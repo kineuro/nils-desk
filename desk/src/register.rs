@@ -161,7 +161,7 @@ fn field_is(r: &Value, k: &str, v: &str) -> bool {
     match &r[k] {
         Value::String(s) => s == v,
         Value::Null => false,
-        other => other.to_string() == v,
+        other => format!("{other}") == v,
     }
 }
 
