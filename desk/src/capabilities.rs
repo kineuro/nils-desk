@@ -180,13 +180,22 @@ pub async fn document(desk: &Shared, person: &session::Person) -> Value {
             "contracts": {"openapi": OPENAPI, "suite": SUITE},
             "engine_reachable": reachable,
             "contract_mismatch": mismatch,
+            "login": match desk.config.mode {
+                crate::config::Mode::Off => Value::Null,
+                crate::config::Mode::Local => json!({"kind": "password", "url": "/desk/login"}),
+                crate::config::Mode::Oidc => json!({"kind": "redirect", "url": "/desk/login"}),
+            },
+            "signed_in": !person.subject.is_empty(),
         },
     })
 }
 
 pub async fn door(State(desk): State<Shared>, headers: HeaderMap) -> Response {
     let (session, set) = session::resolve(&desk, &headers);
-    let person = session::person(&desk, &session);
+    let person = match &session {
+        Some(s) => session::person(&desk, s),
+        None => session::nobody(),
+    };
     let doc = document(&desk, &person).await;
     let mut r = axum::Json(doc).into_response();
     if let Some(v) = set {

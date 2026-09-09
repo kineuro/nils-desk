@@ -45,5 +45,8 @@ export interface Capabilities {
     /** The named states of section 7.2 the desk itself reports. */
     engine_reachable: boolean;
     contract_mismatch: null | { found: Record<string, string>; speaks: Record<string, string>; major: boolean };
+    /** How a person logs in, by mode: none in off mode. */
+    login: null | { kind: "password" | "redirect"; url: string };
+    signed_in: boolean;
   };
 }

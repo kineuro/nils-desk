@@ -21,7 +21,7 @@ function doc(over: Partial<Capabilities> = {}): Capabilities {
     assistant: null,
     apps: [],
     person: { subject: "anna", display_name: "Anna", entitlements: ["reader", "reviewer", "operator", "admin", "assist"], roles: ["reader", "reviewer", "operator", "admin"] },
-    desk: { version: "1.0.0-alpha.0", mode: "off", contracts: { openapi: "3", suite: "1" }, engine_reachable: true, contract_mismatch: null },
+    desk: { version: "1.0.0-alpha.0", mode: "off", contracts: { openapi: "3", suite: "1" }, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
     ...over,
   };
 }
@@ -55,6 +55,16 @@ describe("the shell as a predicate over the document", () => {
     d.person.entitlements = [];
     expect(state(d)).toEqual({ kind: "unbound" });
     expect(sections(d)).toEqual([]);
+  });
+  it("names the login before anything else in local and oidc modes", () => {
+    const d = doc();
+    d.desk.mode = "local";
+    d.desk.login = { kind: "password", url: "/desk/login" };
+    d.desk.signed_in = false;
+    d.person.entitlements = [];
+    expect(state(d)).toEqual({ kind: "login", how: "password", url: "/desk/login" });
+    d.desk.signed_in = true;
+    expect(state(d)).toEqual({ kind: "unbound" });
   });
   it("names warming while Kvasir has no first token", () => {
     expect(state(doc({ kvasir: { health: { warming: true } } }))).toEqual({ kind: "warming" });
