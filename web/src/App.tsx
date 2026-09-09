@@ -2,9 +2,11 @@
 import { useEffect, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "./capabilities";
-import { operationsControls, sections, state } from "./sections";
+import { sections, state } from "./sections";
 import { Question } from "./ask/Question";
 import { Results } from "./results/Results";
+import { Operations } from "./ops/Operations";
+import { Data } from "./data/Data";
 
 type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
 
@@ -120,19 +122,9 @@ function Section({ id, caps }: { id: string; caps: Capabilities }) {
     case "results":
       return <Results caps={caps} />;
     case "operations":
-      return (
-        <section>
-          <h1>Operations</h1>
-          <ul>{operationsControls(caps).map((c) => <li key={c}>{c}</li>)}</ul>
-        </section>
-      );
+      return <Operations caps={caps} />;
     case "data":
-      return (
-        <section>
-          <h1>Data</h1>
-          <ul>{caps.engine!.packs.map((p) => <li key={p.name}>{p.name} {p.version}</li>)}</ul>
-        </section>
-      );
+      return <Data caps={caps} />;
     case "settings":
       return (
         <section>

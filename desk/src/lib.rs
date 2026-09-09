@@ -97,6 +97,7 @@ pub fn router(desk: Shared) -> Router {
         )
         .route("/desk/results", get(results::list).post(results::record))
         .route("/desk/lineage", post(results::lineage))
+        .route("/desk/custody", get(results::custody))
         .route("/desk/export/{handle}", get(results::export))
         .route("/.well-known/jwks.json", get(session::jwks))
         .route("/.well-known/openid-configuration", get(session::discovery))

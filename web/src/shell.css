@@ -109,3 +109,24 @@ table.handles th.num { text-align: right; }
 .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin-top: 1rem; border-top: 1px solid var(--line); padding-top: 0.8rem; }
 .control .reason { font-size: 0.85rem; opacity: 0.8; margin: 0.3rem 0 0; }
 .control label { display: inline-flex; gap: 0.4rem; align-items: center; margin-right: 0.5rem; }
+
+/* operations and data (B5) */
+main:has(.ops) { max-width: 110ch; }
+.ops h1 { font-size: 1.35rem; margin: 0 0 0.2rem; }
+.ops h2 { font-size: 1.05rem; margin: 1rem 0 0.4rem; }
+.ops .meta { font-size: 0.85rem; opacity: 0.75; margin: 0.2rem 0; }
+.ops .row { display: flex; gap: 0.7rem; align-items: center; flex-wrap: wrap; margin: 0.4rem 0; }
+.ops .stack { display: grid; gap: 0.5rem; }
+.ops button { font: inherit; padding: 0.3rem 0.7rem; border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 4px; cursor: pointer; }
+.ops button.on, .ops button[type=submit] { background: var(--plum); color: var(--paper); border-color: var(--plum); }
+.ops button:disabled { opacity: 0.5; cursor: not-allowed; }
+.ops button.cell { border: 0; padding: 0; text-decoration: underline dotted; background: transparent; color: inherit; }
+.ops input, .ops select { font: inherit; padding: 0.25rem 0.4rem; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: inherit; }
+.ops label { display: inline-flex; gap: 0.4rem; align-items: center; }
+.tabs { display: flex; gap: 0.25rem; margin: 0.6rem 0 1rem; border-bottom: 1px solid var(--line); padding-bottom: 0.5rem; }
+table.thin { border-collapse: collapse; font-size: 0.9rem; width: 100%; }
+table.thin th, table.thin td { padding: 0.25rem 0.6rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+table.thin tr.on td { background: color-mix(in srgb, var(--plum) 12%, transparent); }
+table.thin th.num { text-align: right; }
+.ops pre { overflow-x: auto; font-size: 0.82rem; }
+pre.procedure { border-left: 3px solid var(--plum); padding: 0.6rem 0.9rem; }

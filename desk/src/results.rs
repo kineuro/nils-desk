@@ -277,3 +277,55 @@ pub fn csv_line(values: &[Value]) -> String {
     out.push_str("\r\n");
     out
 }
+
+/// `GET /desk/custody` (C45): the stores the desk itself keeps, in the
+/// engine's custody shape, and the parts that keep their own, named with
+/// where their command line lists them. The engine's custody door stays the
+/// registry's.
+pub async fn custody(State(desk): State<Shared>, headers: HeaderMap) -> Response {
+    if let Err(r) = who(&desk, &headers) {
+        return *r;
+    }
+    let store = desk.config.store.display().to_string();
+    let bytes = std::fs::metadata(&desk.config.store)
+        .map(|m| m.len())
+        .unwrap_or(0);
+    let mut stores = vec![json!({
+        "store": "desk",
+        "owner": "the desk's operator",
+        "what": "nils-desk.sqlite: sessions, display names, local users, the record of runs and document lineage (ids only)",
+        "where": store,
+        "files": [{"path": store, "kind": "file", "bytes": bytes, "mode": "600"}],
+        "holds": ["technical", "identity"],
+        "counts": {"people": desk.store.people().len(), "results": desk.store.results().len(), "lineage": desk.store.lineage().len()},
+        "kept": "sessions twelve hours; users, runs and lineage until removed",
+        "commands": {"read": ["nils-desk user list"], "change": ["nils-desk user add|grant|password"], "export": [], "delete": "remove the file with the desk stopped"},
+    })];
+    if let Some(k) = &desk.config.kvasir {
+        stores.push(json!({
+            "store": "kvasir",
+            "owner": "the model gateway's operator",
+            "what": "the ledger (no content), the minted keys, the sealed credentials",
+            "where": k.url,
+            "files": [],
+            "holds": ["technical", "identity", "credentials"],
+            "counts": {},
+            "kept": "as Kvasir's own settings say",
+            "commands": {"read": ["kvasir ledger", "kvasir keys list"], "change": ["kvasir keys mint|revoke", "kvasir credentials set"], "export": [], "delete": "kvasir's own command line"},
+        }));
+    }
+    if let Some(a) = &desk.config.assistant {
+        stores.push(json!({
+            "store": "assistant",
+            "owner": "the assistant's operator",
+            "what": "the assistant's database and notes, the evals dataset",
+            "where": a.url,
+            "files": [],
+            "holds": ["technical", "content"],
+            "counts": {},
+            "kept": "as the assistant's own settings say",
+            "commands": {"read": ["nils-assistant custody"], "change": [], "export": [], "delete": "the assistant's own command line"},
+        }));
+    }
+    axum::Json(json!({"stores": stores})).into_response()
+}
