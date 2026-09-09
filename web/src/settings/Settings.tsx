@@ -12,7 +12,7 @@ import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { holds } from "../sections";
-import { type Backend, kvasir, type KeyRow, opening, type PurposeRow } from "./kvasir";
+import { type Backend, kvasir, type KeyRow, opening, type PersonalDoc, personalWords, type PurposeRow, tabSession } from "./kvasir";
 
 export function Settings({ caps }: { caps: Capabilities }) {
   const admin = holds(caps, "admin");
@@ -27,6 +27,7 @@ export function Settings({ caps }: { caps: Capabilities }) {
       <Engine caps={caps} />
       <Desk caps={caps} />
       {caps.kvasir !== null && caps.desk.settings?.kvasir_url && <Kvasir caps={caps} admin={admin} />}
+      {caps.kvasir !== null && caps.desk.settings?.kvasir_url && <Personal />}
       {caps.assistant !== null && <Assistant caps={caps} />}
       <Apps caps={caps} />
     </section>
@@ -327,6 +328,63 @@ function Users() {
       </table>
       {why && <p className="warn">{why}</p>}
       <p>A new user is added at the command line: <code>nils-desk user add NAME</code>.</p>
+    </div>
+  );
+}
+
+
+/** C5: the person's own model credentials, per provider: a brought key, or a subscription connected through OAuth, or the reason neither is offered. */
+function Personal() {
+  const [doc, setDoc] = useState<PersonalDoc | null>(null);
+  const [why, setWhy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [secret, setSecret] = useState<Record<string, string>>({});
+  const load = () => kvasir.personal().then(setDoc).catch((e: Error) => setWhy(e.message));
+  useEffect(() => {
+    load();
+  }, []);
+  const connect = (provider: string) =>
+    kvasir
+      .oauthStart(provider, tabSession(), `${location.origin}${location.pathname}#settings`)
+      .then((r) => {
+        location.href = r.url;
+      })
+      .catch((e: Error) => setWhy(e.message));
+  return (
+    <div className="panel">
+      <h2>Your model credentials</h2>
+      <p className="meta">Held by Kvasir, sealed under your own subject, shown never. A stream of yours uses your credential for a provider before the organisation's.</p>
+      {why && <p className="warn">{why}</p>}
+      {note && <p className="meta">{note}</p>}
+      {doc === null ? <p>Reading</p> : (
+        <ul className="personal">
+          {doc.providers.map((p) => (
+            <li key={p.provider}>
+              <strong>{p.provider}</strong>: {personalWords(p)}
+              {p.personal === "offered" && !p.oauth && (
+                <div className="row">
+                  <button type="button" onClick={() => connect(p.provider)}>Connect your subscription</button>
+                </div>
+              )}
+              {p.oauth && (
+                <div className="row">
+                  <button type="button" onClick={() => kvasir.oauthRevoke(p.provider).then(() => { setNote(`the ${p.provider} grant is revoked; both tokens are deleted.`); load(); }).catch((e: Error) => setWhy(e.message))}>Disconnect</button>
+                </div>
+              )}
+              {p.personal === "offered" && !p.oauth && (
+                <form className="row" onSubmit={(e) => { e.preventDefault(); kvasir.putPersonalKey(p.provider, secret[p.provider] ?? "").then((r) => { setNote(`your ${r.provider} key is stored; shown ${r.shown}.`); setSecret({ ...secret, [p.provider]: "" }); load(); }).catch((e: Error) => setWhy(e.message)); }}>
+                  <label>your own key <input type="password" value={secret[p.provider] ?? ""} onChange={(e) => setSecret({ ...secret, [p.provider]: e.target.value })} autoComplete="off" /></label>
+                  <button type="submit" disabled={(secret[p.provider] ?? "").length < 8}>{p.brought_key ? "Rotate" : "Store"}</button>
+                  {p.brought_key && <button type="button" onClick={() => kvasir.forgetPersonalKey(p.provider).then(() => { setNote(`your ${p.provider} key is forgotten.`); load(); }).catch((e: Error) => setWhy(e.message))}>Forget</button>}
+                </form>
+              )}
+              {p.personal === "absent_by_policy" && p.brought_key && (
+                <div className="row"><button type="button" onClick={() => kvasir.forgetPersonalKey(p.provider).then(load).catch((e: Error) => setWhy(e.message))}>Forget your key</button></div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

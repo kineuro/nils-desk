@@ -69,7 +69,47 @@ export const kvasir = {
   revoke: (id: string) => door<Json>("DELETE", `/v1/keys/${encodeURIComponent(id)}`),
   credential: (provider: string, secret: string) => door<{ provider: string; stored: boolean; shown: string }>("PUT", `/v1/credentials/${encodeURIComponent(provider)}`, { secret }),
   forget: (provider: string) => door<Json>("DELETE", `/v1/credentials/${encodeURIComponent(provider)}`),
+  /** C5: the person's own credentials, per provider; the offer or its absence by policy. */
+  personal: () => door<PersonalDoc>("GET", "/v1/personal"),
+  putPersonalKey: (provider: string, secret: string) => door<{ provider: string; stored: boolean; shown: string }>("PUT", `/v1/personal/keys/${encodeURIComponent(provider)}`, { secret }),
+  forgetPersonalKey: (provider: string) => door<Json>("DELETE", `/v1/personal/keys/${encodeURIComponent(provider)}`),
+  oauthStart: (provider: string, session: string, return_to: string) => door<{ url: string; state: string }>("POST", `/v1/personal/oauth/${encodeURIComponent(provider)}/start`, { session, return_to }),
+  oauthRevoke: (provider: string) => door<Json>("DELETE", `/v1/personal/oauth/${encodeURIComponent(provider)}`),
 };
+
+export interface PersonalProvider {
+  provider: string;
+  personal: "offered" | "absent_by_policy";
+  policy?: { sentence: string; date: string };
+  brought_key: { created_at: number; rotated_at: number | null } | null;
+  oauth: { created_at: number; refreshed_at: number | null; expires_at: number | null } | null;
+}
+export interface PersonalDoc {
+  subject: string;
+  redirect: string;
+  providers: PersonalProvider[];
+}
+
+/** The words the settings page says about one provider's personal source (section 8.4). */
+export function personalWords(p: PersonalProvider): string {
+  if (p.personal === "absent_by_policy") return `Absent by policy: ${p.policy?.sentence ?? "not offered"} (as of ${p.policy?.date ?? "the policy's date"}).`;
+  if (p.oauth) return `Connected through your own subscription${p.oauth.refreshed_at ? ", refreshed" : ""}.`;
+  if (p.brought_key) return "Your own key is stored, sealed under your subject, shown never.";
+  return "Not connected: bring your own key, or connect your subscription.";
+}
+
+/** A per-tab token the state is bound to: kept for the tab's life, never sent anywhere but the start door. */
+export function tabSession(): string {
+  try {
+    const have = sessionStorage.getItem("nils-desk.kvasir.session");
+    if (have) return have;
+    const made = `t-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    sessionStorage.setItem("nils-desk.kvasir.session", made);
+    return made;
+  } catch {
+    return `t-${Date.now().toString(36)}`;
+  }
+}
 
 /** Whether a purpose may move to a backend without more, with an acknowledgement, or never (section 8.3). */
 export function opening(p: PurposeRow, b: Backend): "yes" | "acknowledge" | "never" {

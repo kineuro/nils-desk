@@ -174,3 +174,7 @@ main:has(.panes) { max-width: 140ch; }
 .histogram .shape { font-family: ui-monospace, monospace; }
 .histogram .bar { display: block; height: 0.8rem; background: var(--plum); border-radius: 2px; min-width: 2px; }
 .histogram .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* the person's own credentials (C5) */
+.personal { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
+.personal li { border-top: 1px solid var(--line); padding-top: 0.5rem; }
