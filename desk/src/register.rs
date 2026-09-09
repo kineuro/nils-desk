@@ -101,9 +101,27 @@ impl Api {
         Ok(out)
     }
 
+    /// The one object of a listing whose fields equal the query's pairs,
+    /// matched here rather than trusted to the server's filters: not every
+    /// listing filters on every field, and a wrong "found" is the one
+    /// mistake an idempotent script must not make.
     async fn first(&self, path: &str) -> Result<Option<Value>, String> {
-        let page = self.get(path).await?;
-        Ok(page["results"].as_array().and_then(|a| a.first().cloned()))
+        let checks: Vec<(String, String)> = path
+            .split_once('?')
+            .map(|(_, q)| {
+                url::form_urlencoded::parse(q.as_bytes())
+                    .map(|(k, v)| (k.into_owned(), v.into_owned()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let sep = if path.contains('?') { '&' } else { '?' };
+        let page = self.get(&format!("{path}{sep}page_size=200")).await?;
+        Ok(page["results"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|r| checks.iter().all(|(k, v)| field_is(r, k, v)))
+            .cloned())
     }
 }
 
@@ -136,6 +154,14 @@ fn id(v: &Value) -> String {
     match v {
         Value::String(s) => s.clone(),
         other => other.to_string(),
+    }
+}
+
+fn field_is(r: &Value, k: &str, v: &str) -> bool {
+    match &r[k] {
+        Value::String(s) => s == v,
+        Value::Null => false,
+        other => format!("{other}") == v,
     }
 }
 
