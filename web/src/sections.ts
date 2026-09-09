@@ -73,6 +73,7 @@ export function operationsControls(caps: Capabilities): string[] {
   const table: [string, string][] = [
     ["jobs", "GET /api/jobs"],
     ["review", "GET /api/review"],
+    ["keyword", "GET /api/classify/signals"],
     ["releases", "GET /api/releases"],
     ["handovers", "POST /api/handovers"],
     ["custody", "GET /api/custody"],
@@ -80,8 +81,10 @@ export function operationsControls(caps: Capabilities): string[] {
     ["sessions", "POST /api/jobs"],
   ];
   const needs: Record<string, Entitlement> = {
-    jobs: "reviewer", review: "reviewer", releases: "operator", handovers: "operator",
+    jobs: "reviewer", review: "reviewer", keyword: "reviewer", releases: "operator", handovers: "operator",
     custody: "admin", audit: "admin", sessions: "operator",
   };
-  return table.filter(([id, d]) => door(caps, d) && holds(caps, needs[id])).map(([id]) => id);
+  // the keyword tab of section 9.13 sits beside the review queue only when the assistant serves keyword-tune
+  const served = ((caps.assistant?.["stations"] as { id?: string }[] | undefined) ?? []).map((s) => s.id);
+  return table.filter(([id, d]) => door(caps, d) && holds(caps, needs[id]) && (id !== "keyword" || served.includes("keyword-tune"))).map(([id]) => id);
 }

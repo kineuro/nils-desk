@@ -13,8 +13,9 @@ import type { Capabilities } from "../capabilities";
 import { operationsControls } from "../sections";
 import { type AuditRow, type CustodyStore, ops, type ReleaseRow, type ReviewItem } from "./client";
 import { confirmName, confirmed, list, releaseBody, type ReleaseForm, type ReleaseSource, stackIds } from "./release";
+import { Keyword } from "./Keyword";
 
-const TITLES: Record<string, string> = { jobs: "Jobs", review: "Review", releases: "Releases", handovers: "Handovers", custody: "Custody", audit: "Audit", sessions: "Sessions" };
+const TITLES: Record<string, string> = { jobs: "Jobs", review: "Review", keyword: "Keyword", releases: "Releases", handovers: "Handovers", custody: "Custody", audit: "Audit", sessions: "Sessions" };
 
 function tabOfHash(): { tab: string | null; arg: string | null } {
   const m = /^#operations(?:\/([a-z]+))?(?:\/([^/]+))?/.exec(location.hash);
@@ -50,6 +51,7 @@ export function Operations({ caps }: { caps: Capabilities }) {
       </nav>
       {active === "jobs" && <Jobs caps={caps} />}
       {active === "review" && <Review />}
+      {active === "keyword" && <Keyword caps={caps} />}
       {active === "releases" && <Releases caps={caps} />}
       {active === "handovers" && <Handovers />}
       {active === "custody" && <Custody />}

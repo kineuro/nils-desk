@@ -89,6 +89,28 @@ export interface Batch {
   report?: Json | null;
 }
 
+export interface Signals extends Json {
+  scope: string;
+  axes: Record<string, { tiers: Record<string, number>; confidence: Record<string, number>; open_review: Record<string, number>; disagreeing_terms: unknown[] }>;
+  open_review: Record<string, number>;
+  diagnostics: Record<string, number>;
+  shadowed_keywords: string[];
+  unused_overlay_terms: string[];
+}
+
+export interface OverlayRow {
+  id: number;
+  name: string;
+  version?: string;
+  status: string;
+  scope?: string;
+  author?: string;
+  actor?: unknown;
+  tried?: Json;
+  document?: Json;
+  why?: string;
+}
+
 export const ops = {
   jobs: (all = false, limit = 50) => door<{ count: number; jobs: JobRow[] }>("GET", `/api/jobs${q({ all: all ? 1 : undefined, limit })}`),
   job: (id: number) => door<JobRow>("GET", `/api/jobs/${id}`),
@@ -107,6 +129,11 @@ export const ops = {
   deskCustody: () => door<{ stores: CustodyStore[] }>("GET", "/desk/custody"),
   audit: (f: { principal?: string; action?: string; since?: string; limit?: number }) => door<{ count: number; rows: AuditRow[] }>("GET", `/api/audit${q(f)}`),
   rebuild: (scheme_name?: string, force = false) => door<{ job: number; state: string }>("POST", "/api/sessions/rebuild", { ...(scheme_name ? { scheme_name } : {}), ...(force ? { force } : {}) }),
+  /** Wave 4c section 6.6, the knob engine: the classifier's signals, the overlays, adoption. */
+  signals: (scope: string) => door<Signals>("GET", `/api/classify/signals?scope=${encodeURIComponent(scope).replace(/%3A/giu, ":")}`),
+  overlays: () => door<{ overlays: OverlayRow[] }>("GET", "/api/overlays"),
+  overlay: (id: number) => door<OverlayRow & Json>("GET", `/api/overlays/${id}`),
+  overlayAdopt: (id: number) => door<{ job: number; overlay: number; status: string }>("POST", `/api/overlays/${id}/adopt`, {}),
   selection: (name: string) => door<{ selection_id: number; name: string; version: number; current_version: number; ask: Json; hash?: string }>("GET", `/api/ask/selections/${encodeURIComponent(name)}`),
 };
 
