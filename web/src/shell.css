@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+:root { color-scheme: light dark; --ink: #1c1b1a; --paper: #f6f3ee; --plum: #4b2142; --line: #d8d2c8; }
+@media (prefers-color-scheme: dark) { :root { --ink: #ece7df; --paper: #171512; --plum: #c9a7c0; --line: #3a352f; } }
+body { margin: 0; font: 15px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--paper); }
+.desk { display: grid; grid-template-rows: auto 1fr auto; min-height: 100vh; }
+.top { display: flex; align-items: center; gap: 1.5rem; padding: 0.6rem 1.2rem; border-bottom: 1px solid var(--line); }
+.mark { font-weight: 700; letter-spacing: 0.08em; color: var(--plum); }
+nav { display: flex; gap: 0.25rem; flex: 1; }
+nav button { border: 0; background: transparent; color: inherit; padding: 0.4rem 0.7rem; border-radius: 4px; cursor: pointer; font: inherit; }
+nav button.on { background: var(--plum); color: var(--paper); }
+main { padding: 1.5rem; max-width: 70ch; }
+.state { font-size: 1.05rem; }
+footer { display: flex; gap: 1.5rem; padding: 0.5rem 1.2rem; border-top: 1px solid var(--line); font-size: 0.85rem; opacity: 0.8; }
+.warn { color: #a55; }
+code { font-family: ui-monospace, monospace; }
+iframe { width: 100%; height: 70vh; border: 1px solid var(--line); }

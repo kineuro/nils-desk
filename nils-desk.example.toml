@@ -1,0 +1,35 @@
+# nils-desk.toml: the desk's configuration. Copy beside the binary and edit.
+
+# Where the desk listens, and the origin a browser reaches it at: the
+# cross-origin defences compare every write's Origin against this.
+bind = "127.0.0.1:7200"
+origin = "http://127.0.0.1:7200"
+
+# off: one person on one machine, every entitlement, no login.
+# local and oidc arrive with the identity slice.
+mode = "off"
+
+# The one SQLite file: sessions now; display names, preferences and local
+# users later.
+store = "nils-desk.sqlite"
+
+[engine]
+url = "http://127.0.0.1:8080"
+# The bearer the desk holds for the engine (--auth token); leave out under
+# --auth off. A browser never sees it.
+# token = "..."
+
+# [kvasir]
+# url = "http://127.0.0.1:7100"
+
+# [assistant]
+# url = "http://127.0.0.1:7300"
+
+# One section per registered app, proxied under /apps/{id}/ with the
+# person's token and the same defences.
+# [[apps]]
+# id = "pipelines"
+# title = "Analysis pipelines"
+# url = "http://127.0.0.1:7400"
+# entitlement = "operator"
+# capabilities = "/capabilities"

@@ -1,0 +1,37 @@
+[package]
+name = "nils-desk"
+version = "1.0.0-alpha.0"
+edition = "2024"
+rust-version = "1.98"
+license = "AGPL-3.0-only"
+repository = "https://github.com/kineuro/nils-desk"
+homepage = "https://kineuro.se"
+authors = ["Karolinska Institutet Neuro Research Group"]
+publish = false
+description = "The desk of NILS: one origin, the session, the proxy and the deployment capabilities document"
+
+[dependencies]
+axum = { version = "0.8", features = ["http1", "json", "query", "tokio"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "stream"] }
+futures-util = "0.3"
+bytes = "1"
+http = "1"
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["preserve_order"] }
+toml = "1.1"
+clap = { version = "4.6", features = ["derive"] }
+rust-embed = { version = "8", features = ["include-exclude"] }
+mime_guess = "2"
+rand = "0.9"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+time = { version = "0.3", features = ["formatting", "parsing"] }
+
+[dev-dependencies]
+tempfile = "3"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+
+[lints.clippy]
+all = "warn"

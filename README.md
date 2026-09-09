@@ -9,8 +9,20 @@
 | | |
 |---|---|
 | [`kineuro/nils`](https://github.com/kineuro/nils) | The engine, the design record, the specifications and the contracts this desk is generated from (`contracts/openapi`, `contracts/suite`). |
-| `desk/` | The Rust binary: the session, the proxy, the store, the capabilities document. |
-| `web/` | The React front end, embedded into the binary at build time. |
+| `desk/` | The Rust binary: the session, the proxy, the store, the capabilities document. `cargo test` runs it against a fake engine. |
+| `web/` | The React front end, embedded into the binary at build time: `npm ci && npm run build` in `web/`, then `cargo build` in `desk/`. `npx vitest run` tests the shell's predicates. |
+| `nils-desk.example.toml` | The configuration, annotated. |
+
+## Running it
+
+```sh
+cd web && npm ci && npm run build && cd ../desk && cargo build --release
+cp ../nils-desk.example.toml nils-desk.toml   # edit the engine url
+./target/release/nils-desk check --config nils-desk.toml
+./target/release/nils-desk serve --config nils-desk.toml
+```
+
+`check` compares the engine's contract versions with the desk's and exits non zero, by name, when the engine is behind. `serve` refuses to start on the same condition; an engine that is ahead is a warning the shell shows in its footer; an engine that does not answer is a state the shell renders, not a refusal.
 
 ## The three modes
 

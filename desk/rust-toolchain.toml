@@ -1,0 +1,6 @@
+# The toolchain the desk builds with, the same pin as the engine's
+# (kineuro/nils, engine/rust-toolchain.toml); CI reads this file too.
+[toolchain]
+channel = "1.98.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
