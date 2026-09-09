@@ -8,6 +8,7 @@ import { Results } from "./results/Results";
 import { Operations } from "./ops/Operations";
 import { Data } from "./data/Data";
 import { Settings } from "./settings/Settings";
+import { Pane } from "./assistant/Pane";
 
 type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
 
@@ -119,7 +120,7 @@ export function sectionOfHash(hash: string = location.hash): string | null {
 function Section({ id, caps }: { id: string; caps: Capabilities }) {
   switch (id) {
     case "ask":
-      return <Question />;
+      return <Question caps={caps} />;
     case "results":
       return <Results caps={caps} />;
     case "operations":
@@ -129,7 +130,14 @@ function Section({ id, caps }: { id: string; caps: Capabilities }) {
     case "settings":
       return <Settings caps={caps} />;
     case "assistant":
-      return <section><h1>Assistant</h1><p>The chat pane arrives with D6.</p></section>;
+      // section 7.7: the pane on its own, no document open; the concierge (D5) will hold this conversation
+      return (
+        <section className="ask">
+          <h1>Assistant</h1>
+          <p>Words to a document. Open a question to refine it here instead, one step at a time.</p>
+          <Pane caps={caps} docId={null} chain={[]} epoch={caps.engine?.registry.epoch ?? 0} onOpen={(id) => { location.hash = `#ask/${id}`; }} />
+        </section>
+      );
     default:
       if (id.startsWith("app:")) {
         const app = caps.apps.find((a) => `app:${a.id}` === id);

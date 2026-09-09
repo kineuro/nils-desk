@@ -6,6 +6,7 @@
 //! into the binary, proxies every part on one origin, and composes the
 //! deployment capabilities document every control is a predicate over.
 
+pub mod assistant;
 pub mod capabilities;
 pub mod config;
 pub mod issuer;
@@ -99,6 +100,10 @@ pub fn router(desk: Shared) -> Router {
         .route("/desk/lineage", post(results::lineage))
         .route("/desk/custody", get(results::custody))
         .route("/desk/export/{handle}", get(results::export))
+        .route(
+            "/desk/assistant/conversations/{id}/token",
+            post(assistant::push_token),
+        )
         .route("/.well-known/jwks.json", get(session::jwks))
         .route("/.well-known/openid-configuration", get(session::discovery))
         .route("/api/{*rest}", any(proxy::engine))

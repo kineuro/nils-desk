@@ -344,3 +344,62 @@ async fn an_export_pages_the_handle_with_the_purpose_and_the_desk_records_runs_a
     assert_eq!(doc["export"], "reader");
     assert_eq!(shared.config.export, "reader");
 }
+
+/// Wave 4c §7.7 and §5.5: the desk pushes the person's bearer to the
+/// assistant for one conversation; a cross-origin post cannot, and a desk
+/// with no assistant says so by name.
+#[tokio::test]
+async fn the_desk_pushes_the_bearer_to_the_assistant_for_a_conversation() {
+    let engine = fake_engine("3").await;
+    let assistant = Router::new()
+        .route(
+            "/capabilities",
+            get(|| async {
+                axum::Json(json!({"assistant": {"name": "nils-assistant", "version": "0"}}))
+            }),
+        )
+        .route(
+            "/conversations/{id}/token",
+            axum::routing::post(
+                |axum::extract::Path(id): axum::extract::Path<String>,
+                 axum::Json(body): axum::Json<Value>| async move {
+                    axum::Json(json!({"conversation": id, "token": body["token"]}))
+                },
+            ),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, assistant).await.unwrap() });
+    let (origin, _) = desk(&engine, Some(&url)).await;
+    let client = reqwest::Client::new();
+    let r = client
+        .post(format!("{origin}/desk/assistant/conversations/c%201/token"))
+        .header("origin", "https://evil.example")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = client
+        .post(format!("{origin}/desk/assistant/conversations/c%201/token"))
+        .header("x-nils-desk", "1")
+        .header("origin", &origin)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200, "{}", r.text().await.unwrap());
+    let doc: Value = r.json().await.unwrap();
+    assert_eq!(doc["conversation"], "c 1", "{doc}");
+    assert_eq!(
+        doc["token"], "a-desk-token-of-length-x",
+        "the desk's token in off mode: {doc}"
+    );
+    let (origin, _) = desk(&engine, None).await;
+    let r = client
+        .post(format!("{origin}/desk/assistant/conversations/c1/token"))
+        .header("x-nils-desk", "1")
+        .header("origin", &origin)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
+}
