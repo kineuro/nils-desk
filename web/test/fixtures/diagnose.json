@@ -1,0 +1,141 @@
+{
+ "valid": true,
+ "issues": [],
+ "repairs": [],
+ "warnings": [],
+ "zero_rows": null,
+ "drops": [],
+ "ties": [],
+ "unresolved": [],
+ "coarse": [],
+ "cost": {
+  "sets": 6,
+  "near": 0,
+  "groups": 0,
+  "algebra": 0,
+  "class": "medium"
+ },
+ "funnel": [
+  {
+   "set": "scope",
+   "grain": "cohort",
+   "stage": "source",
+   "rows": 2,
+   "subjects": 2,
+   "on_path": true
+  },
+  {
+   "set": "scope",
+   "grain": "cohort",
+   "stage": "where name among {cohorts}",
+   "rows": 2,
+   "subjects": 2,
+   "on_path": true
+  },
+  {
+   "set": "people",
+   "grain": "subject",
+   "stage": "source",
+   "rows": 50,
+   "subjects": 43,
+   "on_path": true
+  },
+  {
+   "set": "visits",
+   "grain": "session",
+   "stage": "source",
+   "rows": 191,
+   "subjects": 43,
+   "on_path": true
+  },
+  {
+   "set": "flair",
+   "grain": "stack",
+   "stage": "source",
+   "rows": 967,
+   "subjects": 43,
+   "on_path": false
+  },
+  {
+   "set": "flair",
+   "grain": "stack",
+   "stage": "where base = T2w",
+   "rows": 380,
+   "subjects": 43,
+   "on_path": false
+  },
+  {
+   "set": "flair",
+   "grain": "stack",
+   "stage": "where modifier has FLAIR",
+   "rows": 175,
+   "subjects": 41,
+   "on_path": false
+  },
+  {
+   "set": "flair",
+   "grain": "stack",
+   "stage": "where acquisition_type = 3D",
+   "rows": 175,
+   "subjects": 41,
+   "on_path": false
+  },
+  {
+   "set": "flair",
+   "grain": "stack",
+   "stage": "where field_strength within {tesla_tol} of {tesla}",
+   "rows": 175,
+   "subjects": 41,
+   "on_path": false
+  },
+  {
+   "set": "mp2rage",
+   "grain": "stack",
+   "stage": "source",
+   "rows": 967,
+   "subjects": 43,
+   "on_path": false
+  },
+  {
+   "set": "mp2rage",
+   "grain": "stack",
+   "stage": "where technique = MPRAGE",
+   "rows": 382,
+   "subjects": 43,
+   "on_path": false
+  },
+  {
+   "set": "mp2rage",
+   "grain": "stack",
+   "stage": "where field_strength within {tesla_tol} of {tesla}",
+   "rows": 369,
+   "subjects": 43,
+   "on_path": false
+  },
+  {
+   "set": "both",
+   "grain": "session",
+   "stage": "source",
+   "rows": 191,
+   "subjects": 43,
+   "on_path": true
+  },
+  {
+   "set": "both",
+   "grain": "session",
+   "stage": "has flair",
+   "rows": 175,
+   "subjects": 41,
+   "on_path": true
+  },
+  {
+   "set": "both",
+   "grain": "session",
+   "stage": "has mp2rage",
+   "rows": 175,
+   "subjects": 41,
+   "on_path": true
+  }
+ ],
+ "next": []
+}

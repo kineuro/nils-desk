@@ -1,0 +1,340 @@
+{
+ "token": "ce211c719d0b6b46eaca50822510cfd8",
+ "hash": "56f5f97518f98ebc92e84c658993c1d5c7c8fbd4062a1dc7c4b1e1ff15207e47",
+ "epoch": 1,
+ "scheme_digest": "37f53eb14839513e00f3f54494f1601b",
+ "set": "scope",
+ "grain": "cohort",
+ "describe": "scope: cohorts; where name among {cohorts}.",
+ "exposes": {
+  "fields": [
+   "description",
+   "id",
+   "name",
+   "owner"
+  ],
+  "dated": [],
+  "bindings": [],
+  "partners": {},
+  "of": null,
+  "group_by": [],
+  "picked": false
+ },
+ "diagnostics": [],
+ "moves": [
+  {
+   "id": 1,
+   "kind": "add_where",
+   "set": "scope",
+   "template": "where {field} {op} {value}",
+   "holes": [
+    {
+     "name": "field",
+     "type": "field",
+     "fillers": [
+      "description",
+      "id",
+      "name",
+      "owner"
+     ]
+    },
+    {
+     "name": "op",
+     "type": "op",
+     "fillers": [
+      "=",
+      "<>",
+      ">",
+      ">=",
+      "<",
+      "<=",
+      "contains",
+      "starts_with",
+      "not_null",
+      "is_null"
+     ]
+    },
+    {
+     "name": "value",
+     "type": "value",
+     "optional": true
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "kind": "remove_where",
+   "set": "scope",
+   "template": "drop where clause {index}",
+   "holes": [
+    {
+     "name": "index",
+     "type": "index",
+     "fillers": [
+      0
+     ]
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "kind": "set_strict",
+   "set": "scope",
+   "template": "read where clause {index} as {strict}",
+   "holes": [
+    {
+     "name": "index",
+     "type": "index",
+     "fillers": [
+      0
+     ]
+    },
+    {
+     "name": "strict",
+     "type": "bool",
+     "fillers": [
+      true,
+      false
+     ]
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "kind": "add_has",
+   "set": "scope",
+   "template": "at least {min} and at most {max} {child} as {as}",
+   "holes": [
+    {
+     "name": "child",
+     "type": "set",
+     "fillers": [
+      "people"
+     ]
+    },
+    {
+     "name": "min",
+     "type": "int",
+     "optional": true
+    },
+    {
+     "name": "max",
+     "type": "int",
+     "optional": true
+    },
+    {
+     "name": "as",
+     "type": "name",
+     "optional": true
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "kind": "add_bind",
+   "set": "scope",
+   "template": "let {name} = {field}",
+   "holes": [
+    {
+     "name": "name",
+     "type": "name"
+    },
+    {
+     "name": "field",
+     "type": "field",
+     "fillers": [
+      "description",
+      "id",
+      "name",
+      "owner"
+     ]
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "kind": "add_set",
+   "template": "a new set {name} of {grain}s, {source}",
+   "holes": [
+    {
+     "name": "name",
+     "type": "name"
+    },
+    {
+     "name": "grain",
+     "type": "grain",
+     "fillers": [
+      "cohort",
+      "subject",
+      "session",
+      "stack",
+      "instance",
+      "event"
+     ]
+    },
+    {
+     "name": "source",
+     "type": "source",
+     "fillers": [
+      "of:both",
+      "from:both",
+      "of:flair",
+      "from:flair",
+      "of:mp2rage",
+      "from:mp2rage",
+      "of:people",
+      "from:people",
+      "of:scope",
+      "from:scope",
+      "of:visits",
+      "from:visits"
+     ],
+     "optional": true
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "kind": "rename_set",
+   "template": "rename {set} to {name}",
+   "holes": [
+    {
+     "name": "set",
+     "type": "set",
+     "fillers": [
+      "both",
+      "flair",
+      "mp2rage",
+      "people",
+      "scope",
+      "visits"
+     ]
+    },
+    {
+     "name": "name",
+     "type": "name"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "kind": "set_out",
+   "template": "answer with {set} at the {level} level",
+   "holes": [
+    {
+     "name": "set",
+     "type": "set",
+     "fillers": [
+      "both",
+      "flair",
+      "mp2rage",
+      "people",
+      "scope",
+      "visits"
+     ]
+    },
+    {
+     "name": "level",
+     "type": "level",
+     "fillers": [
+      "boolean",
+      "count",
+      "aggregate",
+      "record"
+     ]
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "kind": "set_limit",
+   "template": "at most {n} rows",
+   "holes": [
+    {
+     "name": "n",
+     "type": "int"
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "kind": "set_param",
+   "template": "set {param} to {value}",
+   "holes": [
+    {
+     "name": "param",
+     "type": "param",
+     "fillers": [
+      "cohorts",
+      "tesla",
+      "tesla_tol"
+     ]
+    },
+    {
+     "name": "value",
+     "type": "value"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "kind": "keep_set",
+   "template": "keep {set} as a handle: {keep}",
+   "holes": [
+    {
+     "name": "set",
+     "type": "set",
+     "fillers": [
+      "both",
+      "flair",
+      "mp2rage",
+      "people",
+      "scope",
+      "visits"
+     ]
+    },
+    {
+     "name": "keep",
+     "type": "bool",
+     "fillers": [
+      true,
+      false
+     ]
+    }
+   ]
+  }
+ ],
+ "presets": [
+  {
+   "name": "30 days",
+   "days": 30
+  },
+  {
+   "name": "3 months",
+   "days": 93
+  },
+  {
+   "name": "6 months",
+   "days": 186
+  },
+  {
+   "name": "1 year",
+   "days": 366
+  },
+  {
+   "name": "2 years",
+   "days": 732
+  },
+  {
+   "name": "5 years",
+   "days": 1830
+  }
+ ],
+ "next": [
+  "POST /api/ask/apply with this token and moves",
+  "POST /api/ask/diagnose for the funnel and the drops",
+  "POST /api/ask/preview for ten rows"
+ ],
+ "count_on_options": false,
+ "preview_on_options": false
+}

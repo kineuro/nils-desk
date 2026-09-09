@@ -1,0 +1,27 @@
+{
+ "level": "count",
+ "columns": [
+  "rows",
+  "subjects"
+ ],
+ "rows": [
+  [
+   175,
+   41
+  ]
+ ],
+ "truncated": false,
+ "declaration": {
+  "grain": "session",
+  "session_scheme": {
+   "name": "default",
+   "digest": "37f53eb14839513e00f3f54494f1601b"
+  },
+  "membership": "in flair at least 1 times; and in mp2rage at least 1 times",
+  "key_namespace": "the registry's pseudonymous key",
+  "pick_rule": "none: every row of the set",
+  "denominator": "none: a count over the set",
+  "disclosure": "local, projecting quasiidentifying and sensitive",
+  "truncated": false
+ }
+}

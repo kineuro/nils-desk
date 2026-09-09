@@ -1,0 +1,217 @@
+{
+ "id": 77,
+ "name": "fixture run",
+ "grain": "session",
+ "columns": [
+  {
+   "name": "rows",
+   "type": "integer"
+  },
+  {
+   "name": "subjects",
+   "type": "integer"
+  }
+ ],
+ "row_count": 1,
+ "content_hash": "fcfe0bdf87113984fe6d4f961b5f3f8c11e6e3fd4b383ac95f37cd8a62a4faf7",
+ "ast_version": 1,
+ "ask": {
+  "ast_version": 1,
+  "name": "sessions holding both roles at high field",
+  "scheme": "default",
+  "params": {
+   "cohorts": {
+    "type": "list",
+    "value": [
+     "ms-cohort-a",
+     "ms-cohort-b"
+    ]
+   },
+   "tesla": {
+    "type": "number",
+    "value": 3.0
+   },
+   "tesla_tol": {
+    "type": "number",
+    "value": 0.25
+   }
+  },
+  "sets": {
+   "both": {
+    "grain": "session",
+    "from": "visits",
+    "has": [
+     {
+      "set": "flair",
+      "min": 1
+     },
+     {
+      "set": "mp2rage",
+      "min": 1
+     }
+    ]
+   },
+   "flair": {
+    "grain": "stack",
+    "of": "visits",
+    "where": [
+     [
+      "=",
+      {},
+      [
+       "axis",
+       {},
+       "base"
+      ],
+      "T2w"
+     ],
+     [
+      "has",
+      {},
+      [
+       "axis",
+       {},
+       "modifier"
+      ],
+      "FLAIR"
+     ],
+     [
+      "=",
+      {},
+      [
+       "derived",
+       {},
+       "acquisition_type"
+      ],
+      "3D"
+     ],
+     [
+      "~=",
+      {
+       "tol": [
+        "param",
+        {},
+        "tesla_tol"
+       ]
+      },
+      [
+       "derived",
+       {},
+       "field_strength"
+      ],
+      [
+       "param",
+       {},
+       "tesla"
+      ]
+     ]
+    ]
+   },
+   "mp2rage": {
+    "grain": "stack",
+    "of": "visits",
+    "where": [
+     [
+      "=",
+      {},
+      [
+       "axis",
+       {},
+       "technique"
+      ],
+      "MPRAGE"
+     ],
+     [
+      "~=",
+      {
+       "tol": [
+        "param",
+        {},
+        "tesla_tol"
+       ]
+      },
+      [
+       "derived",
+       {},
+       "field_strength"
+      ],
+      [
+       "param",
+       {},
+       "tesla"
+      ]
+     ]
+    ]
+   },
+   "people": {
+    "grain": "subject",
+    "of": "scope"
+   },
+   "scope": {
+    "grain": "cohort",
+    "where": [
+     [
+      "in",
+      {},
+      [
+       "field",
+       {},
+       "name"
+      ],
+      [
+       "param",
+       {},
+       "cohorts"
+      ]
+     ]
+    ]
+   },
+   "visits": {
+    "grain": "session",
+    "of": "people"
+   }
+  },
+  "keep": [
+   "both"
+  ],
+  "out": {
+   "set": "both",
+   "level": "count"
+  }
+ },
+ "params": {
+  "cohorts": [
+   "ms-cohort-a",
+   "ms-cohort-b"
+  ],
+  "tesla": 3.0,
+  "tesla_tol": 0.25
+ },
+ "selection_versions": [],
+ "principal": "nima@g14",
+ "created_at": "2026-09-09T01:35:43Z",
+ "node": "g14",
+ "pack_version": "0.1.1",
+ "epoch": 1,
+ "scheme_digest": "37f53eb14839513e00f3f54494f1601b",
+ "disclosure": "local",
+ "suppression": {
+  "classes": [
+   "quasi_identifying",
+   "sensitive"
+  ]
+ },
+ "truncated": false,
+ "values_unresolved": {},
+ "last_read_at": null,
+ "rows_dropped_at": null,
+ "withdrawn_at": null,
+ "withdrawn_by": null,
+ "withdrawn_why": null,
+ "actor": {
+  "kind": "absent"
+ },
+ "pinned_by": [],
+ "reads": 0,
+ "pages": 1
+}
