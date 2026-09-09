@@ -64,7 +64,7 @@ describe("the reducer over the live stream", () => {
     expect(s.settled).toEqual({ outcome: "completed" });
   });
   it("is busy from the first assistant chunk to the settlement, and a new turn clears the old choice", () => {
-    const mid = chunks.slice(0, 11).reduce(reduce, empty());
+    const mid = chunks.slice(0, 12).reduce(reduce, empty());
     expect(mid.busy).toBe(true);
     expect(mid.choice).not.toBeNull();
     const next = reduce(mid, { type: "message-started", messageId: "a2" });
