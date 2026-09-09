@@ -18,7 +18,7 @@ use crate::store::Session;
 use crate::{Shared, users};
 
 pub const COOKIE: &str = "nils_desk";
-const HOURS: i64 = 12;
+pub const HOURS: i64 = 12;
 
 /// The person of a session, as the capabilities document names them.
 #[derive(Debug, Clone)]
