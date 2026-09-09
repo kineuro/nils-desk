@@ -24,7 +24,7 @@ async function fail(r: Response): Promise<never> {
 export const assistant = {
   /** Admit one prompt; the answer is the offset the stream continues from. */
   async send(station: string, id: string, message: string): Promise<{ offset: string; submission: string }> {
-    const r = await fetch(`/assistant/agents/${station}/${encodeURIComponent(id)}`, { method: "POST", headers: H, body: JSON.stringify({ message }) });
+    const r = await fetch(`/assistant/agents/${station}/${encodeURIComponent(id)}`, { method: "POST", headers: H, body: JSON.stringify({ kind: "user", body: message }) });
     if (!r.ok) await fail(r);
     const body = (await r.json()) as { submissionId?: string; offset?: string };
     return { offset: r.headers.get("Stream-Next-Offset") ?? body.offset ?? "-1", submission: body.submissionId ?? "" };
