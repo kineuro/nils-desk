@@ -1,0 +1,57 @@
+name: ci
+# The desk on every pull request: the front end built by vite, then the Rust
+# binary formatted, linted and tested with that front end embedded.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: SPDX headers on every source file
+        run: scripts/check-spdx.sh
+  desk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: the front end
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npx vitest run
+          npm run build
+      - name: the pinned toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' desk/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desk
+      - name: format
+        working-directory: desk
+        run: cargo fmt --all --check
+      - name: lint
+        working-directory: desk
+        run: cargo clippy --all-targets -- -D warnings
+      - name: test
+        working-directory: desk
+        run: cargo test
+      - name: the binary serves the front end it embeds
+        working-directory: desk
+        run: |
+          cargo build
+          test -s ../web/dist/index.html
