@@ -148,6 +148,9 @@ main:has(.panes) { max-width: 140ch; }
 .assistant .tools li.running { border-style: dashed; }
 .assistant .tools li.failed { border-color: #a55; color: #a55; }
 .assistant .status { margin: 0; font-size: 0.9rem; }
+.assistant .tasks { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; display: grid; gap: 0.2rem; }
+.assistant .tasks li.running, .assistant .tasks li.queued { opacity: 0.8; font-style: italic; }
+.assistant .tasks li.failed { color: #a55; }
 .assistant .warming { border-left: 3px solid #c90; padding-left: 0.6rem; }
 .assistant .proposal { border: 1px solid var(--plum); border-radius: 6px; padding: 0.5rem 0.8rem; margin: 0.4rem 0; }
 .assistant .proposal.accepted { border-color: var(--line); opacity: 0.8; }

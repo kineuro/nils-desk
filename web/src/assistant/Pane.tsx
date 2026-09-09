@@ -11,12 +11,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { ask, desk, type Diff } from "../ask/client";
-import { assistant, conversationFor, newConversation, remember, type Conversation } from "./client";
+import { assistant, conversationFor, newConversation, remember, type Conversation, type Delegation } from "./client";
 import { unified } from "./diff";
 import { empty, fromHistory, reduce, type PaneState, type Proposal } from "./parts";
 
-const STATION = "ask-help";
 const TOKEN_PUSH_MS = 5 * 60_000;
+const DELEGATION_POLL_MS = 4_000;
+
+/** The station the pane speaks to: the concierge holds the conversation when the assistant serves one (section 9.12), else ask-help directly. */
+export function stationOf(caps: Capabilities): string {
+  const list = (caps.assistant?.["stations"] as { id?: string }[] | undefined) ?? [];
+  return list.some((s) => s.id === "concierge") ? "concierge" : "ask-help";
+}
 
 export interface PaneProps {
   caps: Capabilities;
@@ -36,10 +42,13 @@ export function Pane({ caps, docId, chain, epoch, onOpen }: PaneProps) {
   const reader = useRef<AbortController | null>(null);
   const health = caps.kvasir?.["health"] as { warming?: boolean } | undefined;
   const warming = health?.warming === true;
+  const STATION = stationOf(caps);
+  const [tasks, setTasks] = useState<Delegation[]>([]);
 
   // the stream: from the offset the state holds, until the submission settles
   const follow = useCallback(
     (c: Conversation, from: string) => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- the station is fixed for the deployment
       reader.current?.abort();
       const ctl = new AbortController();
       reader.current = ctl;
@@ -55,14 +64,25 @@ export function Pane({ caps, docId, chain, epoch, onOpen }: PaneProps) {
             return { ...out, offset: next };
           });
           offset = next;
-          if (settled && chunks.length > 0) return;
+          if (settled && chunks.length > 0) {
+            // the concierge settles at once and is woken when its delegate settles: keep reading while a task is pending (section 9.12)
+            let pending = false;
+            if (STATION === "concierge") {
+              const list = await assistant.delegations(c.id).catch(() => [] as Delegation[]);
+              setTasks(list);
+              pending = list.some((t) => t.state === "queued" || t.state === "running");
+            }
+            if (!pending) return;
+            setState((s) => ({ ...s, busy: true }));
+            await new Promise((r) => setTimeout(r, DELEGATION_POLL_MS));
+          }
         }
       };
       loop().catch((e: Error) => {
         if (e.name !== "AbortError") setWhy(e.message);
       });
     },
-    [],
+    [STATION],
   );
 
   // opening: the history, the token, and a running turn followed
@@ -189,6 +209,17 @@ export function Pane({ caps, docId, chain, epoch, onOpen }: PaneProps) {
           </li>
         ))}
       </ol>
+      {tasks.length > 0 && (
+        <ul className="tasks">
+          {tasks.map((t) => (
+            <li key={t.task} className={t.state}>
+              {t.task} with {t.station}: {t.state}
+              {t.result?.sentence && <> , {t.result.sentence}</>}
+              {t.error && <> , {t.error}</>}
+            </li>
+          ))}
+        </ul>
+      )}
       {state.status && (
         <p className="status">
           <span className="tag">{state.status.phase}</span> {state.status.text}

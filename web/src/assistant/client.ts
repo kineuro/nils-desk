@@ -47,9 +47,23 @@ export const assistant = {
   abort: (station: string, id: string) => fetch(`/assistant/agents/${station}/${encodeURIComponent(id)}/abort`, { method: "POST", headers: H }).then(() => undefined),
   feedback: (id: string, accepted: { document: number; sentence: string }[], rejected: { document: number; sentence: string }[]) =>
     fetch(`/assistant/conversations/${encodeURIComponent(id)}/feedback`, { method: "POST", headers: H, body: JSON.stringify({ accepted, rejected }) }).then((r) => (r.ok ? undefined : fail(r))),
+  /** The delegations of a conversation, from the assistant's store (section 9.12). */
+  delegations: async (id: string): Promise<Delegation[]> => {
+    const r = await fetch(`/assistant/conversations/${encodeURIComponent(id)}/delegations`);
+    if (!r.ok) await fail(r);
+    return ((await r.json()) as { tasks?: Delegation[] }).tasks ?? [];
+  },
   /** The desk mints or refreshes the person's token and hands it to the assistant for this conversation. */
   token: (id: string) => fetch(`/desk/assistant/conversations/${encodeURIComponent(id)}/token`, { method: "POST", headers: H }).then((r) => (r.ok ? undefined : fail(r))),
 };
+
+export interface Delegation {
+  task: string;
+  station: string;
+  state: "queued" | "running" | "settled" | "failed" | "aborted";
+  result: { document: number | null; sentence: string | null } | null;
+  error: string | null;
+}
 
 /** Conversations carry parent pointers from the start; the desk keeps its own list, in this browser. */
 export interface Conversation {
