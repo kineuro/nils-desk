@@ -52,5 +52,19 @@ export interface Capabilities {
     signed_in: boolean;
     /** The entitlement an export needs on this desk, when this person holds it; null otherwise. */
     export?: string | null;
+    /** Section 7.6: the desk's own settings, read only; changed in its configuration file. */
+    settings?: {
+      origin: string;
+      engine_url: string;
+      kvasir_url: string | null;
+      assistant_url: string | null;
+      session_hours: number;
+      token_minutes: number;
+      cli_token_hours: number;
+      export: string;
+      store: string;
+      retention: string;
+      engine_flags: string | null;
+    };
   };
 }

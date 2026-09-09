@@ -7,6 +7,7 @@ import { Question } from "./ask/Question";
 import { Results } from "./results/Results";
 import { Operations } from "./ops/Operations";
 import { Data } from "./data/Data";
+import { Settings } from "./settings/Settings";
 
 type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
 
@@ -126,16 +127,7 @@ function Section({ id, caps }: { id: string; caps: Capabilities }) {
     case "data":
       return <Data caps={caps} />;
     case "settings":
-      return (
-        <section>
-          <h1>Settings</h1>
-          <p>{caps.desk.mode} mode.</p>
-          {caps.desk.mode === "local" && caps.person.entitlements.includes("admin") && <Users />}
-          {caps.desk.signed_in && caps.desk.login && (
-            <button onClick={() => fetch("/desk/logout", { method: "POST", headers: { "X-Nils-Desk": "1" } }).then(() => location.reload())}>Log out</button>
-          )}
-        </section>
-      );
+      return <Settings caps={caps} />;
     case "assistant":
       return <section><h1>Assistant</h1><p>The chat pane arrives with D6.</p></section>;
     default:
@@ -176,47 +168,5 @@ function Login({ how, url, onDone }: { how: "password" | "redirect"; url: string
         {why && <p className="warn">{why}</p>}
       </form>
     </section>
-  );
-}
-
-interface UserRow { username: string; display: string; entitlements: string[]; admin: boolean }
-
-/** The admin's users page of local mode: grant and revoke entitlements. */
-function Users() {
-  const [users, setUsers] = useState<UserRow[] | null>(null);
-  const [all, setAll] = useState<string[]>([]);
-  const [why, setWhy] = useState<string | null>(null);
-  const load = () =>
-    fetch("/desk/users")
-      .then((r) => r.json())
-      .then((d: { users: UserRow[]; entitlements: string[] }) => { setUsers(d.users); setAll(d.entitlements); })
-      .catch((e: Error) => setWhy(e.message));
-  useEffect(() => { load(); }, []);
-  const toggle = (u: UserRow, e: string) => {
-    const next = u.entitlements.includes(e) ? u.entitlements.filter((x) => x !== e) : [...u.entitlements, e];
-    fetch(`/desk/users/${encodeURIComponent(u.username)}/entitlements`, {
-      method: "PUT", headers: { "content-type": "application/json", "X-Nils-Desk": "1" }, body: JSON.stringify({ entitlements: next }),
-    }).then(async (r) => (r.ok ? load() : setWhy((await r.json()).error)));
-  };
-  if (!users) return <p>Reading the users</p>;
-  return (
-    <div>
-      <h2>Users</h2>
-      <table className="users">
-        <thead><tr><th>user</th>{all.map((e) => <th key={e}>{e}</th>)}</tr></thead>
-        <tbody>
-          {users.map((u) => (
-            <tr key={u.username}>
-              <td>{u.display} <code>{u.username}</code></td>
-              {all.map((e) => (
-                <td key={e}><input type="checkbox" checked={u.entitlements.includes(e)} onChange={() => toggle(u, e)} /></td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {why && <p className="warn">{why}</p>}
-      <p>A new user is added at the command line: <code>nils-desk user add NAME</code>.</p>
-    </div>
   );
 }

@@ -147,6 +147,34 @@ async fn parts(desk: &Shared) -> Parts {
     p
 }
 
+/// §7.6: the flags to paste on `nils serve` when the identity mode needs a
+/// trust entry: the desk's own issuer in `local` mode, the provider in
+/// `oidc` mode; none in `off` mode.
+fn engine_flags(desk: &Shared) -> Value {
+    let roles = ["reader", "reviewer", "operator", "admin"]
+        .iter()
+        .map(|r| format!("--role {r}={r}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    match desk.config.mode {
+        crate::config::Mode::Off => Value::Null,
+        crate::config::Mode::Local => Value::from(format!(
+            "--auth oidc --oidc-trust issuer={o},audience={a},jwks={o}/.well-known/jwks.json --oidc-groups-claim roles {roles}",
+            o = desk.config.origin.trim_end_matches('/'),
+            a = desk.config.local.audience
+        )),
+        crate::config::Mode::Oidc => match &desk.config.oidc {
+            Some(o) => Value::from(format!(
+                "--auth oidc --oidc-trust issuer={i},audience={a},jwks={i}/jwks/ --oidc-groups-claim {c} {roles}",
+                i = o.issuer.trim_end_matches('/'),
+                a = o.client_id,
+                c = o.roles_claim
+            )),
+            None => Value::Null,
+        },
+    }
+}
+
 /// The document for one person.
 pub async fn document(desk: &Shared, person: &session::Person) -> Value {
     let p = parts(desk).await;
@@ -188,6 +216,21 @@ pub async fn document(desk: &Shared, person: &session::Person) -> Value {
             "signed_in": !person.subject.is_empty(),
             // §7.4: whether this person may export, by the desk's setting
             "export": if desk.config.export != "off" && person.holds(&desk.config.export) { Value::from(desk.config.export.clone()) } else { Value::Null },
+            // §7.6: the desk's own settings, read only here; each is owned
+            // and enforced by the desk and changed in its configuration file
+            "settings": {
+                "origin": desk.config.origin,
+                "engine_url": desk.config.engine.url,
+                "kvasir_url": desk.config.kvasir.as_ref().map(|u| u.url.clone()),
+                "assistant_url": desk.config.assistant.as_ref().map(|u| u.url.clone()),
+                "session_hours": session::HOURS,
+                "token_minutes": crate::issuer::TOKEN_MINUTES,
+                "cli_token_hours": crate::issuer::CLI_TOKEN_HOURS,
+                "export": desk.config.export,
+                "store": desk.config.store.display().to_string(),
+                "retention": "sessions expire after the session lifetime; display names, local users, the record of runs and document lineage are kept until removed with the desk stopped",
+                "engine_flags": engine_flags(desk),
+            },
         },
     })
 }
