@@ -35,6 +35,7 @@ describe("the reducer over the live stream", () => {
   const chunks: Chunk[] = [
     { type: "message-appended", message: { id: "u1", role: "user", display: "visible", parts: [{ type: "text", text: "how many subjects" }] } },
     { type: "message-appended", message: { id: "s1", role: "system", display: "hidden", parts: [{ type: "text", text: "a signal" }] } },
+    { type: "message-appended", message: { id: "s2", role: "system", display: "visible", parts: [{ type: "text", text: "System instructions updated." }] } },
     { type: "message-started", messageId: "a1" },
     { type: "message-delta", messageId: "a1", kind: "reasoning", delta: "hmm" },
     { type: "message-delta", messageId: "a1", kind: "text", delta: "Count" },

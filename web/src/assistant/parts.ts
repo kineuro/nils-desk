@@ -150,7 +150,8 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
     case "message-appended": {
       const m = c.message as { id: string; role: string; display?: string; parts?: { type: string; text?: string }[] };
       if (m.display && m.display !== "visible") return state;
-      if (m.role !== "user" && m.role !== "system") return state;
+      // the runtime's own notices (a prompt refreshed, a station signal) are not turns; a system line is kept only when it settles something
+      if (m.role !== "user" && !(m.role === "system" && (c.message as { settlement?: unknown }).settlement)) return state;
       if (turn(state, m.id)) return state;
       const text = (m.parts ?? []).filter((p) => p.type === "text").map((p) => p.text ?? "").join("");
       return { ...state, turns: [...state.turns, { id: m.id, role: m.role, text, done: true, tools: [] }] };
@@ -201,7 +202,7 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
   let state: PaneState = { ...empty(h.offset ?? previous.offset), proposals: previous.proposals.filter((p) => p.decided !== null) };
   for (const m of h.messages) {
     if (m.display && m.display !== "visible") continue;
-    if (m.role !== "user" && m.role !== "assistant" && m.role !== "system") continue;
+    if (m.role !== "user" && m.role !== "assistant" && !(m.role === "system" && (m as { settlement?: unknown }).settlement)) continue;
     const t: Turn = { id: m.id, role: m.role, text: "", done: true, tools: [] };
     for (const p of m.parts) {
       if (p.type === "text") t.text += p.text ?? "";
