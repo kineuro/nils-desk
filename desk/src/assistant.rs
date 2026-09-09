@@ -26,7 +26,7 @@ pub async fn push_token(
     Path(id): Path<String>,
     headers: HeaderMap,
 ) -> Response {
-    if let Err(why) = same_origin(&desk.config.origin, &headers) {
+    if let Err(why) = same_origin(&desk.config.origins(), &headers) {
         return error(StatusCode::FORBIDDEN, why);
     }
     let Some(up) = crate::proxy::assistant_upstream(&desk) else {

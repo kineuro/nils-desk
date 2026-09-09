@@ -73,7 +73,7 @@ fn export_of(desk: &Shared, headers: &HeaderMap) -> Value {
 
 /// `POST /desk/results {handle, document}`: a run happened from a document.
 pub async fn record(State(desk): State<Shared>, headers: HeaderMap, body: String) -> Response {
-    if let Err(why) = same_origin(&desk.config.origin, &headers) {
+    if let Err(why) = same_origin(&desk.config.origins(), &headers) {
         return error(StatusCode::FORBIDDEN, why);
     }
     let p = match who(&desk, &headers) {
@@ -92,7 +92,7 @@ pub async fn record(State(desk): State<Shared>, headers: HeaderMap, body: String
 
 /// `POST /desk/lineage {document, parent}`: an apply made a child.
 pub async fn lineage(State(desk): State<Shared>, headers: HeaderMap, body: String) -> Response {
-    if let Err(why) = same_origin(&desk.config.origin, &headers) {
+    if let Err(why) = same_origin(&desk.config.origins(), &headers) {
         return error(StatusCode::FORBIDDEN, why);
     }
     let p = match who(&desk, &headers) {

@@ -5,6 +5,12 @@
 bind = "127.0.0.1:7200"
 origin = "http://127.0.0.1:7200"
 
+# Other addresses this same desk answers at, when a browser may reach it by more
+# than one: the machine's own address beside the loopback, a host name beside an
+# address. A write carrying one of them is the desk's own; everything the desk
+# advertises, mints and redirects to stays the `origin` above.
+# also_origins = ["http://192.168.0.30:7200", "http://localhost:7200"]
+
 # off: one person on one machine, every entitlement, no login.
 # local: users the desk keeps; the desk is a small issuer the engine trusts.
 # oidc: an identity provider; the desk is a confidential client with PKCE.
