@@ -1,0 +1,52 @@
+{
+ "sets": [
+  [
+   "scope",
+   "scope: cohorts; where name among {cohorts}."
+  ],
+  [
+   "people",
+   "people: subjects of scope."
+  ],
+  [
+   "visits",
+   "visits: sessions of people."
+  ],
+  [
+   "flair",
+   "flair: stacks of visits; where base = T2w and modifier has FLAIR and acquisition_type = 3D and field_strength within {tesla_tol} of {tesla}."
+  ],
+  [
+   "mp2rage",
+   "mp2rage: stacks of visits; where technique = MPRAGE and field_strength within {tesla_tol} of {tesla}."
+  ],
+  [
+   "both",
+   "both: sessions from visits; at least 1 flair; at least 1 mp2rage."
+  ]
+ ],
+ "conventions": [
+  "windows are days with both ends inclusive; a month is 31 days and a year 366",
+  "a date carries its precision; comparisons and windows read a coarse date as its interval, forgiving unless the clause says strict (no clause here does)",
+  "cohort membership is the open interval; there is no as-of date",
+  "stack sets exclude the excluded disposition; superseded rows and withdrawn picks are never read",
+  "the session scheme is 37f53eb14839513e00f3f54494f1601b with a window of 0 days"
+ ],
+ "denominators": [],
+ "mechanisms": [],
+ "disclosure": "local, projecting quasiidentifying and sensitive",
+ "answer": "the answer is both at the count level",
+ "declaration": {
+  "grain": "session",
+  "session_scheme": {
+   "name": "default",
+   "digest": "37f53eb14839513e00f3f54494f1601b"
+  },
+  "membership": "in flair at least 1 times; and in mp2rage at least 1 times",
+  "key_namespace": "the registry's pseudonymous key",
+  "pick_rule": "none: every row of the set",
+  "denominator": "none: a count over the set",
+  "disclosure": "local, projecting quasiidentifying and sensitive",
+  "truncated": false
+ }
+}

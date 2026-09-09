@@ -1,0 +1,182 @@
+{
+ "document": 2,
+ "hash": "add3759bfe61bb7449b8ad88d6777a16c5584ca8751285addf51d726a712f5e3",
+ "digest": "3b653bedc889cc7d01c0a93ef9258d38abb3c588b189a4324540f071fda1a42c",
+ "principal": "nima@g14",
+ "created_at": "2026-09-09T01:36:05Z",
+ "last_used_at": "2026-09-09T01:36:05Z",
+ "parent": 1,
+ "ask": {
+  "ast_version": 1,
+  "name": "sessions holding both roles at high field",
+  "scheme": "default",
+  "params": {
+   "cohorts": {
+    "type": "list",
+    "value": [
+     "ms-cohort-a",
+     "ms-cohort-b"
+    ]
+   },
+   "tesla": {
+    "type": "number",
+    "value": 3.0
+   },
+   "tesla_tol": {
+    "type": "number",
+    "value": 0.25
+   }
+  },
+  "sets": {
+   "both": {
+    "grain": "session",
+    "from": "visits",
+    "has": [
+     {
+      "set": "flair",
+      "min": 1
+     },
+     {
+      "set": "mp2rage",
+      "min": 1
+     }
+    ]
+   },
+   "flair": {
+    "grain": "stack",
+    "of": "visits",
+    "where": [
+     [
+      "=",
+      {},
+      [
+       "axis",
+       {},
+       "base"
+      ],
+      "T2w"
+     ],
+     [
+      "has",
+      {},
+      [
+       "axis",
+       {},
+       "modifier"
+      ],
+      "FLAIR"
+     ],
+     [
+      "=",
+      {},
+      [
+       "derived",
+       {},
+       "acquisition_type"
+      ],
+      "3D"
+     ],
+     [
+      "~=",
+      {
+       "tol": [
+        "param",
+        {},
+        "tesla_tol"
+       ]
+      },
+      [
+       "derived",
+       {},
+       "field_strength"
+      ],
+      [
+       "param",
+       {},
+       "tesla"
+      ]
+     ]
+    ]
+   },
+   "mp2rage": {
+    "grain": "stack",
+    "of": "visits",
+    "where": [
+     [
+      "=",
+      {},
+      [
+       "axis",
+       {},
+       "technique"
+      ],
+      "MPRAGE"
+     ],
+     [
+      "~=",
+      {
+       "tol": [
+        "param",
+        {},
+        "tesla_tol"
+       ]
+      },
+      [
+       "derived",
+       {},
+       "field_strength"
+      ],
+      [
+       "param",
+       {},
+       "tesla"
+      ]
+     ]
+    ]
+   },
+   "people": {
+    "grain": "subject",
+    "of": "scope"
+   },
+   "scope": {
+    "grain": "cohort",
+    "where": [
+     [
+      "in",
+      {},
+      [
+       "field",
+       {},
+       "name"
+      ],
+      [
+       "param",
+       {},
+       "cohorts"
+      ]
+     ],
+     [
+      "not_null",
+      {},
+      [
+       "field",
+       {},
+       "name"
+      ]
+     ]
+    ]
+   },
+   "visits": {
+    "grain": "session",
+    "of": "people"
+   }
+  },
+  "keep": [
+   "both"
+  ],
+  "out": {
+   "set": "both",
+   "level": "count"
+  }
+ }
+}

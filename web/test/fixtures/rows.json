@@ -1,0 +1,21 @@
+{
+ "handle": 77,
+ "page": 0,
+ "pages": 1,
+ "columns": [
+  {
+   "name": "rows",
+   "type": "integer"
+  },
+  {
+   "name": "subjects",
+   "type": "integer"
+  }
+ ],
+ "rows": [
+  [
+   175,
+   41
+  ]
+ ]
+}

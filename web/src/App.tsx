@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "./capabilities";
 import { operationsControls, sections, state } from "./sections";
+import { Question } from "./ask/Question";
 
 type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
 
@@ -97,7 +98,7 @@ export function App() {
 function Section({ id, caps }: { id: string; caps: Capabilities }) {
   switch (id) {
     case "ask":
-      return <section><h1>Ask</h1><p>The question page arrives with B3. The engine serves {caps.engine!.doors.length} doors.</p></section>;
+      return <Question />;
     case "results":
       return <section><h1>Results</h1><p>Handles and selections arrive with B4.</p></section>;
     case "operations":

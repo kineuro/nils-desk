@@ -1,0 +1,42 @@
+{
+ "handle": 77,
+ "hash": "56f5f97518f98ebc92e84c658993c1d5c7c8fbd4062a1dc7c4b1e1ff15207e47",
+ "grain": "session",
+ "row_count": 1,
+ "declaration": {
+  "grain": "session",
+  "session_scheme": {
+   "name": "default",
+   "digest": "37f53eb14839513e00f3f54494f1601b"
+  },
+  "membership": "in flair at least 1 times; and in mp2rage at least 1 times",
+  "key_namespace": "the registry's pseudonymous key",
+  "pick_rule": "none: every row of the set",
+  "denominator": "none: a count over the set",
+  "disclosure": "local, projecting quasiidentifying and sensitive",
+  "truncated": false
+ },
+ "content_hash": "fcfe0bdf87113984fe6d4f961b5f3f8c11e6e3fd4b383ac95f37cd8a62a4faf7",
+ "truncated": false,
+ "columns": [
+  "rows",
+  "subjects"
+ ],
+ "rows": [
+  [
+   175,
+   41
+  ]
+ ],
+ "page_rows": 200,
+ "pages": 1,
+ "measures": {
+  "columns": [],
+  "scalars": {}
+ },
+ "drift": [],
+ "kept": [],
+ "identifiers": [],
+ "inlined": [],
+ "epoch": 1
+}

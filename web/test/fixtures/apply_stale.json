@@ -1,0 +1,14 @@
+{
+ "error": "stale_options",
+ "issues": [
+  {
+   "code": "stale_options",
+   "path": "moves",
+   "message": "the token names another document, set or scope than 2, scope",
+   "next": "POST /api/ask/options for document 2 and apply against its token"
+  }
+ ],
+ "next": [
+  "POST /api/ask/options for document 2 and apply against its token"
+ ]
+}
