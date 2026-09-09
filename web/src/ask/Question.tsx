@@ -11,6 +11,7 @@ import {
   ask,
   chain,
   columnName,
+  desk,
   DoorError,
   runOnce,
   type Column,
@@ -227,6 +228,8 @@ function Editor({ docId, onOpen, onClose }: { docId: number; onOpen: (id: number
       try {
         const a = await ask.apply(docId, o, offer.set, [{ move_id: offer.move.id, args: offer.args }]);
         setEdits((prev) => [...prev, line]);
+        // the desk's own record of lineage, so a result of the parent can be told stale (section 7.4)
+        if (a.document !== a.parent) desk.lineage(a.document, a.parent).catch(() => undefined);
         onOpen(a.document);
       } catch (e) {
         if (e instanceof DoorError && e.stale) {
@@ -249,7 +252,10 @@ function Editor({ docId, onOpen, onClose }: { docId: number; onOpen: (id: number
     if (!doc) return;
     const epoch = opts[openSet ?? ""]?.epoch ?? 0;
     runOnce(docId, epoch)
-      .then((r) => setRan({ handle: r.handle, row_count: r.row_count, content_hash: r.content_hash }))
+      .then((r) => {
+        setRan({ handle: r.handle, row_count: r.row_count, content_hash: r.content_hash });
+        desk.record(r.handle, docId).catch(() => undefined);
+      })
       .catch((e: Error) => setWhy(e.message));
   };
 

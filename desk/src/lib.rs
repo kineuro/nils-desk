@@ -12,6 +12,7 @@ pub mod issuer;
 pub mod oidc;
 pub mod proxy;
 pub mod register;
+pub mod results;
 pub mod session;
 pub mod store;
 pub mod users;
@@ -94,6 +95,9 @@ pub fn router(desk: Shared) -> Router {
             "/desk/users/{name}/entitlements",
             axum::routing::put(session::users_entitlements),
         )
+        .route("/desk/results", get(results::list).post(results::record))
+        .route("/desk/lineage", post(results::lineage))
+        .route("/desk/export/{handle}", get(results::export))
         .route("/.well-known/jwks.json", get(session::jwks))
         .route("/.well-known/openid-configuration", get(session::discovery))
         .route("/api/{*rest}", any(proxy::engine))

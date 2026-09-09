@@ -48,5 +48,7 @@ export interface Capabilities {
     /** How a person logs in, by mode: none in off mode. */
     login: null | { kind: "password" | "redirect"; url: string };
     signed_in: boolean;
+    /** The entitlement an export needs on this desk, when this person holds it; null otherwise. */
+    export?: string | null;
   };
 }

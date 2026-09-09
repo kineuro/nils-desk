@@ -225,3 +225,122 @@ async fn a_registered_app_that_answers_is_in_the_document_and_one_that_does_not_
     assert_eq!(apps[0]["capabilities"]["version"], "1");
     assert!(apps[1]["capabilities"].is_null(), "absence is null: {doc}");
 }
+
+/// Wave 4c §7.4: an export pages the engine's rows door under the caller's
+/// bearer with the purpose on every page, and comes back as CSV; the desk's
+/// own record of runs and lineage is written by the front end.
+#[tokio::test]
+async fn an_export_pages_the_handle_with_the_purpose_and_the_desk_records_runs_and_lineage() {
+    let seen: Arc<std::sync::Mutex<Vec<String>>> = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = seen.clone();
+    let app = Router::new()
+        .route(
+            "/api/capabilities",
+            get(|| async {
+                axum::Json(json!({
+                    "engine": {"name": "nils", "version": "1.0.0-alpha.0"},
+                    "contracts": {"openapi": "3", "review_item": "4", "pack": "4", "suite": "1", "mcp": "1"},
+                    "doors": ["GET /api/ask/handles"], "policy": [], "auth": "token", "principal": "desk@lab",
+                    "roles": ["reader"], "registry": {"epoch": 7}, "packs": [],
+                }))
+            }),
+        )
+        .route(
+            "/api/ask/handles/{id}",
+            get(|axum::extract::Path(id): axum::extract::Path<i64>| async move {
+                axum::Json(json!({"id": id, "name": "converters/good", "pages": 2, "row_count": 3,
+                    "columns": [{"name": "_key", "type": "integer"}, {"name": "label", "type": "text"}]}))
+            }),
+        )
+        .route(
+            "/api/ask/handles/{id}/rows",
+            get(move |headers: HeaderMap, axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>| {
+                let log = log.clone();
+                async move {
+                    let bearer = headers.get("authorization").and_then(|v| v.to_str().ok()).unwrap_or("").to_string();
+                    log.lock().unwrap().push(format!("{bearer}|{}|{}", q.get("page").cloned().unwrap_or_default(), q.get("purpose").cloned().unwrap_or_default()));
+                    let page: i64 = q.get("page").and_then(|p| p.parse().ok()).unwrap_or(0);
+                    let rows = if page == 0 { json!([[1, "plain"], [2, "has, a comma"]]) } else { json!([[3, "says \"hi\"\nand more"]]) };
+                    axum::Json(json!({"handle": 5, "page": page, "pages": 2, "columns": [], "rows": rows}))
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let engine = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let (origin, shared) = desk(&engine, None).await;
+    // off mode: every request is the operator's, no cookie needed
+    let client = reqwest::Client::new();
+    let r = client
+        .get(format!(
+            "{origin}/desk/export/5?purpose=the%20monthly%20count"
+        ))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(
+        r.headers().get("content-type").unwrap(),
+        "text/csv; charset=utf-8"
+    );
+    assert!(
+        r.headers()
+            .get("content-disposition")
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("handle-5-converters_good.csv")
+    );
+    let body = r.text().await.unwrap();
+    assert_eq!(
+        body,
+        "_key,label\r\n1,plain\r\n2,\"has, a comma\"\r\n3,\"says \"\"hi\"\"\nand more\"\r\n"
+    );
+    let pages = seen.lock().unwrap().clone();
+    assert_eq!(
+        pages,
+        vec![
+            "Bearer a-desk-token-of-length-x|0|the monthly count".to_string(),
+            "Bearer a-desk-token-of-length-x|1|the monthly count".to_string()
+        ]
+    );
+    // the desk's own record, written by the front end after a run and an apply
+    let r = client
+        .post(format!("{origin}/desk/results"))
+        .header("X-Nils-Desk", "1")
+        .header("Origin", &origin)
+        .body(r#"{"handle": 5, "document": 2}"#)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 204);
+    let r = client
+        .post(format!("{origin}/desk/lineage"))
+        .header("X-Nils-Desk", "1")
+        .header("Origin", &origin)
+        .body(r#"{"document": 3, "parent": 2}"#)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 204);
+    let r = client
+        .post(format!("{origin}/desk/lineage"))
+        .body(r#"{"document": 4, "parent": 3}"#)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403, "a cross-origin write is refused");
+    let doc: Value = client
+        .get(format!("{origin}/desk/results"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(doc["results"][0]["handle"], 5);
+    assert_eq!(doc["results"][0]["document"], 2);
+    assert_eq!(doc["lineage"], json!([{"document": 3, "parent": 2}]));
+    assert_eq!(doc["export"], "reader");
+    assert_eq!(shared.config.export, "reader");
+}

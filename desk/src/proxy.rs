@@ -17,7 +17,7 @@ use crate::config::{Mode, Upstream};
 use crate::session;
 
 /// The bearer a proxied call carries (Wave 4c §5.4, §5.5).
-async fn bearer(
+pub(crate) async fn bearer(
     desk: &Shared,
     up: &Upstream,
     headers: &HeaderMap,

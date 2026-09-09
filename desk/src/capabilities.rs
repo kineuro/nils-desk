@@ -186,6 +186,8 @@ pub async fn document(desk: &Shared, person: &session::Person) -> Value {
                 crate::config::Mode::Oidc => json!({"kind": "redirect", "url": "/desk/login"}),
             },
             "signed_in": !person.subject.is_empty(),
+            // §7.4: whether this person may export, by the desk's setting
+            "export": if desk.config.export != "off" && person.holds(&desk.config.export) { Value::from(desk.config.export.clone()) } else { Value::Null },
         },
     })
 }

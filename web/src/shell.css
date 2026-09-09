@@ -81,3 +81,31 @@ button.cell { border: 0; padding: 0; background: transparent; color: inherit; cu
 .examples .note { margin-left: 0.6rem; opacity: 0.75; font-size: 0.9rem; }
 .ran { border-left: 3px solid var(--line); padding-left: 0.8rem; }
 @media (max-width: 60rem) { .versions li { grid-template-columns: 3rem 1fr; } .compare { grid-template-columns: 1fr; } }
+
+/* the result surface (B4) */
+main:has(.results) { max-width: 100ch; }
+.results h1 { font-size: 1.35rem; margin: 0 0 0.2rem; }
+.results h2 { font-size: 1.05rem; margin: 0 0 0.5rem; }
+.results h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 0.3rem; opacity: 0.75; }
+.results .meta { font-size: 0.85rem; opacity: 0.75; margin: 0; }
+.results .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 0.4rem 0; }
+.results button, .results .button { font: inherit; padding: 0.3rem 0.7rem; border: 1px solid var(--line); background: transparent; color: inherit; border-radius: 4px; cursor: pointer; text-decoration: none; display: inline-block; }
+.results .button { background: var(--plum); color: var(--paper); border-color: var(--plum); }
+.results button:disabled { opacity: 0.5; cursor: not-allowed; }
+.results button.cell { border: 0; padding: 0; text-decoration: underline dotted; }
+.results input { font: inherit; padding: 0.25rem 0.4rem; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: inherit; }
+table.handles { border-collapse: collapse; font-size: 0.92rem; width: 100%; }
+table.handles th, table.handles td { padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--line); text-align: left; }
+table.handles tr.on td { background: color-mix(in srgb, var(--plum) 12%, transparent); }
+table.handles th.num { text-align: right; }
+.badges { display: inline-flex; gap: 0.3rem; }
+.tag.warn { border-color: #a55; color: #a55; }
+.tag.off { border-color: var(--line); color: inherit; opacity: 0.7; }
+.running ul { margin: 0; padding-left: 1.2rem; }
+.provenance { display: grid; grid-template-columns: max-content 1fr; gap: 0.15rem 1rem; margin: 0 0 0.8rem; font-size: 0.92rem; }
+.provenance dt { opacity: 0.7; }
+.provenance dd { margin: 0; overflow-wrap: anywhere; }
+.overlay { border-left: 3px solid #a55; padding: 0.4rem 0.9rem; margin: 0.6rem 0; }
+.controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; margin-top: 1rem; border-top: 1px solid var(--line); padding-top: 0.8rem; }
+.control .reason { font-size: 0.85rem; opacity: 0.8; margin: 0.3rem 0 0; }
+.control label { display: inline-flex; gap: 0.4rem; align-items: center; margin-right: 0.5rem; }
