@@ -9,11 +9,13 @@ import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import type { JobRow, Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
+import { stationsServed } from "../assistant/stations";
+import { Anonymisation } from "./Anonymisation";
 import { ops } from "../ops/client";
 import { type Batch, data } from "../ops/client";
 import { command, type IngestForm, restoreProcedure, type Verb } from "./ingest";
 
-const TABS: [string, string][] = [["packs", "Packs"], ["batches", "Batches"], ["quarantine", "Quarantine"], ["ingest", "Ingest"], ["backup", "Backup"], ["restore", "Restore"]];
+const TABS: [string, string][] = [["packs", "Packs"], ["batches", "Batches"], ["quarantine", "Quarantine"], ["ingest", "Ingest"], ["anonymisation", "Anonymisation"], ["backup", "Backup"], ["restore", "Restore"]];
 
 function tabOfHash(): string | null {
   const m = /^#data(?:\/([a-z]+))?/.exec(location.hash);
@@ -31,7 +33,9 @@ export function Data({ caps }: { caps: Capabilities }) {
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
   const operator = caps.person.entitlements.some((e) => e === "operator" || e === "admin");
-  const tabs = TABS.filter(([id]) => operator || !["ingest", "backup", "restore"].includes(id));
+  // the anonymisation page of section 9.14 needs the probe door, an operator, and the assistant's identity-check
+  const probe = caps.engine?.doors.includes("POST /api/ingest/probe") && stationsServed(caps).includes("identity-check");
+  const tabs = TABS.filter(([id]) => (operator || !["ingest", "anonymisation", "backup", "restore"].includes(id)) && (id !== "anonymisation" || probe));
   const active = tabs.some(([id]) => id === tab) ? tab : tabs[0][0];
   return (
     <section className="ops">
@@ -50,6 +54,7 @@ export function Data({ caps }: { caps: Capabilities }) {
       {active === "batches" && <Batches />}
       {active === "quarantine" && <Quarantine />}
       {active === "ingest" && <Ingest caps={caps} />}
+      {active === "anonymisation" && <Anonymisation caps={caps} />}
       {active === "backup" && <Backup caps={caps} />}
       {active === "restore" && <Restore />}
     </section>

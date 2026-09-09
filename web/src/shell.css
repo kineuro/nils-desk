@@ -165,3 +165,12 @@ main:has(.panes) { max-width: 140ch; }
 .assistant .say textarea { width: 100%; box-sizing: border-box; font-family: inherit; }
 .assistant .aside { font-size: 0.85rem; }
 @media (max-width: 700px) { .panes { grid-template-columns: 1fr; } .assistant { position: static; max-height: none; } }
+
+/* the anonymisation page (D7): the probe's histograms, shapes never values */
+.histograms { display: grid; grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); gap: 1rem; }
+.candidate h3 { text-transform: none; letter-spacing: 0; font-size: 0.95rem; opacity: 1; }
+.histogram { list-style: none; padding: 0; margin: 0.3rem 0; display: grid; gap: 0.2rem; }
+.histogram li { display: grid; grid-template-columns: 6rem 1fr 3rem; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
+.histogram .shape { font-family: ui-monospace, monospace; }
+.histogram .bar { display: block; height: 0.8rem; background: var(--plum); border-radius: 2px; min-width: 2px; }
+.histogram .num { text-align: right; font-variant-numeric: tabular-nums; }
