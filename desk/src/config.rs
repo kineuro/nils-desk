@@ -13,6 +13,12 @@ pub struct Config {
     /// cross-origin defences of §5.4 compare against, and the issuer of the
     /// tokens the desk mints in `local` mode.
     pub origin: String,
+    /// Other addresses this same desk answers at: a machine's own address
+    /// beside the loopback, a host name beside an address. A write carrying
+    /// one of them is the desk's own write (§5.4); everything the desk
+    /// advertises, mints and redirects to stays the canonical `origin`.
+    #[serde(default)]
+    pub also_origins: Vec<String>,
     /// `off`, `local` or `oidc` (Wave 4c §5.1).
     #[serde(default = "default_mode")]
     pub mode: Mode,
@@ -33,6 +39,15 @@ pub struct Config {
     /// engine still authorises every page read against the caller.
     #[serde(default = "default_export")]
     pub export: String,
+}
+
+impl Config {
+    /// Every address a write may come from: the canonical origin first.
+    pub fn origins(&self) -> Vec<&str> {
+        let mut out = vec![self.origin.as_str()];
+        out.extend(self.also_origins.iter().map(String::as_str));
+        out
+    }
 }
 
 fn default_export() -> String {

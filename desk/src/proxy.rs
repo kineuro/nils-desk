@@ -130,25 +130,29 @@ fn absent(what: &str) -> Response {
         .into_response()
 }
 
-/// Whether a writing request came from the desk's own front end.
-pub fn same_origin(origin: &str, headers: &HeaderMap) -> Result<(), &'static str> {
+/// Whether a writing request came from the desk's own front end. A desk may
+/// answer at more than one address (a machine's own address beside the
+/// loopback, a host name beside an address); any of them is its own.
+pub fn same_origin(origins: &[&str], headers: &HeaderMap) -> Result<(), &'static str> {
     if headers.get("x-nils-desk").and_then(|v| v.to_str().ok()) != Some("1") {
         return Err(
             "a write through the desk carries X-Nils-Desk: 1, which a cross-origin form cannot send",
         );
     }
-    let origin = origin.trim_end_matches('/');
+    let ours = || origins.iter().map(|o| o.trim_end_matches('/'));
     if let Some(o) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) {
-        return if o.trim_end_matches('/') == origin {
+        let o = o.trim_end_matches('/');
+        return if ours().any(|ours| ours == o) {
             Ok(())
         } else {
             Err("the request's Origin is not this desk")
         };
     }
     if let Some(r) = headers.get(header::REFERER).and_then(|v| v.to_str().ok()) {
-        return if r.starts_with(origin) && r[origin.len()..].starts_with('/')
-            || r.trim_end_matches('/') == origin
-        {
+        return if ours().any(|ours| {
+            r.starts_with(ours) && r[ours.len()..].starts_with('/')
+                || r.trim_end_matches('/') == ours
+        }) {
             Ok(())
         } else {
             Err("the request's Referer is not this desk")
@@ -179,7 +183,7 @@ async fn forward(desk: &Shared, up: &Upstream, path: &str, req: Request) -> Resp
     let method = req.method().clone();
     let headers = req.headers().clone();
     if !matches!(method, Method::GET | Method::HEAD | Method::OPTIONS)
-        && let Err(why) = same_origin(&desk.config.origin, &headers)
+        && let Err(why) = same_origin(&desk.config.origins(), &headers)
     {
         return (StatusCode::FORBIDDEN, axum::Json(json!({"error": why}))).into_response();
     }

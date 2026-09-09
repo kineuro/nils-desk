@@ -107,6 +107,34 @@ async fn the_document_composes_the_parts_and_their_absence() {
     }
 }
 
+#[test]
+fn a_desk_may_answer_at_more_than_one_address() {
+    use axum::http::HeaderMap;
+    use nils_desk::proxy::same_origin;
+    let mut h = HeaderMap::new();
+    h.insert("x-nils-desk", "1".parse().unwrap());
+    h.insert("origin", "http://127.0.0.1:7203".parse().unwrap());
+    // the canonical origin alone: the loopback is not this desk
+    assert!(same_origin(&["http://192.168.0.30:7203"], &h).is_err());
+    // named beside it: the same desk, whichever address the browser typed
+    let both = ["http://192.168.0.30:7203", "http://127.0.0.1:7203"];
+    assert!(same_origin(&both, &h).is_ok());
+    h.insert("origin", "http://192.168.0.30:7203".parse().unwrap());
+    assert!(same_origin(&both, &h).is_ok());
+    // and nothing else is
+    h.insert("origin", "https://evil.example".parse().unwrap());
+    assert!(same_origin(&both, &h).is_err());
+    // a referer under one of them counts, a bare prefix does not
+    h.remove("origin");
+    h.insert("referer", "http://127.0.0.1:7203/ask/3".parse().unwrap());
+    assert!(same_origin(&both, &h).is_ok());
+    h.insert("referer", "http://127.0.0.1:72033/ask".parse().unwrap());
+    assert!(same_origin(&both, &h).is_err());
+    // the header is still required
+    h.remove("x-nils-desk");
+    assert!(same_origin(&both, &h).is_err());
+}
+
 #[tokio::test]
 async fn a_cross_origin_write_is_refused_and_a_same_origin_one_is_proxied_with_the_bearer() {
     let engine = fake_engine("3").await;
