@@ -173,6 +173,64 @@ export const ask = {
   guide: () => door<Guide>("GET", "/api/ask/guide"),
 };
 
+export interface HandleRow {
+  id: number;
+  name: string | null;
+  grain: string;
+  row_count: number;
+  content_hash: string | null;
+  principal: string;
+  actor: Json;
+  created_at: string;
+  epoch: number;
+  pack_version: string | null;
+  disclosure: string;
+  truncated: boolean;
+  /** The person's own limit in the document's out, when they set one. */
+  limit: number | null;
+  /** Whether the rows are still kept. */
+  kept: boolean;
+  last_read_at: string | null;
+  withdrawn_at: string | null;
+  ask_hash: string | null;
+  columns: string[];
+}
+
+export interface JobRow {
+  id: number;
+  kind: string;
+  name: string | null;
+  state: "queued" | "running" | "cancelling" | "done" | "failed" | "cancelled";
+  started_at: string;
+  heartbeat_at: string | null;
+  finished_at: string | null;
+  progress: Json | null;
+  error: string | null;
+  args: { argv?: string[]; principal?: string } & Json;
+  result: Json | null;
+}
+
+/** The desk's own record: which document a run came from, which document followed which. */
+export interface DeskRecord {
+  results: { handle: number; document: number; subject: string; made_at: string }[];
+  lineage: { document: number; parent: number }[];
+  export: string | null;
+}
+
+export const desk = {
+  results: () => door<DeskRecord>("GET", "/desk/results"),
+  record: (handle: number, document: number) => door<Json>("POST", "/desk/results", { handle, document }),
+  lineage: (document: number, parent: number) => door<Json>("POST", "/desk/lineage", { document, parent }),
+};
+
+export const results = {
+  handles: (withdrawn = false) => door<{ count: number; handles: HandleRow[] }>("GET", `/api/ask/handles?limit=200${withdrawn ? "&withdrawn=1" : ""}`),
+  jobs: () => door<{ count: number; jobs: JobRow[] }>("GET", "/api/jobs"),
+  job: (id: number) => door<JobRow>("GET", `/api/jobs/${id}`),
+  promote: (handle: number, cohort: string, create: boolean, reason: string) =>
+    door<{ job: number; state: string }>("POST", `/api/ask/handles/${handle}/promote`, reason ? { cohort, create, reason } : { cohort, create }),
+};
+
 export interface Drafted {
   document: number | null;
   hash: string | null;

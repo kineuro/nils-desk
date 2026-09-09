@@ -81,6 +81,18 @@ impl Store {
                  state TEXT PRIMARY KEY,
                  verifier TEXT NOT NULL,
                  created_at TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS result (
+                 handle INTEGER PRIMARY KEY,
+                 document INTEGER NOT NULL,
+                 subject TEXT NOT NULL,
+                 made_at TEXT NOT NULL
+             );
+             CREATE TABLE IF NOT EXISTS lineage (
+                 document INTEGER PRIMARY KEY,
+                 parent INTEGER NOT NULL,
+                 subject TEXT NOT NULL,
+                 made_at TEXT NOT NULL
              );",
         )
         .map_err(|e| e.to_string())?;
@@ -311,4 +323,49 @@ pub fn token() -> String {
     let mut bytes = [0u8; 32];
     rand::rng().fill_bytes(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+// --- Wave 4c §7.4: the desk's own record of which document a run came
+// from and which document followed which, so a result can be told stale
+// when its document moved on. Ids only; the engine holds the content.
+impl Store {
+    pub fn result_put(&self, handle: i64, document: i64, subject: &str) {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO result (handle, document, subject, made_at) VALUES (?1, ?2, ?3, ?4)",
+            params![handle, document, subject, now_iso()],
+        );
+    }
+
+    pub fn results(&self) -> Vec<(i64, i64, String, String)> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let mut st = match conn
+            .prepare("SELECT handle, document, subject, made_at FROM result ORDER BY handle DESC")
+        {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .map(|rows| rows.flatten().collect())
+            .unwrap_or_default()
+    }
+
+    pub fn lineage_put(&self, document: i64, parent: i64, subject: &str) {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = conn.execute(
+            "INSERT OR IGNORE INTO lineage (document, parent, subject, made_at) VALUES (?1, ?2, ?3, ?4)",
+            params![document, parent, subject, now_iso()],
+        );
+    }
+
+    pub fn lineage(&self) -> Vec<(i64, i64)> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let mut st = match conn.prepare("SELECT document, parent FROM lineage ORDER BY document") {
+            Ok(s) => s,
+            Err(_) => return Vec::new(),
+        };
+        st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map(|rows| rows.flatten().collect())
+            .unwrap_or_default()
+    }
 }

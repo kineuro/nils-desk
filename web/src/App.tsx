@@ -4,13 +4,25 @@ import type React from "react";
 import type { Capabilities } from "./capabilities";
 import { operationsControls, sections, state } from "./sections";
 import { Question } from "./ask/Question";
+import { Results } from "./results/Results";
 
 type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
 
 /** The shell: a pure function of the deployment capabilities document. */
 export function App() {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
-  const [current, setCurrent] = useState<string>("ask");
+  const [current, setCurrent] = useState<string>(() => sectionOfHash() ?? "ask");
+
+  // the hash names the section and, past the slash, what it opens:
+  // #ask/12, #results, #operations/releases/77
+  useEffect(() => {
+    const onHash = () => {
+      const s = sectionOfHash();
+      if (s) setCurrent(s);
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -42,7 +54,7 @@ export function App() {
         <span className="mark">NILS</span>
         <nav>
           {list.map((s) => (
-            <button key={s.id} className={s.id === active?.id ? "on" : ""} onClick={() => setCurrent(s.id)}>
+            <button key={s.id} className={s.id === active?.id ? "on" : ""} onClick={() => { setCurrent(s.id); if (!location.hash.startsWith(`#${s.id}`)) location.hash = `#${s.id}`; }}>
               {s.title}
             </button>
           ))}
@@ -95,12 +107,18 @@ export function App() {
   );
 }
 
+/** The section the hash names: its first segment, with app: kept whole. */
+export function sectionOfHash(hash: string = location.hash): string | null {
+  const m = /^#([a-z]+(?::[a-z0-9_-]+)?)(?:\/|$)/.exec(hash);
+  return m ? m[1] : null;
+}
+
 function Section({ id, caps }: { id: string; caps: Capabilities }) {
   switch (id) {
     case "ask":
       return <Question />;
     case "results":
-      return <section><h1>Results</h1><p>Handles and selections arrive with B4.</p></section>;
+      return <Results caps={caps} />;
     case "operations":
       return (
         <section>

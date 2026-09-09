@@ -29,6 +29,14 @@ pub struct Config {
     pub local: Local,
     /// `oidc` mode: the provider.
     pub oidc: Option<Oidc>,
+    /// Wave 4c §7.4, §7.6: the entitlement an export needs, or `off`. The
+    /// engine still authorises every page read against the caller.
+    #[serde(default = "default_export")]
+    pub export: String,
+}
+
+fn default_export() -> String {
+    "reader".into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
