@@ -8,9 +8,13 @@
 
 pub mod capabilities;
 pub mod config;
+pub mod issuer;
+pub mod oidc;
 pub mod proxy;
+pub mod register;
 pub mod session;
 pub mod store;
+pub mod users;
 pub mod web;
 
 use std::sync::Arc;
@@ -31,6 +35,10 @@ pub struct Desk {
     pub store: store::Store,
     pub http: reqwest::Client,
     pub caps: capabilities::Cache,
+    /// `local` mode: the desk as an issuer.
+    pub issuer: Option<issuer::Issuer>,
+    /// `oidc` mode: the provider.
+    pub oidc: Option<oidc::Client>,
 }
 
 pub type Shared = Arc<Desk>;
@@ -43,11 +51,29 @@ pub fn start(text: &str) -> Result<Shared, String> {
         .connect_timeout(std::time::Duration::from_secs(5))
         .build()
         .map_err(|e| e.to_string())?;
+    let issuer = match config.mode {
+        config::Mode::Local => Some(issuer::Issuer::open(
+            &config.local.key,
+            &config.origin,
+            &config.local.audience,
+        )?),
+        _ => None,
+    };
+    let oidc = match (config.mode, &config.oidc) {
+        (config::Mode::Oidc, Some(o)) => Some(oidc::Client::new(
+            o.clone(),
+            config.client_secret()?,
+            http.clone(),
+        )),
+        _ => None,
+    };
     Ok(Arc::new(Desk {
         config,
         store,
         http,
         caps: capabilities::Cache::default(),
+        issuer,
+        oidc,
     }))
 }
 
@@ -56,7 +82,20 @@ pub fn router(desk: Shared) -> Router {
     Router::new()
         .route("/desk/capabilities", get(capabilities::door))
         .route("/desk/session", get(session::door))
+        .route("/desk/login", get(session::begin).post(session::login))
+        .route("/desk/callback", get(session::callback))
+        .route("/desk/cli-login", post(session::cli_login))
         .route("/desk/logout", post(session::logout))
+        .route(
+            "/desk/users",
+            get(session::users_list).post(session::users_add),
+        )
+        .route(
+            "/desk/users/{name}/entitlements",
+            axum::routing::put(session::users_entitlements),
+        )
+        .route("/.well-known/jwks.json", get(session::jwks))
+        .route("/.well-known/openid-configuration", get(session::discovery))
         .route("/api/{*rest}", any(proxy::engine))
         .route("/kvasir/{*rest}", any(proxy::kvasir))
         .route("/assistant/{*rest}", any(proxy::assistant))

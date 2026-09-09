@@ -28,6 +28,9 @@ cp ../nils-desk.example.toml nils-desk.toml   # edit the engine url
 
 `off` (one person, every entitlement), `local` (users the desk keeps, its own issuer and JWKS) and `oidc` (an identity provider through a trust list). The engine, Kvasir and the desk speak the same five entitlements, fixed in `contracts/suite/v1`.
 
+- **local**: `nils-desk user add anna --admin` (the password on stdin) makes the first user; the admin grants `reader`, `reviewer`, `operator`, `admin` and `assist` on the settings page. The desk mints tokens of fifteen minutes for the person who just signed in, signed with an EdDSA key it made at first start, and publishes `/.well-known/jwks.json` and `/.well-known/openid-configuration`; the engine trusts it like any provider (the flags are in `nils-desk.example.toml`). `nils login --desk URL` gets the command line a token of one day.
+- **oidc**: `nils-desk register --authentik https://auth.example.org --token FILE --origin https://desk.example.org --allow staff --bind reader=staff --bind operator=neuro-ops ...` creates, idempotently, the application, the OAuth2 provider with a signing key, the policy binding, the five entitlements bound to the groups named and the entitlements scope mapping, then prints the engine's trust flag and the desk's `[oidc]` table. A second run changes nothing. Sign in is the authorization code grant with PKCE; the desk holds the person's tokens and refreshes them before expiry; the display name is recorded beside the subject at first sight, so a person renamed at the provider moves no row.
+
 ## License
 
 AGPL-3.0-only, under the same [Contributor License Agreement](CLA.md) as the engine. See [CONTRIBUTING.md](CONTRIBUTING.md).

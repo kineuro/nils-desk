@@ -13,7 +13,54 @@ use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
 use crate::Shared;
-use crate::config::Upstream;
+use crate::config::{Mode, Upstream};
+use crate::session;
+
+/// The bearer a proxied call carries (Wave 4c §5.4, §5.5).
+async fn bearer(
+    desk: &Shared,
+    up: &Upstream,
+    headers: &HeaderMap,
+) -> Result<Option<String>, String> {
+    match desk.config.mode {
+        Mode::Off => Ok(up.token.clone()),
+        Mode::Local => {
+            let (s, _) = session::resolve(desk, headers);
+            let s = s.ok_or("no session; log in at the desk")?;
+            let issuer = desk.issuer.as_ref().ok_or("the desk is not an issuer")?;
+            let now = time::OffsetDateTime::now_utc().unix_timestamp();
+            if let (Some(t), Some(exp)) =
+                (s.tokens["access"].as_str(), s.tokens["expires_at"].as_i64())
+                && exp - now > 60
+            {
+                return Ok(Some(t.to_string()));
+            }
+            let person = session::person(desk, &s);
+            let (t, exp) = issuer.mint(
+                &person.subject,
+                &person.display_name,
+                &person.entitlements,
+                crate::issuer::TOKEN_MINUTES,
+            )?;
+            desk.store
+                .set_tokens(&s.id, &json!({"access": t, "expires_at": exp}));
+            Ok(Some(t))
+        }
+        Mode::Oidc => {
+            let (s, _) = session::resolve(desk, headers);
+            let s = s.ok_or("no session; log in at the desk")?;
+            let client = desk.oidc.as_ref().ok_or("the desk has no provider")?;
+            let tokens = match client.refresh(&s.tokens).await? {
+                Some(fresh) => {
+                    desk.store.set_tokens(&s.id, &fresh);
+                    fresh
+                }
+                None => s.tokens.clone(),
+            };
+            Ok(tokens["access"].as_str().map(str::to_string))
+        }
+    }
+}
 
 const BODY_LIMIT: usize = 64 << 20;
 
@@ -149,8 +196,15 @@ async fn forward(desk: &Shared, up: &Upstream, path: &str, req: Request) -> Resp
             out = out.header(name, value);
         }
     }
-    if let Some(t) = &up.token {
-        out = out.bearer_auth(t);
+    // The bearer: the desk's own in `off` mode; the person's in the others,
+    // minted by the desk's issuer or held from the provider and refreshed
+    // before its expiry. A browser never sees either.
+    match bearer(desk, up, &headers).await {
+        Ok(Some(t)) => out = out.bearer_auth(t),
+        Ok(None) => {}
+        Err(e) => {
+            return (StatusCode::UNAUTHORIZED, axum::Json(json!({"error": e}))).into_response();
+        }
     }
     let resp = match out.body(body).send().await {
         Ok(r) => r,

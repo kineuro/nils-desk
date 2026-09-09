@@ -6,8 +6,30 @@ bind = "127.0.0.1:7200"
 origin = "http://127.0.0.1:7200"
 
 # off: one person on one machine, every entitlement, no login.
-# local and oidc arrive with the identity slice.
+# local: users the desk keeps; the desk is a small issuer the engine trusts.
+# oidc: an identity provider; the desk is a confidential client with PKCE.
 mode = "off"
+
+# local mode: the EdDSA signing key, made at first start, mode 600, and the
+# audience the minted tokens carry (what the engine's trust entry names).
+# The first user: `nils-desk user add anna --admin` (password on stdin);
+# the admin grants entitlements on the settings page. The engine runs with
+#   --auth oidc --oidc-trust issuer=<origin>,audience=nils,jwks=<origin>/.well-known/jwks.json
+#   --oidc-groups-claim roles --role reader=reader --role reviewer=reviewer
+#   --role operator=operator --role admin=admin
+# [local]
+# key = "nils-desk.key"
+# audience = "nils"
+
+# oidc mode: what `nils-desk register --authentik URL --token FILE --origin
+# <origin> --allow GROUP --bind reader=GROUP ...` prints, and the engine's
+# flags beside it.
+# [oidc]
+# issuer = "https://auth.example.org/application/o/nils/"
+# client_id = "..."
+# client_secret_file = "nils-desk.client-secret"
+# scopes = ["openid", "profile", "email", "offline_access", "entitlements"]
+# roles_claim = "roles"
 
 # The one SQLite file: sessions now; display names, preferences and local
 # users later.

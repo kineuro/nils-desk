@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { useEffect, useState } from "react";
+import type React from "react";
 import type { Capabilities } from "./capabilities";
 import { operationsControls, sections, state } from "./sections";
 
@@ -48,6 +49,7 @@ export function App() {
         <span className="person">{caps.person.display_name}</span>
       </header>
       <main>
+        {st.kind === "login" && <Login how={st.how} url={st.url} onDone={() => location.reload()} />}
         {st.kind === "unbound" && (
           <section className="state">
             <h1>No entitlement yet</h1>
@@ -113,7 +115,16 @@ function Section({ id, caps }: { id: string; caps: Capabilities }) {
         </section>
       );
     case "settings":
-      return <section><h1>Settings</h1><p>{caps.desk.mode} mode; the settings pages arrive with B2 and C4.</p></section>;
+      return (
+        <section>
+          <h1>Settings</h1>
+          <p>{caps.desk.mode} mode.</p>
+          {caps.desk.mode === "local" && caps.person.entitlements.includes("admin") && <Users />}
+          {caps.desk.signed_in && caps.desk.login && (
+            <button onClick={() => fetch("/desk/logout", { method: "POST", headers: { "X-Nils-Desk": "1" } }).then(() => location.reload())}>Log out</button>
+          )}
+        </section>
+      );
     case "assistant":
       return <section><h1>Assistant</h1><p>The chat pane arrives with D6.</p></section>;
     default:
@@ -123,4 +134,78 @@ function Section({ id, caps }: { id: string; caps: Capabilities }) {
       }
       return null;
   }
+}
+
+function Login({ how, url, onDone }: { how: "password" | "redirect"; url: string; onDone: () => void }) {
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [why, setWhy] = useState<string | null>(null);
+  if (how === "redirect") {
+    return (
+      <section className="state">
+        <h1>Sign in</h1>
+        <p>This desk signs you in at your organisation's identity provider.</p>
+        <a className="button" href={url}>Continue</a>
+      </section>
+    );
+  }
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    fetch(url, { method: "POST", headers: { "content-type": "application/json", "X-Nils-Desk": "1" }, body: JSON.stringify({ username, password }) })
+      .then(async (r) => (r.ok ? onDone() : setWhy((await r.json()).error ?? `the desk answered ${r.status}`)))
+      .catch((e: Error) => setWhy(e.message));
+  };
+  return (
+    <section className="state">
+      <h1>Sign in</h1>
+      <form onSubmit={submit} className="login">
+        <label>Username <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" /></label>
+        <label>Password <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>
+        <button type="submit">Sign in</button>
+        {why && <p className="warn">{why}</p>}
+      </form>
+    </section>
+  );
+}
+
+interface UserRow { username: string; display: string; entitlements: string[]; admin: boolean }
+
+/** The admin's users page of local mode: grant and revoke entitlements. */
+function Users() {
+  const [users, setUsers] = useState<UserRow[] | null>(null);
+  const [all, setAll] = useState<string[]>([]);
+  const [why, setWhy] = useState<string | null>(null);
+  const load = () =>
+    fetch("/desk/users")
+      .then((r) => r.json())
+      .then((d: { users: UserRow[]; entitlements: string[] }) => { setUsers(d.users); setAll(d.entitlements); })
+      .catch((e: Error) => setWhy(e.message));
+  useEffect(() => { load(); }, []);
+  const toggle = (u: UserRow, e: string) => {
+    const next = u.entitlements.includes(e) ? u.entitlements.filter((x) => x !== e) : [...u.entitlements, e];
+    fetch(`/desk/users/${encodeURIComponent(u.username)}/entitlements`, {
+      method: "PUT", headers: { "content-type": "application/json", "X-Nils-Desk": "1" }, body: JSON.stringify({ entitlements: next }),
+    }).then(async (r) => (r.ok ? load() : setWhy((await r.json()).error)));
+  };
+  if (!users) return <p>Reading the users</p>;
+  return (
+    <div>
+      <h2>Users</h2>
+      <table className="users">
+        <thead><tr><th>user</th>{all.map((e) => <th key={e}>{e}</th>)}</tr></thead>
+        <tbody>
+          {users.map((u) => (
+            <tr key={u.username}>
+              <td>{u.display} <code>{u.username}</code></td>
+              {all.map((e) => (
+                <td key={e}><input type="checkbox" checked={u.entitlements.includes(e)} onChange={() => toggle(u, e)} /></td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {why && <p className="warn">{why}</p>}
+      <p>A new user is added at the command line: <code>nils-desk user add NAME</code>.</p>
+    </div>
+  );
 }

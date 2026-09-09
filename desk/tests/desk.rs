@@ -216,7 +216,7 @@ async fn a_registered_app_that_answers_is_in_the_document_and_one_that_does_not_
     let person = nils_desk::session::Person {
         subject: "anna".into(),
         display_name: "Anna".into(),
-        entitlements: vec!["operator"],
+        entitlements: vec!["operator".to_string()],
     };
     let doc = nils_desk::capabilities::document(&shared, &person).await;
     let apps = doc["apps"].as_array().unwrap();

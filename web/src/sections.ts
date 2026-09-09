@@ -30,6 +30,7 @@ export function door(caps: Capabilities, name: string): boolean {
 
 /** The three named states of section 7.2, and the fourth the desk adds. */
 export type State =
+  | { kind: "login"; how: "password" | "redirect"; url: string }
   | { kind: "unbound" }
   | { kind: "warming" }
   | { kind: "contract_mismatch"; found: Record<string, string>; speaks: Record<string, string> }
@@ -41,6 +42,7 @@ export function state(caps: Capabilities): State {
     return { kind: "contract_mismatch", found: caps.desk.contract_mismatch.found, speaks: caps.desk.contract_mismatch.speaks };
   }
   if (!caps.desk.engine_reachable || !caps.engine) return { kind: "no_engine" };
+  if (!caps.desk.signed_in && caps.desk.login) return { kind: "login", how: caps.desk.login.kind, url: caps.desk.login.url };
   if (caps.person.entitlements.length === 0) return { kind: "unbound" };
   const health = caps.kvasir?.["health"] as { warming?: boolean } | undefined;
   if (caps.kvasir && health?.warming === true) return { kind: "warming" };

@@ -14,3 +14,8 @@ footer { display: flex; gap: 1.5rem; padding: 0.5rem 1.2rem; border-top: 1px sol
 .warn { color: #a55; }
 code { font-family: ui-monospace, monospace; }
 iframe { width: 100%; height: 70vh; border: 1px solid var(--line); }
+.login { display: grid; gap: 0.6rem; max-width: 24rem; }
+.login input { display: block; width: 100%; padding: 0.4rem; font: inherit; }
+.button, button[type=submit], .state button { display: inline-block; padding: 0.4rem 0.9rem; background: var(--plum); color: var(--paper); border: 0; border-radius: 4px; text-decoration: none; font: inherit; cursor: pointer; }
+table.users { border-collapse: collapse; }
+table.users th, table.users td { padding: 0.3rem 0.6rem; border-bottom: 1px solid var(--line); text-align: left; }
