@@ -181,9 +181,7 @@ async fn an_engine_speaking_a_contract_the_desk_does_not_is_refused_by_name() {
     );
     let shared = nils_desk::start(&text).unwrap();
     let caps = nils_desk::capabilities::engine(&shared).await.unwrap();
-    let e = nils_desk::capabilities::check(&caps)
-        .err()
-        .expect("refused");
+    let e = nils_desk::capabilities::check(&caps).expect_err("refused");
     assert!(e.major);
     assert!(e.message.contains("openapi 2 against 3"), "{}", e.message);
     assert!(e.message.contains("does not start"), "{}", e.message);
