@@ -130,3 +130,38 @@ table.thin tr.on td { background: color-mix(in srgb, var(--plum) 12%, transparen
 table.thin th.num { text-align: right; }
 .ops pre { overflow-x: auto; font-size: 0.82rem; }
 pre.procedure { border-left: 3px solid var(--plum); padding: 0.6rem 0.9rem; }
+
+/* the assistant pane (B7, section 7.7): question left, chat right, stacked below 700 px */
+main:has(.panes) { max-width: 140ch; }
+.panes { display: grid; grid-template-columns: minmax(0, 1fr) minmax(22rem, 34rem); gap: 1.5rem; align-items: start; }
+.panes > .ask { min-width: 0; }
+.assistant { border: 1px solid var(--line); border-radius: 6px; padding: 0.8rem 1rem; position: sticky; top: 1rem; max-height: calc(100vh - 2rem); display: flex; flex-direction: column; gap: 0.5rem; }
+.assistant header h2 { margin: 0; font-size: 1.05rem; }
+.assistant header .meta { flex: 1; }
+.assistant .turns { list-style: none; padding: 0; margin: 0; overflow-y: auto; display: grid; gap: 0.5rem; }
+.assistant .turns li.user { justify-self: end; background: var(--plum); color: var(--paper); border-radius: 12px 12px 2px 12px; padding: 0.4rem 0.8rem; max-width: 90%; }
+.assistant .turns li.user p { margin: 0; }
+.assistant .turns li.assistant p { margin: 0.2rem 0; white-space: pre-wrap; }
+.assistant .turns li.system { font-size: 0.85rem; opacity: 0.7; }
+.assistant .tools { list-style: none; padding: 0; margin: 0.2rem 0; display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.assistant .tools li { font-size: 0.75rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 0.5rem; opacity: 0.8; }
+.assistant .tools li.running { border-style: dashed; }
+.assistant .tools li.failed { border-color: #a55; color: #a55; }
+.assistant .status { margin: 0; font-size: 0.9rem; }
+.assistant .tasks { list-style: none; padding: 0; margin: 0; font-size: 0.85rem; display: grid; gap: 0.2rem; }
+.assistant .tasks li.running, .assistant .tasks li.queued { opacity: 0.8; font-style: italic; }
+.assistant .tasks li.failed { color: #a55; }
+.assistant .warming { border-left: 3px solid #c90; padding-left: 0.6rem; }
+.assistant .proposal { border: 1px solid var(--plum); border-radius: 6px; padding: 0.5rem 0.8rem; margin: 0.4rem 0; }
+.assistant .proposal.accepted { border-color: var(--line); opacity: 0.8; }
+.assistant .proposal.rejected { border-color: var(--line); opacity: 0.6; text-decoration: line-through; }
+.assistant .proposal .sentence { margin: 0 0 0.2rem; }
+.assistant .udiff { font-size: 0.8rem; overflow-x: auto; margin: 0.4rem 0; max-height: 18rem; }
+.assistant .udiff .add { color: #2a7; }
+.assistant .udiff .del { color: #a55; }
+.assistant .udiff .hunk { opacity: 0.6; }
+.assistant .choice ul { list-style: none; padding: 0; display: grid; gap: 0.3rem; }
+.assistant .choice .count { margin-left: 0.5rem; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.assistant .say textarea { width: 100%; box-sizing: border-box; font-family: inherit; }
+.assistant .aside { font-size: 0.85rem; }
+@media (max-width: 700px) { .panes { grid-template-columns: 1fr; } .assistant { position: static; max-height: none; } }

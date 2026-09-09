@@ -27,6 +27,9 @@ import {
 } from "./client";
 
 import { documentMoves, edit, editor, firstEmpty, movesForCell, PROJECTIONS, project, sentence, type Edit, type Offer, type Step, type SubStep } from "./editor";
+import type { Capabilities } from "../capabilities";
+import { Pane } from "../assistant/Pane";
+import { holds } from "../sections";
 
 const LAST = "nils-desk.ask.last";
 
@@ -41,9 +44,12 @@ function idFromHash(): number | null {
   }
 }
 
-export function Question() {
+export function Question({ caps }: { caps?: Capabilities }) {
   const [docId, setDocId] = useState<number | null>(idFromHash);
   const [why, setWhy] = useState<string | null>(null);
+  // section 7.7: the two values the panes share, the document id and the epoch; the chain so a conversation follows a version
+  const [context, setContext] = useState<{ chain: number[]; epoch: number }>({ chain: [], epoch: caps?.engine?.registry.epoch ?? 0 });
+  const withAssistant = caps !== undefined && caps.assistant !== null && holds(caps, "assist");
   const open = (id: number) => {
     setWhy(null);
     setDocId(id);
@@ -54,8 +60,14 @@ export function Question() {
       // a private window keeps nothing; the hash still carries the id
     }
   };
-  if (docId === null) return <Start onOpen={open} why={why} setWhy={setWhy} />;
-  return <Editor key={docId} docId={docId} onOpen={open} onClose={() => { setDocId(null); location.hash = ""; }} />;
+  const page = docId === null ? <Start onOpen={open} why={why} setWhy={setWhy} /> : <Editor key={docId} docId={docId} onOpen={open} onClose={() => { setDocId(null); location.hash = ""; }} onContext={setContext} />;
+  if (!withAssistant || caps === undefined) return page;
+  return (
+    <div className="panes">
+      {page}
+      <Pane caps={caps} docId={docId} chain={context.chain} epoch={context.epoch} onOpen={open} />
+    </div>
+  );
 }
 
 /** No document yet: an id, authored text, or one of the pack's worked examples. */
@@ -130,7 +142,7 @@ interface Version extends DocumentHandle {
 }
 
 /** The editor over one stored document. Keyed by the id: a new version is a fresh editor. */
-function Editor({ docId, onOpen, onClose }: { docId: number; onOpen: (id: number) => void; onClose: () => void }) {
+function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: (id: number) => void; onClose: () => void; onContext?: (c: { chain: number[]; epoch: number }) => void }) {
   const [doc, setDoc] = useState<DocumentHandle | null>(null);
   const [opts, setOpts] = useState<Record<string, Options>>({});
   const [openSet, setOpenSet] = useState<string | null>(null);
@@ -203,6 +215,13 @@ function Editor({ docId, onOpen, onClose }: { docId: number; onOpen: (id: number
   }, [preview, refreshPreview]);
 
   const steps: Step[] = useMemo(() => (doc ? editor(doc.ask, opts) : []), [doc, opts]);
+
+  // what the assistant pane shares with this page: the chain of this document and the epoch the options carried
+  useEffect(() => {
+    if (!onContext) return;
+    const epoch = Object.values(opts)[0]?.epoch ?? 0;
+    onContext({ chain: (versions ?? []).map((v) => v.document), epoch });
+  }, [onContext, opts, versions]);
 
   // the open step: the first empty one, and its options
   useEffect(() => {

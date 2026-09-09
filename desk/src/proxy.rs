@@ -84,12 +84,22 @@ pub async fn kvasir(
     }
 }
 
+/// The assistant as an upstream: the bearer it takes per turn is the one
+/// that opens the engine (§5.5), so in `off` mode it is the engine's own
+/// token unless the assistant block names one.
+pub(crate) fn assistant_upstream(desk: &Shared) -> Option<Upstream> {
+    desk.config.assistant.as_ref().map(|a| Upstream {
+        url: a.url.clone(),
+        token: a.token.clone().or_else(|| desk.config.engine.token.clone()),
+    })
+}
+
 pub async fn assistant(
     State(desk): State<Shared>,
     Path(rest): Path<String>,
     req: Request,
 ) -> Response {
-    match desk.config.assistant.clone() {
+    match assistant_upstream(&desk) {
         Some(up) => forward(&desk, &up, &format!("/{rest}"), req).await,
         None => absent("the assistant"),
     }
