@@ -83,6 +83,8 @@ export interface Place {
 export const objects = {
   depends: (kind: string, id: string | number) => door<Closure>("GET", `/api/depends/${kind}/${encodeURIComponent(String(id))}`),
   places: (probe = false) => door<{ places: Place[]; enforced?: boolean }>("GET", `/api/places${probe ? "?probe=1" : ""}`),
+  placeAdd: (body: { name: string; role: Place["role"]; path: string; guarantees: Record<string, unknown> }) => door<Place>("POST", "/api/places", body),
+  placeSet: (id: number, body: { path?: string; guarantees?: Record<string, unknown>; retired?: boolean }) => door<Place>("PUT", `/api/places/${id}`, body),
   summary: (since?: string | null) => door<Summary>("GET", `/api/summary${since ? `?since=${encodeURIComponent(since)}` : ""}`),
   timeline: (kind: string, id: string | number) => door<{ kind: string; id: string | number; events: Event[] }>("GET", `/api/timeline/${kind}/${id}`),
   documents: (after?: string | null) => door<{ count: number; documents: DocumentRow[]; next: string | null }>("GET", `/api/ask/documents${after ? `?after=${encodeURIComponent(after)}` : ""}`),

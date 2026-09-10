@@ -65,6 +65,8 @@ export interface Capabilities {
       store: string;
       retention: string;
       engine_flags: string | null;
+      /** Wave 5 section 10.4: the supervisor the desk proxies under /supervise/, when one is configured. */
+      supervisor_url?: string | null;
     };
   };
 }

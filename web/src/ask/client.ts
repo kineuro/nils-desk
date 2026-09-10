@@ -156,7 +156,7 @@ export class DoorError extends Error {
   }
 }
 
-export async function door<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
+export async function door<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
   const r = await fetch(path, {
     method,
     headers: { "content-type": "application/json", "X-Nils-Desk": "1" },

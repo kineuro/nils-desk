@@ -105,6 +105,37 @@ pub async fn assistant(
     }
 }
 
+/// The supervisor (Wave 5 §10.4): its own bearer from the config, and only
+/// a person holding `admin` reaches it; in `off` mode everyone does.
+pub async fn supervisor(
+    State(desk): State<Shared>,
+    Path(rest): Path<String>,
+    req: Request,
+) -> Response {
+    let Some(up) = desk.config.supervisor.clone() else {
+        return absent("the supervisor");
+    };
+    if !matches!(desk.config.mode, Mode::Off) {
+        let (s, _) = session::resolve(&desk, req.headers());
+        let admin = s
+            .map(|s| {
+                session::person(&desk, &s)
+                    .entitlements
+                    .iter()
+                    .any(|e| e == "admin")
+            })
+            .unwrap_or(false);
+        if !admin {
+            return (
+                axum::http::StatusCode::FORBIDDEN,
+                axum::Json(json!({"error": "the supervisor is open to admins"})),
+            )
+                .into_response();
+        }
+    }
+    forward(&desk, &up, &format!("/{rest}"), req).await
+}
+
 pub async fn app(
     State(desk): State<Shared>,
     Path((app, rest)): Path<(String, String)>,

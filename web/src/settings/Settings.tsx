@@ -16,10 +16,14 @@ import { usePageContext } from "../Rail";
 import { parse } from "../routes";
 import { controls } from "../sections";
 import { SHORTCUTS } from "../ui/shortcuts";
+import { Parts } from "./Parts";
+import { Places } from "./Places";
+import { Database } from "./Database";
+import { Identity } from "./Identity";
 import { holds } from "../sections";
 import { type Backend, kvasir, type KeyRow, opening, type PersonalDoc, personalWords, type PurposeRow, tabSession } from "./kvasir";
 
-const TITLES: Record<string, string> = { parts: "Parts", audit: "Audit", sessions: "Sessions", shortcuts: "Shortcuts" };
+const TITLES: Record<string, string> = { parts: "Parts", places: "Places", database: "Database", audit: "Audit", identity: "Identity", sessions: "Sessions", shortcuts: "Shortcuts" };
 
 export function Settings({ caps }: { caps: Capabilities }) {
   const admin = holds(caps, "admin");
@@ -54,16 +58,19 @@ export function Settings({ caps }: { caps: Capabilities }) {
         ))}
       </nav>
       {active === "parts" && (
-        <>
+        <Parts caps={caps}>
           <Engine caps={caps} />
           <Desk caps={caps} />
           {caps.kvasir !== null && caps.desk.settings?.kvasir_url && <Kvasir caps={caps} admin={admin} />}
           {caps.kvasir !== null && caps.desk.settings?.kvasir_url && <Personal />}
           {caps.assistant !== null && <Assistant caps={caps} />}
           <Apps caps={caps} />
-        </>
+        </Parts>
       )}
+      {active === "places" && <Places caps={caps} />}
+      {active === "database" && <Database caps={caps} />}
       {active === "audit" && <Audit />}
+      {active === "identity" && <Identity caps={caps} />}
       {active === "sessions" && <Sessions />}
       {active === "shortcuts" && <Shortcuts />}
     </section>

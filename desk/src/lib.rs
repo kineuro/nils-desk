@@ -109,6 +109,7 @@ pub fn router(desk: Shared) -> Router {
         .route("/api/{*rest}", any(proxy::engine))
         .route("/kvasir/{*rest}", any(proxy::kvasir))
         .route("/assistant/{*rest}", any(proxy::assistant))
+        .route("/supervise/{*rest}", any(proxy::supervisor))
         .route("/apps/{app}/{*rest}", any(proxy::app))
         .fallback(web::serve)
         .with_state(desk)
