@@ -191,7 +191,12 @@ pub async fn document(desk: &Shared, person: &session::Person) -> Value {
             };
             (e.clone(), true, m)
         }
-        Err(_) => (Value::Null, false, Value::Null),
+        // an engine that answered 401 or 403 is reachable; it refused this person's bearer, or the probe had none
+        Err(m) => (
+            Value::Null,
+            m.contains("401") || m.contains("403"),
+            Value::Null,
+        ),
     };
     json!({
         "engine": engine,
