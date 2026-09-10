@@ -246,7 +246,7 @@ async fn a_registered_app_that_answers_is_in_the_document_and_one_that_does_not_
         display_name: "Anna".into(),
         entitlements: vec!["operator".to_string()],
     };
-    let doc = nils_desk::capabilities::document(&shared, &person).await;
+    let doc = nils_desk::capabilities::document(&shared, &person, None).await;
     let apps = doc["apps"].as_array().unwrap();
     assert_eq!(apps.len(), 2, "{doc}");
     assert_eq!(apps[0]["id"], "pipelines");

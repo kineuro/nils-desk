@@ -46,6 +46,22 @@ pub async fn engine(desk: &Shared) -> Result<Value, String> {
     fetch(desk, &desk.config.engine, "/api/capabilities").await
 }
 
+/// The engine's document as one person: with the bearer the session opens
+/// (Wave 4c §5.5), so the roles and the doors are that person's. In `off`
+/// mode the bearer is the desk's own.
+pub async fn engine_as(desk: &Shared, headers: &HeaderMap) -> Result<Value, String> {
+    let up = &desk.config.engine;
+    let token = match crate::proxy::bearer(desk, up, headers).await {
+        Ok(t) => t,
+        Err(why) => return Err(format!("/api/capabilities: {why}")),
+    };
+    let with = Upstream {
+        url: up.url.clone(),
+        token,
+    };
+    fetch(desk, &with, "/api/capabilities").await
+}
+
 async fn fetch(desk: &Shared, up: &Upstream, path: &str) -> Result<Value, String> {
     let mut req = desk
         .http
@@ -176,8 +192,18 @@ fn engine_flags(desk: &Shared) -> Value {
 }
 
 /// The document for one person.
-pub async fn document(desk: &Shared, person: &session::Person) -> Value {
-    let p = parts(desk).await;
+pub async fn document(
+    desk: &Shared,
+    person: &session::Person,
+    headers: Option<&HeaderMap>,
+) -> Value {
+    let mut p = parts(desk).await;
+    // the engine is asked as the person when there is one: its answer is theirs, not the desk's
+    if let Some(h) = headers
+        && !person.subject.is_empty()
+    {
+        p.engine = engine_as(desk, h).await;
+    }
     let (engine, reachable, mismatch) = match &p.engine {
         Ok(e) => {
             let m = match check(e) {
@@ -247,7 +273,7 @@ pub async fn door(State(desk): State<Shared>, headers: HeaderMap) -> Response {
         Some(s) => session::person(&desk, s),
         None => session::nobody(),
     };
-    let doc = document(&desk, &person).await;
+    let doc = document(&desk, &person, Some(&headers)).await;
     let mut r = axum::Json(doc).into_response();
     if let Some(v) = set {
         r.headers_mut().insert(header::SET_COOKIE, v);
