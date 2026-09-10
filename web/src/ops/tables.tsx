@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Operations (Wave 4c section 7.5): thin tables over doors that exist, each
+// The operational tables (Wave 4c section 7.5), re-homed by Wave 5 section 6.2: thin tables over doors that exist, each
 // gated by the entitlement the door wants. Jobs live from the events door
 // under the cap, with polling as the fallback; review; releases and
 // handovers, where the desk shows exactly what will be released and who
@@ -10,59 +10,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { ask, chain, type Column, columnName, desk, type DocumentHandle, type HandleRow, type Json, type JobRow, results } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { operationsControls } from "../sections";
 import { type AuditRow, type CustodyStore, ops, type ReleaseRow, type ReviewItem } from "./client";
 import { confirmName, confirmed, list, releaseBody, type ReleaseForm, type ReleaseSource, stackIds } from "./release";
-import { Keyword } from "./Keyword";
+import { parse } from "../routes";
 
-const TITLES: Record<string, string> = { jobs: "Jobs", review: "Review", keyword: "Keyword", releases: "Releases", handovers: "Handovers", custody: "Custody", audit: "Audit", sessions: "Sessions" };
-
+/** The release the address names: #release/releases/77. */
 function tabOfHash(): { tab: string | null; arg: string | null } {
-  const m = /^#operations(?:\/([a-z]+))?(?:\/([^/]+))?/.exec(location.hash);
-  return { tab: m?.[1] ?? null, arg: m?.[2] ?? null };
-}
-
-export function Operations({ caps }: { caps: Capabilities }) {
-  const tabs = operationsControls(caps);
-  const [tab, setTab] = useState<string>(() => tabOfHash().tab ?? tabs[0] ?? "jobs");
-  useEffect(() => {
-    const onHash = () => {
-      const t = tabOfHash().tab;
-      if (t) setTab(t);
-    };
-    window.addEventListener("hashchange", onHash);
-    return () => window.removeEventListener("hashchange", onHash);
-  }, []);
-  const active = tabs.includes(tab) ? tab : tabs[0];
-  return (
-    <section className="ops">
-      <header className="ask-head">
-        <div>
-          <h1>Operations</h1>
-          <p className="meta">Each table is a door the engine serves and your entitlement opens.</p>
-        </div>
-      </header>
-      <nav className="tabs">
-        {tabs.map((t) => (
-          <button key={t} type="button" className={t === active ? "on" : ""} onClick={() => { setTab(t); location.hash = `#operations/${t}`; }}>
-            {TITLES[t] ?? t}
-          </button>
-        ))}
-      </nav>
-      {active === "jobs" && <Jobs caps={caps} />}
-      {active === "review" && <Review />}
-      {active === "keyword" && <Keyword caps={caps} />}
-      {active === "releases" && <Releases caps={caps} />}
-      {active === "handovers" && <Handovers />}
-      {active === "custody" && <Custody />}
-      {active === "audit" && <Audit />}
-      {active === "sessions" && <Sessions />}
-    </section>
-  );
+  const r = parse();
+  return r.kind === "section" ? { tab: r.tab, arg: r.arg } : { tab: null, arg: null };
 }
 
 /** Jobs: live from the events door when a stream is free, else polled. */
-function Jobs({ caps }: { caps: Capabilities }) {
+export function Jobs({ caps }: { caps: Capabilities }) {
   const [open, setOpen] = useState<JobRow[] | null>(null);
   const [epoch, setEpoch] = useState<number | null>(null);
   const [all, setAll] = useState<JobRow[]>([]);
@@ -118,7 +77,7 @@ function Jobs({ caps }: { caps: Capabilities }) {
   );
 }
 
-function JobTable({ jobs, onCancel }: { jobs: JobRow[]; onCancel?: (id: number) => void }) {
+export function JobTable({ jobs, onCancel }: { jobs: JobRow[]; onCancel?: (id: number) => void }) {
   return (
     <div className="scroll">
       <table className="thin">
@@ -139,7 +98,7 @@ function JobTable({ jobs, onCancel }: { jobs: JobRow[]; onCancel?: (id: number) 
   );
 }
 
-function Review() {
+export function Review() {
   const [status, setStatus] = useState("open");
   const [kind, setKind] = useState("");
   const [items, setItems] = useState<ReviewItem[] | null>(null);
@@ -237,7 +196,7 @@ function Review() {
 }
 
 /** Releases: the history, and the form that shows exactly what will be released. */
-function Releases({ caps }: { caps: Capabilities }) {
+export function Releases({ caps }: { caps: Capabilities }) {
   const [rows, setRows] = useState<ReleaseRow[] | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const [kind, setKind] = useState<"handle" | "hand">(() => (tabOfHash().arg ? "handle" : "handle"));
@@ -379,7 +338,7 @@ function Releases({ caps }: { caps: Capabilities }) {
   );
 }
 
-function Handovers() {
+export function Handovers() {
   const [release, setRelease] = useState("");
   const [out, setOut] = useState("");
   const [key, setKey] = useState("");
@@ -402,7 +361,7 @@ function Handovers() {
   );
 }
 
-function Custody() {
+export function Custody() {
   const [engine, setEngine] = useState<{ home: string; backend: string; registry_id: string; stores: CustodyStore[] } | null>(null);
   const [mine, setMine] = useState<CustodyStore[]>([]);
   const [why, setWhy] = useState<string | null>(null);
@@ -437,7 +396,7 @@ function Custody() {
   );
 }
 
-function Audit() {
+export function Audit() {
   const [f, setF] = useState({ principal: "", action: "", since: "", limit: "50" });
   const [rows, setRows] = useState<AuditRow[] | null>(null);
   const [why, setWhy] = useState<string | null>(null);
@@ -478,7 +437,7 @@ function Audit() {
   );
 }
 
-function Sessions() {
+export function Sessions() {
   const [scheme, setScheme] = useState("");
   const [force, setForce] = useState(false);
   const [why, setWhy] = useState<string | null>(null);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "./capabilities";
-import { operationsControls, sections, state } from "./sections";
+import { controls, sections, state } from "./sections";
 
 function doc(over: Partial<Capabilities> = {}): Capabilities {
   return {
@@ -29,7 +29,7 @@ function doc(over: Partial<Capabilities> = {}): Capabilities {
 describe("the shell as a predicate over the document", () => {
   it("renders no assistant section when no assistant answered", () => {
     const s = sections(doc());
-    expect(s.map((x) => x.id)).toEqual(["ask", "results", "operations", "data", "settings"]);
+    expect(s.map((x) => x.id)).toEqual(["home", "ask", "data", "review", "release", "pipelines", "settings"]);
   });
   it("renders the assistant only when it answered and the person holds assist", () => {
     expect(sections(doc({ assistant: { version: "0" } })).some((s) => s.id === "assistant")).toBe(true);
@@ -45,10 +45,13 @@ describe("the shell as a predicate over the document", () => {
   it("removes what the entitlement does not open, and the ladder implies the ones below", () => {
     const d = doc();
     d.person.entitlements = ["reviewer"];
-    expect(sections(d).map((x) => x.id)).toEqual(["ask", "results", "operations", "data", "settings"]);
-    expect(operationsControls(d)).toEqual(["jobs", "review"]);
+    expect(sections(d).map((x) => x.id)).toEqual(["home", "ask", "data", "review", "pipelines", "settings"]);
+    expect(controls(d, "review")).toEqual(["review"]);
+    expect(controls(d, "pipelines")).toEqual(["jobs"]);
+    expect(controls(d, "release")).toEqual([]);
     d.person.entitlements = ["operator"];
-    expect(operationsControls(d)).toEqual(["jobs", "review", "releases", "handovers", "sessions"]);
+    expect(controls(d, "release")).toEqual(["releases", "handovers"]);
+    expect(controls(d, "settings")).toEqual(["parts", "sessions", "shortcuts"]);
   });
   it("names the unbound person rather than a 403", () => {
     const d = doc();

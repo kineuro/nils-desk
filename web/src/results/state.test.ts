@@ -28,7 +28,11 @@ describe("the three named states", () => {
     expect(moved.stale).toEqual({ overlay: "document 2 moved on to 4", document: 2, moved_to: 4 });
     const epoch = stateOf(handle(), record(), 2, all, true);
     expect(epoch.stale?.overlay).toBe("the registry moved: epoch 1 then, 2 now");
-    expect(epoch.release.enabled).toBe(true);
+    // Wave 5 section 6.6: a stale answer is not released, exported or promoted; the button keeps its one reason
+    expect(epoch.release.enabled).toBe(false);
+    expect(epoch.release.reason).toMatch(/stale answer is not released; the registry moved to epoch 2/);
+    expect(moved.release.reason).toMatch(/moved on to 4/);
+    expect(epoch.export.enabled).toBe(false);
   });
   it("truncated: your limit is told apart from our truncation, and release and promote carry the reason", () => {
     const yours = stateOf(handle({ truncated: true, limit: 175, grain: "subject" }), record(), 1, all, true);

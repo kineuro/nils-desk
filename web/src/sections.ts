@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The shell is a pure function of the deployment capabilities document and
-// the person's entitlements (Wave 4c section 7.2). Each section and each
-// control is a predicate: a missing part, a wrong document shape and a
-// missing entitlement each remove it, never disable it.
+// the person's entitlements (Wave 4c section 7.2; Wave 5 section 6.2). Each
+// section and each control is a predicate: a missing part, a wrong document
+// shape and a missing entitlement each remove it, never disable it.
 
 import type { Capabilities, Entitlement } from "./capabilities";
 
@@ -49,17 +49,19 @@ export function state(caps: Capabilities): State {
   return { kind: "ready" };
 }
 
-/** The sections the shell renders, in order, for this document and person. */
+/** The sections the shell renders, in order, for this document and person (section 6.2). */
 export function sections(caps: Capabilities): Section[] {
   const out: Section[] = [];
   if (state(caps).kind !== "ready") return out;
+  if (holds(caps, "reader")) out.push({ id: "home", title: "Home" });
   if (holds(caps, "reader") && door(caps, "POST /api/ask/run")) out.push({ id: "ask", title: "Ask" });
-  if (holds(caps, "reader") && door(caps, "GET /api/ask/handles")) out.push({ id: "results", title: "Results" });
-  if (holds(caps, "reviewer") && door(caps, "GET /api/jobs")) out.push({ id: "operations", title: "Operations" });
   if (holds(caps, "reader") && door(caps, "GET /api/packs")) out.push({ id: "data", title: "Data" });
-  if (holds(caps, "reader")) out.push({ id: "settings", title: "Settings" });
+  if (controls(caps, "review").length > 0) out.push({ id: "review", title: "Review" });
+  if (controls(caps, "release").length > 0) out.push({ id: "release", title: "Release" });
+  if (holds(caps, "reviewer") && door(caps, "GET /api/jobs")) out.push({ id: "pipelines", title: "Pipelines" });
   // present only when the assistant answered and the person holds assist
   if (caps.assistant !== null && holds(caps, "assist")) out.push({ id: "assistant", title: "Assistant" });
+  if (holds(caps, "reader")) out.push({ id: "settings", title: "Settings" });
   for (const app of caps.apps) {
     if (app.capabilities === null) continue;
     if (app.entitlement && !holds(caps, app.entitlement)) continue;
@@ -68,23 +70,33 @@ export function sections(caps: Capabilities): Section[] {
   return out;
 }
 
-/** The controls of the Operations section, each a door the engine serves. */
-export function operationsControls(caps: Capabilities): string[] {
-  const table: [string, string][] = [
-    ["jobs", "GET /api/jobs"],
-    ["review", "GET /api/review"],
-    ["keyword", "GET /api/classify/signals"],
-    ["releases", "GET /api/releases"],
-    ["handovers", "POST /api/handovers"],
-    ["custody", "GET /api/custody"],
-    ["audit", "GET /api/audit"],
-    ["sessions", "POST /api/jobs"],
-  ];
-  const needs: Record<string, Entitlement> = {
-    jobs: "reviewer", review: "reviewer", keyword: "reviewer", releases: "operator", handovers: "operator",
-    custody: "admin", audit: "admin", sessions: "operator",
+/** The controls of a section, each a door the engine serves under the entitlement it wants. */
+export function controls(caps: Capabilities, section: string): string[] {
+  const table: Record<string, [string, string, Entitlement][]> = {
+    ask: [
+      ["questions", "POST /api/ask/run", "reader"],
+      ["results", "GET /api/ask/handles", "reader"],
+    ],
+    review: [
+      ["review", "GET /api/review", "reviewer"],
+      ["keyword", "GET /api/classify/signals", "reviewer"],
+    ],
+    release: [
+      ["releases", "GET /api/releases", "operator"],
+      ["handovers", "POST /api/handovers", "operator"],
+      ["custody", "GET /api/custody", "admin"],
+    ],
+    pipelines: [["jobs", "GET /api/jobs", "reviewer"]],
+    settings: [
+      ["parts", "GET /api/capabilities", "reader"],
+      ["audit", "GET /api/audit", "admin"],
+      ["sessions", "POST /api/jobs", "operator"],
+      ["shortcuts", "GET /api/capabilities", "reader"],
+    ],
   };
-  // the keyword tab of section 9.13 sits beside the review queue only when the assistant serves keyword-tune
+  // the keyword tab of 4c section 9.13 sits beside the review queue only when the assistant serves keyword-tune
   const served = ((caps.assistant?.["stations"] as { id?: string }[] | undefined) ?? []).map((s) => s.id);
-  return table.filter(([id, d]) => door(caps, d) && holds(caps, needs[id]) && (id !== "keyword" || served.includes("keyword-tune"))).map(([id]) => id);
+  return (table[section] ?? [])
+    .filter(([id, d, need]) => door(caps, d) && holds(caps, need) && (id !== "keyword" || served.includes("keyword-tune")))
+    .map(([id]) => id);
 }

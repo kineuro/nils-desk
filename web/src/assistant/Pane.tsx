@@ -232,7 +232,7 @@ export function Pane({ caps, docId, chain, epoch, onOpen }: PaneProps) {
         <p className="meta">
           Results cited:{" "}
           {state.handles.map((h) => (
-            <a key={h} href={`#results/${h}`}>handle {h}</a>
+            <a key={h} href={`#handle/${h}`}>handle {h}</a>
           ))}
         </p>
       )}

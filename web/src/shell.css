@@ -194,3 +194,72 @@ main:has(.panes) { max-width: 140ch; }
 /* the person's own credentials (C5) */
 .personal { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.6rem; }
 .personal li { border-top: 1px solid var(--n-line); padding-top: 0.5rem; }
+
+/* Wave 5 section 6: the shell, the rail, the object pages, the bands */
+.top nav a { color: inherit; text-decoration: none; padding: 0.4rem 0.7rem; border-radius: var(--n-radius); }
+.top nav a.on { background: var(--n-brand); color: var(--n-text-on-brand); }
+.top nav a:hover:not(.on) { background: var(--n-bg-hover); }
+.body { display: grid; grid-template-columns: minmax(0, 1fr); }
+.with-rail .body { grid-template-columns: minmax(0, 2fr) minmax(20rem, 1fr); gap: var(--n-space-3); align-items: start; }
+.rail { position: sticky; top: 0; max-height: 100vh; overflow-y: auto; padding: var(--n-space-3) var(--n-space-3) var(--n-space-3) 0; }
+.rail .assistant { position: static; max-height: none; }
+.rail-about { margin: 0 0 var(--n-space-1) 0; }
+@media (max-width: 900px) { .with-rail .body { grid-template-columns: 1fr; } .rail { position: static; max-height: none; padding: 0 var(--n-space-3) var(--n-space-3); } }
+.tabs a { color: inherit; text-decoration: none; padding: 0.3rem 0.7rem; border-radius: var(--n-radius); }
+.tabs a.on { background: var(--n-brand); color: var(--n-text-on-brand); }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--n-text-size-small); }
+
+/* Home (6.1): four bands */
+main:has(.home) { max-width: 110ch; }
+.bands { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: var(--n-space-3); }
+.band { background: var(--n-bg-raised); border: 1px solid var(--n-line); border-radius: var(--n-radius); padding: var(--n-space-3); }
+.band h2 { margin: 0 0 var(--n-space-2); }
+.band h3 { font-size: var(--n-text-size-small); text-transform: uppercase; letter-spacing: 0.06em; margin: var(--n-space-2) 0 var(--n-space-1); color: var(--n-text-faint); }
+.todo { list-style: none; padding: 0; margin: 0; display: grid; gap: var(--n-space-1); }
+table.counts td:first-child { min-width: 8rem; }
+
+/* object pages (6.3) */
+main:has(.object) { max-width: 100ch; }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--n-space-1) var(--n-space-3); margin: var(--n-space-3) 0; }
+.facts dt { color: var(--n-text-faint); }
+.facts dd { margin: 0; overflow-wrap: anywhere; }
+.timeline { list-style: none; padding: 0; margin: 0; border-left: 2px solid var(--n-line); }
+.timeline .event { display: flex; flex-wrap: wrap; gap: var(--n-space-2); align-items: baseline; padding: var(--n-space-1) var(--n-space-3); position: relative; }
+.timeline .event::before { content: ""; position: absolute; left: -6px; top: 0.8em; width: 10px; height: 10px; border-radius: 50%; background: var(--n-brand); }
+.timeline time { font-family: var(--n-font-mono); font-size: var(--n-text-size-small); color: var(--n-text-faint); font-variant-numeric: tabular-nums; }
+.event-kind { font-size: var(--n-text-size-small); padding: 0 var(--n-space-2); border-radius: var(--n-radius); background: var(--n-neutral-bg); color: var(--n-neutral-fg); }
+.event-actor { color: var(--n-text-faint); }
+
+/* the wait, the failure, the empty (6.5) */
+.wait { display: inline-flex; gap: var(--n-space-2); align-items: baseline; color: var(--n-text-dim); }
+.wait-panel { display: flex; padding: var(--n-space-3); border: 1px dashed var(--n-line); border-radius: var(--n-radius); }
+.wait-page { display: flex; padding: var(--n-space-4); font-size: var(--n-text-size-h2); }
+.wait-phase::after { content: ""; display: inline-block; width: 0.6em; height: 0.6em; margin-left: 0.4em; border-radius: 50%; border: 2px solid var(--n-brand); border-right-color: transparent; animation: turn 1s linear infinite; vertical-align: middle; }
+@keyframes turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .wait-phase::after { animation: none; } }
+.wait-count { font-variant-numeric: tabular-nums; color: var(--n-text-faint); }
+.failure { border-left: 3px solid var(--n-blocked-line); background: var(--n-blocked-bg); color: var(--n-blocked-fg); padding: var(--n-space-2) var(--n-space-3); margin: var(--n-space-2) 0; }
+.failure-sentence { margin: 0 0 var(--n-space-1); }
+.failure-raw summary { cursor: pointer; font-size: var(--n-text-size-small); }
+.failure-raw pre { white-space: pre-wrap; }
+.empty { color: var(--n-text-dim); }
+
+/* the stale veil and the blocked control (6.6) */
+.veiled { position: relative; }
+.veil-under { opacity: 0.35; filter: grayscale(0.6); user-select: none; }
+.veil { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: var(--n-space-2); background: transparent; }
+.blocked { display: inline-flex; flex-direction: column; gap: 2px; }
+.blocked .reason { font-size: var(--n-text-size-small); color: var(--n-text-faint); max-width: 22rem; }
+kbd { font-family: var(--n-font-mono); font-size: var(--n-text-size-small); border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: var(--n-radius); padding: 0 0.35em; background: var(--n-bg-sunken); }
+
+/* print (6.6): the declaration and the funnel expanded, the chrome gone */
+@media print {
+  .top, .rail, .banner, footer, .tabs, .row button, .ask button, .results button { display: none !important; }
+  .body { display: block; }
+  main { max-width: none; padding: 0; }
+  .declaration, .panel, .step-body, details { display: block !important; }
+  details > * { display: block; }
+  .veil-under { opacity: 1; filter: none; }
+  a { color: inherit; text-decoration: none; }
+  a[href^="#"]::after { content: " (" attr(href) ")"; color: var(--n-text-faint); font-size: var(--n-text-size-small); }
+}
