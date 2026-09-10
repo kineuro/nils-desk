@@ -4,6 +4,16 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.4] - 2026-09-10
+
+### Fixed
+
+- The installer opens the terminal instead of asking whether it is there. Piped into a shell with no controlling terminal it put the binary down and then died on `cannot open /dev/tty`: the device is still there, passes every test that can be made of it, and refuses to open, so the branch meant to fall back to the defaults never ran and a scripted install ended on an error instead of installing. The open is in a subshell, because a redirection that fails on a special builtin ends a shell with `set -e`.
+
+### Changed
+
+- One place knows how a configuration path resolves: `start_at` reads the file through `Config::read` rather than parsing it a second time itself.
+
 ## [1.0.0-alpha.3] - 2026-09-10
 
 ### Fixed
