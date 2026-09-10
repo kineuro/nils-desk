@@ -170,7 +170,32 @@ fn default_roles_claim() -> String {
 impl Config {
     pub fn read(path: &std::path::Path) -> Result<Config, String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        Config::parse(&text)
+        let mut c = Config::parse(&text)?;
+        c.beside(path.parent().unwrap_or(std::path::Path::new(".")));
+        Ok(c)
+    }
+
+    /// Every relative path in the configuration is relative to the
+    /// configuration, not to wherever the command happened to be run.
+    ///
+    /// The service has a working directory and never noticed the
+    /// difference. A person running `nils-desk user add --config
+    /// <path>` from their home directory did: it made a second store
+    /// there, said the person was added, and the desk they meant went on
+    /// refusing them with nothing to say why.
+    pub fn beside(&mut self, dir: &std::path::Path) {
+        fn under(dir: &std::path::Path, path: &mut std::path::PathBuf) {
+            if path.is_relative() {
+                *path = dir.join(&*path);
+            }
+        }
+        under(dir, &mut self.store);
+        under(dir, &mut self.local.key);
+        if let Some(oidc) = &mut self.oidc
+            && let Some(file) = &mut oidc.client_secret_file
+        {
+            under(dir, file);
+        }
     }
 
     pub fn parse(text: &str) -> Result<Config, String> {
@@ -220,5 +245,64 @@ impl Config {
         std::fs::read_to_string(f)
             .map(|s| s.trim().to_string())
             .map_err(|e| format!("{}: {e}", f.display()))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A relative path in the configuration is relative to the
+    /// configuration. The service never noticed, because it is given a
+    /// working directory; a person running a command from their own
+    /// directory made a second store there and was then refused by the
+    /// desk they meant, with nothing said.
+    #[test]
+    fn a_relative_path_is_relative_to_the_configuration() {
+        let dir = std::path::Path::new("/srv/nils/desk");
+        let mut c = Config::parse(
+            r#"
+bind = "127.0.0.1:7200"
+origin = "http://127.0.0.1:7200"
+mode = "local"
+store = "nils-desk.sqlite"
+
+[local]
+key = "nils-desk.key"
+
+[engine]
+url = "http://127.0.0.1:8437"
+"#,
+        )
+        .expect("the configuration parses");
+        c.beside(dir);
+        assert_eq!(c.store, dir.join("nils-desk.sqlite"));
+        assert_eq!(c.local.key, dir.join("nils-desk.key"));
+    }
+
+    /// A path someone spelled out in full is left as it is.
+    #[test]
+    fn an_absolute_path_is_left_alone() {
+        let mut c = Config::parse(
+            r#"
+bind = "127.0.0.1:7200"
+origin = "http://127.0.0.1:7200"
+mode = "local"
+store = "/var/lib/nils-desk/store.sqlite"
+
+[local]
+key = "/etc/nils/desk.key"
+
+[engine]
+url = "http://127.0.0.1:8437"
+"#,
+        )
+        .expect("the configuration parses");
+        c.beside(std::path::Path::new("/srv/nils/desk"));
+        assert_eq!(
+            c.store,
+            std::path::Path::new("/var/lib/nils-desk/store.sqlite")
+        );
+        assert_eq!(c.local.key, std::path::Path::new("/etc/nils/desk.key"));
     }
 }
