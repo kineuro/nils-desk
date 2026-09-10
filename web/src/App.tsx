@@ -13,6 +13,7 @@ import { Pipelines } from "./pipelines/Pipelines";
 import { Data } from "./data/Data";
 import { Settings } from "./settings/Settings";
 import { Pane } from "./assistant/Pane";
+import { Teaching } from "./assistant/Teaching";
 import { ObjectPage } from "./objects/ObjectPage";
 import { Rail, RailProvider, railPresent, usePageContext } from "./Rail";
 import { install as installShortcuts } from "./ui/shortcuts";
@@ -158,7 +159,7 @@ function Section({ id, caps, route }: { id: string; caps: Capabilities; route: R
     case "settings":
       return <Settings caps={caps} />;
     case "assistant":
-      return <AssistantSection caps={caps} />;
+      return <AssistantSection caps={caps} route={route} />;
     default:
       if (id.startsWith("app:")) {
         const app = caps.apps.find((a) => `app:${a.id}` === id);
@@ -194,14 +195,35 @@ function Ask({ caps, route }: { caps: Capabilities; route: Route & { kind: "sect
   );
 }
 
-/** Section 7.7 and Wave 5 section 6.4: the same conversation at full width, for work that is not about one object. */
-function AssistantSection({ caps }: { caps: Capabilities }) {
-  usePageContext({ page: { kind: "assistant", id: null }, epoch: caps.engine?.registry.epoch });
+/** Section 7.7 and Wave 5 section 6.4: the same conversation at full width, for work that is not about one object; Teaching beside it (section 9.5). */
+function AssistantSection({ caps, route }: { caps: Capabilities; route: Route & { kind: "section" } }) {
+  const tabs = controls(caps, "assistant");
+  const tab = route.tab === "teaching" && tabs.includes("teaching") ? "teaching" : "chat";
+  usePageContext({ page: { kind: "assistant", id: tab }, epoch: caps.engine?.registry.epoch });
   return (
     <section className="ask">
-      <h1>Assistant</h1>
-      <p>Words to a document. Open a question to refine it in the rail instead, one step at a time.</p>
-      <Pane caps={caps} docId={null} chain={[]} epoch={caps.engine?.registry.epoch ?? 0} onOpen={(id) => { location.hash = `#ask/${id}`; }} />
+      {tabs.length > 1 && (
+        <nav className="tabs" aria-label="assistant">
+          <a className={tab === "chat" ? "on" : ""} href="#assistant">
+            Conversation
+          </a>
+          <a className={tab === "teaching" ? "on" : ""} href="#assistant/teaching">
+            Teaching
+          </a>
+        </nav>
+      )}
+      {tab === "chat" ? (
+        <>
+          <h1>Assistant</h1>
+          <p>Words to a document. Open a question to refine it in the rail instead, one step at a time.</p>
+          <Pane caps={caps} docId={null} chain={[]} epoch={caps.engine?.registry.epoch ?? 0} onOpen={(id) => { location.hash = `#ask/${id}`; }} />
+        </>
+      ) : (
+        <>
+          <h1>Teaching</h1>
+          <Teaching caps={caps} />
+        </>
+      )}
     </section>
   );
 }
