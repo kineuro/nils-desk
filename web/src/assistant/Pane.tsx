@@ -11,7 +11,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { ask, desk, type Diff } from "../ask/client";
-import { assistant, conversationFor, newConversation, remember, type Conversation, type Delegation } from "./client";
+import { assistant, conversationFor, newConversation, remember, StaleProposal, type Conversation, type Delegation } from "./client";
+import type { PageContext } from "../ui/context";
 import { unified } from "./diff";
 import { empty, fromHistory, reduce, type PaneState, type Proposal } from "./parts";
 
@@ -31,9 +32,11 @@ export interface PaneProps {
   chain: number[];
   epoch: number;
   onOpen: (id: number) => void;
+  /** The page's typed context (Wave 5 section 9.2), sent beside every turn. */
+  context?: PageContext;
 }
 
-export function Pane({ caps, docId, chain, epoch, onOpen }: PaneProps) {
+export function Pane({ caps, docId, chain, epoch, onOpen, context }: PaneProps) {
   const [conv, setConv] = useState<Conversation | null>(() => conversationFor(docId === null ? [] : [docId, ...chain]));
   const [state, setState] = useState<PaneState>(empty);
   const [text, setText] = useState("");
@@ -128,8 +131,10 @@ export function Pane({ caps, docId, chain, epoch, onOpen }: PaneProps) {
     setWhy(null);
     setText("");
     setState((s) => ({ ...s, busy: true, settled: null }));
+    // the lineage is the chain's root (section 7.4); the assistant keys the conversation by it
+    const lineage = chain.length > 0 ? chain[0] : docId;
     assistant
-      .send(STATION, c.id, message)
+      .send(STATION, c.id, message, { context, lineage, document: docId })
       .then(({ offset }) => follow(c, state.offset === "-1" ? "-1" : offset))
       .catch((e: Error) => {
         setWhy(e.message);
@@ -143,18 +148,40 @@ export function Pane({ caps, docId, chain, epoch, onOpen }: PaneProps) {
     send(text.trim());
   };
 
-  const decide = (p: Proposal, verdict: "accepted" | "rejected") => {
-    if (!conv) return;
-    setState((s) => ({ ...s, proposals: s.proposals.map((x) => (x.document === p.document ? { ...x, decided: verdict } : x)) }));
-    const row = { document: p.document, sentence: p.sentence };
-    assistant.feedback(conv.id, verdict === "accepted" ? [row] : [], verdict === "rejected" ? [row] : []).catch((e: Error) => setWhy(e.message));
-    if (verdict === "accepted") {
-      const parent = p.parent ?? docId;
-      if (parent !== null && parent !== p.document) desk.lineage(p.document, parent).catch(() => undefined);
-      remember({ ...conv, document: p.document });
-      onOpen(p.document);
-    }
+  const decide = (p: Proposal, verdict: "accepted" | "rejected", why?: string) => {
+    if (!conv || p.stale) return;
+    const row = { document: p.document, sentence: p.sentence, ...(why ? { why } : {}), ...(docId !== null ? { current: docId } : {}) };
+    assistant
+      .feedback(conv.id, verdict === "accepted" ? [row] : [], verdict === "rejected" ? [row] : [])
+      .then(() => {
+        setState((s) => ({ ...s, proposals: s.proposals.map((x) => (x.document === p.document ? { ...x, decided: verdict } : x)) }));
+        if (verdict === "accepted") {
+          const parent = p.parent ?? docId;
+          if (parent !== null && parent !== p.document) desk.lineage(p.document, parent).catch(() => undefined);
+          remember({ ...conv, document: p.document });
+          onOpen(p.document);
+        }
+      })
+      .catch((e: Error) => {
+        // the question moved on since the proposal: it reads as stale and stays undecided (section 7.4)
+        if (e instanceof StaleProposal) setState((s) => ({ ...s, proposals: s.proposals.map((x) => (x.document === p.document ? { ...x, stale: { moved_to: e.movedTo } } : x)) }));
+        else setWhy(e.message);
+      });
   };
+
+  // typing in the document rejects (Wave 5 section 7.3): an edit made by hand sends every pending proposal back as rejected
+  useEffect(() => {
+    const onEdited = () => {
+      setState((s) => {
+        const pending = s.proposals.filter((p) => p.decided === null);
+        if (pending.length === 0 || !conv) return s;
+        assistant.feedback(conv.id, [], pending.map((p) => ({ document: p.document, sentence: p.sentence, why: "the person edited the document instead" }))).catch(() => undefined);
+        return { ...s, proposals: s.proposals.map((p) => (p.decided === null ? { ...p, decided: "rejected" as const } : p)) };
+      });
+    };
+    window.addEventListener("nils:document-edited", onEdited);
+    return () => window.removeEventListener("nils:document-edited", onEdited);
+  }, [conv]);
 
   const fresh = () => {
     reader.current?.abort();
@@ -269,8 +296,14 @@ function ProposalView({ p, diff, onDecide }: { p: Proposal; diff: string | null 
         proposes document {p.document}
         {p.parent !== null && <> from {p.parent}</>}
         {p.decided && <> , {p.decided}</>}
+        {p.stale && <span className="tag warn"> stale</span>}
       </p>
-      {p.decided === null && (
+      {p.stale && (
+        <p className="reason">
+          The question moved on{p.stale.moved_to !== null && <> to {p.stale.moved_to}</>} since this was proposed; it cannot be accepted. Say it again on the open version.
+        </p>
+      )}
+      {p.decided === null && !p.stale && (
         <>
           {diff === undefined || diff === null ? <p className="meta">Reading the diff</p> : diff === "" ? <p className="meta">No change against the base.</p> : <pre className="udiff">{diff.split("\n").map((l, i) => <span key={`${i}-${l}`} className={l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : l.startsWith("@@") ? "hunk" : ""}>{l}{"\n"}</span>)}</pre>}
           <div className="row">

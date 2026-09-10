@@ -69,6 +69,9 @@ export interface Declaration {
   denominator?: string;
   disclosure?: string;
   truncated?: boolean;
+  /** Wave 5 section 7.5: the timezone and the week start the engine read the dates under; the registry's, never the browser's. */
+  timezone?: string;
+  week_start?: string;
 }
 
 export interface Preview {
@@ -106,6 +109,8 @@ export interface Funnel {
   set: string;
   grain: string;
   stage: string;
+  /** Wave 5 section 12.3: the clause group, when the diagnosis was asked by clause. */
+  group?: string;
   rows: number;
   subjects: number;
   on_path: boolean;
@@ -124,6 +129,19 @@ export interface Diagnosis {
   cost: { sets: number; class: string };
   funnel: Funnel[];
   next: string[];
+  /** Wave 5 section 12.3: present when the diagnosis was asked by clause; one row per set and clause group in the language's order. */
+  by?: "set" | "clause";
+  groups?: ClauseGroup[];
+}
+
+export interface ClauseGroup {
+  set: string;
+  grain: string;
+  group: string;
+  clauses: number;
+  kept: number;
+  subjects: number;
+  lost: number;
 }
 
 export class DoorError extends Error {
@@ -159,7 +177,11 @@ export const ask = {
   describe: (document_id: number) => door<Described>("POST", "/api/ask/describe", { document_id }),
   explain: (document_id: number) => door<{ sqlite: string; postgres: string; columns: string[] }>("POST", "/api/ask/explain", { document_id }),
   preview: (document_id: number, rows = 10) => door<Preview>("POST", "/api/ask/preview", { document_id, rows }),
-  diagnose: (document_id: number) => door<Diagnosis>("POST", "/api/ask/diagnose", { document_id }),
+  diagnose: (document_id: number, by?: "set" | "clause") => door<Diagnosis>("POST", "/api/ask/diagnose", by ? { document_id, by } : { document_id }),
+  /** Wave 5 section 12.1: the opening set of a new question, from anything a person may start from. */
+  start: (body: { from: Record<string, unknown> }) => door<{ document: Json; set: string; grain: string; count: number; subjects: number | null; sessions: number | null; epoch: number }>("POST", "/api/ask/start", body),
+  /** An uploaded identifier list, resolved through the linkage store; reviewer and above. */
+  upload: (values: string[], namespace?: string) => door<{ upload: number; resolved?: number; unresolved?: number }>("POST", "/api/ask/values", namespace ? { values, namespace } : { values }),
   diff: (a: Side, b: Side) => door<Diff>("POST", "/api/ask/diff", { a, b }),
   run: (document_id: number, name?: string) => door<Run>("POST", "/api/ask/run", name ? { document_id, name } : { document_id }),
   rows: (handle: number, page: number) => door<{ columns: Column[]; rows: unknown[][]; page: number; pages: number }>("GET", `/api/ask/handles/${handle}/rows?page=${page}`),
