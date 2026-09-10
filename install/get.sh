@@ -34,7 +34,14 @@ for arg in "$@"; do
     --no-rust) allow_rust=0 ;;
     --version=*) version="${arg#--version=}" ;;
     --dir=*) dir="${arg#--dir=}" ;;
-    -h|--help) sed -n '2,20p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)
+      printf '%s\n' "curl -fsSL https://nils.kineuro.se/get | sh" \
+        "  --with-desk     install the desk beside the engine" \
+        "  --version=X     a version instead of the newest release" \
+        "  --from-source   build from source even when a binary exists" \
+        "  --no-rust       never install a Rust toolchain; stop instead" \
+        "  --dir=DIR       where the binaries go"
+      exit 0 ;;
     *) echo "unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -66,8 +73,26 @@ fi
 if [ "$(id -u)" = 0 ]; then share=/usr/local/share/nils; else share="${XDG_DATA_HOME:-$HOME/.local/share}/nils"; fi
 mkdir -p "$dir" "$share"
 
-if [ -n "$version" ]; then base_engine="$ENGINE_REL/download/v$version"; base_desk="$DESK_REL/download/v$version"
-else base_engine="$ENGINE_REL/latest/download"; base_desk="$DESK_REL/latest/download"; fi
+# The newest release, pre-release or not. GitHub's own `latest/download` path
+# skips pre-releases, so ask the API for the first tag when it is not there.
+newest() {   # newest <releases base> <owner/repo>
+  _v=$(curl -fsSL --connect-timeout 15 --max-time 60 "$1/latest/download/VERSION" 2>/dev/null | tr -d ' \r\n' || true)
+  if [ -z "$_v" ]; then
+    _v=$(curl -fsSL --connect-timeout 15 --max-time 60 -H 'accept: application/vnd.github+json' \
+      "https://api.github.com/repos/$2/releases?per_page=10" 2>/dev/null \
+      | grep -o '"tag_name"[ ]*:[ ]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/' | sed 's/^v//' || true)
+  fi
+  printf '%s' "$_v"
+}
+
+if [ -z "$version" ]; then
+  version=$(newest "$ENGINE_REL" kineuro/nils)
+  desk_version=$(newest "$DESK_REL" kineuro/nils-desk)
+else
+  desk_version=$version
+fi
+if [ -n "$version" ]; then base_engine="$ENGINE_REL/download/v$version"; else base_engine="$ENGINE_REL/latest/download"; fi
+if [ -n "$desk_version" ]; then base_desk="$DESK_REL/download/v$desk_version"; else base_desk="$DESK_REL/latest/download"; fi
 
 sha256() { if have sha256sum; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi; }
 
@@ -120,7 +145,7 @@ build_from_source() {   # build_from_source <repo> <package> <binary>
   rm -rf "$_src"
 }
 
-say "NILS, for $target"
+say "NILS${version:+ $version}, for $target"
 
 # The engine, and the packs beside it.
 tmp=$(mktemp)
