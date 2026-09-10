@@ -2,7 +2,17 @@
 
 **The desk of NILS.** One process, the only origin a person's browser talks to: it holds the session and the person's tokens, serves the front end from bytes compiled into the binary, proxies the engine, Kvasir, the assistant and registered apps on one origin, and composes the deployment capabilities document that every section, control and menu item is a predicate over. It owns nothing that answers "who changed this": that is the engine's actor.
 
-> **Pre-alpha.** Built in the open as part of Wave 4c of NILS v1 (`kineuro/nils`, `docs/specs/wave4c-the-assistant.md`, sections 4 and 7). Nothing here runs yet.
+> **Pre-alpha.** Built in the open as part of Wave 4c of NILS v1 (`kineuro/nils`, `docs/specs/wave4c-the-assistant.md`, sections 4 and 7). It installs and runs, and the interfaces are still moving: take a release, not a promise of stability.
+
+## Installing
+
+The desk comes with the engine, and one line installs both:
+
+```
+curl -fsSL https://nils.kineuro.se/get | sh
+```
+
+To take this binary on its own, see [the desk's install page](https://kineuro.se/nils/docs/desk/install/): a release for five targets with the web application inside it, a container image at `ghcr.io/kineuro/nils-desk`, or a build from this repository.
 
 ## Where things are
 
