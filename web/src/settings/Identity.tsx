@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { door } from "../ask/client";
+import { assistant, type Grant, type Grants } from "../assistant/client";
 import type { Capabilities } from "../capabilities";
 import { holds } from "../sections";
 import { Empty } from "../ui/Empty";
@@ -15,22 +16,27 @@ interface UserRow {
   last_seen?: string | null;
 }
 
-interface Grant {
-  id: number;
-  principal: string;
-  door: string;
-  created_at: string;
-}
-
 export function Identity({ caps }: { caps: Capabilities }) {
   const admin = holds(caps, "admin");
   const [users, setUsers] = useState<UserRow[] | null>(null);
   const [grants, setGrants] = useState<Grant[] | null>(null);
+  const [ladder, setLadder] = useState<Grants["ladder"]>([]);
+  const [door2, setDoor2] = useState("");
   const [why, setWhy] = useState<string | null>(null);
+  const loadGrants = () =>
+    assistant
+      .grants(admin)
+      .then((g) => {
+        setGrants(g.grants.filter((x) => !x.revoked_at));
+        setLadder(g.ladder);
+      })
+      .catch(() => setGrants(null));
   useEffect(() => {
     if (caps.desk.mode === "local" && admin) door<{ users: UserRow[] }>("GET", "/desk/users").then((u) => setUsers(u.users)).catch((e: Error) => setWhy(e.message));
-    if (caps.assistant !== null) door<{ grants: Grant[] }>("GET", "/assistant/grants").then((g) => setGrants(g.grants)).catch(() => setGrants(null));
+    if (caps.assistant !== null) loadGrants();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per mode and person
   }, [caps.desk.mode, caps.assistant, admin]);
+  const rungTwo = ladder.filter((l) => l.rung === 2 && holds(caps, l.role as "reader" | "reviewer" | "operator" | "admin"));
   const trust = (caps.engine as { oidc?: { issuer?: string; audience?: string } } | null)?.oidc;
   return (
     <div className="identity">
@@ -81,7 +87,19 @@ export function Identity({ caps }: { caps: Capabilities }) {
       )}
       {caps.desk.mode === "oidc" && <p className="meta">People and their groups are the identity provider's; the desk reads the entitlements it binds to them.</p>}
       <h3>Standing grants</h3>
+      <p className="meta">A grant is consent: personal, per verb, revocable, shown in the rail before anything runs. Only what your own entitlement opens can be granted, and only rung-two verbs, the ones that can be undone.</p>
       {caps.assistant === null && <p className="meta">No assistant: nothing runs under a grant.</p>}
+      {grants !== null && rungTwo.length > 0 && (
+        <div className="row">
+          <select value={door2} onChange={(e) => setDoor2(e.target.value)} aria-label="a verb to grant">
+            <option value="">a verb the assistant may run for you</option>
+            {rungTwo.filter((l) => !(grants ?? []).some((g) => g.door === l.door && g.subject === caps.person.subject)).map((l) => (
+              <option key={l.door} value={l.door}>{l.door}</option>
+            ))}
+          </select>
+          <button type="button" disabled={!door2} onClick={() => assistant.grant(door2).then(() => { setDoor2(""); loadGrants(); }).catch((e: Error) => setWhy(e.message))}>Grant</button>
+        </div>
+      )}
       {caps.assistant !== null && grants === null && <p className="meta">The assistant serves no grants door yet.</p>}
       {grants && grants.length === 0 && <Empty what="No standing grant." />}
       {grants && grants.length > 0 && (
@@ -97,14 +115,14 @@ export function Identity({ caps }: { caps: Capabilities }) {
           <tbody>
             {grants.map((g) => (
               <tr key={g.id}>
-                <td>{g.principal}</td>
+                <td>{g.subject}</td>
                 <td>
                   <code>{g.door}</code>
                 </td>
                 <td className="when">{g.created_at.slice(0, 16).replace("T", " ")}</td>
                 <td>
-                  {(admin || g.principal === caps.person.subject) && (
-                    <button type="button" onClick={() => door("DELETE", `/assistant/grants/${g.id}`).then(() => setGrants((s) => (s ?? []).filter((x) => x.id !== g.id))).catch((e: Error) => setWhy(e.message))}>
+                  {(admin || g.subject === caps.person.subject) && (
+                    <button type="button" onClick={() => assistant.revoke(g.id).then(() => setGrants((s) => (s ?? []).filter((x) => x.id !== g.id))).catch((e: Error) => setWhy(e.message))}>
                       Revoke
                     </button>
                   )}
