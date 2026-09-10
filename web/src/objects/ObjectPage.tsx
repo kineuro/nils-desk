@@ -17,6 +17,8 @@ import { usePageContext } from "../Rail";
 import { BatchPage } from "../data/BatchPage";
 import { PackPage } from "../data/PackPage";
 import { ItemPage } from "../review/ItemPage";
+import { lazy, Suspense } from "react";
+const Viewer = lazy(() => import("../viewer/Viewer").then((m) => ({ default: m.Viewer })));
 import { Timeline } from "./Timeline";
 
 type Load<T> = { kind: "waiting"; since: number } | { kind: "failed"; failed: Failed } | { kind: "ready"; value: T } | { kind: "no_door" };
@@ -39,7 +41,7 @@ function useDoor<T>(has: boolean, read: () => Promise<T>, deps: unknown[]): Load
 }
 
 const TITLES: Record<ObjectKind, string> = {
-  cohort: "Cohort", subject: "Subject", session: "Session", batch: "Batch", document: "Question", handle: "Result", release: "Release",
+  cohort: "Cohort", subject: "Subject", session: "Session", stack: "Stack", batch: "Batch", document: "Question", handle: "Result", release: "Release",
   handover: "Handover", pack: "Pack", overlay: "Overlay", rule: "Rule", job: "Job", review: "Review item", conversation: "Conversation",
 };
 
@@ -70,7 +72,9 @@ function Body({ caps, kind, id }: { caps: Capabilities; kind: ObjectKind; id: st
     case "job":
       return <JobBody caps={caps} id={Number(id)} />;
     case "review":
-      return <ItemPage id={Number(id)} />;
+      return <ItemPage id={Number(id)} caps={caps} />;
+    case "stack":
+      return <StackBody caps={caps} id={Number(id)} />;
     case "batch":
       return <BatchPage caps={caps} id={Number(id)} />;
     case "pack":
@@ -191,6 +195,19 @@ function ReleaseBody({ caps, id }: { caps: Capabilities; id: number }) {
         </dl>
       )}
     </Loading>
+  );
+}
+
+/** A stack's page: the viewer when the engine serves the manifest door (Wave 5 section 8.2). */
+function StackBody({ caps, id }: { caps: Capabilities; id: number }) {
+  usePageContext({ page: { kind: "stack", id: String(id) } });
+  // the bench (scripts/viewer-bench.mjs) opens the viewer on a door the capabilities may not list yet
+  const bench = /[?&]bench=1/.test(location.search);
+  if (!served(caps, "GET /api/instances/{id}/manifest") && !bench) return <p className="meta">This engine serves no instance door yet; what it keeps about this stack is the timeline below.</p>;
+  return (
+    <Suspense fallback={<Wait phase="loading the viewer" since={Date.now()} size="panel" />}>
+      <Viewer stack={id} />
+    </Suspense>
   );
 }
 
