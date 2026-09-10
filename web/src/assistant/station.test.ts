@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
-import { stationOf } from "./Pane";
+import { stationOf } from "./stations";
 
 const caps = (stations: { id: string }[] | null): Capabilities =>
   ({ assistant: stations === null ? null : { stations }, kvasir: null, engine: null, apps: [], person: { subject: "a", display_name: "A", entitlements: [], roles: [] }, desk: {} }) as unknown as Capabilities;
