@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { Keyword } from "../ops/Keyword";
-import { Review as ReviewTable } from "../ops/tables";
+import { Items } from "./Items";
 import { usePageContext } from "../Rail";
 import { parse } from "../routes";
 import { controls } from "../sections";
@@ -31,7 +31,7 @@ export function Review({ caps }: { caps: Capabilities }) {
       <header className="ask-head">
         <div>
           <h1>Review</h1>
-          <p className="meta">What a person decides: items the engine opened, and the rules that opened them.</p>
+          <p className="meta">Where judgement happens: items sorted by what they cost if wrong, each with the evidence that raised it.</p>
         </div>
       </header>
       {tabs.length > 1 && (
@@ -43,7 +43,7 @@ export function Review({ caps }: { caps: Capabilities }) {
           ))}
         </nav>
       )}
-      {active === "review" && <ReviewTable />}
+      {active === "review" && <Items />}
       {active === "keyword" && <Keyword caps={caps} />}
     </section>
   );

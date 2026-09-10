@@ -8,11 +8,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { ask, chain, type Column, columnName, desk, type DocumentHandle, type HandleRow, type Json, type JobRow, results } from "../ask/client";
+import { ask, chain, type Column, columnName, desk, type DocumentHandle, type HandleRow, type JobRow, results } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { type AuditRow, type CustodyStore, ops, type ReleaseRow, type ReviewItem } from "./client";
+import { type AuditRow, type CustodyStore, ops, type ReleaseRow } from "./client";
 import { confirmName, confirmed, list, releaseBody, type ReleaseForm, type ReleaseSource, stackIds } from "./release";
 import { parse } from "../routes";
+import { objects, type Place } from "../objects/client";
+import { door as served } from "../sections";
 
 /** The release the address names: #release/releases/77. */
 function tabOfHash(): { tab: string | null; arg: string | null } {
@@ -98,103 +100,6 @@ export function JobTable({ jobs, onCancel }: { jobs: JobRow[]; onCancel?: (id: n
   );
 }
 
-export function Review() {
-  const [status, setStatus] = useState("open");
-  const [kind, setKind] = useState("");
-  const [items, setItems] = useState<ReviewItem[] | null>(null);
-  const [openId, setOpenId] = useState<number | null>(null);
-  const [item, setItem] = useState<ReviewItem | null>(null);
-  const [why, setWhy] = useState<string | null>(null);
-  const [form, setForm] = useState({ value: "", nothing: false, member: "", scope: "stack", stage: false, why: "" });
-  const [answer, setAnswer] = useState<Json | null>(null);
-  const load = useCallback(() => {
-    ops.review(status || undefined, kind || undefined).then((r) => setItems(r.items)).catch((e: Error) => setWhy(e.message));
-  }, [status, kind]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  useEffect(() => {
-    if (openId === null) return setItem(null);
-    ops.reviewItem(openId).then(setItem).catch((e: Error) => setWhy(e.message));
-  }, [openId]);
-  const apply = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (openId === null) return;
-    const body: Json = { scope: form.scope, stage: form.stage };
-    if (form.nothing) body.nothing = true;
-    else if (form.value.trim()) body.value = form.value.trim();
-    if (form.member.trim()) body.member = Number(form.member);
-    if (form.why.trim()) body.why = form.why.trim();
-    ops.reviewApply(openId, body).then((a) => { setAnswer(a); load(); ops.reviewItem(openId).then(setItem); }).catch((e: Error) => setWhy(e.message));
-  };
-  const accept = () => openId !== null && ops.reviewAccept(openId, form.why.trim() || undefined).then((a) => { setAnswer(a); load(); }).catch((e: Error) => setWhy(e.message));
-  const decisionId = item?.decision && typeof (item.decision as Json).id === "number" ? ((item.decision as Json).id as number) : null;
-  const staged = Boolean(item?.decision && (item.decision as Json).staged);
-  return (
-    <div>
-      <div className="row">
-        <label>status <input value={status} onChange={(e) => setStatus(e.target.value)} placeholder="open, closed, accepted" size={12} /></label>
-        <label>kind <input value={kind} onChange={(e) => setKind(e.target.value)} placeholder="any" size={14} /></label>
-        <button type="button" onClick={load}>Refresh</button>
-      </div>
-      {why && <p className="warn">{why}</p>}
-      {items === null ? <p>Reading</p> : items.length === 0 ? <p>No item matches.</p> : (
-        <div className="scroll">
-          <table className="thin">
-            <thead><tr><th>item</th><th>kind</th><th>scope</th><th>status</th><th>created</th><th>decided</th><th>group</th></tr></thead>
-            <tbody>
-              {items.map((i) => (
-                <tr key={i.id} className={i.id === openId ? "on" : ""}>
-                  <td><button type="button" className="cell" onClick={() => setOpenId(i.id)}>{i.id}</button></td>
-                  <td>{i.kind}</td><td>{i.scope}</td><td>{i.status}</td><td className="when">{i.created_at}</td><td className="when">{i.decided_at ?? ""}</td><td>{i.group_key ?? ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      {item && (
-        <div className="panel">
-          <h2>item {item.id}: {item.kind} on {item.scope}, {item.status}</h2>
-          {item.ref && <p>ref <code>{JSON.stringify(item.ref)}</code></p>}
-          {item.evidence && <details><summary>evidence</summary><pre>{JSON.stringify(item.evidence, null, 2)}</pre></details>}
-          {item.members && item.members.length > 0 && <details><summary>{item.members.length} members</summary><pre>{JSON.stringify(item.members, null, 2)}</pre></details>}
-          {item.decision && <p>decision <code>{JSON.stringify(item.decision)}</code></p>}
-          {item.status === "open" && (
-            <form className="stack" onSubmit={apply}>
-              <div className="row">
-                <label>value <input value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} disabled={form.nothing} /></label>
-                <label><input type="checkbox" checked={form.nothing} onChange={(e) => setForm({ ...form, nothing: e.target.checked })} /> the axis has no value here</label>
-              </div>
-              <div className="row">
-                <label>member <input value={form.member} onChange={(e) => setForm({ ...form, member: e.target.value })} placeholder="stack id, optional" size={14} /></label>
-                <label>scope{" "}
-                  <select value={form.scope} onChange={(e) => setForm({ ...form, scope: e.target.value })}>
-                    {["stack", "series", "subject", "origin"].map((s) => <option key={s}>{s}</option>)}
-                  </select>
-                </label>
-                <label><input type="checkbox" checked={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.checked })} /> stage, commit later</label>
-              </div>
-              <label>why <input value={form.why} onChange={(e) => setForm({ ...form, why: e.target.value })} size={40} /></label>
-              <div className="row">
-                <button type="submit" disabled={!form.nothing && !form.value.trim()}>Apply</button>
-                <button type="button" onClick={accept}>Accept without a decision</button>
-              </div>
-            </form>
-          )}
-          {decisionId !== null && (
-            <div className="row">
-              {staged && <button type="button" onClick={() => ops.decisionCommit(decisionId).then((a) => { setAnswer(a); load(); }).catch((e: Error) => setWhy(e.message))}>Commit decision {decisionId}</button>}
-              <button type="button" onClick={() => ops.decisionWithdraw(decisionId).then((a) => { setAnswer(a); load(); }).catch((e: Error) => setWhy(e.message))}>Withdraw decision {decisionId}</button>
-            </div>
-          )}
-          {answer && <p className="meta">answered <code>{JSON.stringify(answer)}</code></p>}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Releases: the history, and the form that shows exactly what will be released. */
 export function Releases({ caps }: { caps: Capabilities }) {
   const [rows, setRows] = useState<ReleaseRow[] | null>(null);
@@ -209,9 +114,13 @@ export function Releases({ caps }: { caps: Capabilities }) {
   const [form, setForm] = useState<ReleaseForm>({ name: "", out: "", layout: "", dates: "keep", on_unknown: "", pack: "", scheme_name: "" });
   const [typed, setTyped] = useState("");
   const [queued, setQueued] = useState<{ job: number; command?: string[] } | null>(null);
+  const [places, setPlaces] = useState<Place[] | null>(null);
+  const [declaration, setDeclaration] = useState<{ key_namespace?: string; disclosure?: string; grain?: string } | null>(null);
   useEffect(() => {
     ops.releases().then((r) => setRows(r.releases)).catch((e: Error) => setWhy(e.message));
-  }, []);
+    // Wave 5 section 8.3 and 10.2: a release writes only to an export place; the picker offers them when the engine names places
+    if (served(caps, "GET /api/places")) objects.places().then((p) => setPlaces(p.places.filter((x) => x.role === "export" && x.retired_at === null))).catch(() => setPlaces(null));
+  }, [caps]);
   // the handle, all its stack ids, its first page, and the document it came from
   useEffect(() => {
     const id = Number(handleId);
@@ -237,7 +146,10 @@ export function Releases({ caps }: { caps: Capabilities }) {
         const rec = (await desk.results()).results.find((r) => r.handle === id);
         if (rec && alive) {
           const [d, versions] = await Promise.all([ask.describe(rec.document), chain(rec.document)]);
-          if (alive) setDocument({ id: rec.document, sentences: d.sets, versions });
+          if (alive) {
+            setDocument({ id: rec.document, sentences: d.sets, versions });
+            setDeclaration({ key_namespace: d.declaration.key_namespace, disclosure: d.declaration.disclosure, grain: d.declaration.grain });
+          }
         }
       } catch (e) {
         if (alive) setWhy((e as Error).message);
@@ -317,7 +229,19 @@ export function Releases({ caps }: { caps: Capabilities }) {
         )}
         <div className="row">
           <label>name <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} size={20} /></label>
-          <label>out <input value={form.out} onChange={(e) => setForm({ ...form, out: e.target.value })} placeholder="a directory on the engine's host" size={32} /></label>
+          {places && places.length > 0 ? (
+            <label>
+              export place{" "}
+              <select value={form.out} onChange={(e) => setForm({ ...form, out: e.target.value })}>
+                <option value="">choose</option>
+                {places.map((p) => (
+                  <option key={p.id} value={p.path}>{p.name} ({p.role})</option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <label>out <input value={form.out} onChange={(e) => setForm({ ...form, out: e.target.value })} placeholder={places === null ? "a directory on the engine's host" : "no export place is bound; an operator binds one under Settings"} size={32} /></label>
+          )}
         </div>
         <div className="row">
           <label>layout <select value={form.layout} onChange={(e) => setForm({ ...form, layout: e.target.value })}><option value="">default</option><option>descriptive</option><option>bids</option></select></label>
@@ -328,6 +252,20 @@ export function Releases({ caps }: { caps: Capabilities }) {
         </div>
         <p>{body.ok ? <>Will release <strong>{body.summary}</strong>.</> : <span className="meta">Not yet: {body.why}.</span>}</p>
         <label>
+          <dl className="release-facts">
+            <dt>pseudonym namespace</dt>
+            <dd>{declaration?.key_namespace ?? "the registry's pseudonymous key"}</dd>
+            <dt>layout</dt>
+            <dd>{form.layout || "the pack's default"}</dd>
+            <dt>dates</dt>
+            <dd>{form.dates || "keep"}{form.dates === "keep" || !form.dates ? "" : ", held back"}</dd>
+            <dt>fields held back</dt>
+            <dd>{declaration?.disclosure ? `as the declaration says: ${declaration.disclosure}` : "as the pack's release policy says"}</dd>
+            <dt>audit rows</dt>
+            <dd>one for the release by {caps.person.subject}, one per handover that carries it</dd>
+            <dt>export place</dt>
+            <dd>{form.out || "not chosen"}</dd>
+          </dl>
           type <code>{confirmName(src, form.name) || "the name"}</code> to confirm{" "}
           <input value={typed} onChange={(e) => setTyped(e.target.value)} size={20} />
         </label>
