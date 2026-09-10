@@ -93,7 +93,8 @@ export function Viewer({ stack, level: ruleLevel = null }: ViewerProps) {
     if (!manifest || !el.current) return;
     await initOnce();
     const width = el.current.clientWidth || 512;
-    const level = ruleLevel ?? levelFor(width, manifest.shape[2], manifest.levels);
+    const forced = BENCH ? Number(new URLSearchParams(location.search).get("level") ?? "") : Number.NaN;
+    const level = Number.isInteger(forced) ? forced : (ruleLevel ?? levelFor(width, manifest.shape[2], manifest.levels));
     levelRef.current = level;
     const [nz] = levelShape(manifest, level);
     const z0 = Math.floor(nz / 2);

@@ -27,6 +27,9 @@ interface Stack {
 
 const stacks = new Map<number, Stack>();
 let pool: DecodePool | null = null;
+/** Planes decoded ahead of the scroll, by image id; a few in the direction of travel, handed over when asked. */
+const ahead = new Map<string, Promise<cs.Types.IImage>>();
+const AHEAD = 6;
 export const counters: Counters = { bytes: 0, planesDecoded: 0, decodeMs: 0, fetches: 0 };
 
 export function imageId(stack: number, level: number, z: number): string {
@@ -54,9 +57,18 @@ export function close(stack: number): void {
   if (!s) return;
   for (const level of Array.from({ length: s.manifest.levels }, (_, i) => i)) {
     const [nz] = levelShape(s.manifest, level);
-    for (let z = 0; z < nz; z++) cs.cache.removeImageLoadObject(imageId(stack, level, z), { force: true });
+    for (let z = 0; z < nz; z++) forget(imageId(stack, level, z));
   }
   stacks.delete(stack);
+}
+
+/** Drop a decoded plane from cornerstone's cache when it holds one; an id never loaded is nothing to drop. */
+function forget(id: string): void {
+  try {
+    if (cs.cache.getImageLoadObject(id)) cs.cache.removeImageLoadObject(id, { force: true });
+  } catch {
+    // already gone
+  }
 }
 
 function key(level: number, slab: number): string {
@@ -97,22 +109,57 @@ function ring(stack: number, s: Stack, level: number, z: number): Promise<void> 
   const p = plan(z, nz, dir, resident);
   for (const e of p.evict) {
     s.slabs.delete(key(level, e));
-    for (let zz = e * SLAB; zz < Math.min(nz, (e + 1) * SLAB); zz++) cs.cache.removeImageLoadObject(imageId(stack, level, zz), { force: true });
+    for (let zz = e * SLAB; zz < Math.min(nz, (e + 1) * SLAB); zz++) forget(imageId(stack, level, zz));
   }
   const own = fetchSlab(stack, s, level, slabOf(z));
   for (const f of p.fetch) if (f !== slabOf(z)) void fetchSlab(stack, s, level, f);
   return own;
 }
 
-/** One decoded plane as the image cornerstone expects. */
+/** One decoded plane as the image cornerstone expects; the next few in the direction of travel start decoding now. */
 async function loadPlane(id: string): Promise<cs.Types.IImage> {
   const { stack, level, z } = parseImageId(id);
   const s = stacks.get(stack);
   if (!s) throw new Error(`stack ${stack} is not open`);
+  const dir = direction(s.previous, z);
+  const early = ahead.get(id);
+  if (early) {
+    ahead.delete(id);
+    s.previous = z;
+    decodeAhead(stack, s, level, z, dir);
+    return early;
+  }
+  const image = await decodePlane(id, stack, s, level, z);
+  decodeAhead(stack, s, level, z, dir);
+  return image;
+}
+
+function decodeAhead(stack: number, s: Stack, level: number, z: number, dir: 1 | -1): void {
+  const [nz] = levelShape(s.manifest, level);
+  for (let k = 1; k <= AHEAD; k++) {
+    const zz = z + k * dir;
+    if (zz < 0 || zz >= nz) break;
+    const id = imageId(stack, level, zz);
+    if (ahead.has(id) || cs.cache.getImageLoadObject(id)) continue;
+    const p = decodePlane(id, stack, s, level, zz, true);
+    ahead.set(id, p);
+    p.catch(() => ahead.delete(id));
+  }
+  // what was decoded ahead and passed by is let go
+  for (const key of [...ahead.keys()]) {
+    const { level: l, z: az } = parseImageId(key);
+    if (l !== level || Math.abs(az - z) > AHEAD * 2) ahead.delete(key);
+  }
+}
+
+async function decodePlane(id: string, stack: number, s: Stack, level: number, z: number, quiet = false): Promise<cs.Types.IImage> {
   const m = s.manifest;
   const [, ny, nx] = levelShape(m, level);
   const [, dy, dx] = levelSpacing(m, level);
-  await ring(stack, s, level, z);
+  if (quiet) {
+    // ahead of the scroll: the plane's slab is fetched without moving the ring's own sense of direction
+    await fetchSlab(stack, s, level, slabOf(z));
+  } else await ring(stack, s, level, z);
   const slab = s.slabs.get(key(level, slabOf(z)));
   if (!slab) throw new Error(`slab of plane ${z} was evicted before it was read`);
   const tiles = slab.tiles[z - slabOf(z) * SLAB];
@@ -182,6 +229,6 @@ export function register(): void {
         return undefined;
     }
   }, 10000);
-  // the cache holds a few slabs' worth of decoded planes; the ring holds the encoded ones
-  cs.cache.setMaxCacheSize(512 * 1024 * 1024);
+  // the cache holds a few slabs' worth of decoded planes, never the stack; the ring holds the encoded ones
+  cs.cache.setMaxCacheSize(256 * 1024 * 1024);
 }

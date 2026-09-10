@@ -201,7 +201,9 @@ function ReleaseBody({ caps, id }: { caps: Capabilities; id: number }) {
 /** A stack's page: the viewer when the engine serves the manifest door (Wave 5 section 8.2). */
 function StackBody({ caps, id }: { caps: Capabilities; id: number }) {
   usePageContext({ page: { kind: "stack", id: String(id) } });
-  if (!served(caps, "GET /api/instances/{id}/manifest")) return <p className="meta">This engine serves no instance door yet; what it keeps about this stack is the timeline below.</p>;
+  // the bench (scripts/viewer-bench.mjs) opens the viewer on a door the capabilities may not list yet
+  const bench = /[?&]bench=1/.test(location.search);
+  if (!served(caps, "GET /api/instances/{id}/manifest") && !bench) return <p className="meta">This engine serves no instance door yet; what it keeps about this stack is the timeline below.</p>;
   return (
     <Suspense fallback={<Wait phase="loading the viewer" since={Date.now()} size="panel" />}>
       <Viewer stack={id} />
