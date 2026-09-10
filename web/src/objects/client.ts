@@ -56,7 +56,33 @@ export function cohortNames(s: Summary): string[] {
   return [...names].sort();
 }
 
+/** Wave 5 section 12.4: the closure of an irreversible act. */
+export interface Closure {
+  kind: string;
+  id: string | number;
+  stacks: { count: number; sample: number[] };
+  review: { opens: number; closes: number };
+  handles: { handle: number; name: string | null; reason: string }[];
+  releases: { release: number; name: string; version: string }[];
+  moves?: { axis: string; from: string | null; to: string; stacks: number }[];
+}
+
+/** Wave 5 section 12.5: a place, a named location with a role and the guarantees behind it. */
+export interface Place {
+  id: number;
+  name: string;
+  role: "source" | "registry" | "working" | "export" | "share" | "exchange" | "backup";
+  path: string;
+  guarantees: Record<string, unknown>;
+  probed: Record<string, unknown> | null;
+  probed_at: string | null;
+  bound?: string[];
+  retired_at: string | null;
+}
+
 export const objects = {
+  depends: (kind: string, id: string | number) => door<Closure>("GET", `/api/depends/${kind}/${encodeURIComponent(String(id))}`),
+  places: (probe = false) => door<{ places: Place[]; enforced?: boolean }>("GET", `/api/places${probe ? "?probe=1" : ""}`),
   summary: (since?: string | null) => door<Summary>("GET", `/api/summary${since ? `?since=${encodeURIComponent(since)}` : ""}`),
   timeline: (kind: string, id: string | number) => door<{ kind: string; id: string | number; events: Event[] }>("GET", `/api/timeline/${kind}/${id}`),
   documents: (after?: string | null) => door<{ count: number; documents: DocumentRow[]; next: string | null }>("GET", `/api/ask/documents${after ? `?after=${encodeURIComponent(after)}` : ""}`),

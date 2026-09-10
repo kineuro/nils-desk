@@ -35,7 +35,8 @@ export interface ReviewItem {
   ref?: Json | null;
   evidence?: Json | null;
   decision?: Json | null;
-  members?: unknown[] | null;
+  /** The contract: for a grouped question, how many stacks it is about; older engines sent the list. */
+  members?: number | unknown[] | null;
   group_key?: string | null;
   accepted_by?: string | null;
 }

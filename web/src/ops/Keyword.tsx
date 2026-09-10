@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
+import { Closure } from "../review/Closure";
 import { stations, type StationRun, type Verdict } from "../assistant/stations";
 import { holds } from "../sections";
 import { ops, type OverlayRow, type Signals } from "./client";
@@ -43,7 +44,21 @@ export function Keyword({ caps }: { caps: Capabilities }) {
       })
       .catch((e: Error) => setWhy(e.message));
   };
-  const adopt = (id: number) => ops.overlayAdopt(id).then(() => load()).catch((e: Error) => setWhy(e.message));
+  // an adoption is irreversible: it opens the closure panel first (Wave 5 section 8.2), and the panel's button does the act
+  const [closing, setClosing] = useState<number | null>(null);
+  const [adopting, setAdopting] = useState(false);
+  const adopt = (id: number) => setClosing(id);
+  const confirmAdopt = (id: number) => {
+    setAdopting(true);
+    ops
+      .overlayAdopt(id)
+      .then(() => {
+        setClosing(null);
+        load();
+      })
+      .catch((e: Error) => setWhy(e.message))
+      .finally(() => setAdopting(false));
+  };
 
   const result = verdict?.result as
     | { axis?: string; bucket?: string; prediction?: { add?: string[]; remove?: string[]; flip?: string[]; must_not_regress?: string[] }; rehearsal?: { moves?: { axis: string; from: string; to: string; stacks: number }[]; review_items?: { close: number; open: number } }; diff?: string; proposal?: { overlay?: number; review_item?: number } | null; sentence?: string }
@@ -115,6 +130,15 @@ export function Keyword({ caps }: { caps: Capabilities }) {
           </div>
         )}
       </div>
+      {closing !== null && (
+        <Closure
+          caps={caps}
+          act={{ verb: `Adopt overlay ${closing}`, kind: "overlay", id: closing, moves: result?.proposal?.overlay === closing ? result.rehearsal?.moves?.map((m) => ({ axis: m.axis, from: m.from || null, to: m.to, stacks: m.stacks })) : undefined }}
+          onConfirm={() => confirmAdopt(closing)}
+          onCancel={() => setClosing(null)}
+          busy={adopting}
+        />
+      )}
       {overlays.length > 0 && (
         <div className="panel">
           <h2>Overlays</h2>

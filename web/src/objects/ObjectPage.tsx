@@ -7,13 +7,16 @@
 import { useEffect, useState } from "react";
 import { ask, type DocumentHandle, chain, type Json, results } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { ops, type ReleaseRow, type ReviewItem } from "../ops/client";
+import { ops, type ReleaseRow } from "../ops/client";
 import type { JobRow } from "../ask/client";
 import type { ObjectKind } from "../routes";
 import { door as served } from "../sections";
 import { classify, Failure, type Failed } from "../ui/Failure";
 import { Wait } from "../ui/Wait";
 import { usePageContext } from "../Rail";
+import { BatchPage } from "../data/BatchPage";
+import { PackPage } from "../data/PackPage";
+import { ItemPage } from "../review/ItemPage";
 import { Timeline } from "./Timeline";
 
 type Load<T> = { kind: "waiting"; since: number } | { kind: "failed"; failed: Failed } | { kind: "ready"; value: T } | { kind: "no_door" };
@@ -67,7 +70,11 @@ function Body({ caps, kind, id }: { caps: Capabilities; kind: ObjectKind; id: st
     case "job":
       return <JobBody caps={caps} id={Number(id)} />;
     case "review":
-      return <ReviewBody caps={caps} id={Number(id)} />;
+      return <ItemPage id={Number(id)} />;
+    case "batch":
+      return <BatchPage caps={caps} id={Number(id)} />;
+    case "pack":
+      return <PackPage name={id} />;
     case "release":
       return <ReleaseBody caps={caps} id={Number(id)} />;
     default:
@@ -162,30 +169,6 @@ function JobBody({ caps, id }: { caps: Capabilities; id: number }) {
           <Fact k="started" v={j.started_at} />
           <Fact k="finished" v={j.finished_at} />
           {j.error && <Fact k="error" v={j.error} />}
-        </dl>
-      )}
-    </Loading>
-  );
-}
-
-function ReviewBody({ caps, id }: { caps: Capabilities; id: number }) {
-  const load = useDoor(served(caps, "GET /api/review/{id}"), () => ops.reviewItem(id), [id]);
-  usePageContext({ page: { kind: "review", id: String(id) } });
-  return (
-    <Loading load={load}>
-      {(r: ReviewItem) => (
-        <dl className="facts">
-          <Fact k="kind" v={r.kind} />
-          <Fact k="scope" v={r.scope} />
-          <Fact k="status" v={r.status} />
-          <Fact k="opened" v={r.created_at} />
-          <Fact k="decided" v={r.decided_at} />
-          <dt />
-          <dd>
-            <a className="button" href={`#review/review/${id}`}>
-              Open in Review
-            </a>
-          </dd>
         </dl>
       )}
     </Loading>

@@ -284,3 +284,25 @@ table.documents { width: 100%; }
 .versions li.event { color: var(--n-text-dim); }
 .versions .branch { font-size: var(--n-text-size-small); }
 table.funnel th { font-weight: 500; font-size: var(--n-text-size-small); color: var(--n-text-faint); text-align: left; }
+
+/* Data, Review and Release (Wave 5 section 8) */
+.strip { list-style: none; padding: 0; margin: var(--n-space-3) 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--n-space-2); }
+.stage { border: 1px solid var(--n-line); border-radius: var(--n-radius); padding: var(--n-space-2) var(--n-space-3); display: grid; gap: var(--n-space-1); background: var(--n-bg-raised); border-top: 3px solid var(--n-neutral-line); }
+.stage-name { text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.stage-words { font-weight: 500; }
+.stage-jobs { list-style: none; padding: 0; margin: 0; font-size: var(--n-text-size-small); }
+.stage-done { border-top-color: var(--n-ok-icon); }
+.stage-running { border-top-color: var(--n-brand); }
+.stage-failed { border-top-color: var(--n-blocked-icon); }
+.stage-pending { border-top-color: var(--n-caution-icon); }
+@media (max-width: 800px) { .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tag.caution { border-color: var(--n-caution-line); color: var(--n-caution-fg); background: var(--n-caution-bg); }
+.closure { border-left: 3px solid var(--n-gated-icon); background: var(--n-gated-bg); color: var(--n-gated-fg); }
+.closure h3 { margin-top: 0; color: inherit; opacity: 1; text-transform: none; letter-spacing: 0; font-size: var(--n-text-size-h2); }
+.closure .reasons { margin: var(--n-space-1) 0; }
+.moves-by-axis { margin: var(--n-space-1) 0; }
+table.queue tr[data-cost] td { vertical-align: middle; }
+table.candidates td:first-child { font-weight: 500; }
+.item h3, .batch h3, .pack h3 { font-size: var(--n-text-size-small); text-transform: uppercase; letter-spacing: 0.06em; color: var(--n-text-faint); margin: var(--n-space-3) 0 var(--n-space-1); }
+.release-facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--n-space-1) var(--n-space-3); margin: var(--n-space-2) 0; padding: var(--n-space-2) var(--n-space-3); background: var(--n-bg-sunken); border-radius: var(--n-radius); }
+.release-facts dd { margin: 0; }

@@ -25,7 +25,7 @@ export function parse(hash: string = location.hash): Route {
   const m = SECTION.exec(hash);
   if (!m) return { kind: "section", section: "home", tab: null, arg: null };
   const [, first, second, third] = m;
-  if (isObjectKind(first) && second !== undefined && /^\d+$/.test(second)) {
+  if (isObjectKind(first) && second !== undefined && (/^\d+$/.test(second) || (first === "pack" && second !== ""))) {
     return { kind: "object", object: first, id: second, tab: third ?? null };
   }
   return { kind: "section", section: first, tab: second || null, arg: third || null };
