@@ -22,12 +22,21 @@ export interface Manifest {
   pack_version?: string;
   /** Planes per slab the door answers at most; 32 by the study. */
   slab?: number;
+  /** The engine's own shapes per level, when it names them (A6): [nz, ny, nx] and the tile grid. */
+  level_shapes?: { level: number; shape: [number, number, number]; tiles: [number, number]; bytes?: number }[];
+  /** The raw value is pixel plus intercept, for the window's numbers. */
+  intercept?: number;
+  /** Burned-in annotation held below the operator role: the tiles refuse and the render blanks the band. */
+  held?: boolean;
+  stack?: number;
 }
 
 const H = { "X-Nils-Desk": "1" };
 
 /** The shape of a level: every level halves in plane, never in depth (the slab is scrolled at full depth). */
 export function levelShape(m: Manifest, level: number): [number, number, number] {
+  const named = m.level_shapes?.find((l) => l.level === level);
+  if (named) return named.shape;
   const f = 2 ** level;
   return [m.shape[0], Math.ceil(m.shape[1] / f), Math.ceil(m.shape[2] / f)];
 }

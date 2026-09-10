@@ -220,7 +220,7 @@ export function Viewer({ stack, level: ruleLevel = null }: ViewerProps) {
             {a === "z" ? "axial, the stack" : a === "y" ? "coronal" : "sagittal"}
           </button>
         ))}
-        {manifest.annotation?.burned_in && <span className="tag caution">burned-in annotation held</span>}
+        {(manifest.annotation?.burned_in || manifest.held) && <span className="tag caution">burned-in annotation held</span>}
       </div>
       <div className="viewer-stage" hidden={axis !== "z"}>
         <div ref={el} className="viewer-element" />
