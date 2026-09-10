@@ -45,9 +45,23 @@ pub struct Desk {
 
 pub type Shared = Arc<Desk>;
 
-/// A desk from its configuration text: the store opened, the client built.
+/// A desk from its configuration file: the paths in it read as relative to
+/// it, the store opened, the client built. This is what every command uses,
+/// so that a command run from anywhere opens the same store as the service.
+pub fn start_at(path: &std::path::Path) -> Result<Shared, String> {
+    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut config = Config::parse(&text)?;
+    config.beside(path.parent().unwrap_or(std::path::Path::new(".")));
+    from_config(config)
+}
+
+/// A desk from its configuration text, with relative paths taken as they
+/// are written, which means relative to wherever this runs.
 pub fn start(text: &str) -> Result<Shared, String> {
-    let config = Config::parse(text)?;
+    from_config(Config::parse(text)?)
+}
+
+fn from_config(config: Config) -> Result<Shared, String> {
     let store = store::Store::open(&config.store)?;
     let http = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))

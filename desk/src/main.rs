@@ -121,8 +121,7 @@ fn main() {
 }
 
 fn load(path: &std::path::Path) -> Result<Shared, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    nils_desk::start(&text)
+    nils_desk::start_at(path)
 }
 
 async fn check(path: &std::path::Path) -> i32 {
