@@ -72,6 +72,38 @@ export const assistant = {
     if (!r.ok) await fail(r);
     return ((await r.json()) as { tasks?: Delegation[] }).tasks ?? [];
   },
+  /** Wave 5 section 9.4: the person's inbox, what the assistant and the engine did for them. */
+  inbox: async (): Promise<Inbox> => {
+    const r = await fetch("/assistant/inbox");
+    if (!r.ok) await fail(r);
+    return (await r.json()) as Inbox;
+  },
+  /** Section 9.3: a plan restated is confirmed once; the scheduler fires what is due. */
+  confirmPlan: async (id: string): Promise<Plan> => {
+    const r = await fetch(`/assistant/plans/${encodeURIComponent(id)}/confirm`, { method: "POST", headers: H });
+    if (!r.ok) await fail(r);
+    return (await r.json()) as Plan;
+  },
+  /** A rung-three proposal decided by the person, after the desk's own closure panel performed or declined the act. */
+  decideProposal: async (plan: string, n: number, verdict: "accepted" | "rejected"): Promise<void> => {
+    const r = await fetch(`/assistant/plans/${encodeURIComponent(plan)}/proposals/${n}/decide`, { method: "POST", headers: H, body: JSON.stringify({ verdict }) });
+    if (!r.ok) await fail(r);
+  },
+  /** Section 9.1: standing grants, per person and per verb, revocable. */
+  grants: async (all = false): Promise<Grants> => {
+    const r = await fetch(`/assistant/grants${all ? "?all=1" : ""}`);
+    if (!r.ok) await fail(r);
+    return (await r.json()) as Grants;
+  },
+  grant: async (door: string): Promise<Grant> => {
+    const r = await fetch("/assistant/grants", { method: "POST", headers: H, body: JSON.stringify({ door }) });
+    if (!r.ok) await fail(r);
+    return (await r.json()) as Grant;
+  },
+  revoke: async (id: number): Promise<void> => {
+    const r = await fetch(`/assistant/grants/${id}`, { method: "DELETE", headers: H });
+    if (!r.ok) await fail(r);
+  },
   /** The desk mints or refreshes the person's token and hands it to the assistant for this conversation. */
   token: (id: string) => fetch(`/desk/assistant/conversations/${encodeURIComponent(id)}/token`, { method: "POST", headers: H }).then((r) => (r.ok ? undefined : fail(r))),
 };
@@ -106,6 +138,68 @@ export interface Lineage {
     proposals: { document: number; parent: number | null; base_document: number | null; base_hash: string | null; sentence: string; at: string; decided: "accepted" | "rejected" | null; why: string | null; decided_at: string | null; stale: boolean }[];
     handles: { handle: number; operation: string; at: string }[];
   }[];
+}
+
+export interface Step {
+  n: number;
+  rung: 2 | 3;
+  verb: string;
+  door: string;
+  words: string;
+  state: string;
+  reason?: string | null;
+  job?: number | null;
+  grant?: number | null;
+  queued_at?: string | number | null;
+  finished_at?: string | number | null;
+  decided?: string | null;
+  when?: unknown;
+}
+
+export interface Plan {
+  id: string;
+  conversation?: string;
+  instruction: string;
+  state: string;
+  created_at?: string | number;
+  confirmed_at?: string | number | null;
+  steps: Step[];
+  fired?: unknown[];
+}
+
+export interface InboxJob {
+  id?: number;
+  job?: number;
+  kind?: string;
+  name?: string | null;
+  state?: string;
+  started_at?: string;
+  finished_at?: string | null;
+  object?: { kind: string; id: number | string } | null;
+  [k: string]: unknown;
+}
+
+export interface Inbox {
+  subject: string;
+  jobs: { queued: InboxJob[]; running: InboxJob[]; finished: InboxJob[]; failed: InboxJob[] };
+  waiting: Step[];
+  plans: Plan[];
+  proposals: Step[];
+  grants: Grant[];
+}
+
+export interface Grant {
+  id: number;
+  subject: string;
+  door: string;
+  created_at: string;
+  revoked_at?: string | null;
+}
+
+export interface Grants {
+  subject: string;
+  grants: Grant[];
+  ladder: { door: string; rung: 1 | 2 | 3; role: string }[];
 }
 
 export interface Delegation {

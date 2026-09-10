@@ -14,6 +14,8 @@ import { ask, desk, type Diff } from "../ask/client";
 import { assistant, conversationFor, newConversation, remember, StaleProposal, type Conversation, type Delegation } from "./client";
 import type { PageContext } from "../ui/context";
 import { unified } from "./diff";
+import { PlanView } from "./PlanView";
+import type { Plan } from "./client";
 import { empty, fromHistory, reduce, type PaneState, type Proposal } from "./parts";
 
 const TOKEN_PUSH_MS = 5 * 60_000;
@@ -47,6 +49,17 @@ export function Pane({ caps, docId, chain, epoch, onOpen, context }: PaneProps) 
   const warming = health?.warming === true;
   const STATION = stationOf(caps);
   const [tasks, setTasks] = useState<Delegation[]>([]);
+  const [plans, setPlans] = useState<Plan[]>([]);
+  // the operator station's plans reach the rail from the inbox (section 9.3, 9.4): the person's, unconfirmed or running
+  const readPlans = useCallback(() => {
+    assistant
+      .inbox()
+      .then((i) => setPlans(i.plans.filter((p) => p.state !== "done" && (!conv || !p.conversation || p.conversation === conv.id))))
+      .catch(() => setPlans([]));
+  }, [conv]);
+  useEffect(() => {
+    if (!state.busy && state.settled) readPlans();
+  }, [state.busy, state.settled, readPlans]);
 
   // the stream: from the offset the state holds, until the submission settles
   const follow = useCallback(
@@ -236,6 +249,13 @@ export function Pane({ caps, docId, chain, epoch, onOpen, context }: PaneProps) 
           </li>
         ))}
       </ol>
+      {plans.length > 0 && (
+        <div className="plans">
+          {plans.map((p) => (
+            <PlanView key={p.id} plan={p} onChanged={(np) => setPlans((ps) => ps.map((x) => (x.id === np.id ? { ...x, ...np } : x)))} />
+          ))}
+        </div>
+      )}
       {tasks.length > 0 && (
         <ul className="tasks">
           {tasks.map((t) => (

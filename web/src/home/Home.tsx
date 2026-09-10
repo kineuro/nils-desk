@@ -11,6 +11,8 @@ import { ops, type ReleaseRow, type ReviewItem } from "../ops/client";
 import { usePageContext } from "../Rail";
 import { door as served, holds } from "../sections";
 import { cohortNames, objects, type Summary } from "../objects/client";
+import { assistant, type Inbox } from "../assistant/client";
+import { stepState } from "../assistant/PlanView";
 import { Empty } from "../ui/Empty";
 import { classify, Failure, type Failed } from "../ui/Failure";
 import { Wait } from "../ui/Wait";
@@ -59,6 +61,8 @@ export function Home({ caps }: { caps: Capabilities }) {
   const reviewer = holds(caps, "reviewer");
   const review = useLoad(reviewer && served(caps, "GET /api/review"), () => ops.review("open", undefined, 20));
   const jobs = useLoad(reviewer && served(caps, "GET /api/jobs"), () => ops.jobs(true, 50), 10_000);
+  // Wave 5 section 9.4: the inbox is Home's third and fourth bands, kept, when the assistant serves it
+  const inbox = useLoad(caps.assistant !== null && holds(caps, "assist"), () => assistant.inbox(), 15_000);
   const handles = useLoad(served(caps, "GET /api/ask/handles"), () => results.handles());
   const releases = useLoad(holds(caps, "operator") && served(caps, "GET /api/releases"), () => ops.releases(20));
   return (
@@ -84,9 +88,11 @@ export function Home({ caps }: { caps: Capabilities }) {
               }}
             </Loaded>
           )}
+          {inbox && inbox.kind === "ready" && <Waiting inbox={inbox.value} />}
         </Band>
         <Band title="What is running">
           {!reviewer && <p className="meta">Jobs are listed for reviewers and above.</p>}
+          {inbox && inbox.kind === "ready" && <PlansRunning inbox={inbox.value} />}
           {jobs && (
             <Loaded load={jobs}>
               {(j) => {
@@ -120,6 +126,67 @@ export function Home({ caps }: { caps: Capabilities }) {
         </Band>
       </div>
     </section>
+  );
+}
+
+/** Proposals waiting for the person and steps that wait for a grant or a token, from the inbox (section 9.4). */
+function Waiting({ inbox }: { inbox: Inbox }) {
+  const proposals = inbox.proposals.filter((p) => !p.decided);
+  const waiting = inbox.waiting.filter((w) => w.reason);
+  if (proposals.length === 0 && waiting.length === 0) return null;
+  return (
+    <div>
+      {proposals.length > 0 && (
+        <>
+          <h3>Proposals waiting for you</h3>
+          <ul className="todo">
+            {proposals.map((p) => (
+              <li key={`${p.door}-${p.n}`}>
+                <a href="#assistant">{p.words}</a> <span className="meta">a proposal, decided by you</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {waiting.length > 0 && (
+        <>
+          <h3>Steps that wait</h3>
+          <ul className="todo">
+            {waiting.map((w) => (
+              <li key={`${w.door}-${w.n}`}>
+                {w.words} <span className="meta">{stepState(w)}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Plans that ran or run, one line per step, from the inbox. */
+function PlansRunning({ inbox }: { inbox: Inbox }) {
+  const live = inbox.plans.filter((p) => p.state !== "done");
+  if (live.length === 0) return null;
+  return (
+    <div>
+      <h3>Plans</h3>
+      <ul className="todo">
+        {live.map((p) => (
+          <li key={p.id}>
+            <a href="#assistant">{p.instruction}</a>
+            <ul className="plan-steps small">
+              {p.steps.map((s) => (
+                <li key={s.n}>
+                  {s.words} <span className="meta">{stepState(s)}</span>
+                  {s.job && <> <a href={`#job/${s.job}`}>job {s.job}</a></>}
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

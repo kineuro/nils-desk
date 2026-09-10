@@ -306,3 +306,12 @@ table.candidates td:first-child { font-weight: 500; }
 .item h3, .batch h3, .pack h3 { font-size: var(--n-text-size-small); text-transform: uppercase; letter-spacing: 0.06em; color: var(--n-text-faint); margin: var(--n-space-3) 0 var(--n-space-1); }
 .release-facts { display: grid; grid-template-columns: max-content 1fr; gap: var(--n-space-1) var(--n-space-3); margin: var(--n-space-2) 0; padding: var(--n-space-2) var(--n-space-3); background: var(--n-bg-sunken); border-radius: var(--n-radius); }
 .release-facts dd { margin: 0; }
+
+/* the ladder (Wave 5 section 9): plans in the rail and on Home */
+.plan { border: 1px solid var(--n-gated-line); background: var(--n-gated-bg); color: var(--n-gated-fg); border-radius: var(--n-radius); padding: var(--n-space-2) var(--n-space-3); margin: var(--n-space-2) 0; }
+.plan.open { border-left: 3px solid var(--n-gated-icon); }
+.plan .sentence { margin: 0 0 var(--n-space-1); }
+.plan-steps { margin: 0; padding-left: 1.2rem; display: grid; gap: 2px; }
+.plan-steps.small { font-size: var(--n-text-size-small); padding-left: 1rem; }
+.plan-steps .tag { font-size: 0.7rem; }
+.plan-steps .rung-3 .tag { border-color: var(--n-gated-line); color: var(--n-gated-fg); }
