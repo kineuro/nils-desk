@@ -315,3 +315,8 @@ table.candidates td:first-child { font-weight: 500; }
 .plan-steps.small { font-size: var(--n-text-size-small); padding-left: 1rem; }
 .plan-steps .tag { font-size: 0.7rem; }
 .plan-steps .rung-3 .tag { border-color: var(--n-gated-line); color: var(--n-gated-fg); }
+/* Teaching (Wave 5 section 9.5) */
+.teaching h2 { margin-top: var(--n-space-3); }
+.teaching table { width: 100%; }
+table.corrections td:nth-child(3) { max-width: 30rem; }
+table.candidates-table td.row { gap: var(--n-space-1); }

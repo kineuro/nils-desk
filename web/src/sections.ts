@@ -88,6 +88,10 @@ export function controls(caps: Capabilities, section: string): string[] {
       ["custody", "GET /api/custody", "admin"],
     ],
     pipelines: [["jobs", "GET /api/jobs", "reviewer"]],
+    assistant: [
+      ["chat", "GET /api/capabilities", "reader"],
+      ["teaching", "GET /api/capabilities", "reviewer"],
+    ],
     settings: [
       ["parts", "GET /api/capabilities", "reader"],
       ["places", "GET /api/places", "operator"],
@@ -100,7 +104,15 @@ export function controls(caps: Capabilities, section: string): string[] {
   };
   // the keyword tab of 4c section 9.13 sits beside the review queue only when the assistant serves keyword-tune
   const served = ((caps.assistant?.["stations"] as { id?: string }[] | undefined) ?? []).map((s) => s.id);
+  const assistantDoors = (caps.assistant?.["doors"] as string[] | undefined) ?? [];
   return (table[section] ?? [])
-    .filter(([id, d, need]) => door(caps, d) && holds(caps, need) && (id !== "keyword" || served.includes("keyword-tune")))
+    .filter(
+      ([id, d, need]) =>
+        door(caps, d) &&
+        holds(caps, need) &&
+        (id !== "keyword" || served.includes("keyword-tune")) &&
+        (id !== "chat" || caps.assistant !== null) &&
+        (id !== "teaching" || assistantDoors.includes("GET /teaching/candidates")),
+    )
     .map(([id]) => id);
 }
