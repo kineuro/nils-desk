@@ -106,7 +106,16 @@ esac
 
 # The wizard asks questions, so give it the terminal even though this script
 # arrived through a pipe. Without one it takes the defaults and says so.
-if [ -r /dev/tty ] && [ -c /dev/tty ]; then
+#
+# The test opens the terminal rather than asking whether the file is there.
+# In a script with no controlling terminal, /dev/tty is still a character
+# device that passes every test you can make of it and then refuses to
+# open, and the install ended on "cannot open /dev/tty" instead of taking
+# the defaults, which is the whole point of having a default path.
+#
+# The open is in a subshell because a redirection that fails on a special
+# builtin ends the shell, and `set -e` is on.
+if (exec < /dev/tty) 2>/dev/null; then
   exec "$dir/nils" setup $rest < /dev/tty
 else
   exec "$dir/nils" setup --yes $rest
