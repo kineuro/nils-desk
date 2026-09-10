@@ -11,11 +11,12 @@
 #   curl -fsSL https://nils.kineuro.se/get | sh -s -- --parts engine,desk --yes
 #
 # Options this script takes for itself:
-#   --dir=DIR      where the binary goes (default ~/.local/bin, or
+#   --bin-dir=DIR  where the `nils` binary goes (default ~/.local/bin, or
 #                  /usr/local/bin as root)
 #   --version=X    a version instead of the newest release
 #   --no-setup     install the binary and stop
-# Everything else is passed to `nils setup`.
+# Everything else is passed to `nils setup`, `--dir` among it, which is
+# where the registry and the rest live rather than where the binary goes.
 #
 # SPDX-License-Identifier: AGPL-3.0-only
 set -eu
@@ -28,15 +29,18 @@ rest=""
 
 for arg in "$@"; do
   case "$arg" in
-    --dir=*) dir="${arg#--dir=}" ;;
+    --bin-dir=*) dir="${arg#--bin-dir=}" ;;
     --version=*) version="${arg#--version=}" ;;
     --no-setup) run_setup=0 ;;
     -h|--help)
       printf '%s\n' "curl -fsSL https://nils.kineuro.se/get | sh" \
-        "  --dir=DIR      where the binary goes" \
+        "  --bin-dir=DIR  where the nils binary goes" \
         "  --version=X    a version instead of the newest release" \
         "  --no-setup     install the binary and stop" \
-        "  anything else is passed to 'nils setup' (--parts, --dir, --mode, --yes, --print)"
+        "  anything else is passed to 'nils setup' (--parts, --dir, --mode, --yes, --print)" \
+        "" \
+        "  --bin-dir is where the binary goes; --dir, which the wizard takes," \
+        "  is where the registry and everything else lives."
       exit 0 ;;
     *) rest="$rest $arg" ;;
   esac
