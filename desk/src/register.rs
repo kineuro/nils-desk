@@ -241,6 +241,9 @@ pub async fn register(api: &Api, plan: &Plan) -> Result<Registered, String> {
         "authorization_flow": authorization,
         "invalidation_flow": invalidation,
         "client_type": "confidential",
+        // without these the provider allows no grant at all and the first
+        // sign in fails as `invalid_request`, which says nothing about why
+        "grant_types": ["authorization_code", "refresh_token"],
         "redirect_uris": [{"matching_mode": "strict", "url": redirect}],
         "signing_key": key_pk,
         "property_mappings": mapping_pks,
