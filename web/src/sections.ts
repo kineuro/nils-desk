@@ -41,8 +41,9 @@ export function state(caps: Capabilities): State {
   if (caps.desk.contract_mismatch?.major) {
     return { kind: "contract_mismatch", found: caps.desk.contract_mismatch.found, speaks: caps.desk.contract_mismatch.speaks };
   }
-  if (!caps.desk.engine_reachable || !caps.engine) return { kind: "no_engine" };
+  // the login comes before the engine: a person without a session has no bearer, so the engine's 401 says nothing about the engine
   if (!caps.desk.signed_in && caps.desk.login) return { kind: "login", how: caps.desk.login.kind, url: caps.desk.login.url };
+  if (!caps.desk.engine_reachable || !caps.engine) return { kind: "no_engine" };
   if (caps.person.entitlements.length === 0) return { kind: "unbound" };
   const health = caps.kvasir?.["health"] as { warming?: boolean } | undefined;
   if (caps.kvasir && health?.warming === true) return { kind: "warming" };

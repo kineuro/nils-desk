@@ -59,6 +59,15 @@ describe("the shell as a predicate over the document", () => {
     expect(state(d)).toEqual({ kind: "unbound" });
     expect(sections(d)).toEqual([]);
   });
+  it("names the login before the engine: an unauthenticated probe says nothing about the engine", () => {
+    const d = doc();
+    d.desk.mode = "oidc";
+    d.desk.signed_in = false;
+    d.desk.login = { kind: "redirect", url: "/desk/login" };
+    d.desk.engine_reachable = false;
+    d.engine = null;
+    expect(state(d).kind).toBe("login");
+  });
   it("names the login before anything else in local and oidc modes", () => {
     const d = doc();
     d.desk.mode = "local";
