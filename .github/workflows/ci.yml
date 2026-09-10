@@ -16,6 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: SPDX headers on every source file
         run: scripts/check-spdx.sh
+      - name: the theme is one file
+        run: scripts/check-theme.sh
   desk:
     runs-on: ubuntu-latest
     steps:

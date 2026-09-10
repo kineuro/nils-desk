@@ -55,7 +55,7 @@ export function App() {
   return (
     <div className="desk">
       <header className="top">
-        <span className="mark">NILS</span>
+        <a className="mark" href="#home" aria-label="NILS home"><img src="/brand/nils-mark.svg" alt="" width="22" height="22" />NILS</a>
         <nav>
           {list.map((s) => (
             <button key={s.id} className={s.id === active?.id ? "on" : ""} onClick={() => { setCurrent(s.id); if (!location.hash.startsWith(`#${s.id}`)) location.hash = `#${s.id}`; }}>

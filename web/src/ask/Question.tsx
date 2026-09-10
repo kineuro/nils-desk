@@ -511,7 +511,7 @@ function StepView({ step, open, onOpen, options, funnel, grain, onApply, busy, p
   return (
     <li className={`step ${open ? "open" : ""}`}>
       <div className="step-head" onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && onOpen()} role="button" tabIndex={0}>
-        <strong>{step.set}</strong> <span className="grain">{step.grain}s {step.source}</span>
+        <strong>{step.set}</strong> <span className="grain" data-grain={step.grain}>{step.grain}s {step.source}</span>
         {step.answers && <span className="tag">answer</span>}
         {step.kept && <span className="tag">kept</span>}
         {last && <span className="count">{last.rows} rows, {last.subjects} subjects</span>}

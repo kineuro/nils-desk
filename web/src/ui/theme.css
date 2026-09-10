@@ -1,0 +1,154 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/*
+ * The theme (Wave 5 §5.1, D53). The one file in the desk that names a colour,
+ * a face or a size; everything else speaks in the tokens below. A deployment
+ * replaces the look by replacing this file and web/public/brand/.
+ *
+ * Two tables with the same key set: light on :root, dark under the scheme query
+ * and under an explicit data-theme. The gate checks the key sets match.
+ */
+
+/* the three faces, served from this origin so an air-gapped desk looks the same */
+@font-face { font-family: "IBM Plex Sans"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/IBMPlexSans-Regular-Latin1.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/IBMPlexSans-Medium-Latin1.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Sans"; font-weight: 600; font-style: normal; font-display: swap; src: url("/fonts/IBMPlexSans-SemiBold-Latin1.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Serif"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/IBMPlexSerif-Regular-Latin1.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Serif"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/IBMPlexSerif-Medium-Latin1.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Serif"; font-weight: 400; font-style: italic; font-display: swap; src: url("/fonts/IBMPlexSerif-Italic-Latin1.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/IBMPlexMono-Regular-Latin1.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/IBMPlexMono-Medium-Latin1.woff2") format("woff2"); }
+
+:root {
+  color-scheme: light;
+
+  /* type */
+  --n-font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --n-font-serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
+  --n-font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --n-text-size: 15px;
+  --n-text-size-small: 13px;
+  --n-text-size-h1: 1.5rem;
+  --n-text-size-h2: 1.15rem;
+  --n-line-height: 1.5;
+
+  /* one control height and a four-step scale */
+  --n-control: 2rem;
+  --n-space-1: 0.25rem;
+  --n-space-2: 0.5rem;
+  --n-space-3: 1rem;
+  --n-space-4: 2rem;
+  --n-radius: 3px;
+  --n-measure: 70ch;
+
+  /* surfaces */
+  --n-bg-page: #F6F5F2;
+  --n-bg-raised: #FFFFFF;
+  --n-bg-sunken: #ECE9E4;
+  --n-bg-hover: #F0EDE8;
+  --n-bg-selected: #EFE3EA;
+
+  /* text */
+  --n-text: #1C1A1F;
+  --n-text-dim: #3E3944;
+  --n-text-faint: #6B6470;
+  --n-text-on-brand: #F6F5F2;
+
+  /* lines */
+  --n-line: #E4E1DC;
+  --n-line-strong: #1C1A1F;
+
+  /* the brand: plum on surfaces, plum as text */
+  --n-brand: #4F0433;
+  --n-brand-hover: #7A1F5A;
+  --n-brand-soft: #EFE3EA;
+  --n-brand-text: #4F0433;
+
+  /* six intents, each a quad: foreground, background, border, icon */
+  --n-neutral-fg: #3E3944; --n-neutral-bg: #ECE9E4; --n-neutral-line: #D8D4CD; --n-neutral-icon: #6B6470;
+  --n-brand-fg: #4F0433; --n-brand-bg: #EFE3EA; --n-brand-line: #D9BFCF; --n-brand-icon: #4F0433;
+  --n-ok-fg: #1F6E43; --n-ok-bg: #E1F0E7; --n-ok-line: #B7D8C4; --n-ok-icon: #1F6E43;
+  --n-caution-fg: #B9621C; --n-caution-bg: #FBEEDF; --n-caution-line: #EFCBA6; --n-caution-icon: #B9621C;
+  --n-blocked-fg: #A4232B; --n-blocked-bg: #F8E1E2; --n-blocked-line: #EBB8BC; --n-blocked-icon: #A4232B;
+  /* gated: the projection door; neither an error to dismiss nor a warning to ignore */
+  --n-gated-fg: #1F4D66; --n-gated-bg: #E3ECF1; --n-gated-line: #B4CBD8; --n-gated-icon: #1F4D66;
+
+  /* seven grain tints, low in chroma, close in lightness: what a set counts */
+  --n-grain-cohort: #E7E3EF;
+  --n-grain-subject: #E3EAF0;
+  --n-grain-session: #E0EEEC;
+  --n-grain-stack: #E6EEDF;
+  --n-grain-instance: #F0ECDC;
+  --n-grain-event: #F2E6DE;
+  --n-grain-group: #EFE2E6;
+
+  /* focus */
+  --n-focus: #7A1F5A;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --n-bg-page: #141416;
+    --n-bg-raised: #222226;
+    --n-bg-sunken: #1B1B1E;
+    --n-bg-hover: #2A2A2F;
+    --n-bg-selected: #2E1C29;
+    --n-text: #ECEAE6;
+    --n-text-dim: #C9C6C1;
+    --n-text-faint: #93909A;
+    --n-text-on-brand: #F6F5F2;
+    --n-line: #333238;
+    --n-line-strong: #ECEAE6;
+    --n-brand: #4F0433;
+    --n-brand-hover: #6B1A4C;
+    --n-brand-soft: #2E1C29;
+    --n-brand-text: #B57CA1;
+    --n-neutral-fg: #C9C6C1; --n-neutral-bg: #2A2A2F; --n-neutral-line: #3E3D44; --n-neutral-icon: #93909A;
+    --n-brand-fg: #B57CA1; --n-brand-bg: #2E1C29; --n-brand-line: #4F2E45; --n-brand-icon: #B57CA1;
+    --n-ok-fg: #7FCB9A; --n-ok-bg: #1C3327; --n-ok-line: #2C4F3B; --n-ok-icon: #7FCB9A;
+    --n-caution-fg: #E3A46A; --n-caution-bg: #3A2A1A; --n-caution-line: #5A4128; --n-caution-icon: #E3A46A;
+    --n-blocked-fg: #E58A90; --n-blocked-bg: #3A1F22; --n-blocked-line: #5A3034; --n-blocked-icon: #E58A90;
+    --n-gated-fg: #8FBDD6; --n-gated-bg: #1B2B35; --n-gated-line: #2C4453; --n-gated-icon: #8FBDD6;
+    --n-grain-cohort: #2B2734;
+    --n-grain-subject: #262C33;
+    --n-grain-session: #233030;
+    --n-grain-stack: #292F25;
+    --n-grain-instance: #322E22;
+    --n-grain-event: #342A25;
+    --n-grain-group: #33272C;
+    --n-focus: #B57CA1;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --n-bg-page: #141416;
+  --n-bg-raised: #222226;
+  --n-bg-sunken: #1B1B1E;
+  --n-bg-hover: #2A2A2F;
+  --n-bg-selected: #2E1C29;
+  --n-text: #ECEAE6;
+  --n-text-dim: #C9C6C1;
+  --n-text-faint: #93909A;
+  --n-text-on-brand: #F6F5F2;
+  --n-line: #333238;
+  --n-line-strong: #ECEAE6;
+  --n-brand: #4F0433;
+  --n-brand-hover: #6B1A4C;
+  --n-brand-soft: #2E1C29;
+  --n-brand-text: #B57CA1;
+  --n-neutral-fg: #C9C6C1; --n-neutral-bg: #2A2A2F; --n-neutral-line: #3E3D44; --n-neutral-icon: #93909A;
+  --n-brand-fg: #B57CA1; --n-brand-bg: #2E1C29; --n-brand-line: #4F2E45; --n-brand-icon: #B57CA1;
+  --n-ok-fg: #7FCB9A; --n-ok-bg: #1C3327; --n-ok-line: #2C4F3B; --n-ok-icon: #7FCB9A;
+  --n-caution-fg: #E3A46A; --n-caution-bg: #3A2A1A; --n-caution-line: #5A4128; --n-caution-icon: #E3A46A;
+  --n-blocked-fg: #E58A90; --n-blocked-bg: #3A1F22; --n-blocked-line: #5A3034; --n-blocked-icon: #E58A90;
+  --n-gated-fg: #8FBDD6; --n-gated-bg: #1B2B35; --n-gated-line: #2C4453; --n-gated-icon: #8FBDD6;
+  --n-grain-cohort: #2B2734;
+  --n-grain-subject: #262C33;
+  --n-grain-session: #233030;
+  --n-grain-stack: #292F25;
+  --n-grain-instance: #322E22;
+  --n-grain-event: #342A25;
+  --n-grain-group: #33272C;
+  --n-focus: #B57CA1;
+}
