@@ -70,3 +70,9 @@ export const stations = {
     return { run, verdict: await this.verdict(run.run) };
   },
 };
+
+/** The station the desk speaks to: the concierge when the assistant serves one, else ask-help (Wave 4c section 9.12). */
+export function stationOf(caps: Capabilities): string {
+  const list = (caps.assistant?.["stations"] as { id?: string }[] | undefined) ?? [];
+  return list.some((s) => s.id === "concierge") ? "concierge" : "ask-help";
+}
