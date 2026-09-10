@@ -222,6 +222,7 @@ pub async fn document(desk: &Shared, person: &session::Person) -> Value {
                 "origin": desk.config.origin,
                 "engine_url": desk.config.engine.url,
                 "kvasir_url": desk.config.kvasir.as_ref().map(|u| u.url.clone()),
+                "supervisor_url": desk.config.supervisor.as_ref().map(|u| u.url.clone()),
                 "assistant_url": desk.config.assistant.as_ref().map(|u| u.url.clone()),
                 "session_hours": session::HOURS,
                 "token_minutes": crate::issuer::TOKEN_MINUTES,

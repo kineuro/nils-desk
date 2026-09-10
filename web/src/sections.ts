@@ -89,7 +89,10 @@ export function controls(caps: Capabilities, section: string): string[] {
     pipelines: [["jobs", "GET /api/jobs", "reviewer"]],
     settings: [
       ["parts", "GET /api/capabilities", "reader"],
+      ["places", "GET /api/places", "operator"],
+      ["database", "GET /api/custody", "admin"],
       ["audit", "GET /api/audit", "admin"],
+      ["identity", "GET /api/capabilities", "reader"],
       ["sessions", "POST /api/jobs", "operator"],
       ["shortcuts", "GET /api/capabilities", "reader"],
     ],

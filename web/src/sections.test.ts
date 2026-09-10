@@ -51,7 +51,7 @@ describe("the shell as a predicate over the document", () => {
     expect(controls(d, "release")).toEqual([]);
     d.person.entitlements = ["operator"];
     expect(controls(d, "release")).toEqual(["releases", "handovers"]);
-    expect(controls(d, "settings")).toEqual(["parts", "sessions", "shortcuts"]);
+    expect(controls(d, "settings")).toEqual(["parts", "identity", "sessions", "shortcuts"]);
   });
   it("names the unbound person rather than a 403", () => {
     const d = doc();

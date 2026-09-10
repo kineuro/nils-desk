@@ -14,6 +14,7 @@ import { type AuditRow, type CustodyStore, ops, type ReleaseRow } from "./client
 import { confirmName, confirmed, list, releaseBody, type ReleaseForm, type ReleaseSource, stackIds } from "./release";
 import { parse } from "../routes";
 import { objects, type Place } from "../objects/client";
+import { type AuditFilter, auditQuery } from "../settings/console";
 import { door as served } from "../sections";
 
 /** The release the address names: #release/releases/77. */
@@ -335,15 +336,28 @@ export function Custody() {
 }
 
 export function Audit() {
-  const [f, setF] = useState({ principal: "", action: "", since: "", limit: "50" });
-  const [rows, setRows] = useState<AuditRow[] | null>(null);
+  // Wave 5 section 10.5: filtered by person, by door, by object and by month; the raw projections as their own view; reading it writes a row
+  const [f, setF] = useState<AuditFilter & { raw: boolean }>({ principal: "", action: "", object: "", month: "", raw: false });
+  const [all, setAll] = useState<AuditRow[] | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const load = useCallback(() => {
-    ops.audit({ principal: f.principal || undefined, action: f.action || undefined, since: f.since || undefined, limit: Number(f.limit) || 50 }).then((r) => setRows(r.rows)).catch((e: Error) => setWhy(e.message));
-  }, [f]);
+    ops.audit(auditQuery(f)).then((r) => setAll(r.rows)).catch((e: Error) => setWhy(e.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the door's query is the dependency
+  }, [f.principal, f.action, f.month]);
   useEffect(() => {
     load();
   }, [load]);
+  const rows = useMemo(() => {
+    if (!all) return null;
+    const object = f.object.trim().toLowerCase();
+    return all.filter((r) => {
+      const action = String(r.action ?? "");
+      if (f.raw && !/project|rows|export|values/.test(action)) return false;
+      if (f.month && typeof r.at === "string" && !r.at.startsWith(f.month)) return false;
+      if (object && !JSON.stringify(r).toLowerCase().includes(object)) return false;
+      return true;
+    });
+  }, [all, f.object, f.month, f.raw]);
   const columns = useMemo(() => {
     const seen = new Set<string>();
     for (const r of rows ?? []) for (const k of Object.keys(r)) seen.add(k);
@@ -352,11 +366,13 @@ export function Audit() {
   }, [rows]);
   return (
     <div>
+      <p className="meta">Every row, by person, by door, by object and by month. This view is a disclosure surface of its own: reading it writes a row.</p>
       <div className="row">
-        <label>principal <input value={f.principal} onChange={(e) => setF({ ...f, principal: e.target.value })} size={14} /></label>
-        <label>action <input value={f.action} onChange={(e) => setF({ ...f, action: e.target.value })} placeholder="linkage. for a prefix" size={16} /></label>
-        <label>since <input value={f.since} onChange={(e) => setF({ ...f, since: e.target.value })} placeholder="ISO stamp" size={20} /></label>
-        <label>limit <input value={f.limit} onChange={(e) => setF({ ...f, limit: e.target.value })} size={5} inputMode="numeric" /></label>
+        <label>person <input value={f.principal} onChange={(e) => setF({ ...f, principal: e.target.value })} size={14} /></label>
+        <label>door <input value={f.action} onChange={(e) => setF({ ...f, action: e.target.value })} placeholder="linkage. for a prefix" size={16} /></label>
+        <label>object <input value={f.object} onChange={(e) => setF({ ...f, object: e.target.value })} placeholder="handle 71, document 9" size={16} /></label>
+        <label>month <input value={f.month} onChange={(e) => setF({ ...f, month: e.target.value })} placeholder="2026-09" size={8} /></label>
+        <label><input type="checkbox" checked={f.raw} onChange={(e) => setF({ ...f, raw: e.target.checked })} /> raw projections only</label>
       </div>
       {why && <p className="warn">{why}</p>}
       {rows === null ? <p>Reading</p> : rows.length === 0 ? <p>No row matches.</p> : (

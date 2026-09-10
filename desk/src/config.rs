@@ -28,6 +28,9 @@ pub struct Config {
     pub engine: Upstream,
     pub kvasir: Option<Upstream>,
     pub assistant: Option<Upstream>,
+    /// Wave 5 §10.4: the supervisor on this host, reached under `/supervise/` by an admin.
+    #[serde(default)]
+    pub supervisor: Option<Upstream>,
     #[serde(default)]
     pub apps: Vec<App>,
     /// `local` mode: the desk as a small issuer (C46).

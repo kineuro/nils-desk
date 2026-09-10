@@ -35,7 +35,8 @@ export function Data({ caps }: { caps: Capabilities }) {
   const operator = caps.person.entitlements.some((e) => e === "operator" || e === "admin");
   // the anonymisation page of section 9.14 needs the probe door, an operator, and the assistant's identity-check
   const probe = caps.engine?.doors.includes("POST /api/ingest/probe") && stationsServed(caps).includes("identity-check");
-  const tabs = TABS.filter(([id]) => (operator || !["ingest", "anonymisation", "backup", "restore"].includes(id)) && (id !== "anonymisation" || probe));
+  // backup and restore moved to Settings, Database (Wave 5 section 10.3)
+  const tabs = TABS.filter(([id]) => !["backup", "restore"].includes(id) && (operator || !["ingest", "anonymisation"].includes(id)) && (id !== "anonymisation" || probe));
   const active = tabs.some(([id]) => id === tab) ? tab : tabs[0][0];
   return (
     <section className="ops">
@@ -230,7 +231,7 @@ function Ingest({ caps }: { caps: Capabilities }) {
 }
 
 /** Backup is a job with its archives listed; verify is a job. */
-function Backup({ caps }: { caps: Capabilities }) {
+export function Backup({ caps }: { caps: Capabilities }) {
   const configured = Boolean((caps.engine as { backup_dir?: boolean } | null)?.backup_dir);
   const [jobs, setJobs] = useState<JobRow[]>([]);
   const [why, setWhy] = useState<string | null>(null);
@@ -270,7 +271,7 @@ function Backup({ caps }: { caps: Capabilities }) {
 }
 
 /** Restore prints the exact command and the procedure; it runs nothing (D50). */
-function Restore() {
+export function Restore() {
   const [archive, setArchive] = useState("");
   const [home, setHome] = useState("");
   useEffect(() => {

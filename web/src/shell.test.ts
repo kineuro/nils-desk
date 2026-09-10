@@ -49,7 +49,7 @@ describe("the laptop walks every section", () => {
     expect(controls(c, "review")).toEqual(["review", "keyword"]);
     expect(controls(c, "release")).toEqual(["releases", "handovers", "custody"]);
     expect(controls(c, "pipelines")).toEqual(["jobs"]);
-    expect(controls(c, "settings")).toEqual(["parts", "audit", "sessions", "shortcuts"]);
+    expect(controls(c, "settings")).toEqual(["parts", "database", "audit", "identity", "sessions", "shortcuts"]);
   });
   it("has no Operations section any more, and its addresses move", () => {
     expect(sections(laptop()).some((s) => s.id === "operations")).toBe(false);
