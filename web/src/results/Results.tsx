@@ -19,7 +19,7 @@ export function Results({ caps }: { caps: Capabilities }) {
   const [record, setRecord] = useState<DeskRecord>({ results: [], lineage: [], export: null });
   const [withdrawn, setWithdrawn] = useState(false);
   const [openId, setOpenId] = useState<number | null>(() => {
-    const m = /^#results\/(\d+)$/.exec(location.hash);
+    const m = /^#(?:ask\/results|results)\/(\d+)$/.exec(location.hash);
     return m ? Number(m[1]) : null;
   });
   const [why, setWhy] = useState<string | null>(null);
@@ -246,10 +246,10 @@ function Detail({ s, caps, onChanged }: { s: ResultState; caps: Capabilities; on
         </div>
         <div className="control">
           <h3>Release</h3>
-          <button type="button" disabled={!s.release.enabled} title={s.release.reason ?? ""} onClick={() => { location.hash = `#operations/releases/${h.id}`; }}>
+          <button type="button" disabled={!s.release.enabled} title={s.release.reason ?? ""} onClick={() => { location.hash = `#release/releases/${h.id}`; }}>
             Release
           </button>
-          <p className="reason">{s.release.enabled ? "opens the release form on the Operations page" : s.release.reason}</p>
+          <p className="reason">{s.release.enabled ? "opens the release form on the Release page" : s.release.reason}</p>
         </div>
         <div className="control">
           <h3>Promote</h3>

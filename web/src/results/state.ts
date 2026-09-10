@@ -107,6 +107,8 @@ export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, entitle
     if (rows === "withdrawn") return cannot("the handle was withdrawn");
     if (rows === "dropped") return cannot("the rows were dropped by retention");
     if (truncated) return cannot(truncated.by === "you" ? `a capped answer is not ${what}; raise your limit in the out step and run again` : `a truncated answer is not ${what}; narrow the question or run it as a job`);
+    // the reason's order (Wave 5 section 6.6): truncated, stale, incomplete, role
+    if (stale) return cannot(stale.moved_to !== null ? `a stale answer is not ${what}; the question moved on to ${stale.moved_to}, run that` : `a stale answer is not ${what}; the registry moved to epoch ${epoch}, run the question again`);
     if (!holds(need)) return cannot(`${what} needs the ${need} entitlement`);
     return null;
   };
@@ -118,7 +120,7 @@ export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, entitle
     truncated,
     release: gate("operator", "released") ?? can,
     promote: h.grain === "subject" ? (gate("operator", "promoted") ?? can) : cannot("only a subject handle is promoted into a cohort"),
-    export: rows !== "kept" ? cannot(rows === "withdrawn" ? "the handle was withdrawn" : "the rows were dropped by retention") : canExport ? can : cannot("export is not open to you on this desk"),
+    export: rows !== "kept" ? cannot(rows === "withdrawn" ? "the handle was withdrawn" : "the rows were dropped by retention") : stale ? cannot("a stale answer is not exported; run the question again") : canExport ? can : cannot("export is not open to you on this desk"),
   };
 }
 

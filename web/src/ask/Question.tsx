@@ -28,8 +28,7 @@ import {
 
 import { documentMoves, edit, editor, firstEmpty, movesForCell, PROJECTIONS, project, sentence, type Edit, type Offer, type Step, type SubStep } from "./editor";
 import type { Capabilities } from "../capabilities";
-import { Pane } from "../assistant/Pane";
-import { holds } from "../sections";
+import { usePageContext } from "../Rail";
 
 const LAST = "nils-desk.ask.last";
 
@@ -49,7 +48,6 @@ export function Question({ caps }: { caps?: Capabilities }) {
   const [why, setWhy] = useState<string | null>(null);
   // section 7.7: the two values the panes share, the document id and the epoch; the chain so a conversation follows a version
   const [context, setContext] = useState<{ chain: number[]; epoch: number }>({ chain: [], epoch: caps?.engine?.registry.epoch ?? 0 });
-  const withAssistant = caps !== undefined && caps.assistant !== null && holds(caps, "assist");
   const open = (id: number) => {
     setWhy(null);
     setDocId(id);
@@ -60,14 +58,9 @@ export function Question({ caps }: { caps?: Capabilities }) {
       // a private window keeps nothing; the hash still carries the id
     }
   };
-  const page = docId === null ? <Start onOpen={open} why={why} setWhy={setWhy} /> : <Editor key={docId} docId={docId} onOpen={open} onClose={() => { setDocId(null); location.hash = ""; }} onContext={setContext} />;
-  if (!withAssistant || caps === undefined) return page;
-  return (
-    <div className="panes">
-      {page}
-      <Pane caps={caps} docId={docId} chain={context.chain} epoch={context.epoch} onOpen={open} />
-    </div>
-  );
+  // the rail reads the page's typed context (Wave 5 section 9.2): the document, its chain and the epoch; never a row
+  usePageContext(docId === null ? { page: { kind: "ask", id: null }, epoch: context.epoch } : { page: { kind: "ask", id: String(docId) }, document_id: docId, chain: context.chain, epoch: context.epoch });
+  return docId === null ? <Start onOpen={open} why={why} setWhy={setWhy} /> : <Editor key={docId} docId={docId} onOpen={open} onClose={() => { setDocId(null); location.hash = "#ask"; }} onContext={setContext} />;
 }
 
 /** No document yet: an id, authored text, or one of the pack's worked examples. */

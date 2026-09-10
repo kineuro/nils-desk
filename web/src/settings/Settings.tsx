@@ -11,11 +11,33 @@
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
+import { Audit, Sessions } from "../ops/tables";
+import { usePageContext } from "../Rail";
+import { parse } from "../routes";
+import { controls } from "../sections";
+import { SHORTCUTS } from "../ui/shortcuts";
 import { holds } from "../sections";
 import { type Backend, kvasir, type KeyRow, opening, type PersonalDoc, personalWords, type PurposeRow, tabSession } from "./kvasir";
 
+const TITLES: Record<string, string> = { parts: "Parts", audit: "Audit", sessions: "Sessions", shortcuts: "Shortcuts" };
+
 export function Settings({ caps }: { caps: Capabilities }) {
   const admin = holds(caps, "admin");
+  const tabs = controls(caps, "settings");
+  const [tab, setTab] = useState<string>(() => {
+    const r = parse();
+    return (r.kind === "section" ? r.tab : null) ?? "parts";
+  });
+  useEffect(() => {
+    const onHash = () => {
+      const r = parse();
+      if (r.kind === "section" && r.section === "settings") setTab(r.tab ?? "parts");
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const active = tabs.includes(tab) ? tab : "parts";
+  usePageContext({ page: { kind: "settings", id: active } });
   return (
     <section className="ops settings">
       <header className="ask-head">
@@ -24,13 +46,55 @@ export function Settings({ caps }: { caps: Capabilities }) {
           <p className="meta">One section per part. A setting is owned and enforced by the part that has it; the desk only shows and, where a door exists, sends.</p>
         </div>
       </header>
-      <Engine caps={caps} />
-      <Desk caps={caps} />
-      {caps.kvasir !== null && caps.desk.settings?.kvasir_url && <Kvasir caps={caps} admin={admin} />}
-      {caps.kvasir !== null && caps.desk.settings?.kvasir_url && <Personal />}
-      {caps.assistant !== null && <Assistant caps={caps} />}
-      <Apps caps={caps} />
+      <nav className="tabs" aria-label="settings">
+        {tabs.map((t) => (
+          <a key={t} className={t === active ? "on" : ""} href={`#settings/${t}`}>
+            {TITLES[t] ?? t}
+          </a>
+        ))}
+      </nav>
+      {active === "parts" && (
+        <>
+          <Engine caps={caps} />
+          <Desk caps={caps} />
+          {caps.kvasir !== null && caps.desk.settings?.kvasir_url && <Kvasir caps={caps} admin={admin} />}
+          {caps.kvasir !== null && caps.desk.settings?.kvasir_url && <Personal />}
+          {caps.assistant !== null && <Assistant caps={caps} />}
+          <Apps caps={caps} />
+        </>
+      )}
+      {active === "audit" && <Audit />}
+      {active === "sessions" && <Sessions />}
+      {active === "shortcuts" && <Shortcuts />}
     </section>
+  );
+}
+
+/** The shortcut registry, listed (section 6.6): the one place a binding is declared. */
+function Shortcuts() {
+  return (
+    <div>
+      <h2>Keyboard shortcuts</h2>
+      <p className="meta">No single key does anything on its own, so typing a document never triggers one.</p>
+      <table className="thin">
+        <thead>
+          <tr>
+            <th>keys</th>
+            <th>does</th>
+          </tr>
+        </thead>
+        <tbody>
+          {SHORTCUTS.map((s) => (
+            <tr key={s.keys}>
+              <td>
+                <kbd>{s.keys}</kbd>
+              </td>
+              <td>{s.does}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
