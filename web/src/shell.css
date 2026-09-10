@@ -3,6 +3,8 @@
 @media (prefers-color-scheme: dark) { :root { --ink: #ece7df; --paper: #171512; --plum: #c9a7c0; --line: #3a352f; } }
 body { margin: 0; font: 15px/1.45 system-ui, sans-serif; color: var(--ink); background: var(--paper); }
 .desk { display: grid; grid-template-rows: auto 1fr auto; min-height: 100vh; }
+.desk:has(.banner) { grid-template-rows: auto auto 1fr auto; }
+.banner { padding: 0.35rem 1.2rem; font-size: 0.85rem; background: var(--plum); color: var(--paper); }
 .top { display: flex; align-items: center; gap: 1.5rem; padding: 0.6rem 1.2rem; border-bottom: 1px solid var(--line); }
 .mark { font-weight: 700; letter-spacing: 0.08em; color: var(--plum); }
 nav { display: flex; gap: 0.25rem; flex: 1; }

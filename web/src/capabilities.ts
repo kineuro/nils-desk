@@ -14,7 +14,7 @@ export interface EngineCapabilities {
   auth: "off" | "token" | "oidc";
   principal: string;
   roles: Role[];
-  registry: { epoch: number; schema_version?: number; node?: string };
+  registry: { epoch: number; schema_version?: number; node?: string; synthetic?: string | null };
   /** Section 6.5: the events cap, the ingest locations by name, whether a backup directory is set. */
   event_streams?: number;
   ingest_roots?: string[];
