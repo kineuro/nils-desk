@@ -4,7 +4,7 @@
 // holds assist, absent otherwise without a gap. It knows which object is
 // under it through the typed context each page contributes (section 9.2).
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { Pane } from "./assistant/Pane";
 import type { Capabilities } from "./capabilities";
@@ -25,13 +25,12 @@ export function railPresent(caps: Capabilities): boolean {
 
 export function RailProvider({ children }: { children: React.ReactNode }) {
   const [context, setContext] = useState<PageContext>({ page: { kind: "home", id: null } });
-  const value = useMemo<RailState>(
-    () => ({
-      context,
-      contribute: (c) => setContext(admit(c ?? { page: { kind: "home", id: null } })),
-    }),
-    [context],
-  );
+  // stable across renders, and a contribution equal to the last one keeps the old object, so a page's effect never loops
+  const contribute = useCallback((c: PageContext | null) => {
+    const next = admit(c ?? { page: { kind: "home", id: null } });
+    setContext((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+  }, []);
+  const value = useMemo<RailState>(() => ({ context, contribute }), [context, contribute]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
@@ -67,7 +66,7 @@ export function Rail({ caps }: { caps: Capabilities }) {
   return (
     <aside className="rail" aria-label="assistant">
       <p className="meta rail-about">{aboutWords(c)}</p>
-      <Pane key={docId ?? "none"} caps={caps} docId={docId} chain={chain} epoch={epoch} onOpen={(id) => { location.hash = `#ask/${id}`; }} />
+      <Pane key={docId ?? "none"} caps={caps} docId={docId} chain={chain} epoch={epoch} context={c} onOpen={(id) => { location.hash = `#ask/${id}`; }} />
     </aside>
   );
 }

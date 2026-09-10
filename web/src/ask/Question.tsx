@@ -29,6 +29,11 @@ import {
 import { documentMoves, edit, editor, firstEmpty, movesForCell, PROJECTIONS, project, sentence, type Edit, type Offer, type Step, type SubStep } from "./editor";
 import type { Capabilities } from "../capabilities";
 import { usePageContext } from "../Rail";
+import { door as served, holds } from "../sections";
+import { cohortNames, objects, type DocumentRow, type Event } from "../objects/client";
+import { Empty } from "../ui/Empty";
+import { Wait } from "../ui/Wait";
+import { chipWord, clauseGroups, countWords, type From, type GroupRow, landing, nextMoves, pastedList, pickerSections, startBody, type Started } from "./start";
 
 const LAST = "nils-desk.ask.last";
 
@@ -47,7 +52,7 @@ export function Question({ caps }: { caps?: Capabilities }) {
   const [docId, setDocId] = useState<number | null>(idFromHash);
   const [why, setWhy] = useState<string | null>(null);
   // section 7.7: the two values the panes share, the document id and the epoch; the chain so a conversation follows a version
-  const [context, setContext] = useState<{ chain: number[]; epoch: number }>({ chain: [], epoch: caps?.engine?.registry.epoch ?? 0 });
+  const [context, setContext] = useState<PageShare>({ chain: [], epoch: caps?.engine?.registry.epoch ?? 0 });
   const open = (id: number) => {
     setWhy(null);
     setDocId(id);
@@ -59,16 +64,32 @@ export function Question({ caps }: { caps?: Capabilities }) {
     }
   };
   // the rail reads the page's typed context (Wave 5 section 9.2): the document, its chain and the epoch; never a row
-  usePageContext(docId === null ? { page: { kind: "ask", id: null }, epoch: context.epoch } : { page: { kind: "ask", id: String(docId) }, document_id: docId, chain: context.chain, epoch: context.epoch });
-  return docId === null ? <Start onOpen={open} why={why} setWhy={setWhy} /> : <Editor key={docId} docId={docId} onOpen={open} onClose={() => { setDocId(null); location.hash = "#ask"; }} onContext={setContext} />;
+  usePageContext(
+    docId === null
+      ? { page: { kind: "ask", id: null }, epoch: context.epoch }
+      : { page: { kind: "ask", id: String(docId) }, document_id: docId, chain: context.chain, epoch: context.epoch, content_hash: context.hash, sets: context.sets, funnel: context.funnel, declaration: context.declaration },
+  );
+  return docId === null ? <Start caps={caps} onOpen={open} why={why} setWhy={setWhy} /> : <Editor key={docId} docId={docId} caps={caps} onOpen={open} onClose={() => { setDocId(null); location.hash = "#ask"; }} onContext={setContext} />;
 }
 
-/** No document yet: an id, authored text, or one of the pack's worked examples. */
-function Start({ onOpen, why, setWhy }: { onOpen: (id: number) => void; why: string | null; setWhy: (w: string | null) => void }) {
+/** What a page shares with the rail (Wave 5 section 9.2): identifiers, names and counts, never a row. */
+export interface PageShare {
+  chain: number[];
+  epoch: number;
+  hash?: string;
+  sets?: { name: string; grain: string }[];
+  funnel?: { set: string; rows: number }[];
+  declaration?: Record<string, string | number | boolean | null>;
+}
+
+/** No document yet (section 7.1): a new question from anything, an id, authored text, the questions that exist, or a worked example. */
+function Start({ caps, onOpen, why, setWhy }: { caps?: Capabilities; onOpen: (id: number) => void; why: string | null; setWhy: (w: string | null) => void }) {
   const [id, setId] = useState("");
   const [text, setText] = useState("");
   const [examples, setExamples] = useState<{ question: string; document: Json; note?: string }[]>([]);
   const [drafted, setDrafted] = useState<Diagnosis | null>(null);
+  const canStart = caps ? served(caps, "POST /api/ask/start") : false;
+  const canList = caps ? served(caps, "GET /api/ask/documents") : false;
   useEffect(() => {
     ask.guide().then((g) => setExamples(g.examples ?? [])).catch(() => setExamples([]));
   }, []);
@@ -95,8 +116,9 @@ function Start({ onOpen, why, setWhy }: { onOpen: (id: number) => void; why: str
   return (
     <section className="ask start">
       <h1>Ask</h1>
-      <p>A question is a stored document with a version chain. Open one, write one, or start from an example the pack ships.</p>
+      <p>A question is a stored document with a version chain. Start one from anything, open one, write one, or start from an example the pack ships.</p>
       {why && <p className="warn">{why}</p>}
+      {canStart && caps && <NewQuestion caps={caps} onOpen={onOpen} setWhy={setWhy} />}
       <form onSubmit={byId} className="row">
         <label>
           Document <input value={id} onChange={(e) => setId(e.target.value)} inputMode="numeric" placeholder="id" />
@@ -112,6 +134,7 @@ function Start({ onOpen, why, setWhy }: { onOpen: (id: number) => void; why: str
         </div>
         {drafted && <DiagnosisView d={drafted} />}
       </details>
+      {canList && <Documents onOpen={onOpen} />}
       {examples.length > 0 && (
         <div>
           <h2>Worked examples</h2>
@@ -129,13 +152,136 @@ function Start({ onOpen, why, setWhy }: { onOpen: (id: number) => void; why: str
   );
 }
 
+/** Start from anything (D60): everyone with its count, then the picker narrows it and shows the new count and the sessions under it. */
+function NewQuestion({ caps, onOpen, setWhy }: { caps: Capabilities; onOpen: (id: number) => void; setWhy: (w: string | null) => void }) {
+  const [from, setFrom] = useState<From>({ kind: "nothing" });
+  const [started, setStarted] = useState<Started | null>(null);
+  const [since, setSince] = useState<number | null>(null);
+  const [cohorts, setCohorts] = useState<string[]>([]);
+  const [pasted, setPasted] = useState("");
+  const [field, setField] = useState("");
+  const reviewer = holds(caps, "reviewer");
+  useEffect(() => {
+    if (served(caps, "GET /api/summary")) objects.summary().then((s) => setCohorts(cohortNames(s))).catch(() => setCohorts([]));
+    else ask.values("cohort", "name", 50).then((v) => setCohorts((v.items ?? []).map(([n]) => String(n)))).catch(() => setCohorts([]));
+  }, [caps]);
+  useEffect(() => {
+    let alive = true;
+    setSince(Date.now());
+    setStarted(null);
+    ask
+      .start(startBody(from))
+      .then((r) => alive && setStarted({ document: r.document as Record<string, unknown>, set: r.set, grain: r.grain, count: r.count, subjects: r.subjects, sessions: r.sessions, epoch: r.epoch }))
+      .catch((e: Error) => alive && setWhy(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [from, setWhy]);
+  const begin = () => {
+    if (!started) return;
+    ask.store(started.document as Json).then((d) => onOpen(d.document)).catch((e: Error) => setWhy(e.message));
+  };
+  const upload = () => {
+    const list = pastedList(pasted);
+    if (list.length === 0) return;
+    ask.upload(list).then((u) => setFrom({ kind: "values", upload: u.upload })).catch((e: Error) => setWhy(e.message));
+  };
+  const toggleCohort = (c: string) => {
+    const have = from.kind === "cohorts" ? from.cohorts : [];
+    const next = have.includes(c) ? have.filter((x) => x !== c) : [...have, c];
+    setFrom(next.length === 0 ? { kind: "nothing" } : { kind: "cohorts", cohorts: next });
+  };
+  return (
+    <div className="panel new-question">
+      <div className="row">
+        <h2>New question</h2>
+        <span className="count-slot">{started ? countWords(started) : since !== null ? <Wait phase="counting" since={since} /> : null}</span>
+        <button type="button" className="on" onClick={begin} disabled={!started}>Start</button>
+      </div>
+      <p className="meta">Everyone, or narrow to what you may start from. No question has been asked yet, and none needs to be.</p>
+      <div className="from">
+        <fieldset>
+          <legend>cohorts</legend>
+          {cohorts.length === 0 && <span className="meta">none named</span>}
+          {cohorts.map((c) => (
+            <label key={c}>
+              <input type="checkbox" checked={from.kind === "cohorts" && from.cohorts.includes(c)} onChange={() => toggleCohort(c)} /> {c}
+            </label>
+          ))}
+        </fieldset>
+        <fieldset>
+          <legend>a saved selection, a result or a question</legend>
+          <input value={field} onChange={(e) => setField(e.target.value)} placeholder="name@version, or an id" size={22} aria-label="what to start from" />
+          <button type="button" onClick={() => setFrom({ kind: "selection", selection: field.trim() })} disabled={!field.trim() || /^\d+$/.test(field.trim())}>selection</button>
+          <button type="button" onClick={() => setFrom({ kind: "handle", handle: Number(field) })} disabled={!/^\d+$/.test(field.trim())}>result</button>
+          <button type="button" onClick={() => setFrom({ kind: "document", document: Number(field) })} disabled={!/^\d+$/.test(field.trim())}>question</button>
+        </fieldset>
+        <fieldset>
+          <legend>a pasted list of identifiers</legend>
+          {reviewer ? (
+            <>
+              <textarea value={pasted} onChange={(e) => setPasted(e.target.value)} rows={3} placeholder="one per line; resolved through the linkage store" spellCheck={false} />
+              <button type="button" onClick={upload} disabled={pastedList(pasted).length === 0}>Resolve</button>
+            </>
+          ) : (
+            <span className="meta">resolving a list needs the reviewer entitlement</span>
+          )}
+        </fieldset>
+        {from.kind !== "nothing" && (
+          <button type="button" onClick={() => setFrom({ kind: "nothing" })}>Everyone again</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The questions that exist (section 12.1): name, grain, versions, last run, author. */
+function Documents({ onOpen }: { onOpen: (id: number) => void }) {
+  const [rows, setRows] = useState<DocumentRow[] | null>(null);
+  const [since] = useState(() => Date.now());
+  useEffect(() => {
+    objects.documents().then((d) => setRows(d.documents)).catch(() => setRows([]));
+  }, []);
+  if (rows === null) return <Wait phase="reading the questions" since={since} size="panel" />;
+  if (rows.length === 0) return <Empty what="No question is stored yet." />;
+  return (
+    <div>
+      <h2>Questions</h2>
+      <table className="thin documents">
+        <thead>
+          <tr>
+            <th>name</th>
+            <th>grain</th>
+            <th className="num">versions</th>
+            <th>last run</th>
+            <th>author</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.document}>
+              <td>
+                <button type="button" className="cell" onClick={() => onOpen(r.document)}>{r.name ?? `question ${r.document}`}</button>
+              </td>
+              <td>{r.grain ?? ""}</td>
+              <td className="num">{r.versions}</td>
+              <td>{r.last_run ? <a href={`#handle/${r.last_run.handle}`}>{r.last_run.at.slice(0, 16).replace("T", " ")}</a> : ""}</td>
+              <td>{r.author ?? ""}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 interface Version extends DocumentHandle {
   /** What changed against the parent, from the diff door; null for the root or when the door refused. */
   changes: NonNullable<Diff["changes"]> | null;
 }
 
 /** The editor over one stored document. Keyed by the id: a new version is a fresh editor. */
-function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: (id: number) => void; onClose: () => void; onContext?: (c: { chain: number[]; epoch: number }) => void }) {
+function Editor({ docId, caps, onOpen, onClose, onContext }: { docId: number; caps?: Capabilities; onOpen: (id: number) => void; onClose: () => void; onContext?: (c: PageShare) => void }) {
   const [doc, setDoc] = useState<DocumentHandle | null>(null);
   const [opts, setOpts] = useState<Record<string, Options>>({});
   const [openSet, setOpenSet] = useState<string | null>(null);
@@ -155,7 +301,11 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
   const [why, setWhy] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [cell, setCell] = useState<{ column: string; value: unknown; offers: Offer[] } | null>(null);
-  const [ran, setRan] = useState<{ handle: number; row_count: number; content_hash: string } | null>(null);
+  const [ran, setRan] = useState<{ handle: number; row_count: number; content_hash: string; hash: string } | null>(null);
+  const [picker, setPicker] = useState(false);
+  const [prefill, setPrefill] = useState<{ set: string; field: string } | null>(null);
+  const [events, setEvents] = useState<Event[] | null>(null);
+  const [showText, setShowText] = useState(false);
   const previousCount = useRef<Map<number, number>>(new Map());
 
   // the document and the read-only panels, once per version
@@ -165,7 +315,13 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
     ask.get(docId).then((d) => alive && setDoc(d)).catch(fail);
     ask.describe(docId).then((d) => alive && setDescribed(d)).catch(fail);
     ask.explain(docId).then((x) => alive && setExplained({ sqlite: x.sqlite, postgres: x.postgres })).catch(() => alive && setExplained(null));
-    ask.diagnose(docId).then((d) => alive && setDiagnosis(d)).catch(fail);
+    // the funnel keyed by clause group (section 7.2, 12.3); an engine before A3 answers the set-keyed one
+    ask
+      .diagnose(docId, "clause")
+      .catch(() => ask.diagnose(docId))
+      .then((d) => alive && setDiagnosis(d))
+      .catch(fail);
+    if (caps && served(caps, "GET /api/timeline/{kind}/{id}")) objects.timeline("document", docId).then((t) => alive && setEvents(t.events)).catch(() => alive && setEvents([]));
     chain(docId)
       .then(async (list) => {
         const out: Version[] = [];
@@ -213,8 +369,16 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
   useEffect(() => {
     if (!onContext) return;
     const epoch = Object.values(opts)[0]?.epoch ?? 0;
-    onContext({ chain: (versions ?? []).map((v) => v.document), epoch });
-  }, [onContext, opts, versions]);
+    const decl = described?.declaration;
+    onContext({
+      chain: (versions ?? []).map((v) => v.document),
+      epoch,
+      hash: doc?.hash,
+      sets: steps.map((st) => ({ name: st.set, grain: st.grain })),
+      funnel: (diagnosis?.funnel ?? []).filter((f) => f.on_path).map((f) => ({ set: f.set, rows: f.rows })),
+      declaration: decl ? { grain: decl.grain, disclosure: decl.disclosure ?? null, timezone: decl.timezone ?? null, week_start: decl.week_start ?? null } : undefined,
+    });
+  }, [onContext, opts, versions, doc?.hash, steps, diagnosis, described]);
 
   // the open step: the first empty one, and its options
   useEffect(() => {
@@ -235,6 +399,7 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
       const o = opts[offer.set];
       if (!o) return setWhy(`The options of ${offer.set} are not here yet.`);
       const line = edit(origin, docId, offer);
+      window.dispatchEvent(new CustomEvent("nils:document-edited", { detail: { document: docId, origin } }));
       setBusy(true);
       setWhy(null);
       try {
@@ -265,7 +430,7 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
     const epoch = opts[openSet ?? ""]?.epoch ?? 0;
     runOnce(docId, epoch)
       .then((r) => {
-        setRan({ handle: r.handle, row_count: r.row_count, content_hash: r.content_hash });
+        setRan({ handle: r.handle, row_count: r.row_count, content_hash: r.content_hash, hash: r.hash });
         desk.record(r.handle, docId).catch(() => undefined);
       })
       .catch((e: Error) => setWhy(e.message));
@@ -300,6 +465,8 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
         </div>
         <div className="row">
           <button type="button" onClick={run} disabled={busy}>Run</button>
+          <button type="button" onClick={() => setPicker((p) => !p)}>{picker ? "Close the picker" : "Add a condition"}</button>
+          <button type="button" onClick={() => setShowText((t) => !t)}>{showText ? "Hide the document" : "The document"}</button>
           <button type="button" onClick={() => setShowSql((s) => !s)}>{showSql ? "Hide SQL" : "SQL"}</button>
           <button type="button" onClick={() => setDrawer((d) => !d)}>{drawer ? "Hide diagnosis" : "Diagnose"}</button>
           <button type="button" onClick={onClose}>Close</button>
@@ -313,6 +480,26 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
       )}
 
       {described && <DeclarationBlock d={described.declaration} described={described} />}
+
+      {showText && (
+        <div className="panel document-text">
+          <p className="meta">The document as it hashes, {doc.hash.slice(0, 12)}. Nothing else does.</p>
+          <pre>{JSON.stringify(doc.ask, null, 2)}</pre>
+        </div>
+      )}
+
+      {picker && (
+        <ConditionPicker
+          options={opts}
+          sets={steps.map((st) => st.set)}
+          onNeed={(set) => ask.options(docId, set).then((o) => setOpts((prev) => ({ ...prev, [set]: o }))).catch((e: Error) => setWhy(e.message))}
+          onPick={(set, field) => {
+            setOpenSet(set);
+            setPrefill({ set, field });
+            setPicker(false);
+          }}
+        />
+      )}
 
       {showSql && explained && (
         <div className="panel sql">
@@ -335,7 +522,8 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
             open={s.set === openSet}
             onOpen={() => setOpenSet(s.set)}
             options={opts[s.set] ?? null}
-            funnel={diagnosis?.funnel.filter((f) => f.set === s.set) ?? []}
+            groups={diagnosis ? clauseGroups(diagnosis.funnel, s.set, diagnosis.groups) : []}
+            prefill={prefill && prefill.set === s.set ? prefill.field : null}
             grain={s.grain}
             onApply={(offer) => apply("chip", offer)}
             busy={busy}
@@ -355,10 +543,14 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
       <div className="panel">
         <div className="row">
           <h2>Preview</h2>
-          {preview && preview.of !== docId && <span className="stale">stale: made for document {preview.of}</span>}
-          <button type="button" onClick={refreshPreview}>Refresh</button>
+          {preview && preview.of === docId && <button type="button" onClick={refreshPreview}>Refresh</button>}
         </div>
-        {preview ? (
+        {preview && preview.of !== docId ? (
+          <p>
+            The document moved since these rows were read.{" "}
+            <button type="button" onClick={refreshPreview}>Show ten rows for this version</button>
+          </p>
+        ) : preview ? (
           <PreviewTable p={preview.p} projection={projection} onCell={onCell} />
         ) : (
           <p>Reading ten rows</p>
@@ -385,24 +577,42 @@ function Editor({ docId, onOpen, onClose, onContext }: { docId: number; onOpen: 
 
       <div className="panel">
         <h2>Versions</h2>
+        <p className="meta">Edits, runs, releases and promotions in one list (section 7.4). A version is opened or branched from, never reverted in place.</p>
         {versions ? (
           <ol className="versions">
-            {versions.map((v) => (
-              <li key={v.document} className={v.document === docId ? "on" : ""}>
-                <button type="button" onClick={() => onOpen(v.document)}>{v.document}</button>
-                <span>{v.principal ?? "unknown"}</span>
-                <span className="when">{v.created_at ?? ""}</span>
-                <span className="changed">
-                  {v.changes === null ? (v.parent === null ? "the root" : "diff unavailable") : v.changes.length === 0 ? "no change" : v.changes.map((c) => `${c.set}.${c.part} ${c.kind}`).join("; ")}
-                </span>
-                <label>
-                  <input type="radio" name="diff-a" checked={diffPick.a === v.document} onChange={() => setDiffPick((p) => ({ ...p, a: v.document }))} /> a
-                </label>
-                <label>
-                  <input type="radio" name="diff-b" checked={diffPick.b === v.document} onChange={() => setDiffPick((p) => ({ ...p, b: v.document }))} /> b
-                </label>
-              </li>
-            ))}
+            {interleave(versions, events ?? []).map((row) =>
+              row.kind === "version" ? (
+                <li key={`v-${row.v.document}`} className={row.v.document === docId ? "on" : ""}>
+                  <button type="button" onClick={() => onOpen(row.v.document)} title="open this version">{row.v.document}</button>
+                  <span>{row.v.principal ?? "unknown"}</span>
+                  <span className="when">{row.v.created_at ?? ""}</span>
+                  <span className="changed">
+                    {row.v.changes === null ? (row.v.parent === null ? "the root" : "diff unavailable") : row.v.changes.length === 0 ? "no change" : row.v.changes.map((c) => `${c.set}.${c.part} ${c.kind}`).join("; ")}
+                  </span>
+                  <label>
+                    <input type="radio" name="diff-a" checked={diffPick.a === row.v.document} onChange={() => setDiffPick((p) => ({ ...p, a: row.v.document }))} /> a
+                  </label>
+                  <label>
+                    <input type="radio" name="diff-b" checked={diffPick.b === row.v.document} onChange={() => setDiffPick((p) => ({ ...p, b: row.v.document }))} /> b
+                  </label>
+                  {row.v.document !== docId && (
+                    <button type="button" className="branch" onClick={() => { onOpen(row.v.document); setWhy(`Editing from version ${row.v.document}; the next move makes a new version from it.`); }}>
+                      start a new version from here
+                    </button>
+                  )}
+                </li>
+              ) : (
+                <li key={`e-${row.i}`} className="event">
+                  <span className="event-kind">{row.e.kind}</span>
+                  <span>{row.e.actor ?? ""}</span>
+                  <span className="when">{row.e.at}</span>
+                  <span className="changed">
+                    {row.e.summary}
+                    {row.e.produced && <> <a href={`#${row.e.produced.kind}/${row.e.produced.id}`}>{row.e.produced.kind} {row.e.produced.id}</a></>}
+                  </span>
+                </li>
+              ),
+            )}
           </ol>
         ) : (
           <p>Reading the chain</p>
@@ -442,6 +652,8 @@ function DeclarationBlock({ d, described }: { d: Declaration; described: Describ
         {d.pick_rule && <><dt>pick</dt><dd>{d.pick_rule}</dd></>}
         {d.denominator && <><dt>denominator</dt><dd>{d.denominator}</dd></>}
         {d.disclosure && <><dt>disclosure</dt><dd>{d.disclosure}</dd></>}
+        {d.timezone && <><dt>timezone</dt><dd>{d.timezone}</dd></>}
+        {d.week_start && <><dt>week starts</dt><dd>{d.week_start}</dd></>}
       </dl>
       {described.answer && <p className="answer">{described.answer}</p>}
       {(described.conventions ?? []).length > 0 && (
@@ -488,21 +700,23 @@ function DiagnosisView({ d }: { d: Diagnosis }) {
   );
 }
 
-function StepView({ step, open, onOpen, options, funnel, grain, onApply, busy, projection, setProjection }: {
+function StepView({ step, open, onOpen, options, groups, prefill, grain, onApply, busy, projection, setProjection }: {
   step: Step;
   open: boolean;
   onOpen: () => void;
   options: Options | null;
-  funnel: { stage: string; rows: number; subjects: number }[];
+  groups: GroupRow[];
+  prefill: string | null;
   grain: string;
   onApply: (offer: Offer) => void;
   busy: boolean;
   projection: string | null;
   setProjection: (p: string | null) => void;
 }) {
-  const last = funnel[funnel.length - 1];
+  const last = groups[groups.length - 1];
+  const next = nextMoves(step);
   return (
-    <li className={`step ${open ? "open" : ""}`}>
+    <li className={`step ${open ? "open" : ""} ${step.answers ? "answers" : ""}`}>
       <div className="step-head" onClick={onOpen} onKeyDown={(e) => e.key === "Enter" && onOpen()} role="button" tabIndex={0}>
         <strong>{step.set}</strong> <span className="grain" data-grain={step.grain}>{step.grain}s {step.source}</span>
         {step.answers && <span className="tag">answer</span>}
@@ -514,20 +728,80 @@ function StepView({ step, open, onOpen, options, funnel, grain, onApply, busy, p
           {step.sentence && <p className="sentence">{step.sentence}</p>}
           {!options && <p>Reading the options</p>}
           {step.parts.filter((p) => p.visible).map((p) => (
-            <SubStepView key={p.part} part={p} set={step.set} grain={grain} where={step.where} clauses={step.clauses[p.part] ?? []} source={step.source} onApply={onApply} busy={busy} projection={projection} setProjection={setProjection} />
+            <SubStepView key={p.part} part={p} set={step.set} grain={grain} where={step.where} clauses={step.clauses[p.part] ?? []} source={step.source} prefill={p.part === "where" ? prefill : null} onApply={onApply} busy={busy} projection={projection} setProjection={setProjection} />
           ))}
-          {funnel.length > 0 && (
+          {groups.length > 0 && (
             <table className="funnel small">
+              <thead><tr><th>kept at</th><th className="num">rows</th><th className="num">subjects</th><th className="num">lost</th></tr></thead>
               <tbody>
-                {funnel.map((f, i) => (
-                  <tr key={i}><td>{f.stage}</td><td className="num">{f.rows}</td><td className="num">{f.subjects}</td></tr>
+                {groups.map((g) => (
+                  <tr key={g.group}><td>{g.group}</td><td className="num">{g.rows}</td><td className="num">{g.subjects}</td><td className="num">{g.lost > 0 ? g.lost : ""}</td></tr>
                 ))}
               </tbody>
             </table>
           )}
+          {next.length > 0 && (
+            <ul className={`next-moves ${step.answers ? "large" : ""}`} aria-label={`next moves of ${step.set}`}>
+              {next.map(({ part, move }) => (
+                <li key={move.id}>
+                  <a className="chip" href={`#part-${step.set}-${part}`} onClick={(e) => { e.preventDefault(); document.getElementById(`part-${step.set}-${part}`)?.scrollIntoView({ block: "nearest" }); }}>
+                    {chipWord(move)}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </li>
+  );
+}
+
+/** A version row or an event row, by time (section 7.4). */
+function interleave(versions: Version[], events: Event[]): ({ kind: "version"; v: Version } | { kind: "event"; e: Event; i: number })[] {
+  const rows: ({ kind: "version"; v: Version; at: string } | { kind: "event"; e: Event; i: number; at: string })[] = [
+    ...versions.map((v) => ({ kind: "version" as const, v, at: v.created_at ?? "" })),
+    ...events.filter((e) => e.kind !== "version").map((e, i) => ({ kind: "event" as const, e, i, at: e.at })),
+  ];
+  rows.sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  return rows;
+}
+
+/** One condition picker across every set (section 7.3): a section per set, its fields under it, a search across all; the chosen field decides which set the clause lands on. */
+function ConditionPicker({ options, sets, onNeed, onPick }: { options: Record<string, Options>; sets: string[]; onNeed: (set: string) => void; onPick: (set: string, field: string) => void }) {
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    for (const set of sets) if (!options[set]) onNeed(set);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetched once per missing set
+  }, [sets.join(",")]);
+  const sections = pickerSections(options, sets, search);
+  const missing = sets.filter((s) => !options[s]);
+  return (
+    <div className="panel picker" role="dialog" aria-label="add a condition">
+      <div className="row">
+        <h2>Add a condition</h2>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="search every set" aria-label="search fields" autoFocus />
+      </div>
+      {missing.length > 0 && <p className="meta">reading {missing.join(", ")}</p>}
+      {sections.length === 0 && missing.length === 0 && <Empty what="No field matches." />}
+      <div className="picker-sections">
+        {sections.map((sec) => (
+          <section key={sec.set}>
+            <h3>
+              {sec.set} <span className="grain" data-grain={sec.grain}>{sec.grain}</span>
+              {landing(options, sec.set) === null && <span className="meta"> (no where move here)</span>}
+            </h3>
+            <ul className="chips">
+              {sec.fields.map((f) => (
+                <li key={f}>
+                  <button type="button" className="chip" disabled={landing(options, sec.set) === null} onClick={() => onPick(sec.set, f)}>{f}</button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -544,20 +818,21 @@ function clauseText(c: unknown): string {
   return `${term(lhs)} ${op} ${rhs === undefined ? "" : term(rhs)}`.trim();
 }
 
-function SubStepView({ part, set, grain, where, clauses, source, onApply, busy, projection, setProjection }: {
+function SubStepView({ part, set, grain, where, clauses, source, prefill, onApply, busy, projection, setProjection }: {
   part: SubStep;
   set: string;
   grain: string;
   where: unknown[];
   clauses: string[];
   source: string;
+  prefill: string | null;
   onApply: (offer: Offer) => void;
   busy: boolean;
   projection: string | null;
   setProjection: (p: string | null) => void;
 }) {
   return (
-    <div className={`part ${part.active ? "active" : ""} ${part.valid ? "valid" : ""}`}>
+    <div className={`part ${part.active ? "active" : ""} ${part.valid ? "valid" : ""}`} id={`part-${set}-${part.part}`}>
       <h3>{part.part}</h3>
       {part.part === "source" && <p className="clause">{source}</p>}
       {clauses.length > 0 && (
@@ -575,7 +850,7 @@ function SubStepView({ part, set, grain, where, clauses, source, onApply, busy, 
           </select>
         </label>
       )}
-      <MoveList moves={part.moves} set={set} grain={grain} onApply={onApply} busy={busy} />
+      <MoveList moves={part.moves} set={set} grain={grain} onApply={onApply} busy={busy} prefill={prefill} />
       {part.revert && (
         <button type="button" className="revert" disabled={busy} onClick={() => onApply({ set, move: part.revert!.move, args: part.revert!.args })}>
           Revert: {sentence(part.revert.move, part.revert.args)}
@@ -606,13 +881,13 @@ function WhereChips({ set, part, where, onApply, busy }: { set: string; part: Su
 }
 
 /** One form per move the engine offered: the template, a control per hole. */
-function MoveList({ moves, set, grain, onApply, busy }: { moves: Move[]; set: string; grain: string; onApply: (o: Offer) => void; busy: boolean }) {
+function MoveList({ moves, set, grain, onApply, busy, prefill = null }: { moves: Move[]; set: string; grain: string; onApply: (o: Offer) => void; busy: boolean; prefill?: string | null }) {
   if (moves.length === 0) return null;
   return (
     <ul className="moves">
       {moves.map((m) => (
         <li key={m.id}>
-          <MoveForm move={m} set={set} grain={grain} onApply={onApply} busy={busy} />
+          <MoveForm key={m.kind === "add_where" ? `${m.id}-${prefill ?? ""}` : m.id} move={m} set={set} grain={grain} onApply={onApply} busy={busy} prefill={m.kind === "add_where" ? prefill : null} />
         </li>
       ))}
     </ul>
@@ -627,8 +902,11 @@ function coerce(type: string, raw: string): unknown {
   return raw;
 }
 
-function MoveForm({ move, set, grain, onApply, busy }: { move: Move; set: string; grain: string; onApply: (o: Offer) => void; busy: boolean }) {
-  const [raw, setRaw] = useState<Record<string, string>>({});
+function MoveForm({ move, set, grain, onApply, busy, prefill = null }: { move: Move; set: string; grain: string; onApply: (o: Offer) => void; busy: boolean; prefill?: string | null }) {
+  const [raw, setRaw] = useState<Record<string, string>>(() => {
+    const fieldHole = move.holes.find((h) => h.type === "field");
+    return prefill && fieldHole ? { [fieldHole.name]: prefill } : {};
+  });
   const [samples, setSamples] = useState<string[]>([]);
   const field = raw[move.holes.find((h) => h.type === "field")?.name ?? ""];
   useEffect(() => {

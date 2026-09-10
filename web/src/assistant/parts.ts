@@ -81,6 +81,8 @@ export interface Proposal {
   /** The assistant turn that made it. */
   turn: string;
   decided: null | "accepted" | "rejected";
+  /** Wave 5 section 7.4: the question moved on since the proposal; it reads as stale and cannot be accepted. */
+  stale?: { moved_to: number | null };
 }
 
 export interface PaneState {

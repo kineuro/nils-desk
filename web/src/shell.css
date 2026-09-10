@@ -263,3 +263,24 @@ kbd { font-family: var(--n-font-mono); font-size: var(--n-text-size-small); bord
   a { color: inherit; text-decoration: none; }
   a[href^="#"]::after { content: " (" attr(href) ")"; color: var(--n-text-faint); font-size: var(--n-text-size-small); }
 }
+
+/* the question workbench (Wave 5 section 7) */
+.new-question .count-slot { flex: 1; font-variant-numeric: tabular-nums; }
+.new-question .from { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: var(--n-space-3); }
+.new-question fieldset { border: 1px solid var(--n-line); border-radius: var(--n-radius); padding: var(--n-space-2) var(--n-space-3); display: flex; flex-wrap: wrap; gap: var(--n-space-2); align-items: center; }
+.new-question legend { font-size: var(--n-text-size-small); color: var(--n-text-faint); padding: 0 var(--n-space-1); }
+.new-question textarea { width: 100%; box-sizing: border-box; font-family: var(--n-font-mono); font-size: var(--n-text-size-small); }
+table.documents { width: 100%; }
+.document-text pre { max-height: 24rem; overflow: auto; font-size: var(--n-text-size-small); }
+.picker-sections { display: grid; gap: var(--n-space-2); }
+.picker-sections h3 { text-transform: none; letter-spacing: 0; font-size: var(--n-text-size); opacity: 1; display: flex; gap: var(--n-space-2); align-items: baseline; }
+.picker .chips .chip { border: 0; background: var(--n-bg-sunken); color: inherit; font: inherit; padding: 0.1rem 0.6rem; border-radius: 999px; cursor: pointer; }
+.picker .chips .chip:hover:not(:disabled) { background: var(--n-bg-selected); }
+.picker .chips li { border: 0; padding: 0; }
+.next-moves { list-style: none; display: flex; flex-wrap: wrap; gap: var(--n-space-1); padding: 0; margin: var(--n-space-2) 0 0; border-top: 1px dashed var(--n-line); padding-top: var(--n-space-2); }
+.next-moves .chip { display: inline-block; border: 1px solid var(--n-brand-line); color: var(--n-brand-text); background: var(--n-brand-bg); border-radius: 999px; padding: 0 0.6rem; font-size: var(--n-text-size-small); text-decoration: none; }
+.next-moves.large .chip { font-size: var(--n-text-size); padding: 0.15rem 0.8rem; }
+.step.answers { border-left: 3px solid var(--n-brand); }
+.versions li.event { color: var(--n-text-dim); }
+.versions .branch { font-size: var(--n-text-size-small); }
+table.funnel th { font-weight: 500; font-size: var(--n-text-size-small); color: var(--n-text-faint); text-align: left; }

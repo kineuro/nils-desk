@@ -8,7 +8,8 @@ import { door } from "../ask/client";
 export interface Summary {
   epoch: number;
   synthetic: string | null;
-  cohorts: string[];
+  /** How many cohorts the registry names; the names are the keys of by_cohort. */
+  cohorts: number;
   subjects: Counts;
   sessions: Counts & { window_days?: number };
   stacks: Counts;
@@ -34,17 +35,29 @@ export interface Event {
 }
 
 export interface DocumentRow {
-  id: number;
+  document: number;
+  root: number;
   name: string | null;
   grain: string | null;
-  last_run: string | null;
+  out: string | null;
+  level: string | null;
   versions: number;
   author: string | null;
   created_at: string;
+  updated_at: string | null;
+  last_used_at: string | null;
+  hash: string;
+  last_run: { handle: number; at: string } | null;
+}
+
+/** The cohort names a summary carries, from the by-cohort keys of its three counts. */
+export function cohortNames(s: Summary): string[] {
+  const names = new Set<string>([...Object.keys(s.subjects.by_cohort), ...Object.keys(s.sessions.by_cohort), ...Object.keys(s.stacks.by_cohort)]);
+  return [...names].sort();
 }
 
 export const objects = {
   summary: (since?: string | null) => door<Summary>("GET", `/api/summary${since ? `?since=${encodeURIComponent(since)}` : ""}`),
   timeline: (kind: string, id: string | number) => door<{ kind: string; id: string | number; events: Event[] }>("GET", `/api/timeline/${kind}/${id}`),
-  documents: (after?: string | null) => door<{ documents: DocumentRow[]; next: string | null }>("GET", `/api/ask/documents${after ? `?after=${encodeURIComponent(after)}` : ""}`),
+  documents: (after?: string | null) => door<{ count: number; documents: DocumentRow[]; next: string | null }>("GET", `/api/ask/documents${after ? `?after=${encodeURIComponent(after)}` : ""}`),
 };

@@ -10,7 +10,7 @@ import type { Capabilities } from "../capabilities";
 import { ops, type ReleaseRow, type ReviewItem } from "../ops/client";
 import { usePageContext } from "../Rail";
 import { door as served, holds } from "../sections";
-import { objects, type Summary } from "../objects/client";
+import { cohortNames, objects, type Summary } from "../objects/client";
 import { Empty } from "../ui/Empty";
 import { classify, Failure, type Failed } from "../ui/Failure";
 import { Wait } from "../ui/Wait";
@@ -157,7 +157,7 @@ function Holds({ s }: { s: Summary }) {
             <td className="num">{s.sessions.total}</td>
             <td className="num">{s.stacks.total}</td>
           </tr>
-          {s.cohorts.map((c) => (
+          {cohortNames(s).map((c) => (
             <tr key={c}>
               <td>{c}</td>
               <td className="num">{s.subjects.by_cohort[c] ?? 0}</td>
@@ -172,7 +172,7 @@ function Holds({ s }: { s: Summary }) {
           stacks by pack version: {Object.entries(s.stacks.by_pack_version!).map(([v, n]) => `${v}: ${n}`).join(", ")}
         </p>
       )}
-      {s.cohorts.length > 1 && <p className="meta">a subject in two cohorts counts in each</p>}
+      {s.cohorts > 1 && <p className="meta">a subject in two cohorts counts in each</p>}
       <p className="meta">
         epoch {s.epoch}
         {s.synthetic && <>, synthetic</>}

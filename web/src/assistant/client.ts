@@ -5,6 +5,7 @@
 // itself, since a browser never holds one.
 
 import type { Chunk, History } from "./parts";
+import type { PageContext } from "../ui/context";
 
 const H = { "content-type": "application/json", "X-Nils-Desk": "1" };
 
@@ -22,9 +23,13 @@ async function fail(r: Response): Promise<never> {
 }
 
 export const assistant = {
-  /** Admit one prompt; the answer is the offset the stream continues from. */
-  async send(station: string, id: string, message: string): Promise<{ offset: string; submission: string }> {
-    const r = await fetch(`/assistant/agents/${station}/${encodeURIComponent(id)}`, { method: "POST", headers: H, body: JSON.stringify({ kind: "user", body: message }) });
+  /** Admit one prompt with the page's typed context, the lineage and the document (Wave 5 section 9.2, 7.4); the answer is the offset the stream continues from. */
+  async send(station: string, id: string, message: string, beside: { context?: PageContext; lineage?: number | null; document?: number | null } = {}): Promise<{ offset: string; submission: string }> {
+    const payload: Record<string, unknown> = { kind: "user", body: message };
+    if (beside.context) payload.context = beside.context;
+    if (typeof beside.lineage === "number") payload.lineage = beside.lineage;
+    if (typeof beside.document === "number") payload.document = beside.document;
+    const r = await fetch(`/assistant/agents/${station}/${encodeURIComponent(id)}`, { method: "POST", headers: H, body: JSON.stringify(payload) });
     if (!r.ok) await fail(r);
     const body = (await r.json()) as { submissionId?: string; offset?: string };
     return { offset: r.headers.get("Stream-Next-Offset") ?? body.offset ?? "-1", submission: body.submissionId ?? "" };
@@ -45,8 +50,22 @@ export const assistant = {
     return (await r.json()) as History;
   },
   abort: (station: string, id: string) => fetch(`/assistant/agents/${station}/${encodeURIComponent(id)}/abort`, { method: "POST", headers: H }).then(() => undefined),
-  feedback: (id: string, accepted: { document: number; sentence: string }[], rejected: { document: number; sentence: string }[]) =>
-    fetch(`/assistant/conversations/${encodeURIComponent(id)}/feedback`, { method: "POST", headers: H, body: JSON.stringify({ accepted, rejected }) }).then((r) => (r.ok ? undefined : fail(r))),
+  /** A proposal's verdict, with the document the person is on; a stale accept comes back as a StaleProposal, never recorded. */
+  feedback: async (id: string, accepted: FeedbackRow[], rejected: FeedbackRow[]): Promise<void> => {
+    const r = await fetch(`/assistant/conversations/${encodeURIComponent(id)}/feedback`, { method: "POST", headers: H, body: JSON.stringify({ accepted, rejected }) });
+    if (r.status === 409) {
+      const j = (await r.json().catch(() => ({}))) as { stale?: boolean; document?: number; base?: number; moved_to?: number; error?: string };
+      if (j.stale) throw new StaleProposal(j.document ?? 0, j.base ?? null, j.moved_to ?? null, j.error ?? "the question moved on");
+    }
+    if (!r.ok) await fail(r);
+  },
+  /** The conversations of a lineage, newest first, with what was proposed, decided and produced (section 7.4). */
+  lineage: async (root: number): Promise<Lineage | null> => {
+    const r = await fetch(`/assistant/conversations?lineage=${root}`);
+    if (r.status === 404) return null;
+    if (!r.ok) await fail(r);
+    return (await r.json()) as Lineage;
+  },
   /** The delegations of a conversation, from the assistant's store (section 9.12). */
   delegations: async (id: string): Promise<Delegation[]> => {
     const r = await fetch(`/assistant/conversations/${encodeURIComponent(id)}/delegations`);
@@ -56,6 +75,38 @@ export const assistant = {
   /** The desk mints or refreshes the person's token and hands it to the assistant for this conversation. */
   token: (id: string) => fetch(`/desk/assistant/conversations/${encodeURIComponent(id)}/token`, { method: "POST", headers: H }).then((r) => (r.ok ? undefined : fail(r))),
 };
+
+export interface FeedbackRow {
+  document: number;
+  sentence: string;
+  why?: string;
+  /** The document the person is on when deciding; the assistant refuses an accept whose base moved. */
+  current?: number;
+}
+
+export class StaleProposal extends Error {
+  constructor(
+    readonly document: number,
+    readonly base: number | null,
+    readonly movedTo: number | null,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export interface Lineage {
+  lineage: number;
+  head: number;
+  conversations: {
+    id: string;
+    station: string;
+    document: number | null;
+    created_at: string;
+    proposals: { document: number; parent: number | null; base_document: number | null; base_hash: string | null; sentence: string; at: string; decided: "accepted" | "rejected" | null; why: string | null; decided_at: string | null; stale: boolean }[];
+    handles: { handle: number; operation: string; at: string }[];
+  }[];
+}
 
 export interface Delegation {
   task: string;
