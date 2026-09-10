@@ -49,10 +49,7 @@ pub type Shared = Arc<Desk>;
 /// it, the store opened, the client built. This is what every command uses,
 /// so that a command run from anywhere opens the same store as the service.
 pub fn start_at(path: &std::path::Path) -> Result<Shared, String> {
-    let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let mut config = Config::parse(&text)?;
-    config.beside(path.parent().unwrap_or(std::path::Path::new(".")));
-    from_config(config)
+    from_config(Config::read(path)?)
 }
 
 /// A desk from its configuration text, with relative paths taken as they
