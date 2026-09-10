@@ -320,3 +320,21 @@ table.candidates td:first-child { font-weight: 500; }
 .teaching table { width: 100%; }
 table.corrections td:nth-child(3) { max-width: 30rem; }
 table.candidates-table td.row { gap: var(--n-space-1); }
+
+/* the viewer (Wave 5 section 8.2, B6) */
+main:has(.with-viewer), main:has(.object-stack) { max-width: 140ch; }
+.item.with-viewer { display: grid; grid-template-columns: minmax(0, 3fr) minmax(22rem, 2fr); gap: var(--n-space-3); align-items: start; }
+.item-viewer { position: sticky; top: var(--n-space-3); }
+.viewer { display: grid; gap: var(--n-space-1); }
+.viewer-axes { display: flex; gap: var(--n-space-1); align-items: center; flex-wrap: wrap; }
+.viewer-axes button { font: inherit; min-height: var(--n-control); padding: 0 0.7rem; border: 1px solid var(--n-line); background: transparent; color: inherit; border-radius: var(--n-radius); cursor: pointer; }
+.viewer-axes button.on { background: var(--n-brand); color: var(--n-text-on-brand); border-color: var(--n-brand); }
+.viewer-stage { position: relative; aspect-ratio: 1 / 1; background: var(--n-line-strong); border-radius: var(--n-radius); overflow: hidden; }
+.viewer-element { position: absolute; inset: 0; }
+.viewer-first { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.viewer-mpr { display: grid; gap: var(--n-space-1); }
+.viewer-mpr img { width: 100%; background: var(--n-line-strong); border-radius: var(--n-radius); object-fit: contain; aspect-ratio: 1 / 1; }
+.viewer-foot { font-variant-numeric: tabular-nums; margin: 0; }
+.viewer.gated .viewer-mpr { margin-top: var(--n-space-2); }
+@media (max-width: 1000px) { .item.with-viewer { grid-template-columns: 1fr; } .item-viewer { position: static; } }
+@media print { .viewer-stage, .viewer-axes { display: none; } }

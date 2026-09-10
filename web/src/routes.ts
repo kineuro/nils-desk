@@ -5,7 +5,7 @@
 // past the slash: #release/releases/77, #ask/12.
 
 export const OBJECT_KINDS = [
-  "cohort", "subject", "session", "batch", "document", "handle", "release", "handover",
+  "cohort", "subject", "session", "stack", "batch", "document", "handle", "release", "handover",
   "pack", "overlay", "rule", "job", "review", "conversation",
 ] as const;
 export type ObjectKind = (typeof OBJECT_KINDS)[number];

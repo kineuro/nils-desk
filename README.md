@@ -24,6 +24,14 @@ cp ../nils-desk.example.toml nils-desk.toml   # edit the engine url
 
 `check` compares the engine's contract versions with the desk's and exits non zero, by name, when the engine is behind. `serve` refuses to start on the same condition; an engine that is ahead is a warning the shell shows in its footer; an engine that does not answer is a state the shell renders, not a refusal.
 
+## The viewer
+
+Review's viewer (Wave 5 section 8.2) is cornerstone3D over the desk's own `nils:` image loader: a ring of slabs around the current plane, fetched ahead of the scroll through the engine's instance doors and evicted behind, decoded in a worker pool by the OpenJPH (HTJ2K) and OpenJPEG (JPEG 2000) WASM decoders, which `npm run build` copies from their packages into `web/public/codecs/` so they are served from the desk's own origin. The first picture is the server's render; the decoded plane replaces it. The level follows the viewport. The loader's ring and eviction are pure and tested (`web/src/viewer/ring.test.ts`). The viewer's own numbers sit in its footer; to read them headless against a running desk and a stack the engine serves:
+
+```sh
+cd web && DESK_URL=http://127.0.0.1:7203 node scripts/viewer-bench.mjs <stack id>
+```
+
 ## The three modes
 
 `off` (one person, every entitlement), `local` (users the desk keeps, its own issuer and JWKS) and `oidc` (an identity provider through a trust list). The engine, Kvasir and the desk speak the same five entitlements, fixed in `contracts/suite/v1`.

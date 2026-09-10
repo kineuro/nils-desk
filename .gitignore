@@ -16,3 +16,8 @@ node_modules/
 !.env.example
 *.sqlite
 *.db
+# the viewer's WASM decoders are copied from their packages at build (web/scripts/codecs.mjs)
+web/public/codecs/*.js
+web/public/codecs/*.wasm
+web/public/codecs/LICENSE-*.txt
+!web/public/codecs/decode.worker.js

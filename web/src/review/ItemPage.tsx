@@ -12,6 +12,10 @@ import { ops, type ReviewItem } from "../ops/client";
 import { classify, Failure, type Failed } from "../ui/Failure";
 import { Wait } from "../ui/Wait";
 import { kindWords, needsReading } from "./triage";
+import type { Capabilities } from "../capabilities";
+import { door as served } from "../sections";
+import { lazy, Suspense } from "react";
+const Viewer = lazy(() => import("../viewer/Viewer").then((m) => ({ default: m.Viewer })));
 
 interface Candidate {
   value?: unknown;
@@ -36,7 +40,7 @@ export function evidenceParts(e: Json | null | undefined): { fields: [string, un
   return { fields, candidates, rest };
 }
 
-export function ItemPage({ id, onChanged }: { id: number; onChanged?: () => void }) {
+export function ItemPage({ id, caps, onChanged }: { id: number; caps?: Capabilities; onChanged?: () => void }) {
   const [item, setItem] = useState<ReviewItem | null>(null);
   const [failed, setFailed] = useState<Failed | null>(null);
   const [since, setSince] = useState(() => Date.now());
@@ -89,8 +93,18 @@ export function ItemPage({ id, onChanged }: { id: number; onChanged?: () => void
       })
       .catch((e: Error) => setWhy(e.message));
   const ref = (item.ref ?? {}) as Json;
+  // the viewer beside the evidence (Wave 5 section 8.2, B6): on the item's stack, at the level the rule read when the evidence names one
+  const stackId = typeof ref.stack_id === "number" ? ref.stack_id : null;
+  const evidenceLevel = item.evidence && typeof (item.evidence as Json).level === "number" ? ((item.evidence as Json).level as number) : null;
+  const viewerServed = caps ? served(caps, "GET /api/instances/{id}/manifest") : false;
   return (
-    <div className="item">
+    <div className={`item ${stackId !== null && viewerServed ? "with-viewer" : ""}`}>
+      {stackId !== null && viewerServed && (
+        <div className="item-viewer">
+          <Suspense fallback={<Wait phase="loading the viewer" since={Date.now()} size="panel" />}><Viewer stack={stackId} level={evidenceLevel} /></Suspense>
+        </div>
+      )}
+      <div className="item-facts">
       <dl className="facts">
         <dt>what</dt>
         <dd>{kindWords(item.kind)}</dd>
@@ -243,6 +257,7 @@ export function ItemPage({ id, onChanged }: { id: number; onChanged?: () => void
             answered <code>{JSON.stringify(answer)}</code>
           </p>
         )}
+      </div>
       </div>
     </div>
   );
