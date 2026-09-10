@@ -1,0 +1,13 @@
+# The desk as an image. The binary is built by the release workflow, one per
+# platform, and copied in; the front end is already inside it.
+# SPDX-License-Identifier: AGPL-3.0-only
+FROM docker.io/library/debian:trixie-slim
+ARG TARGETARCH
+RUN groupadd -g 1500 nils && useradd -u 1500 -g 1500 -M -d /srv/nils nils \
+ && mkdir -p /srv/nils/desk && chown -R nils:nils /srv/nils
+COPY bin/nils-desk-linux-${TARGETARCH} /usr/local/bin/nils-desk
+USER nils
+WORKDIR /srv/nils/desk
+EXPOSE 7200
+ENTRYPOINT ["nils-desk"]
+CMD ["serve", "--config", "/srv/nils/desk/nils-desk.toml"]
