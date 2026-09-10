@@ -29,21 +29,25 @@ pub(crate) async fn bearer(
             let s = s.ok_or("no session; log in at the desk")?;
             let issuer = desk.issuer.as_ref().ok_or("the desk is not an issuer")?;
             let now = time::OffsetDateTime::now_utc().unix_timestamp();
+            let person = session::person(desk, &s);
+            // a kept token is reused while it lives and while it still says what the user row says now (§5.9)
             if let (Some(t), Some(exp)) =
                 (s.tokens["access"].as_str(), s.tokens["expires_at"].as_i64())
                 && exp - now > 60
+                && s.tokens["roles"] == json!(person.entitlements)
             {
                 return Ok(Some(t.to_string()));
             }
-            let person = session::person(desk, &s);
             let (t, exp) = issuer.mint(
                 &person.subject,
                 &person.display_name,
                 &person.entitlements,
                 crate::issuer::TOKEN_MINUTES,
             )?;
-            desk.store
-                .set_tokens(&s.id, &json!({"access": t, "expires_at": exp}));
+            desk.store.set_tokens(
+                &s.id,
+                &json!({"access": t, "expires_at": exp, "roles": person.entitlements}),
+            );
             Ok(Some(t))
         }
         Mode::Oidc => {
