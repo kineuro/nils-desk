@@ -1,0 +1,73 @@
+name: desk-build
+# The release targets: the front end is built once and carried to every runner,
+# then `nils-desk` is built natively on each, the way a release is, and the
+# binary is kept as an artifact. release.yml calls this on every tag.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: the front end
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 1
+
+  build:
+    needs: web
+    name: nils-desk ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { target: linux-x86_64, runner: ubuntu-latest, exe: "" }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm, exe: "" }
+          - { target: macos-x86_64, runner: macos-15-intel, exe: "" }
+          - { target: macos-arm64, runner: macos-latest, exe: "" }
+          - { target: windows-x86_64, runner: windows-latest, exe: ".exe" }
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+      - name: the pinned toolchain
+        id: toolchain
+        run: echo "channel=$(sed -n 's/^channel = "\(.*\)"$/\1/p' desk/rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.toolchain.outputs.channel }}
+      - name: build
+        working-directory: desk
+        run: cargo build --release --locked
+      - name: it runs
+        working-directory: desk
+        run: ./target/release/nils-desk${{ matrix.exe }} --version
+      - name: name it for the release
+        run: cp desk/target/release/nils-desk${{ matrix.exe }} nils-desk-${{ matrix.target }}${{ matrix.exe }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nils-desk-${{ matrix.target }}
+          path: nils-desk-${{ matrix.target }}${{ matrix.exe }}
+          retention-days: 7

@@ -104,6 +104,7 @@ pub fn router(desk: Shared) -> Router {
             "/desk/assistant/conversations/{id}/token",
             post(assistant::push_token),
         )
+        .route("/get", get(web::get_script))
         .route("/.well-known/jwks.json", get(session::jwks))
         .route("/.well-known/openid-configuration", get(session::discovery))
         .route("/api/{*rest}", any(proxy::engine))
