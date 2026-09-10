@@ -65,6 +65,11 @@ export function App() {
         </nav>
         <span className="person">{caps.person.display_name}</span>
       </header>
+      {caps.engine?.registry.synthetic && (
+        <div className="banner" role="note">
+          Made-up data: this registry was built by {caps.engine.registry.synthetic}. Nothing here is a real person or a real scan.
+        </div>
+      )}
       <main>
         {st.kind === "login" && <Login how={st.how} url={st.url} onDone={() => location.reload()} />}
         {st.kind === "unbound" && (
