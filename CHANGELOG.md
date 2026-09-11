@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.7] - 2026-09-11
+
+No change of its own. Released beside the engine's 1.0.0-alpha.7, which runs the gateway and the assistant in containers and restarts what an update changed, so the two stay in step: a container install names both images with the engine's version.
+
 ## [1.0.0-alpha.6] - 2026-09-11
 
 No change of its own. Released beside the engine's 1.0.0-alpha.6, which adds `nils uninstall`, so the two stay in step: a container install names both images with the engine's version.
