@@ -4,7 +4,7 @@ import type { HandleRow } from "../ask/client";
 import { confirmed, confirmName, list, releaseBody, stackIds } from "./release";
 
 const stackHandle: HandleRow = {
-  id: 75, name: null, grain: "stack", row_count: 250, content_hash: "x", principal: "nima@g14", actor: {}, created_at: "", epoch: 1, pack_version: "0.1.1",
+  id: 75, name: null, grain: "stack", row_count: 250, content_hash: "x", principal: "anna@ward-3", actor: {}, created_at: "", epoch: 1, pack_version: "0.1.1",
   disclosure: "local", truncated: false, limit: null, kept: true, last_read_at: null, withdrawn_at: null, ask_hash: "h", columns: ["_key", "_subject", "id"],
 };
 
