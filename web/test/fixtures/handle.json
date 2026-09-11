@@ -188,9 +188,9 @@
   "tesla_tol": 0.25
  },
  "selection_versions": [],
- "principal": "nima@g14",
+ "principal": "anna@ward-3",
  "created_at": "2026-09-09T01:35:43Z",
- "node": "g14",
+ "node": "ward-3",
  "pack_version": "0.1.1",
  "epoch": 1,
  "scheme_digest": "37f53eb14839513e00f3f54494f1601b",

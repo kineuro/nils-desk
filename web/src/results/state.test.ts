@@ -4,7 +4,7 @@ import type { DeskRecord, HandleRow, JobRow } from "../ask/client";
 import { age, running, stateOf, surface } from "./state";
 
 const handle = (over: Partial<HandleRow> = {}): HandleRow => ({
-  id: 77, name: "fixture run", grain: "session", row_count: 175, content_hash: "fcfe", principal: "nima@g14", actor: { kind: "absent" },
+  id: 77, name: "fixture run", grain: "session", row_count: 175, content_hash: "fcfe", principal: "anna@ward-3", actor: { kind: "absent" },
   created_at: "2026-09-09T01:35:43Z", epoch: 1, pack_version: "0.1.1", disclosure: "local", truncated: false, limit: null, kept: true,
   last_read_at: null, withdrawn_at: null, ask_hash: "56f5", columns: ["rows", "subjects"], ...over,
 });
