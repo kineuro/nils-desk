@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.13] - 2026-09-12
+
+Released beside the engine's 1.0.0-alpha.13 so the two stay in step: a container install names both images with the engine's version.
+
+### Changed
+
+- The one-line installer opens with the NILS wordmark, Karolinska Institutet and the link, and shows a bar while the binary downloads.
+
 ## [1.0.0-alpha.12] - 2026-09-12
 
 ### Fixed
