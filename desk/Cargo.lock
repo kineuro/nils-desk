@@ -1131,7 +1131,7 @@ dependencies = [
 
 [[package]]
 name = "nils-desk"
-version = "1.0.0-alpha.11"
+version = "1.0.0-alpha.12"
 dependencies = [
  "argon2",
  "axum",

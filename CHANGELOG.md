@@ -4,6 +4,12 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.12] - 2026-09-12
+
+### Fixed
+
+- The one-line installer put 1.0.0-alpha.9 on every machine after 1.0.0-alpha.11 was out. With every release a pre-release, GitHub has no `latest` release, and the installer took the first release the API listed, which is not in version order. It now takes the highest version listed.
+
 ## [1.0.0-alpha.11] - 2026-09-12
 
 No change of its own. Released beside the engine's 1.0.0-alpha.11 so the two stay in step: a container install names both images with the engine's version.
