@@ -1,6 +1,6 @@
 [package]
 name = "nils-desk"
-version = "1.0.0-alpha.11"
+version = "1.0.0-alpha.12"
 edition = "2024"
 rust-version = "1.98"
 license = "AGPL-3.0-only"
