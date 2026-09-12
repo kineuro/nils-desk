@@ -83,6 +83,9 @@
 
   /* focus */
   --n-focus: #7A1F5A;
+
+  /* the veil under a drawer */
+  --n-scrim: #1C1A1F40;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -117,6 +120,7 @@
     --n-grain-event: #342A25;
     --n-grain-group: #33272C;
     --n-focus: #B57CA1;
+    --n-scrim: #00000080;
   }
 }
 
@@ -151,4 +155,5 @@
   --n-grain-event: #342A25;
   --n-grain-group: #33272C;
   --n-focus: #B57CA1;
+  --n-scrim: #00000080;
 }
