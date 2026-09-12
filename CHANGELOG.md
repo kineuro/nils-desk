@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.10] - 2026-09-12
+
+No change of its own. Released beside the engine's 1.0.0-alpha.10 so the two stay in step: a container install names both images with the engine's version.
+
 ## [1.0.0-alpha.9] - 2026-09-12
 
 No change of its own. Released beside the engine's 1.0.0-alpha.9 so the two stay in step: a container install names both images with the engine's version.
