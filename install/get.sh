@@ -47,6 +47,20 @@ for arg in "$@"; do
 done
 
 die() { printf '%s\n' "$*" >&2; exit 1; }
+
+# A progress bar on one line: `bar <bytes so far> <bytes in all> <width>`.
+bar() {
+  awk -v got="$1" -v all="$2" -v w="$3" -v plum="$plum" -v dim="$dim" -v off="$off" 'BEGIN {
+    if (all <= 0) all = 1
+    if (got > all) got = all
+    filled = int(w * got / all)
+    line = ""
+    for (i = 0; i < filled; i++) line = line "█"
+    rest = ""
+    for (i = filled; i < w; i++) rest = rest "░"
+    printf "\r [%s%s%s%s%s] %3d%%  %s%d of %d MB%s ", plum, line, off, dim, rest, int(100 * got / all), dim, got / 1048576, all / 1048576, off
+  }'
+}
 have() { command -v "$1" >/dev/null 2>&1; }
 
 have curl || die "curl is needed to install NILS"
@@ -103,9 +117,59 @@ fi
 
 base="$REL/download/v$version"
 tmp=$(mktemp)
-printf 'NILS %s, for %s\n' "$version" "$target"
-curl -fsSL --connect-timeout 15 --max-time 900 "$base/nils-$target" -o "$tmp" \
-  || { rm -f "$tmp"; die "no binary for $target in release $version; build from source: https://kineuro.se/nils/docs/"; }
+
+# The bar only on a terminal; colour only there too, and not when NO_COLOR
+# is set, which asks for no colour and nothing more. Truecolor in plum and
+# cream where the terminal says it has it, the nearest of the 256 otherwise.
+live=0
+[ -t 1 ] && [ "${TERM:-dumb}" != dumb ] && live=1
+colour=0
+[ "$live" = 1 ] && [ -z "${NO_COLOR:-}" ] && colour=1
+if [ "$colour" = 1 ]; then
+  case "${COLORTERM:-}" in
+    truecolor|24bit) plum=$(printf '\033[38;2;196;120;168m'); cream=$(printf '\033[38;2;246;245;242m') ;;
+    *) plum=$(printf '\033[38;5;175m'); cream=$(printf '\033[38;5;255m') ;;
+  esac
+  dim=$(printf '\033[2m'); bold=$(printf '\033[1m'); off=$(printf '\033[0m')
+else
+  plum=""; cream=""; dim=""; bold=""; off=""
+fi
+
+printf '\n'
+printf ' %s╔╗╔ ╦ ╦   ╔═╗%s\n' "$plum$bold" "$off"
+printf ' %s║║║ ║ ║   ╚═╗%s   %sNeuroimaging Intelligent Linked System%s\n' "$plum$bold" "$off" "$cream" "$off"
+printf ' %s╝╚╝ ╩ ╩═╝ ╚═╝%s   %sKarolinska Institutet · kineuro.se/nils%s\n' "$plum$bold" "$off" "$dim" "$off"
+printf '\n NILS %s for %s\n' "$version" "$target"
+
+# The binary, with a bar when there is a terminal to draw it on: its size is
+# asked first, and the file is measured as it arrives.
+url="$base/nils-$target"
+total=0
+if [ "$live" = 1 ]; then
+  total=$(curl -fsIL --connect-timeout 15 --max-time 60 "$url" 2>/dev/null \
+    | tr -d '\r' | awk 'tolower($1)=="content-length:" {n=$2} END {print n+0}')
+fi
+if [ "$live" = 1 ] && [ "${total:-0}" -gt 0 ]; then
+  curl -fsSL --connect-timeout 15 --max-time 900 "$url" -o "$tmp" &
+  pid=$!
+  width=28
+  while kill -0 "$pid" 2>/dev/null; do
+    got=$(wc -c < "$tmp" 2>/dev/null | tr -d ' ')
+    bar "$got" "$total" "$width"
+    sleep 0.2
+  done
+  if wait "$pid"; then
+    bar "$total" "$total" "$width"
+    printf '\n'
+  else
+    printf '\n'
+    rm -f "$tmp"
+    die "no binary for $target in release $version; build from source: https://kineuro.se/nils/docs/"
+  fi
+else
+  curl -fsSL --connect-timeout 15 --max-time 900 "$url" -o "$tmp" \
+    || { rm -f "$tmp"; die "no binary for $target in release $version; build from source: https://kineuro.se/nils/docs/"; }
+fi
 
 want=$(curl -fsSL --connect-timeout 15 --max-time 120 "$base/SHA256SUMS" 2>/dev/null | grep " nils-$target\$" | awk '{print $1}' || true)
 if [ -n "$want" ]; then
@@ -116,7 +180,7 @@ fi
 chmod 755 "$tmp"
 mv -f "$tmp" "$dir/nils"
 [ "$plat" = macos ] && xattr -d com.apple.quarantine "$dir/nils" 2>/dev/null || true
-printf 'installed %s/nils\n' "$dir"
+printf ' %s✓%s installed %s/nils\n' "$plum" "$off" "$dir"
 
 case ":$PATH:" in
   *":$dir:"*) ;;
