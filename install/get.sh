@@ -68,6 +68,27 @@ target="$plat-$cpu"
 [ -n "$dir" ] || { if [ "$(id -u)" = 0 ]; then dir=/usr/local/bin; else dir="$HOME/.local/bin"; fi; }
 mkdir -p "$dir"
 
+# The highest version on standard input, one per line. GitHub lists releases
+# in no order a version can rely on: after 1.0.0-alpha.11 it put alpha.9
+# first, so the first listed is not the newest.
+newest() {
+  awk '
+    function key(v,    core, pre, c, num, lbl, k) {
+      core = v; pre = ""
+      if (index(v, "-")) { core = substr(v, 1, index(v, "-") - 1); pre = substr(v, index(v, "-") + 1) }
+      split(core, c, ".")
+      k = sprintf("%06d.%06d.%06d", c[1], c[2], c[3])
+      if (pre == "") return k ".1"
+      num = pre; lbl = pre
+      sub(/.*\./, "", num); sub(/\.[0-9]+$/, "", lbl)
+      if (num !~ /^[0-9]+$/) num = 0
+      return k ".0." lbl "." sprintf("%06d", num)
+    }
+    NF { k = key($0); if (best == "" || k > bestk) { best = $0; bestk = k } }
+    END { if (best != "") print best }
+  '
+}
+
 # The newest release, pre-release or not: GitHub's own `latest` skips a
 # pre-release, and before 1.0.0 that is all there is.
 if [ -z "$version" ]; then
@@ -75,8 +96,8 @@ if [ -z "$version" ]; then
 fi
 if [ -z "$version" ]; then
   version=$(curl -fsSL --connect-timeout 15 --max-time 60 -H 'accept: application/vnd.github+json' \
-    "https://api.github.com/repos/kineuro/nils/releases?per_page=10" 2>/dev/null \
-    | grep -o '"tag_name"[ ]*:[ ]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/' | sed 's/^v//' || true)
+    "https://api.github.com/repos/kineuro/nils/releases?per_page=30" 2>/dev/null \
+    | grep -o '"tag_name"[ ]*:[ ]*"[^"]*"' | sed 's/.*"\([^"]*\)"$/\1/' | sed 's/^v//' | newest || true)
 fi
 [ -n "$version" ] || die "no release found at $REL"
 
