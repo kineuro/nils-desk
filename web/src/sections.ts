@@ -40,8 +40,9 @@ export function sections(caps: Capabilities, ready: boolean | null = true, conve
   if (!usable(caps)) return [];
   const out: Section[] = [];
   if (holds(caps, "reader")) out.push({ id: "home", title: ready === false ? "Get started" : "Home", icon: "home" });
-  if (ready !== true) return out;
+  // the assistant helps set an install up as well, so it does not wait for it
   if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: [{ id: "new", title: "New conversation", depth: 1 }, ...conversations] });
+  if (ready !== true) return out;
   for (const p of PLACEHOLDERS) if (holds(caps, p.entitlement) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon });
   return out;
 }
