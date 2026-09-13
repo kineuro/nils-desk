@@ -35,27 +35,27 @@ const served = (entitlements: Entitlement[], doors: string[]): Capabilities => {
 describe("the settings pages", () => {
   it("are an operator's and an admin's, and nobody else's", () => {
     expect(settingsPages(caps(["reader", "reviewer", "assist"]))).toEqual([]);
-    expect(settingsPages(caps(["operator"])).map((p) => p.id)).toEqual(["parts", "engine", "desk"]);
+    expect(settingsPages(caps(["operator"])).map((p) => p.id)).toEqual(["overview", "parts", "engine", "desk"]);
   });
 
   it("name the gateway and the assistant under the parts, where they answered", () => {
     const both = caps(["operator"], { kvasir: { models: [] }, assistant: { stations: [] } });
-    expect(settingsPages(both).map((p) => p.id)).toEqual(["parts", "engine", "desk", "gateway", "assistant"]);
+    expect(settingsPages(both).map((p) => p.id)).toEqual(["overview", "parts", "engine", "desk", "gateway", "assistant"]);
     expect(settingsPages(both).filter((p) => p.sub).map((p) => p.id)).toEqual(["engine", "desk", "gateway", "assistant"]);
   });
 
   it("offer the places where the engine serves them, and the database, identity and the audit log to an admin", () => {
     const doors = ["GET /api/places", "GET /api/backups", "GET /api/audit"];
-    expect(settingsPages(served(["operator"], doors)).map((p) => p.id)).toEqual(["parts", "engine", "desk", "places"]);
-    expect(settingsPages(served(["admin"], doors)).map((p) => p.id)).toEqual(["parts", "engine", "desk", "places", "database", "identity", "audit"]);
-    expect(settingsPages(caps(["admin"])).map((p) => p.id)).toEqual(["parts", "engine", "desk", "identity"]);
+    expect(settingsPages(served(["operator"], doors)).map((p) => p.id)).toEqual(["overview", "parts", "engine", "desk", "places"]);
+    expect(settingsPages(served(["admin"], doors)).map((p) => p.id)).toEqual(["overview", "parts", "engine", "desk", "places", "database", "identity", "audit"]);
+    expect(settingsPages(caps(["admin"])).map((p) => p.id)).toEqual(["overview", "parts", "engine", "desk", "identity"]);
   });
 
-  it("open the page an address names, and the parts for anything else", () => {
+  it("open the page an address names, and the overview for anything else", () => {
     const pages = settingsPages(caps(["admin"]));
     expect(settingsPage(pages, "desk")?.id).toBe("desk");
-    expect(settingsPage(pages, "nowhere")?.id).toBe("parts");
-    expect(settingsPage(pages, null)?.id).toBe("parts");
+    expect(settingsPage(pages, "nowhere")?.id).toBe("overview");
+    expect(settingsPage(pages, null)?.id).toBe("overview");
     expect(settingsPage([], "parts")).toBeNull();
   });
 });

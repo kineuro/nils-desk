@@ -71,12 +71,26 @@ export function Head({ title, lede, under, children }: { title: string; lede: st
   );
 }
 
-export function Health({ tone, words }: { tone: "ok" | "caution" | "blocked" | "neutral"; words: string }) {
+export function Health({ tone, words }: { tone: "ok" | "caution" | "blocked" | "neutral" | "brand"; words: string }) {
   const tag = tone === "neutral" ? "tag" : `tag ${tone}`;
   return (
     <span className={tag}>
       <span className={tone === "neutral" ? "dot" : `dot ${tone}`} />
       {words}
     </span>
+  );
+}
+
+/** A page's few numbers at its head, each with its label and, where it matters, a tone. */
+export function Stats({ items }: { items: { label: string; value: string; tone?: "ok" | "caution" | "blocked" }[] }) {
+  return (
+    <dl className="stats">
+      {items.map((s) => (
+        <div key={s.label} className={s.tone ? `stat ${s.tone}` : "stat"}>
+          <dt>{s.label}</dt>
+          <dd>{s.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

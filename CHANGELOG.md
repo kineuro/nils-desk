@@ -7,9 +7,12 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Added
 
 - A theme switch in the top bar, beside the person: as the system, dark or light. The choice is kept in the browser and holds from the first paint.
+- Settings opens on an overview, a card for each page: whether every part answers and a newer release, how many places there are and whether each stands up to its role, the last backup and the schedule, what keeps the registry, how people sign in, the model the assistant reaches, and the newest act of the audit log. What needs a person is listed above the cards, the worst first, and a card opens its page. What the cards read is kept between pages and read again on asking.
+- The Places, Database and Identity pages start with their few numbers: the places, the sources, how many need attention and the least room; what keeps the registry, the last backup, the schedule and the archives; how people sign in, how many, and where the desk answers.
 
 ### Changed
 
+- Each Settings page says what it is in one short line.
 - One side panel. The sections sit at its top and Settings at its foot. The open section unfolds its pages under it; Settings, once opened, rises to sit under the last section with its pages below it, and goes back down when another section opens. The second column that listed Settings' pages is gone. On a narrow window the side is a panel over the page, opened from the top bar.
 - A place added or opened, a person added, and a purpose moved open in a dialog over the page, not a drawer at its side. On a phone the dialog rises from the bottom as a sheet.
 - The Places page draws the places it read last at once, and says when that was. It reads them again when asked, after a change made on it, or when Home or the Database page has read them since, not every time it opens.

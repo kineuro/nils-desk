@@ -15,7 +15,8 @@ import { placesKept } from "../objects/kept";
 import { ops, type CustodyStore } from "../ops/client";
 import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
-import { Acted, Head, messageOf, useActing } from "./common";
+import { Acted, Head, messageOf, Stats, useActing } from "./common";
+import { databaseStats } from "./stats";
 import {
   backupByHand,
   backupsTag,
@@ -188,7 +189,8 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
   const nothing = !backups && !calendar && !status;
   return (
     <div className="settings">
-      <Head title="Database" lede="Where the registry is kept, how it is backed up, and what was fixed when it was made." />
+      <Head title="Database" lede="Where the registry lives, and how it is backed up." />
+      {(status || backups) && <Stats items={databaseStats(backups, status?.backend ?? null, now)} />}
       {why && <p className="warn">{why}</p>}
       {nothing && !why && <p className="meta">Reading the registry.</p>}
       <div className="db-grid">
