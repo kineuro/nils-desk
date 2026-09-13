@@ -61,7 +61,7 @@ code, .path { font-family: var(--n-font-mono); font-size: 0.92em; }
 .side-gap { flex: 1 1 0; transition: flex-grow 320ms ease; }
 .side.risen .side-gap { flex-grow: 0; }
 .side-foot { display: grid; gap: 2px; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--n-line); }
-.menu-button { display: none; color: var(--n-text-dim); }
+.icon-button.menu-button { display: none; color: var(--n-text-dim); }
 .theme-switch { color: var(--n-text-faint); }
 .theme-switch:hover { color: var(--n-text); background: var(--n-bg-hover); }
 .page { padding: 1.6rem 2rem 2rem; overflow: auto; min-width: 0; min-height: 0; }
@@ -489,7 +489,7 @@ button.steps-line:hover { background: var(--n-bg-hover); }
   .top { gap: 0.6rem; padding: 0.5rem 1rem; }
   /* the top bar keeps to one line: the person's avatar, the update's icon, and no chip of where it runs */
   .top .where, .person-name, .update-words { display: none; }
-  .menu-button { display: grid; margin-left: -0.4rem; }
+  .icon-button.menu-button { display: grid; margin-left: -0.4rem; }
   .side { position: fixed; top: 0; bottom: 0; left: 0; z-index: 21; width: min(17rem, 86vw); padding-top: 1rem; transform: translateX(-101%); visibility: hidden; transition: transform 240ms ease, visibility 0s linear 240ms; }
   .side.open { transform: none; visibility: visible; transition: transform 240ms ease, visibility 0s; }
   .side-scrim { z-index: 20; }
