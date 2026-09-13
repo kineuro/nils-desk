@@ -2,11 +2,13 @@
 // The Places page (Wave 5 section 10.2), as the chosen design draws it: every
 // folder NILS reads or keeps data in, with its role, what was declared of it,
 // what the engine measured and whether it stands up to its role. A place is
-// added in a dialog: a source is looked inside first, the engine is started
+// added in a dialog, its folder typed or chosen by clicking through this
+// machine's folders: a source is looked inside first, the engine is started
 // again to read it where a service keeps it running, and its folders are
-// digested. An opened place has its guarantees changed or is retired. The
-// engine checks every rule again at its doors. The places read last are
-// drawn at once, and read again when asked or after a change.
+// digested. An opened place moves to another folder, has its guarantees
+// changed, or is retired. The engine checks every rule again at its doors.
+// The places read last are drawn at once, and read again when asked or
+// after a change.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -22,8 +24,10 @@ import { Icon } from "../ui/Icon";
 import { agoWords, useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
-import { placeStats } from "./stats";
+import { plainPath } from "./folders";
 import { addFolderWords, keptRunning, reapplyByHand } from "./install";
+import { fixedWords, knownFolders, movable, moveRefusal, moveWords } from "./move";
+import { PathField } from "./PathField";
 import {
   EMPTY,
   ROLE_WORDS,
@@ -41,7 +45,8 @@ import {
   type Role,
   type Tone,
 } from "./places";
-import { supervise, type Install } from "./supervise";
+import { placeStats } from "./stats";
+import { followRun, supervise, type Install } from "./supervise";
 
 type Opened = { kind: "add" } | { kind: "change"; place: Place } | null;
 
@@ -198,7 +203,7 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
         </>
       )}
       {opened?.kind === "add" && places !== null && <AddDialog caps={caps} install={install} places={places} packs={packs} onClose={() => setOpened(null)} onDone={done} />}
-      {opened?.kind === "change" && places !== null && <ChangeDialog place={opened.place} places={places} onClose={() => setOpened(null)} onDone={done} />}
+      {opened?.kind === "change" && places !== null && <ChangeDialog caps={caps} install={install} place={opened.place} places={places} onClose={() => setOpened(null)} onDone={done} />}
     </div>
   );
 }
@@ -310,22 +315,19 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
           Folder
         </label>
         <div className="row path-row">
-          <div className="input mono grow">
-            <input
-              id="place-path"
-              value={d.path}
-              placeholder="/srv/imaging/2026-cohort"
-              spellCheck={false}
-              disabled={working}
-              onChange={(e) => {
-                setD({ ...d, path: e.target.value });
-                setSeen({ kind: "idle" });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && source) look();
-              }}
-            />
-          </div>
+          <PathField
+            id="place-path"
+            value={d.path}
+            placeholder="/srv/imaging/2026-cohort"
+            disabled={working}
+            browse={supervised}
+            known={knownFolders(places, install?.dir ?? null)}
+            onChange={(path) => {
+              setD({ ...d, path });
+              setSeen({ kind: "idle" });
+            }}
+            onEnter={() => source && look()}
+          />
           {source && supervised && (
             <button type="button" className="button secondary" disabled={!folder.startsWith("/") || seen.kind === "looking" || working} onClick={look}>
               Look inside
@@ -415,22 +417,45 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
   );
 }
 
-function ChangeDialog({ place, places, onClose, onDone }: { place: Place; places: Place[]; onClose: () => void; onDone: () => void }) {
+function ChangeDialog(props: { caps: Capabilities; install: Install | null; place: Place; places: Place[]; onClose: () => void; onDone: () => void }) {
+  const { caps, install, place, places, onClose, onDone } = props;
   const said = (k: string) => place.guarantees?.[k] === true;
   const [g, setG] = useState({ snapshots: said("snapshots"), protected: said("protected"), fast: said("fast") });
   const [backup, setBackup] = useState<string | null>(typeof place.guarantees?.["backup"] === "string" ? (place.guarantees["backup"] as string) : null);
   const [retiring, setRetiring] = useState(false);
+  const [moving, setMoving] = useState(false);
+  const [to, setTo] = useState(place.path);
   const saving = useActing();
   const retired = place.retired_at !== null;
   const probed = place.probed ?? {};
   const backups = places.filter((p) => p.role === "backup" && p.retired_at === null && p.id !== place.id);
-  const changed = g.snapshots !== said("snapshots") || g.protected !== said("protected") || g.fast !== said("fast") || (place.role === "registry" && backup !== (place.guarantees?.["backup"] ?? null));
+  const supervised = install !== null && holds(caps, "admin");
+  // a source moved is read at its new folder once the engine starts again, which the supervisor does where a service keeps it running
+  const restarts = place.role === "source" && supervised && install !== null && keptRunning(install);
+  const guaranteesChanged = g.snapshots !== said("snapshots") || g.protected !== said("protected") || g.fast !== said("fast") || (place.role === "registry" && backup !== (place.guarantees?.["backup"] ?? null));
+  const target = moving ? plainPath(to) : null;
+  const refusal = moving ? moveRefusal(to, place, places) : null;
+  const moves = moving && target !== null && refusal === null;
 
   const save = () =>
-    saving.act(`changing ${place.name}`, async () => {
-      await objects.placeSet(place.id, { guarantees: { ...place.guarantees, ...g, backup: place.role === "registry" ? backup : (place.guarantees?.["backup"] ?? null) } });
+    saving.act(moves ? `moving ${place.name}` : `changing ${place.name}`, async () => {
+      await objects.placeSet(place.id, {
+        ...(moves && target ? { path: target } : {}),
+        ...(guaranteesChanged ? { guarantees: { ...place.guarantees, ...g, backup: place.role === "registry" ? backup : (place.guarantees?.["backup"] ?? null) } } : {}),
+      });
+      if (moves && restarts) {
+        const run = await supervise.reapply("engine");
+        const ended = await followRun(run.id, () => undefined);
+        if (ended === null || ended.state !== "done") {
+          void placesKept.refresh().catch(() => undefined);
+          if (ended === null) throw new Error(`${place.name} is in ${target} now; the engine is still starting, so look again in a moment.`);
+          throw new Error(`${place.name} is in ${target} now, and the engine did not start again: ${ended.tail?.slice(-1)[0] ?? ended.state}`);
+        }
+      }
       onDone();
-      return `${place.name} is changed.`;
+      if (!moves) return `${place.name} is changed.`;
+      if (place.role !== "source" || restarts) return `${place.name} is in ${target} now.`;
+      return `${place.name} is in ${target} now; the engine reads it there once it starts again.`;
     });
 
   const retire = () =>
@@ -440,13 +465,14 @@ function ChangeDialog({ place, places, onClose, onDone }: { place: Place; places
       return `${place.name} is retired.`;
     });
 
+  const fixed = fixedWords(place.role);
   const foot = (
     <>
       <Acted acting={saving.acting} />
       {!retired && (
         <div className="row actions">
-          <button type="button" className="button" disabled={!changed || saving.working} onClick={save}>
-            Save
+          <button type="button" className="button" disabled={(!guaranteesChanged && !moves) || (moving && refusal !== null && to.trim() !== place.path) || saving.working} onClick={save}>
+            {moves ? (restarts ? "Move it and restart the engine" : "Move it") : "Save"}
           </button>
           {retiring ? (
             <>
@@ -474,10 +500,14 @@ function ChangeDialog({ place, places, onClose, onDone }: { place: Place; places
         <dd>{ROLE_WORDS[place.role].holds}</dd>
         <dt>must have</dt>
         <dd>{ROLE_WORDS[place.role].must}</dd>
-        <dt>path</dt>
-        <dd>
-          <span className="path">{place.path}</span>
-        </dd>
+        {retired && (
+          <>
+            <dt>path</dt>
+            <dd>
+              <span className="path">{place.path}</span>
+            </dd>
+          </>
+        )}
         {typeof probed["free_bytes"] === "number" && (
           <>
             <dt>free</dt>
@@ -507,6 +537,31 @@ function ChangeDialog({ place, places, onClose, onDone }: { place: Place; places
       </dl>
       {!retired && (
         <>
+          <div className="field">
+            <span className="label">Folder</span>
+            {moving ? (
+              <PathField
+                value={to}
+                onChange={setTo}
+                label="The folder to move it to"
+                disabled={saving.working}
+                browse={supervised}
+                known={knownFolders(places, install?.dir ?? null).filter((k) => k.path !== place.path)}
+              />
+            ) : (
+              <div className="row folder-now">
+                <span className="path grow">{place.path}</span>
+                {movable(place.role) && (
+                  <button type="button" className="button secondary small" disabled={saving.working} onClick={() => setMoving(true)}>
+                    Move to another folder
+                  </button>
+                )}
+              </div>
+            )}
+            {moving && <span className={refusal && to.trim() !== place.path ? "warn" : "meta"}>{refusal && to.trim() !== place.path ? refusal : moveWords(place.role)}</span>}
+            {moving && restarts && <span className="meta">Moving it starts the engine again; the desk, the gateway and the assistant keep running.</span>}
+            {!moving && fixed && <span className="meta">{fixed}</span>}
+          </div>
           {place.role === "registry" && (
             <div className="field">
               <label className="label" htmlFor="change-backup">

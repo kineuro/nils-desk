@@ -308,6 +308,44 @@ table.thin tr.openable:hover td, table.thin tr.openable:focus-visible td { backg
 .stat.ok dd { color: var(--n-ok-fg); }
 .stat.caution dd { color: var(--n-caution-fg); }
 .stat.blocked dd { color: var(--n-blocked-fg); }
+/* a folder's path, typed or chosen: the folders open under the field, and a click opens a folder */
+/* the field keeps the width its folders need: a button beside it goes under it on a narrow window */
+.path-row { align-items: flex-start; flex-wrap: wrap; }
+.path-row > .path-field { flex: 1 1 16rem; }
+.path-field { display: grid; gap: 0.4rem; min-width: 0; }
+.path-input { padding-right: 0.15rem; }
+.browser { display: grid; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); overflow: hidden; }
+.browser-head { display: flex; align-items: center; gap: 0.2rem; min-width: 0; padding: 0.25rem 0.3rem; border-bottom: 1px solid var(--n-line); }
+.browser-title { flex: 1; padding-left: 0.4rem; font-size: var(--n-text-size-small); font-weight: 600; color: var(--n-text-dim); }
+.crumbs { display: flex; align-items: center; flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: var(--n-font-mono); font-size: 13px; }
+.crumb-step { display: inline-flex; align-items: center; }
+.crumb { padding: 0.1rem 0.25rem; border: 0; border-radius: var(--n-radius); background: transparent; color: var(--n-brand-text); font: inherit; cursor: pointer; }
+.crumb:hover { background: var(--n-brand-soft); }
+span.crumb { color: var(--n-text); font-weight: 500; cursor: default; }
+span.crumb:hover { background: transparent; }
+.crumb-sep { padding: 0 0.05rem; color: var(--n-text-faint); }
+.browser-disk, .browser-note { display: flex; align-items: center; gap: 0.45rem; margin: 0; padding: 0.35rem 0.7rem; border-bottom: 1px solid var(--n-line); font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
+.browser-disk .i { color: var(--n-text-faint); }
+.browser-note.caution { background: var(--n-caution-bg); color: var(--n-caution-fg); }
+.browser-note.blocked { background: var(--n-blocked-bg); color: var(--n-blocked-fg); }
+.browser-list { display: grid; align-content: start; max-height: 16.5rem; overflow: auto; padding: 0.25rem; }
+.browser-row { display: flex; align-items: center; gap: 0.55rem; width: 100%; min-width: 0; min-height: 2rem; padding: 0 0.5rem; border: 0; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.browser-row:hover:not(:disabled) { background: var(--n-bg-hover); }
+.browser-row:disabled { color: var(--n-text-faint); cursor: default; }
+.browser-row .i { color: var(--n-text-faint); }
+.browser-row.caution > .i:first-child { color: var(--n-caution-icon); }
+/* a folder's name keeps its room before what is said beside it */
+.browser-name { flex: 1 1 auto; min-width: 5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: 13.5px; }
+.browser-row .meta { flex: 0 1 auto; min-width: 0; max-width: 55%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.browser-tag { flex: none; padding: 0 0.4rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-neutral-bg); color: var(--n-neutral-fg); font-size: 12px; }
+.browser-tag.caution { border-color: var(--n-caution-line); background: var(--n-caution-bg); color: var(--n-caution-fg); }
+.browser-tag.blocked { border-color: var(--n-blocked-line); background: var(--n-blocked-bg); color: var(--n-blocked-fg); }
+.browser-hidden { justify-self: start; margin: 0.2rem 0.25rem; }
+.browser-files { padding: 0.3rem 0.5rem; }
+.browser-foot { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.45rem 0.4rem 0.7rem; border-top: 1px solid var(--n-line); background: var(--n-bg-page); }
+.browser-path { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+.folder-now { gap: 0.6rem; flex-wrap: wrap; }
+.folder-now .path { min-width: 0; overflow-wrap: anywhere; }
 .choices { display: grid; gap: 0.45rem; }
 .key-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
