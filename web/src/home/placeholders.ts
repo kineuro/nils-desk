@@ -14,11 +14,13 @@ export interface Placeholder {
   entitlement: Entitlement;
   door: string;
   words: string;
+  /** Built back: the section renders its own page, not this placeholder. */
+  built?: boolean;
 }
 
 export const PLACEHOLDERS: Placeholder[] = [
   { id: "query", title: "Query", icon: "search", entitlement: "reader", door: "POST /api/ask/run", words: "Narrow the registry to what you need, step by step or in words, and keep every version of it as a card." },
-  { id: "data", title: "Data", icon: "data", entitlement: "reader", door: "GET /api/packs", words: "The batches digested, the rule packs, and what each scan was recognised as." },
+  { id: "data", title: "Data", icon: "data", entitlement: "reader", door: "GET /api/sources", words: "The sources, each with its digests and how what comes in is handled.", built: true },
   { id: "review", title: "Review", icon: "review", entitlement: "reviewer", door: "GET /api/review", words: "What needs a person's judgement: a scan the rules could not place, a subject to confirm." },
   { id: "release", title: "Release", icon: "release", entitlement: "operator", door: "POST /api/releases", words: "Hand results out as a release, a BIDS tree or a table, written to an export place." },
   { id: "pipelines", title: "Pipelines", icon: "branch", entitlement: "reviewer", door: "GET /api/jobs", words: "The jobs that ran and are running: digests, backups and releases." },

@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- The Data page, built back around sources. Each source place is a card: its name and folder, how what comes in is handled, the subjects, sessions and stacks it holds, and how many digests have read it and when. The chosen source lists its newest digests, each with the files it read, new, changed, unchanged and refused, and its four stages (walked, digested, classified, reviewed) as marks with their counts; a digest still reading shows so and the page reads again every twenty seconds. For an operator, Digest what is new queues a digest of the source, Handling declares whether it arrives identified and what a release does on the way out, and Bring DICOM in opens the setup's flow in a dialog. It reads the engine's `GET /api/sources`, in the engine's 1.0.0-alpha.18.
+
 ### Changed
 
 - The assistant has a page of its own, Assistant, under Home, and the rail on the right of every page is gone. The conversations this browser keeps are listed under it in the side, newest first, below New conversation. A conversation shows what the assistant did as a folded list of steps, each new version of a query it proposes, to accept or disregard, a choice answered with a click, and a plan to confirm. The station it talks to is chosen beside the box before the first message, and a turn can be stopped. Plan it with the assistant, on the setup page, opens a new conversation with its sentence ready to send.
