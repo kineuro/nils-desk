@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Query page's pure parts: a card's name, a card's versions, how a move's
-// holes are typed in and read back as arguments, and the counts a step of the
-// timeline shows. Nothing here composes ask JSON; a query changes only through
+// holes are typed in and read back as arguments, the counts a step of the
+// timeline shows, and what the charts of a step draw. Nothing here composes ask JSON; a query changes only through
 // a move the engine offered.
 
-import type { ClauseGroup, DocumentHandle, Json, Move } from "../ask/client";
+import type { CatalogField, ClauseGroup, DocumentHandle, Json, Move, Profile, ProfileValue } from "../ask/client";
 
 /** A card's name: the query's own name, else the set it answers, else plain words. */
 export function cardTitle(name: string | null | undefined, answer?: string | null): string {
@@ -121,4 +121,81 @@ export function stepCounts(groups: ClauseGroup[] | undefined, set: string): { ro
   if (mine.length === 0) return null;
   const last = mine[mine.length - 1];
   return { rows: last.kept, subjects: last.subjects, lost: mine.reduce((a, g) => a + g.lost, 0) };
+}
+
+/** A count with its unit, singular for one: 1 subject, 1,497 stacks. */
+export function unitWords(count: number, unit: string): string {
+  return `${count.toLocaleString("en-US")} ${count === 1 && unit.endsWith("s") ? unit.slice(0, -1) : unit}`;
+}
+
+/** How a profile's value reads on a bar. */
+export type ValueAs = "base" | "decade" | "sex" | "plain";
+
+const SEX_WORDS: Record<string, string> = { F: "female", M: "male", O: "other" };
+
+/** A value as a bar's label: a missing value named for what is missing, a decade as its span of years, a sex in words. */
+export function valueWords(v: ProfileValue["value"], as: ValueAs = "plain"): string {
+  if (v === null || v === "") return as === "decade" ? "age unknown" : as === "base" ? "no base" : "not recorded";
+  if (as === "decade" && typeof v === "number") return `${v} to ${v + 9}`;
+  if (as === "sex") return SEX_WORDS[String(v)] ?? String(v);
+  return String(v);
+}
+
+export interface Bar {
+  label: string;
+  count: number;
+  subjects: number;
+  /** The bar's length against the longest, from 0 to 1. */
+  share: number;
+}
+
+/** A chart's bars in the order they read: decades by age with the unknown last, anything else as the engine listed it, most first. */
+export function barsOf(values: ProfileValue[], as: ValueAs = "plain"): Bar[] {
+  const ordered = as === "decade" ? [...values].sort((a, b) => (a.value === null ? 1 : b.value === null ? -1 : Number(a.value) - Number(b.value))) : values;
+  const widest = Math.max(1, ...ordered.map((v) => v.count));
+  return ordered.map((v) => ({ label: valueWords(v.value, as), count: v.count, subjects: v.subjects, share: v.count / widest }));
+}
+
+export type Chart = { kind: "bars"; bars: Bar[] } | { kind: "words"; words: string } | { kind: "none" };
+
+const sentence = (s: string): string => (s === "" ? s : `${s[0].toUpperCase()}${s.slice(1)}${s.endsWith(".") ? "" : "."}`);
+
+/** What one part of a profile draws: its bars, the reason it has none, or nothing where the step's grain has no such part. */
+export function chartOf(part: unknown, as: ValueAs = "plain", empty = "Nothing to count under this step."): Chart {
+  if (part === null || part === undefined || typeof part !== "object") return { kind: "none" };
+  if (Array.isArray(part)) return part.length > 0 ? { kind: "bars", bars: barsOf(part as ProfileValue[], as) } : { kind: "words", words: empty };
+  const p = part as Record<string, unknown>;
+  if (typeof p.withheld === "string") return { kind: "words", words: sentence(p.withheld) };
+  if (typeof p.refused === "string") return { kind: "words", words: `This could not be counted: ${p.refused}` };
+  if (Array.isArray(p.values)) return chartOf(p.values, as, empty);
+  if (Array.isArray(p.kinds)) return chartOf(p.kinds, as, empty);
+  return { kind: "none" };
+}
+
+/** A profile's headline numbers, each member counted once: subjects, sessions and stacks, or the rows and subjects of a set of another grain. */
+export function countsOf(p: Profile | null): { label: string; value: number }[] {
+  const c = (p?.counts ?? {}) as Record<string, unknown>;
+  return ["subjects", "sessions", "stacks", "rows"].filter((k) => typeof c[k] === "number").map((k) => ({ label: k, value: c[k] as number }));
+}
+
+export type ChartTab = "stacks" | "field" | "people" | "clinical";
+
+/** The charts a profile has, as tabs: a part the step's grain has none of is no tab. */
+export function tabsOf(p: Profile | null): { id: ChartTab; words: string }[] {
+  if (!p) return [];
+  const tabs: { id: ChartTab; words: string }[] = [];
+  if (p.stack_types !== null) tabs.push({ id: "stacks", words: "Stack types" });
+  if (typeof (p.counts as Record<string, unknown>).stacks === "number") tabs.push({ id: "field", words: "By a field" });
+  if (p.demographics !== null) tabs.push({ id: "people", words: "Demographics" });
+  if (p.clinical !== null) tabs.push({ id: "clinical", words: "Clinical" });
+  return tabs;
+}
+
+/** The stack fields a chart may count by value: categories a person reads, never a date, and only a technical or a clinical one. The scanner's maker comes first. */
+export function fieldChoices(fields: CatalogField[]): string[] {
+  const kind = (s: string) => s.toLowerCase().replace(/[^a-z]/g, "");
+  const paths = fields
+    .filter((f) => !f.dated && ["technical", "clinical"].includes(kind(f.class)) && ["text", "integer", "bool", "boolean"].includes(f.type))
+    .map((f) => f.path);
+  return [...new Set(paths)].sort((a, b) => (a === "manufacturer" ? -1 : b === "manufacturer" ? 1 : a.localeCompare(b)));
 }

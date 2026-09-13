@@ -144,6 +144,36 @@ export interface ClauseGroup {
   lost: number;
 }
 
+/** One value of a profile's chart: how many members hold it, each once, and how many subjects. */
+export interface ProfileValue {
+  value: string | number | boolean | null;
+  count: number;
+  subjects: number;
+}
+
+type Refused = { refused: string };
+
+/** The profile of one set of a document, for the Query card's charts; every number counts a member once. */
+export interface Profile {
+  set: string;
+  grain: string;
+  counts: { subjects: number; sessions: number; stacks: number } | { rows: number; subjects: number } | Refused;
+  stack_types: ProfileValue[] | Refused | null;
+  field: { name: string; values?: ProfileValue[]; truncated?: boolean; refused?: string; withheld?: string } | null;
+  demographics: { sex: ProfileValue[] | Refused; age_decades: ProfileValue[] | Refused } | { withheld: string } | null;
+  clinical: { kinds: ProfileValue[]; sensitive_withheld: boolean } | Refused | null;
+}
+
+/** A field as the catalog lists it for the caller. */
+export interface CatalogField {
+  level: string;
+  path: string;
+  type: string;
+  class: string;
+  dated: boolean;
+  description: string;
+}
+
 export class DoorError extends Error {
   constructor(
     readonly status: number,
@@ -177,6 +207,15 @@ export const ask = {
   describe: (document_id: number) => door<Described>("POST", "/api/ask/describe", { document_id }),
   explain: (document_id: number) => door<{ sqlite: string; postgres: string; columns: string[] }>("POST", "/api/ask/explain", { document_id }),
   preview: (document_id: number, rows = 10) => door<Preview>("POST", "/api/ask/preview", { document_id, rows }),
+  /** The profile of one set, the document's answer by default: its subjects, sessions and stacks, its stack types, one stack field by value, and the demographics and clinical event kinds the role may read. */
+  profile: (document_id: number, set?: string, field?: string) =>
+    door<Profile>("POST", "/api/ask/profile", { document_id, ...(set ? { set } : {}), ...(field ? { field } : {}) }),
+  /** One page of a level's fields as the catalog lists them for the caller. */
+  fields: (level: string, after?: string) =>
+    door<{ level: string; fields: CatalogField[]; next: string | null; total: number }>(
+      "GET",
+      `/api/ask/catalog/${encodeURIComponent(level)}${after ? `?after=${encodeURIComponent(after)}` : ""}`,
+    ),
   diagnose: (document_id: number, by?: "set" | "clause") => door<Diagnosis>("POST", "/api/ask/diagnose", by ? { document_id, by } : { document_id }),
   /** Wave 5 section 12.1: the opening set of a new question, from anything a person may start from. */
   start: (body: { from: Record<string, unknown> }) => door<{ document: Json; set: string; grain: string; count: number; subjects: number | null; sessions: number | null; epoch: number }>("POST", "/api/ask/start", body),
@@ -299,4 +338,17 @@ export async function chain(id: number, get: (id: number) => Promise<DocumentHan
     at = d.parent;
   }
   return out.reverse();
+}
+
+/** Every field of a level the caller may read, page after page. */
+export async function catalogFields(level: string, page: typeof ask.fields = ask.fields): Promise<CatalogField[]> {
+  const out: CatalogField[] = [];
+  let after: string | undefined;
+  for (let i = 0; i < 20; i++) {
+    const p = await page(level, after);
+    out.push(...p.fields);
+    if (!p.next) break;
+    after = p.next;
+  }
+  return out;
 }

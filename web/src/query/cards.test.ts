@@ -2,8 +2,8 @@
 // The Query page's pure parts.
 
 import { describe, expect, it } from "vitest";
-import type { Move } from "../ask/client";
-import { argsOf, cardTitle, clauseText, inputOf, moveWords, preview, stepCounts, versionsOf } from "./cards";
+import type { Move, Profile } from "../ask/client";
+import { argsOf, cardTitle, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, stepCounts, tabsOf, unitWords, valueWords, versionsOf } from "./cards";
 
 const addWhere: Move = {
   id: 4,
@@ -85,5 +85,72 @@ describe("a clause read from a query", () => {
     expect(clauseText(["in", {}, ["axis", {}, "base"], ["T1w", "T2w"]])).toBe("base in T1w, T2w");
     expect(clauseText(["and", {}, ["=", {}, ["field", {}, "course"], "RRMS"], [">=", {}, ["field", {}, "edss"], 3]])).toBe("course = RRMS and edss >= 3");
     expect(clauseText(["is_null", {}, ["field", {}, "birth_date"]])).toBe("is null(birth date)");
+  });
+});
+
+describe("a step's charts", () => {
+  const profile: Profile = {
+    set: "people",
+    grain: "subject",
+    counts: { subjects: 43, sessions: 162, stacks: 822 },
+    stack_types: [
+      { value: "T1w", count: 497, subjects: 43 },
+      { value: null, count: 5, subjects: 2 },
+    ],
+    field: null,
+    demographics: { withheld: "the sex and the age of a subject are quasi-identifying, counted from the reviewer role" },
+    clinical: { kinds: [{ value: "EDSS", count: 156, subjects: 43 }], sensitive_withheld: true },
+  };
+  it("count each member once, and chart only what the step's grain has", () => {
+    expect(countsOf(profile)).toEqual([
+      { label: "subjects", value: 43 },
+      { label: "sessions", value: 162 },
+      { label: "stacks", value: 822 },
+    ]);
+    expect(tabsOf(profile).map((t) => t.id)).toEqual(["stacks", "field", "people", "clinical"]);
+    const cohort: Profile = { ...profile, grain: "cohort", counts: { rows: 2, subjects: 43 }, stack_types: null, demographics: null, clinical: null };
+    expect(tabsOf(cohort)).toEqual([]);
+    expect(countsOf(cohort)).toEqual([
+      { label: "subjects", value: 43 },
+      { label: "rows", value: 2 },
+    ]);
+  });
+  it("draw bars against the longest, a missing value named", () => {
+    const chart = chartOf(profile.stack_types, "base");
+    expect(chart.kind === "bars" && chart.bars.map((b) => [b.label, b.share])).toEqual([
+      ["T1w", 1],
+      ["no base", 5 / 497],
+    ]);
+  });
+  it("read decades by age with the unknown last, and a sex in words", () => {
+    const decades = [
+      { value: null, count: 15, subjects: 4 },
+      { value: 40, count: 117, subjects: 32 },
+      { value: 20, count: 5, subjects: 3 },
+    ];
+    const chart = chartOf(decades, "decade");
+    expect(chart.kind === "bars" && chart.bars.map((b) => b.label)).toEqual(["20 to 29", "40 to 49", "age unknown"]);
+    expect(valueWords("F", "sex")).toBe("female");
+    expect(valueWords(null, "sex")).toBe("not recorded");
+    expect(unitWords(1, "subjects")).toBe("1 subject");
+    expect(unitWords(1497, "stacks")).toBe("1,497 stacks");
+  });
+  it("say why a part has nothing to draw", () => {
+    expect(chartOf(profile.demographics)).toEqual({ kind: "words", words: "The sex and the age of a subject are quasi-identifying, counted from the reviewer role." });
+    expect(chartOf({ name: "manufacturer", refused: "no stacks" })).toEqual({ kind: "words", words: "This could not be counted: no stacks" });
+    expect(chartOf([], "plain", "None here.")).toEqual({ kind: "words", words: "None here." });
+    expect(chartOf(null)).toEqual({ kind: "none" });
+    expect(chartOf(profile.clinical).kind).toBe("bars");
+  });
+  it("offer the stack fields a person reads as categories, the scanner's maker first", () => {
+    const f = (path: string, type: string, klass: string, dated = false) => ({ level: "stack", path, type, class: klass, dated, description: "" });
+    const fields = [
+      f("series_description", "text", "quasi_identifying"),
+      f("dwi_directions", "integer", "technical"),
+      f("acquired_on", "date", "technical", true),
+      f("manufacturer", "text", "technical"),
+      f("slice_thickness", "real", "technical"),
+    ];
+    expect(fieldChoices(fields)).toEqual(["manufacturer", "dwi_directions"]);
   });
 });
