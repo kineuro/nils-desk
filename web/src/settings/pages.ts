@@ -20,6 +20,8 @@ export function settingsPages(caps: Capabilities): SettingsPage[] {
   if (!holds(caps, "operator")) return [];
   const admin = holds(caps, "admin");
   const out: SettingsPage[] = [
+    // how the install stands, a card for each page
+    { id: "overview", title: "Overview", sub: false },
     { id: "parts", title: "Parts", sub: false },
     { id: "engine", title: "Engine", sub: true },
     { id: "desk", title: "Desk", sub: true },

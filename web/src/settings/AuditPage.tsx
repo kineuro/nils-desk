@@ -38,7 +38,7 @@ export function AuditPage() {
   const narrowed = filter.principal || filter.action || filter.month;
   return (
     <div className="settings">
-      <Head title="Audit" lede="Every act that changes a judgement, reveals an identifier, or changes a setting, with who did it and when. The registry keeps it." />
+      <Head title="Audit" lede="Every act that changes a judgement, reveals an identifier or changes a setting." />
       <form
         className="row audit-filters"
         onSubmit={(e) => {

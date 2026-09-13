@@ -21,7 +21,8 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { agoWords, useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
-import { Acted, Head, messageOf, useActing } from "./common";
+import { Acted, Head, messageOf, Stats, useActing } from "./common";
+import { placeStats } from "./stats";
 import { addFolderWords, keptRunning, reapplyByHand } from "./install";
 import {
   EMPTY,
@@ -85,7 +86,7 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
   return (
     <div className="settings">
       <div className="places-head">
-        <Head title="Places" lede="Every folder NILS reads or keeps data in is a place with a role, and the rules are checked on every write." />
+        <Head title="Places" lede="Every folder NILS reads or keeps data in, with its role." />
         {operator && (
           <button type="button" className="button" onClick={() => setOpened({ kind: "add" })}>
             <Icon name="plus" />
@@ -97,6 +98,7 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
       {places === null && !failed && <Wait phase="reading the places" since={since} />}
       {places !== null && (
         <>
+          <Stats items={placeStats(places, containers)} />
           <div className="row places-bar">
             {places.length > 0 && (
               <div className="chips" role="group" aria-label="show the places of one role">

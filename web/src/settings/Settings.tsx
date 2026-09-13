@@ -16,6 +16,7 @@ import { AuditPage } from "./AuditPage";
 import { DatabasePage } from "./DatabasePage";
 import { GatewayPage } from "./GatewayPage";
 import { IdentityPage } from "./IdentityPage";
+import { OverviewPage } from "./OverviewPage";
 import { PlacesPage } from "./PlacesPage";
 import { keptRunning, reapplyByHand } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
@@ -33,6 +34,8 @@ interface PageProps {
 export function Settings(props: PageProps & { page: string | null }) {
   const pages = settingsPages(props.caps);
   switch (settingsPage(pages, props.page)?.id) {
+    case "overview":
+      return <OverviewPage caps={props.caps} install={props.install} />;
     case "parts":
       return <PartsPage {...props} built={pages.map((p) => p.id)} />;
     case "engine":
@@ -131,7 +134,7 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
 
   return (
     <div className="settings">
-      <Head title="Parts" lede="Everything this deployment runs, with its version and health, and what a newer release would change." />
+      <Head title="Parts" lede="Every part, its version and its health." />
 
       {install?.release.newer && (
         <section className="panel update" aria-label="a newer release">

@@ -58,6 +58,7 @@ describe("the foot", () => {
   it("carries Settings' pages, each part's own set in under the parts", () => {
     const pages = foot(caps())[0].pages ?? [];
     expect(pages.map((p) => [p.id, p.depth])).toEqual([
+      ["overview", 1],
       ["parts", 1],
       ["engine", 2],
       ["desk", 2],

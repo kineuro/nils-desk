@@ -68,7 +68,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
 
   return (
     <div className="settings">
-      <Head title="Gateway and models" under lede="The assistant reaches its models through the gateway. What leaves your systems is decided per purpose, never by default.">
+      <Head title="Gateway and models" under lede="The models the assistant reaches, and what may leave, purpose by purpose.">
         {health && <Health tone={health.tone} words={health.words} />}
         <span className="meta">{[health?.streams, version ? `Kvasir ${version}` : "Kvasir"].filter(Boolean).join(" · ")}</span>
       </Head>

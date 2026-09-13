@@ -283,6 +283,31 @@ table.thin tr.openable:hover td, table.thin tr.openable:focus-visible td { backg
 .places-bar { gap: 0.5rem; flex-wrap: wrap; }
 /* when a kept read was read, and the button that reads it again, stay together at the end of the line */
 .kept-at { display: inline-flex; align-items: center; gap: 0.25rem; margin-left: auto; white-space: nowrap; }
+/* the overview: what needs a person, then a card for each page */
+.attention { display: grid; gap: 0.4rem; }
+.attention:empty { display: none; }
+.attention-item, .attention-item:hover { display: flex; align-items: center; gap: 0.6rem; padding: 0.55rem 0.8rem; border: 1px solid var(--n-caution-line); border-radius: var(--n-radius); background: var(--n-caution-bg); color: var(--n-caution-fg); text-decoration: none; }
+.attention-item.blocked, .attention-item.blocked:hover { border-color: var(--n-blocked-line); background: var(--n-blocked-bg); color: var(--n-blocked-fg); }
+.attention-item.brand, .attention-item.brand:hover { border-color: var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-fg); }
+.attention a.attention-item:hover { border-color: currentColor; }
+.attention-ok { display: flex; align-items: center; gap: 0.5rem; color: var(--n-ok-fg); }
+.dash { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 0.9rem; }
+.dash-card, .dash-card:hover { display: grid; gap: 0.3rem; align-content: start; padding: 0.9rem 1rem 1rem; color: var(--n-text); text-decoration: none; transition: border-color 120ms ease, background-color 120ms ease; }
+.dash-card:hover { border-color: var(--n-brand-line); background: var(--n-bg-hover); }
+.dash-top { display: flex; align-items: center; flex-wrap: wrap; gap: 0.3rem 0.5rem; min-width: 0; color: var(--n-text-faint); }
+.dash-title { flex: 1; font-weight: 600; color: var(--n-text); }
+.dash-top .tag { white-space: normal; }
+.dash-value { margin-top: 0.15rem; font-family: var(--n-font-serif); font-size: 1.4rem; line-height: 1.2; overflow-wrap: anywhere; }
+.dash-facts { display: grid; gap: 0.05rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
+.dot.brand { background: var(--n-brand-icon); }
+/* a page's few numbers: cells that share their borders and fill the last row */
+.stats { display: flex; flex-wrap: wrap; margin: 0; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); overflow: hidden; }
+.stat { flex: 1 1 9.5rem; min-width: 0; margin: 0 -1px -1px 0; padding: 0.6rem 0.9rem; border-right: 1px solid var(--n-line); border-bottom: 1px solid var(--n-line); }
+.stat dt { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--n-text-faint); }
+.stat dd { margin: 0.15rem 0 0; font-family: var(--n-font-serif); font-size: 1.15rem; line-height: 1.25; overflow-wrap: anywhere; }
+.stat.ok dd { color: var(--n-ok-fg); }
+.stat.caution dd { color: var(--n-caution-fg); }
+.stat.blocked dd { color: var(--n-blocked-fg); }
 .choices { display: grid; gap: 0.45rem; }
 .key-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }

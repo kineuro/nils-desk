@@ -11,7 +11,8 @@ import type { Capabilities, Entitlement } from "../capabilities";
 import { Command } from "../ui/Command";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
-import { Acted, Head, messageOf, useActing } from "./common";
+import { Acted, Head, messageOf, Stats, useActing } from "./common";
+import { identityStats } from "./stats";
 import { LADDER, MODES, addRefusal, identity, lastSeenWords, lit, reachWords, stepBelow, topStep, withAssist, withStep, type DeskUser, type Users } from "./identity";
 
 export function IdentityPage({ caps }: { caps: Capabilities }) {
@@ -50,7 +51,8 @@ export function IdentityPage({ caps }: { caps: Capabilities }) {
 
   return (
     <div className="settings">
-      <Head title="Identity" lede="Who may sign in, what each person may do, and where the desk answers." />
+      <Head title="Identity" lede="Who signs in, and what each person may do." />
+      <Stats items={identityStats(caps, users)} />
       {why && <p className="warn">{why}</p>}
 
       <section className="stack">
