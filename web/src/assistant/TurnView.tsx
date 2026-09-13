@@ -1,13 +1,35 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // One turn of a conversation, as the Assistant page and a Query card's
 // discussion show it: what was said, what the assistant did as a folded list
-// of steps, each version it proposes, and a choice answered with a click. A
-// page that decides proposals somewhere else passes no onDecide, and the turn
-// only names them.
+// of steps, its words drawn from their markdown, each version it proposes, and
+// a choice answered with a click. A page that decides proposals somewhere else
+// passes no onDecide, and the turn only names them. On the Assistant page a
+// turn carries its actions too (the chat, slice 4): a person's message is
+// copied, edited, or switched to another way it was sent, and an answer is
+// copied, asked for again, or given a verdict.
 
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "../ui/Icon";
+import type { Rating } from "./chats";
+import { Markdown } from "./Markdown";
 import type { Proposal, Turn } from "./parts";
 import { foldedSteps, stepLines } from "./steps";
+import { MISSES } from "./thread";
+
+export interface TurnActions {
+  /** A turn is running: nothing is sent again meanwhile. */
+  busy: boolean;
+  editing: boolean;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onEdit: (words: string) => void;
+  onRetry: () => void;
+  rating: Rating | null;
+  onRate: (verdict: "up" | "down" | null, reason?: string) => void;
+  /** Which of the ways this message was sent it is, and where the ways either side continue. */
+  version: { index: number; count: number; prev: string | null; next: string | null } | null;
+  onVersion: (conversation: string) => void;
+}
 
 export function TurnView(props: {
   turn: Turn;
@@ -19,9 +41,10 @@ export function TurnView(props: {
   onChoose: (label: string) => void;
   /** Where an undecided proposal is decided, when it is not here. */
   decidedElsewhere?: string;
+  actions?: TurnActions;
 }) {
-  const { turn, open, onToggle, proposals, choice, onDecide, onChoose, decidedElsewhere } = props;
-  if (turn.role === "user") return <p className="said you">{turn.text}</p>;
+  const { turn, open, onToggle, proposals, choice, onDecide, onChoose, decidedElsewhere, actions } = props;
+  if (turn.role === "user") return <Asked turn={turn} actions={actions} />;
   if (turn.role === "system") return <p className="meta">{turn.text}</p>;
   const folded = foldedSteps(turn.tools);
   return (
@@ -44,7 +67,7 @@ export function TurnView(props: {
               ))}
         </div>
       )}
-      {turn.text && <p className="said-text">{turn.text}</p>}
+      {turn.text && <Markdown text={turn.text} />}
       {proposals.map((p) => (
         <div key={p.document} className="proposal">
           <Icon name="ask" />
@@ -80,6 +103,214 @@ export function TurnView(props: {
           </div>
         </div>
       )}
+      {actions && turn.done && <Answered turn={turn} actions={actions} />}
     </div>
+  );
+}
+
+/** A person's message: its words, the ways it was sent, and copy and edit on hover. */
+function Asked({ turn, actions }: { turn: Turn; actions?: TurnActions }) {
+  if (!actions) return <p className="said you">{turn.text}</p>;
+  if (actions.editing) return <EditBox words={turn.text} onSend={actions.onEdit} onCancel={actions.onCancelEdit} />;
+  const v = actions.version;
+  return (
+    <div className="said-you">
+      <p className="said you">{turn.text}</p>
+      <div className="turn-actions">
+        <span className="on-hover">
+          <CopyButton text={turn.text} what="message" />
+          <button type="button" className="icon-button" aria-label="Edit this message" title="Edit" disabled={actions.busy} onClick={actions.onStartEdit}>
+            <Icon name="pencil" />
+          </button>
+        </span>
+        {v && v.count > 1 && (
+          <span className="versions">
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="The way it was sent before"
+              title="Before"
+              disabled={!v.prev || actions.busy}
+              onClick={() => v.prev && actions.onVersion(v.prev)}
+            >
+              <Icon name="chevron-left" />
+            </button>
+            <span className="meta num">
+              {v.index + 1} / {v.count}
+            </span>
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="The way it was sent after"
+              title="After"
+              disabled={!v.next || actions.busy}
+              onClick={() => v.next && actions.onVersion(v.next)}
+            >
+              <Icon name="chevron-right" />
+            </button>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** An answer's actions: copy it, ask for it again, and say whether it was good or missed. */
+function Answered({ turn, actions }: { turn: Turn; actions: TurnActions }) {
+  const [missing, setMissing] = useState(false);
+  const verdict = actions.rating?.verdict ?? null;
+  return (
+    <>
+      <div className="turn-actions">
+        {turn.text && <CopyButton text={turn.text} what="answer" />}
+        <button type="button" className="icon-button" aria-label="Ask for this answer again" title="Ask again" disabled={actions.busy} onClick={actions.onRetry}>
+          <Icon name="restart" />
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="A good answer"
+          title="Good answer"
+          aria-pressed={verdict === "up"}
+          onClick={() => {
+            setMissing(false);
+            actions.onRate(verdict === "up" ? null : "up");
+          }}
+        >
+          <Icon name="thumb-up" />
+        </button>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label="The answer missed"
+          title="Missed"
+          aria-pressed={verdict === "down"}
+          onClick={() => {
+            if (verdict === "down") actions.onRate(null);
+            setMissing(verdict !== "down" && !missing);
+          }}
+        >
+          <Icon name="thumb-down" />
+        </button>
+        {verdict === "down" && actions.rating?.reason && <span className="meta">{actions.rating.reason}</span>}
+      </div>
+      {missing && (
+        <Miss
+          onSend={(reason) => {
+            setMissing(false);
+            actions.onRate("down", reason);
+          }}
+          onCancel={() => setMissing(false)}
+        />
+      )}
+    </>
+  );
+}
+
+/** What missed, in a word or in a sentence; either may be left out. */
+function Miss({ onSend, onCancel }: { onSend: (reason?: string) => void; onCancel: () => void }) {
+  const [picked, setPicked] = useState<string | null>(null);
+  const [words, setWords] = useState("");
+  const reason = [picked, words.trim()].filter(Boolean).join(": ");
+  return (
+    <form
+      className="miss"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSend(reason || undefined);
+      }}
+    >
+      <p className="meta">What missed? Say it if you like; the verdict is kept with this conversation.</p>
+      <div className="chips">
+        {MISSES.map((m) => (
+          <button key={m} type="button" className={picked === m ? "button small" : "button secondary small"} aria-pressed={picked === m} onClick={() => setPicked(picked === m ? null : m)}>
+            {m}
+          </button>
+        ))}
+      </div>
+      <div className="input">
+        <input value={words} maxLength={400} placeholder="Or say it in words" aria-label="What missed" onChange={(e) => setWords(e.target.value)} />
+      </div>
+      <div className="row miss-foot">
+        <span className="grow" />
+        <button type="button" className="button secondary small" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="button small">
+          Send
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** A message being edited: sent as another version of it, the one before a click away. */
+function EditBox({ words, onSend, onCancel }: { words: string; onSend: (words: string) => void; onCancel: () => void }) {
+  const [text, setText] = useState(words);
+  const box = useRef<HTMLTextAreaElement | null>(null);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }, []);
+  const send = () => {
+    const w = text.trim();
+    if (w) onSend(w);
+  };
+  return (
+    <form
+      className="edit-box"
+      onSubmit={(e) => {
+        e.preventDefault();
+        send();
+      }}
+    >
+      <div className="input composer-input">
+        <textarea
+          ref={box}
+          value={text}
+          rows={Math.min(8, Math.max(2, text.split("\n").length))}
+          aria-label="Edit the message"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              send();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
+        />
+      </div>
+      <div className="row edit-box-foot">
+        <span className="meta grow">Sent as another version; the one before stays a click away.</span>
+        <button type="button" className="button secondary small" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="submit" className="button small" disabled={text.trim().length === 0}>
+          Send
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function CopyButton({ text, what }: { text: string; what: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard
+      ?.writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => undefined);
+  };
+  return (
+    <button type="button" className="icon-button" aria-label={copied ? "Copied" : `Copy the ${what}`} title={copied ? "Copied" : "Copy"} onClick={copy}>
+      <Icon name={copied ? "check" : "copy"} />
+    </button>
   );
 }

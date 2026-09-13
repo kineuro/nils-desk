@@ -620,7 +620,11 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
                 aria-label="Talk to the assistant about this card"
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) submit(e);
+                  if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) submit(e);
+                  else if (e.key === "Escape" && pane.busy) {
+                    e.preventDefault();
+                    talk.stop();
+                  }
                 }}
               />
               {pane.busy ? (
