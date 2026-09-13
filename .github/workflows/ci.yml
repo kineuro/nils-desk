@@ -1,6 +1,8 @@
 name: ci
-# The desk on every pull request: the front end built by vite, then the Rust
-# binary formatted, linted and tested with that front end embedded.
+# The desk on every pull request and on main: the front end built by vite, then the
+# Rust binary formatted, linted and tested with that front end embedded. On main the
+# release targets are built as well (desk-build.yml), so a tag takes those binaries
+# rather than building them again.
 on:
   pull_request:
   push:
@@ -8,6 +10,11 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  # a newer push to a pull request stops the run it replaces; a run on main is never stopped
+  group: ci-${{ github.event_name == 'pull_request' && github.head_ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   hygiene:
@@ -57,3 +64,7 @@ jobs:
         run: |
           cargo build
           test -s ../web/dist/index.html
+  build:
+    # on main only: the binaries a release of this commit takes
+    if: github.event_name == 'push'
+    uses: ./.github/workflows/desk-build.yml
