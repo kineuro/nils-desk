@@ -1,26 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Home, as the chosen design draws it (option A): what is installed and how
-// it answers, the steps that make the install ready for real work, and the
-// four tiles of what the registry holds, what needs you, what is running and
-// what changed since you were last here. Every line is read from a door; a
-// door this deployment does not serve, or that this person may not open,
-// takes its part of the page with it.
+// it answers, and the four tiles of what the registry holds, what needs you,
+// what is running and what changed since you were last here. For an operator
+// a line says how far setup is while a step is left, and opens it. Every line
+// is read from a door; a door this deployment does not serve, or that this
+// person may not open, takes its part of the page with it.
 
 import { useCallback, useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served, holds } from "../deployment";
-import { objects, type Place, type Summary } from "../objects/client";
+import { objects, type Summary } from "../objects/client";
 import { placesKept } from "../objects/kept";
 import { data, ops } from "../ops/client";
-import { database, type Backups } from "../settings/database";
+import { href } from "../routes";
+import { backupsKept } from "../settings/kept";
 import { kvasir } from "../settings/kvasir";
 import type { Install } from "../settings/supervise";
-import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
-import { BringInStep } from "./BringIn";
-import type { Pack } from "./look";
-import { headline, lede, next, steps, type Purpose, type Step } from "./steps";
+import { useKept } from "../ui/kept";
+import { progressWords, setupSteps } from "./setup";
+import type { Purpose } from "./steps";
 import { holdsTile, lastVisit, markVisit, needsTile, runningTile, sinceTile, tilesOffered, type Tile, type TileId } from "./tiles";
 
 interface Loaded {
@@ -28,39 +28,34 @@ interface Loaded {
   since: Summary | null;
   open: number | null;
   jobs: JobRow[] | null;
-  places: Place[] | null;
   batches: number | null;
   backups: JobRow[] | null;
   purposes: Purpose[] | null;
-  packs: Pack[] | null;
-  archives: Backups | null;
 }
 
-const NOTHING: Loaded = { summary: null, since: null, open: null, jobs: null, places: null, batches: null, backups: null, purposes: null, packs: null, archives: null };
+const NOTHING: Loaded = { summary: null, since: null, open: null, jobs: null, batches: null, backups: null, purposes: null };
 
 /** A door's answer, or null where it failed: Home shows what it could read. */
 function quietly<T>(p: Promise<T>): Promise<T | null> {
   return p.catch(() => null);
 }
 
-export function Home({ caps, install, onChanged }: { caps: Capabilities; install: Install | null; onChanged: () => void }) {
+export function Home({ caps, install }: { caps: Capabilities; install: Install | null }) {
   const [loaded, setLoaded] = useState<Loaded>(NOTHING);
   const [last] = useState<string | null>(() => lastVisit());
+  const places = useKept(placesKept);
+  const archives = useKept(backupsKept);
 
   const load = useCallback(() => {
     const has = (d: string) => served(caps, d);
+    // the places and the backups are kept for every page that reads them
+    if (has("GET /api/places")) void placesKept.refresh().catch(() => undefined);
+    if (has("GET /api/backups") && holds(caps, "admin")) void backupsKept.refresh().catch(() => undefined);
     void Promise.all([
       has("GET /api/summary") ? quietly(objects.summary()) : null,
       has("GET /api/summary") && last ? quietly(objects.summary(last)) : null,
       has("GET /api/review") && holds(caps, "reviewer") ? quietly(ops.review("open", undefined, 500)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs") ? quietly(ops.jobs(false, 50)).then((r) => r?.jobs ?? null) : null,
-      has("GET /api/places")
-        ? quietly(objects.places()).then((r) => {
-            // the Places page draws these at once when it opens next
-            if (r) placesKept.put(r);
-            return r?.places ?? null;
-          })
-        : null,
       has("GET /api/batches") ? quietly(data.batches(1000)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs")
         ? quietly(ops.jobs(true, 200)).then(
@@ -68,12 +63,7 @@ export function Home({ caps, install, onChanged }: { caps: Capabilities; install
           )
         : null,
       caps.kvasir !== null ? quietly(kvasir.purposes()).then((r) => r?.purposes.map((p) => ({ purpose: p.purpose, content: p.content, backend: p.backend })) ?? null) : null,
-      has("GET /api/packs") ? quietly(data.packs()).then((r) => r?.packs ?? null) : null,
-      // the archives and their schedule say more than the backup jobs, where an admin may read them
-      has("GET /api/backups") && holds(caps, "admin") ? quietly(database.backups()) : null,
-    ]).then(([summary, since, open, jobs, places, batches, backups, purposes, packs, archives]) =>
-      setLoaded({ summary, since, open, jobs, places, batches, backups, purposes, packs, archives }),
-    );
+    ]).then(([summary, since, open, jobs, batches, backups, purposes]) => setLoaded({ summary, since, open, jobs, batches, backups, purposes }));
   }, [caps, last]);
 
   // read again when the registry moves, and every half minute for what runs
@@ -91,9 +81,13 @@ export function Home({ caps, install, onChanged }: { caps: Capabilities; install
     return () => clearTimeout(t);
   }, []);
 
-  const all = steps({ caps, install, places: loaded.places, batches: loaded.batches, backups: loaded.backups, archives: loaded.archives, purposes: loaded.purposes });
-  const opens = next(all);
-  const band = holds(caps, "operator") && opens !== null;
+  // how far setup is, for an operator, while a step is left
+  const setup =
+    holds(caps, "operator") && served(caps, "GET /api/places") && places.value
+      ? setupSteps({ caps, install, places: places.value.places, batches: loaded.batches, backups: loaded.backups, archives: archives.value, purposes: loaded.purposes })
+      : [];
+  const left = setup.filter((s) => !s.met);
+  const needed = left.some((s) => s.required);
   const tiles = tilesOffered(caps)
     .map((id) => tile(id, loaded, caps, last))
     .filter((t): t is Tile => t !== null);
@@ -102,36 +96,16 @@ export function Home({ caps, install, onChanged }: { caps: Capabilities; install
     <div className="home">
       <div className="home-head">
         <span className="eyebrow">Home</span>
-        <h1>{band ? headline(all) : "What NILS holds, and what needs you"}</h1>
-        {band && <p className="lede">{lede(all)}</p>}
+        <h1>What NILS holds, and what needs you</h1>
       </div>
       <PartsStrip caps={caps} install={install} />
-      {band && (
-        <section className="band" aria-label="get this install ready">
-          <div className="band-head rule-top">
-            <h2>Get this install ready</h2>
-            <span className="meta">This band leaves Home once every step is done.</span>
-          </div>
-          {all.map((s, i) =>
-            s.id === "dicom" && s === opens ? (
-              <BringInStep
-                key={s.id}
-                n={i + 1}
-                step={s}
-                caps={caps}
-                install={install}
-                places={loaded.places ?? []}
-                packs={loaded.packs ?? []}
-                onDone={() => {
-                  load();
-                  onChanged();
-                }}
-              />
-            ) : (
-              <StepRow key={s.id} n={i + 1} step={s} next={s === opens} />
-            ),
-          )}
-        </section>
+      {left.length > 0 && (
+        <a className={needed ? "setup-line caution" : "setup-line"} href={href("settings", "setup")}>
+          <Icon name={needed ? "alert" : "check"} />
+          <span className="grow">{progressWords(setup)}</span>
+          <span className="setup-line-go">Setup</span>
+          <Icon name="chevron-right" />
+        </a>
       )}
       {tiles.length > 0 && (
         <section className="tiles rule-top" aria-label="the registry now">
@@ -159,50 +133,6 @@ function tile(id: TileId, l: Loaded, caps: Capabilities, last: string | null): T
     case "since":
       return l.summary || last === null ? sinceTile(last, l.since) : null;
   }
-}
-
-function StepNo({ n, step }: { n: number; step: Step }) {
-  if (step.state === "done")
-    return (
-      <span className="stepno done" title="done">
-        <Icon name="check" />
-      </span>
-    );
-  if (step.state === "attention")
-    return (
-      <span className="stepno attention" title="needs a decision">
-        <Icon name="alert" />
-      </span>
-    );
-  return <span className={`stepno${step.state === "now" ? " now" : ""}`}>{n}</span>;
-}
-
-function StepRow({ n, step, next: isNext }: { n: number; step: Step; next: boolean }) {
-  return (
-    <div className="step">
-      <StepNo n={n} step={step} />
-      <div className="step-body">
-        <h3>{step.title}</h3>
-        <p className="meta">{step.words}</p>
-        {step.tags.length > 0 && (
-          <div className="tags">
-            {step.tags.map((t) => (
-              <span key={t.text} className={`tag${t.tone === "caution" ? " caution" : ""}`}>
-                {t.tone === "caution" && <Icon name="alert" />}
-                {t.text}
-              </span>
-            ))}
-          </div>
-        )}
-        {step.id === "model" && step.state !== "done" && (
-          <p className="meta">
-            To choose the model, run <Command text="nils setup" /> again on this machine; it asks what the assistant talks to.
-          </p>
-        )}
-      </div>
-      {isNext ? <span className="tag brand">next</span> : <span />}
-    </div>
-  );
 }
 
 /** The parts this deployment has, each with a dot for whether it answers and its version. */

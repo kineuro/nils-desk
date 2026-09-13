@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // What the shell offers (Wave 5 sections 6.2 and 6.4), each a predicate on the
-// capabilities document and the person. A section that is not built back yet
-// is not offered: the desk shows what the deployment has and nothing else.
+// capabilities document and the person. Until an operator's install is set
+// up, the side holds its first page and Settings; once it is, the sections
+// being built back join them, each where the engine serves its door.
 
 import type { Capabilities } from "./capabilities";
 import { stationOf, stationsServed } from "./assistant/stations";
-import { holds, state } from "./deployment";
+import { door, holds, state } from "./deployment";
+import { PLACEHOLDERS } from "./home/placeholders";
 import { settingsPages } from "./settings/pages";
 import type { IconName } from "./ui/Icon";
 
@@ -30,11 +32,17 @@ export function usable(caps: Capabilities): boolean {
   return kind === "ready" || kind === "warming";
 }
 
-/** The sections down the side, in order, for this document and person. */
-export function sections(caps: Capabilities): Section[] {
+/**
+ * The sections down the side, in order, for this document and person. `ready`
+ * says whether the install is set up: false keeps an operator on its first
+ * page, named for it, and null holds the rest back while it is not known yet.
+ */
+export function sections(caps: Capabilities, ready: boolean | null = true): Section[] {
   if (!usable(caps)) return [];
   const out: Section[] = [];
-  if (holds(caps, "reader")) out.push({ id: "home", title: "Home", icon: "home" });
+  if (holds(caps, "reader")) out.push({ id: "home", title: ready === false ? "Get started" : "Home", icon: "home" });
+  if (ready !== true) return out;
+  for (const p of PLACEHOLDERS) if (holds(caps, p.entitlement) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon });
   return out;
 }
 

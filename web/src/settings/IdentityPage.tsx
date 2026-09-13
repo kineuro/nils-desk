@@ -240,7 +240,7 @@ export function IdentityPage({ caps }: { caps: Capabilities }) {
   );
 }
 
-function AddPerson({ users, onClose, onDone }: { users: DeskUser[]; onClose: () => void; onDone: () => void }) {
+export function AddPerson({ users, onClose, onDone }: { users: DeskUser[]; onClose: () => void; onDone: () => void }) {
   const [username, setUsername] = useState("");
   const [display, setDisplay] = useState("");
   const [password, setPassword] = useState("");
