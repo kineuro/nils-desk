@@ -585,6 +585,22 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .card-talk-log { max-height: 26rem; overflow-y: auto; gap: 0.8rem; font-size: 14px; }
 .card-talk .said.you { max-width: 92%; }
 .card-talk-composer { display: grid; gap: 0.4rem; }
+.talk-card { position: sticky; top: 0; z-index: 3; display: grid; gap: 0.7rem; max-height: min(70vh, 46rem); overflow: auto; padding: 0.8rem 1rem; border: 1px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.talk-card.folded { max-height: none; overflow: visible; }
+.talk-card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.talk-card-head h2 { margin: 0; font-size: 1.15rem; overflow-wrap: anywhere; }
+/* the title keeps a line of its own on a narrow screen, and the controls wrap below it */
+.talk-card-head > .grow { flex: 1 1 14rem; min-width: 0; }
+.talk-card-proposal { display: grid; gap: 0.4rem; padding: 0.6rem 0.75rem; border: 1px dashed var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-brand-soft); }
+.versions button.version { font: inherit; cursor: pointer; }
+.step-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.step-chip-wrap { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--n-text-faint); }
+.step-chip { display: inline-flex; align-items: baseline; gap: 0.4rem; padding: 0.3rem 0.6rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-page); color: var(--n-text); font: inherit; font-size: var(--n-text-size-small); cursor: pointer; }
+.step-chip:hover { background: var(--n-bg-hover); }
+.step-chip.on { border-color: var(--n-brand-line); background: var(--n-bg-selected); }
+.step-chip:focus-visible { outline: 2px solid var(--n-brand); outline-offset: 1px; }
+.step-editor.plain, .profile.plain { display: grid; gap: 0.6rem; padding-top: 0.7rem; border-top: 1px solid var(--n-line); }
+.step-editor.plain h3, .profile.plain h3 { margin: 0; font-size: 1rem; }
 @media (max-width: 1100px) {
   .query-grid { grid-template-columns: minmax(0, 1fr); }
 }

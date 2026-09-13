@@ -15,7 +15,7 @@ import { TurnView } from "../assistant/TurnView";
 import { useConversation, type Conversing } from "../assistant/useConversation";
 import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
 import { editor, setsOf } from "../ask/editor";
-import { countWords, nextMoves, startBody, type From, type Started } from "../ask/start";
+import { countWords, startBody, type From, type Started } from "../ask/start";
 import type { Capabilities } from "../capabilities";
 import { holds } from "../deployment";
 import { objects, type DocumentRow } from "../objects/client";
@@ -26,7 +26,8 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
-import { argsOf, cardTitle, changeWords, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, stepCounts, tabsOf, unitWords, versionsOf, type Chart, type ChartTab, type Version } from "./cards";
+import { ProfilePanel, StepEditor } from "./CardParts";
+import { cardTitle, changeWords, clauseText, fieldChoices, stepCounts, versionsOf, type ChartTab, type Version } from "./cards";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -363,7 +364,6 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
 
   const groups = (diagnosis?.groups ?? []).filter((g) => current && g.set === current.set);
   const widest = Math.max(1, ...groups.map((g) => g.kept + g.lost));
-  const removeWhere = current ? options[current.set]?.moves.find((m) => m.kind === "remove_where") ?? null : null;
   // a new step is a move on the whole query, offered with any set's options
   const addSet = current ? options[current.set]?.moves.find((m) => m.kind === "add_set") ?? null : null;
   return (
@@ -409,50 +409,19 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
             onField={setField}
           />
           {current && (
-            <section className="panel card">
-              <div className="row">
-                <h2 className="grow">{move?.kind === "add_set" ? "Add a step" : `Change ${current.set}`}</h2>
-                <span className="tag">{current.grain}</span>
-              </div>
-              {current.sentence && <p className="lede">{current.sentence}</p>}
-              <div className="clauses">
-                {current.where.map((c, i) => (
-                  <span key={`w${i}`} className="clause-pill">
-                    where {clauseText(c)}
-                    {removeWhere && (
-                      <button type="button" className="icon-button" aria-label="Remove this condition" disabled={busy !== null} onClick={() => applyMove(current.set, removeWhere, { index: i })}>
-                        <Icon name="x" />
-                      </button>
-                    )}
-                  </span>
-                ))}
-                {Object.entries(current.clauses).flatMap(([part, lines]) => (lines ?? []).map((l, i) => <span key={`${part}${i}`} className="clause-pill">{part} {l}</span>))}
-              </div>
-              {!move && (
-                <div className="chips">
-                  {nextMoves(current).map(({ move: m }) => (
-                    <button key={m.id} type="button" className="move" disabled={busy !== null} onClick={() => { setMove(m); setTyped({}); }}>
-                      <Icon name="plus" />
-                      {moveWords(m)}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {move && (
-                <MoveForm
-                  move={move}
-                  grain={current.grain}
-                  typed={typed}
-                  busy={busy !== null}
-                  onType={(k, v) => setTyped((t) => ({ ...t, [k]: v }))}
-                  onApply={() => {
-                    const { args, missing } = argsOf(move, typed);
-                    if (missing.length === 0) applyMove(current.set, move, args);
-                  }}
-                  onCancel={() => { setMove(null); setTyped({}); }}
-                />
-              )}
-            </section>
+            <StepEditor
+              step={current}
+              options={options[current.set] ?? null}
+              move={move}
+              typed={typed}
+              busy={busy !== null}
+              onMove={(m) => {
+                setMove(m);
+                setTyped({});
+              }}
+              onType={(k, v) => setTyped((t) => ({ ...t, [k]: v }))}
+              onApply={applyMove}
+            />
           )}
           <section className="panel card">
             <div className="row">
@@ -651,193 +620,5 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
         </>
       )}
     </section>
-  );
-}
-
-function ProfilePanel(props: {
-  set: string | null;
-  profile: Profile | null;
-  loading: boolean;
-  why: string | null;
-  tab: ChartTab;
-  onTab: (t: ChartTab) => void;
-  field: string;
-  fields: string[];
-  onField: (f: string) => void;
-}) {
-  const { set, profile, loading, why, field, fields, onTab, onField } = props;
-  const tabs = tabsOf(profile);
-  const tab = tabs.some((t) => t.id === props.tab) ? props.tab : (tabs[0]?.id ?? null);
-  const counts = countsOf(profile);
-  const people = chartOf(profile?.demographics);
-  const demographics = profile?.demographics && "sex" in profile.demographics ? profile.demographics : null;
-  const clinical = profile?.clinical && "kinds" in profile.clinical ? profile.clinical : null;
-  return (
-    <section className="panel card" aria-busy={loading}>
-      <div className="row">
-        <h2 className="grow">{set ? `Under ${set}` : "Under this step"}</h2>
-        {loading && !why && <span className="meta">counting</span>}
-      </div>
-      {why && <p className="warn">The charts could not be counted: {why}</p>}
-      {counts.length > 0 && (
-        <div className="profile-counts">
-          {counts.map((c) => (
-            <div key={c.label} className="profile-count">
-              <b className="num">{n(c.value)}</b>
-              <span className="meta">{c.value === 1 && c.label.endsWith("s") ? c.label.slice(0, -1) : c.label}</span>
-            </div>
-          ))}
-        </div>
-      )}
-      {tabs.length > 0 && (
-        <div className="chart-tabs" role="tablist" aria-label="charts">
-          {tabs.map((t) => (
-            <button key={t.id} type="button" role="tab" aria-selected={t.id === tab} className={t.id === tab ? "on" : ""} onClick={() => onTab(t.id)}>
-              {t.words}
-            </button>
-          ))}
-        </div>
-      )}
-      {profile && tab === "stacks" && <Bars chart={chartOf(profile.stack_types, "base")} unit="stacks" />}
-      {profile && tab === "field" && (
-        <>
-          <label className="field chart-field">
-            <span className="label">Count the stacks by</span>
-            <span className="input">
-              <select value={field} onChange={(e) => onField(e.target.value)}>
-                {(fields.includes(field) ? fields : [field, ...fields]).map((f) => (
-                  <option key={f} value={f}>
-                    {f.replace(/_/g, " ")}
-                  </option>
-                ))}
-              </select>
-            </span>
-          </label>
-          <Bars chart={chartOf(profile.field)} unit="stacks" />
-          {profile.field?.truncated && <p className="meta">The first 60 values are shown.</p>}
-        </>
-      )}
-      {profile && tab === "people" && people.kind === "words" && <p className="meta">{people.words}</p>}
-      {profile && tab === "people" && demographics && (
-        <div className="profile-pair">
-          <div>
-            <h3>Sex</h3>
-            <Bars chart={chartOf(demographics.sex, "sex")} unit="subjects" />
-          </div>
-          <div>
-            <h3>Age at the session</h3>
-            <Bars chart={chartOf(demographics.age_decades, "decade")} unit="sessions" />
-          </div>
-        </div>
-      )}
-      {profile && tab === "clinical" && (
-        <>
-          <Bars chart={chartOf(profile.clinical, "plain", "No clinical events are recorded for these subjects.")} unit="events" />
-          {clinical?.sensitive_withheld && <p className="meta">Kinds of event marked sensitive are left out at your role.</p>}
-        </>
-      )}
-    </section>
-  );
-}
-
-function Bars({ chart, unit }: { chart: Chart; unit: string }) {
-  if (chart.kind === "none") return null;
-  if (chart.kind === "words") return <p className="meta">{chart.words}</p>;
-  const three = unit === "subjects";
-  return (
-    <div className={three ? "bars three" : "bars"}>
-      {chart.bars.map((b, i) => (
-        <div key={`${b.label}${i}`} className="bar-row">
-          <span className="bar-label" title={b.label}>
-            {b.label}
-          </span>
-          <span className="bar-track">
-            <i style={{ width: `${Math.max(1, Math.round(100 * b.share))}%` }} />
-          </span>
-          <span className="num">{unitWords(b.count, unit)}</span>
-          {!three && <span className="num meta">{unitWords(b.subjects, "subjects")}</span>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function MoveForm(props: { move: Move; grain: string; typed: Record<string, string>; busy: boolean; onType: (k: string, v: string) => void; onApply: () => void; onCancel: () => void }) {
-  const { move, grain, typed, busy, onType, onApply, onCancel } = props;
-  const { missing } = argsOf(move, typed);
-  const field = typed.field ?? "";
-  const [suggested, setSuggested] = useState<{ values: [unknown, number][]; hidden: boolean } | null>(null);
-  // smart proposals for a condition: the values the chosen field holds most, with their counts
-  useEffect(() => {
-    setSuggested(null);
-    if (move.kind !== "add_where" || !field) return;
-    let alive = true;
-    ask
-      .values(grain, field, 8)
-      .then((r) => alive && setSuggested({ values: r.items ?? [], hidden: (r as { kind?: string }).kind === "shapes" }))
-      .catch(() => alive && setSuggested(null));
-    return () => {
-      alive = false;
-    };
-  }, [move.kind, grain, field]);
-  return (
-    <div className="move-form">
-      <p className="move-sentence">{preview(move, typed)}</p>
-      <div className="move-holes">
-        {move.holes.map((h) => {
-          const kind = inputOf(h);
-          const value = typed[h.name] ?? "";
-          return (
-            <label key={h.name} className="field">
-              <span className="label">
-                {h.name.replace(/_/g, " ")}
-                {h.optional ? " (optional)" : ""}
-              </span>
-              <span className="input">
-                {kind === "choice" && (
-                  <select value={value} onChange={(e) => onType(h.name, e.target.value)}>
-                    <option value="">choose</option>
-                    {(h.fillers ?? []).map((f) => (
-                      <option key={f} value={f}>
-                        {f}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {kind === "yesno" && (
-                  <select value={value} onChange={(e) => onType(h.name, e.target.value)}>
-                    <option value="">choose</option>
-                    <option value="true">yes</option>
-                    <option value="false">no</option>
-                  </select>
-                )}
-                {kind === "number" && <input type="number" value={value} onChange={(e) => onType(h.name, e.target.value)} />}
-                {kind === "words" && <input value={value} onChange={(e) => onType(h.name, e.target.value)} />}
-              </span>
-            </label>
-          );
-        })}
-      </div>
-      {suggested && !suggested.hidden && suggested.values.length > 0 && (
-        <div className="chips" aria-label="values this field holds">
-          {suggested.values.map(([v, count]) => (
-            <button key={String(v)} type="button" className="move" onClick={() => onType("value", String(v))}>
-              {String(v)}
-              <span className="meta num">{n(count)}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      {suggested?.hidden && <p className="meta">This field's values are not listed at your role; its shapes are.</p>}
-      <div className="row actions">
-        <button type="button" className="button small" disabled={busy || missing.length > 0} onClick={onApply}>
-          Apply as the next version
-        </button>
-        <button type="button" className="button secondary small" onClick={onCancel}>
-          Cancel
-        </button>
-        {missing.length > 0 && <span className="meta">still to fill: {missing.join(", ").replace(/_/g, " ")}</span>}
-      </div>
-    </div>
   );
 }

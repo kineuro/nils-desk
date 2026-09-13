@@ -6,7 +6,8 @@
 // accept or disregard, a choice answered with a click, and the plans it made,
 // which run only once confirmed. Another page may hand it a sentence to start
 // from. The conversation loop itself is useConversation, which a Query card's
-// discussion holds too.
+// discussion holds too, and the query a conversation is about floats over it
+// as its card.
 
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -18,6 +19,7 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { conversations, newConversation, takeSaid, titleOf, type Plan } from "./client";
 import type { PaneState } from "./parts";
+import { CardInPlay, type InPlay } from "./CardInPlay";
 import { stationOf, stationsServed } from "./stations";
 import { TurnView } from "./TurnView";
 import { useConversation } from "./useConversation";
@@ -58,6 +60,8 @@ export function AssistantPage({ caps, conversation }: { caps: Capabilities; conv
   const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
   const model = assistantModel(caps);
   const context = admit({ page: { kind: "assistant", id: null }, epoch: caps.engine?.registry.epoch });
+  // the query card floating over the conversation: the version on it goes with the next prompt
+  const inPlay = useRef<InPlay | null>(null);
 
   // another conversation opened from the side, or a new one: start from its history
   useEffect(() => {
@@ -77,7 +81,11 @@ export function AssistantPage({ caps, conversation }: { caps: Capabilities; conv
       location.hash = href("assistant", id);
     }
     setText("");
-    talk.send(id, words, { context });
+    const card = inPlay.current;
+    const prompt = card
+      ? admit({ page: { kind: "assistant", id: null }, epoch: caps.engine?.registry.epoch, document_id: card.document, content_hash: card.hash, chain: card.chain, sets: card.sets, funnel: card.funnel })
+      : context;
+    talk.send(id, words, { context: prompt, lineage: card?.root ?? null, document: card?.document ?? null });
   };
 
   const submit = (e: React.FormEvent) => {
@@ -103,6 +111,7 @@ export function AssistantPage({ caps, conversation }: { caps: Capabilities; conv
         <h1 className="grow">{title}</h1>
         {model && <span className="tag">{model}</span>}
       </div>
+      {conv && <CardInPlay key={conv} talk={talk} opened={conversations().find((c) => c.id === conv)?.document ?? null} onShown={(card) => (inPlay.current = card)} />}
       <div className="talk" aria-live="polite">
         {unknown && <p className="meta">This browser does not keep that conversation. Start a new one from the side.</p>}
         {!unknown && pane.turns.length === 0 && !pane.busy && <p className="lede">{hint(station)}</p>}
@@ -114,7 +123,7 @@ export function AssistantPage({ caps, conversation }: { caps: Capabilities; conv
             onToggle={() => toggle(t.id)}
             proposals={pane.proposals.filter((p) => p.turn === t.id)}
             choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
-            onDecide={(p, verdict) => void talk.decide(p, verdict)}
+            decidedElsewhere="It stands on the card above, to accept or disregard."
             onChoose={(label) => send(label)}
           />
         ))}
