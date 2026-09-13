@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- The desk forwarded a person's bearer to the supervisor, a token the desk signs in local mode or the provider's in oidc mode, and the supervisor knows only the tokens in its own configuration, so every call from Settings was refused. The desk now sends the supervisor the token from its `[supervisor]` table in every mode, once it has checked, as before, that the person is an admin.
+
 ## [1.0.0-alpha.14] - 2026-09-13
 
 Released beside the engine's 1.0.0-alpha.14 so the two stay in step: a container install names both images with the engine's version. The desk itself is unchanged.
