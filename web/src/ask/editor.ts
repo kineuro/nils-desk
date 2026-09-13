@@ -10,30 +10,47 @@ import type { Json, Move, Options } from "./client";
 export const PARTS = ["source", "near", "attach", "has", "where", "pick", "out", "window"] as const;
 export type Part = (typeof PARTS)[number];
 
-/** The sub-step a move's kind belongs to; `document` for the moves with no set. */
+/** The sub-step a move's kind belongs to, for every kind the engine's move catalog names; `document` for the moves with no set. */
 export function partOf(kind: string): Part | "document" {
   switch (kind) {
     case "add_where":
+    case "add_axis_where":
+    case "exclude_scenario":
     case "remove_where":
     case "set_strict":
       return "where";
     case "add_has":
+    case "set_bound":
+    case "remove_relation":
       return "has";
+    case "add_attach":
     case "add_bind":
+    case "remove_bind":
+    case "set_level":
       return "attach";
     case "add_near":
+    case "set_policy":
+    case "set_optional":
       return "near";
     case "set_window":
       return "window";
-    case "set_pick":
+    case "add_pick":
+    case "remove_pick":
       return "pick";
     case "set_out":
     case "set_limit":
+    case "add_measure":
+    case "add_column":
+    case "add_order":
+    case "remove_column":
       return "out";
     default:
       return "document";
   }
 }
+
+/** A move that takes something away rather than adding a step: offered on the clause it removes, not in the row of next moves. */
+export const removes = (kind: string): boolean => kind.startsWith("remove_");
 
 export interface SubStep {
   part: Part;

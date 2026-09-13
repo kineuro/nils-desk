@@ -5,7 +5,7 @@
 // picker across every set.
 
 import type { ClauseGroup, Funnel, Move, Options } from "./client";
-import { PARTS, type Part, partOf, type Step } from "./editor";
+import { PARTS, type Part, partOf, removes, type Step } from "./editor";
 
 /** What a new question starts from (section 7.1). */
 export type From =
@@ -30,7 +30,8 @@ export function startBody(from: From): { from: Record<string, unknown> } {
     case "document":
       return { from: { document: from.document } };
     case "values":
-      return { from: { values: from.upload } };
+      // the engine reads the upload as the text of its id
+      return { from: { values: String(from.upload) } };
   }
 }
 
@@ -111,7 +112,7 @@ export function nextMoves(step: Step): NextMove[] {
   for (const part of PARTS) {
     const sub = step.parts.find((p) => p.part === part);
     if (!sub) continue;
-    for (const m of sub.moves) if (partOf(m.kind) === part && m.kind !== "remove_where") out.push({ part, move: m });
+    for (const m of sub.moves) if (partOf(m.kind) === part && !removes(m.kind)) out.push({ part, move: m });
   }
   return out;
 }

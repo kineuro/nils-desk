@@ -11,6 +11,7 @@ import { AssistantPage } from "./assistant/AssistantPage";
 import { conversations, CONVERSATIONS_CHANGED } from "./assistant/client";
 import type { Capabilities } from "./capabilities";
 import { DataPage } from "./data/DataPage";
+import { QueryPage } from "./query/QueryPage";
 import { door, holds, state } from "./deployment";
 import { Home } from "./home/Home";
 import { PlaceholderPage } from "./home/Placeholder";
@@ -235,6 +236,7 @@ export function App() {
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
           {ready && active?.id === "data" && <DataPage caps={caps} install={install} onChanged={changed} />}
+          {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {ready && active === null && (
