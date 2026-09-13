@@ -1,133 +1,225 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The first page of a fresh install: the parts this deployment has, what the
-// registry holds, and who you are. Nothing else is here yet; each part of the
-// desk is built back deliberately.
+// Home, as the chosen design draws it (option A): what is installed and how
+// it answers, the steps that make the install ready for real work, and the
+// four tiles of what the registry holds, what needs you, what is running and
+// what changed since you were last here. Every line is read from a door; a
+// door this deployment does not serve, or that this person may not open,
+// takes its part of the page with it.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { door as served } from "../deployment";
-import { cohortNames, objects, type Summary } from "../objects/client";
-import { classify, Failure, type Failed } from "../ui/Failure";
-import { Wait } from "../ui/Wait";
+import { door as served, holds } from "../deployment";
+import { objects, type Place, type Summary } from "../objects/client";
+import { data, ops } from "../ops/client";
+import { kvasir } from "../settings/kvasir";
+import type { Install } from "../settings/supervise";
+import { Command } from "../ui/Command";
+import { Icon } from "../ui/Icon";
+import { BringInStep } from "./BringIn";
+import type { Pack } from "./look";
+import { headline, lede, next, steps, type Purpose, type Step } from "./steps";
+import { holdsTile, lastVisit, markVisit, needsTile, runningTile, sinceTile, tilesOffered, type Tile, type TileId } from "./tiles";
 
-type Load = { kind: "waiting"; since: number } | { kind: "failed"; failed: Failed } | { kind: "ready"; summary: Summary } | { kind: "absent" };
+interface Loaded {
+  summary: Summary | null;
+  since: Summary | null;
+  open: number | null;
+  jobs: JobRow[] | null;
+  places: Place[] | null;
+  batches: number | null;
+  backups: JobRow[] | null;
+  purposes: Purpose[] | null;
+  packs: Pack[] | null;
+}
 
-export function Home({ caps }: { caps: Capabilities }) {
-  const has = served(caps, "GET /api/summary");
-  const [load, setLoad] = useState<Load>(has ? { kind: "waiting", since: Date.now() } : { kind: "absent" });
+const NOTHING: Loaded = { summary: null, since: null, open: null, jobs: null, places: null, batches: null, backups: null, purposes: null, packs: null };
+
+/** A door's answer, or null where it failed: Home shows what it could read. */
+function quietly<T>(p: Promise<T>): Promise<T | null> {
+  return p.catch(() => null);
+}
+
+export function Home({ caps, install, onChanged }: { caps: Capabilities; install: Install | null; onChanged: () => void }) {
+  const [loaded, setLoaded] = useState<Loaded>(NOTHING);
+  const [last] = useState<string | null>(() => lastVisit());
+
+  const load = useCallback(() => {
+    const has = (d: string) => served(caps, d);
+    void Promise.all([
+      has("GET /api/summary") ? quietly(objects.summary()) : null,
+      has("GET /api/summary") && last ? quietly(objects.summary(last)) : null,
+      has("GET /api/review") && holds(caps, "reviewer") ? quietly(ops.review("open", undefined, 500)).then((r) => r?.count ?? null) : null,
+      has("GET /api/jobs") ? quietly(ops.jobs(false, 50)).then((r) => r?.jobs ?? null) : null,
+      has("GET /api/places") ? quietly(objects.places()).then((r) => r?.places ?? null) : null,
+      has("GET /api/batches") ? quietly(data.batches(1000)).then((r) => r?.count ?? null) : null,
+      has("GET /api/jobs")
+        ? quietly(ops.jobs(true, 200)).then(
+            (r) => r?.jobs.filter((j) => j.kind === "backup" && j.state === "done").sort((a, b) => (b.finished_at ?? "").localeCompare(a.finished_at ?? "")) ?? null,
+          )
+        : null,
+      caps.kvasir !== null ? quietly(kvasir.purposes()).then((r) => r?.purposes.map((p) => ({ purpose: p.purpose, content: p.content, backend: p.backend })) ?? null) : null,
+      has("GET /api/packs") ? quietly(data.packs()).then((r) => r?.packs ?? null) : null,
+    ]).then(([summary, since, open, jobs, places, batches, backups, purposes, packs]) =>
+      setLoaded({ summary, since, open, jobs, places, batches, backups, purposes, packs }),
+    );
+  }, [caps, last]);
+
+  // read again when the registry moves, and every half minute for what runs
+  const epoch = caps.engine?.registry.epoch ?? null;
   useEffect(() => {
-    if (!has) return;
-    let alive = true;
-    objects
-      .summary()
-      .then((s) => alive && setLoad({ kind: "ready", summary: s }))
-      .catch((e: unknown) => alive && setLoad({ kind: "failed", failed: classify(e) }));
-    return () => {
-      alive = false;
-    };
-  }, [has]);
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the epoch is what moves
+  }, [epoch]);
+
+  // this visit counts once the page has been read for a moment
+  useEffect(() => {
+    const t = setTimeout(() => markVisit(new Date().toISOString()), 10_000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const all = steps({ caps, install, places: loaded.places, batches: loaded.batches, backups: loaded.backups, purposes: loaded.purposes });
+  const opens = next(all);
+  const band = holds(caps, "operator") && opens !== null;
+  const tiles = tilesOffered(caps)
+    .map((id) => tile(id, loaded, caps, last))
+    .filter((t): t is Tile => t !== null);
 
   return (
-    <section className="first">
-      <h1>NILS</h1>
-      <p className="lede">
-        This deployment keeps imaging data as one registry: every scan digested and classified, every person pseudonymous, every question a
-        stored document, every release described before it is made.
-      </p>
-
-      <h2>What is installed</h2>
-      <dl className="facts">
-        <dt>engine</dt>
-        <dd>
-          {caps.engine ? `${caps.engine.engine.name} ${caps.engine.engine.version}` : "not reachable"}
-          {caps.engine && <span className="meta"> contracts {Object.entries(caps.engine.contracts).map(([k, v]) => `${k} ${v}`).join(", ")}</span>}
-        </dd>
-        <dt>desk</dt>
-        <dd>
-          {caps.desk.version}
-          <span className="meta"> {caps.desk.mode} mode</span>
-        </dd>
-        {caps.kvasir !== null && (
-          <>
-            <dt>model gateway</dt>
-            <dd>installed</dd>
-          </>
-        )}
-        {caps.assistant !== null && (
-          <>
-            <dt>assistant</dt>
-            <dd>installed</dd>
-          </>
-        )}
-      </dl>
-
-      <h2>What the registry holds</h2>
-      {load.kind === "absent" && <p>This engine serves no summary door, so the desk cannot say.</p>}
-      {load.kind === "waiting" && <Wait phase="reading the registry" since={load.since} size="panel" />}
-      {load.kind === "failed" && <Failure failed={load.failed} />}
-      {load.kind === "ready" && <Holds caps={caps} s={load.summary} />}
-
-      <h2>You</h2>
-      <dl className="facts">
-        <dt>signed in as</dt>
-        <dd>
-          {caps.person.display_name || caps.person.subject}
-          {caps.person.subject && caps.person.display_name && <span className="meta"> {caps.person.subject}</span>}
-        </dd>
-        <dt>entitlements</dt>
-        <dd>{caps.person.entitlements.join(", ") || "none"}</dd>
-      </dl>
-    </section>
+    <div className="home">
+      <div className="home-head">
+        <span className="eyebrow">Home</span>
+        <h1>{band ? headline(all) : "What NILS holds, and what needs you"}</h1>
+        {band && <p className="lede">{lede(all)}</p>}
+      </div>
+      <PartsStrip caps={caps} install={install} />
+      {band && (
+        <section className="band" aria-label="get this install ready">
+          <div className="band-head rule-top">
+            <h2>Get this install ready</h2>
+            <span className="meta">This band leaves Home once every step is done.</span>
+          </div>
+          {all.map((s, i) =>
+            s.id === "dicom" && s === opens ? (
+              <BringInStep
+                key={s.id}
+                n={i + 1}
+                step={s}
+                caps={caps}
+                install={install}
+                places={loaded.places ?? []}
+                packs={loaded.packs ?? []}
+                onDone={() => {
+                  load();
+                  onChanged();
+                }}
+              />
+            ) : (
+              <StepRow key={s.id} n={i + 1} step={s} next={s === opens} />
+            ),
+          )}
+        </section>
+      )}
+      {tiles.length > 0 && (
+        <section className="tiles rule-top" aria-label="the registry now">
+          {tiles.map((t) => (
+            <div key={t.id} className="tile">
+              <span className="eyebrow">{t.eyebrow}</span>
+              <span className="value num">{t.value}</span>
+              <span className="meta">{t.meta}</span>
+            </div>
+          ))}
+        </section>
+      )}
+    </div>
   );
 }
 
-function Holds({ caps, s }: { caps: Capabilities; s: Summary }) {
-  const empty = s.subjects.total === 0 && s.sessions.total === 0 && s.stacks.total === 0;
-  if (empty) {
-    return (
-      <>
-        <p>The registry is empty. Nothing has been brought in yet.</p>
-        <p className="meta">
-          epoch {s.epoch}
-          {caps.engine?.registry.schema_version !== undefined && <>, schema {caps.engine.registry.schema_version}</>}
-        </p>
-      </>
-    );
+function tile(id: TileId, l: Loaded, caps: Capabilities, last: string | null): Tile | null {
+  switch (id) {
+    case "holds":
+      return l.summary ? holdsTile(l.summary, caps.engine?.registry.schema_version) : null;
+    case "needs":
+      return l.open !== null ? needsTile(l.open) : null;
+    case "running":
+      return l.jobs !== null ? runningTile(l.jobs) : null;
+    case "since":
+      return l.summary || last === null ? sinceTile(last, l.since) : null;
   }
-  const names = cohortNames(s);
+}
+
+function StepNo({ n, step }: { n: number; step: Step }) {
+  if (step.state === "done")
+    return (
+      <span className="stepno done" title="done">
+        <Icon name="check" />
+      </span>
+    );
+  if (step.state === "attention")
+    return (
+      <span className="stepno attention" title="needs a decision">
+        <Icon name="alert" />
+      </span>
+    );
+  return <span className={`stepno${step.state === "now" ? " now" : ""}`}>{n}</span>;
+}
+
+function StepRow({ n, step, next: isNext }: { n: number; step: Step; next: boolean }) {
   return (
-    <>
-      <table className="thin counts">
-        <thead>
-          <tr>
-            <th />
-            <th className="num">subjects</th>
-            <th className="num">sessions</th>
-            <th className="num">stacks</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>all</td>
-            <td className="num">{s.subjects.total}</td>
-            <td className="num">{s.sessions.total}</td>
-            <td className="num">{s.stacks.total}</td>
-          </tr>
-          {names.map((c) => (
-            <tr key={c}>
-              <td>{c}</td>
-              <td className="num">{s.subjects.by_cohort[c] ?? 0}</td>
-              <td className="num">{s.sessions.by_cohort[c] ?? 0}</td>
-              <td className="num">{s.stacks.by_cohort[c] ?? 0}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="meta">
-        epoch {s.epoch}
-        {caps.engine?.registry.schema_version !== undefined && <>, schema {caps.engine.registry.schema_version}</>}
-        {names.length > 1 && <>; a subject in two cohorts counts in each</>}
-      </p>
-    </>
+    <div className="step">
+      <StepNo n={n} step={step} />
+      <div className="step-body">
+        <h3>{step.title}</h3>
+        <p className="meta">{step.words}</p>
+        {step.tags.length > 0 && (
+          <div className="tags">
+            {step.tags.map((t) => (
+              <span key={t.text} className={`tag${t.tone === "caution" ? " caution" : ""}`}>
+                {t.tone === "caution" && <Icon name="alert" />}
+                {t.text}
+              </span>
+            ))}
+          </div>
+        )}
+        {step.id === "model" && step.state !== "done" && (
+          <p className="meta">
+            To choose the model, run <Command text="nils setup" /> again on this machine; it asks what the assistant talks to.
+          </p>
+        )}
+      </div>
+      {isNext ? <span className="tag brand">next</span> : <span />}
+    </div>
+  );
+}
+
+/** The parts this deployment has, each with a dot for whether it answers and its version. */
+function PartsStrip({ caps, install }: { caps: Capabilities; install: Install | null }) {
+  const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
+  const stations = ((caps.assistant?.["stations"] as unknown[] | undefined) ?? []).length;
+  const listed = (name: string) => install?.parts[name] !== undefined;
+  const items: { name: string; meta: string | null; tone: "ok" | "caution" | "blocked" }[] = [
+    { name: "engine", meta: caps.engine?.engine.version ?? "does not answer", tone: caps.engine ? "ok" : "blocked" },
+    { name: "desk", meta: caps.desk.version, tone: "ok" },
+  ];
+  if (caps.kvasir !== null || listed("kvasir")) items.push({ name: "gateway", meta: caps.kvasir === null ? "does not answer" : warming ? "warming" : null, tone: caps.kvasir === null ? "blocked" : warming ? "caution" : "ok" });
+  if (caps.assistant !== null || listed("assistant"))
+    items.push({ name: "assistant", meta: caps.assistant === null ? "does not answer" : stations > 0 ? `${stations} ${stations === 1 ? "station" : "stations"}` : null, tone: caps.assistant === null ? "blocked" : "ok" });
+  if (install) {
+    const postgres = install.backend.startsWith("postgres");
+    const service = install.services.find((s) => s.part === "postgres");
+    items.push({ name: postgres ? "Postgres" : "SQLite", meta: install.parts["postgres"]?.version ?? null, tone: service && !service.running ? "blocked" : "ok" });
+  }
+  return (
+    <section className="panel parts-strip" aria-label="what is installed">
+      {items.map((p) => (
+        <span key={p.name} className="row">
+          <span className={`dot ${p.tone}`} />
+          {p.name}
+          {p.meta && <span className="meta">{p.meta}</span>}
+        </span>
+      ))}
+    </section>
   );
 }

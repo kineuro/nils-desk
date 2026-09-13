@@ -7,11 +7,13 @@
 import { useEffect, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "./capabilities";
-import { state } from "./deployment";
+import { holds, state } from "./deployment";
 import { Home } from "./home/Home";
 import { Rail } from "./Rail";
 import { href, parse, type Route } from "./routes";
 import { foot, initials, railPresent, sections, type Section } from "./sections";
+import { where } from "./settings/install";
+import { supervise, type Install } from "./settings/supervise";
 import { Icon } from "./ui/Icon";
 
 type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
@@ -42,6 +44,29 @@ export function App() {
     };
   }, []);
 
+  // the install as the supervisor on this host reports it, for an admin
+  const [install, setInstall] = useState<Install | null>(null);
+  const [asked, setAsked] = useState(0);
+  const supervised = load.kind === "ready" && holds(load.caps, "admin") && Boolean(load.caps.desk.settings?.supervisor_url);
+  useEffect(() => {
+    if (!supervised) {
+      setInstall(null);
+      return;
+    }
+    let alive = true;
+    const read = () =>
+      supervise
+        .install()
+        .then((i) => alive && setInstall(i))
+        .catch(() => alive && setInstall(null));
+    read();
+    const t = setInterval(read, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [supervised, asked]);
+
   if (load.kind === "loading") return <main className="state lone">Reaching the desk</main>;
   if (load.kind === "failed") return <main className="state lone">The desk did not answer: {load.why}</main>;
   const caps = load.caps;
@@ -60,7 +85,19 @@ export function App() {
           <img src="/brand/nils-mark.svg" alt="" width="22" height="22" />
           NILS
         </a>
+        {install && (
+          <span className="chip where">
+            <Icon name="layers" />
+            {where(install)}
+          </span>
+        )}
         <span className="grow" />
+        {install?.release.newer && (
+          <span className="update-note" title={`to take it: ${install.release.command}`}>
+            <Icon name="update" />
+            {install.release.newer} is out
+          </span>
+        )}
         {caps.desk.signed_in && who && (
           <span className="person">
             <span className="avatar" aria-hidden="true">
@@ -129,7 +166,7 @@ export function App() {
               </p>
             </section>
           )}
-          {st.kind === "ready" && active?.id === "home" && <Home caps={caps} />}
+          {st.kind === "ready" && active?.id === "home" && <Home caps={caps} install={install} onChanged={() => setAsked((n) => n + 1)} />}
           {st.kind === "ready" && active === null && (
             <section className="state">
               <h1>Nothing is open to you here</h1>
