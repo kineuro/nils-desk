@@ -82,7 +82,11 @@ pub fn resolve(desk: &Shared, headers: &HeaderMap) -> (Option<Session>, Option<H
     if let Some(id) = cookie(headers)
         && let Some(s) = desk.store.get(&id)
     {
-        return (Some(s), None);
+        // in `local` mode a session holds only for a person the desk still keeps
+        if desk.config.mode != Mode::Local || desk.store.user(&s.subject).is_some() {
+            return (Some(s), None);
+        }
+        desk.store.delete(&id);
     }
     match desk.config.mode {
         Mode::Off => {
@@ -146,7 +150,7 @@ pub async fn door(State(desk): State<Shared>, headers: HeaderMap) -> Response {
         "mode": desk.config.mode.to_string(),
         "login": match desk.config.mode {
             Mode::Off => Value::Null,
-            Mode::Local => json!({"kind": "password", "url": "/desk/login"}),
+            Mode::Local => json!({"kind": "password", "url": "/desk/login", "nobody_yet": !desk.store.has_users()}),
             Mode::Oidc => json!({"kind": "redirect", "url": "/desk/login"}),
         },
     }))

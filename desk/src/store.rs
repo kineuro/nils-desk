@@ -166,6 +166,46 @@ impl Store {
         let _ = conn.execute("DELETE FROM session WHERE id = ?1", params![id]);
     }
 
+    /// How people sign in, as this desk runs now. A session made under
+    /// another way of signing in names a person this desk no longer knows
+    /// that way: a desk that now keeps passwords still holding the operator
+    /// of `off` mode, or a token minted for an origin it no longer answers
+    /// at. So a change clears every session and every login in flight; true
+    /// when it did. A store from a desk that recorded nothing counts as a
+    /// change.
+    pub fn sign_in(&self, how: &str) -> bool {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+        );
+        let was: Option<String> = conn
+            .query_row("SELECT value FROM meta WHERE key = 'sign_in'", [], |r| {
+                r.get(0)
+            })
+            .optional()
+            .ok()
+            .flatten();
+        if was.as_deref() == Some(how) {
+            return false;
+        }
+        let _ = conn.execute_batch("DELETE FROM session; DELETE FROM pending;");
+        let _ = conn.execute(
+            "INSERT INTO meta (key, value) VALUES ('sign_in', ?1) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![how],
+        );
+        true
+    }
+
+    /// Whether the desk keeps anyone who signs in with a password.
+    pub fn has_users(&self) -> bool {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        conn.query_row("SELECT EXISTS(SELECT 1 FROM user)", [], |r| {
+            r.get::<_, i64>(0)
+        })
+        .map(|n| n != 0)
+        .unwrap_or(false)
+    }
+
     // --- people: the display name beside the subject, at first sight
 
     pub fn saw(&self, subject: &str, display: &str) {

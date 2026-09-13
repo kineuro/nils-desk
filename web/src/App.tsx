@@ -185,7 +185,9 @@ export function App() {
       <div className={body}>
         {sided && <Side top={side} foot={kept} section={active?.id ?? null} page={route.page} open={menu} onClose={closeMenu} />}
         <main className="page">
-          {st.kind === "login" && <Login how={st.how} url={st.url} onDone={() => location.reload()} />}
+          {st.kind === "login" && (
+            <Login how={st.how} url={st.url} nobody={(caps.desk.login as { nobody_yet?: boolean } | null)?.nobody_yet === true} onDone={() => location.reload()} />
+          )}
           {st.kind === "unbound" && (
             <section className="state">
               <h1>No entitlement yet</h1>
@@ -230,7 +232,7 @@ export function App() {
   );
 }
 
-function Login({ how, url, onDone }: { how: "password" | "redirect"; url: string; onDone: () => void }) {
+function Login({ how, url, nobody, onDone }: { how: "password" | "redirect"; url: string; nobody: boolean; onDone: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [why, setWhy] = useState<string | null>(null);
@@ -256,6 +258,17 @@ function Login({ how, url, onDone }: { how: "password" | "redirect"; url: string
   return (
     <section className="state">
       <h1>Sign in</h1>
+      {nobody && (
+        <div className="note caution">
+          <div className="note-body">
+            <p className="note-lead">Nobody can sign in yet.</p>
+            <p className="note-detail">
+              This desk keeps its own people, and none has been added. On the machine the desk runs on, run nils setup again, which asks for the first person, or add them with:
+            </p>
+            <code>nils-desk user add &lt;name&gt; --admin --config nils-desk.toml</code>
+          </div>
+        </div>
+      )}
       <form onSubmit={submit} className="login">
         <label>
           Username <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
