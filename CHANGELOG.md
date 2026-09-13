@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.16] - 2026-09-13
+
+Released beside the engine's 1.0.0-alpha.16 so the two stay in step. Choosing a folder by clicking reads the door that engine's supervisor adds; every other change works with the engine's 1.0.0-alpha.15 as well.
+
 ### Added
 
 - A theme switch in the top bar, beside the person: as the system, dark or light. The choice is kept in the browser and holds from the first paint.
