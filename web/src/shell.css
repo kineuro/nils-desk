@@ -551,6 +551,7 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .timeline-step.on { background: var(--n-bg-selected); }
 .timeline-step.answer { cursor: default; border-bottom: 0; }
 .timeline-step.answer:hover { background: transparent; }
+.timeline-add { padding: 0.55rem 1rem; border-bottom: 1px solid var(--n-line); }
 .timeline-dot { width: 10px; height: 10px; margin-top: 0.35rem; border-radius: 50%; border: 2px solid var(--n-brand-text); background: var(--n-bg-raised); }
 .timeline-step.on .timeline-dot, .timeline-step.answer .timeline-dot { background: var(--n-brand-text); }
 .timeline-body { display: grid; gap: 0.15rem; min-width: 0; }

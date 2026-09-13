@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Move } from "../ask/client";
-import { argsOf, cardTitle, clauseText, inputOf, preview, stepCounts, versionsOf } from "./cards";
+import { argsOf, cardTitle, clauseText, inputOf, moveWords, preview, stepCounts, versionsOf } from "./cards";
 
 const addWhere: Move = {
   id: 4,
@@ -57,6 +57,10 @@ describe("a move typed in by hand", () => {
     expect(argsOf(addWhere, { field: "sex" })).toEqual({ args: { field: "sex" }, missing: ["op"] });
     expect(argsOf(addHas, { child: "stacks", min: "2" })).toEqual({ args: { child: "stacks", min: 2 }, missing: [] });
     expect(argsOf(addHas, { child: "stacks", min: "two" }).missing).toEqual(["min"]);
+  });
+  it("says on its button what it does", () => {
+    expect(moveWords(addHas)).toBe("Must have");
+    expect(moveWords({ ...addHas, kind: "something_new", template: "frobnicate {x}" })).toBe("frobnicate");
   });
   it("reads as its template with what was typed so far", () => {
     expect(preview(addWhere, { field: "sex", op: "=" })).toBe("where sex = {value}");

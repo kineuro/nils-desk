@@ -66,6 +66,36 @@ export function preview(move: Move, typed: Record<string, string>): string {
   });
 }
 
+const MOVE_WORDS: Record<string, string> = {
+  add_set: "Add a step",
+  add_where: "Where",
+  add_axis_where: "Where the scan is",
+  exclude_scenario: "Leave out",
+  add_near: "Near in time",
+  set_window: "Within",
+  set_policy: "Which one when several",
+  set_optional: "Keep those without",
+  add_has: "Must have",
+  set_bound: "How many",
+  add_attach: "Attach",
+  add_bind: "Bring in a field",
+  set_level: "At the level of",
+  add_pick: "One per",
+  set_out: "Answer with",
+  add_measure: "Measure",
+  add_column: "Show a column",
+  add_order: "Order by",
+  set_limit: "At most",
+  set_param: "Set a value",
+  rename_set: "Rename",
+  keep_set: "Keep",
+};
+
+/** A move's words on its button: what it does, else the template up to its first hole. */
+export function moveWords(m: Move): string {
+  return MOVE_WORDS[m.kind] ?? (m.template.split("{")[0].trim() || m.kind.replace(/_/g, " "));
+}
+
 const isClause = (v: unknown[]): boolean => typeof v[0] === "string" && v.length >= 2 && typeof v[1] === "object" && v[1] !== null && !Array.isArray(v[1]);
 
 const INFIX = new Set(["=", "!=", "<", "<=", ">", ">=", "in", "not_in", "contains", "starts_with", "like"]);

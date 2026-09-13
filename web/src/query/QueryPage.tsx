@@ -17,7 +17,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
-import { argsOf, cardTitle, clauseText, inputOf, preview, stepCounts, versionsOf, type Version } from "./cards";
+import { argsOf, cardTitle, clauseText, inputOf, moveWords, preview, stepCounts, versionsOf, type Version } from "./cards";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -256,6 +256,8 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const groups = (diagnosis?.groups ?? []).filter((g) => current && g.set === current.set);
   const widest = Math.max(1, ...groups.map((g) => g.kept + g.lost));
   const removeWhere = current ? options[current.set]?.moves.find((m) => m.kind === "remove_where") ?? null : null;
+  // a new step is a move on the whole query, offered with any set's options
+  const addSet = current ? options[current.set]?.moves.find((m) => m.kind === "add_set") ?? null : null;
   return (
     <section className="query">
       <div className="query-head">
@@ -309,7 +311,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
           {current && (
             <section className="panel card">
               <div className="row">
-                <h2 className="grow">Change {current.set}</h2>
+                <h2 className="grow">{move?.kind === "add_set" ? "Add a step" : `Change ${current.set}`}</h2>
                 <span className="tag">{current.grain}</span>
               </div>
               {current.sentence && <p className="lede">{current.sentence}</p>}
@@ -331,7 +333,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                   {nextMoves(current).map(({ move: m }) => (
                     <button key={m.id} type="button" className="move" disabled={busy !== null} onClick={() => { setMove(m); setTyped({}); }}>
                       <Icon name="plus" />
-                      {m.template.split("{")[0].trim() || m.kind.replace(/_/g, " ")}
+                      {moveWords(m)}
                     </button>
                   ))}
                 </div>
@@ -407,6 +409,14 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                 </button>
               );
             })}
+            {addSet && (
+              <div className="timeline-add">
+                <button type="button" className="move" disabled={busy !== null} onClick={() => { setMove(addSet); setTyped({}); }}>
+                  <Icon name="plus" />
+                  Add a step
+                </button>
+              </div>
+            )}
             <div className="timeline-step answer">
               <span className="timeline-dot" />
               <span className="timeline-body">
