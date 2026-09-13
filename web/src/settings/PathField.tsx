@@ -5,7 +5,7 @@
 // and a disk /etc/fstab names that is not mounted. A click opens a folder;
 // the button at the foot takes the folder that is open.
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -151,6 +151,12 @@ function Folder(props: {
 }) {
   const { view, hidden, onHidden, onGo, onStart, onClose, onEscape, onUse } = props;
   const { path, listing } = view;
+  // the trail shows the folder that is open, however long the way to it
+  const trailRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const t = trailRef.current;
+    if (t) t.scrollLeft = t.scrollWidth;
+  }, [path]);
   const note = listing ? listingNote(listing, view.unmounted) : null;
   const all = listing?.folders ?? [];
   const hiddenCount = all.filter((f) => f.hidden).length;
@@ -164,7 +170,7 @@ function Folder(props: {
         <button type="button" className="icon-button" title="Up one folder" aria-label="Up one folder" disabled={path === "/"} onClick={() => onGo(trail[trail.length - 2]?.path ?? "/")}>
           <Icon name="arrow-up" />
         </button>
-        <nav className="crumbs" aria-label="the folders above this one">
+        <nav ref={trailRef} className="crumbs" aria-label="the folders above this one">
           <button type="button" className="crumb" title="Where one may start" onClick={onStart}>
             start
           </button>

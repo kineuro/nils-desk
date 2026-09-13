@@ -344,6 +344,10 @@ span.crumb:hover { background: transparent; }
 .browser-files { padding: 0.3rem 0.5rem; }
 .browser-foot { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.45rem 0.4rem 0.7rem; border-top: 1px solid var(--n-line); background: var(--n-bg-page); }
 .browser-path { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+@media (max-width: 640px) {
+  /* on a phone a folder's path has the row; what is said beside it waits for the folder to open */
+  .browser-row .meta { display: none; }
+}
 .folder-now { gap: 0.6rem; flex-wrap: wrap; }
 .folder-now .path { min-width: 0; overflow-wrap: anywhere; }
 .choices { display: grid; gap: 0.45rem; }
