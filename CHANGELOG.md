@@ -7,6 +7,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Added
 
 - The Query page, built back as cards. Every query kept is a card with its versions and when it last ran; a new one starts from everyone or from cohorts, and any card starts a new card from the version open. A card opens on a version: where the counts go under the step chosen, the step's conditions with a button to take one away, and the moves the engine offers as the next step, typed in by hand, with the values a field holds most offered as proposals for a condition. Applying a move opens the next version, and every version stays a click away. On the right, the card's steps run as a timeline from its start to its answer, each with its count. Run counts the answer, and Preview shows its first rows.
+- The charts of a Query card. Above the editor stands what is under the step chosen on the timeline: its subjects, sessions and stacks, each counted once however many paths reach it, then its stacks by type, its stacks by a field chosen from the catalog, the sex and the age of its subjects where the role may read them, and the kinds of their clinical events. Where the rows go under a step now says they are rows, beside the subjects, and a step of subjects on the timeline counts its subjects.
 
 ### Fixed
 

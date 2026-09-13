@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Query page: every query kept is a card. A card opens on a version: its
-// counts and the manual editor in the middle, and on the right the discussion
+// charts and the manual editor in the middle, and on the right the discussion
 // and the card's steps as a timeline from its start to its answer. Every change
 // is a move the engine offered, and applying one makes the next version, so a
-// person can go back to any version and start again from it.
+// person can go back to any version and start again from it. The charts count
+// what is under the step chosen on the timeline, each member once.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ask, chain, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview } from "../ask/client";
+import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
 import { editor, setsOf } from "../ask/editor";
 import { countWords, nextMoves, startBody, type From, type Started } from "../ask/start";
 import type { Capabilities } from "../capabilities";
@@ -17,7 +18,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
-import { argsOf, cardTitle, clauseText, inputOf, moveWords, preview, stepCounts, versionsOf, type Version } from "./cards";
+import { argsOf, cardTitle, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, stepCounts, tabsOf, unitWords, versionsOf, type Chart, type ChartTab, type Version } from "./cards";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -168,6 +169,11 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const [rows, setRows] = useState<Preview | null>(null);
   const [answered, setAnswered] = useState<{ count: number; truncated: boolean } | null>(null);
   const [since] = useState(() => Date.now());
+  const [profile, setProfile] = useState<{ set: string; field: string; value: Profile } | null>(null);
+  const [profileWhy, setProfileWhy] = useState<string | null>(null);
+  const [tab, setTab] = useState<ChartTab>("stacks");
+  const [field, setField] = useState("manufacturer");
+  const [fields, setFields] = useState<string[]>([]);
 
   const load = useCallback(() => {
     ask
@@ -189,6 +195,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
     setRows(null);
     setAnswered(null);
     setWhy(null);
+    setProfile(null);
     load();
   }, [load]);
 
@@ -196,6 +203,32 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const answer = ((doc?.ask.out as Json | undefined)?.set as string | undefined) ?? null;
   const current = steps.find((s) => s.set === chosen) ?? steps.find((s) => s.answers) ?? steps[0] ?? null;
   const reviewer = holds(caps, "reviewer");
+  const profiled = current?.set ?? null;
+
+  // the charts follow the step chosen on the timeline, and are counted again for every version
+  useEffect(() => {
+    if (profiled === null) return;
+    let alive = true;
+    setProfileWhy(null);
+    ask.profile(id, profiled, field).then(
+      (p) => alive && setProfile({ set: profiled, field, value: p }),
+      (e: Error) => alive && setProfileWhy(e.message),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [id, doc, profiled, field]);
+
+  useEffect(() => {
+    let alive = true;
+    catalogFields("stack").then(
+      (f) => alive && setFields(fieldChoices(f)),
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   const next = (document: number) => {
     // the same text is the same version: nothing moves, so the page reads it again
@@ -289,25 +322,17 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       {why && <p className="warn">{why}</p>}
       <div className="query-grid">
         <div className="query-main">
-          <section className="panel card">
-            <div className="row">
-              <h2 className="grow">{current ? `Where the counts go in ${current.set}` : "Where the counts go"}</h2>
-              {answered && <span className="tag brand">{answered.truncated ? "at least " : ""}{n(answered.count)} rows</span>}
-            </div>
-            {groups.length === 0 && <p className="meta">The counts come once the engine has checked the query.</p>}
-            {groups.map((g) => (
-              <div key={g.group} className="count-bar">
-                <span className="count-group">{g.group}</span>
-                <span className="count-track">
-                  <i style={{ width: `${Math.round((100 * g.kept) / widest)}%` }} />
-                </span>
-                <span className="num">{n(g.kept)}</span>
-                <span className="num meta">{g.subjects === g.kept ? "" : `${n(g.subjects)} subjects`}</span>
-                {g.lost > 0 && <span className="num warn">−{n(g.lost)}</span>}
-              </div>
-            ))}
-            <p className="meta">Charts of the subjects, sessions, stack types and demographics under a step come next.</p>
-          </section>
+          <ProfilePanel
+            set={profiled}
+            profile={profile && profile.set === profiled ? profile.value : null}
+            loading={profiled !== null && (profile === null || profile.set !== profiled || profile.field !== field)}
+            why={profileWhy}
+            tab={tab}
+            onTab={setTab}
+            field={field}
+            fields={fields}
+            onField={setField}
+          />
           {current && (
             <section className="panel card">
               <div className="row">
@@ -354,6 +379,25 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               )}
             </section>
           )}
+          <section className="panel card">
+            <div className="row">
+              <h2 className="grow">{current ? `Where the rows go in ${current.set}` : "Where the rows go"}</h2>
+              {answered && <span className="tag brand">{answered.truncated ? "at least " : ""}{n(answered.count)} rows</span>}
+            </div>
+            {groups.length === 0 && <p className="meta">The counts come once the engine has checked the query.</p>}
+            {groups.map((g) => (
+              <div key={g.group} className="count-bar">
+                <span className="count-group">{g.group}</span>
+                <span className="count-track">
+                  <i style={{ width: `${Math.round((100 * g.kept) / widest)}%` }} />
+                </span>
+                <span className="num">{n(g.kept)} rows</span>
+                <span className="num meta">{n(g.subjects)} subjects</span>
+                {g.lost > 0 && <span className="num warn">−{n(g.lost)}</span>}
+              </div>
+            ))}
+            <p className="meta">A row is a member for each path that reaches it, so a subject in two of the cohorts a query starts from is two rows. The numbers above count each member once.</p>
+          </section>
           <section className="panel card">
             <div className="row">
               <h2 className="grow">Rows</h2>
@@ -405,7 +449,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                     {s.where.map((c, i) => <span key={i} className="timeline-clause">where {clauseText(c)}</span>)}
                     {Object.entries(s.clauses).flatMap(([part, lines]) => (lines ?? []).map((l, i) => <span key={`${part}${i}`} className="timeline-clause">{part} {l}</span>))}
                   </span>
-                  <span className="num timeline-count">{counts ? n(counts.rows) : ""}</span>
+                  <span className="num timeline-count" title={counts ? (s.grain === "subject" ? "subjects, each once" : "rows") : undefined}>{counts ? n(s.grain === "subject" ? counts.subjects : counts.rows) : ""}</span>
                 </button>
               );
             })}
@@ -429,6 +473,114 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
         </aside>
       </div>
     </section>
+  );
+}
+
+function ProfilePanel(props: {
+  set: string | null;
+  profile: Profile | null;
+  loading: boolean;
+  why: string | null;
+  tab: ChartTab;
+  onTab: (t: ChartTab) => void;
+  field: string;
+  fields: string[];
+  onField: (f: string) => void;
+}) {
+  const { set, profile, loading, why, field, fields, onTab, onField } = props;
+  const tabs = tabsOf(profile);
+  const tab = tabs.some((t) => t.id === props.tab) ? props.tab : (tabs[0]?.id ?? null);
+  const counts = countsOf(profile);
+  const people = chartOf(profile?.demographics);
+  const demographics = profile?.demographics && "sex" in profile.demographics ? profile.demographics : null;
+  const clinical = profile?.clinical && "kinds" in profile.clinical ? profile.clinical : null;
+  return (
+    <section className="panel card" aria-busy={loading}>
+      <div className="row">
+        <h2 className="grow">{set ? `Under ${set}` : "Under this step"}</h2>
+        {loading && !why && <span className="meta">counting</span>}
+      </div>
+      {why && <p className="warn">The charts could not be counted: {why}</p>}
+      {counts.length > 0 && (
+        <div className="profile-counts">
+          {counts.map((c) => (
+            <div key={c.label} className="profile-count">
+              <b className="num">{n(c.value)}</b>
+              <span className="meta">{c.value === 1 && c.label.endsWith("s") ? c.label.slice(0, -1) : c.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {tabs.length > 0 && (
+        <div className="chart-tabs" role="tablist" aria-label="charts">
+          {tabs.map((t) => (
+            <button key={t.id} type="button" role="tab" aria-selected={t.id === tab} className={t.id === tab ? "on" : ""} onClick={() => onTab(t.id)}>
+              {t.words}
+            </button>
+          ))}
+        </div>
+      )}
+      {profile && tab === "stacks" && <Bars chart={chartOf(profile.stack_types, "base")} unit="stacks" />}
+      {profile && tab === "field" && (
+        <>
+          <label className="field chart-field">
+            <span className="label">Count the stacks by</span>
+            <span className="input">
+              <select value={field} onChange={(e) => onField(e.target.value)}>
+                {(fields.includes(field) ? fields : [field, ...fields]).map((f) => (
+                  <option key={f} value={f}>
+                    {f.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <Bars chart={chartOf(profile.field)} unit="stacks" />
+          {profile.field?.truncated && <p className="meta">The first 60 values are shown.</p>}
+        </>
+      )}
+      {profile && tab === "people" && people.kind === "words" && <p className="meta">{people.words}</p>}
+      {profile && tab === "people" && demographics && (
+        <div className="profile-pair">
+          <div>
+            <h3>Sex</h3>
+            <Bars chart={chartOf(demographics.sex, "sex")} unit="subjects" />
+          </div>
+          <div>
+            <h3>Age at the session</h3>
+            <Bars chart={chartOf(demographics.age_decades, "decade")} unit="sessions" />
+          </div>
+        </div>
+      )}
+      {profile && tab === "clinical" && (
+        <>
+          <Bars chart={chartOf(profile.clinical, "plain", "No clinical events are recorded for these subjects.")} unit="events" />
+          {clinical?.sensitive_withheld && <p className="meta">Kinds of event marked sensitive are left out at your role.</p>}
+        </>
+      )}
+    </section>
+  );
+}
+
+function Bars({ chart, unit }: { chart: Chart; unit: string }) {
+  if (chart.kind === "none") return null;
+  if (chart.kind === "words") return <p className="meta">{chart.words}</p>;
+  const three = unit === "subjects";
+  return (
+    <div className={three ? "bars three" : "bars"}>
+      {chart.bars.map((b, i) => (
+        <div key={`${b.label}${i}`} className="bar-row">
+          <span className="bar-label" title={b.label}>
+            {b.label}
+          </span>
+          <span className="bar-track">
+            <i style={{ width: `${Math.max(1, Math.round(100 * b.share))}%` }} />
+          </span>
+          <span className="num">{unitWords(b.count, unit)}</span>
+          {!three && <span className="num meta">{unitWords(b.subjects, "subjects")}</span>}
+        </div>
+      ))}
+    </div>
   );
 }
 
