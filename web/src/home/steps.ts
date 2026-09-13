@@ -6,6 +6,7 @@
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { Place } from "../objects/client";
+import type { Backups } from "../settings/database";
 import { keptRunning, where } from "../settings/install";
 import type { Install } from "../settings/supervise";
 import { day } from "./tiles";
@@ -44,6 +45,8 @@ export interface Facts {
   batches: number | null;
   /** Finished backup jobs, newest first. */
   backups: JobRow[] | null;
+  /** The archives and the schedule, where the engine serves them to this person; they say more than the jobs do. */
+  archives?: Backups | null;
   purposes: Purpose[] | null;
 }
 
@@ -135,19 +138,28 @@ function safe(f: Facts, now: number): Step | null {
   const at = registry?.path ?? (f.install ? `${f.install.dir}/registry` : null);
   const mount = (p: Place | null) => (typeof p?.probed?.["mount"] === "string" ? (p.probed["mount"] as string) : null);
   const sameDisk = backup !== null && registry !== null && mount(backup) !== null && mount(backup) === mount(registry);
-  const last = f.backups?.[0]?.finished_at ?? null;
+  // the archives say more than the jobs: when the newest was written, and whether it passed its check
+  const newest = f.archives?.archives.find((a) => a.ours) ?? null;
+  const last = newest?.created_at ?? f.backups?.[0]?.finished_at ?? null;
   const recent = last !== null && now - new Date(last).getTime() < WEEK;
+  const failed = newest?.checked?.ok === false;
+  const schedule = f.archives?.schedule ?? null;
   let words = f.install ? `${keeper} keeps the registry${at ? ` in ${at}` : ""}.` : `The registry is kept${at ? ` in ${at}` : ""}.`;
   if (backup) {
     words += ` Backups go to ${backup.path}${sameDisk ? ", on the same disk" : ""}, and ${last ? `the last ran on ${day(last)}` : "none has run"}.`;
   } else {
     words += " No backup place is named for it.";
   }
+  if (schedule && schedule.every !== "off") {
+    const on = schedule.every === "week" && schedule.day ? `every ${schedule.day.charAt(0).toUpperCase()}${schedule.day.slice(1)}` : "every day";
+    words += ` A backup runs ${on} at ${schedule.at}${schedule.keep !== null ? `, and the last ${schedule.keep} are kept` : ""}.`;
+  }
   const tags: Tag[] = [];
   if (sameDisk) tags.push({ text: "same disk as the registry", tone: "caution" });
-  tags.push({ text: "no schedule", tone: "neutral" });
+  if (failed) tags.push({ text: "the last backup failed its check", tone: "caution" });
+  if (!schedule || schedule.every === "off") tags.push({ text: "no schedule", tone: "neutral" });
   tags.push({ text: "key not in any backup", tone: "neutral" });
-  const done = backup !== null && !sameDisk && recent;
+  const done = backup !== null && !sameDisk && recent && !failed;
   return { id: "safe", title, state: done ? "done" : "todo", words, tags, halfway: false };
 }
 

@@ -36,6 +36,15 @@ describe("the settings pages", () => {
     expect(settingsPages(caps(["admin"], { assistant: { stations: [] } })).map((p) => p.id)).toEqual(["parts", "engine", "desk", "assistant"]);
     expect(settingsPages(caps(["admin"])).filter((p) => p.sub).map((p) => p.id)).toEqual(["engine", "desk"]);
   });
+  it("offer the database to an admin, where the engine serves its doors", () => {
+    const served = (entitlements: Entitlement[]) => {
+      const c = caps(entitlements);
+      return { ...c, engine: { ...c.engine!, doors: ["GET /api/backups", "GET /api/settings"] } };
+    };
+    expect(settingsPages(served(["admin"])).map((p) => p.id)).toEqual(["parts", "engine", "desk", "database"]);
+    expect(settingsPages(served(["operator"])).map((p) => p.id)).not.toContain("database");
+    expect(settingsPages(caps(["admin"])).map((p) => p.id)).not.toContain("database");
+  });
   it("open the page an address names, and the parts for anything else", () => {
     const pages = settingsPages(caps(["admin"]));
     expect(settingsPage(pages, "desk")?.id).toBe("desk");

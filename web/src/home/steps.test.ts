@@ -6,9 +6,11 @@ import { describe, expect, it } from "vitest";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { Place } from "../objects/client";
+import type { Backups } from "../settings/database";
 import type { Install, Look } from "../settings/supervise";
 import { digests, placeName, rows } from "./look";
 import { headline, lede, next, steps, type Facts } from "./steps";
+import { day } from "./tiles";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
   return {
@@ -131,6 +133,31 @@ describe("the band as the install moves on", () => {
     const all = steps(f, Date.parse("2026-09-13T12:00:00Z"));
     expect(all.every((s) => s.state === "done")).toBe(true);
     expect(headline(all)).toBeNull();
+  });
+  it("reads the archives and the schedule where the engine serves them", () => {
+    const archives: Backups = {
+      dir: "/srv/backup",
+      place: null,
+      count: 1,
+      archives: [
+        { name: "78195d1d-20260913020000", created_at: "2026-09-13T02:00:00Z", seconds: 3, bytes: 10, files: 3, epoch: 0, schema_version: 37, backend: "postgres", ours: true, checked: { at: "", ok: true, rehearsed: true } },
+      ],
+      schedule: { every: "day", at: "02:00", day: null, keep: 14, timezone: "UTC", next: null, next_local: null, last: null },
+    };
+    const f: Facts = { ...fresh, places: [place("disk", "backup", "/srv/backup", "/srv/backup"), place("registry", "registry", "~/nils/registry", "/", "disk")], archives };
+    const now = Date.parse("2026-09-13T12:00:00Z");
+    const kept = steps(f, now).find((s) => s.id === "safe")!;
+    expect(kept.words).toBe(
+      `Postgres 17 keeps the registry in ~/nils/registry. Backups go to /srv/backup, and the last ran on ${day("2026-09-13T02:00:00Z")}. A backup runs every day at 02:00, and the last 14 are kept.`,
+    );
+    expect(kept.tags.map((t) => t.text)).toEqual(["key not in any backup"]);
+    expect(kept.state).toBe("done");
+    const failed: Backups = { ...archives, archives: [{ ...archives.archives[0], checked: { at: "", ok: false, rehearsed: true } }] };
+    const worse = steps({ ...f, archives: failed }, now).find((s) => s.id === "safe")!;
+    expect(worse.state).toBe("todo");
+    expect(worse.tags[0]).toEqual({ text: "the last backup failed its check", tone: "caution" });
+    const weekly: Backups = { ...archives, schedule: { ...archives.schedule, every: "week", day: "sunday", at: "03:30", keep: null } };
+    expect(steps({ ...f, archives: weekly }, now).find((s) => s.id === "safe")!.words).toMatch(/A backup runs every Sunday at 03:30\.$/);
   });
   it("leaves out what this person cannot read, and a warning for a desk open with no sign in", () => {
     const f: Facts = { ...fresh, install: null, places: null, caps: caps({ assistant: null, desk: { ...caps().desk, settings: { ...caps().desk.settings!, origin: "http://192.168.1.40:7200" } } }) };
