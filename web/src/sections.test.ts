@@ -44,7 +44,7 @@ describe("the sections", () => {
 });
 
 describe("the sections of an install that is set up", () => {
-  const doors = ["GET /api/capabilities", "POST /api/ask/run", "GET /api/packs", "GET /api/review", "POST /api/releases", "GET /api/jobs"];
+  const doors = ["GET /api/capabilities", "POST /api/ask/run", "GET /api/sources", "GET /api/review", "POST /api/releases", "GET /api/jobs"];
   const served = caps({ engine: { ...caps().engine!, doors } });
   it("join Home where the engine serves their doors and the person may open them", () => {
     expect(sections(served).map((s) => s.id)).toEqual(["home", "query", "data", "review", "release", "pipelines"]);

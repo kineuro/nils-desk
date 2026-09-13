@@ -10,6 +10,7 @@ import type React from "react";
 import { AssistantPage } from "./assistant/AssistantPage";
 import { conversations, CONVERSATIONS_CHANGED } from "./assistant/client";
 import type { Capabilities } from "./capabilities";
+import { DataPage } from "./data/DataPage";
 import { door, holds, state } from "./deployment";
 import { Home } from "./home/Home";
 import { PlaceholderPage } from "./home/Placeholder";
@@ -142,7 +143,7 @@ export function App() {
   const active = [...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null;
   const inSettings = ready && active?.id === "settings";
   const onSetup = ready && operator && !left && (setupReady === false || landed);
-  const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id);
+  const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id && !p.built);
   const who = caps.person.display_name || caps.person.subject;
   const body = ["body", sided ? "with-side" : null].filter(Boolean).join(" ");
   const changed = () => setAsked((n) => n + 1);
@@ -233,6 +234,7 @@ export function App() {
           {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={setupReady ? () => setLeft(true) : undefined} />}
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
+          {ready && active?.id === "data" && <DataPage caps={caps} install={install} onChanged={changed} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {ready && active === null && (
