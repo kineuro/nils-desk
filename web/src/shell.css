@@ -234,6 +234,26 @@ table.thin th.tick, table.thin td.tick { width: 30px; }
 .part-name { gap: 0.55rem; }
 .part-name .i { color: var(--n-text-faint); }
 table.thin td.go { width: 24px; color: var(--n-text-faint); }
+.db-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+.db-col { display: grid; gap: 1.2rem; min-width: 0; }
+.fields3 { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.6fr) minmax(0, 1fr); gap: 0.8rem; }
+.schedule-when { gap: 0.4rem; flex-wrap: wrap; }
+.schedule-when .input { flex: 1 1 6.5rem; }
+.schedule-when .input.time { flex: 1 0 8.5rem; }
+.input.static { background: var(--n-bg-sunken); }
+.note.db-key { padding: 0.9rem 1rem; }
+.note.db-key .note-detail { color: var(--n-text); }
+/* a path or a command is one long word: it breaks where it must, and never widens a column past its track */
+.settings > *, .pair > *, .db-col > *, .stack > * { min-width: 0; }
+.settings .meta, .note-detail { overflow-wrap: anywhere; }
+.chip.command { white-space: normal; max-width: 100%; }
+.chip.command code { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 1180px) {
+  .db-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .fields3 { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* ------------------------------------------------------------ narrower windows */
 @media (max-width: 1180px) {

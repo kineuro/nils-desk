@@ -6,19 +6,18 @@
 // beside it, and what it does goes on apart from the call.
 
 import { useEffect, useState } from "react";
-import type React from "react";
-import { DoorError } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { holds } from "../deployment";
 import { href } from "../routes";
 import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
-import { Wait } from "../ui/Wait";
+import { Acted, Head, Health, useRun } from "./common";
+import { DatabasePage } from "./DatabasePage";
 import { keptRunning, reapplyByHand } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
 import { checkedWords, contractWords, keptByWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
-import { followRun, supervise, type Install, type Run } from "./supervise";
+import { supervise, type Install } from "./supervise";
 
 interface PageProps {
   caps: Capabilities;
@@ -58,68 +57,11 @@ export function Settings(props: PageProps & { page: string | null }) {
       return <DeskPage {...props} />;
     case "assistant":
       return <AssistantPage {...props} />;
+    case "database":
+      return <DatabasePage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     default:
       return null;
   }
-}
-
-function messageOf(e: unknown): string {
-  if (e instanceof DoorError) {
-    const body = (e.body ?? {}) as { error?: unknown };
-    return typeof body.error === "string" ? body.error : `the door answered ${e.status}`;
-  }
-  return e instanceof Error ? e.message : String(e);
-}
-
-type Acting = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
-
-/** Work the supervisor goes on with apart from the call, followed until it ends. */
-function useRun() {
-  const [acting, setActing] = useState<Acting>({ kind: "idle" });
-  const start = (phase: string, begin: () => Promise<Run>, done: (r: Run) => string) => {
-    setActing({ kind: "working", phase, since: Date.now() });
-    (async () => {
-      const run = await begin();
-      const ended = await followRun(run.id, () => undefined);
-      if (ended === null) return setActing({ kind: "failed", why: "It is still going; look again in a moment." });
-      if (ended.state !== "done") return setActing({ kind: "failed", why: ended.tail?.slice(-1)[0] ?? `it ${ended.state}` });
-      setActing({ kind: "done", words: done(ended) });
-    })().catch((e: unknown) => setActing({ kind: "failed", why: messageOf(e) }));
-  };
-  return { acting, start, working: acting.kind === "working" };
-}
-
-function Acted({ acting }: { acting: Acting }) {
-  if (acting.kind === "working") return <Wait phase={acting.phase} since={acting.since} />;
-  if (acting.kind === "done") return <p className="ok-words">{acting.words}</p>;
-  if (acting.kind === "failed") return <p className="warn">{acting.why}</p>;
-  return null;
-}
-
-function Head({ title, lede, under, children }: { title: string; lede: string; under?: boolean; children?: React.ReactNode }) {
-  return (
-    <div className="settings-head">
-      {under && (
-        <a className="meta" href={href("settings", "parts")}>
-          Parts / {title}
-        </a>
-      )}
-      <div className="row">
-        <h1>{title}</h1>
-        {children}
-      </div>
-      <p className="lede">{lede}</p>
-    </div>
-  );
-}
-
-function Health({ tone, words }: { tone: "ok" | "caution" | "blocked"; words: string }) {
-  return (
-    <span className={`tag ${tone}`}>
-      <span className={`dot ${tone}`} />
-      {words}
-    </span>
-  );
 }
 
 type RestartPart = Parameters<typeof supervise.restart>[0];

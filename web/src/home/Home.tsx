@@ -12,6 +12,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served, holds } from "../deployment";
 import { objects, type Place, type Summary } from "../objects/client";
 import { data, ops } from "../ops/client";
+import { database, type Backups } from "../settings/database";
 import { kvasir } from "../settings/kvasir";
 import type { Install } from "../settings/supervise";
 import { Command } from "../ui/Command";
@@ -31,9 +32,10 @@ interface Loaded {
   backups: JobRow[] | null;
   purposes: Purpose[] | null;
   packs: Pack[] | null;
+  archives: Backups | null;
 }
 
-const NOTHING: Loaded = { summary: null, since: null, open: null, jobs: null, places: null, batches: null, backups: null, purposes: null, packs: null };
+const NOTHING: Loaded = { summary: null, since: null, open: null, jobs: null, places: null, batches: null, backups: null, purposes: null, packs: null, archives: null };
 
 /** A door's answer, or null where it failed: Home shows what it could read. */
 function quietly<T>(p: Promise<T>): Promise<T | null> {
@@ -60,8 +62,10 @@ export function Home({ caps, install, onChanged }: { caps: Capabilities; install
         : null,
       caps.kvasir !== null ? quietly(kvasir.purposes()).then((r) => r?.purposes.map((p) => ({ purpose: p.purpose, content: p.content, backend: p.backend })) ?? null) : null,
       has("GET /api/packs") ? quietly(data.packs()).then((r) => r?.packs ?? null) : null,
-    ]).then(([summary, since, open, jobs, places, batches, backups, purposes, packs]) =>
-      setLoaded({ summary, since, open, jobs, places, batches, backups, purposes, packs }),
+      // the archives and their schedule say more than the backup jobs, where an admin may read them
+      has("GET /api/backups") && holds(caps, "admin") ? quietly(database.backups()) : null,
+    ]).then(([summary, since, open, jobs, places, batches, backups, purposes, packs, archives]) =>
+      setLoaded({ summary, since, open, jobs, places, batches, backups, purposes, packs, archives }),
     );
   }, [caps, last]);
 
@@ -80,7 +84,7 @@ export function Home({ caps, install, onChanged }: { caps: Capabilities; install
     return () => clearTimeout(t);
   }, []);
 
-  const all = steps({ caps, install, places: loaded.places, batches: loaded.batches, backups: loaded.backups, purposes: loaded.purposes });
+  const all = steps({ caps, install, places: loaded.places, batches: loaded.batches, backups: loaded.backups, archives: loaded.archives, purposes: loaded.purposes });
   const opens = next(all);
   const band = holds(caps, "operator") && opens !== null;
   const tiles = tilesOffered(caps)
