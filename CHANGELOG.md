@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.15] - 2026-09-13
+
+Released beside the engine's 1.0.0-alpha.15 so the two stay in step. Home and Settings are the chosen design's; the Database page reads doors that engine adds, and every other page shows wherever the part it reads answers.
+
 ### Added
 
 - Home, as the chosen design of the home page draws it. A strip of the parts says whether each answers. For an operator, a band of steps makes an install ready for real work, each worked out from what the parts report: how it is installed, a model for the assistant, bringing DICOM in, keeping the registry safe, and who signs in. The band leaves Home once every step is done. Four tiles say what the registry holds, what needs you, what is running and what changed since your last visit.
