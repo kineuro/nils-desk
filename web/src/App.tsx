@@ -2,21 +2,29 @@
 // The shell (Wave 5 section 6): the top bar, the side, the page, and the
 // assistant's rail on the right. Everything it shows is a predicate over the
 // capabilities document, and each part of the desk is built back
-// deliberately, so a section that is not built is not offered.
+// deliberately. Until an operator's install is set up, Home is the page of
+// its steps and the rest of the desk waits.
 
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "./capabilities";
-import { holds, state } from "./deployment";
+import { door, holds, state } from "./deployment";
 import { Home } from "./home/Home";
+import { PlaceholderPage } from "./home/Placeholder";
+import { PLACEHOLDERS } from "./home/placeholders";
+import { ready as readyToStart } from "./home/setup";
+import { Setup } from "./home/Setup";
+import { placesKept } from "./objects/kept";
 import { Rail } from "./Rail";
 import { href, parse, type Route } from "./routes";
 import { foot, initials, railPresent, sections, usable } from "./sections";
 import { where } from "./settings/install";
+import { backupsKept } from "./settings/kept";
 import { Settings } from "./settings/Settings";
 import { supervise, type Install } from "./settings/supervise";
 import { Side } from "./Side";
 import { Icon } from "./ui/Icon";
+import { useKept } from "./ui/kept";
 import { ThemeSwitch } from "./ui/ThemeSwitch";
 
 type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
@@ -81,20 +89,48 @@ export function App() {
     };
   }, [supervised, asked]);
 
+  // whether an operator's install is set up, from the places and the backups every page keeps
+  const places = useKept(placesKept);
+  const archives = useKept(backupsKept);
+  const known = load.kind === "ready" ? load.caps : null;
+  const operator = known !== null && usable(known) && holds(known, "operator");
+  const readsPlaces = operator && door(known, "GET /api/places");
+  const readsBackups = operator && holds(known, "admin") && door(known, "GET /api/backups");
+  useEffect(() => {
+    if (readsPlaces) placesKept.ensure();
+    if (readsBackups) backupsKept.ensure();
+  }, [readsPlaces, readsBackups]);
+  // a read that failed does not hold the desk back
+  const setupReady: boolean | null =
+    known === null || !readsPlaces || (places.error !== null && places.value === null)
+      ? true
+      : readsBackups && archives.value === null && archives.error === null
+        ? null
+        : readyToStart(known, install, places.value?.places ?? null, readsBackups ? archives.value : null);
+  // an operator who landed on setup stays there until they open Home
+  const [landed, setLanded] = useState(false);
+  const [left, setLeft] = useState(false);
+  useEffect(() => {
+    if (setupReady === false) setLanded(true);
+  }, [setupReady]);
+
   if (load.kind === "loading") return <main className="state lone">Reaching the desk</main>;
   if (load.kind === "failed") return <main className="state lone">The desk did not answer: {load.why}</main>;
   const caps = load.caps;
   const st = state(caps);
   // a model backend that is still warming keeps only the assistant waiting
   const ready = usable(caps);
-  const side = sections(caps);
+  const side = sections(caps, setupReady);
   const kept = foot(caps);
   const sided = side.length + kept.length > 0;
   const active = [...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null;
   const rail = active !== null && railPresent(caps, active.id);
   const inSettings = ready && active?.id === "settings";
+  const onSetup = ready && operator && !left && (setupReady === false || landed);
+  const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id);
   const who = caps.person.display_name || caps.person.subject;
   const body = ["body", sided ? "with-side" : null, rail ? "with-rail" : null].filter(Boolean).join(" ");
+  const changed = () => setAsked((n) => n + 1);
 
   return (
     <div className="desk">
@@ -176,8 +212,11 @@ export function App() {
               </p>
             </section>
           )}
-          {ready && active?.id === "home" && <Home caps={caps} install={install} onChanged={() => setAsked((n) => n + 1)} />}
-          {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={() => setAsked((n) => n + 1)} />}
+          {ready && active?.id === "home" && operator && setupReady === null && <p className="meta">Reading the install.</p>}
+          {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={setupReady ? () => setLeft(true) : undefined} />}
+          {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
+          {ready && placeholder && active && <PlaceholderPage id={active.id} />}
+          {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {ready && active === null && (
             <section className="state">
               <h1>Nothing is open to you here</h1>

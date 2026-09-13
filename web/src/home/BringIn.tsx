@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Home's third step opened, as the chosen design draws it: a folder named or
+// Bringing DICOM in, the step of setup that names a source: a folder typed or
 // chosen by clicking through this machine's folders, looked inside by the
 // supervisor on this host, each folder inside ticked to become a batch of its
 // own, and the folder added as a source. The engine starts again to read it,
@@ -23,13 +23,12 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { FolderTable } from "./FolderTable";
 import { digests, placeName, rows as rowsOf, type FolderRow, type Pack } from "./look";
-import type { Step } from "./steps";
 
 type Seen = { kind: "idle" } | { kind: "looking"; since: number } | { kind: "seen"; rows: FolderRow[]; partial: boolean } | { kind: "failed"; why: string };
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
 
-export function BringInStep(props: { n: number; step: Step; caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onDone: () => void }) {
-  const { n, step, caps, install, places, packs, onDone } = props;
+export function BringInForm(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onDone: () => void }) {
+  const { caps, install, places, packs, onDone } = props;
   const [path, setPath] = useState("");
   const [seen, setSeen] = useState<Seen>({ kind: "idle" });
   const [ticked, setTicked] = useState<Set<string>>(new Set());
@@ -68,10 +67,8 @@ export function BringInStep(props: { n: number; step: Step; caps: Capabilities; 
     )
       .then((words) => {
         setAct({ kind: "done", words });
-        if (restarts) {
-          setSeen({ kind: "idle" });
-          setPath("");
-        }
+        setSeen({ kind: "idle" });
+        setPath("");
         onDone();
       })
       .catch((e: unknown) => setAct({ kind: "failed", why: messageOf(e) }));
@@ -88,92 +85,84 @@ export function BringInStep(props: { n: number; step: Step; caps: Capabilities; 
   const words = install ? addFolderWords(install) : null;
   const holding = seen.kind === "seen" ? seen.rows.filter((r) => r.dicom).length : 0;
   return (
-    <div className="step open">
-      <span className="stepno now">{n}</span>
-      <div className="step-form">
-        <div className="step-body">
-          <h3>{step.title}</h3>
-          <p className="meta">{step.words}</p>
-        </div>
-        <div className="row path-row">
-          <PathField
-            value={path}
-            placeholder="/srv/imaging/incoming"
-            label="A folder on this machine"
-            browse={supervised}
-            known={knownFolders(places, install?.dir ?? null)}
-            onChange={(p) => {
-              setPath(p);
-              setSeen({ kind: "idle" });
-            }}
-            onEnter={look}
-          />
-          {supervised && (
-            <button type="button" className="button secondary" disabled={!absolute || seen.kind === "looking"} onClick={look}>
-              <Icon name="search" />
-              Look inside
-            </button>
-          )}
-        </div>
-        {seen.kind === "looking" && <Wait phase="looking inside the folder" since={seen.since} />}
-        {seen.kind === "failed" && <p className="warn">{seen.why}</p>}
-        {seen.kind === "seen" && (
-          <div className="folders">
-            <p className="meta">
-              {holding === 0
-                ? "No folder inside holds DICOM that the look could find."
-                : `${holding === 1 ? "One folder holds" : `${holding} folders hold`} DICOM. Each ticked folder becomes a batch of its own.`}
-              {seen.partial ? " The look stopped before the end, so some folders are not listed." : ""}
-            </p>
-            <FolderTable rows={seen.rows} ticked={ticked} onToggle={toggle} disabled={working} />
-          </div>
-        )}
-        {words && install && (
-          <div className="note">
-            <Icon name="restart" />
-            <div className="note-body">
-              <p className="note-lead">{words.lead}</p>
-              <p className="note-detail">{words.detail}</p>
-              <Command text={reapplyByHand(install)} />
-            </div>
-          </div>
-        )}
-        <div className="row actions">
-          {restarts && (
-            <button type="button" className="button" disabled={!absolute || chosen.length === 0 || working} onClick={() => add(true)}>
-              Add and digest
-            </button>
-          )}
-          <button type="button" className={restarts ? "button secondary" : "button"} disabled={!absolute || working} onClick={() => add(false)}>
-            {restarts ? "Add only" : "Add as a source"}
+    <div className="step-form">
+      <div className="row path-row">
+        <PathField
+          value={path}
+          placeholder="/srv/imaging/incoming"
+          label="A folder on this machine"
+          browse={supervised}
+          known={knownFolders(places, install?.dir ?? null)}
+          onChange={(p) => {
+            setPath(p);
+            setSeen({ kind: "idle" });
+          }}
+          onEnter={look}
+        />
+        {supervised && (
+          <button type="button" className="button secondary" disabled={!absolute || seen.kind === "looking"} onClick={look}>
+            <Icon name="search" />
+            Look inside
           </button>
-          {railPresent(caps, "home") && (
-            <button
-              type="button"
-              className="button quiet small"
-              onClick={() =>
-                window.dispatchEvent(
-                  new CustomEvent("nils:rail-say", {
-                    detail: `Bring in ${folder || "the folder I name"}, one batch for each folder inside, and classify what can be classified.`,
-                  }),
-                )
-              }
-            >
-              <Icon name="assistant" />
-              Plan it with the assistant
-            </button>
-          )}
-        </div>
-        {!supervised && absolute && (
-          <p className="meta">
-            The engine reads a new source once it starts again: <Command text="nils supervise reapply --part engine" />
-          </p>
         )}
-        {act.kind === "working" && <Wait phase={act.phase} since={act.since} />}
-        {act.kind === "done" && <p className="ok-words">{act.words}</p>}
-        {act.kind === "failed" && <p className="warn">{act.why}</p>}
       </div>
-      <span className="tag brand">next</span>
+      {seen.kind === "looking" && <Wait phase="looking inside the folder" since={seen.since} />}
+      {seen.kind === "failed" && <p className="warn">{seen.why}</p>}
+      {seen.kind === "seen" && (
+        <div className="folders">
+          <p className="meta">
+            {holding === 0
+              ? "No folder inside holds DICOM that the look could find."
+              : `${holding === 1 ? "One folder holds" : `${holding} folders hold`} DICOM. Each ticked folder becomes a batch of its own.`}
+            {seen.partial ? " The look stopped before the end, so some folders are not listed." : ""}
+          </p>
+          <FolderTable rows={seen.rows} ticked={ticked} onToggle={toggle} disabled={working} />
+        </div>
+      )}
+      {words && install && (
+        <div className="note">
+          <Icon name="restart" />
+          <div className="note-body">
+            <p className="note-lead">{words.lead}</p>
+            <p className="note-detail">{words.detail}</p>
+            <Command text={reapplyByHand(install)} />
+          </div>
+        </div>
+      )}
+      <div className="row actions">
+        {restarts && (
+          <button type="button" className="button" disabled={!absolute || chosen.length === 0 || working} onClick={() => add(true)}>
+            Add and digest
+          </button>
+        )}
+        <button type="button" className={restarts ? "button secondary" : "button"} disabled={!absolute || working} onClick={() => add(false)}>
+          {restarts ? "Add only" : "Add as a source"}
+        </button>
+        {railPresent(caps, "home") && (
+          <button
+            type="button"
+            className="button quiet small"
+            onClick={() =>
+              window.dispatchEvent(
+                new CustomEvent("nils:rail-say", {
+                  detail: `Bring in ${folder || "the folder I name"}, one batch for each folder inside, and classify what can be classified.`,
+                }),
+              )
+            }
+          >
+            <Icon name="assistant" />
+            Plan it with the assistant
+          </button>
+        )}
+      </div>
+      {!supervised && absolute && (
+        <p className="meta">
+          The engine reads a new source once it starts again: <Command text="nils supervise reapply --part engine" />
+        </p>
+      )}
+      {act.kind === "working" && <Wait phase={act.phase} since={act.since} />}
+      {act.kind === "done" && <p className="ok-words">{act.words}</p>}
+      {act.kind === "failed" && <p className="warn">{act.why}</p>}
     </div>
   );
 }

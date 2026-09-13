@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The shell of option A: the sections offered, the rail's presence, station
-// and model, the avatar's letters, and the addresses.
+// The shell of option A: the sections offered, before and after an install is
+// set up, the rail's presence, station and model, the avatar's letters, and
+// the addresses.
 
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "./capabilities";
+import { PLACEHOLDERS } from "./home/placeholders";
 import { href, parse } from "./routes";
 import { foot, initials, railModel, railPresent, railStation, sections } from "./sections";
 import { ICON_NAMES } from "./ui/Icon";
@@ -37,6 +39,21 @@ describe("the sections", () => {
   });
   it("name only icons the set has", () => {
     for (const s of [...sections(caps()), ...foot(caps())]) expect(ICON_NAMES).toContain(s.icon);
+    for (const p of PLACEHOLDERS) expect(ICON_NAMES).toContain(p.icon);
+  });
+});
+
+describe("the sections of an install that is set up", () => {
+  const doors = ["GET /api/capabilities", "POST /api/ask/run", "GET /api/packs", "GET /api/review", "POST /api/releases", "GET /api/jobs"];
+  const served = caps({ engine: { ...caps().engine!, doors } });
+  it("join Home where the engine serves their doors and the person may open them", () => {
+    expect(sections(served).map((s) => s.id)).toEqual(["home", "ask", "data", "review", "release", "pipelines"]);
+    const reader = { ...served, person: { ...served.person, entitlements: ["reader" as const] } };
+    expect(sections(reader).map((s) => s.id)).toEqual(["home", "ask", "data"]);
+  });
+  it("wait while an operator's install is not set up, with Home named for its first page, and while that is not known", () => {
+    expect(sections(served, false)).toEqual([{ id: "home", title: "Get started", icon: "home" }]);
+    expect(sections(served, null)).toEqual([{ id: "home", title: "Home", icon: "home" }]);
   });
 });
 
@@ -63,6 +80,7 @@ describe("the foot", () => {
       ["engine", 2],
       ["desk", 2],
       ["identity", 1],
+      ["setup", 1],
     ]);
   });
 });

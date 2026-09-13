@@ -36,6 +36,8 @@ export function settingsPages(caps: Capabilities): SettingsPage[] {
   // who signs in is the desk's, and an admin's
   if (admin) out.push({ id: "identity", title: "Identity", sub: false });
   if (admin && door(caps, "GET /api/audit")) out.push({ id: "audit", title: "Audit", sub: false });
+  // the steps that make the install ready, kept once they are done
+  out.push({ id: "setup", title: "Setup", sub: false });
   return out;
 }
 

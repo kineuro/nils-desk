@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
+import { Setup } from "../home/Setup";
 import { holds } from "../deployment";
 import { href } from "../routes";
 import { Command } from "../ui/Command";
@@ -54,6 +55,8 @@ export function Settings(props: PageProps & { page: string | null }) {
       return <IdentityPage caps={props.caps} />;
     case "audit":
       return <AuditPage />;
+    case "setup":
+      return <Setup caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     default:
       return null;
   }
