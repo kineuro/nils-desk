@@ -69,6 +69,7 @@ export function preview(move: Move, typed: Record<string, string>): string {
 const MOVE_WORDS: Record<string, string> = {
   add_set: "Add a step",
   add_where: "Where",
+  set_strict: "How a condition reads",
   add_axis_where: "Where the scan is",
   exclude_scenario: "Leave out",
   add_near: "Near in time",
@@ -198,4 +199,21 @@ export function fieldChoices(fields: CatalogField[]): string[] {
     .filter((f) => !f.dated && ["technical", "clinical"].includes(kind(f.class)) && ["text", "integer", "bool", "boolean"].includes(f.type))
     .map((f) => f.path);
   return [...new Set(paths)].sort((a, b) => (a === "manufacturer" ? -1 : b === "manufacturer" ? 1 : a.localeCompare(b)));
+}
+
+/** A change between two versions, in words: what it adds, takes away or changes, and in which step. The query's default scheme says nothing, and reads as nothing. */
+export function changeWords(c: { set?: string | null; part: string; kind: string; after?: unknown }): string {
+  const part = c.part.replace(/_/g, " ");
+  if (!c.set) {
+    if (c.part === "name") return c.kind === "removed" ? "" : typeof c.after === "string" && c.after.length <= 60 ? `names the query "${c.after}"` : "names the query";
+    if (c.part === "scheme" && (c.after === "default" || c.after === null || c.after === undefined)) return "";
+    // which sets a result keeps is bookkeeping a person never reads
+    if (c.part === "keep") return "";
+    if (c.part === "out") return "changes what the query answers with";
+    return `${c.kind === "added" ? "adds" : c.kind === "removed" ? "takes away" : "changes"} the query's ${part}`;
+  }
+  if (c.part === "set") return c.kind === "added" ? `adds the step ${c.set}` : c.kind === "removed" ? `takes away the step ${c.set}` : `changes the step ${c.set}`;
+  if (c.kind === "added") return `adds ${part} to ${c.set}`;
+  if (c.kind === "removed") return `takes ${part} away from ${c.set}`;
+  return `changes ${part} in ${c.set}`;
 }

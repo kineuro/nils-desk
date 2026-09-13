@@ -578,6 +578,13 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .timeline-body { display: grid; gap: 0.15rem; min-width: 0; }
 .timeline-clause { font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
 .timeline-count { font-family: var(--n-font-serif); font-size: 1.05rem; }
+.timeline-step.proposed { width: auto; margin: 0.5rem 0.75rem; border: 1px dashed var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); cursor: default; }
+.timeline-step.proposed:hover { background: var(--n-bg-raised); }
+.timeline-step.proposed .timeline-dot { border-style: dashed; }
+.timeline-step.proposed.stale { color: var(--n-text-dim); }
+.card-talk-log { max-height: 26rem; overflow-y: auto; gap: 0.8rem; font-size: 14px; }
+.card-talk .said.you { max-width: 92%; }
+.card-talk-composer { display: grid; gap: 0.4rem; }
 @media (max-width: 1100px) {
   .query-grid { grid-template-columns: minmax(0, 1fr); }
 }

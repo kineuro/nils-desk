@@ -3,7 +3,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Move, Profile } from "../ask/client";
-import { argsOf, cardTitle, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, stepCounts, tabsOf, unitWords, valueWords, versionsOf } from "./cards";
+import { argsOf, cardTitle, changeWords, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, stepCounts, tabsOf, unitWords, valueWords, versionsOf } from "./cards";
 
 const addWhere: Move = {
   id: 4,
@@ -60,6 +60,7 @@ describe("a move typed in by hand", () => {
   });
   it("says on its button what it does", () => {
     expect(moveWords(addHas)).toBe("Must have");
+    expect(moveWords({ ...addHas, kind: "set_strict" })).toBe("How a condition reads");
     expect(moveWords({ ...addHas, kind: "something_new", template: "frobnicate {x}" })).toBe("frobnicate");
   });
   it("reads as its template with what was typed so far", () => {
@@ -152,5 +153,18 @@ describe("a step's charts", () => {
       f("slice_thickness", "real", "technical"),
     ];
     expect(fieldChoices(fields)).toEqual(["manufacturer", "dwi_directions"]);
+  });
+});
+
+describe("a proposed version", () => {
+  it("says what it changes, and in which step", () => {
+    expect(changeWords({ set: "people", part: "where", kind: "changed" })).toBe("changes where in people");
+    expect(changeWords({ set: "visits", part: "set", kind: "added" })).toBe("adds the step visits");
+    expect(changeWords({ set: "people", part: "near", kind: "removed" })).toBe("takes near away from people");
+    expect(changeWords({ part: "name", kind: "added", after: "women of the two cohorts" })).toBe('names the query "women of the two cohorts"');
+    expect(changeWords({ set: null, part: "scheme", kind: "added", after: "default" })).toBe("");
+    expect(changeWords({ part: "keep", kind: "added" })).toBe("");
+    expect(changeWords({ part: "out", kind: "changed" })).toBe("changes what the query answers with");
+    expect(changeWords({ part: "params", kind: "changed" })).toBe("changes the query's params");
   });
 });
