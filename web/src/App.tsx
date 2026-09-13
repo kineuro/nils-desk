@@ -13,6 +13,7 @@ import { Rail } from "./Rail";
 import { href, parse, type Route } from "./routes";
 import { foot, initials, railPresent, sections, type Section } from "./sections";
 import { where } from "./settings/install";
+import { SetNav, Settings } from "./settings/Settings";
 import { supervise, type Install } from "./settings/supervise";
 import { Icon } from "./ui/Icon";
 
@@ -44,8 +45,9 @@ export function App() {
     };
   }, []);
 
-  // the install as the supervisor on this host reports it, for an admin
+  // the install as the supervisor on this host reports it, for an admin, and when it was read
   const [install, setInstall] = useState<Install | null>(null);
+  const [installAt, setInstallAt] = useState<number | null>(null);
   const [asked, setAsked] = useState(0);
   const supervised = load.kind === "ready" && holds(load.caps, "admin") && Boolean(load.caps.desk.settings?.supervisor_url);
   useEffect(() => {
@@ -57,7 +59,11 @@ export function App() {
     const read = () =>
       supervise
         .install()
-        .then((i) => alive && setInstall(i))
+        .then((i) => {
+          if (!alive) return;
+          setInstall(i);
+          setInstallAt(Date.now());
+        })
         .catch(() => alive && setInstall(null));
     read();
     const t = setInterval(read, 60_000);
@@ -75,8 +81,9 @@ export function App() {
   const kept = foot(caps);
   const active = [...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null;
   const rail = active !== null && railPresent(caps, active.id);
+  const inSettings = st.kind === "ready" && active?.id === "settings";
   const who = caps.person.display_name || caps.person.subject;
-  const body = ["body", side.length + kept.length > 0 ? "with-side" : null, rail ? "with-rail" : null].filter(Boolean).join(" ");
+  const body = ["body", side.length + kept.length > 0 ? "with-side" : null, inSettings ? "with-setnav" : null, rail ? "with-rail" : null].filter(Boolean).join(" ");
 
   return (
     <div className="desk">
@@ -93,10 +100,10 @@ export function App() {
         )}
         <span className="grow" />
         {install?.release.newer && (
-          <span className="update-note" title={`to take it: ${install.release.command}`}>
+          <a className="update-note" href={href("settings", "parts")} title={`to take it: ${install.release.command}`}>
             <Icon name="update" />
             {install.release.newer} is out
-          </span>
+          </a>
         )}
         {caps.desk.signed_in && who && (
           <span className="person">
@@ -132,6 +139,7 @@ export function App() {
             )}
           </nav>
         )}
+        {inSettings && <SetNav caps={caps} page={route.page} />}
         <main className="page">
           {st.kind === "login" && <Login how={st.how} url={st.url} onDone={() => location.reload()} />}
           {st.kind === "unbound" && (
@@ -167,6 +175,7 @@ export function App() {
             </section>
           )}
           {st.kind === "ready" && active?.id === "home" && <Home caps={caps} install={install} onChanged={() => setAsked((n) => n + 1)} />}
+          {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={() => setAsked((n) => n + 1)} />}
           {st.kind === "ready" && active === null && (
             <section className="state">
               <h1>Nothing is open to you here</h1>
