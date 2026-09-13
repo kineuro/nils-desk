@@ -58,8 +58,24 @@ pub fn start(text: &str) -> Result<Shared, String> {
     from_config(Config::parse(text)?)
 }
 
+/// How people sign in, as far as a session depends on it: the mode, and the
+/// origin and audience a `local` desk mints its tokens for, or the provider
+/// of an `oidc` desk.
+pub fn sign_in_of(config: &Config) -> String {
+    match config.mode {
+        config::Mode::Off => "off".to_string(),
+        config::Mode::Local => format!("local {} {}", config.origin, config.local.audience),
+        config::Mode::Oidc => match &config.oidc {
+            Some(o) => format!("oidc {} {}", o.issuer, o.client_id),
+            None => "oidc".to_string(),
+        },
+    }
+}
+
 fn from_config(config: Config) -> Result<Shared, String> {
     let store = store::Store::open(&config.store)?;
+    // a session holds only under the way of signing in it was made with
+    store.sign_in(&sign_in_of(&config));
     let http = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(5))
         .build()

@@ -177,6 +177,11 @@ async fn serve(path: &std::path::Path) -> i32 {
                 return 2;
             }
         }
+        // a desk that signs people in holds no token of its own, so an engine that asks for one has answered
+        Err(e) if e.contains("401") || e.contains("403") => tracing::info!(
+            "the engine at {} answers, and takes the token of a person who signs in",
+            desk.config.engine.url
+        ),
         Err(e) => tracing::warn!(
             "the engine at {} did not answer: {e}",
             desk.config.engine.url

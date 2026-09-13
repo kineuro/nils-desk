@@ -785,3 +785,102 @@ async fn the_registration_creates_everything_once_and_a_second_run_changes_nothi
     );
     assert_eq!(r2.client_id, r.client_id);
 }
+
+#[tokio::test]
+async fn a_change_of_sign_in_signs_everyone_out_and_an_empty_desk_says_so() {
+    let engine = fake_engine().await;
+    let dir = tempfile::tempdir().unwrap();
+    let store = dir.path().join("desk.sqlite").display().to_string();
+    let key = dir.path().join("desk.key").display().to_string();
+    let off = format!(
+        "origin = \"http://127.0.0.1:7200\"\nmode = \"off\"\nstore = \"{store}\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let local = format!(
+        "origin = \"http://127.0.0.1:7200\"\nmode = \"local\"\nstore = \"{store}\"\n[local]\nkey = \"{key}\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+
+    // nobody signs in: a browser that opens the desk is the operator
+    let desk = nils_desk::start(&off).unwrap();
+    let operator = desk
+        .store
+        .create(
+            "operator",
+            "the operator",
+            &["admin".to_string()],
+            &json!({}),
+            12,
+        )
+        .unwrap();
+    assert!(desk.store.get(&operator.id).is_some());
+    drop(desk);
+
+    // the desk keeps its own people now: that browser is nobody, and nobody can sign in yet
+    let desk = nils_desk::start(&local).unwrap();
+    assert!(
+        desk.store.get(&operator.id).is_none(),
+        "the operator's session went with the change"
+    );
+    assert!(!desk.store.has_users());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let app = nils_desk::router(desk.clone());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let client = reqwest::Client::new();
+    let doc: Value = client
+        .get(format!("{url}/desk/capabilities"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(doc["desk"]["signed_in"], false);
+    assert_eq!(
+        doc["desk"]["login"]["nobody_yet"], true,
+        "{}",
+        doc["desk"]["login"]
+    );
+
+    // a session of a person the desk does not keep holds nothing, and is gone
+    let ghost = desk
+        .store
+        .create("ghost", "Ghost", &[], &json!({}), 12)
+        .unwrap();
+    let doc: Value = client
+        .get(format!("{url}/desk/capabilities"))
+        .header("cookie", format!("nils_desk={}", ghost.id))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(doc["desk"]["signed_in"], false);
+    assert!(desk.store.get(&ghost.id).is_none());
+
+    // once a person is kept the page stops saying so, and their session holds across a start with the same sign-in
+    nils_desk::users::add(
+        &desk.store,
+        "anna",
+        "correct horse battery",
+        Some("Anna"),
+        &[],
+        true,
+    )
+    .unwrap();
+    let anna = desk
+        .store
+        .create("anna", "Anna", &[], &json!({}), 12)
+        .unwrap();
+    let doc: Value = client
+        .get(format!("{url}/desk/capabilities"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(doc["desk"]["login"]["nobody_yet"], false);
+    let again = nils_desk::start(&local).unwrap();
+    assert!(again.store.get(&anna.id).is_some());
+}

@@ -241,7 +241,8 @@ pub async fn document(
             "contract_mismatch": mismatch,
             "login": match desk.config.mode {
                 crate::config::Mode::Off => Value::Null,
-                crate::config::Mode::Local => json!({"kind": "password", "url": "/desk/login"}),
+                // nobody_yet: the desk keeps no one to sign in, so the login page says how to add the first person
+                crate::config::Mode::Local => json!({"kind": "password", "url": "/desk/login", "nobody_yet": !desk.store.has_users()}),
                 crate::config::Mode::Oidc => json!({"kind": "redirect", "url": "/desk/login"}),
             },
             "signed_in": !person.subject.is_empty(),
