@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Settings' pages (Wave 5 section 10), as the chosen design lays them out:
-// the parts, with the engine, the desk and the assistant under them, then the
-// places and the database. A page is offered only once it is built back,
-// where the deployment has what it shows, and to a person who may read it.
+// the parts, with the engine, the desk, the gateway and the assistant under
+// them, then the places and the database. A page is offered only once it is
+// built back, where the deployment has what it shows, and to a person who
+// may read it.
 
 import type { Capabilities } from "../capabilities";
 import { door, holds } from "../deployment";
@@ -22,6 +23,8 @@ export function settingsPages(caps: Capabilities): SettingsPage[] {
     { id: "engine", title: "Engine", sub: true },
     { id: "desk", title: "Desk", sub: true },
   ];
+  // the gateway, where it answered the desk
+  if (caps.kvasir !== null) out.push({ id: "gateway", title: "Gateway and models", sub: true });
   if (caps.assistant !== null) out.push({ id: "assistant", title: "Assistant", sub: true });
   // the places, where the engine serves them
   if (door(caps, "GET /api/places")) out.push({ id: "places", title: "Places", sub: false });

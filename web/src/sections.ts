@@ -15,9 +15,15 @@ export interface Section {
   icon: IconName;
 }
 
+/** Whether the desk can be worked in: ready, or ready with the model backend still warming, which only the assistant waits for. */
+export function usable(caps: Capabilities): boolean {
+  const kind = state(caps).kind;
+  return kind === "ready" || kind === "warming";
+}
+
 /** The sections down the side, in order, for this document and person. */
 export function sections(caps: Capabilities): Section[] {
-  if (state(caps).kind !== "ready") return [];
+  if (!usable(caps)) return [];
   const out: Section[] = [];
   if (holds(caps, "reader")) out.push({ id: "home", title: "Home", icon: "home" });
   return out;
@@ -25,13 +31,13 @@ export function sections(caps: Capabilities): Section[] {
 
 /** The sections kept at the foot of the side, apart from the work: Settings, for a person who may open one of its pages. */
 export function foot(caps: Capabilities): Section[] {
-  if (state(caps).kind !== "ready" || settingsPages(caps).length === 0) return [];
+  if (!usable(caps) || settingsPages(caps).length === 0) return [];
   return [{ id: "settings", title: "Settings", icon: "settings" }];
 }
 
-/** Whether the rail renders beside a section: the assistant answered and the person holds assist (section 6.4). The chosen design draws Settings without it. */
+/** Whether the rail renders beside a section: the assistant answered and the person holds assist (section 6.4). The chosen design draws Settings without it. While the model warms the rail is there and waits. */
 export function railPresent(caps: Capabilities, section: string): boolean {
-  return state(caps).kind === "ready" && caps.assistant !== null && holds(caps, "assist") && section !== "assistant" && section !== "settings";
+  return usable(caps) && caps.assistant !== null && holds(caps, "assist") && section !== "assistant" && section !== "settings";
 }
 
 /** The station the rail speaks to: on Home the operator plans, where the assistant serves it (section 9.3); elsewhere the concierge. */

@@ -256,6 +256,10 @@ table.thin tr.openable:hover td, table.thin tr.openable:focus-visible td { backg
 .drawer-body > * { min-width: 0; }
 .drawer-foot { display: grid; gap: 0.75rem; padding: 1rem 1.2rem; border-top: 1px solid var(--n-line); }
 .choices { display: grid; gap: 0.45rem; }
+.key-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.key-form .input { min-width: 12rem; }
+.provider { display: grid; gap: 0.35rem; }
+dl.facts .facts-pair { display: contents; }
 .choice { display: flex; align-items: center; gap: 0.55rem; }
 .checks { display: flex; gap: 1.2rem; flex-wrap: wrap; }
 input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
@@ -274,6 +278,10 @@ input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
   /* on a phone a place's row keeps its state in sight: the path goes under its name, and its guarantees and room are in the opened place */
   table.thin.places th:nth-child(3), table.thin.places td:nth-child(3), table.thin.places th:nth-child(4), table.thin.places td:nth-child(4), table.thin.places th:nth-child(5), table.thin.places td:nth-child(5) { display: none; }
   table.thin.places .place-path { display: block; font-family: var(--n-font-mono); overflow-wrap: anywhere; }
+  /* a page's title keeps its line, and what stands beside it goes under */
+  .settings-head .row { flex-wrap: wrap; }
+  /* a model's row keeps where its prompts go and its admission in sight; its backend and stations are on wider windows */
+  table.thin.models th:nth-child(2), table.thin.models td:nth-child(2), table.thin.models th:nth-child(5), table.thin.models td:nth-child(5) { display: none; }
 }
 
 /* ------------------------------------------------------------ narrower windows */

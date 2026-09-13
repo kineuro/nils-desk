@@ -40,6 +40,15 @@ describe("the sections", () => {
   });
 });
 
+describe("a model backend still warming", () => {
+  it("keeps the sections, the foot and the rail, since only the assistant waits for it", () => {
+    const warming = caps({ kvasir: { health: { warming: true } }, assistant: { stations: [{ id: "concierge" }] } });
+    expect(sections(warming).map((s) => s.id)).toEqual(["home"]);
+    expect(foot(warming).map((s) => s.id)).toEqual(["settings"]);
+    expect(railPresent(warming, "home")).toBe(true);
+  });
+});
+
 describe("the foot", () => {
   it("keeps Settings for an operator or an admin of a ready deployment", () => {
     expect(foot(caps()).map((s) => s.id)).toEqual(["settings"]);
