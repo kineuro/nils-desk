@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.20] - 2026-09-14
+
+Released beside the engine's 1.0.0-alpha.20 so the two stay in step. That engine changes nothing the desk reads, so every change works with the engine's 1.0.0-alpha.19 as well. The conversations kept for each person need nils-assistant's conversation doors, and the meter needs its context.
+
 ### Added
 
 - Conversations with the assistant are kept by the assistant, per person, and no longer in the browser. The side lists the pinned and the latest under Assistant, and All conversations lists every one, searched by title and grouped by when it was last used, the archived on a tab of their own; each is renamed, pinned, archived or deleted there or from its own head. A reload shows which proposals were accepted or disregarded. The conversations this browser kept before are offered to the assistant once, which keeps those that were the person's. It needs nils-assistant's conversation doors (the chat, slice 1).
