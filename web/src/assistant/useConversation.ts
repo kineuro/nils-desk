@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PageContext } from "../ui/context";
-import { type ChatContext, chats, chatsKept } from "./chats";
+import { type ChatContext, type ChatVersions, chats, chatsKept, type Rating } from "./chats";
 import { assistant, StaleProposal, type Delegation, type Plan } from "./client";
 import { empty, fromHistory, reduce, type PaneState, type Proposal, withStored } from "./parts";
 
@@ -29,15 +29,22 @@ export interface Conversing {
   why: string | null;
   /** How full the conversation's context is, as the assistant last said (the chat, slice 3). */
   context: ChatContext | null;
+  /** The places in this conversation sent more than one way, and the person's verdicts on its answers (the chat, slice 4). */
+  versions: ChatVersions[];
+  ratings: Rating[];
   /** Start again from nothing, as when another conversation opens. */
   reset: () => void;
   /** A conversation just made on this page: it has no history to read yet. */
   made: (id: string) => void;
   send: (id: string, words: string, beside?: Beside) => void;
+  /** Send once the conversation named has opened and its history is read: into a version just made. */
+  sendWhenOpen: (id: string, words: string, beside?: Beside) => void;
   stop: () => void;
   /** A proposal's verdict, with the document the person is on; true once the assistant recorded it. */
   decide: (p: Proposal, verdict: "accepted" | "rejected", current?: number) => Promise<boolean>;
   confirm: (p: Plan) => void;
+  /** The person's verdict on an answer, up or down with a reason; null takes it back. */
+  rate: (message: string, verdict: "up" | "down" | null, reason?: string) => void;
 }
 
 export function useConversation(station: string, conv: string | null): Conversing {
@@ -49,6 +56,9 @@ export function useConversation(station: string, conv: string | null): Conversin
   const [why, setWhy] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [context, setContext] = useState<ChatContext | null>(null);
+  const [versions, setVersions] = useState<ChatVersions[]>([]);
+  const [ratings, setRatings] = useState<Rating[]>([]);
+  const queued = useRef<{ id: string; words: string; beside: Beside } | null>(null);
 
   // the reducer's state is kept in a ref as well, so the reading loop decides on what it just applied
   const apply = useCallback((f: (s: PaneState) => PaneState) => {
@@ -92,7 +102,11 @@ export function useConversation(station: string, conv: string | null): Conversin
               chatsKept.refresh().catch(() => undefined);
               // and the turn filled the context a little more
               chats.get(id).then(
-                (c) => setContext(c.context ?? null),
+                (c) => {
+                  setContext(c.context ?? null);
+                  setVersions(c.versions ?? []);
+                  setRatings(c.ratings ?? []);
+                },
                 () => undefined,
               );
               return;
@@ -126,12 +140,20 @@ export function useConversation(station: string, conv: string | null): Conversin
             follow(conv, s.offset);
           }
           readPlans(conv);
+          // words waiting for this conversation to open: a version just made, sent into once its history is read
+          const q = queued.current;
+          if (q && q.id === conv && !s.busy) {
+            queued.current = null;
+            send(q.id, q.words, q.beside);
+          }
           // the decisions the assistant keeps: a reload shows what was accepted or disregarded
           chats.get(conv).then(
             (c) => {
               if (!alive) return;
               apply((x) => withStored(x, c.proposals));
               setContext(c.context ?? null);
+              setVersions(c.versions ?? []);
+              setRatings(c.ratings ?? []);
             },
             () => undefined,
           );
@@ -148,10 +170,14 @@ export function useConversation(station: string, conv: string | null): Conversin
 
   const reset = useCallback(() => {
     reader.current?.abort();
+    // a conversation made on this page has a history by the time it is opened again
+    fresh.current = null;
     apply(() => empty());
     setPlans([]);
     setWhy(null);
     setContext(null);
+    setVersions([]);
+    setRatings([]);
   }, [apply]);
 
   const made = useCallback((id: string) => {
@@ -199,5 +225,22 @@ export function useConversation(station: string, conv: string | null): Conversin
       .catch((e: Error) => setWhy(e.message));
   };
 
-  return { pane, plans, since, why, context, reset, made, send, stop, decide, confirm };
+  const sendWhenOpen = (id: string, words: string, beside: Beside = {}) => {
+    queued.current = { id, words, beside };
+  };
+
+  const rate = (message: string, verdict: "up" | "down" | null, reason?: string) => {
+    if (!conv) return;
+    const before = ratings;
+    setRatings((all) => [
+      ...all.filter((r) => r.message !== message),
+      ...(verdict ? [{ message, verdict, reason: reason ?? null, at: new Date().toISOString() }] : []),
+    ]);
+    chats.rate(conv, message, verdict, reason).catch((e: Error) => {
+      setRatings(before);
+      setWhy(e.message);
+    });
+  };
+
+  return { pane, plans, since, why, context, versions, ratings, reset, made, send, sendWhenOpen, stop, decide, confirm, rate };
 }

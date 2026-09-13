@@ -4,6 +4,13 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- The assistant's words are drawn from their markdown: headings, lists, quotes, tables that scroll inside themselves on a narrow screen, and code with a button that copies it. Raw HTML reads as the text it is, a link opens only to the web or to mail, and an image is named, never loaded. A Query card's discussion draws them the same way.
+- A person's message on the Assistant page can be copied or edited, and an answer copied, asked for again, or marked good or missed, with a reason when the person gives one. An edited message, or an answer asked for again, continues as another version of the conversation from that message, reading what the model read before it; the versions of a message are a click apart where it stands (2 / 3), and in the lists they are one conversation, renamed, pinned, archived and deleted together. It needs nils-assistant's versions and verdicts (the chat, slice 4).
+- The message box takes commands after a slash, offered as it is typed and completed with Tab: /new, /fork to continue in a copy of the conversation, /rename, /status for the model and how full the context is, and /help. Esc stops a turn, here and in a card's discussion, and Up in an empty box edits the last message.
+- A new conversation offers a few ways to begin for the station chosen; one picked is put in the box, to change or to send.
+
 ## [1.0.0-alpha.20] - 2026-09-14
 
 Released beside the engine's 1.0.0-alpha.20 so the two stay in step. That engine changes nothing the desk reads, so every change works with the engine's 1.0.0-alpha.19 as well. The conversations kept for each person need nils-assistant's conversation doors, and the meter needs its context.

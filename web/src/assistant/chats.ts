@@ -39,9 +39,28 @@ export interface Chat {
   pinned: boolean;
   archived: boolean;
   forked_from: string | null;
+  /** The message a version was sent instead of (the chat, slice 4); null for a conversation of its own. */
+  fork_slot?: string | null;
   /** From an assistant that keeps it; an older one sends none. */
   context?: ChatContext;
 }
+
+/** A place in a conversation sent more than one way, and the conversation each way continues in (the chat, slice 4). */
+export interface ChatVersions {
+  slot: string;
+  versions: { conversation: string; message: string }[];
+}
+
+/** The person's verdict on one answer. */
+export interface Rating {
+  message: string;
+  verdict: "up" | "down";
+  reason: string | null;
+  at: string;
+}
+
+/** One conversation as the assistant returns it: its proposals and their decisions, its versions and the verdicts on its answers. */
+export type ChatDetail = Chat & { proposals: StoredProposal[]; versions?: ChatVersions[]; ratings?: Rating[] };
 
 /** A proposal as the assistant keeps it, with the person's decision. */
 export interface StoredProposal {
@@ -96,11 +115,37 @@ export const chats = {
   create: (o: { station: string; title?: string | null; document?: number | null; lineage?: number | null }) =>
     fetch("/assistant/conversations", { method: "POST", headers: H, body: JSON.stringify(o) }).then((r) => answer<Chat>(r)),
   /** One conversation, with its proposals and the decisions on them. */
-  get: (id: string) => fetch(one(id)).then((r) => answer<Chat & { proposals: StoredProposal[] }>(r)),
-  patch: (id: string, p: { title?: string | null; pinned?: boolean; archived?: boolean }) =>
+  get: (id: string) => fetch(one(id)).then((r) => answer<ChatDetail>(r)),
+  /** Renamed, pinned or archived, every version alike; `current` makes the version named the one the lists show and open. */
+  patch: (id: string, p: { title?: string | null; pinned?: boolean; archived?: boolean; current?: boolean }) =>
     fetch(one(id), { method: "PATCH", headers: H, body: JSON.stringify(p) }).then((r) => answer<Chat>(r)),
   remove: (id: string) => fetch(one(id), { method: "DELETE", headers: H }).then((r) => answer<{ deleted: string }>(r)),
+  /** A new conversation that reads what this one read before the message named, to send into instead of it; with no message, a copy of the whole conversation. */
+  fork: (id: string, before?: string) =>
+    fetch(`${one(id)}/fork`, { method: "POST", headers: H, body: JSON.stringify(before ? { before } : {}) }).then((r) =>
+      answer<Chat & { fork: { from: string; before: string | null; slot: string | null } }>(r),
+    ),
+  /** The person's verdict on one answer, up or down with a reason; null takes it back. */
+  rate: (id: string, message: string, verdict: "up" | "down" | null, reason?: string) =>
+    fetch(`${one(id)}/ratings`, { method: "POST", headers: H, body: JSON.stringify({ message, verdict, reason: reason ?? null }) }).then((r) =>
+      answer<{ message: string; verdict: "up" | "down" | null; reason: string | null }>(r),
+    ),
 };
+
+/** Where a message stands among the ways its place was sent: which of how many, and the conversations either side. */
+export function versionAt(all: ChatVersions[] | undefined, message: string): { index: number; count: number; prev: string | null; next: string | null } | null {
+  for (const s of all ?? []) {
+    const i = s.versions.findIndex((v) => v.message === message);
+    if (i === -1) continue;
+    return {
+      index: i,
+      count: s.versions.length,
+      prev: i > 0 ? s.versions[i - 1].conversation : null,
+      next: i < s.versions.length - 1 ? s.versions[i + 1].conversation : null,
+    };
+  }
+  return null;
+}
 
 /** The person's latest conversations, as the side and the pages read them. */
 export const chatsKept = keeper(() => chats.list({ limit: 50 }));
@@ -168,7 +213,7 @@ export async function importHere(
   o: {
     local?: () => Conversation[];
     storage?: Pick<Storage, "getItem" | "setItem">;
-    get?: (id: string) => Promise<Chat & { proposals: StoredProposal[] }>;
+    get?: (id: string) => Promise<ChatDetail>;
     patch?: (id: string, p: { title?: string | null }) => Promise<Chat>;
   } = {},
 ): Promise<number> {

@@ -2,7 +2,7 @@
 // A person's conversations as the side and the page of all conversations show them.
 
 import { describe, expect, it } from "vitest";
-import { type Chat, ChatError, chatTitle, groupsOf, importHere, meterOf, sidePages, toImport } from "./chats";
+import { type Chat, ChatError, chatTitle, groupsOf, importHere, meterOf, sidePages, toImport, versionAt } from "./chats";
 
 const chat = (id: string, updated: string, o: Partial<Chat> = {}): Chat => ({
   id,
@@ -88,5 +88,18 @@ describe("a conversation's context", () => {
     expect(meterOf({ tokens: null, window: 65_536, compactions: 0, compacted_at: null })).toBeNull();
     expect(meterOf({ tokens: 10, window: null, compactions: 0, compacted_at: null })).toBeNull();
     expect(meterOf(undefined)).toBeNull();
+  });
+});
+
+describe("a message sent more than one way", () => {
+  it("says which way it is, of how many, and where the ways either side continue", () => {
+    const versions = [
+      { slot: "m2", versions: [{ conversation: "c-a", message: "m2" }, { conversation: "c-b", message: "m2b" }, { conversation: "c-c", message: "m2c" }] },
+    ];
+    expect(versionAt(versions, "m2")).toEqual({ index: 0, count: 3, prev: null, next: "c-b" });
+    expect(versionAt(versions, "m2b")).toEqual({ index: 1, count: 3, prev: "c-a", next: "c-c" });
+    expect(versionAt(versions, "m2c")).toEqual({ index: 2, count: 3, prev: "c-b", next: null });
+    expect(versionAt(versions, "m7")).toBeNull();
+    expect(versionAt(undefined, "m2")).toBeNull();
   });
 });

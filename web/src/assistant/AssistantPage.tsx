@@ -8,7 +8,10 @@
 // which run only once confirmed. Another page may hand it a sentence to start
 // from. The conversation loop itself is useConversation, which a Query card's
 // discussion holds too, and the query a conversation is about floats over it
-// as its card.
+// as its card. The thread (the chat, slice 4): answers in markdown; a message
+// edited, or an answer asked for again, continues as another version of the
+// conversation from that message, with the ways it was sent a click apart;
+// answers given a verdict; commands after a slash; ways to begin.
 
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -19,15 +22,17 @@ import { admit } from "../ui/context";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { useKept } from "../ui/kept";
-import { type Chat, chats, chatsKept, STATION_WORDS } from "./chats";
+import { type Chat, chats, chatsKept, meterOf, STATION_WORDS, versionAt } from "./chats";
 import { ChatActions, ChatHistory } from "./ChatHistory";
 import { takeSaid, titleOf, type Plan } from "./client";
 import type { PaneState } from "./parts";
 import { CardInPlay, type InPlay } from "./CardInPlay";
 import { CompactionNote, ContextMeter } from "./ContextMeter";
+import { Starters } from "./Starters";
 import { stationOf, stationsServed } from "./stations";
+import { askedBefore, COMMANDS, commandOf, commandsFor, lastAsked } from "./thread";
 import { TurnView } from "./TurnView";
-import { useConversation } from "./useConversation";
+import { type Beside, useConversation } from "./useConversation";
 
 /** What the page says before anything is asked, by station. */
 function hint(station: string): string {
@@ -42,6 +47,8 @@ function ending(settled: PaneState["settled"]): string | null {
   if (settled.outcome === "aborted") return "Stopped.";
   return settled.error ?? "The assistant did not finish this turn.";
 }
+
+const said = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 export function AssistantPage({ caps, conversation }: { caps: Capabilities; conversation: string | null }) {
   // the page of all conversations, or one conversation
@@ -64,6 +71,9 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   const pane = talk.pane;
   const [text, setText] = useState(() => handed.current?.words ?? "");
   const [unfolded, setUnfolded] = useState<Set<string>>(new Set());
+  // the message being edited, and what a command answered
+  const [editing, setEditing] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const input = useRef<HTMLTextAreaElement | null>(null);
   const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
   const model = assistantModel(caps);
@@ -77,6 +87,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     talk.reset();
     setMissing(false);
     setFailed(null);
+    setEditing(null);
+    setNote(null);
     if (!opened) {
       setConv(null);
       setMeta(null);
@@ -102,10 +114,20 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     };
   }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** What a prompt carries beside its words: the card floating over the conversation, or the page's own context. */
+  const beside = (): Beside => {
+    const card = inPlay.current;
+    const prompt = card
+      ? admit({ page: { kind: "assistant", id: null }, epoch: caps.engine?.registry.epoch, document_id: card.document, content_hash: card.hash, chain: card.chain, sets: card.sets, funnel: card.funnel })
+      : context;
+    return { context: prompt, lineage: card?.root ?? null, document: card?.document ?? null };
+  };
+
   const send = async (words: string) => {
     let id = conv;
     setText("");
     setFailed(null);
+    setNote(null);
     if (!id) {
       // the assistant names the conversation, and it is the person's
       try {
@@ -118,21 +140,101 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
         chatsKept.refresh().catch(() => undefined);
       } catch (e) {
         setText(words);
-        setFailed(e instanceof Error ? e.message : String(e));
+        setFailed(`The conversation could not be started: ${said(e)}`);
         return;
       }
     }
-    const card = inPlay.current;
-    const prompt = card
-      ? admit({ page: { kind: "assistant", id: null }, epoch: caps.engine?.registry.epoch, document_id: card.document, content_hash: card.hash, chain: card.chain, sets: card.sets, funnel: card.funnel })
-      : context;
-    talk.send(id, words, { context: prompt, lineage: card?.root ?? null, document: card?.document ?? null });
+    talk.send(id, words, beside());
+  };
+
+  // an edited message, or the same words asked again: another version of the conversation from that message on
+  const again = async (message: string, words: string) => {
+    if (!conv || pane.busy) return;
+    setEditing(null);
+    setNote(null);
+    setFailed(null);
+    try {
+      const made = await chats.fork(conv, message);
+      talk.sendWhenOpen(made.id, words, beside());
+      chatsKept.refresh().catch(() => undefined);
+      location.hash = href("assistant", made.id);
+    } catch (e) {
+      setFailed(`It could not be sent again: ${said(e)}`);
+    }
+  };
+
+  const run = async (name: string, rest: string) => {
+    setText("");
+    setNote(null);
+    setFailed(null);
+    if (name === "new") {
+      location.hash = href("assistant", "new");
+      return;
+    }
+    if (name === "help") {
+      setNote(COMMANDS.map((c) => `/${c.name}${c.takes ? ` (${c.takes})` : ""}: ${c.words}`).join("\n"));
+      return;
+    }
+    if (name === "status") {
+      const m = meterOf(talk.context);
+      const n = talk.context?.compactions ?? 0;
+      setNote(
+        [
+          model ? `Model: ${model}` : null,
+          `Talking to: ${STATION_WORDS[station] ?? station}`,
+          m ? `Context: ${m.words}, ${(talk.context?.tokens ?? 0).toLocaleString("en-US")} tokens` : "Context: not measured yet",
+          n > 0 ? `Earlier turns summarized ${n === 1 ? "once" : `${n} times`}` : null,
+        ]
+          .filter(Boolean)
+          .join("\n"),
+      );
+      return;
+    }
+    if (!conv) {
+      setNote(`/${name} needs a conversation; ask something first.`);
+      return;
+    }
+    if (name === "rename") {
+      if (!rest) {
+        setNote("Say the name after /rename.");
+        return;
+      }
+      try {
+        const c = await chats.patch(conv, { title: rest });
+        setMeta(c);
+        chatsKept.refresh().catch(() => undefined);
+      } catch (e) {
+        setFailed(`The conversation could not be renamed: ${said(e)}`);
+      }
+      return;
+    }
+    if (name === "fork") {
+      if (pane.busy) {
+        setNote("Wait for the answer, then copy the conversation.");
+        return;
+      }
+      try {
+        const c = await chats.fork(conv);
+        chatsKept.refresh().catch(() => undefined);
+        location.hash = href("assistant", c.id);
+      } catch (e) {
+        setFailed(`The conversation could not be copied: ${said(e)}`);
+      }
+    }
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (text.trim().length === 0 || pane.busy || warming) return;
-    void send(text.trim());
+    const words = text.trim();
+    if (words.length === 0) return;
+    const command = commandOf(words);
+    if (command) {
+      if (command.known) void run(command.name, command.rest);
+      else setNote(`There is no command /${command.name}; /help lists them.`);
+      return;
+    }
+    if (pane.busy || warming) return;
+    void send(words);
   };
 
   const toggle = (turn: string) =>
@@ -143,7 +245,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
       return next;
     });
 
-  const said = ending(pane.settled);
+  const offered = commandsFor(text);
+  const ended = ending(pane.settled);
   const title = meta?.title ?? (conv || opened ? "A conversation" : "New conversation");
   return (
     <section className="talk-page">
@@ -172,7 +275,20 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
           </p>
         )}
         <CompactionNote context={talk.context} />
-        {!missing && pane.turns.length === 0 && !pane.busy && <p className="lede">{hint(station)}</p>}
+        {!missing && pane.turns.length === 0 && !pane.busy && (
+          <>
+            <p className="lede">{hint(station)}</p>
+            {!conv && (
+              <Starters
+                station={station}
+                onPick={(words) => {
+                  setText(words);
+                  input.current?.focus();
+                }}
+              />
+            )}
+          </>
+        )}
         {pane.turns.map((t) => (
           <TurnView
             key={t.id}
@@ -183,27 +299,88 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
             decidedElsewhere="It stands on the card above, to accept or disregard."
             onChoose={(label) => void send(label)}
+            actions={
+              conv
+                ? {
+                    busy: pane.busy,
+                    editing: editing === t.id,
+                    onStartEdit: () => setEditing(t.id),
+                    onCancelEdit: () => setEditing(null),
+                    onEdit: (words) => void again(t.id, words),
+                    onRetry: () => {
+                      const asked = askedBefore(pane.turns, t.id);
+                      if (asked) void again(asked.id, asked.text);
+                    },
+                    rating: talk.ratings.find((r) => r.message === t.id) ?? null,
+                    onRate: (verdict, reason) => talk.rate(t.id, verdict, reason),
+                    version: versionAt(talk.versions, t.id),
+                    onVersion: (c) => {
+                      // the version switched to is the one the lists show, and open, from now on
+                      chats.patch(c, { current: true }).then(
+                        () => chatsKept.refresh().catch(() => undefined),
+                        () => undefined,
+                      );
+                      location.hash = href("assistant", c);
+                    },
+                  }
+                : undefined
+            }
           />
         ))}
         {pane.busy && <Wait phase={pane.status?.text ?? "thinking"} since={talk.since || Date.now()} />}
         {talk.plans.map((p) => (
           <PlanCard key={p.id} plan={p} onConfirm={() => talk.confirm(p)} onChange={() => input.current?.focus()} />
         ))}
-        {said && <p className={pane.settled?.outcome === "aborted" ? "meta" : "warn"}>{said}</p>}
+        {ended && <p className={pane.settled?.outcome === "aborted" ? "meta" : "warn"}>{ended}</p>}
         {talk.why && <p className="warn">{talk.why}</p>}
-        {failed && <p className="warn">The conversation could not be started: {failed}</p>}
+        {failed && <p className="warn">{failed}</p>}
+        {note && <p className="meta command-note">{note}</p>}
       </div>
       <form className="talk-composer" onSubmit={submit}>
+        {offered.length > 0 && (
+          <div className="command-menu">
+            {offered.map((c) => (
+              <button
+                key={c.name}
+                type="button"
+                onClick={() => {
+                  if (c.takes) {
+                    setText(`/${c.name} `);
+                    input.current?.focus();
+                  } else void run(c.name, "");
+                }}
+              >
+                <code>/{c.name}</code>
+                <span className="meta">{c.words}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="input composer-input">
           <textarea
             ref={input}
             value={text}
             rows={2}
-            placeholder={warming ? "The model is warming" : "Ask, or say what to do"}
+            placeholder={warming ? "The model is warming" : "Ask, or say what to do; / for commands"}
             aria-label="Ask the assistant"
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) submit(e);
+              // Enter sends and Shift+Enter breaks the line, never while a word is still being composed;
+              // Tab completes a command, Esc stops a turn, and Up in an empty box edits the last message
+              if (e.key === "Tab" && offered.length > 0) {
+                e.preventDefault();
+                setText(`/${offered[0].name}${offered[0].takes ? " " : ""}`);
+              } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) submit(e);
+              else if (e.key === "Escape" && pane.busy) {
+                e.preventDefault();
+                talk.stop();
+              } else if (e.key === "ArrowUp" && text === "" && !pane.busy) {
+                const last = lastAsked(pane.turns);
+                if (last) {
+                  e.preventDefault();
+                  setEditing(last.id);
+                }
+              }
             }}
           />
           {pane.busy ? (

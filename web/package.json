@@ -19,6 +19,7 @@
     "@cornerstonejs/core": "^5.8.2",
     "@cornerstonejs/tools": "^5.8.2",
     "events": "^3.3.0",
+    "marked": "^18.0.13",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
