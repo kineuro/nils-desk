@@ -191,6 +191,29 @@ impl Store {
             .unwrap_or_default()
     }
 
+    /// When each subject last signed in; a local user's subject is the username.
+    pub fn last_seen(&self) -> std::collections::HashMap<String, String> {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let mut st = match conn.prepare("SELECT subject, last_seen_at FROM person") {
+            Ok(s) => s,
+            Err(_) => return std::collections::HashMap::new(),
+        };
+        st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))
+            .map(|rows| rows.flatten().collect())
+            .unwrap_or_default()
+    }
+
+    /// How many sessions are open now, whoever holds them.
+    pub fn open_sessions(&self) -> i64 {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        conn.query_row(
+            "SELECT COUNT(*) FROM session WHERE expires_at > ?1",
+            params![now_iso()],
+            |r| r.get(0),
+        )
+        .unwrap_or(0)
+    }
+
     // --- local users
 
     pub fn user_add(

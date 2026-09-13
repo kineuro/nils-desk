@@ -67,6 +67,10 @@ export interface Capabilities {
       engine_flags: string | null;
       /** Wave 5 section 10.4: the supervisor the desk proxies under /supervise/, when one is configured. */
       supervisor_url?: string | null;
+      /** Wave 5 section 10.5: the other addresses this desk answers at. */
+      also_origins?: string[];
+      /** Wave 5 section 10.5: how the desk signs people in; its signing key and audience in local mode, the provider in oidc mode. Never a secret. */
+      signing?: { key?: string; audience?: string; issuer?: string; client_id?: string; roles_claim?: string } | null;
     };
   };
 }

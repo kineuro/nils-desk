@@ -346,13 +346,18 @@ pub async fn users_list(State(desk): State<Shared>, headers: HeaderMap) -> Respo
     if let Err(r) = admin(&desk, &headers) {
         return *r;
     }
+    // Wave 5 §10.5: when each person last signed in, and how many sessions are open now
+    let seen = desk.store.last_seen();
     let list: Vec<Value> = desk
         .store
         .users()
         .into_iter()
-        .map(|u| json!({"username": u.username, "display": u.display, "entitlements": u.entitlements, "admin": u.admin}))
+        .map(|u| {
+            let last = seen.get(&u.username).cloned();
+            json!({"username": u.username, "display": u.display, "entitlements": u.entitlements, "admin": u.admin, "last_seen": last})
+        })
         .collect();
-    axum::Json(json!({"users": list, "entitlements": users::ENTITLEMENTS})).into_response()
+    axum::Json(json!({"users": list, "entitlements": users::ENTITLEMENTS, "sessions_open": desk.store.open_sessions()})).into_response()
 }
 
 pub async fn users_add(

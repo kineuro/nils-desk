@@ -27,35 +27,30 @@ function caps(entitlements: Entitlement[], over: Partial<Capabilities> = {}): Ca
   };
 }
 
+const served = (entitlements: Entitlement[], doors: string[]): Capabilities => {
+  const c = caps(entitlements);
+  return { ...c, engine: { ...c.engine!, doors } };
+};
+
 describe("the settings pages", () => {
   it("are an operator's and an admin's, and nobody else's", () => {
     expect(settingsPages(caps(["reader", "reviewer", "assist"]))).toEqual([]);
     expect(settingsPages(caps(["operator"])).map((p) => p.id)).toEqual(["parts", "engine", "desk"]);
   });
-  it("name the assistant only where one answered", () => {
-    expect(settingsPages(caps(["admin"], { assistant: { stations: [] } })).map((p) => p.id)).toEqual(["parts", "engine", "desk", "assistant"]);
-    expect(settingsPages(caps(["admin"])).filter((p) => p.sub).map((p) => p.id)).toEqual(["engine", "desk"]);
+
+  it("name the gateway and the assistant under the parts, where they answered", () => {
+    const both = caps(["operator"], { kvasir: { models: [] }, assistant: { stations: [] } });
+    expect(settingsPages(both).map((p) => p.id)).toEqual(["parts", "engine", "desk", "gateway", "assistant"]);
+    expect(settingsPages(both).filter((p) => p.sub).map((p) => p.id)).toEqual(["engine", "desk", "gateway", "assistant"]);
   });
-  it("offer the database to an admin, where the engine serves its doors", () => {
-    const served = (entitlements: Entitlement[]) => {
-      const c = caps(entitlements);
-      return { ...c, engine: { ...c.engine!, doors: ["GET /api/backups", "GET /api/settings"] } };
-    };
-    expect(settingsPages(served(["admin"])).map((p) => p.id)).toEqual(["parts", "engine", "desk", "database"]);
-    expect(settingsPages(served(["operator"])).map((p) => p.id)).not.toContain("database");
-    expect(settingsPages(caps(["admin"])).map((p) => p.id)).not.toContain("database");
+
+  it("offer the places where the engine serves them, and the database, identity and the audit log to an admin", () => {
+    const doors = ["GET /api/places", "GET /api/backups", "GET /api/audit"];
+    expect(settingsPages(served(["operator"], doors)).map((p) => p.id)).toEqual(["parts", "engine", "desk", "places"]);
+    expect(settingsPages(served(["admin"], doors)).map((p) => p.id)).toEqual(["parts", "engine", "desk", "places", "database", "identity", "audit"]);
+    expect(settingsPages(caps(["admin"])).map((p) => p.id)).toEqual(["parts", "engine", "desk", "identity"]);
   });
-  it("offer the places where the engine serves them, before the database", () => {
-    const c = caps(["admin"]);
-    const served = { ...c, engine: { ...c.engine!, doors: ["GET /api/places", "GET /api/backups"] } };
-    expect(settingsPages(served).map((p) => p.id)).toEqual(["parts", "engine", "desk", "places", "database"]);
-    const operator = caps(["operator"]);
-    expect(settingsPages({ ...operator, engine: { ...operator.engine!, doors: ["GET /api/places"] } }).map((p) => p.id)).toContain("places");
-  });
-  it("offer the gateway under the desk where it answered, before the assistant", () => {
-    expect(settingsPages(caps(["operator"], { kvasir: { models: [] }, assistant: { stations: [] } })).map((p) => p.id)).toEqual(["parts", "engine", "desk", "gateway", "assistant"]);
-    expect(settingsPages(caps(["operator"], { kvasir: { models: [] } })).find((p) => p.id === "gateway")?.sub).toBe(true);
-  });
+
   it("open the page an address names, and the parts for anything else", () => {
     const pages = settingsPages(caps(["admin"]));
     expect(settingsPage(pages, "desk")?.id).toBe("desk");

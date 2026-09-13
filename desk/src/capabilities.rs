@@ -260,6 +260,13 @@ pub async fn document(
                 "cli_token_hours": crate::issuer::CLI_TOKEN_HOURS,
                 "export": desk.config.export,
                 "store": desk.config.store.display().to_string(),
+                // Wave 5 §10.5: the other addresses this desk answers at, and how it signs people in; never a secret
+                "also_origins": desk.config.also_origins,
+                "signing": match desk.config.mode {
+                    crate::config::Mode::Local => json!({"key": desk.config.local.key.display().to_string(), "audience": desk.config.local.audience}),
+                    crate::config::Mode::Oidc => desk.config.oidc.as_ref().map_or(Value::Null, |o| json!({"issuer": o.issuer, "client_id": o.client_id, "roles_claim": o.roles_claim})),
+                    crate::config::Mode::Off => Value::Null,
+                },
                 "retention": "sessions expire after the session lifetime; display names, local users, the record of runs and document lineage are kept until removed with the desk stopped",
                 "engine_flags": engine_flags(desk),
             },
