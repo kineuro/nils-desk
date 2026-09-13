@@ -8,7 +8,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import { AssistantPage } from "./assistant/AssistantPage";
-import { conversations, CONVERSATIONS_CHANGED } from "./assistant/client";
+import { chatsKept, importHere, sidePages } from "./assistant/chats";
 import type { Capabilities } from "./capabilities";
 import { DataPage } from "./data/DataPage";
 import { QueryPage } from "./query/QueryPage";
@@ -20,7 +20,7 @@ import { ready as readyToStart } from "./home/setup";
 import { Setup } from "./home/Setup";
 import { placesKept } from "./objects/kept";
 import { href, parse, type Route } from "./routes";
-import { foot, initials, sections, usable } from "./sections";
+import { assistantOffered, foot, initials, sections, usable } from "./sections";
 import { where } from "./settings/install";
 import { backupsKept } from "./settings/kept";
 import { Settings } from "./settings/Settings";
@@ -38,17 +38,8 @@ export function App() {
   // the side on a narrow window: a panel over the page, opened from the top bar
   const [menu, setMenu] = useState(false);
   const closeMenu = useCallback(() => setMenu(false), []);
-  // the conversations this browser keeps, listed under the Assistant in the side
-  const [talks, setTalks] = useState(() => conversations());
-  useEffect(() => {
-    const read = () => setTalks(conversations());
-    window.addEventListener(CONVERSATIONS_CHANGED, read);
-    window.addEventListener("storage", read);
-    return () => {
-      window.removeEventListener(CONVERSATIONS_CHANGED, read);
-      window.removeEventListener("storage", read);
-    };
-  }, []);
+  // the person's conversations, kept by the assistant and listed under the Assistant in the side (the chat, slice 2)
+  const talks = useKept(chatsKept);
 
   useEffect(() => {
     const onHash = () => {
@@ -114,6 +105,17 @@ export function App() {
     if (readsPlaces) placesKept.ensure();
     if (readsBackups) backupsKept.ensure();
   }, [readsPlaces, readsBackups]);
+  const talking = known !== null && assistantOffered(known);
+  useEffect(() => {
+    if (!talking) return;
+    // the list an older desk kept in this browser is offered once, then the list is the assistant's
+    importHere()
+      .catch(() => 0)
+      .then(() => chatsKept.refresh())
+      .catch(() => undefined);
+    const t = setInterval(() => chatsKept.refresh().catch(() => undefined), 60_000);
+    return () => clearInterval(t);
+  }, [talking]);
   // a read that failed does not hold the desk back
   const setupReady: boolean | null =
     known === null || !readsPlaces || (places.error !== null && places.value === null)
@@ -137,7 +139,7 @@ export function App() {
   const side = sections(
     caps,
     setupReady,
-    talks.map((c) => ({ id: c.id, title: c.title ?? "A conversation", depth: 1 as const })),
+    sidePages(talks.value?.conversations ?? []),
   );
   const kept = foot(caps);
   const sided = side.length + kept.length > 0;

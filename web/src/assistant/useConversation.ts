@@ -7,8 +7,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PageContext } from "../ui/context";
+import { chats, chatsKept } from "./chats";
 import { assistant, StaleProposal, type Delegation, type Plan } from "./client";
-import { empty, fromHistory, reduce, type PaneState, type Proposal } from "./parts";
+import { empty, fromHistory, reduce, type PaneState, type Proposal, withStored } from "./parts";
 
 const TOKEN_PUSH_MS = 5 * 60_000;
 const DELEGATION_POLL_MS = 4_000;
@@ -84,6 +85,8 @@ export function useConversation(station: string, conv: string | null): Conversin
             }
             if (!pending) {
               readPlans(id);
+              // the list orders by the last use, so a settled turn moves this conversation up
+              chatsKept.refresh().catch(() => undefined);
               return;
             }
             apply((x) => ({ ...x, busy: true }));
@@ -115,6 +118,11 @@ export function useConversation(station: string, conv: string | null): Conversin
             follow(conv, s.offset);
           }
           readPlans(conv);
+          // the decisions the assistant keeps: a reload shows what was accepted or disregarded
+          chats.get(conv).then(
+            (c) => alive && apply((x) => withStored(x, c.proposals)),
+            () => undefined,
+          );
         })
         .catch((e: Error) => alive && setWhy(e.message));
     }

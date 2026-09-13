@@ -223,3 +223,16 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
   const open = state.turns.some((t) => t.role === "assistant" && !t.done);
   return { ...state, busy: open, settled: last ? { outcome: last.outcome, ...(last.error ? { error: last.error } : {}) } : null };
 }
+
+/** The decisions the assistant keeps for a conversation's proposals (the chat, slice 2): a reload shows what was accepted or disregarded, and a proposal made for another version reads as stale. */
+export function withStored(state: PaneState, stored: { document: number; decided: "accepted" | "rejected" | null; stale: boolean }[]): PaneState {
+  return {
+    ...state,
+    proposals: state.proposals.map((p) => {
+      const kept = stored.find((x) => x.document === p.document);
+      if (!kept) return p;
+      if (kept.decided !== null) return { ...p, decided: kept.decided };
+      return kept.stale ? { ...p, stale: p.stale ?? { moved_to: null } } : p;
+    }),
+  };
+}

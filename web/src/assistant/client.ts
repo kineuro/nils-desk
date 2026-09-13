@@ -210,7 +210,7 @@ export interface Delegation {
   error: string | null;
 }
 
-/** Conversations carry parent pointers from the start; the desk keeps its own list, in this browser. */
+/** A conversation as an older desk kept it in this browser; the assistant keeps them now, and this list is offered to it once (the chat, slice 2). */
 export interface Conversation {
   id: string;
   parent: string | null;
@@ -224,9 +224,6 @@ export interface Conversation {
 
 const KEY = "nils-desk.assistant.conversations";
 const SAY = "nils-desk.assistant.say";
-
-/** The event the list sends when it changes, so the side can show a new conversation at once. */
-export const CONVERSATIONS_CHANGED = "nils:conversations";
 
 /** A conversation's name in a list: its first words, cut at a word before 44 characters. */
 export function titleOf(text: string): string {
@@ -258,6 +255,7 @@ export function takeSaid(): { station: string; words: string } | null {
   }
 }
 
+/** The list an older desk kept in this browser. */
 export function conversations(): Conversation[] {
   try {
     const raw = localStorage.getItem(KEY);
@@ -265,25 +263,4 @@ export function conversations(): Conversation[] {
   } catch {
     return [];
   }
-}
-
-export function remember(c: Conversation): void {
-  try {
-    localStorage.setItem(KEY, JSON.stringify([c, ...conversations().filter((x) => x.id !== c.id)].slice(0, 50)));
-    window.dispatchEvent(new Event(CONVERSATIONS_CHANGED));
-  } catch {
-    // a private window keeps nothing
-  }
-}
-
-export function newConversation(document: number | null, parent: string | null, station?: string, title?: string): Conversation {
-  const id = `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const c: Conversation = { id, parent, document, at: new Date().toISOString(), ...(station ? { station } : {}), ...(title ? { title } : {}) };
-  remember(c);
-  return c;
-}
-
-/** The open conversation of a document: the latest one that opened on it or on a version of it, by the ids the caller knows. */
-export function conversationFor(documents: number[]): Conversation | null {
-  return conversations().find((c) => c.document !== null && documents.includes(c.document)) ?? null;
 }

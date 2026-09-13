@@ -884,3 +884,108 @@ async fn a_change_of_sign_in_signs_everyone_out_and_an_empty_desk_says_so() {
     let again = nils_desk::start(&local).unwrap();
     assert!(again.store.get(&anna.id).is_some());
 }
+
+/// The chat, slice 2: the assistant keeps a person's conversations, so the
+/// desk forwards its doors only for a person holding `assist`.
+#[tokio::test]
+async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
+    let engine = fake_engine().await;
+    let seen = Arc::new(Mutex::new(Vec::<String>::new()));
+    let log = seen.clone();
+    let assistant = Router::new()
+        .route(
+            "/capabilities",
+            get(|| async {
+                axum::Json(json!({"assistant": {"name": "nils-assistant", "version": "0"}}))
+            }),
+        )
+        .route(
+            "/conversations",
+            get(move |headers: HeaderMap| {
+                let log = log.clone();
+                async move {
+                    let bearer = headers
+                        .get("authorization")
+                        .and_then(|v| v.to_str().ok())
+                        .unwrap_or("")
+                        .to_string();
+                    log.lock().unwrap().push(bearer);
+                    axum::Json(json!({"conversations": [], "next": null}))
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let assistant_url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, assistant).await.unwrap() });
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n[assistant]\nurl = \"{assistant_url}\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    nils_desk::users::add(
+        &shared.store,
+        "anna",
+        "correct horse battery",
+        Some("Anna"),
+        &["reader".to_string(), "assist".to_string()],
+        false,
+    )
+    .unwrap();
+    nils_desk::users::add(
+        &shared.store,
+        "bo",
+        "another long password",
+        Some("Bo"),
+        &["reader".to_string()],
+        false,
+    )
+    .unwrap();
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let mut cookies = Vec::new();
+    for (name, password) in [
+        ("anna", "correct horse battery"),
+        ("bo", "another long password"),
+    ] {
+        let r = client
+            .post(format!("{origin}/desk/login"))
+            .json(&json!({"username": name, "password": password}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 200, "{name} logs in");
+        cookies.push(cookie_of(&r));
+    }
+    let list = format!("{origin}/assistant/conversations");
+    // nobody signed in, and bo without assist, are refused before the assistant hears a thing
+    let r = client.get(&list).send().await.unwrap();
+    assert!(matches!(r.status().as_u16(), 401 | 403), "{}", r.status());
+    let r = client
+        .get(&list)
+        .header("cookie", &cookies[1])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let body: Value = r.json().await.unwrap();
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("assist"),
+        "{body}"
+    );
+    assert!(seen.lock().unwrap().is_empty());
+    // anna holds assist: forwarded, with the bearer the desk minted for her
+    let r = client
+        .get(&list)
+        .header("cookie", &cookies[0])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let got = seen.lock().unwrap().clone();
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert!(got[0].starts_with("Bearer "), "{got:?}");
+}
