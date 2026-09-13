@@ -6,7 +6,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Fixed
 
-- A change of how people sign in signed nobody out. A desk moved from nobody signing in to the people it keeps, by running `nils setup` again, still took a browser that had opened it before as the operator, with every entitlement and no password; the engine refused that person, so the page said the engine did not answer. The desk now records how people sign in, and when that changes (the mode, the origin a local desk signs for, or the provider) every session and every login in flight is cleared. In local mode a session also holds only for a person the desk still keeps.
+- A change of how people sign in signed nobody out. A desk moved from nobody signing in to the people it keeps, by running `nils setup` again, still took a browser that had opened it before as the operator, with every entitlement and no password; the engine refused that person, so the page said the engine did not answer. The desk now records how people sign in, and when that changes (the mode, the origin a local desk signs for, or the provider) every session and every login in flight is cleared. The first start of this version counts as such a change, so everyone signs in once more. In local mode a session also holds only for a person the desk still keeps.
 - A desk in local mode that keeps nobody yet says so on its login page, with how to add the first person.
 - The desk's start said the engine did not answer when the engine had answered and asked for a person's token. It says so now.
 
