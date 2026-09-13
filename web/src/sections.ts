@@ -5,7 +5,6 @@
 // being built back join them, each where the engine serves its door.
 
 import type { Capabilities } from "./capabilities";
-import { stationOf, stationsServed } from "./assistant/stations";
 import { door, holds, state } from "./deployment";
 import { PLACEHOLDERS } from "./home/placeholders";
 import { settingsPages } from "./settings/pages";
@@ -37,13 +36,19 @@ export function usable(caps: Capabilities): boolean {
  * says whether the install is set up: false keeps an operator on its first
  * page, named for it, and null holds the rest back while it is not known yet.
  */
-export function sections(caps: Capabilities, ready: boolean | null = true): Section[] {
+export function sections(caps: Capabilities, ready: boolean | null = true, conversations: SidePage[] = []): Section[] {
   if (!usable(caps)) return [];
   const out: Section[] = [];
   if (holds(caps, "reader")) out.push({ id: "home", title: ready === false ? "Get started" : "Home", icon: "home" });
   if (ready !== true) return out;
+  if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: [{ id: "new", title: "New conversation", depth: 1 }, ...conversations] });
   for (const p of PLACEHOLDERS) if (holds(caps, p.entitlement) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon });
   return out;
+}
+
+/** Whether the Assistant has its page: the assistant answered and the person holds assist. While the model warms the page is there and waits. */
+export function assistantOffered(caps: Capabilities): boolean {
+  return usable(caps) && caps.assistant !== null && holds(caps, "assist");
 }
 
 /** The sections kept at the foot of the side, apart from the work: Settings, with its pages, for a person who may open one of them. */
@@ -53,19 +58,8 @@ export function foot(caps: Capabilities): Section[] {
   return [{ id: "settings", title: "Settings", icon: "settings", pages: pages.map((p) => ({ id: p.id, title: p.title, depth: p.sub ? 2 : 1 })) }];
 }
 
-/** Whether the rail renders beside a section: the assistant answered and the person holds assist (section 6.4). The chosen design draws Settings without it. While the model warms the rail is there and waits. */
-export function railPresent(caps: Capabilities, section: string): boolean {
-  return usable(caps) && caps.assistant !== null && holds(caps, "assist") && section !== "assistant" && section !== "settings";
-}
-
-/** The station the rail speaks to: on Home the operator plans, where the assistant serves it (section 9.3); elsewhere the concierge. */
-export function railStation(caps: Capabilities, section: string): string {
-  if (section === "home" && stationsServed(caps).includes("operator")) return "operator";
-  return stationOf(caps);
-}
-
 /** The model the gateway lists first, and whether its prompts stay on this machine. */
-export function railModel(caps: Capabilities): string | null {
+export function assistantModel(caps: Capabilities): string | null {
   const models = (caps.kvasir?.["models"] as { id?: unknown; locality?: unknown }[] | undefined) ?? [];
   const first = models.find((m) => typeof m.id === "string");
   if (!first) return null;

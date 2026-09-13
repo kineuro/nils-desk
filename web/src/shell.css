@@ -41,8 +41,6 @@ code, .path { font-family: var(--n-font-mono); font-size: 0.92em; }
 .banner { padding: var(--n-space-1) 1.2rem; font-size: var(--n-text-size-small); background: var(--n-caution-bg); color: var(--n-caution-fg); border-bottom: 1px solid var(--n-caution-line); }
 .body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
 .body.with-side { grid-template-columns: 13.5rem minmax(0, 1fr); }
-.body.with-rail { grid-template-columns: minmax(0, 1fr) 24rem; }
-.body.with-side.with-rail { grid-template-columns: 13.5rem minmax(0, 1fr) 24rem; }
 .side { border-right: 1px solid var(--n-line); padding: 0.9rem 0.6rem; display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: auto; background: var(--n-bg-page); }
 .side a { display: flex; align-items: center; gap: 0.6rem; border-radius: var(--n-radius); color: var(--n-text-dim); }
 .side a:hover { background: var(--n-bg-hover); color: var(--n-text); text-decoration: none; }
@@ -126,16 +124,7 @@ table.thin .num, table.thin th.num { text-align: right; }
 .ladder span:first-child { border-left: 0; }
 .ladder span.on { background: var(--n-brand-bg); color: var(--n-brand-fg); }
 
-/* ------------------------------------------------------------ the rail */
-.rail { border-left: 1px solid var(--n-line); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; background: var(--n-bg-page); }
-.rail .head { display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1rem; border-bottom: 1px solid var(--n-line); }
-.rail-title { font-weight: 600; }
-.rail .talk { padding: 1rem; display: flex; flex-direction: column; gap: 1rem; overflow: auto; }
-.msg { display: grid; gap: 0.35rem; }
-.msg .who { font-size: 12px; color: var(--n-text-faint); }
-.msg p { white-space: pre-wrap; overflow-wrap: anywhere; }
-.msg.you { justify-items: end; }
-.msg.you .text { background: var(--n-bg-sunken); padding: 0.5rem 0.7rem; border-radius: var(--n-radius); max-width: 88%; }
+/* ------------------------------------------------------------ a plan, and the box a conversation is typed in */
 .plan { border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
 .plan-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.55rem 0.75rem; }
 .plan-title { font-weight: 600; }
@@ -464,17 +453,38 @@ input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
   table.thin.audit td.nowrap { white-space: normal; }
 }
 
+/* ------------------------------------------------------------ the assistant's page */
+.talk-page { display: flex; flex-direction: column; gap: 1rem; max-width: 50rem; margin: 0 auto; min-height: 100%; }
+.talk-head { display: flex; align-items: center; gap: 0.75rem; }
+.talk-head h1 { min-width: 0; overflow-wrap: anywhere; }
+.talk { flex: 1; display: flex; flex-direction: column; gap: 1.1rem; }
+.said { display: grid; gap: 0.6rem; }
+.said.you { align-self: flex-end; max-width: 85%; margin: 0; padding: 0.6rem 0.8rem; border-radius: calc(var(--n-radius) * 2); background: var(--n-bg-sunken); white-space: pre-wrap; overflow-wrap: anywhere; }
+.said-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.steps { display: grid; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-size: 14px; }
+.steps-line { display: flex; align-items: center; gap: 0.6rem; width: 100%; margin: 0; padding: 0.45rem 0.7rem; border: 0; background: transparent; color: var(--n-text); font: inherit; text-align: left; }
+button.steps-line { cursor: pointer; }
+button.steps-line:hover { background: var(--n-bg-hover); }
+.steps-line .i { color: var(--n-ok-icon); }
+.steps-line.quiet { border-top: 1px solid var(--n-line); color: var(--n-text-dim); }
+.steps-line.failed .i { color: var(--n-caution-icon); }
+.proposal { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 0.7rem; padding: 0.7rem 0.85rem; border: 1px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.proposal > .i { margin-top: 3px; color: var(--n-brand-icon); }
+.proposal-title { font-weight: 600; }
+.choice { display: grid; gap: 0.35rem; }
+.choice .button .meta { margin-left: 0.2rem; }
+.talk-composer { position: sticky; bottom: 0; display: grid; gap: 0.4rem; padding: 0.6rem 0 0.2rem; background: var(--n-bg-page); }
+.talk-foot { gap: 0.6rem; flex-wrap: wrap; }
+.station-pick { gap: 0.35rem; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.station-pick select { padding: 0.1rem 0.3rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; }
+
 /* ------------------------------------------------------------ narrower windows */
 @media (min-width: 861px) {
   .side-scrim { display: none; }
 }
-@media (max-width: 1180px) {
-  .body.with-rail { grid-template-columns: minmax(0, 1fr) 20rem; }
-  .body.with-side.with-rail { grid-template-columns: 11.5rem minmax(0, 1fr) 20rem; }
-}
 @media (max-width: 860px) {
   .desk { height: auto; min-height: 100vh; }
-  .body, .body.with-side, .body.with-rail, .body.with-side.with-rail { grid-template-columns: minmax(0, 1fr); align-content: start; }
+  .body, .body.with-side { grid-template-columns: minmax(0, 1fr); align-content: start; }
   /* the side is a panel over the page, opened from the menu in the top bar */
   .top { gap: 0.6rem; padding: 0.5rem 1rem; }
   /* the top bar keeps to one line: the person's avatar, the update's icon, and no chip of where it runs */
@@ -484,7 +494,6 @@ input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
   .side.open { transform: none; visibility: visible; transition: transform 240ms ease, visibility 0s; }
   .side-scrim { z-index: 20; }
   .page { padding: 1.2rem 1rem 1.6rem; overflow: visible; }
-  .rail { border-left: 0; border-top: 1px solid var(--n-line); height: 70vh; }
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .tiles .tile + .tile { border-left: 0; }
   .tiles .tile { padding-left: 0; }
