@@ -76,7 +76,8 @@ export interface Place {
   guarantees: Record<string, unknown>;
   probed: Record<string, unknown> | null;
   probed_at: string | null;
-  bound?: string[];
+  /** The paths the engine was started with that lie under this place, and the flag each came from. */
+  bound?: { verb: string; path: string }[];
   retired_at: string | null;
 }
 
