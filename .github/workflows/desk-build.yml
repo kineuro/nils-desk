@@ -1,7 +1,10 @@
 name: desk-build
 # The release targets: the front end is built once and carried to every runner,
-# then `nils-desk` is built natively on each, the way a release is, and the
-# binary is kept as an artifact. release.yml calls this on every tag.
+# then `nils-desk` is built for each, the way a release is, and the binary is kept
+# as an artifact. ci.yml calls this on main, and release.yml takes the binaries
+# main built for the commit it tags. Each target is built on its own kind of
+# machine except the Intel Mac, which is built on Apple silicon in half the time
+# and runs there under Rosetta.
 on:
   workflow_call:
 
@@ -38,11 +41,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { target: linux-x86_64, runner: ubuntu-latest, exe: "" }
-          - { target: linux-arm64, runner: ubuntu-24.04-arm, exe: "" }
-          - { target: macos-x86_64, runner: macos-15-intel, exe: "" }
-          - { target: macos-arm64, runner: macos-latest, exe: "" }
-          - { target: windows-x86_64, runner: windows-latest, exe: ".exe" }
+          - { target: linux-x86_64, runner: ubuntu-latest, exe: "", triple: "" }
+          - { target: linux-arm64, runner: ubuntu-24.04-arm, exe: "", triple: "" }
+          - { target: macos-x86_64, runner: macos-latest, exe: "", triple: x86_64-apple-darwin }
+          - { target: macos-arm64, runner: macos-latest, exe: "", triple: "" }
+          - { target: windows-x86_64, runner: windows-latest, exe: ".exe", triple: "" }
     defaults:
       run:
         shell: bash
@@ -58,14 +61,27 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ steps.toolchain.outputs.channel }}
+          targets: ${{ matrix.triple }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desk
+          # the two Mac builds run on the same kind of machine, so each keeps a cache of its own
+          key: ${{ matrix.triple }}
       - name: build
         working-directory: desk
-        run: cargo build --release --locked
-      - name: it runs
-        working-directory: desk
-        run: ./target/release/nils-desk${{ matrix.exe }} --version
-      - name: name it for the release
-        run: cp desk/target/release/nils-desk${{ matrix.exe }} nils-desk-${{ matrix.target }}${{ matrix.exe }}
+        run: cargo build --release --locked ${{ matrix.triple && format('--target {0}', matrix.triple) || '' }}
+      - name: it runs, named for the release
+        run: |
+          built=desk/target/release
+          run=""
+          if [ -n "${{ matrix.triple }}" ]; then
+            built=desk/target/${{ matrix.triple }}/release
+            # an Intel binary on Apple silicon runs under Rosetta, installed where the image lacks it
+            arch -x86_64 /usr/bin/true 2>/dev/null || sudo softwareupdate --install-rosetta --agree-to-license > /dev/null
+            run="arch -x86_64"
+          fi
+          $run ./$built/nils-desk${{ matrix.exe }} --version
+          cp $built/nils-desk${{ matrix.exe }} nils-desk-${{ matrix.target }}${{ matrix.exe }}
       - uses: actions/upload-artifact@v4
         with:
           name: nils-desk-${{ matrix.target }}
