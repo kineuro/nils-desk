@@ -74,7 +74,7 @@ pub async fn engine(
     req: Request,
 ) -> Response {
     let up = desk.config.engine.clone();
-    forward(&desk, &up, &format!("/api/{rest}"), req).await
+    forward(&desk, &up, &format!("/api/{rest}"), req, Bearer::Person).await
 }
 
 pub async fn kvasir(
@@ -83,7 +83,7 @@ pub async fn kvasir(
     req: Request,
 ) -> Response {
     match desk.config.kvasir.clone() {
-        Some(up) => forward(&desk, &up, &format!("/{rest}"), req).await,
+        Some(up) => forward(&desk, &up, &format!("/{rest}"), req, Bearer::Person).await,
         None => absent("kvasir"),
     }
 }
@@ -104,7 +104,7 @@ pub async fn assistant(
     req: Request,
 ) -> Response {
     match assistant_upstream(&desk) {
-        Some(up) => forward(&desk, &up, &format!("/{rest}"), req).await,
+        Some(up) => forward(&desk, &up, &format!("/{rest}"), req, Bearer::Person).await,
         None => absent("the assistant"),
     }
 }
@@ -137,7 +137,7 @@ pub async fn supervisor(
                 .into_response();
         }
     }
-    forward(&desk, &up, &format!("/{rest}"), req).await
+    forward(&desk, &up, &format!("/{rest}"), req, Bearer::Configured).await
 }
 
 pub async fn app(
@@ -151,7 +151,7 @@ pub async fn app(
                 url: a.url.clone(),
                 token: None,
             };
-            forward(&desk, &up, &format!("/{rest}"), req).await
+            forward(&desk, &up, &format!("/{rest}"), req, Bearer::Person).await
         }
         None => absent(&format!("an app named {app}")),
     }
@@ -214,7 +214,24 @@ fn hop_by_hop(name: &HeaderName) -> bool {
     )
 }
 
-async fn forward(desk: &Shared, up: &Upstream, path: &str, req: Request) -> Response {
+/// Whose bearer a proxied call carries.
+#[derive(Clone, Copy)]
+enum Bearer {
+    /// The person's, as `bearer` gives it for the desk's mode.
+    Person,
+    /// The upstream's own token from the desk's configuration: the
+    /// supervisor knows one token, and the desk has checked the person's
+    /// entitlement before it forwards.
+    Configured,
+}
+
+async fn forward(
+    desk: &Shared,
+    up: &Upstream,
+    path: &str,
+    req: Request,
+    whose: Bearer,
+) -> Response {
     let method = req.method().clone();
     let headers = req.headers().clone();
     if !matches!(method, Method::GET | Method::HEAD | Method::OPTIONS)
@@ -248,7 +265,11 @@ async fn forward(desk: &Shared, up: &Upstream, path: &str, req: Request) -> Resp
     // The bearer: the desk's own in `off` mode; the person's in the others,
     // minted by the desk's issuer or held from the provider and refreshed
     // before its expiry. A browser never sees either.
-    match bearer(desk, up, &headers).await {
+    let credential = match whose {
+        Bearer::Person => bearer(desk, up, &headers).await,
+        Bearer::Configured => Ok(up.token.clone()),
+    };
+    match credential {
         Ok(Some(t)) => out = out.bearer_auth(t),
         Ok(None) => {}
         Err(e) => {
