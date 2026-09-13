@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Home's third step opened, as the chosen design draws it: a folder named,
-// looked inside by the supervisor on this host, each folder inside ticked to
-// become a batch of its own, and the folder added as a source. The engine
-// starts again to read it, which the supervisor does and says how it went;
-// the command a person would run by hand is beside the buttons. The flow is
-// the one the Places page adds a source with.
+// Home's third step opened, as the chosen design draws it: a folder named or
+// chosen by clicking through this machine's folders, looked inside by the
+// supervisor on this host, each folder inside ticked to become a batch of its
+// own, and the folder added as a source. The engine starts again to read it,
+// which the supervisor does and says how it went; the command a person would
+// run by hand is beside the buttons. The flow is the one the Places page adds
+// a source with.
 
 import { useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -13,6 +14,8 @@ import type { Place } from "../objects/client";
 import { railPresent } from "../sections";
 import { messageOf } from "../settings/common";
 import { addFolderWords, keptRunning, reapplyByHand } from "../settings/install";
+import { knownFolders } from "../settings/move";
+import { PathField } from "../settings/PathField";
 import { addPlace } from "../settings/places";
 import { supervise, type Install } from "../settings/supervise";
 import { Command } from "../ui/Command";
@@ -93,21 +96,18 @@ export function BringInStep(props: { n: number; step: Step; caps: Capabilities; 
           <p className="meta">{step.words}</p>
         </div>
         <div className="row path-row">
-          <label className="input mono grow">
-            <span className="sr-only">A folder on this machine</span>
-            <input
-              value={path}
-              placeholder="/srv/imaging/incoming"
-              spellCheck={false}
-              onChange={(e) => {
-                setPath(e.target.value);
-                setSeen({ kind: "idle" });
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") look();
-              }}
-            />
-          </label>
+          <PathField
+            value={path}
+            placeholder="/srv/imaging/incoming"
+            label="A folder on this machine"
+            browse={supervised}
+            known={knownFolders(places, install?.dir ?? null)}
+            onChange={(p) => {
+              setPath(p);
+              setSeen({ kind: "idle" });
+            }}
+            onEnter={look}
+          />
           {supervised && (
             <button type="button" className="button secondary" disabled={!absolute || seen.kind === "looking"} onClick={look}>
               <Icon name="search" />
