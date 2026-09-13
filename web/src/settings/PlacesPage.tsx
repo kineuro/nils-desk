@@ -2,10 +2,11 @@
 // The Places page (Wave 5 section 10.2), as the chosen design draws it: every
 // folder NILS reads or keeps data in, with its role, what was declared of it,
 // what the engine measured and whether it stands up to its role. A place is
-// added in a drawer; a source is looked inside first, the engine is started
+// added in a dialog: a source is looked inside first, the engine is started
 // again to read it where a service keeps it running, and its folders are
 // digested. An opened place has its guarantees changed or is retired. The
-// engine checks every rule again at its doors.
+// engine checks every rule again at its doors. The places read last are
+// drawn at once, and read again when asked or after a change.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -13,10 +14,12 @@ import { door as served, holds } from "../deployment";
 import { FolderTable } from "../home/FolderTable";
 import { digests, placeName, rows as rowsOf, type FolderRow, type Pack } from "../home/look";
 import { objects, type Place } from "../objects/client";
+import { placesKept } from "../objects/kept";
 import { data } from "../ops/client";
 import { Command } from "../ui/Command";
-import { DrawerFrame } from "../ui/Drawer";
+import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
+import { agoWords, useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { Acted, Head, messageOf, useActing } from "./common";
 import { addFolderWords, keptRunning, reapplyByHand } from "./install";
@@ -39,77 +42,82 @@ import {
 } from "./places";
 import { supervise, type Install } from "./supervise";
 
-type Drawer = { kind: "add" } | { kind: "change"; place: Place } | null;
+type Opened = { kind: "add" } | { kind: "change"; place: Place } | null;
 
 function Tag({ tone, words }: { tone: Tone; words: string }) {
   return <span className={tone === "neutral" ? "tag" : `tag ${tone}`}>{words}</span>;
 }
 
 export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; install: Install | null; onChanged: () => void }) {
-  const [places, setPlaces] = useState<Place[] | null>(null);
-  const [enforced, setEnforced] = useState(true);
-  const [why, setWhy] = useState<string | null>(null);
+  const kept = useKept(placesKept);
+  const places = kept.value?.places ?? null;
+  const enforced = kept.value?.enforced ?? true;
   const [role, setRole] = useState<Role | null>(null);
-  const [drawer, setDrawer] = useState<Drawer>(null);
+  const [opened, setOpened] = useState<Opened>(null);
   const [packs, setPacks] = useState<Pack[]>([]);
+  const [since] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
   const measure = useActing();
   const operator = holds(caps, "operator");
   const containers = install !== null && (install.runtime === "docker" || install.runtime === "podman");
 
-  const load = (probe = false) =>
-    objects
-      .places(probe)
-      .then((d) => {
-        setPlaces(d.places);
-        setEnforced(d.enforced ?? true);
-        setWhy(null);
-      })
-      .catch((e: unknown) => setWhy(messageOf(e)));
-
   useEffect(() => {
-    void load();
+    placesKept.ensure();
     if (served(caps, "GET /api/packs"))
       data
         .packs()
         .then((p) => setPacks(p.packs))
         .catch(() => setPacks([]));
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once when the page opens; a change reads again
   }, []);
 
+  const readAgain = () => void placesKept.refresh().catch(() => undefined);
   const shown = (places ?? []).filter((p) => role === null || p.role === role);
   const done = () => {
-    setDrawer(null);
-    void load();
+    setOpened(null);
+    readAgain();
     onChanged();
   };
+  const failed = kept.error ? messageOf(kept.error) : null;
 
   return (
     <div className="settings">
       <div className="places-head">
         <Head title="Places" lede="Every folder NILS reads or keeps data in is a place with a role, and the rules are checked on every write." />
         {operator && (
-          <button type="button" className="button" onClick={() => setDrawer({ kind: "add" })}>
+          <button type="button" className="button" onClick={() => setOpened({ kind: "add" })}>
             <Icon name="plus" />
             Add a place
           </button>
         )}
       </div>
-      {why && <p className="warn">{why}</p>}
-      {places === null && !why && <Wait phase="reading the places" since={Date.now()} />}
+      {failed && places === null && <p className="warn">{failed}</p>}
+      {places === null && !failed && <Wait phase="reading the places" since={since} />}
       {places !== null && (
         <>
-          {places.length > 0 && (
-            <div className="chips" role="group" aria-label="show the places of one role">
-              <button type="button" className={role === null ? "tag brand" : "tag"} aria-pressed={role === null} onClick={() => setRole(null)}>
-                all {places.length}
-              </button>
-              {roleCounts(places).map((r) => (
-                <button key={r.role} type="button" className={role === r.role ? "tag brand" : "tag"} aria-pressed={role === r.role} onClick={() => setRole(role === r.role ? null : r.role)}>
-                  {r.role} {r.count}
+          <div className="row places-bar">
+            {places.length > 0 && (
+              <div className="chips" role="group" aria-label="show the places of one role">
+                <button type="button" className={role === null ? "tag brand" : "tag"} aria-pressed={role === null} onClick={() => setRole(null)}>
+                  all {places.length}
                 </button>
-              ))}
-            </div>
-          )}
+                {roleCounts(places).map((r) => (
+                  <button key={r.role} type="button" className={role === r.role ? "tag brand" : "tag"} aria-pressed={role === r.role} onClick={() => setRole(role === r.role ? null : r.role)}>
+                    {r.role} {r.count}
+                  </button>
+                ))}
+              </div>
+            )}
+            <span className="kept-at">
+              <span className="meta">{kept.reading ? "reading them again" : kept.at !== null ? `read ${agoWords(kept.at, now)}` : ""}</span>
+              <button type="button" className="icon-button" title="Read the places again" aria-label="Read the places again" disabled={kept.reading} onClick={readAgain}>
+                <Icon name="restart" />
+              </button>
+            </span>
+          </div>
+          {failed && <p className="warn">Reading them again failed: {failed}</p>}
           <div className="table-wrap">
             <table className="thin places">
               <thead>
@@ -132,7 +140,7 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
                 )}
                 {shown.map((p) => {
                   const note = pathNote(p);
-                  const open = () => operator && setDrawer({ kind: "change", place: p });
+                  const open = () => operator && setOpened({ kind: "change", place: p });
                   return (
                     <tr
                       key={p.id}
@@ -175,15 +183,20 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
             </div>
           </div>
           <div className="row actions">
-            <button type="button" className="button secondary small" disabled={measure.working} onClick={() => measure.act("measuring every place again", () => load(true).then(() => "Every place is measured again."))}>
+            <button
+              type="button"
+              className="button secondary small"
+              disabled={measure.working}
+              onClick={() => measure.act("measuring every place again", () => placesKept.refresh(() => objects.places(true)).then(() => "Every place is measured again."))}
+            >
               Measure again
             </button>
             <Acted acting={measure.acting} />
           </div>
         </>
       )}
-      {drawer?.kind === "add" && places !== null && <AddDrawer caps={caps} install={install} places={places} packs={packs} onClose={() => setDrawer(null)} onDone={done} />}
-      {drawer?.kind === "change" && places !== null && <ChangeDrawer place={drawer.place} places={places} onClose={() => setDrawer(null)} onDone={done} />}
+      {opened?.kind === "add" && places !== null && <AddDialog caps={caps} install={install} places={places} packs={packs} onClose={() => setOpened(null)} onDone={done} />}
+      {opened?.kind === "change" && places !== null && <ChangeDialog place={opened.place} places={places} onClose={() => setOpened(null)} onDone={done} />}
     </div>
   );
 }
@@ -191,7 +204,7 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
 type Seen = { kind: "idle" } | { kind: "looking"; since: number } | { kind: "seen"; rows: FolderRow[]; partial: boolean } | { kind: "failed"; why: string };
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
 
-function AddDrawer(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onClose: () => void; onDone: () => void }) {
+function AddDialog(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onClose: () => void; onDone: () => void }) {
   const { caps, install, places, packs, onClose, onDone } = props;
   const [d, setD] = useState<PlaceDraft>(EMPTY);
   const [named, setNamed] = useState(false);
@@ -272,7 +285,7 @@ function AddDrawer(props: { caps: Capabilities; install: Install | null; places:
   );
 
   return (
-    <DrawerFrame title={source ? "Add a source" : `Add a ${d.role} place`} icon="folder" onClose={onClose} foot={foot}>
+    <Dialog title={source ? "Add a source" : `Add a ${d.role} place`} icon="folder" onClose={onClose} foot={foot}>
       <div className="field">
         <label className="label" htmlFor="place-role">
           Role
@@ -396,11 +409,11 @@ function AddDrawer(props: { caps: Capabilities; install: Install | null; places:
         </div>
       </div>
       {act.kind === "done" && <p className="ok-words">{act.words}</p>}
-    </DrawerFrame>
+    </Dialog>
   );
 }
 
-function ChangeDrawer({ place, places, onClose, onDone }: { place: Place; places: Place[]; onClose: () => void; onDone: () => void }) {
+function ChangeDialog({ place, places, onClose, onDone }: { place: Place; places: Place[]; onClose: () => void; onDone: () => void }) {
   const said = (k: string) => place.guarantees?.[k] === true;
   const [g, setG] = useState({ snapshots: said("snapshots"), protected: said("protected"), fast: said("fast") });
   const [backup, setBackup] = useState<string | null>(typeof place.guarantees?.["backup"] === "string" ? (place.guarantees["backup"] as string) : null);
@@ -451,7 +464,7 @@ function ChangeDrawer({ place, places, onClose, onDone }: { place: Place; places
   );
 
   return (
-    <DrawerFrame title={place.name} icon="pencil" onClose={onClose} foot={foot}>
+    <Dialog title={place.name} icon="pencil" onClose={onClose} foot={foot}>
       <dl className="facts">
         <dt>role</dt>
         <dd>{place.role}</dd>
@@ -523,6 +536,6 @@ function ChangeDrawer({ place, places, onClose, onDone }: { place: Place; places
           </div>
         </>
       )}
-    </DrawerFrame>
+    </Dialog>
   );
 }

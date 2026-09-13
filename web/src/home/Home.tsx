@@ -11,6 +11,7 @@ import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served, holds } from "../deployment";
 import { objects, type Place, type Summary } from "../objects/client";
+import { placesKept } from "../objects/kept";
 import { data, ops } from "../ops/client";
 import { database, type Backups } from "../settings/database";
 import { kvasir } from "../settings/kvasir";
@@ -53,7 +54,13 @@ export function Home({ caps, install, onChanged }: { caps: Capabilities; install
       has("GET /api/summary") && last ? quietly(objects.summary(last)) : null,
       has("GET /api/review") && holds(caps, "reviewer") ? quietly(ops.review("open", undefined, 500)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs") ? quietly(ops.jobs(false, 50)).then((r) => r?.jobs ?? null) : null,
-      has("GET /api/places") ? quietly(objects.places()).then((r) => r?.places ?? null) : null,
+      has("GET /api/places")
+        ? quietly(objects.places()).then((r) => {
+            // the Places page draws these at once when it opens next
+            if (r) placesKept.put(r);
+            return r?.places ?? null;
+          })
+        : null,
       has("GET /api/batches") ? quietly(data.batches(1000)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs")
         ? quietly(ops.jobs(true, 200)).then(

@@ -10,7 +10,8 @@ import { useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
-import { objects, type Place } from "../objects/client";
+import type { Place } from "../objects/client";
+import { placesKept } from "../objects/kept";
 import { ops, type CustodyStore } from "../ops/client";
 import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
@@ -112,8 +113,8 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
         .then((s) => setStatus(s.registry))
         .catch(() => setStatus(null));
     if (served(caps, "GET /api/places"))
-      objects
-        .places()
+      placesKept
+        .refresh()
         .then((p) => setPlaces(p.places))
         .catch(() => setPlaces(null));
     if (served(caps, "GET /api/custody"))
