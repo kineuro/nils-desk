@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- A theme switch in the top bar, beside the person: as the system, dark or light. The choice is kept in the browser and holds from the first paint.
+
+### Changed
+
+- One side panel. The sections sit at its top and Settings at its foot. The open section unfolds its pages under it; Settings, once opened, rises to sit under the last section with its pages below it, and goes back down when another section opens. The second column that listed Settings' pages is gone. On a narrow window the side is a panel over the page, opened from the top bar.
+
 ## [1.0.0-alpha.15] - 2026-09-13
 
 Released beside the engine's 1.0.0-alpha.15 so the two stay in step. Home and Settings are the chosen design's; the Database page reads doors that engine adds, and every other page shows wherever the part it reads answers.

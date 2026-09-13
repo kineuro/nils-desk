@@ -1,30 +1,38 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The shell (Wave 5 section 6): the top bar, the sections down the side, the
-// page, and the assistant's rail on the right. Everything it shows is a
-// predicate over the capabilities document, and each part of the desk is
-// built back deliberately, so a section that is not built is not offered.
+// The shell (Wave 5 section 6): the top bar, the side, the page, and the
+// assistant's rail on the right. Everything it shows is a predicate over the
+// capabilities document, and each part of the desk is built back
+// deliberately, so a section that is not built is not offered.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "./capabilities";
 import { holds, state } from "./deployment";
 import { Home } from "./home/Home";
 import { Rail } from "./Rail";
 import { href, parse, type Route } from "./routes";
-import { foot, initials, railPresent, sections, usable, type Section } from "./sections";
+import { foot, initials, railPresent, sections, usable } from "./sections";
 import { where } from "./settings/install";
-import { SetNav, Settings } from "./settings/Settings";
+import { Settings } from "./settings/Settings";
 import { supervise, type Install } from "./settings/supervise";
+import { Side } from "./Side";
 import { Icon } from "./ui/Icon";
+import { ThemeSwitch } from "./ui/ThemeSwitch";
 
 type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
 
 export function App() {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [route, setRoute] = useState<Route>(() => parse(location.hash));
+  // the side on a narrow window: a panel over the page, opened from the top bar
+  const [menu, setMenu] = useState(false);
+  const closeMenu = useCallback(() => setMenu(false), []);
 
   useEffect(() => {
-    const onHash = () => setRoute(parse(location.hash));
+    const onHash = () => {
+      setRoute(parse(location.hash));
+      setMenu(false);
+    };
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
@@ -81,15 +89,21 @@ export function App() {
   const ready = usable(caps);
   const side = sections(caps);
   const kept = foot(caps);
+  const sided = side.length + kept.length > 0;
   const active = [...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null;
   const rail = active !== null && railPresent(caps, active.id);
   const inSettings = ready && active?.id === "settings";
   const who = caps.person.display_name || caps.person.subject;
-  const body = ["body", side.length + kept.length > 0 ? "with-side" : null, inSettings ? "with-setnav" : null, rail ? "with-rail" : null].filter(Boolean).join(" ");
+  const body = ["body", sided ? "with-side" : null, rail ? "with-rail" : null].filter(Boolean).join(" ");
 
   return (
     <div className="desk">
       <header className="top">
+        {sided && (
+          <button type="button" className="icon-button menu-button" aria-label="Sections" aria-controls="side" aria-expanded={menu} onClick={() => setMenu((m) => !m)}>
+            <Icon name="menu" />
+          </button>
+        )}
         <a className="brandmark" href={href("home")} aria-label="NILS home">
           <img src="/brand/nils-mark.svg" alt="" width="22" height="22" />
           NILS
@@ -102,17 +116,18 @@ export function App() {
         )}
         <span className="grow" />
         {install?.release.newer && (
-          <a className="update-note" href={href("settings", "parts")} title={`to take it: ${install.release.command}`}>
+          <a className="update-note" href={href("settings", "parts")} title={`${install.release.newer} is out; to take it: ${install.release.command}`}>
             <Icon name="update" />
-            {install.release.newer} is out
+            <span className="update-words">{install.release.newer} is out</span>
           </a>
         )}
+        <ThemeSwitch />
         {caps.desk.signed_in && who && (
-          <span className="person">
+          <span className="person" title={who}>
             <span className="avatar" aria-hidden="true">
               {initials(who)}
             </span>
-            {who}
+            <span className="person-name">{who}</span>
           </span>
         )}
       </header>
@@ -132,21 +147,7 @@ export function App() {
         </div>
       )}
       <div className={body}>
-        {side.length + kept.length > 0 && (
-          <nav className="side" aria-label="sections">
-            {side.map((s) => (
-              <SideLink key={s.id} section={s} on={s.id === active?.id} />
-            ))}
-            {kept.length > 0 && (
-              <div className="foot">
-                {kept.map((s) => (
-                  <SideLink key={s.id} section={s} on={s.id === active?.id} />
-                ))}
-              </div>
-            )}
-          </nav>
-        )}
-        {inSettings && <SetNav caps={caps} page={route.page} />}
+        {sided && <Side top={side} foot={kept} section={active?.id ?? null} page={route.page} open={menu} onClose={closeMenu} />}
         <main className="page">
           {st.kind === "login" && <Login how={st.how} url={st.url} onDone={() => location.reload()} />}
           {st.kind === "unbound" && (
@@ -187,15 +188,6 @@ export function App() {
         {rail && active && <Rail key={active.id} caps={caps} section={active.id} />}
       </div>
     </div>
-  );
-}
-
-function SideLink({ section, on }: { section: Section; on: boolean }) {
-  return (
-    <a className={on ? "on" : undefined} href={href(section.id)} aria-current={on ? "page" : undefined}>
-      <Icon name={section.icon} />
-      {section.title}
-    </a>
   );
 }
 

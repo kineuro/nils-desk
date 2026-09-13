@@ -30,26 +30,6 @@ interface PageProps {
   onChanged: () => void;
 }
 
-export function SetNav({ caps, page }: { caps: Capabilities; page: string | null }) {
-  const pages = settingsPages(caps);
-  const on = settingsPage(pages, page);
-  return (
-    <nav className="setnav" aria-label="settings">
-      <span className="eyebrow">Settings</span>
-      {pages.map((p) => (
-        <a
-          key={p.id}
-          className={[p.sub ? "sub" : null, p.id === on?.id ? "on" : null].filter(Boolean).join(" ") || undefined}
-          href={href("settings", p.id)}
-          aria-current={p.id === on?.id ? "page" : undefined}
-        >
-          {p.title}
-        </a>
-      ))}
-    </nav>
-  );
-}
-
 export function Settings(props: PageProps & { page: string | null }) {
   const pages = settingsPages(props.caps);
   switch (settingsPage(pages, props.page)?.id) {
