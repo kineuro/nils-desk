@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
 import type { DocumentHandle, Options } from "./client";
-import { documentMoves, edit, editor, firstEmpty, movesForCell, partOf, project, sentence, setsOf, step } from "./editor";
+import { documentMoves, edit, editor, firstEmpty, movesForCell, partOf, project, removes, sentence, setsOf, step } from "./editor";
 import applied from "../../test/fixtures/apply.json";
 import child from "../../test/fixtures/documents_get_child.json";
 import root from "../../test/fixtures/documents_get.json";
@@ -91,5 +91,25 @@ describe("the projection preset keeps the named columns the result has", () => {
     expect(project(cols, "the named list")).toEqual(["subject", "stack", "base"]);
     expect(project(cols, null)).toEqual(cols);
     expect(project(["rows", "subjects"], "on request")).toEqual([]);
+  });
+});
+
+describe("every kind of the engine's move catalog", () => {
+  it("lands on the step it edits", () => {
+    const expected: Record<string, string> = {
+      add_where: "where", add_axis_where: "where", exclude_scenario: "where", remove_where: "where", set_strict: "where",
+      add_near: "near", set_policy: "near", set_optional: "near", set_window: "window",
+      add_has: "has", set_bound: "has", remove_relation: "has",
+      add_attach: "attach", add_bind: "attach", remove_bind: "attach", set_level: "attach",
+      add_pick: "pick", remove_pick: "pick",
+      set_out: "out", set_limit: "out", add_measure: "out", add_column: "out", add_order: "out", remove_column: "out",
+      add_set: "document", remove_set: "document", rename_set: "document", set_param: "document", keep_set: "document", update_selection: "document",
+    };
+    for (const [kind, part] of Object.entries(expected)) expect(partOf(kind), kind).toBe(part);
+    expect(Object.keys(expected)).toHaveLength(30);
+  });
+  it("tells a move that takes something away", () => {
+    expect(removes("remove_pick")).toBe(true);
+    expect(removes("add_pick")).toBe(false);
   });
 });

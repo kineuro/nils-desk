@@ -4,6 +4,15 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- The Query page, built back as cards. Every query kept is a card with its versions and when it last ran; a new one starts from everyone or from cohorts, and any card starts a new card from the version open. A card opens on a version: where the counts go under the step chosen, the step's conditions with a button to take one away, and the moves the engine offers as the next step, typed in by hand, with the values a field holds most offered as proposals for a condition. Applying a move opens the next version, and every version stays a click away. On the right, the card's steps run as a timeline from its start to its answer, each with its count. Run counts the answer, and Preview shows its first rows.
+
+### Fixed
+
+- The query editor mapped a move kind the engine never sends, so picking one per subject, bringing in fields and a time window's policy were never offered. Every kind of the engine's move catalog lands on its step now.
+- Starting a query from an uploaded list sent the list as a number, which the engine refused. It is sent as the text the engine reads.
+
 ## [1.0.0-alpha.18] - 2026-09-13
 
 Released beside the engine's 1.0.0-alpha.18 so the two stay in step. The Data page reads the sources door that engine adds; every other change works with the engine's 1.0.0-alpha.17 as well.

@@ -11,7 +11,7 @@ describe("start from anything", () => {
     expect(startBody({ kind: "selection", selection: "high-field@2" })).toEqual({ from: { selection: "high-field@2" } });
     expect(startBody({ kind: "handle", handle: 71 })).toEqual({ from: { handle: 71 } });
     expect(startBody({ kind: "document", document: 9 })).toEqual({ from: { document: 9 } });
-    expect(startBody({ kind: "values", upload: 3 })).toEqual({ from: { values: 3 } });
+    expect(startBody({ kind: "values", upload: 3 })).toEqual({ from: { values: "3" } });
   });
   it("says the count and what sits under it", () => {
     expect(countWords({ document: {}, set: "people", grain: "subject", count: 48, subjects: 48, sessions: 172, epoch: 1 })).toBe("48 subjects, 172 sessions");

@@ -517,6 +517,49 @@ button.steps-line:hover { background: var(--n-bg-hover); }
   .digest-when { grid-column: 1 / -1; }
 }
 
+/* ------------------------------------------------------------ the Query page: cards, and a card with its steps */
+.query { display: grid; gap: 1.1rem; align-content: start; max-width: 84rem; }
+.query-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 0.9rem; }
+.query-card-link, .query-card-link:hover { display: grid; gap: 0.45rem; align-content: start; padding: 0.85rem 0.95rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); text-decoration: none; }
+.query-card-link:hover { border-color: var(--n-brand-line); }
+.query-card-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; min-width: 0; }
+.query-head { display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; }
+.query-head .grow { display: grid; gap: 0.2rem; min-width: 14rem; }
+.versions { display: inline-flex; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); overflow: hidden; }
+.versions .version, .versions .version:hover { padding: 0.2rem 0.55rem; border-left: 1px solid var(--n-neutral-line); font-family: var(--n-font-mono); font-size: 12.5px; color: var(--n-text-dim); text-decoration: none; }
+.versions .version:first-child { border-left: 0; }
+.versions .version.on { background: var(--n-brand); color: var(--n-text-on-brand); }
+.query-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 24rem); gap: 1.1rem; align-items: start; }
+.query-main, .query-side { display: grid; gap: 1.1rem; align-content: start; min-width: 0; }
+.count-bar { display: grid; grid-template-columns: 5rem minmax(0, 1fr) 4.5rem auto auto; gap: 0.6rem; align-items: center; font-size: var(--n-text-size-small); }
+.count-group { color: var(--n-text-dim); }
+.count-track { height: 12px; border-radius: 2px; background: var(--n-bg-sunken); overflow: hidden; }
+.count-track i { display: block; height: 100%; background: var(--n-grain-subject); }
+.clauses { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.clause-pill { display: inline-flex; align-items: center; gap: 0.2rem; min-height: 1.75rem; padding: 0 0.2rem 0 0.6rem; border-radius: var(--n-radius); background: var(--n-bg-sunken); font-size: 14px; }
+.clause-pill .icon-button { width: 1.5rem; height: 1.5rem; color: var(--n-text-faint); }
+.move { display: inline-flex; align-items: center; gap: 0.3rem; min-height: 1.75rem; padding: 0 0.6rem; border: 1px dashed var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-brand-text); font: inherit; font-size: 13.5px; cursor: pointer; }
+.move:hover { border-color: var(--n-brand-line); background: var(--n-brand-soft); }
+.move .meta { margin-left: 0.15rem; }
+.move-form { display: grid; gap: 0.7rem; padding: 0.8rem; border: 1px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-page); }
+.move-sentence { font-family: var(--n-font-mono); font-size: 14px; }
+.move-holes { display: grid; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); gap: 0.6rem; }
+.timeline { display: grid; }
+.timeline-head { padding: 0.75rem 1rem; border-bottom: 1px solid var(--n-line); }
+.timeline-step { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; gap: 0.7rem; align-items: start; width: 100%; padding: 0.65rem 1rem; border: 0; border-bottom: 1px solid var(--n-line); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.timeline-step:hover { background: var(--n-bg-hover); }
+.timeline-step.on { background: var(--n-bg-selected); }
+.timeline-step.answer { cursor: default; border-bottom: 0; }
+.timeline-step.answer:hover { background: transparent; }
+.timeline-dot { width: 10px; height: 10px; margin-top: 0.35rem; border-radius: 50%; border: 2px solid var(--n-brand-text); background: var(--n-bg-raised); }
+.timeline-step.on .timeline-dot, .timeline-step.answer .timeline-dot { background: var(--n-brand-text); }
+.timeline-body { display: grid; gap: 0.15rem; min-width: 0; }
+.timeline-clause { font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
+.timeline-count { font-family: var(--n-font-serif); font-size: 1.05rem; }
+@media (max-width: 1100px) {
+  .query-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ------------------------------------------------------------ narrower windows */
 @media (min-width: 861px) {
   .side-scrim { display: none; }
