@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.18] - 2026-09-13
+
+Released beside the engine's 1.0.0-alpha.18 so the two stay in step. The Data page reads the sources door that engine adds; every other change works with the engine's 1.0.0-alpha.17 as well.
+
 ### Added
 
 - The Data page, built back around sources. Each source place is a card: its name and folder, how what comes in is handled, the subjects, sessions and stacks it holds, and how many digests have read it and when. The chosen source lists its newest digests, each with the files it read, new, changed, unchanged and refused, and its four stages (walked, digested, classified, reviewed) as marks with their counts; a digest still reading shows so and the page reads again every twenty seconds. For an operator, Digest what is new queues a digest of the source, Handling declares whether it arrives identified and what a release does on the way out, and Bring DICOM in opens the setup's flow in a dialog. It reads the engine's `GET /api/sources`, in the engine's 1.0.0-alpha.18.
