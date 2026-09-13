@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The shell of option A: the sections offered, before and after an install is
-// set up, the rail's presence, station and model, the avatar's letters, and
-// the addresses.
+// set up, the Assistant's page and model, the avatar's letters, and the
+// addresses.
 
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "./capabilities";
 import { PLACEHOLDERS } from "./home/placeholders";
 import { href, parse } from "./routes";
-import { foot, initials, railModel, railPresent, railStation, sections } from "./sections";
+import { assistantModel, assistantOffered, foot, initials, sections } from "./sections";
 import { ICON_NAMES } from "./ui/Icon";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
@@ -47,9 +47,9 @@ describe("the sections of an install that is set up", () => {
   const doors = ["GET /api/capabilities", "POST /api/ask/run", "GET /api/packs", "GET /api/review", "POST /api/releases", "GET /api/jobs"];
   const served = caps({ engine: { ...caps().engine!, doors } });
   it("join Home where the engine serves their doors and the person may open them", () => {
-    expect(sections(served).map((s) => s.id)).toEqual(["home", "ask", "data", "review", "release", "pipelines"]);
+    expect(sections(served).map((s) => s.id)).toEqual(["home", "query", "data", "review", "release", "pipelines"]);
     const reader = { ...served, person: { ...served.person, entitlements: ["reader" as const] } };
-    expect(sections(reader).map((s) => s.id)).toEqual(["home", "ask", "data"]);
+    expect(sections(reader).map((s) => s.id)).toEqual(["home", "query", "data"]);
   });
   it("wait while an operator's install is not set up, with Home named for its first page, and while that is not known", () => {
     expect(sections(served, false)).toEqual([{ id: "home", title: "Get started", icon: "home" }]);
@@ -58,11 +58,11 @@ describe("the sections of an install that is set up", () => {
 });
 
 describe("a model backend still warming", () => {
-  it("keeps the sections, the foot and the rail, since only the assistant waits for it", () => {
+  it("keeps the sections, the foot and the Assistant, since only the assistant waits for it", () => {
     const warming = caps({ kvasir: { health: { warming: true } }, assistant: { stations: [{ id: "concierge" }] } });
-    expect(sections(warming).map((s) => s.id)).toEqual(["home"]);
+    expect(sections(warming).map((s) => s.id)).toEqual(["home", "assistant"]);
     expect(foot(warming).map((s) => s.id)).toEqual(["settings"]);
-    expect(railPresent(warming, "home")).toBe(true);
+    expect(assistantOffered(warming)).toBe(true);
   });
 });
 
@@ -85,25 +85,22 @@ describe("the foot", () => {
   });
 });
 
-describe("the rail", () => {
-  const withAssistant = caps({ assistant: { stations: [{ id: "concierge" }, { id: "operator" }] } });
-  it("is present when the assistant answered and the person holds assist", () => {
-    expect(railPresent(caps(), "home")).toBe(false);
-    expect(railPresent(withAssistant, "home")).toBe(true);
+describe("the Assistant", () => {
+  const withAssistant = caps({ assistant: { stations: [{ id: "concierge" }, { id: "ask-help" }] } });
+  it("has its page when the assistant answered and the person holds assist, with its conversations under it", () => {
+    expect(assistantOffered(caps())).toBe(false);
+    expect(assistantOffered(withAssistant)).toBe(true);
     const noAssist = { ...withAssistant, person: { ...withAssistant.person, entitlements: ["reader" as const] } };
-    expect(railPresent(noAssist, "home")).toBe(false);
-    expect(railPresent(withAssistant, "assistant")).toBe(false);
-    expect(railPresent(withAssistant, "settings")).toBe(false);
-  });
-  it("plans with the operator on Home and talks to the concierge elsewhere", () => {
-    expect(railStation(withAssistant, "home")).toBe("operator");
-    expect(railStation(withAssistant, "settings")).toBe("concierge");
-    expect(railStation(caps({ assistant: { stations: [{ id: "ask-help" }] } }), "home")).toBe("ask-help");
+    expect(assistantOffered(noAssist)).toBe(false);
+    const side = sections(withAssistant, true, [{ id: "c-1", title: "T1w after contrast", depth: 1 }]);
+    expect(side.map((s) => s.id)).toEqual(["home", "assistant"]);
+    expect(side[1].pages?.map((p) => p.id)).toEqual(["new", "c-1"]);
+    expect(sections(withAssistant, false).map((s) => s.id)).toEqual(["home"]);
   });
   it("names the gateway's first model and where its prompts go", () => {
-    expect(railModel(caps())).toBeNull();
-    expect(railModel(caps({ kvasir: { models: [{ id: "qwen38-27b", locality: "local" }] } }))).toBe("qwen38-27b · this machine");
-    expect(railModel(caps({ kvasir: { models: [{ id: "MiniMax-M2", locality: "remote" }] } }))).toBe("MiniMax-M2 · provider");
+    expect(assistantModel(caps())).toBeNull();
+    expect(assistantModel(caps({ kvasir: { models: [{ id: "qwen38-27b", locality: "local" }] } }))).toBe("qwen38-27b · this machine");
+    expect(assistantModel(caps({ kvasir: { models: [{ id: "MiniMax-M2", locality: "remote" }] } }))).toBe("MiniMax-M2 · provider");
   });
 });
 

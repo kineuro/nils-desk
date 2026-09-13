@@ -17,7 +17,7 @@ export interface Placeholder {
 }
 
 export const PLACEHOLDERS: Placeholder[] = [
-  { id: "ask", title: "Ask", icon: "ask", entitlement: "reader", door: "POST /api/ask/run", words: "Ask the registry a question, in words or as a query, and keep the answer as a result." },
+  { id: "query", title: "Query", icon: "search", entitlement: "reader", door: "POST /api/ask/run", words: "Narrow the registry to what you need, step by step or in words, and keep every version of it as a card." },
   { id: "data", title: "Data", icon: "data", entitlement: "reader", door: "GET /api/packs", words: "The batches digested, the rule packs, and what each scan was recognised as." },
   { id: "review", title: "Review", icon: "review", entitlement: "reviewer", door: "GET /api/review", words: "What needs a person's judgement: a scan the rules could not place, a subject to confirm." },
   { id: "release", title: "Release", icon: "release", entitlement: "operator", door: "POST /api/releases", words: "Hand results out as a release, a BIDS tree or a table, written to an export place." },

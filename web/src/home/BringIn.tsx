@@ -11,7 +11,10 @@ import { useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { holds } from "../deployment";
 import type { Place } from "../objects/client";
-import { railPresent } from "../sections";
+import { sayLater } from "../assistant/client";
+import { stationOf, stationsServed } from "../assistant/stations";
+import { href } from "../routes";
+import { assistantOffered } from "../sections";
 import { messageOf } from "../settings/common";
 import { addFolderWords, keptRunning, reapplyByHand } from "../settings/install";
 import { knownFolders } from "../settings/move";
@@ -138,17 +141,17 @@ export function BringInForm(props: { caps: Capabilities; install: Install | null
         <button type="button" className={restarts ? "button secondary" : "button"} disabled={!absolute || working} onClick={() => add(false)}>
           {restarts ? "Add only" : "Add as a source"}
         </button>
-        {railPresent(caps, "home") && (
+        {assistantOffered(caps) && (
           <button
             type="button"
             className="button quiet small"
-            onClick={() =>
-              window.dispatchEvent(
-                new CustomEvent("nils:rail-say", {
-                  detail: `Bring in ${folder || "the folder I name"}, one batch for each folder inside, and classify what can be classified.`,
-                }),
-              )
-            }
+            onClick={() => {
+              sayLater(
+                stationsServed(caps).includes("operator") ? "operator" : stationOf(caps),
+                `Bring in ${folder || "the folder I name"}, one batch for each folder inside, and classify what can be classified.`,
+              );
+              location.hash = href("assistant", "new");
+            }}
           >
             <Icon name="assistant" />
             Plan it with the assistant

@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The assistant has a page of its own, Assistant, under Home, and the rail on the right of every page is gone. The conversations this browser keeps are listed under it in the side, newest first, below New conversation. A conversation shows what the assistant did as a folded list of steps, each new version of a query it proposes, to accept or disregard, a choice answered with a click, and a plan to confirm. The station it talks to is chosen beside the box before the first message, and a turn can be stopped. Plan it with the assistant, on the setup page, opens a new conversation with its sentence ready to send.
+- Ask is called Query, and waits to be built back as the other sections do.
+
 ## [1.0.0-alpha.17] - 2026-09-13
 
 Released beside the engine's 1.0.0-alpha.17 so the two stay in step. Every change here works with the engine's 1.0.0-alpha.16 as well.

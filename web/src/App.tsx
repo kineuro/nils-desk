@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The shell (Wave 5 section 6): the top bar, the side, the page, and the
-// assistant's rail on the right. Everything it shows is a predicate over the
+// The shell (Wave 5 section 6): the top bar, the side and the page; the
+// assistant has a page of its own. Everything it shows is a predicate over the
 // capabilities document, and each part of the desk is built back
 // deliberately. Until an operator's install is set up, Home is the page of
 // its steps and the rest of the desk waits.
 
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
+import { AssistantPage } from "./assistant/AssistantPage";
+import { conversations, CONVERSATIONS_CHANGED } from "./assistant/client";
 import type { Capabilities } from "./capabilities";
 import { door, holds, state } from "./deployment";
 import { Home } from "./home/Home";
@@ -15,9 +17,8 @@ import { PLACEHOLDERS } from "./home/placeholders";
 import { ready as readyToStart } from "./home/setup";
 import { Setup } from "./home/Setup";
 import { placesKept } from "./objects/kept";
-import { Rail } from "./Rail";
 import { href, parse, type Route } from "./routes";
-import { foot, initials, railPresent, sections, usable } from "./sections";
+import { foot, initials, sections, usable } from "./sections";
 import { where } from "./settings/install";
 import { backupsKept } from "./settings/kept";
 import { Settings } from "./settings/Settings";
@@ -35,6 +36,17 @@ export function App() {
   // the side on a narrow window: a panel over the page, opened from the top bar
   const [menu, setMenu] = useState(false);
   const closeMenu = useCallback(() => setMenu(false), []);
+  // the conversations this browser keeps, listed under the Assistant in the side
+  const [talks, setTalks] = useState(() => conversations());
+  useEffect(() => {
+    const read = () => setTalks(conversations());
+    window.addEventListener(CONVERSATIONS_CHANGED, read);
+    window.addEventListener("storage", read);
+    return () => {
+      window.removeEventListener(CONVERSATIONS_CHANGED, read);
+      window.removeEventListener("storage", read);
+    };
+  }, []);
 
   useEffect(() => {
     const onHash = () => {
@@ -120,16 +132,19 @@ export function App() {
   const st = state(caps);
   // a model backend that is still warming keeps only the assistant waiting
   const ready = usable(caps);
-  const side = sections(caps, setupReady);
+  const side = sections(
+    caps,
+    setupReady,
+    talks.map((c) => ({ id: c.id, title: c.title ?? "A conversation", depth: 1 as const })),
+  );
   const kept = foot(caps);
   const sided = side.length + kept.length > 0;
   const active = [...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null;
-  const rail = active !== null && railPresent(caps, active.id);
   const inSettings = ready && active?.id === "settings";
   const onSetup = ready && operator && !left && (setupReady === false || landed);
   const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id);
   const who = caps.person.display_name || caps.person.subject;
-  const body = ["body", sided ? "with-side" : null, rail ? "with-rail" : null].filter(Boolean).join(" ");
+  const body = ["body", sided ? "with-side" : null].filter(Boolean).join(" ");
   const changed = () => setAsked((n) => n + 1);
 
   return (
@@ -217,6 +232,7 @@ export function App() {
           {ready && active?.id === "home" && operator && setupReady === null && <p className="meta">Reading the install.</p>}
           {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={setupReady ? () => setLeft(true) : undefined} />}
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
+          {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {ready && active === null && (
@@ -226,7 +242,6 @@ export function App() {
             </section>
           )}
         </main>
-        {rail && active && <Rail key={active.id} caps={caps} section={active.id} />}
       </div>
     </div>
   );

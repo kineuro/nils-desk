@@ -217,9 +217,46 @@ export interface Conversation {
   /** The document it opened on. */
   document: number | null;
   at: string;
+  /** The station it talks to, and its first words; older entries have neither. */
+  station?: string;
+  title?: string;
 }
 
 const KEY = "nils-desk.assistant.conversations";
+const SAY = "nils-desk.assistant.say";
+
+/** The event the list sends when it changes, so the side can show a new conversation at once. */
+export const CONVERSATIONS_CHANGED = "nils:conversations";
+
+/** A conversation's name in a list: its first words, cut at a word before 44 characters. */
+export function titleOf(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  if (flat.length <= 44) return flat || "A conversation";
+  const cut = flat.slice(0, 44);
+  // a cut that ends where a word ends keeps that word
+  const at = flat[44] === " " ? cut.length : cut.lastIndexOf(" ");
+  return `${(at > 20 ? cut.slice(0, at) : cut).replace(/[\s,.;:]+$/, "")}…`;
+}
+
+/** A sentence another page hands the Assistant page to start from, and the station it goes to. */
+export function sayLater(station: string, words: string): void {
+  try {
+    sessionStorage.setItem(SAY, JSON.stringify({ station, words }));
+  } catch {
+    // a private window keeps nothing; the person types it
+  }
+}
+
+export function takeSaid(): { station: string; words: string } | null {
+  try {
+    const raw = sessionStorage.getItem(SAY);
+    sessionStorage.removeItem(SAY);
+    const v = raw ? (JSON.parse(raw) as { station?: unknown; words?: unknown }) : null;
+    return v && typeof v.station === "string" && typeof v.words === "string" ? { station: v.station, words: v.words } : null;
+  } catch {
+    return null;
+  }
+}
 
 export function conversations(): Conversation[] {
   try {
@@ -233,14 +270,15 @@ export function conversations(): Conversation[] {
 export function remember(c: Conversation): void {
   try {
     localStorage.setItem(KEY, JSON.stringify([c, ...conversations().filter((x) => x.id !== c.id)].slice(0, 50)));
+    window.dispatchEvent(new Event(CONVERSATIONS_CHANGED));
   } catch {
     // a private window keeps nothing
   }
 }
 
-export function newConversation(document: number | null, parent: string | null): Conversation {
+export function newConversation(document: number | null, parent: string | null, station?: string, title?: string): Conversation {
   const id = `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-  const c = { id, parent, document, at: new Date().toISOString() };
+  const c: Conversation = { id, parent, document, at: new Date().toISOString(), ...(station ? { station } : {}), ...(title ? { title } : {}) };
   remember(c);
   return c;
 }
