@@ -8,7 +8,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
-import { conversationFor, newConversation, titleOf } from "../assistant/client";
+import { chats, chatsKept } from "../assistant/chats";
+import { titleOf } from "../assistant/client";
 import type { Proposal } from "../assistant/parts";
 import { stationsServed } from "../assistant/stations";
 import { TurnView } from "../assistant/TurnView";
@@ -24,6 +25,7 @@ import { assistantModel, assistantOffered } from "../sections";
 import { admit } from "../ui/context";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
+import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
 import { ProfilePanel, StepEditor } from "./CardParts";
@@ -235,15 +237,19 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const [conv, setConv] = useState<string | null>(null);
   const talk = useConversation(station, conv);
   const root = versions.some((v) => v.id === id) ? versions[0].id : null;
+  // the person's conversation on any version of this card, from the assistant's list (the chat, slice 2)
+  const chatList = useKept(chatsKept);
   useEffect(() => {
-    if (root === null) return;
-    const found = conversationFor(versions.map((v) => v.id));
-    const kept = found && (found.station ?? station) === station ? found.id : null;
-    if (kept !== conv) {
-      talk.reset();
-      setConv(kept);
-    }
+    talk.reset();
+    setConv(null);
   }, [root]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (root === null || !talkable) return;
+    chatsKept.ensure();
+    const chain = versions.map((v) => v.id);
+    const found = (chatList.value?.conversations ?? []).find((c) => c.station === station && c.document !== null && chain.includes(c.document));
+    if (found) setConv((was) => was ?? found.id);
+  }, [root, chatList.value]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pending = talk.pane.proposals.filter((p) => p.decided === null);
   const [changes, setChanges] = useState<Record<string, string[]>>({});
@@ -325,12 +331,20 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       });
   };
 
-  const say = (words: string) => {
+  const say = async (words: string) => {
     let target = conv;
     if (!target) {
-      target = newConversation(id, null, station, titleOf(words)).id;
-      talk.made(target);
-      setConv(target);
+      // the assistant names the card's conversation, and it is the person's
+      try {
+        const made = await chats.create({ station, title: titleOf(words), document: id, lineage: root ?? id });
+        target = made.id;
+        talk.made(target);
+        setConv(target);
+        chatsKept.refresh().catch(() => undefined);
+      } catch (e) {
+        setWhy(e instanceof Error ? e.message : String(e));
+        return;
+      }
     }
     const context = admit({
       page: { kind: "query", id: String(id) },

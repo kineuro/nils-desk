@@ -98,15 +98,31 @@ pub(crate) fn assistant_upstream(desk: &Shared) -> Option<Upstream> {
     })
 }
 
+/// The assistant (Wave 4c §7.7) keeps a person's conversations, so the desk
+/// forwards its doors only for a person holding `assist`, as it pushes the
+/// token only for them; in `off` mode everyone does.
 pub async fn assistant(
     State(desk): State<Shared>,
     Path(rest): Path<String>,
     req: Request,
 ) -> Response {
-    match assistant_upstream(&desk) {
-        Some(up) => forward(&desk, &up, &format!("/{rest}"), req, Bearer::Person).await,
-        None => absent("the assistant"),
+    let Some(up) = assistant_upstream(&desk) else {
+        return absent("the assistant");
+    };
+    if !matches!(desk.config.mode, Mode::Off) {
+        let (s, _) = session::resolve(&desk, req.headers());
+        let assist = s
+            .map(|s| session::person(&desk, &s).holds("assist"))
+            .unwrap_or(false);
+        if !assist {
+            return (
+                axum::http::StatusCode::FORBIDDEN,
+                axum::Json(json!({"error": "the assistant needs the assist entitlement"})),
+            )
+                .into_response();
+        }
     }
+    forward(&desk, &up, &format!("/{rest}"), req, Bearer::Person).await
 }
 
 /// The supervisor (Wave 5 §10.4): its own bearer from the config, and only

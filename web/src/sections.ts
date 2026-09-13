@@ -41,7 +41,7 @@ export function sections(caps: Capabilities, ready: boolean | null = true, conve
   const out: Section[] = [];
   if (holds(caps, "reader")) out.push({ id: "home", title: ready === false ? "Get started" : "Home", icon: "home" });
   // the assistant helps set an install up as well, so it does not wait for it
-  if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: [{ id: "new", title: "New conversation", depth: 1 }, ...conversations] });
+  if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: [{ id: "new", title: "New conversation", depth: 1 }, ...conversations, { id: "all", title: "All conversations", depth: 1 }] });
   if (ready !== true) return out;
   for (const p of PLACEHOLDERS) if (holds(caps, p.entitlement) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon });
   return out;

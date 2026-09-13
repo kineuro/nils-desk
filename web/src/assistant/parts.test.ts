@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { acceptPart, asPart, empty, fromHistory, reduce, type Chunk } from "./parts";
+import { acceptPart, asPart, empty, fromHistory, reduce, withStored, type Chunk } from "./parts";
 
 describe("the closed union of parts (section 9.8)", () => {
   it("admits exactly the eight shapes and drops the rest", () => {
@@ -87,5 +87,21 @@ describe("the reducer over the live stream", () => {
     expect(s.proposals[0].decided).toBe("rejected");
     expect(s.busy).toBe(false);
     expect(reduce(decided, { type: "conversation-reset", snapshot: h }).turns).toHaveLength(2);
+  });
+  it("takes the decisions the assistant kept, so a reload shows what was accepted", () => {
+    let s = empty();
+    s = acceptPart(s, "a1", { kind: "move_proposal", document: 7, parent: null, sentence: "one" });
+    s = acceptPart(s, "a1", { kind: "move_proposal", document: 8, parent: 7, sentence: "two" });
+    s = acceptPart(s, "a2", { kind: "move_proposal", document: 9, parent: 8, sentence: "three" });
+    const kept = withStored(s, [
+      { document: 7, decided: "accepted", stale: false },
+      { document: 8, decided: null, stale: true },
+      { document: 99, decided: "rejected", stale: false },
+    ]);
+    expect(kept.proposals.map((p) => [p.document, p.decided, p.stale ?? null])).toEqual([
+      [7, "accepted", null],
+      [8, null, { moved_to: null }],
+      [9, null, null],
+    ]);
   });
 });

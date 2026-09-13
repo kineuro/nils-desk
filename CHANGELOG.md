@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Conversations with the assistant are kept by the assistant, per person, and no longer in the browser. The side lists the pinned and the latest under Assistant, and All conversations lists every one, searched by title and grouped by when it was last used, the archived on a tab of their own; each is renamed, pinned, archived or deleted there or from its own head. A reload shows which proposals were accepted or disregarded. The conversations this browser kept before are offered to the assistant once, which keeps those that were the person's. It needs nils-assistant's conversation doors (the chat, slice 1).
+
+### Changed
+
+- The desk forwards the assistant's doors only for a person holding `assist`, as it already did for the token it pushes.
+
 ## [1.0.0-alpha.19] - 2026-09-13
 
 Released beside the engine's 1.0.0-alpha.19 so the two stay in step. The charts of a Query card read the profile door that engine adds, and accepting a version the assistant proposed keeps it under the version open, which that engine learned too; every other change works with the engine's 1.0.0-alpha.18 as well.
