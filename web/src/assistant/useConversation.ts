@@ -7,7 +7,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { PageContext } from "../ui/context";
-import { chats, chatsKept } from "./chats";
+import { type ChatContext, chats, chatsKept } from "./chats";
 import { assistant, StaleProposal, type Delegation, type Plan } from "./client";
 import { empty, fromHistory, reduce, type PaneState, type Proposal, withStored } from "./parts";
 
@@ -27,6 +27,8 @@ export interface Conversing {
   /** When the running turn started, for the wait's clock. */
   since: number;
   why: string | null;
+  /** How full the conversation's context is, as the assistant last said (the chat, slice 3). */
+  context: ChatContext | null;
   /** Start again from nothing, as when another conversation opens. */
   reset: () => void;
   /** A conversation just made on this page: it has no history to read yet. */
@@ -46,6 +48,7 @@ export function useConversation(station: string, conv: string | null): Conversin
   const [since, setSince] = useState(0);
   const [why, setWhy] = useState<string | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [context, setContext] = useState<ChatContext | null>(null);
 
   // the reducer's state is kept in a ref as well, so the reading loop decides on what it just applied
   const apply = useCallback((f: (s: PaneState) => PaneState) => {
@@ -87,6 +90,11 @@ export function useConversation(station: string, conv: string | null): Conversin
               readPlans(id);
               // the list orders by the last use, so a settled turn moves this conversation up
               chatsKept.refresh().catch(() => undefined);
+              // and the turn filled the context a little more
+              chats.get(id).then(
+                (c) => setContext(c.context ?? null),
+                () => undefined,
+              );
               return;
             }
             apply((x) => ({ ...x, busy: true }));
@@ -120,7 +128,11 @@ export function useConversation(station: string, conv: string | null): Conversin
           readPlans(conv);
           // the decisions the assistant keeps: a reload shows what was accepted or disregarded
           chats.get(conv).then(
-            (c) => alive && apply((x) => withStored(x, c.proposals)),
+            (c) => {
+              if (!alive) return;
+              apply((x) => withStored(x, c.proposals));
+              setContext(c.context ?? null);
+            },
             () => undefined,
           );
         })
@@ -139,6 +151,7 @@ export function useConversation(station: string, conv: string | null): Conversin
     apply(() => empty());
     setPlans([]);
     setWhy(null);
+    setContext(null);
   }, [apply]);
 
   const made = useCallback((id: string) => {
@@ -186,5 +199,5 @@ export function useConversation(station: string, conv: string | null): Conversin
       .catch((e: Error) => setWhy(e.message));
   };
 
-  return { pane, plans, since, why, reset, made, send, stop, decide, confirm };
+  return { pane, plans, since, why, context, reset, made, send, stop, decide, confirm };
 }

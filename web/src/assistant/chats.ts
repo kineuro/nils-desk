@@ -18,6 +18,14 @@ export const STATION_WORDS: Record<string, string> = {
   operator: "Plans work",
 };
 
+/** How full a conversation's context is, as the assistant last saw it (the chat, slice 3). */
+export interface ChatContext {
+  tokens: number | null;
+  window: number | null;
+  compactions: number;
+  compacted_at: string | null;
+}
+
 /** A conversation as the assistant lists it. */
 export interface Chat {
   id: string;
@@ -31,6 +39,8 @@ export interface Chat {
   pinned: boolean;
   archived: boolean;
   forked_from: string | null;
+  /** From an assistant that keeps it; an older one sends none. */
+  context?: ChatContext;
 }
 
 /** A proposal as the assistant keeps it, with the person's decision. */
@@ -94,6 +104,19 @@ export const chats = {
 
 /** The person's latest conversations, as the side and the pages read them. */
 export const chatsKept = keeper(() => chats.list({ limit: 50 }));
+
+/** The meter's reading: the share of the window the context holds, amber from 70%; none while the size or the window is unknown. */
+export function meterOf(c: ChatContext | null | undefined): { percent: number; words: string; tone: "plain" | "caution"; title: string } | null {
+  if (!c || c.tokens === null || !c.window) return null;
+  const percent = Math.min(100, Math.round((100 * c.tokens) / c.window));
+  const size = (n: number) => (n >= 1024 ? `${Math.round(n / 1024)}k` : String(n));
+  return {
+    percent,
+    words: `${percent}% of ${size(c.window)}`,
+    tone: percent >= 70 ? "caution" : "plain",
+    title: `The conversation holds ${c.tokens.toLocaleString("en-US")} of the model's ${c.window.toLocaleString("en-US")} tokens. Earlier turns are summarized before it fills.`,
+  };
+}
 
 /** A conversation's name, or plain words while it has none. */
 export function chatTitle(c: { title: string | null }): string {

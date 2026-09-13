@@ -24,6 +24,7 @@ import { ChatActions, ChatHistory } from "./ChatHistory";
 import { takeSaid, titleOf, type Plan } from "./client";
 import type { PaneState } from "./parts";
 import { CardInPlay, type InPlay } from "./CardInPlay";
+import { CompactionNote, ContextMeter } from "./ContextMeter";
 import { stationOf, stationsServed } from "./stations";
 import { TurnView } from "./TurnView";
 import { useConversation } from "./useConversation";
@@ -170,6 +171,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             This conversation is not one of yours, or it was deleted. <a href={href("assistant", "all")}>All conversations</a>
           </p>
         )}
+        <CompactionNote context={talk.context} />
         {!missing && pane.turns.length === 0 && !pane.busy && <p className="lede">{hint(station)}</p>}
         {pane.turns.map((t) => (
           <TurnView
@@ -229,6 +231,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
           ) : (
             <span className="meta">{STATION_WORDS[station] ?? station}</span>
           )}
+          <ContextMeter context={talk.context} />
           <span className="grow" />
           <span className="meta">{station === "operator" ? "It plans jobs for you to confirm; nothing runs before that." : "It reads what you may read, and proposes; you decide."}</span>
         </div>

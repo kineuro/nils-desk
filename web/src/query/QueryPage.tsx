@@ -12,6 +12,7 @@ import { chats, chatsKept } from "../assistant/chats";
 import { titleOf } from "../assistant/client";
 import type { Proposal } from "../assistant/parts";
 import { stationsServed } from "../assistant/stations";
+import { CompactionNote, ContextMeter } from "../assistant/ContextMeter";
 import { TurnView } from "../assistant/TurnView";
 import { useConversation, type Conversing } from "../assistant/useConversation";
 import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
@@ -584,11 +585,13 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
         <Icon name="assistant" />
         <h2 className="grow">Talk it through</h2>
         {talkable && model && <span className="tag">{model}</span>}
+        {talkable && <ContextMeter context={talk.context} />}
       </div>
       {!talkable && <p className="meta">The assistant is not open to you here. The card still changes by hand, step by step.</p>}
       {talkable && (
         <>
           <div className="talk card-talk-log" aria-live="polite">
+            <CompactionNote context={talk.context} />
             {pane.turns.length === 0 && !pane.busy && (
               <p className="meta">Say a change in words, such as only women, or their T1w stacks. The assistant proposes it as the next version, and it stands in the steps below to accept or disregard.</p>
             )}

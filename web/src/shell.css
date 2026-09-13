@@ -488,6 +488,12 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .chat-row-link:hover .chat-row-title { color: var(--n-brand-text); }
 .chat-row-title { font-weight: 500; overflow-wrap: anywhere; }
 .chat-actions, .chat-rename { gap: 0.35rem; flex-wrap: wrap; }
+.context-meter { display: inline-flex; align-items: center; gap: 0.45rem; }
+.context-track { width: 4.5rem; height: 6px; overflow: hidden; border-radius: 3px; background: var(--n-bg-sunken); }
+.context-track i { display: block; height: 100%; background: var(--n-brand-line); }
+.context-meter.caution .context-track i { background: var(--n-caution-icon); }
+.context-meter.caution .meta { color: var(--n-caution-fg); }
+.compaction-note { margin: 0; padding: 0.4rem 0.7rem; border-left: 2px solid var(--n-line-strong); }
 .station-pick { gap: 0.35rem; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
 .station-pick select { padding: 0.1rem 0.3rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; }
 

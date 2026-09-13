@@ -7,6 +7,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Added
 
 - Conversations with the assistant are kept by the assistant, per person, and no longer in the browser. The side lists the pinned and the latest under Assistant, and All conversations lists every one, searched by title and grouped by when it was last used, the archived on a tab of their own; each is renamed, pinned, archived or deleted there or from its own head. A reload shows which proposals were accepted or disregarded. The conversations this browser kept before are offered to the assistant once, which keeps those that were the person's. It needs nils-assistant's conversation doors (the chat, slice 1).
+- A conversation shows how full its context is: a thin meter by the composer, and in a Query card's discussion, reads the share of the model's window the conversation holds, amber from 70%. Once the assistant has summarized earlier turns to stay within the window, the thread says so, and the whole conversation still shows. It needs nils-assistant's context (the chat, slice 3).
 
 ### Changed
 
