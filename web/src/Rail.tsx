@@ -65,6 +65,19 @@ export function Rail({ caps, section }: { caps: Capabilities; section: string })
   const model = railModel(caps);
   const context: PageContext = admit({ page: { kind: section, id: null }, epoch: caps.engine?.registry.epoch });
 
+  // a page may hand the rail a sentence to start from; the person sends it
+  useEffect(() => {
+    const say = (e: Event) => {
+      const words = (e as CustomEvent<unknown>).detail;
+      if (typeof words === "string") {
+        setText(words);
+        input.current?.focus();
+      }
+    };
+    window.addEventListener("nils:rail-say", say);
+    return () => window.removeEventListener("nils:rail-say", say);
+  }, []);
+
   // the reducer's state is kept in a ref as well, so the reading loop decides on what it just applied
   const apply = useCallback((f: (s: PaneState) => PaneState) => {
     current.current = f(current.current);

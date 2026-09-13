@@ -4,6 +4,12 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Home, as the chosen design of the home page draws it. A strip of the parts says whether each answers. For an operator, a band of steps makes an install ready for real work, each worked out from what the parts report: how it is installed, a model for the assistant, bringing DICOM in, keeping the registry safe, and who signs in. The band leaves Home once every step is done. Four tiles say what the registry holds, what needs you, what is running and what changed since your last visit.
+- Bringing DICOM in from Home. The supervisor looks inside a folder, and each folder inside that holds DICOM is ticked to become a batch of its own, with the pack that reads it. The folder is added as a source, the supervisor starts the engine again to read it, and a digest is queued for each ticked folder. The command a person would run by hand is beside the buttons, and where no service runs the engine, it is the command alone.
+- The shell's top bar, for an admin, says how the install runs and when a newer release is out, from the supervisor's report.
+
 ### Fixed
 
 - The desk forwarded a person's bearer to the supervisor, a token the desk signs in local mode or the provider's in oidc mode, and the supervisor knows only the tokens in its own configuration, so every call from Settings was refused. The desk now sends the supervisor the token from its `[supervisor]` table in every mode, once it has checked, as before, that the person is an admin.
