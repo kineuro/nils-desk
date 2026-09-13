@@ -321,6 +321,19 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
         .await
         .unwrap();
     assert_eq!(list["users"].as_array().unwrap().len(), 2);
+    // each with when they last signed in, and the sessions open now
+    assert!(
+        list["users"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|u| u["last_seen"].is_string()),
+        "{list}"
+    );
+    assert!(
+        list["sessions_open"].as_i64().is_some_and(|n| n >= 2),
+        "{list}"
+    );
     // the command line's login: a token of one day
     let r = client
         .post(format!("{origin}/desk/cli-login"))

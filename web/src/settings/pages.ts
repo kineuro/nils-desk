@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Settings' pages (Wave 5 section 10), as the chosen design lays them out:
 // the parts, with the engine, the desk, the gateway and the assistant under
-// them, then the places and the database. A page is offered only once it is
-// built back, where the deployment has what it shows, and to a person who
-// may read it.
+// them, then the places, the database, identity and the audit log. A page is
+// offered only once it is built back, where the deployment has what it
+// shows, and to a person who may read it.
 
 import type { Capabilities } from "../capabilities";
 import { door, holds } from "../deployment";
@@ -18,6 +18,7 @@ export interface SettingsPage {
 /** The pages down the settings nav, in order, for this document and person. */
 export function settingsPages(caps: Capabilities): SettingsPage[] {
   if (!holds(caps, "operator")) return [];
+  const admin = holds(caps, "admin");
   const out: SettingsPage[] = [
     { id: "parts", title: "Parts", sub: false },
     { id: "engine", title: "Engine", sub: true },
@@ -29,7 +30,10 @@ export function settingsPages(caps: Capabilities): SettingsPage[] {
   // the places, where the engine serves them
   if (door(caps, "GET /api/places")) out.push({ id: "places", title: "Places", sub: false });
   // the database is an admin's, where the engine serves its doors
-  if (holds(caps, "admin") && (door(caps, "GET /api/backups") || door(caps, "GET /api/settings"))) out.push({ id: "database", title: "Database", sub: false });
+  if (admin && (door(caps, "GET /api/backups") || door(caps, "GET /api/settings"))) out.push({ id: "database", title: "Database", sub: false });
+  // who signs in is the desk's, and an admin's
+  if (admin) out.push({ id: "identity", title: "Identity", sub: false });
+  if (admin && door(caps, "GET /api/audit")) out.push({ id: "audit", title: "Audit", sub: false });
   return out;
 }
 

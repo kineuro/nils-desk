@@ -12,8 +12,10 @@ import { href } from "../routes";
 import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
 import { Acted, Head, Health, useRun } from "./common";
+import { AuditPage } from "./AuditPage";
 import { DatabasePage } from "./DatabasePage";
 import { GatewayPage } from "./GatewayPage";
+import { IdentityPage } from "./IdentityPage";
 import { PlacesPage } from "./PlacesPage";
 import { keptRunning, reapplyByHand } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
@@ -65,6 +67,10 @@ export function Settings(props: PageProps & { page: string | null }) {
       return <PlacesPage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     case "database":
       return <DatabasePage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
+    case "identity":
+      return <IdentityPage caps={props.caps} />;
+    case "audit":
+      return <AuditPage />;
     default:
       return null;
   }

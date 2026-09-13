@@ -257,6 +257,21 @@ table.thin tr.openable:hover td, table.thin tr.openable:focus-visible td { backg
 .drawer-foot { display: grid; gap: 0.75rem; padding: 1rem 1.2rem; border-top: 1px solid var(--n-line); }
 .choices { display: grid; gap: 0.45rem; }
 .key-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+.modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
+.radio { width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--n-neutral-line); background: var(--n-bg-raised); flex: none; display: inline-grid; place-items: center; }
+.radio.on { border-color: var(--n-brand-text); }
+.radio.on::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--n-brand-text); }
+.mode .row { gap: 0.55rem; }
+table.thin.audit .audit-scope { display: none; }
+.mode.on { border: 2px solid var(--n-brand-text); padding: calc(1rem - 1px) calc(1.1rem - 1px); }
+.ladder button { font: inherit; font-size: 12px; line-height: 1.35rem; padding: 0 0.5rem; border: 0; border-left: 1px solid var(--n-neutral-line); background: transparent; color: var(--n-text-faint); cursor: pointer; }
+.ladder button:first-child { border-left: 0; }
+.ladder button.on { background: var(--n-brand-bg); color: var(--n-brand-fg); }
+.ladder button:disabled { cursor: default; }
+.ladder-row { gap: 0.6rem; flex-wrap: wrap; }
+.audit-filters { gap: 0.5rem; flex-wrap: wrap; }
+.audit-filters .input { flex: 1 1 11rem; }
+td.nowrap { white-space: nowrap; }
 .key-form .input { min-width: 12rem; }
 .provider { display: grid; gap: 0.35rem; }
 dl.facts .facts-pair { display: contents; }
@@ -282,6 +297,11 @@ input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
   .settings-head .row { flex-wrap: wrap; }
   /* a model's row keeps where its prompts go and its admission in sight; its backend and stations are on wider windows */
   table.thin.models th:nth-child(2), table.thin.models td:nth-child(2), table.thin.models th:nth-child(5), table.thin.models td:nth-child(5) { display: none; }
+  .modes { grid-template-columns: minmax(0, 1fr); }
+  /* an act keeps what it touched in sight, under the act, and its epoch is on wider windows */
+  table.thin.audit th:nth-child(4), table.thin.audit td:nth-child(4), table.thin.audit th:nth-child(5), table.thin.audit td:nth-child(5) { display: none; }
+  table.thin.audit .audit-scope { display: block; overflow-wrap: anywhere; margin-top: 0.25rem; }
+  table.thin.audit td.nowrap { white-space: normal; }
 }
 
 /* ------------------------------------------------------------ narrower windows */
