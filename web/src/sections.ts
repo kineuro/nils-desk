@@ -9,10 +9,19 @@ import { holds, state } from "./deployment";
 import { settingsPages } from "./settings/pages";
 import type { IconName } from "./ui/Icon";
 
+/** A page of a section, unfolded under it in the side while the section is open. */
+export interface SidePage {
+  id: string;
+  title: string;
+  /** 2 sets it in under the page before it. */
+  depth: 1 | 2;
+}
+
 export interface Section {
   id: string;
   title: string;
   icon: IconName;
+  pages?: SidePage[];
 }
 
 /** Whether the desk can be worked in: ready, or ready with the model backend still warming, which only the assistant waits for. */
@@ -29,10 +38,11 @@ export function sections(caps: Capabilities): Section[] {
   return out;
 }
 
-/** The sections kept at the foot of the side, apart from the work: Settings, for a person who may open one of its pages. */
+/** The sections kept at the foot of the side, apart from the work: Settings, with its pages, for a person who may open one of them. */
 export function foot(caps: Capabilities): Section[] {
-  if (!usable(caps) || settingsPages(caps).length === 0) return [];
-  return [{ id: "settings", title: "Settings", icon: "settings" }];
+  const pages = usable(caps) ? settingsPages(caps) : [];
+  if (pages.length === 0) return [];
+  return [{ id: "settings", title: "Settings", icon: "settings", pages: pages.map((p) => ({ id: p.id, title: p.title, depth: p.sub ? 2 : 1 })) }];
 }
 
 /** Whether the rail renders beside a section: the assistant answered and the person holds assist (section 6.4). The chosen design draws Settings without it. While the model warms the rail is there and waits. */

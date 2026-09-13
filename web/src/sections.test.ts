@@ -55,6 +55,15 @@ describe("the foot", () => {
     expect(foot(caps({ person: { subject: "r", display_name: "r", entitlements: ["reader", "assist"], roles: ["reader"] } }))).toEqual([]);
     expect(foot(caps({ engine: null }))).toEqual([]);
   });
+  it("carries Settings' pages, each part's own set in under the parts", () => {
+    const pages = foot(caps())[0].pages ?? [];
+    expect(pages.map((p) => [p.id, p.depth])).toEqual([
+      ["parts", 1],
+      ["engine", 2],
+      ["desk", 2],
+      ["identity", 1],
+    ]);
+  });
 });
 
 describe("the rail", () => {
