@@ -13,6 +13,7 @@ import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
 import { Acted, Head, Health, useRun } from "./common";
 import { DatabasePage } from "./DatabasePage";
+import { PlacesPage } from "./PlacesPage";
 import { keptRunning, reapplyByHand } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
@@ -57,6 +58,8 @@ export function Settings(props: PageProps & { page: string | null }) {
       return <DeskPage {...props} />;
     case "assistant":
       return <AssistantPage {...props} />;
+    case "places":
+      return <PlacesPage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     case "database":
       return <DatabasePage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     default:

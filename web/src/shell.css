@@ -241,6 +241,24 @@ table.thin td.go { width: 24px; color: var(--n-text-faint); }
 .schedule-when .input { flex: 1 1 6.5rem; }
 .schedule-when .input.time { flex: 1 0 8.5rem; }
 .input.static { background: var(--n-bg-sunken); }
+.places-head { display: flex; align-items: flex-end; gap: 1rem; flex-wrap: wrap; }
+.places-head .settings-head { flex: 1; min-width: 16rem; }
+.chips { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+button.tag { cursor: pointer; font-family: inherit; }
+button.tag:hover { border-color: var(--n-brand-line); }
+table.thin.places td.num { white-space: nowrap; }
+table.thin.places .place-path { display: none; }
+table.thin tr.openable { cursor: pointer; }
+table.thin tr.openable:hover td, table.thin tr.openable:focus-visible td { background: var(--n-bg-hover); }
+.drawer-head { display: flex; align-items: center; gap: 0.6rem; padding: 1rem 1.2rem; border-bottom: 1px solid var(--n-line); color: var(--n-brand-icon); }
+.drawer-head h2 { flex: 1; color: var(--n-text); }
+.drawer-body { padding: 1rem 1.2rem; display: grid; gap: 1rem; align-content: start; overflow: auto; min-height: 0; }
+.drawer-body > * { min-width: 0; }
+.drawer-foot { display: grid; gap: 0.75rem; padding: 1rem 1.2rem; border-top: 1px solid var(--n-line); }
+.choices { display: grid; gap: 0.45rem; }
+.choice { display: flex; align-items: center; gap: 0.55rem; }
+.checks { display: flex; gap: 1.2rem; flex-wrap: wrap; }
+input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
 .note.db-key { padding: 0.9rem 1rem; }
 .note.db-key .note-detail { color: var(--n-text); }
 /* a path or a command is one long word: it breaks where it must, and never widens a column past its track */
@@ -253,6 +271,9 @@ table.thin td.go { width: 24px; color: var(--n-text-faint); }
 }
 @media (max-width: 860px) {
   .fields3 { grid-template-columns: minmax(0, 1fr); }
+  /* on a phone a place's row keeps its state in sight: the path goes under its name, and its guarantees and room are in the opened place */
+  table.thin.places th:nth-child(3), table.thin.places td:nth-child(3), table.thin.places th:nth-child(4), table.thin.places td:nth-child(4), table.thin.places th:nth-child(5), table.thin.places td:nth-child(5) { display: none; }
+  table.thin.places .place-path { display: block; font-family: var(--n-font-mono); overflow-wrap: anywhere; }
 }
 
 /* ------------------------------------------------------------ narrower windows */

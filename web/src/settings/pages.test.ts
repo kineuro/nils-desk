@@ -45,6 +45,13 @@ describe("the settings pages", () => {
     expect(settingsPages(served(["operator"])).map((p) => p.id)).not.toContain("database");
     expect(settingsPages(caps(["admin"])).map((p) => p.id)).not.toContain("database");
   });
+  it("offer the places where the engine serves them, before the database", () => {
+    const c = caps(["admin"]);
+    const served = { ...c, engine: { ...c.engine!, doors: ["GET /api/places", "GET /api/backups"] } };
+    expect(settingsPages(served).map((p) => p.id)).toEqual(["parts", "engine", "desk", "places", "database"]);
+    const operator = caps(["operator"]);
+    expect(settingsPages({ ...operator, engine: { ...operator.engine!, doors: ["GET /api/places"] } }).map((p) => p.id)).toContain("places");
+  });
   it("open the page an address names, and the parts for anything else", () => {
     const pages = settingsPages(caps(["admin"]));
     expect(settingsPage(pages, "desk")?.id).toBe("desk");
