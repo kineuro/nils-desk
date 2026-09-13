@@ -9,7 +9,7 @@
 import { useEffect, useState } from "react";
 import type { Capabilities, Entitlement } from "../capabilities";
 import { Command } from "../ui/Command";
-import { DrawerFrame } from "../ui/Drawer";
+import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Acted, Head, messageOf, useActing } from "./common";
 import { LADDER, MODES, addRefusal, identity, lastSeenWords, lit, reachWords, stepBelow, topStep, withAssist, withStep, type DeskUser, type Users } from "./identity";
@@ -270,7 +270,7 @@ function AddPerson({ users, onClose, onDone }: { users: DeskUser[]; onClose: () 
   );
 
   return (
-    <DrawerFrame title="Add a person" icon="users" onClose={onClose} foot={foot}>
+    <Dialog title="Add a person" icon="users" onClose={onClose} foot={foot}>
       <div className="field">
         <label className="label" htmlFor="person-username">
           Username
@@ -314,6 +314,6 @@ function AddPerson({ users, onClose, onDone }: { users: DeskUser[]; onClose: () 
           and use the assistant
         </label>
       </div>
-    </DrawerFrame>
+    </Dialog>
   );
 }

@@ -11,6 +11,8 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Changed
 
 - One side panel. The sections sit at its top and Settings at its foot. The open section unfolds its pages under it; Settings, once opened, rises to sit under the last section with its pages below it, and goes back down when another section opens. The second column that listed Settings' pages is gone. On a narrow window the side is a panel over the page, opened from the top bar.
+- A place added or opened, a person added, and a purpose moved open in a dialog over the page, not a drawer at its side. On a phone the dialog rises from the bottom as a sheet.
+- The Places page draws the places it read last at once, and says when that was. It reads them again when asked, after a change made on it, or when Home or the Database page has read them since, not every time it opens.
 
 ## [1.0.0-alpha.15] - 2026-09-13
 

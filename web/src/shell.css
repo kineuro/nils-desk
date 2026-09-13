@@ -147,9 +147,28 @@ table.thin .num, table.thin th.num { text-align: right; }
 .composer-input { align-items: flex-end; padding-right: 0.25rem; }
 .composer-input textarea { min-height: 2.6rem; }
 
-/* ------------------------------------------------------------ a drawer over the page */
+/* ------------------------------------------------------------ a dialog over the page */
 .scrim { position: fixed; inset: 0; background: var(--n-scrim); z-index: 10; }
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(480px, 100vw); z-index: 11; background: var(--n-bg-raised); border-left: 1px solid var(--n-line); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.dialog { width: min(38rem, calc(100vw - 2rem)); max-width: none; max-height: min(88vh, 56rem); padding: 0; border: 1px solid var(--n-line); border-radius: calc(var(--n-radius) * 2); background: var(--n-bg-raised); color: var(--n-text); overflow: hidden; }
+.dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; animation: dialog-in 180ms ease-out; }
+.dialog::backdrop { background: var(--n-scrim); }
+.dialog[open]::backdrop { animation: dialog-fade 180ms ease-out; }
+html:has(.dialog[open]) { overflow: hidden; }
+@keyframes dialog-in { from { opacity: 0; transform: translateY(0.5rem) scale(0.98); } }
+@keyframes dialog-fade { from { opacity: 0; } }
+@keyframes dialog-sheet { from { transform: translateY(100%); } }
+.dialog-head { display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.1rem; border-bottom: 1px solid var(--n-line); color: var(--n-brand-icon); }
+.dialog-head h2 { flex: 1; color: var(--n-text); }
+.dialog-body { padding: 1rem 1.1rem; display: grid; gap: 1rem; align-content: start; overflow: auto; min-height: 0; }
+.dialog-body > * { min-width: 0; }
+.dialog-foot { display: grid; gap: 0.75rem; padding: 0.85rem 1.1rem; border-top: 1px solid var(--n-line); }
+/* on a phone the dialog rises from the bottom as a sheet, with a grip at its top */
+@media (max-width: 640px) {
+  .dialog { width: 100%; max-height: 92dvh; margin: auto 0 0; border-width: 1px 0 0; border-radius: calc(var(--n-radius) * 4) calc(var(--n-radius) * 4) 0 0; }
+  .dialog[open] { animation: dialog-sheet 240ms ease-out; }
+  .dialog-head { position: relative; padding-top: 1.3rem; }
+  .dialog-head::before { content: ""; position: absolute; top: 0.5rem; left: calc(50% - 1.25rem); width: 2.5rem; height: 4px; border-radius: 2px; background: var(--n-neutral-line); }
+}
 
 /* ------------------------------------------------------------ the named states, and the sign in */
 .state { display: grid; gap: var(--n-space-2); max-width: var(--n-measure); font-size: 1.05rem; }
@@ -261,11 +280,9 @@ table.thin.places td.num { white-space: nowrap; }
 table.thin.places .place-path { display: none; }
 table.thin tr.openable { cursor: pointer; }
 table.thin tr.openable:hover td, table.thin tr.openable:focus-visible td { background: var(--n-bg-hover); }
-.drawer-head { display: flex; align-items: center; gap: 0.6rem; padding: 1rem 1.2rem; border-bottom: 1px solid var(--n-line); color: var(--n-brand-icon); }
-.drawer-head h2 { flex: 1; color: var(--n-text); }
-.drawer-body { padding: 1rem 1.2rem; display: grid; gap: 1rem; align-content: start; overflow: auto; min-height: 0; }
-.drawer-body > * { min-width: 0; }
-.drawer-foot { display: grid; gap: 0.75rem; padding: 1rem 1.2rem; border-top: 1px solid var(--n-line); }
+.places-bar { gap: 0.5rem; flex-wrap: wrap; }
+/* when a kept read was read, and the button that reads it again, stay together at the end of the line */
+.kept-at { display: inline-flex; align-items: center; gap: 0.25rem; margin-left: auto; white-space: nowrap; }
 .choices { display: grid; gap: 0.45rem; }
 .key-form { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; }
@@ -344,4 +361,5 @@ input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
 @media (prefers-reduced-motion: reduce) {
   .wait-phase::after { animation: none; }
   .side, .side.open, .side-gap, .side-pages, .side-chevron { transition: none; }
+  .dialog[open], .dialog[open]::backdrop { animation: none; }
 }

@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { holds } from "../deployment";
 import { Command } from "../ui/Command";
-import { DrawerFrame } from "../ui/Drawer";
+import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Acted, Head, Health, messageOf, useActing } from "./common";
 import { admissionWords, gatewayHealth, machineWords, modelMeta, purposeLines, stationOf, targets, usedFor, whereWords, type CatalogueModel, type Tone } from "./gateway";
@@ -347,7 +347,7 @@ function MoveDrawer({ purpose, backends, onClose, onDone }: { purpose: PurposeRo
   );
 
   return (
-    <DrawerFrame title={`Where ${station} goes`} icon="gateway" onClose={onClose} foot={foot}>
+    <Dialog title={`Where ${station} goes`} icon="gateway" onClose={onClose} foot={foot}>
       <dl className="facts">
         <dt>purpose</dt>
         <dd>
@@ -382,6 +382,6 @@ function MoveDrawer({ purpose, backends, onClose, onDone }: { purpose: PurposeRo
           <span className="meta">Recorded with your name beside the purpose; the gateway refuses the move without it.</span>
         </div>
       )}
-    </DrawerFrame>
+    </Dialog>
   );
 }
