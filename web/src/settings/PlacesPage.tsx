@@ -8,7 +8,6 @@
 // engine checks every rule again at its doors.
 
 import { useEffect, useState } from "react";
-import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served, holds } from "../deployment";
 import { FolderTable } from "../home/FolderTable";
@@ -16,6 +15,7 @@ import { digests, placeName, rows as rowsOf, type FolderRow, type Pack } from ".
 import { objects, type Place } from "../objects/client";
 import { data } from "../ops/client";
 import { Command } from "../ui/Command";
+import { DrawerFrame } from "../ui/Drawer";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { Acted, Head, messageOf, useActing } from "./common";
@@ -185,34 +185,6 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
       {drawer?.kind === "add" && places !== null && <AddDrawer caps={caps} install={install} places={places} packs={packs} onClose={() => setDrawer(null)} onDone={done} />}
       {drawer?.kind === "change" && places !== null && <ChangeDrawer place={drawer.place} places={places} onClose={() => setDrawer(null)} onDone={done} />}
     </div>
-  );
-}
-
-/** A drawer over the page: its head, what it asks, and its buttons; Escape closes it. */
-function DrawerFrame(props: { title: string; icon: "folder" | "pencil"; onClose: () => void; children: React.ReactNode; foot: React.ReactNode }) {
-  const { title, icon, onClose, children, foot } = props;
-  useEffect(() => {
-    const close = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, [onClose]);
-  return (
-    <>
-      <div className="scrim" onClick={onClose} />
-      <aside className="drawer" role="dialog" aria-modal="true" aria-label={title}>
-        <div className="drawer-head">
-          <Icon name={icon} size="lg" />
-          <h2>{title}</h2>
-          <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
-            <Icon name="x" />
-          </button>
-        </div>
-        <div className="drawer-body">{children}</div>
-        <div className="drawer-foot">{foot}</div>
-      </aside>
-    </>
   );
 }
 

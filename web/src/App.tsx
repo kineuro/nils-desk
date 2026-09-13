@@ -11,7 +11,7 @@ import { holds, state } from "./deployment";
 import { Home } from "./home/Home";
 import { Rail } from "./Rail";
 import { href, parse, type Route } from "./routes";
-import { foot, initials, railPresent, sections, type Section } from "./sections";
+import { foot, initials, railPresent, sections, usable, type Section } from "./sections";
 import { where } from "./settings/install";
 import { SetNav, Settings } from "./settings/Settings";
 import { supervise, type Install } from "./settings/supervise";
@@ -77,11 +77,13 @@ export function App() {
   if (load.kind === "failed") return <main className="state lone">The desk did not answer: {load.why}</main>;
   const caps = load.caps;
   const st = state(caps);
+  // a model backend that is still warming keeps only the assistant waiting
+  const ready = usable(caps);
   const side = sections(caps);
   const kept = foot(caps);
   const active = [...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null;
   const rail = active !== null && railPresent(caps, active.id);
-  const inSettings = st.kind === "ready" && active?.id === "settings";
+  const inSettings = ready && active?.id === "settings";
   const who = caps.person.display_name || caps.person.subject;
   const body = ["body", side.length + kept.length > 0 ? "with-side" : null, inSettings ? "with-setnav" : null, rail ? "with-rail" : null].filter(Boolean).join(" ");
 
@@ -124,6 +126,11 @@ export function App() {
           The engine is ahead of this desk. Everything here still works; update the desk to see what the engine added.
         </div>
       )}
+      {st.kind === "warming" && (
+        <div className="banner" role="note">
+          The model backend has not produced its first token since it started. The rest of the desk works; the assistant waits.
+        </div>
+      )}
       <div className={body}>
         {side.length + kept.length > 0 && (
           <nav className="side" aria-label="sections">
@@ -153,12 +160,6 @@ export function App() {
               </p>
             </section>
           )}
-          {st.kind === "warming" && (
-            <section className="state">
-              <h1>Warming</h1>
-              <p>The model backend has not produced its first token since it started. The rest of the desk works; the assistant waits.</p>
-            </section>
-          )}
           {st.kind === "no_engine" && (
             <section className="state">
               <h1>The engine did not answer</h1>
@@ -174,9 +175,9 @@ export function App() {
               </p>
             </section>
           )}
-          {st.kind === "ready" && active?.id === "home" && <Home caps={caps} install={install} onChanged={() => setAsked((n) => n + 1)} />}
+          {ready && active?.id === "home" && <Home caps={caps} install={install} onChanged={() => setAsked((n) => n + 1)} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={() => setAsked((n) => n + 1)} />}
-          {st.kind === "ready" && active === null && (
+          {ready && active === null && (
             <section className="state">
               <h1>Nothing is open to you here</h1>
               <p>The desk has no section for the entitlements this account holds.</p>

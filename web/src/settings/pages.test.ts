@@ -52,6 +52,10 @@ describe("the settings pages", () => {
     const operator = caps(["operator"]);
     expect(settingsPages({ ...operator, engine: { ...operator.engine!, doors: ["GET /api/places"] } }).map((p) => p.id)).toContain("places");
   });
+  it("offer the gateway under the desk where it answered, before the assistant", () => {
+    expect(settingsPages(caps(["operator"], { kvasir: { models: [] }, assistant: { stations: [] } })).map((p) => p.id)).toEqual(["parts", "engine", "desk", "gateway", "assistant"]);
+    expect(settingsPages(caps(["operator"], { kvasir: { models: [] } })).find((p) => p.id === "gateway")?.sub).toBe(true);
+  });
   it("open the page an address names, and the parts for anything else", () => {
     const pages = settingsPages(caps(["admin"]));
     expect(settingsPage(pages, "desk")?.id).toBe("desk");
