@@ -2,7 +2,7 @@
 // A person's conversations as the side and the page of all conversations show them.
 
 import { describe, expect, it } from "vitest";
-import { type Chat, ChatError, chatTitle, groupsOf, importHere, sidePages, toImport } from "./chats";
+import { type Chat, ChatError, chatTitle, groupsOf, importHere, meterOf, sidePages, toImport } from "./chats";
 
 const chat = (id: string, updated: string, o: Partial<Chat> = {}): Chat => ({
   id,
@@ -77,5 +77,16 @@ describe("a person's conversations", () => {
     ]);
     expect(await importHere({ local: () => local, storage, get, patch })).toBe(0);
     expect(toImport(local, ["c-mine"]).map((c) => c.id)).toEqual(["c-gone", "c-later"]);
+  });
+});
+
+describe("a conversation's context", () => {
+  it("reads as its share of the model's window, amber from 70%, and not at all while unknown", () => {
+    expect(meterOf({ tokens: 24_810, window: 65_536, compactions: 0, compacted_at: null })).toMatchObject({ percent: 38, words: "38% of 64k", tone: "plain" });
+    expect(meterOf({ tokens: 47_000, window: 65_536, compactions: 1, compacted_at: "2026-09-14T10:00:00Z" })?.tone).toBe("caution");
+    expect(meterOf({ tokens: 90_000, window: 65_536, compactions: 0, compacted_at: null })?.percent).toBe(100);
+    expect(meterOf({ tokens: null, window: 65_536, compactions: 0, compacted_at: null })).toBeNull();
+    expect(meterOf({ tokens: 10, window: null, compactions: 0, compacted_at: null })).toBeNull();
+    expect(meterOf(undefined)).toBeNull();
   });
 });
