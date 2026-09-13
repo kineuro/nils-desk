@@ -6,6 +6,7 @@
 import type { Capabilities } from "./capabilities";
 import { stationOf, stationsServed } from "./assistant/stations";
 import { holds, state } from "./deployment";
+import { settingsPages } from "./settings/pages";
 import type { IconName } from "./ui/Icon";
 
 export interface Section {
@@ -22,14 +23,15 @@ export function sections(caps: Capabilities): Section[] {
   return out;
 }
 
-/** The sections kept at the foot of the side, apart from the work. */
-export function foot(_caps: Capabilities): Section[] {
-  return [];
+/** The sections kept at the foot of the side, apart from the work: Settings, for a person who may open one of its pages. */
+export function foot(caps: Capabilities): Section[] {
+  if (state(caps).kind !== "ready" || settingsPages(caps).length === 0) return [];
+  return [{ id: "settings", title: "Settings", icon: "settings" }];
 }
 
-/** Whether the rail renders beside a section: the assistant answered and the person holds assist (section 6.4). */
+/** Whether the rail renders beside a section: the assistant answered and the person holds assist (section 6.4). The chosen design draws Settings without it. */
 export function railPresent(caps: Capabilities, section: string): boolean {
-  return state(caps).kind === "ready" && caps.assistant !== null && holds(caps, "assist") && section !== "assistant";
+  return state(caps).kind === "ready" && caps.assistant !== null && holds(caps, "assist") && section !== "assistant" && section !== "settings";
 }
 
 /** The station the rail speaks to: on Home the operator plans, where the assistant serves it (section 9.3); elsewhere the concierge. */

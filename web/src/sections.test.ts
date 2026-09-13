@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "./capabilities";
 import { href, parse } from "./routes";
-import { initials, railModel, railPresent, railStation, sections } from "./sections";
+import { foot, initials, railModel, railPresent, railStation, sections } from "./sections";
 import { ICON_NAMES } from "./ui/Icon";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
@@ -36,7 +36,15 @@ describe("the sections", () => {
     expect(sections(caps({ engine: null }))).toEqual([]);
   });
   it("name only icons the set has", () => {
-    for (const s of sections(caps())) expect(ICON_NAMES).toContain(s.icon);
+    for (const s of [...sections(caps()), ...foot(caps())]) expect(ICON_NAMES).toContain(s.icon);
+  });
+});
+
+describe("the foot", () => {
+  it("keeps Settings for an operator or an admin of a ready deployment", () => {
+    expect(foot(caps()).map((s) => s.id)).toEqual(["settings"]);
+    expect(foot(caps({ person: { subject: "r", display_name: "r", entitlements: ["reader", "assist"], roles: ["reader"] } }))).toEqual([]);
+    expect(foot(caps({ engine: null }))).toEqual([]);
   });
 });
 
@@ -48,6 +56,7 @@ describe("the rail", () => {
     const noAssist = { ...withAssistant, person: { ...withAssistant.person, entitlements: ["reader" as const] } };
     expect(railPresent(noAssist, "home")).toBe(false);
     expect(railPresent(withAssistant, "assistant")).toBe(false);
+    expect(railPresent(withAssistant, "settings")).toBe(false);
   });
   it("plans with the operator on Home and talks to the concierge elsewhere", () => {
     expect(railStation(withAssistant, "home")).toBe("operator");

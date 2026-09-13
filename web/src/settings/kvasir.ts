@@ -34,6 +34,17 @@ export interface Backend {
   health: { warming?: boolean; ok?: boolean; queued?: number; [k: string]: unknown };
 }
 
+/** Section 8.6: one run of the admission suite for a model on a runtime, as the gateway recorded it. */
+export interface AdmissionRecord {
+  id: number;
+  backend: string;
+  model: string;
+  runtime: { name: string; version: string; build: string };
+  /** Milliseconds since the epoch. */
+  at: number;
+  passed: boolean;
+}
+
 export interface PurposeRow {
   purpose: string;
   app: string;
@@ -60,6 +71,7 @@ export interface KeyRow {
 
 export const kvasir = {
   backends: () => door<{ backends: Backend[] }>("GET", "/v1/backends"),
+  admission: (limit = 20) => door<{ records: AdmissionRecord[] }>("GET", `/v1/admission?limit=${limit}`),
   purposes: () => door<{ purposes: PurposeRow[] }>("GET", "/v1/purposes"),
   setPolicy: (purpose: string, backend: string, acknowledgement: string | null) =>
     door<Json>("PUT", `/v1/purposes/${encodeURIComponent(purpose)}/policy`, acknowledgement ? { backend, acknowledgement } : { backend }),
