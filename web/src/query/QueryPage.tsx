@@ -7,6 +7,12 @@
 // what is under the step chosen on the timeline, each member once.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type React from "react";
+import { conversationFor, newConversation, titleOf } from "../assistant/client";
+import type { Proposal } from "../assistant/parts";
+import { stationsServed } from "../assistant/stations";
+import { TurnView } from "../assistant/TurnView";
+import { useConversation, type Conversing } from "../assistant/useConversation";
 import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
 import { editor, setsOf } from "../ask/editor";
 import { countWords, nextMoves, startBody, type From, type Started } from "../ask/start";
@@ -14,11 +20,13 @@ import type { Capabilities } from "../capabilities";
 import { holds } from "../deployment";
 import { objects, type DocumentRow } from "../objects/client";
 import { href } from "../routes";
+import { assistantModel, assistantOffered } from "../sections";
+import { admit } from "../ui/context";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
-import { argsOf, cardTitle, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, stepCounts, tabsOf, unitWords, versionsOf, type Chart, type ChartTab, type Version } from "./cards";
+import { argsOf, cardTitle, changeWords, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, stepCounts, tabsOf, unitWords, versionsOf, type Chart, type ChartTab, type Version } from "./cards";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -196,6 +204,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
     setAnswered(null);
     setWhy(null);
     setProfile(null);
+    setBusy(null);
     load();
   }, [load]);
 
@@ -218,6 +227,37 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       alive = false;
     };
   }, [id, doc, profiled, field]);
+
+  // the card's discussion: the conversation opened on any of its versions, followed across them
+  const station = "ask-help";
+  const talkable = assistantOffered(caps) && stationsServed(caps).includes(station);
+  const [conv, setConv] = useState<string | null>(null);
+  const talk = useConversation(station, conv);
+  const root = versions.some((v) => v.id === id) ? versions[0].id : null;
+  useEffect(() => {
+    if (root === null) return;
+    const found = conversationFor(versions.map((v) => v.id));
+    const kept = found && (found.station ?? station) === station ? found.id : null;
+    if (kept !== conv) {
+      talk.reset();
+      setConv(kept);
+    }
+  }, [root]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const pending = talk.pane.proposals.filter((p) => p.decided === null);
+  const [changes, setChanges] = useState<Record<string, string[]>>({});
+  const pendingKey = pending.map((p) => p.document).join(",");
+  // what each proposed version changes against the version open
+  useEffect(() => {
+    for (const p of pending) {
+      const key = `${id}:${p.document}`;
+      if (changes[key] || p.stale) continue;
+      ask.diff({ document_id: id }, { document_id: p.document }).then(
+        (d) => setChanges((c) => ({ ...c, [key]: (d.changes ?? []).map(changeWords).filter((w) => w !== "") })),
+        () => undefined,
+      );
+    }
+  }, [pendingKey, id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let alive = true;
@@ -278,6 +318,41 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       .start({ from: { document: id } })
       .then((s) => ask.store(s.document as Json))
       .then((d) => next(d.document))
+      .catch((e: Error) => {
+        setBusy(null);
+        setWhy(e.message);
+      });
+  };
+
+  const say = (words: string) => {
+    let target = conv;
+    if (!target) {
+      target = newConversation(id, null, station, titleOf(words)).id;
+      talk.made(target);
+      setConv(target);
+    }
+    const context = admit({
+      page: { kind: "query", id: String(id) },
+      document_id: id,
+      content_hash: doc?.hash,
+      chain: versions.map((v) => v.id),
+      epoch: caps.engine?.registry.epoch,
+      sets: steps.map((s) => ({ name: s.set, grain: s.grain })),
+      funnel: steps.flatMap((s) => {
+        const c = stepCounts(diagnosis?.groups, s.set);
+        return c ? [{ set: s.set, rows: c.rows }] : [];
+      }),
+    });
+    talk.send(target, words, { context, lineage: root ?? id, document: id });
+  };
+
+  // accepting a proposal: the assistant records it against the version open, and the engine keeps it as that version's next
+  const take = (p: Proposal) => {
+    setBusy({ phase: "taking the proposed version", since: Date.now() });
+    setWhy(null);
+    talk
+      .decide(p, "accepted", id)
+      .then((ok) => (ok ? ask.storeUnder(p.document, id).then((d) => next(d.document)) : setBusy(null)))
       .catch((e: Error) => {
         setBusy(null);
         setWhy(e.message);
@@ -423,13 +498,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
         </div>
 
         <aside className="query-side">
-          <section className="panel card">
-            <div className="row">
-              <Icon name="assistant" />
-              <h2 className="grow">Talk it through</h2>
-            </div>
-            <p className="meta">The assistant comes to this card next: say a change in words, and it appears as a step to accept or disregard.</p>
-          </section>
+          <TalkPanel caps={caps} talkable={talkable} talk={talk} onSay={say} />
           <section className="panel timeline">
             <div className="row timeline-head">
               <h2 className="grow">Steps</h2>
@@ -453,6 +522,35 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                 </button>
               );
             })}
+            {pending.map((p) => (
+              <div key={p.document} className={p.stale ? "timeline-step proposed stale" : "timeline-step proposed"}>
+                <span className="timeline-dot" />
+                <span className="timeline-body">
+                  <span className="row">
+                    <b className="grow">Proposed next version</b>
+                    <span className="tag brand">from the assistant</span>
+                  </span>
+                  <span>{p.sentence}</span>
+                  {(changes[`${id}:${p.document}`] ?? []).map((w, i) => (
+                    <span key={i} className="timeline-clause">
+                      {w}
+                    </span>
+                  ))}
+                  {p.stale ? (
+                    <span className="meta">It was made for another version, so it can no longer be taken here.</span>
+                  ) : (
+                    <span className="row actions">
+                      <button type="button" className="button small" disabled={busy !== null} onClick={() => take(p)}>
+                        Accept
+                      </button>
+                      <button type="button" className="button secondary small" disabled={busy !== null} onClick={() => void talk.decide(p, "rejected", id)}>
+                        Disregard
+                      </button>
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
             {addSet && (
               <div className="timeline-add">
                 <button type="button" className="move" disabled={busy !== null} onClick={() => { setMove(addSet); setTyped({}); }}>
@@ -472,6 +570,86 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
           {!reviewer && <p className="meta">Starting from a list of identifiers asks for the reviewer role.</p>}
         </aside>
       </div>
+    </section>
+  );
+}
+
+function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkable: boolean; talk: Conversing; onSay: (words: string) => void }) {
+  const [text, setText] = useState("");
+  const [unfolded, setUnfolded] = useState<Set<string>>(new Set());
+  const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
+  const model = assistantModel(caps);
+  const pane = talk.pane;
+  const settled = pane.settled && pane.settled.outcome !== "completed" ? pane.settled : null;
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const words = text.trim();
+    if (!words || pane.busy || warming) return;
+    setText("");
+    onSay(words);
+  };
+  const toggle = (turn: string) =>
+    setUnfolded((was) => {
+      const next = new Set(was);
+      if (next.has(turn)) next.delete(turn);
+      else next.add(turn);
+      return next;
+    });
+  return (
+    <section className="panel card card-talk">
+      <div className="row">
+        <Icon name="assistant" />
+        <h2 className="grow">Talk it through</h2>
+        {talkable && model && <span className="tag">{model}</span>}
+      </div>
+      {!talkable && <p className="meta">The assistant is not open to you here. The card still changes by hand, step by step.</p>}
+      {talkable && (
+        <>
+          <div className="talk card-talk-log" aria-live="polite">
+            {pane.turns.length === 0 && !pane.busy && (
+              <p className="meta">Say a change in words, such as only women, or their T1w stacks. The assistant proposes it as the next version, and it stands in the steps below to accept or disregard.</p>
+            )}
+            {pane.turns.map((t) => (
+              <TurnView
+                key={t.id}
+                turn={t}
+                open={unfolded.has(t.id)}
+                onToggle={() => toggle(t.id)}
+                proposals={pane.proposals.filter((p) => p.turn === t.id)}
+                choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
+                onChoose={(label) => onSay(label)}
+                decidedElsewhere="It stands in the steps below."
+              />
+            ))}
+            {pane.busy && <Wait phase={pane.status?.text ?? "thinking"} since={talk.since || Date.now()} />}
+            {settled && <p className={settled.outcome === "aborted" ? "meta" : "warn"}>{settled.outcome === "aborted" ? "Stopped." : (settled.error ?? "The assistant did not finish this turn.")}</p>}
+            {talk.why && <p className="warn">{talk.why}</p>}
+          </div>
+          <form className="card-talk-composer" onSubmit={submit}>
+            <div className="input composer-input">
+              <textarea
+                value={text}
+                rows={2}
+                placeholder={warming ? "The model is warming" : "Say a change in words"}
+                aria-label="Talk to the assistant about this card"
+                onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) submit(e);
+                }}
+              />
+              {pane.busy ? (
+                <button type="button" className="icon-button" aria-label="Stop" title="Stop" onClick={talk.stop}>
+                  <Icon name="x" />
+                </button>
+              ) : (
+                <button type="submit" className="icon-button" aria-label="Send" disabled={warming || text.trim().length === 0}>
+                  <Icon name="arrow" />
+                </button>
+              )}
+            </div>
+          </form>
+        </>
+      )}
     </section>
   );
 }

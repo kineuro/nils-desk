@@ -200,6 +200,8 @@ export async function door<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: s
 
 export const ask = {
   store: (document: Json) => door<DocumentHandle>("POST", "/api/ask/documents", { document }),
+  /** A stored document kept under another as its next version: a draft the assistant proposed joins the card's line. */
+  storeUnder: (document_id: number, parent: number) => door<DocumentHandle>("POST", "/api/ask/documents", { document_id, parent }),
   get: (id: number) => door<DocumentHandle>("GET", `/api/ask/documents/${id}`),
   options: (document_id: number, set: string) => door<Options>("POST", "/api/ask/options", { document_id, set }),
   apply: (document_id: number, o: Options, set: string, moves: { move_id: number; args: Json }[]) =>
