@@ -339,6 +339,31 @@ span.crumb:hover { background: transparent; }
 }
 .folder-now { gap: 0.6rem; flex-wrap: wrap; }
 .folder-now .path { min-width: 0; overflow-wrap: anywhere; }
+/* the engine's picker: the folders of its ingest locations at any depth, what a look found in each, and the folders chosen */
+.picker-filter { padding: 0.35rem 0.4rem; border-bottom: 1px solid var(--n-line); }
+.picker-filter .input { min-height: 1.9rem; }
+.picker-filter .i { color: var(--n-text-faint); }
+.browser-list.picker-list { max-height: 20rem; }
+.picker-row { display: flex; align-items: center; gap: 0.25rem; min-width: 0; padding-left: 0.45rem; border-radius: var(--n-radius); }
+.picker-row:hover { background: var(--n-bg-hover); }
+.picker-row.on { background: var(--n-brand-soft); }
+.picker-open { display: flex; align-items: center; gap: 0.55rem; flex: 1; min-width: 0; min-height: 2rem; padding: 0.25rem 0.5rem 0.25rem 0.3rem; border: 0; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.picker-open:disabled { color: var(--n-text-faint); cursor: default; }
+.picker-open .i { flex: none; color: var(--n-text-faint); }
+/* a long name wraps inside its row, and what the look found goes under it on a narrow window */
+.picker-label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.05rem 0.7rem; flex: 1; min-width: 0; }
+.picker-name { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; font-family: var(--n-font-mono); font-size: 13.5px; }
+.picker-what { flex: 0 1 auto; min-width: 0; overflow-wrap: anywhere; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.picker-what.dicom { color: var(--n-ok-fg); }
+.picker-more { justify-self: start; margin: 0.2rem 0.25rem; }
+.picker-foot, .picker-stalled { flex-wrap: wrap; }
+/* the open folder's path keeps a line of its own before its buttons on a narrow window */
+.picker-foot .browser-path { flex: 1 1 14rem; }
+.chosen-list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.chosen-item { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.6rem; min-width: 0; padding: 0.3rem 0.35rem 0.3rem 0.7rem; border-bottom: 1px solid var(--n-line); }
+.chosen-item:last-child { border-bottom: 0; }
+.chosen-at { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; font-size: 13px; }
+.chosen-note { flex: 1 1 10rem; min-width: 0; overflow-wrap: anywhere; }
 
 /* ------------------------------------------------------------ getting started */
 .setup { display: grid; gap: 1.3rem; max-width: 76rem; }

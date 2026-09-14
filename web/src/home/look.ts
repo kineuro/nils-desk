@@ -47,7 +47,8 @@ export function rows(look: Look, packs: Pack[]): FolderRow[] {
   return out;
 }
 
-const slug = (s: string) =>
+/** A name made plain for a place or a digest: lower case, words joined by one dash, at most 40 characters. */
+export const slug = (s: string) =>
   s
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")

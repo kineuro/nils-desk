@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Bringing DICOM in, the step of setup that names a source: a folder typed or
-// chosen by clicking through this machine's folders, looked inside by the
-// supervisor on this host, each folder inside ticked to become a batch of its
-// own, and the folder added as a source. The engine starts again to read it,
-// which the supervisor does and says how it went; the command a person would
-// run by hand is beside the buttons. The flow is the one the Places page adds
-// a source with.
+// Bringing DICOM in, the step of setup that names a source. Where the engine
+// lists its own ingest locations to an operator, folders are chosen there at
+// any depth, looked inside and digested, one digest each (the picker in
+// data/Picker.tsx). Otherwise, and for an admin who wants a folder outside
+// those locations, a folder is typed or chosen by clicking through this
+// machine's folders, looked inside by the supervisor on this host, each
+// folder inside ticked to become a batch of its own, and the folder added as
+// a source. The engine starts again to read it, which the supervisor does and
+// says how it went; the command a person would run by hand is beside the
+// buttons. That flow is the one the Places page adds a source with.
 
 import { useState } from "react";
 import type { Capabilities } from "../capabilities";
-import { holds } from "../deployment";
+import { IngestPicker } from "../data/Picker";
+import { door, holds } from "../deployment";
 import type { Place } from "../objects/client";
 import { sayLater } from "../assistant/client";
 import { stationOf, stationsServed } from "../assistant/stations";
@@ -30,8 +34,33 @@ import { digests, placeName, rows as rowsOf, type FolderRow, type Pack } from ".
 type Seen = { kind: "idle" } | { kind: "looking"; since: number } | { kind: "seen"; rows: FolderRow[]; partial: boolean } | { kind: "failed"; why: string };
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
 
-export function BringInForm(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onDone: () => void }) {
-  const { caps, install, places, packs, onDone } = props;
+export function BringInForm(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onDone: (words?: string) => void }) {
+  const { caps, install, places, onDone } = props;
+  const [outside, setOutside] = useState(false);
+  // the engine lists its ingest locations to an operator; the supervisor answers an admin
+  const listed = door(caps, "POST /api/ingest/folders") && holds(caps, "operator");
+  const supervised = install !== null && holds(caps, "admin");
+  if (listed && !outside) {
+    return (
+      <IngestPicker
+        places={places}
+        onDone={onDone}
+        outside={
+          supervised ? (
+            <button type="button" className="button quiet small" onClick={() => setOutside(true)}>
+              <Icon name="folder-search" />A folder outside these
+            </button>
+          ) : null
+        }
+      />
+    );
+  }
+  return <HostForm {...props} back={listed ? () => setOutside(false) : null} />;
+}
+
+/** A folder of the host, through the supervisor: typed or browsed, looked inside, and added as a source with a restart. */
+function HostForm(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onDone: (words?: string) => void; back: (() => void) | null }) {
+  const { caps, install, places, packs, onDone, back } = props;
   const [path, setPath] = useState("");
   const [seen, setSeen] = useState<Seen>({ kind: "idle" });
   const [ticked, setTicked] = useState<Set<string>>(new Set());
@@ -155,6 +184,12 @@ export function BringInForm(props: { caps: Capabilities; install: Install | null
           >
             <Icon name="assistant" />
             Plan it with the assistant
+          </button>
+        )}
+        {back && (
+          <button type="button" className="button quiet small" onClick={back}>
+            <Icon name="arrow-up" />
+            The engine's locations
           </button>
         )}
       </div>
