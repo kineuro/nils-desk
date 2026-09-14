@@ -989,3 +989,86 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
     assert_eq!(got.len(), 1, "{got:?}");
     assert!(got[0].starts_with("Bearer "), "{got:?}");
 }
+
+/// The chat, slice 5: a person holding `assist` lists the people on the desk
+/// to share a conversation with, everyone but themselves; a person without it
+/// and nobody signed in are refused; a desk nobody signs in to lists nobody.
+#[tokio::test]
+async fn the_people_on_the_desk_are_listed_for_a_person_holding_assist() {
+    let engine = fake_engine().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    for (name, password, display, entitlements) in [
+        (
+            "anna",
+            "correct horse battery",
+            "Anna",
+            ["reviewer", "assist"],
+        ),
+        ("bo", "another long password", "Bo", ["reader", "reader"]),
+        ("cy", "a third long password", "Cy", ["reader", "assist"]),
+    ] {
+        let entitlements: Vec<String> = entitlements.iter().map(|e| e.to_string()).collect();
+        nils_desk::users::add(
+            &shared.store,
+            name,
+            password,
+            Some(display),
+            &entitlements,
+            false,
+        )
+        .unwrap();
+    }
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let mut cookies = Vec::new();
+    for (name, password) in [
+        ("anna", "correct horse battery"),
+        ("bo", "another long password"),
+    ] {
+        let r = client
+            .post(format!("{origin}/desk/login"))
+            .json(&json!({"username": name, "password": password}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 200, "{name} logs in");
+        cookies.push(cookie_of(&r));
+    }
+    let people = format!("{origin}/desk/people");
+    let r = client.get(&people).send().await.unwrap();
+    assert_eq!(r.status(), 401);
+    let r = client
+        .get(&people)
+        .header("cookie", &cookies[1])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = client
+        .get(&people)
+        .header("cookie", &cookies[0])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(
+        body["people"],
+        json!([{"subject": "bo", "display": "Bo"}, {"subject": "cy", "display": "Cy"}])
+    );
+    let off = format!(
+        "origin = \"{{origin}}\"\nmode = \"off\"\nstore = \"{{dir}}/desk.sqlite\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, _shared, _dir) = desk(&off).await;
+    let r = client
+        .get(format!("{origin}/desk/people"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
+}

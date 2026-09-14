@@ -42,8 +42,10 @@ export function TurnView(props: {
   /** Where an undecided proposal is decided, when it is not here. */
   decidedElsewhere?: string;
   actions?: TurnActions;
+  /** Where a proposal opens on the Query page, when the thread offers it (a share's reader, the chat, slice 5). */
+  openQuery?: (document: number) => string;
 }) {
-  const { turn, open, onToggle, proposals, choice, onDecide, onChoose, decidedElsewhere, actions } = props;
+  const { turn, open, onToggle, proposals, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery } = props;
   if (turn.role === "user") return <Asked turn={turn} actions={actions} />;
   if (turn.role === "system") return <p className="meta">{turn.text}</p>;
   const folded = foldedSteps(turn.tools);
@@ -77,6 +79,11 @@ export function TurnView(props: {
             {p.stale && <p className="meta">The query moved on since; this version can no longer be taken.</p>}
             {!onDecide && p.decided === null && !p.stale && decidedElsewhere && <p className="meta">{decidedElsewhere}</p>}
           </div>
+          {openQuery && (
+            <a className="button secondary small" href={openQuery(p.document)}>
+              Open in Query
+            </a>
+          )}
           {onDecide && p.decided === null && !p.stale && (
             <div className="row">
               <button type="button" className="button small" onClick={() => onDecide(p, "accepted")}>

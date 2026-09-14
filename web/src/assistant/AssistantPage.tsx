@@ -28,6 +28,8 @@ import { takeSaid, titleOf, type Plan } from "./client";
 import type { PaneState } from "./parts";
 import { CardInPlay, type InPlay } from "./CardInPlay";
 import { CompactionNote, ContextMeter } from "./ContextMeter";
+import { ShareDialog } from "./ShareDialog";
+import { SharedList, SharedPage } from "./SharedPages";
 import { Starters } from "./Starters";
 import { stationOf, stationsServed } from "./stations";
 import { askedBefore, COMMANDS, commandOf, commandsFor, lastAsked } from "./thread";
@@ -53,6 +55,9 @@ const said = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export function AssistantPage({ caps, conversation }: { caps: Capabilities; conversation: string | null }) {
   // the page of all conversations, or one conversation
   if (conversation === "all") return <ChatHistory />;
+  // what is shared, and one share opened (the chat, slice 5)
+  if (conversation === "shared") return <SharedList />;
+  if (conversation?.startsWith("s-")) return <SharedPage id={conversation} />;
   return <ChatPage caps={caps} conversation={conversation} />;
 }
 
@@ -74,6 +79,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   // the message being edited, and what a command answered
   const [editing, setEditing] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   const input = useRef<HTMLTextAreaElement | null>(null);
   const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
   const model = assistantModel(caps);
@@ -89,6 +95,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     setFailed(null);
     setEditing(null);
     setNote(null);
+    setSharing(false);
     if (!opened) {
       setConv(null);
       setMeta(null);
@@ -194,6 +201,10 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
       setNote(`/${name} needs a conversation; ask something first.`);
       return;
     }
+    if (name === "share") {
+      if (meta) setSharing(true);
+      return;
+    }
     if (name === "rename") {
       if (!rest) {
         setNote("Say the name after /rename.");
@@ -254,6 +265,12 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
         <h1 className="grow">{title}</h1>
         {model && <span className="tag">{model}</span>}
         {meta && (
+          <button type="button" className="button secondary small" aria-haspopup="dialog" onClick={() => setSharing(true)}>
+            <Icon name="users" />
+            {meta.shared ? "Shared" : "Share"}
+          </button>
+        )}
+        {meta && (
           <ChatActions
             chat={meta}
             onChanged={(c) => {
@@ -267,6 +284,16 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
           />
         )}
       </div>
+      {sharing && meta && (
+        <ShareDialog
+          chat={meta}
+          onClose={(shared) => {
+            setSharing(false);
+            setMeta({ ...meta, shared });
+            chatsKept.refresh().catch(() => undefined);
+          }}
+        />
+      )}
       {conv && <CardInPlay key={conv} talk={talk} opened={meta?.document ?? null} onShown={(card) => (inPlay.current = card)} />}
       <div className="talk" aria-live="polite">
         {missing && (

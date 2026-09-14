@@ -94,7 +94,7 @@ describe("the Assistant", () => {
     expect(assistantOffered(noAssist)).toBe(false);
     const side = sections(withAssistant, true, [{ id: "c-1", title: "T1w after contrast", depth: 1 }]);
     expect(side.map((s) => s.id)).toEqual(["home", "assistant"]);
-    expect(side[1].pages?.map((p) => p.id)).toEqual(["new", "c-1", "all"]);
+    expect(side[1].pages?.map((p) => p.id)).toEqual(["new", "c-1", "all", "shared"]);
     // it helps set an install up, so it is there before the rest of the desk
     expect(sections(withAssistant, false).map((s) => s.id)).toEqual(["home", "assistant"]);
   });

@@ -41,6 +41,8 @@ export interface Chat {
   forked_from: string | null;
   /** The message a version was sent instead of (the chat, slice 4); null for a conversation of its own. */
   fork_slot?: string | null;
+  /** Shared by its owner (the chat, slice 5). */
+  shared?: boolean;
   /** From an assistant that keeps it; an older one sends none. */
   context?: ChatContext;
 }
