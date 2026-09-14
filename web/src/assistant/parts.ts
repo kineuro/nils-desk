@@ -12,7 +12,9 @@ export type Part =
   | { kind: "lookup"; level: string; field: string; values: string[] }
   | { kind: "handle_ref"; handle: number }
   | { kind: "funnel"; rows: { set: string; stage: string; rows: number; subjects: number }[] }
-  | { kind: "status"; phase: string; text: string };
+  | { kind: "status"; phase: string; text: string }
+  /** The chat, slice 6: a memory the assistant offered, kept because the person asked, or forgot. */
+  | { kind: "memory"; state: "proposed" | "saved" | "forgotten"; text: string; id: number | null };
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
@@ -55,9 +57,21 @@ export function asPart(v: unknown): Part | null {
         : null;
     case "status":
       return isStr(o.phase) && isStr(o.text) ? { kind: "status", phase: o.phase, text: o.text } : null;
+    case "memory":
+      return (o.state === "proposed" || o.state === "saved" || o.state === "forgotten") && isStr(o.text)
+        ? { kind: "memory", state: o.state, text: o.text, id: isNum(o.id) ? o.id : null }
+        : null;
     default:
       return null;
   }
+}
+
+/** A memory as the thread shows it. */
+export interface PaneMemory {
+  turn: string;
+  state: "proposed" | "saved" | "forgotten";
+  text: string;
+  id: number | null;
 }
 
 export interface Tool {
@@ -96,6 +110,8 @@ export interface PaneState {
   status: { phase: string; text: string } | null;
   handles: number[];
   aside: Extract<Part, { kind: "note" | "todo" | "lookup" | "funnel" }>[];
+  /** The memories offered, kept or forgotten in the conversation, by the turn that did it. */
+  memories: PaneMemory[];
   settled: null | { outcome: string; error?: string };
 }
 
@@ -108,6 +124,7 @@ export const empty = (offset = "-1"): PaneState => ({
   status: null,
   handles: [],
   aside: [],
+  memories: [],
   settled: null,
 });
 
@@ -139,6 +156,9 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
       return { ...state, status: { phase: p.phase, text: p.text } };
     case "handle_ref":
       return state.handles.includes(p.handle) ? state : { ...state, handles: [...state.handles, p.handle] };
+    case "memory":
+      if (state.memories.some((x) => x.turn === turnId && x.text === p.text && x.state === p.state)) return state;
+      return { ...state, memories: [...state.memories, { turn: turnId, state: p.state, text: p.text, id: p.id }] };
     default:
       return { ...state, aside: [...state.aside, p] };
   }

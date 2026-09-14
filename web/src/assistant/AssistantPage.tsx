@@ -28,6 +28,8 @@ import { takeSaid, titleOf, type Plan } from "./client";
 import type { PaneState } from "./parts";
 import { CardInPlay, type InPlay } from "./CardInPlay";
 import { CompactionNote, ContextMeter } from "./ContextMeter";
+import { memory } from "./memory";
+import { MemoryPage } from "./MemoryPage";
 import { ShareDialog } from "./ShareDialog";
 import { SharedList, SharedPage } from "./SharedPages";
 import { Starters } from "./Starters";
@@ -58,6 +60,8 @@ export function AssistantPage({ caps, conversation }: { caps: Capabilities; conv
   // what is shared, and one share opened (the chat, slice 5)
   if (conversation === "shared") return <SharedList />;
   if (conversation?.startsWith("s-")) return <SharedPage id={conversation} />;
+  // what the assistant keeps (the chat, slice 6)
+  if (conversation === "memory") return <MemoryPage caps={caps} />;
   return <ChatPage caps={caps} conversation={conversation} />;
 }
 
@@ -80,6 +84,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   const [editing, setEditing] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  // the memories offered in this conversation, kept or put aside here
+  const [kept, setKept] = useState<Record<string, "saved" | "dismissed">>({});
   const input = useRef<HTMLTextAreaElement | null>(null);
   const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
   const model = assistantModel(caps);
@@ -96,6 +102,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     setEditing(null);
     setNote(null);
     setSharing(false);
+    setKept({});
     if (!opened) {
       setConv(null);
       setMeta(null);
@@ -195,6 +202,19 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
           .filter(Boolean)
           .join("\n"),
       );
+      return;
+    }
+    if (name === "remember") {
+      if (!rest) {
+        setNote("Say what to keep after /remember.");
+        return;
+      }
+      try {
+        await memory.add(rest, "said");
+        setNote(`Kept for your later conversations: ${rest}`);
+      } catch (e) {
+        setFailed(`It was not kept: ${said(e)}`);
+      }
       return;
     }
     if (!conv) {
@@ -326,6 +346,17 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
             decidedElsewhere="It stands on the card above, to accept or disregard."
             onChoose={(label) => void send(label)}
+            memories={pane.memories.filter((x) => x.turn === t.id)}
+            memoryActions={{
+              state: (x) => kept[`${x.turn}|${x.text}`] ?? null,
+              keep: (x) => {
+                memory.add(x.text, "accepted").then(
+                  () => setKept((was) => ({ ...was, [`${x.turn}|${x.text}`]: "saved" })),
+                  (e: unknown) => setFailed(`It was not kept: ${said(e)}`),
+                );
+              },
+              dismiss: (x) => setKept((was) => ({ ...was, [`${x.turn}|${x.text}`]: "dismissed" })),
+            }}
             actions={
               conv
                 ? {

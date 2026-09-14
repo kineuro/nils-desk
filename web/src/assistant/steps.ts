@@ -23,6 +23,8 @@ const WORDS: Record<string, string> = {
   plan: "Planned the work",
   advance: "Moved on",
   settle: "Settled the answer",
+  remember: "Noted something to keep",
+  forget: "Forgot something kept",
 };
 
 /** The line for one tool call: known tools by what they do, others by name. */

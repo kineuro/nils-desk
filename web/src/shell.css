@@ -521,6 +521,27 @@ input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
 .share-people-list label { gap: 0.6rem; padding: 0.45rem 0.65rem; cursor: pointer; }
 .share-people-list label:hover { background: var(--n-bg-hover); }
 .share-byline { margin: -0.5rem 0 0; }
+.memory-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; padding: 0.8rem 1rem; }
+.memory-switch p { margin: 0; }
+.memory-switch > .grow { flex: 1 1 16rem; }
+.memory-switch-title { font-weight: 600; }
+.memory-switch-actions { gap: 0.4rem; flex-wrap: wrap; }
+.memory-add { gap: 0.5rem; flex-wrap: wrap; }
+.memory-add .input { min-width: min(100%, 16rem); }
+.memory-edit { gap: 0.4rem; }
+.memory-edit .input { min-width: min(100%, 14rem); }
+.memory-row .chat-row-title { font-weight: 400; }
+.memory-instructions { display: grid; gap: 0.6rem; padding: 0.85rem 1rem; }
+.memory-instructions p { margin: 0; }
+.memory-draft { display: grid; gap: 0.5rem; }
+.memory-draft .input { align-items: stretch; padding-block: 0.4rem; }
+.memory-draft textarea { min-height: 14rem; resize: vertical; }
+.memory-draft .row { gap: 0.4rem; flex-wrap: wrap; }
+.memory-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.6rem 0.8rem; border: 1px dashed var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.memory-offer p { margin: 0; }
+.memory-offer .row { gap: 0.4rem; }
+.memory-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin: 0; }
+.memory-line .i { color: var(--n-ok-icon); }
 @media (hover: none) { .on-hover { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .on-hover { transition: none; } }
 .steps { display: grid; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-size: 14px; }

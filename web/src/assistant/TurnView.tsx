@@ -9,10 +9,11 @@
 // copied, asked for again, or given a verdict.
 
 import { useEffect, useRef, useState } from "react";
+import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import type { Rating } from "./chats";
 import { Markdown } from "./Markdown";
-import type { Proposal, Turn } from "./parts";
+import type { PaneMemory, Proposal, Turn } from "./parts";
 import { foldedSteps, stepLines } from "./steps";
 import { MISSES } from "./thread";
 
@@ -44,8 +45,11 @@ export function TurnView(props: {
   actions?: TurnActions;
   /** Where a proposal opens on the Query page, when the thread offers it (a share's reader, the chat, slice 5). */
   openQuery?: (document: number) => string;
+  /** The memories this turn offered, kept or forgot (the chat, slice 6), and what the page does with an offer. */
+  memories?: PaneMemory[];
+  memoryActions?: { state: (m: PaneMemory) => "saved" | "dismissed" | null; keep: (m: PaneMemory) => void; dismiss: (m: PaneMemory) => void };
 }) {
-  const { turn, open, onToggle, proposals, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery } = props;
+  const { turn, open, onToggle, proposals, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions } = props;
   if (turn.role === "user") return <Asked turn={turn} actions={actions} />;
   if (turn.role === "system") return <p className="meta">{turn.text}</p>;
   const folded = foldedSteps(turn.tools);
@@ -97,6 +101,39 @@ export function TurnView(props: {
           {p.decided !== null && <span className={p.decided === "accepted" ? "tag ok" : "tag"}>{p.decided === "accepted" ? "accepted" : "disregarded"}</span>}
         </div>
       ))}
+      {(memories ?? []).map((mem) => {
+        const here = memoryActions?.state(mem) ?? null;
+        const key = `${mem.state}:${mem.text}`;
+        if (mem.state === "forgotten")
+          return (
+            <p key={key} className="meta memory-line">
+              Forgotten: {mem.text}
+            </p>
+          );
+        if (mem.state === "saved" || here === "saved")
+          return (
+            <p key={key} className="meta memory-line">
+              <Icon name="check" />
+              Kept for your later conversations: {mem.text} <a href={href("assistant", "memory")}>Memory</a>
+            </p>
+          );
+        if (here === "dismissed" || !memoryActions) return null;
+        return (
+          <div key={key} className="memory-offer">
+            <p className="grow">
+              <strong>Keep this for later conversations?</strong> {mem.text}
+            </p>
+            <div className="row">
+              <button type="button" className="button small" onClick={() => memoryActions.keep(mem)}>
+                Save
+              </button>
+              <button type="button" className="button secondary small" onClick={() => memoryActions.dismiss(mem)}>
+                Not now
+              </button>
+            </div>
+          </div>
+        );
+      })}
       {choice && (
         <div className="choice">
           <p className="meta">{choice.question}</p>
