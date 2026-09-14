@@ -8,12 +8,13 @@
 // copied, edited, or switched to another way it was sent, and an answer is
 // copied, asked for again, or given a verdict.
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import type { Rating } from "./chats";
 import { useCopy } from "../ui/clipboard";
 import { Markdown } from "./Markdown";
+import { plainMentions, saidWithMentions } from "./mentions";
 import type { PaneMemory, Proposal, Turn } from "./parts";
 import { foldedSteps, stepLines } from "./steps";
 import { MISSES } from "./thread";
@@ -178,17 +179,42 @@ function Thinking({ text, live }: { text: string; live: boolean }) {
   );
 }
 
+/** A person's words, each card, cohort or result they named drawn as a chip; a card's opens it on the Query page (the chat, slice 12). */
+function SaidWords({ text }: { text: string }) {
+  return (
+    <>
+      {saidWithMentions(text).map((s, i) =>
+        s.kind === "words" ? (
+          <Fragment key={i}>{s.text}</Fragment>
+        ) : s.mention.kind === "card" ? (
+          <a key={i} className="mention" href={href("query", s.mention.id)} title={`Query card, document ${s.mention.id}`}>
+            {s.mention.name}
+          </a>
+        ) : (
+          <span key={i} className="mention" title={s.mention.kind === "cohort" ? "Cohort" : `Result ${s.mention.id}`}>
+            {s.mention.name}
+          </span>
+        ),
+      )}
+    </>
+  );
+}
+
 /** A person's message: its words, the ways it was sent, and copy and edit on hover. */
 function Asked({ turn, actions }: { turn: Turn; actions?: TurnActions }) {
-  if (!actions) return <p className="said you">{turn.text}</p>;
+  if (!actions) return <p className="said you">
+        <SaidWords text={turn.text} />
+      </p>;
   if (actions.editing) return <EditBox words={turn.text} onSend={actions.onEdit} onCancel={actions.onCancelEdit} />;
   const v = actions.version;
   return (
     <div className="said-you">
-      <p className="said you">{turn.text}</p>
+      <p className="said you">
+        <SaidWords text={turn.text} />
+      </p>
       <div className="turn-actions">
         <span className="on-hover">
-          <CopyButton text={turn.text} what="message" />
+          <CopyButton text={plainMentions(turn.text)} what="message" />
           <button type="button" className="icon-button" aria-label="Edit this message" title="Edit" disabled={actions.busy} onClick={actions.onStartEdit}>
             <Icon name="pencil" />
           </button>

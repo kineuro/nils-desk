@@ -552,6 +552,9 @@ input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
 .command-menu button:hover, .command-menu button:focus-visible { background: var(--n-bg-hover); }
 .command-menu code { color: var(--n-brand-text); }
 .command-note { margin: 0; padding: 0.45rem 0.7rem; border-left: 2px solid var(--n-line-strong); white-space: pre-wrap; }
+.command-menu .mention-kind { min-width: 3.6rem; color: var(--n-text-faint); font-size: 0.85em; }
+.mention { display: inline-block; max-width: 100%; padding: 0 0.35rem; overflow: hidden; border: 1px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-brand-text); line-height: 1.4; text-decoration: none; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
+a.mention:hover, a.mention:focus-visible { background: var(--n-bg-hover); }
 .starters { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: 0.5rem; }
 .starter { padding: 0.65rem 0.8rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
 .starter:hover { border-color: var(--n-brand-line); background: var(--n-bg-hover); }
