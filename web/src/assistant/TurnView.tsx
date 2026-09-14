@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import type { Rating } from "./chats";
+import { useCopy } from "../ui/clipboard";
 import { Markdown } from "./Markdown";
 import type { PaneMemory, Proposal, Turn } from "./parts";
 import { foldedSteps, stepLines } from "./steps";
@@ -75,7 +76,7 @@ export function TurnView(props: {
               ))}
         </div>
       )}
-      {turn.text ? <Markdown text={turn.text} /> : said && turn.done && proposals.length === 0 ? <Markdown text={said} /> : null}
+      {turn.text ? <Markdown text={turn.text} streaming={!turn.done} /> : said && turn.done && proposals.length === 0 ? <Markdown text={said} /> : null}
       {proposals.map((p) => (
         <div key={p.document} className="proposal">
           <Icon name="ask" />
@@ -344,19 +345,11 @@ function EditBox({ words, onSend, onCancel }: { words: string; onSend: (words: s
 }
 
 function CopyButton({ text, what }: { text: string; what: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard
-      ?.writeText(text)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => undefined);
-  };
+  const [state, copy] = useCopy();
+  const label = state === "copied" ? "Copied" : state === "failed" ? "Could not copy" : `Copy the ${what}`;
   return (
-    <button type="button" className="icon-button" aria-label={copied ? "Copied" : `Copy the ${what}`} title={copied ? "Copied" : "Copy"} onClick={copy}>
-      <Icon name={copied ? "check" : "copy"} />
+    <button type="button" className="icon-button" aria-label={label} title={label} onClick={() => copy(text)}>
+      <Icon name={state === "copied" ? "check" : state === "failed" ? "alert" : "copy"} />
     </button>
   );
 }

@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { whenWords } from "../data/sources";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
+import { useCopy } from "../ui/clipboard";
 import { Icon } from "../ui/Icon";
 import type { Chat } from "./chats";
 import { audienceWords, type DeskPerson, guardWords, matching, namesOf, peopleKept, readsWords, type Share, ShareRefused, shares } from "./shares";
@@ -22,7 +23,7 @@ export function ShareDialog({ chat, onClose }: { chat: Chat; onClose: (shared: b
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [why, setWhy] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copied, copyNow] = useCopy();
 
   useEffect(() => {
     let alive = true;
@@ -75,15 +76,7 @@ export function ShareDialog({ chat, onClose }: { chat: Chat; onClose: (shared: b
   const save = () => act(shares.put(chat.id, audience, audience === "people" ? chosen : []).then((r) => setShare(r.share)));
   const stop = () => act(shares.stop(chat.id).then(() => setShare(null)));
   const link = share ? `${location.origin}${location.pathname}${href("assistant", share.id)}` : "";
-  const copy = () => {
-    navigator.clipboard
-      ?.writeText(link)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => undefined);
-  };
+  const copy = () => copyNow(link);
   const done = () => onClose(Boolean(share));
 
   return (
@@ -125,8 +118,8 @@ export function ShareDialog({ chat, onClose }: { chat: Chat; onClose: (shared: b
               <input readOnly value={link} aria-label="The share's link" />
             </span>
             <button type="button" className="button secondary small" onClick={copy}>
-              <Icon name={copied ? "check" : "copy"} />
-              {copied ? "Copied" : "Copy link"}
+              <Icon name={copied === "copied" ? "check" : copied === "failed" ? "alert" : "copy"} />
+              {copied === "copied" ? "Copied" : copied === "failed" ? "Could not copy" : "Copy link"}
             </button>
           </div>
         </div>

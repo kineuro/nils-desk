@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- An answer's markdown is drawn in every case: six heading levels, footnotes gathered at its end, the note, tip, important, warning and caution quotes GitHub writes, sub and superscripts, named and numbered character references, a details block, and the few HTML tags that only shape words. A single tilde no longer strikes words through, so "~5 subjects" keeps its tilde, and a loose task item no longer shows its brackets. A formula written between dollars, as \(...\) or \[...\], or in a math fence is drawn as MathML in Noto Sans Math, which the desk serves itself, while a price such as "$5 and $10" stays words; code is coloured by its language; each loads the first time an answer needs it. A reply still arriving no longer shows a half-formed table, bare asterisks or half a link, and copying works on a desk served over plain HTTP, where the browser keeps the clipboard away (the chat, slice 8).
+
 ## [1.0.0-alpha.21] - 2026-09-14
 
 Released beside the engine's 1.0.0-alpha.21 so the two stay in step. That engine changes nothing the desk reads, so every change works with the engine's 1.0.0-alpha.20 as well. The thread, sharing, memory, and export and recall each need the nils-assistant change named with it.

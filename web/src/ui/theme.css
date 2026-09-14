@@ -17,6 +17,8 @@
 @font-face { font-family: "IBM Plex Serif"; font-weight: 400; font-style: italic; font-display: swap; src: url("/fonts/IBMPlexSerif-Italic-Latin1.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Mono"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/IBMPlexMono-Regular-Latin1.woff2") format("woff2"); }
 @font-face { font-family: "IBM Plex Mono"; font-weight: 500; font-style: normal; font-display: swap; src: url("/fonts/IBMPlexMono-Medium-Latin1.woff2") format("woff2"); }
+/* formulas (the chat, slice 8): Noto Sans Math, which carries the MATH table MathML is laid out by */
+@font-face { font-family: "Noto Sans Math"; font-weight: 400; font-style: normal; font-display: swap; src: url("/fonts/NotoSansMath-Regular.woff2") format("woff2"); }
 
 :root {
   color-scheme: light;
@@ -25,6 +27,7 @@
   --n-font-sans: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
   --n-font-serif: "IBM Plex Serif", Georgia, "Times New Roman", serif;
   --n-font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --n-font-math: "Noto Sans Math", math;
   --n-text-size: 15px;
   --n-text-size-small: 13px;
   --n-text-size-h1: 1.5rem;
