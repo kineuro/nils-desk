@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- Opening a conversation whose last turn failed no longer blanks the desk. The assistant keeps a failed turn's error as an object of its own, and the thread drew that object as it was; it now shows the error's words, after a reload and on the stream alike.
+- A page that stops drawing says so in its own place, with what went wrong and a way to draw it again, and the rest of the desk keeps working. Opening another page or conversation draws afresh. Before, one such page took the whole desk with it.
+
 ## [1.0.0-alpha.22] - 2026-09-14
 
 Released beside the engine's 1.0.0-alpha.22 so the two stay in step. That engine changes nothing the desk reads, so every change works with the engine's 1.0.0-alpha.21 as well. Titles by the model, /summarize, mentions and the memory a new conversation reads each need the nils-assistant change named with it.
