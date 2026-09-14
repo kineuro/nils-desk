@@ -4,9 +4,10 @@
 // with their keys, every model with where its prompts go, its admission and
 // the stations it answers, where each station goes, and the install's
 // ChatGPT subscription. An admin adds a model through a test, checks one
-// with the admission suite and removes one. A station moves to another
-// backend at once, recorded with who moved it; rows of the archive leave
-// only with an admin's written reason, and identifiers never.
+// with the admission suite and removes one, and downloads models from the
+// Hugging Face Hub for a model server of theirs under Local models. A station
+// moves to another backend at once, recorded with who moved it; rows of the
+// archive leave only with an admin's written reason, and identifiers never.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -37,6 +38,7 @@ import {
 } from "./gateway";
 import { backendsKept } from "./kept";
 import { kvasir, type AdmissionRecord, type Backend, type PurposeRow, type Subscription } from "./kvasir";
+import { LocalModels } from "./LocalModels";
 import { runtimeName } from "./parts";
 import { placeOf } from "./subscription";
 import { SubscriptionCard } from "./SubscriptionCard";
@@ -308,6 +310,8 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
         </div>
         <Acted acting={check.acting} />
       </section>
+
+      {admin && <LocalModels />}
 
       {purposes && backends && (
         <section className="stack">

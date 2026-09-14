@@ -4,7 +4,7 @@
 // yet, and where a purpose may go.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type Backend, KvasirError, kvasir, opening, type PurposeRow, triedOf } from "./kvasir";
+import { type Backend, KvasirError, kvasir, localRefusalOf, opening, type PurposeRow, triedOf } from "./kvasir";
 
 const local: Backend = { id: "sglang", kind: "openai", locality: "local", provider: null, credential: null, models: ["qwen"], health: {} };
 const remote: Backend = { id: "minimax", kind: "anthropic", locality: "remote", provider: "minimax", credential: true, models: ["m"], health: {} };
@@ -73,5 +73,39 @@ describe("Kvasir's doors", () => {
       { method: "POST", url: "/kvasir/v1/admission/run", body: { backend: "local" } },
       { method: "DELETE", url: "/kvasir/v1/backends/gpt%205", body: undefined },
     ]);
+  });
+
+  it("send the local models' doors, answer null where Kvasir serves none, and keep the sizes of a refusal for room", async () => {
+    const calls = answering(200, {});
+    await kvasir.local.setLocation("/srv/models");
+    await kvasir.local.lookup({ repo: "owner/name", revision: "main", include: ["*Q4_K_M.gguf"] });
+    await kvasir.local.download({ repo: "owner/name", revision: "main" });
+    await kvasir.local.pause(3);
+    await kvasir.local.resume(3);
+    await kvasir.local.remove(3);
+    await kvasir.local.setToken("hf_a-token");
+    await kvasir.local.clearToken();
+    expect(calls).toEqual([
+      { method: "PUT", url: "/kvasir/v1/local/location", body: { path: "/srv/models" } },
+      { method: "POST", url: "/kvasir/v1/local/lookup", body: { repo: "owner/name", revision: "main", include: ["*Q4_K_M.gguf"] } },
+      { method: "POST", url: "/kvasir/v1/local/models", body: { repo: "owner/name", revision: "main" } },
+      { method: "POST", url: "/kvasir/v1/local/models/3/pause", body: {} },
+      { method: "POST", url: "/kvasir/v1/local/models/3/resume", body: {} },
+      { method: "DELETE", url: "/kvasir/v1/local/models/3", body: undefined },
+      { method: "PUT", url: "/kvasir/v1/local/token", body: { token: "hf_a-token" } },
+      { method: "DELETE", url: "/kvasir/v1/local/token", body: undefined },
+    ]);
+    answering(404, { error: { code: "no_such_door", message: "GET /v1/local is not a door Kvasir has" } });
+    await expect(kvasir.local.status()).resolves.toBeNull();
+    answering(403, { error: { code: "no_role", message: "local models are an admin's" } });
+    await expect(kvasir.local.status()).rejects.toThrow("local models are an admin's");
+    const room = { code: "no_space", message: "/srv/models has 10.0 GiB free, and this download needs 17.0 GiB", free_bytes: 10 * 2 ** 30, needed_bytes: 17 * 2 ** 30 };
+    answering(507, { error: room });
+    const e = await kvasir.local.download({ repo: "owner/name" }).catch((x: unknown) => x);
+    expect(localRefusalOf(e)).toEqual({ status: 507, code: "no_space", message: room.message, free_bytes: room.free_bytes, needed_bytes: room.needed_bytes });
+    answering(422, { error: { code: "needs_token", message: "the Hugging Face Hub refused owner/name" } });
+    const gated = await kvasir.local.lookup({ repo: "owner/name" }).catch((x: unknown) => x);
+    expect(localRefusalOf(gated)).toMatchObject({ status: 422, code: "needs_token", free_bytes: null, needed_bytes: null });
+    expect(localRefusalOf(new Error("no body"))).toBeNull();
   });
 });
