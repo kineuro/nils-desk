@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- The Kvasir page, a person's own ChatGPT subscription on their profile, and Kvasir on Home and in Setup show wherever people sign in. The desk read Kvasir's catalog with no credential, which Kvasir refuses once people sign in, so the desk took Kvasir for absent and left those out. It now reads the catalog with the signed-in person's own token, as its proxy to Kvasir already does. A desk where nobody signs in was not affected.
+
 ## [1.0.0-alpha.23] - 2026-09-14
 
 Released beside the engine's 1.0.0-alpha.23 so the two stay in step. Bring DICOM in at any depth needs that engine's ingest folders and look doors. The Kvasir page, the subscriptions and local models need Kvasir 1.0.0-alpha.4, and a person's own subscription serving their conversations needs nils-assistant 1.0.0-alpha.23.

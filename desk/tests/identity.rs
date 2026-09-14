@@ -1072,3 +1072,101 @@ async fn the_people_on_the_desk_are_listed_for_a_person_holding_assist() {
         .unwrap();
     assert_eq!(r.status(), 404);
 }
+
+/// A fake Kvasir whose catalog answers only a bearer, as Kvasir does wherever
+/// people sign in, and the bearers it saw.
+async fn fake_kvasir() -> (String, Arc<Mutex<Vec<String>>>) {
+    let seen = Arc::new(Mutex::new(Vec::new()));
+    let kept = seen.clone();
+    let app = Router::new().route(
+        "/v1/config",
+        get(move |headers: HeaderMap| {
+            let kept = kept.clone();
+            async move {
+                let bearer = headers
+                    .get("authorization")
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string();
+                kept.lock().unwrap().push(bearer.clone());
+                if bearer.starts_with("Bearer ") {
+                    axum::Json(json!({"baseUrl": "http://kvasir.test/v1", "models": [], "backends": [], "health": {"warming": false}, "kvasir": {"version": "1.0.0-alpha.4"}})).into_response()
+                } else {
+                    (
+                        StatusCode::UNAUTHORIZED,
+                        axum::Json(json!({"error": {"code": "unauthenticated", "message": "a bearer token of a trusted issuer"}})),
+                    )
+                        .into_response()
+                }
+            }
+        }),
+    );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (url, seen)
+}
+
+#[tokio::test]
+async fn kvasir_is_read_as_the_person_where_people_sign_in() {
+    let engine = fake_engine().await;
+    let (kvasir, seen) = fake_kvasir().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n[kvasir]\nurl = \"{kvasir}\"\n"
+    );
+    let (origin, shared, _) = desk(&text).await;
+    nils_desk::users::add(
+        &shared.store,
+        "anna",
+        "correct horse battery",
+        Some("Anna"),
+        &[],
+        true,
+    )
+    .unwrap();
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
+    // nobody signed in: Kvasir refused the desk's own read, which carries no credential
+    let doc: Value = client
+        .get(format!("{origin}/desk/capabilities"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(doc["kvasir"].is_null(), "{doc}");
+
+    // signed in: the desk asks Kvasir with the person's own token, as its proxy does, and
+    // the Kvasir page, the profile's subscription and Home's Kvasir have Kvasir to read
+    let r = client
+        .post(format!("{origin}/desk/login"))
+        .json(&json!({"username": "anna", "password": "correct horse battery"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let anna = cookie_of(&r);
+    let doc: Value = client
+        .get(format!("{origin}/desk/capabilities"))
+        .header("cookie", &anna)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(doc["kvasir"]["kvasir"]["version"], "1.0.0-alpha.4", "{doc}");
+    let bearers = seen.lock().unwrap().clone();
+    assert!(
+        bearers.iter().any(String::is_empty),
+        "the desk's own read carried no credential: {bearers:?}"
+    );
+    assert!(
+        bearers.iter().any(|b| b.starts_with("Bearer ")),
+        "the person's read carried their token: {bearers:?}"
+    );
+}

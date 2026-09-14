@@ -62,6 +62,25 @@ pub async fn engine_as(desk: &Shared, headers: &HeaderMap) -> Result<Value, Stri
     fetch(desk, &with, "/api/capabilities").await
 }
 
+/// Kvasir's catalog as one person: with the bearer the session opens, as the
+/// desk's proxy sends it (Wave 4c §5.5). Where people sign in, Kvasir refuses
+/// a read with no credential, and a desk that asked only with its own took
+/// Kvasir for absent and hid the Kvasir page.
+pub async fn kvasir_as(desk: &Shared, headers: &HeaderMap) -> Result<Value, String> {
+    let Some(up) = &desk.config.kvasir else {
+        return Err("/v1/config: no Kvasir is configured".to_string());
+    };
+    let token = match crate::proxy::bearer(desk, up, headers).await {
+        Ok(t) => t,
+        Err(why) => return Err(format!("/v1/config: {why}")),
+    };
+    let with = Upstream {
+        url: up.url.clone(),
+        token,
+    };
+    fetch(desk, &with, "/v1/config").await
+}
+
 async fn fetch(desk: &Shared, up: &Upstream, path: &str) -> Result<Value, String> {
     let mut req = desk
         .http
@@ -203,6 +222,10 @@ pub async fn document(
         && !person.subject.is_empty()
     {
         p.engine = engine_as(desk, h).await;
+        // where the desk's own read of Kvasir had nothing, as wherever Kvasir signs people in, it asks as the person
+        if p.kvasir.is_none() && desk.config.kvasir.is_some() {
+            p.kvasir = kvasir_as(desk, h).await.ok();
+        }
     }
     let (engine, reachable, mismatch) = match &p.engine {
         Ok(e) => {
