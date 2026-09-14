@@ -132,6 +132,12 @@ export const chats = {
     fetch(`${one(id)}/ratings`, { method: "POST", headers: H, body: JSON.stringify({ message, verdict, reason: reason ?? null }) }).then((r) =>
       answer<{ message: string; verdict: "up" | "down" | null; reason: string | null }>(r),
     ),
+  /** The conversation as a markdown file's text: what was said, the steps and the versions proposed (the chat, slice 7). */
+  exportMarkdown: (id: string) =>
+    fetch(`${one(id)}/export`).then(async (r) => {
+      if (!r.ok) await answer(r);
+      return r.text();
+    }),
 };
 
 /** Where a message stands among the ways its place was sent: which of how many, and the conversations either side. */

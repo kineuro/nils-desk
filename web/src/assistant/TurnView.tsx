@@ -47,9 +47,11 @@ export function TurnView(props: {
   openQuery?: (document: number) => string;
   /** The memories this turn offered, kept or forgot (the chat, slice 6), and what the page does with an offer. */
   memories?: PaneMemory[];
+  /** The sentence the turn settled on, shown when it wrote no words and proposed nothing (the chat, slice 7). */
+  said?: string;
   memoryActions?: { state: (m: PaneMemory) => "saved" | "dismissed" | null; keep: (m: PaneMemory) => void; dismiss: (m: PaneMemory) => void };
 }) {
-  const { turn, open, onToggle, proposals, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions } = props;
+  const { turn, open, onToggle, proposals, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions, said } = props;
   if (turn.role === "user") return <Asked turn={turn} actions={actions} />;
   if (turn.role === "system") return <p className="meta">{turn.text}</p>;
   const folded = foldedSteps(turn.tools);
@@ -73,7 +75,7 @@ export function TurnView(props: {
               ))}
         </div>
       )}
-      {turn.text && <Markdown text={turn.text} />}
+      {turn.text ? <Markdown text={turn.text} /> : said && turn.done && proposals.length === 0 ? <Markdown text={said} /> : null}
       {proposals.map((p) => (
         <div key={p.document} className="proposal">
           <Icon name="ask" />

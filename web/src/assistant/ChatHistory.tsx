@@ -11,6 +11,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { type Chat, chats, chatsKept, chatTitle, groupsOf, STATION_WORDS } from "./chats";
+import { exportName, saveText } from "./download";
 
 export function ChatHistory() {
   const [q, setQ] = useState("");
@@ -187,6 +188,19 @@ export function ChatActions({ chat, onChanged, onDeleted }: { chat: Chat; onChan
       </button>
       <button type="button" className="button secondary small" disabled={busy} onClick={() => act(chats.patch(chat.id, { archived: !chat.archived }))}>
         {chat.archived ? "Restore" : "Archive"}
+      </button>
+      <button
+        type="button"
+        className="button secondary small"
+        disabled={busy}
+        onClick={() =>
+          chats.exportMarkdown(chat.id).then(
+            (text) => saveText(exportName(chat.title), text),
+            (e: Error) => setWhy(e.message),
+          )
+        }
+      >
+        Export
       </button>
       <button type="button" className="button secondary small" disabled={busy} onClick={() => setAsking(true)}>
         Delete

@@ -25,6 +25,7 @@ const WORDS: Record<string, string> = {
   settle: "Settled the answer",
   remember: "Noted something to keep",
   forget: "Forgot something kept",
+  search_conversations: "Searched your earlier conversations",
 };
 
 /** The line for one tool call: known tools by what they do, others by name. */
