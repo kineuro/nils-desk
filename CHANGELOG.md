@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.24] - 2026-09-14
+
+Released beside the engine's 1.0.0-alpha.24 so the two stay in step. That engine changes nothing the desk reads, so this desk works with the engine's 1.0.0-alpha.23 as well.
+
 ### Fixed
 
 - The Kvasir page, a person's own ChatGPT subscription on their profile, and Kvasir on Home and in Setup show wherever people sign in. The desk read Kvasir's catalog with no credential, which Kvasir refuses once people sign in, so the desk took Kvasir for absent and left those out. It now reads the catalog with the signed-in person's own token, as its proxy to Kvasir already does. A desk where nobody signs in was not affected.
