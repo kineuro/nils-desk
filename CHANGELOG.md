@@ -4,6 +4,8 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.25] - 2026-09-14
+
 ### Added
 
 - Start and Stop on the Kvasir page, for a downloaded model in GGUF, where the install runs llama.cpp for Kvasir. The local models section names the runtime, its llama.cpp build and archive, and whether it answers; where the install runs none it says Kvasir runs no model here and keeps each model's commands as before. A model loading into llama.cpp reads as loading, and the list is read again every two seconds until it serves or does not start. A serving model says the name it is served as, the context and slots llama.cpp settled on, and whether Kvasir admitted it: warming until its first answer, being checked, admitted, or refused with the checks it failed. A model that did not start says why, with what llama.cpp logged behind a disclosure. llama.cpp runs one model at a time, so starting a model while another serves asks first, naming the one it stops. A started model is stopped before it can be removed. A model Kvasir starts keeps its commands folded under Or run it yourself, and one it cannot start shows them open with why. It needs Kvasir's runtime doors; with a Kvasir that has none, the section is as it was.
