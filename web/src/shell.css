@@ -598,6 +598,15 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .steps-line .i { color: var(--n-ok-icon); }
 .steps-line.quiet { border-top: 1px solid var(--n-line); color: var(--n-text-dim); }
 .steps-line.failed .i { color: var(--n-caution-icon); }
+/* what the model reasoned before it answered, folded (the chat, slice 9) */
+.thinking .steps-line .i { color: var(--n-text-faint); }
+.thinking-body { padding: 0.5rem 0.8rem 0.7rem 2.2rem; border-top: 1px solid var(--n-line); color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.thinking-body .md { gap: 0.45rem; }
+.thinking-live::after { content: "…"; display: inline-block; width: 1.2em; overflow: hidden; vertical-align: bottom; }
+@media (prefers-reduced-motion: no-preference) {
+  .thinking-live::after { animation: thinking-dots 1.2s steps(4, end) infinite; }
+}
+@keyframes thinking-dots { from { width: 0; } to { width: 1.2em; } }
 .proposal { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 0.7rem; padding: 0.7rem 0.85rem; border: 1px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
 .proposal > .i { margin-top: 3px; color: var(--n-brand-icon); }
 .proposal-title { font-weight: 600; }
