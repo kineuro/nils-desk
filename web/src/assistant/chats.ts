@@ -31,7 +31,8 @@ export interface Chat {
   id: string;
   station: string;
   title: string | null;
-  title_by: "model" | "person" | null;
+  /** Who named it: the person, the model, or the first words of its first message until the model names it (the chat, slice 10). */
+  title_by: "model" | "person" | "words" | null;
   lineage: number | null;
   document: number | null;
   created_at: string;
@@ -114,8 +115,10 @@ export const chats = {
     return fetch(`/assistant/conversations${qs ? `?${qs}` : ""}`).then((r) => answer<{ conversations: Chat[]; next: string | null }>(r));
   },
   /** A new conversation, named by the assistant and the person's. */
-  create: (o: { station: string; title?: string | null; document?: number | null; lineage?: number | null }) =>
+  create: (o: { station: string; title?: string | null; title_by?: "words"; document?: number | null; lineage?: number | null }) =>
     fetch("/assistant/conversations", { method: "POST", headers: H, body: JSON.stringify(o) }).then((r) => answer<Chat>(r)),
+  /** The conversation named by the model, while its name is still the first words of its first message (the chat, slice 10). */
+  name: (id: string) => fetch(`${one(id)}/title`, { method: "POST", headers: H }).then((r) => answer<Chat>(r)),
   /** One conversation, with its proposals and the decisions on them. */
   get: (id: string) => fetch(one(id)).then((r) => answer<ChatDetail>(r)),
   /** Renamed, pinned or archived, every version alike; `current` makes the version named the one the lists show and open. */
@@ -174,6 +177,12 @@ export function meterOf(c: ChatContext | null | undefined): { percent: number; w
 /** A conversation's name, or plain words while it has none. */
 export function chatTitle(c: { title: string | null }): string {
   return c.title?.trim() || "A conversation";
+}
+
+/** The open conversation as the list now shows it, when the list has a new name for it (the chat, slice 10); null when nothing changed. */
+export function renamedIn(meta: Chat | null, list: Chat[]): Chat | null {
+  const row = meta ? list.find((c) => c.id === meta.id) : undefined;
+  return meta && row && (row.title !== meta.title || row.title_by !== meta.title_by) ? { ...meta, title: row.title, title_by: row.title_by } : null;
 }
 
 export interface ChatGroup {

@@ -106,6 +106,12 @@ export function useConversation(station: string, conv: string | null): Conversin
                   setContext(c.context ?? null);
                   setVersions(c.versions ?? []);
                   setRatings(c.ratings ?? []);
+                  // a conversation still named by its first words is named by the model once an answer settles (the chat, slice 10)
+                  if (c.title_by === "words")
+                    chats
+                      .name(id)
+                      .then(() => chatsKept.refresh())
+                      .catch(() => undefined);
                 },
                 () => undefined,
               );
