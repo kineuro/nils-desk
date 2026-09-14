@@ -17,6 +17,7 @@ export const COMMANDS: Command[] = [
   { name: "new", words: "Start a new conversation" },
   { name: "fork", words: "Continue in a copy of this conversation" },
   { name: "share", words: "Share this conversation" },
+  { name: "remember", words: "Keep something for your later conversations", takes: "what to keep" },
   { name: "rename", words: "Rename this conversation", takes: "a name" },
   { name: "status", words: "Show the model, the station and how full the context is" },
   { name: "help", words: "List these commands" },
