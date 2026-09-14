@@ -4,6 +4,8 @@
 // touch. A part of any other shape is dropped here and nowhere else. The
 // assistant never calls a desk function and never navigates the desk.
 
+import { splitReasoning } from "./reasoning";
+
 export type Part =
   | { kind: "move_proposal"; document: number; parent: number | null; sentence: string }
   | { kind: "choice"; question: string; options: { label: string; count: number | null }[] }
@@ -80,10 +82,21 @@ export interface Tool {
   state: "running" | "done" | "failed";
 }
 
+/** One step of an assistant's reply as it arrived: its words, and the reasoning its runtime separated. */
+export interface Step {
+  words: string;
+  reasoning: string;
+}
+
 export interface Turn {
   id: string;
   role: "user" | "assistant" | "system";
+  /** The words; for an assistant, its answer: each step's words a paragraph apart, with any reasoning a model left inline read out (the chat, slice 9). */
   text: string;
+  /** What an assistant reasoned before it answered: what its runtime separated, and what was read out of its words (the chat, slice 9). */
+  thinking?: string;
+  /** An assistant's steps as they arrived, which its text and thinking are drawn from. */
+  steps?: Step[];
   done: boolean;
   tools: Tool[];
 }
@@ -145,6 +158,28 @@ function withTurn(state: PaneState, id: string, f: (t: Turn) => Turn): PaneState
   return { ...state, turns: state.turns.map((t) => (t.id === id ? f(t) : t)) };
 }
 
+/** Two steps' words, a paragraph apart (the chat, slice 9). */
+export function joinSteps(before: string, next: string): string {
+  if (before === "" || next === "") return before + next;
+  if (before.endsWith("\n\n")) return before + next;
+  return before.endsWith("\n") ? `${before}\n${next}` : `${before}\n\n${next}`;
+}
+
+/** An assistant turn's answer and thinking, drawn from its steps: inline reasoning is read out of each step's own words. */
+function drawn(t: Turn, steps: Step[]): Turn {
+  let text = "";
+  let thinking = "";
+  for (const step of steps) {
+    const split = splitReasoning(step.words);
+    text = joinSteps(text, split.text);
+    thinking = joinSteps(thinking, joinSteps(step.reasoning.trim(), split.thinking));
+  }
+  return { ...t, steps, text, thinking };
+}
+
+/** The steps of a turn that was built without them, as one step. */
+const stepsOf = (t: Turn): Step[] => t.steps ?? [{ words: t.text, reasoning: t.thinking ?? "" }];
+
 /** What one part may touch: a proposal, the choice, the status line, a handle, or the aside. */
 export function acceptPart(state: PaneState, turnId: string, raw: unknown): PaneState {
   const p = asPart(raw);
@@ -187,13 +222,27 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
     }
     case "message-started": {
       const id = c.messageId as string;
-      // a later step of the same response starts the same message again; only a new turn clears the old choice
-      if (turn(state, id)) return { ...state, busy: true };
-      return { ...state, busy: true, settled: null, choice: null, turns: [...state.turns, { id, role: "assistant", text: "", done: false, tools: [] }] };
+      // a later step of the same response starts the same message again: a new step; only a new turn clears the old choice
+      if (turn(state, id)) return { ...withTurn(state, id, (t) => ({ ...t, steps: [...stepsOf(t), { words: "", reasoning: "" }] })), busy: true };
+      return {
+        ...state,
+        busy: true,
+        settled: null,
+        choice: null,
+        turns: [...state.turns, { id, role: "assistant", text: "", thinking: "", steps: [{ words: "", reasoning: "" }], done: false, tools: [] }],
+      };
     }
-    case "message-delta":
-      if (c.kind !== "text") return state;
-      return withTurn(state, c.messageId as string, (t) => ({ ...t, text: t.text + String(c.delta ?? "") }));
+    case "message-delta": {
+      // words and the reasoning a runtime separated go to the step they arrive in (the chat, slice 9)
+      if (c.kind !== "text" && c.kind !== "reasoning") return state;
+      const delta = String(c.delta ?? "");
+      return withTurn(state, c.messageId as string, (t) => {
+        const steps = [...stepsOf(t)];
+        const last = steps[steps.length - 1] ?? { words: "", reasoning: "" };
+        steps[Math.max(steps.length - 1, 0)] = c.kind === "text" ? { ...last, words: last.words + delta } : { ...last, reasoning: last.reasoning + delta };
+        return drawn(t, steps);
+      });
+    }
     case "tool-input":
       return withTurn(state, c.messageId as string, (t) => ({
         ...t,
@@ -232,12 +281,27 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
   for (const m of h.messages) {
     if (m.display && m.display !== "visible") continue;
     if (m.role !== "user" && m.role !== "assistant" && !(m.role === "system" && (m as { settlement?: unknown }).settlement)) continue;
-    const t: Turn = { id: m.id, role: m.role, text: "", done: true, tools: [] };
+    let t: Turn = { id: m.id, role: m.role, text: "", done: true, tools: [] };
+    // an assistant's steps: words or reasoning that follow words or a tool call begin the next one (the chat, slice 9)
+    const steps: Step[] = [];
+    let step: Step = { words: "", reasoning: "" };
+    let called = false;
     for (const p of m.parts) {
-      if (p.type === "text") t.text += p.text ?? "";
-      else if (p.type === "dynamic-tool" && p.toolCallId)
+      if ((p.type === "text" || p.type === "reasoning") && m.role === "assistant") {
+        if (step.words !== "" || called) {
+          steps.push(step);
+          step = { words: "", reasoning: "" };
+          called = false;
+        }
+        if (p.type === "text") step.words += p.text ?? "";
+        else step.reasoning += p.text ?? "";
+      } else if (p.type === "text") t.text += p.text ?? "";
+      else if (p.type === "dynamic-tool" && p.toolCallId) {
         t.tools.push({ id: p.toolCallId, name: p.toolName ?? "", state: p.state === "output-error" ? "failed" : p.state === "output-available" ? "done" : "running" });
+        called = true;
+      }
     }
+    if (m.role === "assistant") t = drawn(t, [...steps, step]);
     state = { ...state, turns: [...state.turns, t] };
     for (const p of m.parts) if (p.type.startsWith("data-")) state = acceptPart(state, m.id, p.data);
   }

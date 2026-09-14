@@ -58,6 +58,7 @@ export function TurnView(props: {
   const folded = foldedSteps(turn.tools);
   return (
     <div className="said">
+      {turn.thinking && <Thinking text={turn.thinking} live={!turn.done && !turn.text} />}
       {folded && (
         <div className="steps">
           <button type="button" className="steps-line" aria-expanded={open} onClick={onToggle}>
@@ -151,6 +152,28 @@ export function TurnView(props: {
         </div>
       )}
       {actions && turn.done && <Answered turn={turn} actions={actions} />}
+    </div>
+  );
+}
+
+/** What the model reasoned before it answered, folded until asked for, never part of the answer (the chat, slice 9). */
+function Thinking({ text, live }: { text: string; live: boolean }) {
+  const [open, setOpen] = useState(false);
+  const words = text.split(/\s+/u).filter(Boolean).length;
+  return (
+    <div className="steps thinking">
+      <button type="button" className="steps-line" aria-expanded={open} onClick={() => setOpen((was) => !was)}>
+        <Icon name={open ? "chevron-down" : "chevron-right"} />
+        <span className={live ? "grow thinking-live" : "grow"}>{live ? "Thinking" : "Reasoning"}</span>
+        <span className="meta num">
+          {words.toLocaleString()} {words === 1 ? "word" : "words"}
+        </span>
+      </button>
+      {open && (
+        <div className="thinking-body">
+          <Markdown text={text} streaming={live} />
+        </div>
+      )}
     </div>
   );
 }
