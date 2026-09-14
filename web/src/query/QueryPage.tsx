@@ -337,7 +337,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
     if (!target) {
       // the assistant names the card's conversation, and it is the person's
       try {
-        const made = await chats.create({ station, title: titleOf(words), document: id, lineage: root ?? id });
+        const made = await chats.create({ station, title: titleOf(words), title_by: "words", document: id, lineage: root ?? id });
         target = made.id;
         talk.made(target);
         setConv(target);

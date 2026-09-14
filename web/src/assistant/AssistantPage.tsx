@@ -22,7 +22,7 @@ import { admit } from "../ui/context";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { useKept } from "../ui/kept";
-import { type Chat, chats, chatsKept, meterOf, STATION_WORDS, versionAt } from "./chats";
+import { type Chat, chats, chatsKept, meterOf, STATION_WORDS, versionAt, renamedIn } from "./chats";
 import { ChatActions, ChatHistory } from "./ChatHistory";
 import { takeSaid, titleOf, type Plan } from "./client";
 import type { PaneState } from "./parts";
@@ -129,6 +129,12 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     };
   }, [opened]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // the name the model gave the conversation, once the list learns it (the chat, slice 10)
+  useEffect(() => {
+    const renamed = renamedIn(meta, list);
+    if (renamed) setMeta(renamed);
+  }, [list]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** What a prompt carries beside its words: the card floating over the conversation, or the page's own context. */
   const beside = (): Beside => {
     const card = inPlay.current;
@@ -146,7 +152,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     if (!id) {
       // the assistant names the conversation, and it is the person's
       try {
-        const made = await chats.create({ station, title: titleOf(words) });
+        const made = await chats.create({ station, title: titleOf(words), title_by: "words" });
         id = made.id;
         talk.made(id);
         setMeta(made);
