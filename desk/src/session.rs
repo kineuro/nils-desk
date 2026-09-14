@@ -443,3 +443,52 @@ pub async fn users_entitlements(
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
 }
+
+// --- the people on this desk, for choosing whom to share a conversation with (the chat, slice 5)
+
+/// The people a person may name when sharing a conversation: everyone the desk
+/// keeps in `local` mode, and everyone who has signed in at least once in
+/// `oidc` mode, by subject and display name, never the person asking. A person
+/// holding `assist` asks; a desk nobody signs in to has one person and lists
+/// nobody.
+pub async fn people_list(State(desk): State<Shared>, headers: HeaderMap) -> Response {
+    if desk.config.mode == Mode::Off {
+        return error(
+            StatusCode::NOT_FOUND,
+            "a desk nobody signs in to has one person",
+        );
+    }
+    let (session, _) = resolve(&desk, &headers);
+    let Some(s) = session else {
+        return error(StatusCode::UNAUTHORIZED, "no session");
+    };
+    let me = person(&desk, &s);
+    if !me.holds("assist") {
+        return error(
+            StatusCode::FORBIDDEN,
+            "the people on the desk are listed for a person holding assist",
+        );
+    }
+    let mut people = std::collections::BTreeMap::<String, String>::new();
+    if desk.config.mode == Mode::Local {
+        for u in desk.store.users() {
+            people.insert(u.username, u.display);
+        }
+    } else {
+        for (subject, display, _) in desk.store.people() {
+            people.insert(subject, display);
+        }
+    }
+    people.remove(&me.subject);
+    let mut list: Vec<(String, String)> = people.into_iter().collect();
+    list.sort_by(|a, b| {
+        a.1.to_lowercase()
+            .cmp(&b.1.to_lowercase())
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    let out: Vec<Value> = list
+        .into_iter()
+        .map(|(subject, display)| json!({"subject": subject, "display": display}))
+        .collect();
+    axum::Json(json!({ "people": out })).into_response()
+}

@@ -101,6 +101,7 @@ export function ChatHistory() {
                     <span className="chat-row-title">{chatTitle(c)}</span>
                     <span className="meta">
                       {STATION_WORDS[c.station] ?? c.station} · {whenWords(c.updated_at)}
+                      {c.shared ? " · shared" : ""}
                     </span>
                   </a>
                   <ChatActions chat={c} onChanged={changed} onDeleted={changed} />

@@ -123,6 +123,7 @@ pub fn router(desk: Shared) -> Router {
             "/desk/users/{name}/entitlements",
             axum::routing::put(session::users_entitlements),
         )
+        .route("/desk/people", get(session::people_list))
         .route("/desk/results", get(results::list).post(results::record))
         .route("/desk/lineage", post(results::lineage))
         .route("/desk/custody", get(results::custody))

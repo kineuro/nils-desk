@@ -509,6 +509,18 @@ input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
 .starter { padding: 0.65rem 0.8rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
 .starter:hover { border-color: var(--n-brand-line); background: var(--n-bg-hover); }
 .starter:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 2px; }
+.share-state { display: grid; gap: 0.45rem; padding: 0.65rem 0.75rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.share-state p { margin: 0; }
+.share-link { gap: 0.4rem; flex-wrap: wrap; }
+.share-link .input { min-width: min(100%, 14rem); }
+.share-audience { display: grid; gap: 0.35rem; margin: 0; padding: 0; border: 0; }
+.share-audience label { gap: 0.5rem; }
+.share-people { display: grid; gap: 0.5rem; }
+.share-people-list { display: grid; max-height: 16rem; overflow: auto; margin: 0; padding: 0; list-style: none; border: 1px solid var(--n-line); border-radius: var(--n-radius); }
+.share-people-list li + li { border-top: 1px solid var(--n-line); }
+.share-people-list label { gap: 0.6rem; padding: 0.45rem 0.65rem; cursor: pointer; }
+.share-people-list label:hover { background: var(--n-bg-hover); }
+.share-byline { margin: -0.5rem 0 0; }
 @media (hover: none) { .on-hover { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .on-hover { transition: none; } }
 .steps { display: grid; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-size: 14px; }
