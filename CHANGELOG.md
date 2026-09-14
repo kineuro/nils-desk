@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.23] - 2026-09-14
+
+Released beside the engine's 1.0.0-alpha.23 so the two stay in step. Bring DICOM in at any depth needs that engine's ingest folders and look doors. The Kvasir page, the subscriptions and local models need Kvasir 1.0.0-alpha.4, and a person's own subscription serving their conversations needs nils-assistant 1.0.0-alpha.23.
+
 ### Added
 
 - Bring DICOM in chooses from the engine's own ingest locations, for an operator, where the engine serves `POST /api/ingest/folders`, so it works where no supervisor answers. It opens at the locations, sources first, and goes into folders at any depth with a trail back up, a filter by name and Show more for the next page, so a folder of a hundred thousand folders is paged rather than cut off at 500. Each folder on screen says what a look inside it found: DICOM or not, its modalities and scanners, and how many files it holds. Folders ticked anywhere gather in a chosen list, where a folder inside another chosen one says so, and each becomes a digest of its own, named from its path; the page says what was queued. A folder no source place holds is offered to be added as a source first, without starting the engine again. An admin whose supervisor answers still reaches a folder outside those locations, and without the engine's doors the dialog is as it was. It needs an engine that serves the ingest folders and look doors.
