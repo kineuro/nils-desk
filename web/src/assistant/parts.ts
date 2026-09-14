@@ -222,6 +222,18 @@ export function answersSummarize(turns: Turn[], id: string): boolean {
   return i > 0 && turns[i].role === "assistant" && turns[i - 1].role === "system" && turns[i - 1].text === SUMMARIZE_ASKED;
 }
 
+/**
+ * The words of the error a turn settled with. The assistant's runtime keeps it
+ * as an object of its own, {name, message, type, details}, in a history and on
+ * the stream alike; a page shows its message. A thread that drew the object
+ * itself stopped the whole desk.
+ */
+export function settledError(e: unknown): string | undefined {
+  if (isStr(e)) return e.trim() || undefined;
+  const message = (e as { message?: unknown } | null | undefined)?.message;
+  return isStr(message) && message.trim() ? message.trim() : undefined;
+}
+
 /** The reducer over the live stream. Unknown chunk types are dropped. */
 export function reduce(state: PaneState, c: Chunk): PaneState {
   switch (c.type) {
@@ -274,8 +286,10 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
       return acceptPart(state, String(c.messageId), c.data);
     case "message-completed":
       return withTurn(state, c.messageId as string, (t) => ({ ...t, done: true }));
-    case "submission-settled":
-      return { ...state, busy: false, settled: { outcome: String(c.outcome), ...(c.error ? { error: String(c.error) } : {}) } };
+    case "submission-settled": {
+      const error = settledError(c.error);
+      return { ...state, busy: false, settled: { outcome: String(c.outcome), ...(error ? { error } : {}) } };
+    }
     default:
       return state;
   }
@@ -289,7 +303,8 @@ export interface History {
     display?: string;
     parts: { type: string; text?: string; data?: unknown; toolCallId?: string; toolName?: string; state?: string }[];
   }[];
-  settlements?: { submissionId: string; outcome: string; error?: string }[];
+  /** A failed turn's error as the runtime keeps it, an object of its own; settledError reads its words. */
+  settlements?: { submissionId: string; outcome: string; error?: unknown }[];
 }
 
 /** The pane from a history snapshot: what the live reducer would have built, minus what the store keeps only once per kind. */
@@ -333,7 +348,8 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
   });
   const last = h.settlements?.[h.settlements.length - 1];
   const open = state.turns.some((t) => t.role === "assistant" && !t.done);
-  return { ...state, busy: open, settled: last ? { outcome: last.outcome, ...(last.error ? { error: last.error } : {}) } : null };
+  const error = settledError(last?.error);
+  return { ...state, busy: open, settled: last ? { outcome: last.outcome, ...(error ? { error } : {}) } : null };
 }
 
 /** The decisions the assistant keeps for a conversation's proposals (the chat, slice 2): a reload shows what was accepted or disregarded, and a proposal made for another version reads as stale. */

@@ -28,6 +28,7 @@ import { supervise, type Install } from "./settings/supervise";
 import { Side } from "./Side";
 import { Icon } from "./ui/Icon";
 import { useKept } from "./ui/kept";
+import { PageBoundary } from "./ui/PageBoundary";
 import { ThemeSwitch } from "./ui/ThemeSwitch";
 
 type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
@@ -204,6 +205,7 @@ export function App() {
       <div className={body}>
         {sided && <Side top={side} foot={kept} section={active?.id ?? null} page={route.page} open={menu} onClose={closeMenu} />}
         <main className="page">
+          <PageBoundary route={`${route.section}/${route.page ?? ""}/${route.arg ?? ""}`}>
           {st.kind === "login" && (
             <Login how={st.how} url={st.url} nobody={(caps.desk.login as { nobody_yet?: boolean } | null)?.nobody_yet === true} onDone={() => location.reload()} />
           )}
@@ -247,6 +249,7 @@ export function App() {
               <p>The desk has no section for the entitlements this account holds.</p>
             </section>
           )}
+          </PageBoundary>
         </main>
       </div>
     </div>

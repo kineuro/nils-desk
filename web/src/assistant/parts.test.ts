@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { acceptPart, answersSummarize, asPart, empty, fromHistory, reduce, SUMMARIZE_ASKED, withStored, type Chunk } from "./parts";
+import { acceptPart, answersSummarize, asPart, empty, fromHistory, reduce, settledError, SUMMARIZE_ASKED, withStored, type Chunk } from "./parts";
 
 describe("the closed union of parts (section 9.8)", () => {
   it("admits exactly the eight shapes and drops the rest", () => {
@@ -103,6 +103,35 @@ describe("the reducer over the live stream", () => {
       [8, null, { moved_to: null }],
       [9, null, null],
     ]);
+  });
+});
+
+describe("a turn that failed", () => {
+  // the runtime's own shape, as a history keeps it and the stream carries it
+  const failure = {
+    name: "FlueError",
+    message: "direct(sub_1) failed: 403 Forbidden: the key's purposes do not include assistant.operator (refused)",
+    type: "operation_failed",
+    details: "the model gateway refused the request",
+  };
+  it("reads the words out of the error a history kept, so opening the conversation draws a sentence", () => {
+    const s = fromHistory({
+      messages: [{ id: "u1", role: "user", parts: [{ type: "text", text: "plan the digest" }] }],
+      settlements: [{ submissionId: "x", outcome: "failed", error: failure }],
+    });
+    expect(s.settled).toEqual({ outcome: "failed", error: failure.message });
+  });
+  it("reads the same words out of the stream", () => {
+    const s = reduce(empty(), { type: "submission-settled", submissionId: "x", outcome: "failed", error: failure });
+    expect(s.settled).toEqual({ outcome: "failed", error: failure.message });
+  });
+  it("keeps a sentence as it is and has no words for an error without a message", () => {
+    expect(settledError(" the model did not answer ")).toBe("the model did not answer");
+    expect(settledError({ type: "internal_error" })).toBeUndefined();
+    expect(settledError("")).toBeUndefined();
+    expect(settledError(null)).toBeUndefined();
+    expect(settledError(undefined)).toBeUndefined();
+    expect(fromHistory({ messages: [], settlements: [{ submissionId: "x", outcome: "failed", error: { type: "internal_error" } }] }).settled).toEqual({ outcome: "failed" });
   });
 });
 
