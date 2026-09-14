@@ -3,9 +3,9 @@
 // record 23): the backends Kvasir holds and their health, a model tried,
 // added, checked and removed, a backend's key, where each purpose goes, the
 // admission records, the minted keys, the ChatGPT subscription, and the local
-// models Kvasir downloads with where they go and the Hugging Face token. Every
-// write goes through the same identity as the data, and the desk's
-// cross-origin defences.
+// models Kvasir downloads with where they go, the Hugging Face token, and a
+// model started or stopped on llama.cpp (record 24). Every write goes through
+// the same identity as the data, and the desk's cross-origin defences.
 
 import type { Json } from "../ask/client";
 
@@ -227,14 +227,52 @@ export interface LocalModel {
   finished_at: number | null;
   /** The commands a model server runs it with, once it is downloaded; empty before. */
   serve: LocalServe[];
+  /** Record 24: whether Kvasir can start it on the runtime, a finished GGUF download on an install with one. A Kvasir before record 24 says nothing. */
+  startable?: boolean;
+  /** Record 24: where it stands on the runtime; null before a first start. A Kvasir before record 24 says nothing. */
+  run?: LocalRun | null;
 }
 
-/** Where new downloads go and the room there, whether a Hugging Face token is set, and every local model. */
+/** Record 24: where a started model stands on the runtime. */
+export type RunState = "starting" | "serving" | "stopped" | "failed";
+
+/** Record 24: a local model an admin started on the runtime, as Kvasir follows it. */
+export interface LocalRun {
+  state: RunState;
+  /** The model's id on the runtime's backend in Kvasir. */
+  model: string;
+  /** Why it did not start, in Kvasir's words. */
+  error: string | null;
+  /** The last lines llama.cpp logged for it, where it did not start. */
+  log: string[];
+  /** The context and slots llama.cpp settled on, once it serves. */
+  context: number | null;
+  slots: number | null;
+  started_by: string | null;
+  /** Milliseconds since the epoch. */
+  started_at: number | null;
+}
+
+/** Record 24: the runtime Kvasir starts downloaded models on, llama.cpp's server on this machine. */
+export interface LocalRuntime {
+  /** llama.cpp's build, such as b10964. */
+  build: string;
+  /** The archive the build came from, such as ubuntu-vulkan-x64. */
+  variant: string;
+  /** Whether it answers now. */
+  reachable: boolean;
+  /** The local model it loads or serves now, by its id; null for none. */
+  serving: number | null;
+}
+
+/** Where new downloads go and the room there, whether a Hugging Face token is set, every local model, and the runtime where the install has one. */
 export interface LocalStatus {
   location: string;
   free_bytes: number | null;
   token: boolean;
   models: LocalModel[];
+  /** Record 24: null where the install runs no runtime for Kvasir. A Kvasir before record 24 says nothing. */
+  runtime?: LocalRuntime | null;
 }
 
 /** One file a download would bring, as the hub lists it; a small file kept in git has no sha256. */
@@ -308,6 +346,10 @@ export const kvasir = {
     download: (ask: LocalAsk) => door<LocalModel>("POST", "/v1/local/models", ask),
     pause: (id: number) => door<LocalModel>("POST", `/v1/local/models/${id}/pause`, {}),
     resume: (id: number) => door<LocalModel>("POST", `/v1/local/models/${id}/resume`, {}),
+    /** Record 24: started on llama.cpp, which stops the model it serves now; answers the row, starting. */
+    start: (id: number) => door<LocalModel>("POST", `/v1/local/models/${id}/start`, {}),
+    /** Record 24: unloaded from llama.cpp and let go from Kvasir's backend; answers the row. */
+    stop: (id: number) => door<LocalModel>("POST", `/v1/local/models/${id}/stop`, {}),
     /** A model and its files deleted; one gone already answers 404, and then null. */
     remove: (id: number) => unlessAbsent(door<Json>("DELETE", `/v1/local/models/${id}`)),
     /** The token for gated and private models, sealed and never shown. */

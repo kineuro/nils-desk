@@ -482,10 +482,10 @@ table.thin th.acts, table.thin td.acts { width: 1%; }
 .sub-link > span { min-width: 0; overflow-wrap: anywhere; }
 /* the Kvasir page's local models: where downloads go and the token, each model with how far it is, and the commands a model server runs it with */
 .stack.local { gap: 0.55rem; }
-.local .path { overflow-wrap: anywhere; }
+.local .path, .local .warn { overflow-wrap: anywhere; }
 .local .dialog-head h2 { min-width: 0; overflow-wrap: anywhere; }
 .local-list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
-.local-row { display: grid; gap: 0.3rem; min-width: 0; padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--n-line); }
+.local-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.3rem; min-width: 0; padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--n-line); }
 .local-row:last-child { border-bottom: 0; }
 .local-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.7rem; min-width: 0; }
 .local-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.05rem 0.6rem; flex: 1 1 14rem; min-width: 0; }
@@ -500,6 +500,17 @@ table.thin th.acts, table.thin td.acts { width: 1%; }
 .serve-row { display: contents; }
 .serve-list dt { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
 .serve-list dd { margin: 0; min-width: 0; }
+/* record 24: the runtime a downloaded model starts on, a model's run on it, what llama.cpp logged, the commands folded under a model Kvasir starts, and the stations a provider does not answer */
+.local-runtime { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; min-width: 0; }
+.local-run { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; min-width: 0; }
+.local-log { min-width: 0; }
+.local-log pre { max-height: 14rem; margin: 0.3rem 0 0; overflow: auto; overflow-wrap: anywhere; font-size: var(--n-text-size-small); }
+.serve-self { min-width: 0; }
+.serve-self > summary { cursor: pointer; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.serve-self > .serve { margin-top: 0.4rem; }
+.closed-list { display: grid; gap: 0.3rem; margin: 0.35rem 0 0; padding: 0; list-style: none; }
+.closed-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.2rem 0.6rem; min-width: 0; font-size: var(--n-text-size-small); }
+.closed-list li > span { flex: 1 1 14rem; min-width: 0; overflow-wrap: anywhere; }
 .found { display: grid; gap: 0.4rem; }
 .file-list { display: grid; max-height: 14rem; overflow: auto; margin: 0; padding: 0.25rem 0; list-style: none; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-page); }
 .file-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 0.2rem 0.8rem; min-width: 0; padding: 0.15rem 0.65rem; }

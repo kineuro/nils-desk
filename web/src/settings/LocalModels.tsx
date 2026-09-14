@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Local models on the Kvasir page (record 23, slice M), for an admin and
-// where Kvasir serves them: where new downloads go and the room there, the
-// Hugging Face token, and every model Kvasir downloads with its state, how
-// far it is and its path, to pause, resume or remove. A downloaded model
-// shows the commands a model server runs it with, since Kvasir runs no
-// model. While a model is queued or downloading, the list is read again
-// every few seconds, until none is.
+// Local models on the Kvasir page (record 23, slice M; record 24), for an
+// admin and where Kvasir serves them: where new downloads go and the room
+// there, the Hugging Face token, and every model Kvasir downloads with its
+// state, how far it is and its path, to pause, resume or remove. Where the
+// install runs llama.cpp for Kvasir, a downloaded GGUF model starts and stops
+// from its row, one at a time, and says how it serves and whether Kvasir
+// admitted it; a downloaded model also shows the commands a model server runs
+// it with. While a model is queued or downloading, or loads into llama.cpp,
+// the list is read again every few seconds, until none is.
 
 import { useEffect, useId, useRef, useState } from "react";
 import { Command } from "../ui/Command";
@@ -13,44 +15,81 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Acted, Health, messageOf, useActing } from "./common";
 import { DownloadModel } from "./DownloadModel";
-import { kvasir, type LocalModel, type LocalStatus } from "./kvasir";
+import type { Admission } from "./gateway";
+import { kvasir, localRefusalOf, type AdmissionRecord, type Backend, type LocalModel, type LocalRun, type LocalServe, type LocalStatus } from "./kvasir";
 import {
   actionsOf,
   barOf,
+  emptyWords,
   freeWords,
+  introWords,
   locationRefusal,
   modelTag,
   movedWords,
   NO_COMMAND,
+  NOT_STARTABLE_NOTE,
   POLL_MS,
   progressWords,
   queuedWords,
   removedWords,
   removeWords,
+  replaceWords,
   revisionWords,
+  runActionsOf,
+  runningBesides,
+  runsKey,
   runtimeLabel,
+  runtimeLine,
+  runtimeTag,
+  runTag,
+  SELF_NOTE,
   sentence,
   SERVE_NOTE,
+  servedAdmission,
+  servingWords,
+  START_POLL_MS,
+  started,
+  startedWords,
+  starting,
+  startRefusalWords,
   STAY_NOTE,
+  stopFirstWords,
+  stoppedWords,
   TOKEN_NOTE,
   tokenReady,
   tokenTag,
+  UNREACHABLE,
   underWay,
 } from "./local";
 
 /** Kvasir's words for a refusal, as a sentence. */
 const refused = (e: unknown) => new Error(sentence(messageOf(e)));
 
-export function LocalModels() {
+export function LocalModels(props: {
+  /** Kvasir's backends as the page read them, for whether a serving model is admitted. */
+  backends?: Backend[] | null;
+  admissions?: AdmissionRecord[] | null;
+  now?: number;
+  /** Called when a model starts, stops or changes how it runs, so the page reads its backends again. */
+  onRun?: () => void;
+}) {
+  const { backends = null, admissions = null, now = Date.now(), onRun } = props;
   const [status, setStatus] = useState<LocalStatus | null>(null);
   const [missed, setMissed] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [moving, setMoving] = useState(false);
   const [removing, setRemoving] = useState<number | null>(null);
+  const [replacing, setReplacing] = useState<number | null>(null);
   const acting = useActing();
   // each read and each answer counts one, so a read still on its way when a fresher answer lands is let go
   const round = useRef(0);
+  // how the models ran at the last read, so a change there reads the page's backends again
+  const runs = useRef<string | null>(null);
+  const told = useRef(onRun);
+  useEffect(() => {
+    told.current = onRun;
+  });
 
   const load = () => {
     const mine = ++round.current;
@@ -61,6 +100,9 @@ export function LocalModels() {
         // null where Kvasir does not serve local models, and the section stays out
         setStatus(s);
         setMissed(null);
+        const key = s ? runsKey(s.models) : null;
+        if (runs.current !== null && key !== runs.current) told.current?.();
+        runs.current = key;
       })
       .catch((e: unknown) => {
         // below admin, or Kvasir not answering: a section never read stays out, and one read keeps what it showed
@@ -88,6 +130,15 @@ export function LocalModels() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load only sets what it read
   }, [busy]);
 
+  // while a model loads into llama.cpp the list is read again sooner, until it serves or does not start
+  const loading = status !== null && starting(status.models);
+  useEffect(() => {
+    if (!loading) return;
+    const t = setInterval(load, START_POLL_MS);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load only sets what it read
+  }, [loading]);
+
   if (status === null) return null;
 
   const put = (m: LocalModel) => take((s) => ({ ...s, models: s.models.map((x) => (x.id === m.id ? m : x)) }));
@@ -104,8 +155,43 @@ export function LocalModels() {
     });
   };
 
+  const start = (m: LocalModel) => {
+    setSaid(null);
+    acting.act(`starting ${m.repo}`, async () => {
+      try {
+        put(await kvasir.local.start(m.id));
+      } catch (e) {
+        load();
+        const r = localRefusalOf(e);
+        throw new Error(r ? startRefusalWords(r) : sentence(messageOf(e)));
+      }
+      // the model it stopped changed too, and the page's backends follow
+      load();
+      told.current?.();
+      return startedWords(m);
+    });
+  };
+
+  const stop = (m: LocalModel) => {
+    setSaid(null);
+    acting.act(`stopping ${m.repo}`, async () => {
+      try {
+        put(await kvasir.local.stop(m.id));
+      } catch (e) {
+        load();
+        throw refused(e);
+      }
+      load();
+      told.current?.();
+      return stoppedWords(m);
+    });
+  };
+
   const quiet = acting.acting.kind === "done" && acting.acting.words === "";
   const toRemove = removing === null ? null : (status.models.find((m) => m.id === removing) ?? null);
+  const toStart = replacing === null ? null : (status.models.find((m) => m.id === replacing) ?? null);
+  const stopping = toStart ? runningBesides(status.models, toStart.id) : null;
+  const runtime = status.runtime;
 
   return (
     <section className="stack local">
@@ -123,7 +209,15 @@ export function LocalModels() {
           Download a model
         </button>
       </div>
-      <p className="meta">Models Kvasir downloads from the Hugging Face Hub, for a model server of yours to run.</p>
+      <p className="meta">{introWords(runtime)}</p>
+      {runtime && (
+        <div className="local-runtime">
+          <Icon name="chip" />
+          <span className="path">{runtimeLine(runtime)}</span>
+          <Health {...runtimeTag(runtime)} />
+        </div>
+      )}
+      {runtime && !runtime.reachable && <p className="warn">{UNREACHABLE}</p>}
       {said && <p className="ok-words">{said}</p>}
       {missed && <p className="warn">{`The list could not be read again: ${missed}`}</p>}
 
@@ -158,7 +252,7 @@ export function LocalModels() {
       </div>
 
       {status.models.length === 0 ? (
-        <p className="meta">No local model yet. Download one, then start a model server on it.</p>
+        <p className="meta">{emptyWords(runtime)}</p>
       ) : (
         <ul className="local-list">
           {status.models.map((m) => (
@@ -166,12 +260,21 @@ export function LocalModels() {
               key={m.id}
               model={m}
               busy={acting.working}
+              runtime={Boolean(runtime)}
+              admission={m.run ? servedAdmission(m.run, backends, admissions, now) : null}
               onPause={() => step(m, `pausing ${m.repo}`, kvasir.local.pause)}
               onResume={() => step(m, `resuming ${m.repo}`, kvasir.local.resume)}
               onRemove={() => {
                 setSaid(null);
                 setRemoving(m.id);
               }}
+              onStart={() => {
+                setSaid(null);
+                // llama.cpp runs one model at a time: a start that stops another asks first
+                if (runningBesides(status.models, m.id)) setReplacing(m.id);
+                else start(m);
+              }}
+              onStop={() => stop(m)}
             />
           ))}
         </ul>
@@ -214,15 +317,44 @@ export function LocalModels() {
           }}
         />
       )}
+      {toStart && stopping && (
+        <StartInstead
+          model={toStart}
+          running={stopping}
+          onClose={() => setReplacing(null)}
+          onStart={() => {
+            setReplacing(null);
+            start(toStart);
+          }}
+        />
+      )}
     </section>
   );
 }
 
-/** One model Kvasir downloads: its name, revision and commit, its state and how far it is, its path, what may be done with it, and once downloaded the commands a model server runs it with. */
-export function LocalModelRow(props: { model: LocalModel; busy?: boolean; onPause: () => void; onResume: () => void; onRemove: () => void }) {
-  const { model: m, busy = false, onPause, onResume, onRemove } = props;
+/**
+ * One model Kvasir downloads: its name, revision and commit, its state and how
+ * far it is, its path and what may be done with it; where Kvasir starts it on
+ * llama.cpp, how it runs and whether Kvasir admitted it; and once downloaded
+ * the commands a model server runs it with.
+ */
+export function LocalModelRow(props: {
+  model: LocalModel;
+  busy?: boolean;
+  /** Whether the install runs llama.cpp for Kvasir. */
+  runtime?: boolean;
+  /** Whether Kvasir admitted the model, where it serves. */
+  admission?: Admission | null;
+  onPause: () => void;
+  onResume: () => void;
+  onRemove: () => void;
+  onStart?: () => void;
+  onStop?: () => void;
+}) {
+  const { model: m, busy = false, runtime = false, admission = null, onPause, onResume, onRemove, onStart, onStop } = props;
   const tag = modelTag(m.state);
   const bar = barOf(m);
+  const run = m.run ?? null;
   return (
     <li className="local-row">
       <div className="local-head">
@@ -231,7 +363,19 @@ export function LocalModelRow(props: { model: LocalModel; busy?: boolean; onPaus
           <span className="meta">{revisionWords(m)}</span>
         </div>
         <Health tone={tag.tone} words={tag.words} />
+        {run && <Health {...runTag(run)} />}
         <span className="local-actions">
+          {runActionsOf(m).map((a) =>
+            a === "start" ? (
+              <button key={a} type="button" className="button small" disabled={busy || !onStart} onClick={onStart}>
+                Start
+              </button>
+            ) : (
+              <button key={a} type="button" className="button secondary small" disabled={busy || !onStop} onClick={onStop}>
+                Stop
+              </button>
+            ),
+          )}
           {actionsOf(m.state).map((a) =>
             a === "remove" ? (
               <button key={a} type="button" className="button quiet small" onClick={onRemove}>
@@ -264,24 +408,68 @@ export function LocalModelRow(props: { model: LocalModel; busy?: boolean; onPaus
       )}
       {m.state === "failed" && m.error && <p className="warn">{sentence(m.error)}</p>}
       <p className="meta path">{m.path}</p>
-      {m.state === "done" && (
-        <div className="serve">
-          {m.serve.length > 0 && (
-            <dl className="serve-list">
-              {m.serve.map((s, i) => (
-                <div key={`${i}-${s.runtime}`} className="serve-row">
-                  <dt>{runtimeLabel(s.runtime)}</dt>
-                  <dd>
-                    <Command text={s.command} />
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-          <p className="meta">{m.serve.length > 0 ? SERVE_NOTE : NO_COMMAND}</p>
-        </div>
-      )}
+      {run && <RunLines run={run} admission={admission} />}
+      {m.state === "done" &&
+        (m.startable === true ? (
+          m.serve.length > 0 && (
+            <details className="serve-self">
+              <summary>Or run it yourself</summary>
+              <div className="serve">
+                <ServeList serve={m.serve} />
+                <p className="meta">{SELF_NOTE}</p>
+              </div>
+            </details>
+          )
+        ) : (
+          <div className="serve">
+            {runtime && m.serve.length > 0 && <span className="label">Or run it yourself</span>}
+            {m.serve.length > 0 && <ServeList serve={m.serve} />}
+            <p className="meta">{m.serve.length > 0 ? (runtime ? NOT_STARTABLE_NOTE : SERVE_NOTE) : NO_COMMAND}</p>
+          </div>
+        ))}
     </li>
+  );
+}
+
+/** A model's run on llama.cpp: loading, serving with its context, slots and admission, or why it did not start with what llama.cpp logged. A stopped model says so in its tag alone. */
+function RunLines({ run, admission }: { run: LocalRun; admission: Admission | null }) {
+  if (run.state === "starting") return <p className="meta">{`Loading into llama.cpp as ${run.model}.`}</p>;
+  if (run.state === "serving")
+    return (
+      <div className="local-run">
+        <span className="meta">{servingWords(run)}</span>
+        {admission && <Health tone={admission.tone} words={admission.words} />}
+        {admission?.detail && <span className="meta">{admission.detail}</span>}
+      </div>
+    );
+  if (run.state !== "failed") return null;
+  const log = Array.isArray(run.log) ? run.log : [];
+  return (
+    <>
+      <p className="warn">{sentence(run.error ?? "") || "It did not start, and llama.cpp said nothing more."}</p>
+      {log.length > 0 && (
+        <details className="failure-raw local-log">
+          <summary>What llama.cpp logged</summary>
+          <pre>{log.join("\n")}</pre>
+        </details>
+      )}
+    </>
+  );
+}
+
+/** The commands a model server runs a download with, each under its label and to copy. */
+function ServeList({ serve }: { serve: LocalServe[] }) {
+  return (
+    <dl className="serve-list">
+      {serve.map((s, i) => (
+        <div key={`${i}-${s.runtime}`} className="serve-row">
+          <dt>{runtimeLabel(s.runtime)}</dt>
+          <dd>
+            <Command text={s.command} />
+          </dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 
@@ -432,14 +620,17 @@ function LocationDialog({ current, onClose, onDone }: { current: string; onClose
   );
 }
 
-/** A model removed, once the dialog has said what goes with it. */
+/** A model removed, once the dialog has said what goes with it; a model llama.cpp loads or serves is stopped first. */
 function RemoveLocal({ model, onClose, onDone }: { model: LocalModel; onClose: () => void; onDone: (words: string) => void }) {
   const removing = useActing();
+  const held = started(model);
   const remove = () =>
     removing.act(`removing ${model.repo}`, async () => {
       try {
         await kvasir.local.remove(model.id);
       } catch (e) {
+        // Kvasir refuses to remove a model it has started, until it is stopped
+        if (localRefusalOf(e)?.status === 409) throw new Error(stopFirstWords(model));
         throw refused(e);
       }
       onDone(removedWords(model));
@@ -451,7 +642,7 @@ function RemoveLocal({ model, onClose, onDone }: { model: LocalModel; onClose: (
     <>
       {!quiet && <Acted acting={removing.acting} />}
       <div className="row actions">
-        <button type="button" className="button" disabled={removing.working} onClick={remove}>
+        <button type="button" className="button" disabled={removing.working || held} onClick={remove}>
           Remove it
         </button>
         <button type="button" className="button secondary" onClick={onClose}>
@@ -463,9 +654,26 @@ function RemoveLocal({ model, onClose, onDone }: { model: LocalModel; onClose: (
 
   return (
     <Dialog title={`Remove ${model.repo}?`} icon="alert" onClose={onClose} foot={foot}>
-      {removeWords(model).map((w) => (
-        <p key={w}>{w}</p>
-      ))}
+      {held ? <p>{stopFirstWords(model)}</p> : removeWords(model).map((w) => <p key={w}>{w}</p>)}
+    </Dialog>
+  );
+}
+
+/** Before a start that stops the model llama.cpp loads or serves now: it runs one model at a time. */
+function StartInstead({ model, running, onClose, onStart }: { model: LocalModel; running: LocalModel; onClose: () => void; onStart: () => void }) {
+  const foot = (
+    <div className="row actions">
+      <button type="button" className="button" onClick={onStart}>
+        Start it
+      </button>
+      <button type="button" className="button secondary" onClick={onClose}>
+        Cancel
+      </button>
+    </div>
+  );
+  return (
+    <Dialog title={`Start ${model.repo}?`} icon="chip" onClose={onClose} foot={foot}>
+      <p>{replaceWords(model, running)}</p>
     </Dialog>
   );
 }

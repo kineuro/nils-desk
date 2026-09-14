@@ -108,4 +108,17 @@ describe("Kvasir's doors", () => {
     expect(localRefusalOf(gated)).toMatchObject({ status: 422, code: "needs_token", free_bytes: null, needed_bytes: null });
     expect(localRefusalOf(new Error("no body"))).toBeNull();
   });
+
+  it("send a start and a stop to their doors, and keep the code of a refusal to start (record 24)", async () => {
+    const calls = answering(202, {});
+    await kvasir.local.start(3);
+    await kvasir.local.stop(3);
+    expect(calls).toEqual([
+      { method: "POST", url: "/kvasir/v1/local/models/3/start", body: {} },
+      { method: "POST", url: "/kvasir/v1/local/models/3/stop", body: {} },
+    ]);
+    answering(409, { error: { code: "runtime_unreachable", message: "the runtime did not answer" } });
+    const e = await kvasir.local.start(3).catch((x: unknown) => x);
+    expect(localRefusalOf(e)).toMatchObject({ status: 409, code: "runtime_unreachable", message: "the runtime did not answer" });
+  });
 });

@@ -207,3 +207,35 @@ export function removalWords(b: Backend, backends: Backend[], purposes: PurposeR
   }
   return out;
 }
+
+/** A station a provider does not answer, and what moving it there needs. */
+export interface ClosedLine {
+  purpose: PurposeRow;
+  station: string;
+  needs: "nothing" | "an acknowledgement" | "never";
+  words: string;
+}
+
+/**
+ * The stations a provider does not answer, said once it is added (record 24):
+ * a station with no row in the table stays in your systems, so a provider
+ * answers only the stations an admin moves to it; rows of the archive go only
+ * with a written reason, and identifiers never.
+ */
+export function closedTo(provider: Backend, purposes: PurposeRow[]): ClosedLine[] {
+  return purposes
+    .filter((p) => p.backend !== provider.id)
+    .map((p): ClosedLine => {
+      const station = stationOf(p.purpose);
+      const open = opening(p, provider);
+      if (open === "never") return { purpose: p, station, needs: "never", words: `${station} carries identifiers, which never leave your systems.` };
+      if (open === "acknowledge") return { purpose: p, station, needs: "an acknowledgement", words: `${station} carries rows of the archive, which go there only once you write down why.` };
+      return { purpose: p, station, needs: "nothing", words: `${station} reads no rows, and goes there once you move it.` };
+    });
+}
+
+/** What leads the stations a provider does not answer: none yet, or not these. */
+export function closedLead(provider: Backend, purposes: PurposeRow[]): string {
+  const named = destinationWords(provider);
+  return purposes.some((p) => p.backend === provider.id) ? `${named} does not answer these stations yet` : `${named} answers no station yet`;
+}

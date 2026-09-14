@@ -7,6 +7,8 @@ import { describe, expect, it } from "vitest";
 import {
   admissionWords,
   checkWords,
+  closedLead,
+  closedTo,
   destinationWords,
   gatewayHealth,
   listWords,
@@ -181,5 +183,21 @@ describe("where each station goes", () => {
       { backend: minimax, needs: "an acknowledgement" },
       { backend: chatgpt, needs: "an acknowledgement" },
     ]);
+  });
+});
+
+describe("a provider just added", () => {
+  it("names the stations it does not answer, each with what moving it there needs", () => {
+    const concierge = purpose({});
+    const operator = purpose({ purpose: "assistant.operator", content: "catalog" });
+    const identity = purpose({ purpose: "desk.identity", content: "identifiers" });
+    const askHelp = purpose({ purpose: "assistant.ask-help", backend: "minimax", locality: "remote", default: false });
+    expect(closedTo(minimax, [concierge, operator, identity, askHelp]).map((l) => [l.station, l.needs, l.words])).toEqual([
+      ["concierge", "an acknowledgement", "concierge carries rows of the archive, which go there only once you write down why."],
+      ["operator", "nothing", "operator reads no rows, and goes there once you move it."],
+      ["desk.identity", "never", "desk.identity carries identifiers, which never leave your systems."],
+    ]);
+    expect(closedLead(minimax, [concierge, askHelp])).toBe("MiniMax-M3 does not answer these stations yet");
+    expect(closedLead(minimax, [concierge])).toBe("MiniMax-M3 answers no station yet");
   });
 });

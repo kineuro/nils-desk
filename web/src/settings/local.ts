@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Local models on the Kvasir page (record 23, slice M). Kvasir downloads a
-// model from the Hugging Face Hub into a location an admin changes, and runs
-// none of them: an admin starts a model server on a download and adds it with
-// Add a model. These are the section's rules and words: sizes as a person
-// reads them, each state's tag, bar and actions, what the download dialog
-// asks and when it may download, and each refusal in words a person can act
-// on.
+// Local models on the Kvasir page (record 23, slice M; record 24). Kvasir
+// downloads a model from the Hugging Face Hub into a location an admin
+// changes. Where the install runs llama.cpp for Kvasir, a downloaded GGUF model
+// starts on it from its row, one at a time; elsewhere an admin starts a model
+// server on a download and adds it with Add a model. These are the section's
+// rules and words: sizes as a person reads them, each state's tag, bar and
+// actions, what the download dialog asks and when it may download, how a
+// started model runs, and each refusal in words a person can act on.
 
-import type { Tone } from "./gateway";
-import type { LocalAsk, LocalLookup, LocalModel, LocalRefusal, LocalState } from "./kvasir";
+import { admissionWords, listWords, modelOf, type Admission, type Tone } from "./gateway";
+import type { AdmissionRecord, Backend, LocalAsk, LocalLookup, LocalModel, LocalRefusal, LocalRun, LocalRuntime, LocalState, RunState } from "./kvasir";
 
 /** How often the list is read again while a model is queued or downloading. */
 export const POLL_MS = 5_000;
@@ -290,4 +291,132 @@ export function removedWords(m: LocalModel): string {
 /** Where new downloads go, said once the location changed. */
 export function movedWords(location: string): string {
   return `New downloads go to ${location} now.`;
+}
+
+// Record 24: a downloaded GGUF model started on the runtime, llama.cpp's server
+// on this machine, which Kvasir loads the model into and follows.
+
+/** How often the list is read again while a model loads into the runtime. */
+export const START_POLL_MS = 2_000;
+
+/** What the section says first: where its models run, by the runtime the install has. A Kvasir before record 24 says nothing of one, and the words are as they were. */
+export function introWords(runtime: LocalRuntime | null | undefined): string {
+  if (runtime === undefined) return "Models Kvasir downloads from the Hugging Face Hub, for a model server of yours to run.";
+  if (runtime === null) return "Models Kvasir downloads from the Hugging Face Hub. Kvasir runs no model here: a model server of yours runs them.";
+  return "Models Kvasir downloads from the Hugging Face Hub and starts on llama.cpp on this machine, one at a time.";
+}
+
+/** Said where the list is empty, by the runtime the install has. */
+export function emptyWords(runtime: LocalRuntime | null | undefined): string {
+  return runtime ? "No local model yet. Download a model in GGUF, then start it from its row." : "No local model yet. Download one, then start a model server on it.";
+}
+
+/** The runtime as the section names it: llama.cpp's build, and the archive it came from. */
+export function runtimeLine(r: LocalRuntime): string {
+  return `llama.cpp ${r.build}, ${r.variant}`;
+}
+
+/** Whether the runtime answers, as the tag beside it. */
+export function runtimeTag(r: LocalRuntime): { tone: LocalTone; words: string } {
+  return r.reachable ? { tone: "ok", words: "answers" } : { tone: "blocked", words: "does not answer" };
+}
+
+/** Said while the runtime does not answer. */
+export const UNREACHABLE = "Kvasir does not reach llama.cpp on this machine, so no model starts or serves until it answers again.";
+
+/** Said under the commands of a model Kvasir starts itself, folded under Or run it yourself. */
+export const SELF_NOTE = "A model server started with one of these commands is added with Add a model.";
+
+/** Said under the commands of a downloaded model Kvasir cannot start, on an install that runs llama.cpp for it. */
+export const NOT_STARTABLE_NOTE = "Kvasir starts only a GGUF model: start a model server with one of these commands, then add it with Add a model.";
+
+/** Whether a model is started on the runtime now: loading or serving. */
+export function started(m: LocalModel): boolean {
+  return m.run?.state === "starting" || m.run?.state === "serving";
+}
+
+/** Whether the list is read again sooner: while a model loads into the runtime. */
+export function starting(models: LocalModel[]): boolean {
+  return models.some((m) => m.run?.state === "starting");
+}
+
+/** The model the runtime loads or serves now, other than the one named: it runs one model at a time. */
+export function runningBesides(models: LocalModel[], id: number): LocalModel | null {
+  return models.find((m) => m.id !== id && started(m)) ?? null;
+}
+
+/** Every model's run in one line, to tell whether a run changed between two reads. */
+export function runsKey(models: LocalModel[]): string {
+  return models.map((m) => `${m.id}:${m.run?.state ?? "-"}:${m.run?.model ?? ""}`).join(",");
+}
+
+export type RunAction = "start" | "stop";
+
+/** What a row offers on the runtime: Stop while the model loads or serves, Start for one Kvasir can start, and nothing where it cannot. */
+export function runActionsOf(m: LocalModel): RunAction[] {
+  if (started(m)) return ["stop"];
+  return m.startable === true ? ["start"] : [];
+}
+
+const RUN_TAGS: Record<RunState, { tone: LocalTone; words: string }> = {
+  starting: { tone: "brand", words: "loading" },
+  serving: { tone: "ok", words: "serving" },
+  stopped: { tone: "neutral", words: "stopped" },
+  failed: { tone: "blocked", words: "did not start" },
+};
+
+/** The tag of a model's run; a state this desk does not know reads as Kvasir names it. */
+export function runTag(run: LocalRun): { tone: LocalTone; words: string } {
+  return RUN_TAGS[run.state] ?? { tone: "neutral", words: String(run.state) };
+}
+
+/** A serving model's line: the name it is served as, and the context and slots llama.cpp settled on. */
+export function servingWords(run: LocalRun): string {
+  const parts: string[] = [];
+  if (run.context) parts.push(`${count(run.context)} tokens of context`);
+  if (run.slots) parts.push(run.slots === 1 ? "one slot" : `${count(run.slots)} slots`);
+  return parts.length > 0 ? `Serving as ${run.model}, with ${listWords(parts)}.` : `Serving as ${run.model}.`;
+}
+
+/**
+ * Whether Kvasir admitted a serving model, read from the backend that serves
+ * it: warming until its first answer, then as the models table says it, being
+ * checked, admitted, or refused with the checks it failed. Null for a model
+ * that does not serve, or before the backends are read.
+ */
+export function servedAdmission(run: LocalRun, backends: Backend[] | null, records: AdmissionRecord[] | null, now: number): Admission | null {
+  if (run.state !== "serving" || backends === null) return null;
+  const b = backends.find((x) => x.builtin !== true && x.locality === "local" && (x.models.includes(run.model) || (x.entries ?? []).some((e) => e.id === run.model)));
+  if (!b) return { tone: "caution", words: "being added", detail: "Kvasir holds it as a model in your systems in a moment." };
+  if (b.health.warming === true) return { tone: "caution", words: "warming", detail: "Kvasir checks it with its admission suite once it has answered." };
+  return admissionWords(run.model, b, modelOf(b, run.model, []), records, { now, checking: false });
+}
+
+/** A refusal of a start in words a person can act on, by its code; Kvasir's own words for any other. */
+export function startRefusalWords(r: LocalRefusal): string {
+  if (r.code === "no_runtime") return "This install runs no llama.cpp for Kvasir to start a model on. Start a model server with one of the model's commands, then add it with Add a model.";
+  if (r.code === "not_downloaded") return "This model is not downloaded yet. Start it once its download has finished.";
+  if (r.code === "not_gguf") return "Kvasir starts only a GGUF model. Start a model server on these files with one of their commands, then add it with Add a model.";
+  if (r.code === "runtime_unreachable") return "llama.cpp on this machine does not answer, so Kvasir could not start the model. Start it again once llama.cpp answers.";
+  return sentence(r.message) || `Kvasir answered ${r.status}.`;
+}
+
+/** Said before a start that stops the model llama.cpp loads or serves now. */
+export function replaceWords(next: LocalModel, running: LocalModel): string {
+  return `llama.cpp runs one model at a time, so starting ${next.repo} stops ${running.repo}.`;
+}
+
+/** What a start began, said once Kvasir took it. */
+export function startedWords(m: LocalModel): string {
+  return `${m.repo} is loading into llama.cpp. Once it serves, Kvasir checks it with its admission suite before the assistant uses it.`;
+}
+
+/** What a stop did, said once Kvasir took it. */
+export function stoppedWords(m: LocalModel): string {
+  return `${m.repo} is stopped, and llama.cpp holds no memory for it any more.`;
+}
+
+/** Said in place of removing a model llama.cpp loads or serves. */
+export function stopFirstWords(m: LocalModel): string {
+  return `${m.repo} is started on llama.cpp. Stop it first, then remove it.`;
 }
