@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.21] - 2026-09-14
+
+Released beside the engine's 1.0.0-alpha.21 so the two stay in step. That engine changes nothing the desk reads, so every change works with the engine's 1.0.0-alpha.20 as well. The thread, sharing, memory, and export and recall each need the nils-assistant change named with it.
+
 ### Added
 
 - The assistant's words are drawn from their markdown: headings, lists, quotes, tables that scroll inside themselves on a narrow screen, and code with a button that copies it. Raw HTML reads as the text it is, a link opens only to the web or to mail, and an image is named, never loaded. A Query card's discussion draws them the same way.
