@@ -14,7 +14,7 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { Markdown } from "./Markdown";
 import {
-  asked,
+  asked, budgetWords,
   charsLeft,
   fromWork,
   INSTRUCTION_CHARS,
@@ -79,7 +79,7 @@ export function MemoryPage({ caps }: { caps: Capabilities }) {
           <span className="eyebrow">Assistant</span>
           <h1>Memory</h1>
           <p className="lede">
-            What the assistant reads at the start of each new conversation: the install's instructions, what you asked it to keep, and a few notes from your work. It keeps
+            What the assistant reads at the start of each new conversation: the install's instructions, what you asked it to keep, up to 3,000 characters of it, and a few notes from your work. It keeps
             something only when you ask or accept, never a person's data, and what it keeps about you is yours alone.
           </p>
         </div>
@@ -107,6 +107,7 @@ export function MemoryPage({ caps }: { caps: Capabilities }) {
 
       <section className="chat-group">
         <h2 className="chat-group-label">What you asked it to keep</h2>
+        {mine.length > 0 && <p className="meta memory-budget">{budgetWords(mine)}</p>}
         <form
           className="row memory-add"
           onSubmit={(e) => {
