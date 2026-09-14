@@ -30,6 +30,7 @@ import { CardInPlay, type InPlay } from "./CardInPlay";
 import { CompactionNote, ContextMeter } from "./ContextMeter";
 import { exportName, saveText } from "./download";
 import { memory } from "./memory";
+import { loadMentionables, MENTION_KIND, type Mentionable, mentionables, mentionAt, plainMentions, withMention } from "./mentions";
 import { MemoryPage } from "./MemoryPage";
 import { ShareDialog } from "./ShareDialog";
 import { SharedList, SharedPage } from "./SharedPages";
@@ -87,6 +88,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   const [sharing, setSharing] = useState(false);
   // the memories offered in this conversation, kept or put aside here
   const [kept, setKept] = useState<Record<string, "saved" | "dismissed">>({});
+  // what a mention can name, read once an @ is first typed (the chat, slice 12)
+  const [mentionable, setMentionable] = useState<Mentionable[] | null>(null);
   const input = useRef<HTMLTextAreaElement | null>(null);
   const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
   const model = assistantModel(caps);
@@ -167,7 +170,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     if (!id) {
       // the assistant names the conversation, and it is the person's
       try {
-        const made = await chats.create({ station, title: titleOf(words), title_by: "words" });
+        const made = await chats.create({ station, title: titleOf(plainMentions(words)), title_by: "words" });
         id = made.id;
         talk.made(id);
         setMeta(made);
@@ -324,6 +327,14 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     });
 
   const offered = commandsFor(text);
+  // a card, a cohort or a result named with @ (the chat, slice 12): the lists are read once, when an @ is first typed
+  const typing = mentionAt(text);
+  useEffect(() => {
+    if (typing === null || mentionable !== null) return;
+    setMentionable([]);
+    loadMentionables().then(setMentionable, () => undefined);
+  }, [typing === null]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mentionOffer = typing !== null && offered.length === 0 ? mentionables(typing, mentionable ?? []) : [];
   const ended = ending(pane.settled);
   const title = meta?.title ?? (conv || opened ? "A conversation" : "New conversation");
   return (
@@ -462,20 +473,41 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             ))}
           </div>
         )}
+        {mentionOffer.length > 0 && (
+          <div className="command-menu mention-menu" aria-label="Name a card, a cohort or a result">
+            {mentionOffer.map((m) => (
+              <button
+                key={`${m.kind}:${m.id}`}
+                type="button"
+                onClick={() => {
+                  setText(withMention(text, m));
+                  input.current?.focus();
+                }}
+              >
+                <span className="mention-kind">{MENTION_KIND[m.kind]}</span>
+                <span>{m.name}</span>
+                {m.detail && <span className="meta">{m.detail}</span>}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="input composer-input">
           <textarea
             ref={input}
             value={text}
             rows={2}
-            placeholder={warming ? "The model is warming" : "Ask, or say what to do; / for commands"}
+            placeholder={warming ? "The model is warming" : "Ask, or say what to do; / for commands, @ to name a card"}
             aria-label="Ask the assistant"
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
               // Enter sends and Shift+Enter breaks the line, never while a word is still being composed;
-              // Tab completes a command, Esc stops a turn, and Up in an empty box edits the last message
+              // Tab completes a command or a mention, Esc stops a turn, and Up in an empty box edits the last message
               if (e.key === "Tab" && offered.length > 0) {
                 e.preventDefault();
                 setText(`/${offered[0].name}${offered[0].takes ? " " : ""}`);
+              } else if (e.key === "Tab" && mentionOffer.length > 0) {
+                e.preventDefault();
+                setText(withMention(text, mentionOffer[0]));
               } else if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) submit(e);
               else if (e.key === "Escape" && pane.busy) {
                 e.preventDefault();
