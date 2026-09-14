@@ -37,6 +37,7 @@ export interface Conversing {
   /** A conversation just made on this page: it has no history to read yet. */
   made: (id: string) => void;
   send: (id: string, words: string, beside?: Beside) => void;
+  summarize: (id: string) => Promise<void>;
   /** Send once the conversation named has opened and its history is read: into a version just made. */
   sendWhenOpen: (id: string, words: string, beside?: Beside) => void;
   stop: () => void;
@@ -248,5 +249,19 @@ export function useConversation(station: string, conv: string | null): Conversin
     });
   };
 
-  return { pane, plans, since, why, context, versions, ratings, reset, made, send, sendWhenOpen, stop, decide, confirm, rate };
+  // the earlier conversation summarized on the person's word (the chat, slice 11): followed as a turn is, while the station answers in one line and the runtime summarizes
+  const summarize = (id: string): Promise<void> => {
+    setWhy(null);
+    setSince(Date.now());
+    apply((s) => ({ ...s, busy: true, settled: null }));
+    return chats.summarize(id).then(
+      ({ offset }) => follow(id, offset ?? current.current.offset),
+      (e: unknown) => {
+        apply((s) => ({ ...s, busy: false }));
+        throw e;
+      },
+    );
+  };
+
+  return { pane, plans, since, why, context, versions, ratings, reset, made, send, summarize, sendWhenOpen, stop, decide, confirm, rate };
 }

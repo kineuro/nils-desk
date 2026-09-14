@@ -22,10 +22,10 @@ import { admit } from "../ui/context";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { useKept } from "../ui/kept";
-import { type Chat, chats, chatsKept, meterOf, STATION_WORDS, versionAt, renamedIn } from "./chats";
+import { type Chat, type ChatContext, chats, chatsKept, meterOf, STATION_WORDS, versionAt, renamedIn } from "./chats";
 import { ChatActions, ChatHistory } from "./ChatHistory";
 import { takeSaid, titleOf, type Plan } from "./client";
-import type { PaneState } from "./parts";
+import { answersSummarize, type PaneState } from "./parts";
 import { CardInPlay, type InPlay } from "./CardInPlay";
 import { CompactionNote, ContextMeter } from "./ContextMeter";
 import { exportName, saveText } from "./download";
@@ -93,6 +93,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   const context = admit({ page: { kind: "assistant", id: null }, epoch: caps.engine?.registry.epoch });
   // the query card floating over the conversation: the version on it goes with the next prompt
   const inPlay = useRef<InPlay | null>(null);
+  // a summarize asked for: how many summaries the conversation had, and the context read before it (the chat, slice 11)
+  const summarizing = useRef<{ before: number; context: ChatContext | null } | null>(null);
 
   // another conversation opened from the side, or a new one: its station and name from the assistant, then its history
   useEffect(() => {
@@ -104,6 +106,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     setNote(null);
     setSharing(false);
     setKept({});
+    summarizing.current = null;
     if (!opened) {
       setConv(null);
       setMeta(null);
@@ -134,6 +137,18 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     const renamed = renamedIn(meta, list);
     if (renamed) setMeta(renamed);
   }, [list]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // what a summarize did, once its turn settled and the conversation was read again (the chat, slice 11)
+  useEffect(() => {
+    const asked = summarizing.current;
+    if (!asked || pane.busy || talk.context === asked.context) return;
+    summarizing.current = null;
+    setNote(
+      (talk.context?.compactions ?? 0) > asked.before
+        ? "Earlier turns were summarized. How full the context is shows again after the next answer."
+        : "Nothing was summarized: too little has been said since the conversation was last summarized.",
+    );
+  }, [talk.context, pane.busy]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** What a prompt carries beside its words: the card floating over the conversation, or the page's own context. */
   const beside = (): Beside => {
@@ -266,6 +281,23 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
       } catch (e) {
         setFailed(`The conversation could not be copied: ${said(e)}`);
       }
+      return;
+    }
+    if (name === "summarize") {
+      if (pane.busy) {
+        setNote("Wait for the answer, then summarize the conversation.");
+        return;
+      }
+      summarizing.current = { before: talk.context?.compactions ?? 0, context: talk.context };
+      try {
+        await talk.summarize(conv);
+      } catch (e) {
+        summarizing.current = null;
+        // a conversation too short to summarize, or a turn still running, is said plainly
+        const why = said(e);
+        if ((e as { status?: unknown }).status === 409) setNote(`${why.charAt(0).toUpperCase()}${why.slice(1)}.`);
+        else setFailed(`The conversation could not be summarized: ${why}`);
+      }
     }
   };
 
@@ -374,7 +406,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
               dismiss: (x) => setKept((was) => ({ ...was, [`${x.turn}|${x.text}`]: "dismissed" })),
             }}
             actions={
-              conv
+              conv && !answersSummarize(pane.turns, t.id)
                 ? {
                     busy: pane.busy,
                     editing: editing === t.id,
