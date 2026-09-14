@@ -43,6 +43,9 @@ export interface InstructionsState {
 export const MEMORY_CHARS = 300;
 export const INSTRUCTION_CHARS = 4000;
 
+/** The most of what a person asked to keep a new conversation reads, in characters (the chat, slice 13). */
+export const MEMORY_BUDGET = 3000;
+
 export class MemoryRefused extends Error {
   constructor(
     readonly status: number,
@@ -109,4 +112,13 @@ export function sourceWords(i: MemoryItem): string {
 /** How many characters are left in a memory being written. */
 export function charsLeft(text: string, max = MEMORY_CHARS): number {
   return max - text.trim().length;
+}
+
+/** How much of what a person asked to keep a new conversation reads (the chat, slice 13): all of it within the budget, else what is closest to its first message. */
+export function budgetWords(items: MemoryItem[]): string {
+  const chars = asked(items).reduce((sum, i) => sum + i.text.length, 0);
+  const n = (x: number) => x.toLocaleString("en-US");
+  return chars <= MEMORY_BUDGET
+    ? `${n(chars)} of ${n(MEMORY_BUDGET)} characters: a new conversation reads all of it.`
+    : `${n(chars)} characters, past the ${n(MEMORY_BUDGET)} a new conversation reads: it reads what is closest to your first message, and the assistant looks up the rest when you refer to it.`;
 }
