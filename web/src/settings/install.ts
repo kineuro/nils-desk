@@ -25,7 +25,7 @@ export function addFolderWords(i: Install): { lead: string; detail: string } {
       detail: "This install runs no services, so start the engine again yourself once the folder is added. nils setup prints the command, with every folder the registry names.",
     };
   }
-  const rest = "The desk, the gateway and the assistant keep running.";
+  const rest = "The desk, Kvasir and the assistant keep running.";
   if (i.runtime === "docker") {
     return {
       lead: "Adding a folder restarts the engine.",

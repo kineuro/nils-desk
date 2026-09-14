@@ -417,16 +417,22 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
 }
 
 function ModelBody({ caps }: { caps: Capabilities }) {
+  // Kvasir holds its models itself (record 23), so an admin adds one on its page; setup still can
+  const reaches = caps.kvasir !== null;
   return (
     <>
-      <p className="meta">The assistant's model is chosen when NILS is set up, and running setup again changes it.</p>
+      <p className="meta">
+        {reaches
+          ? "An admin adds a model on the Kvasir page, where Kvasir tests it before holding it. Running setup again changes it too."
+          : "The assistant's model is chosen when NILS is set up, and running setup again changes it."}
+      </p>
       <div className="row actions">
-        <Command text="nils setup" />
-        {caps.kvasir !== null && (
-          <a className="button quiet small" href={href("settings", "gateway")}>
-            The Gateway and models page
+        {reaches && (
+          <a className="button small" href={href("settings", "gateway")}>
+            The Kvasir page
           </a>
         )}
+        <Command text="nils setup" />
       </div>
     </>
   );

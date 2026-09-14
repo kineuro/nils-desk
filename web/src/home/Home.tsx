@@ -144,7 +144,7 @@ function PartsStrip({ caps, install }: { caps: Capabilities; install: Install | 
     { name: "engine", meta: caps.engine?.engine.version ?? "does not answer", tone: caps.engine ? "ok" : "blocked" },
     { name: "desk", meta: caps.desk.version, tone: "ok" },
   ];
-  if (caps.kvasir !== null || listed("kvasir")) items.push({ name: "gateway", meta: caps.kvasir === null ? "does not answer" : warming ? "warming" : null, tone: caps.kvasir === null ? "blocked" : warming ? "caution" : "ok" });
+  if (caps.kvasir !== null || listed("kvasir")) items.push({ name: "Kvasir", meta: caps.kvasir === null ? "does not answer" : warming ? "warming" : null, tone: caps.kvasir === null ? "blocked" : warming ? "caution" : "ok" });
   if (caps.assistant !== null || listed("assistant"))
     items.push({ name: "assistant", meta: caps.assistant === null ? "does not answer" : stations > 0 ? `${stations} ${stations === 1 ? "station" : "stations"}` : null, tone: caps.assistant === null ? "blocked" : "ok" });
   if (install) {

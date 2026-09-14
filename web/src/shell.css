@@ -38,6 +38,9 @@ code, .path { font-family: var(--n-font-mono); font-size: 0.92em; }
 .brandmark img { width: 22px; height: 22px; display: block; }
 .person { display: flex; align-items: center; gap: 0.5rem; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
 .avatar { width: 24px; height: 24px; border-radius: 50%; background: var(--n-brand-soft); color: var(--n-brand-text); display: grid; place-items: center; font-size: 11px; font-weight: 600; }
+/* the person's name opens their own page */
+a.person, a.person:hover { color: var(--n-text-dim); text-decoration: none; }
+a.person:hover, a.person[aria-current="page"] { color: var(--n-text); }
 .banner { padding: var(--n-space-1) 1.2rem; font-size: var(--n-text-size-small); background: var(--n-caution-bg); color: var(--n-caution-fg); border-bottom: 1px solid var(--n-caution-line); }
 .body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
 .body.with-side { grid-template-columns: 13.5rem minmax(0, 1fr); }
@@ -190,6 +193,8 @@ html:has(.dialog[open]) { overflow: hidden; }
 .veil { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: var(--n-space-2); }
 .blocked { display: inline-flex; flex-direction: column; gap: 2px; }
 .blocked .reason { font-size: var(--n-text-size-small); color: var(--n-text-faint); max-width: 22rem; }
+/* a tag of the blocked tone shares the class, and keeps its dot beside its words at a tag's own gap */
+.tag.blocked { flex-direction: row; gap: 0.3rem; }
 
 /* ------------------------------------------------------------ home */
 .home { display: flex; flex-direction: column; gap: 1.3rem; max-width: 66rem; }
@@ -454,6 +459,67 @@ dl.facts .facts-pair { display: contents; }
 input[type="radio"] { accent-color: var(--n-brand); width: 16px; height: 16px; }
 .note.db-key { padding: 0.9rem 1rem; }
 .note.db-key .note-detail { color: var(--n-text); }
+/* the Kvasir page: a backend's check and removal, the add dialog's choices, and the subscription's card */
+table.thin th.acts, table.thin td.acts { width: 1%; }
+.row-actions { display: flex; justify-content: flex-end; gap: 0.3rem; }
+.row-actions.under { display: none; }
+.radio-row { display: flex; align-items: flex-start; gap: 0.55rem; min-width: 0; cursor: pointer; }
+.radio-row > input { flex: none; margin: 0.2rem 0 0; }
+.radio-row > span { display: grid; gap: 0.05rem; min-width: 0; }
+.check-row { display: flex; align-items: center; gap: 0.55rem; justify-self: start; cursor: pointer; }
+.plain-set { margin: 0; padding: 0; border: 0; min-width: 0; }
+.plain-set > legend { padding: 0; margin-bottom: 0.3rem; }
+.fields2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; }
+.field-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.6rem; }
+.field-row > .input { flex: 1 1 12rem; }
+.tried { display: grid; gap: 0.15rem; }
+.tried-list { display: grid; gap: 0.2rem; margin: 0; padding-left: 1.1rem; }
+.subscription { display: grid; gap: 0.6rem; }
+.sign-in-code { display: grid; gap: 0.35rem; justify-items: start; padding: 0.75rem 0.9rem; border: 1px dashed var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-page); }
+.code-row { gap: 0.35rem; flex-wrap: wrap; }
+.sign-in-code .code { font-family: var(--n-font-mono); font-size: 1.7rem; font-weight: 500; line-height: 1.2; letter-spacing: 0.12em; overflow-wrap: anywhere; }
+.sub-link { display: inline-flex; align-items: center; gap: 0.35rem; max-width: 100%; }
+.sub-link > span { min-width: 0; overflow-wrap: anywhere; }
+/* the Kvasir page's local models: where downloads go and the token, each model with how far it is, and the commands a model server runs it with */
+.stack.local { gap: 0.55rem; }
+.local .path { overflow-wrap: anywhere; }
+.local .dialog-head h2 { min-width: 0; overflow-wrap: anywhere; }
+.local-list { display: grid; margin: 0; padding: 0; list-style: none; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.local-row { display: grid; gap: 0.3rem; min-width: 0; padding: 0.75rem 0.9rem; border-bottom: 1px solid var(--n-line); }
+.local-row:last-child { border-bottom: 0; }
+.local-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.7rem; min-width: 0; }
+.local-name { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.05rem 0.6rem; flex: 1 1 14rem; min-width: 0; }
+.local-name > .path { font-weight: 500; }
+.local-actions { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.local-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.7rem; }
+.local-track { flex: 1 1 8rem; max-width: 22rem; height: 6px; overflow: hidden; border-radius: 3px; background: var(--n-bg-sunken); }
+.local-track i { display: block; height: 100%; background: var(--n-brand-icon); }
+.local-track.paused i { background: var(--n-caution-icon); }
+.serve { display: grid; gap: 0.45rem; margin-top: 0.25rem; }
+.serve-list { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.35rem 0.9rem; align-items: center; margin: 0; }
+.serve-row { display: contents; }
+.serve-list dt { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.serve-list dd { margin: 0; min-width: 0; }
+.found { display: grid; gap: 0.4rem; }
+.file-list { display: grid; max-height: 14rem; overflow: auto; margin: 0; padding: 0.25rem 0; list-style: none; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-page); }
+.file-list li { display: flex; align-items: baseline; justify-content: space-between; gap: 0.2rem 0.8rem; min-width: 0; padding: 0.15rem 0.65rem; }
+.file-list .path { min-width: 0; overflow-wrap: anywhere; }
+.file-list .num { flex: none; }
+@media (max-width: 640px) {
+  /* on a phone a command goes under its label, and fills each line rather than leaving a dash of its path on a line of its own */
+  .serve-list { grid-template-columns: minmax(0, 1fr); gap: 0.1rem; }
+  .serve-list dd { margin-bottom: 0.4rem; }
+  .serve-list code { word-break: break-all; }
+}
+@media (max-width: 640px) {
+  .fields2 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  /* on a narrow window a backend's check and removal go under its model, and a model's tags may take two lines */
+  table.thin.models th.acts, table.thin.models td.acts { display: none; }
+  table.thin.models .row-actions.under { display: flex; flex-wrap: wrap; justify-content: flex-start; margin-top: 0.35rem; }
+  table.thin.models .tag { white-space: normal; }
+}
 /* a path or a command is one long word: it breaks where it must, and never widens a column past its track */
 .settings > *, .pair > *, .db-col > *, .stack > * { min-width: 0; }
 .settings .meta, .note-detail { overflow-wrap: anywhere; }

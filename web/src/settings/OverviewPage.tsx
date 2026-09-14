@@ -83,7 +83,7 @@ export function OverviewPage({ caps, install }: { caps: Capabilities; install: I
     });
   }
   if (has("identity")) slots.push({ key: "signin", page: "identity", title: "Sign-in", icon: "users", card: signinCard(caps, users.value), failed: null });
-  if (has("gateway")) slots.push({ key: "gateway", page: "gateway", title: "Gateway and models", icon: "gateway", card: backends.value ? gatewayCard(caps, backends.value) : null, failed: failed(backends.error, backends.value) });
+  if (has("gateway")) slots.push({ key: "gateway", page: "gateway", title: "Kvasir", icon: "gateway", card: backends.value ? gatewayCard(caps, backends.value) : null, failed: failed(backends.error, backends.value) });
   if (has("audit")) slots.push({ key: "audit", page: "audit", title: "Audit", icon: "file", card: audit.value ? auditCard(audit.value, now) : null, failed: failed(audit.error, audit.value) });
   const needs = attention(slots.flatMap((s) => (s.card ? [s.card] : [])));
   const settled = slots.every((s) => s.card !== null || s.failed !== null);

@@ -44,7 +44,10 @@ describe("the parts card", () => {
     expect(partsCard(caps(), install).state).toEqual({ tone: "brand", words: "1.0.0-alpha.16 is out" });
     expect(partsCard(caps(), install).facts).toEqual(["2 parts: engine, desk", "on this machine, kept running"]);
     expect(partsCard(caps({ engine: null }), null).state).toEqual({ tone: "blocked", words: "the engine does not answer" });
-    expect(partsCard(caps({ kvasir: { health: { warming: true } } }), null).state).toEqual({ tone: "caution", words: "the gateway is warming" });
+    expect(partsCard(caps({ kvasir: { health: { warming: true } } }), null).state).toEqual({ tone: "caution", words: "Kvasir is warming" });
+    const kvasirDown = { ...install, parts: { kvasir: { version: "1.0.0-alpha.3", kind: "node", path: "" } } } as unknown as Install;
+    expect(partsCard(caps(), kvasirDown).state).toEqual({ tone: "blocked", words: "Kvasir does not answer" });
+    expect(partsCard(caps({ kvasir: {} }), null).facts).toEqual(["3 parts: engine, desk, Kvasir"]);
   });
 });
 
@@ -122,6 +125,15 @@ describe("the gateway card", () => {
     expect(card.value).toBe("local-model");
     expect(card.state).toEqual({ tone: "ok", words: "warm" });
     expect(card.facts).toEqual(["1 local backend", "1 of 4 streams busy", "identifiers never leave"]);
+    expect(card.title).toBe("Kvasir");
+  });
+
+  it("counts ChatGPT through people's own subscriptions apart from the providers, and says when Kvasir holds no model", () => {
+    const chatgpt = { id: "chatgpt", kind: "openai-codex-responses", locality: "remote" as const, provider: "chatgpt", credential: null, models: [], health: {}, builtin: true };
+    const both = gatewayCard(caps({ kvasir: { models: [] } }), [{ id: "sgl", kind: "openai", locality: "local", provider: null, credential: null, models: ["local-model"], health: {} }, chatgpt]);
+    expect(both.facts[0]).toBe("1 local backend · ChatGPT subscriptions");
+    expect(gatewayCard(caps({ kvasir: { models: [] } }), [chatgpt]).state).toEqual({ tone: "caution", words: "no model yet" });
+    expect(gatewayCard(caps(), null).value).toBe("no model reached");
   });
 });
 

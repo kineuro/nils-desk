@@ -86,7 +86,7 @@ describe("the installed parts", () => {
       page: "engine",
     });
     expect(rows[1]).toMatchObject({ meta: "local sign-in", runsAs: { text: "nils-desk", mono: true }, page: "desk" });
-    expect(rows[2]).toMatchObject({ version: "Kvasir 1.0.0-alpha.2", meta: "from source", health: { tone: "ok", words: "warm · 1 of 8 streams busy" }, newer: { text: "fetched with the update", tag: false }, page: null });
+    expect(rows[2]).toMatchObject({ title: "Kvasir", version: "1.0.0-alpha.2", mono: true, meta: "from source", health: { tone: "ok", words: "warm · 1 of 8 streams busy" }, newer: { text: "fetched with the update", tag: false }, page: null });
     expect(rows[3]).toMatchObject({ version: "SGLang 0.5.2", meta: "NVIDIA GeForce RTX 3060, 6 GB", health: { tone: "ok", words: "serving qwen38-27b" }, newer: { text: "yours to update", tag: false } });
     expect(rows[4]).toMatchObject({ version: "17", meta: "set up here", runsAs: { text: "nils-postgres", mono: true }, health: { tone: "ok", words: "running" }, newer: { text: "stays at 17", tag: false } });
   });
@@ -135,12 +135,12 @@ describe("the words", () => {
   it("say what an update changes, and nothing when nothing is newer", () => {
     expect(updateWords(install())).toEqual([
       "The engine and the desk move to 1.0.0-alpha.15 together.",
-      "The gateway fetches its newest source, and is built again where it moved.",
+      "Kvasir fetches its newest source, and is built again where it moved.",
       "Postgres stays at 17, and its data is not touched.",
       "Every part starts again, in order, once it is replaced.",
     ]);
     const both = install({ parts: { ...install().parts, assistant: { version: "0.1.0", kind: "node", path: "/home/ada/nils/assistant" } }, service: "none" });
-    expect(updateWords(both)[1]).toBe("The gateway and the assistant fetch their newest source, and are built again where it moved.");
+    expect(updateWords(both)[1]).toBe("Kvasir and the assistant fetch their newest source, and are built again where it moved.");
     expect(updateWords(both).at(-1)).toBe("This install runs no services, so start each part again yourself once it is replaced.");
     expect(updateWords(install({ release: { installed: "1.0.0-alpha.15", newest: "1.0.0-alpha.15", newer: null, error: null, command: "nils update --all" } }))).toEqual([]);
   });

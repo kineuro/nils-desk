@@ -19,6 +19,7 @@ import { PLACEHOLDERS } from "./home/placeholders";
 import { ready as readyToStart } from "./home/setup";
 import { Setup } from "./home/Setup";
 import { placesKept } from "./objects/kept";
+import { ProfilePage } from "./profile/ProfilePage";
 import { href, parse, type Route } from "./routes";
 import { assistantOffered, foot, initials, sections, usable } from "./sections";
 import { where } from "./settings/install";
@@ -144,7 +145,9 @@ export function App() {
   );
   const kept = foot(caps);
   const sided = side.length + kept.length > 0;
-  const active = [...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null;
+  // a person's own page opens from their name in the top bar, apart from the sections
+  const onProfile = ready && route.section === "profile";
+  const active = onProfile ? null : ([...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null);
   const inSettings = ready && active?.id === "settings";
   const onSetup = ready && operator && !left && (setupReady === false || landed);
   const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id && !p.built);
@@ -179,12 +182,12 @@ export function App() {
         )}
         <ThemeSwitch />
         {caps.desk.signed_in && who && (
-          <span className="person" title={who}>
+          <a className="person" href={href("profile")} title={`${who}: your profile`} aria-label={`${who}: your profile`} aria-current={onProfile ? "page" : undefined}>
             <span className="avatar" aria-hidden="true">
               {initials(who)}
             </span>
             <span className="person-name">{who}</span>
-          </span>
+          </a>
         )}
       </header>
       {caps.engine?.registry.synthetic && (
@@ -243,7 +246,8 @@ export function App() {
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
-          {ready && active === null && (
+          {onProfile && <ProfilePage caps={caps} />}
+          {ready && active === null && !onProfile && (
             <section className="state">
               <h1>Nothing is open to you here</h1>
               <p>The desk has no section for the entitlements this account holds.</p>
