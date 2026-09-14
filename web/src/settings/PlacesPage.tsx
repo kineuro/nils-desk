@@ -559,7 +559,7 @@ function ChangeDialog(props: { caps: Capabilities; install: Install | null; plac
               </div>
             )}
             {moving && <span className={refusal && to.trim() !== place.path ? "warn" : "meta"}>{refusal && to.trim() !== place.path ? refusal : moveWords(place.role)}</span>}
-            {moving && restarts && <span className="meta">Moving it starts the engine again; the desk, the gateway and the assistant keep running.</span>}
+            {moving && restarts && <span className="meta">Moving it starts the engine again; the desk, Kvasir and the assistant keep running.</span>}
             {!moving && fixed && <span className="meta">{fixed}</span>}
           </div>
           {place.role === "registry" && (

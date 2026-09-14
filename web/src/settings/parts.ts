@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Parts page's words (Wave 5 section 10.1), as the chosen design draws
 // them: every part the deployment runs with its version, what runs it and how
-// it answers, the model runtime beside the gateway, what a newer release
+// it answers, the model runtime beside Kvasir, what a newer release
 // changes, and how the install is kept running. Every line is read from the
-// capabilities document, the supervisor's install or the gateway's admission
+// capabilities document, the supervisor's install or Kvasir's admission
 // records; nothing is hand-built.
 
 import type { Capabilities } from "../capabilities";
@@ -74,12 +74,12 @@ export function runtimeName(name: string): string {
 
 /** A part's name at the head of a row. */
 export function partTitle(part: string): string {
-  return ({ engine: "Engine", desk: "Desk", gateway: "Gateway", kvasir: "Gateway", assistant: "Assistant", postgres: "Postgres" } as Record<string, string>)[part] ?? part;
+  return ({ engine: "Engine", desk: "Desk", gateway: "Kvasir", kvasir: "Kvasir", assistant: "Assistant", postgres: "Postgres" } as Record<string, string>)[part] ?? part;
 }
 
 /** A part's name inside a sentence. */
 export function partName(part: string): string {
-  return ({ engine: "the engine", desk: "the desk", gateway: "the gateway", kvasir: "the gateway", assistant: "the assistant", postgres: "Postgres" } as Record<string, string>)[part] ?? part;
+  return ({ engine: "the engine", desk: "the desk", gateway: "Kvasir", kvasir: "Kvasir", assistant: "the assistant", postgres: "Postgres" } as Record<string, string>)[part] ?? part;
 }
 
 const SIGN_IN: Record<string, string> = { off: "no sign-in", local: "local sign-in", oidc: "single sign-on" };
@@ -143,10 +143,10 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
     const of = backends.reduce((n, b) => n + (b.health?.concurrency ?? 0), 0);
     rows.push({
       id: "gateway",
-      title: "Gateway",
+      title: "Kvasir",
       icon: "gateway",
-      version: `Kvasir ${gateway?.kvasir?.version ?? kvasirPart?.version ?? ""}`.trim(),
-      mono: false,
+      version: gateway?.kvasir?.version ?? kvasirPart?.version ?? "not known",
+      mono: (gateway?.kvasir?.version ?? kvasirPart?.version) !== undefined,
       meta: kindWords(kvasirPart?.kind),
       runsAs: runsAs("gateway"),
       health:

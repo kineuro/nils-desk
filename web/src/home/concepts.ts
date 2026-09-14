@@ -27,5 +27,5 @@ export const CONCEPTS: Concept[] = [
   { term: "Place", count: "one per folder", icon: "disk", words: "Any folder NILS uses, with its role: a source, the registry, a backup place, an export." },
   { term: "Backup place", count: "one per registry", icon: "shield", words: "Where the registry's archives go, best on storage other than the registry's." },
   { term: "People", count: "four roles", icon: "users", words: "A reader reads, a reviewer judges, an operator runs the install, an admin changes it. Each role includes the ones before it." },
-  { term: "Assistant", count: "optional", icon: "assistant", words: "Answers and plans in words. The gateway decides which model a prompt may reach, and what may leave." },
+  { term: "Assistant", count: "optional", icon: "assistant", words: "Answers and plans in words. Kvasir decides which model a prompt may reach, and what may leave." },
 ];

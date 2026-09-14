@@ -424,7 +424,7 @@ function ModelBody({ caps }: { caps: Capabilities }) {
         <Command text="nils setup" />
         {caps.kvasir !== null && (
           <a className="button quiet small" href={href("settings", "gateway")}>
-            The Gateway and models page
+            The Kvasir page
           </a>
         )}
       </div>

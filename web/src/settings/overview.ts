@@ -10,7 +10,7 @@ import type { AuditRow } from "../ops/client";
 import type { IconName } from "../ui/Icon";
 import { agoWords } from "../ui/kept";
 import { backupsTag, nextWords, registryRule, scheduleWords, sizeWords, type Backups } from "./database";
-import { gatewayHealth } from "./gateway";
+import { gatewayHealth, shownBackends } from "./gateway";
 import { reachWords, type Users } from "./identity";
 import { keptRunning, where } from "./install";
 import type { Backend } from "./kvasir";
@@ -52,21 +52,22 @@ const ROLE_ONE: Record<Place["role"], string> = { ...ROLE_PLURAL, source: "sourc
 /** Every part and whether it answers, the newest release, and how the install runs. */
 export function partsCard(caps: Capabilities, install: Install | null): Card {
   const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
-  const parts: { name: string; answers: boolean }[] = [
-    { name: "engine", answers: caps.engine !== null },
-    { name: "desk", answers: true },
+  // each part by its name in a list, and as it is called inside a sentence
+  const parts: { name: string; called: string; answers: boolean }[] = [
+    { name: "engine", called: "the engine", answers: caps.engine !== null },
+    { name: "desk", called: "the desk", answers: true },
   ];
-  if (caps.kvasir !== null || install?.parts["kvasir"]) parts.push({ name: "gateway", answers: caps.kvasir !== null });
-  if (caps.assistant !== null || install?.parts["assistant"]) parts.push({ name: "assistant", answers: caps.assistant !== null });
+  if (caps.kvasir !== null || install?.parts["kvasir"]) parts.push({ name: "Kvasir", called: "Kvasir", answers: caps.kvasir !== null });
+  if (caps.assistant !== null || install?.parts["assistant"]) parts.push({ name: "assistant", called: "the assistant", answers: caps.assistant !== null });
   const down = parts.filter((p) => !p.answers);
   const newer = install?.release.newer ?? null;
   const state: Card["state"] =
     down.length === 1
-      ? { tone: "blocked", words: `the ${down[0].name} does not answer` }
+      ? { tone: "blocked", words: `${down[0].called} does not answer` }
       : down.length > 1
         ? { tone: "blocked", words: `${down.length} parts do not answer` }
         : warming
-          ? { tone: "caution", words: "the gateway is warming" }
+          ? { tone: "caution", words: "Kvasir is warming" }
           : newer
             ? { tone: "brand", words: `${newer} is out` }
             : { tone: "ok", words: "all answer" };
@@ -149,10 +150,10 @@ function hostOf(url: string): string {
   }
 }
 
-/** Whether the gateway is warm, the model the assistant reaches first, and where prompts may go. */
+/** Whether Kvasir is warm, the model the assistant reaches first, and where prompts may go. */
 export function gatewayCard(caps: Capabilities, backends: Backend[] | null): Card {
-  const title = "Gateway and models";
-  if (caps.kvasir === null) return { page: "gateway", title, icon: "gateway", state: { tone: "blocked", words: "does not answer" }, value: "no gateway", facts: [] };
+  const title = "Kvasir";
+  if (caps.kvasir === null) return { page: "gateway", title, icon: "gateway", state: { tone: "blocked", words: "does not answer" }, value: "no model reached", facts: [] };
   const models = (caps.kvasir["models"] as { id?: unknown; locality?: unknown }[] | undefined) ?? [];
   const first = models.find((m) => m.locality === "local" && typeof m.id === "string") ?? models.find((m) => typeof m.id === "string");
   const facts: string[] = [];
@@ -160,9 +161,12 @@ export function gatewayCard(caps: Capabilities, backends: Backend[] | null): Car
   if (backends) {
     const h = gatewayHealth(backends);
     state = { tone: h.tone, words: h.words };
-    const locals = backends.filter((b) => b.locality === "local").length;
-    const remotes = backends.filter((b) => b.locality === "remote").length;
-    facts.push([locals > 0 ? count(locals, "local backend", "local backends") : null, remotes > 0 ? count(remotes, "provider", "providers") : null].filter(Boolean).join(" · ") || "no backend");
+    // ChatGPT through people's own subscriptions is not a provider the install holds a key for
+    const { held, subscriptions } = shownBackends(backends);
+    const locals = held.filter((b) => b.locality === "local").length;
+    const remotes = held.filter((b) => b.locality === "remote").length;
+    const kinds = [locals > 0 ? count(locals, "local backend", "local backends") : null, remotes > 0 ? count(remotes, "provider", "providers") : null, subscriptions.length > 0 ? "ChatGPT subscriptions" : null];
+    facts.push(kinds.filter(Boolean).join(" · ") || "no model yet");
     if (h.streams) facts.push(h.streams);
   }
   facts.push("identifiers never leave");

@@ -287,7 +287,7 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
             <Acted acting={restart.acting} />
             <p className="meta">
               {keptRunning(install)
-                ? "A restart keeps an order: Postgres, the engine, the desk, the gateway, then the assistant. By hand:"
+                ? "A restart keeps an order: Postgres, the engine, the desk, Kvasir, then the assistant. By hand:"
                 : "This install runs no services, so each part runs until whatever started it stops. To have them kept running, run setup again:"}
             </p>
             <Command text={restartByHand(install, keptRunning(install) ? chosen : "all")} />
@@ -390,7 +390,7 @@ function EnginePage({ caps, install, onChanged }: PageProps) {
           <Icon name="folder" />
           <div className="note-body">
             <p className="note-lead">The engine learns the folders the registry names when it starts.</p>
-            <p className="note-detail">Starting it again with them rewrites its service and restarts it; the desk, the gateway and the assistant keep running.</p>
+            <p className="note-detail">Starting it again with them rewrites its service and restarts it; the desk, Kvasir and the assistant keep running.</p>
             <div className="restart-row">
               <button
                 type="button"
@@ -427,7 +427,7 @@ function DeskPage({ caps, install, onChanged }: PageProps) {
   const unit = install?.services.find((x) => x.part === "desk") ?? null;
   const reaches: [string, string | null | undefined][] = [
     ["the engine", s?.engine_url],
-    ["the gateway", s?.kvasir_url],
+    ["Kvasir", s?.kvasir_url],
     ["the assistant", s?.assistant_url],
     ["the supervisor", s?.supervisor_url],
   ];

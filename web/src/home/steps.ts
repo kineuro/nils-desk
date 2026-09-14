@@ -74,7 +74,7 @@ function model(f: Facts): Step | null {
   if (f.caps.assistant === null) return null;
   const title = "A model for the assistant";
   if (f.caps.kvasir === null) {
-    return { id: "model", title, state: "attention", words: "The gateway does not answer, so the assistant has no model to talk to.", tags: [], halfway: false };
+    return { id: "model", title, state: "attention", words: "Kvasir does not answer, so the assistant has no model to talk to.", tags: [], halfway: false };
   }
   const all = models(f.caps);
   const local = all.filter((m) => m.locality === "local");
@@ -91,7 +91,7 @@ function model(f: Facts): Step | null {
       closed.length > 0 ? ` The ${closed.length === 1 ? "station that reads" : `${closed.length} stations that read`} rows of the archive ${closed.length === 1 ? "needs" : "need"} a local model.` : "";
     return { id: "model", title, state: "attention", words: `${remote[0].id} at a provider answers what reads no rows.${need}${serve}`, tags: [], halfway: false };
   }
-  return { id: "model", title, state: "attention", words: `The gateway lists no model yet.${serve || " A model on another machine of yours, or a provider, can answer instead."}`, tags: [], halfway: false };
+  return { id: "model", title, state: "attention", words: `Kvasir lists no model yet.${serve || " A model on another machine of yours, or a provider, can answer instead."}`, tags: [], halfway: false };
 }
 
 function dicom(f: Facts, containers: boolean): Step | null {
