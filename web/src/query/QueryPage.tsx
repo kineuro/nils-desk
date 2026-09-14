@@ -605,6 +605,7 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
                 choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
                 onChoose={(label) => onSay(label)}
                 decidedElsewhere="It stands in the steps below."
+                said={pane.finals[t.id]}
               />
             ))}
             {pane.busy && <Wait phase={pane.status?.text ?? "thinking"} since={talk.since || Date.now()} />}

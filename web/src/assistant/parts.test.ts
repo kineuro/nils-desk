@@ -105,3 +105,15 @@ describe("the reducer over the live stream", () => {
     ]);
   });
 });
+
+describe("a turn that settled without words", () => {
+  it("keeps the sentence it settled on, live and from the history", () => {
+    const live = reduce(reduce(empty(), { type: "message-started", messageId: "a1" }), { type: "data-part", messageId: "a1", data: { kind: "status", phase: "finish", text: "It was titled Sessions per cohort." } });
+    expect(live.finals).toEqual({ a1: "It was titled Sessions per cohort." });
+    const working = reduce(live, { type: "data-part", messageId: "a2", data: { kind: "status", phase: "plan", text: "planning" } });
+    expect(working.finals).toEqual({ a1: "It was titled Sessions per cohort." });
+    const read = fromHistory({ messages: [{ id: "a1", role: "assistant", parts: [{ type: "data-status", data: { kind: "status", phase: "finish", text: "done" } }] }] });
+    expect(read.finals).toEqual({ a1: "done" });
+  });
+});
+

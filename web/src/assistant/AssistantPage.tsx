@@ -28,6 +28,7 @@ import { takeSaid, titleOf, type Plan } from "./client";
 import type { PaneState } from "./parts";
 import { CardInPlay, type InPlay } from "./CardInPlay";
 import { CompactionNote, ContextMeter } from "./ContextMeter";
+import { exportName, saveText } from "./download";
 import { memory } from "./memory";
 import { MemoryPage } from "./MemoryPage";
 import { ShareDialog } from "./ShareDialog";
@@ -221,6 +222,14 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
       setNote(`/${name} needs a conversation; ask something first.`);
       return;
     }
+    if (name === "export") {
+      try {
+        saveText(exportName(meta?.title ?? null), await chats.exportMarkdown(conv));
+      } catch (e) {
+        setFailed(`The conversation could not be exported: ${said(e)}`);
+      }
+      return;
+    }
     if (name === "share") {
       if (meta) setSharing(true);
       return;
@@ -346,6 +355,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
             decidedElsewhere="It stands on the card above, to accept or disregard."
             onChoose={(label) => void send(label)}
+            said={pane.finals[t.id]}
             memories={pane.memories.filter((x) => x.turn === t.id)}
             memoryActions={{
               state: (x) => kept[`${x.turn}|${x.text}`] ?? null,

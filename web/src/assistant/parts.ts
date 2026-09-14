@@ -112,6 +112,8 @@ export interface PaneState {
   aside: Extract<Part, { kind: "note" | "todo" | "lookup" | "funnel" }>[];
   /** The memories offered, kept or forgotten in the conversation, by the turn that did it. */
   memories: PaneMemory[];
+  /** The sentence each turn settled on: what a turn that wrote no words answered (the chat, slice 7). */
+  finals: Record<string, string>;
   settled: null | { outcome: string; error?: string };
 }
 
@@ -125,6 +127,7 @@ export const empty = (offset = "-1"): PaneState => ({
   handles: [],
   aside: [],
   memories: [],
+  finals: {},
   settled: null,
 });
 
@@ -153,7 +156,11 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
     case "choice":
       return { ...state, choice: { question: p.question, options: p.options, turn: turnId } };
     case "status":
-      return { ...state, status: { phase: p.phase, text: p.text } };
+      return {
+        ...state,
+        status: { phase: p.phase, text: p.text },
+        finals: p.phase === "finish" ? { ...state.finals, [turnId]: p.text } : state.finals,
+      };
     case "handle_ref":
       return state.handles.includes(p.handle) ? state : { ...state, handles: [...state.handles, p.handle] };
     case "memory":

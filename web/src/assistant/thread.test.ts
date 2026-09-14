@@ -17,7 +17,7 @@ describe("the message box", () => {
   });
 
   it("offers the commands a half-typed name could be, and none once the name is done", () => {
-    expect(commandsFor("/").map((c) => c.name)).toEqual(["new", "fork", "share", "remember", "rename", "status", "help"]);
+    expect(commandsFor("/").map((c) => c.name)).toEqual(["new", "fork", "share", "remember", "export", "rename", "status", "help"]);
     expect(commandsFor("/re").map((c) => c.name)).toEqual(["remember", "rename"]);
     expect(commandsFor("/rename cohorts")).toEqual([]);
     expect(commandsFor("cohorts")).toEqual([]);
