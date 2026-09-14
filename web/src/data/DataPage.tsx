@@ -133,10 +133,12 @@ export function DataPage({ caps, install, onChanged }: { caps: Capabilities; ins
             install={install}
             places={places.value?.places ?? []}
             packs={packs}
-            onDone={() => {
+            onDone={(words) => {
               setBringing(false);
               void placesKept.refresh().catch(() => undefined);
               onChanged();
+              // what was queued, said on the page once the dialog closes
+              if (words) setSaid(words);
               read();
             }}
           />
