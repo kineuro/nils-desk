@@ -83,7 +83,7 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(meta.permissions().mode() & 0o777, 0o600);
     }
-    // the first user is the admin; the second holds nothing yet
+    // the first user is the admin, who uses the assistant too; the second holds nothing yet
     nils_desk::users::add(
         &shared.store,
         "anna",
@@ -159,7 +159,11 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
         .await
         .unwrap();
     assert_eq!(doc["person"]["display_name"], "Anna");
-    assert_eq!(doc["person"]["entitlements"], json!(["admin"]), "{doc}");
+    assert_eq!(
+        doc["person"]["entitlements"],
+        json!(["admin", "assist"]),
+        "{doc}"
+    );
     assert_eq!(doc["desk"]["signed_in"], true);
 
     // a proxied write carries a token the desk minted for anna, which the
@@ -203,7 +207,7 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
     assert_eq!(claims["sub"], "anna");
     assert_eq!(
         claims["roles"],
-        json!(["admin"]),
+        json!(["admin", "assist"]),
         "no wider than the stored entitlements: {claims}"
     );
     assert!(
@@ -939,6 +943,16 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
         false,
     )
     .unwrap();
+    // the first person setup adds, an admin with nothing else named, uses the assistant too
+    nils_desk::users::add(
+        &shared.store,
+        "cy",
+        "a third long password",
+        Some("Cy"),
+        &[],
+        true,
+    )
+    .unwrap();
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .build()
@@ -947,6 +961,7 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
     for (name, password) in [
         ("anna", "correct horse battery"),
         ("bo", "another long password"),
+        ("cy", "a third long password"),
     ] {
         let r = client
             .post(format!("{origin}/desk/login"))
@@ -988,6 +1003,15 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
     let got = seen.lock().unwrap().clone();
     assert_eq!(got.len(), 1, "{got:?}");
     assert!(got[0].starts_with("Bearer "), "{got:?}");
+    // cy, added with --admin alone, holds assist and is forwarded as well
+    let r = client
+        .get(&list)
+        .header("cookie", &cookies[2])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(seen.lock().unwrap().len(), 2);
 }
 
 /// The chat, slice 5: a person holding `assist` lists the people on the desk

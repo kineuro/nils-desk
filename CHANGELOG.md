@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- The first person setup adds, who may do everything, may use the assistant. `nils-desk user add --admin` gave them `admin` alone, and using the assistant takes `assist`, which stands beside the other entitlements rather than under `admin`, so the Assistant was missing from their side and its doors refused them until an admin granted `assist` on People. A user added with `--admin` now holds `assist` as well. Someone added before keeps what they hold: an admin grants `assist` on People. A desk where nobody signs in, or whose people sign in at a provider, was not affected.
+
 ## [1.0.0-alpha.24] - 2026-09-14
 
 Released beside the engine's 1.0.0-alpha.24 so the two stay in step. That engine changes nothing the desk reads, so this desk works with the engine's 1.0.0-alpha.23 as well.
