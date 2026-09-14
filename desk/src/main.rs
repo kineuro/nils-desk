@@ -49,7 +49,7 @@ enum UserCommand {
         /// An entitlement, repeatable: reader, reviewer, operator, admin, assist
         #[arg(long = "entitlement", value_name = "NAME")]
         entitlements: Vec<String>,
-        /// The first user: an admin, who grants the rest on the settings page
+        /// The first user: an admin who uses the assistant too, and grants the rest on the settings page
         #[arg(long)]
         admin: bool,
     },

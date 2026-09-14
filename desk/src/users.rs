@@ -2,7 +2,7 @@
 
 //! The local users of `local` mode: argon2id passwords, entitlements an
 //! admin grants and revokes, and the first user created by
-//! `nils-desk user add --admin`.
+//! `nils-desk user add --admin`, who holds `admin` and `assist`.
 
 use argon2::Argon2;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
@@ -61,8 +61,14 @@ pub fn add(
     }
     check_entitlements(entitlements)?;
     let mut list: Vec<String> = entitlements.to_vec();
-    if admin && !list.iter().any(|e| e == "admin") {
-        list.push("admin".into());
+    if admin {
+        // an admin may do everything, the assistant too: `assist` stands
+        // beside the ladder, so `admin` alone leaves them without it
+        for e in ["admin", "assist"] {
+            if !list.iter().any(|x| x == e) {
+                list.push(e.into());
+            }
+        }
     }
     store.user_add(
         username,
