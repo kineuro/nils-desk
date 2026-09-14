@@ -206,6 +206,22 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
   }
 }
 
+/** The line the thread shows where the person asked to summarize the earlier conversation (the chat, slice 11). */
+export const SUMMARIZE_ASKED = "You asked to summarize the earlier conversation.";
+
+/** Whether a message is where the person asked to summarize: the runtime keeps the summarize signal out of sight, with its tag. */
+export function isSummarizeMark(m: unknown): boolean {
+  return (m as { signal?: { tagName?: unknown } } | null)?.signal?.tagName === "summarize";
+}
+
+const summarizeTurn = (id: string): Turn => ({ id, role: "system", text: SUMMARIZE_ASKED, done: true, tools: [] });
+
+/** Whether an answer is the one line that answered a summarize, which is not copied, asked again or rated. */
+export function answersSummarize(turns: Turn[], id: string): boolean {
+  const i = turns.findIndex((t) => t.id === id);
+  return i > 0 && turns[i].role === "assistant" && turns[i - 1].role === "system" && turns[i - 1].text === SUMMARIZE_ASKED;
+}
+
 /** The reducer over the live stream. Unknown chunk types are dropped. */
 export function reduce(state: PaneState, c: Chunk): PaneState {
   switch (c.type) {
@@ -213,6 +229,7 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
       return fromHistory(c.snapshot as History, state);
     case "message-appended": {
       const m = c.message as { id: string; role: string; display?: string; parts?: { type: string; text?: string }[] };
+      if (isSummarizeMark(m)) return turn(state, m.id) ? state : { ...state, turns: [...state.turns, summarizeTurn(m.id)] };
       if (m.display && m.display !== "visible") return state;
       // the runtime's own notices (a prompt refreshed, a station signal) are not turns; a system line is kept only when it settles something
       if (m.role !== "user" && !(m.role === "system" && (c.message as { settlement?: unknown }).settlement)) return state;
@@ -279,6 +296,10 @@ export interface History {
 export function fromHistory(h: History, previous: PaneState = empty()): PaneState {
   let state: PaneState = { ...empty(h.offset ?? previous.offset), proposals: previous.proposals.filter((p) => p.decided !== null) };
   for (const m of h.messages) {
+    if (isSummarizeMark(m)) {
+      state = { ...state, turns: [...state.turns, summarizeTurn(m.id)] };
+      continue;
+    }
     if (m.display && m.display !== "visible") continue;
     if (m.role !== "user" && m.role !== "assistant" && !(m.role === "system" && (m as { settlement?: unknown }).settlement)) continue;
     let t: Turn = { id: m.id, role: m.role, text: "", done: true, tools: [] };

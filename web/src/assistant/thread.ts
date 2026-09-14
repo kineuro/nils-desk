@@ -19,6 +19,7 @@ export const COMMANDS: Command[] = [
   { name: "share", words: "Share this conversation" },
   { name: "remember", words: "Keep something for your later conversations", takes: "what to keep" },
   { name: "export", words: "Save this conversation as a markdown file" },
+  { name: "summarize", words: "Summarize the earlier conversation, so it takes less of the context" },
   { name: "rename", words: "Rename this conversation", takes: "a name" },
   { name: "status", words: "Show the model, the station and how full the context is" },
   { name: "help", words: "List these commands" },

@@ -119,6 +119,12 @@ export const chats = {
     fetch("/assistant/conversations", { method: "POST", headers: H, body: JSON.stringify(o) }).then((r) => answer<Chat>(r)),
   /** The conversation named by the model, while its name is still the first words of its first message (the chat, slice 10). */
   name: (id: string) => fetch(`${one(id)}/title`, { method: "POST", headers: H }).then((r) => answer<Chat>(r)),
+  /** The earlier conversation summarized now (the chat, slice 11): the station answers in one line and the runtime summarizes; the offset the stream continues from, when the assistant gives one. */
+  summarize: async (id: string): Promise<{ offset: string | null }> => {
+    const r = await fetch(`${one(id)}/summarize`, { method: "POST", headers: H });
+    const body = await answer<{ offset?: unknown } | null>(r);
+    return { offset: r.headers.get("Stream-Next-Offset") ?? (typeof body?.offset === "string" ? body.offset : null) };
+  },
   /** One conversation, with its proposals and the decisions on them. */
   get: (id: string) => fetch(one(id)).then((r) => answer<ChatDetail>(r)),
   /** Renamed, pinned or archived, every version alike; `current` makes the version named the one the lists show and open. */

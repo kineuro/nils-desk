@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { acceptPart, asPart, empty, fromHistory, reduce, withStored, type Chunk } from "./parts";
+import { acceptPart, answersSummarize, asPart, empty, fromHistory, reduce, SUMMARIZE_ASKED, withStored, type Chunk } from "./parts";
 
 describe("the closed union of parts (section 9.8)", () => {
   it("admits exactly the eight shapes and drops the rest", () => {
@@ -117,3 +117,33 @@ describe("a turn that settled without words", () => {
   });
 });
 
+describe("where the person asked to summarize (the chat, slice 11)", () => {
+  // the runtime keeps a signal out of sight, with the tag it was sent with
+  const mark = { id: "s1", role: "system", display: "diagnostic", purpose: "dispatch", signal: { tagName: "summarize" }, parts: [{ type: "text", text: "The person asked to summarize the conversation so far." }] };
+  const asked = { id: "u1", role: "user", display: "visible", parts: [{ type: "text", text: "how many cohorts" }] };
+
+  it("shows as a quiet line, live and from the history, and the one line that answered takes no actions", () => {
+    let s = empty();
+    for (const c of [
+      { type: "message-appended", message: asked },
+      { type: "message-appended", message: mark },
+      { type: "message-appended", message: mark },
+      { type: "message-started", messageId: "a2" },
+      { type: "message-delta", messageId: "a2", kind: "text", delta: "The earlier conversation is being summarized." },
+    ] as Chunk[])
+      s = reduce(s, c);
+    expect(s.turns.map((t) => [t.id, t.role, t.text])).toEqual([
+      ["u1", "user", "how many cohorts"],
+      ["s1", "system", SUMMARIZE_ASKED],
+      ["a2", "assistant", "The earlier conversation is being summarized."],
+    ]);
+    expect(answersSummarize(s.turns, "a2")).toBe(true);
+    expect(answersSummarize(s.turns, "u1")).toBe(false);
+    const read = fromHistory({ messages: [asked, mark, { id: "a2", role: "assistant", display: "visible", parts: [{ type: "text", text: "Summarizing." }] }] });
+    expect(read.turns.map((t) => t.role)).toEqual(["user", "system", "assistant"]);
+    expect(answersSummarize(read.turns, "a2")).toBe(true);
+    // a signal with no tag, or another tag, stays out of the thread
+    const other = { ...mark, signal: { tagName: "registry" } };
+    expect(fromHistory({ messages: [other] }).turns).toEqual([]);
+  });
+});
