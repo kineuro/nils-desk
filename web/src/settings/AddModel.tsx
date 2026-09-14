@@ -32,9 +32,16 @@ import {
   type Tested,
 } from "./adding";
 import { Acted, useActing } from "./common";
-import { kvasir, triedOf } from "./kvasir";
+import { kvasir, type Locality, triedOf } from "./kvasir";
 
-export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (words: string) => void }) {
+/** What an add held: the backend's id, where its prompts go, and its models. */
+export interface Added {
+  id: string;
+  locality: Locality;
+  models: string[];
+}
+
+export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (words: string, added: Added) => void }) {
   const id = useId();
   const [d, setD] = useState<Draft>(() => draft("here"));
   /** What the server lists: undefined until asked, null where it lists nothing it can say. */
@@ -97,7 +104,7 @@ export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (wo
     working.act(`adding ${asked.model.trim()} to Kvasir`, async () => {
       try {
         const r = await kvasir.add(description(asked, true));
-        onDone(addedWords(asked.model.trim(), r.backend.id, r.backend.locality));
+        onDone(addedWords(asked.model.trim(), r.backend.id, r.backend.locality), r.backend);
         return "";
       } catch (e) {
         const models = triedOf(e);

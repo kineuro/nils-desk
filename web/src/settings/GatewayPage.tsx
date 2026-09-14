@@ -5,9 +5,11 @@
 // the stations it answers, where each station goes, and the install's
 // ChatGPT subscription. An admin adds a model through a test, checks one
 // with the admission suite and removes one, and downloads models from the
-// Hugging Face Hub for a model server of theirs under Local models. A station
-// moves to another backend at once, recorded with who moved it; rows of the
-// archive leave only with an admin's written reason, and identifiers never.
+// Hugging Face Hub under Local models, where a GGUF model starts on llama.cpp
+// if the install runs it for Kvasir (record 24). A station moves to another
+// backend at once, recorded with who moved it; rows of the archive leave only
+// with an admin's written reason, and identifiers never. A provider just added
+// names the stations it does not answer yet, each to move from there.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -16,6 +18,7 @@ import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { AddModel } from "./AddModel";
+import { ClosedStations } from "./ClosedStations";
 import { Acted, Head, Health, messageOf, useActing } from "./common";
 import {
   admissionWords,
@@ -67,6 +70,9 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   const [why, setWhy] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const [moving, setMoving] = useState<PurposeRow | null>(null);
+  // the provider a move starts on, where it opened from the note under Models, and the provider just added
+  const [toward, setToward] = useState<string | null>(null);
+  const [opened, setOpened] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Backend | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
@@ -148,6 +154,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   const toChatgpt = (purposes ?? []).filter((p) => shown.subscriptions.some((b) => b.id === p.backend)).map((p) => stationOf(p.purpose));
   const personal = admin && place.profile !== null;
   const bare = subscriptions === null && shown.subscriptions.length > 0;
+  const provider = opened ? (remotes.find((b) => b.id === opened) ?? null) : null;
   const runtimeOf = (b: Backend) => {
     const newest = (admissions ?? []).filter((r) => r.backend === b.id).sort((x, y) => y.at - x.at)[0];
     return newest ? `${runtimeName(newest.runtime.name)} ${newest.runtime.version}`.trim() : "a model server";
@@ -248,6 +255,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
               className="button small"
               onClick={() => {
                 setSaid(null);
+                setOpened(null);
                 setAdding(true);
               }}
             >
@@ -259,6 +267,16 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
           )}
         </div>
         {said && <p className="ok-words">{said}</p>}
+        {admin && provider && purposes && (
+          <ClosedStations
+            provider={provider}
+            purposes={purposes}
+            onChange={(p) => {
+              setToward(provider.id);
+              setMoving(p);
+            }}
+          />
+        )}
         <div className="table-wrap">
           <table className="thin models">
             <thead>
@@ -311,7 +329,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
         <Acted acting={check.acting} />
       </section>
 
-      {admin && <LocalModels />}
+      {admin && <LocalModels backends={backends} admissions={admissions} now={now} onRun={load} />}
 
       {purposes && backends && (
         <section className="stack">
@@ -349,7 +367,14 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
                       </td>
                       <td>
                         {admin && l.movable && (
-                          <button type="button" className="button quiet small" onClick={() => setMoving(row)}>
+                          <button
+                            type="button"
+                            className="button quiet small"
+                            onClick={() => {
+                              setToward(null);
+                              setMoving(row);
+                            }}
+                          >
                             Change
                           </button>
                         )}
@@ -388,9 +413,11 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
       {adding && (
         <AddModel
           onClose={() => setAdding(false)}
-          onDone={(words) => {
+          onDone={(words, added) => {
             setAdding(false);
             setSaid(words);
+            // a provider added answers no station until one is moved there, which the note under Models offers
+            setOpened(added.locality === "remote" ? added.id : null);
             load();
           }}
         />
@@ -403,6 +430,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
           onClose={() => setRemoving(null)}
           onDone={(words) => {
             setRemoving(null);
+            setOpened(null);
             setSaid(words);
             load();
           }}
@@ -413,6 +441,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
           purpose={moving}
           backends={backends}
           system={system}
+          toward={toward}
           onClose={() => setMoving(null)}
           onDone={() => {
             setMoving(null);
@@ -523,10 +552,11 @@ function RemoveDialog(props: { backend: Backend; backends: Backend[]; purposes: 
 }
 
 /** A purpose moved to another backend: at once where nothing more is needed, with an admin's written reason where rows would leave. */
-function MoveDrawer(props: { purpose: PurposeRow; backends: Backend[]; system: boolean; onClose: () => void; onDone: () => void }) {
-  const { purpose, backends, system, onClose, onDone } = props;
+function MoveDrawer(props: { purpose: PurposeRow; backends: Backend[]; system: boolean; toward?: string | null; onClose: () => void; onDone: () => void }) {
+  const { purpose, backends, system, toward = null, onClose, onDone } = props;
   const options = targets(purpose, backends);
-  const [to, setTo] = useState(options[0]?.backend.id ?? "");
+  // opened from a provider just added, the move starts on that provider
+  const [to, setTo] = useState(options.find((o) => o.backend.id === toward)?.backend.id ?? options[0]?.backend.id ?? "");
   const [reason, setReason] = useState("");
   const moving = useActing();
   const chosen = options.find((o) => o.backend.id === to) ?? null;

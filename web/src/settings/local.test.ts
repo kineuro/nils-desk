@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Local models: sizes as a person reads them, each state's tag, bar and
 // actions, when the list is read again, what the download dialog asks and
-// when it may download, and each refusal in words.
+// when it may download, each refusal in words, and a model started on
+// llama.cpp (record 24).
 
 import { describe, expect, it } from "vitest";
-import type { LocalLookup, LocalModel, LocalRefusal, LocalState } from "./kvasir";
+import type { AdmissionRecord, Backend, LocalLookup, LocalModel, LocalRefusal, LocalRun, LocalRuntime, LocalState, RunState } from "./kvasir";
 import {
   actionsOf,
   askOf,
@@ -13,9 +14,11 @@ import {
   bytesWords,
   downloadable,
   EMPTY_DRAFT,
+  emptyWords,
   fingerprint,
   foundWords,
   freeWords,
+  introWords,
   locationRefusal,
   modelTag,
   patternsOf,
@@ -25,11 +28,26 @@ import {
   refusalWords,
   removedWords,
   removeWords,
+  replaceWords,
   revisionWords,
   roomWords,
+  runActionsOf,
+  runningBesides,
+  runsKey,
   runtimeLabel,
+  runtimeLine,
+  runtimeTag,
+  runTag,
   sentence,
+  servedAdmission,
+  servingWords,
   stale,
+  started,
+  startedWords,
+  starting,
+  startRefusalWords,
+  stopFirstWords,
+  stoppedWords,
   tokenReady,
   tokenTag,
   underWay,
@@ -285,5 +303,86 @@ describe("where downloads go, changed", () => {
     // the location already set says nothing, and saves nothing
     expect(locationRefusal(" /srv/models ", "/srv/models")).toBe("");
     expect(locationRefusal("/mnt/models", "/srv/models")).toBeNull();
+  });
+});
+
+describe("a model started on llama.cpp", () => {
+  const done: Partial<LocalModel> = { state: "done", bytes_done: 16 * GIB, finished_at: 1 };
+  const run = (over: Partial<LocalRun> = {}): LocalRun => ({ state: "serving", model: "name-q4-k-m", error: null, log: [], context: 32768, slots: 4, started_by: "admin", started_at: 1, ...over });
+  const runtime: LocalRuntime = { build: "b10964", variant: "ubuntu-vulkan-x64", reachable: true, serving: 1 };
+
+  it("says where the models run by the runtime the install has, and as it did for a Kvasir before record 24", () => {
+    expect(introWords(undefined)).toBe("Models Kvasir downloads from the Hugging Face Hub, for a model server of yours to run.");
+    expect(introWords(null)).toBe("Models Kvasir downloads from the Hugging Face Hub. Kvasir runs no model here: a model server of yours runs them.");
+    expect(introWords(runtime)).toBe("Models Kvasir downloads from the Hugging Face Hub and starts on llama.cpp on this machine, one at a time.");
+    expect(emptyWords(undefined)).toBe("No local model yet. Download one, then start a model server on it.");
+    expect(emptyWords(null)).toBe("No local model yet. Download one, then start a model server on it.");
+    expect(emptyWords(runtime)).toBe("No local model yet. Download a model in GGUF, then start it from its row.");
+    expect(runtimeLine(runtime)).toBe("llama.cpp b10964, ubuntu-vulkan-x64");
+    expect(runtimeTag(runtime)).toEqual({ tone: "ok", words: "answers" });
+    expect(runtimeTag({ ...runtime, reachable: false })).toEqual({ tone: "blocked", words: "does not answer" });
+  });
+
+  it("offers Stop while a model loads or serves, Start where Kvasir can start it, and nothing where it cannot", () => {
+    expect(runActionsOf(model({ ...done, startable: true, run: null }))).toEqual(["start"]);
+    expect(runActionsOf(model({ ...done, startable: true, run: run({ state: "failed" }) }))).toEqual(["start"]);
+    expect(runActionsOf(model({ ...done, startable: true, run: run({ state: "stopped" }) }))).toEqual(["start"]);
+    expect(runActionsOf(model({ ...done, startable: true, run: run({ state: "starting" }) }))).toEqual(["stop"]);
+    expect(runActionsOf(model({ ...done, startable: true, run: run() }))).toEqual(["stop"]);
+    expect(runActionsOf(model({ ...done, startable: false }))).toEqual([]);
+    // a Kvasir before record 24 says nothing of either
+    expect(runActionsOf(model(done))).toEqual([]);
+  });
+
+  it("tags each run, reads the list again sooner while a model loads, and names the model another start stops", () => {
+    const states: RunState[] = ["starting", "serving", "stopped", "failed"];
+    expect(states.map((state) => runTag(run({ state })))).toEqual([
+      { tone: "brand", words: "loading" },
+      { tone: "ok", words: "serving" },
+      { tone: "neutral", words: "stopped" },
+      { tone: "blocked", words: "did not start" },
+    ]);
+    const serving = model({ ...done, id: 1, repo: "owner/one", run: run() });
+    const loading = model({ ...done, id: 2, repo: "owner/two", run: run({ state: "starting" }) });
+    const idle = model({ ...done, id: 3, repo: "owner/three", startable: true, run: null });
+    expect(starting([serving, idle])).toBe(false);
+    expect(starting([serving, loading])).toBe(true);
+    expect(started(serving)).toBe(true);
+    expect(started(loading)).toBe(true);
+    expect(started(idle)).toBe(false);
+    expect(runningBesides([serving, idle], 3)).toBe(serving);
+    expect(runningBesides([serving, idle], 1)).toBeNull();
+    expect(replaceWords(idle, serving)).toBe("llama.cpp runs one model at a time, so starting owner/three stops owner/one.");
+    expect(runsKey([serving, idle])).toBe(runsKey([serving, idle]));
+    expect(runsKey([serving, idle])).not.toBe(runsKey([model({ ...serving, run: run({ state: "failed" }) }), idle]));
+  });
+
+  it("says how a model serves, and whether Kvasir admitted it from the backend that serves it", () => {
+    expect(servingWords(run())).toBe("Serving as name-q4-k-m, with 32,768 tokens of context and 4 slots.");
+    expect(servingWords(run({ context: null, slots: 1 }))).toBe("Serving as name-q4-k-m, with one slot.");
+    expect(servingWords(run({ context: null, slots: null }))).toBe("Serving as name-q4-k-m.");
+    const now = Date.parse("2026-09-15T12:00:00Z");
+    const entry = { id: "name-q4-k-m", name: "name", reasoning: false, context_window: 32768, max_tokens: 4096, admitted: true };
+    const backend: Backend = { id: "llama-cpp", kind: "openai-completions", locality: "local", provider: null, credential: null, models: ["name-q4-k-m"], health: { warming: false }, added_at: now - 2 * 3_600_000, entries: [entry] };
+    expect(servedAdmission(run({ state: "starting" }), [backend], [], now)).toBeNull();
+    expect(servedAdmission(run(), null, null, now)).toBeNull();
+    expect(servedAdmission(run(), [], [], now)).toEqual({ tone: "caution", words: "being added", detail: "Kvasir holds it as a model in your systems in a moment." });
+    expect(servedAdmission(run(), [{ ...backend, health: { warming: true } }], [], now)).toEqual({ tone: "caution", words: "warming", detail: "Kvasir checks it with its admission suite once it has answered." });
+    expect(servedAdmission(run(), [backend], [], now)).toEqual({ tone: "ok", words: "admitted", detail: null });
+    const refusedRecord: AdmissionRecord = { id: 1, backend: "llama-cpp", model: "name-q4-k-m", runtime: { name: "llama.cpp", version: "b10964", build: "" }, at: now - 3_600_000, passed: false, checks: [{ name: "tool_calls", passed: false }] };
+    expect(servedAdmission(run(), [{ ...backend, entries: [{ ...entry, admitted: false }] }], [refusedRecord], now)).toMatchObject({ tone: "blocked", detail: "failed tool calls" });
+  });
+
+  it("says a refusal to start in words a person can act on, and why a started model is not removed", () => {
+    const at = (code: string) => refusal(code, "refused", { status: 409 });
+    expect(startRefusalWords(at("no_runtime"))).toBe("This install runs no llama.cpp for Kvasir to start a model on. Start a model server with one of the model's commands, then add it with Add a model.");
+    expect(startRefusalWords(at("not_downloaded"))).toBe("This model is not downloaded yet. Start it once its download has finished.");
+    expect(startRefusalWords(at("not_gguf"))).toBe("Kvasir starts only a GGUF model. Start a model server on these files with one of their commands, then add it with Add a model.");
+    expect(startRefusalWords(at("runtime_unreachable"))).toBe("llama.cpp on this machine does not answer, so Kvasir could not start the model. Start it again once llama.cpp answers.");
+    expect(startRefusalWords(refusal("bad_request", "the model's file went missing"))).toBe("The model's file went missing.");
+    expect(startRefusalWords(refusal(null, "", { status: 500 }))).toBe("Kvasir answered 500.");
+    expect(startedWords(model())).toBe("owner/name is loading into llama.cpp. Once it serves, Kvasir checks it with its admission suite before the assistant uses it.");
+    expect(stoppedWords(model())).toBe("owner/name is stopped, and llama.cpp holds no memory for it any more.");
+    expect(stopFirstWords(model())).toBe("owner/name is started on llama.cpp. Stop it first, then remove it.");
   });
 });

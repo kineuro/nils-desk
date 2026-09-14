@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Start and Stop on the Kvasir page, for a downloaded model in GGUF, where the install runs llama.cpp for Kvasir. The local models section names the runtime, its llama.cpp build and archive, and whether it answers; where the install runs none it says Kvasir runs no model here and keeps each model's commands as before. A model loading into llama.cpp reads as loading, and the list is read again every two seconds until it serves or does not start. A serving model says the name it is served as, the context and slots llama.cpp settled on, and whether Kvasir admitted it: warming until its first answer, being checked, admitted, or refused with the checks it failed. A model that did not start says why, with what llama.cpp logged behind a disclosure. llama.cpp runs one model at a time, so starting a model while another serves asks first, naming the one it stops. A started model is stopped before it can be removed. A model Kvasir starts keeps its commands folded under Or run it yourself, and one it cannot start shows them open with why. It needs Kvasir's runtime doors; with a Kvasir that has none, the section is as it was.
+- A provider added on the Kvasir page names the stations it does not answer yet. A station with no row in the table stays in your systems, so a provider answers only the stations moved to it: one that reads no rows moves there without more, rows of the archive go only once an admin writes down why, and identifiers never do. Each station that may move has its Change beside it, which opens the dialog of Where each station goes with the provider chosen.
+
 ### Fixed
 
 - The first person setup adds, who may do everything, may use the assistant. `nils-desk user add --admin` gave them `admin` alone, and using the assistant takes `assist`, which stands beside the other entitlements rather than under `admin`, so the Assistant was missing from their side and its doors refused them until an admin granted `assist` on People. A user added with `--admin` now holds `assist` as well. Someone added before keeps what they hold: an admin grants `assist` on People. A desk where nobody signs in, or whose people sign in at a provider, was not affected.
