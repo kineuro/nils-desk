@@ -123,16 +123,19 @@ describe("the avatar", () => {
 
 describe("the addresses", () => {
   it("name a section, its page and what it opens, and send anything else Home", () => {
-    expect(parse("#settings/places")).toEqual({ section: "settings", page: "places", arg: null });
-    expect(parse("#settings/places/backup%20disk")).toEqual({ section: "settings", page: "places", arg: "backup disk" });
-    expect(parse("")).toEqual({ section: "home", page: null, arg: null });
-    expect(parse("#/nowhere")).toEqual({ section: "home", page: null, arg: null });
-    expect(parse("#settings/places/%E0%A4%A")).toEqual({ section: "settings", page: "places", arg: null });
+    expect(parse("#settings/places")).toEqual({ section: "settings", page: "places", arg: null, sub: null });
+    expect(parse("#settings/places/backup%20disk")).toEqual({ section: "settings", page: "places", arg: "backup disk", sub: null });
+    expect(parse("")).toEqual({ section: "home", page: null, arg: null, sub: null });
+    expect(parse("#/nowhere")).toEqual({ section: "home", page: null, arg: null, sub: null });
+    expect(parse("#settings/places/%E0%A4%A")).toEqual({ section: "settings", page: "places", arg: null, sub: null });
+    // a page of what the page opened: a dataset's pseudonymisation
+    expect(parse("#data/datasets/spring-scans/pseudonymisation")).toEqual({ section: "data", page: "datasets", arg: "spring-scans", sub: "pseudonymisation" });
+    expect(parse("#data/batch/12")).toEqual({ section: "data", page: "batch", arg: "12", sub: null });
   });
   it("round-trip", () => {
-    for (const h of ["#home", "#settings/parts", "#settings/places/backup%20disk"]) {
+    for (const h of ["#home", "#settings/parts", "#settings/places/backup%20disk", "#data/datasets/spring-scans/pseudonymisation"]) {
       const r = parse(h);
-      expect(href(r.section, r.page, r.arg)).toBe(h);
+      expect(href(r.section, r.page, r.arg, r.sub)).toBe(h);
     }
   });
 });

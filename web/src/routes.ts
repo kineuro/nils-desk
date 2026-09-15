@@ -8,14 +8,16 @@ export interface Route {
   section: string;
   page: string | null;
   arg: string | null;
+  /** A page of what the page opened: #data/datasets/<name>/pseudonymisation. */
+  sub: string | null;
 }
 
-const HASH = /^#([a-z]+)(?:\/([a-z0-9_-]*))?(?:\/([^/]*))?$/;
+const HASH = /^#([a-z]+)(?:\/([a-z0-9_-]*))?(?:\/([^/]*))?(?:\/([a-z-]+))?$/;
 
 /** The route a hash names. */
 export function parse(hash: string): Route {
   const m = HASH.exec(hash);
-  if (!m) return { section: "home", page: null, arg: null };
+  if (!m) return { section: "home", page: null, arg: null, sub: null };
   let arg: string | null = null;
   if (m[3]) {
     try {
@@ -24,11 +26,13 @@ export function parse(hash: string): Route {
       arg = null;
     }
   }
-  return { section: m[1], page: m[2] || null, arg };
+  return { section: m[1], page: m[2] || null, arg, sub: m[4] || null };
 }
 
-/** The hash of a section, its page and what the page opens. */
-export function href(section: string, page?: string | null, arg?: string | null): string {
+/** The hash of a section, its page, what the page opens, and a page of that. */
+export function href(section: string, page?: string | null, arg?: string | null, sub?: string | null): string {
   if (!page) return `#${section}`;
-  return arg ? `#${section}/${page}/${encodeURIComponent(arg)}` : `#${section}/${page}`;
+  if (!arg) return `#${section}/${page}`;
+  const at = `#${section}/${page}/${encodeURIComponent(arg)}`;
+  return sub ? `${at}/${sub}` : at;
 }
