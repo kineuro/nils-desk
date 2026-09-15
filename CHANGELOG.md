@@ -4,6 +4,8 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.28] - 2026-09-15
+
 ### Added
 
 - Groups give pages. A group has a name, grants, a detail and, where people sign in at a provider, the provider groups it follows. A grant names a page and how far a person goes there, `see` or `work`, and the assistant's `use`; the detail says what they see in records: `plain`, `quasi` (sex and age) or `sensitive`. A person holds what all their groups give, with grants an admin gives them alone on top, and the desk refuses a change that would leave nobody who may change people and groups. An install starts with Readers, Reviewers, Operators and Admins, made from the ladder when the desk first starts; each person joins the group of their top step and keeps `assist` as a grant of their own.
