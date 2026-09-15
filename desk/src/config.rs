@@ -104,7 +104,9 @@ pub struct App {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Local {
     /// The EdDSA signing key, PEM, generated at first start and readable by
-    /// the desk's account only.
+    /// the desk's account only. Named nowhere, it sits beside the store,
+    /// which the desk must be able to write, and not beside the
+    /// configuration, which a service may keep read-only.
     #[serde(default = "default_key")]
     pub key: std::path::PathBuf,
     /// The audience the minted tokens carry, which the engine's trust entry
@@ -157,8 +159,9 @@ fn default_store() -> std::path::PathBuf {
 fn default_capabilities() -> String {
     "/capabilities".into()
 }
+/// No key named: [`Config::beside`] puts it next to the store.
 fn default_key() -> std::path::PathBuf {
-    "nils-desk.key".into()
+    std::path::PathBuf::new()
 }
 fn default_audience() -> String {
     "nils".into()
@@ -205,7 +208,16 @@ impl Config {
             }
         }
         under(dir, &mut self.store);
-        under(dir, &mut self.local.key);
+        if self.local.key.as_os_str().is_empty() {
+            // a key nobody named sits beside the store, which the desk writes
+            let store_dir = self
+                .store
+                .parent()
+                .map_or_else(|| dir.to_path_buf(), std::path::Path::to_path_buf);
+            self.local.key = store_dir.join("nils-desk.key");
+        } else {
+            under(dir, &mut self.local.key);
+        }
         if let Some(oidc) = &mut self.oidc
             && let Some(file) = &mut oidc.client_secret_file
         {
@@ -305,6 +317,36 @@ url = "http://127.0.0.1:8437"
         c.beside(dir);
         assert_eq!(c.store, dir.join("nils-desk.sqlite"));
         assert_eq!(c.local.key, dir.join("nils-desk.key"));
+    }
+
+    /// A key nobody named sits beside the store, which the desk must be able
+    /// to write, and not beside the configuration, which a service may keep
+    /// read-only: a desk that signs people in through a provider stopped at
+    /// its start where only its state folder was writable.
+    #[test]
+    fn a_key_nobody_named_sits_beside_the_store() {
+        let mut c = Config::parse(
+            "origin = \"https://desk.example.org\"\nmode = \"oidc\"\nstore = \"/srv/nils/desk/state/nils-desk.sqlite\"\n[engine]\nurl = \"http://127.0.0.1:8437\"\n[oidc]\nissuer = \"https://id.example.org/\"\nclient_id = \"desk\"\nclient_secret = \"not a secret\"\n",
+        )
+        .expect("the configuration parses");
+        c.beside(std::path::Path::new("/srv/nils/desk"));
+        assert_eq!(
+            c.local.key,
+            std::path::Path::new("/srv/nils/desk/state/nils-desk.key")
+        );
+        let mut c = Config::parse(
+            "origin = \"http://127.0.0.1:7200\"\n[engine]\nurl = \"http://127.0.0.1:8437\"\n",
+        )
+        .expect("the configuration parses");
+        c.beside(std::path::Path::new("/home/anna/nils/desk"));
+        assert_eq!(
+            c.store,
+            std::path::Path::new("/home/anna/nils/desk/nils-desk.sqlite")
+        );
+        assert_eq!(
+            c.local.key,
+            std::path::Path::new("/home/anna/nils/desk/nils-desk.key")
+        );
     }
 
     /// The provider's groups are read from `groups` unless the table names
