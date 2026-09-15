@@ -4,9 +4,10 @@
 //! registration of Wave 4c §5.7. It creates, or finds, the application, the
 //! OAuth2 provider with a signing key, the policy binding of the groups that
 //! may use it, the five entitlements bound to the groups the operator names,
-//! and attaches the entitlements scope mapping; then it prints the trust
-//! flag and the role flags to paste into the engine's command line. A second
-//! run changes nothing.
+//! and attaches the scope mappings, the profile scope carrying the groups a
+//! person is in, which a group at the desk follows; then it prints what the
+//! engine and Kvasir need to trust the desk's own issuer beside the
+//! provider. A second run changes nothing.
 
 use serde_json::{Value, json};
 
@@ -22,9 +23,14 @@ pub struct Plan {
     pub allow: Vec<String>,
     /// Entitlement to group.
     pub bind: Vec<(String, String)>,
+    /// The audience of the tokens the desk mints, its `[local] audience`.
+    pub audience: String,
 }
 
 pub struct Registered {
+    /// The desk's own issuer, which is its origin, and the audience of its tokens.
+    pub desk: String,
+    pub audience: String,
     pub issuer: String,
     pub client_id: String,
     pub client_secret: String,
@@ -201,7 +207,8 @@ pub async fn register(api: &Api, plan: &Plan) -> Result<Registered, String> {
     };
     let key_pk = key["pk"].as_str().unwrap_or("").to_string();
 
-    // the scope mappings: the standard ones and the entitlements
+    // the scope mappings: the standard ones, profile carrying the groups a
+    // person is in, which the desk's `groups_claim` reads, and the entitlements
     let mappings = api
         .get("/propertymappings/provider/scope/?page_size=100")
         .await?;
@@ -369,6 +376,8 @@ pub async fn register(api: &Api, plan: &Plan) -> Result<Registered, String> {
 
     let issuer = format!("{}/application/o/{}/", api.base, plan.slug);
     Ok(Registered {
+        desk: origin.to_string(),
+        audience: plan.audience.clone(),
         jwks: format!("{issuer}jwks/"),
         issuer,
         client_id: provider["client_id"].as_str().unwrap_or("").to_string(),
@@ -379,18 +388,39 @@ pub async fn register(api: &Api, plan: &Plan) -> Result<Registered, String> {
 }
 
 impl Registered {
-    /// The flags to paste: the engine's trust entry and its role map.
+    /// The flags to paste on the engine: the desk's own issuer, whose tokens
+    /// carry the grants and the detail the engine reads as they are and whose
+    /// subjects it keeps, and beside it the provider, whose own tokens (the
+    /// command line's) still map their entitlements through `--role` and
+    /// whose subjects the engine qualifies.
     pub fn flags(&self) -> String {
-        let roles: Vec<String> = ["reader", "reviewer", "operator", "admin"]
+        let roles: Vec<String> = crate::grants::LADDER
             .iter()
             .map(|r| format!("--role {r}={r}"))
             .collect();
         format!(
-            "--auth oidc --oidc-trust issuer={},audience={},jwks={} --oidc-groups-claim roles {}",
-            self.issuer,
-            self.client_id,
-            self.jwks,
-            roles.join(" ")
+            "--auth oidc --oidc-trust issuer={desk},audience={audience},jwks={desk}/.well-known/jwks.json,keep_subject=true --oidc-trust issuer={issuer},audience={client},jwks={jwks} --oidc-groups-claim roles {roles}",
+            desk = self.desk,
+            audience = self.audience,
+            issuer = self.issuer,
+            client = self.client_id,
+            jwks = self.jwks,
+            roles = roles.join(" ")
         )
+    }
+
+    /// Kvasir's `auth` block, beside the tokens it keeps: the same two
+    /// issuers on its trust list, the desk's alone keeping the subjects it
+    /// names, and the provider's entitlements as roles.
+    pub fn kvasir_auth(&self) -> Value {
+        json!({
+            "mode": "oidc",
+            "trust": [
+                {"issuer": self.desk, "audience": self.audience, "jwks": format!("{}/.well-known/jwks.json", self.desk), "keepSubject": true},
+                {"issuer": self.issuer, "audience": self.client_id, "jwks": self.jwks},
+            ],
+            "groupsClaim": "roles",
+            "roles": {"reader": "reader", "reviewer": "reviewer", "operator": "operator", "admin": "admin", "assist": "assist"},
+        })
     }
 }

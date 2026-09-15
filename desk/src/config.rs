@@ -33,13 +33,16 @@ pub struct Config {
     pub supervisor: Option<Upstream>,
     #[serde(default)]
     pub apps: Vec<App>,
-    /// `local` mode: the desk as a small issuer (C46).
+    /// `local` and `oidc` modes: the desk as a small issuer (C46), signing
+    /// the tokens the parts receive.
     #[serde(default)]
     pub local: Local,
     /// `oidc` mode: the provider.
     pub oidc: Option<Oidc>,
-    /// Wave 4c §7.4, §7.6: the entitlement an export needs, or `off`. The
-    /// engine still authorises every page read against the caller.
+    /// Wave 4c §7.4, §7.6: what an export needs: a grant, `query:work` unless
+    /// set, or a ladder name standing for its set, as a configuration
+    /// written before grants names one, or `off`. The engine still
+    /// authorises every page read against the caller.
     #[serde(default = "default_export")]
     pub export: String,
 }
@@ -54,7 +57,7 @@ impl Config {
 }
 
 fn default_export() -> String {
-    "reader".into()
+    "query:work".into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -76,7 +79,8 @@ impl std::fmt::Display for Mode {
 }
 
 /// A part the desk proxies: its URL and, in `off` mode, the bearer the desk
-/// holds for it. In `local` and `oidc` modes the person's own token goes.
+/// holds for it. In `local` and `oidc` modes the token the desk mints for
+/// the person goes.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Upstream {
     pub url: String,
@@ -84,12 +88,14 @@ pub struct Upstream {
     pub token: Option<String>,
 }
 
-/// An app registry entry (Wave 4c §4.4; `contracts/suite/v1/app.schema.json`).
+/// An app registry entry (Wave 4c §4.4; `contracts/suite/v2/app.schema.json`).
 #[derive(Debug, Clone, Deserialize)]
 pub struct App {
     pub id: String,
     pub title: String,
     pub url: String,
+    /// A grant, or a ladder name standing for its set, that a person holds
+    /// to reach the app through the desk.
     pub entitlement: String,
     #[serde(default = "default_capabilities")]
     pub capabilities: String,
@@ -128,9 +134,14 @@ pub struct Oidc {
     pub client_secret_file: Option<std::path::PathBuf>,
     #[serde(default = "default_scopes")]
     pub scopes: Vec<String>,
-    /// The claim that carries the entitlements, plain strings.
+    /// The claim that carries the legacy entitlements, plain strings: each
+    /// stands for its set until a group at the desk follows a provider group.
     #[serde(default = "default_roles_claim")]
     pub roles_claim: String,
+    /// The claim that carries the provider's groups, plain strings, which a
+    /// group at the desk follows by name.
+    #[serde(default = "default_groups_claim")]
+    pub groups_claim: String,
 }
 
 fn default_bind() -> String {
@@ -165,6 +176,9 @@ fn default_scopes() -> Vec<String> {
 }
 fn default_roles_claim() -> String {
     "roles".into()
+}
+fn default_groups_claim() -> String {
+    "groups".into()
 }
 
 impl Config {
@@ -214,6 +228,12 @@ impl Config {
         {
             return Err("[oidc]: client_secret or client_secret_file".into());
         }
+        if c.export != "off" && !crate::grants::is_name(&c.export) {
+            return Err(format!(
+                "export: {} is not a grant or a ladder name, nor off",
+                c.export
+            ));
+        }
         for a in &c.apps {
             if !a
                 .id
@@ -223,6 +243,12 @@ impl Config {
                 return Err(format!(
                     "apps: {} is not an id (lower case letters, digits, dashes)",
                     a.id
+                ));
+            }
+            if !crate::grants::is_name(&a.entitlement) {
+                return Err(format!(
+                    "apps: {}: {} is not a grant or a ladder name",
+                    a.id, a.entitlement
                 ));
             }
         }
@@ -278,6 +304,47 @@ url = "http://127.0.0.1:8437"
         c.beside(dir);
         assert_eq!(c.store, dir.join("nils-desk.sqlite"));
         assert_eq!(c.local.key, dir.join("nils-desk.key"));
+    }
+
+    /// The provider's groups are read from `groups` unless the table names
+    /// another claim.
+    #[test]
+    fn the_groups_claim_is_groups_unless_named() {
+        let base = "origin = \"http://127.0.0.1:7200\"\nmode = \"oidc\"\n[engine]\nurl = \"http://127.0.0.1:8437\"\n[oidc]\nissuer = \"https://id.example.org/\"\nclient_id = \"desk\"\nclient_secret = \"not a secret\"\n";
+        let c = Config::parse(base).expect("the configuration parses");
+        assert_eq!(c.oidc.unwrap().groups_claim, "groups");
+        let c = Config::parse(&format!("{base}groups_claim = \"memberOf\"\n"))
+            .expect("the configuration parses");
+        assert_eq!(c.oidc.unwrap().groups_claim, "memberOf");
+    }
+
+    /// An app's entitlement and the export setting name a grant or a ladder
+    /// name, so a slip of the pen stops the desk rather than closing a door.
+    #[test]
+    fn an_entitlement_names_a_grant_or_a_ladder_name() {
+        let with = |export: &str, entitlement: &str| {
+            Config::parse(&format!(
+                "origin = \"http://127.0.0.1:7200\"\nexport = \"{export}\"\n[engine]\nurl = \"http://127.0.0.1:8437\"\n[[apps]]\nid = \"pipelines\"\ntitle = \"Pipelines\"\nurl = \"http://127.0.0.1:7400\"\nentitlement = \"{entitlement}\"\n"
+            ))
+        };
+        assert!(with("reader", "operator").is_ok());
+        assert!(with("query:see", "pipelines:work").is_ok());
+        assert!(with("off", "assist").is_ok());
+        assert!(with("everyone", "operator").is_err());
+        assert!(with("reader", "king").is_err());
+    }
+
+    /// An export needs query:work unless the configuration names another
+    /// grant, or a ladder name as one written before grants does.
+    #[test]
+    fn an_export_needs_query_work_unless_named() {
+        let base = "origin = \"http://127.0.0.1:7200\"\n";
+        let engine = "[engine]\nurl = \"http://127.0.0.1:8437\"\n";
+        let c = Config::parse(&format!("{base}{engine}")).expect("the configuration parses");
+        assert_eq!(c.export, "query:work");
+        let c = Config::parse(&format!("{base}export = \"reader\"\n{engine}"))
+            .expect("a ladder name still parses");
+        assert_eq!(c.export, "reader");
     }
 
     /// A path someone spelled out in full is left as it is.

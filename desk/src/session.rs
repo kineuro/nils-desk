@@ -5,8 +5,9 @@
 //! §5.1): none in `off` mode, where the one person is the operator at the
 //! keyboard; username and password at the desk in `local` mode; the
 //! provider in `oidc` mode. The display name is recorded beside the subject
-//! at first sight (§5.9); the entitlements come from the user row or the
-//! token's claim, never from the browser.
+//! at first sight (§5.9). What a person holds is resolved on every request
+//! from the desk's groups and the grants they hold alone, under `oidc` with
+//! the provider's groups kept from the sign-in, and never from the browser.
 
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
@@ -14,53 +15,44 @@ use axum::response::{IntoResponse, Redirect, Response};
 use serde_json::{Value, json};
 
 use crate::config::Mode;
-use crate::store::Session;
+use crate::grants::Access;
+use crate::proxy::same_origin;
+use crate::store::{Claims, Session};
 use crate::{Shared, users};
 
 pub const COOKIE: &str = "nils_desk";
 pub const HOURS: i64 = 12;
 
-/// The person of a session, as the capabilities document names them.
+/// The person of a session, as the capabilities document names them: what
+/// they hold now, and the names of the groups it comes from.
 #[derive(Debug, Clone)]
 pub struct Person {
     pub subject: String,
     pub display_name: String,
-    pub entitlements: Vec<String>,
+    pub access: Access,
+    pub groups: Vec<String>,
 }
 
 impl Person {
-    pub fn roles(&self) -> Vec<&str> {
-        self.entitlements
-            .iter()
-            .map(String::as_str)
-            .filter(|e| *e != "assist")
-            .collect()
+    /// Whether the person holds a grant.
+    pub fn holds(&self, grant: &str) -> bool {
+        self.access.holds(grant)
     }
-    pub fn holds(&self, e: &str) -> bool {
-        let ladder = ["reader", "reviewer", "operator", "admin"];
-        if e == "assist" {
-            return self.entitlements.iter().any(|x| x == "assist");
-        }
-        let want = ladder.iter().position(|x| *x == e).unwrap_or(usize::MAX);
-        self.entitlements.iter().any(|x| {
-            ladder
-                .iter()
-                .position(|l| l == x)
-                .is_some_and(|have| have >= want)
-        })
+
+    /// Whether the person holds a grant, or a set by its ladder name.
+    pub fn holds_name(&self, name: &str) -> bool {
+        self.access.holds_name(name)
     }
+
     pub fn as_json(&self) -> Value {
         json!({
             "subject": self.subject,
             "display_name": self.display_name,
-            "entitlements": self.entitlements,
-            "roles": self.roles(),
+            "grants": self.access.list(),
+            "detail": self.access.detail.as_str(),
+            "groups": self.groups,
         })
     }
-}
-
-fn all() -> Vec<String> {
-    users::ENTITLEMENTS.iter().map(|s| s.to_string()).collect()
 }
 
 pub fn cookie_of(desk: &Shared, id: &str, hours: i64) -> Option<HeaderValue> {
@@ -92,7 +84,13 @@ pub fn resolve(desk: &Shared, headers: &HeaderMap) -> (Option<Session>, Option<H
         Mode::Off => {
             let s = desk
                 .store
-                .create("operator", "the operator", &all(), &json!({}), HOURS)
+                .create(
+                    "operator",
+                    "the operator",
+                    &Claims::default(),
+                    &json!({}),
+                    HOURS,
+                )
                 .ok();
             let set = s.as_ref().and_then(|s| cookie_of(desk, &s.id, HOURS));
             (s, set)
@@ -101,22 +99,52 @@ pub fn resolve(desk: &Shared, headers: &HeaderMap) -> (Option<Session>, Option<H
     }
 }
 
-/// The person of a session: in `local` mode the entitlements are the user
-/// row's now, not the session's at login, so a grant shows at once.
+/// The person of a session, resolved now rather than at login, so a change
+/// to a group or to what a person holds applies at their next click. In
+/// `off` mode the one person holds everything.
 pub fn person(desk: &Shared, session: &Session) -> Person {
-    let entitlements = match desk.config.mode {
-        Mode::Local => desk
-            .store
-            .user(&session.subject)
-            .map(|(u, _)| u.entitlements)
-            .unwrap_or_default(),
-        _ => session.entitlements.clone(),
+    let (access, groups) = match desk.config.mode {
+        Mode::Off => (Access::everything(), Vec::new()),
+        mode => {
+            let book = desk.store.book();
+            let claims = (mode == Mode::Oidc).then_some(&session.claims);
+            let r = book.resolve(&session.subject, claims);
+            let ids: Vec<i64> = r.member.iter().chain(&r.followed).copied().collect();
+            (r.access, book.names(&ids))
+        }
     };
     Person {
         subject: session.subject.clone(),
         display_name: session.display.clone(),
-        entitlements,
+        access,
+        groups,
     }
+}
+
+/// The person of a request, holding a grant or a set by its ladder name:
+/// nobody signed in is 401, and a person without it 403, naming `what` they
+/// reached for and what it needs.
+pub fn holding(
+    desk: &Shared,
+    headers: &HeaderMap,
+    need: &str,
+    what: &str,
+) -> Result<Person, Box<Response>> {
+    let (session, _) = resolve(desk, headers);
+    let Some(s) = session else {
+        return Err(Box::new(error(
+            StatusCode::UNAUTHORIZED,
+            "no session; log in at the desk",
+        )));
+    };
+    let p = person(desk, &s);
+    if !p.holds_name(need) {
+        return Err(Box::new(error(
+            StatusCode::FORBIDDEN,
+            format!("{what} needs {need}"),
+        )));
+    }
+    Ok(p)
 }
 
 /// Nobody, for the shell to name: the login page in `local` mode, the
@@ -125,7 +153,8 @@ pub fn nobody() -> Person {
     Person {
         subject: String::new(),
         display_name: String::new(),
-        entitlements: Vec::new(),
+        access: Access::default(),
+        groups: Vec::new(),
     }
 }
 
@@ -161,13 +190,22 @@ pub async fn door(State(desk): State<Shared>, headers: HeaderMap) -> Response {
     r
 }
 
-/// `POST /desk/login` in `local` mode: username and password for a session.
-pub async fn login(State(desk): State<Shared>, axum::Json(body): axum::Json<Value>) -> Response {
+/// `POST /desk/login` in `local` mode: username and password for a session,
+/// from the desk's own origin, so another site cannot sign a browser in as
+/// someone else.
+pub async fn login(
+    State(desk): State<Shared>,
+    headers: HeaderMap,
+    axum::Json(body): axum::Json<Value>,
+) -> Response {
     if desk.config.mode != Mode::Local {
         return error(
             StatusCode::NOT_FOUND,
             "this desk takes no password; see /desk/session for how to log in",
         );
+    }
+    if let Err(why) = same_origin(&desk.config.origins(), &headers) {
+        return error(StatusCode::FORBIDDEN, why);
     }
     let (Some(u), Some(p)) = (body["username"].as_str(), body["password"].as_str()) else {
         return error(StatusCode::BAD_REQUEST, "username and password");
@@ -178,11 +216,12 @@ pub async fn login(State(desk): State<Shared>, axum::Json(body): axum::Json<Valu
             "the username or the password is not right",
         );
     };
-    desk.store.saw(&user.username, &user.display);
+    desk.store
+        .saw(&user.username, &user.display, &Claims::default());
     match desk.store.create(
         &user.username,
         &user.display,
-        &user.entitlements,
+        &Claims::default(),
         &json!({}),
         HOURS,
     ) {
@@ -198,15 +237,15 @@ pub async fn login(State(desk): State<Shared>, axum::Json(body): axum::Json<Valu
 }
 
 /// `POST /desk/cli-login` in `local` mode (§5.8): a token of one day for
-/// `nils login --desk`.
+/// `nils login --desk`, with what the person holds now.
 pub async fn cli_login(
     State(desk): State<Shared>,
     axum::Json(body): axum::Json<Value>,
 ) -> Response {
-    let Some(issuer) = &desk.issuer else {
+    let (Mode::Local, Some(issuer)) = (desk.config.mode, &desk.issuer) else {
         return error(
             StatusCode::NOT_FOUND,
-            "this desk mints no tokens; it is not in local mode",
+            "this desk mints no tokens for the command line; it is not in local mode",
         );
     };
     let (Some(u), Some(p)) = (body["username"].as_str(), body["password"].as_str()) else {
@@ -218,7 +257,8 @@ pub async fn cli_login(
             "the username or the password is not right",
         );
     };
-    match issuer.mint(&user.username, &user.display, &user.entitlements, crate::issuer::CLI_TOKEN_HOURS * 60) {
+    let access = desk.store.access(&user.username, None).access;
+    match issuer.mint(&user.username, &user.username, &user.display, &access, crate::issuer::CLI_TOKEN_HOURS * 60) {
         Ok((token, exp)) => axum::Json(json!({"token": token, "expires_at": exp, "issuer": issuer.origin, "audience": issuer.audience})).into_response(),
         Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e),
     }
@@ -250,7 +290,8 @@ pub struct Callback {
     error_description: Option<String>,
 }
 
-/// `GET /desk/callback`: the code for a session.
+/// `GET /desk/callback`: the code for a session, which keeps the provider's
+/// groups and legacy entitlements from this sign-in.
 pub async fn callback(State(desk): State<Shared>, Query(q): Query<Callback>) -> Response {
     let Some(client) = &desk.oidc else {
         return error(StatusCode::NOT_FOUND, "this desk has no provider");
@@ -276,10 +317,15 @@ pub async fn callback(State(desk): State<Shared>, Query(q): Query<Callback>) -> 
     let redirect = format!("{}/desk/callback", desk.config.origin.trim_end_matches('/'));
     match client.finish(&code, &verifier, &redirect).await {
         Ok(a) => {
-            desk.store.saw(&a.subject, &a.display);
+            let claims = Claims {
+                groups: a.groups,
+                roles: a.roles,
+                username: a.username,
+            };
+            desk.store.saw(&a.subject, &a.display, &claims);
             match desk
                 .store
-                .create(&a.subject, &a.display, &a.entitlements, &a.tokens, HOURS)
+                .create(&a.subject, &a.display, &claims, &a.tokens, HOURS)
             {
                 Ok(s) => {
                     let mut r = Redirect::to("/").into_response();
@@ -295,7 +341,11 @@ pub async fn callback(State(desk): State<Shared>, Query(q): Query<Callback>) -> 
     }
 }
 
+/// `POST /desk/logout`, from the desk's own origin.
 pub async fn logout(State(desk): State<Shared>, headers: HeaderMap) -> Response {
+    if let Err(why) = same_origin(&desk.config.origins(), &headers) {
+        return error(StatusCode::FORBIDDEN, why);
+    }
     if let Some(id) = cookie(&headers) {
         desk.store.delete(&id);
     }
@@ -307,7 +357,7 @@ pub async fn logout(State(desk): State<Shared>, headers: HeaderMap) -> Response 
     r
 }
 
-// --- the issuer's documents
+// --- the issuer's documents, wherever the desk signs for its people
 
 pub async fn jwks(State(desk): State<Shared>) -> Response {
     match &desk.issuer {
@@ -318,177 +368,7 @@ pub async fn jwks(State(desk): State<Shared>) -> Response {
 
 pub async fn discovery(State(desk): State<Shared>) -> Response {
     match &desk.issuer {
-        Some(i) => axum::Json(i.discovery()).into_response(),
+        Some(i) => axum::Json(i.discovery(desk.config.mode == Mode::Local)).into_response(),
         None => error(StatusCode::NOT_FOUND, "this desk is not an issuer"),
     }
-}
-
-// --- the admin's users page (local mode)
-
-fn admin(desk: &Shared, headers: &HeaderMap) -> Result<Person, Box<Response>> {
-    let (session, _) = resolve(desk, headers);
-    let Some(s) = session else {
-        return Err(Box::new(error(StatusCode::UNAUTHORIZED, "no session")));
-    };
-    let p = person(desk, &s);
-    if !p.holds("admin") {
-        return Err(Box::new(error(
-            StatusCode::FORBIDDEN,
-            "the users page is an admin's",
-        )));
-    }
-    Ok(p)
-}
-
-pub async fn users_list(State(desk): State<Shared>, headers: HeaderMap) -> Response {
-    if desk.config.mode != Mode::Local {
-        return error(
-            StatusCode::NOT_FOUND,
-            "users live at the provider in this mode",
-        );
-    }
-    if let Err(r) = admin(&desk, &headers) {
-        return *r;
-    }
-    // Wave 5 §10.5: when each person last signed in, and how many sessions are open now
-    let seen = desk.store.last_seen();
-    let list: Vec<Value> = desk
-        .store
-        .users()
-        .into_iter()
-        .map(|u| {
-            let last = seen.get(&u.username).cloned();
-            json!({"username": u.username, "display": u.display, "entitlements": u.entitlements, "admin": u.admin, "last_seen": last})
-        })
-        .collect();
-    axum::Json(json!({"users": list, "entitlements": users::ENTITLEMENTS, "sessions_open": desk.store.open_sessions()})).into_response()
-}
-
-pub async fn users_add(
-    State(desk): State<Shared>,
-    headers: HeaderMap,
-    axum::Json(body): axum::Json<Value>,
-) -> Response {
-    if desk.config.mode != Mode::Local {
-        return error(
-            StatusCode::NOT_FOUND,
-            "users live at the provider in this mode",
-        );
-    }
-    if let Err(r) = admin(&desk, &headers) {
-        return *r;
-    }
-    let (Some(u), Some(p)) = (body["username"].as_str(), body["password"].as_str()) else {
-        return error(StatusCode::BAD_REQUEST, "username and password");
-    };
-    let ents: Vec<String> = body["entitlements"]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str())
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
-    match users::add(
-        &desk.store,
-        u,
-        p,
-        body["display"].as_str(),
-        &ents,
-        body["admin"].as_bool() == Some(true),
-    ) {
-        Ok(()) => (StatusCode::CREATED, axum::Json(json!({"username": u}))).into_response(),
-        Err(e) => error(StatusCode::BAD_REQUEST, e),
-    }
-}
-
-pub async fn users_entitlements(
-    State(desk): State<Shared>,
-    headers: HeaderMap,
-    axum::extract::Path(name): axum::extract::Path<String>,
-    axum::Json(body): axum::Json<Value>,
-) -> Response {
-    if desk.config.mode != Mode::Local {
-        return error(
-            StatusCode::NOT_FOUND,
-            "users live at the provider in this mode",
-        );
-    }
-    let who = match admin(&desk, &headers) {
-        Ok(p) => p,
-        Err(r) => return *r,
-    };
-    let ents: Vec<String> = body["entitlements"]
-        .as_array()
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str())
-                .map(str::to_string)
-                .collect()
-        })
-        .unwrap_or_default();
-    if let Err(e) = users::check_entitlements(&ents) {
-        return error(StatusCode::BAD_REQUEST, e);
-    }
-    if who.subject == name && !ents.iter().any(|e| e == "admin") {
-        return error(
-            StatusCode::BAD_REQUEST,
-            "an admin does not revoke their own admin; another admin does",
-        );
-    }
-    match desk.store.user_set_entitlements(&name, &ents) {
-        Ok(true) => axum::Json(json!({"username": name, "entitlements": ents})).into_response(),
-        Ok(false) => error(StatusCode::NOT_FOUND, format!("no user named {name}")),
-        Err(e) => error(StatusCode::INTERNAL_SERVER_ERROR, e),
-    }
-}
-
-// --- the people on this desk, for choosing whom to share a conversation with (the chat, slice 5)
-
-/// The people a person may name when sharing a conversation: everyone the desk
-/// keeps in `local` mode, and everyone who has signed in at least once in
-/// `oidc` mode, by subject and display name, never the person asking. A person
-/// holding `assist` asks; a desk nobody signs in to has one person and lists
-/// nobody.
-pub async fn people_list(State(desk): State<Shared>, headers: HeaderMap) -> Response {
-    if desk.config.mode == Mode::Off {
-        return error(
-            StatusCode::NOT_FOUND,
-            "a desk nobody signs in to has one person",
-        );
-    }
-    let (session, _) = resolve(&desk, &headers);
-    let Some(s) = session else {
-        return error(StatusCode::UNAUTHORIZED, "no session");
-    };
-    let me = person(&desk, &s);
-    if !me.holds("assist") {
-        return error(
-            StatusCode::FORBIDDEN,
-            "the people on the desk are listed for a person holding assist",
-        );
-    }
-    let mut people = std::collections::BTreeMap::<String, String>::new();
-    if desk.config.mode == Mode::Local {
-        for u in desk.store.users() {
-            people.insert(u.username, u.display);
-        }
-    } else {
-        for (subject, display, _) in desk.store.people() {
-            people.insert(subject, display);
-        }
-    }
-    people.remove(&me.subject);
-    let mut list: Vec<(String, String)> = people.into_iter().collect();
-    list.sort_by(|a, b| {
-        a.1.to_lowercase()
-            .cmp(&b.1.to_lowercase())
-            .then_with(|| a.0.cmp(&b.0))
-    });
-    let out: Vec<Value> = list
-        .into_iter()
-        .map(|(subject, display)| json!({"subject": subject, "display": display}))
-        .collect();
-    axum::Json(json!({ "people": out })).into_response()
 }

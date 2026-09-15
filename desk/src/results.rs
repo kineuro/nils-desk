@@ -21,22 +21,9 @@ fn error(status: StatusCode, message: impl Into<String>) -> Response {
     (status, axum::Json(json!({"error": message.into()}))).into_response()
 }
 
+/// The results are read by a person holding `query:see`.
 fn who(desk: &Shared, headers: &HeaderMap) -> Result<Person, Box<Response>> {
-    let (session, _) = session::resolve(desk, headers);
-    let s = session.ok_or_else(|| {
-        Box::new(error(
-            StatusCode::UNAUTHORIZED,
-            "no session; log in at the desk",
-        ))
-    })?;
-    let p = session::person(desk, &s);
-    if !p.holds("reader") {
-        return Err(Box::new(error(
-            StatusCode::FORBIDDEN,
-            "no entitlement opens the results",
-        )));
-    }
-    Ok(p)
+    session::holding(desk, headers, "query:see", "reading results")
 }
 
 /// `GET /desk/results`: the desk's record of runs and of document lineage.
@@ -64,7 +51,7 @@ pub async fn list(State(desk): State<Shared>, headers: HeaderMap) -> Response {
 
 fn export_of(desk: &Shared, headers: &HeaderMap) -> Value {
     match who(desk, headers) {
-        Ok(p) if desk.config.export != "off" && p.holds(&desk.config.export) => {
+        Ok(p) if desk.config.export != "off" && p.holds_name(&desk.config.export) => {
             Value::from(desk.config.export.clone())
         }
         _ => Value::Null,
@@ -134,13 +121,10 @@ pub async fn export(
     if desk.config.export == "off" {
         return error(StatusCode::FORBIDDEN, "export is off on this desk");
     }
-    if !p.holds(&desk.config.export) {
+    if !p.holds_name(&desk.config.export) {
         return error(
             StatusCode::FORBIDDEN,
-            format!(
-                "export needs the {} entitlement on this desk",
-                desk.config.export
-            ),
+            format!("export needs {} on this desk", desk.config.export),
         );
     }
     let up = desk.config.engine.clone();
@@ -293,13 +277,13 @@ pub async fn custody(State(desk): State<Shared>, headers: HeaderMap) -> Response
     let mut stores = vec![json!({
         "store": "desk",
         "owner": "the desk's operator",
-        "what": "nils-desk.sqlite: sessions, display names, local users, the record of runs and document lineage (ids only)",
+        "what": "nils-desk.sqlite: sessions, display names, local users, groups and what each person holds, the record of runs and document lineage (ids only)",
         "where": store,
         "files": [{"path": store, "kind": "file", "bytes": bytes, "mode": "600"}],
         "holds": ["technical", "identity"],
-        "counts": {"people": desk.store.people().len(), "results": desk.store.results().len(), "lineage": desk.store.lineage().len()},
-        "kept": "sessions twelve hours; users, runs and lineage until removed",
-        "commands": {"read": ["nils-desk user list"], "change": ["nils-desk user add|grant|password"], "export": [], "delete": "remove the file with the desk stopped"},
+        "counts": {"people": desk.store.people().len(), "groups": desk.store.book().groups.len(), "results": desk.store.results().len(), "lineage": desk.store.lineage().len()},
+        "kept": "sessions twelve hours; users, groups, runs and lineage until removed",
+        "commands": {"read": ["nils-desk user list", "nils-desk group list"], "change": ["nils-desk user add|access|password", "nils-desk group add|set|remove"], "export": [], "delete": "remove the file with the desk stopped"},
     })];
     if let Some(k) = &desk.config.kvasir {
         stores.push(json!({

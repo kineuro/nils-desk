@@ -9,6 +9,8 @@
 pub mod assistant;
 pub mod capabilities;
 pub mod config;
+pub mod grants;
+pub mod identity;
 pub mod issuer;
 pub mod oidc;
 pub mod proxy;
@@ -22,13 +24,14 @@ pub mod web;
 use std::sync::Arc;
 
 use axum::Router;
-use axum::routing::{any, get, post};
+use axum::routing::{any, get, post, put};
 
 pub use config::Config;
 
-/// The contract versions this desk was generated from (Wave 4c §6.7).
-pub const OPENAPI: &str = "3";
-pub const SUITE: &str = "1";
+/// The contract versions this desk was generated from (Wave 4c §6.7): an
+/// engine behind either major is refused by name.
+pub const OPENAPI: &str = "4";
+pub const SUITE: &str = "2";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Everything a request handler reaches.
@@ -37,7 +40,7 @@ pub struct Desk {
     pub store: store::Store,
     pub http: reqwest::Client,
     pub caps: capabilities::Cache,
-    /// `local` mode: the desk as an issuer.
+    /// `local` and `oidc` modes: the desk as the issuer of the parts' tokens.
     pub issuer: Option<issuer::Issuer>,
     /// `oidc` mode: the provider.
     pub oidc: Option<oidc::Client>,
@@ -58,15 +61,20 @@ pub fn start(text: &str) -> Result<Shared, String> {
     from_config(Config::parse(text)?)
 }
 
-/// How people sign in, as far as a session depends on it: the mode, and the
-/// origin and audience a `local` desk mints its tokens for, or the provider
-/// of an `oidc` desk.
+/// How people sign in, as far as a session depends on it: the mode, the
+/// provider of an `oidc` desk, and the origin and audience the desk mints
+/// its tokens for. An `oidc` desk that passed on the provider's tokens held
+/// sessions that knew no groups, so a desk that signs for its people signs
+/// them out once.
 pub fn sign_in_of(config: &Config) -> String {
     match config.mode {
         config::Mode::Off => "off".to_string(),
         config::Mode::Local => format!("local {} {}", config.origin, config.local.audience),
         config::Mode::Oidc => match &config.oidc {
-            Some(o) => format!("oidc {} {}", o.issuer, o.client_id),
+            Some(o) => format!(
+                "oidc {} {} signed {} {}",
+                o.issuer, o.client_id, config.origin, config.local.audience
+            ),
             None => "oidc".to_string(),
         },
     }
@@ -81,12 +89,12 @@ fn from_config(config: Config) -> Result<Shared, String> {
         .build()
         .map_err(|e| e.to_string())?;
     let issuer = match config.mode {
-        config::Mode::Local => Some(issuer::Issuer::open(
+        config::Mode::Local | config::Mode::Oidc => Some(issuer::Issuer::open(
             &config.local.key,
             &config.origin,
             &config.local.audience,
         )?),
-        _ => None,
+        config::Mode::Off => None,
     };
     let oidc = match (config.mode, &config.oidc) {
         (config::Mode::Oidc, Some(o)) => Some(oidc::Client::new(
@@ -117,13 +125,23 @@ pub fn router(desk: Shared) -> Router {
         .route("/desk/logout", post(session::logout))
         .route(
             "/desk/users",
-            get(session::users_list).post(session::users_add),
+            get(identity::users_list).post(identity::users_add),
         )
         .route(
             "/desk/users/{name}/entitlements",
-            axum::routing::put(session::users_entitlements),
+            put(identity::users_entitlements),
         )
-        .route("/desk/people", get(session::people_list))
+        .route("/desk/people", get(identity::people_list))
+        .route(
+            "/desk/groups",
+            get(identity::groups_list).post(identity::groups_add),
+        )
+        .route(
+            "/desk/groups/{id}",
+            put(identity::groups_set).delete(identity::groups_remove),
+        )
+        .route("/desk/access", get(identity::access_list))
+        .route("/desk/access/{subject}", put(identity::access_set))
         .route("/desk/results", get(results::list).post(results::record))
         .route("/desk/lineage", post(results::lineage))
         .route("/desk/custody", get(results::custody))
