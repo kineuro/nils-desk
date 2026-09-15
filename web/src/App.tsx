@@ -10,7 +10,10 @@ import type React from "react";
 import { AssistantPage } from "./assistant/AssistantPage";
 import { chatsKept, importHere, sidePages } from "./assistant/chats";
 import type { Capabilities } from "./capabilities";
+import { CohortPage } from "./data/CohortPage";
+import { CohortsPage } from "./data/CohortsPage";
 import { DataPage } from "./data/DataPage";
+import { ReleasePage } from "./ops/ReleasePage";
 import { QueryPage } from "./query/QueryPage";
 import { door, state } from "./deployment";
 import { may } from "./grants";
@@ -242,8 +245,11 @@ export function App() {
           {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={setupReady ? () => setLeft(true) : undefined} />}
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
-          {ready && active?.id === "data" && <DataPage caps={caps} install={install} onChanged={changed} />}
+          {ready && active?.id === "data" && route.page === "cohorts" && route.arg && <CohortPage caps={caps} name={route.arg} />}
+          {ready && active?.id === "data" && route.page === "cohorts" && !route.arg && <CohortsPage caps={caps} />}
+          {ready && active?.id === "data" && route.page !== "cohorts" && <DataPage caps={caps} install={install} onChanged={changed} />}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
+          {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {onProfile && <ProfilePage caps={caps} />}

@@ -4,6 +4,17 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Data / Cohorts, at `#data/cohorts`. A cohort is a membership and nothing else, and the page shows one card per cohort: what waits on Review, that it is empty, new or sorted; where its members come from, fed by a dataset, promoted from a query card with its version and date, or by hand; its subjects, sessions and stacks; its releases, owner and age. New cohort takes a name, an owner and why, and, from a list, the codes that join at once. The three ways a subject joins are on the page: a dataset feeds it, a query promotes them, a hand adds them. It needs an engine that serves the cohort doors; making one needs work on the Data page.
+- A cohort's page, at `#data/cohorts/<name>`: how it came to be and whose it is; its subjects, sessions, stacks and what waits on Review, with the way there; its members over time as a step chart, each join up and each leave down; how they joined, newest first, with the batch, the card or the audit beside each; and beside it the datasets holding its people, its releases and the queries to start from it, each opening a card on everyone in it. Add or remove takes codes, which way and a reason, recorded on every membership; Rename keeps its members, history and releases; Retire keeps them too and takes the cohort out of the lists, from where it can be brought back; Release opens New release with the cohort chosen.
+- Make a cohort on a query card's answer, once it is run complete: the subjects of its rows, at any grain, become a new cohort named from the card, or join one that exists, with why, and the cohort's card is on Data / Cohorts at once. Promoting is Data work now, not Release work.
+- The Release page, at `#release`: every release as a table with its version, layout, how its dates and UIDs left, its subjects and sessions, when and by whom, whether it was handed over, and whether it was withdrawn and why. New release is of a cohort or of a query card's complete answer at stack grain kept on this desk; it is named for what it is of, the day and the next number of that day, in a BIDS or descriptive layout, and says how the files of each dataset leave under that dataset's own handling, which session scheme, and which export place it is written to. A cohort with stacks still waiting on Review is said so before it leaves. Select first says what it reaches without writing anything; Release queues the job. It needs work on the Release page.
+
+### Changed
+
+- The release body sends a card's answer as its handle, which the engine reads itself and refuses when it no longer reproduces, and takes `datasets` beside `cohorts`.
+
 ## [1.0.0-alpha.28] - 2026-09-15
 
 ### Added
