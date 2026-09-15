@@ -31,20 +31,21 @@ describe("the Kvasir page", () => {
     expect(html).toContain("Add a model</button>");
   });
 
-  it("tells a person who may use the assistant and see Kvasir it holds their own subscription, and leaves adding the rest to an admin", () => {
+  it("tells a person who may use the assistant and see Kvasir it holds their own subscription, and leaves adding the rest to Kvasir: Work", () => {
     const html = page(["kvasir:see", "assistant:use"]);
     expect(html).not.toContain('href="#settings/parts"');
     expect(html).toContain("Which model answers each station, and your own ChatGPT subscription.");
     expect(html).not.toContain("version 1.0.0-alpha.7");
-    expect(html).toContain("the ones an admin added, and yours");
-    expect(html).toContain("Downloads, servers and providers are an admin&#x27;s to add.");
+    expect(html).toContain("the ones added with Kvasir: Work, and yours");
+    expect(html).toContain("Adding downloads, servers and providers needs Kvasir: Work.");
+    expect(html).not.toContain("admin");
     // Add a model waits for Kvasir to answer with the subscription it offers
     expect(html).not.toContain("Add a model</button>");
   });
 
   it("offers a person who may only see Kvasir nothing to add", () => {
     const html = page(["kvasir:see"]);
-    expect(html).toContain("the ones an admin added");
+    expect(html).toContain("the ones added with Kvasir: Work");
     expect(html).not.toContain("Add a model</button>");
   });
 });

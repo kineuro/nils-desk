@@ -127,10 +127,10 @@ describe("who looks at the page (record 25)", () => {
   it("says a refusal for want of a grant in plain words, and leaves any other refusal as it came", () => {
     const refused = (body: unknown) => new KvasirError(403, "refused", body as KvasirError["body"]);
     expect((plainly(refused({ error: { code: "no_grant", needs: ["assistant:use", "kvasir:see"] } })) as Error).message).toBe(
-      "A subscription of your own needs the assistant and Kvasir: See. An admin gives them on the Identity page.",
+      "A subscription of your own needs the assistant and Kvasir: See. Someone with Identity: Work gives them on the Identity page.",
     );
-    expect((plainly(refused({ error: { code: "no_grant", needs: ["kvasir:work"] } })) as Error).message).toBe("This needs Kvasir: Work, which you do not hold. An admin gives it on the Identity page.");
-    expect((plainly(refused({ error: { code: "no_grant", message: "no grant" } })) as Error).message).toBe("This needs a grant you do not hold. An admin gives it on the Identity page.");
+    expect((plainly(refused({ error: { code: "no_grant", needs: ["kvasir:work"] } })) as Error).message).toBe("This needs Kvasir: Work, which you do not hold. Someone with Identity: Work gives it on the Identity page.");
+    expect((plainly(refused({ error: { code: "no_grant", message: "no grant" } })) as Error).message).toBe("This needs a grant you do not hold. Someone with Identity: Work gives it on the Identity page.");
     expect((plainly(refused({ error: { code: "not_a_person" } })) as Error).message).toMatch(/^Kvasir keeps a subscription for a person/u);
     const other = new KvasirError(409, "in the list already", {});
     expect(plainly(other)).toBe(other);

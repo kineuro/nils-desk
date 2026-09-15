@@ -60,7 +60,7 @@ describe("Add a model's choices", () => {
     expect(choiceWords("subscription", { local, subscription: sub() })).toEqual({
       mark: { icon: "key", tone: "caution" },
       title: "Your own ChatGPT subscription",
-      words: "Sign in with your ChatGPT plan. It answers only your conversations, for the stations an admin lets go to ChatGPT.",
+      words: "Sign in with your ChatGPT plan. It answers only your conversations, for the stations someone with Kvasir: Work sends to ChatGPT.",
     });
     expect(choiceWords("subscription", { local, subscription: sub({ for: "system" }) }).title).toBe("The install's ChatGPT subscription");
   });
