@@ -15,6 +15,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { FolderTable } from "../home/FolderTable";
+import { needsWork } from "../access";
 import { digests, placeName, rows as rowsOf, type FolderRow, type Pack } from "../home/look";
 import { objects, type Place } from "../objects/client";
 import { placesKept } from "../objects/kept";
@@ -226,6 +227,8 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
   const source = d.role === "source";
   const supervised = install !== null && may(caps, "install:work");
   const restarts = source && supervised && install !== null && keptRunning(install);
+  // a place is work on Places, and digesting what it holds is work on Data (record 25)
+  const digesting = needsWork(caps, "Digesting the folder once it is added", [["data:work", "the Data page"]]);
   const working = act.kind === "working";
   const backups = places.filter((p) => p.role === "backup" && p.retired_at === null);
   const chosen = seen.kind === "seen" ? seen.rows.filter((r) => r.dicom && ticked.has(r.name)) : [];
@@ -249,7 +252,7 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
 
   const add = () => {
     if (refusal) return;
-    const queue = !restarts || seen.kind !== "seen" ? [] : d.each ? digests(name, chosen) : chosen.length > 0 ? [wholeDigest(name)] : [];
+    const queue = !restarts || seen.kind !== "seen" || digesting !== null ? [] : d.each ? digests(name, chosen) : chosen.length > 0 ? [wholeDigest(name)] : [];
     const say = (phase: string) => setAct({ kind: "working", phase, since: Date.now() });
     addPlace({ name, role: d.role, path: folder, guarantees: guaranteesOf(draft), restart: restarts, digests: queue }, say)
       .then((words) => {
@@ -358,24 +361,28 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
       {seen.kind === "failed" && <p className="warn">{seen.why}</p>}
       {seen.kind === "seen" && source && (
         <>
-          <div className="field">
-            <span className="label">How to digest it</span>
-            <div className="choices" role="radiogroup">
-              <label className="choice">
-                <input type="radio" name="digest-how" checked={d.each} disabled={working} onChange={() => setD({ ...d, each: true })} />A batch for each folder inside, each with its own rules
-              </label>
-              <label className="choice">
-                <input type="radio" name="digest-how" checked={!d.each} disabled={working} onChange={() => setD({ ...d, each: false })} />
-                One batch for the whole folder
-              </label>
+          {digesting === null ? (
+            <div className="field">
+              <span className="label">How to digest it</span>
+              <div className="choices" role="radiogroup">
+                <label className="choice">
+                  <input type="radio" name="digest-how" checked={d.each} disabled={working} onChange={() => setD({ ...d, each: true })} />A batch for each folder inside, each with its own rules
+                </label>
+                <label className="choice">
+                  <input type="radio" name="digest-how" checked={!d.each} disabled={working} onChange={() => setD({ ...d, each: false })} />
+                  One batch for the whole folder
+                </label>
+              </div>
+              {!restarts && <span className="meta">The digests are queued once the engine reads the folder, which it does once it starts again.</span>}
             </div>
-            {!restarts && <span className="meta">The digests are queued once the engine reads the folder, which it does once it starts again.</span>}
-          </div>
+          ) : (
+            <p className="meta">{digesting}</p>
+          )}
           <FolderTable
             rows={seen.rows}
             ticked={ticked}
             disabled={working}
-            ticks={d.each}
+            ticks={d.each && digesting === null}
             onToggle={(n) =>
               setTicked((t) => {
                 const next = new Set(t);
