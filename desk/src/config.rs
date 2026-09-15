@@ -134,8 +134,9 @@ pub struct Oidc {
     pub client_secret_file: Option<std::path::PathBuf>,
     #[serde(default = "default_scopes")]
     pub scopes: Vec<String>,
-    /// The claim that carries the legacy entitlements, plain strings: each
-    /// stands for its set until a group at the desk follows a provider group.
+    /// The claim that carries the provider's legacy entitlements, plain
+    /// strings: each always stands for its set, beside what the person's
+    /// groups give.
     #[serde(default = "default_roles_claim")]
     pub roles_claim: String,
     /// The claim that carries the provider's groups, plain strings, which a

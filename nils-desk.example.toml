@@ -40,7 +40,7 @@ mode = "off"
 # oidc mode: what `nils-desk register --authentik URL --token FILE --origin
 # <origin> --allow GROUP --bind reader=GROUP ...` prints. A group at the desk
 # follows the provider groups in groups_claim; an entitlement in roles_claim
-# stands for its ladder set until a group follows a provider group.
+# always stands for its ladder set, beside what the person's groups give.
 # [oidc]
 # issuer = "https://auth.example.org/application/o/nils/"
 # client_id = "..."
