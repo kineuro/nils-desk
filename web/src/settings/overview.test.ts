@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
+import { SETS } from "../grants";
 import type { Place } from "../objects/client";
 import type { Backups } from "./database";
 import { attention, auditCard, backupsCard, gatewayCard, partsCard, placesCard, registryCard, signinCard } from "./overview";
@@ -25,7 +26,7 @@ function caps(over: Partial<Capabilities> = {}): Capabilities {
     kvasir: null,
     assistant: null,
     apps: [],
-    person: { subject: "operator", display_name: "the operator", entitlements: ["admin"], roles: ["admin"] },
+    person: { subject: "operator", display_name: "the operator", grants: SETS.admin.grants, detail: "sensitive", groups: ["Admins"] },
     desk: { version: "1.0.0-alpha.16", mode: "off", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
     ...over,
   };

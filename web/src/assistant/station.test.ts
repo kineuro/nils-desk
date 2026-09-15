@@ -4,7 +4,7 @@ import type { Capabilities } from "../capabilities";
 import { stationOf } from "./stations";
 
 const caps = (stations: { id: string }[] | null): Capabilities =>
-  ({ assistant: stations === null ? null : { stations }, kvasir: null, engine: null, apps: [], person: { subject: "a", display_name: "A", entitlements: [], roles: [] }, desk: {} }) as unknown as Capabilities;
+  ({ assistant: stations === null ? null : { stations }, kvasir: null, engine: null, apps: [], person: { subject: "a", display_name: "A", grants: [], detail: "plain", groups: [] }, desk: {} }) as unknown as Capabilities;
 
 describe("the station the pane speaks to", () => {
   it("is the concierge when the assistant serves one, else ask-help", () => {

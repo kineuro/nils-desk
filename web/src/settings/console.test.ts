@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
+import { SETS } from "../grants";
 import type { Place } from "../objects/client";
 import { auditQuery, guaranteeWords, parts, placeRule, updateWords } from "./console";
 import { byHand } from "./supervise";
@@ -11,7 +12,7 @@ function caps(): Capabilities {
     kvasir: { version: "0.4.0", health: { warming: true }, contracts: {} },
     assistant: { version: "0.9.0", contracts: { mcp: "1" } },
     apps: [{ id: "viewer", title: "Viewer", capabilities: { version: "2.0", contracts: { pack: "4" } } }],
-    person: { subject: "p", display_name: "P", entitlements: ["reader"], roles: ["reader"] },
+    person: { subject: "p", display_name: "P", grants: SETS.reader.grants, detail: "plain", groups: ["Readers"] },
     desk: { version: "1.0.0", mode: "off", contracts: { openapi: "3" }, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
   };
 }
