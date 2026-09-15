@@ -4,6 +4,19 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Groups give pages. A group has a name, grants, a detail and, where people sign in at a provider, the provider groups it follows. A grant names a page and how far a person goes there, `see` or `work`, and the assistant's `use`; the detail says what they see in records: `plain`, `quasi` (sex and age) or `sensitive`. A person holds what all their groups give, with grants an admin gives them alone on top, and the desk refuses a change that would leave nobody who may change people and groups. An install starts with Readers, Reviewers, Operators and Admins, made from the ladder when the desk first starts; each person joins the group of their top step and keeps `assist` as a grant of their own.
+- The identity doors: `GET /desk/groups` and `GET /desk/access` for `identity:see`; `POST /desk/groups`, `PUT` and `DELETE /desk/groups/{id}`, `POST /desk/users` and `PUT /desk/access/{subject}` for `identity:work`, each from the desk's own origin, as signing in and out now are. `GET /desk/users` and `PUT /desk/users/{name}/entitlements` answer for one release, a ladder name standing for its set.
+- The command line: `nils-desk user add <name>` takes `--group`, `--grant` and `--detail` beside `--admin`, which joins Admins; `nils-desk user access <name>` sets what a person holds, and `user grant` answers for one release; `nils-desk group list|add|set|remove`. `--entitlement` still takes a ladder name, as its set, for one release.
+- `[oidc] groups_claim`, `groups` unless set.
+
+### Changed
+
+- The desk signs the tokens the engine, Kvasir, the assistant and apps receive wherever people sign in, with `grants` and `detail` and no `roles`, minted again when what a person holds changes. In `oidc` mode the provider says who a person is and which groups they are in, and the token's subject is the provider's subject at the provider's host, as the parts knew it; everyone signs in once more after the update. The engine and Kvasir trust the desk's issuer, keeping its subjects, beside the provider, as the settings page and `nils-desk register` print.
+- The capabilities document names a person's `grants`, `detail` and `groups` in place of entitlements and roles, and the desk speaks suite 2: an engine that speaks suite 1 is a contract mismatch.
+- The assistant's doors need `assistant:use`, the supervisor's `install:work`, an app's its entitlement (a grant or a ladder name), and reading results `query:see`. An export needs `query:work` unless the configuration names another grant or a ladder name.
+
 ## [1.0.0-alpha.27] - 2026-09-15
 
 No change of its own. Released beside the engine's 1.0.0-alpha.27 so the two stay in step: a container install names both images with the engine's version.
