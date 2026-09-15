@@ -3,7 +3,8 @@
 //! The shared grants vectors (`contracts/suite/v2/vectors/grants.json`,
 //! copied verbatim to `tests/vectors/grants.json`), run where the desk meets
 //! them: the ladder's sets, which the migration makes its groups from; a
-//! list of names, as `--entitlement` and a legacy entitlement give them.
+//! list of names, as `--entitlement` and a legacy entitlement give them; a
+//! provider's claims; and the subject the desk names a provider's person by.
 
 use nils_desk::grants::{self, Access};
 use serde_json::Value;
@@ -132,4 +133,26 @@ fn a_list_of_names_stands_for_its_sets_and_grants() {
         let got = grants::of_names(case["roles"].as_str().unwrap().split(','));
         matches(name, &case["expect"], &got);
     }
+}
+
+/// Under `oidc` the desk names a provider's person to the parts as the
+/// provider's subject at the provider's host, as an entry that keeps no
+/// subjects named them before the desk signed for its people; the desk's own
+/// entry then keeps that subject as it is. So the cases a desk qualifies run
+/// here, and a subject already qualified is left to the entry that keeps it.
+#[test]
+fn a_providers_subject_is_named_as_an_entry_that_keeps_none_names_it() {
+    let v = vectors();
+    let mut ran = 0;
+    for case in v["principals"].as_array().unwrap() {
+        let sub = case["sub"].as_str().unwrap();
+        if case["keep_subject"] == true && sub.contains('@') {
+            continue;
+        }
+        let name = case["name"].as_str().unwrap();
+        let got = nils_desk::issuer::principal(case["iss"].as_str().unwrap(), sub);
+        assert_eq!(got, case["expect"].as_str().unwrap(), "{name}");
+        ran += 1;
+    }
+    assert!(ran >= 2, "the vectors name the subjects a desk qualifies");
 }
