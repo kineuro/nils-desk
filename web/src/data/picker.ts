@@ -4,11 +4,25 @@
 // folders to look inside next, what a look found, the folders chosen from
 // anywhere with the chosen folder each is inside, and the digest each becomes.
 
+import { needsWork } from "../access";
+import type { Capabilities } from "../capabilities";
 import { slug } from "../home/look";
 import type { FolderEntry, FolderPage, IngestRoot, LookedFolder, PlaceRef } from "./browse";
 
 /** The folders a look is asked about at once, as the engine takes them. */
 export const LOOK_AT_ONCE = 64;
+
+/**
+ * Why a new folder may not be added as a source, in words, or null when it
+ * may: its digests are work on Data, and adding the place is work on Places
+ * (record 25). Choosing a folder a source already holds needs neither words.
+ */
+export function newFolderRefusal(caps: Capabilities): string | null {
+  return needsWork(caps, "Bringing DICOM in from a new folder", [
+    ["data:work", "the Data page"],
+    ["places:work", "the Places page"],
+  ]);
+}
 
 const n = (v: number) => v.toLocaleString("en-GB");
 
