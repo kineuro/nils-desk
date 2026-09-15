@@ -97,6 +97,8 @@ export interface Signals extends Json {
   diagnostics: Record<string, number>;
   shadowed_keywords: string[];
   unused_overlay_terms: string[];
+  /** Record 26: per axis, per value, how many stacks were decided there and how many are unsure; an older engine sends none. */
+  by_value?: Record<string, Record<string, { decided?: number; unsure?: number }>>;
 }
 
 export interface OverlayRow {
@@ -117,7 +119,8 @@ export const ops = {
   job: (id: number) => door<JobRow>("GET", `/api/jobs/${id}`),
   cancel: (id: number) => door<{ job: number; state: string }>("POST", `/api/jobs/${id}/cancel`),
   enqueue: (command: string[], name?: string) => door<{ job: number; state: string }>("POST", "/api/jobs", name ? { command, name } : { command }),
-  review: (status?: string, kind?: string, limit = 50) => door<{ count: number; items: ReviewItem[] }>("GET", `/api/review${q({ status, kind, limit })}`),
+  /** Record 26: `cohort` narrows the queue to the subjects with an open membership there, on an engine that serves the filter. */
+  review: (status?: string, kind?: string, limit = 50, cohort?: string) => door<{ count: number; items: ReviewItem[] }>("GET", `/api/review${q({ status, kind, limit, cohort })}`),
   reviewItem: (id: number) => door<ReviewItem>("GET", `/api/review/${id}`),
   reviewApply: (id: number, body: Json) => door<Json>("POST", `/api/review/${id}/apply`, body),
   reviewAccept: (id: number, why?: string) => door<Json>("POST", `/api/review/${id}/accept`, why ? { why } : {}),
@@ -143,5 +146,5 @@ export const data = {
   pack: (name: string) => door<Json>("GET", `/api/packs/${encodeURIComponent(name)}`),
   batches: (limit = 50) => door<{ count: number; batches: Batch[] }>("GET", `/api/batches${q({ limit })}`),
   batch: (id: number) => door<Batch>("GET", `/api/batches/${id}`),
-  quarantine: (batch?: number, cls?: string, limit = 100) => door<{ count: number; files: Json[] }>("GET", `/api/quarantine${q({ batch, class: cls, limit })}`),
+  quarantine: (batch?: number, cls?: string, limit = 100, cohort?: string) => door<{ count: number; files: Json[] }>("GET", `/api/quarantine${q({ batch, class: cls, limit, cohort })}`),
 };

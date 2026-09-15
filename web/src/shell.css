@@ -1336,3 +1336,87 @@ dl.facts .row.wrap .input { min-height: 1.75rem; }
   .cpage .data-head > .button { flex: 1 1 auto; }
 }
 /* ---------------------------------------------------------------- end of record 26: Data / Cohorts, a cohort's page, New cohort from a card, and the Release page */
+
+/* ---------------------------------------------------------------- record 26, D4: the Review page (the queue by cohort, the rules with every axis, the identifiers), Why is this, the viewer in its dialog, and a station's run */
+/* the page's three sub-pages as chips under the head, the cohorts, and what was just done */
+.review .chips.pages a { text-decoration: none; }
+.review .chips.pages a:hover { border-color: var(--n-brand-line); color: var(--n-text); }
+.review .chips.pages a.on:hover { color: var(--n-brand-fg); }
+.review .chips .opt b { margin-left: 0.35rem; font-weight: 500; }
+.review .chips-note { margin-left: 0.4rem; }
+.review .said { display: flex; align-items: center; gap: 0.4rem; color: var(--n-ok-fg); }
+/* the three kinds on top, each a card with its count first */
+.needs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.9rem; }
+.need { display: grid; gap: 0.3rem; align-content: start; min-width: 0; padding: 0.75rem 0.9rem; border: 1px solid var(--n-caution-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.need.quiet { border-color: var(--n-line); color: var(--n-text-dim); }
+.need .value { font-family: var(--n-font-serif); font-size: 1.45rem; line-height: 1.15; color: var(--n-text); }
+.need .row { padding-top: 0.2rem; }
+/* the queue: a decided row fades, the acts keep to the right */
+table.thin.queue tr.decided td { color: var(--n-text-faint); }
+table.thin.queue td.path, table.thin.rules td.words .path { overflow-wrap: anywhere; }
+/* the rules: the pack strip in one line of four, the axes rail, the words with the site's on top */
+.strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.strip > div { display: grid; gap: 0.15rem; min-width: 0; padding: 0.55rem 0.7rem 0.6rem; border-top: 4px solid var(--n-bg-sunken); background: var(--n-bg-raised); }
+.strip > div.done { border-top-color: var(--n-ok-icon); }
+.strip > div.now { border-top-color: var(--n-brand); }
+.strip > div.wait { border-top-color: var(--n-caution-icon); }
+.strip > div.failed { border-top-color: var(--n-blocked-icon); }
+.strip .k { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--n-text-faint); }
+.strip .v { font-family: var(--n-font-serif); font-size: 1.35rem; line-height: 1.15; }
+.strip .v small { font-family: var(--n-font-sans); font-size: 13px; color: var(--n-text-faint); }
+.strip .meta { min-width: 0; overflow-wrap: anywhere; }
+.strip.small > div { padding: 0.3rem 0.5rem 0.35rem; border-top-width: 3px; }
+.strip.small .v { font-size: 1.05rem; }
+.strip.small .k { font-size: 11px; }
+.review .section-head { flex-wrap: wrap; }
+.review .section-head .chips { flex: 0 1 auto; }
+table.thin.rules td.words { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; min-width: 12rem; }
+table.thin.rules td.words .tag { white-space: normal; }
+table.thin.proposals td b { font-weight: 500; }
+/* the explanation's decision: the value beside its scope */
+.input.select select { padding-right: 0.2rem; }
+/* the viewer in a dialog: axial, coronal, sagittal as tabs, the stage with the server's first picture over it, the footer's numbers */
+.viewer { display: grid; gap: 0.5rem; min-width: 0; }
+.viewer-axes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.viewer-axes button { min-height: 1.65rem; padding: 0 0.65rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text-dim); font: inherit; font-size: var(--n-text-size-small); cursor: pointer; }
+.viewer-axes button.on { border-color: var(--n-brand-text); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
+.viewer-stage { position: relative; aspect-ratio: 1; max-height: 60vh; overflow: hidden; border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.viewer-element { position: absolute; inset: 0; }
+.viewer-first { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.viewer-mpr { display: grid; gap: 0.4rem; }
+.viewer-mpr img { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.viewer-mpr input[type="range"] { width: 100%; accent-color: var(--n-brand); }
+.viewer-foot { overflow-wrap: anywhere; }
+.viewer.gated .failure { margin: 0; }
+@media (min-width: 641px) {
+  .dialog:has(.viewer) { width: min(52rem, calc(100vw - 2rem)); }
+  .dialog:has(.run) { width: min(48rem, calc(100vw - 2rem)); }
+}
+/* a station's run: its head, the phases as a timeline, the probe's shapes as bars, the acts */
+.run { display: grid; gap: 1rem; align-content: start; min-width: 0; }
+.run-head { align-items: flex-start; gap: 0.8rem; }
+.run-title { display: grid; gap: 0.2rem; min-width: 0; }
+.run-title h2 { overflow-wrap: anywhere; }
+.run-acts { flex-wrap: wrap; }
+.tl { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.tl li { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 0.6rem; padding: 0.35rem 0; font-size: 14px; }
+.tl li::before { content: ""; width: 8px; height: 8px; margin: 6px 0 0 3px; border-radius: 50%; background: var(--n-neutral-icon); }
+.tl li.done::before { background: var(--n-ok-icon); }
+.tl li.now::before { background: var(--n-brand); }
+.tl li.wait::before { background: var(--n-caution-icon); }
+.tl li.failed::before { background: var(--n-blocked-icon); }
+.tl li + li::after { content: ""; position: absolute; top: -8px; left: 6.5px; height: 14px; border-left: 1px solid var(--n-line); }
+.tl li > span { display: grid; gap: 0.1rem; min-width: 0; }
+.tl .meta { display: block; overflow-wrap: anywhere; }
+.bybase { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 0.35rem 0.8rem; align-items: center; font-size: 14px; }
+.bybase-row { display: contents; }
+.bybase .bar { height: 8px; overflow: hidden; border-radius: 2px; background: var(--n-bg-sunken); }
+.bybase .bar i { display: block; height: 100%; background: var(--n-brand-line); }
+.bybase .bar i.unsure { background: var(--n-caution-icon); }
+@media (max-width: 860px) {
+  .needs { grid-template-columns: minmax(0, 1fr); }
+  .strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* the queue and the rules keep what a row is about in sight; the batch and the flag go under on wider windows only */
+  table.thin.queue th:nth-child(3), table.thin.queue td:nth-child(3), table.thin.rules th:nth-child(3), table.thin.rules td:nth-child(3) { display: none; }
+}
+/* ---------------------------------------------------------------- end of record 26, D4 */

@@ -16,6 +16,8 @@ export const STATION_WORDS: Record<string, string> = {
   concierge: "Asks about the registry",
   "ask-help": "Builds queries",
   operator: "Plans work",
+  "keyword-tune": "Tunes the sorting words",
+  "identity-check": "Checks who a file is about",
 };
 
 /** How full a conversation's context is, as the assistant last saw it (the chat, slice 3). */

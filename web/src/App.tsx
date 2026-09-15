@@ -27,6 +27,7 @@ import { ready as readyToStart } from "./home/setup";
 import { Setup } from "./home/Setup";
 import { placesKept } from "./objects/kept";
 import { ProfilePage } from "./profile/ProfilePage";
+import { ReviewPage } from "./review/ReviewPage";
 import { href, parse, type Route } from "./routes";
 import { assistantOffered, foot, initials, sections, usable } from "./sections";
 import { where } from "./settings/install";
@@ -258,6 +259,7 @@ export function App() {
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
           {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
+          {ready && active?.id === "review" && <ReviewPage caps={caps} page={route.page} query={route.query} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {onProfile && <ProfilePage caps={caps} />}
