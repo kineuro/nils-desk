@@ -230,7 +230,7 @@ export function SubscriptionCard(props: { row: Subscription; may?: boolean; stat
       )}
       {signed && stations && <span className="meta">{answeredWords(sub, stations)}</span>}
       {(button || more) && (
-        <div className="row">
+        <div className="row acts">
           {button}
           {more}
         </div>

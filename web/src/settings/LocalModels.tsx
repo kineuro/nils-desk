@@ -339,7 +339,7 @@ export function LocalModelCard(props: {
       {run?.state === "failed" && <RunFailure run={run} />}
       {answers && started(m) && <span className="meta">{answers}</span>}
       <Files model={m} runtime={runtime} />
-      <div className="row">
+      <div className="row acts">
         {runActionsOf(m).map((a) =>
           a === "start" ? (
             <button key={a} type="button" className="button small" disabled={busy || !onStart} onClick={onStart}>

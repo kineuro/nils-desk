@@ -43,7 +43,7 @@ describe("a model Kvasir holds", () => {
     expect(html).toContain("Your server · SGLang · 131,072 tokens");
     expect(html).toMatch(/<span class="tag ok"><span class="dot ok"><\/span>admitted 15 Sept?<\/span>/u);
     expect(html).toContain("answers keyword-tune");
-    expect(html).toContain(">Check</button>");
+    expect(html).toMatch(/<div class="row acts"><button type="button" class="button secondary small">Check<\/button>/u);
     expect(html).toContain('<summary class="button quiet small" aria-label="More for qwen36-27b-fast">');
     expect(html).toContain(">Remove</button>");
   });

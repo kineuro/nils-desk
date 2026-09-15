@@ -87,7 +87,7 @@ export function BackendCard(props: { card: ModelCard; work: boolean; busy?: bool
       {c.detail && <span className="meta">{c.detail}</span>}
       {c.answers && <span className="meta">{c.answers}</span>}
       {work && c.first && (
-        <div className="row">
+        <div className="row acts">
           {c.kind === "provider" ? (
             <button type="button" className="button secondary small" disabled={busy} onClick={onKey}>
               {c.backend.credential === true ? "Replace key" : "Store its key"}
