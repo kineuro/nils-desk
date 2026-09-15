@@ -5,7 +5,9 @@
 // admission records, the minted keys, the ChatGPT subscription, and the local
 // models Kvasir downloads with where they go, the Hugging Face token, and a
 // model started or stopped on llama.cpp (record 24). Every write goes through
-// the same identity as the data, and the desk's cross-origin defences.
+// the same identity as the data, and the desk's cross-origin defences. Kvasir
+// guards each door with the person's grants (record 25) and says which grants
+// a refused door needs.
 
 import type { Json } from "../ask/client";
 
@@ -52,6 +54,9 @@ function unlessAbsent<T>(p: Promise<T>): Promise<T | null> {
 
 export type Locality = "local" | "remote";
 
+/** Record 24: the backend Kvasir holds the models it started on llama.cpp under; an added backend takes another name. */
+export const RUNTIME_BACKEND = "llama-cpp";
+
 /** One model a backend serves, as Kvasir holds it. */
 export interface BackendEntry {
   id: string;
@@ -78,7 +83,7 @@ export interface Backend {
   id: string;
   kind: string;
   locality: Locality;
-  /** Where the backend answers, who added it and when (milliseconds): an admin's to see. */
+  /** Where the backend answers, who added it and when (milliseconds): shown only to a person with Kvasir: Work. */
   base_url?: string;
   added_by?: string;
   added_at?: number;
@@ -328,13 +333,14 @@ export const kvasir = {
   /** A backend's key, kept under the backend's id and never shown. */
   credential: (backend: string, secret: string) => door<{ provider: string; stored: boolean; shown: string }>("PUT", `/v1/credentials/${encodeURIComponent(backend)}`, { secret }),
   forget: (backend: string) => door<Json>("DELETE", `/v1/credentials/${encodeURIComponent(backend)}`),
-  /** The subscriptions this person may sign in with; null where Kvasir does not serve the door yet. */
+  /** This person's own subscription, or the install's where nobody signs in; null where Kvasir does not serve the door yet. */
   subscriptions: () => unlessAbsent(door<{ subscriptions: Subscription[] }>("GET", "/v1/subscriptions")),
-  /** A sign-in begun: a code the person enters at a link, then approves. */
+  /** A sign-in begun: a code the person enters at a link, then approves. Record 25: it needs the assistant and Kvasir: See. */
   signIn: (provider: string) => door<SignInStarted>("POST", `/v1/subscriptions/${encodeURIComponent(provider)}/sign-in`, {}),
   chooseModel: (provider: string, model: string) => door<Subscription>("PUT", `/v1/subscriptions/${encodeURIComponent(provider)}`, { model }),
+  /** Signing out needs only the person. */
   signOut: (provider: string) => door<Json>("DELETE", `/v1/subscriptions/${encodeURIComponent(provider)}`),
-  /** Record 23: the models Kvasir downloads from the Hugging Face Hub; every door is an admin's. */
+  /** Record 23: the models Kvasir downloads from the Hugging Face Hub; record 25: every door needs Kvasir: Work. */
   local: {
     /** Where new downloads go, the token and every model; null where Kvasir does not serve local models yet. */
     status: () => unlessAbsent(door<LocalStatus>("GET", "/v1/local")),
@@ -365,6 +371,22 @@ export function localRefusalOf(e: unknown): LocalRefusal | null {
   const error = (typeof e.body.error === "object" && e.body.error !== null ? e.body.error : {}) as { code?: unknown; free_bytes?: unknown; needed_bytes?: unknown };
   const size = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
   return { status: e.status, code: typeof error.code === "string" ? error.code : null, message: e.message, free_bytes: size(error.free_bytes), needed_bytes: size(error.needed_bytes) };
+}
+
+/** A door refused for want of a grant (record 25): the grants Kvasir names, or a subscription asked for with no person behind the call. */
+export interface GrantRefusal {
+  code: "no_grant" | "not_a_person";
+  needs: string[];
+}
+
+/** A refusal for want of a grant as the page reads it, or null for any other answer. */
+export function grantRefusalOf(e: unknown): GrantRefusal | null {
+  if (!(e instanceof KvasirError) || e.status !== 403) return null;
+  const error = (typeof e.body.error === "object" && e.body.error !== null ? e.body.error : {}) as { code?: unknown; needs?: unknown };
+  if (error.code === "not_a_person") return { code: "not_a_person", needs: [] };
+  if (error.code !== "no_grant") return null;
+  const needs = Array.isArray(error.needs) ? error.needs.filter((g): g is string => typeof g === "string") : [];
+  return { code: "no_grant", needs };
 }
 
 /** What each model said, where an add was refused because one did not answer. */
