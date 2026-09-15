@@ -2,10 +2,12 @@
 
 //! `oidc` mode: the provider through the authorization code grant with PKCE
 //! (Wave 4c §5.1, §5.4). The desk is a confidential client: it holds the
-//! secret, the person's access and refresh tokens live in the session row,
-//! the access token is pushed to the parts and refreshed before its expiry.
-//! The id token is verified against the provider's JWKS, and the
-//! entitlements are read from the claim the provider was registered to emit.
+//! secret, and the person's access and refresh tokens live in the session
+//! row, refreshed before their expiry so a person the provider no longer
+//! signs in is refused. The id token is verified against the provider's
+//! JWKS; it says who the person is, the groups they are in (`groups_claim`)
+//! and any legacy entitlements (`roles_claim`). The parts receive the token
+//! the desk mints, never the provider's.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -29,13 +31,31 @@ pub struct Authenticated {
     pub subject: String,
     pub display: String,
     pub email: Option<String>,
-    pub entitlements: Vec<String>,
+    /// The name the person signs in with at the provider.
+    pub username: Option<String>,
+    /// The provider's groups, from `groups_claim`.
+    pub groups: Vec<String>,
+    /// The legacy entitlements, from `roles_claim`.
+    pub roles: Vec<String>,
     /// What the session keeps: access, refresh, expires_at (unix seconds).
     pub tokens: Value,
 }
 
 fn b64(bytes: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+/// The strings of a claim that is an array; nothing otherwise.
+fn strings(claim: &Value) -> Vec<String> {
+    claim
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 impl Client {
@@ -179,15 +199,9 @@ impl Client {
                 .unwrap_or("")
                 .to_string(),
             email: claims["email"].as_str().map(str::to_string),
-            entitlements: claims[&self.config.roles_claim]
-                .as_array()
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str())
-                        .map(str::to_string)
-                        .collect()
-                })
-                .unwrap_or_default(),
+            username: claims["preferred_username"].as_str().map(str::to_string),
+            groups: strings(&claims[&self.config.groups_claim]),
+            roles: strings(&claims[&self.config.roles_claim]),
             tokens: json!({
                 "access": access,
                 "refresh": body["refresh_token"],

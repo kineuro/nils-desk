@@ -2,10 +2,12 @@
 
 //! The three identity modes (Wave 4c §5.1, §5.7 to §5.9): `local`, where the
 //! desk is a small issuer and the engine cannot tell; `oidc`, against a fake
-//! provider through the authorization code grant with PKCE; and the
+//! provider through the authorization code grant with PKCE, where the desk
+//! signs for the person with what the provider's groups give; and the
 //! registration script against a fake Authentik, idempotent on its second
 //! run. Two users on a laptop in local mode; a person renamed at the
-//! provider moves no row.
+//! provider moves no row; groups and people changed through the identity
+//! doors; the parts the desk opens by grant.
 
 use std::sync::{Arc, Mutex};
 
@@ -14,6 +16,9 @@ use axum::extract::{Query, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{any, get, post};
+use nils_desk::grants::{self, Access, Detail};
+use nils_desk::store::{Change, Claims};
+use nils_desk::users::Given;
 use serde_json::{Value, json};
 
 /// A fake engine that echoes the bearer it saw.
@@ -43,6 +48,28 @@ async fn fake_engine() -> String {
     url
 }
 
+/// A part that answers anything, and the bearer each call to it carried.
+async fn fake_part() -> (String, Arc<Mutex<Vec<String>>>) {
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let log = heard.clone();
+    let app = Router::new().fallback(move |headers: HeaderMap| {
+        let log = log.clone();
+        async move {
+            let bearer = headers
+                .get("authorization")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .to_string();
+            log.lock().unwrap().push(bearer.clone());
+            axum::Json(json!({ "bearer": bearer }))
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    (url, heard)
+}
+
 /// A desk on a free port from the configuration text, with `{origin}` and
 /// `{dir}` filled in.
 async fn desk(text: &str) -> (String, Arc<nils_desk::Desk>, std::path::PathBuf) {
@@ -69,6 +96,84 @@ fn cookie_of(r: &reqwest::Response) -> String {
         .to_string()
 }
 
+fn client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap()
+}
+
+/// A write from the desk's own front end: the header a cross-origin form
+/// cannot send, and the desk's own origin.
+fn ours(r: reqwest::RequestBuilder, origin: &str) -> reqwest::RequestBuilder {
+    r.header("x-nils-desk", "1").header("origin", origin)
+}
+
+async fn login(client: &reqwest::Client, origin: &str, username: &str, password: &str) -> String {
+    let r = ours(client.post(format!("{origin}/desk/login")), origin)
+        .json(&json!({"username": username, "password": password}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200, "{username} logs in");
+    cookie_of(&r)
+}
+
+async fn get_json(client: &reqwest::Client, url: String, cookie: &str) -> Value {
+    client
+        .get(url)
+        .header("cookie", cookie)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+/// The claims of a bearer the desk minted, verified against its own JWKS.
+async fn claims_of(client: &reqwest::Client, origin: &str, bearer: &str) -> Value {
+    let token = bearer.strip_prefix("Bearer ").expect("a bearer");
+    let jwks: jsonwebtoken::jwk::JwkSet = client
+        .get(format!("{origin}/.well-known/jwks.json"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let header = jsonwebtoken::decode_header(token).unwrap();
+    let jwk = jwks
+        .find(header.kid.as_deref().unwrap())
+        .expect("the key the token names");
+    let key = jsonwebtoken::DecodingKey::from_jwk(jwk).unwrap();
+    let mut v = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
+    v.set_issuer(&[origin]);
+    v.set_audience(&["nils"]);
+    jsonwebtoken::decode::<Value>(token, &key, &v)
+        .unwrap()
+        .claims
+}
+
+/// The grants a list of names stands for, as the desk lists them.
+fn grants_of(names: &[&str]) -> Value {
+    json!(grants::of_names(names.iter().copied()).list())
+}
+
+fn admin() -> Given {
+    Given {
+        admin: true,
+        ..Default::default()
+    }
+}
+
+fn entitled(names: &[&str]) -> Given {
+    Given {
+        entitlements: names.iter().map(|n| n.to_string()).collect(),
+        ..Default::default()
+    }
+}
+
 #[tokio::test]
 async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
     let engine = fake_engine().await;
@@ -83,14 +188,13 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(meta.permissions().mode() & 0o777, 0o600);
     }
-    // the first user is the admin, who uses the assistant too; the second holds nothing yet
+    // the first user is an admin, in Admins; the second holds nothing yet
     nils_desk::users::add(
         &shared.store,
         "anna",
         "correct horse battery",
         Some("Anna"),
-        &[],
-        true,
+        &admin(),
     )
     .unwrap();
     nils_desk::users::add(
@@ -98,8 +202,7 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
         "bo",
         "another long password",
         Some("Bo"),
-        &[],
-        false,
+        &Given::default(),
     )
     .unwrap();
     assert!(
@@ -108,16 +211,12 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
             "bo",
             "another long password",
             None,
-            &[],
-            false
+            &Given::default()
         )
         .is_err(),
         "no duplicate"
     );
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .unwrap();
+    let client = client();
 
     // nobody: the document names the login, the shell names the state
     let doc: Value = client
@@ -130,86 +229,66 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
         .unwrap();
     assert_eq!(doc["desk"]["signed_in"], false, "{doc}");
     assert_eq!(doc["desk"]["login"]["kind"], "password", "{doc}");
-    assert_eq!(doc["person"]["entitlements"], json!([]));
-    // a wrong password
-    let r = client
-        .post(format!("{origin}/desk/login"))
-        .json(&json!({"username": "anna", "password": "wrong"}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(r.status(), 401);
-    // anna logs in
+    assert_eq!(doc["person"]["grants"], json!([]));
+    assert_eq!(doc["person"]["groups"], json!([]));
+    // a login posted from another site is refused before the password is looked at
     let r = client
         .post(format!("{origin}/desk/login"))
         .json(&json!({"username": "anna", "password": "correct horse battery"}))
         .send()
         .await
         .unwrap();
-    assert_eq!(r.status(), 200);
-    let anna = cookie_of(&r);
-    assert!(anna.starts_with("nils_desk="));
-    let doc: Value = client
-        .get(format!("{origin}/desk/capabilities"))
-        .header("cookie", &anna)
+    assert_eq!(r.status(), 403);
+    let r = client
+        .post(format!("{origin}/desk/login"))
+        .header("x-nils-desk", "1")
+        .header("origin", "https://evil.example")
+        .json(&json!({"username": "anna", "password": "correct horse battery"}))
         .send()
         .await
-        .unwrap()
-        .json()
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    // a wrong password
+    let r = ours(client.post(format!("{origin}/desk/login")), &origin)
+        .json(&json!({"username": "anna", "password": "wrong"}))
+        .send()
         .await
         .unwrap();
+    assert_eq!(r.status(), 401);
+    // anna logs in, and holds what Admins give
+    let anna = login(&client, &origin, "anna", "correct horse battery").await;
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &anna).await;
     assert_eq!(doc["person"]["display_name"], "Anna");
-    assert_eq!(
-        doc["person"]["entitlements"],
-        json!(["admin", "assist"]),
+    assert_eq!(doc["person"]["grants"], json!(grants::GRANTS), "{doc}");
+    assert_eq!(doc["person"]["detail"], "sensitive");
+    assert_eq!(doc["person"]["groups"], json!(["Admins"]));
+    assert!(
+        doc["person"].get("entitlements").is_none() && doc["person"].get("roles").is_none(),
         "{doc}"
     );
     assert_eq!(doc["desk"]["signed_in"], true);
 
     // a proxied write carries a token the desk minted for anna, which the
     // engine verifies against the desk's own JWKS
-    let r = client
-        .post(format!("{origin}/api/jobs"))
+    let r = ours(client.post(format!("{origin}/api/jobs")), &origin)
         .header("cookie", &anna)
-        .header("x-nils-desk", "1")
-        .header("origin", &origin)
         .body("{}")
         .send()
         .await
         .unwrap();
     assert_eq!(r.status(), 202);
     let got: Value = r.json().await.unwrap();
-    let token = got["bearer"]
-        .as_str()
-        .unwrap()
-        .strip_prefix("Bearer ")
-        .expect("a bearer")
-        .to_string();
-    let jwks: jsonwebtoken::jwk::JwkSet = client
-        .get(format!("{origin}/.well-known/jwks.json"))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    let header = jsonwebtoken::decode_header(&token).unwrap();
-    let jwk = jwks
-        .find(header.kid.as_deref().unwrap())
-        .expect("the key the token names");
-    let key = jsonwebtoken::DecodingKey::from_jwk(jwk).unwrap();
-    let mut v = jsonwebtoken::Validation::new(jsonwebtoken::Algorithm::EdDSA);
-    v.set_issuer(&[origin.as_str()]);
-    v.set_audience(&["nils"]);
-    let claims = jsonwebtoken::decode::<Value>(&token, &key, &v)
-        .unwrap()
-        .claims;
+    let claims = claims_of(&client, &origin, got["bearer"].as_str().unwrap()).await;
     assert_eq!(claims["sub"], "anna");
+    assert_eq!(claims["preferred_username"], "anna");
+    assert_eq!(claims["name"], "Anna");
     assert_eq!(
-        claims["roles"],
-        json!(["admin", "assist"]),
-        "no wider than the stored entitlements: {claims}"
+        claims["grants"],
+        json!(grants::GRANTS),
+        "sorted, and no wider than what anna holds: {claims}"
     );
+    assert_eq!(claims["detail"], "sensitive");
+    assert!(claims.get("roles").is_none(), "no roles: {claims}");
     assert!(
         claims["exp"].as_i64().unwrap() - claims["iat"].as_i64().unwrap() <= 15 * 60,
         "fifteen minutes"
@@ -223,26 +302,15 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
         .await
         .unwrap();
     assert_eq!(disc["issuer"], origin);
+    assert_eq!(disc["token_endpoint"], format!("{origin}/desk/cli-login"));
+    let supported = disc["claims_supported"].as_array().unwrap();
+    assert!(supported.contains(&json!("grants")) && supported.contains(&json!("detail")));
 
     // bo logs in and holds nothing: the unbound person, never a 403 body
-    let r = client
-        .post(format!("{origin}/desk/login"))
-        .json(&json!({"username": "bo", "password": "another long password"}))
-        .send()
-        .await
-        .unwrap();
-    let bo = cookie_of(&r);
-    let doc: Value = client
-        .get(format!("{origin}/desk/capabilities"))
-        .header("cookie", &bo)
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(doc["person"]["entitlements"], json!([]), "{doc}");
-    // bo is no admin: the users page refuses
+    let bo = login(&client, &origin, "bo", "another long password").await;
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &bo).await;
+    assert_eq!(doc["person"]["grants"], json!([]), "{doc}");
+    // bo holds no identity:see: the users page refuses
     let r = client
         .get(format!("{origin}/desk/users"))
         .header("cookie", &bo)
@@ -250,95 +318,77 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
         .await
         .unwrap();
     assert_eq!(r.status(), 403);
-    // anna grants bo reader and assist on the settings page; a grant shows at once
-    let r = client
-        .put(format!("{origin}/desk/users/bo/entitlements"))
-        .header("cookie", &anna)
-        .header("x-nils-desk", "1")
-        .header("origin", &origin)
-        .json(&json!({"entitlements": ["reader", "assist"]}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(r.status(), 200, "{}", r.text().await.unwrap());
-    let doc: Value = client
-        .get(format!("{origin}/desk/capabilities"))
-        .header("cookie", &bo)
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    // anna gives bo reader and assist through the users door of the ladder,
+    // which answers for one release; it shows at once
+    let r = ours(
+        client.put(format!("{origin}/desk/users/bo/entitlements")),
+        &origin,
+    )
+    .header("cookie", &anna)
+    .json(&json!({"entitlements": ["reader", "assist"]}))
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(body["entitlements"], json!(["reader", "assist"]), "{body}");
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &bo).await;
     assert_eq!(
-        doc["person"]["entitlements"],
-        json!(["reader", "assist"]),
+        doc["person"]["grants"],
+        grants_of(&["reader", "assist"]),
         "{doc}"
     );
+    assert_eq!(doc["person"]["detail"], "plain");
     // and bo's next proxied call carries them
-    let r = client
+    let got: Value = client
         .get(format!("{origin}/api/jobs"))
         .header("cookie", &bo)
         .send()
         .await
-        .unwrap();
-    let got: Value = r.json().await.unwrap();
-    let token = got["bearer"]
-        .as_str()
-        .unwrap()
-        .strip_prefix("Bearer ")
-        .unwrap()
-        .to_string();
-    let claims = jsonwebtoken::decode::<Value>(&token, &key, &v)
-        .unwrap()
-        .claims;
-    assert_eq!(claims["roles"], json!(["reader", "assist"]));
-    // an unknown entitlement is refused; an admin does not revoke their own
-    let r = client
-        .put(format!("{origin}/desk/users/bo/entitlements"))
-        .header("cookie", &anna)
-        .header("x-nils-desk", "1")
-        .header("origin", &origin)
-        .json(&json!({"entitlements": ["king"]}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(r.status(), 400);
-    let r = client
-        .put(format!("{origin}/desk/users/anna/entitlements"))
-        .header("cookie", &anna)
-        .header("x-nils-desk", "1")
-        .header("origin", &origin)
-        .json(&json!({"entitlements": ["reader"]}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(r.status(), 400);
-    // the users page lists both
-    let list: Value = client
-        .get(format!("{origin}/desk/users"))
-        .header("cookie", &anna)
-        .send()
-        .await
         .unwrap()
         .json()
         .await
         .unwrap();
-    assert_eq!(list["users"].as_array().unwrap().len(), 2);
+    let claims = claims_of(&client, &origin, got["bearer"].as_str().unwrap()).await;
+    assert_eq!(claims["grants"], grants_of(&["reader", "assist"]));
+    assert_eq!(claims["detail"], "plain");
+    // an unknown entitlement is refused; so is taking identity:work from the only person holding it
+    let r = ours(
+        client.put(format!("{origin}/desk/users/bo/entitlements")),
+        &origin,
+    )
+    .header("cookie", &anna)
+    .json(&json!({"entitlements": ["king"]}))
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 400);
+    let r = ours(
+        client.put(format!("{origin}/desk/users/anna/entitlements")),
+        &origin,
+    )
+    .header("cookie", &anna)
+    .json(&json!({"entitlements": ["reader"]}))
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 409);
+    let body: Value = r.json().await.unwrap();
+    assert!(body["error"].is_string(), "{body}");
+    // the users page lists both, in entitlements
+    let list = get_json(&client, format!("{origin}/desk/users"), &anna).await;
+    let users = list["users"].as_array().unwrap();
+    assert_eq!(users.len(), 2);
     // each with when they last signed in, and the sessions open now
-    assert!(
-        list["users"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|u| u["last_seen"].is_string()),
-        "{list}"
-    );
+    assert!(users.iter().all(|u| u["last_seen"].is_string()), "{list}");
     assert!(
         list["sessions_open"].as_i64().is_some_and(|n| n >= 2),
         "{list}"
     );
-    // the command line's login: a token of one day
+    let a = users.iter().find(|u| u["username"] == "anna").unwrap();
+    assert_eq!(a["entitlements"], json!(["admin", "assist"]));
+    assert_eq!(a["admin"], true);
+    // the command line's login: a token of one day, with what bo holds
     let r = client
         .post(format!("{origin}/desk/cli-login"))
         .json(&json!({"username": "bo", "password": "another long password"}))
@@ -347,29 +397,25 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
         .unwrap();
     assert_eq!(r.status(), 200);
     let t: Value = r.json().await.unwrap();
-    let claims = jsonwebtoken::decode::<Value>(t["token"].as_str().unwrap(), &key, &v)
-        .unwrap()
-        .claims;
+    let bearer = format!("Bearer {}", t["token"].as_str().unwrap());
+    let claims = claims_of(&client, &origin, &bearer).await;
     assert!(claims["exp"].as_i64().unwrap() - claims["iat"].as_i64().unwrap() >= 23 * 3600);
-    // logout ends the session
+    assert_eq!(claims["grants"], grants_of(&["reader", "assist"]));
+    // logout from another site is refused; from the desk it ends the session
     let r = client
         .post(format!("{origin}/desk/logout"))
         .header("cookie", &bo)
-        .header("x-nils-desk", "1")
-        .header("origin", &origin)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = ours(client.post(format!("{origin}/desk/logout")), &origin)
+        .header("cookie", &bo)
         .send()
         .await
         .unwrap();
     assert_eq!(r.status(), 204);
-    let doc: Value = client
-        .get(format!("{origin}/desk/capabilities"))
-        .header("cookie", &bo)
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &bo).await;
     assert_eq!(doc["desk"]["signed_in"], false);
 }
 
@@ -381,8 +427,8 @@ struct Provider {
     issuer: Mutex<String>,
     key: ed25519_dalek::SigningKey,
     codes: Mutex<Vec<(String, String)>>,
-    /// The person the provider answers for: subject, name, roles.
-    person: Mutex<(String, String, Vec<String>)>,
+    /// The person the provider answers for: subject, name, roles, groups.
+    person: Mutex<(String, String, Vec<String>, Vec<String>)>,
     tokens_minted: Mutex<u32>,
 }
 
@@ -397,6 +443,7 @@ async fn fake_provider() -> (String, Arc<Provider>) {
             "subject-1".into(),
             "Anna Andersson".into(),
             vec!["reviewer".into(), "assist".into()],
+            vec!["staff".into()],
         )),
         tokens_minted: Mutex::new(0),
     });
@@ -443,7 +490,7 @@ async fn fake_provider() -> (String, Arc<Provider>) {
                 if f["client_secret"] != "the-client-secret" {
                     return (StatusCode::UNAUTHORIZED, axum::Json(json!({"error": "invalid_client"}))).into_response();
                 }
-                let (sub, name, roles) = p.person.lock().unwrap().clone();
+                let (sub, name, roles, groups) = p.person.lock().unwrap().clone();
                 if f["grant_type"] == "authorization_code" {
                     let codes = p.codes.lock().unwrap();
                     let Some((_, challenge)) = codes.iter().find(|(c, _)| *c == f["code"]) else {
@@ -465,7 +512,7 @@ async fn fake_provider() -> (String, Arc<Provider>) {
                 let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::EdDSA);
                 header.kid = Some("k1".into());
                 let iss = p.issuer.lock().unwrap().clone();
-                let claims = json!({"iss": iss, "aud": "desk-client", "sub": sub, "name": name, "preferred_username": "anna", "email": "anna@example.org", "roles": roles, "iat": now, "exp": now + 900});
+                let claims = json!({"iss": iss, "aud": "desk-client", "sub": sub, "name": name, "preferred_username": "anna", "email": "anna@example.org", "roles": roles, "groups": groups, "iat": now, "exp": now + 900});
                 let id_token = jsonwebtoken::encode(&header, &claims, &enc).unwrap();
                 axum::Json(json!({"access_token": format!("access-{n}"), "refresh_token": format!("refresh-{n}"), "expires_in": if f["grant_type"] == "authorization_code" { 30 } else { 900 }, "id_token": id_token, "token_type": "Bearer"})).into_response()
             }),
@@ -475,32 +522,9 @@ async fn fake_provider() -> (String, Arc<Provider>) {
     (issuer, p)
 }
 
-#[tokio::test]
-async fn oidc_mode_logs_in_through_the_provider_with_pkce_and_a_renamed_person_moves_no_row() {
-    let engine = fake_engine().await;
-    let (issuer, provider) = fake_provider().await;
-    // the fake signs its id tokens with the placeholder issuer; patch it in
-    let text = format!(
-        "origin = \"{{origin}}\"\nmode = \"oidc\"\nstore = \"{{dir}}/desk.sqlite\"\n[engine]\nurl = \"{engine}\"\n[oidc]\nissuer = \"{issuer}\"\nclient_id = \"desk-client\"\nclient_secret = \"the-client-secret\"\n"
-    );
-    // the id token's iss is written by the fake as the literal issuer
-    let (origin, shared, _) = desk(&text).await;
-    let _ = shared;
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .unwrap();
-    // nobody yet: the login is a redirect
-    let doc: Value = client
-        .get(format!("{origin}/desk/capabilities"))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
-    assert_eq!(doc["desk"]["login"]["kind"], "redirect");
-    // to the provider, with PKCE and state
+/// Through the provider and back: the desk's login redirect, the provider's
+/// redirect with a code, and the callback that makes the session.
+async fn sign_in(client: &reqwest::Client, origin: &str, issuer: &str) -> String {
     let r = client
         .get(format!("{origin}/desk/login"))
         .send()
@@ -516,7 +540,6 @@ async fn oidc_mode_logs_in_through_the_provider_with_pkce_and_a_renamed_person_m
         .to_string();
     assert!(to.starts_with(&format!("{issuer}/authorize?")), "{to}");
     assert!(to.contains("code_challenge_method=S256"));
-    // the provider sends the browser back with a code
     let r = client.get(&to).send().await.unwrap();
     assert_eq!(r.status(), 303);
     let back = r
@@ -530,6 +553,57 @@ async fn oidc_mode_logs_in_through_the_provider_with_pkce_and_a_renamed_person_m
         back.starts_with(&format!("{origin}/desk/callback?")),
         "{back}"
     );
+    let r = client.get(&back).send().await.unwrap();
+    assert_eq!(r.status(), 303, "{}", r.text().await.unwrap());
+    cookie_of(&r)
+}
+
+#[tokio::test]
+async fn oidc_mode_signs_in_at_the_provider_and_the_desk_signs_for_the_person_it_names() {
+    let engine = fake_engine().await;
+    let (issuer, provider) = fake_provider().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"oidc\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n[oidc]\nissuer = \"{issuer}\"\nclient_id = \"desk-client\"\nclient_secret = \"the-client-secret\"\n"
+    );
+    let (origin, shared, _) = desk(&text).await;
+    let client = client();
+    // nobody yet: the login is a redirect
+    let doc: Value = client
+        .get(format!("{origin}/desk/capabilities"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(doc["desk"]["login"]["kind"], "redirect");
+    // the desk signs here too: its issuer answers, the settings name the
+    // groups claim, and the engine is told to trust the desk beside the provider
+    let signing = &doc["desk"]["settings"]["signing"];
+    assert_eq!(signing["groups_claim"], "groups", "{signing}");
+    assert_eq!(signing["roles_claim"], "roles", "{signing}");
+    assert_eq!(signing["audience"], "nils", "{signing}");
+    let flags = doc["desk"]["settings"]["engine_flags"].as_str().unwrap();
+    assert!(
+        flags.contains(&format!("--oidc-trust issuer={origin},audience=nils,"))
+            && flags.contains(&format!(
+                "--oidc-trust issuer={issuer},audience=desk-client,"
+            )),
+        "{flags}"
+    );
+    let disc: Value = client
+        .get(format!("{origin}/.well-known/openid-configuration"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(disc["issuer"], origin);
+    assert!(
+        disc["token_endpoint"].is_null(),
+        "no passwords here: {disc}"
+    );
     // a callback with a state the desk did not begin is refused
     let r = client
         .get(format!("{origin}/desk/callback?code=x&state=nope"))
@@ -537,12 +611,20 @@ async fn oidc_mode_logs_in_through_the_provider_with_pkce_and_a_renamed_person_m
         .await
         .unwrap();
     assert_eq!(r.status(), 400);
-    // the real callback: a session, the display name recorded at first sight
-    let r = client.get(&back).send().await.unwrap();
-    assert_eq!(r.status(), 303, "{}", r.text().await.unwrap());
-    let anna = cookie_of(&r);
-    let doc: Value = client
-        .get(format!("{origin}/desk/capabilities"))
+    // the real sign-in: a session, the display name recorded at first sight,
+    // and the legacy entitlements of the roles claim standing for their sets
+    let anna = sign_in(&client, &origin, &issuer).await;
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &anna).await;
+    assert_eq!(doc["person"]["subject"], "subject-1", "{doc}");
+    assert_eq!(doc["person"]["display_name"], "Anna Andersson");
+    assert_eq!(doc["person"]["grants"], grants_of(&["reviewer", "assist"]));
+    assert_eq!(doc["person"]["detail"], "quasi");
+    assert_eq!(doc["person"]["groups"], json!([]));
+    // a proxied call carries the desk's token, not the provider's: the
+    // provider's own token is still refreshed before its expiry, and the code
+    // grant gave thirty seconds, so the first call refreshes it once
+    let first: Value = client
+        .get(format!("{origin}/api/jobs"))
         .header("cookie", &anna)
         .send()
         .await
@@ -550,70 +632,84 @@ async fn oidc_mode_logs_in_through_the_provider_with_pkce_and_a_renamed_person_m
         .json()
         .await
         .unwrap();
-    assert_eq!(doc["person"]["subject"], "subject-1", "{doc}");
-    assert_eq!(doc["person"]["display_name"], "Anna Andersson");
-    assert_eq!(doc["person"]["entitlements"], json!(["reviewer", "assist"]));
-    // a proxied call carries the person's access token, refreshed before
-    // expiry: the code grant gave thirty seconds, so the first call refreshes
-    let r = client
-        .get(format!("{origin}/api/jobs"))
-        .header("cookie", &anna)
-        .send()
-        .await
-        .unwrap();
-    let got: Value = r.json().await.unwrap();
-    assert_eq!(got["bearer"], "Bearer access-2", "refreshed once: {got}");
-    let r = client
-        .get(format!("{origin}/api/jobs"))
-        .header("cookie", &anna)
-        .send()
-        .await
-        .unwrap();
-    let got: Value = r.json().await.unwrap();
+    let first = first["bearer"].as_str().unwrap().to_string();
+    assert!(!first.contains("access-"), "{first}");
+    assert_eq!(*provider.tokens_minted.lock().unwrap(), 2, "refreshed once");
+    let claims = claims_of(&client, &origin, &first).await;
+    let host = issuer.trim_start_matches("http://");
     assert_eq!(
-        got["bearer"], "Bearer access-2",
-        "and kept while fresh: {got}"
+        claims["sub"],
+        format!("subject-1@{host}"),
+        "the principal the parts knew anna by: {claims}"
     );
+    assert_eq!(claims["preferred_username"], "anna");
+    assert_eq!(claims["name"], "Anna Andersson");
+    assert_eq!(claims["grants"], grants_of(&["reviewer", "assist"]));
+    assert_eq!(claims["detail"], "quasi");
+    assert!(claims.get("roles").is_none(), "{claims}");
+    // and kept while fresh and while it says what anna holds
+    let again: Value = client
+        .get(format!("{origin}/api/jobs"))
+        .header("cookie", &anna)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(again["bearer"], first);
+    assert_eq!(*provider.tokens_minted.lock().unwrap(), 2);
+    // a group the admin makes that follows the provider's staff group gives
+    // anna what it holds at her next click
+    let staff = shared
+        .store
+        .change(
+            true,
+            Change::GroupAdd {
+                name: "Staff".into(),
+                access: Access::new(["kvasir:work", "identity:see"], Detail::Plain),
+                follows: vec!["staff".into()],
+            },
+        )
+        .unwrap()
+        .unwrap();
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &anna).await;
+    assert_eq!(doc["person"]["groups"], json!(["Staff"]), "{doc}");
+    let mut want = grants::of_names(["reviewer", "assist", "kvasir:work", "identity:see"]);
+    want.detail = Detail::Quasi;
+    assert_eq!(doc["person"]["grants"], json!(want.list()));
+    let third: Value = client
+        .get(format!("{origin}/api/jobs"))
+        .header("cookie", &anna)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_ne!(third["bearer"], first, "minted again for what changed");
+    let claims = claims_of(&client, &origin, third["bearer"].as_str().unwrap()).await;
+    assert_eq!(claims["grants"], json!(want.list()));
+    // the people who have signed in, with the groups their provider's groups reach
+    let access = get_json(&client, format!("{origin}/desk/access"), &anna).await;
+    assert_eq!(access["mode"], "oidc");
+    let people = access["people"].as_array().unwrap();
+    assert_eq!(people.len(), 1, "{access}");
+    assert_eq!(people[0]["subject"], "subject-1");
+    assert_eq!(people[0]["groups"], json!([]));
+    assert_eq!(people[0]["followed"], json!([staff]));
+    assert_eq!(people[0]["access"], want.as_json());
+    assert_eq!(people[0]["sessions_open"], 1);
+
     // a person renamed at the provider: the same subject, a new display, no new row
     *provider.person.lock().unwrap() = (
         "subject-1".into(),
         "Anna Bergström".into(),
         vec!["reviewer".into(), "assist".into()],
+        vec!["staff".into()],
     );
-    let r = client
-        .get(format!("{origin}/desk/login"))
-        .send()
-        .await
-        .unwrap();
-    let to = r
-        .headers()
-        .get("location")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-    let back = client
-        .get(&to)
-        .send()
-        .await
-        .unwrap()
-        .headers()
-        .get("location")
-        .unwrap()
-        .to_str()
-        .unwrap()
-        .to_string();
-    let r = client.get(&back).send().await.unwrap();
-    let again = cookie_of(&r);
-    let doc: Value = client
-        .get(format!("{origin}/desk/capabilities"))
-        .header("cookie", &again)
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let again = sign_in(&client, &origin, &issuer).await;
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &again).await;
     assert_eq!(doc["person"]["subject"], "subject-1");
     assert_eq!(doc["person"]["display_name"], "Anna Bergström");
     let people = shared.store.people();
@@ -810,7 +906,7 @@ async fn a_change_of_sign_in_signs_everyone_out_and_an_empty_desk_says_so() {
         .create(
             "operator",
             "the operator",
-            &["admin".to_string()],
+            &Claims::default(),
             &json!({}),
             12,
         )
@@ -848,7 +944,7 @@ async fn a_change_of_sign_in_signs_everyone_out_and_an_empty_desk_says_so() {
     // a session of a person the desk does not keep holds nothing, and is gone
     let ghost = desk
         .store
-        .create("ghost", "Ghost", &[], &json!({}), 12)
+        .create("ghost", "Ghost", &Claims::default(), &json!({}), 12)
         .unwrap();
     let doc: Value = client
         .get(format!("{url}/desk/capabilities"))
@@ -868,13 +964,12 @@ async fn a_change_of_sign_in_signs_everyone_out_and_an_empty_desk_says_so() {
         "anna",
         "correct horse battery",
         Some("Anna"),
-        &[],
-        true,
+        &admin(),
     )
     .unwrap();
     let anna = desk
         .store
-        .create("anna", "Anna", &[], &json!({}), 12)
+        .create("anna", "Anna", &Claims::default(), &json!({}), 12)
         .unwrap();
     let doc: Value = client
         .get(format!("{url}/desk/capabilities"))
@@ -890,9 +985,9 @@ async fn a_change_of_sign_in_signs_everyone_out_and_an_empty_desk_says_so() {
 }
 
 /// The chat, slice 2: the assistant keeps a person's conversations, so the
-/// desk forwards its doors only for a person holding `assist`.
+/// desk forwards its doors only for a person holding `assistant:use`.
 #[tokio::test]
-async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
+async fn the_assistant_is_reached_only_by_a_person_holding_assistant_use() {
     let engine = fake_engine().await;
     let seen = Arc::new(Mutex::new(Vec::<String>::new()));
     let log = seen.clone();
@@ -930,8 +1025,7 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
         "anna",
         "correct horse battery",
         Some("Anna"),
-        &["reader".to_string(), "assist".to_string()],
-        false,
+        &entitled(&["reader", "assist"]),
     )
     .unwrap();
     nils_desk::users::add(
@@ -939,8 +1033,7 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
         "bo",
         "another long password",
         Some("Bo"),
-        &["reader".to_string()],
-        false,
+        &entitled(&["reader"]),
     )
     .unwrap();
     // the first person setup adds, an admin with nothing else named, uses the assistant too
@@ -949,33 +1042,22 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
         "cy",
         "a third long password",
         Some("Cy"),
-        &[],
-        true,
+        &admin(),
     )
     .unwrap();
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .unwrap();
+    let client = client();
     let mut cookies = Vec::new();
     for (name, password) in [
         ("anna", "correct horse battery"),
         ("bo", "another long password"),
         ("cy", "a third long password"),
     ] {
-        let r = client
-            .post(format!("{origin}/desk/login"))
-            .json(&json!({"username": name, "password": password}))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(r.status(), 200, "{name} logs in");
-        cookies.push(cookie_of(&r));
+        cookies.push(login(&client, &origin, name, password).await);
     }
     let list = format!("{origin}/assistant/conversations");
-    // nobody signed in, and bo without assist, are refused before the assistant hears a thing
+    // nobody signed in, and bo without the assistant, are refused before the assistant hears a thing
     let r = client.get(&list).send().await.unwrap();
-    assert!(matches!(r.status().as_u16(), 401 | 403), "{}", r.status());
+    assert_eq!(r.status(), 401);
     let r = client
         .get(&list)
         .header("cookie", &cookies[1])
@@ -988,11 +1070,11 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
         body["error"]
             .as_str()
             .unwrap_or_default()
-            .contains("assist"),
+            .contains("assistant:use"),
         "{body}"
     );
     assert!(seen.lock().unwrap().is_empty());
-    // anna holds assist: forwarded, with the bearer the desk minted for her
+    // anna holds it: forwarded, with the bearer the desk minted for her
     let r = client
         .get(&list)
         .header("cookie", &cookies[0])
@@ -1003,7 +1085,7 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
     let got = seen.lock().unwrap().clone();
     assert_eq!(got.len(), 1, "{got:?}");
     assert!(got[0].starts_with("Bearer "), "{got:?}");
-    // cy, added with --admin alone, holds assist and is forwarded as well
+    // cy, added with --admin alone, is in Admins, which hold the assistant, and is forwarded as well
     let r = client
         .get(&list)
         .header("cookie", &cookies[2])
@@ -1014,11 +1096,12 @@ async fn the_assistant_is_reached_only_by_a_person_holding_assist() {
     assert_eq!(seen.lock().unwrap().len(), 2);
 }
 
-/// The chat, slice 5: a person holding `assist` lists the people on the desk
-/// to share a conversation with, everyone but themselves; a person without it
-/// and nobody signed in are refused; a desk nobody signs in to lists nobody.
+/// The chat, slice 5: a person holding `assistant:use` lists the people on
+/// the desk to share a conversation with, everyone but themselves; a person
+/// without it and nobody signed in are refused; a desk nobody signs in to
+/// lists nobody.
 #[tokio::test]
-async fn the_people_on_the_desk_are_listed_for_a_person_holding_assist() {
+async fn the_people_on_the_desk_are_listed_for_a_person_holding_the_assistant() {
     let engine = fake_engine().await;
     let text = format!(
         "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
@@ -1034,34 +1117,22 @@ async fn the_people_on_the_desk_are_listed_for_a_person_holding_assist() {
         ("bo", "another long password", "Bo", ["reader", "reader"]),
         ("cy", "a third long password", "Cy", ["reader", "assist"]),
     ] {
-        let entitlements: Vec<String> = entitlements.iter().map(|e| e.to_string()).collect();
         nils_desk::users::add(
             &shared.store,
             name,
             password,
             Some(display),
-            &entitlements,
-            false,
+            &entitled(&entitlements),
         )
         .unwrap();
     }
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .unwrap();
+    let client = client();
     let mut cookies = Vec::new();
     for (name, password) in [
         ("anna", "correct horse battery"),
         ("bo", "another long password"),
     ] {
-        let r = client
-            .post(format!("{origin}/desk/login"))
-            .json(&json!({"username": name, "password": password}))
-            .send()
-            .await
-            .unwrap();
-        assert_eq!(r.status(), 200, "{name} logs in");
-        cookies.push(cookie_of(&r));
+        cookies.push(login(&client, &origin, name, password).await);
     }
     let people = format!("{origin}/desk/people");
     let r = client.get(&people).send().await.unwrap();
@@ -1144,14 +1215,10 @@ async fn kvasir_is_read_as_the_person_where_people_sign_in() {
         "anna",
         "correct horse battery",
         Some("Anna"),
-        &[],
-        true,
+        &admin(),
     )
     .unwrap();
-    let client = reqwest::Client::builder()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .unwrap();
+    let client = client();
 
     // nobody signed in: Kvasir refused the desk's own read, which carries no credential
     let doc: Value = client
@@ -1166,23 +1233,8 @@ async fn kvasir_is_read_as_the_person_where_people_sign_in() {
 
     // signed in: the desk asks Kvasir with the person's own token, as its proxy does, and
     // the Kvasir page, the profile's subscription and Home's Kvasir have Kvasir to read
-    let r = client
-        .post(format!("{origin}/desk/login"))
-        .json(&json!({"username": "anna", "password": "correct horse battery"}))
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(r.status(), 200);
-    let anna = cookie_of(&r);
-    let doc: Value = client
-        .get(format!("{origin}/desk/capabilities"))
-        .header("cookie", &anna)
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let anna = login(&client, &origin, "anna", "correct horse battery").await;
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &anna).await;
     assert_eq!(doc["kvasir"]["kvasir"]["version"], "1.0.0-alpha.4", "{doc}");
     let bearers = seen.lock().unwrap().clone();
     assert!(
@@ -1193,4 +1245,467 @@ async fn kvasir_is_read_as_the_person_where_people_sign_in() {
         bearers.iter().any(|b| b.starts_with("Bearer ")),
         "the person's read carried their token: {bearers:?}"
     );
+}
+
+/// The identity doors: groups made, changed and removed, people given
+/// groups and grants of their own, each change from the desk's own origin
+/// by a person holding identity:work, and none that leaves nobody holding it.
+#[tokio::test]
+async fn groups_and_people_change_through_the_identity_doors() {
+    let engine = fake_engine().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    nils_desk::users::add(
+        &shared.store,
+        "anna",
+        "correct horse battery",
+        Some("Anna"),
+        &admin(),
+    )
+    .unwrap();
+    nils_desk::users::add(
+        &shared.store,
+        "bo",
+        "another long password",
+        Some("Bo"),
+        &Given::default(),
+    )
+    .unwrap();
+    let client = client();
+    let anna = login(&client, &origin, "anna", "correct horse battery").await;
+    let bo = login(&client, &origin, "bo", "another long password").await;
+    let url = |path: &str| format!("{origin}{path}");
+
+    // reading needs identity:see
+    let r = client.get(url("/desk/groups")).send().await.unwrap();
+    assert_eq!(r.status(), 401);
+    let r = client
+        .get(url("/desk/groups"))
+        .header("cookie", &bo)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let groups = get_json(&client, url("/desk/groups"), &anna).await;
+    let list = groups["groups"].as_array().unwrap();
+    let names: Vec<&str> = list.iter().map(|g| g["name"].as_str().unwrap()).collect();
+    assert_eq!(names, ["Readers", "Reviewers", "Operators", "Admins"]);
+    let group = |name: &str| list.iter().find(|g| g["name"] == name).unwrap().clone();
+    let (readers, admins) = (
+        group("Readers")["id"].as_i64().unwrap(),
+        group("Admins")["id"].as_i64().unwrap(),
+    );
+    assert_eq!(
+        group("Readers"),
+        json!({"id": readers, "name": "Readers", "grants": grants_of(&["reader"]), "detail": "plain", "follows": [], "members": []})
+    );
+    assert_eq!(group("Admins")["members"], json!(["anna"]));
+
+    // making a group: from the desk's own origin, by a person holding identity:work
+    let scanners = json!({"name": "Scanner people", "grants": ["data:work", "review:see"], "detail": "quasi", "follows": ["neuro-scanner"]});
+    let r = client
+        .post(url("/desk/groups"))
+        .header("cookie", &anna)
+        .json(&scanners)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403, "not from the desk's own origin");
+    let r = ours(client.post(url("/desk/groups")), &origin)
+        .header("cookie", &bo)
+        .json(&scanners)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403, "bo holds no identity:work");
+    let r = ours(client.post(url("/desk/groups")), &origin)
+        .header("cookie", &anna)
+        .json(&scanners)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 201);
+    let made: Value = r.json().await.unwrap();
+    let scanner = made["id"].as_i64().unwrap();
+    assert_eq!(
+        made,
+        json!({"id": scanner, "name": "Scanner people", "grants": ["data:see", "data:work", "review:see"], "detail": "quasi", "follows": ["neuro-scanner"], "members": []})
+    );
+    for (body, why) in [
+        (scanners.clone(), "a name taken"),
+        (
+            json!({"name": "Coffee", "grants": ["coffee:work"]}),
+            "a grant outside the vocabulary",
+        ),
+        (
+            json!({"name": "All", "grants": [], "detail": "everything"}),
+            "a detail outside the order",
+        ),
+        (json!({"grants": []}), "no name"),
+    ] {
+        let r = ours(client.post(url("/desk/groups")), &origin)
+            .header("cookie", &anna)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 400, "{why}");
+        let e: Value = r.json().await.unwrap();
+        assert!(e["error"].is_string(), "{why}: {e}");
+    }
+    // changing it
+    let r = ours(client.put(url(&format!("/desk/groups/{scanner}"))), &origin)
+        .header("cookie", &anna)
+        .json(&json!({"name": "Scanners", "grants": ["data:work"], "detail": "plain"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let set: Value = r.json().await.unwrap();
+    assert_eq!(
+        set,
+        json!({"id": scanner, "name": "Scanners", "grants": ["data:see", "data:work"], "detail": "plain", "follows": [], "members": []})
+    );
+    let r = ours(client.put(url("/desk/groups/999")), &origin)
+        .header("cookie", &anna)
+        .json(&json!({"name": "Nine", "grants": []}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
+    let r = client
+        .put(url(&format!("/desk/groups/{scanner}")))
+        .header("cookie", &anna)
+        .json(&json!({"name": "Scanners", "grants": []}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+
+    // the people, with their groups, what they hold alone and what it adds up to
+    let access = get_json(&client, url("/desk/access"), &anna).await;
+    assert_eq!(access["mode"], "local");
+    assert!(
+        access["sessions_open"].as_i64().is_some_and(|n| n >= 2),
+        "{access}"
+    );
+    let people = access["people"].as_array().unwrap();
+    assert_eq!(people.len(), 2);
+    let row = |who: &str| people.iter().find(|p| p["subject"] == who).unwrap().clone();
+    let a = row("anna");
+    assert_eq!(a["display"], "Anna");
+    assert_eq!(a["groups"], json!([admins]));
+    assert_eq!(a["followed"], json!([]));
+    assert_eq!(a["grants"], json!([]));
+    assert!(a["detail"].is_null());
+    assert_eq!(
+        a["access"],
+        json!({"grants": grants::GRANTS, "detail": "sensitive"})
+    );
+    assert!(a["last_seen_at"].is_string());
+    assert_eq!(a["sessions_open"], 1);
+    assert_eq!(
+        row("bo")["access"],
+        json!({"grants": [], "detail": "plain"})
+    );
+
+    // anna gives bo two groups and the assistant alone; bo's next click has them
+    let r = ours(client.put(url("/desk/access/bo")), &origin)
+        .header("cookie", &anna)
+        .json(
+            &json!({"groups": [scanner, readers], "grants": ["assistant:use"], "detail": "quasi"}),
+        )
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let b: Value = r.json().await.unwrap();
+    assert_eq!(b["subject"], "bo");
+    assert_eq!(b["groups"], json!([readers, scanner]));
+    assert_eq!(b["grants"], json!(["assistant:use"]));
+    assert_eq!(b["detail"], "quasi");
+    assert_eq!(
+        b["access"],
+        json!({"grants": ["assistant:use", "data:see", "data:work", "query:see", "query:work"], "detail": "quasi"})
+    );
+    let doc = get_json(&client, url("/desk/capabilities"), &bo).await;
+    assert_eq!(doc["person"]["groups"], json!(["Readers", "Scanners"]));
+    assert_eq!(doc["person"]["grants"], b["access"]["grants"]);
+    assert_eq!(doc["person"]["detail"], "quasi");
+    for (path, body, status, why) in [
+        (
+            "/desk/access/bo",
+            json!({"groups": [999], "grants": []}),
+            400,
+            "a group that is not there",
+        ),
+        (
+            "/desk/access/bo",
+            json!({"groups": [], "grants": ["assistant:see"]}),
+            400,
+            "a grant outside the vocabulary",
+        ),
+        (
+            "/desk/access/bo",
+            json!({"grants": []}),
+            400,
+            "no groups named",
+        ),
+        (
+            "/desk/access/zed",
+            json!({"groups": [], "grants": []}),
+            404,
+            "nobody by that name",
+        ),
+    ] {
+        let r = ours(client.put(url(path)), &origin)
+            .header("cookie", &anna)
+            .json(&body)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), status, "{why}");
+    }
+    let r = client
+        .put(url("/desk/access/bo"))
+        .header("cookie", &anna)
+        .json(&json!({"groups": [], "grants": []}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+
+    // nobody is left without identity:work
+    let r = ours(client.put(url("/desk/access/anna")), &origin)
+        .header("cookie", &anna)
+        .json(&json!({"groups": [], "grants": [], "detail": null}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 409);
+    let e: Value = r.json().await.unwrap();
+    assert!(e["error"].is_string(), "{e}");
+    let r = ours(
+        client.delete(url(&format!("/desk/groups/{admins}"))),
+        &origin,
+    )
+    .header("cookie", &anna)
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 409);
+    let r = ours(client.put(url(&format!("/desk/groups/{admins}"))), &origin)
+        .header("cookie", &anna)
+        .json(&json!({"name": "Admins", "grants": ["query:see"]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 409);
+    // once bo is in Admins too, anna may leave, and her next click no longer reads people
+    for (who, groups) in [("bo", admins), ("anna", readers)] {
+        let r = ours(client.put(url(&format!("/desk/access/{who}"))), &origin)
+            .header("cookie", &anna)
+            .json(&json!({"groups": [groups], "grants": []}))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 200, "{who}");
+    }
+    let r = client
+        .get(url("/desk/groups"))
+        .header("cookie", &anna)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+
+    // removing a group
+    let path = url(&format!("/desk/groups/{scanner}"));
+    let r = client
+        .delete(&path)
+        .header("cookie", &bo)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = ours(client.delete(&path), &origin)
+        .header("cookie", &bo)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 204);
+    let r = ours(client.delete(&path), &origin)
+        .header("cookie", &bo)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
+
+    // adding a person with their groups and a grant of their own
+    let r = ours(client.post(url("/desk/users")), &origin)
+        .header("cookie", &bo)
+        .json(&json!({"username": "cy", "password": "a third long password", "display": "Cy", "groups": [readers], "grants": ["assistant:use"], "detail": null}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 201);
+    let c: Value = r.json().await.unwrap();
+    assert_eq!(
+        c,
+        json!({"subject": "cy", "display": "Cy", "groups": [readers], "followed": [], "grants": ["assistant:use"], "detail": null, "access": {"grants": grants_of(&["reader", "assist"]), "detail": "plain"}, "last_seen_at": null, "sessions_open": 0})
+    );
+    let r = ours(client.post(url("/desk/users")), &origin)
+        .header("cookie", &bo)
+        .json(&json!({"username": "dy", "password": "a fourth long password", "groups": [999]}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 400);
+    assert!(shared.store.user("dy").is_none(), "nobody half made");
+    let r = client
+        .post(url("/desk/users"))
+        .header("cookie", &bo)
+        .json(&json!({"username": "ey", "password": "a fifth long password"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let cy = login(&client, &origin, "cy", "a third long password").await;
+    let doc = get_json(&client, url("/desk/capabilities"), &cy).await;
+    assert_eq!(doc["person"]["groups"], json!(["Readers"]));
+}
+
+/// A part the desk opens by grant: the assistant for `assistant:use`, the
+/// supervisor for `install:work`, an app for the grant or the ladder name it
+/// names; each refused before it hears a thing.
+#[tokio::test]
+async fn the_desk_opens_the_assistant_the_supervisor_and_apps_by_grant() {
+    let engine = fake_engine().await;
+    let (assistant, heard_assistant) = fake_part().await;
+    let (supervisor, heard_supervisor) = fake_part().await;
+    let (app, heard_app) = fake_part().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n[assistant]\nurl = \"{assistant}\"\n[supervisor]\nurl = \"{supervisor}\"\ntoken = \"the-supervisors-token\"\n[[apps]]\nid = \"ops\"\ntitle = \"Operations\"\nurl = \"{app}\"\nentitlement = \"operator\"\n[[apps]]\nid = \"models\"\ntitle = \"Models\"\nurl = \"{app}\"\nentitlement = \"kvasir:see\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    let operators = shared.store.book().group_named("Operators").unwrap().id;
+    let people = [
+        (
+            "anna",
+            Given {
+                grants: vec!["assistant:use".into()],
+                ..Default::default()
+            },
+        ),
+        (
+            "bo",
+            Given {
+                groups: vec![operators],
+                ..Default::default()
+            },
+        ),
+        (
+            "cy",
+            Given {
+                grants: vec!["install:work".into()],
+                ..Default::default()
+            },
+        ),
+    ];
+    let client = client();
+    let mut who = std::collections::HashMap::new();
+    for (name, given) in people {
+        nils_desk::users::add(&shared.store, name, "a long enough password", None, &given).unwrap();
+        who.insert(
+            name,
+            login(&client, &origin, name, "a long enough password").await,
+        );
+    }
+    let get = |path: &str, cookie: Option<&String>| {
+        let mut r = client.get(format!("{origin}{path}"));
+        if let Some(c) = cookie {
+            r = r.header("cookie", c);
+        }
+        r.send()
+    };
+    // nobody signed in reaches none of them
+    for path in [
+        "/assistant/conversations",
+        "/supervise/status",
+        "/apps/ops/runs",
+        "/apps/models/list",
+    ] {
+        assert_eq!(get(path, None).await.unwrap().status(), 401, "{path}");
+    }
+    for (path, name, status) in [
+        ("/assistant/conversations", "anna", 200),
+        ("/assistant/conversations", "bo", 403),
+        ("/assistant/conversations", "cy", 403),
+        ("/supervise/status", "anna", 403),
+        ("/supervise/status", "bo", 403),
+        ("/supervise/status", "cy", 200),
+        ("/apps/ops/runs", "anna", 403),
+        ("/apps/ops/runs", "bo", 200),
+        ("/apps/ops/runs", "cy", 403),
+        ("/apps/models/list", "anna", 403),
+        ("/apps/models/list", "bo", 200),
+        ("/apps/models/list", "cy", 403),
+    ] {
+        let r = get(path, who.get(name)).await.unwrap();
+        assert_eq!(r.status(), status, "{name} at {path}");
+        if status == 403 {
+            let e: Value = r.json().await.unwrap();
+            assert!(
+                e["error"].as_str().is_some_and(|m| m.contains("needs")),
+                "{e}"
+            );
+        }
+    }
+    // what each part heard: the desk's token for the person, the supervisor its own
+    let heard = heard_assistant.lock().unwrap().clone();
+    assert_eq!(heard.len(), 1, "{heard:?}");
+    let claims = claims_of(&client, &origin, &heard[0]).await;
+    assert_eq!(claims["sub"], "anna");
+    assert_eq!(claims["grants"], json!(["assistant:use"]));
+    let heard = heard_supervisor.lock().unwrap().clone();
+    assert_eq!(heard, ["Bearer the-supervisors-token"]);
+    let heard = heard_app.lock().unwrap().clone();
+    assert_eq!(heard.len(), 2, "{heard:?}");
+    let claims = claims_of(&client, &origin, &heard[0]).await;
+    assert_eq!(claims["sub"], "bo");
+    assert_eq!(claims["grants"], grants_of(&["operator"]));
+    assert_eq!(claims["detail"], "sensitive");
+    // the token pushed to the assistant for a conversation is for a person holding the assistant
+    let push = format!("{origin}/desk/assistant/conversations/c1/token");
+    let r = ours(client.post(&push), &origin)
+        .header("cookie", &who["bo"])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = ours(client.post(&push), &origin)
+        .header("cookie", &who["anna"])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    // a grant given applies at the next click
+    shared
+        .store
+        .change(
+            false,
+            Change::Access {
+                subject: "bo".into(),
+                groups: vec![operators],
+                grants: grants::normalise(["assistant:use"]),
+                detail: None,
+            },
+        )
+        .unwrap();
+    let r = get("/assistant/conversations", who.get("bo"))
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
 }

@@ -84,10 +84,10 @@ async fn the_document_composes_the_parts_and_their_absence() {
     assert_eq!(doc["engine"]["registry"]["epoch"], 7);
     assert!(doc["assistant"].is_null(), "no assistant answered: {doc}");
     assert!(doc["kvasir"].is_null());
-    assert_eq!(
-        doc["person"]["entitlements"],
-        json!(["reader", "reviewer", "operator", "admin", "assist"])
-    );
+    // the one person of a desk nobody signs in to holds every grant, in no group
+    assert_eq!(doc["person"]["grants"], json!(nils_desk::grants::GRANTS));
+    assert_eq!(doc["person"]["detail"], "sensitive");
+    assert_eq!(doc["person"]["groups"], json!([]));
     assert_eq!(doc["desk"]["mode"], "off");
     assert_eq!(doc["desk"]["engine_reachable"], true);
     assert!(doc["desk"]["contract_mismatch"].is_null(), "{doc}");
@@ -244,7 +244,8 @@ async fn a_registered_app_that_answers_is_in_the_document_and_one_that_does_not_
     let person = nils_desk::session::Person {
         subject: "anna".into(),
         display_name: "Anna".into(),
-        entitlements: vec!["operator".to_string()],
+        access: nils_desk::grants::set("operator").unwrap(),
+        groups: vec!["Operators".to_string()],
     };
     let doc = nils_desk::capabilities::document(&shared, &person, None).await;
     let apps = doc["apps"].as_array().unwrap();
@@ -252,6 +253,33 @@ async fn a_registered_app_that_answers_is_in_the_document_and_one_that_does_not_
     assert_eq!(apps[0]["id"], "pipelines");
     assert_eq!(apps[0]["capabilities"]["version"], "1");
     assert!(apps[1]["capabilities"].is_null(), "absence is null: {doc}");
+}
+
+/// A desk nobody signs in to has one person and no people or groups to
+/// change.
+#[tokio::test]
+async fn a_desk_nobody_signs_in_to_has_no_people_or_groups_to_change() {
+    let engine = fake_engine("3").await;
+    let (origin, _) = desk(&engine, None).await;
+    let client = reqwest::Client::new();
+    for path in [
+        "/desk/groups",
+        "/desk/access",
+        "/desk/users",
+        "/desk/people",
+    ] {
+        let r = client.get(format!("{origin}{path}")).send().await.unwrap();
+        assert_eq!(r.status(), 404, "{path}");
+    }
+    let r = client
+        .post(format!("{origin}/desk/groups"))
+        .header("x-nils-desk", "1")
+        .header("origin", &origin)
+        .body(r#"{"name": "Readers again", "grants": []}"#)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 404);
 }
 
 /// Wave 4c §7.4: an export pages the engine's rows door under the caller's

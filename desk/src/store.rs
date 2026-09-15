@@ -235,11 +235,12 @@ pub struct Session {
     pub id: String,
     pub subject: String,
     pub display: String,
-    /// The entitlements at login, plain strings.
-    pub entitlements: Vec<String>,
-    /// What the session holds for the parts: in `oidc` mode the provider's
-    /// access and refresh tokens and their expiry; in `local` mode the last
-    /// minted token and its expiry. Never sent to a browser.
+    /// What the provider said at sign-in, under `oidc`; nothing otherwise.
+    pub claims: Claims,
+    /// What the session holds for the parts: the token the desk last minted
+    /// for the person, with its expiry and what it carried, and in `oidc`
+    /// mode the provider's access and refresh tokens and their expiry.
+    /// Never sent to a browser.
     pub tokens: Value,
 }
 
@@ -247,8 +248,6 @@ pub struct Session {
 pub struct User {
     pub username: String,
     pub display: String,
-    pub entitlements: Vec<String>,
-    pub admin: bool,
 }
 
 fn now_iso() -> String {
@@ -353,19 +352,19 @@ impl Store {
         &self,
         subject: &str,
         display: &str,
-        entitlements: &[String],
+        claims: &Claims,
         tokens: &Value,
         hours: i64,
     ) -> Result<Session, String> {
         let id = token();
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute(
-            "INSERT INTO session (id, subject, display, entitlements, tokens, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO session (id, subject, display, claims, tokens, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             params![
                 id,
                 subject,
                 display,
-                serde_json::to_string(entitlements).unwrap_or_default(),
+                serde_json::to_string(claims).unwrap_or_default(),
                 tokens.to_string(),
                 now_iso(),
                 later_iso(hours)
@@ -376,7 +375,7 @@ impl Store {
             id,
             subject: subject.into(),
             display: display.into(),
-            entitlements: entitlements.to_vec(),
+            claims: claims.clone(),
             tokens: tokens.clone(),
         })
     }
@@ -384,14 +383,14 @@ impl Store {
     pub fn get(&self, id: &str) -> Option<Session> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.query_row(
-            "SELECT id, subject, display, entitlements, tokens FROM session WHERE id = ?1 AND expires_at > ?2",
+            "SELECT id, subject, display, claims, tokens FROM session WHERE id = ?1 AND expires_at > ?2",
             params![id, now_iso()],
             |r| {
                 Ok(Session {
                     id: r.get(0)?,
                     subject: r.get(1)?,
                     display: r.get(2)?,
-                    entitlements: serde_json::from_str(&r.get::<_, String>(3)?).unwrap_or_default(),
+                    claims: serde_json::from_str(&r.get::<_, String>(3)?).unwrap_or_default(),
                     tokens: serde_json::from_str(&r.get::<_, String>(4)?).unwrap_or(Value::Null),
                 })
             },
@@ -503,18 +502,12 @@ impl Store {
 
     // --- local users
 
-    pub fn user_add(
-        &self,
-        username: &str,
-        hash: &str,
-        display: &str,
-        entitlements: &[String],
-        admin: bool,
-    ) -> Result<(), String> {
+    /// A user and their password; what they hold is given as a change.
+    pub fn user_add(&self, username: &str, hash: &str, display: &str) -> Result<(), String> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.execute(
-            "INSERT INTO user (username, password_hash, display, entitlements, admin, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![username, hash, display, serde_json::to_string(entitlements).unwrap_or_default(), admin as i64, now_iso()],
+            "INSERT INTO user (username, password_hash, display, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![username, hash, display, now_iso()],
         )
         .map_err(|e| {
             if e.to_string().contains("UNIQUE") {
@@ -529,15 +522,13 @@ impl Store {
     pub fn user(&self, username: &str) -> Option<(User, String)> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         conn.query_row(
-            "SELECT username, password_hash, display, entitlements, admin FROM user WHERE username = ?1",
+            "SELECT username, password_hash, display FROM user WHERE username = ?1",
             params![username],
             |r| {
                 Ok((
                     User {
                         username: r.get(0)?,
                         display: r.get(2)?,
-                        entitlements: serde_json::from_str(&r.get::<_, String>(3)?).unwrap_or_default(),
-                        admin: r.get::<_, i64>(4)? != 0,
                     },
                     r.get(1)?,
                 ))
@@ -550,9 +541,7 @@ impl Store {
 
     pub fn users(&self) -> Vec<User> {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
-        let mut st = match conn
-            .prepare("SELECT username, display, entitlements, admin FROM user ORDER BY username")
-        {
+        let mut st = match conn.prepare("SELECT username, display FROM user ORDER BY username") {
             Ok(s) => s,
             Err(_) => return Vec::new(),
         };
@@ -560,30 +549,10 @@ impl Store {
             Ok(User {
                 username: r.get(0)?,
                 display: r.get(1)?,
-                entitlements: serde_json::from_str(&r.get::<_, String>(2)?).unwrap_or_default(),
-                admin: r.get::<_, i64>(3)? != 0,
             })
         })
         .map(|rows| rows.flatten().collect())
         .unwrap_or_default()
-    }
-
-    pub fn user_set_entitlements(
-        &self,
-        username: &str,
-        entitlements: &[String],
-    ) -> Result<bool, String> {
-        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
-        let n = conn
-            .execute(
-                "UPDATE user SET entitlements = ?1 WHERE username = ?2",
-                params![
-                    serde_json::to_string(entitlements).unwrap_or_default(),
-                    username
-                ],
-            )
-            .map_err(|e| e.to_string())?;
-        Ok(n == 1)
     }
 
     pub fn user_set_password(&self, username: &str, hash: &str) -> Result<bool, String> {

@@ -236,26 +236,33 @@ fn user(command: UserCommand) -> i32 {
             } => {
                 let desk = load(&config)?;
                 let password = read_password()?;
+                let given = nils_desk::users::Given {
+                    entitlements,
+                    admin,
+                    ..Default::default()
+                };
                 nils_desk::users::add(
                     &desk.store,
                     &username,
                     &password,
                     display.as_deref(),
-                    &entitlements,
-                    admin,
+                    &given,
                 )?;
                 println!("added {username}{}", if admin { " (admin)" } else { "" });
                 Ok(())
             }
             UserCommand::List { config } => {
                 let desk = load(&config)?;
+                let book = desk.store.book();
                 for u in desk.store.users() {
+                    let r = book.resolve(&u.username, None);
                     println!(
-                        "{:<20} {:<24} {}{}",
+                        "{:<20} {:<24} {:<24} {:<9} {}",
                         u.username,
                         u.display,
-                        u.entitlements.join(","),
-                        if u.admin { " admin" } else { "" }
+                        book.names(&r.member).join(","),
+                        r.access.detail,
+                        r.access.list().join(",")
                     );
                 }
                 Ok(())
@@ -267,9 +274,18 @@ fn user(command: UserCommand) -> i32 {
             } => {
                 let desk = load(&config)?;
                 nils_desk::users::check_entitlements(&entitlements)?;
-                if !desk.store.user_set_entitlements(&username, &entitlements)? {
-                    return Err(format!("no user named {username}"));
-                }
+                let sets = nils_desk::grants::of_names(entitlements.iter().map(String::as_str));
+                desk.store
+                    .change(
+                        false,
+                        nils_desk::store::Change::Access {
+                            subject: username.clone(),
+                            groups: Vec::new(),
+                            grants: sets.grants,
+                            detail: (!entitlements.is_empty()).then_some(sets.detail),
+                        },
+                    )
+                    .map_err(|e| e.to_string())?;
                 println!("{username}: {}", entitlements.join(","));
                 Ok(())
             }

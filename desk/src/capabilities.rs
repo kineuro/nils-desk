@@ -47,7 +47,7 @@ pub async fn engine(desk: &Shared) -> Result<Value, String> {
 }
 
 /// The engine's document as one person: with the bearer the session opens
-/// (Wave 4c §5.5), so the roles and the doors are that person's. In `off`
+/// (Wave 4c §5.5), so the grants and the doors are that person's. In `off`
 /// mode the bearer is the desk's own.
 pub async fn engine_as(desk: &Shared, headers: &HeaderMap) -> Result<Value, String> {
     let up = &desk.config.engine;
@@ -182,29 +182,34 @@ async fn parts(desk: &Shared) -> Parts {
     p
 }
 
-/// §7.6: the flags to paste on `nils serve` when the identity mode needs a
-/// trust entry: the desk's own issuer in `local` mode, the provider in
-/// `oidc` mode; none in `off` mode.
+/// §7.6: the flags to paste on `nils serve` where people sign in: the
+/// desk's own issuer, whose tokens carry the grants and the detail the
+/// engine reads as they are, and in `oidc` mode the provider beside it,
+/// whose own tokens (the command line's) still map their groups through
+/// `--role`. None in `off` mode.
 fn engine_flags(desk: &Shared) -> Value {
-    let roles = ["reader", "reviewer", "operator", "admin"]
-        .iter()
-        .map(|r| format!("--role {r}={r}"))
-        .collect::<Vec<_>>()
-        .join(" ");
+    let origin = desk.config.origin.trim_end_matches('/');
+    let own = format!(
+        "--oidc-trust issuer={origin},audience={a},jwks={origin}/.well-known/jwks.json",
+        a = desk.config.local.audience
+    );
     match desk.config.mode {
         crate::config::Mode::Off => Value::Null,
-        crate::config::Mode::Local => Value::from(format!(
-            "--auth oidc --oidc-trust issuer={o},audience={a},jwks={o}/.well-known/jwks.json --oidc-groups-claim roles {roles}",
-            o = desk.config.origin.trim_end_matches('/'),
-            a = desk.config.local.audience
-        )),
+        crate::config::Mode::Local => Value::from(format!("--auth oidc {own}")),
         crate::config::Mode::Oidc => match &desk.config.oidc {
-            Some(o) => Value::from(format!(
-                "--auth oidc --oidc-trust issuer={i},audience={a},jwks={i}/jwks/ --oidc-groups-claim {c} {roles}",
-                i = o.issuer.trim_end_matches('/'),
-                a = o.client_id,
-                c = o.roles_claim
-            )),
+            Some(o) => {
+                let roles = crate::grants::LADDER
+                    .iter()
+                    .map(|r| format!("--role {r}={r}"))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                Value::from(format!(
+                    "--auth oidc {own} --oidc-trust issuer={i},audience={a},jwks={i}/jwks/ --oidc-groups-claim {c} {roles}",
+                    i = o.issuer.trim_end_matches('/'),
+                    a = o.client_id,
+                    c = o.roles_claim
+                ))
+            }
             None => Value::Null,
         },
     }
@@ -270,7 +275,7 @@ pub async fn document(
             },
             "signed_in": !person.subject.is_empty(),
             // §7.4: whether this person may export, by the desk's setting
-            "export": if desk.config.export != "off" && person.holds(&desk.config.export) { Value::from(desk.config.export.clone()) } else { Value::Null },
+            "export": if desk.config.export != "off" && person.holds_name(&desk.config.export) { Value::from(desk.config.export.clone()) } else { Value::Null },
             // §7.6: the desk's own settings, read only here; each is owned
             // and enforced by the desk and changed in its configuration file
             "settings": {
@@ -286,12 +291,13 @@ pub async fn document(
                 "store": desk.config.store.display().to_string(),
                 // Wave 5 §10.5: the other addresses this desk answers at, and how it signs people in; never a secret
                 "also_origins": desk.config.also_origins,
+                // where people sign in the desk signs the parts' tokens with its own key, under oidc too
                 "signing": match desk.config.mode {
                     crate::config::Mode::Local => json!({"key": desk.config.local.key.display().to_string(), "audience": desk.config.local.audience}),
-                    crate::config::Mode::Oidc => desk.config.oidc.as_ref().map_or(Value::Null, |o| json!({"issuer": o.issuer, "client_id": o.client_id, "roles_claim": o.roles_claim})),
+                    crate::config::Mode::Oidc => desk.config.oidc.as_ref().map_or(Value::Null, |o| json!({"issuer": o.issuer, "client_id": o.client_id, "roles_claim": o.roles_claim, "groups_claim": o.groups_claim, "key": desk.config.local.key.display().to_string(), "audience": desk.config.local.audience})),
                     crate::config::Mode::Off => Value::Null,
                 },
-                "retention": "sessions expire after the session lifetime; display names, local users, the record of runs and document lineage are kept until removed with the desk stopped",
+                "retention": "sessions expire after the session lifetime; display names, local users, the record of runs and document lineage are kept until removed with the desk stopped; groups and what each person holds are kept until an admin changes them",
                 "engine_flags": engine_flags(desk),
             },
         },

@@ -16,54 +16,75 @@ use crate::Shared;
 use crate::config::{Mode, Upstream};
 use crate::session;
 
-/// The bearer a proxied call carries (Wave 4c §5.4, §5.5).
+/// The bearer a proxied call carries (Wave 4c §5.4, §5.5): in `off` mode
+/// the desk's own for the part; where people sign in, a token the desk
+/// mints for the person with the grants and the detail they hold now,
+/// minted again when those change or near its expiry (C46). Under `oidc`
+/// the subject is the provider's, qualified by the provider's host, and the
+/// provider's own tokens are refreshed before their expiry first, so a
+/// person the provider no longer signs in is refused here.
 pub(crate) async fn bearer(
     desk: &Shared,
     up: &Upstream,
     headers: &HeaderMap,
 ) -> Result<Option<String>, String> {
-    match desk.config.mode {
-        Mode::Off => Ok(up.token.clone()),
-        Mode::Local => {
-            let (s, _) = session::resolve(desk, headers);
-            let s = s.ok_or("no session; log in at the desk")?;
-            let issuer = desk.issuer.as_ref().ok_or("the desk is not an issuer")?;
-            let now = time::OffsetDateTime::now_utc().unix_timestamp();
-            let person = session::person(desk, &s);
-            // a kept token is reused while it lives and while it still says what the user row says now (§5.9)
-            if let (Some(t), Some(exp)) =
-                (s.tokens["access"].as_str(), s.tokens["expires_at"].as_i64())
-                && exp - now > 60
-                && s.tokens["roles"] == json!(person.entitlements)
-            {
-                return Ok(Some(t.to_string()));
-            }
-            let (t, exp) = issuer.mint(
-                &person.subject,
-                &person.display_name,
-                &person.entitlements,
-                crate::issuer::TOKEN_MINUTES,
-            )?;
-            desk.store.set_tokens(
-                &s.id,
-                &json!({"access": t, "expires_at": exp, "roles": person.entitlements}),
-            );
-            Ok(Some(t))
-        }
-        Mode::Oidc => {
-            let (s, _) = session::resolve(desk, headers);
-            let s = s.ok_or("no session; log in at the desk")?;
-            let client = desk.oidc.as_ref().ok_or("the desk has no provider")?;
-            let tokens = match client.refresh(&s.tokens).await? {
-                Some(fresh) => {
-                    desk.store.set_tokens(&s.id, &fresh);
-                    fresh
-                }
-                None => s.tokens.clone(),
-            };
-            Ok(tokens["access"].as_str().map(str::to_string))
-        }
+    if desk.config.mode == Mode::Off {
+        return Ok(up.token.clone());
     }
+    let (s, _) = session::resolve(desk, headers);
+    let s = s.ok_or("no session; log in at the desk")?;
+    let issuer = desk.issuer.as_ref().ok_or("the desk is not an issuer")?;
+    let mut tokens = if s.tokens.is_object() {
+        s.tokens.clone()
+    } else {
+        json!({})
+    };
+    let subject = match (desk.config.mode, desk.oidc.as_ref()) {
+        (Mode::Oidc, Some(client)) => {
+            if let Some(mut fresh) = client.refresh(&tokens).await? {
+                fresh["minted"] = tokens["minted"].take();
+                tokens = fresh;
+                desk.store.set_tokens(&s.id, &tokens);
+            }
+            crate::issuer::principal(&client.config.issuer, &s.subject)
+        }
+        (Mode::Oidc, None) => return Err("the desk has no provider".into()),
+        _ => s.subject.clone(),
+    };
+    let person = session::person(desk, &s);
+    let grants = person.access.list();
+    let detail = person.access.detail.as_str();
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    // a kept token is reused while it lives and while it still says what the person holds now (§5.9)
+    let kept = &tokens["minted"];
+    if let (Some(t), Some(exp)) = (kept["access"].as_str(), kept["expires_at"].as_i64())
+        && exp - now > 60
+        && kept["grants"] == json!(grants)
+        && kept["detail"] == detail
+    {
+        return Ok(Some(t.to_string()));
+    }
+    let username = s.claims.username.as_deref().unwrap_or(&s.subject);
+    let (t, exp) = issuer.mint(
+        &subject,
+        username,
+        &person.display_name,
+        &person.access,
+        crate::issuer::TOKEN_MINUTES,
+    )?;
+    tokens["minted"] = json!({"access": t, "expires_at": exp, "grants": grants, "detail": detail});
+    desk.store.set_tokens(&s.id, &tokens);
+    Ok(Some(t))
+}
+
+/// Where people sign in, a part the desk opens only to a person holding a
+/// grant, or a set by its ladder name; in `off` mode the one person holds
+/// everything.
+fn gate(desk: &Shared, headers: &HeaderMap, need: &str, what: &str) -> Result<(), Box<Response>> {
+    if desk.config.mode == Mode::Off {
+        return Ok(());
+    }
+    session::holding(desk, headers, need, what).map(|_| ())
 }
 
 const BODY_LIMIT: usize = 64 << 20;
@@ -99,8 +120,8 @@ pub(crate) fn assistant_upstream(desk: &Shared) -> Option<Upstream> {
 }
 
 /// The assistant (Wave 4c §7.7) keeps a person's conversations, so the desk
-/// forwards its doors only for a person holding `assist`, as it pushes the
-/// token only for them; in `off` mode everyone does.
+/// forwards its doors only for a person holding `assistant:use`, as it
+/// pushes the token only for them; in `off` mode everyone does.
 pub async fn assistant(
     State(desk): State<Shared>,
     Path(rest): Path<String>,
@@ -109,24 +130,14 @@ pub async fn assistant(
     let Some(up) = assistant_upstream(&desk) else {
         return absent("the assistant");
     };
-    if !matches!(desk.config.mode, Mode::Off) {
-        let (s, _) = session::resolve(&desk, req.headers());
-        let assist = s
-            .map(|s| session::person(&desk, &s).holds("assist"))
-            .unwrap_or(false);
-        if !assist {
-            return (
-                axum::http::StatusCode::FORBIDDEN,
-                axum::Json(json!({"error": "the assistant needs the assist entitlement"})),
-            )
-                .into_response();
-        }
+    if let Err(r) = gate(&desk, req.headers(), "assistant:use", "the assistant") {
+        return *r;
     }
     forward(&desk, &up, &format!("/{rest}"), req, Bearer::Person).await
 }
 
 /// The supervisor (Wave 5 §10.4): its own bearer from the config, and only
-/// a person holding `admin` reaches it; in `off` mode everyone does.
+/// a person holding `install:work` reaches it; in `off` mode everyone does.
 pub async fn supervisor(
     State(desk): State<Shared>,
     Path(rest): Path<String>,
@@ -135,23 +146,8 @@ pub async fn supervisor(
     let Some(up) = desk.config.supervisor.clone() else {
         return absent("the supervisor");
     };
-    if !matches!(desk.config.mode, Mode::Off) {
-        let (s, _) = session::resolve(&desk, req.headers());
-        let admin = s
-            .map(|s| {
-                session::person(&desk, &s)
-                    .entitlements
-                    .iter()
-                    .any(|e| e == "admin")
-            })
-            .unwrap_or(false);
-        if !admin {
-            return (
-                axum::http::StatusCode::FORBIDDEN,
-                axum::Json(json!({"error": "the supervisor is open to admins"})),
-            )
-                .into_response();
-        }
+    if let Err(r) = gate(&desk, req.headers(), "install:work", "the supervisor") {
+        return *r;
     }
     forward(&desk, &up, &format!("/{rest}"), req, Bearer::Configured).await
 }
@@ -163,6 +159,10 @@ pub async fn app(
 ) -> Response {
     match desk.config.app(&app) {
         Some(a) => {
+            // the app's entitlement, a grant or a ladder name, is the person's to hold
+            if let Err(r) = gate(&desk, req.headers(), &a.entitlement, &a.title) {
+                return *r;
+            }
             let up = Upstream {
                 url: a.url.clone(),
                 token: None,
@@ -237,7 +237,7 @@ enum Bearer {
     Person,
     /// The upstream's own token from the desk's configuration: the
     /// supervisor knows one token, and the desk has checked the person's
-    /// entitlement before it forwards.
+    /// grant before it forwards.
     Configured,
 }
 

@@ -166,9 +166,7 @@ fn a_fresh_store_starts_with_the_four_groups_and_nobody_in_them() {
 fn what_groups_give_and_what_a_person_holds_alone_add_up() {
     let v = vectors();
     let (store, _dir) = fresh();
-    store
-        .user_add("anna", "not a hash", "Anna", &[], false)
-        .unwrap();
+    store.user_add("anna", "not a hash", "Anna").unwrap();
     let scanner = store
         .change(
             false,
@@ -283,9 +281,7 @@ fn what_groups_give_and_what_a_person_holds_alone_add_up() {
 fn no_change_leaves_nobody_who_may_change_people_and_groups() {
     let (store, _dir) = fresh();
     for name in ["anna", "bo"] {
-        store
-            .user_add(name, "not a hash", name, &[], false)
-            .unwrap();
+        store.user_add(name, "not a hash", name).unwrap();
     }
     let admins = id_of(&store, "Admins");
     let readers = id_of(&store, "Readers");
