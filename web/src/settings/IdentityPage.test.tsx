@@ -2,10 +2,11 @@
 // The Identity page as it draws: nobody signing in, with the facts card only
 // and the command that lets people sign in; the desk keeping the people, with
 // the facts, the groups as cards, the people with what they add up to and
-// what is theirs alone; an identity provider, with the groups it follows and
-// the people who have signed in; what a person who may only look is offered;
-// the page while it reads, when a door refuses, and with nobody in it yet;
-// and Add a person as Setup opens it.
+// what is theirs alone; an identity provider, with the groups each follows,
+// the people who have signed in and the groups the provider's groups reach
+// them through; what a person who may only look is offered; the page while
+// it reads, when a door refuses, and with nobody in it yet; and Add a person
+// as Setup opens it.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -14,10 +15,10 @@ import { GRANTS, type Grant } from "../grants";
 import type { Access, Group, Person } from "./identity";
 import { AddPerson, IdentityBody } from "./IdentityPage";
 
-const reviewers: Group = { id: 1, name: "Reviewers", grants: ["assistant:use", "data:see", "query:work", "review:work"], detail: "quasi", follows: ["lab-review"] };
-const admins: Group = { id: 2, name: "Admins", grants: [...GRANTS], detail: "sensitive", follows: [] };
+const reviewers: Group = { id: 1, name: "Reviewers", grants: ["assistant:use", "data:see", "query:work", "review:work"], detail: "quasi", follows: ["lab-review"], members: ["erik"] };
+const admins: Group = { id: 2, name: "Admins", grants: [...GRANTS], detail: "sensitive", follows: [], members: ["astrid"] };
 
-const person = (over: Partial<Person>): Person => ({ subject: "someone", display: "", groups: [], grants: [], detail: null, access: { grants: [], detail: "plain" }, last_seen_at: null, sessions_open: 0, ...over });
+const person = (over: Partial<Person>): Person => ({ subject: "someone", display: "", groups: [], followed: [], grants: [], detail: null, access: { grants: [], detail: "plain" }, last_seen_at: null, sessions_open: 0, ...over });
 
 const access: Access = {
   mode: "local",
@@ -134,6 +135,8 @@ describe("the Identity page when the desk keeps the people", () => {
     expect(html).toContain('<td class="meta">never</td>');
     expect(html).toContain('aria-label="Change Erik Lund"');
     expect(html).toContain("given to this person alone, on top of their groups");
+    expect(html).not.toContain("joined through the provider");
+    expect(html).not.toContain("followed");
     expect(html).toContain("each group follows one of the provider");
   });
 
@@ -149,8 +152,8 @@ describe("the Identity page when the desk keeps the people", () => {
     const reading = draw(caps("local"), null, null);
     expect(reading).toContain("Reading the groups.");
     expect(reading).toContain("Reading the people.");
-    const refused = draw(caps("local"), null, null, "the door answered 403");
-    expect(refused).toContain('<p class="warn">the door answered 403</p>');
+    const refused = draw(caps("local"), null, null, "You may not see people and groups.");
+    expect(refused).toContain('<p class="warn">You may not see people and groups.</p>');
     expect(refused).not.toContain("Reading the");
     const empty = draw(caps("local"), [], { mode: "local", sessions_open: 0, people: [] });
     expect(empty).toContain("No group yet.");
@@ -166,7 +169,17 @@ describe("the Identity page when the desk keeps the people", () => {
 });
 
 describe("the Identity page with an identity provider", () => {
-  const html = draw(caps("oidc"), [reviewers, admins], { ...access, mode: "oidc" });
+  const groups: Group[] = [{ ...reviewers, members: ["sam@id.example.org"] }, admins];
+  const signedIn: Access = {
+    mode: "oidc",
+    sessions_open: 1,
+    people: [
+      person({ subject: "astrid@id.example.org", display: "Astrid Berg", groups: [2], access: { grants: [...GRANTS], detail: "sensitive" }, sessions_open: 1 }),
+      person({ subject: "sam@id.example.org", display: "Sam Ek", groups: [1], access: { grants: reviewers.grants, detail: "quasi" } }),
+      person({ subject: "erik@id.example.org", display: "Erik Lund", followed: [1], grants: ["kvasir:see"], access: { grants: [...reviewers.grants, "kvasir:see"], detail: "quasi" } }),
+    ],
+  };
+  const html = draw(caps("oidc"), groups, signedIn);
 
   it("names the provider and the groups each group follows, and lists who has signed in", () => {
     expect(html).toContain("<dt>Sign-in</dt><dd>Single sign-on</dd>");
@@ -181,7 +194,18 @@ describe("the Identity page with an identity provider", () => {
     expect(html).toContain("those who have signed in");
     expect(html).not.toContain("Add a person");
     expect(html).toContain('aria-label="Change Erik Lund"');
-    expect(html).toContain("groups are set once, there");
+    expect(html).toContain("a person can also be put in a group here");
+  });
+
+  it("shows the groups the provider's groups reach beside the ones a person was put in, and counts them as groups", () => {
+    expect(html).toContain('<h3 class="grow">Reviewers</h3><span class="meta">2 people</span>');
+    expect(html).toMatch(
+      /<td><span class="amarks"><span class="tag followed"><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Reviewers<span class="sr-only">, through the provider&#x27;s groups<\/span><\/span><span class="meta">and 1 page of their own<\/span><\/span><\/td>/u,
+    );
+    expect(html).toContain('<td><span class="amarks"><span class="tag">Reviewers</span></span></td>');
+    expect(html).toContain('<span class="amark own">Kvasir</span>');
+    expect(html).not.toContain('<span class="amark do own">Query</span>');
+    expect(html).toContain("joined through the provider&#x27;s groups");
   });
 });
 

@@ -2,21 +2,24 @@
 // The access form as it opens: adding a person with the groups on top and
 // nothing to add before a username and a password; changing one, with each
 // line naming the group that gave it, the levels below it locked, a page of
-// their own on top and the note saying what it comes to; the groups a
-// provider set, shown and not picked; and a group made or changed.
+// their own on top and the note saying what it comes to; under oidc the
+// groups the provider's groups reach, fixed among the chips and counted as
+// groups; a door that refused to show the groups; and a group made or
+// changed.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AccessLines, GroupForm, PersonForm } from "./AccessForm";
 import { levelsOf, type Group, type Person } from "./identity";
 
-const reviewers: Group = { id: 1, name: "Reviewers", grants: ["assistant:use", "data:see", "query:work", "review:work"], detail: "quasi", follows: [] };
-const dataTeam: Group = { id: 2, name: "Data team", grants: ["query:work", "data:work", "release:work"], detail: "plain", follows: ["lab-data"] };
+const reviewers: Group = { id: 1, name: "Reviewers", grants: ["assistant:use", "data:see", "query:work", "review:work"], detail: "quasi", follows: [], members: ["erik"] };
+const dataTeam: Group = { id: 2, name: "Data team", grants: ["query:work", "data:work", "release:work"], detail: "plain", follows: ["lab-data"], members: [] };
 
 const erik: Person = {
   subject: "erik",
   display: "Erik Lund",
   groups: [1],
+  followed: [],
   grants: ["kvasir:see"],
   detail: null,
   access: { grants: ["assistant:use", "data:see", "kvasir:see", "query:work", "review:work"], detail: "quasi" },
@@ -45,10 +48,14 @@ describe("adding a person", () => {
     expect(html).toMatch(/<button type="button" class="button" disabled="">Add the person<\/button>/u);
   });
 
-  it("waits for the groups before anything can be added", () => {
+  it("waits for the groups before anything can be added, and says in plain words when they could not be read", () => {
     const html = renderToStaticMarkup(<PersonForm mode="local" groups={null} person={null} taken={[]} onClose={none} onDone={none} />);
     expect(html).toContain("Reading the groups.");
     expect(html).not.toContain("Make a group");
+    const refused = renderToStaticMarkup(<PersonForm mode="local" groups={null} why="You may not see people and groups." person={null} taken={[]} onClose={none} onDone={none} />);
+    expect(refused).toContain('<p class="warn">You may not see people and groups.</p>');
+    expect(refused).not.toContain("Reading the groups.");
+    expect(refused).toMatch(/<button type="button" class="button" disabled="">Add the person<\/button>/u);
   });
 });
 
@@ -59,6 +66,7 @@ describe("changing a person", () => {
     expect(html).toContain("Change Erik Lund");
     expect(html).toMatch(/<button type="button" class="opt on" aria-pressed="true"><svg[^>]*>.*?<\/svg>Reviewers<\/button>/u);
     expect(html).toMatch(/<button type="button" class="opt" aria-pressed="false">Data team<\/button>/u);
+    expect(html).not.toContain("followed");
     expect(lineOf(html, "Query")).toContain("from Reviewers");
     expect(lineOf(html, "Kvasir")).toContain("for Erik Lund only");
     expect(lineOf(html, "Release")).not.toContain("from");
@@ -82,11 +90,17 @@ describe("changing a person", () => {
     expect(html).toMatch(/<button type="button" class="button">Save<\/button>/u);
   });
 
-  it("shows the groups a provider set without picking them", () => {
-    const oidc = renderToStaticMarkup(<PersonForm mode="oidc" groups={[reviewers, dataTeam]} person={erik} taken={[]} onClose={none} onDone={none} />);
-    expect(oidc).toContain('<span class="tag">Reviewers</span>');
-    expect(oidc).not.toContain('class="opt');
-    expect(oidc).toContain("change at the provider");
+  it("under oidc, fixes the groups the provider's groups reach among the chips and counts them as groups", () => {
+    const reached: Person = { ...erik, subject: "erik@id.example.org", groups: [], followed: [1] };
+    const oidc = renderToStaticMarkup(<PersonForm mode="oidc" groups={[reviewers, dataTeam]} person={reached} taken={[]} onClose={none} onDone={none} />);
+    expect(oidc).toMatch(/<span class="opt on followed"><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Reviewers<span class="sr-only">, through the provider&#x27;s groups<\/span><\/span>/u);
+    expect(oidc).not.toMatch(/<button[^>]*>(?:<svg[^>]*>(?:(?!<\/svg>).)*<\/svg>)?Reviewers<\/button>/u);
+    expect(oidc).toMatch(/<button type="button" class="opt" aria-pressed="false">Data team<\/button>/u);
+    expect(oidc).toContain("A group with the globe takes them in through the provider");
+    expect(lineOf(oidc, "Query")).toContain("from Reviewers");
+    expect(lineOf(oidc, "Query")).toContain('class="locked" aria-pressed="false" disabled="">See</button>');
+    expect(lineOf(oidc, "Kvasir")).toContain("for Erik Lund only");
+    expect(oidc).toContain("Reviewers gives all of it but Kvasir");
   });
 
   it("names every group that gives a line's level", () => {

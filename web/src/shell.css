@@ -496,6 +496,7 @@ table.thin.people .person-under { display: none; }
 .opt { display: inline-flex; align-items: center; min-height: 1.75rem; padding: 0 0.6rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font: inherit; font-size: 13px; color: var(--n-text); cursor: pointer; }
 .opt .i { width: 13px; height: 13px; margin-right: 0.3rem; stroke-width: 2.4; }
 .opt.on { border-color: var(--n-brand-text); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
+.opt.followed { cursor: default; }
 .access-under { margin-top: -0.5rem; }
 .row.actions .push { margin-left: auto; }
 @media (min-width: 641px) {

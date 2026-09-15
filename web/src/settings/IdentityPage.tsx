@@ -3,23 +3,24 @@
 // draws it: how people sign in and where the desk answers, as facts with the
 // command that changes them, since both restart the desk and the engine; the
 // groups an admin names, each with the pages it gives; and the people, with
-// their groups, what those add up to and what is theirs alone. A change to a
-// person or a group applies at their next click.
+// their groups, what those add up to and what is theirs alone. Under oidc a
+// person's groups include the ones the provider's groups reach, marked as
+// such. A change to a person or a group applies at their next click.
 
 import { useEffect, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
-import { holdsGrant, may } from "../grants";
+import { may } from "../grants";
 import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
 import { GroupForm, PersonForm } from "./AccessForm";
-import { Head, messageOf, Stats } from "./common";
-import { GroupCards, Marks, MarksLegend } from "./GroupCards";
+import { Head, Stats } from "./common";
+import { GroupCards, GroupTags, Marks, MarksLegend } from "./GroupCards";
 import {
   MODES,
   RECORD_WORDS,
   accessStats,
-  groupsOf,
+  groupsGiving,
   identity,
   marksOf,
   memberCount,
@@ -28,6 +29,7 @@ import {
   ownPages,
   ownWords,
   reachWords,
+  readWords,
   seenWords,
   type Access,
   type Group,
@@ -51,9 +53,10 @@ export function IdentityPage({ caps }: { caps: Capabilities }) {
         setAccess(a);
         setWhy(null);
       })
-      .catch((e: unknown) => setWhy(messageOf(e)));
+      .catch((e: unknown) => setWhy(readWords(e)));
 
   useEffect(() => {
+    // the identity doors answer only where people sign in
     if (mode !== "off") void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once for the mode the desk runs in
   }, [mode]);
@@ -115,7 +118,8 @@ export interface BodyProps {
 
 const LOCAL_NOTE =
   "A person in two groups gets what both give. When people sign in through an identity provider instead, each group follows one of the provider's groups, so a person's groups are set once, at the provider.";
-const OIDC_NOTE = "A person in two groups gets what both give. Each group follows groups at the identity provider, so a person's groups are set once, there; a page for one person alone is given here, with Change.";
+const OIDC_NOTE =
+  "A person in two groups gets what both give. A group that follows the provider's groups takes in whoever is in them when they sign in, marked with the globe; a person can also be put in a group here, and given a page of their own, with Change.";
 
 /** The page as it draws from what it read. */
 export function IdentityBody({ caps, groups, access, why, said = null, now = Date.now(), onOpen, children }: BodyProps) {
@@ -166,7 +170,7 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
             ) : (
               <People mode={mode} people={access.people} groups={groups ?? []} me={caps.person.subject} work={work} now={now} onChange={(p) => onOpen({ kind: "person", person: p })} />
             )}
-            {access !== null && access.people.length > 0 && <MarksLegend />}
+            {access !== null && access.people.length > 0 && <MarksLegend followed={mode === "oidc"} />}
             <div className="note">
               <Icon name="info" />
               <div className="note-body">
@@ -291,16 +295,12 @@ function People(props: { mode: "off" | "local" | "oidc"; people: readonly Person
         </thead>
         <tbody>
           {people.map((p) => {
-            const theirs = groupsOf(p.groups, groups);
+            // the groups the provider's groups reach count as groups, so what they give is not the person's own
+            const theirs = groupsGiving(p, groups);
             const own = ownPages(p.grants, theirs);
             const extra = ownWords(own.size, ownDetailAbove(p.detail, theirs));
             const seen = seenWords(p, now);
             const name = p.display || p.subject;
-            const tags = theirs.map((g) => (
-              <span key={String(g.id)} className={holdsGrant(g.grants, "identity:work") ? "tag brand" : "tag"}>
-                {g.name}
-              </span>
-            ));
             return (
               <tr key={p.subject}>
                 <td>
@@ -309,14 +309,16 @@ function People(props: { mode: "off" | "local" | "oidc"; people: readonly Person
                   {name !== p.subject && <div className="meta path">{p.subject}</div>}
                   <div className="person-under">
                     <span className="meta">{seen}</span>
-                    <span className="person-groups">{tags}</span>
+                    <span className="person-groups">
+                      <GroupTags person={p} groups={groups} />
+                    </span>
                   </div>
                 </td>
                 <td>
                   <span className="amarks">
-                    {tags}
+                    <GroupTags person={p} groups={groups} />
                     {extra && <span className="meta">{extra}</span>}
-                    {tags.length === 0 && !extra && <span className="meta">none</span>}
+                    {theirs.length === 0 && !extra && <span className="meta">none</span>}
                   </span>
                 </td>
                 <td>
@@ -353,7 +355,7 @@ export function AddPerson({ users, groups, onClose, onDone }: { users: readonly 
     identity
       .groups()
       .then((g) => alive && setRead(g))
-      .catch((e: unknown) => alive && setWhy(messageOf(e)));
+      .catch((e: unknown) => alive && setWhy(readWords(e)));
     return () => {
       alive = false;
     };

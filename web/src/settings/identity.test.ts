@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Identity page's words: the pages as levels, what groups and a person's
-// own grants add up to, the levels a group locks, the marks and when they
-// collapse, the note under the form, a refusal, when a person last signed
-// in, where the desk answers, and a person added.
+// own grants add up to, the groups the provider's groups reach counted as
+// groups and never sent back, the levels a group locks, the marks and when
+// they collapse, the note under the form, a refusal and a failed read in
+// plain words, when a person last signed in, where the desk answers, and a
+// person added.
 
 import { describe, expect, it } from "vitest";
 import { DoorError } from "../ask/client";
@@ -16,10 +18,12 @@ import {
   andWords,
   detailGivenBy,
   detailLocked,
+  followedOnly,
   followsOf,
   givenBy,
   grantsOf,
   groupRefusal,
+  groupsGiving,
   lastSeenWords,
   levelOf,
   levelsOf,
@@ -32,7 +36,9 @@ import {
   ownDetailAbove,
   ownPages,
   ownWords,
+  personBody,
   reachWords,
+  readWords,
   refusalWords,
   seenWords,
   summaryWords,
@@ -41,13 +47,16 @@ import {
   type Group,
   type PageId,
   type PageLine,
+  type Person,
 } from "./identity";
 
 const line = (id: PageId): PageLine => PAGE_LINES.find((l) => l.id === id) as PageLine;
 
-const reviewers: Group = { id: 1, name: "Reviewers", grants: ["assistant:use", "data:see", "query:work", "review:work"], detail: "quasi", follows: [] };
-const dataTeam: Group = { id: 2, name: "Data team", grants: ["query:see", "data:work", "release:work", "pipelines:work", "places:work"], detail: "plain", follows: [] };
+const reviewers: Group = { id: 1, name: "Reviewers", grants: ["assistant:use", "data:see", "query:work", "review:work"], detail: "quasi", follows: [], members: [] };
+const dataTeam: Group = { id: 2, name: "Data team", grants: ["query:see", "data:work", "release:work", "pipelines:work", "places:work"], detail: "plain", follows: [], members: [] };
 const everything: Grant[] = [...SETS.admin.grants, "assistant:use"];
+
+const person = (over: Partial<Person>): Person => ({ subject: "someone", display: "", groups: [], followed: [], grants: [], detail: null, access: { grants: [], detail: "plain" }, last_seen_at: null, sessions_open: 0, ...over });
 
 describe("the pages as levels", () => {
   it("reads how far grants go on a page, work holding see", () => {
@@ -111,19 +120,22 @@ describe("groups and a person's own grants", () => {
     expect(ownDetailAbove(null, [])).toBe(false);
   });
 
-  it("count a group's people however the desk lists them", () => {
-    const access: Access = {
-      mode: "local",
-      sessions_open: 0,
-      people: [
-        { subject: "bo", display: "Bo", groups: ["1"], grants: [], detail: null, access: { grants: [], detail: "plain" }, last_seen_at: null, sessions_open: 0 },
-        { subject: "cy", display: "Cy", groups: [2], grants: [], detail: null, access: { grants: [], detail: "plain" }, last_seen_at: null, sessions_open: 1 },
-      ],
-    };
-    expect(memberCount({ ...reviewers, members: ["bo", "cy"] }, null)).toBe(2);
-    expect(memberCount({ ...reviewers, members: 5 }, null)).toBe(5);
-    expect(memberCount(reviewers, access.people)).toBe(1);
-    expect(memberCount(dataTeam, access.people)).toBe(1);
+  it("count the groups the provider's groups reach as groups, and send back only the groups a person was put in", () => {
+    const sam = { groups: [2], followed: [1, 2] };
+    expect(groupsGiving(sam, [reviewers, dataTeam]).map((g) => g.name)).toEqual(["Reviewers", "Data team"]);
+    expect(followedOnly(sam, [reviewers, dataTeam]).map((g) => g.name)).toEqual(["Reviewers"]);
+    expect(followedOnly({ groups: [1] }, [reviewers, dataTeam])).toEqual([]);
+    expect(personBody([2], [1], [reviewers, dataTeam], { query: "work", data: "work", kvasir: "see" }, "quasi")).toEqual({ groups: [2], grants: ["kvasir:see"], detail: null });
+    expect(personBody(["2", 9], [], [reviewers, dataTeam], { review: "work" }, "sensitive")).toEqual({ groups: [2], grants: ["review:work"], detail: "sensitive" });
+    expect(personBody([], [1], [reviewers, dataTeam], { assistant: "use" }, null)).toEqual({ groups: [], grants: [], detail: null });
+  });
+
+  it("count a group's people: those put in it and those the provider's groups reach", () => {
+    const people = [person({ subject: "bo", groups: ["1"] }), person({ subject: "cy", groups: [2] }), person({ subject: "dee", followed: [2] })];
+    expect(memberCount({ ...reviewers, members: ["bo", "eli"] }, people)).toBe(2);
+    expect(memberCount(reviewers, people)).toBe(1);
+    expect(memberCount(dataTeam, people)).toBe(2);
+    expect(memberCount({ ...dataTeam, members: ["cy"] }, null)).toBe(1);
   });
 });
 
@@ -201,13 +213,26 @@ describe("the words", () => {
     expect(groupRefusal("Reviewers", [reviewers], 1)).toBeNull();
   });
 
-  it("put a refusal in plain words", () => {
+  it("put a refusal in plain words, never naming a grant", () => {
     expect(refusalWords(new DoorError(409, { error: "no identity:work left" }), "group")).toBe("That would leave nobody who may change people and groups, so the desk kept everything as it was.");
+    expect(refusalWords(new DoorError(401, { error: "no session; log in at the desk" }), "person")).toBe("Your session has ended. Sign in at the desk again, then make the change once more.");
+    expect(refusalWords(new DoorError(403, { error: "changing people needs identity:work" }), "group")).toBe("You may not change people and groups.");
     expect(refusalWords(new DoorError(400, { error: "unknown group 7" }), "person")).toBe("The desk does not know a group or a page chosen here. Open the page again and choose once more.");
+    expect(refusalWords(new DoorError(400, { error: "data:admin is not a grant" }), "group")).toBe("The desk does not know a group or a page chosen here. Open the page again and choose once more.");
     expect(refusalWords(new DoorError(400, { error: "a user named bo exists" }), "person")).toBe("A user named bo exists.");
     expect(refusalWords(new DoorError(404, {}), "person")).toBe("The desk no longer knows this person. Open the page again.");
     expect(refusalWords(new DoorError(500, {}), "group")).toBe("The desk answered 500.");
+    expect(refusalWords(new DoorError(500, { error: "grant query:see is not held" }), "group")).toBe("The desk answered 500.");
     expect(refusalWords(new Error("offline"), "group")).toBe("offline");
+  });
+
+  it("say why the people and groups could not be read, never naming a grant", () => {
+    expect(readWords(new DoorError(401, { error: "no session; log in at the desk" }))).toBe("Your session has ended. Sign in at the desk again to see people and groups.");
+    expect(readWords(new DoorError(403, { error: "people need identity:see" }))).toBe("You may not see people and groups.");
+    expect(readWords(new DoorError(404, { error: "not found" }))).toBe("The desk keeps no people or groups now; it may have been set up again so that nobody signs in. Open the page again.");
+    expect(readWords(new DoorError(500, { error: "the store is locked" }))).toBe("The store is locked.");
+    expect(readWords(new DoorError(502, {}))).toBe("The people and groups could not be read: the desk answered 502.");
+    expect(readWords(new Error("offline"))).toBe("offline");
   });
 
   it("say when a person last signed in", () => {
@@ -236,11 +261,7 @@ describe("the words", () => {
 
   it("give the page's numbers for each way people sign in", () => {
     const caps = (mode: "off" | "local" | "oidc", origin = "http://127.0.0.1:7203") => ({ desk: { mode, settings: { origin } } }) as unknown as Capabilities;
-    const access: Access = {
-      mode: "local",
-      sessions_open: 3,
-      people: [{ subject: "bo", display: "Bo", groups: [1], grants: [], detail: null, access: { grants: [], detail: "plain" }, last_seen_at: null, sessions_open: 2 }],
-    };
+    const access: Access = { mode: "local", sessions_open: 3, people: [person({ subject: "bo", display: "Bo", groups: [1], sessions_open: 2 })] };
     expect(accessStats(caps("local"), [reviewers, dataTeam], access)).toEqual([
       { label: "Sign-in", value: "Local accounts", tone: undefined },
       { label: "People", value: "1" },

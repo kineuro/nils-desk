@@ -3,7 +3,9 @@
 // person's groups as chips on top, then a line for each page with how far
 // they go there, the pages under Settings each on their own, and how much of
 // a record they see. Each of a person's lines names the group that gave it,
-// and a level a group gives cannot be chosen lower for that person. The note
+// and a level a group gives cannot be chosen lower for that person. Under
+// oidc the groups a person reaches through the provider's groups count as
+// groups too, and are never sent back as groups they were put in. The note
 // under the lines says in plain words what all of it comes to.
 
 import { useId, useState } from "react";
@@ -24,15 +26,15 @@ import {
   givenBy,
   grantsOf,
   groupRefusal,
-  groupsOf,
+  groupsGiving,
   higher,
   highestDetail,
   identity,
   levelsOf,
   lineWords,
   locked,
-  ownAbove,
   ownPages,
+  personBody,
   refusalWords,
   sameGroup,
   summaryWords,
@@ -150,35 +152,15 @@ export function AccessNote({ words }: { words: { lead: string; detail: string[] 
   );
 }
 
-/** A person's groups as chips to pick, or under oidc the groups the provider put them in. */
-function GroupChips(props: { groups: readonly Group[] | null; chosen: readonly GroupId[]; follow: boolean; onToggle: (id: GroupId) => void; onMake: () => void }) {
-  const { groups, chosen, follow, onToggle, onMake } = props;
+/** A person's groups as chips to pick; a group the provider's groups reach is shown among them, fixed and marked with the globe. */
+function GroupChips(props: { groups: readonly Group[] | null; chosen: readonly GroupId[]; followed: readonly GroupId[]; follow: boolean; onToggle: (id: GroupId) => void; onMake: () => void }) {
+  const { groups, chosen, followed, follow, onToggle, onMake } = props;
   const id = useId();
   if (groups === null) {
     return (
       <div className="field">
         <span className="label">Groups</span>
         <span className="meta">Reading the groups.</span>
-      </div>
-    );
-  }
-  if (follow) {
-    const mine = groupsOf(chosen, groups);
-    return (
-      <div className="field">
-        <span className="label">Groups</span>
-        <div className="row presets">
-          {mine.length === 0 ? (
-            <span className="meta">none</span>
-          ) : (
-            mine.map((g) => (
-              <span key={String(g.id)} className="tag">
-                {g.name}
-              </span>
-            ))
-          )}
-        </div>
-        <span className="meta">Groups follow the provider's groups, so a person's groups change at the provider.</span>
       </div>
     );
   }
@@ -189,6 +171,15 @@ function GroupChips(props: { groups: readonly Group[] | null; chosen: readonly G
       </span>
       <div className="row presets" role="group" aria-labelledby={id}>
         {groups.map((g) => {
+          if (followed.some((f) => sameGroup(f, g.id))) {
+            return (
+              <span key={String(g.id)} className="opt on followed">
+                <Icon name="globe" />
+                {g.name}
+                <span className="sr-only">, through the provider's groups</span>
+              </span>
+            );
+          }
           const on = chosen.some((c) => sameGroup(c, g.id));
           return (
             <button key={String(g.id)} type="button" className={on ? "opt on" : "opt"} aria-pressed={on} onClick={() => onToggle(g.id)}>
@@ -202,7 +193,13 @@ function GroupChips(props: { groups: readonly Group[] | null; chosen: readonly G
           Make a group
         </button>
       </div>
-      <span className="meta">{groups.length === 0 ? "No group yet: make one, or open pages for this person alone below." : "A person may be in more than one, and gets what every one of them gives."}</span>
+      <span className="meta">
+        {groups.length === 0
+          ? "No group yet: make one, or open pages for this person alone below."
+          : follow
+            ? "A group with the globe takes them in through the provider's groups, and changes there. A person may be put in other groups here too, and gets what every one of them gives."
+            : "A person may be in more than one, and gets what every one of them gives."}
+      </span>
     </div>
   );
 }
@@ -227,6 +224,7 @@ export interface PersonFormProps {
 export function PersonForm(props: PersonFormProps) {
   const { mode, person, taken, onClose, onDone, onGroupMade } = props;
   const follow = mode === "oidc";
+  const followed = person?.followed ?? [];
   const [username, setUsername] = useState("");
   const [display, setDisplay] = useState("");
   const [password, setPassword] = useState("");
@@ -240,20 +238,20 @@ export function PersonForm(props: PersonFormProps) {
 
   const known = props.groups;
   const all = known === null ? null : [...known, ...made.filter((m) => !known.some((g) => sameGroup(g.id, m.id)))];
-  const mine = groupsOf(chosen, all ?? []);
+  // the groups the provider's groups reach give what they give, and lock it, as the ones the person was put in do
+  const mine = groupsGiving({ groups: chosen, followed }, all ?? []);
   const levels = Object.fromEntries(PAGE_LINES.map((l) => [l.id, higher(l, givenBy(mine, l).level, own[l.id])])) as Levels;
   const detail = highestDetail([detailGivenBy(mine).detail, ...(ownDetail ? [ownDetail] : [])]);
-  const theirs = ownAbove(mine, own, ownDetail);
+  const body = personBody(chosen, followed, all ?? [], own, ownDetail);
   const name = person === null ? display.trim() || username.trim() : person.display || person.subject;
-  const words = summaryWords({ kind: "person", name, grants: grantsOf(levels), detail, groups: mine, own: ownPages(theirs.grants, mine), ownDetail: theirs.detail !== null });
+  const words = summaryWords({ kind: "person", name, grants: grantsOf(levels), detail, groups: mine, own: ownPages(body.grants, mine), ownDetail: body.detail !== null });
   const refusal = person === null ? addRefusal({ username, password }, taken) : null;
 
   const save = () =>
     saving.act(person === null ? `adding ${username.trim()}` : `changing what ${name} may see and do`, async () => {
-      const body = { groups: mine.map((g) => g.id), grants: theirs.grants, detail: theirs.detail };
       try {
         if (person === null) await identity.add({ username: username.trim(), password, display: display.trim(), ...body });
-        else await identity.setAccess(person.subject, follow ? { ...body, groups: person.groups } : body);
+        else await identity.setAccess(person.subject, body);
       } catch (e) {
         throw new Error(refusalWords(e, "person"));
       }
@@ -319,11 +317,12 @@ export function PersonForm(props: PersonFormProps) {
           </dl>
         )}
         {props.why ? (
-          <p className="warn">The groups could not be read: {props.why}</p>
+          <p className="warn">{props.why}</p>
         ) : (
           <GroupChips
             groups={all}
             chosen={chosen}
+            followed={followed}
             follow={follow}
             onToggle={(id) => setChosen((c) => (c.some((x) => sameGroup(x, id)) ? c.filter((x) => !sameGroup(x, id)) : [...c, id]))}
             onMake={() => setMaking(true)}
