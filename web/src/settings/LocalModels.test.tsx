@@ -189,7 +189,7 @@ describe("the line under the models", () => {
     expect(line({ ...status, runtime: { ...status.runtime!, reachable: false } }, null)).toContain('<span class="warn">does not answer</span>');
     const bare = line({ ...status, runtime: null, token: true, free_bytes: null }, null);
     expect(bare).not.toContain("llama.cpp");
-    expect(bare).toContain("the free space there is not known");
+    expect(bare).toContain("free space unknown");
     expect(bare).toContain("Hugging Face token set");
   });
 });

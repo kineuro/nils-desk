@@ -185,7 +185,7 @@ describe("a model's row", () => {
     expect(removeWords(model())).toEqual(["Nothing of it is downloaded yet, so it only leaves the list."]);
     expect(removedWords(model({ state: "done" }))).toBe("owner/name is removed, and 16 GiB is free again.");
     expect(removedWords(model())).toBe("owner/name is removed.");
-    expect(queuedWords(model())).toBe(`owner/name is queued: 16 GiB in 3 files, into ${PATH}.`);
+    expect(queuedWords(model())).toBe("owner/name is queued, 16 GiB.");
   });
 });
 
@@ -375,8 +375,8 @@ describe("a model started on llama.cpp", () => {
     expect(startRefusalWords(at("runtime_unreachable"))).toBe("llama.cpp on this machine does not answer, so Kvasir could not start the model. Start it again once llama.cpp answers.");
     expect(startRefusalWords(refusal("bad_request", "the model's file went missing"))).toBe("The model's file went missing.");
     expect(startRefusalWords(refusal(null, "", { status: 500 }))).toBe("Kvasir answered 500.");
-    expect(startedWords(model())).toBe("owner/name is loading into llama.cpp. Once it serves, Kvasir checks it with its admission suite before the assistant uses it.");
-    expect(stoppedWords(model())).toBe("owner/name is stopped, and llama.cpp holds no memory for it any more.");
+    expect(startedWords(model())).toBe("owner/name is loading into llama.cpp.");
+    expect(stoppedWords(model())).toBe("owner/name is stopped.");
     expect(stopFirstWords(model())).toBe("owner/name is started on llama.cpp. Stop it first, then remove it.");
   });
 });
@@ -486,6 +486,6 @@ describe("a local model's card (record 25)", () => {
     const two = model({ ...done, id: 2, repo: "owner/two", run: run() });
     expect(localOrder([one, two]).map((m) => m.id)).toEqual([2, 1]);
     expect(roomLine(412 * GIB)).toBe("412 GiB free");
-    expect(roomLine(null)).toBe("the free space there is not known");
+    expect(roomLine(null)).toBe("free space unknown");
   });
 });

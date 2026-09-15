@@ -36,13 +36,13 @@ describe("where each station goes", () => {
     expect(html).toContain("Change where ask-help goes, now ");
     expect(html).toContain('<span class="station">ask-help</span><span class="tag">carries rows</span>');
     expect(html).toContain("<b>Qwen3.6-27B-Q4_K_M</b>");
-    expect(html).toContain('<span class="meta">this machine, llama.cpp</span>');
+    expect(html).toContain('<span class="meta">this machine · llama.cpp</span>');
     expect(html).toContain('<span class="tag ok">stays in your systems</span>');
     expect(html).toContain('<span class="sq brand">');
     expect(html).toContain('<span class="chev">');
     expect(html).toContain('<span class="tag">carries the catalogue</span>');
     expect(html).toContain('<span class="tag caution">leaves your systems</span>');
-    expect(html).toContain('<span class="meta side">no rows, so no reason needed</span>');
+    expect(html).toContain('<span class="meta side"></span>');
   });
 
   it("draws a plain box for a person who may not move a station", () => {
@@ -65,9 +65,9 @@ describe("the drawer", () => {
     const [now] = lines(admin, [runtime, minimax], [row]);
     const html = renderToStaticMarkup(<MoveDrawer purpose={row} backends={[runtime, minimax]} system={false} now={now.to} toward="minimax" onClose={() => undefined} onDone={() => undefined} />);
     expect(html).toContain("Where concierge goes");
-    expect(html).toContain("Qwen3.6-27B-Q4_K_M, this machine, llama.cpp");
+    expect(html).toContain("Qwen3.6-27B-Q4_K_M · this machine · llama.cpp");
     expect(html).toContain("MiniMax-M3");
-    expect(html).toContain("Why rows of the archive may leave, for this purpose");
+    expect(html).toContain("Why rows of the archive may leave");
     expect(html).toContain("Move concierge");
   });
 });

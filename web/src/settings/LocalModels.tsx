@@ -201,7 +201,7 @@ export function useLocalModels(props: { enabled: boolean; onRun?: () => void; on
           onDone={(s) => {
             setLocating(false);
             take(s);
-            say(`${movedWords(s.location)} ${STAY_NOTE}`);
+            say(movedWords(s.location));
           }}
         />
       )}
@@ -433,8 +433,8 @@ export function MachineLine({ install, status, onLocate, onToken }: { install: I
       )}
       <span>
         <Icon name="disk" />
-        <span>
-          Downloads go to <span className="path">{status.location}</span>, {roomLine(status.free_bytes)} ·
+        <span title="Where downloads go">
+          <span className="path">{status.location}</span> · {roomLine(status.free_bytes)} ·
         </span>
         <button type="button" className="link-button" onClick={onLocate}>
           Change

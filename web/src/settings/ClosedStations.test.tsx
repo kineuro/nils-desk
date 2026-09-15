@@ -27,9 +27,9 @@ describe("the stations a provider does not answer", () => {
     const purposes = [purpose({}), purpose({ purpose: "assistant.operator", content: "catalog" }), purpose({ purpose: "desk.identity", content: "identifiers" })];
     const html = renderToStaticMarkup(<ClosedStations provider={minimax} purposes={purposes} onChange={() => undefined} />);
     expect(html).toContain("MiniMax-M3 answers no station yet");
-    expect(html).toContain("concierge carries rows of the archive, which go there only once you write down why.");
-    expect(html).toContain("operator reads no rows, and goes there once you move it.");
-    expect(html).toContain("desk.identity carries identifiers, which never leave your systems.");
+    expect(html).toContain("concierge: needs a written reason");
+    expect(html).toContain("operator: moves at once");
+    expect(html).toContain("desk.identity: identifiers never leave");
     expect(html.match(/>Change<\/button>/gu)).toHaveLength(2);
     expect(html).toContain('aria-label="Change where concierge goes"');
   });

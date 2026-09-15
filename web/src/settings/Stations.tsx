@@ -48,7 +48,9 @@ export function StationRoutes({ routes, onChange }: { routes: Route[]; onChange?
               <Box to={r.to} />
             </div>
           )}
-          <span className="meta side">{r.side ?? ""}</span>
+          <span className="meta side" title={r.because ?? undefined}>
+            {r.side ?? ""}
+          </span>
         </div>
       ))}
     </div>
@@ -123,17 +125,17 @@ export function MoveDrawer(props: { purpose: PurposeRow; backends: Backend[]; sy
             </label>
           ))}
         </div>
-        {chosen?.backend.builtin === true && !system && <span className="meta">A person who has not signed in to ChatGPT gets the default model in your systems instead.</span>}
+        {chosen?.backend.builtin === true && !system && <span className="meta">Without a subscription, the default model answers.</span>}
       </div>
       {needs && (
         <div className="field">
           <label className="label" htmlFor="move-reason">
-            Why rows of the archive may leave, for this purpose
+            Why rows of the archive may leave
           </label>
           <div className="input">
             <textarea id="move-reason" rows={3} value={reason} disabled={moving.working} onChange={(e) => setReason(e.target.value)} />
           </div>
-          <span className="meta">Recorded with your name beside the purpose; Kvasir refuses the move without it.</span>
+          <span className="meta">Recorded with your name.</span>
         </div>
       )}
     </Dialog>

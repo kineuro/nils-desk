@@ -83,8 +83,6 @@ export function underWay(models: LocalModel[]): boolean {
   return models.some((m) => m.state === "queued" || m.state === "downloading");
 }
 
-const filesWords = (n: number) => (n === 1 ? "one file" : `${count(n)} files`);
-
 /** How far a model is, as facts beside its tag: the bytes it has of all it needs, and the percent while it downloads. */
 export function progressWords(m: LocalModel): string {
   const of = `${bytesWords(m.bytes_done)} of ${bytesWords(m.bytes_total)}`;
@@ -266,7 +264,7 @@ export function removeWords(m: LocalModel): string[] {
 
 /** What a download queued, said once the dialog closes. */
 export function queuedWords(m: LocalModel): string {
-  return `${m.repo} is queued: ${bytesWords(m.bytes_total)} in ${filesWords(m.files)}, into ${m.path}.`;
+  return `${m.repo} is queued, ${bytesWords(m.bytes_total)}.`;
 }
 
 /** What a removal let go, said once it is done. */
@@ -277,7 +275,7 @@ export function removedWords(m: LocalModel): string {
 
 /** Where new downloads go, said once the location changed. */
 export function movedWords(location: string): string {
-  return `New downloads go to ${location} now.`;
+  return `New downloads go to ${location}.`;
 }
 
 // Record 24: a downloaded GGUF model started on the runtime, llama.cpp's server
@@ -295,9 +293,6 @@ export function runtimeLine(r: LocalRuntime): string {
 export function runtimeTag(r: LocalRuntime): { tone: LocalTone; words: string } {
   return r.reachable ? { tone: "ok", words: "answers" } : { tone: "blocked", words: "does not answer" };
 }
-
-/** Said while the runtime does not answer. */
-export const UNREACHABLE = "Kvasir does not reach llama.cpp on this machine, so no model starts or serves until it answers again.";
 
 /** Said under the commands of a model Kvasir starts itself, folded under Or run it yourself. */
 export const SELF_NOTE = "A model server started with one of these commands is added with Add a model.";
@@ -375,12 +370,12 @@ export function replaceWords(next: LocalModel, running: LocalModel): string {
 
 /** What a start began, said once Kvasir took it. */
 export function startedWords(m: LocalModel): string {
-  return `${m.repo} is loading into llama.cpp. Once it serves, Kvasir checks it with its admission suite before the assistant uses it.`;
+  return `${m.repo} is loading into llama.cpp.`;
 }
 
 /** What a stop did, said once Kvasir took it. */
 export function stoppedWords(m: LocalModel): string {
-  return `${m.repo} is stopped, and llama.cpp holds no memory for it any more.`;
+  return `${m.repo} is stopped.`;
 }
 
 /** Said in place of removing a model llama.cpp loads or serves. */
@@ -508,5 +503,5 @@ export function localOrder(models: LocalModel[]): LocalModel[] {
 
 /** Where downloads go and the room there, on the line under the cards. */
 export function roomLine(free: number | null): string {
-  return free === null ? "the free space there is not known" : `${bytesWords(free)} free`;
+  return free === null ? "free space unknown" : `${bytesWords(free)} free`;
 }

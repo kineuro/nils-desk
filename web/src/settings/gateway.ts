@@ -201,9 +201,9 @@ export function admissionWords(model: string, backend: Backend, listed: Catalogu
 export function checkWords(records: AdmissionRecord[]): { passed: boolean; words: string } {
   if (records.length === 0) return { passed: false, words: "Kvasir checked no model." };
   const words = records.map((r) => {
-    if (r.passed) return `${r.model} passed the admission suite, and the assistant may use it.`;
+    if (r.passed) return `${r.model} is admitted.`;
     const failed = failedChecks(r);
-    return `${r.model} did not pass the admission suite${failed.length > 0 ? `: it failed ${listWords(failed)}` : ""}.`;
+    return `${r.model} is refused${failed.length > 0 ? `: it failed ${listWords(failed)}` : ""}.`;
   });
   return { passed: records.every((r) => r.passed), words: words.join(" ") };
 }
@@ -301,30 +301,30 @@ export function destinationOf(p: PurposeRow, backends: Backend[], at: { viewer: 
   const b = backends.find((x) => x.id === p.backend);
   if (!b) {
     const stopped = p.backend === RUNTIME_BACKEND;
-    return { mark: MARKS.nowhere, title: "nowhere yet", meta: stopped ? "its model on this machine is stopped" : "no model in your systems answers it yet", where: null };
+    return { mark: MARKS.nowhere, title: "nowhere yet", meta: stopped ? "model stopped" : null, where: null };
   }
   const where = whereWords(b.locality);
   if (b.builtin === true) {
     const { viewer, subscription: s } = at;
     const name = s?.name ?? "ChatGPT";
-    const until = defaultModel(backends) ?? "the default model in your systems";
-    const signed = s?.state === "signed_in" ? `${subscribedModel(s) ?? name}, signed in` : null;
-    if (viewer.system) return { mark: MARKS.subscription, title: `The install's ${name} subscription`, meta: signed ?? `${until} until it is signed in`, where };
-    if (viewer.subscribes && !viewer.work) return { mark: MARKS.subscription, title: `Your own ${name} subscription`, meta: signed ?? `${until} until you sign in`, where };
-    return { mark: MARKS.subscription, title: `Each person's own ${name} subscription`, meta: "the default model in your systems for anyone without one", where };
+    const until = defaultModel(backends);
+    const model = s?.state === "signed_in" ? subscribedModel(s) : undefined;
+    if (viewer.system) return { mark: MARKS.subscription, title: `The install's ${name} subscription`, meta: model !== undefined ? model : until ? `${until} until signed in` : null, where };
+    if (viewer.subscribes && !viewer.work) return { mark: MARKS.subscription, title: `Your own ${name} subscription`, meta: model !== undefined ? model : until ? `${until} until you sign in` : null, where };
+    return { mark: MARKS.subscription, title: `Each person's own ${name} subscription`, meta: until ? `${until} without one` : null, where };
   }
   const model = b.models[0] ?? b.id;
-  if (onRuntime(b)) return { mark: MARKS.runtime, title: model, meta: "this machine, llama.cpp", where };
+  if (onRuntime(b)) return { mark: MARKS.runtime, title: model, meta: "this machine · llama.cpp", where };
   if (b.locality === "local") {
     const runtime = runtimeOfBackend(b, at.admissions);
-    return { mark: MARKS.server, title: model, meta: at.viewer.work ? (runtime ? `your server, ${runtime}` : "your server") : "a server in your systems", where };
+    return { mark: MARKS.server, title: model, meta: at.viewer.work ? (runtime ? `your server · ${runtime}` : "your server") : "your systems", where };
   }
-  return { mark: MARKS.provider, title: model, meta: `${providerName(b)}, a provider`, where };
+  return { mark: MARKS.provider, title: model, meta: providerName(b), where };
 }
 
 /** Where a station goes now, in one line. */
 export function goesToWords(d: Destination): string {
-  return d.meta ? `${d.title}, ${d.meta}` : d.title;
+  return d.meta ? `${d.title} · ${d.meta}` : d.title;
 }
 
 /** What a station carries to the model, beside its name. */
@@ -339,8 +339,10 @@ export interface Route {
   station: string;
   carries: string;
   to: Destination;
-  /** Who allowed rows of the archive to leave for it, or why nothing needed allowing; null otherwise. */
+  /** Who allowed rows of the archive to leave for it, and when; null otherwise. */
   side: string | null;
+  /** The reason written down for it, as the hover title of who allowed it. */
+  because: string | null;
   /** Whether this viewer may move it, to a backend it may go to. */
   movable: boolean;
 }
@@ -348,13 +350,16 @@ export interface Route {
 /** Where each station goes (record 25): the page's first section. */
 export function routes(purposes: PurposeRow[], backends: Backend[], at: { viewer: Viewer; admissions: AdmissionRecord[] | null; subscription: Subscription | null }): Route[] {
   return purposes.map((p) => {
-    const b = backends.find((x) => x.id === p.backend);
-    const side = p.acknowledged
-      ? `allowed by ${p.acknowledged.by}${p.acknowledged.at ? ` on ${onDate(p.acknowledged.at)}` : ""}, for this station`
-      : b?.locality === "remote" && p.content === "catalog"
-        ? "no rows, so no reason needed"
-        : null;
-    return { purpose: p, station: stationOf(p.purpose), carries: carriesWords(p.content), to: destinationOf(p, backends, at), side, movable: at.viewer.work && targets(p, backends).length > 0 };
+    const side = p.acknowledged ? `allowed by ${p.acknowledged.by}${p.acknowledged.at ? `, ${onDate(p.acknowledged.at)}` : ""}` : null;
+    return {
+      purpose: p,
+      station: stationOf(p.purpose),
+      carries: carriesWords(p.content),
+      to: destinationOf(p, backends, at),
+      side,
+      because: p.acknowledged?.text ?? null,
+      movable: at.viewer.work && targets(p, backends).length > 0,
+    };
   });
 }
 
@@ -410,9 +415,9 @@ export function closedTo(provider: Backend, purposes: PurposeRow[]): ClosedLine[
     .map((p): ClosedLine => {
       const station = stationOf(p.purpose);
       const open = opening(p, provider);
-      if (open === "never") return { purpose: p, station, needs: "never", words: `${station} carries identifiers, which never leave your systems.` };
-      if (open === "acknowledge") return { purpose: p, station, needs: "an acknowledgement", words: `${station} carries rows of the archive, which go there only once you write down why.` };
-      return { purpose: p, station, needs: "nothing", words: `${station} reads no rows, and goes there once you move it.` };
+      if (open === "never") return { purpose: p, station, needs: "never", words: `${station}: identifiers never leave` };
+      if (open === "acknowledge") return { purpose: p, station, needs: "an acknowledgement", words: `${station}: needs a written reason` };
+      return { purpose: p, station, needs: "nothing", words: `${station}: moves at once` };
     });
 }
 
