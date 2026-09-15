@@ -49,6 +49,8 @@ describe("the sections of an install that is set up", () => {
   const served = caps({ engine: { ...caps().engine!, doors } });
   it("join Home where the engine serves their doors and the person may open them", () => {
     expect(sections(served).map((s) => s.id)).toEqual(["home", "query", "data", "review", "release", "pipelines"]);
+    // Data unfolds its two pages in the side (record 26)
+    expect(sections(served).find((s) => s.id === "data")?.pages?.map((p) => p.id)).toEqual(["datasets", "cohorts"]);
     const reader = { ...served, person: { ...served.person, grants: SETS.reader.grants, detail: "plain" as const, groups: ["Readers"] } };
     expect(sections(reader).map((s) => s.id)).toEqual(["home", "query", "data"]);
     const reviewing = { ...served, person: { ...served.person, grants: ["review:see" as const], detail: "plain" as const } };
@@ -123,16 +125,23 @@ describe("the avatar", () => {
 
 describe("the addresses", () => {
   it("name a section, its page and what it opens, and send anything else Home", () => {
-    expect(parse("#settings/places")).toEqual({ section: "settings", page: "places", arg: null });
-    expect(parse("#settings/places/backup%20disk")).toEqual({ section: "settings", page: "places", arg: "backup disk" });
-    expect(parse("")).toEqual({ section: "home", page: null, arg: null });
-    expect(parse("#/nowhere")).toEqual({ section: "home", page: null, arg: null });
-    expect(parse("#settings/places/%E0%A4%A")).toEqual({ section: "settings", page: "places", arg: null });
+    expect(parse("#settings/places")).toEqual({ section: "settings", page: "places", arg: null, sub: null });
+    expect(parse("#settings/places/backup%20disk")).toEqual({ section: "settings", page: "places", arg: "backup disk", sub: null });
+    expect(parse("")).toEqual({ section: "home", page: null, arg: null, sub: null });
+    expect(parse("#/nowhere")).toEqual({ section: "home", page: null, arg: null, sub: null });
+    expect(parse("#settings/places/%E0%A4%A")).toEqual({ section: "settings", page: "places", arg: null, sub: null });
+  });
+  it("name a page of what a page opened, in one word past it", () => {
+    expect(parse("#data/datasets/incoming/pseudonymisation")).toEqual({ section: "data", page: "datasets", arg: "incoming", sub: "pseudonymisation" });
+    expect(parse("#data/batch/12")).toEqual({ section: "data", page: "batch", arg: "12", sub: null });
+    expect(parse("#data/datasets/a/b/c")).toEqual({ section: "home", page: null, arg: null, sub: null });
+    expect(href("data", "datasets", "incoming", "pseudonymisation")).toBe("#data/datasets/incoming/pseudonymisation");
+    expect(href("data", "datasets", null, "pseudonymisation")).toBe("#data/datasets");
   });
   it("round-trip", () => {
-    for (const h of ["#home", "#settings/parts", "#settings/places/backup%20disk"]) {
+    for (const h of ["#home", "#settings/parts", "#settings/places/backup%20disk", "#data/datasets/incoming/pseudonymisation"]) {
       const r = parse(h);
-      expect(href(r.section, r.page, r.arg)).toBe(h);
+      expect(href(r.section, r.page, r.arg, r.sub)).toBe(h);
     }
   });
 });

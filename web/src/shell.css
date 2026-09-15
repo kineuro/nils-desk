@@ -1069,3 +1069,97 @@ button.steps-line:hover { background: var(--n-bg-hover); }
   .side, .side.open, .side-gap, .side-pages, .side-chevron { transition: none; }
   .dialog[open], .dialog[open]::backdrop { animation: none; }
 }
+
+/* ------------------------------------------------------------ record 26, D1: the Data page as shape C (datasets with two trees, Now from the event stream, the batches with five marks, Add a dataset, Bring in what is new) */
+.sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 0.9rem; }
+.scard { display: grid; gap: 0.55rem; align-content: start; min-width: 0; padding: 0.85rem 0.95rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); cursor: pointer; }
+.scard:hover { border-color: var(--n-brand-line); }
+.scard.on { border-color: var(--n-brand-line); box-shadow: inset 0 3px 0 var(--n-brand); }
+.scard .name { display: flex; align-items: center; gap: 0.5rem; min-width: 0; font-weight: 600; }
+.scard .name > .i { color: var(--n-text-faint); }
+.scard-pick { min-width: 0; padding: 0; border: 0; background: transparent; color: var(--n-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scard-pick:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 2px; border-radius: 2px; }
+.scard .where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: 12.5px; color: var(--n-text-faint); }
+.scard > .row { flex-wrap: wrap; gap: 0.3rem 0.6rem; }
+.scard .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.scard .nums b { display: block; font-family: var(--n-font-serif); font-weight: 400; font-size: 1.15rem; line-height: 1.2; }
+.scard .nums span { font-size: 12px; color: var(--n-text-faint); }
+.scard > .meta { overflow-wrap: anywhere; }
+.scard .more-menu > summary { min-height: 1.5rem; padding: 0 0.3rem; }
+.scard .more-list > a, .scard .more-list > a:hover { padding: 0.4rem 0.55rem; border-radius: var(--n-radius); color: var(--n-text); font-size: var(--n-text-size-small); text-decoration: none; }
+.scard .more-list > a:hover { background: var(--n-bg-hover); }
+.privacy { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 12px; font-weight: 500; }
+.privacy.gated { color: var(--n-gated-fg); }
+.privacy.ok { color: var(--n-ok-fg); }
+.tag.users .i { width: 12px; height: 12px; }
+/* the two trees of a dataset */
+.trees { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.5rem; font-size: 12.5px; color: var(--n-text-dim); }
+.trees > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; min-width: 0; }
+.trees .i { flex: none; width: 13px; height: 13px; color: var(--n-text-faint); }
+.trees .path { font-size: 12px; white-space: nowrap; }
+/* the five marks of a batch in its row */
+.mini { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; min-width: 7rem; }
+.mini.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.mini i { display: block; height: 6px; border-radius: 2px; background: var(--n-bg-sunken); }
+.mini i.done { background: var(--n-ok-icon); }
+.mini i.now { background: var(--n-brand); }
+.mini i.wait { background: var(--n-caution-icon); }
+.mini i.failed { background: var(--n-blocked-icon); }
+table.thin.batches th.strip-head { width: 30%; }
+table.thin.batches .batch-link { font-weight: 500; overflow-wrap: anywhere; }
+.tail { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+.tail .i { width: 13px; height: 13px; color: var(--n-text-faint); }
+button.tail { padding: 0; }
+/* the stage strip of a batch, for the batch page beside this slice */
+.strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.strip.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.strip > div { display: grid; gap: 0.15rem; padding: 0.55rem 0.7rem 0.6rem; border-top: 4px solid var(--n-bg-sunken); background: var(--n-bg-raised); min-width: 0; }
+.strip > div.done { border-top-color: var(--n-ok-icon); }
+.strip > div.now { border-top-color: var(--n-brand); }
+.strip > div.wait { border-top-color: var(--n-caution-icon); }
+.strip > div.failed { border-top-color: var(--n-blocked-icon); }
+.strip .k { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--n-text-faint); }
+.strip .v { font-family: var(--n-font-serif); font-size: 1.35rem; line-height: 1.15; }
+.strip .v small { font-family: var(--n-font-sans); font-size: 13px; color: var(--n-text-faint); }
+.strip.small > div { padding: 0.3rem 0.5rem 0.35rem; border-top-width: 3px; }
+.strip.small .v { font-size: 1.05rem; }
+.strip.small .k { font-size: 11px; }
+/* the jobs now, from the engine's event stream */
+.jobs-now { display: grid; gap: 0.5rem; }
+.job { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 0.2rem 0.8rem; align-items: center; padding: 0.65rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.job > .sq { grid-row: 1 / span 2; width: 32px; height: 32px; }
+.job > .what { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.6rem; min-width: 0; }
+.job > .what b { font-weight: 500; }
+.job > .what .meta { overflow-wrap: anywhere; }
+.job > .acts { grid-column: 3; grid-row: 1 / span 2; display: flex; gap: 0.3rem; }
+.job > .how { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.7rem; min-width: 0; }
+.job .local-track { flex: 1 1 8rem; max-width: 18rem; }
+.job.queued { background: transparent; border-style: dashed; }
+.job.failed { border-color: var(--n-blocked-line); }
+.now-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 1rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.now-line > span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.now-line .i { width: 13px; height: 13px; }
+/* the steps of a bring-in and of a v0 folder, as a timeline */
+.tl { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.tl li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 0.6rem; padding: 0.35rem 0; font-size: 14px; position: relative; }
+.tl li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--n-neutral-icon); margin: 6px 0 0 3px; }
+.tl li.done::before { background: var(--n-ok-icon); }
+.tl li.now::before { background: var(--n-brand); }
+.tl li.wait::before { background: var(--n-caution-icon); }
+.tl li + li::after { content: ""; position: absolute; left: 6.5px; top: -8px; height: 14px; border-left: 1px solid var(--n-line); }
+.tl li > span { display: grid; gap: 0.05rem; min-width: 0; }
+.tl b { font-weight: 500; }
+/* Add a dataset and Bring in what is new */
+.dataset-names { align-items: start; }
+.batch-name { max-width: 18rem; }
+.map-columns { display: grid; gap: 0.5rem; }
+.map-columns table.thin td { padding-top: 0.3rem; padding-bottom: 0.3rem; }
+.map-columns .input { min-height: 1.9rem; }
+.report { display: grid; gap: 0.2rem; margin: 0; padding: 0 0 0 1.1rem; font-size: var(--n-text-size-small); }
+dl.facts .input { display: inline-flex; }
+@media (max-width: 640px) {
+  .job { grid-template-columns: 32px minmax(0, 1fr); }
+  .job > .acts { grid-column: 2; grid-row: auto; }
+  .job > .sq { grid-row: 1; }
+  table.thin.batches th:nth-child(3), table.thin.batches td:nth-child(3), table.thin.batches th:nth-child(4), table.thin.batches td:nth-child(4) { display: none; }
+}
