@@ -24,5 +24,5 @@ export const PLACEHOLDERS: Placeholder[] = [
   { id: "data", title: "Data", icon: "data", grant: "data:see", door: "GET /api/sources", words: "The sources, each with its digests and how what comes in is handled.", built: true },
   { id: "review", title: "Review", icon: "review", grant: "review:see", door: "GET /api/review", words: "What needs a person's judgement: a scan the rules could not place, a subject to confirm." },
   { id: "release", title: "Release", icon: "release", grant: "release:see", door: "POST /api/releases", words: "Hand results out as a release, a BIDS tree or a table, written to an export place." },
-  { id: "pipelines", title: "Pipelines", icon: "branch", grant: "pipelines:see", door: "GET /api/jobs", words: "The jobs that ran and are running: digests, backups and releases." },
+  { id: "pipelines", title: "Pipelines", icon: "branch", grant: "pipelines:see", door: "GET /api/jobs", words: "The jobs that ran and are running: digests, backups and releases.", built: true },
 ];
