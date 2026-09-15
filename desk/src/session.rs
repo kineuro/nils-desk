@@ -178,7 +178,8 @@ pub async fn login(State(desk): State<Shared>, axum::Json(body): axum::Json<Valu
             "the username or the password is not right",
         );
     };
-    desk.store.saw(&user.username, &user.display);
+    desk.store
+        .saw(&user.username, &user.display, &Default::default());
     match desk.store.create(
         &user.username,
         &user.display,
@@ -276,7 +277,7 @@ pub async fn callback(State(desk): State<Shared>, Query(q): Query<Callback>) -> 
     let redirect = format!("{}/desk/callback", desk.config.origin.trim_end_matches('/'));
     match client.finish(&code, &verifier, &redirect).await {
         Ok(a) => {
-            desk.store.saw(&a.subject, &a.display);
+            desk.store.saw(&a.subject, &a.display, &Default::default());
             match desk
                 .store
                 .create(&a.subject, &a.display, &a.entitlements, &a.tokens, HOURS)

@@ -45,6 +45,85 @@ fn the_ladders_sets_are_the_vectors_sets() {
     );
 }
 
+/// The strings of a claim, or none.
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|s| s.as_str())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Under `oidc` the desk resolves a person from what the provider said:
+/// each binding of the vectors is a group the admin made that follows the
+/// provider group, and the claims' grants and detail are the person's own.
+/// The same bindings read a second time as legacy entitlements in the roles
+/// claim, each standing for its set, resolve the same.
+#[test]
+fn a_providers_groups_and_legacy_entitlements_resolve_as_the_vectors_say() {
+    use nils_desk::store::{Change, Claims, Store};
+    let v = vectors();
+    assert_eq!(v["groups_claim"], "groups");
+    let roles = v["roles"].as_object().unwrap();
+    for case in v["claims"].as_array().unwrap() {
+        let name = case["name"].as_str().unwrap();
+        let claims = &case["claims"];
+        let provider = strings(&claims["groups"]);
+        let own = grants::normalise(strings(&claims["grants"]).iter().map(String::as_str));
+        let own_detail = claims
+            .get("detail")
+            .map(|d| grants::Detail::read(d.as_str()));
+        let legacy: Vec<String> = provider
+            .iter()
+            .filter_map(|g| roles.get(g).and_then(Value::as_str))
+            .map(str::to_string)
+            .collect();
+        for (pass, groups, bindings) in [
+            ("follows", provider.clone(), true),
+            ("legacy", Vec::new(), false),
+        ] {
+            let dir = tempfile::tempdir().unwrap();
+            let store = Store::open(&dir.path().join("desk.sqlite")).unwrap();
+            if bindings {
+                for (group, binding) in roles {
+                    store
+                        .change(
+                            true,
+                            Change::GroupAdd {
+                                name: format!("{group} at the provider"),
+                                access: grants::of_names([binding.as_str().unwrap()]),
+                                follows: vec![group.clone()],
+                            },
+                        )
+                        .unwrap();
+                }
+            }
+            let said = Claims {
+                groups,
+                roles: if bindings { Vec::new() } else { legacy.clone() },
+                username: None,
+            };
+            store.saw("8c1f2a", "Anna", &said);
+            store
+                .change(
+                    true,
+                    Change::Access {
+                        subject: "8c1f2a".into(),
+                        groups: Vec::new(),
+                        grants: own.clone(),
+                        detail: own_detail,
+                    },
+                )
+                .unwrap();
+            let got = store.access("8c1f2a", Some(&said)).access;
+            matches(&format!("{name} ({pass})"), &case["expect"], &got);
+        }
+    }
+}
+
 #[test]
 fn a_list_of_names_stands_for_its_sets_and_grants() {
     let v = vectors();
