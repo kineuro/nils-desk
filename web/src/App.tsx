@@ -10,7 +10,10 @@ import type React from "react";
 import { AssistantPage } from "./assistant/AssistantPage";
 import { chatsKept, importHere, sidePages } from "./assistant/chats";
 import type { Capabilities } from "./capabilities";
+import { BatchPage } from "./data/BatchPage";
 import { DataPage } from "./data/DataPage";
+import { PseudonymsPage } from "./data/PseudonymsPage";
+import { PipelinesPage } from "./ops/PipelinesPage";
 import { QueryPage } from "./query/QueryPage";
 import { door, state } from "./deployment";
 import { may } from "./grants";
@@ -242,8 +245,13 @@ export function App() {
           {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={setupReady ? () => setLeft(true) : undefined} />}
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
-          {ready && active?.id === "data" && <DataPage caps={caps} install={install} onChanged={changed} />}
+          {ready && active?.id === "data" && route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg) && <BatchPage caps={caps} id={Number(route.arg)} />}
+          {ready && active?.id === "data" && route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation" && <PseudonymsPage caps={caps} name={route.arg} onChanged={changed} />}
+          {ready && active?.id === "data" && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || (route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation")) && (
+            <DataPage caps={caps} install={install} onChanged={changed} />
+          )}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
+          {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {onProfile && <ProfilePage caps={caps} />}

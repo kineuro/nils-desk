@@ -1069,3 +1069,95 @@ button.steps-line:hover { background: var(--n-bg-hover); }
   .side, .side.open, .side-gap, .side-pages, .side-chevron { transition: none; }
   .dialog[open], .dialog[open]::backdrop { animation: none; }
 }
+
+/* ---------------------------------------------------------------- record 26, D2: a batch's page, a dataset's Pseudonymisation page, and Pipelines as the jobs */
+/* a page with an aside: the main column and, at the right, the cards that stand beside it */
+.bpage { display: grid; grid-template-columns: minmax(0, 1fr) 22rem; gap: 1.1rem 1.4rem; align-items: start; max-width: 76rem; }
+.bpage > .main { display: grid; gap: 1.1rem; min-width: 0; }
+.bpage > .aside { display: grid; gap: 1.1rem; min-width: 0; }
+.bpage .data-head { align-items: flex-end; }
+.crumb { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.crumb > .i { width: 13px; height: 13px; }
+.crumb > span:last-child { color: var(--n-text-dim); }
+/* the stage strip: one cell a stage, its top edge in the stage's colour */
+.strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.strip.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.strip > div { display: grid; gap: 0.15rem; align-content: start; min-width: 0; padding: 0.55rem 0.7rem 0.6rem; border-top: 4px solid var(--n-bg-sunken); background: var(--n-bg-raised); }
+.strip > div.done { border-top-color: var(--n-ok-icon); }
+.strip > div.now { border-top-color: var(--n-brand); }
+.strip > div.wait { border-top-color: var(--n-caution-icon); }
+.strip > div.failed { border-top-color: var(--n-blocked-icon); }
+.strip .k { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--n-text-faint); }
+.strip .v { font-family: var(--n-font-serif); font-size: 1.35rem; line-height: 1.15; min-height: 1.15em; }
+.strip .v small { font-family: var(--n-font-sans); font-size: 13px; color: var(--n-text-faint); }
+.strip .meta { min-width: 0; overflow-wrap: anywhere; }
+.strip.small > div { padding: 0.3rem 0.5rem 0.35rem; border-top-width: 3px; }
+.strip.small .v { font-size: 1.05rem; }
+.strip.small .k { font-size: 11px; }
+/* a count by name as bars, the unsure in the caution colour */
+.bybase { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 0.35rem 0.8rem; align-items: center; font-size: 14px; }
+.bybase .bar { height: 8px; border-radius: 2px; background: var(--n-bg-sunken); overflow: hidden; }
+.bybase .bar i { display: block; height: 100%; background: var(--n-brand-line); }
+.bybase .bar i.unsure { background: var(--n-caution-icon); }
+/* a timeline down the side: a dot a line, joined */
+.tl { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.tl li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 0.6rem; padding: 0.35rem 0; font-size: 14px; position: relative; }
+.tl li::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--n-neutral-icon); margin: 6px 0 0 3px; }
+.tl li.done::before { background: var(--n-ok-icon); }
+.tl li.now::before { background: var(--n-brand); }
+.tl li.wait::before { background: var(--n-caution-icon); }
+.tl li.failed::before { background: var(--n-blocked-icon); }
+.tl li + li::after { content: ""; position: absolute; left: 6.5px; top: -8px; height: 14px; border-left: 1px solid var(--n-line); }
+.tl .meta { display: block; }
+/* counts by reason, or by shape */
+.reasons { display: grid; gap: 0.3rem; }
+.reason { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 0.6rem; align-items: baseline; font-size: 14px; }
+.reason b { font-family: var(--n-font-serif); font-weight: 400; }
+.tail { display: inline-flex; align-items: center; gap: 0.35rem; white-space: normal; text-align: left; }
+.tail .i { width: 13px; height: 13px; flex: none; color: var(--n-text-faint); }
+button.tail { font: inherit; }
+/* the two trees of a dataset */
+.tree-card { display: grid; gap: 0.3rem; min-width: 0; padding: 0.7rem 0.85rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); font-size: 14px; }
+.tree-card.on { background: var(--n-bg-raised); border-color: var(--n-brand-line); box-shadow: inset 0 3px 0 var(--n-brand); }
+.tree-card .row { gap: 0.4rem; }
+.tree-card .path { min-width: 0; overflow-wrap: anywhere; }
+.tree-card .meta { overflow-wrap: anywhere; }
+.panel.card.held { border-color: var(--n-caution-line); }
+.held-lede { font-size: 14px; }
+.radio-row.off { color: var(--n-text-faint); cursor: default; }
+.column-role { display: grid; gap: 0.3rem; min-width: 16rem; }
+/* the identity-check station's run, as a panel on the page */
+.check { gap: 0.9rem; }
+.check-head { align-items: flex-start; gap: 0.8rem; }
+.check-head > .grow { display: grid; gap: 0.2rem; min-width: 0; }
+.check .panel.card { padding: 0.8rem 0.9rem; }
+/* the jobs as cards: what, the acts at the right, how far under */
+.pipelines { display: grid; gap: 1.1rem; align-content: start; max-width: 76rem; }
+.now { display: grid; gap: 0.5rem; }
+.job { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 0.2rem 0.8rem; align-items: center; padding: 0.65rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.job > .sq { grid-row: 1 / span 2; width: 32px; height: 32px; }
+.job > .what { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.6rem; min-width: 0; }
+.job > .what b { font-weight: 500; }
+.job > .what .meta { overflow-wrap: anywhere; }
+.job > .acts { grid-column: 3; grid-row: 1 / span 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.3rem; }
+.job > .how { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.7rem; min-width: 0; }
+.job .local-track { flex: 1 1 8rem; max-width: 18rem; }
+.job.queued { background: transparent; border-style: dashed; }
+.job.failed { border-color: var(--n-blocked-line); }
+.job.cancelled, .job.done { color: var(--n-text-dim); }
+.job .blocked .reason { max-width: 12rem; text-align: right; }
+.now-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 1rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.now-line > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.now-line .i { width: 13px; height: 13px; }
+@media (max-width: 1100px) {
+  .bpage { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  /* on a narrow window the five stages keep two a row, and a job's acts go under its words */
+  .strip, .strip.five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .job { grid-template-columns: 32px minmax(0, 1fr); }
+  .job > .acts { grid-column: 2; grid-row: auto; justify-content: flex-start; }
+  .job .blocked .reason { text-align: left; }
+  .column-role { min-width: 12rem; }
+}
+/* ---------------------------------------------------------------- end of record 26, D2 */
