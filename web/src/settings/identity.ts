@@ -34,15 +34,18 @@ export interface Group {
   grants: Grant[];
   detail: Detail;
   follows: string[];
-  /** Its people, by subject, or how many there are. */
-  members?: string[] | number;
+  /** The people put in it, by subject; those who reach it through the provider's groups are not among them. */
+  members: string[];
 }
 
 /** A person as the access door lists them: their groups, what an admin gave them alone, and what all of it adds up to. */
 export interface Person {
   subject: string;
   display: string;
+  /** The groups the person was put in. */
   groups: GroupId[];
+  /** The groups the person reaches through the provider's groups; the desk keeps them apart from the ones they were put in. */
+  followed: GroupId[];
   /** Given to this person alone, on top of their groups. */
   grants: Grant[];
   detail: Detail | null;
@@ -65,7 +68,7 @@ export interface GroupBody {
   follows: string[];
 }
 
-/** What a person is given: their groups, and what is theirs alone on top. */
+/** What a person is given: the groups they are put in, and what is theirs alone on top. */
 export interface AccessBody {
   groups: GroupId[];
   grants: Grant[];
@@ -210,6 +213,19 @@ export function groupsOf(ids: readonly GroupId[], all: readonly Group[]): Group[
   return all.filter((g) => ids.some((id) => sameGroup(id, g.id)));
 }
 
+/** The groups that give a person what they have: the ones they were put in and the ones the provider's groups reach. */
+export function groupsGiving(p: { groups: readonly GroupId[]; followed?: readonly GroupId[] }, all: readonly Group[]): Group[] {
+  return groupsOf([...p.groups, ...(p.followed ?? [])], all);
+}
+
+/** The groups a person reaches only through the provider's groups. */
+export function followedOnly(p: { groups: readonly GroupId[]; followed?: readonly GroupId[] }, all: readonly Group[]): Group[] {
+  return groupsOf(
+    (p.followed ?? []).filter((id) => !p.groups.some((m) => sameGroup(m, id))),
+    all,
+  );
+}
+
 /** What groups give on a page: the highest level any of them gives, and the names of the groups that give it. */
 export function givenBy(groups: readonly Group[], line: PageLine): { level: Level; from: string[] } {
   let level: Level = "hidden";
@@ -258,6 +274,11 @@ export function ownDetailAbove(own: Detail | null, groups: readonly Group[]): bo
   return own !== null && detailRank(own) > detailRank(detailGivenBy(groups).detail);
 }
 
+/** What a change to a person sends: the groups they are put in, never the ones the provider's groups reach, and what is theirs alone above every group that gives them anything. */
+export function personBody(chosen: readonly GroupId[], followed: readonly GroupId[], all: readonly Group[], levels: Partial<Levels>, detail: Detail | null): AccessBody {
+  return { groups: groupsOf(chosen, all).map((g) => g.id), ...ownAbove(groupsGiving({ groups: chosen, followed }, all), levels, detail) };
+}
+
 export interface Mark {
   key: string;
   label: string;
@@ -284,11 +305,11 @@ export function marksOf(grants: readonly string[], own: ReadonlySet<PageId> = ne
   return out;
 }
 
-/** How many people are in a group: its members as the desk lists them, else the people who name it. */
+/** How many people are in a group: the people put in it, and those who reach it through the provider's groups. */
 export function memberCount(group: Group, people: readonly Person[] | null): number {
-  if (typeof group.members === "number") return group.members;
-  if (Array.isArray(group.members)) return group.members.length;
-  return (people ?? []).filter((p) => p.groups.some((id) => sameGroup(id, group.id))).length;
+  const subjects = new Set(group.members ?? []);
+  for (const p of people ?? []) if (groupsGiving(p, [group]).length > 0) subjects.add(p.subject);
+  return subjects.size;
 }
 
 /** "A", "A and B", "A, B and C". */
@@ -395,17 +416,39 @@ export function groupRefusal(name: string, groups: readonly Group[], id: GroupId
   return null;
 }
 
+/** A grant as the desk spells it in an error, never shown to a person. */
+const GRANT_WORD = /\b[a-z][a-z-]*:[a-z]+\b/u;
+
+/** What the desk said in an error, when it is words a person may be shown. */
+function saidOf(e: DoorError): string | null {
+  const body = (e.body ?? {}) as { error?: unknown };
+  const said = typeof body.error === "string" ? body.error.trim() : "";
+  if (!said || GRANT_WORD.test(said)) return null;
+  return `${said[0].toUpperCase()}${said.slice(1)}${/[.!?]$/u.test(said) ? "" : "."}`;
+}
+
 /** A door's refusal of a change to people or groups, in plain words. */
 export function refusalWords(e: unknown, what: "person" | "group"): string {
   if (e instanceof DoorError) {
     const body = (e.body ?? {}) as { error?: unknown };
-    const said = typeof body.error === "string" ? body.error.trim() : "";
+    const raw = typeof body.error === "string" ? body.error : "";
+    if (e.status === 401) return "Your session has ended. Sign in at the desk again, then make the change once more.";
     if (e.status === 409) return "That would leave nobody who may change people and groups, so the desk kept everything as it was.";
     if (e.status === 404) return what === "person" ? "The desk no longer knows this person. Open the page again." : "The desk no longer knows this group. Open the page again.";
     if (e.status === 403) return "You may not change people and groups.";
-    if (e.status === 400 && /unknown/iu.test(said) && /grant|group/iu.test(said)) return "The desk does not know a group or a page chosen here. Open the page again and choose once more.";
-    if (said) return `${said[0].toUpperCase()}${said.slice(1)}${/[.!?]$/u.test(said) ? "" : "."}`;
-    return `The desk answered ${e.status}.`;
+    if (e.status === 400 && ((/unknown/iu.test(raw) && /grant|group/iu.test(raw)) || GRANT_WORD.test(raw))) return "The desk does not know a group or a page chosen here. Open the page again and choose once more.";
+    return saidOf(e) ?? `The desk answered ${e.status}.`;
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
+/** Why the people and groups could not be read, in plain words. */
+export function readWords(e: unknown): string {
+  if (e instanceof DoorError) {
+    if (e.status === 401) return "Your session has ended. Sign in at the desk again to see people and groups.";
+    if (e.status === 403) return "You may not see people and groups.";
+    if (e.status === 404) return "The desk keeps no people or groups now; it may have been set up again so that nobody signs in. Open the page again.";
+    return saidOf(e) ?? `The people and groups could not be read: the desk answered ${e.status}.`;
   }
   return e instanceof Error ? e.message : String(e);
 }
