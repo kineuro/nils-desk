@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// A model Kvasir holds, as its card draws (record 25): where it runs, its
-// admission or where its prompts go and the stations it answers; its check,
-// its key and its removal for a person with Kvasir: Work, and nothing to act
-// on for anyone else.
+// A model Kvasir holds, as its card draws (record 25): its name, where it runs
+// in a few words with the rest as a hover title, one tag, and how many
+// stations it answers with their names as a hover title; its check, its key
+// and its removal along the bottom for a person with Kvasir: Work, and nothing
+// to act on for anyone else.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -36,14 +37,14 @@ const drawn = (viewer: Viewer) =>
   backendCards([server, minimax], { viewer, catalogue: [], admissions: [record], purposes, now, checking: null, drawn: [] }).map((card) => renderToStaticMarkup(<BackendCard card={card} work={viewer.work} />));
 
 describe("a model Kvasir holds", () => {
-  it("offers a person with Kvasir: Work a server's check and its removal, and says where it runs", () => {
+  it("names the model, where it runs with the rest as a hover title, its tag and the stations it answers, with a server's check and removal along the bottom", () => {
     const [html] = drawn(admin);
-    expect(html).toContain('<span class="sq">');
-    expect(html).toContain('title="http://127.0.0.1:30000/v1">qwen36-27b-fast</span>');
-    expect(html).toContain("Your server · SGLang · 131,072 tokens");
-    expect(html).toMatch(/<span class="tag ok"><span class="dot ok"><\/span>admitted 15 Sept?<\/span>/u);
-    expect(html).toContain("answers keyword-tune");
-    expect(html).toContain(">Check</button>");
+    expect(html).toContain('<span class="card-name path" title="qwen36-27b-fast">qwen36-27b-fast</span>');
+    expect(html).toContain('<div class="where"><span class="sq">');
+    expect(html).toContain('<span class="meta" title="SGLang · 131,072 tokens · http://127.0.0.1:30000/v1">Your server</span>');
+    expect(html).toMatch(/<span class="tag ok" title="admitted on 15 Sept?"><span class="dot ok"><\/span>admitted<\/span>/u);
+    expect(html).toContain('<span class="meta" title="keyword-tune">answers 1 station</span>');
+    expect(html).toMatch(/<div class="row acts"><button type="button" class="button secondary small">Check<\/button>/u);
     expect(html).toContain('<summary class="button quiet small" aria-label="More for qwen36-27b-fast">');
     expect(html).toContain(">Remove</button>");
   });
@@ -51,21 +52,21 @@ describe("a model Kvasir holds", () => {
   it("offers a provider's key and its removal, and says it leaves your systems", () => {
     const [, html] = drawn(admin);
     expect(html).toContain('<span class="sq caution">');
-    expect(html).toContain("MiniMax, a provider · key kept by Kvasir");
+    expect(html).toContain('<span class="meta" title="key kept by Kvasir">MiniMax</span>');
     expect(html).toContain('<span class="tag caution">leaves your systems</span>');
     expect(html).toContain(">Replace key</button>");
     expect(html).toContain(">Forget the key</button>");
     expect(html).toContain(">Remove</button>");
   });
 
-  it("shows anyone else the model, where it runs in your systems and what it answers, with nothing to act on", () => {
+  it("shows anyone else the model, where it runs and what it answers, with nothing to act on", () => {
     const [server, provider] = drawn(person);
-    expect(server).toContain("A server in your systems · 131,072 tokens");
+    expect(server).toContain('<span class="meta" title="131,072 tokens">Your server</span>');
     expect(server).not.toContain("SGLang");
     expect(server).not.toContain("127.0.0.1");
     expect(server).not.toContain("<button");
     expect(server).not.toContain("<summary");
-    expect(provider).toContain("MiniMax, a provider</span>");
+    expect(provider).toContain('<span class="meta">MiniMax</span>');
     expect(provider).not.toContain("key kept");
     expect(provider).not.toContain("<button");
   });

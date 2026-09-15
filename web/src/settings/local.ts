@@ -8,7 +8,7 @@
 // actions, what the download dialog asks and when it may download, how a
 // started model runs, and each refusal in words a person can act on.
 
-import { admissionWords, modelOf, type Admission, type Tone } from "./gateway";
+import { admissionTitle, admissionWords, modelOf, type Admission, type Card, type Tone } from "./gateway";
 import type { AdmissionRecord, Backend, LocalAsk, LocalFile, LocalLookup, LocalModel, LocalRefusal, LocalRun, LocalRuntime, LocalState, RunState } from "./kvasir";
 
 /** How often the list is read again while a model is queued or downloading. */
@@ -83,16 +83,11 @@ export function underWay(models: LocalModel[]): boolean {
   return models.some((m) => m.state === "queued" || m.state === "downloading");
 }
 
-const filesWords = (n: number) => (n === 1 ? "one file" : `${count(n)} files`);
-
-/** How far a model is, said beside its bar or under its name. */
+/** How far a model is, as facts beside its tag: the bytes it has of all it needs, and the percent while it downloads. */
 export function progressWords(m: LocalModel): string {
-  const whole = `${bytesWords(m.bytes_total)} in ${filesWords(m.files)}`;
-  const part = `${bytesWords(m.bytes_done)} of ${bytesWords(m.bytes_total)}`;
-  if (m.state === "downloading" || m.state === "paused") return `${part}, ${percentOf(m.bytes_done, m.bytes_total)}%`;
-  if (m.state === "queued") return `${m.bytes_done > 0 ? part : whole}, waiting its turn`;
-  if (m.state === "failed" && m.bytes_done > 0) return `${part} when it stopped`;
-  return whole;
+  const of = `${bytesWords(m.bytes_done)} of ${bytesWords(m.bytes_total)}`;
+  if (m.state === "downloading" || m.state === "paused") return `${of} · ${percentOf(m.bytes_done, m.bytes_total)}%`;
+  return m.bytes_done > 0 && m.state !== "done" ? of : bytesWords(m.bytes_total);
 }
 
 /** A commit as a person compares it: its first seven characters. */
@@ -120,7 +115,7 @@ export const SERVE_NOTE = "Kvasir runs no model: start a model server with one o
 export const NO_COMMAND = "Kvasir runs no model, and knows no command for these files: start a model server on them as its own documentation says, then add it with Add a model.";
 
 /** Said beside the Hugging Face token. */
-export const TOKEN_NOTE = "Needed only for gated or private models. Kvasir keeps it sealed and never shows it.";
+export const TOKEN_NOTE = "Gated and private models need one. Sealed; never shown.";
 
 /** Said where the location changes. */
 export const STAY_NOTE = "Models downloaded earlier stay where they are, and the list shows each with its own path.";
@@ -204,16 +199,16 @@ export function foundWords(l: LocalLookup): string {
   return `${files}, ${bytesWords(l.bytes_total)} in all, at ${revisionWords(l)}.`;
 }
 
-/** Where the room runs out: both sizes, and the two ways to make room. */
+/** Where the room runs out: what is free, and what the download needs with the room Kvasir keeps spare. */
 function noRoomWords(free: number, needed: number): string {
-  return `There is not room for it where downloads go: ${bytesWords(free)} free, and it needs ${bytesWords(needed)}, 1 GiB of that to spare. Free some space there, or change where new downloads go.`;
+  return `Not enough room where downloads go: ${bytesWords(free)} free, ${bytesWords(needed)} needed.`;
 }
 
 /** Whether a download of this size fits where downloads go, with the room Kvasir keeps spare; null where the free space is not known. */
 export function roomWords(total: number, free: number | null): { fits: boolean; words: string } | null {
   if (free === null) return null;
   const needed = total + SPARE_BYTES;
-  return free >= needed ? { fits: true, words: `${bytesWords(free)} free where downloads go.` } : { fits: false, words: noRoomWords(free, needed) };
+  return free >= needed ? { fits: true, words: `${bytesWords(free)} free` } : { fits: false, words: noRoomWords(free, needed) };
 }
 
 /** Kvasir's words as a sentence: a full stop at its end, and a capital at its start where it starts with a plain word rather than a file's name or a path. */
@@ -240,7 +235,7 @@ export function refusalWords(r: LocalRefusal, at: { token: boolean; patterns: nu
   if (r.code === "needs_token")
     return at.token
       ? "The Hugging Face Hub refused the token for this model. The token's account needs access to it, and a gated model needs its terms accepted on the hub."
-      : "This model is gated or private, so it needs a Hugging Face token. Set one under Hugging Face token on the Kvasir page, then try again.";
+      : "This model is gated or private, so it needs a Hugging Face token. Set one above, then try again.";
   if (r.code === "conflict") return "This model is in the list already, at the same commit where downloads go. Resume it there, or remove it first to download it again.";
   if (r.code === "not_on_hub") return "The Hugging Face Hub has no such model at that revision. Check the name, as owner/name, and the revision.";
   if (r.code === "nothing_to_download")
@@ -269,7 +264,7 @@ export function removeWords(m: LocalModel): string[] {
 
 /** What a download queued, said once the dialog closes. */
 export function queuedWords(m: LocalModel): string {
-  return `${m.repo} is queued: ${bytesWords(m.bytes_total)} in ${filesWords(m.files)}, into ${m.path}.`;
+  return `${m.repo} is queued, ${bytesWords(m.bytes_total)}.`;
 }
 
 /** What a removal let go, said once it is done. */
@@ -280,7 +275,7 @@ export function removedWords(m: LocalModel): string {
 
 /** Where new downloads go, said once the location changed. */
 export function movedWords(location: string): string {
-  return `New downloads go to ${location} now.`;
+  return `New downloads go to ${location}.`;
 }
 
 // Record 24: a downloaded GGUF model started on the runtime, llama.cpp's server
@@ -298,9 +293,6 @@ export function runtimeLine(r: LocalRuntime): string {
 export function runtimeTag(r: LocalRuntime): { tone: LocalTone; words: string } {
   return r.reachable ? { tone: "ok", words: "answers" } : { tone: "blocked", words: "does not answer" };
 }
-
-/** Said while the runtime does not answer. */
-export const UNREACHABLE = "Kvasir does not reach llama.cpp on this machine, so no model starts or serves until it answers again.";
 
 /** Said under the commands of a model Kvasir starts itself, folded under Or run it yourself. */
 export const SELF_NOTE = "A model server started with one of these commands is added with Add a model.";
@@ -357,8 +349,8 @@ export function runTag(run: LocalRun): { tone: LocalTone; words: string } {
 export function servedAdmission(run: LocalRun, backends: Backend[] | null, records: AdmissionRecord[] | null, now: number): Admission | null {
   if (run.state !== "serving" || backends === null) return null;
   const b = backends.find((x) => x.builtin !== true && x.locality === "local" && (x.models.includes(run.model) || (x.entries ?? []).some((e) => e.id === run.model)));
-  if (!b) return { tone: "caution", words: "being added", detail: "Kvasir holds it as a model in your systems in a moment." };
-  if (b.health.warming === true) return { tone: "caution", words: "warming", detail: "Kvasir checks it with its admission suite once it has answered." };
+  if (!b) return { tone: "caution", words: "being added", on: null, detail: "held as a model in a moment" };
+  if (b.health.warming === true) return { tone: "caution", words: "warming", on: null, detail: "checked once it has answered" };
   return admissionWords(run.model, b, modelOf(b, run.model, []), records, { now, checking: false });
 }
 
@@ -378,12 +370,12 @@ export function replaceWords(next: LocalModel, running: LocalModel): string {
 
 /** What a start began, said once Kvasir took it. */
 export function startedWords(m: LocalModel): string {
-  return `${m.repo} is loading into llama.cpp. Once it serves, Kvasir checks it with its admission suite before the assistant uses it.`;
+  return `${m.repo} is loading into llama.cpp.`;
 }
 
 /** What a stop did, said once Kvasir took it. */
 export function stoppedWords(m: LocalModel): string {
-  return `${m.repo} is stopped, and llama.cpp holds no memory for it any more.`;
+  return `${m.repo} is stopped.`;
 }
 
 /** Said in place of removing a model llama.cpp loads or serves. */
@@ -397,13 +389,8 @@ export function stopFirstWords(m: LocalModel): string {
 
 /** What Add a model says of downloading, by the runtime the install has. */
 export function downloadChoiceWords(runtime: LocalRuntime | null | undefined): string {
-  return runtime
-    ? "A GGUF model from the Hugging Face Hub, started by Kvasir on llama.cpp here. Prompts stay in your systems."
-    : "A model from the Hugging Face Hub, for a model server of yours to run. Prompts stay in your systems.";
+  return runtime ? "Hugging Face Hub · llama.cpp here · stays in your systems" : "Hugging Face Hub · for a model server of yours · stays in your systems";
 }
-
-/** Said under the files a download brings. */
-export const CHECKED_BEFORE = "Kvasir checks the model before the assistant may use it.";
 
 /** A file of a GGUF model to choose, by its quantization: every part of a split file together, with its size in all. */
 export interface FileChoice {
@@ -439,16 +426,25 @@ export function fileChoices(files: LocalFile[]): FileChoice[] {
   return out.map((c) => (out.filter((x) => x.label === c.label).length > 1 ? { ...c, label: stemOf(c.key) } : c));
 }
 
-/** Whether a file fits the machine's card, as the tag beside it says; null where the card is not known. */
-export function fitWords(bytes: number, card: { memory_gb: number } | null | undefined): { tone: LocalTone; words: string } | null {
-  if (!card || !(card.memory_gb > 0)) return null;
-  return bytes <= card.memory_gb * 2 ** 30 ? { tone: "ok", words: "fits the card" } : { tone: "caution", words: "larger than the card: runs on the processor, slowly" };
+/**
+ * Whether a file fits the machine's cards, as the tag beside it says: within
+ * the largest card alone, or across all of them, with their memory together;
+ * null where no card's memory is known.
+ */
+export function fitWords(bytes: number, cards: Card[]): { tone: LocalTone; words: string; title: string | null } | null {
+  const sizes = cards.map((c) => c.memory_gb).filter((m) => m > 0);
+  if (sizes.length === 0) return null;
+  const many = sizes.length > 1;
+  if (bytes <= Math.max(...sizes) * 2 ** 30) return { tone: "ok", words: many ? "fits one card" : "fits the card", title: null };
+  const total = sizes.reduce((n, m) => n + m, 0);
+  if (many && bytes <= total * 2 ** 30) return { tone: "ok", words: `fits ${sizes.length} cards, ${Math.round(total)} GB`, title: null };
+  return { tone: "caution", words: `larger than the ${many ? "cards" : "card"}`, title: "runs on the processor, slowly" };
 }
 
-/** The file a look-up opens on: Q4_K_M where it fits, else the largest that fits a card that is known, else none until one is chosen. */
-export function defaultChoice(choices: FileChoice[], card: { memory_gb: number } | null | undefined): string | null {
-  const known = fitWords(0, card) !== null;
-  const fitting = known ? choices.filter((c) => fitWords(c.bytes, card)?.tone === "ok") : choices;
+/** The file a look-up opens on: Q4_K_M where it fits, else the largest that fits where the cards are known, else none until one is chosen. */
+export function defaultChoice(choices: FileChoice[], cards: Card[]): string | null {
+  const known = fitWords(0, cards) !== null;
+  const fitting = known ? choices.filter((c) => fitWords(c.bytes, cards)?.tone === "ok") : choices;
   const usual = fitting.find((c) => c.label.toUpperCase() === "Q4_K_M");
   if (usual) return usual.key;
   return known && fitting.length > 0 ? fitting[fitting.length - 1].key : null;
@@ -473,17 +469,26 @@ export function localName(m: LocalModel): string {
   return started(m) && m.run?.model ? m.run.model : m.repo;
 }
 
-/** A local model's line under its name: this machine, and what it is there for. */
-export function localMeta(m: LocalModel): string {
-  if (m.run?.state === "serving") return ["This machine", "llama.cpp", m.run.context ? `${count(m.run.context)} tokens` : null].filter(Boolean).join(" · ");
-  if (m.run?.state === "starting") return "This machine · llama.cpp";
-  if (m.state !== "done") return "This machine · from the Hugging Face Hub";
-  return m.startable === true ? "This machine · starts on llama.cpp" : "This machine · for a model server of yours";
+/** What is known of a local model, as the hover title of where it runs: its revision, its size, and the context llama.cpp gave it. */
+export function localFacts(m: LocalModel): string {
+  const context = m.run?.state === "serving" && m.run.context ? `${count(m.run.context)} tokens` : null;
+  return [revisionWords(m), bytesWords(m.bytes_total), context].filter(Boolean).join(" · ");
 }
 
-/** The tag a local model's card carries: how it runs once started, else where its download stands. */
-export function localTag(m: LocalModel): { tone: LocalTone; words: string } {
-  return m.run && m.run.state !== "stopped" ? runTag(m.run) : modelTag(m.state);
+/**
+ * The one tag a local model's card carries, with its detail as a hover title:
+ * how it runs once started, its admission where that is not settled while it
+ * serves, and else where its download stands.
+ */
+export function localTag(m: LocalModel, admission: Admission | null = null): { tone: LocalTone; words: string; title: string | null } {
+  const run = m.run;
+  if (run?.state === "serving") {
+    if (admission && admission.tone !== "ok") return { tone: admission.tone, words: admission.words, title: admissionTitle(admission) };
+    return { ...runTag(run), title: admission ? admissionTitle(admission) : null };
+  }
+  if (run?.state === "starting") return { ...runTag(run), title: `loading as ${run.model}` };
+  if (run?.state === "failed") return { ...runTag(run), title: run.error ? sentence(run.error) : null };
+  return { ...modelTag(m.state), title: m.state === "failed" && m.error ? sentence(m.error) : null };
 }
 
 /** The local models in the order their cards stand: the one llama.cpp loads or serves first, then the rest as Kvasir lists them. */
@@ -493,5 +498,5 @@ export function localOrder(models: LocalModel[]): LocalModel[] {
 
 /** Where downloads go and the room there, on the line under the cards. */
 export function roomLine(free: number | null): string {
-  return free === null ? "the free space there is not known" : `${bytesWords(free)} free`;
+  return free === null ? "free space unknown" : `${bytesWords(free)} free`;
 }

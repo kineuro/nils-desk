@@ -15,15 +15,27 @@ describe("downloading a model", () => {
   it("opens on an empty name, main as the revision and the patterns with an example, with Look it up and Download held back", () => {
     const html = renderToStaticMarkup(<AddModel choices={["download"]} local={local} onClose={() => undefined} onDone={() => undefined} />);
     expect(html).toContain("Add a model");
-    expect(html).toContain("A GGUF model from the Hugging Face Hub, started by Kvasir on llama.cpp here. Prompts stay in your systems.");
+    expect(html).toContain("Hugging Face Hub · llama.cpp here · stays in your systems");
     expect(html).toContain('placeholder="owner/name"');
     expect(html).toContain("<summary>Another revision, or only some files</summary>");
     expect(html).toContain('placeholder="main"');
     expect(html).toContain('placeholder="*Q4_K_M.gguf"');
-    expect(html).toContain("one a line or separated by commas");
+    expect(html).toContain("One a line or separated by commas");
     expect(html).toContain("a model is named as the hub names it, owner/name");
     expect(html).not.toContain('type="password"');
     expect(html).toMatch(/<button type="button" class="button secondary" disabled="">Look it up<\/button>/u);
     expect(html).toMatch(/<button type="button" class="button" disabled="">Download<\/button>/u);
+  });
+
+  it("says whether a Hugging Face token is set, and offers to set or replace it there", () => {
+    const unset = renderToStaticMarkup(<AddModel choices={["download"]} local={local} onClose={() => undefined} onDone={() => undefined} />);
+    expect(unset).toContain('<span class="label">Hugging Face token</span>');
+    expect(unset).toContain('<span class="tag">not set</span>');
+    expect(unset).toContain(">Set</button>");
+    expect(unset).toContain("Gated models need one.");
+    const set = renderToStaticMarkup(<AddModel choices={["download"]} local={{ ...local, token: true }} onClose={() => undefined} onDone={() => undefined} />);
+    expect(set).toContain('<span class="tag ok">set</span>');
+    expect(set).toContain(">Replace</button>");
+    expect(set).not.toContain('type="password"');
   });
 });

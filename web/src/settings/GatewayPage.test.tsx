@@ -22,30 +22,27 @@ const caps = (grants: Grant[]) =>
 const page = (grants: Grant[]) => renderToStaticMarkup(<GatewayPage caps={caps(grants)} install={null} />);
 
 describe("the Kvasir page", () => {
-  it("tells an admin it holds the models, leads back to the parts, and offers Add a model", () => {
+  it("tells an admin what it is in a few words, leads back to the parts, and offers Add a model", () => {
     const html = page([...SETS.admin.grants, "assistant:use"]);
     expect(html).toContain('href="#settings/parts"');
-    expect(html).toContain("Which model answers each station, and the models Kvasir holds for them.");
+    expect(html).toContain('<p class="lede">Which model each station goes to.</p>');
     expect(html).toContain("version 1.0.0-alpha.7");
-    expect(html).toContain("what the stations can go to");
+    expect(html).not.toContain("what the stations can go to");
     expect(html).toContain("Add a model</button>");
   });
 
-  it("tells a person who may use the assistant and see Kvasir it holds their own subscription, and leaves adding the rest to Kvasir: Work", () => {
+  it("says nothing to a person who may use the assistant and see Kvasir about who adds what", () => {
     const html = page(["kvasir:see", "assistant:use"]);
     expect(html).not.toContain('href="#settings/parts"');
-    expect(html).toContain("Which model answers each station, and your own ChatGPT subscription.");
+    expect(html).toContain('<p class="lede">Which model each station goes to.</p>');
     expect(html).not.toContain("version 1.0.0-alpha.7");
-    expect(html).toContain("the ones added with Kvasir: Work, and yours");
-    expect(html).toContain("Adding downloads, servers and providers needs Kvasir: Work.");
+    expect(html).not.toContain("Kvasir: Work");
     expect(html).not.toContain("admin");
     // Add a model waits for Kvasir to answer with the subscription it offers
     expect(html).not.toContain("Add a model</button>");
   });
 
   it("offers a person who may only see Kvasir nothing to add", () => {
-    const html = page(["kvasir:see"]);
-    expect(html).toContain("the ones added with Kvasir: Work");
-    expect(html).not.toContain("Add a model</button>");
+    expect(page(["kvasir:see"])).not.toContain("Add a model</button>");
   });
 });

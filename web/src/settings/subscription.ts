@@ -79,17 +79,15 @@ export function cardTitle(s: Subscription): string {
 const onDay = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const onShortDay = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
-/** What the card, or the dialog signing it in, says first for its state. */
-export function leadWords(s: Subscription, where: "card" | "dialog" = "card"): string {
-  if (s.state === "waiting") return `Open the link, enter the code, and approve. This ${where} follows the sign-in and says when it is done.`;
+/** What the dialog signing it in says for its state; a failed sign-in's reason is also the card's tag title. */
+export function leadWords(s: Subscription): string {
+  if (s.state === "waiting") return "Enter the code at the link, then approve.";
   if (s.state === "signed_in") return s.since === null ? "Signed in." : `Signed in since ${onDay(s.since)}.`;
   if (s.state === "failed") {
     const why = (s.error ?? "").trim().replace(/[.\s]+$/u, "");
     return why ? `The sign-in did not finish: ${why}.` : "The sign-in did not finish.";
   }
-  return s.for === "system"
-    ? `Until it is signed in, the stations that go to ${s.name} answer with the default model in your systems.`
-    : `Until you sign in, the stations that go to ${s.name} answer you with the default model in your systems.`;
+  return "Not signed in.";
 }
 
 /** A model the subscription offers, with the context it takes. */
@@ -98,42 +96,27 @@ export function modelWords(m: { id: string; name: string; context_window: number
   return m.context_window > 0 ? `${name}, ${m.context_window.toLocaleString("en-GB")} tokens` : name;
 }
 
-/** The line under a signed-in card's title: whose it is, and the model it answers with. */
-export function cardMeta(s: Subscription): string {
-  const whose = s.for === "system" ? "The whole install's" : "Yours alone";
-  if (!s.model) return `${whose} · no model chosen yet`;
-  const m = s.models.find((x) => x.id === s.model);
-  return `${whose} · ${m ? modelWords(m) : s.model}`;
+/** What is known of a signed-in subscription, as the hover title of its model: whose it is, the context it takes, and since when. */
+export function cardFacts(s: Subscription): string {
+  const model = s.models.find((m) => m.id === s.model);
+  const context = model && model.context_window > 0 ? `${model.context_window.toLocaleString("en-GB")} tokens` : null;
+  return [s.for === "system" ? "the whole install's" : "yours alone", context, sinceWords(s)].filter(Boolean).join(" · ");
 }
 
-/** Since when it is signed in, beside its tag. */
+/** Since when it is signed in. */
 export function sinceWords(s: Subscription): string | null {
   return s.state === "signed_in" && s.since !== null ? `since ${onShortDay(s.since)}` : null;
 }
 
-/** The stations a signed-in subscription answers, on its card. */
-export function answeredWords(s: Subscription, stations: string[]): string {
-  if (stations.length === 0) return `answers no station until someone with Kvasir: Work sends one to ${s.name}`;
-  return `answers ${listWords(stations)}${s.for === "person" ? ", in your conversations" : ""}`;
-}
-
 /** How signing in goes, said before it starts. */
-export function howWords(s: Subscription): string {
-  const done = s.for === "system" ? "the install is signed in" : "you are signed in";
-  return `Kvasir asks OpenAI for a code. You open the link, enter the code and approve; this dialog follows along and says when ${done}. You choose the model it answers with afterwards.`;
-}
+export const HOW = "Kvasir asks OpenAI for a code; enter it at the link and approve.";
 
-/** What the subscription carries, said before signing in: the stations it answers today, and the rule for rows and identifiers. */
+/** What the subscription carries, said before signing in: the stations it answers, and that identifiers never reach it. */
 export function stationsNote(s: Subscription, stations: string[]): string {
-  const today =
-    stations.length > 0
-      ? `It answers ${listWords(stations)}${s.for === "person" ? " for you" : ""} today.`
-      : `No station goes to ${s.name} yet; someone with Kvasir: Work sends one there under Where each station goes.`;
-  return `${today} Rows of the registry reach it only where someone with Kvasir: Work wrote down why, and identifiers never do.`;
+  return `${stations.length > 0 ? `Answers ${listWords(stations)}.` : `No station goes to ${s.name} yet.`} Identifiers never reach it.`;
 }
 
 /** Said once a sign-in from Add a model is done. */
 export function signedInWords(s: Subscription): string {
-  const who = s.for === "system" ? "The install is" : "You are";
-  return `${who} signed in to ${s.name}. ${s.model ? "Its card under Models says the model it answers with." : "Choose the model it answers with on its card under Models."}`;
+  return `${s.for === "system" ? "The install is" : "You are"} signed in to ${s.name}.`;
 }

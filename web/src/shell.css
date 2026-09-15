@@ -639,14 +639,18 @@ button.dest:hover { border-color: var(--n-brand-line); background: var(--n-bg-ho
 .dest > b { font-weight: 500; }
 .dest > .tag { grid-column: 3; grid-row: 1 / span 2; }
 .dest > .chev { grid-column: 4; grid-row: 1 / span 2; display: grid; color: var(--n-text-faint); }
-/* the models as cards, a card's quieter acts behind its three dots, and the line under them */
-.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: 0.9rem; align-items: start; }
-.mcard { display: grid; gap: 0.45rem; align-content: start; min-width: 0; padding: 0.8rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+/* the models as cards, as tall as the tallest in their row with their acts along the bottom, a card's quieter acts behind its three dots, and the line under them */
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: 0.9rem; align-items: stretch; }
+.mcard { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; padding: 0.8rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.mcard > .acts { margin-top: auto; padding-top: 0.2rem; }
 .mcard.mine { border-color: var(--n-caution-line); }
 .mcard.wide { grid-column: span 2; }
-.mcard .name { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
-.mcard .name > .path { min-width: 0; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-.mcard .name > b { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.mcard .card-name { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.mcard .card-name.path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; overflow-wrap: normal; }
+.mcard .where { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
+.mcard .where > .sq { width: 22px; height: 22px; }
+.mcard .where > .sq .i { width: 13px; height: 13px; }
+.mcard .where > .meta { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mcard > .row { flex-wrap: wrap; gap: 0.3rem 0.5rem; }
 .mcard .tag { white-space: normal; }
 .mcard .warn, .mcard .path { overflow-wrap: anywhere; }

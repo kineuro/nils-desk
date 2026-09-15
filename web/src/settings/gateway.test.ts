@@ -8,12 +8,15 @@ import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
 import type { Grant } from "../grants";
 import {
+  admissionTitle,
   admissionWords,
   answersWords,
+  cardsOf,
   carriesWords,
   checkWords,
   closedLead,
   closedTo,
+  countedStations,
   defaultModel,
   destinationWords,
   gatewayHealth,
@@ -91,10 +94,18 @@ describe("Kvasir", () => {
     expect(gatewayHealth([chatgpt])).toEqual({ tone: "caution", words: "no model yet", streams: null });
   });
 
-  it("says the machine's card and what it can serve", () => {
-    const install = { machine: { card: { name: "NVIDIA GeForce RTX 4090", memory_gb: 23.99 }, advice: ["A 27B model at 4 bit fits with room for the context."] } } as Install;
-    expect(machineWords(install)).toEqual({ card: "NVIDIA GeForce RTX 4090, 24 GB", advice: ["A 27B model at 4 bit fits with room for the context."] });
-    expect(machineWords(null)).toEqual({ card: null, advice: [] });
+  it("says every card the machine has, with their memory, and what it can serve", () => {
+    const machine = (over: Partial<Install["machine"]>) => ({ machine: { card: null, advice: [], ...over } }) as unknown as Install;
+    const pro = { name: "NVIDIA RTX PRO 6000", memory_gb: 95.59 };
+    const one = machine({ card: { name: "NVIDIA GeForce RTX 4090", memory_gb: 23.99 }, advice: ["A 27B model at 4 bit fits with room for the context."] });
+    expect(machineWords(one)).toEqual({ cards: "NVIDIA GeForce RTX 4090, 24 GB", advice: ["A 27B model at 4 bit fits with room for the context."] });
+    expect(machineWords(machine({ card: pro, cards: [pro, pro] })).cards).toBe("2 × NVIDIA RTX PRO 6000, 191 GB");
+    expect(machineWords(machine({ cards: [{ name: "NVIDIA RTX 4090 Laptop GPU", memory_gb: 15.99 }, { name: "Intel UHD Graphics", memory_gb: 0 }] })).cards).toBe("NVIDIA RTX 4090 Laptop GPU, 16 GB · Intel UHD Graphics");
+    expect(machineWords(machine({ cards: [{ name: "NVIDIA GeForce RTX 4090", memory_gb: 24 }, { name: "NVIDIA GeForce RTX 3090", memory_gb: 24 }] })).cards).toBe("NVIDIA GeForce RTX 4090, 24 GB · NVIDIA GeForce RTX 3090, 24 GB · 48 GB in all");
+    // an empty list reads as the one card setup found, and no card at all says nothing
+    expect(cardsOf(machine({ card: pro, cards: [] }))).toEqual([pro]);
+    expect(machineWords(machine({}))).toEqual({ cards: null, advice: [] });
+    expect(machineWords(null)).toEqual({ cards: null, advice: [] });
   });
 
   it("shows the models it holds as cards, and ChatGPT through subscriptions as the subscription's card", () => {
@@ -156,7 +167,7 @@ describe("a model", () => {
     const now = Date.parse("2026-09-15T12:00:00Z");
     const day = new Date(Date.parse("2026-09-15T10:00:00Z")).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
     const idle = { now, checking: false };
-    expect(admissionWords("qwen38-27b", local, { id: "qwen38-27b", admitted: true }, [record({})], idle)).toEqual({ tone: "ok", words: `admitted ${day}`, detail: null });
+    expect(admissionWords("qwen38-27b", local, { id: "qwen38-27b", admitted: true }, [record({})], idle)).toEqual({ tone: "ok", words: "admitted", on: day, detail: null });
     const refused = record({
       passed: false,
       checks: [
@@ -166,9 +177,11 @@ describe("a model", () => {
         { name: "stream_integrity", passed: null },
       ],
     });
-    expect(admissionWords("qwen38-27b", local, undefined, [refused], idle)).toEqual({ tone: "blocked", words: `refused on ${day}`, detail: "failed tool calls and context overflow" });
-    expect(admissionWords("qwen38-27b", local, undefined, [record({ passed: false })], idle)).toEqual({ tone: "blocked", words: `refused on ${day}`, detail: null });
-    expect(admissionWords("qwen38-27b", local, undefined, [], idle)).toEqual({ tone: "caution", words: "not admitted yet", detail: null });
+    expect(admissionWords("qwen38-27b", local, undefined, [refused], idle)).toEqual({ tone: "blocked", words: "refused", on: day, detail: "failed tool calls and context overflow" });
+    expect(admissionTitle(admissionWords("qwen38-27b", local, undefined, [refused], idle))).toBe(`refused on ${day}: failed tool calls and context overflow`);
+    expect(admissionWords("qwen38-27b", local, undefined, [record({ passed: false })], idle)).toEqual({ tone: "blocked", words: "refused", on: day, detail: null });
+    expect(admissionWords("qwen38-27b", local, undefined, [], idle)).toEqual({ tone: "caution", words: "not admitted yet", on: null, detail: null });
+    expect(admissionTitle(admissionWords("qwen38-27b", local, undefined, [], idle))).toBeNull();
     // a backend added within the hour is being checked, and so is any model while a check runs
     const waiting = { id: "qwen38-27b", admitted: false };
     expect(admissionWords("qwen38-27b", { ...local, added_at: now - 20 * 60_000 }, waiting, [], idle).words).toBe("being checked");
@@ -176,14 +189,14 @@ describe("a model", () => {
     expect(admissionWords("qwen38-27b", local, { id: "qwen38-27b", admitted: true }, [record({})], { now, checking: true }).words).toBe("being checked");
     // a refusal from before the backend was added again is not this backend's
     expect(admissionWords("qwen38-27b", { ...local, added_at: Date.parse("2026-09-15T11:30:00Z") }, undefined, [refused], idle).words).toBe("being checked");
-    expect(admissionWords("MiniMax-M3", minimax, undefined, null, idle)).toEqual({ tone: "neutral", words: "not needed for a provider", detail: null });
+    expect(admissionWords("MiniMax-M3", minimax, undefined, null, idle)).toEqual({ tone: "neutral", words: "not needed for a provider", on: null, detail: null });
   });
 
   it("says what a check found, model by model", () => {
-    expect(checkWords([record({})])).toEqual({ passed: true, words: "qwen38-27b passed the admission suite, and the assistant may use it." });
+    expect(checkWords([record({})])).toEqual({ passed: true, words: "qwen38-27b is admitted." });
     expect(checkWords([record({ passed: false, checks: [{ name: "enforced_schema", passed: false }, { name: "a_new_check", passed: false }] })])).toEqual({
       passed: false,
-      words: "qwen38-27b did not pass the admission suite: it failed enforced schemas and a new check.",
+      words: "qwen38-27b is refused: it failed enforced schemas and a new check.",
     });
     expect(checkWords([])).toEqual({ passed: false, words: "Kvasir checked no model." });
   });
@@ -193,8 +206,9 @@ describe("a model", () => {
     expect(usedFor(local, purposes)).toBe("concierge, ask-help");
     expect(usedFor(minimax, purposes)).toBe("operator");
     expect(usedFor({ ...local, id: "spare" }, purposes)).toBe("nothing yet");
-    expect(answersWords("local", purposes)).toBe("answers concierge and ask-help");
-    expect(answersWords("spare", purposes)).toBe("answers no station yet");
+    expect(answersWords("local", purposes)).toEqual({ words: "answers 2 stations", title: "concierge, ask-help" });
+    expect(answersWords("spare", purposes)).toEqual({ words: "answers no station", title: null });
+    expect(countedStations(["concierge"])).toEqual({ words: "answers 1 station", title: "concierge" });
     expect(answersWords("local", null)).toBeNull();
     expect(stationOf("desk.search")).toBe("desk.search");
     expect(subscribedStations([purpose({ backend: "chatgpt", locality: "remote" }), purpose({ purpose: "assistant.ask-help" })], [local, chatgpt])).toEqual(["concierge"]);
@@ -255,19 +269,20 @@ describe("where each station goes (record 25)", () => {
     expect(lines[0]).toMatchObject({
       station: "ask-help",
       carries: "carries rows",
-      to: { mark: { icon: "chip", tone: "brand" }, title: "Qwen3.6-27B-Q4_K_M", meta: "this machine, llama.cpp", where: { tone: "ok", words: "stays in your systems" } },
+      to: { mark: { icon: "chip", tone: "brand" }, title: "Qwen3.6-27B-Q4_K_M", meta: "this machine · llama.cpp", where: { tone: "ok", words: "stays in your systems" } },
       side: null,
       movable: true,
     });
-    expect(lines[1].to).toMatchObject({ mark: { icon: "engine", tone: "neutral" }, title: "qwen38-27b", meta: "your server, SGLang" });
-    expect(lines[2]).toMatchObject({ carries: "carries the catalogue", side: "no rows, so no reason needed", to: { mark: { icon: "cloud", tone: "caution" }, title: "MiniMax-M3", meta: "MiniMax, a provider", where: { tone: "caution", words: "leaves your systems" } } });
-    expect(lines[3].side).toMatch(/^allowed by admin on 14 Sept? 2026, for this station$/u);
+    expect(lines[1].to).toMatchObject({ mark: { icon: "engine", tone: "neutral" }, title: "qwen38-27b", meta: "your server · SGLang" });
+    expect(lines[2]).toMatchObject({ carries: "carries the catalogue", side: null, because: null, to: { mark: { icon: "cloud", tone: "caution" }, title: "MiniMax-M3", meta: "MiniMax", where: { tone: "caution", words: "leaves your systems" } } });
+    expect(lines[3].side).toMatch(/^allowed by admin, 14 Sept? 2026$/u);
+    expect(lines[3].because).toBe("why");
     expect(carriesWords("identifiers")).toBe("carries identifiers");
   });
 
   it("says where a server is only to a person with Kvasir: Work, and lets only them move a station", () => {
     const lines = routes([purpose({})], [local, minimax], at(person));
-    expect(lines[0].to.meta).toBe("a server in your systems");
+    expect(lines[0].to.meta).toBe("your systems");
     expect(lines[0].movable).toBe(false);
     expect(routes([purpose({ content: "identifiers" })], [local, minimax], at(admin))[0].movable).toBe(false);
   });
@@ -275,11 +290,11 @@ describe("where each station goes (record 25)", () => {
   it("names ChatGPT as each person's own subscription, the person's own, or the install's", () => {
     const viaChatgpt = purpose({ backend: "chatgpt", locality: "remote", default: false });
     const title = (viewer: Viewer, s: Subscription | null = null) => routes([viaChatgpt], [local, chatgpt], at(viewer, s))[0].to;
-    expect(title(admin, sub({ state: "signed_in", model: "gpt-5.5" }))).toMatchObject({ title: "Each person's own ChatGPT subscription", meta: "the default model in your systems for anyone without one" });
+    expect(title(admin, sub({ state: "signed_in", model: "gpt-5.5" }))).toMatchObject({ title: "Each person's own ChatGPT subscription", meta: "qwen38-27b without one" });
     expect(title(seer)).toMatchObject({ title: "Each person's own ChatGPT subscription" });
     expect(title(person, sub())).toMatchObject({ title: "Your own ChatGPT subscription", meta: "qwen38-27b until you sign in" });
-    expect(title(person, sub({ state: "signed_in", model: "gpt-5.5", models: [{ id: "gpt-5.5", name: "GPT-5.5", context_window: 272000 }] }))).toMatchObject({ meta: "GPT-5.5, signed in" });
-    expect(title(alone, sub({ for: "system" }))).toMatchObject({ title: "The install's ChatGPT subscription", meta: "qwen38-27b until it is signed in" });
+    expect(title(person, sub({ state: "signed_in", model: "gpt-5.5", models: [{ id: "gpt-5.5", name: "GPT-5.5", context_window: 272000 }] }))).toMatchObject({ meta: "GPT-5.5" });
+    expect(title(alone, sub({ for: "system" }))).toMatchObject({ title: "The install's ChatGPT subscription", meta: "qwen38-27b until signed in" });
     expect(destinationWords(chatgpt)).toBe("Each person's own ChatGPT subscription");
     expect(destinationWords(chatgpt, true)).toBe("The install's ChatGPT subscription");
     expect(destinationWords(local)).toBe("qwen38-27b");
@@ -287,9 +302,10 @@ describe("where each station goes (record 25)", () => {
 
   it("says a station goes nowhere where its backend is gone, and why where the model on this machine is stopped", () => {
     const [gone, stopped] = routes([purpose({ backend: "spare" }), purpose({ backend: "llama-cpp" })], [minimax], at(admin));
-    expect(gone.to).toMatchObject({ title: "nowhere yet", meta: "no model in your systems answers it yet", where: null });
-    expect(stopped.to.meta).toBe("its model on this machine is stopped");
-    expect(goesToWords(gone.to)).toBe("nowhere yet, no model in your systems answers it yet");
+    expect(gone.to).toMatchObject({ title: "nowhere yet", meta: null, where: null });
+    expect(stopped.to.meta).toBe("model stopped");
+    expect(goesToWords(gone.to)).toBe("nowhere yet");
+    expect(goesToWords(stopped.to)).toBe("nowhere yet · model stopped");
   });
 
   it("offers a station only the backends it may move to, ChatGPT among them, and says what a move needs", () => {
@@ -311,9 +327,9 @@ describe("a provider just added", () => {
     const identity = purpose({ purpose: "desk.identity", content: "identifiers" });
     const askHelp = purpose({ purpose: "assistant.ask-help", backend: "minimax", locality: "remote", default: false });
     expect(closedTo(minimax, [concierge, operator, identity, askHelp]).map((l) => [l.station, l.needs, l.words])).toEqual([
-      ["concierge", "an acknowledgement", "concierge carries rows of the archive, which go there only once you write down why."],
-      ["operator", "nothing", "operator reads no rows, and goes there once you move it."],
-      ["desk.identity", "never", "desk.identity carries identifiers, which never leave your systems."],
+      ["concierge", "an acknowledgement", "concierge: needs a written reason"],
+      ["operator", "nothing", "operator: moves at once"],
+      ["desk.identity", "never", "desk.identity: identifiers never leave"],
     ]);
     expect(closedLead(minimax, [concierge, askHelp])).toBe("MiniMax-M3 does not answer these stations yet");
     expect(closedLead(minimax, [concierge])).toBe("MiniMax-M3 answers no station yet");

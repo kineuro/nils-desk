@@ -11,13 +11,10 @@
 import { useId, useState } from "react";
 import type React from "react";
 import { Dialog } from "../ui/Dialog";
-import { Icon } from "../ui/Icon";
 import {
   addable,
   addedWords,
-  addressHint,
   asksKey,
-  CHECKED_FIRST,
   description,
   draft,
   findRefusal,
@@ -37,7 +34,7 @@ import {
 import { MarkSquare } from "./cards";
 import { Acted, useActing } from "./common";
 import { useDownload } from "./DownloadModel";
-import { plainly } from "./gateway";
+import { cardsOf, plainly } from "./gateway";
 import { kvasir, type LocalModel, type LocalStatus, type Locality, type Subscription, triedOf } from "./kvasir";
 import { choiceWords, type Choice } from "./models";
 import { useSignInPart } from "./SubscriptionCard";
@@ -51,7 +48,7 @@ export interface Added {
 }
 
 /** Said under the address of a model server of yours, which may be on this machine or another. */
-export const SERVER_HINT = "Its address as Kvasir reaches it, most often ending in /v1: this machine's server at its port, or another machine's address on your network.";
+export const SERVER_HINT = "Most often ends in /v1.";
 
 /** A model server of yours or a provider: its address and key, the models it lists, a test of the one chosen, and the add. */
 function useServer(where: "here" | "provider", props: { onClose: () => void; onDone: (words: string, added: Added) => void }): { body: React.ReactNode; foot: React.ReactNode; busy: boolean } {
@@ -171,7 +168,7 @@ function useServer(where: "here" | "provider", props: { onClose: () => void; onD
         <div className="input mono">
           <input id={`${id}-address`} value={d.baseUrl} inputMode="url" spellCheck={false} autoComplete="off" disabled={busy} onChange={(e) => edit({ baseUrl: e.target.value })} />
         </div>
-        <span className="meta">{d.where === "provider" ? addressHint(d) : SERVER_HINT}</span>
+        {(d.where !== "provider" || d.preset === "other") && <span className="meta">{SERVER_HINT}</span>}
       </div>
 
       {d.where !== "provider" && (
@@ -188,7 +185,7 @@ function useServer(where: "here" | "provider", props: { onClose: () => void; onD
           <div className="input mono">
             <input id={`${id}-key`} type="password" autoComplete="off" value={d.key} disabled={busy} onChange={(e) => edit({ key: e.target.value })} />
           </div>
-          <span className="meta">Kvasir keeps it sealed, and never shows it again.</span>
+          <span className="meta">Sealed; never shown again.</span>
         </div>
       )}
 
@@ -198,7 +195,7 @@ function useServer(where: "here" | "provider", props: { onClose: () => void; onD
           <button type="button" className="button secondary small" disabled={cannotFind !== null || busy} onClick={find}>
             Find its models
           </button>
-          {cannotFind ? <span className="meta">{cannotFind}</span> : !found && <span className="meta">Kvasir asks the server which models it serves.</span>}
+          {cannotFind && <span className="meta">{cannotFind}</span>}
         </div>
         {findRound === round && <Acted acting={finding.acting} />}
         {found &&
@@ -247,14 +244,7 @@ function useServer(where: "here" | "provider", props: { onClose: () => void; onD
         </div>
       )}
 
-      {localityOf(d.where) === "local" && (
-        <div className="note">
-          <Icon name="shield" />
-          <div className="note-body">
-            <p className="note-detail">{CHECKED_FIRST}</p>
-          </div>
-        </div>
-      )}
+      {localityOf(d.where) === "local" && <span className="meta">Checked with the admission suite before use.</span>}
     </>
   );
 
@@ -269,7 +259,7 @@ function useServer(where: "here" | "provider", props: { onClose: () => void; onD
             {outcome.detail && <p className="meta">{outcome.detail}</p>}
           </div>
         ))}
-      {stale(d, tested) && <p className="meta">Something changed since the test, so test it again.</p>}
+      {stale(d, tested) && <p className="meta">Changed since the test; test it again.</p>}
       {refused.length > 0 && (
         <ul className="tried-list">
           {refused.map((w) => (
@@ -302,7 +292,8 @@ function useServer(where: "here" | "provider", props: { onClose: () => void; onD
  * The dialog. `choices` are what this person may add, the first chosen as it
  * opens; `local` and `install` feed the download, `subscription` and
  * `stations` the sign-in. A server or provider added calls `onDone`, a
- * download queued `onQueued`, and a subscription changed `onSubscription`.
+ * download queued `onQueued`, a subscription changed `onSubscription`, and a
+ * Hugging Face token set in the download `onToken`.
  */
 export function AddModel(props: {
   choices: Choice[];
@@ -314,8 +305,9 @@ export function AddModel(props: {
   onDone: (words: string, added: Added) => void;
   onQueued?: (m: LocalModel) => void;
   onSubscription?: (s: Subscription) => void;
+  onToken?: (set: boolean) => void;
 }) {
-  const { choices, local = null, install = null, subscription = null, stations = [], onClose, onDone, onQueued, onSubscription } = props;
+  const { choices, local = null, install = null, subscription = null, stations = [], onClose, onDone, onQueued, onSubscription, onToken } = props;
   const id = useId();
   const [choice, setChoice] = useState<Choice | null>(choices[0] ?? null);
   const server = useServer("here", { onClose, onDone });
@@ -323,10 +315,11 @@ export function AddModel(props: {
   const download = useDownload({
     token: local?.token ?? false,
     free: local?.free_bytes ?? null,
-    card: install?.machine.card ?? null,
+    cards: cardsOf(install),
     advice: install?.machine.advice ?? [],
     onClose,
     onDone: (m) => onQueued?.(m),
+    onToken: (set) => onToken?.(set),
   });
   const signing = useSignInPart({ row: subscription, stations, follow: choice === "subscription", onChange: onSubscription, onClose });
   const part = choice === "download" ? download : choice === "server" ? server : choice === "provider" ? provider : choice === "subscription" ? signing : null;

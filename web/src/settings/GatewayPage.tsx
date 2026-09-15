@@ -24,7 +24,7 @@ import { Acted, Head, Health, messageOf, useActing, type Acting } from "./common
 import { answersWords, checkWords, gatewayHealth, listWords, plainly, removalWords, routes, subscribedStations, viewerOf, type CatalogueModel } from "./gateway";
 import { backendsKept } from "./kept";
 import { kvasir, RUNTIME_BACKEND, type AdmissionRecord, type Backend, type PurposeRow, type Subscription } from "./kvasir";
-import { localOrder, servedAdmission, started, UNREACHABLE } from "./local";
+import { localOrder, servedAdmission, started } from "./local";
 import { LocalModelCard, MachineLine, useLocalModels } from "./LocalModels";
 import { addChoices, backendCards } from "./models";
 import { MoveDrawer, StationRoutes } from "./Stations";
@@ -100,7 +100,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   const cards = backends ? backendCards(backends, { viewer, catalogue, admissions, purposes, now, checking, drawn }) : [];
 
   // a model added in the last hour, or loaded on llama.cpp, is read again until its admission settles
-  const settling = cards.some((c) => checking !== c.backend.id && c.tags.some((t) => SETTLING.has(t.words))) || served.some((a) => a !== null && SETTLING.has(a.words));
+  const settling = cards.some((c) => checking !== c.backend.id && SETTLING.has(c.tag.words)) || served.some((a) => a !== null && SETTLING.has(a.words));
   useEffect(() => {
     if (!settling) return;
     const t = setInterval(load, 15_000);
@@ -155,7 +155,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
       <Head
         title="Kvasir"
         under={may(caps, "install:see")}
-        lede={viewer.subscribes && !viewer.work ? "Which model answers each station, and your own ChatGPT subscription." : "Which model answers each station, and the models Kvasir holds for them."}
+        lede="Which model each station goes to."
       >
         {health && <Health tone={health.tone} words={health.words} />}
         {viewer.work && <span className="meta">{[health?.streams, version ? `version ${version}` : null].filter(Boolean).join(" · ")}</span>}
@@ -166,7 +166,6 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
         <section className="stack roomy">
           <div className="section-head rule-top">
             <h2>Where each station goes</h2>
-            <span className="meta">{viewer.work ? "changes at once, recorded with who and why" : "whoever may work on the Kvasir page decides"}</span>
           </div>
           {viewer.work && provider && (
             <ClosedStations
@@ -191,12 +190,12 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
               }
             />
           ) : (
-            <p className="meta">No station has asked Kvasir for a model yet.</p>
+            <p className="meta">No station yet.</p>
           )}
           <div className="note gated">
             <Icon name="lock" />
             <div className="note-body">
-              <p className="note-detail">Identifiers never leave. Rows of the archive go to a provider or to ChatGPT only after someone with Kvasir: Work writes down why, for that one purpose.</p>
+              <p className="note-detail">Identifiers never leave; rows leave only with a written reason.</p>
             </div>
           </div>
         </section>
@@ -205,7 +204,6 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
       <section className="stack roomy">
         <div className="section-head rule-top">
           <h2>Models</h2>
-          <span className="meta">{viewer.work ? "what the stations can go to" : viewer.subscribes ? "the ones added with Kvasir: Work, and yours" : "the ones added with Kvasir: Work"}</span>
           {choices.length > 0 && (
             <button
               type="button"
@@ -222,8 +220,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
           )}
         </div>
         {said && <p className="ok-words">{said}</p>}
-        {runtime && !runtime.reachable && <p className="warn">{UNREACHABLE}</p>}
-        {local.status && local.missed && <p className="warn">{`The models Kvasir downloads could not be read again: ${local.missed}`}</p>}
+        {local.status && local.missed && <p className="warn">{`Could not read the downloads again: ${local.missed}`}</p>}
         {(anything || subscription) && (
           <div className="mgrid">
             {!viewer.work && subscription}
@@ -264,12 +261,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
             {viewer.work && subscription}
           </div>
         )}
-        {backends !== null && !anything && (
-          <p className="meta">{viewer.work ? "Kvasir holds no model yet. Add a model downloads one to this machine, or adds a model server of yours or a provider." : "Kvasir holds no model yet."}</p>
-        )}
-        {!viewer.work && (
-          <p className="meta">{mine && viewer.subscribes ? "Add a model offers you a subscription of your own. Adding downloads, servers and providers needs Kvasir: Work." : "Adding downloads, servers and providers needs Kvasir: Work."}</p>
-        )}
+        {backends !== null && !anything && <p className="meta">No model yet.</p>}
         <Said acting={acting.acting} />
         <Said acting={local.acting} />
         {viewer.work && local.status && <MachineLine install={install} status={local.status} onLocate={local.locate} onToken={local.token} />}
@@ -295,6 +287,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
             local.queued(m);
           }}
           onSubscription={change}
+          onToken={local.tokenSet}
         />
       )}
       {removing && backends && (
@@ -381,7 +374,7 @@ function KeyDialog({ backend, onClose, onDone }: { backend: Backend; onClose: ()
         <div className="input mono">
           <input id="provider-key" type="password" autoComplete="off" value={secret} disabled={saving.working} onChange={(e) => setSecret(e.target.value)} />
         </div>
-        <span className="meta">Kvasir keeps it sealed, and never shows it again.</span>
+        <span className="meta">Sealed; never shown again.</span>
       </div>
     </Dialog>
   );

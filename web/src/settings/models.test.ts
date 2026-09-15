@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Kvasir page's models (record 25): the choices Add a model offers by what
 // a person may do and what Kvasir serves, each choice's words, and the cards
-// of the models Kvasir holds, in their order and with their words.
+// of the models Kvasir holds, in their order and with the little they say.
 
 import { describe, expect, it } from "vitest";
 import type { Viewer } from "./gateway";
@@ -53,14 +53,14 @@ describe("Add a model's choices", () => {
     expect(choiceWords("download", { local: { ...local, runtime }, subscription: null })).toEqual({
       mark: { icon: "update", tone: "brand" },
       title: "Download it to this machine",
-      words: "A GGUF model from the Hugging Face Hub, started by Kvasir on llama.cpp here. Prompts stay in your systems.",
+      words: "Hugging Face Hub · llama.cpp here · stays in your systems",
     });
     expect(choiceWords("server", { local, subscription: null })).toMatchObject({ mark: { icon: "engine", tone: "neutral" }, title: "A model server of yours" });
-    expect(choiceWords("provider", { local, subscription: null }).words).toBe("A company that serves models, with your key. Prompts leave your systems.");
+    expect(choiceWords("provider", { local, subscription: null }).words).toBe("With your key · leaves your systems");
     expect(choiceWords("subscription", { local, subscription: sub() })).toEqual({
       mark: { icon: "key", tone: "caution" },
       title: "Your own ChatGPT subscription",
-      words: "Sign in with your ChatGPT plan. It answers only your conversations, for the stations someone with Kvasir: Work sends to ChatGPT.",
+      words: "Your ChatGPT plan · only your conversations",
     });
     expect(choiceWords("subscription", { local, subscription: sub({ for: "system" }) }).title).toBe("The install's ChatGPT subscription");
   });
@@ -76,7 +76,7 @@ describe("the cards of the models Kvasir holds", () => {
   const purposes: PurposeRow[] = [{ purpose: "assistant.ask-help", app: "nils-assistant", content: "rows", kind: "foreground", backend: "llama-cpp", locality: "local", default: false, acknowledged: null, may_open_remote: "" }];
   const at = (viewer: Viewer, over: { drawn?: string[]; admissions?: AdmissionRecord[] } = {}) => ({ viewer, catalogue: [], admissions: over.admissions ?? [passed], purposes, now, checking: null, drawn: over.drawn ?? [] });
 
-  it("puts this machine's llama.cpp first, then servers of yours, then providers, and leaves ChatGPT to its own card", () => {
+  it("puts this machine's llama.cpp first, then servers of yours, then providers, each saying little, and leaves ChatGPT to its own card", () => {
     const cards = backendCards([minimax, chatgpt, server, runtime], at(admin));
     expect(cards.map((c) => [c.kind, c.name, c.first])).toEqual([
       ["runtime", "Qwen3.6-27B-Q4_K_M", true],
@@ -84,23 +84,30 @@ describe("the cards of the models Kvasir holds", () => {
       ["server", "small", false],
       ["provider", "MiniMax-M3", true],
     ]);
-    expect(cards[0]).toMatchObject({ meta: "This machine · llama.cpp", tags: [{ tone: "ok", words: "serving", dot: true }], answers: "answers ask-help" });
-    expect(cards[0].aside).toMatch(/^admitted 15 Sept?$/u);
-    expect(cards[1]).toMatchObject({ meta: "Your server", tags: [{ tone: "caution", words: "not admitted yet", dot: true }], answers: "answers no station yet" });
-    expect(cards[3]).toMatchObject({ meta: "MiniMax, a provider · no key kept", tags: [{ tone: "caution", words: "leaves your systems", dot: false }] });
+    expect(cards[0]).toMatchObject({ where: "This machine", facts: "llama.cpp", tag: { tone: "ok", words: "serving", dot: true }, answers: { words: "answers 1 station", title: "ask-help" } });
+    expect(cards[0].tag.title).toMatch(/^admitted on 15 Sept?$/u);
+    expect(cards[1]).toMatchObject({ where: "Your server", facts: null, tag: { tone: "caution", words: "not admitted yet", dot: true, title: null }, answers: { words: "answers no station", title: null } });
+    expect(cards[3]).toMatchObject({ where: "MiniMax", facts: "no key kept", tag: { tone: "blocked", words: "no key", dot: true } });
   });
 
   it("leaves out a model on llama.cpp that the card of a downloaded model draws", () => {
     expect(backendCards([runtime, server], at(admin, { drawn: ["Qwen3.6-27B-Q4_K_M"] })).map((c) => c.name)).toEqual(["fast", "small"]);
   });
 
-  it("tags a model on llama.cpp that warms, or that Kvasir refused", () => {
+  it("tags a model on llama.cpp that warms, or that Kvasir refused, with the checks it failed as the tag's title", () => {
     const [warming] = backendCards([{ ...runtime, health: { warming: true } }], at(person));
-    expect(warming.tags[0]).toEqual({ tone: "caution", words: "warming", dot: true });
+    expect(warming.tag).toEqual({ tone: "caution", words: "warming", dot: true, title: null });
     const refused = { ...passed, passed: false, checks: [{ name: "tool_calls", passed: false }] };
     const [card] = backendCards([runtime], at(person, { admissions: [refused] }));
-    expect(card.tags.map((t) => t.tone)).toEqual(["ok", "blocked"]);
-    expect(card.detail).toBe("failed tool calls");
-    expect(card.address).toBeNull();
+    expect(card.tag).toMatchObject({ tone: "blocked", words: "refused", dot: true });
+    expect(card.tag.title).toMatch(/^refused on 15 Sept?: failed tool calls$/u);
+  });
+
+  it("says where a server answers, its runtime and its context, and a provider's key, only to a person with Kvasir: Work", () => {
+    const addressed: Backend = { ...server, models: ["fast"], base_url: "http://127.0.0.1:30000/v1", entries: [{ id: "fast", name: "fast", reasoning: false, context_window: 131072, max_tokens: 4096, admitted: true }] };
+    const records = [{ ...passed, backend: "sglang", model: "fast", runtime: { name: "sglang", version: "0.5", build: "" } }];
+    expect(backendCards([addressed], at(admin, { admissions: records }))[0].facts).toBe("SGLang · 131,072 tokens · http://127.0.0.1:30000/v1");
+    expect(backendCards([addressed], at(person, { admissions: records }))[0].facts).toBe("131,072 tokens");
+    expect(backendCards([{ ...minimax, credential: true }], at(person))[0]).toMatchObject({ where: "MiniMax", facts: null, tag: { words: "leaves your systems", dot: false } });
   });
 });

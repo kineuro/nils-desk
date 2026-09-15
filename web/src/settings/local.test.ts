@@ -22,7 +22,7 @@ import {
   fingerprint,
   fitWords,
   foundWords,
-  localMeta,
+  localFacts,
   localName,
   localOrder,
   localTag,
@@ -160,13 +160,13 @@ describe("a model's row", () => {
     expect(barOf(model({ state: "paused", ...half }))).toBe(50);
     expect(barOf(model({ state: "queued", ...half }))).toBeNull();
     expect(barOf(model({ state: "done", bytes_done: 16 * GIB }))).toBeNull();
-    expect(progressWords(model({ state: "downloading", ...half }))).toBe("8 GiB of 16 GiB, 50%");
-    expect(progressWords(model({ state: "paused", bytes_done: 4 * GIB }))).toBe("4 GiB of 16 GiB, 25%");
-    expect(progressWords(model())).toBe("16 GiB in 3 files, waiting its turn");
-    expect(progressWords(model(half))).toBe("8 GiB of 16 GiB, waiting its turn");
-    expect(progressWords(model({ state: "done", files: 1 }))).toBe("16 GiB in one file");
-    expect(progressWords(model({ state: "failed", ...half }))).toBe("8 GiB of 16 GiB when it stopped");
-    expect(progressWords(model({ state: "failed" }))).toBe("16 GiB in 3 files");
+    expect(progressWords(model({ state: "downloading", ...half }))).toBe("8 GiB of 16 GiB · 50%");
+    expect(progressWords(model({ state: "paused", bytes_done: 4 * GIB }))).toBe("4 GiB of 16 GiB · 25%");
+    expect(progressWords(model())).toBe("16 GiB");
+    expect(progressWords(model(half))).toBe("8 GiB of 16 GiB");
+    expect(progressWords(model({ state: "done", ...half }))).toBe("16 GiB");
+    expect(progressWords(model({ state: "failed", ...half }))).toBe("8 GiB of 16 GiB");
+    expect(progressWords(model({ state: "failed" }))).toBe("16 GiB");
   });
 
   it("names the revision with a short commit, and labels each command by the server it starts", () => {
@@ -185,7 +185,7 @@ describe("a model's row", () => {
     expect(removeWords(model())).toEqual(["Nothing of it is downloaded yet, so it only leaves the list."]);
     expect(removedWords(model({ state: "done" }))).toBe("owner/name is removed, and 16 GiB is free again.");
     expect(removedWords(model())).toBe("owner/name is removed.");
-    expect(queuedWords(model())).toBe(`owner/name is queued: 16 GiB in 3 files, into ${PATH}.`);
+    expect(queuedWords(model())).toBe("owner/name is queued, 16 GiB.");
   });
 });
 
@@ -247,10 +247,10 @@ describe("the download dialog", () => {
     expect(foundWords(lookup({ files: [], bytes_total: 0, include: ["*Q4_K_M.gguf", "*.json"] }))).toBe("No file matches any of *Q4_K_M.gguf, *.json.");
     expect(foundWords(lookup({ files: [], bytes_total: 0 }))).toBe("The Hugging Face Hub lists no file for this model at that revision.");
     expect(roomWords(4 * GIB, null)).toBeNull();
-    expect(roomWords(4 * GIB, 100 * GIB)).toEqual({ fits: true, words: "100 GiB free where downloads go." });
+    expect(roomWords(4 * GIB, 100 * GIB)).toEqual({ fits: true, words: "100 GiB free" });
     expect(roomWords(4 * GIB, 4.5 * GIB)).toEqual({
       fits: false,
-      words: "There is not room for it where downloads go: 4.5 GiB free, and it needs 5 GiB, 1 GiB of that to spare. Free some space there, or change where new downloads go.",
+      words: "Not enough room where downloads go: 4.5 GiB free, 5 GiB needed.",
     });
   });
 });
@@ -260,14 +260,14 @@ describe("a refusal in words", () => {
 
   it("says a refusal for room with both sizes, and Kvasir's own words where it carries none", () => {
     expect(refusalWords(refusal("no_space", "/srv/models has 10.0 GiB free", { status: 507, free_bytes: 10 * GIB, needed_bytes: 17 * GIB }), at)).toBe(
-      "There is not room for it where downloads go: 10 GiB free, and it needs 17 GiB, 1 GiB of that to spare. Free some space there, or change where new downloads go.",
+      "Not enough room where downloads go: 10 GiB free, 17 GiB needed.",
     );
     expect(refusalWords(refusal("no_space", "/srv/models has 10.0 GiB free", { status: 507 }), at)).toBe("/srv/models has 10.0 GiB free.");
   });
 
   it("points a gated model to the token, a model held already to its row, and says the rest in words", () => {
     expect(refusalWords(refusal("needs_token", "the Hugging Face Hub refused owner/name", { status: 422 }), at)).toBe(
-      "This model is gated or private, so it needs a Hugging Face token. Set one under Hugging Face token on the Kvasir page, then try again.",
+      "This model is gated or private, so it needs a Hugging Face token. Set one above, then try again.",
     );
     expect(refusalWords(refusal("needs_token", "the Hugging Face Hub refused the token for owner/name", { status: 422 }), { ...at, token: true })).toBe(
       "The Hugging Face Hub refused the token for this model. The token's account needs access to it, and a gated model needs its terms accepted on the hub.",
@@ -360,9 +360,9 @@ describe("a model started on llama.cpp", () => {
     const backend: Backend = { id: "llama-cpp", kind: "openai-completions", locality: "local", provider: null, credential: null, models: ["name-q4-k-m"], health: { warming: false }, added_at: now - 2 * 3_600_000, entries: [entry] };
     expect(servedAdmission(run({ state: "starting" }), [backend], [], now)).toBeNull();
     expect(servedAdmission(run(), null, null, now)).toBeNull();
-    expect(servedAdmission(run(), [], [], now)).toEqual({ tone: "caution", words: "being added", detail: "Kvasir holds it as a model in your systems in a moment." });
-    expect(servedAdmission(run(), [{ ...backend, health: { warming: true } }], [], now)).toEqual({ tone: "caution", words: "warming", detail: "Kvasir checks it with its admission suite once it has answered." });
-    expect(servedAdmission(run(), [backend], [], now)).toEqual({ tone: "ok", words: "admitted", detail: null });
+    expect(servedAdmission(run(), [], [], now)).toEqual({ tone: "caution", words: "being added", on: null, detail: "held as a model in a moment" });
+    expect(servedAdmission(run(), [{ ...backend, health: { warming: true } }], [], now)).toEqual({ tone: "caution", words: "warming", on: null, detail: "checked once it has answered" });
+    expect(servedAdmission(run(), [backend], [], now)).toEqual({ tone: "ok", words: "admitted", on: null, detail: null });
     const refusedRecord: AdmissionRecord = { id: 1, backend: "llama-cpp", model: "name-q4-k-m", runtime: { name: "llama.cpp", version: "b10964", build: "" }, at: now - 3_600_000, passed: false, checks: [{ name: "tool_calls", passed: false }] };
     expect(servedAdmission(run(), [{ ...backend, entries: [{ ...entry, admitted: false }] }], [refusedRecord], now)).toMatchObject({ tone: "blocked", detail: "failed tool calls" });
   });
@@ -375,8 +375,8 @@ describe("a model started on llama.cpp", () => {
     expect(startRefusalWords(at("runtime_unreachable"))).toBe("llama.cpp on this machine does not answer, so Kvasir could not start the model. Start it again once llama.cpp answers.");
     expect(startRefusalWords(refusal("bad_request", "the model's file went missing"))).toBe("The model's file went missing.");
     expect(startRefusalWords(refusal(null, "", { status: 500 }))).toBe("Kvasir answered 500.");
-    expect(startedWords(model())).toBe("owner/name is loading into llama.cpp. Once it serves, Kvasir checks it with its admission suite before the assistant uses it.");
-    expect(stoppedWords(model())).toBe("owner/name is stopped, and llama.cpp holds no memory for it any more.");
+    expect(startedWords(model())).toBe("owner/name is loading into llama.cpp.");
+    expect(stoppedWords(model())).toBe("owner/name is stopped.");
     expect(stopFirstWords(model())).toBe("owner/name is started on llama.cpp. Stop it first, then remove it.");
   });
 });
@@ -391,11 +391,11 @@ describe("a download under Add a model (record 25)", () => {
     file("Qwen3.6-27B-UD-Q5_K_XL.gguf", 19 * GIB),
     file("mmproj-F16.gguf", GIB),
   ];
-  const card = { memory_gb: 23.99 };
+  const card = [{ name: "NVIDIA GeForce RTX 4090", memory_gb: 23.99 }];
 
   it("says what downloading is, by the runtime the install has", () => {
-    expect(downloadChoiceWords({ build: "b10964", variant: "ubuntu-vulkan-x64", reachable: true, serving: null })).toMatch(/started by Kvasir on llama\.cpp here/u);
-    expect(downloadChoiceWords(null)).toBe("A model from the Hugging Face Hub, for a model server of yours to run. Prompts stay in your systems.");
+    expect(downloadChoiceWords({ build: "b10964", variant: "ubuntu-vulkan-x64", reachable: true, serving: null })).toBe("Hugging Face Hub · llama.cpp here · stays in your systems");
+    expect(downloadChoiceWords(null)).toBe("Hugging Face Hub · for a model server of yours · stays in your systems");
   });
 
   it("offers each quantization of a GGUF model once, with the parts of a split file together, and no vision projector", () => {
@@ -417,14 +417,27 @@ describe("a download under Add a model (record 25)", () => {
 
   it("says whether a file fits the card, and opens on Q4_K_M where it fits, else the largest that fits", () => {
     const choices = fileChoices(files);
-    expect(fitWords(16 * GIB, card)).toEqual({ tone: "ok", words: "fits the card" });
-    expect(fitWords(28 * GIB, card)).toEqual({ tone: "caution", words: "larger than the card: runs on the processor, slowly" });
-    expect(fitWords(28 * GIB, null)).toBeNull();
+    expect(fitWords(16 * GIB, card)).toEqual({ tone: "ok", words: "fits the card", title: null });
+    expect(fitWords(28 * GIB, card)).toEqual({ tone: "caution", words: "larger than the card", title: "runs on the processor, slowly" });
+    expect(fitWords(28 * GIB, [])).toBeNull();
     expect(defaultChoice(choices, card)).toBe("Qwen3.6-27B-Q4_K_M.gguf");
     expect(defaultChoice(choices.filter((c) => c.label !== "Q4_K_M"), card)).toBe("Qwen3.6-27B-UD-Q5_K_XL.gguf");
-    expect(defaultChoice(choices, { memory_gb: 8 })).toBeNull();
-    expect(defaultChoice(choices.filter((c) => c.label !== "Q4_K_M"), null)).toBeNull();
-    expect(defaultChoice(choices, null)).toBe("Qwen3.6-27B-Q4_K_M.gguf");
+    expect(defaultChoice(choices, [{ name: "small", memory_gb: 8 }])).toBeNull();
+    expect(defaultChoice(choices.filter((c) => c.label !== "Q4_K_M"), [])).toBeNull();
+    expect(defaultChoice(choices, [])).toBe("Qwen3.6-27B-Q4_K_M.gguf");
+  });
+
+  it("measures a file against the largest card, and says the memory of all the cards where it fits only across them", () => {
+    const two = [
+      { name: "NVIDIA GeForce RTX 4080", memory_gb: 16 },
+      { name: "NVIDIA GeForce RTX 4080", memory_gb: 16 },
+      { name: "Intel UHD Graphics", memory_gb: 0 },
+    ];
+    expect(fitWords(12 * GIB, two)).toEqual({ tone: "ok", words: "fits one card", title: null });
+    expect(fitWords(28 * GIB, two)).toEqual({ tone: "ok", words: "fits 2 cards, 32 GB", title: null });
+    expect(fitWords(40 * GIB, two)).toEqual({ tone: "caution", words: "larger than the cards", title: "runs on the processor, slowly" });
+    expect(fitWords(GIB, [{ name: "Intel UHD Graphics", memory_gb: 0 }])).toBeNull();
+    expect(defaultChoice(fileChoices(files).filter((c) => c.label !== "Q4_K_M"), two)).toBe("Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0.gguf");
   });
 
   it("downloads the chosen file of a GGUF model, every file the patterns choose of another, and nothing before a look-up", () => {
@@ -455,15 +468,17 @@ describe("a local model's card (record 25)", () => {
     expect(localName(model())).toBe("owner/name");
   });
 
-  it("says where it runs, and tags how it runs once started or where its download stands", () => {
-    expect(localMeta(model({ ...done, run: run() }))).toBe("This machine · llama.cpp · 32,768 tokens");
-    expect(localMeta(model({ ...done, run: run({ state: "starting", context: null }) }))).toBe("This machine · llama.cpp");
-    expect(localMeta(model({ state: "downloading" }))).toBe("This machine · from the Hugging Face Hub");
-    expect(localMeta(model({ ...done, startable: true }))).toBe("This machine · starts on llama.cpp");
-    expect(localMeta(model(done))).toBe("This machine · for a model server of yours");
-    expect(localTag(model({ ...done, run: run() }))).toEqual({ tone: "ok", words: "serving" });
-    expect(localTag(model({ ...done, run: run({ state: "stopped" }) }))).toEqual({ tone: "ok", words: "downloaded" });
-    expect(localTag(model({ state: "paused" }))).toEqual({ tone: "caution", words: "paused" });
+  it("says what is known of it as a hover title, and one tag for how it runs or where its download stands", () => {
+    expect(localFacts(model({ ...done, run: run() }))).toBe("main, commit 0123456 · 16 GiB · 32,768 tokens");
+    expect(localFacts(model({ state: "downloading" }))).toBe("main, commit 0123456 · 16 GiB");
+    expect(localTag(model({ ...done, run: run() }))).toEqual({ tone: "ok", words: "serving", title: null });
+    expect(localTag(model({ ...done, run: run() }), { tone: "ok", words: "admitted", on: "14 Sept", detail: null })).toEqual({ tone: "ok", words: "serving", title: "admitted on 14 Sept" });
+    expect(localTag(model({ ...done, run: run() }), { tone: "blocked", words: "refused", on: "15 Sept", detail: "failed tool calls" })).toEqual({ tone: "blocked", words: "refused", title: "refused on 15 Sept: failed tool calls" });
+    expect(localTag(model({ ...done, run: run({ state: "starting" }) }))).toEqual({ tone: "brand", words: "loading", title: "loading as name-q4-k-m" });
+    expect(localTag(model({ ...done, run: run({ state: "failed", error: "exit code 1" }) }))).toEqual({ tone: "blocked", words: "did not start", title: "Exit code 1." });
+    expect(localTag(model({ ...done, run: run({ state: "stopped" }) }))).toEqual({ tone: "ok", words: "downloaded", title: null });
+    expect(localTag(model({ state: "failed", error: "fetch failed" }))).toEqual({ tone: "blocked", words: "failed", title: "Fetch failed." });
+    expect(localTag(model({ state: "paused" }))).toEqual({ tone: "caution", words: "paused", title: null });
   });
 
   it("puts the model llama.cpp serves first, and says the room where downloads go", () => {
@@ -471,6 +486,6 @@ describe("a local model's card (record 25)", () => {
     const two = model({ ...done, id: 2, repo: "owner/two", run: run() });
     expect(localOrder([one, two]).map((m) => m.id)).toEqual([2, 1]);
     expect(roomLine(412 * GIB)).toBe("412 GiB free");
-    expect(roomLine(null)).toBe("the free space there is not known");
+    expect(roomLine(null)).toBe("free space unknown");
   });
 });

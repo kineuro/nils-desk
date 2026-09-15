@@ -93,10 +93,39 @@ export function gatewayHealth(backends: Backend[]): { tone: Tone; words: string;
   return { tone: warming ? "caution" : "ok", words: warming ? "warming" : "warm", streams };
 }
 
-/** The card this machine has and what it can serve, in the words setup uses. */
-export function machineWords(install: Install | null): { card: string | null; advice: string[] } {
-  const card = install?.machine.card ?? null;
-  return { card: card ? `${card.name}, ${Math.round(card.memory_gb)} GB` : null, advice: install?.machine.advice ?? [] };
+/** A graphics card the supervisor found, with its memory. */
+export interface Card {
+  name: string;
+  memory_gb: number;
+}
+
+/** Every card the machine has: the supervisor's list where it gives one, else the one card setup found, and none where no supervisor answers. */
+export function cardsOf(install: Install | null): Card[] {
+  const machine = install?.machine;
+  if (!machine) return [];
+  if (Array.isArray(machine.cards) && machine.cards.length > 0) return machine.cards;
+  return machine.card ? [machine.card] : [];
+}
+
+/**
+ * The machine's cards in one line, each kind once with how many there are and
+ * their memory together, and the memory of all where more than one kind holds
+ * some; null where no card is known. And what setup says the machine can serve.
+ */
+export function machineWords(install: Install | null): { cards: string | null; advice: string[] } {
+  const kinds: { name: string; count: number; memory: number }[] = [];
+  for (const c of cardsOf(install)) {
+    const memory = c.memory_gb > 0 ? c.memory_gb : 0;
+    const kind = kinds.find((k) => k.name === c.name);
+    if (kind) {
+      kind.count += 1;
+      kind.memory += memory;
+    } else kinds.push({ name: c.name, count: 1, memory });
+  }
+  const parts = kinds.map((k) => `${k.count > 1 ? `${k.count} × ` : ""}${k.name}${k.memory > 0 ? `, ${Math.round(k.memory)} GB` : ""}`);
+  const holding = kinds.filter((k) => k.memory > 0);
+  if (holding.length > 1) parts.push(`${Math.round(holding.reduce((n, k) => n + k.memory, 0))} GB in all`);
+  return { cards: parts.length > 0 ? parts.join(" · ") : null, advice: install?.machine.advice ?? [] };
 }
 
 /** A model's facts: what Kvasir holds of it, or its catalogue's line where Kvasir says nothing more. */
@@ -132,8 +161,15 @@ export function failedChecks(r: AdmissionRecord): string[] {
 export interface Admission {
   tone: Tone;
   words: string;
-  /** The checks a refused model failed, said under its tag. */
+  /** The day of the record it was admitted or refused on, for the tag's hover title. */
+  on: string | null;
+  /** The checks a refused model failed, for the tag's hover title. */
   detail: string | null;
+}
+
+/** An admission's hover title: when it was admitted or refused, and the checks a refused model failed. */
+export function admissionTitle(a: Admission): string | null {
+  return [a.on ? `${a.words} on ${a.on}` : null, a.detail].filter(Boolean).join(": ") || null;
 }
 
 /**
@@ -143,31 +179,31 @@ export interface Admission {
  * backend was added unless a check since refused it.
  */
 export function admissionWords(model: string, backend: Backend, listed: CatalogueModel | undefined, records: AdmissionRecord[] | null, at: { now: number; checking: boolean }): Admission {
-  if (backend.locality === "remote") return { tone: "neutral", words: "not needed for a provider", detail: null };
-  if (at.checking) return { tone: "caution", words: "being checked", detail: null };
+  if (backend.locality === "remote") return { tone: "neutral", words: "not needed for a provider", on: null, detail: null };
+  if (at.checking) return { tone: "caution", words: "being checked", on: null, detail: null };
   // a record from before the backend was added again is another backend's
   const since = backend.added_at ?? 0;
   const mine = (records ?? []).filter((r) => r.backend === backend.id && r.model === model && r.at >= since).sort((a, b) => b.at - a.at);
   const flag = listed?.admitted;
   if (flag === true || (typeof flag !== "boolean" && mine[0]?.passed === true)) {
     const passed = mine.find((r) => r.passed);
-    return { tone: "ok", words: passed ? `admitted ${onDay(passed.at)}` : "admitted", detail: null };
+    return { tone: "ok", words: "admitted", on: passed ? onDay(passed.at) : null, detail: null };
   }
   if (mine[0] && !mine[0].passed) {
     const failed = failedChecks(mine[0]);
-    return { tone: "blocked", words: `refused on ${onDay(mine[0].at)}`, detail: failed.length > 0 ? `failed ${listWords(failed)}` : null };
+    return { tone: "blocked", words: "refused", on: onDay(mine[0].at), detail: failed.length > 0 ? `failed ${listWords(failed)}` : null };
   }
-  if (backend.added_at !== undefined && at.now - backend.added_at < CHECKING_MS) return { tone: "caution", words: "being checked", detail: null };
-  return { tone: "caution", words: "not admitted yet", detail: null };
+  if (backend.added_at !== undefined && at.now - backend.added_at < CHECKING_MS) return { tone: "caution", words: "being checked", on: null, detail: null };
+  return { tone: "caution", words: "not admitted yet", on: null, detail: null };
 }
 
 /** What a check found, model by model. */
 export function checkWords(records: AdmissionRecord[]): { passed: boolean; words: string } {
   if (records.length === 0) return { passed: false, words: "Kvasir checked no model." };
   const words = records.map((r) => {
-    if (r.passed) return `${r.model} passed the admission suite, and the assistant may use it.`;
+    if (r.passed) return `${r.model} is admitted.`;
     const failed = failedChecks(r);
-    return `${r.model} did not pass the admission suite${failed.length > 0 ? `: it failed ${listWords(failed)}` : ""}.`;
+    return `${r.model} is refused${failed.length > 0 ? `: it failed ${listWords(failed)}` : ""}.`;
   });
   return { passed: records.every((r) => r.passed), words: words.join(" ") };
 }
@@ -183,11 +219,16 @@ export function usedFor(backend: Backend, purposes: PurposeRow[]): string {
   return stations.length === 0 ? "nothing yet" : stations.join(", ");
 }
 
-/** The stations a backend answers, as a card says it under the model. */
-export function answersWords(backendId: string, purposes: PurposeRow[] | null): string | null {
+/** The stations a backend answers, counted as a card says them, with their names for a hover title; null before the stations are read. */
+export function answersWords(backendId: string, purposes: PurposeRow[] | null): { words: string; title: string | null } | null {
   if (purposes === null) return null;
-  const stations = purposes.filter((p) => p.backend === backendId).map((p) => stationOf(p.purpose));
-  return stations.length === 0 ? "answers no station yet" : `answers ${listWords(stations)}`;
+  return countedStations(purposes.filter((p) => p.backend === backendId).map((p) => stationOf(p.purpose)));
+}
+
+/** Stations counted, as a card says them, with their names for a hover title. */
+export function countedStations(stations: string[]): { words: string; title: string | null } {
+  if (stations.length === 0) return { words: "answers no station", title: null };
+  return { words: stations.length === 1 ? "answers 1 station" : `answers ${stations.length} stations`, title: stations.join(", ") };
 }
 
 /** The stations that go to ChatGPT through the subscription. */
@@ -260,30 +301,30 @@ export function destinationOf(p: PurposeRow, backends: Backend[], at: { viewer: 
   const b = backends.find((x) => x.id === p.backend);
   if (!b) {
     const stopped = p.backend === RUNTIME_BACKEND;
-    return { mark: MARKS.nowhere, title: "nowhere yet", meta: stopped ? "its model on this machine is stopped" : "no model in your systems answers it yet", where: null };
+    return { mark: MARKS.nowhere, title: "nowhere yet", meta: stopped ? "model stopped" : null, where: null };
   }
   const where = whereWords(b.locality);
   if (b.builtin === true) {
     const { viewer, subscription: s } = at;
     const name = s?.name ?? "ChatGPT";
-    const until = defaultModel(backends) ?? "the default model in your systems";
-    const signed = s?.state === "signed_in" ? `${subscribedModel(s) ?? name}, signed in` : null;
-    if (viewer.system) return { mark: MARKS.subscription, title: `The install's ${name} subscription`, meta: signed ?? `${until} until it is signed in`, where };
-    if (viewer.subscribes && !viewer.work) return { mark: MARKS.subscription, title: `Your own ${name} subscription`, meta: signed ?? `${until} until you sign in`, where };
-    return { mark: MARKS.subscription, title: `Each person's own ${name} subscription`, meta: "the default model in your systems for anyone without one", where };
+    const until = defaultModel(backends);
+    const model = s?.state === "signed_in" ? subscribedModel(s) : undefined;
+    if (viewer.system) return { mark: MARKS.subscription, title: `The install's ${name} subscription`, meta: model !== undefined ? model : until ? `${until} until signed in` : null, where };
+    if (viewer.subscribes && !viewer.work) return { mark: MARKS.subscription, title: `Your own ${name} subscription`, meta: model !== undefined ? model : until ? `${until} until you sign in` : null, where };
+    return { mark: MARKS.subscription, title: `Each person's own ${name} subscription`, meta: until ? `${until} without one` : null, where };
   }
   const model = b.models[0] ?? b.id;
-  if (onRuntime(b)) return { mark: MARKS.runtime, title: model, meta: "this machine, llama.cpp", where };
+  if (onRuntime(b)) return { mark: MARKS.runtime, title: model, meta: "this machine · llama.cpp", where };
   if (b.locality === "local") {
     const runtime = runtimeOfBackend(b, at.admissions);
-    return { mark: MARKS.server, title: model, meta: at.viewer.work ? (runtime ? `your server, ${runtime}` : "your server") : "a server in your systems", where };
+    return { mark: MARKS.server, title: model, meta: at.viewer.work ? (runtime ? `your server · ${runtime}` : "your server") : "your systems", where };
   }
-  return { mark: MARKS.provider, title: model, meta: `${providerName(b)}, a provider`, where };
+  return { mark: MARKS.provider, title: model, meta: providerName(b), where };
 }
 
 /** Where a station goes now, in one line. */
 export function goesToWords(d: Destination): string {
-  return d.meta ? `${d.title}, ${d.meta}` : d.title;
+  return d.meta ? `${d.title} · ${d.meta}` : d.title;
 }
 
 /** What a station carries to the model, beside its name. */
@@ -298,8 +339,10 @@ export interface Route {
   station: string;
   carries: string;
   to: Destination;
-  /** Who allowed rows of the archive to leave for it, or why nothing needed allowing; null otherwise. */
+  /** Who allowed rows of the archive to leave for it, and when; null otherwise. */
   side: string | null;
+  /** The reason written down for it, as the hover title of who allowed it. */
+  because: string | null;
   /** Whether this viewer may move it, to a backend it may go to. */
   movable: boolean;
 }
@@ -307,13 +350,16 @@ export interface Route {
 /** Where each station goes (record 25): the page's first section. */
 export function routes(purposes: PurposeRow[], backends: Backend[], at: { viewer: Viewer; admissions: AdmissionRecord[] | null; subscription: Subscription | null }): Route[] {
   return purposes.map((p) => {
-    const b = backends.find((x) => x.id === p.backend);
-    const side = p.acknowledged
-      ? `allowed by ${p.acknowledged.by}${p.acknowledged.at ? ` on ${onDate(p.acknowledged.at)}` : ""}, for this station`
-      : b?.locality === "remote" && p.content === "catalog"
-        ? "no rows, so no reason needed"
-        : null;
-    return { purpose: p, station: stationOf(p.purpose), carries: carriesWords(p.content), to: destinationOf(p, backends, at), side, movable: at.viewer.work && targets(p, backends).length > 0 };
+    const side = p.acknowledged ? `allowed by ${p.acknowledged.by}${p.acknowledged.at ? `, ${onDate(p.acknowledged.at)}` : ""}` : null;
+    return {
+      purpose: p,
+      station: stationOf(p.purpose),
+      carries: carriesWords(p.content),
+      to: destinationOf(p, backends, at),
+      side,
+      because: p.acknowledged?.text ?? null,
+      movable: at.viewer.work && targets(p, backends).length > 0,
+    };
   });
 }
 
@@ -369,9 +415,9 @@ export function closedTo(provider: Backend, purposes: PurposeRow[]): ClosedLine[
     .map((p): ClosedLine => {
       const station = stationOf(p.purpose);
       const open = opening(p, provider);
-      if (open === "never") return { purpose: p, station, needs: "never", words: `${station} carries identifiers, which never leave your systems.` };
-      if (open === "acknowledge") return { purpose: p, station, needs: "an acknowledgement", words: `${station} carries rows of the archive, which go there only once you write down why.` };
-      return { purpose: p, station, needs: "nothing", words: `${station} reads no rows, and goes there once you move it.` };
+      if (open === "never") return { purpose: p, station, needs: "never", words: `${station}: identifiers never leave` };
+      if (open === "acknowledge") return { purpose: p, station, needs: "an acknowledgement", words: `${station}: needs a written reason` };
+      return { purpose: p, station, needs: "nothing", words: `${station}: moves at once` };
     });
 }
 
