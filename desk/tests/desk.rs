@@ -288,6 +288,35 @@ async fn a_registered_app_that_answers_is_in_the_document_and_one_that_does_not_
     assert!(apps[1]["capabilities"].is_null(), "absence is null: {doc}");
 }
 
+/// Wave 4c §7.4: an export needs query:work unless the configuration names
+/// another grant; a ladder name there still stands for its set.
+#[tokio::test]
+async fn an_export_needs_query_work_unless_the_configuration_names_another() {
+    use nils_desk::grants::{Access, Detail};
+    let engine = fake_engine().await;
+    let query = Access::new(["query:work"], Detail::Plain);
+    let reader = nils_desk::grants::set("reader").unwrap();
+    for (export, holds, says) in [
+        ("", &query, Some("query:work")),
+        ("export = \"reader\"\n", &query, None),
+        ("export = \"reader\"\n", &reader, Some("reader")),
+        ("export = \"off\"\n", &reader, None),
+    ] {
+        let text = format!(
+            "origin = \"http://127.0.0.1:1\"\nstore = \":memory:\"\n{export}[engine]\nurl = \"{engine}\"\n"
+        );
+        let shared = nils_desk::start(&text).unwrap();
+        let person = nils_desk::session::Person {
+            subject: "anna".into(),
+            display_name: "Anna".into(),
+            access: holds.clone(),
+            groups: Vec::new(),
+        };
+        let doc = nils_desk::capabilities::document(&shared, &person, None).await;
+        assert_eq!(doc["desk"]["export"], json!(says), "{export:?}");
+    }
+}
+
 /// A desk nobody signs in to has one person and no people or groups to
 /// change.
 #[tokio::test]
@@ -430,8 +459,8 @@ async fn an_export_pages_the_handle_with_the_purpose_and_the_desk_records_runs_a
     assert_eq!(doc["results"][0]["handle"], 5);
     assert_eq!(doc["results"][0]["document"], 2);
     assert_eq!(doc["lineage"], json!([{"document": 3, "parent": 2}]));
-    assert_eq!(doc["export"], "reader");
-    assert_eq!(shared.config.export, "reader");
+    assert_eq!(doc["export"], "query:work");
+    assert_eq!(shared.config.export, "query:work");
 }
 
 /// Wave 4c §7.7 and §5.5: the desk pushes the person's bearer to the

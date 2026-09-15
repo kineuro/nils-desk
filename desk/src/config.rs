@@ -39,9 +39,10 @@ pub struct Config {
     pub local: Local,
     /// `oidc` mode: the provider.
     pub oidc: Option<Oidc>,
-    /// Wave 4c §7.4, §7.6: the grant an export needs, or a ladder name
-    /// standing for its set, or `off`. The engine still authorises every
-    /// page read against the caller.
+    /// Wave 4c §7.4, §7.6: what an export needs: a grant, `query:work` unless
+    /// set, or a ladder name standing for its set, as a configuration
+    /// written before grants names one, or `off`. The engine still
+    /// authorises every page read against the caller.
     #[serde(default = "default_export")]
     pub export: String,
 }
@@ -56,7 +57,7 @@ impl Config {
 }
 
 fn default_export() -> String {
-    "reader".into()
+    "query:work".into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
@@ -331,6 +332,19 @@ url = "http://127.0.0.1:8437"
         assert!(with("off", "assist").is_ok());
         assert!(with("everyone", "operator").is_err());
         assert!(with("reader", "king").is_err());
+    }
+
+    /// An export needs query:work unless the configuration names another
+    /// grant, or a ladder name as one written before grants does.
+    #[test]
+    fn an_export_needs_query_work_unless_named() {
+        let base = "origin = \"http://127.0.0.1:7200\"\n";
+        let engine = "[engine]\nurl = \"http://127.0.0.1:8437\"\n";
+        let c = Config::parse(&format!("{base}{engine}")).expect("the configuration parses");
+        assert_eq!(c.export, "query:work");
+        let c = Config::parse(&format!("{base}export = \"reader\"\n{engine}"))
+            .expect("a ladder name still parses");
+        assert_eq!(c.export, "reader");
     }
 
     /// A path someone spelled out in full is left as it is.
