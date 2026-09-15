@@ -57,14 +57,14 @@ describe("a CSV read on this machine", () => {
 
 describe("what a column looks like", () => {
   it("is its shape: digits as 9, capitals as A, and how many rows hold it", () => {
-    expect(shapeOf("SMS1234")).toBe("AAA9999");
+    expect(shapeOf("REG1234")).toBe("AAA9999");
     expect(shapeOf("19900101-9999")).toBe("99999999-9999");
     expect(shapeWords("999999999999")).toBe("12 digits");
     expect(shapeWords("AAA999")).toBe("AAA999");
     const look = lookAt("pn", ["199001019999", "199002029999", "199001019999", ""]);
     expect(look.words).toBe("12 digits, 3 rows, rest empty, 2 distinct");
     expect(lookAt("blank", ["", ""]).words).toBe("empty");
-    expect(lookAt("mixed", ["SMS1234", "199001019999", "SMS9999", "AB12"]).words).toBe("3 shapes: AAA9999, 12 digits, 4 rows");
+    expect(lookAt("mixed", ["REG1234", "199001019999", "REG9999", "AB12"]).words).toBe("3 shapes: AAA9999, 12 digits, 4 rows");
   });
   it("means the person's number, the code, a type of the registry's, or a new type named after the header", () => {
     const look = lookAt("x", ["1"]);
