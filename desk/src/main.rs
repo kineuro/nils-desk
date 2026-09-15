@@ -174,6 +174,9 @@ struct RegisterArgs {
     /// Where to write the client secret, mode 600, for the desk's [oidc] table
     #[arg(long, value_name = "FILE")]
     secret_file: Option<std::path::PathBuf>,
+    /// The audience of the tokens the desk mints, as its [local] table names it
+    #[arg(long, default_value = "nils")]
+    audience: String,
 }
 
 fn main() {
@@ -560,6 +563,7 @@ async fn register(a: RegisterArgs) -> i32 {
             origin: a.origin.clone(),
             allow: a.allow.clone(),
             bind,
+            audience: a.audience.clone(),
         };
         let r = nils_desk::register::register(&api, &plan).await?;
         for c in &r.created {
@@ -569,12 +573,16 @@ async fn register(a: RegisterArgs) -> i32 {
             println!("found   {f}");
         }
         println!();
-        println!("the engine's flags:");
+        println!("the engine's flags, trusting the desk beside the provider:");
         println!("  {}", r.flags());
+        println!();
+        println!("Kvasir's auth, beside the tokens it keeps:");
+        println!("  {}", r.kvasir_auth());
         println!();
         println!("the desk's [oidc] table:");
         println!("  issuer = \"{}\"", r.issuer);
         println!("  client_id = \"{}\"", r.client_id);
+        println!("  groups_claim = \"groups\"");
         match &a.secret_file {
             Some(f) => {
                 write_secret(f, &r.client_secret)?;

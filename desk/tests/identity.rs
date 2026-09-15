@@ -540,6 +540,8 @@ async fn sign_in(client: &reqwest::Client, origin: &str, issuer: &str) -> String
         .to_string();
     assert!(to.starts_with(&format!("{issuer}/authorize?")), "{to}");
     assert!(to.contains("code_challenge_method=S256"));
+    // the profile scope, which carries the groups a person is in
+    assert!(to.contains("profile"), "{to}");
     let r = client.get(&to).send().await.unwrap();
     assert_eq!(r.status(), 303);
     let back = r
@@ -845,6 +847,7 @@ async fn the_registration_creates_everything_once_and_a_second_run_changes_nothi
             ("operator".into(), "neuro-ops".into()),
             ("assist".into(), "staff".into()),
         ],
+        audience: "nils".into(),
     };
     let r = nils_desk::register::register(&api, &plan).await.unwrap();
     assert_eq!(r.client_id, "client-abc");
@@ -853,13 +856,24 @@ async fn the_registration_creates_everything_once_and_a_second_run_changes_nothi
     assert!(r.found.is_empty(), "{:?}", r.found);
     assert!(r.created.iter().any(|c| c == "provider"));
     assert!(r.created.iter().any(|c| c == "entitlement assist"));
+    // the engine and Kvasir trust the desk's own issuer beside the provider
     let flags = r.flags();
     assert!(
-        flags.contains("--oidc-trust issuer=")
-            && flags.contains("audience=client-abc")
+        flags.contains("--oidc-trust issuer=https://desk.example.org,audience=nils,jwks=https://desk.example.org/.well-known/jwks.json")
+            && flags.contains(&format!(
+                "--oidc-trust issuer={url}/application/o/nils/,audience=client-abc,"
+            ))
             && flags.contains("--oidc-groups-claim roles --role reader=reader"),
         "{flags}"
     );
+    let kvasir = r.kvasir_auth();
+    assert_eq!(kvasir["mode"], "oidc");
+    assert_eq!(
+        kvasir["trust"][0],
+        json!({"issuer": "https://desk.example.org", "audience": "nils", "jwks": "https://desk.example.org/.well-known/jwks.json"})
+    );
+    assert_eq!(kvasir["trust"][1]["audience"], "client-abc");
+    assert_eq!(kvasir["roles"]["admin"], "admin");
     let posts = *ak.posts.lock().unwrap();
     // key, provider, application, one allow binding, five entitlements, three bindings
     assert_eq!(posts, 1 + 1 + 1 + 1 + 5 + 3, "{:?}", r.created);
@@ -873,6 +887,14 @@ async fn the_registration_creates_everything_once_and_a_second_run_changes_nothi
         assert_eq!(p["access_token_validity"], "minutes=15");
         assert_eq!(p["refresh_token_validity"], "days=30");
         assert_eq!(p["property_mappings"].as_array().unwrap().len(), 5);
+        // the profile scope carries the groups a person is in, which the desk's groups follow
+        assert!(
+            p["property_mappings"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("m-profile")),
+            "{p}"
+        );
         assert_eq!(p["client_type"], "confidential");
     }
     // the second run
