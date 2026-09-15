@@ -2,8 +2,8 @@
 // The shell (Wave 5 section 6): the top bar, the side and the page; the
 // assistant has a page of its own. Everything it shows is a predicate over the
 // capabilities document, and each part of the desk is built back
-// deliberately. Until an operator's install is set up, Home is the page of
-// its steps and the rest of the desk waits.
+// deliberately. Until the install is set up, Home is the page of its steps
+// for a person who may see the install, and the rest of the desk waits.
 
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
@@ -12,7 +12,8 @@ import { chatsKept, importHere, sidePages } from "./assistant/chats";
 import type { Capabilities } from "./capabilities";
 import { DataPage } from "./data/DataPage";
 import { QueryPage } from "./query/QueryPage";
-import { door, holds, state } from "./deployment";
+import { door, state } from "./deployment";
+import { may } from "./grants";
 import { Home } from "./home/Home";
 import { PlaceholderPage } from "./home/Placeholder";
 import { PLACEHOLDERS } from "./home/placeholders";
@@ -68,11 +69,11 @@ export function App() {
     };
   }, []);
 
-  // the install as the supervisor on this host reports it, for an admin, and when it was read
+  // the install as the supervisor on this host reports it, for a person who may see the install, and when it was read
   const [install, setInstall] = useState<Install | null>(null);
   const [installAt, setInstallAt] = useState<number | null>(null);
   const [asked, setAsked] = useState(0);
-  const supervised = load.kind === "ready" && holds(load.caps, "admin") && Boolean(load.caps.desk.settings?.supervisor_url);
+  const supervised = load.kind === "ready" && may(load.caps, "install:see") && Boolean(load.caps.desk.settings?.supervisor_url);
   useEffect(() => {
     if (!supervised) {
       setInstall(null);
@@ -96,13 +97,13 @@ export function App() {
     };
   }, [supervised, asked]);
 
-  // whether an operator's install is set up, from the places and the backups every page keeps
+  // whether the install is set up, for a person who may see it, from the places and the backups every page keeps
   const places = useKept(placesKept);
   const archives = useKept(backupsKept);
   const known = load.kind === "ready" ? load.caps : null;
-  const operator = known !== null && usable(known) && holds(known, "operator");
-  const readsPlaces = operator && door(known, "GET /api/places");
-  const readsBackups = operator && holds(known, "admin") && door(known, "GET /api/backups");
+  const setsUp = known !== null && usable(known) && may(known, "install:see");
+  const readsPlaces = setsUp && may(known, "places:see") && door(known, "GET /api/places");
+  const readsBackups = setsUp && may(known, "database:see") && door(known, "GET /api/backups");
   useEffect(() => {
     if (readsPlaces) placesKept.ensure();
     if (readsBackups) backupsKept.ensure();
@@ -125,7 +126,7 @@ export function App() {
       : readsBackups && archives.value === null && archives.error === null
         ? null
         : readyToStart(known, install, places.value?.places ?? null, readsBackups ? archives.value : null);
-  // an operator who landed on setup stays there until they open Home
+  // a person who landed on setup stays there until they open Home
   const [landed, setLanded] = useState(false);
   const [left, setLeft] = useState(false);
   useEffect(() => {
@@ -149,7 +150,7 @@ export function App() {
   const onProfile = ready && route.section === "profile";
   const active = onProfile ? null : ([...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null);
   const inSettings = ready && active?.id === "settings";
-  const onSetup = ready && operator && !left && (setupReady === false || landed);
+  const onSetup = ready && setsUp && !left && (setupReady === false || landed);
   const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id && !p.built);
   const who = caps.person.display_name || caps.person.subject;
   const body = ["body", sided ? "with-side" : null].filter(Boolean).join(" ");
@@ -214,12 +215,11 @@ export function App() {
           )}
           {st.kind === "unbound" && (
             <section className="state">
-              <h1>No entitlement yet</h1>
+              <h1>No grant yet</h1>
               <p>
-                The account <code>{caps.person.subject}</code> exists and holds no entitlement. An operator binds one of
-                <code> reader</code>, <code>reviewer</code>, <code>operator</code> or <code>admin</code>
-                {caps.desk.mode === "oidc" ? " to a group of yours at the identity provider" : " to this user"}. Nothing here is broken;
-                nothing is open yet.
+                The account <code>{caps.person.subject}</code> exists and holds no grant. Pages are given on the Identity page, through a group or
+                to this account alone{caps.desk.mode === "oidc" ? ", and a group there can follow a group of yours at the identity provider" : ""}. Nothing
+                here is broken; nothing is open yet.
               </p>
             </section>
           )}
@@ -238,7 +238,7 @@ export function App() {
               </p>
             </section>
           )}
-          {ready && active?.id === "home" && operator && setupReady === null && <p className="meta">Reading the install.</p>}
+          {ready && active?.id === "home" && setsUp && setupReady === null && <p className="meta">Reading the install.</p>}
           {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={setupReady ? () => setLeft(true) : undefined} />}
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
@@ -250,7 +250,7 @@ export function App() {
           {ready && active === null && !onProfile && (
             <section className="state">
               <h1>Nothing is open to you here</h1>
-              <p>The desk has no section for the entitlements this account holds.</p>
+              <p>The desk has no section for the grants this account holds.</p>
             </section>
           )}
           </PageBoundary>
