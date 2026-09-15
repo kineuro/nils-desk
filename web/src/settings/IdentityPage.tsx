@@ -260,7 +260,7 @@ function SignIn({ caps, sessions }: { caps: Capabilities; sessions: number | nul
           <Icon name="restart" />
           {mode === "off" ? (
             <p>
-              To let people sign in, each seeing only what an admin gives them, run <Command text="nils setup" /> and choose that the desk keeps the people, or an identity provider. It restarts the desk and the engine.
+              To let people sign in, each seeing only what they are given, run <Command text="nils setup" /> and choose that the desk keeps the people, or an identity provider. It restarts the desk and the engine.
             </p>
           ) : (
             <p>

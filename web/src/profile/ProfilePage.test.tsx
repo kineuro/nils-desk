@@ -36,6 +36,9 @@ describe("a person's own page", () => {
     expect(html).toMatch(/<div class="arow deep"><b>Kvasir<\/b>/u);
     expect(html).toContain("<b>Release and Pipelines</b>");
     expect(html).toContain("not shown to you");
+    expect(html).toContain("Whoever may change people and groups can open them for you.");
+    expect(html).toContain("set by whoever may change people and groups");
+    expect(html).not.toContain("admin");
     expect(html).toContain('<span class="amark">with identifying details</span>');
     expect(html).toContain('<span class="what">Dates, subject codes, sex and age, scanner names and series and protocol descriptions.</span>');
   });

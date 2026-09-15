@@ -78,7 +78,8 @@ describe("the Identity page when nobody signs in", () => {
     expect(html).toContain("Nobody signs in");
     expect(html).toContain("Whoever opens the desk sees every page and may do everything.");
     expect(html).toContain("Only this machine");
-    expect(html).toContain("To let people sign in, each seeing only what an admin gives them");
+    expect(html).toContain("To let people sign in, each seeing only what they are given");
+    expect(html).not.toContain("an admin");
     expect(html).toContain("<code>nils setup</code>");
     expect(html).toContain("It restarts the desk and the engine.");
     expect(html).not.toContain("<h2>Groups</h2>");
