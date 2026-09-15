@@ -32,7 +32,7 @@ export function ProfilePage({ caps }: { caps: Capabilities }) {
   }, [reaches]);
 
   const who = caps.person.display_name || caps.person.subject;
-  const step = topStep(caps.person.entitlements);
+  const step = caps.person.groups.length > 0 ? caps.person.groups.join(", ") : topStep([]);
   const assist = holds(caps, "assist");
   const mode = MODES.find((m) => m.id === caps.desk.mode) ?? null;
   const place = placeOf(subscriptions);
