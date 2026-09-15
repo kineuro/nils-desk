@@ -241,16 +241,113 @@ fn the_command_line_keeps_groups_and_what_each_person_holds() {
     );
     assert!(names("dy").is_empty());
 
-    // group set replaces what a group gives and follows
+    // group set changes only what it names: the grants here, not the detail
     ok(&["group", "set", "Readers", "--grant", "query:see"], None);
     let readers = store().book().group_named("Readers").unwrap().clone();
     assert_eq!(readers.access, Access::new(["query:see"], Detail::Plain));
     assert!(readers.follows.is_empty());
+    ok(
+        &["group", "set", "Scanner people", "--detail", "sensitive"],
+        None,
+    );
+    let scanners = store()
+        .book()
+        .group_named("Scanner people")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        scanners.access,
+        Access::new(["data:work", "review:see"], Detail::Sensitive),
+        "its grants stay"
+    );
+    assert_eq!(scanners.follows, ["neuro-scanner"], "and what it follows");
+    ok(
+        &[
+            "group",
+            "set",
+            "Scanner people",
+            "--follows",
+            "neuro-mr",
+            "--follows",
+            "neuro-ct",
+        ],
+        None,
+    );
+    let scanners = store()
+        .book()
+        .group_named("Scanner people")
+        .unwrap()
+        .clone();
+    assert_eq!(scanners.follows, ["neuro-mr", "neuro-ct"]);
+    assert_eq!(
+        scanners.access,
+        Access::new(["data:work", "review:see"], Detail::Sensitive)
+    );
+    // cleared, and renamed
+    ok(
+        &[
+            "group",
+            "set",
+            "Scanner people",
+            "--no-grants",
+            "--no-follows",
+            "--rename",
+            "Scanners",
+        ],
+        None,
+    );
+    let book = store().book();
+    assert!(book.group_named("Scanner people").is_none());
+    let scanners = book.group_named("Scanners").unwrap();
+    assert!(scanners.access.grants.is_empty() && scanners.follows.is_empty());
+    assert_eq!(scanners.access.detail, Detail::Sensitive);
+    // naming nothing is refused, saying what to name; a list and its clearing
+    // do not go together; a name taken or a group not there is refused by name
+    let r = run(&["group", "set", "Scanners"], None);
+    assert_eq!(r.code, 2, "{}", r.out);
+    for flag in [
+        "--grant",
+        "--no-grants",
+        "--detail",
+        "--follows",
+        "--no-follows",
+        "--rename",
+    ] {
+        assert!(r.err.contains(flag), "{flag}: {}", r.err);
+    }
+    let r = run(
+        &[
+            "group",
+            "set",
+            "Scanners",
+            "--grant",
+            "query:see",
+            "--no-grants",
+        ],
+        None,
+    );
+    assert_eq!(r.code, 2, "{}", r.out);
+    assert!(r.err.contains("cannot be used with"), "{}", r.err);
+    refused(
+        &["group", "set", "Scanners", "--rename", "Readers"],
+        None,
+        "exists",
+    );
+    refused(
+        &["group", "set", "Nothing", "--detail", "plain"],
+        None,
+        "no group named Nothing",
+    );
 
     // anna alone may change people and groups: none of these may leave nobody who can
     refused(&["group", "remove", "Admins"], None, "identity:work");
     refused(
         &["group", "set", "Admins", "--grant", "query:see"],
+        None,
+        "identity:work",
+    );
+    refused(
+        &["group", "set", "Admins", "--no-grants"],
         None,
         "identity:work",
     );

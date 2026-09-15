@@ -129,20 +129,29 @@ enum GroupCommand {
         #[arg(long = "follows", value_name = "GROUP")]
         follows: Vec<String>,
     },
-    /// Set what a group gives and follows, all replaced
+    /// Change a group: only what is named changes
     Set {
         #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
         config: std::path::PathBuf,
         name: String,
-        /// A grant the group gives, repeatable
-        #[arg(long = "grant", value_name = "GRANT")]
+        /// A grant the group gives, repeatable; replaces its grants
+        #[arg(long = "grant", value_name = "GRANT", conflicts_with = "no_grants")]
         grants: Vec<String>,
-        /// What its people see in records: plain, quasi or sensitive
+        /// Take every grant the group gives away
+        #[arg(long)]
+        no_grants: bool,
+        /// What its people see in records: plain, quasi or sensitive; replaces its detail
         #[arg(long, value_name = "DETAIL")]
         detail: Option<String>,
-        /// A group at the provider whose people this group reaches, repeatable (oidc mode)
-        #[arg(long = "follows", value_name = "GROUP")]
+        /// A group at the provider whose people this group reaches, repeatable; replaces what it follows (oidc mode)
+        #[arg(long = "follows", value_name = "GROUP", conflicts_with = "no_follows")]
         follows: Vec<String>,
+        /// Follow no provider group
+        #[arg(long)]
+        no_follows: bool,
+        /// A new name for the group
+        #[arg(long, value_name = "NEW")]
+        rename: Option<String>,
     },
     /// Remove a group; its people keep what else they hold
     Remove {
@@ -554,24 +563,57 @@ fn group(command: GroupCommand) -> Result<(), String> {
             config,
             name,
             grants,
+            no_grants,
             detail,
             follows,
+            no_follows,
+            rename,
         } => {
+            if grants.is_empty()
+                && !no_grants
+                && detail.is_none()
+                && follows.is_empty()
+                && !no_follows
+                && rename.is_none()
+            {
+                return Err(format!(
+                    "name what changes for {name}: --grant or --no-grants, --detail, --follows or --no-follows, or --rename, each changing only what it names"
+                ));
+            }
             let desk = load(&config)?;
-            let access = gives(&grants, detail.as_deref())?;
-            let id = group_id(&desk, &name)?;
+            let book = desk.store.book();
+            let group = book
+                .group_named(&name)
+                .ok_or_else(|| format!("no group named {name}"))?;
+            let mut access = group.access.clone();
+            if no_grants {
+                access.grants.clear();
+            } else if !grants.is_empty() {
+                access.grants = nils_desk::grants::check(&grants)?;
+            }
+            if let Some(d) = nils_desk::grants::check_detail(detail.as_deref())? {
+                access.detail = d;
+            }
+            let follows = if no_follows {
+                Vec::new()
+            } else if follows.is_empty() {
+                group.follows.clone()
+            } else {
+                follows
+            };
+            let named = rename.unwrap_or_else(|| name.clone());
             desk.store
                 .change(
                     oidc(&desk),
                     Change::GroupSet {
-                        id,
-                        name: name.clone(),
+                        id: group.id,
+                        name: named.clone(),
                         access,
                         follows,
                     },
                 )
                 .map_err(|e| e.to_string())?;
-            println!("{name}: set");
+            println!("{named}: set");
             Ok(())
         }
         GroupCommand::Remove { config, name } => {
