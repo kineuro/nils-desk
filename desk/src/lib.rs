@@ -9,6 +9,7 @@
 pub mod assistant;
 pub mod capabilities;
 pub mod config;
+pub mod grants;
 pub mod issuer;
 pub mod oidc;
 pub mod proxy;
