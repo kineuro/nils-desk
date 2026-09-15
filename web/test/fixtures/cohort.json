@@ -1,0 +1,28 @@
+{
+  "name": "north",
+  "owner": "astrid",
+  "description": "the north site, every subject its folder brings in",
+  "subjects": 212,
+  "sessions": 240,
+  "stacks": 3106,
+  "feeds": ["north-3t"],
+  "from": { "kind": "source", "detail": { "place": "north-3t" } },
+  "waiting": 62,
+  "created_at": "2026-05-11T09:12:00Z",
+  "last_joined": "2026-09-15T08:40:00Z",
+  "retired_at": null,
+  "joins": [
+    { "when": "2026-09-15T08:40:00Z", "what": "batch north-3t-2026-09-15 of the dataset north-3t", "subjects": 38, "by": "the dataset's rule", "batch": 19 },
+    { "when": "2026-09-03T15:10:00Z", "what": "taken out by hand: consent withdrawn", "subjects": 2, "left": true, "by": "astrid", "actor": "astrid" },
+    { "when": "2026-08-20T21:04:00Z", "what": "batch north-3t-2026-08-20", "subjects": 41, "by": "the dataset's rule", "batch": 14 },
+    { "when": "2026-07-02T09:30:00Z", "what": "batch north-3t-2026-07-02", "subjects": 43, "by": "the dataset's rule", "batch": 9 },
+    { "when": "2026-05-11T09:12:00Z", "what": "first read of the dataset north-3t", "subjects": 92, "by": "the dataset's rule", "batch": 3 }
+  ],
+  "sources_holding": [
+    { "name": "north-3t", "subjects": 212, "feeds": true, "arrives": "identified", "batches": 4 },
+    { "name": "archive-2019", "subjects": 6, "feeds": false, "arrives": "deidentified", "batches": 1 }
+  ],
+  "releases": [
+    { "id": 4, "name": "north-2026.08.21.1", "version": "1", "layout": "bids", "subjects": 174, "started_at": "2026-08-21T10:00:00Z", "handed_over": "2026-08-22T09:00:00Z", "withdrawn_at": null }
+  ]
+}
