@@ -5,7 +5,7 @@
 // controls may do, with the reason on the control when they may not.
 
 import type { DeskRecord, HandleRow, JobRow } from "../ask/client";
-import { holdsGrant, type Grant } from "../grants";
+import { holdsGrant } from "../grants";
 
 export interface Running {
   job: number;
@@ -100,13 +100,13 @@ export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, grants:
   if (h.truncated) truncated = { by: h.limit !== null && h.row_count >= h.limit ? "you" : "us", limit: h.limit };
   const cannot = (why: string): Control => ({ enabled: false, reason: why });
   const can: Control = { enabled: true, reason: null };
-  const gate = (need: Grant, what: string): Control | null => {
+  const gate = (what: string, doing: string): Control | null => {
     if (rows === "withdrawn") return cannot("the handle was withdrawn");
     if (rows === "dropped") return cannot("the rows were dropped by retention");
     if (truncated) return cannot(truncated.by === "you" ? `a capped answer is not ${what}; raise your limit in the out step and run again` : `a truncated answer is not ${what}; narrow the question or run it as a job`);
     // the reason's order (Wave 5 section 6.6): truncated, stale, incomplete, grant
     if (stale) return cannot(stale.moved_to !== null ? `a stale answer is not ${what}; the question moved on to ${stale.moved_to}, run that` : `a stale answer is not ${what}; the registry moved to epoch ${epoch}, run the question again`);
-    if (!holdsGrant(grants, need)) return cannot(`it is ${what} with the ${need} grant`);
+    if (!holdsGrant(grants, "release:work")) return cannot(`${doing} needs work on the Release page`);
     return null;
   };
   return {
@@ -115,8 +115,8 @@ export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, grants:
     rows,
     stale,
     truncated,
-    release: gate("release:work", "released") ?? can,
-    promote: h.grain === "subject" ? (gate("release:work", "promoted") ?? can) : cannot("only a subject handle is promoted into a cohort"),
+    release: gate("released", "releasing it") ?? can,
+    promote: h.grain === "subject" ? (gate("promoted", "promoting it") ?? can) : cannot("only a subject handle is promoted into a cohort"),
     export: rows !== "kept" ? cannot(rows === "withdrawn" ? "the handle was withdrawn" : "the rows were dropped by retention") : stale ? cannot("a stale answer is not exported; run the question again") : canExport ? can : cannot("export is not open to you on this desk"),
   };
 }

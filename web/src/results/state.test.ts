@@ -51,8 +51,10 @@ describe("the three named states", () => {
 describe("the controls", () => {
   it("are gated by the grant the door wants, with the reason on the control", () => {
     const reader = stateOf(handle({ grain: "subject" }), record(), 1, SETS.reader.grants, true);
-    expect(reader.release).toEqual({ enabled: false, reason: "it is released with the release:work grant" });
-    expect(reader.promote).toEqual({ enabled: false, reason: "it is promoted with the release:work grant" });
+    expect(reader.release).toEqual({ enabled: false, reason: "releasing it needs work on the Release page" });
+    expect(reader.promote).toEqual({ enabled: false, reason: "promoting it needs work on the Release page" });
+    // the reason is words, never a grant as the parts spell it
+    expect(`${reader.release.reason} ${reader.promote.reason}`).not.toMatch(/:(see|work|use)\b/);
     expect(reader.export.enabled).toBe(true);
     // seeing releases is not making them
     expect(stateOf(handle({ grain: "subject" }), record(), 1, ["release:see"], true).release.enabled).toBe(false);

@@ -241,7 +241,7 @@ export function ProfilePanel(props: {
       {profile && tab === "clinical" && (
         <>
           <Bars chart={chartOf(profile.clinical, "plain", "No clinical events are recorded for these subjects.")} unit="events" />
-          {clinical?.sensitive_withheld && <p className="meta">Kinds of event marked sensitive are left out at your role.</p>}
+          {clinical?.sensitive_withheld && <p className="meta">Some kinds of event are left out, since you do not see everything in records.</p>}
         </>
       )}
     </section>
