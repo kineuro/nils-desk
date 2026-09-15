@@ -380,38 +380,3 @@ export function closedLead(provider: Backend, purposes: PurposeRow[]): string {
   const named = destinationWords(provider);
   return purposes.some((p) => p.backend === provider.id) ? `${named} does not answer these stations yet` : `${named} answers no station yet`;
 }
-
-/** A model's line under its name: the context it takes and whether it reasons. */
-export function modelMeta(m: CatalogueModel | undefined, locality: Backend["locality"]): string {
-  const parts = [m?.contextWindow ? `${count(m.contextWindow)} tokens` : null, m?.reasoning ? "reasoning" : null].filter(Boolean);
-  if (parts.length === 0) return locality === "remote" ? "a provider's model" : "";
-  return parts.join(" · ");
-}
-
-export interface PurposeLine {
-  purpose: string;
-  station: string;
-  carries: string;
-  goesTo: string;
-  locality: Backend["locality"] | null;
-  allowed: string | null;
-  /** Whether another backend may take it, with or without an acknowledgement. */
-  movable: boolean;
-}
-
-/** Where each station goes; `system` says the ChatGPT backend is the install's subscription, on a desk that signs nobody in. */
-export function purposeLines(purposes: PurposeRow[], backends: Backend[], system = false): PurposeLine[] {
-  return purposes.map((p) => {
-    const b = backends.find((x) => x.id === p.backend);
-    const allowed = p.acknowledged ? `allowed by ${p.acknowledged.by}${p.acknowledged.at ? ` on ${onDay(p.acknowledged.at)}` : ""}` : null;
-    return {
-      purpose: p.purpose,
-      station: stationOf(p.purpose),
-      carries: p.content === "catalog" ? "catalogue" : p.content,
-      goesTo: !b ? "nowhere yet" : b.builtin === true ? destinationWords(b, system) : `${destinationWords(b)}, ${b.locality === "local" ? "in your systems" : "a provider"}`,
-      locality: b?.locality ?? null,
-      allowed,
-      movable: targets(p, backends).length > 0,
-    };
-  });
-}

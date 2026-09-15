@@ -8,7 +8,7 @@
 // actions, what the download dialog asks and when it may download, how a
 // started model runs, and each refusal in words a person can act on.
 
-import { admissionWords, listWords, modelOf, type Admission, type Tone } from "./gateway";
+import { admissionWords, modelOf, type Admission, type Tone } from "./gateway";
 import type { AdmissionRecord, Backend, LocalAsk, LocalFile, LocalLookup, LocalModel, LocalRefusal, LocalRun, LocalRuntime, LocalState, RunState } from "./kvasir";
 
 /** How often the list is read again while a model is queued or downloading. */
@@ -125,20 +125,10 @@ export const TOKEN_NOTE = "Needed only for gated or private models. Kvasir keeps
 /** Said where the location changes. */
 export const STAY_NOTE = "Models downloaded earlier stay where they are, and the list shows each with its own path.";
 
-/** Whether the Hugging Face token is set, as the tag beside it. */
-export function tokenTag(set: boolean): { tone: LocalTone; words: string } {
-  return set ? { tone: "ok", words: "set" } : { tone: "neutral", words: "not set" };
-}
-
 /** Whether a typed token is one Kvasir takes: 8 to 512 characters, and no space. */
 export function tokenReady(typed: string): boolean {
   const t = typed.trim();
   return t.length >= 8 && t.length <= 512 && !/\s/u.test(t);
-}
-
-/** The room where new downloads go. */
-export function freeWords(free: number | null): string {
-  return free === null ? "Kvasir could not read the free space there." : `${bytesWords(free)} free`;
 }
 
 /** The include text as patterns: one a line or separated by commas, trimmed, each once. */
@@ -299,19 +289,7 @@ export function movedWords(location: string): string {
 /** How often the list is read again while a model loads into the runtime. */
 export const START_POLL_MS = 2_000;
 
-/** What the section says first: where its models run, by the runtime the install has. A Kvasir before record 24 says nothing of one, and the words are as they were. */
-export function introWords(runtime: LocalRuntime | null | undefined): string {
-  if (runtime === undefined) return "Models Kvasir downloads from the Hugging Face Hub, for a model server of yours to run.";
-  if (runtime === null) return "Models Kvasir downloads from the Hugging Face Hub. Kvasir runs no model here: a model server of yours runs them.";
-  return "Models Kvasir downloads from the Hugging Face Hub and starts on llama.cpp on this machine, one at a time.";
-}
-
-/** Said where the list is empty, by the runtime the install has. */
-export function emptyWords(runtime: LocalRuntime | null | undefined): string {
-  return runtime ? "No local model yet. Download a model in GGUF, then start it from its row." : "No local model yet. Download one, then start a model server on it.";
-}
-
-/** The runtime as the section names it: llama.cpp's build, and the archive it came from. */
+/** The runtime as the line under the models names it: llama.cpp's build, and the archive it came from. */
 export function runtimeLine(r: LocalRuntime): string {
   return `llama.cpp ${r.build}, ${r.variant}`;
 }
@@ -368,14 +346,6 @@ const RUN_TAGS: Record<RunState, { tone: LocalTone; words: string }> = {
 /** The tag of a model's run; a state this desk does not know reads as Kvasir names it. */
 export function runTag(run: LocalRun): { tone: LocalTone; words: string } {
   return RUN_TAGS[run.state] ?? { tone: "neutral", words: String(run.state) };
-}
-
-/** A serving model's line: the name it is served as, and the context and slots llama.cpp settled on. */
-export function servingWords(run: LocalRun): string {
-  const parts: string[] = [];
-  if (run.context) parts.push(`${count(run.context)} tokens of context`);
-  if (run.slots) parts.push(run.slots === 1 ? "one slot" : `${count(run.slots)} slots`);
-  return parts.length > 0 ? `Serving as ${run.model}, with ${listWords(parts)}.` : `Serving as ${run.model}.`;
 }
 
 /**

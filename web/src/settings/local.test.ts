@@ -18,13 +18,10 @@ import {
   downloadAsk,
   downloadChoiceWords,
   EMPTY_DRAFT,
-  emptyWords,
   fileChoices,
   fingerprint,
   fitWords,
   foundWords,
-  freeWords,
-  introWords,
   localMeta,
   localName,
   localOrder,
@@ -52,7 +49,6 @@ import {
   runTag,
   sentence,
   servedAdmission,
-  servingWords,
   stale,
   started,
   startedWords,
@@ -61,7 +57,6 @@ import {
   stopFirstWords,
   stoppedWords,
   tokenReady,
-  tokenTag,
   underWay,
 } from "./local";
 
@@ -194,12 +189,8 @@ describe("a model's row", () => {
   });
 });
 
-describe("where downloads go, and the token", () => {
-  it("says the room there, whether a token is set, and which token Kvasir takes", () => {
-    expect(freeWords(412 * GIB)).toBe("412 GiB free");
-    expect(freeWords(null)).toBe("Kvasir could not read the free space there.");
-    expect(tokenTag(true)).toEqual({ tone: "ok", words: "set" });
-    expect(tokenTag(false)).toEqual({ tone: "neutral", words: "not set" });
+describe("the token", () => {
+  it("says which token Kvasir takes", () => {
     expect(tokenReady(" hf_abcdefgh ")).toBe(true);
     expect(tokenReady("hf_abc")).toBe(false);
     expect(tokenReady("hf_abc defgh")).toBe(false);
@@ -323,13 +314,7 @@ describe("a model started on llama.cpp", () => {
   const run = (over: Partial<LocalRun> = {}): LocalRun => ({ state: "serving", model: "name-q4-k-m", error: null, log: [], context: 32768, slots: 4, started_by: "admin", started_at: 1, ...over });
   const runtime: LocalRuntime = { build: "b10964", variant: "ubuntu-vulkan-x64", reachable: true, serving: 1 };
 
-  it("says where the models run by the runtime the install has, and as it did for a Kvasir before record 24", () => {
-    expect(introWords(undefined)).toBe("Models Kvasir downloads from the Hugging Face Hub, for a model server of yours to run.");
-    expect(introWords(null)).toBe("Models Kvasir downloads from the Hugging Face Hub. Kvasir runs no model here: a model server of yours runs them.");
-    expect(introWords(runtime)).toBe("Models Kvasir downloads from the Hugging Face Hub and starts on llama.cpp on this machine, one at a time.");
-    expect(emptyWords(undefined)).toBe("No local model yet. Download one, then start a model server on it.");
-    expect(emptyWords(null)).toBe("No local model yet. Download one, then start a model server on it.");
-    expect(emptyWords(runtime)).toBe("No local model yet. Download a model in GGUF, then start it from its row.");
+  it("names the runtime the install has, and whether it answers", () => {
     expect(runtimeLine(runtime)).toBe("llama.cpp b10964, ubuntu-vulkan-x64");
     expect(runtimeTag(runtime)).toEqual({ tone: "ok", words: "answers" });
     expect(runtimeTag({ ...runtime, reachable: false })).toEqual({ tone: "blocked", words: "does not answer" });
@@ -369,10 +354,7 @@ describe("a model started on llama.cpp", () => {
     expect(runsKey([serving, idle])).not.toBe(runsKey([model({ ...serving, run: run({ state: "failed" }) }), idle]));
   });
 
-  it("says how a model serves, and whether Kvasir admitted it from the backend that serves it", () => {
-    expect(servingWords(run())).toBe("Serving as name-q4-k-m, with 32,768 tokens of context and 4 slots.");
-    expect(servingWords(run({ context: null, slots: 1 }))).toBe("Serving as name-q4-k-m, with one slot.");
-    expect(servingWords(run({ context: null, slots: null }))).toBe("Serving as name-q4-k-m.");
+  it("says whether Kvasir admitted a serving model, from the backend that serves it", () => {
     const now = Date.parse("2026-09-15T12:00:00Z");
     const entry = { id: "name-q4-k-m", name: "name", reasoning: false, context_window: 32768, max_tokens: 4096, admitted: true };
     const backend: Backend = { id: "llama-cpp", kind: "openai-completions", locality: "local", provider: null, credential: null, models: ["name-q4-k-m"], health: { warming: false }, added_at: now - 2 * 3_600_000, entries: [entry] };
