@@ -174,7 +174,7 @@ describe("the note under the form", () => {
 
   it("says it for a person in no group, in two groups, and with only their own pages", () => {
     const none = summaryWords({ kind: "person", name: " ", grants: [], detail: "plain", groups: [] });
-    expect(none.lead).toBe("This person will see Home only.");
+    expect(none.lead).toBe("This person will see nothing until given a page.");
     expect(none.detail).toEqual([
       "This person may look, but work nowhere. In records, this person sees no dates, subject codes, sex or age, scanner names or series descriptions.",
       "This person is in no group, so all of it is theirs alone.",

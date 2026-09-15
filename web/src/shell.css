@@ -643,7 +643,8 @@ button.dest:hover { border-color: var(--n-brand-line); background: var(--n-bg-ho
 .mcard.mine { border-color: var(--n-caution-line); }
 .mcard.wide { grid-column: span 2; }
 .mcard .name { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
-.mcard .name > .path, .mcard .name > b { min-width: 0; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.mcard .name > .path { min-width: 0; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.mcard .name > b { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
 .mcard > .row { flex-wrap: wrap; gap: 0.3rem 0.5rem; }
 .mcard .tag { white-space: normal; }
 .mcard .warn, .mcard .path { overflow-wrap: anywhere; }
@@ -682,11 +683,11 @@ button.dest:hover { border-color: var(--n-brand-line); background: var(--n-bg-ho
 .more-fields { min-width: 0; }
 .more-fields > summary { cursor: pointer; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
 .more-body { display: grid; gap: 0.8rem; margin-top: 0.6rem; }
+.route .side:empty { display: none; }
 @media (max-width: 860px) {
   /* on a narrow window a station's line stacks: its name, the arrow turned down, its box, and who allowed it */
   .route { grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }
   .route > .i { transform: rotate(90deg); }
-  .route .side:empty { display: none; }
 }
 @media (max-width: 640px) {
   /* on a phone a box's tag goes under its words, a card following a sign-in keeps to one column, and a file's tag goes under its name */

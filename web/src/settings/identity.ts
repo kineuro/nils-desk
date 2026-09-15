@@ -355,8 +355,13 @@ export function summaryWords(s: Summary): { lead: string; detail: string[] } {
   const shown = (settings: boolean) => PAGE_LINES.filter((l) => l.settings === settings && levelOf(s.grants, l) !== "hidden").map((l) => l.named);
   const pages = shown(false);
   const settings = shown(true);
+  // a person holding no grant is shown only that they hold none, while a group giving nothing still leaves its people what else they hold
   const lead =
-    pages.length === 0 && settings.length === 0 ? `${who} will see Home only.` : `${who} will see ${andWords(["Home", ...pages])}${settings.length > 0 ? `, and ${andWords(settings)} under Settings` : ""}.`;
+    person && s.grants.length === 0
+      ? `${who} will see nothing until given a page.`
+      : pages.length === 0 && settings.length === 0
+        ? `${who} will see Home only.`
+        : `${who} will see ${andWords(["Home", ...pages])}${settings.length > 0 ? `, and ${andWords(settings)} under Settings` : ""}.`;
 
   const works = PAGE_LINES.filter((l) => levelOf(s.grants, l) === "work").map((l) => l.named);
   const doing = [...(levelOf(s.grants, PAGE_LINES[0]) === "use" ? ["use the assistant"] : []), ...(works.length > 0 ? [`work in ${andWords(works)}`] : [])];

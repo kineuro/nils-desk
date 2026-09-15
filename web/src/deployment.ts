@@ -26,8 +26,10 @@ export function state(caps: Capabilities): State {
   }
   // the login comes before the engine: a person without a session has no bearer, so the engine's 401 says nothing about the engine
   if (!caps.desk.signed_in && caps.desk.login) return { kind: "login", how: caps.desk.login.kind, url: caps.desk.login.url };
-  if (!caps.desk.engine_reachable || !caps.engine) return { kind: "no_engine" };
+  if (!caps.desk.engine_reachable) return { kind: "no_engine" };
+  // an engine that answered and refused a person who holds no grant has nothing for them: say that, not that it did not answer
   if (caps.person.grants.length === 0) return { kind: "unbound" };
+  if (!caps.engine) return { kind: "no_engine" };
   const health = caps.kvasir?.["health"] as { warming?: boolean } | undefined;
   if (caps.kvasir && health?.warming === true) return { kind: "warming" };
   return { kind: "ready" };

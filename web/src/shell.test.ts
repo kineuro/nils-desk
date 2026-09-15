@@ -53,6 +53,14 @@ describe("the states of a fresh install", () => {
     d.person.grants = [];
     expect(state(d)).toEqual({ kind: "unbound" });
   });
+  it("names a person the engine refused for holding no grant as unbound, not as an engine that did not answer", () => {
+    const d = fresh();
+    d.person.grants = [];
+    d.engine = null;
+    expect(state(d)).toEqual({ kind: "unbound" });
+    d.desk.engine_reachable = false;
+    expect(state(d).kind).toBe("no_engine");
+  });
   it("names a major contract mismatch before anything else", () => {
     const d = fresh();
     d.desk.contract_mismatch = { found: { openapi: "4" }, speaks: { openapi: "3" }, major: true };

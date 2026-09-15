@@ -323,7 +323,7 @@ function People(props: { mode: "off" | "local" | "oidc"; people: readonly Person
                 </td>
                 <td>
                   <div className="stack">
-                    <Marks marks={marksOf(p.access.grants, own)} />
+                    <Marks marks={marksOf(p.access.grants, own)} none="No grant yet" />
                     <span className="meta">In records: {RECORD_WORDS[p.access.detail].choice.toLowerCase()}</span>
                   </div>
                 </td>

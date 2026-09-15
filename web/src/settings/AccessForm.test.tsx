@@ -44,7 +44,7 @@ describe("adding a person", () => {
     expect(html).toContain('type="password"');
     expect(html).toMatch(/<button type="button" class="opt" aria-pressed="false">Reviewers<\/button>/u);
     expect(html).toContain("Make a group");
-    expect(html).toContain("This person will see Home only.");
+    expect(html).toContain("This person will see nothing until given a page.");
     expect(html).toMatch(/<button type="button" class="button" disabled="">Add the person<\/button>/u);
   });
 

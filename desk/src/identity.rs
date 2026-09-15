@@ -64,10 +64,12 @@ fn signs_in(desk: &Shared) -> Result<(), Refusal> {
 /// Local users live at the desk in `local` mode only.
 fn local_only(desk: &Shared) -> Result<(), Refusal> {
     if desk.config.mode != Mode::Local {
-        return Err(Box::new(error(
-            StatusCode::NOT_FOUND,
-            "users live at the provider in this mode",
-        )));
+        let why = if desk.config.mode == Mode::Off {
+            "a desk nobody signs in to keeps no users"
+        } else {
+            "people sign in through the provider in this mode, and the desk keeps no users"
+        };
+        return Err(Box::new(error(StatusCode::NOT_FOUND, why)));
     }
     Ok(())
 }
