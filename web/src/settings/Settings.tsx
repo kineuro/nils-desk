@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Settings (Wave 5 section 10), as the chosen design draws it: a nav of its
 // pages beside the side, and the page it opens. Every page reads the
-// capabilities document and, for an admin, the supervisor on this host; a
-// button that acts on the install has the command a person would run by hand
-// beside it, and what it does goes on apart from the call.
+// capabilities document and, for a person who may see the install, the
+// supervisor on this host; a button that acts on the install, for a person
+// with work on it, has the command a person would run by hand beside it, and
+// what it does goes on apart from the call.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { Setup } from "../home/Setup";
-import { holds } from "../deployment";
+import { may } from "../grants";
 import { href } from "../routes";
 import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
@@ -67,7 +68,7 @@ type RestartPart = Parameters<typeof supervise.restart>[0];
 /** A part's restart: the button where the supervisor keeps the install running, and the command beside it either way. */
 function RestartPart({ caps, install, part, onChanged }: { caps: Capabilities; install: Install | null; part: RestartPart; onChanged: () => void }) {
   const restart = useRun();
-  if (!install || !holds(caps, "admin") || !install.services.some((s) => s.part === part)) return null;
+  if (!install || !may(caps, "install:work") || !install.services.some((s) => s.part === part)) return null;
   return (
     <div className="note">
       <Icon name="restart" />
@@ -99,8 +100,7 @@ function RestartPart({ caps, install, part, onChanged }: { caps: Capabilities; i
 }
 
 function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & { built: string[] }) {
-  const admin = holds(caps, "admin");
-  const supervised = admin && install !== null;
+  const supervised = may(caps, "install:work") && install !== null;
   const [admissions, setAdmissions] = useState<AdmissionRecord[] | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [part, setPart] = useState<RestartPart>("engine");
@@ -129,8 +129,8 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
   const checked = checkedWords(checkedAt, now);
   const services = install?.services ?? [];
   const chosen = services.some((s) => s.part === part) ? part : ((services.find((s) => s.part === "engine")?.part ?? services[0]?.part ?? "engine") as RestartPart);
-  const missing = !admin
-    ? "How each part runs, and updating it, are an admin's to see."
+  const missing = !may(caps, "install:see")
+    ? "How each part runs, and updating it, are for a person who may see the install."
     : caps.desk.settings?.supervisor_url
       ? "The supervisor on this host did not answer, so how each part runs is not shown."
       : "This desk reaches no supervisor, so how each part runs is not shown.";
@@ -322,7 +322,7 @@ const AUTH: Record<string, string> = {
 
 function EnginePage({ caps, install, onChanged }: PageProps) {
   const engine = caps.engine;
-  const admin = holds(caps, "admin");
+  const works = may(caps, "install:work");
   const reapply = useRun();
   const unit = install?.services.find((s) => s.part === "engine") ?? null;
   if (!engine) {
@@ -385,7 +385,7 @@ function EnginePage({ caps, install, onChanged }: PageProps) {
           </dl>
         </div>
       </section>
-      {install && admin && keptRunning(install) && unit && (
+      {install && works && keptRunning(install) && unit && (
         <div className="note">
           <Icon name="folder" />
           <div className="note-body">

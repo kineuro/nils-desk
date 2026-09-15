@@ -2,13 +2,13 @@
 // The Memory page (the chat, slice 6): what the assistant reads at the start
 // of each new conversation. The person sees, adds, edits and deletes what
 // they asked it to keep and the notes kept from their work, pauses memory or
-// deletes all of it; everyone reads the install's instructions, and an admin
-// writes their next version.
+// deletes all of it; everyone reads the install's instructions, and a person
+// with work on the assistant's settings writes their next version.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
-import { holds } from "../deployment";
+import { may } from "../grants";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -37,7 +37,7 @@ export function MemoryPage({ caps }: { caps: Capabilities }) {
   const [busy, setBusy] = useState(false);
   const [asked_, setAsked] = useState(0);
   const [since] = useState(() => Date.now());
-  const admin = holds(caps, "admin");
+  const instructs = may(caps, "assistant-settings:work");
 
   useEffect(() => {
     let alive = true;
@@ -189,9 +189,9 @@ export function MemoryPage({ caps }: { caps: Capabilities }) {
                 </p>
               </div>
             ) : (
-              <p className="meta">No instructions yet.{admin ? " Write the first: the cohorts and what they mean, the conventions, a short glossary." : ""}</p>
+              <p className="meta">No instructions yet.{instructs ? " Write the first: the cohorts and what they mean, the conventions, a short glossary." : ""}</p>
             )}
-            {admin && (
+            {instructs && (
               <div className="row">
                 <button type="button" className="button secondary small" onClick={() => setDraft(current?.text ?? "")}>
                   <Icon name="pencil" />

@@ -12,7 +12,8 @@
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
-import { door as served, holds } from "../deployment";
+import { door as served } from "../deployment";
+import { may } from "../grants";
 import { FolderTable } from "../home/FolderTable";
 import { digests, placeName, rows as rowsOf, type FolderRow, type Pack } from "../home/look";
 import { objects, type Place } from "../objects/client";
@@ -64,7 +65,7 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
   const [since] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
   const measure = useActing();
-  const operator = holds(caps, "operator");
+  const mayChange = may(caps, "places:work");
   const containers = install !== null && (install.runtime === "docker" || install.runtime === "podman");
 
   useEffect(() => {
@@ -92,7 +93,7 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
     <div className="settings">
       <div className="places-head">
         <Head title="Places" lede="Every folder NILS reads or keeps data in, with its role." />
-        {operator && (
+        {mayChange && (
           <button type="button" className="button" onClick={() => setOpened({ kind: "add" })}>
             <Icon name="plus" />
             Add a place
@@ -147,12 +148,12 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
                 )}
                 {shown.map((p) => {
                   const note = pathNote(p);
-                  const open = () => operator && setOpened({ kind: "change", place: p });
+                  const open = () => mayChange && setOpened({ kind: "change", place: p });
                   return (
                     <tr
                       key={p.id}
-                      className={operator ? "openable" : undefined}
-                      tabIndex={operator ? 0 : undefined}
+                      className={mayChange ? "openable" : undefined}
+                      tabIndex={mayChange ? 0 : undefined}
                       onClick={open}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") open();
@@ -223,7 +224,7 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
   const draft = { ...d, path: folder, name };
   const refusal = draftRefusal(draft, places);
   const source = d.role === "source";
-  const supervised = install !== null && holds(caps, "admin");
+  const supervised = install !== null && may(caps, "install:work");
   const restarts = source && supervised && install !== null && keptRunning(install);
   const working = act.kind === "working";
   const backups = places.filter((p) => p.role === "backup" && p.retired_at === null);
@@ -334,7 +335,7 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
             </button>
           )}
         </div>
-        {source && <span className="meta">{supervised ? "NILS looks inside before anything changes." : "The supervisor on this host looks inside a folder for an admin."}</span>}
+        {source && <span className="meta">{supervised ? "NILS looks inside before anything changes." : "The supervisor on this host looks inside a folder for a person with work on the install."}</span>}
       </div>
       <div className="field">
         <label className="label" htmlFor="place-name">
@@ -429,7 +430,7 @@ function ChangeDialog(props: { caps: Capabilities; install: Install | null; plac
   const retired = place.retired_at !== null;
   const probed = place.probed ?? {};
   const backups = places.filter((p) => p.role === "backup" && p.retired_at === null && p.id !== place.id);
-  const supervised = install !== null && holds(caps, "admin");
+  const supervised = install !== null && may(caps, "install:work");
   // a source moved is read at its new folder once the engine starts again, which the supervisor does where a service keeps it running
   const restarts = place.role === "source" && supervised && install !== null && keptRunning(install);
   const guaranteesChanged = g.snapshots !== said("snapshots") || g.protected !== said("protected") || g.fast !== said("fast") || (place.role === "registry" && backup !== (place.guarantees?.["backup"] ?? null));
