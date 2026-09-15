@@ -118,7 +118,7 @@ describe("the Identity page when the desk keeps the people", () => {
     expect(html).toContain('<span class="amark do">Assistant</span><span class="amark do">Query</span><span class="amark">Data</span><span class="amark do">Review</span>');
     expect(html).toContain('<span class="amark do">Every page</span><span class="amark do">Every setting</span>');
     expect(html).toContain("the desk always keeps at least one");
-    expect(html).toContain("In records: with sex and age");
+    expect(html).toContain("In records: with identifying details");
     expect(html).not.toContain("Follows ");
     expect(html).toContain("Make a group");
     expect(html).toContain('aria-label="Change Reviewers"');

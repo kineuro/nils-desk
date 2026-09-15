@@ -492,6 +492,8 @@ table.thin.people .person-under { display: none; }
 .seg button.on.off { background: var(--n-bg-sunken); color: var(--n-text); }
 .seg button.locked { background: var(--n-bg-sunken); color: var(--n-text-faint); cursor: default; }
 .seg button:focus-visible { outline: 2px solid var(--n-brand-text); outline-offset: -2px; }
+/* what they see in records has longer choices, so they go under its words */
+.arow > .seg.wide { grid-column: 2; grid-row: 3; justify-self: start; margin-top: 0.3rem; }
 .presets { flex-wrap: wrap; gap: 0.4rem; }
 .opt { display: inline-flex; align-items: center; min-height: 1.75rem; padding: 0 0.6rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font: inherit; font-size: 13px; color: var(--n-text); cursor: pointer; }
 .opt .i { width: 13px; height: 13px; margin-right: 0.3rem; stroke-width: 2.4; }

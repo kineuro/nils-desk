@@ -133,11 +133,11 @@ export const PAGE_LINES: readonly PageLine[] = [
 
 export const LEVEL_WORDS: Record<Level, string> = { hidden: "Hidden", see: "See", work: "Work", use: "Use" };
 
-/** How much of a record a person sees, as the forms choose it and say it. */
+/** How much of a record a person sees, in the same words wherever it is shown: identifying details are the engine's quasi-identifying class, and everything adds the sensitive class. */
 export const RECORD_WORDS: Record<Detail, { choice: string; says: string; sees: string }> = {
-  plain: { choice: "Without sex and age", says: "Records without sex, age, the images or sensitive events.", sees: "neither sex nor age, nor the images" },
-  quasi: { choice: "With sex and age", says: "Sex and age and the images, but no sensitive events or identifiers.", sees: "sex and age, and the images" },
-  sensitive: { choice: "Everything", says: "Sensitive events, identifiers and what is burned into images as well.", sees: "everything, sensitive events and identifiers too" },
+  plain: { choice: "Without identifying details", says: "No dates, subject codes, sex or age, scanner names or series descriptions.", sees: "no dates, subject codes, sex or age, scanner names or series descriptions" },
+  quasi: { choice: "With identifying details", says: "Dates, subject codes, sex and age, scanner names and series and protocol descriptions.", sees: "dates, subject codes, sex and age, scanner names and series and protocol descriptions" },
+  sensitive: { choice: "Everything", says: "Identifying details, sensitive events, raw identifiers and burned-in annotation.", sees: "identifying details, sensitive events, raw identifiers and burned-in annotation" },
 };
 
 /** A page's words in the form: what seeing it opens, then what work adds. */

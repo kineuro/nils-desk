@@ -36,7 +36,8 @@ describe("a person's own page", () => {
     expect(html).toMatch(/<div class="arow deep"><b>Kvasir<\/b>/u);
     expect(html).toContain("<b>Release and Pipelines</b>");
     expect(html).toContain("not shown to you");
-    expect(html).toContain('<span class="amark">with sex and age</span>');
+    expect(html).toContain('<span class="amark">with identifying details</span>');
+    expect(html).toContain('<span class="what">Dates, subject codes, sex and age, scanner names and series and protocol descriptions.</span>');
   });
 
   it("points to the Kvasir page for a subscription of their own, and keeps none itself", () => {
@@ -54,7 +55,8 @@ describe("a person's own page", () => {
     const html = renderToStaticMarkup(<ProfilePage caps={caps(["query:see"], "plain", { groups: [] })} />);
     expect(html).toContain("<b>Assistant, Data, Review, Release, Pipelines and Settings</b>");
     expect(html).toMatch(/<dt>your groups<\/dt><dd>none<\/dd>/u);
-    expect(html).toContain('<span class="amark">without sex and age</span>');
+    expect(html).toContain('<span class="amark">without identifying details</span>');
+    expect(html).toContain("No dates, subject codes, sex or age, scanner names or series descriptions.");
   });
 
   it("on a desk that signs nobody in, holds every page and says the subscription is the install's", () => {
