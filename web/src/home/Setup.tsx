@@ -29,7 +29,7 @@ import { useKept } from "../ui/kept";
 import { BringInForm } from "./BringIn";
 import { CONCEPTS } from "./concepts";
 import { placeName, type Pack } from "./look";
-import { minimumMet, progressWords, setupSteps, type SetupId, type SetupStep } from "./setup";
+import { backupFolderRefusal, minimumMet, progressWords, setupSteps, type SetupId, type SetupStep } from "./setup";
 import type { Purpose } from "./steps";
 import { day } from "./tiles";
 
@@ -267,6 +267,8 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
   const acting = useActing();
   if (!may(caps, "database:see")) return <p className="meta">Where the registry's backups go, and when they run, are named on the Database page.</p>;
   const changes = may(caps, "database:work");
+  // naming the engine's folder adds or changes places too, so it asks for work on both pages
+  const refusal = backupFolderRefusal(caps);
   const live = places.filter((p) => p.retired_at === null);
   const registry = live.find((p) => p.role === "registry") ?? null;
   const named = registry?.guarantees?.["backup"];
@@ -339,7 +341,7 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
         </div>
       )}
       <div className="row actions">
-        {changes && !backup && dir && (
+        {refusal === null && !backup && dir && (
           <button type="button" className="button" disabled={acting.working} onClick={nameDir}>
             Back up to the engine's backup folder
           </button>
@@ -363,6 +365,7 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
           The engine writes its archives to <span className="path">{dir}</span>. Naming it the registry's backup place records that; storage other than the registry's is better, and setup moves it.
         </p>
       )}
+      {refusal !== null && !backup && dir && <p className="meta">{refusal}</p>}
       <Acted acting={acting.acting} />
     </>
   );

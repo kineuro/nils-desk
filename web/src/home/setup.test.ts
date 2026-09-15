@@ -4,11 +4,11 @@
 
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
-import { SETS } from "../grants";
+import { SETS, type Grant } from "../grants";
 import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
 import type { Install } from "../settings/supervise";
-import { minimumMet, progressWords, ready, setupSteps } from "./setup";
+import { backupFolderRefusal, minimumMet, progressWords, ready, setupSteps } from "./setup";
 import type { Facts } from "./steps";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
@@ -107,5 +107,17 @@ describe("the rest of the desk", () => {
     expect(ready(caps(), install, null, null)).toBeNull();
     expect(ready(caps(), install, registryAndBackups, archives("day", null))).toBe(false);
     expect(ready(caps(), install, [...registryAndBackups, place(3, "incoming", "source", "/srv/incoming")], archives("day", null))).toBe(true);
+  });
+
+  it("offers the engine's backup folder only with work on the Database and the Places pages, and says in words what is missing", () => {
+    const holding = (grants: Grant[]) => caps({ person: { subject: "p", display_name: "p", grants, detail: "plain", groups: [] } });
+    expect(backupFolderRefusal(caps())).toBeNull();
+    expect(backupFolderRefusal(holding(["database:work", "places:work"]))).toBeNull();
+    expect(backupFolderRefusal(holding(["database:work", "places:see"]))).toBe(
+      "Backing up to the engine's backup folder needs work on the Database page and on the Places page; this account has no work on the Places page.",
+    );
+    expect(backupFolderRefusal(holding(["places:work", "database:see"]))).toMatch(/this account has no work on the Database page\.$/);
+    expect(backupFolderRefusal(holding(["database:see"]))).toMatch(/this account has no work on the Database page or on the Places page\.$/);
+    for (const g of [[], ["database:see"], ["places:work"]] as Grant[][]) expect(backupFolderRefusal(holding(g))).not.toMatch(/:(see|work|use)\b/);
   });
 });

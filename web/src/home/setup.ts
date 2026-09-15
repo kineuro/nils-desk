@@ -87,6 +87,17 @@ export function ready(caps: Capabilities, install: Install | null, places: Place
   return minimumMet(setupSteps({ caps, install, places, batches: null, backups: null, archives, purposes: null }));
 }
 
+/**
+ * Why backing up to the engine's backup folder is not offered to this person,
+ * in words, or null when it is. Naming the folder adds or changes places as
+ * well as the backups, so it asks for work on both pages (record 25).
+ */
+export function backupFolderRefusal(caps: Capabilities): string | null {
+  const missing = [may(caps, "database:work") ? null : "the Database page", may(caps, "places:work") ? null : "the Places page"].filter((m) => m !== null);
+  if (missing.length === 0) return null;
+  return `Backing up to the engine's backup folder needs work on the Database page and on the Places page; this account has no work on ${missing.join(" or on ")}.`;
+}
+
 /** How far setup is, in a sentence. */
 export function progressWords(all: SetupStep[]): string {
   const needed = all.filter((s) => s.required);
