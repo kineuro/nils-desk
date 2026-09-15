@@ -8,28 +8,40 @@ import { describe, expect, it } from "vitest";
 import type { AdmissionRecord, Backend, LocalLookup, LocalModel, LocalRefusal, LocalRun, LocalRuntime, LocalState, RunState } from "./kvasir";
 import {
   actionsOf,
+  askedBytes,
   askOf,
   askRefusal,
   barOf,
   bytesWords,
+  defaultChoice,
   downloadable,
+  downloadAsk,
+  downloadChoiceWords,
   EMPTY_DRAFT,
   emptyWords,
+  fileChoices,
   fingerprint,
+  fitWords,
   foundWords,
   freeWords,
   introWords,
+  localMeta,
+  localName,
+  localOrder,
+  localTag,
   locationRefusal,
   modelTag,
   patternsOf,
   percentOf,
   progressWords,
+  quantizationOf,
   queuedWords,
   refusalWords,
   removedWords,
   removeWords,
   replaceWords,
   revisionWords,
+  roomLine,
   roomWords,
   runActionsOf,
   runningBesides,
@@ -384,5 +396,99 @@ describe("a model started on llama.cpp", () => {
     expect(startedWords(model())).toBe("owner/name is loading into llama.cpp. Once it serves, Kvasir checks it with its admission suite before the assistant uses it.");
     expect(stoppedWords(model())).toBe("owner/name is stopped, and llama.cpp holds no memory for it any more.");
     expect(stopFirstWords(model())).toBe("owner/name is started on llama.cpp. Stop it first, then remove it.");
+  });
+});
+
+describe("a download under Add a model (record 25)", () => {
+  const file = (path: string, size: number) => ({ path, size, sha256: null });
+  const files = [
+    file("README.md", 4096),
+    file("Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0-00001-of-00002.gguf", 15 * GIB),
+    file("Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0-00002-of-00002.gguf", 13 * GIB),
+    file("Qwen3.6-27B-Q4_K_M.gguf", 16 * GIB),
+    file("Qwen3.6-27B-UD-Q5_K_XL.gguf", 19 * GIB),
+    file("mmproj-F16.gguf", GIB),
+  ];
+  const card = { memory_gb: 23.99 };
+
+  it("says what downloading is, by the runtime the install has", () => {
+    expect(downloadChoiceWords({ build: "b10964", variant: "ubuntu-vulkan-x64", reachable: true, serving: null })).toMatch(/started by Kvasir on llama\.cpp here/u);
+    expect(downloadChoiceWords(null)).toBe("A model from the Hugging Face Hub, for a model server of yours to run. Prompts stay in your systems.");
+  });
+
+  it("offers each quantization of a GGUF model once, with the parts of a split file together, and no vision projector", () => {
+    expect(fileChoices(files)).toEqual([
+      { key: "Qwen3.6-27B-Q4_K_M.gguf", label: "Q4_K_M", paths: ["Qwen3.6-27B-Q4_K_M.gguf"], bytes: 16 * GIB },
+      { key: "Qwen3.6-27B-UD-Q5_K_XL.gguf", label: "UD-Q5_K_XL", paths: ["Qwen3.6-27B-UD-Q5_K_XL.gguf"], bytes: 19 * GIB },
+      {
+        key: "Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0.gguf",
+        label: "Q8_0",
+        paths: ["Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0-00001-of-00002.gguf", "Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0-00002-of-00002.gguf"],
+        bytes: 28 * GIB,
+      },
+    ]);
+    expect(fileChoices([file("model.safetensors", GIB), file("config.json", 1)])).toEqual([]);
+    expect(["gemma-3-12b-it-Q5_K_M.gguf", "model-IQ2_XXS.gguf", "model.BF16.gguf", "tiny.gguf"].map(quantizationOf)).toEqual(["Q5_K_M", "IQ2_XXS", "BF16", "tiny"]);
+    // two files of one quantization go by their names
+    expect(fileChoices([file("a-Q4_K_M.gguf", 1), file("b-Q4_K_M.gguf", 2)]).map((c) => c.label)).toEqual(["a-Q4_K_M", "b-Q4_K_M"]);
+  });
+
+  it("says whether a file fits the card, and opens on Q4_K_M where it fits, else the largest that fits", () => {
+    const choices = fileChoices(files);
+    expect(fitWords(16 * GIB, card)).toEqual({ tone: "ok", words: "fits the card" });
+    expect(fitWords(28 * GIB, card)).toEqual({ tone: "caution", words: "larger than the card: runs on the processor, slowly" });
+    expect(fitWords(28 * GIB, null)).toBeNull();
+    expect(defaultChoice(choices, card)).toBe("Qwen3.6-27B-Q4_K_M.gguf");
+    expect(defaultChoice(choices.filter((c) => c.label !== "Q4_K_M"), card)).toBe("Qwen3.6-27B-UD-Q5_K_XL.gguf");
+    expect(defaultChoice(choices, { memory_gb: 8 })).toBeNull();
+    expect(defaultChoice(choices.filter((c) => c.label !== "Q4_K_M"), null)).toBeNull();
+    expect(defaultChoice(choices, null)).toBe("Qwen3.6-27B-Q4_K_M.gguf");
+  });
+
+  it("downloads the chosen file of a GGUF model, every file the patterns choose of another, and nothing before a look-up", () => {
+    const d = { ...EMPTY_DRAFT, repo: "owner/name" };
+    const found = { print: fingerprint(d), lookup: lookup({ files, bytes_total: 64 * GIB }) };
+    expect(downloadAsk(d, null, null)).toBeNull();
+    expect(downloadAsk(d, found, null)).toBeNull();
+    expect(downloadAsk(d, found, "Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0.gguf")).toEqual({
+      repo: "owner/name",
+      revision: "main",
+      include: ["Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0-00001-of-00002.gguf", "Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0-00002-of-00002.gguf"],
+    });
+    expect(downloadAsk({ ...d, repo: "owner/other" }, found, "Qwen3.6-27B-Q4_K_M.gguf")).toBeNull();
+    const plain = { print: fingerprint(d), lookup: lookup({ files: [file("model.safetensors", GIB)], bytes_total: GIB }) };
+    expect(downloadAsk(d, plain, null)).toEqual({ repo: "owner/name", revision: "main" });
+    expect(askedBytes(found.lookup, "Qwen3.6-27B-Q4_K_M.gguf")).toBe(16 * GIB);
+    expect(askedBytes(found.lookup, null)).toBe(64 * GIB);
+  });
+});
+
+describe("a local model's card (record 25)", () => {
+  const done: Partial<LocalModel> = { state: "done", bytes_done: 16 * GIB, finished_at: 1 };
+  const run = (over: Partial<LocalRun> = {}): LocalRun => ({ state: "serving", model: "name-q4-k-m", error: null, log: [], context: 32768, slots: 4, started_by: "admin", started_at: 1, ...over });
+
+  it("names a started model as llama.cpp serves it, and any other by its name on the hub", () => {
+    expect(localName(model({ ...done, run: run() }))).toBe("name-q4-k-m");
+    expect(localName(model({ ...done, run: run({ state: "failed" }) }))).toBe("owner/name");
+    expect(localName(model())).toBe("owner/name");
+  });
+
+  it("says where it runs, and tags how it runs once started or where its download stands", () => {
+    expect(localMeta(model({ ...done, run: run() }))).toBe("This machine · llama.cpp · 32,768 tokens");
+    expect(localMeta(model({ ...done, run: run({ state: "starting", context: null }) }))).toBe("This machine · llama.cpp");
+    expect(localMeta(model({ state: "downloading" }))).toBe("This machine · from the Hugging Face Hub");
+    expect(localMeta(model({ ...done, startable: true }))).toBe("This machine · starts on llama.cpp");
+    expect(localMeta(model(done))).toBe("This machine · for a model server of yours");
+    expect(localTag(model({ ...done, run: run() }))).toEqual({ tone: "ok", words: "serving" });
+    expect(localTag(model({ ...done, run: run({ state: "stopped" }) }))).toEqual({ tone: "ok", words: "downloaded" });
+    expect(localTag(model({ state: "paused" }))).toEqual({ tone: "caution", words: "paused" });
+  });
+
+  it("puts the model llama.cpp serves first, and says the room where downloads go", () => {
+    const one = model({ id: 1, repo: "owner/one" });
+    const two = model({ ...done, id: 2, repo: "owner/two", run: run() });
+    expect(localOrder([one, two]).map((m) => m.id)).toEqual([2, 1]);
+    expect(roomLine(412 * GIB)).toBe("412 GiB free");
+    expect(roomLine(null)).toBe("the free space there is not known");
   });
 });

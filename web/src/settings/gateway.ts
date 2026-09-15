@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Kvasir page's words (Wave 4c sections 8.3 to 8.6, record 23), as the
-// chosen design draws them: Kvasir's health, the machine's card and what it
-// can serve, which backends show where, each model with where its prompts go
-// and whether a local one passed its admission, what a check found, what goes
-// when a backend is removed, and where each station goes. Every word is read
-// from Kvasir's doors or the supervisor's install.
+// The Kvasir page's words (Wave 4c sections 8.3 to 8.6, records 23 to 25), as
+// the chosen design draws them: Kvasir's health, the machine's card, which
+// backends show where, each model with where its prompts go and whether a
+// local one passed its admission, what a check found, what goes when a
+// backend is removed, and where each station goes, as a line from the station
+// to the box of where it runs. Every word is read from Kvasir's doors, the
+// supervisor's install or what the person may do there.
 
-import type { AdmissionRecord, Backend, PurposeRow } from "./kvasir";
-import { opening } from "./kvasir";
+import type { Capabilities } from "../capabilities";
+import { may } from "../grants";
+import type { AdmissionRecord, Backend, PurposeRow, Subscription } from "./kvasir";
+import { grantRefusalOf, opening, RUNTIME_BACKEND } from "./kvasir";
+import { runtimeName } from "./parts";
 import type { Install } from "./supervise";
 
 export type Tone = "ok" | "caution" | "blocked" | "neutral";
@@ -23,6 +27,7 @@ export interface CatalogueModel {
 }
 
 const onDay = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+const onDate = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const count = (n: number) => n.toLocaleString("en-GB");
 
 /** How long a local model reads as being checked after its backend is added: its warm-up and the suite take minutes. */
@@ -34,7 +39,45 @@ export function listWords(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-/** Which backends show where: those Kvasir holds in the models table, and the one it has itself, ChatGPT through subscriptions, under Subscriptions. */
+/** Who looks at the page, as far as its words and its acts go (record 25). */
+export interface Viewer {
+  /** Kvasir: Work: moves stations, adds, checks and removes models, and sees where a server answers. */
+  work: boolean;
+  /** The assistant with Kvasir: See: may sign in a ChatGPT subscription of their own. */
+  subscribes: boolean;
+  /** Nobody signs in, so the ChatGPT subscription is the install's. */
+  system: boolean;
+}
+
+/** The page's viewer: what the person may do there, and whether the subscription Kvasir answered with is the install's. */
+export function viewerOf(caps: Capabilities, subscription: Subscription | null): Viewer {
+  return {
+    work: may(caps, "kvasir:work"),
+    subscribes: may(caps, "assistant:use") && may(caps, "kvasir:see"),
+    system: subscription ? subscription.for === "system" : caps.desk.mode === "off",
+  };
+}
+
+/** A grant as the Identity page names it: the page and how far a person goes there, and the assistant as itself. */
+export function grantWords(grant: string): string {
+  if (grant === "assistant:use") return "the assistant";
+  const [page, level = ""] = grant.split(":");
+  const name = page === "assistant-settings" ? "Assistant settings" : page.charAt(0).toUpperCase() + page.slice(1);
+  return level ? `${name}: ${level.charAt(0).toUpperCase()}${level.slice(1)}` : name;
+}
+
+/** A refusal for want of a grant in words a person can act on; any other refusal as it came. */
+export function plainly(e: unknown): unknown {
+  const r = grantRefusalOf(e);
+  if (!r) return e;
+  if (r.code === "not_a_person") return new Error("Kvasir keeps a subscription for a person, and this call named nobody. Sign in to the desk, then try again.");
+  const needs = listWords(r.needs.map(grantWords));
+  const them = r.needs.length > 1 ? "them" : "it";
+  if (r.needs.includes("assistant:use")) return new Error(`A subscription of your own needs ${needs}. An admin gives ${them} on the Identity page.`);
+  return new Error(needs ? `This needs ${needs}, which you do not hold. An admin gives ${them} on the Identity page.` : "This needs a grant you do not hold. An admin gives it on the Identity page.");
+}
+
+/** Which backends show where: those Kvasir holds as models, and the one it has itself, ChatGPT through subscriptions, as the subscription's card. */
 export function shownBackends(backends: Backend[]): { held: Backend[]; subscriptions: Backend[] } {
   return { held: backends.filter((b) => b.builtin !== true), subscriptions: backends.filter((b) => b.builtin === true) };
 }
@@ -63,11 +106,9 @@ export function modelOf(b: Backend, model: string, catalogue: CatalogueModel[]):
   return catalogue.find((c) => c.id === model && (c.backend === undefined || c.backend === b.id));
 }
 
-/** A model's line under its name: the context it takes and whether it reasons. */
-export function modelMeta(m: CatalogueModel | undefined, locality: Backend["locality"]): string {
-  const parts = [m?.contextWindow ? `${count(m.contextWindow)} tokens` : null, m?.reasoning ? "reasoning" : null].filter(Boolean);
-  if (parts.length === 0) return locality === "remote" ? "a provider's model" : "";
-  return parts.join(" · ");
+/** The context a model takes, as a card says it; null where Kvasir does not say. */
+export function tokensWords(m: CatalogueModel | undefined): string | null {
+  return m?.contextWindow ? `${count(m.contextWindow)} tokens` : null;
 }
 
 /** Where a backend's prompts go. A local backend is one of yours, which is not always this machine. */
@@ -142,37 +183,137 @@ export function usedFor(backend: Backend, purposes: PurposeRow[]): string {
   return stations.length === 0 ? "nothing yet" : stations.join(", ");
 }
 
+/** The stations a backend answers, as a card says it under the model. */
+export function answersWords(backendId: string, purposes: PurposeRow[] | null): string | null {
+  if (purposes === null) return null;
+  const stations = purposes.filter((p) => p.backend === backendId).map((p) => stationOf(p.purpose));
+  return stations.length === 0 ? "answers no station yet" : `answers ${listWords(stations)}`;
+}
+
+/** The stations that go to ChatGPT through the subscription. */
+export function subscribedStations(purposes: PurposeRow[] | null, backends: Backend[] | null): string[] {
+  const builtin = new Set((backends ?? []).filter((b) => b.builtin === true).map((b) => b.id));
+  return (purposes ?? []).filter((p) => p.backend !== null && builtin.has(p.backend)).map((p) => stationOf(p.purpose));
+}
+
 /** A backend where a station goes: its first model, or ChatGPT through the subscription it uses. */
 export function destinationWords(b: Backend, system = false): string {
   if (b.builtin === true) return system ? "The install's ChatGPT subscription" : "Each person's own ChatGPT subscription";
   return b.models[0] ?? b.id;
 }
 
-export interface PurposeLine {
-  purpose: string;
+/** Whether a backend is the one Kvasir holds the models it started on this machine's llama.cpp under. */
+export function onRuntime(b: Backend): boolean {
+  return b.id === RUNTIME_BACKEND && b.locality === "local" && b.builtin !== true;
+}
+
+/** The runtime a backend's newest admission record names, such as SGLang; null where none does. */
+export function runtimeOfBackend(b: Backend, records: AdmissionRecord[] | null): string | null {
+  const newest = (records ?? []).filter((r) => r.backend === b.id).sort((x, y) => y.at - x.at)[0];
+  const name = newest?.runtime.name ?? "";
+  return name && name !== "unknown" ? runtimeName(name) : null;
+}
+
+const PROVIDERS: Record<string, string> = { openai: "OpenAI", openrouter: "OpenRouter", minimax: "MiniMax", anthropic: "Anthropic" };
+
+/** A provider's name as a person knows it. */
+export function providerName(b: Backend): string {
+  const id = b.provider ?? b.id;
+  return PROVIDERS[id.toLowerCase()] ?? id;
+}
+
+/** The model a station gets in your systems where its backend does not answer it: the first model a server of yours serves. */
+export function defaultModel(backends: Backend[]): string | null {
+  return backends.find((x) => x.builtin !== true && x.locality === "local" && x.models.length > 0)?.models[0] ?? null;
+}
+
+/** Where a model runs, as the square beside it shows it. */
+export interface Mark {
+  icon: "chip" | "engine" | "cloud" | "key" | "update" | "alert";
+  tone: "brand" | "neutral" | "caution";
+}
+
+export const MARKS = {
+  runtime: { icon: "chip", tone: "brand" },
+  server: { icon: "engine", tone: "neutral" },
+  provider: { icon: "cloud", tone: "caution" },
+  subscription: { icon: "cloud", tone: "caution" },
+  nowhere: { icon: "alert", tone: "caution" },
+} satisfies Record<string, Mark>;
+
+/** Where a station goes, as its box draws it: where it runs, the model or the subscription, what runs it, and whether its prompts leave. */
+export interface Destination {
+  mark: Mark;
+  title: string;
+  meta: string | null;
+  where: { tone: Tone; words: string } | null;
+}
+
+/** The model a signed-in subscription answers with, by its name. */
+export function subscribedModel(s: Subscription): string | null {
+  if (!s.model) return null;
+  return s.models.find((m) => m.id === s.model)?.name.trim() || s.model;
+}
+
+/** The box a station's line ends in, for this viewer: the subscription reads as theirs, each person's, or the install's. */
+export function destinationOf(p: PurposeRow, backends: Backend[], at: { viewer: Viewer; admissions: AdmissionRecord[] | null; subscription: Subscription | null }): Destination {
+  const b = backends.find((x) => x.id === p.backend);
+  if (!b) {
+    const stopped = p.backend === RUNTIME_BACKEND;
+    return { mark: MARKS.nowhere, title: "nowhere yet", meta: stopped ? "its model on this machine is stopped" : "no model in your systems answers it yet", where: null };
+  }
+  const where = whereWords(b.locality);
+  if (b.builtin === true) {
+    const { viewer, subscription: s } = at;
+    const name = s?.name ?? "ChatGPT";
+    const until = defaultModel(backends) ?? "the default model in your systems";
+    const signed = s?.state === "signed_in" ? `${subscribedModel(s) ?? name}, signed in` : null;
+    if (viewer.system) return { mark: MARKS.subscription, title: `The install's ${name} subscription`, meta: signed ?? `${until} until it is signed in`, where };
+    if (viewer.subscribes && !viewer.work) return { mark: MARKS.subscription, title: `Your own ${name} subscription`, meta: signed ?? `${until} until you sign in`, where };
+    return { mark: MARKS.subscription, title: `Each person's own ${name} subscription`, meta: "the default model in your systems for anyone without one", where };
+  }
+  const model = b.models[0] ?? b.id;
+  if (onRuntime(b)) return { mark: MARKS.runtime, title: model, meta: "this machine, llama.cpp", where };
+  if (b.locality === "local") {
+    const runtime = runtimeOfBackend(b, at.admissions);
+    return { mark: MARKS.server, title: model, meta: at.viewer.work ? (runtime ? `your server, ${runtime}` : "your server") : "a server in your systems", where };
+  }
+  return { mark: MARKS.provider, title: model, meta: `${providerName(b)}, a provider`, where };
+}
+
+/** Where a station goes now, in one line. */
+export function goesToWords(d: Destination): string {
+  return d.meta ? `${d.title}, ${d.meta}` : d.title;
+}
+
+/** What a station carries to the model, beside its name. */
+export function carriesWords(content: PurposeRow["content"]): string {
+  if (content === "catalog") return "carries the catalogue";
+  return content === "rows" ? "carries rows" : "carries identifiers";
+}
+
+/** One station's line: its name and what it carries, where it goes, and who allowed it. */
+export interface Route {
+  purpose: PurposeRow;
   station: string;
   carries: string;
-  goesTo: string;
-  locality: Backend["locality"] | null;
-  allowed: string | null;
-  /** Whether another backend may take it, with or without an acknowledgement. */
+  to: Destination;
+  /** Who allowed rows of the archive to leave for it, or why nothing needed allowing; null otherwise. */
+  side: string | null;
+  /** Whether this viewer may move it, to a backend it may go to. */
   movable: boolean;
 }
 
-/** Where each station goes; `system` says the ChatGPT backend is the install's subscription, on a desk that signs nobody in. */
-export function purposeLines(purposes: PurposeRow[], backends: Backend[], system = false): PurposeLine[] {
+/** Where each station goes (record 25): the page's first section. */
+export function routes(purposes: PurposeRow[], backends: Backend[], at: { viewer: Viewer; admissions: AdmissionRecord[] | null; subscription: Subscription | null }): Route[] {
   return purposes.map((p) => {
     const b = backends.find((x) => x.id === p.backend);
-    const allowed = p.acknowledged ? `allowed by ${p.acknowledged.by}${p.acknowledged.at ? ` on ${onDay(p.acknowledged.at)}` : ""}` : null;
-    return {
-      purpose: p.purpose,
-      station: stationOf(p.purpose),
-      carries: p.content === "catalog" ? "catalogue" : p.content,
-      goesTo: !b ? "nowhere yet" : b.builtin === true ? destinationWords(b, system) : `${destinationWords(b)}, ${b.locality === "local" ? "in your systems" : "a provider"}`,
-      locality: b?.locality ?? null,
-      allowed,
-      movable: targets(p, backends).length > 0,
-    };
+    const side = p.acknowledged
+      ? `allowed by ${p.acknowledged.by}${p.acknowledged.at ? ` on ${onDate(p.acknowledged.at)}` : ""}, for this station`
+      : b?.locality === "remote" && p.content === "catalog"
+        ? "no rows, so no reason needed"
+        : null;
+    return { purpose: p, station: stationOf(p.purpose), carries: carriesWords(p.content), to: destinationOf(p, backends, at), side, movable: at.viewer.work && targets(p, backends).length > 0 };
   });
 }
 
@@ -198,10 +339,10 @@ export function removalWords(b: Backend, backends: Backend[], purposes: PurposeR
   const stations = (purposes ?? []).filter((p) => p.backend === b.id).map((p) => stationOf(p.purpose));
   if (stations.length > 0) {
     const one = stations.length === 1;
-    const next = backends.find((x) => x.id !== b.id && x.builtin !== true && x.locality === "local" && x.models.length > 0);
+    const next = defaultModel(backends.filter((x) => x.id !== b.id));
     out.push(
       next
-        ? `The ${one ? "station it answered goes to its" : "stations it answered go to their"} default instead, ${next.models[0]} in your systems: ${listWords(stations)}.`
+        ? `The ${one ? "station it answered goes to its" : "stations it answered go to their"} default instead, ${next} in your systems: ${listWords(stations)}.`
         : `The ${one ? "station it answered has" : "stations it answered have"} nowhere to go until a model in your systems is added: ${listWords(stations)}.`,
     );
   }
@@ -238,4 +379,39 @@ export function closedTo(provider: Backend, purposes: PurposeRow[]): ClosedLine[
 export function closedLead(provider: Backend, purposes: PurposeRow[]): string {
   const named = destinationWords(provider);
   return purposes.some((p) => p.backend === provider.id) ? `${named} does not answer these stations yet` : `${named} answers no station yet`;
+}
+
+/** A model's line under its name: the context it takes and whether it reasons. */
+export function modelMeta(m: CatalogueModel | undefined, locality: Backend["locality"]): string {
+  const parts = [m?.contextWindow ? `${count(m.contextWindow)} tokens` : null, m?.reasoning ? "reasoning" : null].filter(Boolean);
+  if (parts.length === 0) return locality === "remote" ? "a provider's model" : "";
+  return parts.join(" · ");
+}
+
+export interface PurposeLine {
+  purpose: string;
+  station: string;
+  carries: string;
+  goesTo: string;
+  locality: Backend["locality"] | null;
+  allowed: string | null;
+  /** Whether another backend may take it, with or without an acknowledgement. */
+  movable: boolean;
+}
+
+/** Where each station goes; `system` says the ChatGPT backend is the install's subscription, on a desk that signs nobody in. */
+export function purposeLines(purposes: PurposeRow[], backends: Backend[], system = false): PurposeLine[] {
+  return purposes.map((p) => {
+    const b = backends.find((x) => x.id === p.backend);
+    const allowed = p.acknowledged ? `allowed by ${p.acknowledged.by}${p.acknowledged.at ? ` on ${onDay(p.acknowledged.at)}` : ""}` : null;
+    return {
+      purpose: p.purpose,
+      station: stationOf(p.purpose),
+      carries: p.content === "catalog" ? "catalogue" : p.content,
+      goesTo: !b ? "nowhere yet" : b.builtin === true ? destinationWords(b, system) : `${destinationWords(b)}, ${b.locality === "local" ? "in your systems" : "a provider"}`,
+      locality: b?.locality ?? null,
+      allowed,
+      movable: targets(p, backends).length > 0,
+    };
+  });
 }
