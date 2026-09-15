@@ -28,9 +28,10 @@ use axum::routing::{any, get, post, put};
 
 pub use config::Config;
 
-/// The contract versions this desk was generated from (Wave 4c §6.7).
-pub const OPENAPI: &str = "3";
-pub const SUITE: &str = "1";
+/// The contract versions this desk was generated from (Wave 4c §6.7): an
+/// engine behind either major is refused by name.
+pub const OPENAPI: &str = "4";
+pub const SUITE: &str = "2";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Everything a request handler reaches.

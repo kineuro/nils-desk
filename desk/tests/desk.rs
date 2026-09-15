@@ -16,14 +16,14 @@ use serde_json::{Value, json};
 
 /// A fake engine: capabilities with the given contract versions, a jobs
 /// door that echoes what it got and the bearer it saw.
-async fn fake_engine(openapi: &'static str) -> String {
+async fn engine_speaking(openapi: &'static str, suite: &'static str) -> String {
     let app = Router::new()
         .route(
             "/api/capabilities",
             get(move || async move {
                 axum::Json(json!({
                     "engine": {"name": "nils", "version": "1.0.0-alpha.0"},
-                    "contracts": {"openapi": openapi, "review_item": "4", "pack": "4", "suite": "1", "mcp": "1"},
+                    "contracts": {"openapi": openapi, "review_item": "4", "pack": "4", "suite": suite, "mcp": "2"},
                     "doors": ["GET /api/capabilities", "POST /api/jobs", "GET /api/jobs", "POST /api/ask/run", "GET /api/ask/handles", "GET /api/packs"],
                     "policy": [], "auth": "token", "principal": "desk@lab",
                     "roles": ["reader", "reviewer", "operator", "admin"],
@@ -43,6 +43,11 @@ async fn fake_engine(openapi: &'static str) -> String {
     let url = format!("http://{}", listener.local_addr().unwrap());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     url
+}
+
+/// A fake engine speaking the contracts this desk speaks: openapi 4, suite 2.
+async fn fake_engine() -> String {
+    engine_speaking("4", "2").await
 }
 
 async fn desk(engine: &str, assistant: Option<&str>) -> (String, Arc<nils_desk::Desk>) {
@@ -66,7 +71,7 @@ async fn desk(engine: &str, assistant: Option<&str>) -> (String, Arc<nils_desk::
 
 #[tokio::test]
 async fn the_document_composes_the_parts_and_their_absence() {
-    let engine = fake_engine("3").await;
+    let engine = fake_engine().await;
     let (origin, _) = desk(&engine, None).await;
     let client = reqwest::Client::new();
     let r = client
@@ -137,7 +142,7 @@ fn a_desk_may_answer_at_more_than_one_address() {
 
 #[tokio::test]
 async fn a_cross_origin_write_is_refused_and_a_same_origin_one_is_proxied_with_the_bearer() {
-    let engine = fake_engine("3").await;
+    let engine = fake_engine().await;
     let (origin, _) = desk(&engine, None).await;
     let client = reqwest::Client::new();
     let body = r#"{"command": ["backup"]}"#;
@@ -201,35 +206,63 @@ async fn a_cross_origin_write_is_refused_and_a_same_origin_one_is_proxied_with_t
     assert_eq!(r.status(), 404);
 }
 
-#[tokio::test]
-async fn an_engine_speaking_a_contract_the_desk_does_not_is_refused_by_name() {
-    let engine = fake_engine("2").await;
+type Verdict =
+    Result<Option<nils_desk::capabilities::Mismatch>, Box<nils_desk::capabilities::Mismatch>>;
+
+/// A desk in front of an engine speaking the given contract versions, and
+/// what the desk's check makes of them.
+async fn verdict(openapi: &'static str, suite: &'static str) -> (Arc<nils_desk::Desk>, Verdict) {
+    let engine = engine_speaking(openapi, suite).await;
     let text = format!(
         "origin = \"http://127.0.0.1:1\"\nstore = \":memory:\"\n[engine]\nurl = \"{engine}\"\n"
     );
     let shared = nils_desk::start(&text).unwrap();
     let caps = nils_desk::capabilities::engine(&shared).await.unwrap();
-    let e = nils_desk::capabilities::check(&caps).expect_err("refused");
-    assert!(e.major);
-    assert!(e.message.contains("openapi 2 against 3"), "{}", e.message);
-    assert!(e.message.contains("does not start"), "{}", e.message);
-    // an engine ahead of the desk is a warning the shell shows, not a refusal
-    let ahead = fake_engine("4").await;
-    let text = format!(
-        "origin = \"http://127.0.0.1:1\"\nstore = \":memory:\"\n[engine]\nurl = \"{ahead}\"\n"
+    let verdict = nils_desk::capabilities::check(&caps);
+    (shared, verdict)
+}
+
+#[tokio::test]
+async fn an_engine_speaking_a_contract_the_desk_does_not_is_refused_by_name() {
+    // this desk speaks openapi 4 and suite 2, where a person holds grants
+    assert_eq!((nils_desk::OPENAPI, nils_desk::SUITE), ("4", "2"));
+    let (desk, v) = verdict("4", "2").await;
+    assert!(v.unwrap().is_none(), "the same majors are no mismatch");
+    let nobody = nils_desk::session::nobody();
+    let doc = nils_desk::capabilities::document(&desk, &nobody, None).await;
+    assert!(doc["desk"]["contract_mismatch"].is_null(), "{doc}");
+    assert_eq!(
+        doc["desk"]["contracts"],
+        json!({"openapi": "4", "suite": "2"})
     );
-    let shared = nils_desk::start(&text).unwrap();
-    let caps = nils_desk::capabilities::engine(&shared).await.unwrap();
-    let m = nils_desk::capabilities::check(&caps)
-        .unwrap()
-        .expect("a warning");
+    // an engine behind on either major is refused by name, and the desk does not start
+    for (openapi, suite, named) in [
+        ("3", "2", "openapi 3 against 4"),
+        ("4", "1", "suite 1 against 2"),
+        ("3", "1", "openapi 3 against 4, suite 1 against 2"),
+    ] {
+        let (desk, v) = verdict(openapi, suite).await;
+        let e = v.expect_err("refused");
+        assert!(e.major, "{named}");
+        assert!(e.message.contains(named), "{}", e.message);
+        assert!(e.message.contains("does not start"), "{}", e.message);
+        // and the shell is told the same
+        let doc = nils_desk::capabilities::document(&desk, &nobody, None).await;
+        let m = &doc["desk"]["contract_mismatch"];
+        assert_eq!(m["major"], true, "{doc}");
+        assert_eq!(m["found"], json!({"openapi": openapi, "suite": suite}));
+        assert_eq!(m["speaks"], json!({"openapi": "4", "suite": "2"}));
+    }
+    // an engine ahead of the desk is a warning the shell shows, not a refusal
+    let (_, v) = verdict("5", "2").await;
+    let m = v.unwrap().expect("a warning");
     assert!(!m.major);
     assert!(m.message.contains("ahead"), "{}", m.message);
 }
 
 #[tokio::test]
 async fn a_registered_app_that_answers_is_in_the_document_and_one_that_does_not_is_its_absence() {
-    let engine = fake_engine("3").await;
+    let engine = fake_engine().await;
     let app = Router::new().route(
         "/capabilities",
         get(|| async { axum::Json(json!({"version": "1"})) }),
@@ -259,7 +292,7 @@ async fn a_registered_app_that_answers_is_in_the_document_and_one_that_does_not_
 /// change.
 #[tokio::test]
 async fn a_desk_nobody_signs_in_to_has_no_people_or_groups_to_change() {
-    let engine = fake_engine("3").await;
+    let engine = fake_engine().await;
     let (origin, _) = desk(&engine, None).await;
     let client = reqwest::Client::new();
     for path in [
@@ -295,7 +328,7 @@ async fn an_export_pages_the_handle_with_the_purpose_and_the_desk_records_runs_a
             get(|| async {
                 axum::Json(json!({
                     "engine": {"name": "nils", "version": "1.0.0-alpha.0"},
-                    "contracts": {"openapi": "3", "review_item": "4", "pack": "4", "suite": "1", "mcp": "1"},
+                    "contracts": {"openapi": "4", "review_item": "4", "pack": "4", "suite": "2", "mcp": "2"},
                     "doors": ["GET /api/ask/handles"], "policy": [], "auth": "token", "principal": "desk@lab",
                     "roles": ["reader"], "registry": {"epoch": 7}, "packs": [],
                 }))
@@ -406,7 +439,7 @@ async fn an_export_pages_the_handle_with_the_purpose_and_the_desk_records_runs_a
 /// with no assistant says so by name.
 #[tokio::test]
 async fn the_desk_pushes_the_bearer_to_the_assistant_for_a_conversation() {
-    let engine = fake_engine("3").await;
+    let engine = fake_engine().await;
     let assistant = Router::new()
         .route(
             "/capabilities",

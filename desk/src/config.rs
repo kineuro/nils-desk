@@ -87,7 +87,7 @@ pub struct Upstream {
     pub token: Option<String>,
 }
 
-/// An app registry entry (Wave 4c §4.4; `contracts/suite/v1/app.schema.json`).
+/// An app registry entry (Wave 4c §4.4; `contracts/suite/v2/app.schema.json`).
 #[derive(Debug, Clone, Deserialize)]
 pub struct App {
     pub id: String,

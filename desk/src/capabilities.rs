@@ -2,7 +2,7 @@
 
 //! The deployment capabilities document (Wave 4c §4.3), the one object
 //! every section, control and menu item is a predicate over, as
-//! `contracts/suite/v1/capabilities.schema.json` fixes it: the engine's own
+//! `contracts/suite/v2/capabilities.schema.json` fixes it: the engine's own
 //! document verbatim, Kvasir's, the assistant's and each app's (or their
 //! absence), the person, and the desk with the named states of §7.2.
 
