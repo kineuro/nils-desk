@@ -117,7 +117,7 @@ const SEE_WORK: readonly Level[] = ["hidden", "see", "work"];
 /** A line for each page, in the order the form and the profile draw them. */
 export const PAGE_LINES: readonly PageLine[] = [
   { id: "assistant", title: "Assistant", mark: "Assistant", named: "Assistant", settings: false, levels: ["hidden", "use"], see: "Talk with the assistant, in conversations of their own" },
-  { id: "query", title: "Query", mark: "Query", named: "Query", settings: false, levels: SEE_WORK, see: "See the query cards people share", work: "ask, and save cards" },
+  { id: "query", title: "Query", mark: "Query", named: "Query", settings: false, levels: SEE_WORK, see: "Ask, run and chart questions, and open the cards people share", work: "keep cards and selections, and queue ask jobs" },
   { id: "data", title: "Data", mark: "Data", named: "Data", settings: false, levels: SEE_WORK, see: "See sources and batches", work: "bring DICOM in, start and cancel digests" },
   { id: "review", title: "Review", mark: "Review", named: "Review", settings: false, levels: SEE_WORK, see: "See what waits for a person", work: "decide, and tune the rules" },
   { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "See the releases made", work: "make a release and hand it over" },
@@ -133,11 +133,11 @@ export const PAGE_LINES: readonly PageLine[] = [
 
 export const LEVEL_WORDS: Record<Level, string> = { hidden: "Hidden", see: "See", work: "Work", use: "Use" };
 
-/** How much of a record a person sees, as the forms choose it and say it. */
+/** How much of a record a person sees, in the same words wherever it is shown: identifying details are the engine's quasi-identifying class, and everything adds the sensitive class. */
 export const RECORD_WORDS: Record<Detail, { choice: string; says: string; sees: string }> = {
-  plain: { choice: "Without sex and age", says: "Records without sex, age, the images or sensitive events.", sees: "neither sex nor age, nor the images" },
-  quasi: { choice: "With sex and age", says: "Sex and age and the images, but no sensitive events or identifiers.", sees: "sex and age, and the images" },
-  sensitive: { choice: "Everything", says: "Sensitive events, identifiers and what is burned into images as well.", sees: "everything, sensitive events and identifiers too" },
+  plain: { choice: "Without identifying details", says: "No dates, subject codes, sex or age, scanner names or series descriptions.", sees: "no dates, subject codes, sex or age, scanner names or series descriptions" },
+  quasi: { choice: "With identifying details", says: "Dates, subject codes, sex and age, scanner names and series and protocol descriptions.", sees: "dates, subject codes, sex and age, scanner names and series and protocol descriptions" },
+  sensitive: { choice: "Everything", says: "Identifying details, sensitive events, raw identifiers and burned-in annotation.", sees: "identifying details, sensitive events, raw identifiers and burned-in annotation" },
 };
 
 /** A page's words in the form: what seeing it opens, then what work adds. */

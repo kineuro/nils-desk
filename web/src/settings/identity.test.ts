@@ -75,7 +75,8 @@ describe("the pages as levels", () => {
   });
 
   it("words a page in the form and on a person's profile", () => {
-    expect(lineWords(line("query"))).toBe("See the query cards people share. Work: ask, and save cards.");
+    expect(lineWords(line("query"))).toBe("Ask, run and chart questions, and open the cards people share. Work: keep cards and selections, and queue ask jobs.");
+    expect(yourWords(line("query"), "see")).toBe("Ask, run and chart questions, and open the cards people share.");
     expect(lineWords(line("audit"))).toBe("See who did what, and when.");
     expect(yourWords(line("review"), "work")).toBe("See what waits for a person, decide, and tune the rules.");
     expect(yourWords(line("data"), "see")).toBe("See sources and batches.");
@@ -165,7 +166,7 @@ describe("the note under the form", () => {
     const grants = [...reviewers.grants, "kvasir:see"];
     const s = summaryWords({ kind: "person", name: "Erik", grants, detail: "quasi", groups: [reviewers], own: new Set<PageId>(["kvasir"]), ownDetail: false });
     expect(s.lead).toBe("Erik will see Home, Assistant, Query, Data and Review, and Kvasir under Settings.");
-    expect(s.detail[0]).toBe("Erik may use the assistant, and work in Query and Review. In records, Erik sees sex and age, and the images.");
+    expect(s.detail[0]).toBe("Erik may use the assistant, and work in Query and Review. In records, Erik sees dates, subject codes, sex and age, scanner names and series and protocol descriptions.");
     expect(s.detail[1]).toBe(
       "Reviewers gives all of it but Kvasir, which is Erik's alone. When Reviewers changes, Erik changes with it. A page a group gives cannot go lower here; take the person out of the group instead.",
     );
@@ -174,9 +175,15 @@ describe("the note under the form", () => {
   it("says it for a person in no group, in two groups, and with only their own pages", () => {
     const none = summaryWords({ kind: "person", name: " ", grants: [], detail: "plain", groups: [] });
     expect(none.lead).toBe("This person will see Home only.");
-    expect(none.detail).toEqual(["This person may look, but work nowhere. In records, this person sees neither sex nor age, nor the images.", "This person is in no group, so all of it is theirs alone."]);
+    expect(none.detail).toEqual([
+      "This person may look, but work nowhere. In records, this person sees no dates, subject codes, sex or age, scanner names or series descriptions.",
+      "This person is in no group, so all of it is theirs alone.",
+    ]);
     const two = summaryWords({ kind: "person", name: "Sara", grants: addUp([reviewers, dataTeam], { grants: [], detail: null }).grants, detail: "sensitive", groups: [reviewers, dataTeam], own: new Set(), ownDetail: true });
     expect(two.lead).toBe("Sara will see Home, Assistant, Query, Data, Review, Release and Pipelines, and Places under Settings.");
+    expect(two.detail[0]).toBe(
+      "Sara may use the assistant, and work in Query, Data, Review, Release, Pipelines and Places. In records, Sara sees identifying details, sensitive events, raw identifiers and burned-in annotation.",
+    );
     expect(two.detail[1]).toMatch(/^Reviewers and Data team give all of it but what Sara sees in records, which is Sara's alone\. When one of them changes, Sara changes with it\./u);
     const bare = summaryWords({ kind: "person", name: "Ann", grants: ["audit:see"], detail: "plain", groups: [{ ...dataTeam, grants: [] }], own: new Set<PageId>(["audit"]) });
     expect(bare.detail[1]).toMatch(/^Data team gives none of its pages, so Audit is Ann's alone\./u);
@@ -186,7 +193,7 @@ describe("the note under the form", () => {
     const s = summaryWords({ kind: "group", name: "Guests", grants: ["query:see", "data:see"], detail: "plain", members: 1, follows: ["lab-guests"] });
     expect(s.lead).toBe("People in Guests will see Home, Query and Data.");
     expect(s.detail).toEqual([
-      "People in Guests may look, but work nowhere. In records, people in Guests see neither sex nor age, nor the images.",
+      "People in Guests may look, but work nowhere. In records, people in Guests see no dates, subject codes, sex or age, scanner names or series descriptions.",
       "1 person is in it now, and each gets all of this from their next click, and what their other groups give.",
       "Whoever is in lab-guests at the provider joins it when they sign in.",
     ]);

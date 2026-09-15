@@ -79,7 +79,8 @@ describe("changing a person", () => {
     expect(lineOf(html, "Assistant")).toContain('<button type="button" class="locked" aria-pressed="false" disabled="">Hidden</button><button type="button" class="on" aria-pressed="true">Use</button>');
     expect(lineOf(html, "Kvasir")).toContain('<button type="button" aria-pressed="false">Hidden</button><button type="button" class="on" aria-pressed="true">See</button>');
     expect(lineOf(html, "Release")).toContain('<button type="button" class="on off" aria-pressed="true">Hidden</button>');
-    expect(lineOf(html, "What they see in records")).toContain('class="locked" aria-pressed="false" disabled="">Without sex and age</button><button type="button" class="on" aria-pressed="true">With sex and age</button>');
+    expect(lineOf(html, "What they see in records")).toContain('class="locked" aria-pressed="false" disabled="">Without identifying details</button><button type="button" class="on" aria-pressed="true">With identifying details</button>');
+    expect(lineOf(html, "What they see in records")).toContain("Dates, subject codes, sex and age, scanner names and series and protocol descriptions.");
     expect(lineOf(html, "Audit")).not.toContain(">Work<");
   });
 

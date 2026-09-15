@@ -57,7 +57,7 @@ export function ProfilePage({ caps }: { caps: Capabilities }) {
       <section className="stack roomy">
         <div className="section-head rule-top">
           <h2>What you may see and do</h2>
-          <span className="meta">{off ? "all of it, since nobody signs in" : "an admin sets this"}</span>
+          <span className="meta">{off ? "all of it, since nobody signs in" : "set by whoever may change people and groups"}</span>
         </div>
         <YourAccess grants={person.grants} detail={person.detail} />
       </section>
@@ -118,7 +118,7 @@ export function YourAccess({ grants, detail }: { grants: readonly string[]; deta
           <Icon name="lock" />
           <b>{andWords(hidden)}</b>
           <span className="state meta">not shown to you</span>
-          <span className="what">An admin can open them for you.</span>
+          <span className="what">Whoever may change people and groups can open them for you.</span>
         </div>
       )}
       <div className="arow">

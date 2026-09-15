@@ -31,12 +31,16 @@ describe("a person's own page", () => {
     expect(html).toContain("The desk keeps the people");
     expect(html).toContain('<span class="tag">Reviewers</span>');
     expect(html).toMatch(/<b>Assistant<\/b><span class="state"><span class="amark do">use<\/span><\/span>/u);
-    expect(html).toMatch(/<b>Query<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">See the query cards people share, ask, and save cards\.<\/span>/u);
+    expect(html).toMatch(/<b>Query<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">Ask, run and chart questions, and open the cards people share, keep cards and selections, and queue ask jobs\.<\/span>/u);
     expect(html).toMatch(/<b>Data<\/b><span class="state"><span class="amark">see<\/span><\/span>/u);
     expect(html).toMatch(/<div class="arow deep"><b>Kvasir<\/b>/u);
     expect(html).toContain("<b>Release and Pipelines</b>");
     expect(html).toContain("not shown to you");
-    expect(html).toContain('<span class="amark">with sex and age</span>');
+    expect(html).toContain("Whoever may change people and groups can open them for you.");
+    expect(html).toContain("set by whoever may change people and groups");
+    expect(html).not.toContain("admin");
+    expect(html).toContain('<span class="amark">with identifying details</span>');
+    expect(html).toContain('<span class="what">Dates, subject codes, sex and age, scanner names and series and protocol descriptions.</span>');
   });
 
   it("points to the Kvasir page for a subscription of their own, and keeps none itself", () => {
@@ -54,7 +58,8 @@ describe("a person's own page", () => {
     const html = renderToStaticMarkup(<ProfilePage caps={caps(["query:see"], "plain", { groups: [] })} />);
     expect(html).toContain("<b>Assistant, Data, Review, Release, Pipelines and Settings</b>");
     expect(html).toMatch(/<dt>your groups<\/dt><dd>none<\/dd>/u);
-    expect(html).toContain('<span class="amark">without sex and age</span>');
+    expect(html).toContain('<span class="amark">without identifying details</span>');
+    expect(html).toContain("No dates, subject codes, sex or age, scanner names or series descriptions.");
   });
 
   it("on a desk that signs nobody in, holds every page and says the subscription is the install's", () => {
