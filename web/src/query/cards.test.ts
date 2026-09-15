@@ -3,7 +3,17 @@
 
 import { describe, expect, it } from "vitest";
 import type { Move, Profile } from "../ask/client";
-import { argsOf, cardTitle, changeWords, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, stepCounts, tabsOf, unitWords, valueWords, versionsOf } from "./cards";
+import type { Capabilities } from "../capabilities";
+import type { Grant } from "../grants";
+import { argsOf, cardTitle, changeWords, chartOf, clauseText, countsOf, fieldChoices, inputOf, keepingRefusal, moveWords, preview, stepCounts, tabsOf, unitWords, valueWords, versionsOf } from "./cards";
+
+describe("keeping a card", () => {
+  const holding = (grants: Grant[]) => ({ person: { subject: "p", display_name: "p", grants, detail: "plain", groups: [] } }) as unknown as Capabilities;
+  it("is offered with work on the Query page, and said in words without it", () => {
+    expect(keepingRefusal(holding(["query:work"]))).toBeNull();
+    expect(keepingRefusal(holding(["query:see", "data:work"]))).toBe("Keeping cards needs work on the Query page.");
+  });
+});
 
 const addWhere: Move = {
   id: 4,

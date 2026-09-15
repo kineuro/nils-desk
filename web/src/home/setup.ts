@@ -5,6 +5,7 @@
 // Home's steps say the words; this says which of them hold the rest of the
 // desk back.
 
+import { needsWork } from "../access";
 import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
 import type { Place } from "../objects/client";
@@ -93,9 +94,10 @@ export function ready(caps: Capabilities, install: Install | null, places: Place
  * well as the backups, so it asks for work on both pages (record 25).
  */
 export function backupFolderRefusal(caps: Capabilities): string | null {
-  const missing = [may(caps, "database:work") ? null : "the Database page", may(caps, "places:work") ? null : "the Places page"].filter((m) => m !== null);
-  if (missing.length === 0) return null;
-  return `Backing up to the engine's backup folder needs work on the Database page and on the Places page; this account has no work on ${missing.join(" or on ")}.`;
+  return needsWork(caps, "Backing up to the engine's backup folder", [
+    ["database:work", "the Database page"],
+    ["places:work", "the Places page"],
+  ]);
 }
 
 /** How far setup is, in a sentence. */

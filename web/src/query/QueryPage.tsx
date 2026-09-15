@@ -30,7 +30,7 @@ import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
 import { ProfilePanel, StepEditor } from "./CardParts";
-import { cardTitle, changeWords, clauseText, fieldChoices, stepCounts, versionsOf, type ChartTab, type Version } from "./cards";
+import { cardTitle, changeWords, clauseText, fieldChoices, keepingRefusal, stepCounts, versionsOf, type ChartTab, type Version } from "./cards";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -97,6 +97,8 @@ function StartDialog({ caps, onClose }: { caps: Capabilities; onClose: () => voi
   const [started, setStarted] = useState<Started | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // counting is asking; opening what was counted as a card keeps it
+  const keeping = keepingRefusal(caps);
   const from: From = kind === "cohorts" ? { kind: "cohorts", cohorts: cohorts.split(/[\s,]+/).filter(Boolean) } : { kind: "nothing" };
   const look = () => {
     setBusy(true);
@@ -128,9 +130,11 @@ function StartDialog({ caps, onClose }: { caps: Capabilities; onClose: () => voi
       foot={
         <div className="row actions">
           {started ? (
-            <button type="button" className="button" disabled={busy} onClick={open}>
-              Open as a card
-            </button>
+            keeping === null && (
+              <button type="button" className="button" disabled={busy} onClick={open}>
+                Open as a card
+              </button>
+            )
           ) : (
             <button type="button" className="button" disabled={busy || (kind === "cohorts" && cohorts.trim() === "")} onClick={look}>
               Count it
@@ -160,10 +164,14 @@ function StartDialog({ caps, onClose }: { caps: Capabilities; onClose: () => voi
         )}
       </div>
       {started && <p className="lede">{countWords(started)}</p>}
-      <p className="meta">
-        A saved card, a kept result and a list of identifiers are started from too: open a card and choose Start a new card from here
-        {sees(caps, "quasi") ? "." : "; a list of identifiers asks to see sex and age in records."}
-      </p>
+      {keeping !== null ? (
+        <p className="meta">{keeping} Counting here keeps nothing.</p>
+      ) : (
+        <p className="meta">
+          A saved card, a kept result and a list of identifiers are started from too: open a card and choose Start a new card from here
+          {sees(caps, "quasi") ? "." : "; a list of identifiers asks to see sex and age in records."}
+        </p>
+      )}
     </Dialog>
   );
 }
@@ -217,6 +225,8 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const current = steps.find((s) => s.set === chosen) ?? steps.find((s) => s.answers) ?? steps[0] ?? null;
   // a list of identifiers is started from with detail quasi (record 25)
   const lists = sees(caps, "quasi");
+  // a new card from this one, or a proposed version taken, is kept, which needs work on the Query page
+  const keeping = keepingRefusal(caps);
   const profiled = current?.set ?? null;
 
   // the charts follow the step chosen on the timeline, and are counted again for every version
@@ -400,10 +410,12 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
             ))}
           </nav>
         )}
-        <button type="button" className="button secondary" disabled={busy !== null} onClick={branch}>
-          <Icon name="branch" />
-          New card from here
-        </button>
+        {keeping === null && (
+          <button type="button" className="button secondary" disabled={busy !== null} onClick={branch}>
+            <Icon name="branch" />
+            New card from here
+          </button>
+        )}
         <button type="button" className="button" disabled={busy !== null} onClick={runIt}>
           <Icon name="play" />
           Run
@@ -411,6 +423,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       </div>
       {busy && <Wait phase={busy.phase} since={busy.since} />}
       {why && <p className="warn">{why}</p>}
+      {keeping !== null && <p className="meta">{keeping}</p>}
       <div className="query-grid">
         <div className="query-main">
           <ProfilePanel
@@ -525,9 +538,11 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                     <span className="meta">It was made for another version, so it can no longer be taken here.</span>
                   ) : (
                     <span className="row actions">
-                      <button type="button" className="button small" disabled={busy !== null} onClick={() => take(p)}>
-                        Accept
-                      </button>
+                      {keeping === null && (
+                        <button type="button" className="button small" disabled={busy !== null} onClick={() => take(p)}>
+                          Accept
+                        </button>
+                      )}
                       <button type="button" className="button secondary small" disabled={busy !== null} onClick={() => void talk.decide(p, "rejected", id)}>
                         Disregard
                       </button>
@@ -552,7 +567,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               </span>
             </div>
           </section>
-          {!lists && <p className="meta">Starting from a list of identifiers asks to see sex and age in records.</p>}
+          {keeping === null && !lists && <p className="meta">Starting from a list of identifiers asks to see sex and age in records.</p>}
         </aside>
       </div>
     </section>

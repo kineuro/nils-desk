@@ -26,7 +26,7 @@ export interface InPlay {
   funnel: { set: string; rows: number }[];
 }
 
-export function CardInPlay({ talk, opened, onShown }: { talk: Conversing; opened: number | null; onShown: (card: InPlay | null) => void }) {
+export function CardInPlay({ talk, opened, keeping, onShown }: { talk: Conversing; opened: number | null; keeping: string | null; onShown: (card: InPlay | null) => void }) {
   const proposals = talk.pane.proposals;
   const [shown, setShown] = useState<number | null>(null);
   const seen = useRef(new Set<number>());
@@ -121,7 +121,8 @@ export function CardInPlay({ talk, opened, onShown }: { talk: Conversing; opened
     setBusy(true);
     setWhy(null);
     try {
-      if (proposal && !proposal.stale) await keep(proposal);
+      // a person without work on the Query page keeps nothing: the change is made from the version shown
+      if (proposal && !proposal.stale && keeping === null) await keep(proposal);
       const a = await ask.apply(display, o, set, [{ move_id: m.id, args }]);
       setMove(null);
       setTyped({});
@@ -172,12 +173,15 @@ export function CardInPlay({ talk, opened, onShown }: { talk: Conversing; opened
             <p className="meta">It was made for another version, so it can no longer be taken.</p>
           ) : (
             <div className="row actions">
-              <button type="button" className="button small" disabled={busy} onClick={() => decide(proposal, "accepted")}>
-                Accept
-              </button>
+              {keeping === null && (
+                <button type="button" className="button small" disabled={busy} onClick={() => decide(proposal, "accepted")}>
+                  Accept
+                </button>
+              )}
               <button type="button" className="button secondary small" disabled={busy} onClick={() => decide(proposal, "rejected")}>
                 Disregard
               </button>
+              {keeping !== null && <span className="meta">{keeping}</span>}
             </div>
           )}
         </div>

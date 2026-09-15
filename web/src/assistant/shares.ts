@@ -11,7 +11,7 @@ import type { Proposal, Turn } from "./parts";
 
 const H = { "content-type": "application/json", "X-Nils-Desk": "1" };
 
-/** The class a share guards: a reader whose roles do not reach it is refused. */
+/** The class a share guards: a person who does not see it in records is refused. */
 export interface ShareGuard {
   class: "quasi_identifying" | "sensitive";
   words: string;
@@ -141,7 +141,7 @@ export function readsWords(reads: ShareRead[] | undefined, name: (subject: strin
 
 /** The class a share guards, as its owner and its readers are told. */
 export function guardWords(g: ShareGuard | null): string | null {
-  return g ? `It may have read ${g.words}; a reader whose roles do not reach them is refused.` : null;
+  return g ? `It may have read ${g.words}; a person who does not see them in records is refused.` : null;
 }
 
 /** The people whose name or subject holds what was typed. */

@@ -104,7 +104,7 @@ export function ShareDialog({ chat, onClose }: { chat: Chat; onClose: (shared: b
     >
       <p>
         The people you share with see what was said and the query versions proposed, as the conversation stands when you share it or update the share, never what a tool
-        returned. A card they open is read again under their own roles.
+        returned. A card they open is read again with what they may see.
       </p>
       {alone && <p className="meta">This desk has one person, so there is nobody to share with.</p>}
       {share && (
