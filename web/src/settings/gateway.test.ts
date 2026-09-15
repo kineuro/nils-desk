@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
 import type { Grant } from "../grants";
 import {
+  admissionTitle,
   admissionWords,
   answersWords,
   cardsOf,
@@ -15,6 +16,7 @@ import {
   checkWords,
   closedLead,
   closedTo,
+  countedStations,
   defaultModel,
   destinationWords,
   gatewayHealth,
@@ -165,7 +167,7 @@ describe("a model", () => {
     const now = Date.parse("2026-09-15T12:00:00Z");
     const day = new Date(Date.parse("2026-09-15T10:00:00Z")).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
     const idle = { now, checking: false };
-    expect(admissionWords("qwen38-27b", local, { id: "qwen38-27b", admitted: true }, [record({})], idle)).toEqual({ tone: "ok", words: `admitted ${day}`, detail: null });
+    expect(admissionWords("qwen38-27b", local, { id: "qwen38-27b", admitted: true }, [record({})], idle)).toEqual({ tone: "ok", words: "admitted", on: day, detail: null });
     const refused = record({
       passed: false,
       checks: [
@@ -175,9 +177,11 @@ describe("a model", () => {
         { name: "stream_integrity", passed: null },
       ],
     });
-    expect(admissionWords("qwen38-27b", local, undefined, [refused], idle)).toEqual({ tone: "blocked", words: `refused on ${day}`, detail: "failed tool calls and context overflow" });
-    expect(admissionWords("qwen38-27b", local, undefined, [record({ passed: false })], idle)).toEqual({ tone: "blocked", words: `refused on ${day}`, detail: null });
-    expect(admissionWords("qwen38-27b", local, undefined, [], idle)).toEqual({ tone: "caution", words: "not admitted yet", detail: null });
+    expect(admissionWords("qwen38-27b", local, undefined, [refused], idle)).toEqual({ tone: "blocked", words: "refused", on: day, detail: "failed tool calls and context overflow" });
+    expect(admissionTitle(admissionWords("qwen38-27b", local, undefined, [refused], idle))).toBe(`refused on ${day}: failed tool calls and context overflow`);
+    expect(admissionWords("qwen38-27b", local, undefined, [record({ passed: false })], idle)).toEqual({ tone: "blocked", words: "refused", on: day, detail: null });
+    expect(admissionWords("qwen38-27b", local, undefined, [], idle)).toEqual({ tone: "caution", words: "not admitted yet", on: null, detail: null });
+    expect(admissionTitle(admissionWords("qwen38-27b", local, undefined, [], idle))).toBeNull();
     // a backend added within the hour is being checked, and so is any model while a check runs
     const waiting = { id: "qwen38-27b", admitted: false };
     expect(admissionWords("qwen38-27b", { ...local, added_at: now - 20 * 60_000 }, waiting, [], idle).words).toBe("being checked");
@@ -185,7 +189,7 @@ describe("a model", () => {
     expect(admissionWords("qwen38-27b", local, { id: "qwen38-27b", admitted: true }, [record({})], { now, checking: true }).words).toBe("being checked");
     // a refusal from before the backend was added again is not this backend's
     expect(admissionWords("qwen38-27b", { ...local, added_at: Date.parse("2026-09-15T11:30:00Z") }, undefined, [refused], idle).words).toBe("being checked");
-    expect(admissionWords("MiniMax-M3", minimax, undefined, null, idle)).toEqual({ tone: "neutral", words: "not needed for a provider", detail: null });
+    expect(admissionWords("MiniMax-M3", minimax, undefined, null, idle)).toEqual({ tone: "neutral", words: "not needed for a provider", on: null, detail: null });
   });
 
   it("says what a check found, model by model", () => {
@@ -202,8 +206,9 @@ describe("a model", () => {
     expect(usedFor(local, purposes)).toBe("concierge, ask-help");
     expect(usedFor(minimax, purposes)).toBe("operator");
     expect(usedFor({ ...local, id: "spare" }, purposes)).toBe("nothing yet");
-    expect(answersWords("local", purposes)).toBe("answers concierge and ask-help");
-    expect(answersWords("spare", purposes)).toBe("answers no station yet");
+    expect(answersWords("local", purposes)).toEqual({ words: "answers 2 stations", title: "concierge, ask-help" });
+    expect(answersWords("spare", purposes)).toEqual({ words: "answers no station", title: null });
+    expect(countedStations(["concierge"])).toEqual({ words: "answers 1 station", title: "concierge" });
     expect(answersWords("local", null)).toBeNull();
     expect(stationOf("desk.search")).toBe("desk.search");
     expect(subscribedStations([purpose({ backend: "chatgpt", locality: "remote" }), purpose({ purpose: "assistant.ask-help" })], [local, chatgpt])).toEqual(["concierge"]);

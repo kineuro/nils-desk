@@ -8,7 +8,7 @@
 // actions, what the download dialog asks and when it may download, how a
 // started model runs, and each refusal in words a person can act on.
 
-import { admissionWords, modelOf, type Admission, type Card, type Tone } from "./gateway";
+import { admissionTitle, admissionWords, modelOf, type Admission, type Card, type Tone } from "./gateway";
 import type { AdmissionRecord, Backend, LocalAsk, LocalFile, LocalLookup, LocalModel, LocalRefusal, LocalRun, LocalRuntime, LocalState, RunState } from "./kvasir";
 
 /** How often the list is read again while a model is queued or downloading. */
@@ -85,14 +85,11 @@ export function underWay(models: LocalModel[]): boolean {
 
 const filesWords = (n: number) => (n === 1 ? "one file" : `${count(n)} files`);
 
-/** How far a model is, said beside its bar or under its name. */
+/** How far a model is, as facts beside its tag: the bytes it has of all it needs, and the percent while it downloads. */
 export function progressWords(m: LocalModel): string {
-  const whole = `${bytesWords(m.bytes_total)} in ${filesWords(m.files)}`;
-  const part = `${bytesWords(m.bytes_done)} of ${bytesWords(m.bytes_total)}`;
-  if (m.state === "downloading" || m.state === "paused") return `${part}, ${percentOf(m.bytes_done, m.bytes_total)}%`;
-  if (m.state === "queued") return `${m.bytes_done > 0 ? part : whole}, waiting its turn`;
-  if (m.state === "failed" && m.bytes_done > 0) return `${part} when it stopped`;
-  return whole;
+  const of = `${bytesWords(m.bytes_done)} of ${bytesWords(m.bytes_total)}`;
+  if (m.state === "downloading" || m.state === "paused") return `${of} · ${percentOf(m.bytes_done, m.bytes_total)}%`;
+  return m.bytes_done > 0 && m.state !== "done" ? of : bytesWords(m.bytes_total);
 }
 
 /** A commit as a person compares it: its first seven characters. */
@@ -357,8 +354,8 @@ export function runTag(run: LocalRun): { tone: LocalTone; words: string } {
 export function servedAdmission(run: LocalRun, backends: Backend[] | null, records: AdmissionRecord[] | null, now: number): Admission | null {
   if (run.state !== "serving" || backends === null) return null;
   const b = backends.find((x) => x.builtin !== true && x.locality === "local" && (x.models.includes(run.model) || (x.entries ?? []).some((e) => e.id === run.model)));
-  if (!b) return { tone: "caution", words: "being added", detail: "Kvasir holds it as a model in your systems in a moment." };
-  if (b.health.warming === true) return { tone: "caution", words: "warming", detail: "Kvasir checks it with its admission suite once it has answered." };
+  if (!b) return { tone: "caution", words: "being added", on: null, detail: "held as a model in a moment" };
+  if (b.health.warming === true) return { tone: "caution", words: "warming", on: null, detail: "checked once it has answered" };
   return admissionWords(run.model, b, modelOf(b, run.model, []), records, { now, checking: false });
 }
 
@@ -482,17 +479,26 @@ export function localName(m: LocalModel): string {
   return started(m) && m.run?.model ? m.run.model : m.repo;
 }
 
-/** A local model's line under its name: this machine, and what it is there for. */
-export function localMeta(m: LocalModel): string {
-  if (m.run?.state === "serving") return ["This machine", "llama.cpp", m.run.context ? `${count(m.run.context)} tokens` : null].filter(Boolean).join(" · ");
-  if (m.run?.state === "starting") return "This machine · llama.cpp";
-  if (m.state !== "done") return "This machine · from the Hugging Face Hub";
-  return m.startable === true ? "This machine · starts on llama.cpp" : "This machine · for a model server of yours";
+/** What is known of a local model, as the hover title of where it runs: its revision, its size, and the context llama.cpp gave it. */
+export function localFacts(m: LocalModel): string {
+  const context = m.run?.state === "serving" && m.run.context ? `${count(m.run.context)} tokens` : null;
+  return [revisionWords(m), bytesWords(m.bytes_total), context].filter(Boolean).join(" · ");
 }
 
-/** The tag a local model's card carries: how it runs once started, else where its download stands. */
-export function localTag(m: LocalModel): { tone: LocalTone; words: string } {
-  return m.run && m.run.state !== "stopped" ? runTag(m.run) : modelTag(m.state);
+/**
+ * The one tag a local model's card carries, with its detail as a hover title:
+ * how it runs once started, its admission where that is not settled while it
+ * serves, and else where its download stands.
+ */
+export function localTag(m: LocalModel, admission: Admission | null = null): { tone: LocalTone; words: string; title: string | null } {
+  const run = m.run;
+  if (run?.state === "serving") {
+    if (admission && admission.tone !== "ok") return { tone: admission.tone, words: admission.words, title: admissionTitle(admission) };
+    return { ...runTag(run), title: admission ? admissionTitle(admission) : null };
+  }
+  if (run?.state === "starting") return { ...runTag(run), title: `loading as ${run.model}` };
+  if (run?.state === "failed") return { ...runTag(run), title: run.error ? sentence(run.error) : null };
+  return { ...modelTag(m.state), title: m.state === "failed" && m.error ? sentence(m.error) : null };
 }
 
 /** The local models in the order their cards stand: the one llama.cpp loads or serves first, then the rest as Kvasir lists them. */

@@ -100,7 +100,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   const cards = backends ? backendCards(backends, { viewer, catalogue, admissions, purposes, now, checking, drawn }) : [];
 
   // a model added in the last hour, or loaded on llama.cpp, is read again until its admission settles
-  const settling = cards.some((c) => checking !== c.backend.id && c.tags.some((t) => SETTLING.has(t.words))) || served.some((a) => a !== null && SETTLING.has(a.words));
+  const settling = cards.some((c) => checking !== c.backend.id && SETTLING.has(c.tag.words)) || served.some((a) => a !== null && SETTLING.has(a.words));
   useEffect(() => {
     if (!settling) return;
     const t = setInterval(load, 15_000);

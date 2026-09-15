@@ -161,8 +161,15 @@ export function failedChecks(r: AdmissionRecord): string[] {
 export interface Admission {
   tone: Tone;
   words: string;
-  /** The checks a refused model failed, said under its tag. */
+  /** The day of the record it was admitted or refused on, for the tag's hover title. */
+  on: string | null;
+  /** The checks a refused model failed, for the tag's hover title. */
   detail: string | null;
+}
+
+/** An admission's hover title: when it was admitted or refused, and the checks a refused model failed. */
+export function admissionTitle(a: Admission): string | null {
+  return [a.on ? `${a.words} on ${a.on}` : null, a.detail].filter(Boolean).join(": ") || null;
 }
 
 /**
@@ -172,22 +179,22 @@ export interface Admission {
  * backend was added unless a check since refused it.
  */
 export function admissionWords(model: string, backend: Backend, listed: CatalogueModel | undefined, records: AdmissionRecord[] | null, at: { now: number; checking: boolean }): Admission {
-  if (backend.locality === "remote") return { tone: "neutral", words: "not needed for a provider", detail: null };
-  if (at.checking) return { tone: "caution", words: "being checked", detail: null };
+  if (backend.locality === "remote") return { tone: "neutral", words: "not needed for a provider", on: null, detail: null };
+  if (at.checking) return { tone: "caution", words: "being checked", on: null, detail: null };
   // a record from before the backend was added again is another backend's
   const since = backend.added_at ?? 0;
   const mine = (records ?? []).filter((r) => r.backend === backend.id && r.model === model && r.at >= since).sort((a, b) => b.at - a.at);
   const flag = listed?.admitted;
   if (flag === true || (typeof flag !== "boolean" && mine[0]?.passed === true)) {
     const passed = mine.find((r) => r.passed);
-    return { tone: "ok", words: passed ? `admitted ${onDay(passed.at)}` : "admitted", detail: null };
+    return { tone: "ok", words: "admitted", on: passed ? onDay(passed.at) : null, detail: null };
   }
   if (mine[0] && !mine[0].passed) {
     const failed = failedChecks(mine[0]);
-    return { tone: "blocked", words: `refused on ${onDay(mine[0].at)}`, detail: failed.length > 0 ? `failed ${listWords(failed)}` : null };
+    return { tone: "blocked", words: "refused", on: onDay(mine[0].at), detail: failed.length > 0 ? `failed ${listWords(failed)}` : null };
   }
-  if (backend.added_at !== undefined && at.now - backend.added_at < CHECKING_MS) return { tone: "caution", words: "being checked", detail: null };
-  return { tone: "caution", words: "not admitted yet", detail: null };
+  if (backend.added_at !== undefined && at.now - backend.added_at < CHECKING_MS) return { tone: "caution", words: "being checked", on: null, detail: null };
+  return { tone: "caution", words: "not admitted yet", on: null, detail: null };
 }
 
 /** What a check found, model by model. */
@@ -212,11 +219,16 @@ export function usedFor(backend: Backend, purposes: PurposeRow[]): string {
   return stations.length === 0 ? "nothing yet" : stations.join(", ");
 }
 
-/** The stations a backend answers, as a card says it under the model. */
-export function answersWords(backendId: string, purposes: PurposeRow[] | null): string | null {
+/** The stations a backend answers, counted as a card says them, with their names for a hover title; null before the stations are read. */
+export function answersWords(backendId: string, purposes: PurposeRow[] | null): { words: string; title: string | null } | null {
   if (purposes === null) return null;
-  const stations = purposes.filter((p) => p.backend === backendId).map((p) => stationOf(p.purpose));
-  return stations.length === 0 ? "answers no station yet" : `answers ${listWords(stations)}`;
+  return countedStations(purposes.filter((p) => p.backend === backendId).map((p) => stationOf(p.purpose)));
+}
+
+/** Stations counted, as a card says them, with their names for a hover title. */
+export function countedStations(stations: string[]): { words: string; title: string | null } {
+  if (stations.length === 0) return { words: "answers no station", title: null };
+  return { words: stations.length === 1 ? "answers 1 station" : `answers ${stations.length} stations`, title: stations.join(", ") };
 }
 
 /** The stations that go to ChatGPT through the subscription. */

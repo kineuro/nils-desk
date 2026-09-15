@@ -6,8 +6,7 @@
 import { describe, expect, it } from "vitest";
 import type { Subscription } from "./kvasir";
 import {
-  answeredWords,
-  cardMeta,
+  cardFacts,
   cardTitle,
   expired,
   howWords,
@@ -97,18 +96,14 @@ describe("the card's words", () => {
     expect(leadWords(sub({ state: "failed" }))).toBe("The sign-in did not finish.");
   });
 
-  it("say whose it is, the model it answers with, since when, and the stations it answers", () => {
+  it("say whose it is, the context it takes and since when, as the hover title of its model", () => {
     const models = [{ id: "gpt-5.5", name: "GPT-5.5", context_window: 272000 }];
     const since = Date.parse("2026-09-12T09:00:00Z");
     const short = new Date(since).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-    expect(cardMeta(sub({ state: "signed_in", model: "gpt-5.5", models }))).toBe("Yours alone · GPT-5.5, 272,000 tokens");
-    expect(cardMeta(sub({ for: "system", state: "signed_in", model: "gpt-5.5", models: [] }))).toBe("The whole install's · gpt-5.5");
-    expect(cardMeta(sub({ state: "signed_in" }))).toBe("Yours alone · no model chosen yet");
+    expect(cardFacts(sub({ state: "signed_in", model: "gpt-5.5", models, since }))).toBe(`yours alone · 272,000 tokens · since ${short}`);
+    expect(cardFacts(sub({ for: "system", state: "signed_in", model: "gpt-5.5", models: [] }))).toBe("the whole install's");
     expect(sinceWords(sub({ state: "signed_in", since }))).toBe(`since ${short}`);
     expect(sinceWords(sub({ since }))).toBeNull();
-    expect(answeredWords(sub(), ["concierge"])).toBe("answers concierge, in your conversations");
-    expect(answeredWords(sub({ for: "system" }), ["concierge", "operator"])).toBe("answers concierge and operator");
-    expect(answeredWords(sub(), [])).toBe("answers no station until someone with Kvasir: Work sends one to ChatGPT");
     expect(modelWords({ id: "gpt-5", name: "GPT-5", context_window: 272000 })).toBe("GPT-5, 272,000 tokens");
     expect(modelWords({ id: "gpt-5-mini", name: " ", context_window: 0 })).toBe("gpt-5-mini");
   });

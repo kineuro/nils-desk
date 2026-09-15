@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Kvasir page's models (record 25): the choices Add a model offers a
 // person, by what they may do there and what Kvasir serves, and the card of
-// each model Kvasir holds, with where it runs, its admission or where its
-// prompts go, and the stations it answers. The models Kvasir downloads have
-// cards of their own, and the subscription its own card.
+// each model Kvasir holds, which says little: where it runs in a few words
+// with the rest as a hover title, one tag, and how many stations it answers.
+// The models Kvasir downloads have cards of their own, and the subscription
+// its own card.
 
 import {
+  admissionTitle,
   admissionWords,
   answersWords,
   MARKS,
@@ -52,11 +54,12 @@ export function choiceWords(c: Choice, at: { local: LocalStatus | null | undefin
     : { mark, title: `Your own ${name} subscription`, words: `Sign in with your ${name} plan. It answers only your conversations, for the stations someone with Kvasir: Work sends to ${name}.` };
 }
 
-/** A tag on a card, with the dot of a state or without, as where its prompts go. */
+/** A card's one tag: a state carries a dot, where prompts go carries none, and the detail behind it is its hover title. */
 export interface CardTag {
   tone: Tone;
   words: string;
   dot: boolean;
+  title: string | null;
 }
 
 /** The card of one model Kvasir holds. */
@@ -69,29 +72,30 @@ export interface ModelCard {
   first: boolean;
   mark: Mark;
   name: string;
-  meta: string;
-  tags: CardTag[];
-  /** Said beside the tags: when it was admitted. */
-  aside: string | null;
-  /** The checks a refused model failed. */
-  detail: string | null;
-  answers: string | null;
-  /** Where the backend answers, for a person with Kvasir: Work. */
-  address: string | null;
+  /** Where it runs, in a few words. */
+  where: string;
+  /** The rest of what is known of it, as the hover title of where it runs. */
+  facts: string | null;
+  tag: CardTag;
+  answers: { words: string; title: string | null } | null;
 }
 
 const KINDS = { runtime: 0, server: 1, provider: 2 } as const;
+
+const facts = (parts: (string | null | undefined)[]) => parts.filter(Boolean).join(" · ") || null;
 
 /**
  * Every model Kvasir holds, as cards: this machine's llama.cpp first, then the
  * servers of yours, then the providers. A model on llama.cpp that one of the
  * models Kvasir downloads is serving has that model's card, and is not drawn
- * twice. Where a server runs, and which runtime, is said to Kvasir: Work alone.
+ * twice. Where a server answers, which runtime runs it and a provider's key
+ * are said to Kvasir: Work alone.
  */
 export function backendCards(
   backends: Backend[],
   at: { viewer: Viewer; catalogue: CatalogueModel[]; admissions: AdmissionRecord[] | null; purposes: PurposeRow[] | null; now: number; checking: string | null; drawn: string[] },
 ): ModelCard[] {
+  const work = at.viewer.work;
   const cards = shownBackends(backends).held.flatMap((b) =>
     b.models
       .map((model, i) => ({ model, first: i === 0 }))
@@ -100,20 +104,20 @@ export function backendCards(
         const listed = modelOf(b, model, at.catalogue);
         const tokens = tokensWords(listed);
         const admission = admissionWords(model, b, listed, at.admissions, { now: at.now, checking: at.checking === b.id });
-        const base = { key: `${b.id}/${model}`, backend: b, model, first, name: model, answers: answersWords(b.id, at.purposes), address: at.viewer.work ? (b.base_url ?? null) : null };
-        const join = (parts: (string | null)[]) => parts.filter(Boolean).join(" · ");
+        const admitted: CardTag = { tone: admission.tone, words: admission.words, dot: true, title: admissionTitle(admission) };
+        const address = work ? (b.base_url ?? null) : null;
+        const base = { key: `${b.id}/${model}`, backend: b, model, first, name: model, answers: answersWords(b.id, at.purposes) };
         if (onRuntime(b)) {
-          const warming = b.health.warming === true;
-          const tags: CardTag[] = [{ tone: warming ? "caution" : "ok", words: warming ? "warming" : "serving", dot: true }];
-          if (admission.tone !== "ok") tags.push({ tone: admission.tone, words: admission.words, dot: true });
-          return { ...base, kind: "runtime", mark: MARKS.runtime, meta: join(["This machine", "llama.cpp", tokens]), tags, aside: admission.tone === "ok" ? admission.words : null, detail: admission.detail };
+          const tag: CardTag =
+            b.health.warming === true ? { tone: "caution", words: "warming", dot: true, title: null } : admission.tone !== "ok" ? admitted : { ...admitted, words: "serving" };
+          return { ...base, kind: "runtime", mark: MARKS.runtime, where: "This machine", facts: facts(["llama.cpp", tokens]), tag };
         }
         if (b.locality === "local") {
-          const meta = at.viewer.work ? join(["Your server", runtimeOfBackend(b, at.admissions), tokens]) : join(["A server in your systems", tokens]);
-          return { ...base, kind: "server", mark: MARKS.server, meta, tags: [{ tone: admission.tone, words: admission.words, dot: true }], aside: null, detail: admission.detail };
+          return { ...base, kind: "server", mark: MARKS.server, where: "Your server", facts: facts(work ? [runtimeOfBackend(b, at.admissions), tokens, address] : [tokens]), tag: admitted };
         }
-        const key = !at.viewer.work ? null : b.credential === true ? "key kept by Kvasir" : b.credential === false ? "no key kept" : null;
-        return { ...base, kind: "provider", mark: MARKS.provider, meta: join([`${providerName(b)}, a provider`, key]), tags: [{ tone: "caution", words: "leaves your systems", dot: false }], aside: null, detail: null };
+        const key = b.credential === true ? "key kept by Kvasir" : b.credential === false ? "no key kept" : null;
+        const tag: CardTag = b.credential === false ? { tone: "blocked", words: "no key", dot: true, title: null } : { tone: "caution", words: "leaves your systems", dot: false, title: null };
+        return { ...base, kind: "provider", mark: MARKS.provider, where: providerName(b), facts: facts(work ? [key, address] : []), tag };
       }),
   );
   return cards.sort((x, y) => KINDS[x.kind] - KINDS[y.kind]);

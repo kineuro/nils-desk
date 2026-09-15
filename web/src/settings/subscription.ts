@@ -98,23 +98,16 @@ export function modelWords(m: { id: string; name: string; context_window: number
   return m.context_window > 0 ? `${name}, ${m.context_window.toLocaleString("en-GB")} tokens` : name;
 }
 
-/** The line under a signed-in card's title: whose it is, and the model it answers with. */
-export function cardMeta(s: Subscription): string {
-  const whose = s.for === "system" ? "The whole install's" : "Yours alone";
-  if (!s.model) return `${whose} · no model chosen yet`;
-  const m = s.models.find((x) => x.id === s.model);
-  return `${whose} · ${m ? modelWords(m) : s.model}`;
+/** What is known of a signed-in subscription, as the hover title of its model: whose it is, the context it takes, and since when. */
+export function cardFacts(s: Subscription): string {
+  const model = s.models.find((m) => m.id === s.model);
+  const context = model && model.context_window > 0 ? `${model.context_window.toLocaleString("en-GB")} tokens` : null;
+  return [s.for === "system" ? "the whole install's" : "yours alone", context, sinceWords(s)].filter(Boolean).join(" · ");
 }
 
-/** Since when it is signed in, beside its tag. */
+/** Since when it is signed in. */
 export function sinceWords(s: Subscription): string | null {
   return s.state === "signed_in" && s.since !== null ? `since ${onShortDay(s.since)}` : null;
-}
-
-/** The stations a signed-in subscription answers, on its card. */
-export function answeredWords(s: Subscription, stations: string[]): string {
-  if (stations.length === 0) return `answers no station until someone with Kvasir: Work sends one to ${s.name}`;
-  return `answers ${listWords(stations)}${s.for === "person" ? ", in your conversations" : ""}`;
 }
 
 /** How signing in goes, said before it starts. */

@@ -22,7 +22,7 @@ import {
   fingerprint,
   fitWords,
   foundWords,
-  localMeta,
+  localFacts,
   localName,
   localOrder,
   localTag,
@@ -160,13 +160,13 @@ describe("a model's row", () => {
     expect(barOf(model({ state: "paused", ...half }))).toBe(50);
     expect(barOf(model({ state: "queued", ...half }))).toBeNull();
     expect(barOf(model({ state: "done", bytes_done: 16 * GIB }))).toBeNull();
-    expect(progressWords(model({ state: "downloading", ...half }))).toBe("8 GiB of 16 GiB, 50%");
-    expect(progressWords(model({ state: "paused", bytes_done: 4 * GIB }))).toBe("4 GiB of 16 GiB, 25%");
-    expect(progressWords(model())).toBe("16 GiB in 3 files, waiting its turn");
-    expect(progressWords(model(half))).toBe("8 GiB of 16 GiB, waiting its turn");
-    expect(progressWords(model({ state: "done", files: 1 }))).toBe("16 GiB in one file");
-    expect(progressWords(model({ state: "failed", ...half }))).toBe("8 GiB of 16 GiB when it stopped");
-    expect(progressWords(model({ state: "failed" }))).toBe("16 GiB in 3 files");
+    expect(progressWords(model({ state: "downloading", ...half }))).toBe("8 GiB of 16 GiB · 50%");
+    expect(progressWords(model({ state: "paused", bytes_done: 4 * GIB }))).toBe("4 GiB of 16 GiB · 25%");
+    expect(progressWords(model())).toBe("16 GiB");
+    expect(progressWords(model(half))).toBe("8 GiB of 16 GiB");
+    expect(progressWords(model({ state: "done", ...half }))).toBe("16 GiB");
+    expect(progressWords(model({ state: "failed", ...half }))).toBe("8 GiB of 16 GiB");
+    expect(progressWords(model({ state: "failed" }))).toBe("16 GiB");
   });
 
   it("names the revision with a short commit, and labels each command by the server it starts", () => {
@@ -360,9 +360,9 @@ describe("a model started on llama.cpp", () => {
     const backend: Backend = { id: "llama-cpp", kind: "openai-completions", locality: "local", provider: null, credential: null, models: ["name-q4-k-m"], health: { warming: false }, added_at: now - 2 * 3_600_000, entries: [entry] };
     expect(servedAdmission(run({ state: "starting" }), [backend], [], now)).toBeNull();
     expect(servedAdmission(run(), null, null, now)).toBeNull();
-    expect(servedAdmission(run(), [], [], now)).toEqual({ tone: "caution", words: "being added", detail: "Kvasir holds it as a model in your systems in a moment." });
-    expect(servedAdmission(run(), [{ ...backend, health: { warming: true } }], [], now)).toEqual({ tone: "caution", words: "warming", detail: "Kvasir checks it with its admission suite once it has answered." });
-    expect(servedAdmission(run(), [backend], [], now)).toEqual({ tone: "ok", words: "admitted", detail: null });
+    expect(servedAdmission(run(), [], [], now)).toEqual({ tone: "caution", words: "being added", on: null, detail: "held as a model in a moment" });
+    expect(servedAdmission(run(), [{ ...backend, health: { warming: true } }], [], now)).toEqual({ tone: "caution", words: "warming", on: null, detail: "checked once it has answered" });
+    expect(servedAdmission(run(), [backend], [], now)).toEqual({ tone: "ok", words: "admitted", on: null, detail: null });
     const refusedRecord: AdmissionRecord = { id: 1, backend: "llama-cpp", model: "name-q4-k-m", runtime: { name: "llama.cpp", version: "b10964", build: "" }, at: now - 3_600_000, passed: false, checks: [{ name: "tool_calls", passed: false }] };
     expect(servedAdmission(run(), [{ ...backend, entries: [{ ...entry, admitted: false }] }], [refusedRecord], now)).toMatchObject({ tone: "blocked", detail: "failed tool calls" });
   });
@@ -468,15 +468,17 @@ describe("a local model's card (record 25)", () => {
     expect(localName(model())).toBe("owner/name");
   });
 
-  it("says where it runs, and tags how it runs once started or where its download stands", () => {
-    expect(localMeta(model({ ...done, run: run() }))).toBe("This machine · llama.cpp · 32,768 tokens");
-    expect(localMeta(model({ ...done, run: run({ state: "starting", context: null }) }))).toBe("This machine · llama.cpp");
-    expect(localMeta(model({ state: "downloading" }))).toBe("This machine · from the Hugging Face Hub");
-    expect(localMeta(model({ ...done, startable: true }))).toBe("This machine · starts on llama.cpp");
-    expect(localMeta(model(done))).toBe("This machine · for a model server of yours");
-    expect(localTag(model({ ...done, run: run() }))).toEqual({ tone: "ok", words: "serving" });
-    expect(localTag(model({ ...done, run: run({ state: "stopped" }) }))).toEqual({ tone: "ok", words: "downloaded" });
-    expect(localTag(model({ state: "paused" }))).toEqual({ tone: "caution", words: "paused" });
+  it("says what is known of it as a hover title, and one tag for how it runs or where its download stands", () => {
+    expect(localFacts(model({ ...done, run: run() }))).toBe("main, commit 0123456 · 16 GiB · 32,768 tokens");
+    expect(localFacts(model({ state: "downloading" }))).toBe("main, commit 0123456 · 16 GiB");
+    expect(localTag(model({ ...done, run: run() }))).toEqual({ tone: "ok", words: "serving", title: null });
+    expect(localTag(model({ ...done, run: run() }), { tone: "ok", words: "admitted", on: "14 Sept", detail: null })).toEqual({ tone: "ok", words: "serving", title: "admitted on 14 Sept" });
+    expect(localTag(model({ ...done, run: run() }), { tone: "blocked", words: "refused", on: "15 Sept", detail: "failed tool calls" })).toEqual({ tone: "blocked", words: "refused", title: "refused on 15 Sept: failed tool calls" });
+    expect(localTag(model({ ...done, run: run({ state: "starting" }) }))).toEqual({ tone: "brand", words: "loading", title: "loading as name-q4-k-m" });
+    expect(localTag(model({ ...done, run: run({ state: "failed", error: "exit code 1" }) }))).toEqual({ tone: "blocked", words: "did not start", title: "Exit code 1." });
+    expect(localTag(model({ ...done, run: run({ state: "stopped" }) }))).toEqual({ tone: "ok", words: "downloaded", title: null });
+    expect(localTag(model({ state: "failed", error: "fetch failed" }))).toEqual({ tone: "blocked", words: "failed", title: "Fetch failed." });
+    expect(localTag(model({ state: "paused" }))).toEqual({ tone: "caution", words: "paused", title: null });
   });
 
   it("puts the model llama.cpp serves first, and says the room where downloads go", () => {

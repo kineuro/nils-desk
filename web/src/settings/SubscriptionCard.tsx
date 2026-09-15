@@ -10,13 +10,12 @@ import { useEffect, useId, useRef, useState } from "react";
 import type React from "react";
 import { useCopy } from "../ui/clipboard";
 import { Icon } from "../ui/Icon";
-import { MarkSquare, MoreMenu } from "./cards";
-import { Acted, Health, useActing } from "./common";
-import { MARKS, plainly } from "./gateway";
+import { Answers, MoreMenu, StateTag, Where } from "./cards";
+import { Acted, useActing } from "./common";
+import { countedStations, MARKS, plainly, subscribedModel } from "./gateway";
 import { kvasir, type Subscription } from "./kvasir";
 import {
-  answeredWords,
-  cardMeta,
+  cardFacts,
   cardTitle,
   expired,
   howWords,
@@ -28,7 +27,6 @@ import {
   polling,
   SIGNED_OUT,
   signedInWords,
-  sinceWords,
   stateTag,
   stationsNote,
 } from "./subscription";
@@ -150,7 +148,9 @@ export function SignInCode({ sub, now }: { sub: Subscription; now: number }) {
 /**
  * The subscription's card. `may` says whether this person acts on it,
  * `stations` names those that go to ChatGPT, and `follow` is false while
- * another part of the page follows the sign-in.
+ * another part of the page follows the sign-in. Not signed in, it is its
+ * title, its tag and Sign in; signed in, its model with what is known of it as
+ * a hover title, its tag and the stations it answers.
  */
 export function SubscriptionCard(props: { row: Subscription; may?: boolean; stations?: string[] | null; follow?: boolean; onChange?: (s: Subscription) => void }) {
   const { row, may = true, stations = null, follow = true, onChange } = props;
@@ -160,7 +160,6 @@ export function SubscriptionCard(props: { row: Subscription; may?: boolean; stat
   const tag = stateTag(sub, now);
   const waiting = sub.state === "waiting";
   const signed = sub.state === "signed_in";
-  const since = sinceWords(sub);
   const quiet = acting.kind === "done" && acting.words === "";
   const picking = signed && sub.models.length > 0 && (sub.model === null || choosing);
 
@@ -188,16 +187,12 @@ export function SubscriptionCard(props: { row: Subscription; may?: boolean; stat
 
   return (
     <div className={waiting && may ? "mcard mine wide" : "mcard mine"}>
-      <div className="name">
-        <MarkSquare mark={MARKS.subscription} />
-        <b>{cardTitle(sub)}</b>
-      </div>
-      {signed && <span className="meta">{cardMeta(sub)}</span>}
+      <b className="card-name">{cardTitle(sub)}</b>
+      {signed && <Where mark={MARKS.subscription} words={subscribedModel(sub) ?? "no model chosen yet"} title={cardFacts(sub)} />}
       <div className="row">
-        <Health tone={tag.tone} words={tag.words} />
-        {since && <span className="meta">{since}</span>}
+        <StateTag tag={{ tone: tag.tone, words: tag.words, dot: true, title: sub.state === "failed" ? leadWords(sub) : null }} />
+        {signed && stations && <Answers answers={countedStations(stations)} />}
       </div>
-      {!signed && <span className="meta">{leadWords(sub)}</span>}
       {waiting && may && <SignInCode sub={sub} now={now} />}
       {picking && (
         <div className="field">
@@ -228,14 +223,13 @@ export function SubscriptionCard(props: { row: Subscription; may?: boolean; stat
           </div>
         </div>
       )}
-      {signed && stations && <span className="meta">{answeredWords(sub, stations)}</span>}
       {(button || more) && (
         <div className="row acts">
           {button}
           {more}
         </div>
       )}
-      {!may && !signed && <p className="meta">Signing the install in needs the assistant and Kvasir: See.</p>}
+      {!may && !signed && <p className="meta">Needs the assistant and Kvasir: See.</p>}
       {!quiet && <Acted acting={acting} />}
     </div>
   );
