@@ -295,6 +295,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
             local.queued(m);
           }}
           onSubscription={change}
+          onToken={local.tokenSet}
         />
       )}
       {removing && backends && (

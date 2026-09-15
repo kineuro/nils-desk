@@ -26,4 +26,16 @@ describe("downloading a model", () => {
     expect(html).toMatch(/<button type="button" class="button secondary" disabled="">Look it up<\/button>/u);
     expect(html).toMatch(/<button type="button" class="button" disabled="">Download<\/button>/u);
   });
+
+  it("says whether a Hugging Face token is set, and offers to set or replace it there", () => {
+    const unset = renderToStaticMarkup(<AddModel choices={["download"]} local={local} onClose={() => undefined} onDone={() => undefined} />);
+    expect(unset).toContain('<span class="label">Hugging Face token</span>');
+    expect(unset).toContain('<span class="tag">not set</span>');
+    expect(unset).toContain(">Set</button>");
+    expect(unset).toContain("Gated models need one.");
+    const set = renderToStaticMarkup(<AddModel choices={["download"]} local={{ ...local, token: true }} onClose={() => undefined} onDone={() => undefined} />);
+    expect(set).toContain('<span class="tag ok">set</span>');
+    expect(set).toContain(">Replace</button>");
+    expect(set).not.toContain('type="password"');
+  });
 });

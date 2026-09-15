@@ -275,6 +275,8 @@ export function useLocalModels(props: { enabled: boolean; onRun?: () => void; on
       say(null);
       setTokening(true);
     },
+    /** A Hugging Face token set elsewhere, such as in Add a model. */
+    tokenSet: (token: boolean) => take((s) => ({ ...s, token })),
   };
 }
 

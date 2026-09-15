@@ -267,7 +267,7 @@ describe("a refusal in words", () => {
 
   it("points a gated model to the token, a model held already to its row, and says the rest in words", () => {
     expect(refusalWords(refusal("needs_token", "the Hugging Face Hub refused owner/name", { status: 422 }), at)).toBe(
-      "This model is gated or private, so it needs a Hugging Face token. Set one under Hugging Face token on the Kvasir page, then try again.",
+      "This model is gated or private, so it needs a Hugging Face token. Set one above, then try again.",
     );
     expect(refusalWords(refusal("needs_token", "the Hugging Face Hub refused the token for owner/name", { status: 422 }), { ...at, token: true })).toBe(
       "The Hugging Face Hub refused the token for this model. The token's account needs access to it, and a gated model needs its terms accepted on the hub.",

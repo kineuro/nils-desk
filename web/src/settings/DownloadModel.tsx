@@ -7,10 +7,12 @@
 // other model downloads every file the patterns choose. Download is offered
 // only once a look-up answered for exactly what the dialog shows, and Kvasir
 // looks the model up again as it queues it. A refusal says in words what to do.
+// Whether a Hugging Face token is set is said there too, for a gated model,
+// and the token is set or replaced without leaving the dialog.
 
 import { useId, useState } from "react";
 import type React from "react";
-import { Acted, useActing } from "./common";
+import { Acted, messageOf, useActing } from "./common";
 import { plainly } from "./gateway";
 import { kvasir, localRefusalOf, type LocalModel } from "./kvasir";
 import {
@@ -30,7 +32,9 @@ import {
   patternsOf,
   refusalWords,
   roomWords,
+  sentence,
   stale,
+  tokenReady,
   type DownloadDraft,
   type Found,
 } from "./local";
@@ -39,6 +43,7 @@ import {
  * The download's part of Add a model: what it asks and its buttons. `token`
  * says whether a Hugging Face token is set and `free` the room where downloads
  * go, as the page last read them; `cards` are the machine's, none where no supervisor answers.
+ * `onToken` is told once a token is set here.
  */
 export function useDownload(props: {
   token: boolean;
@@ -47,8 +52,9 @@ export function useDownload(props: {
   advice: string[];
   onClose: () => void;
   onDone: (m: LocalModel) => void;
+  onToken: (set: boolean) => void;
 }): { body: React.ReactNode; foot: React.ReactNode; busy: boolean } {
-  const { token, free, cards, advice, onClose, onDone } = props;
+  const { token, free, cards, advice, onClose, onDone, onToken } = props;
   const id = useId();
   const [d, setD] = useState<DownloadDraft>(EMPTY_DRAFT);
   const [found, setFound] = useState<Found | null>(null);
@@ -58,7 +64,11 @@ export function useDownload(props: {
   const [askedFor, setAskedFor] = useState<string | null>(null);
   const looking = useActing();
   const queuing = useActing();
-  const busy = looking.working || queuing.working;
+  // the Hugging Face token, typed here in place of where it is set now
+  const [typing, setTyping] = useState(false);
+  const [secret, setSecret] = useState("");
+  const saving = useActing();
+  const busy = looking.working || queuing.working || saving.working;
   const print = fingerprint(d);
 
   const edit = (patch: Partial<DownloadDraft>) => setD((x) => ({ ...x, ...patch }));
@@ -70,6 +80,20 @@ export function useDownload(props: {
     const r = localRefusalOf(e);
     return r ? new Error(refusalWords(r, { token, patterns: patternsOf(asked.include).length })) : e;
   };
+
+  const storeToken = () =>
+    saving.act("storing the Hugging Face token", async () => {
+      try {
+        await kvasir.local.setToken(secret.trim());
+      } catch (e) {
+        const plain = plainly(e);
+        throw plain !== e ? plain : new Error(sentence(messageOf(e)));
+      }
+      setSecret("");
+      setTyping(false);
+      onToken(true);
+      return "The token is set.";
+    });
 
   const cannot = askRefusal(d);
 
@@ -111,6 +135,7 @@ export function useDownload(props: {
   const room = shown && shown.files.length > 0 ? roomWords(askedBytes(shown, chosen), free) : null;
   const lookQuiet = looking.acting.kind === "done" && looking.acting.words === "";
   const queueQuiet = queuing.acting.kind === "done" && queuing.acting.words === "";
+  const tokenQuiet = saving.acting.kind === "done" && saving.acting.words === "";
 
   const body = (
     <>
@@ -140,6 +165,50 @@ export function useDownload(props: {
         </div>
         <span className="meta">{cannot ?? "As owner/name. Kvasir asks the hub which files it would download, and keeps nothing."}</span>
         {!lookQuiet && (looking.working || lookedFor === print) && <Acted acting={looking.acting} />}
+      </div>
+
+      <div className="field">
+        <span className="label">Hugging Face token</span>
+        {typing ? (
+          <div className="field-row">
+            <div className="input mono">
+              <input
+                type="password"
+                aria-label="The Hugging Face token"
+                autoComplete="off"
+                value={secret}
+                disabled={saving.working}
+                onChange={(e) => setSecret(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && tokenReady(secret) && !saving.working) storeToken();
+                }}
+              />
+            </div>
+            <button type="button" className="button secondary" disabled={!tokenReady(secret) || saving.working} onClick={storeToken}>
+              Save
+            </button>
+            <button
+              type="button"
+              className="button quiet"
+              disabled={saving.working}
+              onClick={() => {
+                setTyping(false);
+                setSecret("");
+              }}
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <div className="row">
+            <span className={token ? "tag ok" : "tag"}>{token ? "set" : "not set"}</span>
+            <button type="button" className="button quiet small" disabled={busy} onClick={() => setTyping(true)}>
+              {token ? "Replace" : "Set"}
+            </button>
+          </div>
+        )}
+        <span className="meta">Gated models need one.</span>
+        {!tokenQuiet && <Acted acting={saving.acting} />}
       </div>
 
       <details className="more-fields">

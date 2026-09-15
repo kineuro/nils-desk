@@ -240,7 +240,7 @@ export function refusalWords(r: LocalRefusal, at: { token: boolean; patterns: nu
   if (r.code === "needs_token")
     return at.token
       ? "The Hugging Face Hub refused the token for this model. The token's account needs access to it, and a gated model needs its terms accepted on the hub."
-      : "This model is gated or private, so it needs a Hugging Face token. Set one under Hugging Face token on the Kvasir page, then try again.";
+      : "This model is gated or private, so it needs a Hugging Face token. Set one above, then try again.";
   if (r.code === "conflict") return "This model is in the list already, at the same commit where downloads go. Resume it there, or remove it first to download it again.";
   if (r.code === "not_on_hub") return "The Hugging Face Hub has no such model at that revision. Check the name, as owner/name, and the revision.";
   if (r.code === "nothing_to_download")

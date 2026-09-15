@@ -302,7 +302,8 @@ function useServer(where: "here" | "provider", props: { onClose: () => void; onD
  * The dialog. `choices` are what this person may add, the first chosen as it
  * opens; `local` and `install` feed the download, `subscription` and
  * `stations` the sign-in. A server or provider added calls `onDone`, a
- * download queued `onQueued`, and a subscription changed `onSubscription`.
+ * download queued `onQueued`, a subscription changed `onSubscription`, and a
+ * Hugging Face token set in the download `onToken`.
  */
 export function AddModel(props: {
   choices: Choice[];
@@ -314,8 +315,9 @@ export function AddModel(props: {
   onDone: (words: string, added: Added) => void;
   onQueued?: (m: LocalModel) => void;
   onSubscription?: (s: Subscription) => void;
+  onToken?: (set: boolean) => void;
 }) {
-  const { choices, local = null, install = null, subscription = null, stations = [], onClose, onDone, onQueued, onSubscription } = props;
+  const { choices, local = null, install = null, subscription = null, stations = [], onClose, onDone, onQueued, onSubscription, onToken } = props;
   const id = useId();
   const [choice, setChoice] = useState<Choice | null>(choices[0] ?? null);
   const server = useServer("here", { onClose, onDone });
@@ -327,6 +329,7 @@ export function AddModel(props: {
     advice: install?.machine.advice ?? [],
     onClose,
     onDone: (m) => onQueued?.(m),
+    onToken: (set) => onToken?.(set),
   });
   const signing = useSignInPart({ row: subscription, stations, follow: choice === "subscription", onChange: onSubscription, onClose });
   const part = choice === "download" ? download : choice === "server" ? server : choice === "provider" ? provider : choice === "subscription" ? signing : null;
