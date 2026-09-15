@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Identity page (Wave 5 section 10.5, record 25), as the chosen design
-// draws it: how people sign in and where the desk answers, as facts with the
-// command that changes them, since both restart the desk and the engine; the
-// groups an admin names, each with the pages it gives; and the people, with
-// their groups, what those add up to and what is theirs alone. Under oidc a
-// person's groups include the ones the provider's groups reach, marked as
-// such. A change to a person or a group applies at their next click.
+// The Identity page (Wave 5 section 10.5, record 25), kept terse: how people
+// sign in, where the desk answers and how long a session lasts as one row of
+// values, with the signing facts folded under Details and the command that
+// changes them; the groups as cards; and the people with their groups, what
+// those add up to and when each last signed in. A person's subject is a hover
+// title, never text. A change applies at the person's next click.
 
 import { useEffect, useState } from "react";
 import type React from "react";
@@ -15,22 +14,21 @@ import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
 import { GroupForm, PersonForm } from "./AccessForm";
 import { Head, Stats } from "./common";
-import { GroupCards, GroupTags, Marks, MarksLegend } from "./GroupCards";
+import { GroupCards, GroupTags, Marks, MarksLegend, RecordsTag } from "./GroupCards";
 import {
-  MODES,
-  RECORD_WORDS,
+  SIGN_IN,
   accessStats,
   groupsGiving,
+  hostOf,
   identity,
   marksOf,
   memberCount,
-  openWords,
   ownDetailAbove,
   ownPages,
-  ownWords,
   reachWords,
   readWords,
   seenWords,
+  sessionWords,
   type Access,
   type Group,
   type Person,
@@ -116,18 +114,13 @@ export interface BodyProps {
   children?: React.ReactNode;
 }
 
-const LOCAL_NOTE =
-  "A person in two groups gets what both give. When people sign in through an identity provider instead, each group follows one of the provider's groups, so a person's groups are set once, at the provider.";
-const OIDC_NOTE =
-  "A person in two groups gets what both give. A group that follows the provider's groups takes in whoever is in them when they sign in, marked with the globe; a person can also be put in a group here, and given a page of their own, with Change.";
-
 /** The page as it draws from what it read. */
 export function IdentityBody({ caps, groups, access, why, said = null, now = Date.now(), onOpen, children }: BodyProps) {
   const mode = caps.desk.mode;
   const work = may(caps, "identity:work");
   return (
     <div className="settings">
-      <Head title="Identity" lede={mode === "off" ? "Who signs in, and what each person may see and do." : "Who signs in, the groups they belong to, and what each group may see and do."} />
+      <Head title="Identity" lede={mode === "off" ? "Nobody signs in: whoever opens the desk may do everything." : "People, groups and what each may open."} />
       <Stats items={accessStats(caps, groups, access)} />
       {why && <p className="warn">{why}</p>}
       <SignIn caps={caps} sessions={access?.sessions_open ?? null} />
@@ -136,7 +129,6 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
           <section className="stack roomy">
             <div className="section-head rule-top">
               <h2>Groups</h2>
-              <span className="meta">the pages a group sees, and where it may work</span>
               {work && (
                 <button type="button" className="button secondary small" disabled={groups === null} onClick={() => onOpen({ kind: "group", group: null })}>
                   <Icon name="plus" />
@@ -148,7 +140,7 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
             {groups === null ? (
               !why && <p className="meta">Reading the groups.</p>
             ) : groups.length === 0 ? (
-              <p className="meta">No group yet. A group gives its people pages, and a person in two gets what both give.</p>
+              <p className="meta">No groups yet.</p>
             ) : (
               <GroupCards groups={groups} people={access?.people ?? null} follow={mode === "oidc"} mayChange={work} onChange={(g) => onOpen({ kind: "group", group: g })} />
             )}
@@ -156,7 +148,6 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
           <section className="stack roomy">
             <div className="section-head rule-top">
               <h2>People</h2>
-              {mode === "oidc" && <span className="meta">those who have signed in</span>}
               {mode === "local" && work && (
                 <button type="button" className="button small" disabled={groups === null} onClick={() => onOpen({ kind: "add" })}>
                   <Icon name="plus" />
@@ -171,12 +162,6 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
               <People mode={mode} people={access.people} groups={groups ?? []} me={caps.person.subject} work={work} now={now} onChange={(p) => onOpen({ kind: "person", person: p })} />
             )}
             {access !== null && access.people.length > 0 && <MarksLegend followed={mode === "oidc"} />}
-            <div className="note">
-              <Icon name="info" />
-              <div className="note-body">
-                <p className="note-detail">{mode === "oidc" ? OIDC_NOTE : LOCAL_NOTE}</p>
-              </div>
-            </div>
           </section>
         </>
       )}
@@ -185,88 +170,69 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
   );
 }
 
-/** How people sign in, where the desk answers and how long a session lasts, as facts, with the command that changes them. */
+/** How people sign in, where the desk answers and how long a session lasts, as a row of values; the signing facts under Details; and the command that changes them. */
 function SignIn({ caps, sessions }: { caps: Capabilities; sessions: number | null }) {
   const mode = caps.desk.mode;
   const s = caps.desk.settings;
-  const how = MODES.find((m) => m.id === mode) ?? MODES[0];
   const reach = s ? reachWords(s.origin) : null;
-  const also = s?.also_origins ?? [];
   const signing = mode === "off" ? null : (s?.signing ?? null);
+  const host = mode === "oidc" && signing?.issuer ? hostOf(signing.issuer) : null;
+  const where = reach?.local ? "Only this machine" : "This network";
   const pairs: [string, string | undefined][] = [
     ["signing key", signing?.key],
     ["audience", signing?.audience],
     ["provider", signing?.issuer],
     ["client", signing?.client_id],
     ["groups claim", mode === "oidc" ? signing?.groups_claim : undefined],
+    ["also at", (s?.also_origins ?? []).join(", ") || undefined],
   ];
-  const facts = pairs.filter((f): f is [string, string] => Boolean(f[1]));
+  const details = pairs.filter((f): f is [string, string] => Boolean(f[1]));
 
   return (
     <section className="stack roomy">
       <div className="section-head rule-top">
-        <h2>How people sign in</h2>
-        <span className="meta">chosen in setup</span>
+        <h2>Sign-in</h2>
       </div>
       <div className="panel card signin">
-        <div className={mode === "off" || !s ? "facts-row two" : "facts-row"}>
-          <div className="fact">
-            <Icon name="users" size="lg" />
-            <b>{how.title}</b>
-            <span className="meta">{how.words}</span>
-          </div>
+        <div className="signin-row">
+          <span className="signin-item">
+            <Icon name="users" />
+            {SIGN_IN[mode]}
+            {host && <span className="path">{host}</span>}
+          </span>
           {s && reach && (
-            <div className="fact">
-              <Icon name={reach.local ? "lock" : "globe"} size="lg" />
-              <b>{reach.local ? "Only this machine" : "This network"}</b>
-              <span className="meta">
-                The desk answers at <span className="path">{s.origin}</span>
-                {also.length > 0
-                  ? also.map((o, i) => (
-                      <span key={o}>
-                        {i === 0 ? ", and also at " : ", "}
-                        <span className="path">{o}</span>
-                      </span>
-                    ))
-                  : reach.local && " and nowhere else"}
-                .
-              </span>
-            </div>
+            <span className="signin-item" title={where}>
+              <Icon name={reach.local ? "lock" : "globe"} />
+              <span className="sr-only">{where}: </span>
+              <span className="path">{s.origin}</span>
+            </span>
           )}
           {mode !== "off" && s && (
-            <div className="fact">
-              <Icon name="clock" size="lg" />
-              <b>A session lasts {s.session_hours === 1 ? "an hour" : `${s.session_hours} hours`}</b>
-              <span className="meta">
-                {mode === "oidc" ? "The provider says who each person is, and the desk signs for the parts." : "Signed with the desk's own key."}
-                {sessions !== null && ` ${openWords(sessions)}`}
-              </span>
-            </div>
+            <span className="signin-item">
+              <Icon name="clock" />
+              {sessionWords(s.session_hours, sessions)}
+            </span>
           )}
         </div>
-        {facts.length > 0 && (
-          <dl className="facts sign-facts">
-            {facts.map(([k, v]) => (
-              <div key={k} className="facts-pair">
-                <dt>{k}</dt>
-                <dd>
-                  <span className="path">{v}</span>
-                </dd>
-              </div>
-            ))}
-          </dl>
+        {details.length > 0 && (
+          <details className="signin-details">
+            <summary>Details</summary>
+            <dl className="facts sign-facts">
+              {details.map(([k, v]) => (
+                <div key={k} className="facts-pair">
+                  <dt>{k}</dt>
+                  <dd>
+                    <span className="path">{v}</span>
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </details>
         )}
         <div className="setup-say">
           <Icon name="restart" />
-          {mode === "off" ? (
-            <p>
-              To let people sign in, each seeing only what they are given, run <Command text="nils setup" /> and choose that the desk keeps the people, or an identity provider. It restarts the desk and the engine.
-            </p>
-          ) : (
-            <p>
-              To change how people sign in, or where the desk answers, run <Command text="nils setup" /> on this machine. It restarts the desk and the engine, and everyone signs in again.
-            </p>
-          )}
+          <span>Change with</span>
+          <Command text="nils setup" />
         </div>
       </div>
     </section>
@@ -276,71 +242,70 @@ function SignIn({ caps, sessions }: { caps: Capabilities; sessions: number | nul
 /** The people: their groups, what those add up to with what is theirs alone, and when each last signed in. */
 function People(props: { mode: "off" | "local" | "oidc"; people: readonly Person[]; groups: readonly Group[]; me: string; work: boolean; now: number; onChange: (p: Person) => void }) {
   const { mode, people, groups, me, work, now, onChange } = props;
-  if (people.length === 0) return <p className="meta">{mode === "oidc" ? "Nobody has signed in yet." : "The desk keeps nobody yet."}</p>;
+  if (people.length === 0) return <p className="meta">{mode === "oidc" ? "Nobody has signed in yet." : "Nobody yet."}</p>;
   return (
-    <div className="table-wrap">
-      <table className="thin people">
-        <thead>
-          <tr>
-            <th>Person</th>
-            <th>Groups</th>
-            <th>Adds up to</th>
-            <th>Last signed in</th>
-            {work && (
-              <th className="acts">
-                <span className="sr-only">Change</span>
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {people.map((p) => {
-            // the groups the provider's groups reach count as groups, so what they give is not the person's own
-            const theirs = groupsGiving(p, groups);
-            const own = ownPages(p.grants, theirs);
-            const extra = ownWords(own.size, ownDetailAbove(p.detail, theirs));
-            const seen = seenWords(p, now);
-            const name = p.display || p.subject;
-            return (
-              <tr key={p.subject}>
-                <td>
-                  <b>{name}</b>
-                  {p.subject === me && <span className="meta"> you</span>}
-                  {name !== p.subject && <div className="meta path">{p.subject}</div>}
-                  <div className="person-under">
-                    <span className="meta">{seen}</span>
-                    <span className="person-groups">
-                      <GroupTags person={p} groups={groups} />
-                    </span>
-                  </div>
-                </td>
-                <td>
-                  <span className="amarks">
-                    <GroupTags person={p} groups={groups} />
-                    {extra && <span className="meta">{extra}</span>}
-                    {theirs.length === 0 && !extra && <span className="meta">none</span>}
-                  </span>
-                </td>
-                <td>
-                  <div className="stack">
-                    <Marks marks={marksOf(p.access.grants, own)} none="No grant yet" />
-                    <span className="meta">In records: {RECORD_WORDS[p.access.detail].choice.toLowerCase()}</span>
-                  </div>
-                </td>
-                <td className="meta">{seen}</td>
-                {work && (
-                  <td className="acts">
-                    <button type="button" className="button quiet small" aria-label={`Change ${name}`} onClick={() => onChange(p)}>
-                      Change
-                    </button>
+    <>
+      {mode === "oidc" && <p className="meta">People appear once they have signed in.</p>}
+      <div className="table-wrap">
+        <table className="thin people">
+          <thead>
+            <tr>
+              <th>Person</th>
+              <th>Groups</th>
+              <th>Access</th>
+              <th>Last seen</th>
+              {work && (
+                <th className="acts">
+                  <span className="sr-only">Change</span>
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {people.map((p) => {
+              // the groups the provider's groups reach count as groups, so what they give is not the person's own
+              const theirs = groupsGiving(p, groups);
+              const own = ownPages(p.grants, theirs);
+              const seen = seenWords(p, now);
+              const name = p.display || p.subject;
+              return (
+                <tr key={p.subject}>
+                  <td>
+                    <b title={p.subject}>{name}</b>
+                    {p.subject === me && <span className="meta"> you</span>}
+                    <div className="person-under">
+                      <span className="meta">{seen}</span>
+                      <span className="person-groups">
+                        <GroupTags person={p} groups={groups} />
+                      </span>
+                    </div>
                   </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  <td>
+                    <span className="amarks">
+                      <GroupTags person={p} groups={groups} />
+                      {theirs.length === 0 && <span className="meta">none</span>}
+                    </span>
+                  </td>
+                  <td>
+                    <Marks marks={marksOf(p.access.grants, own)}>
+                      <RecordsTag detail={p.access.detail} own={ownDetailAbove(p.detail, theirs)} />
+                    </Marks>
+                  </td>
+                  <td className="meta">{seen}</td>
+                  {work && (
+                    <td className="acts">
+                      <button type="button" className="button quiet small" aria-label={`Change ${name}`} onClick={() => onChange(p)}>
+                        Change
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 

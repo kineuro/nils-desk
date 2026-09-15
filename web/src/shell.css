@@ -448,28 +448,32 @@ table.thin.audit .audit-scope { display: none; }
 .ladder button.on { background: var(--n-brand-bg); color: var(--n-brand-fg); }
 .ladder button:disabled { cursor: default; }
 .ladder-row { gap: 0.6rem; flex-wrap: wrap; }
-/* ---- record 25: the Identity page (sign-in as facts, groups as cards, people with what they add up to), the access form a person and a group share, and the profile's lines */
+/* ---- record 25: the Identity page (sign-in as a row of values, groups as cards, people with what they add up to), the access form a person and a group share, and the profile's lines */
 .stack.roomy { gap: 0.6rem; }
-.facts-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem 1.4rem; }
-.facts-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.fact { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 0.1rem 0.65rem; align-content: start; min-width: 0; }
-.fact > .i { grid-row: 1 / span 2; margin-top: 2px; color: var(--n-brand-icon); }
-.fact > b, .fact > .meta { grid-column: 2; min-width: 0; }
-.fact .path { overflow-wrap: anywhere; }
+.signin { display: grid; gap: 0.7rem; }
+.signin-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.4rem; min-width: 0; }
+.signin-item { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.45rem; min-width: 0; }
+.signin-item > .i { flex: none; color: var(--n-brand-icon); }
+.signin-item .path { min-width: 0; overflow-wrap: anywhere; }
+.signin-details > summary { cursor: pointer; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.signin-details > dl { margin-top: 0.45rem; }
 dl.facts.sign-facts { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); gap: 0.2rem 1rem; font-size: var(--n-text-size-small); }
-.signin { display: grid; gap: 0.9rem; }
-.setup-say { display: flex; align-items: center; gap: 0.6rem; padding-top: 0.75rem; border-top: 1px solid var(--n-line); color: var(--n-text-faint); }
-.setup-say p { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.setup-say { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; padding-top: 0.65rem; border-top: 1px solid var(--n-line); font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.setup-say > .i { color: var(--n-text-faint); }
+.subscription-line { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
 .ggrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9rem; }
 .gcard { display: grid; gap: 0.55rem; align-content: start; min-width: 0; padding: 0.8rem 0.9rem 0.85rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
 .gcard h3 { min-width: 0; overflow-wrap: anywhere; }
 .gcard > .button { justify-self: start; }
+.gcard .follows { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
 .amarks { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
 .amark { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0 0.45rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-size: 12px; font-weight: 500; white-space: nowrap; color: var(--n-text-dim); }
 .amark.do { border-color: var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-fg); }
 .amark.own { border-style: dashed; border-color: var(--n-brand-text); color: var(--n-brand-fg); }
-.amark-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.45rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
-.amark-legend .sep { width: 0.7rem; }
+.tag.records .i { color: var(--n-text-faint); }
+.tag.own { border-style: dashed; border-color: var(--n-brand-text); }
+.amark-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.amark-legend > span:not(.amark):not(.tag) { margin-right: 0.7rem; }
 table.thin.people .person-under { display: none; }
 .alist { display: grid; border-top: 1px solid var(--n-line); }
 .alist-head { margin-bottom: -0.6rem; }
@@ -477,7 +481,7 @@ table.thin.people .person-under { display: none; }
 .arow > .i { grid-column: 1; grid-row: 1 / span 2; color: var(--n-text-faint); }
 .arow > b { grid-column: 2; grid-row: 1; font-weight: 500; }
 .arow > .what { grid-column: 2; grid-row: 2; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
-.arow > .seg, .arow > .state, .arow > .aside { grid-column: 3; grid-row: 1 / span 2; justify-self: end; }
+.arow > .seg, .arow > .state { grid-column: 3; grid-row: 1 / span 2; justify-self: end; }
 .arow > .state { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
 .arow.deep { grid-template-columns: minmax(0, 1fr) auto; padding-left: 1.85rem; }
 .arow.deep > b, .arow.deep > .what { grid-column: 1; }
@@ -499,7 +503,6 @@ table.thin.people .person-under { display: none; }
 .opt .i { width: 13px; height: 13px; margin-right: 0.3rem; stroke-width: 2.4; }
 .opt.on { border-color: var(--n-brand-text); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
 .opt.followed { cursor: default; }
-.access-under { margin-top: -0.5rem; }
 .row.actions .push { margin-left: auto; }
 @media (min-width: 641px) {
   .dialog:has(.alist) { width: min(44rem, calc(100vw - 2rem)); }
@@ -508,7 +511,6 @@ table.thin.people .person-under { display: none; }
   .ggrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 860px) {
-  .facts-row, .facts-row.two { grid-template-columns: minmax(0, 1fr); }
   dl.facts.sign-facts { grid-template-columns: max-content minmax(0, 1fr); }
   /* a person's row keeps what they add up to in sight: when they last signed in, and on a phone their groups, go under their name */
   table.thin.people th:nth-child(4), table.thin.people td:nth-child(4) { display: none; }
@@ -520,7 +522,7 @@ table.thin.people .person-under { display: none; }
   table.thin.people .person-groups { display: contents; }
   /* a line's choice goes under its words, and the three kinds of record stack */
   .arow { grid-template-columns: 18px minmax(0, 1fr); row-gap: 0.25rem; }
-  .arow > .seg, .arow > .state, .arow > .aside { grid-column: 2; grid-row: 3; justify-self: start; }
+  .arow > .seg, .arow > .state { grid-column: 2; grid-row: 3; justify-self: start; }
   .arow.deep { grid-template-columns: minmax(0, 1fr); padding-left: calc(18px + 0.75rem); }
   .arow.deep > .seg, .arow.deep > .state { grid-column: 1; }
   .seg button { min-width: 3.6rem; }

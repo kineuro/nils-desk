@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Identity page as it draws: nobody signing in, with the facts card only
-// and the command that lets people sign in; the desk keeping the people, with
-// the facts, the groups as cards, the people with what they add up to and
-// what is theirs alone; an identity provider, with the groups each follows,
-// the people who have signed in and the groups the provider's groups reach
-// them through; what a person who may only look is offered; the page while
-// it reads, when a door refuses, and with nobody in it yet; and Add a person
-// as Setup opens it.
+// The Identity page as it draws, kept terse: nobody signing in, with the
+// sign-in row and the command only; the desk keeping the people, with the row
+// of values, the signing facts under Details, the groups as cards with one
+// records tag, the people with their subject only on hover, what they add up
+// to and a one-word legend; an identity provider, with the provider's host,
+// the groups each follows, one line on who appears, and the groups the
+// provider's groups reach; what a person who may only look is offered; the
+// page while it reads, when a door refuses, and with nobody in it yet; and
+// Add a person as Setup opens it.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -26,7 +27,7 @@ const access: Access = {
   people: [
     person({ subject: "astrid", display: "Astrid Berg", groups: [2], access: { grants: [...GRANTS], detail: "sensitive" }, sessions_open: 1 }),
     person({ subject: "erik", display: "Erik Lund", groups: [1], grants: ["kvasir:see"], access: { grants: [...reviewers.grants, "kvasir:see"], detail: "quasi" }, sessions_open: 1 }),
-    person({ subject: "guest01", display: "Visiting student" }),
+    person({ subject: "guest01", display: "Visiting student", grants: ["query:see"], detail: "quasi", access: { grants: ["query:see"], detail: "quasi" } }),
   ],
 };
 
@@ -71,79 +72,89 @@ const draw = (c: Capabilities, groups: Group[] | null = [reviewers, admins], a: 
 describe("the Identity page when nobody signs in", () => {
   const html = draw(caps("off"), null, null);
 
-  it("is the facts card only, with the command that lets people sign in", () => {
+  it("is the sign-in row and the command only", () => {
     expect(html).toContain("<dt>Sign-in</dt><dd>No sign-in</dd>");
     expect(html).not.toContain("<dt>People</dt>");
-    expect(html).toContain('class="facts-row two"');
-    expect(html).toContain("Nobody signs in");
-    expect(html).toContain("Whoever opens the desk sees every page and may do everything.");
-    expect(html).toContain("Only this machine");
-    expect(html).toContain("To let people sign in, each seeing only what they are given");
-    expect(html).not.toContain("an admin");
+    expect(html).toContain("Nobody signs in: whoever opens the desk may do everything.");
+    expect(html).toMatch(/<span class="signin-item"><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>No sign-in<\/span>/u);
+    expect(html).toContain('title="Only this machine"');
+    expect(html).toContain('<span class="path">http://127.0.0.1:7203</span>');
+    expect(html).not.toContain("h sessions");
+    expect(html).not.toContain("<summary>Details</summary>");
+    expect(html).toContain("<span>Change with</span>");
     expect(html).toContain("<code>nils setup</code>");
-    expect(html).toContain("It restarts the desk and the engine.");
+    expect(html).not.toContain("To let people sign in");
+    expect(html).not.toContain("chosen in setup");
     expect(html).not.toContain("<h2>Groups</h2>");
     expect(html).not.toContain("<h2>People</h2>");
-    expect(html).not.toContain("A session lasts");
     expect(html).not.toContain('class="radio');
   });
 
-  it("warns when it answers on the network", () => {
+  it("warns when it answers on the network, and keeps the other addresses under Details", () => {
     const open = draw(caps("off", [...GRANTS], { origin: "https://desk.example.org", also_origins: ["https://nils.example.org"] }), null, null);
     expect(open).toContain('<div class="stat caution"><dt>The desk answers</dt><dd>The network</dd></div>');
-    expect(open).toContain("This network");
-    expect(open).toContain(', and also at <span class="path">https://nils.example.org</span>');
+    expect(open).toContain('title="This network"');
+    expect(open).not.toContain("The desk answers at");
+    expect(open).toContain("<summary>Details</summary>");
+    expect(open).toContain('<dt>also at</dt><dd><span class="path">https://nils.example.org</span></dd>');
   });
 });
 
 describe("the Identity page when the desk keeps the people", () => {
   const html = draw(caps("local"));
 
-  it("counts the people, the groups and who is signed in, and says how people sign in as facts", () => {
+  it("counts the people, the groups and who is signed in, and says sign-in as a row of values", () => {
     expect(html).toContain("<dt>People</dt><dd>3</dd>");
     expect(html).toContain("<dt>Groups</dt><dd>2</dd>");
     expect(html).toContain("<dt>Signed in now</dt><dd>2</dd>");
-    expect(html).toContain("The desk keeps the people");
-    expect(html).toContain(" and nowhere else");
-    expect(html).toContain("A session lasts 12 hours");
-    expect(html).toContain("2 sessions are open now.");
+    expect(html).toContain("People, groups and what each may open.");
+    expect(html).toContain("<h2>Sign-in</h2>");
+    expect(html).toMatch(/<\/svg>Local accounts<\/span>/u);
+    expect(html).toMatch(/<\/svg>12 h sessions, 2 open<\/span>/u);
+    expect(html).toContain('<details class="signin-details"><summary>Details</summary>');
     expect(html).toContain('<dt>signing key</dt><dd><span class="path">/srv/nils/desk/signing.key</span></dd>');
     expect(html).toContain("<dt>audience</dt>");
     expect(html).not.toContain("<dt>provider</dt>");
-    expect(html).toContain("To change how people sign in, or where the desk answers, run");
-    expect(html).not.toContain('class="radio');
+    expect(html).not.toContain("nowhere else");
+    expect(html).not.toContain("Signed with the desk");
+    expect(html).not.toContain("chosen in setup");
   });
 
-  it("draws the groups as cards, collapsing a group that holds every page and setting", () => {
+  it("draws the groups as cards with their marks and one records tag, and nothing more", () => {
     expect(html).toContain('<h3 class="grow">Reviewers</h3><span class="meta">1 person</span>');
-    expect(html).toContain('<span class="amark do">Assistant</span><span class="amark do">Query</span><span class="amark">Data</span><span class="amark do">Review</span>');
-    expect(html).toContain('<span class="amark do">Every page</span><span class="amark do">Every setting</span>');
-    expect(html).toContain("the desk always keeps at least one");
-    expect(html).toContain("In records: with identifying details");
-    expect(html).not.toContain("Follows ");
+    expect(html).toMatch(
+      /<span class="amark do">Assistant<\/span><span class="amark do">Query<\/span><span class="amark">Data<\/span><span class="amark do">Review<\/span><span class="tag records" title="Dates, subject codes, sex and age, scanner names and series and protocol descriptions\."><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Identifying<span class="sr-only"> records<\/span><\/span>/u,
+    );
+    expect(html).toMatch(/<span class="amark do">Every page<\/span><span class="amark do">Every setting<\/span><span class="tag records" title="[^"]*"><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Everything</u);
+    expect(html).not.toContain("the desk always keeps at least one");
+    expect(html).not.toContain("the pages a group sees");
+    expect(html).not.toContain("In records:");
+    expect(html).not.toContain("Provider groups it follows");
     expect(html).toContain("Make a group");
     expect(html).toContain('aria-label="Change Reviewers"');
   });
 
-  it("lists the people with their groups, what they add up to, what is theirs alone, and when they signed in", () => {
+  it("lists the people with their subject only on hover, their groups, what they add up to and when they were last seen", () => {
     expect(html).toContain("Add a person");
-    expect(html).toContain("<b>Erik Lund</b>");
-    expect(html).toContain('<div class="meta path">erik</div>');
+    expect(html).toContain('<b title="erik">Erik Lund</b>');
+    expect(html).not.toContain(">erik<");
+    expect(html).toContain("<th>Access</th><th>Last seen</th>");
     expect(html).toContain('<span class="tag brand">Admins</span>');
-    expect(html).toContain('<span class="tag">Reviewers</span><span class="meta">and 1 page of their own</span>');
+    expect(html).toContain('<td><span class="amarks"><span class="tag">Reviewers</span></span></td>');
+    expect(html).not.toContain("of their own");
     expect(html).toContain('<span class="amark own">Kvasir</span>');
-    expect(html).toContain('<td class="meta">signed in now</td>');
+    expect(html).toContain('<span class="amark own">Query</span><span class="tag records own"');
+    expect(html).toContain('<td class="meta">now</td>');
     expect(html).toContain('<td class="meta">never</td>');
     expect(html).toContain('aria-label="Change Erik Lund"');
-    expect(html).toContain("given to this person alone, on top of their groups");
-    expect(html).not.toContain("joined through the provider");
-    expect(html).not.toContain("followed");
-    expect(html).toContain("each group follows one of the provider");
+    expect(html).toContain('<div class="amark-legend"><span class="amark">Data</span><span>see</span><span class="amark do">Data</span><span>work</span><span class="amark own">Kvasir</span><span>own</span></div>');
+    expect(html).not.toContain("via provider");
+    expect(html).not.toContain("A person in two groups");
   });
 
   it("offers no change to a person who may only look", () => {
     const look = draw(caps("local", ["identity:see", "query:see"]));
-    expect(look).toContain("<b>Erik Lund</b>");
+    expect(look).toContain("Erik Lund</b>");
     expect(look).not.toContain("Make a group");
     expect(look).not.toContain("Add a person");
     expect(look).not.toContain(">Change</button>");
@@ -157,15 +168,16 @@ describe("the Identity page when the desk keeps the people", () => {
     expect(refused).toContain('<p class="warn">You may not see people and groups.</p>');
     expect(refused).not.toContain("Reading the");
     const empty = draw(caps("local"), [], { mode: "local", sessions_open: 0, people: [] });
-    expect(empty).toContain("No group yet.");
-    expect(empty).toContain("The desk keeps nobody yet.");
-    expect(empty).not.toContain("sees it and works there");
+    expect(empty).toContain('<p class="meta">No groups yet.</p>');
+    expect(empty).toContain('<p class="meta">Nobody yet.</p>');
+    expect(empty).not.toContain("amark-legend");
   });
 
-  it("says what a change came to in the section it changed", () => {
-    const said = renderToStaticMarkup(<IdentityBody caps={caps("local")} groups={[reviewers]} access={access} why={null} said={{ where: "groups", words: "Guests is made." }} now={NOW} onOpen={none} />);
-    expect(said.indexOf("Guests is made.")).toBeGreaterThan(said.indexOf("<h2>Groups</h2>"));
-    expect(said.indexOf("Guests is made.")).toBeLessThan(said.indexOf("<h2>People</h2>"));
+  it("says a change in a word, in the section it changed", () => {
+    const said = renderToStaticMarkup(<IdentityBody caps={caps("local")} groups={[reviewers]} access={access} why={null} said={{ where: "groups", words: "Saved: Guests" }} now={NOW} onOpen={none} />);
+    expect(said).toContain('<p class="ok-words">Saved: Guests</p>');
+    expect(said.indexOf("Saved: Guests")).toBeGreaterThan(said.indexOf("<h2>Groups</h2>"));
+    expect(said.indexOf("Saved: Guests")).toBeLessThan(said.indexOf("<h2>People</h2>"));
   });
 });
 
@@ -182,31 +194,38 @@ describe("the Identity page with an identity provider", () => {
   };
   const html = draw(caps("oidc"), groups, signedIn);
 
-  it("names the provider and the groups each group follows, and lists who has signed in", () => {
+  it("names the provider's host, folds its facts under Details, and says once who appears", () => {
     expect(html).toContain("<dt>Sign-in</dt><dd>Single sign-on</dd>");
-    expect(html).toContain("An identity provider");
-    expect(html).toContain("The provider says who each person is, and the desk signs for the parts.");
+    expect(html).toMatch(/<\/svg>Single sign-on<span class="path">id\.example\.org<\/span><\/span>/u);
+    expect(html).toMatch(/<\/svg>12 h sessions, 1 open<\/span>/u);
     expect(html).toContain('<dt>provider</dt><dd><span class="path">https://id.example.org/o/nils/</span></dd>');
     expect(html).toContain("<dt>client</dt>");
     expect(html).toContain("<dt>groups claim</dt>");
     expect(html).not.toContain("<dt>signing key</dt>");
-    expect(html).toContain('Follows <span class="path">lab-review</span>');
-    expect(html).toContain("Follows no group at the provider yet.");
-    expect(html).toContain("those who have signed in");
+    expect(html).not.toContain("The provider says who");
+    expect(html).toContain('<p class="meta">People appear once they have signed in.</p>');
+    expect(html).not.toContain("those who have signed in");
     expect(html).not.toContain("Add a person");
     expect(html).toContain('aria-label="Change Erik Lund"');
-    expect(html).toContain("a person can also be put in a group here");
+    expect(html).toContain('<b title="erik@id.example.org">Erik Lund</b>');
+    expect(html).not.toContain(">erik@id.example.org<");
+  });
+
+  it("shows the provider groups a group follows only when it follows some", () => {
+    expect(html.split('title="Provider groups it follows"')).toHaveLength(2);
+    expect(html).toContain('<span class="path">lab-review</span>');
+    expect(html).not.toContain("Follows no group");
   });
 
   it("shows the groups the provider's groups reach beside the ones a person was put in, and counts them as groups", () => {
     expect(html).toContain('<h3 class="grow">Reviewers</h3><span class="meta">2 people</span>');
     expect(html).toMatch(
-      /<td><span class="amarks"><span class="tag followed"><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Reviewers<span class="sr-only">, through the provider&#x27;s groups<\/span><\/span><span class="meta">and 1 page of their own<\/span><\/span><\/td>/u,
+      /<td><span class="amarks"><span class="tag followed" title="via provider"><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Reviewers<span class="sr-only">, through the provider&#x27;s groups<\/span><\/span><\/span><\/td>/u,
     );
     expect(html).toContain('<td><span class="amarks"><span class="tag">Reviewers</span></span></td>');
     expect(html).toContain('<span class="amark own">Kvasir</span>');
     expect(html).not.toContain('<span class="amark do own">Query</span>');
-    expect(html).toContain("joined through the provider&#x27;s groups");
+    expect(html).toMatch(/<\/svg>Reviewers<\/span><span>via provider<\/span><\/div>/u);
   });
 });
 
