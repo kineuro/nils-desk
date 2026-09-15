@@ -1,21 +1,55 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // What the Kvasir page's cards share (record 25): the square that marks where
-// a model runs, the menu of a card's quieter acts, and the card of a model
-// Kvasir holds on this machine's llama.cpp, a server of yours or a provider,
-// with its check, its key and its removal for a person with Kvasir: Work.
+// a model runs, a card's one tag with its detail as a hover title, how many
+// stations it answers with their names as a hover title, the menu of a card's
+// quieter acts, and the card of a model Kvasir holds on this machine's
+// llama.cpp, a server of yours or a provider: its name, where it runs, its tag
+// and its stations, with its check, its key and its removal along the bottom
+// for a person with Kvasir: Work.
 
 import { useEffect, useRef } from "react";
 import type React from "react";
 import { Icon } from "../ui/Icon";
-import { Health } from "./common";
 import type { Mark } from "./gateway";
 import type { ModelCard } from "./models";
 
-/** Where a model runs, as a square beside its name. */
+/** Where a model runs, as a square. */
 export function MarkSquare({ mark }: { mark: Mark }) {
   return (
     <span className={mark.tone === "neutral" ? "sq" : `sq ${mark.tone}`}>
       <Icon name={mark.icon} />
+    </span>
+  );
+}
+
+/** Where a model runs, in a few words beside its square, with the rest of what is known of it as a hover title. */
+export function Where({ mark, words, title }: { mark: Mark; words: string; title?: string | null }) {
+  return (
+    <div className="where">
+      <MarkSquare mark={mark} />
+      <span className="meta" title={title ?? undefined}>
+        {words}
+      </span>
+    </div>
+  );
+}
+
+/** A card's one tag: a state with its dot, where prompts go without one, and its detail as a hover title. */
+export function StateTag({ tag }: { tag: { tone: "ok" | "caution" | "blocked" | "neutral" | "brand"; words: string; dot: boolean; title: string | null } }) {
+  const tone = tag.tone === "neutral" ? "" : ` ${tag.tone}`;
+  return (
+    <span className={`tag${tone}`} title={tag.title ?? undefined}>
+      {tag.dot && <span className={`dot${tone}`} />}
+      {tag.words}
+    </span>
+  );
+}
+
+/** How many stations a model answers, with their names as a hover title. */
+export function Answers({ answers }: { answers: { words: string; title: string | null } }) {
+  return (
+    <span className="meta" title={answers.title ?? undefined}>
+      {answers.words}
     </span>
   );
 }
@@ -53,41 +87,21 @@ export function MoreMenu({ label, children }: { label: string; children: React.R
   );
 }
 
-/** A card's tags: a state with its dot, where prompts go without one. */
-export function CardTags({ tags, aside }: { tags: { tone: "ok" | "caution" | "blocked" | "neutral" | "brand"; words: string; dot: boolean }[]; aside?: string | null }) {
-  return (
-    <div className="row">
-      {tags.map((t) =>
-        t.dot ? (
-          <Health key={t.words} tone={t.tone} words={t.words} />
-        ) : (
-          <span key={t.words} className={t.tone === "neutral" ? "tag" : `tag ${t.tone}`}>
-            {t.words}
-          </span>
-        ),
-      )}
-      {aside && <span className="meta">{aside}</span>}
-    </div>
-  );
-}
-
 /** A model Kvasir holds. `work` gives its backend's first model the check or the key, and the removal. */
 export function BackendCard(props: { card: ModelCard; work: boolean; busy?: boolean; onCheck?: () => void; onKey?: () => void; onForget?: () => void; onRemove?: () => void }) {
   const { card: c, work, busy = false, onCheck, onKey, onForget, onRemove } = props;
   return (
     <div className="mcard">
-      <div className="name">
-        <MarkSquare mark={c.mark} />
-        <span className="path" title={c.address ?? c.name}>
-          {c.name}
-        </span>
+      <span className="card-name path" title={c.name}>
+        {c.name}
+      </span>
+      <Where mark={c.mark} words={c.where} title={c.facts} />
+      <div className="row">
+        <StateTag tag={c.tag} />
+        {c.answers && <Answers answers={c.answers} />}
       </div>
-      <span className="meta">{c.meta}</span>
-      <CardTags tags={c.tags} aside={c.aside} />
-      {c.detail && <span className="meta">{c.detail}</span>}
-      {c.answers && <span className="meta">{c.answers}</span>}
       {work && c.first && (
-        <div className="row">
+        <div className="row acts">
           {c.kind === "provider" ? (
             <button type="button" className="button secondary small" disabled={busy} onClick={onKey}>
               {c.backend.credential === true ? "Replace key" : "Store its key"}

@@ -17,7 +17,6 @@ export function ClosedStations({ provider, purposes, onChange }: { provider: Bac
       <Icon name="lock" />
       <div className="note-body">
         <p className="note-lead">{closedLead(provider, purposes)}</p>
-        <p className="note-detail">A station with no row in the table stays in your systems, so a provider answers only the stations moved to it.</p>
         <ul className="closed-list">
           {lines.map((l) => (
             <li key={l.purpose.purpose}>

@@ -25,7 +25,8 @@ export interface Install {
   services: { part: string; unit: string; watcher: string; running: boolean }[];
   unfinished: boolean;
   release: { installed: string | null; newest: string | null; newer: string | null; error: string | null; command: string };
-  machine: { card: { name: string; memory_gb: number } | null; advice: string[] };
+  /** The card setup found and what the machine can serve; `cards` lists every card, where the supervisor names them all. */
+  machine: { card: { name: string; memory_gb: number } | null; cards?: { name: string; memory_gb: number }[]; advice: string[] };
 }
 
 export interface Run {

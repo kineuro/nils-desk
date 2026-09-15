@@ -2,7 +2,8 @@
 // The Identity page's doors and words (Wave 4c section 5, Wave 5 section
 // 10.5, record 25): how people sign in, the groups an admin names and the
 // pages each gives, the people and what their groups and their own grants
-// add up to, when each last signed in, and where the desk answers.
+// add up to, when each last signed in, and where the desk answers. The words
+// are kept short; the whole of a fact goes where a person hovers or opens it.
 
 import { DoorError, door } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -106,9 +107,9 @@ export interface PageLine {
   settings: boolean;
   /** Its levels, lowest first. */
   levels: readonly Level[];
-  /** What seeing it opens, or using it for the assistant. */
+  /** What seeing it opens, or using it for the assistant, in a few words. */
   see: string;
-  /** What working there adds. */
+  /** What working there adds, in a few words. */
   work?: string;
 }
 
@@ -116,39 +117,38 @@ const SEE_WORK: readonly Level[] = ["hidden", "see", "work"];
 
 /** A line for each page, in the order the form and the profile draw them. */
 export const PAGE_LINES: readonly PageLine[] = [
-  { id: "assistant", title: "Assistant", mark: "Assistant", named: "Assistant", settings: false, levels: ["hidden", "use"], see: "Talk with the assistant, in conversations of their own" },
-  { id: "query", title: "Query", mark: "Query", named: "Query", settings: false, levels: SEE_WORK, see: "Ask, run and chart questions, and open the cards people share", work: "keep cards and selections, and queue ask jobs" },
-  { id: "data", title: "Data", mark: "Data", named: "Data", settings: false, levels: SEE_WORK, see: "See sources and batches", work: "bring DICOM in, start and cancel digests" },
-  { id: "review", title: "Review", mark: "Review", named: "Review", settings: false, levels: SEE_WORK, see: "See what waits for a person", work: "decide, and tune the rules" },
-  { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "See the releases made", work: "make a release and hand it over" },
-  { id: "pipelines", title: "Pipelines", mark: "Pipelines", named: "Pipelines", settings: false, levels: SEE_WORK, see: "See runs and their results", work: "start and cancel runs" },
-  { id: "install", title: "The install", mark: "Install", named: "the install", settings: true, levels: SEE_WORK, see: "See the overview, the parts, the engine, the desk and setup", work: "restart parts, update them and choose host folders" },
-  { id: "kvasir", title: "Kvasir", mark: "Kvasir", named: "Kvasir", settings: true, levels: SEE_WORK, see: "See where stations go, and add a ChatGPT subscription of their own", work: "change models, downloads, keys and stations" },
-  { id: "assistant-settings", title: "The assistant's settings", mark: "Assistant settings", named: "the assistant's settings", settings: true, levels: SEE_WORK, see: "See what the assistant may reach, and its memory", work: "change the install's instructions and everyone's standing grants" },
-  { id: "places", title: "Places", mark: "Places", named: "Places", settings: true, levels: SEE_WORK, see: "See where scans come from, and where releases go", work: "add places and change them" },
-  { id: "database", title: "Database", mark: "Database", named: "Database", settings: true, levels: SEE_WORK, see: "See the archives, their schedule and the registry's calendar", work: "change the schedule and the registry's settings, back up and check" },
-  { id: "identity", title: "Identity", mark: "Identity", named: "Identity", settings: true, levels: SEE_WORK, see: "See who signs in, the groups, and what each may do", work: "add people, make groups and change them" },
-  { id: "audit", title: "Audit", mark: "Audit", named: "Audit", settings: true, levels: ["hidden", "see"], see: "See who did what, and when" },
+  { id: "assistant", title: "Assistant", mark: "Assistant", named: "Assistant", settings: false, levels: ["hidden", "use"], see: "Chat with the assistant" },
+  { id: "query", title: "Query", mark: "Query", named: "Query", settings: false, levels: SEE_WORK, see: "Ask, run and chart questions", work: "keep cards, queue ask jobs" },
+  { id: "data", title: "Data", mark: "Data", named: "Data", settings: false, levels: SEE_WORK, see: "Sources and batches", work: "bring DICOM in, run digests" },
+  { id: "review", title: "Review", mark: "Review", named: "Review", settings: false, levels: SEE_WORK, see: "What waits for a person", work: "decide, tune rules" },
+  { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "Releases made", work: "make and hand over" },
+  { id: "pipelines", title: "Pipelines", mark: "Pipelines", named: "Pipelines", settings: false, levels: SEE_WORK, see: "Runs and results", work: "start and cancel runs" },
+  { id: "install", title: "The install", mark: "Install", named: "the install", settings: true, levels: SEE_WORK, see: "Overview, parts, setup", work: "restart, update" },
+  { id: "kvasir", title: "Kvasir", mark: "Kvasir", named: "Kvasir", settings: true, levels: SEE_WORK, see: "Stations and models", work: "models, keys, stations" },
+  { id: "assistant-settings", title: "The assistant's settings", mark: "Assistant settings", named: "the assistant's settings", settings: true, levels: SEE_WORK, see: "Reach and memory", work: "instructions, standing grants" },
+  { id: "places", title: "Places", mark: "Places", named: "Places", settings: true, levels: SEE_WORK, see: "Scan and export places", work: "add, change" },
+  { id: "database", title: "Database", mark: "Database", named: "Database", settings: true, levels: SEE_WORK, see: "Archives and schedule", work: "back up, check" },
+  { id: "identity", title: "Identity", mark: "Identity", named: "Identity", settings: true, levels: SEE_WORK, see: "People and groups", work: "add, change" },
+  { id: "audit", title: "Audit", mark: "Audit", named: "Audit", settings: true, levels: ["hidden", "see"], see: "Who did what, when" },
 ];
 
 export const LEVEL_WORDS: Record<Level, string> = { hidden: "Hidden", see: "See", work: "Work", use: "Use" };
 
-/** How much of a record a person sees, in the same words wherever it is shown: identifying details are the engine's quasi-identifying class, and everything adds the sensitive class. */
-export const RECORD_WORDS: Record<Detail, { choice: string; says: string; sees: string }> = {
-  plain: { choice: "Without identifying details", says: "No dates, subject codes, sex or age, scanner names or series descriptions.", sees: "no dates, subject codes, sex or age, scanner names or series descriptions" },
-  quasi: { choice: "With identifying details", says: "Dates, subject codes, sex and age, scanner names and series and protocol descriptions.", sees: "dates, subject codes, sex and age, scanner names and series and protocol descriptions" },
-  sensitive: { choice: "Everything", says: "Identifying details, sensitive events, raw identifiers and burned-in annotation.", sees: "identifying details, sensitive events, raw identifiers and burned-in annotation" },
+/** How much of a record a person sees: the choice in the form, a short tag elsewhere, the whole of it on hover, and a phrase for the form's sentence. Identifying details are the engine's quasi-identifying class, and everything adds the sensitive class. */
+export const RECORD_WORDS: Record<Detail, { choice: string; short: string; says: string; phrase: string }> = {
+  plain: { choice: "Without identifying details", short: "Non-identifying", says: "No dates, subject codes, sex or age, scanner names or series descriptions.", phrase: "without identifying details" },
+  quasi: { choice: "With identifying details", short: "Identifying", says: "Dates, subject codes, sex and age, scanner names and series and protocol descriptions.", phrase: "with identifying details" },
+  sensitive: { choice: "Everything", short: "Everything", says: "Identifying details, sensitive events, raw identifiers and burned-in annotation.", phrase: "with every detail" },
 };
 
 /** A page's words in the form: what seeing it opens, then what work adds. */
 export function lineWords(line: PageLine): string {
-  return line.work ? `${line.see}. Work: ${line.work}.` : `${line.see}.`;
+  return line.work ? `${line.see} · work: ${line.work}` : line.see;
 }
 
 /** A page's words on a person's own profile, for the level they hold. */
 export function yourWords(line: PageLine, level: Level): string {
-  const see = line.see.replace("of their own", "of your own");
-  return level === "work" && line.work ? `${see}, ${line.work}.` : `${see}.`;
+  return level === "work" && line.work ? `${line.see} · ${line.work}` : line.see;
 }
 
 function rank(line: PageLine, level: Level): number {
@@ -323,12 +323,6 @@ export function countWords(n: number, one: string, many: string): string {
   return n === 1 ? `1 ${one}` : `${n} ${many}`;
 }
 
-/** Beside a person's groups: what an admin gave them alone. */
-export function ownWords(pages: number, detail: boolean): string | null {
-  const items = [...(pages > 0 ? [countWords(pages, "page", "pages")] : []), ...(detail ? ["more of records"] : [])];
-  return items.length === 0 ? null : `and ${items.join(" and ")} of their own`;
-}
-
 export interface Summary {
   kind: "person" | "group";
   /** A person's name shown or username, or a group's name; empty while it is typed. */
@@ -336,69 +330,18 @@ export interface Summary {
   /** What it adds up to. */
   grants: readonly string[];
   detail: Detail;
-  /** A person's groups, and what is theirs alone. */
-  groups?: readonly Group[];
-  own?: ReadonlySet<PageId>;
-  ownDetail?: boolean;
-  /** How many people a group has, and under oidc the provider's groups it follows. */
-  members?: number;
-  follows?: readonly string[] | null;
 }
 
-/** The note under the form: what the person or the group will see and where they may work, in plain words, and where it comes from. */
-export function summaryWords(s: Summary): { lead: string; detail: string[] } {
+/** The sentence under the form: the pages the person, or the group's people, see, where they work, and how much of a record. */
+export function summaryWords(s: Summary): string {
   const person = s.kind === "person";
   const name = s.name.trim();
   const who = person ? name || "This person" : `People in ${name || "this group"}`;
-  const mid = person ? name || "this person" : `people in ${name || "this group"}`;
-  const sees = person ? "sees" : "see";
-  const shown = (settings: boolean) => PAGE_LINES.filter((l) => l.settings === settings && levelOf(s.grants, l) !== "hidden").map((l) => l.named);
-  const pages = shown(false);
-  const settings = shown(true);
-  // a person holding no grant is shown only that they hold none, while a group giving nothing still leaves its people what else they hold
-  const lead =
-    person && s.grants.length === 0
-      ? `${who} will see nothing until given a page.`
-      : pages.length === 0 && settings.length === 0
-        ? `${who} will see Home only.`
-        : `${who} will see ${andWords(["Home", ...pages])}${settings.length > 0 ? `, and ${andWords(settings)} under Settings` : ""}.`;
-
-  const works = PAGE_LINES.filter((l) => levelOf(s.grants, l) === "work").map((l) => l.named);
-  const doing = [...(levelOf(s.grants, PAGE_LINES[0]) === "use" ? ["use the assistant"] : []), ...(works.length > 0 ? [`work in ${andWords(works)}`] : [])];
-  const work = doing.length > 0 ? `${who} may ${doing.join(", and ")}.` : `${who} may look, but work nowhere.`;
-  const records = `In records, ${mid} ${sees} ${RECORD_WORDS[s.detail].sees}.`;
-  const detail = [`${work} ${records}`];
-
-  if (person) {
-    const groups = s.groups ?? [];
-    const alone = name ? `${name}'s alone` : "theirs alone";
-    if (groups.length === 0) {
-      detail.push(`${who} is in no group, so all of it is ${alone}.`);
-    } else {
-      const names = andWords(groups.map((g) => g.name));
-      const gives = groups.length === 1 ? "gives" : "give";
-      const ownLines = PAGE_LINES.filter((l) => s.own?.has(l.id)).map((l) => l.named);
-      const mine = [...ownLines, ...(s.ownDetail ? [`what ${mid} ${sees} in records`] : [])];
-      const is = mine.length === 1 ? "is" : "are";
-      const first =
-        mine.length === 0
-          ? `${names} ${gives} all of it.`
-          : ownLines.length > 0 && pages.length + settings.length === ownLines.length
-            ? `${names} ${gives} none of its pages, so ${andWords(mine)} ${is} ${alone}.`
-            : `${names} ${gives} all of it but ${andWords(mine)}, which ${is} ${alone}.`;
-      const follow = groups.length === 1 ? `When ${names} changes, ${mid} changes with it.` : `When one of them changes, ${mid} changes with it.`;
-      detail.push(`${first} ${follow} A page a group gives cannot go lower here; take the person out of the group instead.`);
-    }
-  } else {
-    const n = s.members ?? 0;
-    detail.push(
-      n === 0
-        ? "Nobody is in it yet. A person put in it gets all of this, and what their other groups give."
-        : `${countWords(n, "person is", "people are")} in it now, and each gets all of this from their next click, and what their other groups give.`,
-    );
-    if (s.follows) detail.push(s.follows.length > 0 ? `Whoever is in ${andWords([...s.follows])} at the provider joins it when they sign in.` : "It follows no group at the provider yet, so nobody joins it by signing in.");
-  }
-  return { lead, detail };
+  const [sees, works] = person ? ["sees", "works"] : ["see", "work"];
+  const open = PAGE_LINES.filter((l) => levelOf(s.grants, l) !== "hidden").map((l) => l.named);
+  if (open.length === 0) return `${who} ${sees} no page yet.`;
+  const worked = PAGE_LINES.filter((l) => levelOf(s.grants, l) === "work").map((l) => l.named);
+  return `${who} ${sees} ${andWords(open)}${worked.length > 0 ? `, ${works} in ${andWords(worked)}` : ""}, ${RECORD_WORDS[s.detail].phrase}.`;
 }
 
 /** The provider's groups a group follows, as typed: split at commas and new lines, each once. */
@@ -432,28 +375,28 @@ function saidOf(e: DoorError): string | null {
   return `${said[0].toUpperCase()}${said.slice(1)}${/[.!?]$/u.test(said) ? "" : "."}`;
 }
 
-/** A door's refusal of a change to people or groups, in plain words. */
+/** A door's refusal of a change to people or groups, in a few plain words. */
 export function refusalWords(e: unknown, what: "person" | "group"): string {
   if (e instanceof DoorError) {
     const body = (e.body ?? {}) as { error?: unknown };
     const raw = typeof body.error === "string" ? body.error : "";
-    if (e.status === 401) return "Your session has ended. Sign in at the desk again, then make the change once more.";
-    if (e.status === 409) return "That would leave nobody who may change people and groups, so the desk kept everything as it was.";
-    if (e.status === 404) return what === "person" ? "The desk no longer knows this person. Open the page again." : "The desk no longer knows this group. Open the page again.";
+    if (e.status === 401) return "Session ended. Sign in again.";
+    if (e.status === 409) return "Refused: nobody would be left who may change people and groups.";
+    if (e.status === 404) return what === "person" ? "This person is gone. Reload the page." : "This group is gone. Reload the page.";
     if (e.status === 403) return "You may not change people and groups.";
-    if (e.status === 400 && ((/unknown/iu.test(raw) && /grant|group/iu.test(raw)) || GRANT_WORD.test(raw))) return "The desk does not know a group or a page chosen here. Open the page again and choose once more.";
+    if (e.status === 400 && ((/unknown/iu.test(raw) && /grant|group/iu.test(raw)) || GRANT_WORD.test(raw))) return "Unknown group or page. Reload the page.";
     return saidOf(e) ?? `The desk answered ${e.status}.`;
   }
   return e instanceof Error ? e.message : String(e);
 }
 
-/** Why the people and groups could not be read, in plain words. */
+/** Why the people and groups could not be read, in a few plain words. */
 export function readWords(e: unknown): string {
   if (e instanceof DoorError) {
-    if (e.status === 401) return "Your session has ended. Sign in at the desk again to see people and groups.";
+    if (e.status === 401) return "Session ended. Sign in again.";
     if (e.status === 403) return "You may not see people and groups.";
-    if (e.status === 404) return "The desk keeps no people or groups now; it may have been set up again so that nobody signs in. Open the page again.";
-    return saidOf(e) ?? `The people and groups could not be read: the desk answered ${e.status}.`;
+    if (e.status === 404) return "No people or groups here. Reload the page.";
+    return saidOf(e) ?? `Could not read people and groups: the desk answered ${e.status}.`;
   }
   return e instanceof Error ? e.message : String(e);
 }
@@ -474,22 +417,34 @@ export function lastSeenWords(iso: string | null, now: number): string {
   return new Date(at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
-/** When a person last signed in, or that they are signed in now. */
+/** When a person last signed in, or now while a session of theirs is open. */
 export function seenWords(p: Pick<Person, "last_seen_at" | "sessions_open">, now: number): string {
-  return p.sessions_open > 0 ? "signed in now" : lastSeenWords(p.last_seen_at, now);
+  return p.sessions_open > 0 ? "now" : lastSeenWords(p.last_seen_at, now);
 }
 
-/** How many sessions are open, as a sentence. */
-export function openWords(n: number): string {
-  return n === 0 ? "No session is open now." : n === 1 ? "1 session is open now." : `${n} sessions are open now.`;
+/** How long a session lasts, and how many are open when that is known. */
+export function sessionWords(hours: number, open: number | null): string {
+  return open === null ? `${hours} h sessions` : `${hours} h sessions, ${open} open`;
 }
 
-/** How people sign in, the three ways a desk can be set up. */
+/** How people sign in, as one value. */
+export const SIGN_IN: Record<"off" | "local" | "oidc", string> = { off: "No sign-in", local: "Local accounts", oidc: "Single sign-on" };
+
+/** How people sign in, the three ways a desk can be set up, as Setup words them. */
 export const MODES: { id: "off" | "local" | "oidc"; title: string; words: string }[] = [
   { id: "off", title: "Nobody signs in", words: "One person on this machine. Whoever opens the desk sees every page and may do everything." },
   { id: "local", title: "The desk keeps the people", words: "Usernames and passwords held by the desk. The engine trusts what the desk signs." },
   { id: "oidc", title: "An identity provider", words: "Single sign-on through your provider. The desk's groups follow its groups, and the parts trust what the desk signs." },
 ];
+
+/** The host of an address, or the address itself when it is not one. */
+export function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
 
 const LOOPBACK = /^[a-z]+:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i;
 
@@ -514,7 +469,7 @@ export function accessStats(caps: Capabilities, groups: readonly Group[] | null,
   const origin = caps.desk.settings?.origin ?? "";
   const local = origin === "" || reachWords(origin).local;
   const open = mode === "off" && !local ? "caution" : undefined;
-  const out: Stat[] = [{ label: "Sign-in", value: mode === "local" ? "Local accounts" : mode === "oidc" ? "Single sign-on" : "No sign-in", tone: open }];
+  const out: Stat[] = [{ label: "Sign-in", value: SIGN_IN[mode], tone: open }];
   if (mode !== "off") {
     if (access) out.push({ label: "People", value: String(access.people.length) });
     if (groups) out.push({ label: "Groups", value: String(groups.length) });

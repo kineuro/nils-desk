@@ -13,14 +13,14 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Command } from "../ui/Command";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
-import { CardTags, MarkSquare, MoreMenu } from "./cards";
+import { Answers, MoreMenu, StateTag, Where } from "./cards";
 import { Acted, messageOf, useActing } from "./common";
 import { machineWords, MARKS, plainly, type Admission } from "./gateway";
 import { kvasir, localRefusalOf, type LocalModel, type LocalRun, type LocalServe, type LocalStatus } from "./kvasir";
 import {
   actionsOf,
   barOf,
-  localMeta,
+  localFacts,
   localName,
   localTag,
   locationRefusal,
@@ -201,7 +201,7 @@ export function useLocalModels(props: { enabled: boolean; onRun?: () => void; on
           onDone={(s) => {
             setLocating(false);
             take(s);
-            say(`${movedWords(s.location)} ${STAY_NOTE}`);
+            say(movedWords(s.location));
           }}
         />
       )}
@@ -275,14 +275,16 @@ export function useLocalModels(props: { enabled: boolean; onRun?: () => void; on
       say(null);
       setTokening(true);
     },
+    /** A Hugging Face token set elsewhere, such as in Add a model. */
+    tokenSet: (token: boolean) => take((s) => ({ ...s, token })),
   };
 }
 
 /**
- * One model Kvasir downloads, as a card: its name, where it runs, how far its
- * download is and its state; where Kvasir starts it on llama.cpp, how it runs,
- * whether Kvasir admitted it and the stations it answers; its files and, once
- * downloaded, the commands a model server runs it with, folded under the card.
+ * One model Kvasir downloads, as a card: its name, this machine with what is
+ * known of it as a hover title, its bar while it downloads, one tag for how it
+ * runs or where its download stands, and how many stations it answers once
+ * started; its files, its commands and what went wrong folded under the card.
  */
 export function LocalModelCard(props: {
   model: LocalModel;
@@ -292,7 +294,7 @@ export function LocalModelCard(props: {
   /** Whether Kvasir admitted the model, where it serves. */
   admission?: Admission | null;
   /** The stations llama.cpp's model answers. */
-  answers?: string | null;
+  answers?: { words: string; title: string | null } | null;
   onPause: () => void;
   onResume: () => void;
   onRemove: () => void;
@@ -304,17 +306,12 @@ export function LocalModelCard(props: {
   const { model: m, busy = false, runtime = false, admission = null, answers = null, onPause, onResume, onRemove, onStart, onStop, onCheck } = props;
   const name = localName(m);
   const bar = barOf(m);
-  const run = m.run ?? null;
-  const tags = [{ ...localTag(m), dot: true }, ...(admission && admission.tone !== "ok" ? [{ tone: admission.tone, words: admission.words, dot: true }] : [])];
   return (
     <div className="mcard">
-      <div className="name">
-        <MarkSquare mark={MARKS.runtime} />
-        <span className="path" title={m.repo}>
-          {name}
-        </span>
-      </div>
-      <span className="meta">{localMeta(m)}</span>
+      <span className="card-name path" title={m.repo}>
+        {name}
+      </span>
+      <Where mark={MARKS.runtime} words="This machine" title={localFacts(m)} />
       {bar !== null && (
         <div className="local-progress">
           <span
@@ -329,15 +326,12 @@ export function LocalModelCard(props: {
           </span>
         </div>
       )}
-      <CardTags tags={tags} aside={admission?.tone === "ok" ? admission.words : null} />
-      {m.state !== "done" && <span className="meta num">{progressWords(m)}</span>}
-      {admission?.detail && <span className="meta">{admission.detail}</span>}
-      {m.state === "failed" && m.error && <p className="warn">{sentence(m.error)}</p>}
-      {run?.state === "starting" && <span className="meta">{`Loading into llama.cpp as ${run.model}.`}</span>}
-      {run?.state === "failed" && <RunFailure run={run} />}
-      {answers && started(m) && <span className="meta">{answers}</span>}
-      <Files model={m} runtime={runtime} />
       <div className="row">
+        <StateTag tag={{ ...localTag(m, admission), dot: true }} />
+        {started(m) ? answers && <Answers answers={answers} /> : m.state !== "done" && <span className="meta num">{progressWords(m)}</span>}
+      </div>
+      <Files model={m} runtime={runtime} />
+      <div className="row acts">
         {runActionsOf(m).map((a) =>
           a === "start" ? (
             <button key={a} type="button" className="button small" disabled={busy || !onStart} onClick={onStart}>
@@ -357,7 +351,7 @@ export function LocalModelCard(props: {
             </button>
           ))}
         <MoreMenu label={`More for ${name}`}>
-          {onCheck && run?.state === "serving" && (
+          {onCheck && m.run?.state === "serving" && (
             <button type="button" disabled={busy} onClick={onCheck}>
               Check
             </button>
@@ -387,15 +381,17 @@ function RunFailure({ run }: { run: LocalRun }) {
   );
 }
 
-/** A model's revision and path and, once downloaded, the commands a model server runs it with, folded under its card. */
+/** What went wrong, a model's revision and path and, once downloaded, the commands a model server runs it with, folded under its card. */
 function Files({ model: m, runtime }: { model: LocalModel; runtime: boolean }) {
   const serve = m.state === "done" ? m.serve : [];
   const startable = m.startable === true;
-  const summary = serve.length === 0 ? "Its files" : startable ? "Or run it yourself" : "Run it on a model server";
+  const summary = serve.length === 0 ? "Files" : startable ? "Or run it yourself" : "Run it on a model server";
   return (
     <details className="card-files">
       <summary>{summary}</summary>
       <div className="serve">
+        {m.state === "failed" && m.error && <p className="warn">{sentence(m.error)}</p>}
+        {m.run?.state === "failed" && <RunFailure run={m.run} />}
         <span className="meta">{revisionWords(m)}</span>
         <span className="meta path">{m.path}</span>
         {serve.length > 0 && <ServeList serve={serve} />}
@@ -422,23 +418,23 @@ function ServeList({ serve }: { serve: LocalServe[] }) {
   );
 }
 
-/** The line under the models: the machine's card and llama.cpp, where downloads go and the room there, and the Hugging Face token. */
+/** The line under the models: the machine's cards and llama.cpp, where downloads go and the room there, and the Hugging Face token. */
 export function MachineLine({ install, status, onLocate, onToken }: { install: Install | null; status: LocalStatus; onLocate: () => void; onToken: () => void }) {
-  const card = machineWords(install).card;
+  const cards = machineWords(install).cards;
   const runtime = status.runtime ?? null;
   return (
     <div className="mline">
-      {(card || runtime) && (
+      {(cards || runtime) && (
         <span>
           <Icon name="chip" />
-          <span>{[card, runtime ? runtimeLine(runtime) : null].filter(Boolean).join(" · ")}</span>
+          <span>{[cards, runtime ? runtimeLine(runtime) : null].filter(Boolean).join(" · ")}</span>
           {runtime && <span className={runtime.reachable ? "ok-words" : "warn"}>{runtimeTag(runtime).words}</span>}
         </span>
       )}
       <span>
         <Icon name="disk" />
-        <span>
-          Downloads go to <span className="path">{status.location}</span>, {roomLine(status.free_bytes)} ·
+        <span title="Where downloads go">
+          <span className="path">{status.location}</span> · {roomLine(status.free_bytes)} ·
         </span>
         <button type="button" className="link-button" onClick={onLocate}>
           Change
@@ -585,7 +581,7 @@ function LocationDialog({ current, onClose, onDone }: { current: string; onClose
             }}
           />
         </div>
-        <span className="meta">An absolute path on the machine Kvasir runs on, such as /srv/models. Kvasir creates the folder where it is missing, and checks that it can write there.</span>
+        <span className="meta">An absolute path, such as /srv/models; made where missing.</span>
       </div>
       <div className="note">
         <Icon name="info" />
