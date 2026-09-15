@@ -1,66 +1,43 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Kvasir page (Wave 4c sections 8.3 to 8.6, record 23), as the chosen
-// design draws it: Kvasir's health, the machine's card and the providers
-// with their keys, every model with where its prompts go, its admission and
-// the stations it answers, where each station goes, and the install's
-// ChatGPT subscription. An admin adds a model through a test, checks one
-// with the admission suite and removes one, and downloads models from the
-// Hugging Face Hub under Local models, where a GGUF model starts on llama.cpp
-// if the install runs it for Kvasir (record 24). A station moves to another
-// backend at once, recorded with who moved it; rows of the archive leave only
-// with an admin's written reason, and identifiers never. A provider just added
-// names the stations it does not answer yet, each to move from there.
+// The Kvasir page (Wave 4c sections 8.3 to 8.6, records 23 to 25), as the
+// chosen design draws it. Where each station goes leads: a line a station,
+// from its name and what it carries to the box of the model it goes to, where
+// that runs and whether its prompts leave; for a person with Kvasir: Work the
+// box opens the drawer that moves it, and a provider just added names the
+// stations it does not answer yet. Under it the models as cards: those Kvasir
+// holds, checked, keyed and removed with Kvasir: Work; the models Kvasir
+// downloads, with their progress and what may be done with them; and the
+// person's own ChatGPT subscription where they may use the assistant and see
+// Kvasir, or the install's where nobody signs in. One Add a model offers what
+// the person may add, and one line holds the machine, where downloads go and
+// the Hugging Face token.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
-import { holds } from "../deployment";
-import { href } from "../routes";
+import { may } from "../grants";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { AddModel } from "./AddModel";
+import { BackendCard } from "./cards";
 import { ClosedStations } from "./ClosedStations";
-import { Acted, Head, Health, messageOf, useActing } from "./common";
-import {
-  admissionWords,
-  checkWords,
-  destinationWords,
-  gatewayHealth,
-  listWords,
-  machineWords,
-  modelMeta,
-  modelOf,
-  purposeLines,
-  removalWords,
-  shownBackends,
-  stationOf,
-  targets,
-  usedFor,
-  whereWords,
-  type CatalogueModel,
-  type Tone,
-} from "./gateway";
+import { Acted, Head, Health, messageOf, useActing, type Acting } from "./common";
+import { answersWords, checkWords, gatewayHealth, listWords, plainly, removalWords, routes, subscribedStations, viewerOf, type CatalogueModel } from "./gateway";
 import { backendsKept } from "./kept";
-import { kvasir, type AdmissionRecord, type Backend, type PurposeRow, type Subscription } from "./kvasir";
-import { LocalModels } from "./LocalModels";
-import { runtimeName } from "./parts";
-import { placeOf } from "./subscription";
+import { kvasir, RUNTIME_BACKEND, type AdmissionRecord, type Backend, type PurposeRow, type Subscription } from "./kvasir";
+import { localOrder, servedAdmission, started, UNREACHABLE } from "./local";
+import { LocalModelCard, MachineLine, useLocalModels } from "./LocalModels";
+import { addChoices, backendCards } from "./models";
+import { MoveDrawer, StationRoutes } from "./Stations";
 import { SubscriptionCard } from "./SubscriptionCard";
 import type { Install } from "./supervise";
 
-function Tag({ tone, words }: { tone: Tone; words: string }) {
-  return (
-    <span className={tone === "neutral" ? "tag" : `tag ${tone}`}>
-      {tone === "ok" && <Icon name="check" />}
-      {words}
-    </span>
-  );
+/** What an act said, unless it ended with nothing to say. */
+function Said({ acting }: { acting: Acting }) {
+  return acting.kind === "done" && acting.words === "" ? null : <Acted acting={acting} />;
 }
 
-/** Where a station goes, inside a sentence: a model's name as written, the subscription in lower case. */
-function inSentence(b: Backend, system: boolean): string {
-  const words = destinationWords(b, system);
-  return b.builtin === true ? words.charAt(0).toLowerCase() + words.slice(1) : words;
-}
+/** Admissions still settling: the page reads Kvasir again until they do. */
+const SETTLING = new Set(["being checked", "being added", "warming"]);
 
 export function GatewayPage({ caps, install }: { caps: Capabilities; install: Install | null }) {
   const [backends, setBackends] = useState<Backend[] | null>(null);
@@ -70,17 +47,19 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   const [why, setWhy] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const [moving, setMoving] = useState<PurposeRow | null>(null);
-  // the provider a move starts on, where it opened from the note under Models, and the provider just added
+  // the provider a move starts on, where it opened from the stations a provider does not answer, and the provider just added
   const [toward, setToward] = useState<string | null>(null);
   const [opened, setOpened] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Backend | null>(null);
+  const [keying, setKeying] = useState<Backend | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const check = useActing();
-  const admin = holds(caps, "admin");
+  const acting = useActing();
   const catalogue = (caps.kvasir?.["models"] as CatalogueModel[] | undefined) ?? [];
   const version = (caps.kvasir?.["kvasir"] as { version?: string } | undefined)?.version ?? null;
+  const own = subscriptions?.find((s) => s.provider === "chatgpt") ?? null;
+  const viewer = viewerOf(caps, own);
 
   const load = () => {
     setNow(Date.now());
@@ -91,7 +70,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
         backendsKept.put(b.backends);
         setWhy(null);
       })
-      .catch((e: unknown) => setWhy(messageOf(e)));
+      .catch((e: unknown) => setWhy(messageOf(plainly(e))));
     kvasir
       .purposes()
       .then((p) => setPurposes(p.purposes))
@@ -101,6 +80,8 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
       .then((a) => setAdmissions(a.records))
       .catch(() => setAdmissions(null));
   };
+
+  const local = useLocalModels({ enabled: viewer.work, onRun: load, onSaid: setSaid });
 
   useEffect(() => {
     load();
@@ -112,17 +93,14 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once when the page opens; what is done on it reads again
   }, []);
 
-  const shown = shownBackends(backends ?? []);
-  const held = shown.held;
-  const rows = held.flatMap((b) =>
-    b.models.map((m, i) => {
-      const listed = modelOf(b, m, catalogue);
-      return { b, m, first: i === 0, listed, admission: admissionWords(m, b, listed, admissions, { now, checking: checking === b.id }) };
-    }),
-  );
+  const lines = purposes && backends ? routes(purposes, backends, { viewer, admissions, subscription: own }) : null;
+  const locals = local.status ? localOrder(local.status.models) : [];
+  const served = locals.map((m) => (m.run ? servedAdmission(m.run, backends, admissions, now) : null));
+  const drawn = locals.filter(started).map((m) => m.run?.model ?? "");
+  const cards = backends ? backendCards(backends, { viewer, catalogue, admissions, purposes, now, checking, drawn }) : [];
 
-  // a model added in the last hour is read again until its admission settles
-  const settling = rows.some((r) => checking !== r.b.id && r.admission.words === "being checked");
+  // a model added in the last hour, or loaded on llama.cpp, is read again until its admission settles
+  const settling = cards.some((c) => checking !== c.backend.id && c.tags.some((t) => SETTLING.has(t.words))) || served.some((a) => a !== null && SETTLING.has(a.words));
   useEffect(() => {
     if (!settling) return;
     const t = setInterval(load, 15_000);
@@ -133,11 +111,13 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   const runCheck = (b: Backend) => {
     setSaid(null);
     setChecking(b.id);
-    check.act(`checking ${listWords(b.models)} with the admission suite`, async () => {
+    acting.act(`checking ${listWords(b.models)} with the admission suite`, async () => {
       try {
         const found = checkWords((await kvasir.admit(b.id)).records);
         if (!found.passed) throw new Error(found.words);
         return found.words;
+      } catch (e) {
+        throw plainly(e);
       } finally {
         setChecking(null);
         load();
@@ -145,111 +125,88 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
     });
   };
 
-  const health = backends ? gatewayHealth(backends) : null;
-  const machine = machineWords(install);
-  const locals = held.filter((b) => b.locality === "local");
-  const remotes = held.filter((b) => b.locality === "remote");
-  const place = placeOf(subscriptions);
-  const system = place.kvasir !== null;
-  const toChatgpt = (purposes ?? []).filter((p) => shown.subscriptions.some((b) => b.id === p.backend)).map((p) => stationOf(p.purpose));
-  const personal = admin && place.profile !== null;
-  const bare = subscriptions === null && shown.subscriptions.length > 0;
-  const provider = opened ? (remotes.find((b) => b.id === opened) ?? null) : null;
-  const runtimeOf = (b: Backend) => {
-    const newest = (admissions ?? []).filter((r) => r.backend === b.id).sort((x, y) => y.at - x.at)[0];
-    return newest ? `${runtimeName(newest.runtime.name)} ${newest.runtime.version}`.trim() : "a model server";
+  const forget = (b: Backend) => {
+    setSaid(null);
+    acting.act(`forgetting the key for ${b.id}`, async () => {
+      try {
+        await kvasir.forget(b.id);
+      } catch (e) {
+        throw plainly(e);
+      }
+      load();
+      return `Kvasir no longer holds a key for ${b.id}.`;
+    });
   };
-  // a backend's check and removal, on its first model's row: in a column of their own, or under the model on a narrow window
-  const actions = (b: Backend) => (
-    <>
-      {b.locality === "local" && (
-        <button type="button" className="button secondary small" disabled={check.working} onClick={() => runCheck(b)}>
-          Check
-        </button>
-      )}
-      <button
-        type="button"
-        className="button quiet small"
-        disabled={checking === b.id}
-        onClick={() => {
-          setSaid(null);
-          setRemoving(b);
-        }}
-      >
-        Remove
-      </button>
-    </>
-  );
+
+  const health = backends ? gatewayHealth(backends) : null;
+  const stations = subscribedStations(purposes, backends);
+  const provider = opened && backends ? (backends.find((b) => b.id === opened && b.locality === "remote" && b.builtin !== true) ?? null) : null;
+  // a person's own subscription is theirs to sign in with the assistant and Kvasir: See; the install's is on the page where nobody signs in
+  const mine = own && (own.for === "system" || viewer.subscribes) ? own : null;
+  const choices = addChoices(viewer, { local: local.status, subscription: own });
+  const runtime = local.status?.runtime ?? null;
+  const onMachine = backends?.find((b) => b.id === RUNTIME_BACKEND) ?? null;
+  const change = (s: Subscription) => setSubscriptions((all) => (all ?? []).map((x) => (x.provider === s.provider ? s : x)));
+  const subscription = mine && <SubscriptionCard key="subscription" row={mine} stations={stations} follow={!adding} onChange={change} />;
+  const anything = cards.length > 0 || locals.length > 0;
 
   return (
     <div className="settings">
-      <Head title="Kvasir" under lede="The models the assistant reaches, where each station's prompts go, and the subscriptions people sign in with.">
+      <Head
+        title="Kvasir"
+        under={may(caps, "install:see")}
+        lede={viewer.subscribes && !viewer.work ? "Which model answers each station, and your own ChatGPT subscription." : "Which model answers each station, and the models Kvasir holds for them."}
+      >
         {health && <Health tone={health.tone} words={health.words} />}
-        <span className="meta">{[health?.streams, version ? `version ${version}` : null].filter(Boolean).join(" · ")}</span>
+        {viewer.work && <span className="meta">{[health?.streams, version ? `version ${version}` : null].filter(Boolean).join(" · ")}</span>}
       </Head>
       {why && <p className="warn">{why}</p>}
 
-      <section className="pair">
-        <div className="panel card">
-          <div className="row card-head">
-            <Icon name="chip" size="lg" />
-            <h2>This machine</h2>
+      {lines && purposes && (
+        <section className="stack roomy">
+          <div className="section-head rule-top">
+            <h2>Where each station goes</h2>
+            <span className="meta">{viewer.work ? "changes at once, recorded with who and why" : "an admin decides"}</span>
           </div>
-          {machine.card ? (
-            <p>
-              <b>{machine.card}</b>
-            </p>
+          {viewer.work && provider && (
+            <ClosedStations
+              provider={provider}
+              purposes={purposes}
+              onChange={(p) => {
+                setToward(provider.id);
+                setMoving(p);
+              }}
+            />
+          )}
+          {lines.length > 0 ? (
+            <StationRoutes
+              routes={lines}
+              onChange={
+                viewer.work
+                  ? (p) => {
+                      setToward(null);
+                      setMoving(p);
+                    }
+                  : undefined
+              }
+            />
           ) : (
-            <p className="meta">
-              {install
-                ? "The supervisor found no card on this machine."
-                : !admin
-                  ? "The machine's card is shown to an admin, from the supervisor on this host."
-                  : caps.desk.settings?.supervisor_url
-                    ? "The supervisor on this host did not answer, so the machine's card is not shown."
-                    : "This desk reaches no supervisor, so the machine's card is not shown."}
-            </p>
+            <p className="meta">No station has asked Kvasir for a model yet.</p>
           )}
-          {machine.advice.length > 0 && <p className="meta">{machine.advice.join(" ")}</p>}
-          {locals.length > 0 && (
-            <dl className="facts">
-              {locals.map((b) => (
-                <div key={b.id} className="facts-pair">
-                  <dt>{b.id}</dt>
-                  <dd>
-                    {runtimeOf(b)}, serving <span className="path">{b.models.join(", ")}</span>
-                    {b.health.warming === true && <span className="meta">, warming</span>}
-                  </dd>
-                </div>
-              ))}
-            </dl>
-          )}
-        </div>
-        <div className="panel card">
-          <div className="row card-head">
-            <Icon name="cloud" size="lg" />
-            <h2>{remotes.length > 1 ? "Providers" : "Provider"}</h2>
-          </div>
-          {backends !== null && remotes.length === 0 && (
-            <p className="meta">{toChatgpt.length > 0 ? "No provider. Only the stations moved to ChatGPT leave your systems." : "No provider: every prompt stays in your systems."}</p>
-          )}
-          {remotes.map((b) => (
-            <div key={b.id} className="provider">
-              <p>
-                <b>{b.id}</b> <span className="meta">{b.models.join(", ")}</span>
-              </p>
-              {b.base_url && <p className="meta path">{b.base_url}</p>}
-              <p className="meta">{b.credential ? "Its key is kept by Kvasir, readable by nobody else, and never shown." : "Kvasir holds no key for it."}</p>
-              {admin && <KeyForm backend={b.id} stored={b.credential === true} onDone={load} />}
+          <div className="note gated">
+            <Icon name="lock" />
+            <div className="note-body">
+              <p className="note-detail">Identifiers never leave. Rows of the archive go to a provider or to ChatGPT only after an admin writes down why, for that one purpose.</p>
             </div>
-          ))}
-        </div>
-      </section>
+          </div>
+        </section>
+      )}
 
-      <section className="stack">
+      <section className="stack roomy">
         <div className="section-head rule-top">
           <h2>Models</h2>
-          {admin ? (
+          <span className="meta">{viewer.work ? "what the stations can go to" : viewer.subscribes ? "the ones an admin added, and yours" : "the ones an admin added"}</span>
+          {choices.length > 0 && (
             <button
               type="button"
               className="button small"
@@ -262,164 +219,82 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
               <Icon name="plus" />
               Add a model
             </button>
-          ) : (
-            <span className="meta">an admin adds, checks and removes models</span>
           )}
         </div>
         {said && <p className="ok-words">{said}</p>}
-        {admin && provider && purposes && (
-          <ClosedStations
-            provider={provider}
-            purposes={purposes}
-            onChange={(p) => {
-              setToward(provider.id);
-              setMoving(p);
-            }}
-          />
+        {runtime && !runtime.reachable && <p className="warn">{UNREACHABLE}</p>}
+        {local.status && local.missed && <p className="warn">{`The models Kvasir downloads could not be read again: ${local.missed}`}</p>}
+        {(anything || subscription) && (
+          <div className="mgrid">
+            {!viewer.work && subscription}
+            {locals.map((m, i) => (
+              <LocalModelCard
+                key={`local-${m.id}`}
+                model={m}
+                busy={local.working}
+                runtime={runtime !== null}
+                admission={served[i]}
+                answers={answersWords(RUNTIME_BACKEND, purposes)}
+                onPause={() => local.pause(m)}
+                onResume={() => local.resume(m)}
+                onRemove={() => local.remove(m)}
+                onStart={() => local.start(m)}
+                onStop={() => local.stop(m)}
+                onCheck={onMachine ? () => runCheck(onMachine) : undefined}
+              />
+            ))}
+            {cards.map((c) => (
+              <BackendCard
+                key={c.key}
+                card={c}
+                work={viewer.work}
+                busy={acting.working}
+                onCheck={() => runCheck(c.backend)}
+                onKey={() => {
+                  setSaid(null);
+                  setKeying(c.backend);
+                }}
+                onForget={() => forget(c.backend)}
+                onRemove={() => {
+                  setSaid(null);
+                  setRemoving(c.backend);
+                }}
+              />
+            ))}
+            {viewer.work && subscription}
+          </div>
         )}
-        <div className="table-wrap">
-          <table className="thin models">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th>Backend</th>
-                <th>Where prompts go</th>
-                <th>Admission</th>
-                <th>Used for</th>
-                {admin && (
-                  <th className="acts">
-                    <span className="sr-only">Check or remove</span>
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ b, m, first, listed, admission }) => (
-                <tr key={`${b.id}/${m}`}>
-                  <td>
-                    <span className="path">{m}</span>
-                    {modelMeta(listed, b.locality) && <div className="meta">{modelMeta(listed, b.locality)}</div>}
-                    {admin && first && <span className="row-actions under">{actions(b)}</span>}
-                  </td>
-                  <td>
-                    {b.id}
-                    <div className="meta">{b.locality === "local" ? runtimeOf(b) : (b.base_url ?? "a provider")}</div>
-                  </td>
-                  <td>
-                    <Tag {...whereWords(b.locality)} />
-                  </td>
-                  <td>
-                    <Tag tone={admission.tone} words={admission.words} />
-                    {admission.detail && <div className="meta">{admission.detail}</div>}
-                  </td>
-                  <td className="meta">{purposes ? usedFor(b, purposes) : ""}</td>
-                  {admin && <td className="acts">{first && <span className="row-actions">{actions(b)}</span>}</td>}
-                </tr>
-              ))}
-              {backends !== null && held.length === 0 && (
-                <tr>
-                  <td colSpan={admin ? 6 : 5} className="meta">
-                    {admin ? "Kvasir holds no model yet. Add a model server in your systems, or a provider." : "Kvasir holds no model yet."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <Acted acting={check.acting} />
+        {backends !== null && !anything && (
+          <p className="meta">{viewer.work ? "Kvasir holds no model yet. Add a model downloads one to this machine, or adds a model server of yours or a provider." : "Kvasir holds no model yet."}</p>
+        )}
+        {!viewer.work && (
+          <p className="meta">{mine && viewer.subscribes ? "Add a model offers you a subscription of your own. Downloads, servers and providers are an admin's to add." : "Downloads, servers and providers are an admin's to add."}</p>
+        )}
+        <Said acting={acting.acting} />
+        <Said acting={local.acting} />
+        {viewer.work && local.status && <MachineLine install={install} status={local.status} onLocate={local.locate} onToken={local.token} />}
       </section>
-
-      {admin && <LocalModels backends={backends} admissions={admissions} now={now} onRun={load} />}
-
-      {purposes && backends && (
-        <section className="stack">
-          <div className="section-head rule-top">
-            <h2>Where each station goes</h2>
-            <span className="meta">changes at once, recorded with who and why</span>
-          </div>
-          <div className="table-wrap">
-            <table className="thin">
-              <thead>
-                <tr>
-                  <th>Station</th>
-                  <th>Carries</th>
-                  <th>Goes to</th>
-                  <th className="go">
-                    <span className="sr-only">Change</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {purposeLines(purposes, backends, system).map((l) => {
-                  const row = purposes.find((p) => p.purpose === l.purpose)!;
-                  return (
-                    <tr key={l.purpose}>
-                      <td>
-                        {l.station}
-                        <div className="meta">{l.purpose}</div>
-                      </td>
-                      <td>
-                        <span className="tag">{l.carries}</span>
-                      </td>
-                      <td>
-                        {l.goesTo}
-                        {l.allowed && <div className="meta">{l.allowed}</div>}
-                      </td>
-                      <td>
-                        {admin && l.movable && (
-                          <button
-                            type="button"
-                            className="button quiet small"
-                            onClick={() => {
-                              setToward(null);
-                              setMoving(row);
-                            }}
-                          >
-                            Change
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="note gated">
-            <Icon name="lock" />
-            <div className="note-body">
-              <p className="note-detail">Identifiers never leave. Rows of the archive go to a provider or to ChatGPT only after an admin writes down why, for that one purpose.</p>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {(place.kvasir || personal || bare) && (
-        <section className="stack">
-          <div className="section-head rule-top">
-            <h2>Subscriptions</h2>
-            {toChatgpt.length > 0 && <span className="meta">{`ChatGPT answers ${listWords(toChatgpt)}`}</span>}
-          </div>
-          {place.kvasir && <SubscriptionCard row={place.kvasir} may={admin} />}
-          {personal && (
-            <p>
-              Each person signs in with their own ChatGPT subscription from their profile, and it serves only their conversations. <a href={href("profile")}>Your profile</a>
-            </p>
-          )}
-          {bare && <p className="meta">ChatGPT answers through each person's own subscription, for the stations moved to it. This Kvasir does not offer signing in to it yet.</p>}
-        </section>
-      )}
 
       {adding && (
         <AddModel
+          choices={choices}
+          local={local.status ?? null}
+          install={install}
+          subscription={own}
+          stations={stations}
           onClose={() => setAdding(false)}
           onDone={(words, added) => {
             setAdding(false);
             setSaid(words);
-            // a provider added answers no station until one is moved there, which the note under Models offers
+            // a provider added answers no station until one is moved there, which the stations offer
             setOpened(added.locality === "remote" ? added.id : null);
             load();
           }}
+          onQueued={(m) => {
+            setAdding(false);
+            local.queued(m);
+          }}
+          onSubscription={change}
         />
       )}
       {removing && backends && (
@@ -436,11 +311,23 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
           }}
         />
       )}
+      {keying && (
+        <KeyDialog
+          backend={keying}
+          onClose={() => setKeying(null)}
+          onDone={(words) => {
+            setKeying(null);
+            setSaid(words);
+            load();
+          }}
+        />
+      )}
       {moving && backends && (
         <MoveDrawer
           purpose={moving}
           backends={backends}
-          system={system}
+          system={viewer.system}
+          now={lines?.find((l) => l.purpose.purpose === moving.purpose)?.to ?? null}
           toward={toward}
           onClose={() => setMoving(null)}
           onDone={() => {
@@ -449,68 +336,54 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
           }}
         />
       )}
+      {local.dialogs}
     </div>
   );
 }
 
-/** A backend's key: replaced or forgotten, never shown. Kvasir keeps it under the backend's id. */
-function KeyForm({ backend, stored, onDone }: { backend: string; stored: boolean; onDone: () => void }) {
-  const [open, setOpen] = useState(false);
+/** A provider's key, stored or replaced: Kvasir keeps it under the backend's id, and never shows it. */
+function KeyDialog({ backend, onClose, onDone }: { backend: Backend; onClose: () => void; onDone: (words: string) => void }) {
   const [secret, setSecret] = useState("");
   const saving = useActing();
+  const named = backend.models[0] ?? backend.id;
   const short = secret.length < 8;
+  const store = () =>
+    saving.act(`storing the key for ${named}`, async () => {
+      try {
+        await kvasir.credential(backend.id, secret);
+      } catch (e) {
+        throw plainly(e);
+      }
+      onDone(`The key for ${named} is stored, and shown to nobody.`);
+      return "";
+    });
+
+  const foot = (
+    <>
+      <Said acting={saving.acting} />
+      <div className="row actions">
+        <button type="button" className="button" disabled={short || saving.working} onClick={store}>
+          Store it
+        </button>
+        <button type="button" className="button secondary" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </>
+  );
+
   return (
-    <div className="key-form">
-      {open ? (
-        <>
-          <div className="input mono grow">
-            <input type="password" autoComplete="off" aria-label={`The key for ${backend}`} value={secret} onChange={(e) => setSecret(e.target.value)} />
-          </div>
-          <button
-            type="button"
-            className="button small"
-            disabled={short || saving.working}
-            onClick={() =>
-              saving.act(`storing the key for ${backend}`, async () => {
-                await kvasir.credential(backend, secret);
-                setSecret("");
-                setOpen(false);
-                onDone();
-                return `The key for ${backend} is stored, and shown to nobody.`;
-              })
-            }
-          >
-            Store it
-          </button>
-          <button type="button" className="button quiet small" onClick={() => setOpen(false)}>
-            Cancel
-          </button>
-        </>
-      ) : (
-        <>
-          <button type="button" className="button secondary small" onClick={() => setOpen(true)}>
-            {stored ? "Replace the key" : "Store its key"}
-          </button>
-          {stored && (
-            <button
-              type="button"
-              className="button quiet small"
-              disabled={saving.working}
-              onClick={() =>
-                saving.act(`forgetting the key for ${backend}`, async () => {
-                  await kvasir.forget(backend);
-                  onDone();
-                  return `Kvasir no longer holds a key for ${backend}.`;
-                })
-              }
-            >
-              Forget the key
-            </button>
-          )}
-        </>
-      )}
-      <Acted acting={saving.acting} />
-    </div>
+    <Dialog title={backend.credential === true ? `Replace the key for ${named}` : `The key for ${named}`} icon="key" onClose={onClose} foot={foot}>
+      <div className="field">
+        <label className="label" htmlFor="provider-key">
+          Its key
+        </label>
+        <div className="input mono">
+          <input id="provider-key" type="password" autoComplete="off" value={secret} disabled={saving.working} onChange={(e) => setSecret(e.target.value)} />
+        </div>
+        <span className="meta">Kvasir keeps it sealed, and never shows it again.</span>
+      </div>
+    </Dialog>
   );
 }
 
@@ -522,15 +395,18 @@ function RemoveDialog(props: { backend: Backend; backends: Backend[]; purposes: 
   const many = backend.models.length > 1;
   const remove = () =>
     removing.act(`removing ${named}`, async () => {
-      await kvasir.remove(backend.id);
+      try {
+        await kvasir.remove(backend.id);
+      } catch (e) {
+        throw plainly(e);
+      }
       onDone(`${named} ${many ? "are" : "is"} removed from Kvasir.`);
       return "";
     });
-  const quiet = removing.acting.kind === "done" && removing.acting.words === "";
 
   const foot = (
     <>
-      {!quiet && <Acted acting={removing.acting} />}
+      <Said acting={removing.acting} />
       <div className="row actions">
         <button type="button" className="button" disabled={removing.working} onClick={remove}>
           {many ? "Remove them" : "Remove it"}
@@ -547,82 +423,6 @@ function RemoveDialog(props: { backend: Backend; backends: Backend[]; purposes: 
       {removalWords(backend, backends, purposes).map((w) => (
         <p key={w}>{w}</p>
       ))}
-    </Dialog>
-  );
-}
-
-/** A purpose moved to another backend: at once where nothing more is needed, with an admin's written reason where rows would leave. */
-function MoveDrawer(props: { purpose: PurposeRow; backends: Backend[]; system: boolean; toward?: string | null; onClose: () => void; onDone: () => void }) {
-  const { purpose, backends, system, toward = null, onClose, onDone } = props;
-  const options = targets(purpose, backends);
-  // opened from a provider just added, the move starts on that provider
-  const [to, setTo] = useState(options.find((o) => o.backend.id === toward)?.backend.id ?? options[0]?.backend.id ?? "");
-  const [reason, setReason] = useState("");
-  const moving = useActing();
-  const chosen = options.find((o) => o.backend.id === to) ?? null;
-  const needs = chosen?.needs === "an acknowledgement";
-  const station = stationOf(purpose.purpose);
-  const goesTo = purposeLines([purpose], backends, system)[0].goesTo;
-
-  const move = () =>
-    moving.act(`moving ${station}`, async () => {
-      await kvasir.setPolicy(purpose.purpose, to, needs ? reason.trim() : null);
-      onDone();
-      return `${station} goes to ${chosen ? inSentence(chosen.backend, system) : to} now.`;
-    });
-
-  const foot = (
-    <>
-      <Acted acting={moving.acting} />
-      <div className="row actions">
-        <button type="button" className="button" disabled={!chosen || (needs && reason.trim().length === 0) || moving.working} onClick={move}>
-          Move {station}
-        </button>
-        <button type="button" className="button secondary" onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-    </>
-  );
-
-  return (
-    <Dialog title={`Where ${station} goes`} icon="gateway" onClose={onClose} foot={foot}>
-      <dl className="facts">
-        <dt>purpose</dt>
-        <dd>
-          <span className="path">{purpose.purpose}</span>
-        </dd>
-        <dt>carries</dt>
-        <dd>{purpose.content === "catalog" ? "the catalogue, never a row" : purpose.content === "rows" ? "rows of the archive" : "identifiers"}</dd>
-        <dt>goes to now</dt>
-        <dd>{goesTo}</dd>
-      </dl>
-      <div className="field">
-        <span className="label">Move it to</span>
-        <div className="choices" role="radiogroup">
-          {options.map((o) => (
-            <label key={o.backend.id} className="radio-row">
-              <input type="radio" name="move-to" checked={to === o.backend.id} disabled={moving.working} onChange={() => setTo(o.backend.id)} />
-              <span>
-                <span>{destinationWords(o.backend, system)}</span>
-                <span className="meta">{o.backend.locality === "local" ? "stays in your systems" : "leaves your systems"}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-        {chosen?.backend.builtin === true && !system && <span className="meta">A person who has not signed in to ChatGPT gets the default model in your systems instead.</span>}
-      </div>
-      {needs && (
-        <div className="field">
-          <label className="label" htmlFor="move-reason">
-            Why rows of the archive may leave, for this purpose
-          </label>
-          <div className="input">
-            <textarea id="move-reason" rows={3} value={reason} disabled={moving.working} onChange={(e) => setReason(e.target.value)} />
-          </div>
-          <span className="meta">Recorded with your name beside the purpose; Kvasir refuses the move without it.</span>
-        </div>
-      )}
     </Dialog>
   );
 }

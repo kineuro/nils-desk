@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Adding a model (record 23), a dialog on the Kvasir page: where the model
-// is, its address and key, the models its server lists, and one short request
-// to the model chosen. Add is offered only once that request answered for
-// exactly what the dialog shows; Kvasir asks the model again before it holds
-// it, and says what each model said when one did not answer.
+// Add a model (records 23 and 25), the one dialog on the Kvasir page. It asks
+// first where the model comes from, offering only what the person may add:
+// downloading it to this machine, a model server of yours and a provider need
+// Kvasir: Work, and a ChatGPT subscription of one's own needs the assistant
+// with Kvasir: See (on a desk that signs nobody in, it is the install's). A
+// server or a provider is added once one short request to the model chosen
+// answered for exactly what the dialog shows; Kvasir asks the model again
+// before it holds it, and says what each model said when one did not answer.
 
 import { useId, useState } from "react";
+import type React from "react";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import {
@@ -26,13 +30,18 @@ import {
   stale,
   testRefusal,
   triedWords,
-  WHERE,
   withPreset,
   type Draft,
   type Tested,
 } from "./adding";
+import { MarkSquare } from "./cards";
 import { Acted, useActing } from "./common";
-import { kvasir, type Locality, triedOf } from "./kvasir";
+import { useDownload } from "./DownloadModel";
+import { plainly } from "./gateway";
+import { kvasir, type LocalModel, type LocalStatus, type Locality, type Subscription, triedOf } from "./kvasir";
+import { choiceWords, type Choice } from "./models";
+import { useSignInPart } from "./SubscriptionCard";
+import type { Install } from "./supervise";
 
 /** What an add held: the backend's id, where its prompts go, and its models. */
 export interface Added {
@@ -41,15 +50,20 @@ export interface Added {
   models: string[];
 }
 
-export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (words: string, added: Added) => void }) {
+/** Said under the address of a model server of yours, which may be on this machine or another. */
+export const SERVER_HINT = "Its address as Kvasir reaches it, most often ending in /v1: this machine's server at its port, or another machine's address on your network.";
+
+/** A model server of yours or a provider: its address and key, the models it lists, a test of the one chosen, and the add. */
+function useServer(where: "here" | "provider", props: { onClose: () => void; onDone: (words: string, added: Added) => void }): { body: React.ReactNode; foot: React.ReactNode; busy: boolean } {
+  const { onClose, onDone } = props;
   const id = useId();
-  const [d, setD] = useState<Draft>(() => draft("here"));
+  const [d, setD] = useState<Draft>(() => draft(where));
   /** What the server lists: undefined until asked, null where it lists nothing it can say. */
   const [listed, setListed] = useState<string[] | null | undefined>(undefined);
   const [typing, setTyping] = useState(false);
   const [tested, setTested] = useState<Tested | null>(null);
   const [refused, setRefused] = useState<string[]>([]);
-  // what was said for another place or provider is not said again once one is chosen
+  // what was said for another provider is not said again once one is chosen
   const [round, setRound] = useState(0);
   const [findRound, setFindRound] = useState(-1);
   const [workRound, setWorkRound] = useState(-1);
@@ -61,7 +75,7 @@ export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (wo
     setD((x) => ({ ...x, ...patch }));
     setRefused([]);
   };
-  // another place or provider starts the dialog again from there
+  // another provider starts the form again from there
   const begin = (next: Draft) => {
     setRound((r) => r + 1);
     setD(next);
@@ -74,14 +88,18 @@ export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (wo
   const find = () => {
     setFindRound(round);
     finding.act("asking the server which models it serves", async () => {
-      const r = await kvasir.test(description(d, false));
-      const names = r.listed ?? null;
-      setListed(names);
-      if (names && names.length > 0) {
-        setTyping(false);
-        setD((x) => ({ ...x, model: pickFrom(names, x.model) }));
+      try {
+        const r = await kvasir.test(description(d, false));
+        const names = r.listed ?? null;
+        setListed(names);
+        if (names && names.length > 0) {
+          setTyping(false);
+          setD((x) => ({ ...x, model: pickFrom(names, x.model) }));
+        }
+        return listedWords(names);
+      } catch (e) {
+        throw plainly(e);
       }
-      return listedWords(names);
     });
   };
 
@@ -90,11 +108,15 @@ export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (wo
     setWorkRound(round);
     working.act(`sending ${asked.model.trim()} one short request`, async () => {
       setRefused([]);
-      const r = await kvasir.test(description(asked, true));
-      const model = r.models.find((m) => m.id === asked.model.trim()) ?? r.models[0];
-      if (!model) throw new Error("Kvasir answered without a word about the model.");
-      setTested({ print: fingerprint(asked), model });
-      return "";
+      try {
+        const r = await kvasir.test(description(asked, true));
+        const model = r.models.find((m) => m.id === asked.model.trim()) ?? r.models[0];
+        if (!model) throw new Error("Kvasir answered without a word about the model.");
+        setTested({ print: fingerprint(asked), model });
+        return "";
+      } catch (e) {
+        throw plainly(e);
+      }
     });
   };
 
@@ -108,7 +130,7 @@ export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (wo
         return "";
       } catch (e) {
         const models = triedOf(e);
-        if (!models) throw e;
+        if (!models) throw plainly(e);
         setTested(null);
         setRefused(refusedWords(models));
         throw new Error("Kvasir asked the model again before holding it, and did not add it.");
@@ -123,60 +145,8 @@ export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (wo
   const outcome = tested && !stale(d, tested) ? triedWords(tested.model) : null;
   const quiet = working.acting.kind === "done" && working.acting.words === "";
 
-  const foot = (
+  const body = (
     <>
-      {outcome &&
-        (outcome.answered ? (
-          <p className="ok-words">{`${outcome.words} It can be added.`}</p>
-        ) : (
-          <div className="tried">
-            <p className="warn">{outcome.words}</p>
-            {outcome.detail && <p className="meta">{outcome.detail}</p>}
-          </div>
-        ))}
-      {stale(d, tested) && <p className="meta">Something changed since the test, so test it again.</p>}
-      {refused.length > 0 && (
-        <ul className="tried-list">
-          {refused.map((w) => (
-            <li key={w} className="warn">
-              {w}
-            </li>
-          ))}
-        </ul>
-      )}
-      {!quiet && workRound === round && <Acted acting={working.acting} />}
-      {cannotTest && <p className="meta">{cannotTest}</p>}
-      <div className="row actions">
-        <button type="button" className="button secondary" disabled={!found || cannotTest !== null || busy} onClick={test}>
-          Test
-        </button>
-        <button type="button" className="button" disabled={!addable(d, tested) || busy} onClick={add}>
-          Add
-        </button>
-        <button type="button" className="button secondary" onClick={onClose}>
-          Cancel
-        </button>
-      </div>
-    </>
-  );
-
-  return (
-    <Dialog title="Add a model" icon="gateway" onClose={onClose} foot={foot}>
-      <fieldset className="field plain-set">
-        <legend className="label">Where it is</legend>
-        <div className="choices">
-          {WHERE.map((w) => (
-            <label key={w.id} className="radio-row">
-              <input type="radio" name={`${id}-where`} checked={d.where === w.id} disabled={busy} onChange={() => begin(draft(w.id))} />
-              <span>
-                <b>{w.title}</b>
-                <span className="meta">{w.words}</span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </fieldset>
-
       {d.where === "provider" && (
         <div className="field">
           <label className="label" htmlFor={`${id}-provider`}>
@@ -201,7 +171,7 @@ export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (wo
         <div className="input mono">
           <input id={`${id}-address`} value={d.baseUrl} inputMode="url" spellCheck={false} autoComplete="off" disabled={busy} onChange={(e) => edit({ baseUrl: e.target.value })} />
         </div>
-        <span className="meta">{addressHint(d)}</span>
+        <span className="meta">{d.where === "provider" ? addressHint(d) : SERVER_HINT}</span>
       </div>
 
       {d.where !== "provider" && (
@@ -285,6 +255,110 @@ export function AddModel({ onClose, onDone }: { onClose: () => void; onDone: (wo
           </div>
         </div>
       )}
+    </>
+  );
+
+  const foot = (
+    <>
+      {outcome &&
+        (outcome.answered ? (
+          <p className="ok-words">{`${outcome.words} It can be added.`}</p>
+        ) : (
+          <div className="tried">
+            <p className="warn">{outcome.words}</p>
+            {outcome.detail && <p className="meta">{outcome.detail}</p>}
+          </div>
+        ))}
+      {stale(d, tested) && <p className="meta">Something changed since the test, so test it again.</p>}
+      {refused.length > 0 && (
+        <ul className="tried-list">
+          {refused.map((w) => (
+            <li key={w} className="warn">
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!quiet && workRound === round && <Acted acting={working.acting} />}
+      {cannotTest && <p className="meta">{cannotTest}</p>}
+      <div className="row actions">
+        <button type="button" className="button secondary" disabled={!found || cannotTest !== null || busy} onClick={test}>
+          Test
+        </button>
+        <button type="button" className="button" disabled={!addable(d, tested) || busy} onClick={add}>
+          Add
+        </button>
+        <button type="button" className="button secondary" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </>
+  );
+
+  return { body, foot, busy };
+}
+
+/**
+ * The dialog. `choices` are what this person may add, the first chosen as it
+ * opens; `local` and `install` feed the download, `subscription` and
+ * `stations` the sign-in. A server or provider added calls `onDone`, a
+ * download queued `onQueued`, and a subscription changed `onSubscription`.
+ */
+export function AddModel(props: {
+  choices: Choice[];
+  local?: LocalStatus | null;
+  install?: Install | null;
+  subscription?: Subscription | null;
+  stations?: string[];
+  onClose: () => void;
+  onDone: (words: string, added: Added) => void;
+  onQueued?: (m: LocalModel) => void;
+  onSubscription?: (s: Subscription) => void;
+}) {
+  const { choices, local = null, install = null, subscription = null, stations = [], onClose, onDone, onQueued, onSubscription } = props;
+  const id = useId();
+  const [choice, setChoice] = useState<Choice | null>(choices[0] ?? null);
+  const server = useServer("here", { onClose, onDone });
+  const provider = useServer("provider", { onClose, onDone });
+  const download = useDownload({
+    token: local?.token ?? false,
+    free: local?.free_bytes ?? null,
+    card: install?.machine.card ?? null,
+    advice: install?.machine.advice ?? [],
+    onClose,
+    onDone: (m) => onQueued?.(m),
+  });
+  const signing = useSignInPart({ row: subscription, stations, follow: choice === "subscription", onChange: onSubscription, onClose });
+  const part = choice === "download" ? download : choice === "server" ? server : choice === "provider" ? provider : choice === "subscription" ? signing : null;
+  const busy = server.busy || provider.busy || download.busy || signing.busy;
+
+  const foot = part?.foot ?? (
+    <div className="row actions">
+      <button type="button" className="button secondary" onClick={onClose}>
+        Cancel
+      </button>
+    </div>
+  );
+
+  return (
+    <Dialog title="Add a model" icon="gateway" onClose={onClose} foot={foot}>
+      <fieldset className="field plain-set">
+        <legend className="label">Where it comes from</legend>
+        <div className="choices">
+          {choices.map((c) => {
+            const w = choiceWords(c, { local, subscription });
+            return (
+              <label key={c} className={choice === c ? "pick on" : "pick"}>
+                <MarkSquare mark={w.mark} />
+                <b>{w.title}</b>
+                <input type="radio" name={`${id}-from`} checked={choice === c} disabled={busy} onChange={() => setChoice(c)} />
+                <span className="meta">{w.words}</span>
+              </label>
+            );
+          })}
+        </div>
+      </fieldset>
+      {part?.body}
     </Dialog>
   );
 }

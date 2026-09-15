@@ -4,7 +4,7 @@
 // yet, and where a purpose may go.
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type Backend, KvasirError, kvasir, localRefusalOf, opening, type PurposeRow, triedOf } from "./kvasir";
+import { type Backend, grantRefusalOf, KvasirError, kvasir, localRefusalOf, opening, type PurposeRow, triedOf } from "./kvasir";
 
 const local: Backend = { id: "sglang", kind: "openai", locality: "local", provider: null, credential: null, models: ["qwen"], health: {} };
 const remote: Backend = { id: "minimax", kind: "anthropic", locality: "remote", provider: "minimax", credential: true, models: ["m"], health: {} };
@@ -97,8 +97,8 @@ describe("Kvasir's doors", () => {
     ]);
     answering(404, { error: { code: "no_such_door", message: "GET /v1/local is not a door Kvasir has" } });
     await expect(kvasir.local.status()).resolves.toBeNull();
-    answering(403, { error: { code: "no_role", message: "local models are an admin's" } });
-    await expect(kvasir.local.status()).rejects.toThrow("local models are an admin's");
+    answering(403, { error: { code: "no_grant", message: "local models need kvasir:work", needs: ["kvasir:work"] } });
+    await expect(kvasir.local.status()).rejects.toThrow("local models need kvasir:work");
     const room = { code: "no_space", message: "/srv/models has 10.0 GiB free, and this download needs 17.0 GiB", free_bytes: 10 * 2 ** 30, needed_bytes: 17 * 2 ** 30 };
     answering(507, { error: room });
     const e = await kvasir.local.download({ repo: "owner/name" }).catch((x: unknown) => x);
@@ -107,6 +107,23 @@ describe("Kvasir's doors", () => {
     const gated = await kvasir.local.lookup({ repo: "owner/name" }).catch((x: unknown) => x);
     expect(localRefusalOf(gated)).toMatchObject({ status: 422, code: "needs_token", free_bytes: null, needed_bytes: null });
     expect(localRefusalOf(new Error("no body"))).toBeNull();
+  });
+
+  it("keep the grants a door refused for want of names, and a subscription asked for with nobody behind the call (record 25)", async () => {
+    answering(403, { error: { code: "no_grant", message: "a subscription of your own needs assistant:use and kvasir:see", needs: ["assistant:use", "kvasir:see"] } });
+    const e = await kvasir.signIn("chatgpt").catch((x: unknown) => x);
+    expect(grantRefusalOf(e)).toEqual({ code: "no_grant", needs: ["assistant:use", "kvasir:see"] });
+    answering(403, { error: { code: "no_grant", message: "local models need kvasir:work", needs: ["kvasir:work"] } });
+    expect(grantRefusalOf(await kvasir.local.lookup({ repo: "owner/name" }).catch((x: unknown) => x))).toEqual({ code: "no_grant", needs: ["kvasir:work"] });
+    answering(403, { error: { code: "no_grant", message: "no grant" } });
+    expect(grantRefusalOf(await kvasir.backends().catch((x: unknown) => x))).toEqual({ code: "no_grant", needs: [] });
+    answering(401, { error: { code: "unauthenticated", message: "no token" } });
+    expect(grantRefusalOf(await kvasir.backends().catch((x: unknown) => x))).toBeNull();
+    answering(403, { error: { code: "not_a_person", message: "a subscription is a person's" } });
+    expect(grantRefusalOf(await kvasir.signIn("chatgpt").catch((x: unknown) => x))).toEqual({ code: "not_a_person", needs: [] });
+    answering(409, { error: { code: "conflict", message: "in the list already" } });
+    expect(grantRefusalOf(await kvasir.local.download({ repo: "owner/name" }).catch((x: unknown) => x))).toBeNull();
+    expect(grantRefusalOf(new Error("no body"))).toBeNull();
   });
 
   it("send a start and a stop to their doors, and keep the code of a refusal to start (record 24)", async () => {

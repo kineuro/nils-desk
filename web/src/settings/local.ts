@@ -8,8 +8,8 @@
 // actions, what the download dialog asks and when it may download, how a
 // started model runs, and each refusal in words a person can act on.
 
-import { admissionWords, listWords, modelOf, type Admission, type Tone } from "./gateway";
-import type { AdmissionRecord, Backend, LocalAsk, LocalLookup, LocalModel, LocalRefusal, LocalRun, LocalRuntime, LocalState, RunState } from "./kvasir";
+import { admissionWords, modelOf, type Admission, type Tone } from "./gateway";
+import type { AdmissionRecord, Backend, LocalAsk, LocalFile, LocalLookup, LocalModel, LocalRefusal, LocalRun, LocalRuntime, LocalState, RunState } from "./kvasir";
 
 /** How often the list is read again while a model is queued or downloading. */
 export const POLL_MS = 5_000;
@@ -125,20 +125,10 @@ export const TOKEN_NOTE = "Needed only for gated or private models. Kvasir keeps
 /** Said where the location changes. */
 export const STAY_NOTE = "Models downloaded earlier stay where they are, and the list shows each with its own path.";
 
-/** Whether the Hugging Face token is set, as the tag beside it. */
-export function tokenTag(set: boolean): { tone: LocalTone; words: string } {
-  return set ? { tone: "ok", words: "set" } : { tone: "neutral", words: "not set" };
-}
-
 /** Whether a typed token is one Kvasir takes: 8 to 512 characters, and no space. */
 export function tokenReady(typed: string): boolean {
   const t = typed.trim();
   return t.length >= 8 && t.length <= 512 && !/\s/u.test(t);
-}
-
-/** The room where new downloads go. */
-export function freeWords(free: number | null): string {
-  return free === null ? "Kvasir could not read the free space there." : `${bytesWords(free)} free`;
 }
 
 /** The include text as patterns: one a line or separated by commas, trimmed, each once. */
@@ -299,19 +289,7 @@ export function movedWords(location: string): string {
 /** How often the list is read again while a model loads into the runtime. */
 export const START_POLL_MS = 2_000;
 
-/** What the section says first: where its models run, by the runtime the install has. A Kvasir before record 24 says nothing of one, and the words are as they were. */
-export function introWords(runtime: LocalRuntime | null | undefined): string {
-  if (runtime === undefined) return "Models Kvasir downloads from the Hugging Face Hub, for a model server of yours to run.";
-  if (runtime === null) return "Models Kvasir downloads from the Hugging Face Hub. Kvasir runs no model here: a model server of yours runs them.";
-  return "Models Kvasir downloads from the Hugging Face Hub and starts on llama.cpp on this machine, one at a time.";
-}
-
-/** Said where the list is empty, by the runtime the install has. */
-export function emptyWords(runtime: LocalRuntime | null | undefined): string {
-  return runtime ? "No local model yet. Download a model in GGUF, then start it from its row." : "No local model yet. Download one, then start a model server on it.";
-}
-
-/** The runtime as the section names it: llama.cpp's build, and the archive it came from. */
+/** The runtime as the line under the models names it: llama.cpp's build, and the archive it came from. */
 export function runtimeLine(r: LocalRuntime): string {
   return `llama.cpp ${r.build}, ${r.variant}`;
 }
@@ -370,14 +348,6 @@ export function runTag(run: LocalRun): { tone: LocalTone; words: string } {
   return RUN_TAGS[run.state] ?? { tone: "neutral", words: String(run.state) };
 }
 
-/** A serving model's line: the name it is served as, and the context and slots llama.cpp settled on. */
-export function servingWords(run: LocalRun): string {
-  const parts: string[] = [];
-  if (run.context) parts.push(`${count(run.context)} tokens of context`);
-  if (run.slots) parts.push(run.slots === 1 ? "one slot" : `${count(run.slots)} slots`);
-  return parts.length > 0 ? `Serving as ${run.model}, with ${listWords(parts)}.` : `Serving as ${run.model}.`;
-}
-
 /**
  * Whether Kvasir admitted a serving model, read from the backend that serves
  * it: warming until its first answer, then as the models table says it, being
@@ -419,4 +389,109 @@ export function stoppedWords(m: LocalModel): string {
 /** Said in place of removing a model llama.cpp loads or serves. */
 export function stopFirstWords(m: LocalModel): string {
   return `${m.repo} is started on llama.cpp. Stop it first, then remove it.`;
+}
+
+// Record 25: a download is one of Add a model's choices, where a GGUF model's
+// file is chosen by its quantization, and a local model is a card among the
+// models, with the machine, where downloads go and the token on one line.
+
+/** What Add a model says of downloading, by the runtime the install has. */
+export function downloadChoiceWords(runtime: LocalRuntime | null | undefined): string {
+  return runtime
+    ? "A GGUF model from the Hugging Face Hub, started by Kvasir on llama.cpp here. Prompts stay in your systems."
+    : "A model from the Hugging Face Hub, for a model server of yours to run. Prompts stay in your systems.";
+}
+
+/** Said under the files a download brings. */
+export const CHECKED_BEFORE = "Kvasir checks the model before the assistant may use it.";
+
+/** A file of a GGUF model to choose, by its quantization: every part of a split file together, with its size in all. */
+export interface FileChoice {
+  key: string;
+  label: string;
+  paths: string[];
+  bytes: number;
+}
+
+const SPLIT = /-\d{5}-of-\d{5}(?=\.gguf$)/iu;
+const QUANT = /(?:^|[-_.])((?:UD-)?(?:I?Q\d(?:_[A-Z0-9]+)*|B?F(?:16|32)|MXFP4(?:_MOE)?))(?=[-_.]|$)/giu;
+const stemOf = (path: string) => (path.split("/").pop() ?? path).replace(/\.gguf$/iu, "");
+
+/** The quantization a GGUF file's name carries, such as Q4_K_M; its name where it carries none. */
+export function quantizationOf(path: string): string {
+  const found = [...stemOf(path).matchAll(QUANT)];
+  return found.length > 0 ? found[found.length - 1][1] : stemOf(path);
+}
+
+/** The GGUF files a look-up found, one choice a quantization with all its parts, smallest first; a vision projector is not a model to choose. */
+export function fileChoices(files: LocalFile[]): FileChoice[] {
+  const groups = new Map<string, FileChoice>();
+  for (const f of files) {
+    if (!/\.gguf$/iu.test(f.path) || /^mmproj/iu.test(stemOf(f.path))) continue;
+    const key = f.path.replace(SPLIT, "");
+    const g = groups.get(key) ?? { key, label: quantizationOf(key), paths: [], bytes: 0 };
+    g.paths.push(f.path);
+    g.bytes += f.size;
+    groups.set(key, g);
+  }
+  const out = [...groups.values()].sort((a, b) => a.bytes - b.bytes || a.key.localeCompare(b.key));
+  // two files of one quantization are told apart by their names
+  return out.map((c) => (out.filter((x) => x.label === c.label).length > 1 ? { ...c, label: stemOf(c.key) } : c));
+}
+
+/** Whether a file fits the machine's card, as the tag beside it says; null where the card is not known. */
+export function fitWords(bytes: number, card: { memory_gb: number } | null | undefined): { tone: LocalTone; words: string } | null {
+  if (!card || !(card.memory_gb > 0)) return null;
+  return bytes <= card.memory_gb * 2 ** 30 ? { tone: "ok", words: "fits the card" } : { tone: "caution", words: "larger than the card: runs on the processor, slowly" };
+}
+
+/** The file a look-up opens on: Q4_K_M where it fits, else the largest that fits a card that is known, else none until one is chosen. */
+export function defaultChoice(choices: FileChoice[], card: { memory_gb: number } | null | undefined): string | null {
+  const known = fitWords(0, card) !== null;
+  const fitting = known ? choices.filter((c) => fitWords(c.bytes, card)?.tone === "ok") : choices;
+  const usual = fitting.find((c) => c.label.toUpperCase() === "Q4_K_M");
+  if (usual) return usual.key;
+  return known && fitting.length > 0 ? fitting[fitting.length - 1].key : null;
+}
+
+/** What Download asks Kvasir once a look-up answered for what the dialog shows: the chosen file of a GGUF model, else every file the patterns choose; null before it may download. */
+export function downloadAsk(d: DownloadDraft, found: Found | null, chosen: string | null): LocalAsk | null {
+  if (!found || !downloadable(d, found)) return null;
+  const choices = fileChoices(found.lookup.files);
+  if (choices.length === 0) return askOf(d);
+  const file = choices.find((c) => c.key === chosen);
+  return file ? { ...askOf(d), include: file.paths } : null;
+}
+
+/** The bytes a download brings: the chosen file's, or every file the look-up found. */
+export function askedBytes(lookup: LocalLookup, chosen: string | null): number {
+  return fileChoices(lookup.files).find((c) => c.key === chosen)?.bytes ?? lookup.bytes_total;
+}
+
+/** A local model's name on its card: the name llama.cpp serves it as once started, else its name on the hub. */
+export function localName(m: LocalModel): string {
+  return started(m) && m.run?.model ? m.run.model : m.repo;
+}
+
+/** A local model's line under its name: this machine, and what it is there for. */
+export function localMeta(m: LocalModel): string {
+  if (m.run?.state === "serving") return ["This machine", "llama.cpp", m.run.context ? `${count(m.run.context)} tokens` : null].filter(Boolean).join(" · ");
+  if (m.run?.state === "starting") return "This machine · llama.cpp";
+  if (m.state !== "done") return "This machine · from the Hugging Face Hub";
+  return m.startable === true ? "This machine · starts on llama.cpp" : "This machine · for a model server of yours";
+}
+
+/** The tag a local model's card carries: how it runs once started, else where its download stands. */
+export function localTag(m: LocalModel): { tone: LocalTone; words: string } {
+  return m.run && m.run.state !== "stopped" ? runTag(m.run) : modelTag(m.state);
+}
+
+/** The local models in the order their cards stand: the one llama.cpp loads or serves first, then the rest as Kvasir lists them. */
+export function localOrder(models: LocalModel[]): LocalModel[] {
+  return [...models.filter(started), ...models.filter((m) => !started(m))];
+}
+
+/** Where downloads go and the room there, on the line under the cards. */
+export function roomLine(free: number | null): string {
+  return free === null ? "the free space there is not known" : `${bytesWords(free)} free`;
 }

@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The ChatGPT subscription's words (record 23). A person signs in with their
-// own on their profile; on a desk that signs nobody in, the install's is on
-// the Kvasir page. Signing in shows a code to enter at a link, and the card
-// asks Kvasir again every few seconds until it is signed in or failed.
+// The ChatGPT subscription's words (records 23 and 25). A person's own is a
+// card among the Kvasir page's models, for a person who may use the assistant
+// and see Kvasir; on a desk that signs nobody in, the card is the install's.
+// Add a model signs one in too. Signing in shows a code to enter at a link,
+// and the card or the dialog asks Kvasir again every few seconds until it is
+// signed in or failed.
 
-import type { Tone } from "./gateway";
+import { listWords, type Tone } from "./gateway";
 import type { Subscription } from "./kvasir";
 
 /** How often a waiting sign-in is asked after. */
@@ -13,7 +15,22 @@ export const POLL_MS = 3_000;
 /** How long past its code's expiry a sign-in is still asked after, for the clocks of two machines. */
 const GRACE_MS = 60_000;
 
-/** Where the ChatGPT card is drawn: the install's on the Kvasir page, a person's own on their profile. */
+/** A subscription not signed in, where Kvasir answered with none. */
+export const SIGNED_OUT: Subscription = {
+  provider: "chatgpt",
+  name: "ChatGPT",
+  for: "person",
+  state: "signed_out",
+  user_code: null,
+  verification_uri: null,
+  expires_at: null,
+  since: null,
+  model: null,
+  models: [],
+  error: null,
+};
+
+/** Whose the ChatGPT subscription Kvasir answered with is: the install's on a desk that signs nobody in, else the person's own. */
 export function placeOf(subscriptions: Subscription[] | null): { kvasir: Subscription | null; profile: Subscription | null } {
   const row = subscriptions?.find((s) => s.provider === "chatgpt") ?? null;
   return { kvasir: row?.for === "system" ? row : null, profile: row?.for === "person" ? row : null };
@@ -47,12 +64,12 @@ export function linkText(uri: string): string {
   return uri.replace(/^https?:\/\//u, "");
 }
 
-/** The tag at the card's head. */
+/** The tag on the card. */
 export function stateTag(s: Subscription, now: number): { tone: Tone; words: string } {
   if (s.state === "signed_in") return { tone: "ok", words: "signed in" };
   if (s.state === "waiting") return expired(s.expires_at, now) ? { tone: "caution", words: "the code expired" } : { tone: "caution", words: "waiting for you" };
-  if (s.state === "failed") return { tone: "blocked", words: "not signed in" };
-  return { tone: "neutral", words: "signed out" };
+  if (s.state === "failed") return { tone: "blocked", words: "did not finish" };
+  return { tone: "neutral", words: "not signed in" };
 }
 
 export function cardTitle(s: Subscription): string {
@@ -60,10 +77,11 @@ export function cardTitle(s: Subscription): string {
 }
 
 const onDay = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+const onShortDay = (ms: number) => new Date(ms).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
-/** What the card says first, for its state. */
-export function leadWords(s: Subscription): string {
-  if (s.state === "waiting") return "Open the link, enter the code, and approve. This card follows the sign-in and says when it is done.";
+/** What the card, or the dialog signing it in, says first for its state. */
+export function leadWords(s: Subscription, where: "card" | "dialog" = "card"): string {
+  if (s.state === "waiting") return `Open the link, enter the code, and approve. This ${where} follows the sign-in and says when it is done.`;
   if (s.state === "signed_in") return s.since === null ? "Signed in." : `Signed in since ${onDay(s.since)}.`;
   if (s.state === "failed") {
     const why = (s.error ?? "").trim().replace(/[.\s]+$/u, "");
@@ -74,14 +92,48 @@ export function leadWords(s: Subscription): string {
     : `Until you sign in, the stations an admin lets go to ${s.name} answer you with the default model in your systems.`;
 }
 
-/** What the subscription is used for, said under the card. */
-export function servesWords(s: Subscription): string {
-  const serves = s.for === "system" ? "The install's subscription serves every conversation on this desk" : "Your subscription serves only your conversations";
-  return `${serves}, for the stations an admin lets go to ${s.name}. Rows of the registry go to it only where an admin wrote down why, and identifiers never do.`;
-}
-
 /** A model the subscription offers, with the context it takes. */
 export function modelWords(m: { id: string; name: string; context_window: number }): string {
   const name = m.name.trim() || m.id;
   return m.context_window > 0 ? `${name}, ${m.context_window.toLocaleString("en-GB")} tokens` : name;
+}
+
+/** The line under a signed-in card's title: whose it is, and the model it answers with. */
+export function cardMeta(s: Subscription): string {
+  const whose = s.for === "system" ? "The whole install's" : "Yours alone";
+  if (!s.model) return `${whose} · no model chosen yet`;
+  const m = s.models.find((x) => x.id === s.model);
+  return `${whose} · ${m ? modelWords(m) : s.model}`;
+}
+
+/** Since when it is signed in, beside its tag. */
+export function sinceWords(s: Subscription): string | null {
+  return s.state === "signed_in" && s.since !== null ? `since ${onShortDay(s.since)}` : null;
+}
+
+/** The stations a signed-in subscription answers, on its card. */
+export function answeredWords(s: Subscription, stations: string[]): string {
+  if (stations.length === 0) return `answers no station until an admin lets one go to ${s.name}`;
+  return `answers ${listWords(stations)}${s.for === "person" ? ", in your conversations" : ""}`;
+}
+
+/** How signing in goes, said before it starts. */
+export function howWords(s: Subscription): string {
+  const done = s.for === "system" ? "the install is signed in" : "you are signed in";
+  return `Kvasir asks OpenAI for a code. You open the link, enter the code and approve; this dialog follows along and says when ${done}. You choose the model it answers with afterwards.`;
+}
+
+/** What the subscription carries, said before signing in: the stations it answers today, and the rule for rows and identifiers. */
+export function stationsNote(s: Subscription, stations: string[]): string {
+  const today =
+    stations.length > 0
+      ? `It answers ${listWords(stations)}${s.for === "person" ? " for you" : ""} today.`
+      : `No station goes to ${s.name} yet; an admin lets one go there under Where each station goes.`;
+  return `${today} Rows of the registry reach it only where an admin wrote down why, and identifiers never do.`;
+}
+
+/** Said once a sign-in from Add a model is done. */
+export function signedInWords(s: Subscription): string {
+  const who = s.for === "system" ? "The install is" : "You are";
+  return `${who} signed in to ${s.name}. ${s.model ? "Its card under Models says the model it answers with." : "Choose the model it answers with on its card under Models."}`;
 }
