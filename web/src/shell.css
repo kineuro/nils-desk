@@ -448,6 +448,87 @@ table.thin.audit .audit-scope { display: none; }
 .ladder button.on { background: var(--n-brand-bg); color: var(--n-brand-fg); }
 .ladder button:disabled { cursor: default; }
 .ladder-row { gap: 0.6rem; flex-wrap: wrap; }
+/* ---- record 25: the Identity page (sign-in as facts, groups as cards, people with what they add up to), the access form a person and a group share, and the profile's lines */
+.stack.roomy { gap: 0.6rem; }
+.facts-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem 1.4rem; }
+.facts-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fact { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 0.1rem 0.65rem; align-content: start; min-width: 0; }
+.fact > .i { grid-row: 1 / span 2; margin-top: 2px; color: var(--n-brand-icon); }
+.fact > b, .fact > .meta { grid-column: 2; min-width: 0; }
+.fact .path { overflow-wrap: anywhere; }
+dl.facts.sign-facts { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); gap: 0.2rem 1rem; font-size: var(--n-text-size-small); }
+.signin { display: grid; gap: 0.9rem; }
+.setup-say { display: flex; align-items: center; gap: 0.6rem; padding-top: 0.75rem; border-top: 1px solid var(--n-line); color: var(--n-text-faint); }
+.setup-say p { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.ggrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9rem; }
+.gcard { display: grid; gap: 0.55rem; align-content: start; min-width: 0; padding: 0.8rem 0.9rem 0.85rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.gcard h3 { min-width: 0; overflow-wrap: anywhere; }
+.gcard > .button { justify-self: start; }
+.amarks { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.amark { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0 0.45rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-size: 12px; font-weight: 500; white-space: nowrap; color: var(--n-text-dim); }
+.amark.do { border-color: var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-fg); }
+.amark.own { border-style: dashed; border-color: var(--n-brand-text); color: var(--n-brand-fg); }
+.amark-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.45rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.amark-legend .sep { width: 0.7rem; }
+table.thin.people .person-under { display: none; }
+.alist { display: grid; border-top: 1px solid var(--n-line); }
+.alist-head { margin-bottom: -0.6rem; }
+.arow { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; column-gap: 0.75rem; row-gap: 0.05rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--n-line); }
+.arow > .i { grid-column: 1; grid-row: 1 / span 2; color: var(--n-text-faint); }
+.arow > b { grid-column: 2; grid-row: 1; font-weight: 500; }
+.arow > .what { grid-column: 2; grid-row: 2; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.arow > .seg, .arow > .state, .arow > .aside { grid-column: 3; grid-row: 1 / span 2; justify-self: end; }
+.arow > .state { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.arow.deep { grid-template-columns: minmax(0, 1fr) auto; padding-left: 1.85rem; }
+.arow.deep > b, .arow.deep > .what { grid-column: 1; }
+.arow.deep > .seg, .arow.deep > .state { grid-column: 2; }
+.arow.hidden > b { font-weight: 400; color: var(--n-text-faint); }
+.what .from { font-weight: 500; color: var(--n-text-dim); }
+.what .from.own { color: var(--n-brand-text); }
+.seg { display: inline-flex; overflow: hidden; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.seg button { min-width: 4.1rem; padding: 0.15rem 0.6rem; border: 0; border-left: 1px solid var(--n-neutral-line); background: transparent; font: inherit; font-size: 13px; text-align: center; color: var(--n-text-dim); cursor: pointer; }
+.seg button:first-child { border-left: 0; }
+.seg button.on { background: var(--n-brand); color: var(--n-text-on-brand); font-weight: 500; }
+.seg button.on.off { background: var(--n-bg-sunken); color: var(--n-text); }
+.seg button.locked { background: var(--n-bg-sunken); color: var(--n-text-faint); cursor: default; }
+.seg button:focus-visible { outline: 2px solid var(--n-brand-text); outline-offset: -2px; }
+.presets { flex-wrap: wrap; gap: 0.4rem; }
+.opt { display: inline-flex; align-items: center; min-height: 1.75rem; padding: 0 0.6rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font: inherit; font-size: 13px; color: var(--n-text); cursor: pointer; }
+.opt .i { width: 13px; height: 13px; margin-right: 0.3rem; stroke-width: 2.4; }
+.opt.on { border-color: var(--n-brand-text); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
+.access-under { margin-top: -0.5rem; }
+.row.actions .push { margin-left: auto; }
+@media (min-width: 641px) {
+  .dialog:has(.alist) { width: min(44rem, calc(100vw - 2rem)); }
+}
+@media (max-width: 1100px) {
+  .ggrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .facts-row, .facts-row.two { grid-template-columns: minmax(0, 1fr); }
+  dl.facts.sign-facts { grid-template-columns: max-content minmax(0, 1fr); }
+  /* a person's row keeps what they add up to in sight: when they last signed in, and on a phone their groups, go under their name */
+  table.thin.people th:nth-child(4), table.thin.people td:nth-child(4) { display: none; }
+  table.thin.people .person-under { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+}
+@media (max-width: 640px) {
+  .ggrid { grid-template-columns: minmax(0, 1fr); }
+  table.thin.people th:nth-child(2), table.thin.people td:nth-child(2) { display: none; }
+  table.thin.people .person-groups { display: contents; }
+  /* a line's choice goes under its words, and the three kinds of record stack */
+  .arow { grid-template-columns: 18px minmax(0, 1fr); row-gap: 0.25rem; }
+  .arow > .seg, .arow > .state, .arow > .aside { grid-column: 2; grid-row: 3; justify-self: start; }
+  .arow.deep { grid-template-columns: minmax(0, 1fr); padding-left: calc(18px + 0.75rem); }
+  .arow.deep > .seg, .arow.deep > .state { grid-column: 1; }
+  .seg button { min-width: 3.6rem; }
+  .arow > .seg.wide { flex-direction: column; justify-self: stretch; }
+  .seg.wide button { border-left: 0; border-top: 1px solid var(--n-neutral-line); text-align: left; }
+  .seg.wide button:first-child { border-top: 0; }
+}
+@media (min-width: 641px) {
+  table.thin.people .person-groups { display: none; }
+}
+/* ---- end of record 25's Identity page */
 .audit-filters { gap: 0.5rem; flex-wrap: wrap; }
 .audit-filters .input { flex: 1 1 11rem; }
 td.nowrap { white-space: nowrap; }
