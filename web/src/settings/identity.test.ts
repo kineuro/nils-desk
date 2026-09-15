@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Identity page's words: the pages as levels, what groups and a person's
-// own grants add up to, the groups the provider's groups reach counted as
-// groups and never sent back, the levels a group locks, the marks and when
-// they collapse, the note under the form, a refusal and a failed read in
-// plain words, when a person last signed in, where the desk answers, and a
-// person added.
+// The Identity page's words: the pages as levels in a few words each, what
+// groups and a person's own grants add up to, the groups the provider's
+// groups reach counted as groups and never sent back, the levels a group
+// locks, the marks and when they collapse, the one sentence under the form,
+// the short records tags, a refusal and a failed read in a few plain words,
+// sign-in and sessions as values, when a person last signed in, where the
+// desk answers, and a person added.
 
 import { describe, expect, it } from "vitest";
 import { DoorError } from "../ask/client";
@@ -12,6 +13,8 @@ import type { Capabilities } from "../capabilities";
 import { SETS, type Grant } from "../grants";
 import {
   PAGE_LINES,
+  RECORD_WORDS,
+  SIGN_IN,
   accessStats,
   addRefusal,
   addUp,
@@ -24,6 +27,7 @@ import {
   grantsOf,
   groupRefusal,
   groupsGiving,
+  hostOf,
   lastSeenWords,
   levelOf,
   levelsOf,
@@ -31,16 +35,15 @@ import {
   locked,
   marksOf,
   memberCount,
-  openWords,
   ownAbove,
   ownDetailAbove,
   ownPages,
-  ownWords,
   personBody,
   reachWords,
   readWords,
   refusalWords,
   seenWords,
+  sessionWords,
   summaryWords,
   yourWords,
   type Access,
@@ -74,13 +77,16 @@ describe("the pages as levels", () => {
     expect(grantsOf(levelsOf(everything))).toHaveLength(PAGE_LINES.length);
   });
 
-  it("words a page in the form and on a person's profile", () => {
-    expect(lineWords(line("query"))).toBe("Ask, run and chart questions, and open the cards people share. Work: keep cards and selections, and queue ask jobs.");
-    expect(yourWords(line("query"), "see")).toBe("Ask, run and chart questions, and open the cards people share.");
-    expect(lineWords(line("audit"))).toBe("See who did what, and when.");
-    expect(yourWords(line("review"), "work")).toBe("See what waits for a person, decide, and tune the rules.");
-    expect(yourWords(line("data"), "see")).toBe("See sources and batches.");
-    expect(yourWords(line("assistant"), "use")).toBe("Talk with the assistant, in conversations of your own.");
+  it("words a page in a few words, in the form and on a person's profile", () => {
+    expect(lineWords(line("query"))).toBe("Ask, run and chart questions · work: keep cards, queue ask jobs");
+    expect(lineWords(line("audit"))).toBe("Who did what, when");
+    expect(yourWords(line("query"), "see")).toBe("Ask, run and chart questions");
+    expect(yourWords(line("review"), "work")).toBe("What waits for a person · decide, tune rules");
+    expect(yourWords(line("assistant"), "use")).toBe("Chat with the assistant");
+    for (const l of PAGE_LINES) {
+      expect(l.see.split(" ").length).toBeLessThanOrEqual(5);
+      expect((l.work ?? "").split(" ").length).toBeLessThanOrEqual(5);
+    }
   });
 });
 
@@ -161,56 +167,35 @@ describe("the marks", () => {
   });
 });
 
-describe("the note under the form", () => {
-  it("says what a person will see, where they may work, and what is theirs alone", () => {
+describe("the sentence under the form", () => {
+  it("says in one sentence what a person sees, where they work, and how much of a record", () => {
     const grants = [...reviewers.grants, "kvasir:see"];
-    const s = summaryWords({ kind: "person", name: "Erik", grants, detail: "quasi", groups: [reviewers], own: new Set<PageId>(["kvasir"]), ownDetail: false });
-    expect(s.lead).toBe("Erik will see Home, Assistant, Query, Data and Review, and Kvasir under Settings.");
-    expect(s.detail[0]).toBe("Erik may use the assistant, and work in Query and Review. In records, Erik sees dates, subject codes, sex and age, scanner names and series and protocol descriptions.");
-    expect(s.detail[1]).toBe(
-      "Reviewers gives all of it but Kvasir, which is Erik's alone. When Reviewers changes, Erik changes with it. A page a group gives cannot go lower here; take the person out of the group instead.",
+    expect(summaryWords({ kind: "person", name: "Erik", grants, detail: "quasi" })).toBe("Erik sees Assistant, Query, Data, Review and Kvasir, works in Query and Review, with identifying details.");
+    expect(summaryWords({ kind: "person", name: " ", grants: [], detail: "plain" })).toBe("This person sees no page yet.");
+    const sara = addUp([reviewers, dataTeam], { grants: [], detail: null }).grants;
+    expect(summaryWords({ kind: "person", name: "Sara", grants: sara, detail: "sensitive" })).toBe(
+      "Sara sees Assistant, Query, Data, Review, Release, Pipelines and Places, works in Query, Data, Review, Release, Pipelines and Places, with every detail.",
     );
   });
 
-  it("says it for a person in no group, in two groups, and with only their own pages", () => {
-    const none = summaryWords({ kind: "person", name: " ", grants: [], detail: "plain", groups: [] });
-    expect(none.lead).toBe("This person will see nothing until given a page.");
-    expect(none.detail).toEqual([
-      "This person may look, but work nowhere. In records, this person sees no dates, subject codes, sex or age, scanner names or series descriptions.",
-      "This person is in no group, so all of it is theirs alone.",
-    ]);
-    const two = summaryWords({ kind: "person", name: "Sara", grants: addUp([reviewers, dataTeam], { grants: [], detail: null }).grants, detail: "sensitive", groups: [reviewers, dataTeam], own: new Set(), ownDetail: true });
-    expect(two.lead).toBe("Sara will see Home, Assistant, Query, Data, Review, Release and Pipelines, and Places under Settings.");
-    expect(two.detail[0]).toBe(
-      "Sara may use the assistant, and work in Query, Data, Review, Release, Pipelines and Places. In records, Sara sees identifying details, sensitive events, raw identifiers and burned-in annotation.",
-    );
-    expect(two.detail[1]).toMatch(/^Reviewers and Data team give all of it but what Sara sees in records, which is Sara's alone\. When one of them changes, Sara changes with it\./u);
-    const bare = summaryWords({ kind: "person", name: "Ann", grants: ["audit:see"], detail: "plain", groups: [{ ...dataTeam, grants: [] }], own: new Set<PageId>(["audit"]) });
-    expect(bare.detail[1]).toMatch(/^Data team gives none of its pages, so Audit is Ann's alone\./u);
-  });
-
-  it("says what a group's people will see, how many there are, and whom it follows", () => {
-    const s = summaryWords({ kind: "group", name: "Guests", grants: ["query:see", "data:see"], detail: "plain", members: 1, follows: ["lab-guests"] });
-    expect(s.lead).toBe("People in Guests will see Home, Query and Data.");
-    expect(s.detail).toEqual([
-      "People in Guests may look, but work nowhere. In records, people in Guests see no dates, subject codes, sex or age, scanner names or series descriptions.",
-      "1 person is in it now, and each gets all of this from their next click, and what their other groups give.",
-      "Whoever is in lab-guests at the provider joins it when they sign in.",
-    ]);
-    const made = summaryWords({ kind: "group", name: "", grants: SETS.admin.grants, detail: "sensitive", members: 0, follows: [] });
-    expect(made.lead).toBe("People in this group will see Home, Query, Data, Review, Release and Pipelines, and the install, Kvasir, the assistant's settings, Places, Database, Identity and Audit under Settings.");
-    expect(made.detail.slice(1)).toEqual(["Nobody is in it yet. A person put in it gets all of this, and what their other groups give.", "It follows no group at the provider yet, so nobody joins it by signing in."]);
+  it("says it for a group's people", () => {
+    expect(summaryWords({ kind: "group", name: "Guests", grants: ["query:see", "data:see"], detail: "plain" })).toBe("People in Guests see Query and Data, without identifying details.");
+    expect(summaryWords({ kind: "group", name: "", grants: [], detail: "sensitive" })).toBe("People in this group see no page yet.");
   });
 });
 
 describe("the words", () => {
-  it("join lists, count, and say what a person has of their own", () => {
+  it("join lists and count", () => {
     expect(andWords([])).toBe("");
     expect(andWords(["A"])).toBe("A");
     expect(andWords(["A", "B", "C"])).toBe("A, B and C");
-    expect(ownWords(1, false)).toBe("and 1 page of their own");
-    expect(ownWords(2, true)).toBe("and 2 pages and more of records of their own");
-    expect(ownWords(0, false)).toBeNull();
+  });
+
+  it("tag how much of a record in a word, with the whole of it kept for hover", () => {
+    expect(RECORD_WORDS.plain.short).toBe("Non-identifying");
+    expect(RECORD_WORDS.quasi.short).toBe("Identifying");
+    expect(RECORD_WORDS.sensitive.short).toBe("Everything");
+    expect(RECORD_WORDS.quasi.says).toBe("Dates, subject codes, sex and age, scanner names and series and protocol descriptions.");
   });
 
   it("read the provider's groups a group follows and refuse a group without a name or with one taken", () => {
@@ -220,29 +205,30 @@ describe("the words", () => {
     expect(groupRefusal("Reviewers", [reviewers], 1)).toBeNull();
   });
 
-  it("put a refusal in plain words, never naming a grant", () => {
-    expect(refusalWords(new DoorError(409, { error: "no identity:work left" }), "group")).toBe("That would leave nobody who may change people and groups, so the desk kept everything as it was.");
-    expect(refusalWords(new DoorError(401, { error: "no session; log in at the desk" }), "person")).toBe("Your session has ended. Sign in at the desk again, then make the change once more.");
+  it("put a refusal in a few plain words, never naming a grant", () => {
+    expect(refusalWords(new DoorError(409, { error: "no identity:work left" }), "group")).toBe("Refused: nobody would be left who may change people and groups.");
+    expect(refusalWords(new DoorError(401, { error: "no session; log in at the desk" }), "person")).toBe("Session ended. Sign in again.");
     expect(refusalWords(new DoorError(403, { error: "changing people needs identity:work" }), "group")).toBe("You may not change people and groups.");
-    expect(refusalWords(new DoorError(400, { error: "unknown group 7" }), "person")).toBe("The desk does not know a group or a page chosen here. Open the page again and choose once more.");
-    expect(refusalWords(new DoorError(400, { error: "data:admin is not a grant" }), "group")).toBe("The desk does not know a group or a page chosen here. Open the page again and choose once more.");
+    expect(refusalWords(new DoorError(400, { error: "unknown group 7" }), "person")).toBe("Unknown group or page. Reload the page.");
+    expect(refusalWords(new DoorError(400, { error: "data:admin is not a grant" }), "group")).toBe("Unknown group or page. Reload the page.");
     expect(refusalWords(new DoorError(400, { error: "a user named bo exists" }), "person")).toBe("A user named bo exists.");
-    expect(refusalWords(new DoorError(404, {}), "person")).toBe("The desk no longer knows this person. Open the page again.");
+    expect(refusalWords(new DoorError(404, {}), "person")).toBe("This person is gone. Reload the page.");
+    expect(refusalWords(new DoorError(404, {}), "group")).toBe("This group is gone. Reload the page.");
     expect(refusalWords(new DoorError(500, {}), "group")).toBe("The desk answered 500.");
     expect(refusalWords(new DoorError(500, { error: "grant query:see is not held" }), "group")).toBe("The desk answered 500.");
     expect(refusalWords(new Error("offline"), "group")).toBe("offline");
   });
 
   it("say why the people and groups could not be read, never naming a grant", () => {
-    expect(readWords(new DoorError(401, { error: "no session; log in at the desk" }))).toBe("Your session has ended. Sign in at the desk again to see people and groups.");
+    expect(readWords(new DoorError(401, { error: "no session; log in at the desk" }))).toBe("Session ended. Sign in again.");
     expect(readWords(new DoorError(403, { error: "people need identity:see" }))).toBe("You may not see people and groups.");
-    expect(readWords(new DoorError(404, { error: "not found" }))).toBe("The desk keeps no people or groups now; it may have been set up again so that nobody signs in. Open the page again.");
+    expect(readWords(new DoorError(404, { error: "not found" }))).toBe("No people or groups here. Reload the page.");
     expect(readWords(new DoorError(500, { error: "the store is locked" }))).toBe("The store is locked.");
-    expect(readWords(new DoorError(502, {}))).toBe("The people and groups could not be read: the desk answered 502.");
+    expect(readWords(new DoorError(502, {}))).toBe("Could not read people and groups: the desk answered 502.");
     expect(readWords(new Error("offline"))).toBe("offline");
   });
 
-  it("say when a person last signed in", () => {
+  it("say sign-in, sessions and when a person last signed in as values", () => {
     const now = Date.parse("2026-09-13T12:00:00Z");
     expect(lastSeenWords(null, now)).toBe("never");
     expect(lastSeenWords("2026-09-13T11:58:00Z", now)).toBe("now");
@@ -251,10 +237,12 @@ describe("the words", () => {
     expect(lastSeenWords("2026-09-13T09:00:00Z", now)).toBe("3 hours ago");
     expect(lastSeenWords("2026-09-12T09:00:00Z", now)).toBe("yesterday");
     expect(lastSeenWords("2026-09-10T09:00:00Z", now)).toBe("3 days ago");
-    expect(seenWords({ last_seen_at: "2026-09-10T09:00:00Z", sessions_open: 2 }, now)).toBe("signed in now");
-    expect(openWords(0)).toBe("No session is open now.");
-    expect(openWords(1)).toBe("1 session is open now.");
-    expect(openWords(3)).toBe("3 sessions are open now.");
+    expect(seenWords({ last_seen_at: "2026-09-10T09:00:00Z", sessions_open: 2 }, now)).toBe("now");
+    expect(sessionWords(12, 1)).toBe("12 h sessions, 1 open");
+    expect(sessionWords(12, null)).toBe("12 h sessions");
+    expect(SIGN_IN).toEqual({ off: "No sign-in", local: "Local accounts", oidc: "Single sign-on" });
+    expect(hostOf("https://id.example.org/o/nils/")).toBe("id.example.org");
+    expect(hostOf("not an address")).toBe("not an address");
   });
 
   it("say where the desk answers, and refuse a person added twice", () => {
