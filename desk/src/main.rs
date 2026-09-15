@@ -1,10 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The `nils-desk` command line: serve, or check the engine's contracts.
+//! The `nils-desk` command line: serve, check the engine's contracts, keep
+//! the people and the groups they are given pages by, and register the desk
+//! at a provider.
 
 use std::net::SocketAddr;
 
 use clap::{Parser, Subcommand};
+use nils_desk::config::Mode;
+use nils_desk::grants::Access;
+use nils_desk::store::{Change, Claims};
+use nils_desk::users::Given;
 use nils_desk::{OPENAPI, SUITE, Shared, VERSION, capabilities, router};
 
 #[derive(Debug, Parser)]
@@ -30,9 +36,12 @@ enum Command {
         #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
         config: std::path::PathBuf,
     },
-    /// The local users of `local` mode (Wave 4c section 5.1)
+    /// The people of the desk: its local users, and what each person holds
     #[command(subcommand)]
     User(UserCommand),
+    /// The groups people are given pages by
+    #[command(subcommand)]
+    Group(GroupCommand),
     /// Register the desk at an Authentik provider, idempotently (section 5.7)
     Register(RegisterArgs),
 }
@@ -46,24 +55,44 @@ enum UserCommand {
         username: String,
         #[arg(long)]
         display: Option<String>,
-        /// An entitlement, repeatable: reader, reviewer, operator, admin, assist
-        #[arg(long = "entitlement", value_name = "NAME")]
-        entitlements: Vec<String>,
-        /// The first user: an admin who uses the assistant too, and grants the rest on the settings page
+        /// A group the person joins, by name, repeatable
+        #[arg(long = "group", value_name = "GROUP")]
+        groups: Vec<String>,
+        /// A grant the person holds alone, such as query:work, repeatable
+        #[arg(long = "grant", value_name = "GRANT")]
+        grants: Vec<String>,
+        /// What they see in records, on their own: plain, quasi or sensitive
+        #[arg(long, value_name = "DETAIL")]
+        detail: Option<String>,
+        /// The first person: joins Admins, who may do everything, the assistant too
         #[arg(long)]
         admin: bool,
+        /// A ladder name (reader, reviewer, operator, admin, assist), repeatable, standing for its set as the person's own; for one release
+        #[arg(long = "entitlement", value_name = "NAME")]
+        entitlements: Vec<String>,
     },
-    /// The users and their entitlements
+    /// The people, their groups and what they hold
     List {
         #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
         config: std::path::PathBuf,
     },
-    /// Set a user's entitlements, replacing them
-    Grant {
+    /// Set what a person holds: their groups, their grants and their detail, all replaced
+    #[command(alias = "grant")]
+    Access {
         #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
         config: std::path::PathBuf,
         username: String,
-        #[arg(long = "entitlement", value_name = "NAME")]
+        /// A group the person is in, by name, repeatable
+        #[arg(long = "group", value_name = "GROUP")]
+        groups: Vec<String>,
+        /// A grant the person holds alone, repeatable
+        #[arg(long = "grant", value_name = "GRANT")]
+        grants: Vec<String>,
+        /// What they see in records, on their own: plain, quasi or sensitive
+        #[arg(long, value_name = "DETAIL")]
+        detail: Option<String>,
+        /// A ladder name standing for its set, as `user grant` took it; for one release
+        #[arg(long = "entitlement", value_name = "NAME", hide = true)]
         entitlements: Vec<String>,
     },
     /// Set a user's password, read from stdin
@@ -71,6 +100,51 @@ enum UserCommand {
         #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
         config: std::path::PathBuf,
         username: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum GroupCommand {
+    /// The groups: what each gives, who is in it and the provider groups it follows
+    List {
+        #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
+        config: std::path::PathBuf,
+    },
+    /// Make a group
+    Add {
+        #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
+        config: std::path::PathBuf,
+        name: String,
+        /// A grant the group gives, such as query:work, repeatable
+        #[arg(long = "grant", value_name = "GRANT")]
+        grants: Vec<String>,
+        /// What its people see in records: plain, quasi or sensitive
+        #[arg(long, value_name = "DETAIL")]
+        detail: Option<String>,
+        /// A group at the provider whose people this group reaches, repeatable (oidc mode)
+        #[arg(long = "follows", value_name = "GROUP")]
+        follows: Vec<String>,
+    },
+    /// Set what a group gives and follows, all replaced
+    Set {
+        #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
+        config: std::path::PathBuf,
+        name: String,
+        /// A grant the group gives, repeatable
+        #[arg(long = "grant", value_name = "GRANT")]
+        grants: Vec<String>,
+        /// What its people see in records: plain, quasi or sensitive
+        #[arg(long, value_name = "DETAIL")]
+        detail: Option<String>,
+        /// A group at the provider whose people this group reaches, repeatable (oidc mode)
+        #[arg(long = "follows", value_name = "GROUP")]
+        follows: Vec<String>,
+    },
+    /// Remove a group; its people keep what else they hold
+    Remove {
+        #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
+        config: std::path::PathBuf,
+        name: String,
     },
 }
 
@@ -114,7 +188,8 @@ fn main() {
     let code = match cli.command {
         Command::Serve { config } => rt.block_on(serve(&config)),
         Command::Check { config } => rt.block_on(check(&config)),
-        Command::User(c) => user(c),
+        Command::User(c) => answer(user(c)),
+        Command::Group(c) => answer(group(c)),
         Command::Register(a) => rt.block_on(register(a)),
     };
     std::process::exit(code);
@@ -224,93 +299,241 @@ fn read_password() -> Result<String, String> {
     Ok(p)
 }
 
-fn user(command: UserCommand) -> i32 {
-    let run = || -> Result<(), String> {
-        match command {
-            UserCommand::Add {
-                config,
-                username,
-                display,
-                entitlements,
-                admin,
-            } => {
-                let desk = load(&config)?;
-                let password = read_password()?;
-                let given = nils_desk::users::Given {
-                    entitlements,
-                    admin,
-                    ..Default::default()
-                };
-                nils_desk::users::add(
-                    &desk.store,
-                    &username,
-                    &password,
-                    display.as_deref(),
-                    &given,
-                )?;
-                println!("added {username}{}", if admin { " (admin)" } else { "" });
-                Ok(())
-            }
-            UserCommand::List { config } => {
-                let desk = load(&config)?;
-                let book = desk.store.book();
-                for u in desk.store.users() {
-                    let r = book.resolve(&u.username, None);
-                    println!(
-                        "{:<20} {:<24} {:<24} {:<9} {}",
-                        u.username,
-                        u.display,
-                        book.names(&r.member).join(","),
-                        r.access.detail,
-                        r.access.list().join(",")
-                    );
-                }
-                Ok(())
-            }
-            UserCommand::Grant {
-                config,
-                username,
-                entitlements,
-            } => {
-                let desk = load(&config)?;
-                nils_desk::users::check_entitlements(&entitlements)?;
-                let sets = nils_desk::grants::of_names(entitlements.iter().map(String::as_str));
-                desk.store
-                    .change(
-                        false,
-                        nils_desk::store::Change::Access {
-                            subject: username.clone(),
-                            groups: Vec::new(),
-                            grants: sets.grants,
-                            detail: (!entitlements.is_empty()).then_some(sets.detail),
-                        },
-                    )
-                    .map_err(|e| e.to_string())?;
-                println!("{username}: {}", entitlements.join(","));
-                Ok(())
-            }
-            UserCommand::Password { config, username } => {
-                let desk = load(&config)?;
-                let password = read_password()?;
-                if password.len() < 8 {
-                    return Err("a password is at least eight characters".into());
-                }
-                if !desk
-                    .store
-                    .user_set_password(&username, &nils_desk::users::hash(&password)?)?
-                {
-                    return Err(format!("no user named {username}"));
-                }
-                println!("{username}: the password is set");
-                Ok(())
-            }
-        }
-    };
-    match run() {
+fn answer(run: Result<(), String>) -> i32 {
+    match run {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("nils-desk: {e}");
             2
+        }
+    }
+}
+
+fn oidc(desk: &Shared) -> bool {
+    desk.config.mode == Mode::Oidc
+}
+
+fn or_dash(s: String) -> String {
+    if s.is_empty() { "-".into() } else { s }
+}
+
+/// The people the command line lists and changes: the local users, or in
+/// `oidc` mode the people who have signed in, with what their provider said
+/// at their last sign-in.
+fn people(desk: &Shared) -> Vec<(String, String, Option<Claims>)> {
+    if oidc(desk) {
+        desk.store
+            .seen()
+            .into_iter()
+            .map(|p| (p.subject, p.display, Some(p.claims)))
+            .collect()
+    } else {
+        desk.store
+            .users()
+            .into_iter()
+            .map(|u| (u.username, u.display, None))
+            .collect()
+    }
+}
+
+/// A person's groups, detail and grants, on one line.
+fn describe(desk: &Shared, subject: &str) -> String {
+    let book = desk.store.book();
+    let claims = people(desk)
+        .into_iter()
+        .find(|(s, _, _)| s == subject)
+        .and_then(|(_, _, c)| c);
+    let r = book.resolve(subject, claims.as_ref());
+    let ids: Vec<i64> = r.member.iter().chain(&r.followed).copied().collect();
+    format!(
+        "{:<24} {:<9} {}",
+        or_dash(book.names(&ids).join(",")),
+        r.access.detail.as_str(),
+        or_dash(r.access.list().join(","))
+    )
+}
+
+fn group_id(desk: &Shared, name: &str) -> Result<i64, String> {
+    desk.store
+        .book()
+        .group_named(name)
+        .map(|g| g.id)
+        .ok_or_else(|| format!("no group named {name}"))
+}
+
+/// What a group gives, from the grants and the detail named.
+fn gives(grants: &[String], detail: Option<&str>) -> Result<Access, String> {
+    Ok(Access {
+        grants: nils_desk::grants::check(grants)?,
+        detail: nils_desk::grants::check_detail(detail)?.unwrap_or_default(),
+    })
+}
+
+fn user(command: UserCommand) -> Result<(), String> {
+    match command {
+        UserCommand::Add {
+            config,
+            username,
+            display,
+            groups,
+            grants,
+            detail,
+            admin,
+            entitlements,
+        } => {
+            let desk = load(&config)?;
+            let given = Given {
+                groups: nils_desk::users::group_ids(&desk.store, &groups)?,
+                grants,
+                detail: nils_desk::grants::check_detail(detail.as_deref())?,
+                entitlements,
+                admin,
+            };
+            // what the person is given is checked before the password is asked for
+            given.own()?;
+            let password = read_password()?;
+            nils_desk::users::add(
+                &desk.store,
+                &username,
+                &password,
+                display.as_deref(),
+                &given,
+            )?;
+            println!("added {username}{}", if admin { " (admin)" } else { "" });
+            Ok(())
+        }
+        UserCommand::List { config } => {
+            let desk = load(&config)?;
+            for (subject, display, _) in people(&desk) {
+                println!(
+                    "{:<20} {:<24} {}",
+                    subject,
+                    display,
+                    describe(&desk, &subject)
+                );
+            }
+            Ok(())
+        }
+        UserCommand::Access {
+            config,
+            username,
+            groups,
+            grants,
+            detail,
+            entitlements,
+        } => {
+            let desk = load(&config)?;
+            let given = Given {
+                groups: nils_desk::users::group_ids(&desk.store, &groups)?,
+                grants,
+                detail: nils_desk::grants::check_detail(detail.as_deref())?,
+                entitlements,
+                admin: false,
+            };
+            let (own, detail) = given.own()?;
+            desk.store
+                .change(
+                    oidc(&desk),
+                    Change::Access {
+                        subject: username.clone(),
+                        groups: given.groups,
+                        grants: own,
+                        detail,
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            println!("{username}: {}", describe(&desk, &username));
+            Ok(())
+        }
+        UserCommand::Password { config, username } => {
+            let desk = load(&config)?;
+            let password = read_password()?;
+            if password.len() < 8 {
+                return Err("a password is at least eight characters".into());
+            }
+            if !desk
+                .store
+                .user_set_password(&username, &nils_desk::users::hash(&password)?)?
+            {
+                return Err(format!("no user named {username}"));
+            }
+            println!("{username}: the password is set");
+            Ok(())
+        }
+    }
+}
+
+fn group(command: GroupCommand) -> Result<(), String> {
+    match command {
+        GroupCommand::List { config } => {
+            let desk = load(&config)?;
+            let book = desk.store.book();
+            for g in &book.groups {
+                println!(
+                    "{:<24} {:<9} {:<24} {:<24} {}",
+                    g.name,
+                    g.access.detail.as_str(),
+                    or_dash(book.members_of(g.id).join(",")),
+                    or_dash(g.follows.join(",")),
+                    or_dash(g.access.list().join(","))
+                );
+            }
+            Ok(())
+        }
+        GroupCommand::Add {
+            config,
+            name,
+            grants,
+            detail,
+            follows,
+        } => {
+            let desk = load(&config)?;
+            let access = gives(&grants, detail.as_deref())?;
+            desk.store
+                .change(
+                    oidc(&desk),
+                    Change::GroupAdd {
+                        name: name.clone(),
+                        access,
+                        follows,
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            println!("made {name}");
+            Ok(())
+        }
+        GroupCommand::Set {
+            config,
+            name,
+            grants,
+            detail,
+            follows,
+        } => {
+            let desk = load(&config)?;
+            let access = gives(&grants, detail.as_deref())?;
+            let id = group_id(&desk, &name)?;
+            desk.store
+                .change(
+                    oidc(&desk),
+                    Change::GroupSet {
+                        id,
+                        name: name.clone(),
+                        access,
+                        follows,
+                    },
+                )
+                .map_err(|e| e.to_string())?;
+            println!("{name}: set");
+            Ok(())
+        }
+        GroupCommand::Remove { config, name } => {
+            let desk = load(&config)?;
+            let id = group_id(&desk, &name)?;
+            desk.store
+                .change(oidc(&desk), Change::GroupRemove { id })
+                .map_err(|e| e.to_string())?;
+            println!("removed {name}");
+            Ok(())
         }
     }
 }
