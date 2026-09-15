@@ -9,12 +9,6 @@ import type { BackendDescription, BackendKind, Locality, TriedModel } from "./kv
 
 export type Where = "here" | "elsewhere" | "provider";
 
-export const WHERE: { id: Where; title: string; words: string }[] = [
-  { id: "here", title: "A model server on this machine", words: "Such as SGLang, vLLM or Ollama. Prompts stay in your systems." },
-  { id: "elsewhere", title: "A model server on another machine of yours", words: "Reached at its address on your network. Prompts stay in your systems." },
-  { id: "provider", title: "A provider", words: "A company that serves models, with your key. Prompts leave your systems." },
-];
-
 /** Where a model server on this machine most often answers: SGLang's own port. */
 export const HERE = "http://127.0.0.1:30000/v1";
 

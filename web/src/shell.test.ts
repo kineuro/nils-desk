@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "./capabilities";
-import { door, holds, state } from "./deployment";
+import { door, state } from "./deployment";
 import { GRANTS, may } from "./grants";
 import { admit, rowFree } from "./ui/context";
 import { elapsedWords } from "./ui/Wait";
@@ -36,7 +36,6 @@ describe("the states of a fresh install", () => {
   it("is ready when the engine answered and the person holds something", () => {
     expect(state(fresh()).kind).toBe("ready");
     expect(may(fresh(), "install:work")).toBe(true);
-    expect(holds(fresh(), "operator")).toBe(true);
     expect(door(fresh(), "GET /api/summary")).toBe(true);
     expect(door(fresh(), "GET /api/places")).toBe(false);
   });

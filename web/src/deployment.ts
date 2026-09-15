@@ -4,14 +4,7 @@
 // Everything the shell shows is a predicate over the capabilities document
 // and nothing else (Wave 4c section 7.2).
 
-import type { Capabilities, Entitlement } from "./capabilities";
-import { may, SETS, sees } from "./grants";
-
-/** Whether the person holds the whole set a ladder name stands for; kept only until every page asks for a grant (record 25). */
-export function holds(caps: Capabilities, e: Entitlement): boolean {
-  const set = SETS[e];
-  return set.grants.every((g) => may(caps, g)) && sees(caps, set.detail);
-}
+import type { Capabilities } from "./capabilities";
 
 /** The engine serves a door, by its `METHOD /path` name. */
 export function door(caps: Capabilities, name: string): boolean {

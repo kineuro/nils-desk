@@ -654,7 +654,7 @@ button.dest:hover { border-color: var(--n-brand-line); background: var(--n-bg-ho
 .more-menu { position: relative; }
 .more-menu > summary { list-style: none; }
 .more-menu > summary::-webkit-details-marker { display: none; }
-.more-list { position: absolute; top: calc(100% + 0.25rem); right: 0; z-index: 3; display: grid; min-width: 11rem; padding: 0.3rem; border: 1px solid var(--n-line); border-radius: calc(var(--n-radius) * 2); background: var(--n-bg-raised); box-shadow: 0 8px 24px rgba(28, 26, 31, 0.14); }
+.more-list { position: absolute; top: calc(100% + 0.25rem); right: 0; z-index: 3; display: grid; min-width: 11rem; padding: 0.3rem; border: 1px solid var(--n-line); border-radius: calc(var(--n-radius) * 2); background: var(--n-bg-raised); box-shadow: 0 8px 24px var(--n-scrim); }
 .more-list > button { padding: 0.4rem 0.55rem; border: 0; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; font-size: var(--n-text-size-small); text-align: left; cursor: pointer; }
 .more-list > button:hover { background: var(--n-bg-hover); }
 .more-list > button:disabled { color: var(--n-text-faint); cursor: default; }

@@ -5,9 +5,8 @@
 
 import type { Detail, Grant } from "./grants";
 
-/** A ladder name or `assist`, as a legacy entitlement still names one (record 25). */
-export type Entitlement = "reader" | "reviewer" | "operator" | "admin" | "assist";
-export type Role = Exclude<Entitlement, "assist">;
+/** A ladder name, as the engine's roles and an older engine's policy rows still name one (record 25). */
+export type Role = "reader" | "reviewer" | "operator" | "admin";
 
 export interface EngineCapabilities {
   engine: { name: string; version: string };

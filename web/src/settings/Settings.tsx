@@ -16,6 +16,7 @@ import { Icon } from "../ui/Icon";
 import { Acted, Head, Health, useRun } from "./common";
 import { AuditPage } from "./AuditPage";
 import { DatabasePage } from "./DatabasePage";
+import { exportWords } from "./exporting";
 import { GatewayPage } from "./GatewayPage";
 import { IdentityPage } from "./IdentityPage";
 import { OverviewPage } from "./OverviewPage";
@@ -475,7 +476,7 @@ function DeskPage({ caps, install, onChanged }: PageProps) {
               <dt>a command line sign-in lasts</dt>
               <dd>{s.cli_token_hours} hours</dd>
               <dt>may export a table</dt>
-              <dd>{s.export === "off" ? "nobody" : `${s.export} and above`}</dd>
+              <dd>{exportWords(s.export)}</dd>
               <dt>kept in</dt>
               <dd>
                 <span className="path">{s.store}</span>
