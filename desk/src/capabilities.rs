@@ -184,13 +184,14 @@ async fn parts(desk: &Shared) -> Parts {
 
 /// §7.6: the flags to paste on `nils serve` where people sign in: the
 /// desk's own issuer, whose tokens carry the grants and the detail the
-/// engine reads as they are, and in `oidc` mode the provider beside it,
-/// whose own tokens (the command line's) still map their groups through
-/// `--role`. None in `off` mode.
+/// engine reads as they are and whose subjects it keeps as they are, and in
+/// `oidc` mode the provider beside it, whose own tokens (the command line's)
+/// still map their groups through `--role` and whose subjects the engine
+/// qualifies. None in `off` mode.
 fn engine_flags(desk: &Shared) -> Value {
     let origin = desk.config.origin.trim_end_matches('/');
     let own = format!(
-        "--oidc-trust issuer={origin},audience={a},jwks={origin}/.well-known/jwks.json",
+        "--oidc-trust issuer={origin},audience={a},jwks={origin}/.well-known/jwks.json,keep_subject=true",
         a = desk.config.local.audience
     );
     match desk.config.mode {

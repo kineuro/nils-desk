@@ -262,6 +262,13 @@ async fn two_users_on_a_laptop_in_local_mode_and_the_engine_cannot_tell() {
     assert_eq!(doc["person"]["grants"], json!(grants::GRANTS), "{doc}");
     assert_eq!(doc["person"]["detail"], "sensitive");
     assert_eq!(doc["person"]["groups"], json!(["Admins"]));
+    // the engine trusts the desk's own issuer and keeps the subjects it names
+    assert_eq!(
+        doc["desk"]["settings"]["engine_flags"],
+        format!(
+            "--auth oidc --oidc-trust issuer={origin},audience=nils,jwks={origin}/.well-known/jwks.json,keep_subject=true"
+        )
+    );
     assert!(
         doc["person"].get("entitlements").is_none() && doc["person"].get("roles").is_none(),
         "{doc}"
@@ -587,11 +594,17 @@ async fn oidc_mode_signs_in_at_the_provider_and_the_desk_signs_for_the_person_it
     assert_eq!(signing["audience"], "nils", "{signing}");
     let flags = doc["desk"]["settings"]["engine_flags"].as_str().unwrap();
     assert!(
-        flags.contains(&format!("--oidc-trust issuer={origin},audience=nils,"))
-            && flags.contains(&format!(
-                "--oidc-trust issuer={issuer},audience=desk-client,"
-            )),
+        flags.contains(&format!(
+            "--oidc-trust issuer={origin},audience=nils,jwks={origin}/.well-known/jwks.json,keep_subject=true "
+        )) && flags.contains(&format!(
+            "--oidc-trust issuer={issuer},audience=desk-client,jwks={issuer}/jwks/ "
+        )),
         "{flags}"
+    );
+    assert_eq!(
+        flags.matches("keep_subject").count(),
+        1,
+        "only the desk's own entry keeps subjects: {flags}"
     );
     let disc: Value = client
         .get(format!("{origin}/.well-known/openid-configuration"))
@@ -856,24 +869,33 @@ async fn the_registration_creates_everything_once_and_a_second_run_changes_nothi
     assert!(r.found.is_empty(), "{:?}", r.found);
     assert!(r.created.iter().any(|c| c == "provider"));
     assert!(r.created.iter().any(|c| c == "entitlement assist"));
-    // the engine and Kvasir trust the desk's own issuer beside the provider
+    // the engine and Kvasir trust the desk's own issuer beside the provider,
+    // and only the desk's entry keeps the subjects it names
     let flags = r.flags();
     assert!(
-        flags.contains("--oidc-trust issuer=https://desk.example.org,audience=nils,jwks=https://desk.example.org/.well-known/jwks.json")
+        flags.contains("--oidc-trust issuer=https://desk.example.org,audience=nils,jwks=https://desk.example.org/.well-known/jwks.json,keep_subject=true ")
             && flags.contains(&format!(
-                "--oidc-trust issuer={url}/application/o/nils/,audience=client-abc,"
+                "--oidc-trust issuer={url}/application/o/nils/,audience=client-abc,jwks={url}/application/o/nils/jwks/ "
             ))
             && flags.contains("--oidc-groups-claim roles --role reader=reader"),
         "{flags}"
     );
+    assert_eq!(flags.matches("keep_subject").count(), 1, "{flags}");
     let kvasir = r.kvasir_auth();
     assert_eq!(kvasir["mode"], "oidc");
     assert_eq!(
         kvasir["trust"][0],
-        json!({"issuer": "https://desk.example.org", "audience": "nils", "jwks": "https://desk.example.org/.well-known/jwks.json"})
+        json!({"issuer": "https://desk.example.org", "audience": "nils", "jwks": "https://desk.example.org/.well-known/jwks.json", "keepSubject": true})
     );
-    assert_eq!(kvasir["trust"][1]["audience"], "client-abc");
-    assert_eq!(kvasir["roles"]["admin"], "admin");
+    assert_eq!(
+        kvasir["trust"][1],
+        json!({"issuer": format!("{url}/application/o/nils/"), "audience": "client-abc", "jwks": format!("{url}/application/o/nils/jwks/")}),
+        "the provider's entry keeps no subjects"
+    );
+    assert_eq!(
+        kvasir["roles"],
+        json!({"reader": "reader", "reviewer": "reviewer", "operator": "operator", "admin": "admin", "assist": "assist"})
+    );
     let posts = *ak.posts.lock().unwrap();
     // key, provider, application, one allow binding, five entitlements, three bindings
     assert_eq!(posts, 1 + 1 + 1 + 1 + 5 + 3, "{:?}", r.created);

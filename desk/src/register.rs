@@ -389,16 +389,17 @@ pub async fn register(api: &Api, plan: &Plan) -> Result<Registered, String> {
 
 impl Registered {
     /// The flags to paste on the engine: the desk's own issuer, whose tokens
-    /// carry the grants and the detail the engine reads as they are, and
-    /// beside it the provider, whose own tokens (the command line's) still
-    /// map their entitlements through `--role`.
+    /// carry the grants and the detail the engine reads as they are and whose
+    /// subjects it keeps, and beside it the provider, whose own tokens (the
+    /// command line's) still map their entitlements through `--role` and
+    /// whose subjects the engine qualifies.
     pub fn flags(&self) -> String {
         let roles: Vec<String> = crate::grants::LADDER
             .iter()
             .map(|r| format!("--role {r}={r}"))
             .collect();
         format!(
-            "--auth oidc --oidc-trust issuer={desk},audience={audience},jwks={desk}/.well-known/jwks.json --oidc-trust issuer={issuer},audience={client},jwks={jwks} --oidc-groups-claim roles {roles}",
+            "--auth oidc --oidc-trust issuer={desk},audience={audience},jwks={desk}/.well-known/jwks.json,keep_subject=true --oidc-trust issuer={issuer},audience={client},jwks={jwks} --oidc-groups-claim roles {roles}",
             desk = self.desk,
             audience = self.audience,
             issuer = self.issuer,
@@ -409,16 +410,17 @@ impl Registered {
     }
 
     /// Kvasir's `auth` block, beside the tokens it keeps: the same two
-    /// issuers on its trust list, and the provider's entitlements as roles.
+    /// issuers on its trust list, the desk's alone keeping the subjects it
+    /// names, and the provider's entitlements as roles.
     pub fn kvasir_auth(&self) -> Value {
         json!({
             "mode": "oidc",
             "trust": [
-                {"issuer": self.desk, "audience": self.audience, "jwks": format!("{}/.well-known/jwks.json", self.desk)},
+                {"issuer": self.desk, "audience": self.audience, "jwks": format!("{}/.well-known/jwks.json", self.desk), "keepSubject": true},
                 {"issuer": self.issuer, "audience": self.client_id, "jwks": self.jwks},
             ],
             "groupsClaim": "roles",
-            "roles": {"reader": "reader", "reviewer": "reviewer", "operator": "operator", "admin": "admin"},
+            "roles": {"reader": "reader", "reviewer": "reviewer", "operator": "operator", "admin": "admin", "assist": "assist"},
         })
     }
 }
