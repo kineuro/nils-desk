@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // What the shell offers (Wave 5 sections 6.2 and 6.4), each a predicate on the
-// capabilities document and the person. Until an operator's install is set
-// up, the side holds its first page and Settings; once it is, the sections
-// being built back join them, each where the engine serves its door.
+// capabilities document and the person's grants (record 25). Until the install
+// is set up, a person who may see it finds its first page and Settings in the
+// side; once it is, the sections being built back join them, each where the
+// engine serves its door.
 
 import type { Capabilities } from "./capabilities";
-import { door, holds, state } from "./deployment";
+import { door, state } from "./deployment";
+import { may } from "./grants";
 import { PLACEHOLDERS } from "./home/placeholders";
 import { settingsPages } from "./settings/pages";
 import type { IconName } from "./ui/Icon";
@@ -33,23 +35,25 @@ export function usable(caps: Capabilities): boolean {
 
 /**
  * The sections down the side, in order, for this document and person. `ready`
- * says whether the install is set up: false keeps an operator on its first
- * page, named for it, and null holds the rest back while it is not known yet.
+ * says whether the install is set up: false keeps a person who may see the
+ * install on its first page, named for it, and null holds the rest back while
+ * it is not known yet.
  */
 export function sections(caps: Capabilities, ready: boolean | null = true, conversations: SidePage[] = []): Section[] {
   if (!usable(caps)) return [];
   const out: Section[] = [];
-  if (holds(caps, "reader")) out.push({ id: "home", title: ready === false ? "Get started" : "Home", icon: "home" });
+  // Home is everyone's who holds a grant
+  if (caps.person.grants.length > 0) out.push({ id: "home", title: ready === false ? "Get started" : "Home", icon: "home" });
   // the assistant helps set an install up as well, so it does not wait for it
   if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: [{ id: "new", title: "New conversation", depth: 1 }, ...conversations, { id: "all", title: "All conversations", depth: 1 }, { id: "shared", title: "Shared", depth: 1 }, { id: "memory", title: "Memory", depth: 1 }] });
   if (ready !== true) return out;
-  for (const p of PLACEHOLDERS) if (holds(caps, p.entitlement) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon });
+  for (const p of PLACEHOLDERS) if (may(caps, p.grant) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon });
   return out;
 }
 
-/** Whether the Assistant has its page: the assistant answered and the person holds assist. While the model warms the page is there and waits. */
+/** Whether the Assistant has its page: the assistant answered and the person holds assistant:use. While the model warms the page is there and waits. */
 export function assistantOffered(caps: Capabilities): boolean {
-  return usable(caps) && caps.assistant !== null && holds(caps, "assist");
+  return usable(caps) && caps.assistant !== null && may(caps, "assistant:use");
 }
 
 /** The sections kept at the foot of the side, apart from the work: Settings, with its pages, for a person who may open one of them. */

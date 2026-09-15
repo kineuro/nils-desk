@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "./capabilities";
 import { door, holds, state } from "./deployment";
+import { GRANTS, may } from "./grants";
 import { admit, rowFree } from "./ui/context";
 import { elapsedWords } from "./ui/Wait";
 import { classify, SENTENCES } from "./ui/Failure";
@@ -26,7 +27,7 @@ function fresh(): Capabilities {
     kvasir: null,
     assistant: null,
     apps: [],
-    person: { subject: "operator", display_name: "the operator", entitlements: ["reader", "reviewer", "operator", "admin"], roles: ["reader", "reviewer", "operator", "admin"] },
+    person: { subject: "operator", display_name: "the operator", grants: [...GRANTS], detail: "sensitive", groups: [] },
     desk: { version: "1.0.0-alpha.0", mode: "off", contracts: { openapi: "3", suite: "1" }, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
   };
 }
@@ -34,6 +35,7 @@ function fresh(): Capabilities {
 describe("the states of a fresh install", () => {
   it("is ready when the engine answered and the person holds something", () => {
     expect(state(fresh()).kind).toBe("ready");
+    expect(may(fresh(), "install:work")).toBe(true);
     expect(holds(fresh(), "operator")).toBe(true);
     expect(door(fresh(), "GET /api/summary")).toBe(true);
     expect(door(fresh(), "GET /api/places")).toBe(false);
@@ -49,7 +51,7 @@ describe("the states of a fresh install", () => {
   });
   it("names the unbound person rather than a 403", () => {
     const d = fresh();
-    d.person.entitlements = [];
+    d.person.grants = [];
     expect(state(d)).toEqual({ kind: "unbound" });
   });
   it("names a major contract mismatch before anything else", () => {

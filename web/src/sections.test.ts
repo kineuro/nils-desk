@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "./capabilities";
+import { GRANTS, SETS } from "./grants";
 import { PLACEHOLDERS } from "./home/placeholders";
 import { href, parse } from "./routes";
 import { assistantModel, assistantOffered, foot, initials, sections } from "./sections";
@@ -26,7 +27,7 @@ function caps(over: Partial<Capabilities> = {}): Capabilities {
     kvasir: null,
     assistant: null,
     apps: [],
-    person: { subject: "operator", display_name: "the operator", entitlements: ["reader", "reviewer", "operator", "admin", "assist"], roles: ["reader", "reviewer", "operator", "admin"] },
+    person: { subject: "operator", display_name: "the operator", grants: [...GRANTS], detail: "sensitive", groups: [] },
     desk: { version: "1.0.0-alpha.14", mode: "off", contracts: { openapi: "3", suite: "1" }, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
     ...over,
   };
@@ -48,10 +49,12 @@ describe("the sections of an install that is set up", () => {
   const served = caps({ engine: { ...caps().engine!, doors } });
   it("join Home where the engine serves their doors and the person may open them", () => {
     expect(sections(served).map((s) => s.id)).toEqual(["home", "query", "data", "review", "release", "pipelines"]);
-    const reader = { ...served, person: { ...served.person, entitlements: ["reader" as const] } };
+    const reader = { ...served, person: { ...served.person, grants: SETS.reader.grants, detail: "plain" as const, groups: ["Readers"] } };
     expect(sections(reader).map((s) => s.id)).toEqual(["home", "query", "data"]);
+    const reviewing = { ...served, person: { ...served.person, grants: ["review:see" as const], detail: "plain" as const } };
+    expect(sections(reviewing).map((s) => s.id)).toEqual(["home", "review"]);
   });
-  it("wait while an operator's install is not set up, with Home named for its first page, and while that is not known", () => {
+  it("wait while an install is not set up for a person who may see it, with Home named for its first page, and while that is not known", () => {
     expect(sections(served, false)).toEqual([{ id: "home", title: "Get started", icon: "home" }]);
     expect(sections(served, null)).toEqual([{ id: "home", title: "Home", icon: "home" }]);
   });
@@ -67,9 +70,10 @@ describe("a model backend still warming", () => {
 });
 
 describe("the foot", () => {
-  it("keeps Settings for an operator or an admin of a ready deployment", () => {
+  it("keeps Settings for a person who may open one of its pages, of a ready deployment", () => {
     expect(foot(caps()).map((s) => s.id)).toEqual(["settings"]);
-    expect(foot(caps({ person: { subject: "r", display_name: "r", entitlements: ["reader", "assist"], roles: ["reader"] } }))).toEqual([]);
+    expect(foot(caps({ person: { subject: "r", display_name: "r", grants: [...SETS.reader.grants, "assistant:use"], detail: "plain", groups: ["Readers"] } }))).toEqual([]);
+    expect(foot(caps({ person: { subject: "i", display_name: "i", grants: ["identity:see"], detail: "plain", groups: [] } }))[0].pages?.map((p) => p.id)).toEqual(["identity"]);
     expect(foot(caps({ engine: null }))).toEqual([]);
   });
   it("carries Settings' pages, each part's own set in under the parts", () => {
@@ -87,11 +91,14 @@ describe("the foot", () => {
 
 describe("the Assistant", () => {
   const withAssistant = caps({ assistant: { stations: [{ id: "concierge" }, { id: "ask-help" }] } });
-  it("has its page when the assistant answered and the person holds assist, with its conversations under it", () => {
+  it("has its page when the assistant answered and the person holds assistant:use, with its conversations under it", () => {
     expect(assistantOffered(caps())).toBe(false);
     expect(assistantOffered(withAssistant)).toBe(true);
-    const noAssist = { ...withAssistant, person: { ...withAssistant.person, entitlements: ["reader" as const] } };
+    const noAssist = { ...withAssistant, person: { ...withAssistant.person, grants: SETS.reader.grants, detail: "plain" as const } };
     expect(assistantOffered(noAssist)).toBe(false);
+    const onlyAssist = { ...withAssistant, person: { ...withAssistant.person, grants: ["assistant:use" as const], detail: "plain" as const } };
+    expect(sections(onlyAssist).map((s) => s.id)).toEqual(["home", "assistant"]);
+    expect(foot(onlyAssist)).toEqual([]);
     const side = sections(withAssistant, true, [{ id: "c-1", title: "T1w after contrast", depth: 1 }]);
     expect(side.map((s) => s.id)).toEqual(["home", "assistant"]);
     expect(side[1].pages?.map((p) => p.id)).toEqual(["new", "c-1", "all", "shared", "memory"]);
