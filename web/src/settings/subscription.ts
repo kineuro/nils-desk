@@ -88,8 +88,8 @@ export function leadWords(s: Subscription, where: "card" | "dialog" = "card"): s
     return why ? `The sign-in did not finish: ${why}.` : "The sign-in did not finish.";
   }
   return s.for === "system"
-    ? `Until it is signed in, the stations an admin lets go to ${s.name} answer with the default model in your systems.`
-    : `Until you sign in, the stations an admin lets go to ${s.name} answer you with the default model in your systems.`;
+    ? `Until it is signed in, the stations that go to ${s.name} answer with the default model in your systems.`
+    : `Until you sign in, the stations that go to ${s.name} answer you with the default model in your systems.`;
 }
 
 /** A model the subscription offers, with the context it takes. */
@@ -113,7 +113,7 @@ export function sinceWords(s: Subscription): string | null {
 
 /** The stations a signed-in subscription answers, on its card. */
 export function answeredWords(s: Subscription, stations: string[]): string {
-  if (stations.length === 0) return `answers no station until an admin lets one go to ${s.name}`;
+  if (stations.length === 0) return `answers no station until someone with Kvasir: Work sends one to ${s.name}`;
   return `answers ${listWords(stations)}${s.for === "person" ? ", in your conversations" : ""}`;
 }
 
@@ -128,8 +128,8 @@ export function stationsNote(s: Subscription, stations: string[]): string {
   const today =
     stations.length > 0
       ? `It answers ${listWords(stations)}${s.for === "person" ? " for you" : ""} today.`
-      : `No station goes to ${s.name} yet; an admin lets one go there under Where each station goes.`;
-  return `${today} Rows of the registry reach it only where an admin wrote down why, and identifiers never do.`;
+      : `No station goes to ${s.name} yet; someone with Kvasir: Work sends one there under Where each station goes.`;
+  return `${today} Rows of the registry reach it only where someone with Kvasir: Work wrote down why, and identifiers never do.`;
 }
 
 /** Said once a sign-in from Add a model is done. */

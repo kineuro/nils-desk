@@ -43,12 +43,12 @@ describe("the subscription's card", () => {
     const html = renderToStaticMarkup(<SubscriptionCard row={sub()} />);
     expect(html).toContain("<b>Your ChatGPT subscription</b>");
     expect(html).toContain("not signed in");
-    expect(html).toContain("Until you sign in, the stations an admin lets go to ChatGPT answer you with the default model in your systems.");
+    expect(html).toContain("Until you sign in, the stations that go to ChatGPT answer you with the default model in your systems.");
     expect(html).toContain(">Sign in</button>");
     const theirs = renderToStaticMarkup(<SubscriptionCard row={sub({ for: "system", state: "waiting", user_code: "WXYZ-1234" })} may={false} />);
     expect(theirs).not.toContain("<button");
     expect(theirs).not.toContain("WXYZ-1234");
-    expect(theirs).toContain("An admin signs the install in.");
+    expect(theirs).toContain("Signing the install in needs the assistant and Kvasir: See.");
   });
 
   it("says whose it is, the model, since when and the stations it answers once signed in, with another model and a sign-out", () => {

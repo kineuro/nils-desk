@@ -73,8 +73,8 @@ export function plainly(e: unknown): unknown {
   if (r.code === "not_a_person") return new Error("Kvasir keeps a subscription for a person, and this call named nobody. Sign in to the desk, then try again.");
   const needs = listWords(r.needs.map(grantWords));
   const them = r.needs.length > 1 ? "them" : "it";
-  if (r.needs.includes("assistant:use")) return new Error(`A subscription of your own needs ${needs}. An admin gives ${them} on the Identity page.`);
-  return new Error(needs ? `This needs ${needs}, which you do not hold. An admin gives ${them} on the Identity page.` : "This needs a grant you do not hold. An admin gives it on the Identity page.");
+  if (r.needs.includes("assistant:use")) return new Error(`A subscription of your own needs ${needs}. Someone with Identity: Work gives ${them} on the Identity page.`);
+  return new Error(needs ? `This needs ${needs}, which you do not hold. Someone with Identity: Work gives ${them} on the Identity page.` : "This needs a grant you do not hold. Someone with Identity: Work gives it on the Identity page.");
 }
 
 /** Which backends show where: those Kvasir holds as models, and the one it has itself, ChatGPT through subscriptions, as the subscription's card. */

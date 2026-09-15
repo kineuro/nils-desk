@@ -235,7 +235,7 @@ export function SubscriptionCard(props: { row: Subscription; may?: boolean; stat
           {more}
         </div>
       )}
-      {!may && !signed && <p className="meta">An admin signs the install in.</p>}
+      {!may && !signed && <p className="meta">Signing the install in needs the assistant and Kvasir: See.</p>}
       {!quiet && <Acted acting={acting} />}
     </div>
   );

@@ -166,7 +166,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
         <section className="stack roomy">
           <div className="section-head rule-top">
             <h2>Where each station goes</h2>
-            <span className="meta">{viewer.work ? "changes at once, recorded with who and why" : "an admin decides"}</span>
+            <span className="meta">{viewer.work ? "changes at once, recorded with who and why" : "whoever may work on the Kvasir page decides"}</span>
           </div>
           {viewer.work && provider && (
             <ClosedStations
@@ -196,7 +196,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
           <div className="note gated">
             <Icon name="lock" />
             <div className="note-body">
-              <p className="note-detail">Identifiers never leave. Rows of the archive go to a provider or to ChatGPT only after an admin writes down why, for that one purpose.</p>
+              <p className="note-detail">Identifiers never leave. Rows of the archive go to a provider or to ChatGPT only after someone with Kvasir: Work writes down why, for that one purpose.</p>
             </div>
           </div>
         </section>
@@ -205,7 +205,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
       <section className="stack roomy">
         <div className="section-head rule-top">
           <h2>Models</h2>
-          <span className="meta">{viewer.work ? "what the stations can go to" : viewer.subscribes ? "the ones an admin added, and yours" : "the ones an admin added"}</span>
+          <span className="meta">{viewer.work ? "what the stations can go to" : viewer.subscribes ? "the ones added with Kvasir: Work, and yours" : "the ones added with Kvasir: Work"}</span>
           {choices.length > 0 && (
             <button
               type="button"
@@ -268,7 +268,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
           <p className="meta">{viewer.work ? "Kvasir holds no model yet. Add a model downloads one to this machine, or adds a model server of yours or a provider." : "Kvasir holds no model yet."}</p>
         )}
         {!viewer.work && (
-          <p className="meta">{mine && viewer.subscribes ? "Add a model offers you a subscription of your own. Downloads, servers and providers are an admin's to add." : "Downloads, servers and providers are an admin's to add."}</p>
+          <p className="meta">{mine && viewer.subscribes ? "Add a model offers you a subscription of your own. Adding downloads, servers and providers needs Kvasir: Work." : "Adding downloads, servers and providers needs Kvasir: Work."}</p>
         )}
         <Said acting={acting.acting} />
         <Said acting={local.acting} />

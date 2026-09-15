@@ -48,8 +48,8 @@ export function choiceWords(c: Choice, at: { local: LocalStatus | null | undefin
   const name = at.subscription?.name ?? "ChatGPT";
   const mark: Mark = { icon: "key", tone: "caution" };
   return at.subscription?.for === "system"
-    ? { mark, title: `The install's ${name} subscription`, words: `Sign in with a ${name} plan for this install. It answers every conversation on this desk, for the stations an admin lets go to ${name}.` }
-    : { mark, title: `Your own ${name} subscription`, words: `Sign in with your ${name} plan. It answers only your conversations, for the stations an admin lets go to ${name}.` };
+    ? { mark, title: `The install's ${name} subscription`, words: `Sign in with a ${name} plan for this install. It answers every conversation on this desk, for the stations someone with Kvasir: Work sends to ${name}.` }
+    : { mark, title: `Your own ${name} subscription`, words: `Sign in with your ${name} plan. It answers only your conversations, for the stations someone with Kvasir: Work sends to ${name}.` };
 }
 
 /** A tag on a card, with the dot of a state or without, as where its prompts go. */
