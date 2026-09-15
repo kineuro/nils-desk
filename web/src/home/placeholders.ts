@@ -22,7 +22,7 @@ export interface Placeholder {
 export const PLACEHOLDERS: Placeholder[] = [
   { id: "query", title: "Query", icon: "search", grant: "query:see", door: "POST /api/ask/run", words: "Narrow the registry to what you need, step by step or in words, and keep every version of it as a card.", built: true },
   { id: "data", title: "Data", icon: "data", grant: "data:see", door: "GET /api/sources", words: "The sources, each with its digests and how what comes in is handled.", built: true },
-  { id: "review", title: "Review", icon: "review", grant: "review:see", door: "GET /api/review", words: "What needs a person's judgement: a scan the rules could not place, a subject to confirm." },
+  { id: "review", title: "Review", icon: "review", grant: "review:see", door: "GET /api/review", words: "What needs a person's judgement: a scan the rules could not place, a subject to confirm.", built: true },
   { id: "release", title: "Release", icon: "release", grant: "release:see", door: "POST /api/releases", words: "Hand results out as a release, a BIDS tree or a table, written to an export place." },
   { id: "pipelines", title: "Pipelines", icon: "branch", grant: "pipelines:see", door: "GET /api/jobs", words: "The jobs that ran and are running: digests, backups and releases." },
 ];

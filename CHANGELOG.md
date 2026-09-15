@@ -4,6 +4,17 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- The Review page, built back, at `#review` with three pages under one head. The queue (`#review`, or `#review?batch=<id>` from a batch) is a cohort's open items, the costliest first, with the cohorts as chips from the engine's review summary where it serves one, and on top the three kinds as cards: the stacks the rules are unsure of, with Sort them and the rules' guess accepted in bulk for the items triage says need no reading (one audit row each, the rest named with why), the subjects that may be one person, and the sessions that moved. A row is decided at a scope (this scan, its series, this subject, this scanner), with the engine's refusal in words when someone of higher standing decided before; looked at in the viewer with the item's evidence beside it; or seen. Why is this opens from a look: the explain door's answer axis by axis with how sure the pack was and because of what, a decision otherwise, and Add a word for the site prefilled from the row; an engine without the door shows the item's own evidence.
+- Rules (`#review/rules`): the pack in a strip, the scope a change is tried on (a batch, a scanner the signals name, everything), the axes in the order they are decided with what each is made of, and the chosen axis's values with their words, flag and, from the signals, how many stacks were decided there and how many are unsure (by value where the engine counts so, by axis where it does not). Add a word rehearses an overlay through the try door on the scope and proposes it with why; at pack contract 5 any list is named by `axis.value`, at contract 4 only the four buckets the pack lets a site edit. The proposals table adopts with what the closure says it moves, and how many query cards stop reproducing, or refuses on the item beside the overlay. Tune with the assistant starts the keyword-tune station on the chosen scope and axis.
+- Identifiers (`#review/identifiers`): the identity questions by kind, two codes sharing one identifier, files held until the map names their identifier, subjects coded without a map, each with what settles it: the map on the dataset's Pseudonymisation page, a decision, or a merge of the alias into the canonical subject, which needs Data: Work and records in full.
+- A station's run on a page: started headless, followed to its end, drawn as its phases (survey, prediction, rehearsal, check, proposal for keyword-tune; read, probe, proposal, yours for identity-check, with what the probe saw under each rule as shapes and counts) and its verdict, the acts the person's. keyword-tune and identity-check can be picked in the Assistant chat.
+
+### Changed
+
+- An address may narrow its page after a question mark, `#review?batch=12`; an address without one reads as it did.
+
 ## [1.0.0-alpha.28] - 2026-09-15
 
 ### Added
