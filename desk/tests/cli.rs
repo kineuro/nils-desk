@@ -3,8 +3,9 @@
 //! The command line keeps the groups and what each person holds, as setup
 //! and an operator use it: `user add --admin` joins Admins, `group
 //! add|set|remove` and `user access` change the store the service reads,
-//! `--entitlement` and `user grant` still answer for one release, and no
-//! change leaves nobody who may change people and groups.
+//! each change touching only what it names, `--entitlement` and `user
+//! grant` still answer for one release, and no change leaves nobody who may
+//! change people and groups.
 
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -165,7 +166,8 @@ fn the_command_line_keeps_groups_and_what_each_person_holds() {
     );
     assert!(line.contains("assistant:use"), "{line}");
 
-    // user access replaces the groups, the grants and the detail
+    // user access changes only what it names: bo's groups and detail here,
+    // and the grant bo holds alone stays
     let r = ok(
         &[
             "user",
@@ -185,11 +187,53 @@ fn the_command_line_keeps_groups_and_what_each_person_holds() {
     );
     let bo = store().access("bo", None);
     assert_eq!(names("bo"), ["Readers"]);
-    assert!(bo.own.is_empty());
+    assert_eq!(bo.own, grants::normalise(["assistant:use"]));
     assert_eq!(bo.own_detail, Some(Detail::Sensitive));
-    assert_eq!(bo.access.list(), grants::set("reader").unwrap().list());
-    assert_eq!(bo.access.detail, Detail::Sensitive);
-    // user grant still answers, with entitlements, for one release
+    let mut want = grants::set("reader").unwrap();
+    want.add(&Access::new(["assistant:use"], Detail::Sensitive));
+    assert_eq!(bo.access, want);
+    // the grants alone, leaving the groups and the detail
+    ok(
+        &[
+            "user",
+            "access",
+            "bo",
+            "--grant",
+            "kvasir:see",
+            "--grant",
+            "query:see",
+        ],
+        None,
+    );
+    let bo = store().access("bo", None);
+    assert_eq!(names("bo"), ["Readers"]);
+    assert_eq!(bo.own, grants::normalise(["kvasir:see", "query:see"]));
+    assert_eq!(bo.own_detail, Some(Detail::Sensitive));
+    // naming nothing is refused, saying what to name; --none goes with nothing else
+    let r = run(&["user", "access", "bo"], None);
+    assert_eq!(r.code, 2, "{}", r.out);
+    for flag in ["--group", "--grant", "--detail", "--none"] {
+        assert!(r.err.contains(flag), "{flag}: {}", r.err);
+    }
+    let r = run(
+        &["user", "access", "bo", "--none", "--group", "Readers"],
+        None,
+    );
+    assert_eq!(r.code, 2, "{}", r.out);
+    assert!(r.err.contains("cannot be used with"), "{}", r.err);
+    assert_eq!(
+        names("bo"),
+        ["Readers"],
+        "a refused command changes nothing"
+    );
+    // --none takes every group, grant and detail of bo's own away
+    ok(&["user", "access", "bo", "--none"], None);
+    let bo = store().access("bo", None);
+    assert!(names("bo").is_empty() && bo.own.is_empty() && bo.own_detail.is_none());
+    assert!(bo.access.is_empty());
+    // user grant still answers, with entitlements, for one release: the sets
+    // become what the person holds, as they did, their groups too
+    ok(&["user", "access", "dy", "--group", "Scanner people"], None);
     ok(&["user", "grant", "dy", "--entitlement", "operator"], None);
     assert_eq!(
         store().access("dy", None).access,
@@ -210,9 +254,18 @@ fn the_command_line_keeps_groups_and_what_each_person_holds() {
         None,
         "identity:work",
     );
-    refused(&["user", "access", "anna"], None, "identity:work");
+    refused(&["user", "access", "anna", "--none"], None, "identity:work");
+    refused(
+        &["user", "access", "anna", "--group", "Readers"],
+        None,
+        "identity:work",
+    );
     assert_eq!(names("anna"), ["Admins"]);
-    refused(&["user", "access", "zed"], None, "no user named zed");
+    refused(
+        &["user", "access", "zed", "--none"],
+        None,
+        "no user named zed",
+    );
     refused(
         &["group", "remove", "Nothing"],
         None,

@@ -4,6 +4,7 @@
 //! the people and the groups they are given pages by, and register the desk
 //! at a provider.
 
+use std::collections::BTreeSet;
 use std::net::SocketAddr;
 
 use clap::{Parser, Subcommand};
@@ -76,22 +77,25 @@ enum UserCommand {
         #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
         config: std::path::PathBuf,
     },
-    /// Set what a person holds: their groups, their grants and their detail, all replaced
+    /// Change what a person holds: only what is named changes, and --none takes it all away
     #[command(alias = "grant")]
     Access {
         #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
         config: std::path::PathBuf,
         username: String,
-        /// A group the person is in, by name, repeatable
+        /// A group the person is in, by name, repeatable; replaces their groups
         #[arg(long = "group", value_name = "GROUP")]
         groups: Vec<String>,
-        /// A grant the person holds alone, repeatable
+        /// A grant the person holds alone, repeatable; replaces their own grants
         #[arg(long = "grant", value_name = "GRANT")]
         grants: Vec<String>,
-        /// What they see in records, on their own: plain, quasi or sensitive
+        /// What they see in records, on their own: plain, quasi or sensitive; replaces their own detail
         #[arg(long, value_name = "DETAIL")]
         detail: Option<String>,
-        /// A ladder name standing for its set, as `user grant` took it; for one release
+        /// Take every group, every grant of their own and their own detail away
+        #[arg(long, conflicts_with_all = ["groups", "grants", "detail", "entitlements"])]
+        none: bool,
+        /// A ladder name standing for its set, as `user grant` took it: the sets become what they hold, their groups too unless --group names some; for one release
         #[arg(long = "entitlement", value_name = "NAME", hide = true)]
         entitlements: Vec<String>,
     },
@@ -339,14 +343,19 @@ fn people(desk: &Shared) -> Vec<(String, String, Option<Claims>)> {
     }
 }
 
-/// A person's groups, detail and grants, on one line.
-fn describe(desk: &Shared, subject: &str) -> String {
-    let book = desk.store.book();
+/// What a person holds now, and where it comes from.
+fn held(desk: &Shared, subject: &str) -> nils_desk::store::Resolved {
     let claims = people(desk)
         .into_iter()
         .find(|(s, _, _)| s == subject)
         .and_then(|(_, _, c)| c);
-    let r = book.resolve(subject, claims.as_ref());
+    desk.store.book().resolve(subject, claims.as_ref())
+}
+
+/// A person's groups, detail and grants, on one line.
+fn describe(desk: &Shared, subject: &str) -> String {
+    let book = desk.store.book();
+    let r = held(desk, subject);
     let ids: Vec<i64> = r.member.iter().chain(&r.followed).copied().collect();
     format!(
         "{:<24} {:<9} {}",
@@ -423,27 +432,63 @@ fn user(command: UserCommand) -> Result<(), String> {
             groups,
             grants,
             detail,
+            none,
             entitlements,
         } => {
+            if !none
+                && groups.is_empty()
+                && grants.is_empty()
+                && detail.is_none()
+                && entitlements.is_empty()
+            {
+                return Err(format!(
+                    "name what changes for {username}: --group, --grant or --detail, each replacing only what it names, or --none to take everything away"
+                ));
+            }
             let desk = load(&config)?;
-            let given = Given {
-                groups: nils_desk::users::group_ids(&desk.store, &groups)?,
-                grants,
-                detail: nils_desk::grants::check_detail(detail.as_deref())?,
-                entitlements,
-                admin: false,
+            let now = held(&desk, &username);
+            let change = if none {
+                Change::Access {
+                    subject: username.clone(),
+                    groups: Vec::new(),
+                    grants: BTreeSet::new(),
+                    detail: None,
+                }
+            } else {
+                // the groups named replace the person's; an entitlement, as
+                // `user grant` took it, is all they hold, so it leaves them too
+                let groups = if !groups.is_empty() {
+                    nils_desk::users::group_ids(&desk.store, &groups)?
+                } else if !entitlements.is_empty() {
+                    Vec::new()
+                } else {
+                    now.member.clone()
+                };
+                let mut own = if grants.is_empty() && entitlements.is_empty() {
+                    now.own.clone()
+                } else {
+                    nils_desk::grants::check(&grants)?
+                };
+                let mut own_detail = match detail.as_deref() {
+                    Some(d) => nils_desk::grants::check_detail(Some(d))?,
+                    None if entitlements.is_empty() => now.own_detail,
+                    None => None,
+                };
+                if !entitlements.is_empty() {
+                    nils_desk::users::check_entitlements(&entitlements)?;
+                    let sets = nils_desk::grants::of_names(entitlements.iter().map(String::as_str));
+                    own.extend(sets.grants);
+                    own_detail = Some(own_detail.map_or(sets.detail, |d| d.max(sets.detail)));
+                }
+                Change::Access {
+                    subject: username.clone(),
+                    groups,
+                    grants: own,
+                    detail: own_detail,
+                }
             };
-            let (own, detail) = given.own()?;
             desk.store
-                .change(
-                    oidc(&desk),
-                    Change::Access {
-                        subject: username.clone(),
-                        groups: given.groups,
-                        grants: own,
-                        detail,
-                    },
-                )
+                .change(oidc(&desk), change)
                 .map_err(|e| e.to_string())?;
             println!("{username}: {}", describe(&desk, &username));
             Ok(())
