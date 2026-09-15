@@ -137,9 +137,3 @@ export function signedInWords(s: Subscription): string {
   const who = s.for === "system" ? "The install is" : "You are";
   return `${who} signed in to ${s.name}. ${s.model ? "Its card under Models says the model it answers with." : "Choose the model it answers with on its card under Models."}`;
 }
-
-/** What the subscription is used for, said under the card. */
-export function servesWords(s: Subscription): string {
-  const serves = s.for === "system" ? "The install's subscription serves every conversation on this desk" : "Your subscription serves only your conversations";
-  return `${serves}, for the stations an admin lets go to ${s.name}. Rows of the registry go to it only where an admin wrote down why, and identifiers never do.`;
-}
