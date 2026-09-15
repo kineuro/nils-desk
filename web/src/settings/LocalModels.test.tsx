@@ -177,6 +177,8 @@ describe("the line under the models", () => {
   it("holds the machine's card and llama.cpp, where downloads go with the room there, and the token, each to change", () => {
     const html = line(status, install);
     expect(html).toContain("NVIDIA GeForce RTX 4090, 24 GB · llama.cpp b10964, ubuntu-vulkan-x64");
+    const pro = { name: "NVIDIA RTX PRO 6000", memory_gb: 95.59 };
+    expect(line(status, { machine: { card: pro, cards: [pro, pro], advice: [] } } as unknown as Install)).toContain("2 × NVIDIA RTX PRO 6000, 191 GB · llama.cpp b10964, ubuntu-vulkan-x64");
     expect(html).toContain('<span class="ok-words">answers</span>');
     expect(html).toContain('<span class="path">/srv/models</span>');
     expect(html).toContain("412 GiB free");

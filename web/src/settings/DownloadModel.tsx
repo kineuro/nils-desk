@@ -38,17 +38,17 @@ import {
 /**
  * The download's part of Add a model: what it asks and its buttons. `token`
  * says whether a Hugging Face token is set and `free` the room where downloads
- * go, as the page last read them; `card` is the machine's, where it is known.
+ * go, as the page last read them; `cards` are the machine's, none where no supervisor answers.
  */
 export function useDownload(props: {
   token: boolean;
   free: number | null;
-  card: { name: string; memory_gb: number } | null;
+  cards: { name: string; memory_gb: number }[];
   advice: string[];
   onClose: () => void;
   onDone: (m: LocalModel) => void;
 }): { body: React.ReactNode; foot: React.ReactNode; busy: boolean } {
-  const { token, free, card, advice, onClose, onDone } = props;
+  const { token, free, cards, advice, onClose, onDone } = props;
   const id = useId();
   const [d, setD] = useState<DownloadDraft>(EMPTY_DRAFT);
   const [found, setFound] = useState<Found | null>(null);
@@ -80,7 +80,7 @@ export function useDownload(props: {
       try {
         const lookup = await kvasir.local.lookup(askOf(asked));
         setFound({ print: fingerprint(asked), lookup });
-        setChosen(defaultChoice(fileChoices(lookup.files), card));
+        setChosen(defaultChoice(fileChoices(lookup.files), cards));
         return "";
       } catch (e) {
         setFound(null);
@@ -181,7 +181,7 @@ export function useDownload(props: {
             <span className="label">The file</span>
             <div className="choices" role="radiogroup" aria-label="The file">
               {choices.map((c) => {
-                const fit = fitWords(c.bytes, card);
+                const fit = fitWords(c.bytes, cards);
                 return (
                   <label key={c.key} className={chosen === c.key ? "file-row on" : "file-row"}>
                     <input type="radio" name={`${id}-file`} checked={chosen === c.key} disabled={busy} onChange={() => setChosen(c.key)} />

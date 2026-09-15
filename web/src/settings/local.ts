@@ -8,7 +8,7 @@
 // actions, what the download dialog asks and when it may download, how a
 // started model runs, and each refusal in words a person can act on.
 
-import { admissionWords, modelOf, type Admission, type Tone } from "./gateway";
+import { admissionWords, modelOf, type Admission, type Card, type Tone } from "./gateway";
 import type { AdmissionRecord, Backend, LocalAsk, LocalFile, LocalLookup, LocalModel, LocalRefusal, LocalRun, LocalRuntime, LocalState, RunState } from "./kvasir";
 
 /** How often the list is read again while a model is queued or downloading. */
@@ -439,16 +439,25 @@ export function fileChoices(files: LocalFile[]): FileChoice[] {
   return out.map((c) => (out.filter((x) => x.label === c.label).length > 1 ? { ...c, label: stemOf(c.key) } : c));
 }
 
-/** Whether a file fits the machine's card, as the tag beside it says; null where the card is not known. */
-export function fitWords(bytes: number, card: { memory_gb: number } | null | undefined): { tone: LocalTone; words: string } | null {
-  if (!card || !(card.memory_gb > 0)) return null;
-  return bytes <= card.memory_gb * 2 ** 30 ? { tone: "ok", words: "fits the card" } : { tone: "caution", words: "larger than the card: runs on the processor, slowly" };
+/**
+ * Whether a file fits the machine's cards, as the tag beside it says: within
+ * the largest card alone, or across all of them, with their memory together;
+ * null where no card's memory is known.
+ */
+export function fitWords(bytes: number, cards: Card[]): { tone: LocalTone; words: string } | null {
+  const sizes = cards.map((c) => c.memory_gb).filter((m) => m > 0);
+  if (sizes.length === 0) return null;
+  const many = sizes.length > 1;
+  if (bytes <= Math.max(...sizes) * 2 ** 30) return { tone: "ok", words: many ? "fits one card" : "fits the card" };
+  const total = sizes.reduce((n, m) => n + m, 0);
+  if (many && bytes <= total * 2 ** 30) return { tone: "ok", words: `fits the ${sizes.length} cards together, ${Math.round(total)} GB` };
+  return { tone: "caution", words: `larger than the ${many ? "cards" : "card"}: runs on the processor, slowly` };
 }
 
-/** The file a look-up opens on: Q4_K_M where it fits, else the largest that fits a card that is known, else none until one is chosen. */
-export function defaultChoice(choices: FileChoice[], card: { memory_gb: number } | null | undefined): string | null {
-  const known = fitWords(0, card) !== null;
-  const fitting = known ? choices.filter((c) => fitWords(c.bytes, card)?.tone === "ok") : choices;
+/** The file a look-up opens on: Q4_K_M where it fits, else the largest that fits where the cards are known, else none until one is chosen. */
+export function defaultChoice(choices: FileChoice[], cards: Card[]): string | null {
+  const known = fitWords(0, cards) !== null;
+  const fitting = known ? choices.filter((c) => fitWords(c.bytes, cards)?.tone === "ok") : choices;
   const usual = fitting.find((c) => c.label.toUpperCase() === "Q4_K_M");
   if (usual) return usual.key;
   return known && fitting.length > 0 ? fitting[fitting.length - 1].key : null;

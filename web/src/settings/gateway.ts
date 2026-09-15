@@ -93,10 +93,39 @@ export function gatewayHealth(backends: Backend[]): { tone: Tone; words: string;
   return { tone: warming ? "caution" : "ok", words: warming ? "warming" : "warm", streams };
 }
 
-/** The card this machine has and what it can serve, in the words setup uses. */
-export function machineWords(install: Install | null): { card: string | null; advice: string[] } {
-  const card = install?.machine.card ?? null;
-  return { card: card ? `${card.name}, ${Math.round(card.memory_gb)} GB` : null, advice: install?.machine.advice ?? [] };
+/** A graphics card the supervisor found, with its memory. */
+export interface Card {
+  name: string;
+  memory_gb: number;
+}
+
+/** Every card the machine has: the supervisor's list where it gives one, else the one card setup found, and none where no supervisor answers. */
+export function cardsOf(install: Install | null): Card[] {
+  const machine = install?.machine;
+  if (!machine) return [];
+  if (Array.isArray(machine.cards) && machine.cards.length > 0) return machine.cards;
+  return machine.card ? [machine.card] : [];
+}
+
+/**
+ * The machine's cards in one line, each kind once with how many there are and
+ * their memory together, and the memory of all where more than one kind holds
+ * some; null where no card is known. And what setup says the machine can serve.
+ */
+export function machineWords(install: Install | null): { cards: string | null; advice: string[] } {
+  const kinds: { name: string; count: number; memory: number }[] = [];
+  for (const c of cardsOf(install)) {
+    const memory = c.memory_gb > 0 ? c.memory_gb : 0;
+    const kind = kinds.find((k) => k.name === c.name);
+    if (kind) {
+      kind.count += 1;
+      kind.memory += memory;
+    } else kinds.push({ name: c.name, count: 1, memory });
+  }
+  const parts = kinds.map((k) => `${k.count > 1 ? `${k.count} × ` : ""}${k.name}${k.memory > 0 ? `, ${Math.round(k.memory)} GB` : ""}`);
+  const holding = kinds.filter((k) => k.memory > 0);
+  if (holding.length > 1) parts.push(`${Math.round(holding.reduce((n, k) => n + k.memory, 0))} GB in all`);
+  return { cards: parts.length > 0 ? parts.join(" · ") : null, advice: install?.machine.advice ?? [] };
 }
 
 /** A model's facts: what Kvasir holds of it, or its catalogue's line where Kvasir says nothing more. */

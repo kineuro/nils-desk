@@ -37,7 +37,7 @@ import {
 import { MarkSquare } from "./cards";
 import { Acted, useActing } from "./common";
 import { useDownload } from "./DownloadModel";
-import { plainly } from "./gateway";
+import { cardsOf, plainly } from "./gateway";
 import { kvasir, type LocalModel, type LocalStatus, type Locality, type Subscription, triedOf } from "./kvasir";
 import { choiceWords, type Choice } from "./models";
 import { useSignInPart } from "./SubscriptionCard";
@@ -323,7 +323,7 @@ export function AddModel(props: {
   const download = useDownload({
     token: local?.token ?? false,
     free: local?.free_bytes ?? null,
-    card: install?.machine.card ?? null,
+    cards: cardsOf(install),
     advice: install?.machine.advice ?? [],
     onClose,
     onDone: (m) => onQueued?.(m),

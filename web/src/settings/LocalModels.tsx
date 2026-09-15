@@ -422,16 +422,16 @@ function ServeList({ serve }: { serve: LocalServe[] }) {
   );
 }
 
-/** The line under the models: the machine's card and llama.cpp, where downloads go and the room there, and the Hugging Face token. */
+/** The line under the models: the machine's cards and llama.cpp, where downloads go and the room there, and the Hugging Face token. */
 export function MachineLine({ install, status, onLocate, onToken }: { install: Install | null; status: LocalStatus; onLocate: () => void; onToken: () => void }) {
-  const card = machineWords(install).card;
+  const cards = machineWords(install).cards;
   const runtime = status.runtime ?? null;
   return (
     <div className="mline">
-      {(card || runtime) && (
+      {(cards || runtime) && (
         <span>
           <Icon name="chip" />
-          <span>{[card, runtime ? runtimeLine(runtime) : null].filter(Boolean).join(" · ")}</span>
+          <span>{[cards, runtime ? runtimeLine(runtime) : null].filter(Boolean).join(" · ")}</span>
           {runtime && <span className={runtime.reachable ? "ok-words" : "warn"}>{runtimeTag(runtime).words}</span>}
         </span>
       )}

@@ -10,6 +10,7 @@ import type { Grant } from "../grants";
 import {
   admissionWords,
   answersWords,
+  cardsOf,
   carriesWords,
   checkWords,
   closedLead,
@@ -91,10 +92,18 @@ describe("Kvasir", () => {
     expect(gatewayHealth([chatgpt])).toEqual({ tone: "caution", words: "no model yet", streams: null });
   });
 
-  it("says the machine's card and what it can serve", () => {
-    const install = { machine: { card: { name: "NVIDIA GeForce RTX 4090", memory_gb: 23.99 }, advice: ["A 27B model at 4 bit fits with room for the context."] } } as Install;
-    expect(machineWords(install)).toEqual({ card: "NVIDIA GeForce RTX 4090, 24 GB", advice: ["A 27B model at 4 bit fits with room for the context."] });
-    expect(machineWords(null)).toEqual({ card: null, advice: [] });
+  it("says every card the machine has, with their memory, and what it can serve", () => {
+    const machine = (over: Partial<Install["machine"]>) => ({ machine: { card: null, advice: [], ...over } }) as unknown as Install;
+    const pro = { name: "NVIDIA RTX PRO 6000", memory_gb: 95.59 };
+    const one = machine({ card: { name: "NVIDIA GeForce RTX 4090", memory_gb: 23.99 }, advice: ["A 27B model at 4 bit fits with room for the context."] });
+    expect(machineWords(one)).toEqual({ cards: "NVIDIA GeForce RTX 4090, 24 GB", advice: ["A 27B model at 4 bit fits with room for the context."] });
+    expect(machineWords(machine({ card: pro, cards: [pro, pro] })).cards).toBe("2 × NVIDIA RTX PRO 6000, 191 GB");
+    expect(machineWords(machine({ cards: [{ name: "NVIDIA RTX 4090 Laptop GPU", memory_gb: 15.99 }, { name: "Intel UHD Graphics", memory_gb: 0 }] })).cards).toBe("NVIDIA RTX 4090 Laptop GPU, 16 GB · Intel UHD Graphics");
+    expect(machineWords(machine({ cards: [{ name: "NVIDIA GeForce RTX 4090", memory_gb: 24 }, { name: "NVIDIA GeForce RTX 3090", memory_gb: 24 }] })).cards).toBe("NVIDIA GeForce RTX 4090, 24 GB · NVIDIA GeForce RTX 3090, 24 GB · 48 GB in all");
+    // an empty list reads as the one card setup found, and no card at all says nothing
+    expect(cardsOf(machine({ card: pro, cards: [] }))).toEqual([pro]);
+    expect(machineWords(machine({}))).toEqual({ cards: null, advice: [] });
+    expect(machineWords(null)).toEqual({ cards: null, advice: [] });
   });
 
   it("shows the models it holds as cards, and ChatGPT through subscriptions as the subscription's card", () => {
