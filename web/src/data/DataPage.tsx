@@ -8,7 +8,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
-import { door as served, holds } from "../deployment";
+import { door as served } from "../deployment";
+import { may } from "../grants";
 import { BringInForm } from "../home/BringIn";
 import type { Pack } from "../home/look";
 import { placesKept } from "../objects/kept";
@@ -33,7 +34,7 @@ export function DataPage({ caps, install, onChanged }: { caps: Capabilities; ins
   const [packs, setPacks] = useState<Pack[]>([]);
   const [said, setSaid] = useState<string | null>(null);
   const places = useKept(placesKept);
-  const operator = holds(caps, "operator");
+  const works = may(caps, "data:work");
 
   const read = useCallback(() => {
     sources
@@ -82,7 +83,7 @@ export function DataPage({ caps, install, onChanged }: { caps: Capabilities; ins
           <Icon name="folder" />
           Add a source
         </a>
-        {operator && (
+        {works && (
           <button type="button" className="button" onClick={() => setBringing(true)}>
             <Icon name="plus" />
             Bring DICOM in
@@ -110,7 +111,7 @@ export function DataPage({ caps, install, onChanged }: { caps: Capabilities; ins
       {current && (
         <Digests
           source={current}
-          operator={operator}
+          works={works}
           said={said}
           onDigest={() => digestNew(current)}
           onHandling={() => setHandlingOf(current)}
@@ -181,8 +182,8 @@ function SourceCard({ source: s, on, onPick }: { source: Source; on: boolean; on
   );
 }
 
-function Digests(props: { source: Source; operator: boolean; said: string | null; onDigest: () => void; onHandling: () => void }) {
-  const { source: s, operator, said, onDigest, onHandling } = props;
+function Digests(props: { source: Source; works: boolean; said: string | null; onDigest: () => void; onHandling: () => void }) {
+  const { source: s, works, said, onDigest, onHandling } = props;
   const handled = handlingWords(s.handling);
   return (
     <section className="panel digests">
@@ -194,13 +195,13 @@ function Digests(props: { source: Source; operator: boolean; said: string | null
             {s.totals.refused_files > 0 ? ` · ${n(s.totals.refused_files)} files refused` : ""}
           </p>
         </div>
-        {operator && (
+        {works && (
           <button type="button" className="button secondary small" onClick={onHandling}>
             <Icon name="pencil" />
             Handling
           </button>
         )}
-        {operator && (
+        {works && (
           <button type="button" className="button small" onClick={onDigest}>
             <Icon name="play" />
             Digest what is new

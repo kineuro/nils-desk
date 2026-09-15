@@ -19,7 +19,7 @@ import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnos
 import { editor, setsOf } from "../ask/editor";
 import { countWords, startBody, type From, type Started } from "../ask/start";
 import type { Capabilities } from "../capabilities";
-import { holds } from "../deployment";
+import { sees } from "../grants";
 import { objects, type DocumentRow } from "../objects/client";
 import { href } from "../routes";
 import { assistantModel, assistantOffered } from "../sections";
@@ -162,7 +162,7 @@ function StartDialog({ caps, onClose }: { caps: Capabilities; onClose: () => voi
       {started && <p className="lede">{countWords(started)}</p>}
       <p className="meta">
         A saved card, a kept result and a list of identifiers are started from too: open a card and choose Start a new card from here
-        {holds(caps, "reviewer") ? "." : "; a list of identifiers asks for the reviewer role."}
+        {sees(caps, "quasi") ? "." : "; a list of identifiers asks to see sex and age in records."}
       </p>
     </Dialog>
   );
@@ -215,7 +215,8 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const steps = useMemo(() => (doc ? editor(doc.ask, options) : []), [doc, options]);
   const answer = ((doc?.ask.out as Json | undefined)?.set as string | undefined) ?? null;
   const current = steps.find((s) => s.set === chosen) ?? steps.find((s) => s.answers) ?? steps[0] ?? null;
-  const reviewer = holds(caps, "reviewer");
+  // a list of identifiers is started from with detail quasi (record 25)
+  const lists = sees(caps, "quasi");
   const profiled = current?.set ?? null;
 
   // the charts follow the step chosen on the timeline, and are counted again for every version
@@ -551,7 +552,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               </span>
             </div>
           </section>
-          {!reviewer && <p className="meta">Starting from a list of identifiers asks for the reviewer role.</p>}
+          {!lists && <p className="meta">Starting from a list of identifiers asks to see sex and age in records.</p>}
         </aside>
       </div>
     </section>
