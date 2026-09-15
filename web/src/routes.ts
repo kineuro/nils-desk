@@ -9,7 +9,7 @@ export interface Route {
   section: string;
   page: string | null;
   arg: string | null;
-  /** A page of what the page opened, named in one word. */
+  /** A page of what the page opened, named in one word: #data/datasets/<name>/pseudonymisation. */
   sub: string | null;
 }
 

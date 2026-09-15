@@ -133,13 +133,14 @@ describe("the addresses", () => {
   });
   it("name a page of what a page opened, in one word past it", () => {
     expect(parse("#data/datasets/incoming/pseudonymisation")).toEqual({ section: "data", page: "datasets", arg: "incoming", sub: "pseudonymisation" });
+    expect(parse("#data/datasets/spring-scans/pseudonymisation")).toEqual({ section: "data", page: "datasets", arg: "spring-scans", sub: "pseudonymisation" });
     expect(parse("#data/batch/12")).toEqual({ section: "data", page: "batch", arg: "12", sub: null });
     expect(parse("#data/datasets/a/b/c")).toEqual({ section: "home", page: null, arg: null, sub: null });
     expect(href("data", "datasets", "incoming", "pseudonymisation")).toBe("#data/datasets/incoming/pseudonymisation");
     expect(href("data", "datasets", null, "pseudonymisation")).toBe("#data/datasets");
   });
   it("round-trip", () => {
-    for (const h of ["#home", "#settings/parts", "#settings/places/backup%20disk", "#data/datasets/incoming/pseudonymisation"]) {
+    for (const h of ["#home", "#settings/parts", "#settings/places/backup%20disk", "#data/datasets/incoming/pseudonymisation", "#data/datasets/spring-scans/pseudonymisation"]) {
       const r = parse(h);
       expect(href(r.section, r.page, r.arg, r.sub)).toBe(h);
     }
