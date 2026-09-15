@@ -336,7 +336,7 @@ export function MoveForm(props: { move: Move; grain: string; typed: Record<strin
           ))}
         </div>
       )}
-      {suggested?.hidden && <p className="meta">This field's values are not listed at your role; its shapes are.</p>}
+      {suggested?.hidden && <p className="meta">This field's values are not listed, since you do not see them in records; its shapes are.</p>}
       <div className="row actions">
         <button type="button" className="button small" disabled={busy || missing.length > 0} onClick={onApply}>
           Apply as the next version

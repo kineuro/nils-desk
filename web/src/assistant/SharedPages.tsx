@@ -58,7 +58,7 @@ export function SharedList() {
         <div className="grow">
           <span className="eyebrow">Assistant</span>
           <h1>Shared</h1>
-          <p className="lede">Conversations others share with you, and the ones you share. A share shows what was said as it stood when shared; its cards open under your own roles.</p>
+          <p className="lede">Conversations others share with you, and the ones you share. A share shows what was said as it stood when shared; its cards open with what you may see.</p>
         </div>
       </div>
       {why && <p className="warn">The shares could not be read: {why}</p>}
@@ -81,7 +81,7 @@ export function SharedList() {
                   <div className="grow chat-row-link">
                     <span className="chat-row-title">{titleOf(s)}</span>
                     <span className="meta">
-                      {name(s.owner_subject ?? "", s.owner)} · {s.guards ? `It may have read ${s.guards.words}, which your roles do not reach.` : "Your roles do not reach what it read."}
+                      {name(s.owner_subject ?? "", s.owner)} · {s.guards ? `It may have read ${s.guards.words}, which you do not see in records.` : "You do not see in records what it read."}
                     </span>
                   </div>
                 )}
@@ -196,8 +196,8 @@ export function SharedPage({ id }: { id: string }) {
         )}
       </div>
       <p className="meta share-byline">
-        {opened.mine ? `You share this with ${audienceWords(opened)}` : `Shared by ${name(opened.owner_subject ?? "", opened.owner)}`}, as it stood {whenWords(opened.updated_at)}. A card opens under your
-        own roles.
+        {opened.mine ? `You share this with ${audienceWords(opened)}` : `Shared by ${name(opened.owner_subject ?? "", opened.owner)}`}, as it stood {whenWords(opened.updated_at)}. A card opens with what you
+        may see.
       </p>
       {opened.mine && guardWords(opened.guards) && <p className="meta">{guardWords(opened.guards)}</p>}
       <div className="talk">
