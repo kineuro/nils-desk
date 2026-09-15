@@ -1,0 +1,7 @@
+{
+  "subjects": { "named": 38, "known": 30, "new": 8 },
+  "identifiers": { "filed": 42, "known": 30, "new": 12, "types_new": ["site-id"] },
+  "held_released": 4,
+  "merges": [{ "alias": "S-0412", "canonical": "S-0007" }],
+  "conflicts": []
+}

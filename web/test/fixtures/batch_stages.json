@@ -1,0 +1,19 @@
+{
+  "id": 9,
+  "name": "incoming-2026-09-15",
+  "state": "done",
+  "started_at": "2026-09-15T21:02:00Z",
+  "finished_at": "2026-09-15T21:40:00Z",
+  "epoch_after": 412,
+  "seen": 2208,
+  "parsed": 2208,
+  "quarantined": 0,
+  "ingested": 2208,
+  "stages": {
+    "pseudonymised": { "files": 2208, "changed": 0, "held": 4, "refused": 0, "job": 120 },
+    "walked": { "files": 2208, "new": 2208, "changed": 0, "unchanged": 0, "refused": 0, "job": 121 },
+    "digested": { "stacks": 412, "sessions": 40, "subjects": 38, "moved": 0, "job": 121 },
+    "classified": { "stacks": 400, "of": 412, "unsure": 12, "pack": "mri", "jobs": [122, 123] },
+    "reviewed": { "done": 0, "of": 12, "since": "2026-09-15T21:50:00Z" }
+  }
+}
