@@ -20,7 +20,6 @@ import {
   askOf,
   askRefusal,
   bytesWords,
-  CHECKED_BEFORE,
   DEFAULT_REVISION,
   defaultChoice,
   downloadAsk,
@@ -163,7 +162,7 @@ export function useDownload(props: {
             Look it up
           </button>
         </div>
-        <span className="meta">{cannot ?? "As owner/name. Kvasir asks the hub which files it would download, and keeps nothing."}</span>
+        {cannot && <span className="meta">{cannot}</span>}
         {!lookQuiet && (looking.working || lookedFor === print) && <Acted acting={looking.acting} />}
       </div>
 
@@ -230,7 +229,7 @@ export function useDownload(props: {
               onChange={(e) => edit({ revision: e.target.value })}
             />
           </div>
-          <span className="meta">A branch, a tag or a commit. Left empty, main.</span>
+          <span className="meta">Branch, tag or commit; main if empty.</span>
         </div>
         <div className="field">
           <label className="label" htmlFor={`${id}-include`}>
@@ -239,7 +238,7 @@ export function useDownload(props: {
           <div className="input mono">
             <textarea id={`${id}-include`} rows={3} value={d.include} placeholder="*Q4_K_M.gguf" spellCheck={false} disabled={busy} onChange={(e) => edit({ include: e.target.value })} />
           </div>
-          <span className="meta">Patterns, one a line or separated by commas, such as *Q4_K_M.gguf for one quantization of a GGUF model. Left empty, every file of the model is looked up.</span>
+          <span className="meta">One a line or separated by commas, such as *Q4_K_M.gguf.</span>
         </div>
         </div>
       </details>
@@ -257,12 +256,16 @@ export function useDownload(props: {
                     <span>
                       <span className="path">{c.label}</span> <span className="meta">{c.paths.length > 1 ? `${bytesWords(c.bytes)} in ${c.paths.length} parts` : bytesWords(c.bytes)}</span>
                     </span>
-                    {fit && <span className={`tag ${fit.tone}`}>{fit.words}</span>}
+                    {fit && (
+                      <span className={`tag ${fit.tone}`} title={fit.title ?? undefined}>
+                        {fit.words}
+                      </span>
+                    )}
                   </label>
                 );
               })}
             </div>
-            {room && !room.fits ? <span className="warn">{room.words}</span> : <span className="meta">{[room?.words, CHECKED_BEFORE].filter(Boolean).join(" ")}</span>}
+            {room && <span className={room.fits ? "meta" : "warn"}>{room.words}</span>}
             {advice.length > 0 && <span className="meta">{advice.join(" ")}</span>}
           </div>
         ) : (
@@ -286,7 +289,7 @@ export function useDownload(props: {
 
   const foot = (
     <>
-      {stale(d, found) && <p className="meta">Something changed since the look-up, so look it up again.</p>}
+      {stale(d, found) && <p className="meta">Changed since the look-up; look it up again.</p>}
       {shown && choices.length > 0 && chosen === null && <p className="meta">Choose the file to download.</p>}
       {!queueQuiet && (queuing.working || askedFor === print) && <Acted acting={queuing.acting} />}
       <div className="row actions">

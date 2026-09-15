@@ -247,10 +247,10 @@ describe("the download dialog", () => {
     expect(foundWords(lookup({ files: [], bytes_total: 0, include: ["*Q4_K_M.gguf", "*.json"] }))).toBe("No file matches any of *Q4_K_M.gguf, *.json.");
     expect(foundWords(lookup({ files: [], bytes_total: 0 }))).toBe("The Hugging Face Hub lists no file for this model at that revision.");
     expect(roomWords(4 * GIB, null)).toBeNull();
-    expect(roomWords(4 * GIB, 100 * GIB)).toEqual({ fits: true, words: "100 GiB free where downloads go." });
+    expect(roomWords(4 * GIB, 100 * GIB)).toEqual({ fits: true, words: "100 GiB free" });
     expect(roomWords(4 * GIB, 4.5 * GIB)).toEqual({
       fits: false,
-      words: "There is not room for it where downloads go: 4.5 GiB free, and it needs 5 GiB, 1 GiB of that to spare. Free some space there, or change where new downloads go.",
+      words: "Not enough room where downloads go: 4.5 GiB free, 5 GiB needed.",
     });
   });
 });
@@ -260,7 +260,7 @@ describe("a refusal in words", () => {
 
   it("says a refusal for room with both sizes, and Kvasir's own words where it carries none", () => {
     expect(refusalWords(refusal("no_space", "/srv/models has 10.0 GiB free", { status: 507, free_bytes: 10 * GIB, needed_bytes: 17 * GIB }), at)).toBe(
-      "There is not room for it where downloads go: 10 GiB free, and it needs 17 GiB, 1 GiB of that to spare. Free some space there, or change where new downloads go.",
+      "Not enough room where downloads go: 10 GiB free, 17 GiB needed.",
     );
     expect(refusalWords(refusal("no_space", "/srv/models has 10.0 GiB free", { status: 507 }), at)).toBe("/srv/models has 10.0 GiB free.");
   });
@@ -394,8 +394,8 @@ describe("a download under Add a model (record 25)", () => {
   const card = [{ name: "NVIDIA GeForce RTX 4090", memory_gb: 23.99 }];
 
   it("says what downloading is, by the runtime the install has", () => {
-    expect(downloadChoiceWords({ build: "b10964", variant: "ubuntu-vulkan-x64", reachable: true, serving: null })).toMatch(/started by Kvasir on llama\.cpp here/u);
-    expect(downloadChoiceWords(null)).toBe("A model from the Hugging Face Hub, for a model server of yours to run. Prompts stay in your systems.");
+    expect(downloadChoiceWords({ build: "b10964", variant: "ubuntu-vulkan-x64", reachable: true, serving: null })).toBe("Hugging Face Hub · llama.cpp here · stays in your systems");
+    expect(downloadChoiceWords(null)).toBe("Hugging Face Hub · for a model server of yours · stays in your systems");
   });
 
   it("offers each quantization of a GGUF model once, with the parts of a split file together, and no vision projector", () => {
@@ -417,8 +417,8 @@ describe("a download under Add a model (record 25)", () => {
 
   it("says whether a file fits the card, and opens on Q4_K_M where it fits, else the largest that fits", () => {
     const choices = fileChoices(files);
-    expect(fitWords(16 * GIB, card)).toEqual({ tone: "ok", words: "fits the card" });
-    expect(fitWords(28 * GIB, card)).toEqual({ tone: "caution", words: "larger than the card: runs on the processor, slowly" });
+    expect(fitWords(16 * GIB, card)).toEqual({ tone: "ok", words: "fits the card", title: null });
+    expect(fitWords(28 * GIB, card)).toEqual({ tone: "caution", words: "larger than the card", title: "runs on the processor, slowly" });
     expect(fitWords(28 * GIB, [])).toBeNull();
     expect(defaultChoice(choices, card)).toBe("Qwen3.6-27B-Q4_K_M.gguf");
     expect(defaultChoice(choices.filter((c) => c.label !== "Q4_K_M"), card)).toBe("Qwen3.6-27B-UD-Q5_K_XL.gguf");
@@ -433,9 +433,9 @@ describe("a download under Add a model (record 25)", () => {
       { name: "NVIDIA GeForce RTX 4080", memory_gb: 16 },
       { name: "Intel UHD Graphics", memory_gb: 0 },
     ];
-    expect(fitWords(12 * GIB, two)).toEqual({ tone: "ok", words: "fits one card" });
-    expect(fitWords(28 * GIB, two)).toEqual({ tone: "ok", words: "fits the 2 cards together, 32 GB" });
-    expect(fitWords(40 * GIB, two)).toEqual({ tone: "caution", words: "larger than the cards: runs on the processor, slowly" });
+    expect(fitWords(12 * GIB, two)).toEqual({ tone: "ok", words: "fits one card", title: null });
+    expect(fitWords(28 * GIB, two)).toEqual({ tone: "ok", words: "fits 2 cards, 32 GB", title: null });
+    expect(fitWords(40 * GIB, two)).toEqual({ tone: "caution", words: "larger than the cards", title: "runs on the processor, slowly" });
     expect(fitWords(GIB, [{ name: "Intel UHD Graphics", memory_gb: 0 }])).toBeNull();
     expect(defaultChoice(fileChoices(files).filter((c) => c.label !== "Q4_K_M"), two)).toBe("Qwen3.6-27B-Q8_0/Qwen3.6-27B-Q8_0.gguf");
   });

@@ -45,13 +45,13 @@ export function addChoices(viewer: Viewer, at: { local: LocalStatus | null | und
 /** A choice as the dialog draws it: the mark of where the model runs, its title and what it means for the prompts. */
 export function choiceWords(c: Choice, at: { local: LocalStatus | null | undefined; subscription: Subscription | null }): { mark: Mark; title: string; words: string } {
   if (c === "download") return { mark: { icon: "update", tone: "brand" }, title: "Download it to this machine", words: downloadChoiceWords(at.local?.runtime) };
-  if (c === "server") return { mark: MARKS.server, title: "A model server of yours", words: "SGLang, vLLM or Ollama, on this machine or another of yours. Prompts stay in your systems." };
-  if (c === "provider") return { mark: MARKS.provider, title: "A provider", words: "A company that serves models, with your key. Prompts leave your systems." };
+  if (c === "server") return { mark: MARKS.server, title: "A model server of yours", words: "SGLang, vLLM or Ollama · stays in your systems" };
+  if (c === "provider") return { mark: MARKS.provider, title: "A provider", words: "With your key · leaves your systems" };
   const name = at.subscription?.name ?? "ChatGPT";
   const mark: Mark = { icon: "key", tone: "caution" };
   return at.subscription?.for === "system"
-    ? { mark, title: `The install's ${name} subscription`, words: `Sign in with a ${name} plan for this install. It answers every conversation on this desk, for the stations someone with Kvasir: Work sends to ${name}.` }
-    : { mark, title: `Your own ${name} subscription`, words: `Sign in with your ${name} plan. It answers only your conversations, for the stations someone with Kvasir: Work sends to ${name}.` };
+    ? { mark, title: `The install's ${name} subscription`, words: `A ${name} plan · every conversation here` }
+    : { mark, title: `Your own ${name} subscription`, words: `Your ${name} plan · only your conversations` };
 }
 
 /** A card's one tag: a state carries a dot, where prompts go carries none, and the detail behind it is its hover title. */

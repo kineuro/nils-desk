@@ -115,7 +115,7 @@ export const SERVE_NOTE = "Kvasir runs no model: start a model server with one o
 export const NO_COMMAND = "Kvasir runs no model, and knows no command for these files: start a model server on them as its own documentation says, then add it with Add a model.";
 
 /** Said beside the Hugging Face token. */
-export const TOKEN_NOTE = "Needed only for gated or private models. Kvasir keeps it sealed and never shows it.";
+export const TOKEN_NOTE = "Gated and private models need one. Sealed; never shown.";
 
 /** Said where the location changes. */
 export const STAY_NOTE = "Models downloaded earlier stay where they are, and the list shows each with its own path.";
@@ -199,16 +199,16 @@ export function foundWords(l: LocalLookup): string {
   return `${files}, ${bytesWords(l.bytes_total)} in all, at ${revisionWords(l)}.`;
 }
 
-/** Where the room runs out: both sizes, and the two ways to make room. */
+/** Where the room runs out: what is free, and what the download needs with the room Kvasir keeps spare. */
 function noRoomWords(free: number, needed: number): string {
-  return `There is not room for it where downloads go: ${bytesWords(free)} free, and it needs ${bytesWords(needed)}, 1 GiB of that to spare. Free some space there, or change where new downloads go.`;
+  return `Not enough room where downloads go: ${bytesWords(free)} free, ${bytesWords(needed)} needed.`;
 }
 
 /** Whether a download of this size fits where downloads go, with the room Kvasir keeps spare; null where the free space is not known. */
 export function roomWords(total: number, free: number | null): { fits: boolean; words: string } | null {
   if (free === null) return null;
   const needed = total + SPARE_BYTES;
-  return free >= needed ? { fits: true, words: `${bytesWords(free)} free where downloads go.` } : { fits: false, words: noRoomWords(free, needed) };
+  return free >= needed ? { fits: true, words: `${bytesWords(free)} free` } : { fits: false, words: noRoomWords(free, needed) };
 }
 
 /** Kvasir's words as a sentence: a full stop at its end, and a capital at its start where it starts with a plain word rather than a file's name or a path. */
@@ -389,13 +389,8 @@ export function stopFirstWords(m: LocalModel): string {
 
 /** What Add a model says of downloading, by the runtime the install has. */
 export function downloadChoiceWords(runtime: LocalRuntime | null | undefined): string {
-  return runtime
-    ? "A GGUF model from the Hugging Face Hub, started by Kvasir on llama.cpp here. Prompts stay in your systems."
-    : "A model from the Hugging Face Hub, for a model server of yours to run. Prompts stay in your systems.";
+  return runtime ? "Hugging Face Hub · llama.cpp here · stays in your systems" : "Hugging Face Hub · for a model server of yours · stays in your systems";
 }
-
-/** Said under the files a download brings. */
-export const CHECKED_BEFORE = "Kvasir checks the model before the assistant may use it.";
 
 /** A file of a GGUF model to choose, by its quantization: every part of a split file together, with its size in all. */
 export interface FileChoice {
@@ -436,14 +431,14 @@ export function fileChoices(files: LocalFile[]): FileChoice[] {
  * the largest card alone, or across all of them, with their memory together;
  * null where no card's memory is known.
  */
-export function fitWords(bytes: number, cards: Card[]): { tone: LocalTone; words: string } | null {
+export function fitWords(bytes: number, cards: Card[]): { tone: LocalTone; words: string; title: string | null } | null {
   const sizes = cards.map((c) => c.memory_gb).filter((m) => m > 0);
   if (sizes.length === 0) return null;
   const many = sizes.length > 1;
-  if (bytes <= Math.max(...sizes) * 2 ** 30) return { tone: "ok", words: many ? "fits one card" : "fits the card" };
+  if (bytes <= Math.max(...sizes) * 2 ** 30) return { tone: "ok", words: many ? "fits one card" : "fits the card", title: null };
   const total = sizes.reduce((n, m) => n + m, 0);
-  if (many && bytes <= total * 2 ** 30) return { tone: "ok", words: `fits the ${sizes.length} cards together, ${Math.round(total)} GB` };
-  return { tone: "caution", words: `larger than the ${many ? "cards" : "card"}: runs on the processor, slowly` };
+  if (many && bytes <= total * 2 ** 30) return { tone: "ok", words: `fits ${sizes.length} cards, ${Math.round(total)} GB`, title: null };
+  return { tone: "caution", words: `larger than the ${many ? "cards" : "card"}`, title: "runs on the processor, slowly" };
 }
 
 /** The file a look-up opens on: Q4_K_M where it fits, else the largest that fits where the cards are known, else none until one is chosen. */

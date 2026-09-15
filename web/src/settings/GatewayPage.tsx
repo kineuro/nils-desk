@@ -374,7 +374,7 @@ function KeyDialog({ backend, onClose, onDone }: { backend: Backend; onClose: ()
         <div className="input mono">
           <input id="provider-key" type="password" autoComplete="off" value={secret} disabled={saving.working} onChange={(e) => setSecret(e.target.value)} />
         </div>
-        <span className="meta">Kvasir keeps it sealed, and never shows it again.</span>
+        <span className="meta">Sealed; never shown again.</span>
       </div>
     </Dialog>
   );

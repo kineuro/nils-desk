@@ -53,14 +53,14 @@ describe("Add a model's choices", () => {
     expect(choiceWords("download", { local: { ...local, runtime }, subscription: null })).toEqual({
       mark: { icon: "update", tone: "brand" },
       title: "Download it to this machine",
-      words: "A GGUF model from the Hugging Face Hub, started by Kvasir on llama.cpp here. Prompts stay in your systems.",
+      words: "Hugging Face Hub · llama.cpp here · stays in your systems",
     });
     expect(choiceWords("server", { local, subscription: null })).toMatchObject({ mark: { icon: "engine", tone: "neutral" }, title: "A model server of yours" });
-    expect(choiceWords("provider", { local, subscription: null }).words).toBe("A company that serves models, with your key. Prompts leave your systems.");
+    expect(choiceWords("provider", { local, subscription: null }).words).toBe("With your key · leaves your systems");
     expect(choiceWords("subscription", { local, subscription: sub() })).toEqual({
       mark: { icon: "key", tone: "caution" },
       title: "Your own ChatGPT subscription",
-      words: "Sign in with your ChatGPT plan. It answers only your conversations, for the stations someone with Kvasir: Work sends to ChatGPT.",
+      words: "Your ChatGPT plan · only your conversations",
     });
     expect(choiceWords("subscription", { local, subscription: sub({ for: "system" }) }).title).toBe("The install's ChatGPT subscription");
   });

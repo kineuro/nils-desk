@@ -581,7 +581,7 @@ function LocationDialog({ current, onClose, onDone }: { current: string; onClose
             }}
           />
         </div>
-        <span className="meta">An absolute path on the machine Kvasir runs on, such as /srv/models. Kvasir creates the folder where it is missing, and checks that it can write there.</span>
+        <span className="meta">An absolute path, such as /srv/models; made where missing.</span>
       </div>
       <div className="note">
         <Icon name="info" />

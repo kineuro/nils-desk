@@ -18,7 +18,7 @@ import {
   cardFacts,
   cardTitle,
   expired,
-  howWords,
+  HOW,
   leadWords,
   leftWords,
   linkText,
@@ -256,7 +256,7 @@ export function useSignInPart(props: { row: Subscription | null; stations: strin
       <p className="ok-words">{signedInWords(sub)}</p>
     ) : waiting ? (
       <>
-        <p>{leadWords(sub, "dialog")}</p>
+        <p>{leadWords(sub)}</p>
         <SignInCode sub={sub} now={now} />
       </>
     ) : (
@@ -264,7 +264,7 @@ export function useSignInPart(props: { row: Subscription | null; stations: strin
         {sub.state === "failed" && <p className="warn">{leadWords(sub)}</p>}
         <div className="field">
           <span className="label">{sub.for === "system" ? "How the install signs in" : "How you sign in"}</span>
-          <p className="meta">{howWords(sub)}</p>
+          <p className="meta">{HOW}</p>
         </div>
         <div className="note gated">
           <Icon name="lock" />

@@ -9,7 +9,7 @@ import {
   cardFacts,
   cardTitle,
   expired,
-  howWords,
+  HOW,
   leadWords,
   leftWords,
   linkText,
@@ -86,10 +86,8 @@ describe("the card's words", () => {
   it("say what to do now, and the error in words", () => {
     const since = Date.parse("2026-09-14T09:00:00Z");
     const day = new Date(since).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-    expect(leadWords(sub())).toBe("Until you sign in, the stations that go to ChatGPT answer you with the default model in your systems.");
-    expect(leadWords(sub({ for: "system" }))).toBe("Until it is signed in, the stations that go to ChatGPT answer with the default model in your systems.");
-    expect(leadWords(sub({ state: "waiting" }))).toBe("Open the link, enter the code, and approve. This card follows the sign-in and says when it is done.");
-    expect(leadWords(sub({ state: "waiting" }), "dialog")).toBe("Open the link, enter the code, and approve. This dialog follows the sign-in and says when it is done.");
+    expect(leadWords(sub())).toBe("Not signed in.");
+    expect(leadWords(sub({ state: "waiting" }))).toBe("Enter the code at the link, then approve.");
     expect(leadWords(sub({ state: "signed_in", since }))).toBe(`Signed in since ${day}.`);
     expect(leadWords(sub({ state: "signed_in" }))).toBe("Signed in.");
     expect(leadWords(sub({ state: "failed", error: "the code expired before it was approved." }))).toBe("The sign-in did not finish: the code expired before it was approved.");
@@ -111,14 +109,10 @@ describe("the card's words", () => {
 
 describe("signing in from Add a model", () => {
   it("says how it goes, what it answers today and what reaches it, and when it is done", () => {
-    expect(howWords(sub())).toBe(
-      "Kvasir asks OpenAI for a code. You open the link, enter the code and approve; this dialog follows along and says when you are signed in. You choose the model it answers with afterwards.",
-    );
-    expect(howWords(sub({ for: "system" }))).toMatch(/says when the install is signed in\./u);
-    expect(stationsNote(sub(), ["concierge"])).toBe("It answers concierge for you today. Rows of the registry reach it only where someone with Kvasir: Work wrote down why, and identifiers never do.");
-    expect(stationsNote(sub({ for: "system" }), ["concierge"])).toMatch(/^It answers concierge today\./u);
-    expect(stationsNote(sub(), [])).toMatch(/^No station goes to ChatGPT yet; someone with Kvasir: Work sends one there under Where each station goes\./u);
-    expect(signedInWords(sub({ state: "signed_in" }))).toBe("You are signed in to ChatGPT. Choose the model it answers with on its card under Models.");
-    expect(signedInWords(sub({ for: "system", state: "signed_in", model: "gpt-5.5" }))).toBe("The install is signed in to ChatGPT. Its card under Models says the model it answers with.");
+    expect(HOW).toBe("Kvasir asks OpenAI for a code; enter it at the link and approve.");
+    expect(stationsNote(sub(), ["concierge"])).toBe("Answers concierge. Identifiers never reach it.");
+    expect(stationsNote(sub(), [])).toBe("No station goes to ChatGPT yet. Identifiers never reach it.");
+    expect(signedInWords(sub({ state: "signed_in" }))).toBe("You are signed in to ChatGPT.");
+    expect(signedInWords(sub({ for: "system", state: "signed_in", model: "gpt-5.5" }))).toBe("The install is signed in to ChatGPT.");
   });
 });

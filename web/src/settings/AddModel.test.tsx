@@ -59,8 +59,8 @@ describe("adding a model", () => {
     expect(html).not.toContain("Download it to this machine");
     expect(html).not.toContain("A provider");
     expect(html).toContain("How you sign in");
-    expect(html).toContain("Kvasir asks OpenAI for a code.");
-    expect(html).toContain("It answers concierge for you today.");
+    expect(html).toContain("Kvasir asks OpenAI for a code; enter it at the link and approve.");
+    expect(html).toContain("Answers concierge. Identifiers never reach it.");
     expect(html).toContain('<button type="button" class="button">Sign in to ChatGPT</button>');
     expect(html).toContain(">Cancel</button>");
   });
@@ -70,7 +70,7 @@ describe("adding a model", () => {
     expect(install).toContain("<b>The install&#x27;s ChatGPT subscription</b>");
     expect(install).toContain("How the install signs in");
     const signed = dialog(["subscription"], sub({ state: "signed_in", model: "gpt-5" }));
-    expect(signed).toContain("You are signed in to ChatGPT. Its card under Models says the model it answers with.");
+    expect(signed).toContain("You are signed in to ChatGPT.");
     expect(signed).toContain(">Done</button>");
     expect(signed).not.toContain("Sign in to ChatGPT");
   });
@@ -79,7 +79,7 @@ describe("adding a model", () => {
     const html = dialog(["server", "provider"]);
     expect(html).toMatch(/<label class="pick on"><span class="sq">.*?<b>A model server of yours<\/b>/u);
     expect(html).toContain('value="http://127.0.0.1:30000/v1"');
-    expect(html).toContain("this machine&#x27;s server at its port, or another machine&#x27;s address on your network");
+    expect(html).toContain("Most often ends in /v1.");
     expect(html).toContain("Find its models");
     expect(html).toContain("It needs a key");
     expect(html).not.toContain('type="password"');
