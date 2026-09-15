@@ -4,7 +4,9 @@
 // timeline shows, and what the charts of a step draw. Nothing here composes ask JSON; a query changes only through
 // a move the engine offered.
 
+import { needsWork } from "../access";
 import type { CatalogField, ClauseGroup, DocumentHandle, Json, Move, Profile, ProfileValue } from "../ask/client";
+import type { Capabilities } from "../capabilities";
 
 /** A card's name: the query's own name, else the set it answers, else plain words. */
 export function cardTitle(name: string | null | undefined, answer?: string | null): string {
@@ -12,6 +14,11 @@ export function cardTitle(name: string | null | undefined, answer?: string | nul
   if (n) return n;
   const a = (answer ?? "").trim();
   return a ? a.replace(/[_-]+/g, " ") : "A query";
+}
+
+/** Why keeping a card is not offered to this person, in words, or null when it is: the engine keeps a card only for work on the Query page (record 25). */
+export function keepingRefusal(caps: Capabilities): string | null {
+  return needsWork(caps, "Keeping cards", [["query:work", "the Query page"]]);
 }
 
 export interface Version {

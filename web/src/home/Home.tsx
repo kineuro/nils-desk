@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Home, as the chosen design draws it (option A): what is installed and how
 // it answers, and the four tiles of what the registry holds, what needs you,
-// what is running and what changed since you were last here. For an operator
-// a line says how far setup is while a step is left, and opens it. Every line
-// is read from a door; a door this deployment does not serve, or that this
-// person may not open, takes its part of the page with it.
+// what is running and what changed since you were last here. For a person who
+// may see the install, a line says how far setup is while a step is left, and
+// opens it. Every line is read from a door; a door this deployment does not
+// serve, or that this person may not open, takes its part of the page with it.
 
 import { useCallback, useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { door as served, holds } from "../deployment";
+import { door as served } from "../deployment";
+import { may } from "../grants";
 import { objects, type Summary } from "../objects/client";
 import { placesKept } from "../objects/kept";
 import { data, ops } from "../ops/client";
@@ -50,11 +51,11 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
     const has = (d: string) => served(caps, d);
     // the places and the backups are kept for every page that reads them
     if (has("GET /api/places")) void placesKept.refresh().catch(() => undefined);
-    if (has("GET /api/backups") && holds(caps, "admin")) void backupsKept.refresh().catch(() => undefined);
+    if (has("GET /api/backups") && may(caps, "database:see")) void backupsKept.refresh().catch(() => undefined);
     void Promise.all([
       has("GET /api/summary") ? quietly(objects.summary()) : null,
       has("GET /api/summary") && last ? quietly(objects.summary(last)) : null,
-      has("GET /api/review") && holds(caps, "reviewer") ? quietly(ops.review("open", undefined, 500)).then((r) => r?.count ?? null) : null,
+      has("GET /api/review") && may(caps, "review:see") ? quietly(ops.review("open", undefined, 500)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs") ? quietly(ops.jobs(false, 50)).then((r) => r?.jobs ?? null) : null,
       has("GET /api/batches") ? quietly(data.batches(1000)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs")
@@ -81,9 +82,9 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
     return () => clearTimeout(t);
   }, []);
 
-  // how far setup is, for an operator, while a step is left
+  // how far setup is, for a person who may see the install, while a step is left
   const setup =
-    holds(caps, "operator") && served(caps, "GET /api/places") && places.value
+    may(caps, "install:see") && served(caps, "GET /api/places") && places.value
       ? setupSteps({ caps, install, places: places.value.places, batches: loaded.batches, backups: loaded.backups, archives: archives.value, purposes: loaded.purposes })
       : [];
   const left = setup.filter((s) => !s.met);

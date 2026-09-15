@@ -11,35 +11,46 @@ origin = "http://127.0.0.1:7200"
 # advertises, mints and redirects to stays the `origin` above.
 # also_origins = ["http://192.168.0.30:7200", "http://localhost:7200"]
 
-# off: one person on one machine, every entitlement, no login.
+# off: one person on one machine, every grant, no login.
 # local: users the desk keeps; the desk is a small issuer the engine trusts.
-# oidc: an identity provider; the desk is a confidential client with PKCE.
+# oidc: an identity provider; the desk is a confidential client with PKCE,
+# and still signs the tokens the parts receive.
 mode = "off"
 
-# local mode: the EdDSA signing key, made at first start, mode 600, and the
-# audience the minted tokens carry (what the engine's trust entry names).
-# The first user: `nils-desk user add anna --admin` (password on stdin), who
-# holds admin and assist; the admin grants entitlements on the settings page.
+# What exporting a result needs: a grant, or a ladder name (reader, reviewer,
+# operator, admin) standing for its set, or "off". query:work unless set.
+# export = "query:work"
+
+# Where people sign in, the desk signs the tokens the parts receive, with the
+# grants and the detail each person holds: the EdDSA signing key, made at first
+# start, mode 600, and the audience the tokens carry (what the engine's trust
+# entry names). People get pages from groups, and an install starts with
+# Readers, Reviewers, Operators and Admins. The first user:
+# `nils-desk user add anna --admin` (password on stdin), who joins Admins; the
+# rest get groups and grants on the Identity page, or with `nils-desk group`
+# and `nils-desk user access`.
 # The engine runs with
-#   --auth oidc --oidc-trust issuer=<origin>,audience=nils,jwks=<origin>/.well-known/jwks.json
-#   --oidc-groups-claim roles --role reader=reader --role reviewer=reviewer
-#   --role operator=operator --role admin=admin
+#   --auth oidc --oidc-trust issuer=<origin>,audience=nils,jwks=<origin>/.well-known/jwks.json,keep_subject=true
+# and in oidc mode with the provider's entry beside it, as the settings page
+# and `nils-desk register` print them.
 # [local]
 # key = "nils-desk.key"
 # audience = "nils"
 
 # oidc mode: what `nils-desk register --authentik URL --token FILE --origin
-# <origin> --allow GROUP --bind reader=GROUP ...` prints, and the engine's
-# flags beside it.
+# <origin> --allow GROUP --bind reader=GROUP ...` prints. A group at the desk
+# follows the provider groups in groups_claim; an entitlement in roles_claim
+# always stands for its ladder set, beside what the person's groups give.
 # [oidc]
 # issuer = "https://auth.example.org/application/o/nils/"
 # client_id = "..."
 # client_secret_file = "nils-desk.client-secret"
 # scopes = ["openid", "profile", "email", "offline_access", "entitlements"]
+# groups_claim = "groups"
 # roles_claim = "roles"
 
-# The one SQLite file: sessions now; display names, preferences and local
-# users later.
+# The one SQLite file: sessions, display names, local users, groups and what
+# each person holds.
 store = "nils-desk.sqlite"
 
 [engine]
@@ -55,10 +66,11 @@ url = "http://127.0.0.1:8080"
 # url = "http://127.0.0.1:7300"
 
 # One section per registered app, proxied under /apps/{id}/ with the
-# person's token and the same defences.
+# person's token and the same defences, for a person holding its
+# entitlement: a grant, or a ladder name standing for its set.
 # [[apps]]
 # id = "pipelines"
 # title = "Analysis pipelines"
 # url = "http://127.0.0.1:7400"
-# entitlement = "operator"
+# entitlement = "pipelines:work"
 # capabilities = "/capabilities"

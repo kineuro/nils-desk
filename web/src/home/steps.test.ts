@@ -5,6 +5,7 @@
 import { describe, expect, it } from "vitest";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
+import { SETS } from "../grants";
 import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
 import type { Install, Look } from "../settings/supervise";
@@ -28,7 +29,7 @@ function caps(over: Partial<Capabilities> = {}): Capabilities {
     kvasir: { models: [{ id: "MiniMax-M3", locality: "remote" }] },
     assistant: { stations: [{ id: "concierge" }] },
     apps: [],
-    person: { subject: "operator", display_name: "the operator", entitlements: ["admin"], roles: ["admin"] },
+    person: { subject: "operator", display_name: "the operator", grants: SETS.admin.grants, detail: "sensitive", groups: ["Admins"] },
     desk: {
       version: "1.0.0-alpha.14",
       mode: "off",

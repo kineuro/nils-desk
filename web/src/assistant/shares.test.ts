@@ -21,7 +21,7 @@ describe("a share", () => {
     expect(readsWords(undefined)).toBe("Nobody has opened it yet");
     expect(readsWords([{ subject: "cy", display: "Cy", first_at: "", last_at: "", count: 2 }])).toBe("Opened by Cy");
     expect(guardWords(null)).toBeNull();
-    expect(guardWords({ class: "sensitive", words: "sensitive values" })).toBe("It may have read sensitive values; a reader whose roles do not reach them is refused.");
+    expect(guardWords({ class: "sensitive", words: "sensitive values" })).toBe("It may have read sensitive values; a person who does not see them in records is refused.");
   });
 
   it("names people from the desk's directory before the names it was given", () => {

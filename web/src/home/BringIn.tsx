@@ -1,19 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Bringing DICOM in, the step of setup that names a source. Where the engine
-// lists its own ingest locations to an operator, folders are chosen there at
-// any depth, looked inside and digested, one digest each (the picker in
-// data/Picker.tsx). Otherwise, and for an admin who wants a folder outside
-// those locations, a folder is typed or chosen by clicking through this
-// machine's folders, looked inside by the supervisor on this host, each
-// folder inside ticked to become a batch of its own, and the folder added as
-// a source. The engine starts again to read it, which the supervisor does and
-// says how it went; the command a person would run by hand is beside the
-// buttons. That flow is the one the Places page adds a source with.
+// lists its own ingest locations to a person with work on Data, folders are
+// chosen there at any depth, looked inside and digested, one digest each (the
+// picker in data/Picker.tsx). Otherwise, and for a person with work on the
+// install who wants a folder outside those locations, a folder is typed or
+// chosen by clicking through this machine's folders, looked inside by the
+// supervisor on this host, each folder inside ticked to become a batch of its
+// own, and the folder added as a source. The engine starts again to read it,
+// which the supervisor does and says how it went; the command a person would
+// run by hand is beside the buttons. That flow is the one the Places page
+// adds a source with. Adding a folder as a source, in either flow, asks for
+// work on the Data and the Places pages (record 25).
 
 import { useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { IngestPicker } from "../data/Picker";
-import { door, holds } from "../deployment";
+import { newFolderRefusal } from "../data/picker";
+import { door } from "../deployment";
+import { may } from "../grants";
 import type { Place } from "../objects/client";
 import { sayLater } from "../assistant/client";
 import { stationOf, stationsServed } from "../assistant/stations";
@@ -37,14 +41,17 @@ type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } 
 export function BringInForm(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onDone: (words?: string) => void }) {
   const { caps, install, places, onDone } = props;
   const [outside, setOutside] = useState(false);
-  // the engine lists its ingest locations to an operator; the supervisor answers an admin
-  const listed = door(caps, "POST /api/ingest/folders") && holds(caps, "operator");
-  const supervised = install !== null && holds(caps, "admin");
+  // the engine lists its ingest locations to a person with work on Data; the host's folders need work on the install
+  const listed = door(caps, "POST /api/ingest/folders") && may(caps, "data:work");
+  const supervised = install !== null && may(caps, "install:work");
+  // choosing a folder a source already holds, and digesting it, is work on Data; adding a new folder as a source asks for work on Places too
+  const adding = newFolderRefusal(caps);
   if (listed && !outside) {
     return (
       <IngestPicker
         places={places}
         onDone={onDone}
+        adding={adding}
         outside={
           supervised ? (
             <button type="button" className="button quiet small" onClick={() => setOutside(true)}>
@@ -65,10 +72,12 @@ function HostForm(props: { caps: Capabilities; install: Install | null; places: 
   const [seen, setSeen] = useState<Seen>({ kind: "idle" });
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [act, setAct] = useState<Act>({ kind: "idle" });
-  // the supervisor answers an admin; the install is its answer
-  const supervised = install !== null && holds(caps, "admin");
+  // the supervisor answers a person with work on the install; the install is its answer
+  const supervised = install !== null && may(caps, "install:work");
   // and restarts the engine only where a service manager keeps it running
   const restarts = supervised && install !== null && keptRunning(install);
+  // adding the folder as a source asks for work on the Data and the Places pages
+  const adding = newFolderRefusal(caps);
   const folder = path.trim().replace(/\/+$/, "");
   const absolute = folder.startsWith("/");
   const working = act.kind === "working";
@@ -162,14 +171,16 @@ function HostForm(props: { caps: Capabilities; install: Install | null; places: 
         </div>
       )}
       <div className="row actions">
-        {restarts && (
+        {restarts && adding === null && (
           <button type="button" className="button" disabled={!absolute || chosen.length === 0 || working} onClick={() => add(true)}>
             Add and digest
           </button>
         )}
-        <button type="button" className={restarts ? "button secondary" : "button"} disabled={!absolute || working} onClick={() => add(false)}>
-          {restarts ? "Add only" : "Add as a source"}
-        </button>
+        {adding === null && (
+          <button type="button" className={restarts ? "button secondary" : "button"} disabled={!absolute || working} onClick={() => add(false)}>
+            {restarts ? "Add only" : "Add as a source"}
+          </button>
+        )}
         {assistantOffered(caps) && (
           <button
             type="button"
@@ -193,7 +204,8 @@ function HostForm(props: { caps: Capabilities; install: Install | null; places: 
           </button>
         )}
       </div>
-      {!supervised && absolute && (
+      {adding !== null && <p className="meta">{adding}</p>}
+      {adding === null && !supervised && absolute && (
         <p className="meta">
           The engine reads a new source once it starts again: <Command text="nils supervise reapply --part engine" />
         </p>

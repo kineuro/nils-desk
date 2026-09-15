@@ -448,6 +448,90 @@ table.thin.audit .audit-scope { display: none; }
 .ladder button.on { background: var(--n-brand-bg); color: var(--n-brand-fg); }
 .ladder button:disabled { cursor: default; }
 .ladder-row { gap: 0.6rem; flex-wrap: wrap; }
+/* ---- record 25: the Identity page (sign-in as facts, groups as cards, people with what they add up to), the access form a person and a group share, and the profile's lines */
+.stack.roomy { gap: 0.6rem; }
+.facts-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem 1.4rem; }
+.facts-row.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fact { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 0.1rem 0.65rem; align-content: start; min-width: 0; }
+.fact > .i { grid-row: 1 / span 2; margin-top: 2px; color: var(--n-brand-icon); }
+.fact > b, .fact > .meta { grid-column: 2; min-width: 0; }
+.fact .path { overflow-wrap: anywhere; }
+dl.facts.sign-facts { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); gap: 0.2rem 1rem; font-size: var(--n-text-size-small); }
+.signin { display: grid; gap: 0.9rem; }
+.setup-say { display: flex; align-items: center; gap: 0.6rem; padding-top: 0.75rem; border-top: 1px solid var(--n-line); color: var(--n-text-faint); }
+.setup-say p { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.ggrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9rem; }
+.gcard { display: grid; gap: 0.55rem; align-content: start; min-width: 0; padding: 0.8rem 0.9rem 0.85rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.gcard h3 { min-width: 0; overflow-wrap: anywhere; }
+.gcard > .button { justify-self: start; }
+.amarks { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.amark { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0 0.45rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-size: 12px; font-weight: 500; white-space: nowrap; color: var(--n-text-dim); }
+.amark.do { border-color: var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-fg); }
+.amark.own { border-style: dashed; border-color: var(--n-brand-text); color: var(--n-brand-fg); }
+.amark-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.45rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.amark-legend .sep { width: 0.7rem; }
+table.thin.people .person-under { display: none; }
+.alist { display: grid; border-top: 1px solid var(--n-line); }
+.alist-head { margin-bottom: -0.6rem; }
+.arow { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; column-gap: 0.75rem; row-gap: 0.05rem; align-items: center; padding: 0.5rem 0; border-bottom: 1px solid var(--n-line); }
+.arow > .i { grid-column: 1; grid-row: 1 / span 2; color: var(--n-text-faint); }
+.arow > b { grid-column: 2; grid-row: 1; font-weight: 500; }
+.arow > .what { grid-column: 2; grid-row: 2; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.arow > .seg, .arow > .state, .arow > .aside { grid-column: 3; grid-row: 1 / span 2; justify-self: end; }
+.arow > .state { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.arow.deep { grid-template-columns: minmax(0, 1fr) auto; padding-left: 1.85rem; }
+.arow.deep > b, .arow.deep > .what { grid-column: 1; }
+.arow.deep > .seg, .arow.deep > .state { grid-column: 2; }
+.arow.hidden > b { font-weight: 400; color: var(--n-text-faint); }
+.what .from { font-weight: 500; color: var(--n-text-dim); }
+.what .from.own { color: var(--n-brand-text); }
+.seg { display: inline-flex; overflow: hidden; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.seg button { min-width: 4.1rem; padding: 0.15rem 0.6rem; border: 0; border-left: 1px solid var(--n-neutral-line); background: transparent; font: inherit; font-size: 13px; text-align: center; color: var(--n-text-dim); cursor: pointer; }
+.seg button:first-child { border-left: 0; }
+.seg button.on { background: var(--n-brand); color: var(--n-text-on-brand); font-weight: 500; }
+.seg button.on.off { background: var(--n-bg-sunken); color: var(--n-text); }
+.seg button.locked { background: var(--n-bg-sunken); color: var(--n-text-faint); cursor: default; }
+.seg button:focus-visible { outline: 2px solid var(--n-brand-text); outline-offset: -2px; }
+/* what they see in records has longer choices, so they go under its words */
+.arow > .seg.wide { grid-column: 2; grid-row: 3; justify-self: start; margin-top: 0.3rem; }
+.presets { flex-wrap: wrap; gap: 0.4rem; }
+.opt { display: inline-flex; align-items: center; min-height: 1.75rem; padding: 0 0.6rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font: inherit; font-size: 13px; color: var(--n-text); cursor: pointer; }
+.opt .i { width: 13px; height: 13px; margin-right: 0.3rem; stroke-width: 2.4; }
+.opt.on { border-color: var(--n-brand-text); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
+.opt.followed { cursor: default; }
+.access-under { margin-top: -0.5rem; }
+.row.actions .push { margin-left: auto; }
+@media (min-width: 641px) {
+  .dialog:has(.alist) { width: min(44rem, calc(100vw - 2rem)); }
+}
+@media (max-width: 1100px) {
+  .ggrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 860px) {
+  .facts-row, .facts-row.two { grid-template-columns: minmax(0, 1fr); }
+  dl.facts.sign-facts { grid-template-columns: max-content minmax(0, 1fr); }
+  /* a person's row keeps what they add up to in sight: when they last signed in, and on a phone their groups, go under their name */
+  table.thin.people th:nth-child(4), table.thin.people td:nth-child(4) { display: none; }
+  table.thin.people .person-under { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+}
+@media (max-width: 640px) {
+  .ggrid { grid-template-columns: minmax(0, 1fr); }
+  table.thin.people th:nth-child(2), table.thin.people td:nth-child(2) { display: none; }
+  table.thin.people .person-groups { display: contents; }
+  /* a line's choice goes under its words, and the three kinds of record stack */
+  .arow { grid-template-columns: 18px minmax(0, 1fr); row-gap: 0.25rem; }
+  .arow > .seg, .arow > .state, .arow > .aside { grid-column: 2; grid-row: 3; justify-self: start; }
+  .arow.deep { grid-template-columns: minmax(0, 1fr); padding-left: calc(18px + 0.75rem); }
+  .arow.deep > .seg, .arow.deep > .state { grid-column: 1; }
+  .seg button { min-width: 3.6rem; }
+  .arow > .seg.wide { flex-direction: column; justify-self: stretch; }
+  .seg.wide button { border-left: 0; border-top: 1px solid var(--n-neutral-line); text-align: left; }
+  .seg.wide button:first-child { border-top: 0; }
+}
+@media (min-width: 641px) {
+  table.thin.people .person-groups { display: none; }
+}
+/* ---- end of record 25's Identity page */
 .audit-filters { gap: 0.5rem; flex-wrap: wrap; }
 .audit-filters .input { flex: 1 1 11rem; }
 td.nowrap { white-space: nowrap; }
@@ -531,6 +615,91 @@ table.thin th.acts, table.thin td.acts { width: 1%; }
   table.thin.models .row-actions.under { display: flex; flex-wrap: wrap; justify-content: flex-start; margin-top: 0.35rem; }
   table.thin.models .tag { white-space: normal; }
 }
+/* ---------------------------------------------------------------- record 25: the Kvasir page, stations first */
+/* where each station goes: a line a station, from its name and what it carries to the box of where it goes, which opens the drawer for a person who may move it */
+.stack.roomy { gap: 0.6rem; }
+.sq { display: grid; place-items: center; flex: none; width: 28px; height: 28px; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-neutral-bg); color: var(--n-neutral-icon); }
+.sq.brand { border-color: var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-icon); }
+.sq.caution { border-color: var(--n-caution-line); background: var(--n-caution-bg); color: var(--n-caution-icon); }
+.sq .i { width: 15px; height: 15px; }
+.routes { display: grid; }
+.route { display: grid; grid-template-columns: minmax(0, 10rem) 16px minmax(0, 1fr) minmax(0, 12rem); gap: 0.9rem; align-items: center; padding: 0.7rem 0.9rem; border-bottom: 1px solid var(--n-line); }
+.route:last-child { border-bottom: 0; }
+.route > .i { color: var(--n-text-faint); }
+.route .who { display: grid; gap: 0.15rem; justify-items: start; min-width: 0; }
+.route .station { font-weight: 500; overflow-wrap: anywhere; }
+.dest { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr) auto 16px; column-gap: 0.6rem; align-items: center; width: 100%; min-width: 0; padding: 0.35rem 0.6rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; text-align: left; }
+.dest.plain { grid-template-columns: 28px minmax(0, 1fr) auto; }
+button.dest { cursor: pointer; }
+button.dest:hover { border-color: var(--n-brand-line); background: var(--n-bg-hover); }
+.dest > .sq { grid-row: 1 / span 2; }
+.dest > b, .dest > .meta { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
+.dest > b { font-weight: 500; }
+.dest > .tag { grid-column: 3; grid-row: 1 / span 2; }
+.dest > .chev { grid-column: 4; grid-row: 1 / span 2; display: grid; color: var(--n-text-faint); }
+/* the models as cards, a card's quieter acts behind its three dots, and the line under them */
+.mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr)); gap: 0.9rem; align-items: start; }
+.mcard { display: grid; gap: 0.45rem; align-content: start; min-width: 0; padding: 0.8rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.mcard.mine { border-color: var(--n-caution-line); }
+.mcard.wide { grid-column: span 2; }
+.mcard .name { display: flex; align-items: center; gap: 0.55rem; min-width: 0; }
+.mcard .name > .path { min-width: 0; overflow: hidden; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.mcard .name > b { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.mcard > .row { flex-wrap: wrap; gap: 0.3rem 0.5rem; }
+.mcard .tag { white-space: normal; }
+.mcard .warn, .mcard .path { overflow-wrap: anywhere; }
+.mcard .local-track { max-width: none; }
+.mcard .sign-in-code .code { font-size: 1.35rem; }
+.mcard .serve-list { grid-template-columns: minmax(0, 1fr); gap: 0.1rem; }
+.mcard .serve-list dd { margin-bottom: 0.35rem; }
+.card-files { min-width: 0; }
+.card-files > summary { cursor: pointer; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.card-files > .serve { margin-top: 0.4rem; }
+.more-menu { position: relative; }
+.more-menu > summary { list-style: none; }
+.more-menu > summary::-webkit-details-marker { display: none; }
+.more-list { position: absolute; top: calc(100% + 0.25rem); right: 0; z-index: 3; display: grid; min-width: 11rem; padding: 0.3rem; border: 1px solid var(--n-line); border-radius: calc(var(--n-radius) * 2); background: var(--n-bg-raised); box-shadow: 0 8px 24px var(--n-scrim); }
+.more-list > button { padding: 0.4rem 0.55rem; border: 0; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; font-size: var(--n-text-size-small); text-align: left; cursor: pointer; }
+.more-list > button:hover { background: var(--n-bg-hover); }
+.more-list > button:disabled { color: var(--n-text-faint); cursor: default; }
+.mline { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 1.2rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.mline > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.4rem; min-width: 0; }
+.mline .i { width: 14px; height: 14px; }
+.mline .path { overflow-wrap: anywhere; }
+.link-button { padding: 0; border: 0; background: transparent; color: var(--n-brand-text); font: inherit; cursor: pointer; }
+.link-button:hover { color: var(--n-brand-hover); text-decoration: underline; text-underline-offset: 3px; }
+/* Add a model: where the model comes from, and the file of a download */
+.pick { display: grid; grid-template-columns: 32px minmax(0, 1fr) 16px; column-gap: 0.75rem; row-gap: 0.1rem; align-items: start; padding: 0.7rem 0.85rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); cursor: pointer; }
+.pick.on { padding: calc(0.7rem - 1px) calc(0.85rem - 1px); border: 2px solid var(--n-brand-text); }
+.pick > .sq { grid-column: 1; grid-row: 1 / span 2; width: 32px; height: 32px; }
+.pick > b { grid-column: 2; grid-row: 1; font-weight: 500; }
+.pick > input { grid-column: 3; grid-row: 1; margin: 3px 0 0; }
+.pick > .meta { grid-column: 2; grid-row: 2; }
+.file-row { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 0.3rem 0.6rem; align-items: center; padding: 0.45rem 0.6rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); cursor: pointer; }
+.file-row.on { border-color: var(--n-brand-line); background: var(--n-brand-bg); }
+.file-row > input { margin: 0; }
+.file-row .path { overflow-wrap: anywhere; }
+.file-row > .tag { justify-self: end; white-space: normal; }
+.more-fields { min-width: 0; }
+.more-fields > summary { cursor: pointer; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.more-body { display: grid; gap: 0.8rem; margin-top: 0.6rem; }
+.route .side:empty { display: none; }
+@media (max-width: 860px) {
+  /* on a narrow window a station's line stacks: its name, the arrow turned down, its box, and who allowed it */
+  .route { grid-template-columns: minmax(0, 1fr); gap: 0.4rem; }
+  .route > .i { transform: rotate(90deg); }
+}
+@media (max-width: 640px) {
+  /* on a phone a box's tag goes under its words, a card following a sign-in keeps to one column, and a file's tag goes under its name */
+  .dest { grid-template-columns: 28px minmax(0, 1fr) 16px; row-gap: 0.25rem; }
+  .dest.plain { grid-template-columns: 28px minmax(0, 1fr); }
+  .dest > .tag { grid-column: 2; grid-row: auto; justify-self: start; }
+  .dest > .chev { grid-column: 3; }
+  .mcard.wide { grid-column: auto; }
+  .file-row { grid-template-columns: 16px minmax(0, 1fr); }
+  .file-row > .tag { grid-column: 2; justify-self: start; }
+}
+/* ---------------------------------------------------------------- end of record 25: the Kvasir page, stations first */
 /* a path or a command is one long word: it breaks where it must, and never widens a column past its track */
 .settings > *, .pair > *, .db-col > *, .stack > * { min-width: 0; }
 .settings .meta, .note-detail { overflow-wrap: anywhere; }

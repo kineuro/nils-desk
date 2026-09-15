@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
+import { SETS } from "../grants";
 import type { AdmissionRecord } from "./kvasir";
 import { checkedWords, contractWords, keptByWords, partRows, restartByHand, runtimeName, updateWords, uptimeWords } from "./parts";
 import type { Install } from "./supervise";
@@ -25,7 +26,7 @@ function caps(over: Partial<Capabilities> = {}): Capabilities {
     kvasir: null,
     assistant: null,
     apps: [],
-    person: { subject: "admin", display_name: "admin", entitlements: ["admin"], roles: ["admin"] },
+    person: { subject: "admin", display_name: "admin", grants: SETS.admin.grants, detail: "sensitive", groups: ["Admins"] },
     desk: { version: "1.0.0-alpha.14", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
     ...over,
   };

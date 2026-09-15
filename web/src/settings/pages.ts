@@ -3,10 +3,11 @@
 // the parts, with the engine, the desk, Kvasir and the assistant under
 // them, then the places, the database, identity and the audit log. A page is
 // offered only once it is built back, where the deployment has what it
-// shows, and to a person who may read it.
+// shows, and to a person holding the grant that opens it (record 25).
 
 import type { Capabilities } from "../capabilities";
-import { door, holds } from "../deployment";
+import { door } from "../deployment";
+import { may } from "../grants";
 
 export interface SettingsPage {
   id: string;
@@ -17,27 +18,30 @@ export interface SettingsPage {
 
 /** The pages down the settings nav, in order, for this document and person. */
 export function settingsPages(caps: Capabilities): SettingsPage[] {
-  if (!holds(caps, "operator")) return [];
-  const admin = holds(caps, "admin");
-  const out: SettingsPage[] = [
-    // how the install stands, a card for each page
-    { id: "overview", title: "Overview", sub: false },
-    { id: "parts", title: "Parts", sub: false },
-    { id: "engine", title: "Engine", sub: true },
-    { id: "desk", title: "Desk", sub: true },
-  ];
-  // Kvasir, where it answered the desk; its page keeps the id the links name
-  if (caps.kvasir !== null) out.push({ id: "gateway", title: "Kvasir", sub: true });
-  if (caps.assistant !== null) out.push({ id: "assistant", title: "Assistant", sub: true });
+  const install = may(caps, "install:see");
+  const out: SettingsPage[] = [];
+  // how the install stands, a card for each page
+  if (install) {
+    out.push(
+      { id: "overview", title: "Overview", sub: false },
+      { id: "parts", title: "Parts", sub: false },
+      { id: "engine", title: "Engine", sub: true },
+      { id: "desk", title: "Desk", sub: true },
+    );
+  }
+  // Kvasir, where it answered the desk; its page keeps the id the links name.
+  // A part's page is set in under the parts only where the parts are drawn
+  if (caps.kvasir !== null && may(caps, "kvasir:see")) out.push({ id: "gateway", title: "Kvasir", sub: install });
+  if (caps.assistant !== null && may(caps, "assistant-settings:see")) out.push({ id: "assistant", title: "Assistant", sub: install });
   // the places, where the engine serves them
-  if (door(caps, "GET /api/places")) out.push({ id: "places", title: "Places", sub: false });
-  // the database is an admin's, where the engine serves its doors
-  if (admin && (door(caps, "GET /api/backups") || door(caps, "GET /api/settings"))) out.push({ id: "database", title: "Database", sub: false });
-  // who signs in is the desk's, and an admin's
-  if (admin) out.push({ id: "identity", title: "Identity", sub: false });
-  if (admin && door(caps, "GET /api/audit")) out.push({ id: "audit", title: "Audit", sub: false });
+  if (may(caps, "places:see") && door(caps, "GET /api/places")) out.push({ id: "places", title: "Places", sub: false });
+  // the database, where the engine serves its doors
+  if (may(caps, "database:see") && (door(caps, "GET /api/backups") || door(caps, "GET /api/settings"))) out.push({ id: "database", title: "Database", sub: false });
+  // who signs in is the desk's
+  if (may(caps, "identity:see")) out.push({ id: "identity", title: "Identity", sub: false });
+  if (may(caps, "audit:see") && door(caps, "GET /api/audit")) out.push({ id: "audit", title: "Audit", sub: false });
   // the steps that make the install ready, kept once they are done
-  out.push({ id: "setup", title: "Setup", sub: false });
+  if (install) out.push({ id: "setup", title: "Setup", sub: false });
   return out;
 }
 

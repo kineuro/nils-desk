@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Bringing DICOM in from the engine's own ingest locations, for an operator:
-// the locations to start from, the folders inside a folder at any depth, a
-// page at a time and filtered by name, each on screen with what a look inside
-// it found, and the folders chosen from anywhere, each queued as a digest of
-// its own. A digest reads only under a source place, so a folder no source
-// place holds is added as a source first. The engine lists nothing outside
-// its locations.
+// Bringing DICOM in from the engine's own ingest locations, for a person with
+// work on Data: the locations to start from, the folders inside a folder at
+// any depth, a page at a time and filtered by name, each on screen with what a
+// look inside it found, and the folders chosen from anywhere, each queued as a
+// digest of its own. A digest reads only under a source place, so a folder no
+// source place holds is added as a source first, which asks for work on the
+// Places page too. The engine lists nothing outside its locations.
 
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -41,8 +41,9 @@ import {
 
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
 
-export function IngestPicker(props: { places: Place[]; onDone: (words: string) => void; outside?: React.ReactNode }) {
-  const { places, onDone, outside } = props;
+export function IngestPicker(props: { places: Place[]; onDone: (words: string) => void; outside?: React.ReactNode; adding: string | null }) {
+  // `adding`: why a folder may not be added as a source here, in words, or null when it may
+  const { places, onDone, outside, adding } = props;
   // the folder open, or null for the locations
   const [at, setAt] = useState<string | null>(null);
   const [roots, setRoots] = useState<IngestRoot[] | null>(null);
@@ -335,11 +336,12 @@ export function IngestPicker(props: { places: Place[]; onDone: (words: string) =
         {current && (
           <div className="browser-foot picker-foot">
             <span className="path browser-path">{current.at}</span>
-            {!held(current) && (
+            {!held(current) && adding === null && (
               <button type="button" className="button quiet small" disabled={working} onClick={() => addSource(current)}>
                 Add this folder as a source
               </button>
             )}
+            {!held(current) && adding !== null && !chosenAt.has(current.at) && <span className="meta">{adding}</span>}
             <button type="button" className="button secondary small" disabled={working} onClick={() => tick(current)}>
               {chosenAt.has(current.at) ? "Leave this folder out" : "Choose this folder"}
             </button>
@@ -364,7 +366,7 @@ export function IngestPicker(props: { places: Place[]; onDone: (words: string) =
               <li key={c.at} className="chosen-item">
                 <span className="path chosen-at">{c.at}</span>
                 <span className={held(c) ? "meta chosen-note" : "meta chosen-note warn"}>{chosenNote(c, insideOf(chosen, c.at))}</span>
-                {!held(c) && (
+                {!held(c) && adding === null && (
                   <button type="button" className="button secondary small" disabled={working} onClick={() => addSource(c)}>
                     Add as a source
                   </button>
@@ -377,7 +379,11 @@ export function IngestPicker(props: { places: Place[]; onDone: (words: string) =
           </ul>
         )}
       </div>
-      {unheld > 0 && <p className="meta">A digest reads only under a source place: add each folder marked as a source first, or a folder they are inside.</p>}
+      {unheld > 0 && (
+        <p className="meta">
+          {adding === null ? "A digest reads only under a source place: add each folder marked as a source first, or a folder they are inside." : `A digest reads only under a source place, and a folder marked is under none. ${adding}`}
+        </p>
+      )}
       <div className="row actions">
         <button type="button" className="button" disabled={chosen.length === 0 || unheld > 0 || working} onClick={() => void queue()}>
           <Icon name="play" />

@@ -241,7 +241,7 @@ export function ProfilePanel(props: {
       {profile && tab === "clinical" && (
         <>
           <Bars chart={chartOf(profile.clinical, "plain", "No clinical events are recorded for these subjects.")} unit="events" />
-          {clinical?.sensitive_withheld && <p className="meta">Kinds of event marked sensitive are left out at your role.</p>}
+          {clinical?.sensitive_withheld && <p className="meta">Some kinds of event are left out, since you do not see everything in records.</p>}
         </>
       )}
     </section>
@@ -336,7 +336,7 @@ export function MoveForm(props: { move: Move; grain: string; typed: Record<strin
           ))}
         </div>
       )}
-      {suggested?.hidden && <p className="meta">This field's values are not listed at your role; its shapes are.</p>}
+      {suggested?.hidden && <p className="meta">This field's values are not listed, since you do not see them in records; its shapes are.</p>}
       <div className="row actions">
         <button type="button" className="button small" disabled={busy || missing.length > 0} onClick={onApply}>
           Apply as the next version

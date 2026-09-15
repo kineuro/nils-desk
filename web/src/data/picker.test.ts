@@ -4,6 +4,8 @@
 // look found, the chosen folders and the digest each becomes.
 
 import { describe, expect, it } from "vitest";
+import type { Capabilities } from "../capabilities";
+import type { Grant } from "../grants";
 import type { FolderEntry, FolderPage, LookedFolder } from "./browse";
 import {
   atOf,
@@ -22,6 +24,7 @@ import {
   lookNames,
   lookWords,
   mergePage,
+  newFolderRefusal,
   parentAt,
   parseAt,
   pathInside,
@@ -32,6 +35,17 @@ import {
 } from "./picker";
 
 const entry = (name: string, readable: boolean | null = true): FolderEntry => ({ name, readable, place: null });
+
+describe("adding a new folder as a source", () => {
+  const holding = (grants: Grant[]) => ({ person: { subject: "p", display_name: "p", grants, detail: "plain", groups: [] } }) as unknown as Capabilities;
+  it("is offered with work on the Data and the Places pages, and said in words without either", () => {
+    expect(newFolderRefusal(holding(["data:work", "places:work"]))).toBeNull();
+    expect(newFolderRefusal(holding(["data:work"]))).toBe(
+      "Bringing DICOM in from a new folder needs work on the Data page and on the Places page; this account has no work on the Places page.",
+    );
+    expect(newFolderRefusal(holding(["places:work", "data:see"]))).toMatch(/this account has no work on the Data page\.$/);
+  });
+});
 
 describe("a folder named as @root/relative", () => {
   it("has its parts, the folder above it and the way back up", () => {

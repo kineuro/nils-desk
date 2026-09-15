@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
 import type { DeskRecord, HandleRow, JobRow } from "../ask/client";
+import { SETS } from "../grants";
 import { age, running, stateOf, surface } from "./state";
 
 const handle = (over: Partial<HandleRow> = {}): HandleRow => ({
@@ -9,7 +10,7 @@ const handle = (over: Partial<HandleRow> = {}): HandleRow => ({
   last_read_at: null, withdrawn_at: null, ask_hash: "56f5", columns: ["rows", "subjects"], ...over,
 });
 const record = (over: Partial<DeskRecord> = {}): DeskRecord => ({ results: [{ handle: 77, document: 2, subject: "nima", made_at: "" }], lineage: [], export: "reader", ...over });
-const all = ["reader", "reviewer", "operator", "admin"];
+const all = SETS.admin.grants;
 
 describe("the three named states", () => {
   it("running: the ask run jobs not over, with the document they run", () => {
@@ -48,12 +49,17 @@ describe("the three named states", () => {
 });
 
 describe("the controls", () => {
-  it("are gated by the entitlement the door wants, with the reason on the control", () => {
-    const reader = stateOf(handle({ grain: "subject" }), record(), 1, ["reader"], true);
-    expect(reader.release).toEqual({ enabled: false, reason: "released needs the operator entitlement" });
-    expect(reader.promote.enabled).toBe(false);
+  it("are gated by the grant the door wants, with the reason on the control", () => {
+    const reader = stateOf(handle({ grain: "subject" }), record(), 1, SETS.reader.grants, true);
+    expect(reader.release).toEqual({ enabled: false, reason: "releasing it needs work on the Release page" });
+    expect(reader.promote).toEqual({ enabled: false, reason: "promoting it needs work on the Release page" });
+    // the reason is words, never a grant as the parts spell it
+    expect(`${reader.release.reason} ${reader.promote.reason}`).not.toMatch(/:(see|work|use)\b/);
     expect(reader.export.enabled).toBe(true);
-    const noExport = stateOf(handle(), record(), 1, ["reader"], false);
+    // seeing releases is not making them
+    expect(stateOf(handle({ grain: "subject" }), record(), 1, ["release:see"], true).release.enabled).toBe(false);
+    expect(stateOf(handle({ grain: "subject" }), record(), 1, ["release:work"], true).promote.enabled).toBe(true);
+    const noExport = stateOf(handle(), record(), 1, SETS.reader.grants, false);
     expect(noExport.export.reason).toBe("export is not open to you on this desk");
   });
   it("name dropped and withdrawn rows before anything else", () => {

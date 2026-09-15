@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
+import { needsWork } from "../access";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import type { Place } from "../objects/client";
@@ -139,6 +140,9 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
   const kept = stores?.find((s) => s.store === "registry")?.where ?? null;
   const rule = places ? registryRule(places) : null;
   const refused = draft ? draftRule(draft) : null;
+  // a person who may see the database reads it; every change asks for work on it
+  const backupsLocked = needsWork(caps, "Changing the schedule, backing up or rehearsing a restore", [["database:work", "the Database page"]]);
+  const calendarLocked = needsWork(caps, "Changing the calendar", [["database:work", "the Database page"]]);
 
   const backUp = () =>
     backup.act("backing up, then rehearsing a restore of the archive", async () => {
@@ -279,7 +283,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                       </label>
                       <div className="row schedule-when">
                         <div className="input">
-                          <select id="backup-every" value={draft.every} onChange={(e) => setDraft({ ...draft, every: e.target.value as ScheduleDraft["every"] })}>
+                          <select id="backup-every" value={draft.every} disabled={backupsLocked !== null} onChange={(e) => setDraft({ ...draft, every: e.target.value as ScheduleDraft["every"] })}>
                             <option value="off">Off</option>
                             <option value="day">Every day</option>
                             <option value="week">Every week</option>
@@ -287,7 +291,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                         </div>
                         {draft.every === "week" && (
                           <div className="input">
-                            <select aria-label="The day" value={draft.day} onChange={(e) => setDraft({ ...draft, day: e.target.value })}>
+                            <select aria-label="The day" value={draft.day} disabled={backupsLocked !== null} onChange={(e) => setDraft({ ...draft, day: e.target.value })}>
                               {DAYS.map((d) => (
                                 <option key={d} value={d}>
                                   {capitalised(d)}
@@ -298,7 +302,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                         )}
                         {draft.every !== "off" && (
                           <div className="input time">
-                            <input type="time" aria-label="The time of day" value={draft.at} onChange={(e) => setDraft({ ...draft, at: e.target.value })} />
+                            <input type="time" aria-label="The time of day" value={draft.at} disabled={backupsLocked !== null} onChange={(e) => setDraft({ ...draft, at: e.target.value })} />
                           </div>
                         )}
                       </div>
@@ -311,7 +315,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                         Keep
                       </label>
                       <div className="input">
-                        <select id="backup-keep" value={draft.keep ?? ""} onChange={(e) => setDraft({ ...draft, keep: e.target.value === "" ? null : Number(e.target.value) })}>
+                        <select id="backup-keep" value={draft.keep ?? ""} disabled={backupsLocked !== null} onChange={(e) => setDraft({ ...draft, keep: e.target.value === "" ? null : Number(e.target.value) })}>
                           {KEEPS.map((k) => (
                             <option key={k ?? "every"} value={k ?? ""}>
                               {keepWords(k, backups).label}
@@ -322,7 +326,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                       <span className="meta">{keepWords(draft.keep, backups).meta}</span>
                     </div>
                   </div>
-                  {draftChanged(draft, backups.schedule) && (
+                  {backupsLocked === null && draftChanged(draft, backups.schedule) && (
                     <div className="row actions">
                       <button type="button" className="button small" disabled={schedule.working || refused !== null} onClick={saveSchedule}>
                         Save the schedule
@@ -369,15 +373,19 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                     </table>
                   </div>
                   {backups.archives.length > SHOWN && <p className="meta">and {backups.archives.length - SHOWN} older</p>}
-                  <div className="row actions">
-                    <button type="button" className="button" disabled={backup.working} onClick={backUp}>
-                      Back up now
-                    </button>
-                    <button type="button" className="button secondary" disabled={rehearsal.working || newest === null} onClick={rehearse}>
-                      Rehearse a restore
-                    </button>
-                    <span className="meta">A rehearsal checks the newest archive and opens every store in it, without applying it.</span>
-                  </div>
+                  {backupsLocked === null ? (
+                    <div className="row actions">
+                      <button type="button" className="button" disabled={backup.working} onClick={backUp}>
+                        Back up now
+                      </button>
+                      <button type="button" className="button secondary" disabled={rehearsal.working || newest === null} onClick={rehearse}>
+                        Rehearse a restore
+                      </button>
+                      <span className="meta">A rehearsal checks the newest archive and opens every store in it, without applying it.</span>
+                    </div>
+                  ) : (
+                    <p className="meta">{backupsLocked}</p>
+                  )}
                   <Acted acting={backup.acting} />
                   <Acted acting={rehearsal.acting} />
                   <div className="row actions">
@@ -439,7 +447,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                   Timezone
                 </label>
                 <div className="input">
-                  <select id="registry-timezone" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+                  <select id="registry-timezone" value={timezone} disabled={calendarLocked !== null} onChange={(e) => setTimezone(e.target.value)}>
                     {calendar.timezones.map((z) => (
                       <option key={z} value={z}>
                         {z}
@@ -453,7 +461,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                   Week starts on
                 </label>
                 <div className="input">
-                  <select id="registry-week" value={weekStart} onChange={(e) => setWeekStart(e.target.value)}>
+                  <select id="registry-week" value={weekStart} disabled={calendarLocked !== null} onChange={(e) => setWeekStart(e.target.value)}>
                     {calendar.week_starts.map((d) => (
                       <option key={d} value={d}>
                         {capitalised(d)}
@@ -462,7 +470,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                   </select>
                 </div>
               </div>
-              {(timezone !== calendar.timezone || weekStart !== calendar.week_start) && (
+              {calendarLocked === null && (timezone !== calendar.timezone || weekStart !== calendar.week_start) && (
                 <div className="row actions">
                   <button type="button" className="button small" disabled={change.working} onClick={changeCalendar}>
                     Change the calendar
@@ -480,6 +488,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                 </div>
               )}
               <Acted acting={change.acting} />
+              {calendarLocked !== null && <p className="meta">{calendarLocked}</p>}
               <p className="meta">Every answer's dates use these, never the browser's. A change moves the registry's epoch.</p>
             </section>
           )}

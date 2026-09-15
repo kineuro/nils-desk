@@ -26,6 +26,11 @@ export const CONCEPTS: Concept[] = [
   { term: "Key", count: "one per registry", icon: "key", words: "The secret each subject's code is made from, so the code is the same every time. It is in no backup; keep its passphrase apart." },
   { term: "Place", count: "one per folder", icon: "disk", words: "Any folder NILS uses, with its role: a source, the registry, a backup place, an export." },
   { term: "Backup place", count: "one per registry", icon: "shield", words: "Where the registry's archives go, best on storage other than the registry's." },
-  { term: "People", count: "four roles", icon: "users", words: "A reader reads, a reviewer judges, an operator runs the install, an admin changes it. Each role includes the ones before it." },
+  {
+    term: "People",
+    count: "groups and pages",
+    icon: "users",
+    words: "Each person is in groups named on the Identity page. A group gives pages to see or to work on, and how much of a record its people see; a person gets what all their groups give.",
+  },
   { term: "Assistant", count: "optional", icon: "assistant", words: "Answers and plans in words. Kvasir decides which model a prompt may reach, and what may leave." },
 ];

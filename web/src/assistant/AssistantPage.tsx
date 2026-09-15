@@ -16,6 +16,7 @@
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
+import { keepingRefusal } from "../query/cards";
 import { href } from "../routes";
 import { assistantModel } from "../sections";
 import { admit } from "../ui/context";
@@ -372,7 +373,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
           }}
         />
       )}
-      {conv && <CardInPlay key={conv} talk={talk} opened={meta?.document ?? null} onShown={(card) => (inPlay.current = card)} />}
+      {conv && <CardInPlay key={conv} talk={talk} opened={meta?.document ?? null} keeping={keepingRefusal(caps)} onShown={(card) => (inPlay.current = card)} />}
       <div className="talk" aria-live="polite">
         {missing && (
           <p className="meta">

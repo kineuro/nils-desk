@@ -32,17 +32,10 @@ pub async fn push_token(
     let Some(up) = crate::proxy::assistant_upstream(&desk) else {
         return error(StatusCode::NOT_FOUND, "this deployment has no assistant");
     };
-    if !matches!(desk.config.mode, crate::config::Mode::Off) {
-        let (s, _) = session::resolve(&desk, &headers);
-        let Some(s) = s else {
-            return error(StatusCode::UNAUTHORIZED, "no session; log in at the desk");
-        };
-        if !session::person(&desk, &s).holds("assist") {
-            return error(
-                StatusCode::FORBIDDEN,
-                "the assistant needs the assist entitlement",
-            );
-        }
+    if !matches!(desk.config.mode, crate::config::Mode::Off)
+        && let Err(r) = session::holding(&desk, &headers, "assistant:use", "the assistant")
+    {
+        return *r;
     }
     let token = match bearer(&desk, &up, &headers).await {
         Ok(Some(t)) => t,

@@ -5,6 +5,7 @@
 // controls may do, with the reason on the control when they may not.
 
 import type { DeskRecord, HandleRow, JobRow } from "../ask/client";
+import { holdsGrant } from "../grants";
 
 export interface Running {
   job: number;
@@ -87,7 +88,8 @@ function descendant(record: DeskRecord, document: number): number | null {
   return found;
 }
 
-export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, entitlements: string[], canExport: boolean): ResultState {
+/** A result's states and controls for a person holding these grants; `canExport` is whether this desk's export is open to them (caps.desk.export). */
+export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, grants: readonly string[], canExport: boolean): ResultState {
   const document = record.results.find((r) => r.handle === h.id)?.document ?? null;
   const rows: ResultState["rows"] = h.withdrawn_at ? "withdrawn" : h.kept ? "kept" : "dropped";
   let stale: Stale | null = null;
@@ -96,20 +98,15 @@ export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, entitle
   else if (h.epoch !== epoch) stale = { overlay: `the registry moved: epoch ${h.epoch} then, ${epoch} now`, document, moved_to: null };
   let truncated: Truncated | null = null;
   if (h.truncated) truncated = { by: h.limit !== null && h.row_count >= h.limit ? "you" : "us", limit: h.limit };
-  const holds = (e: string) => {
-    const ladder = ["reader", "reviewer", "operator", "admin"];
-    const want = ladder.indexOf(e);
-    return entitlements.some((x) => ladder.indexOf(x) >= want);
-  };
   const cannot = (why: string): Control => ({ enabled: false, reason: why });
   const can: Control = { enabled: true, reason: null };
-  const gate = (need: string, what: string): Control | null => {
+  const gate = (what: string, doing: string): Control | null => {
     if (rows === "withdrawn") return cannot("the handle was withdrawn");
     if (rows === "dropped") return cannot("the rows were dropped by retention");
     if (truncated) return cannot(truncated.by === "you" ? `a capped answer is not ${what}; raise your limit in the out step and run again` : `a truncated answer is not ${what}; narrow the question or run it as a job`);
-    // the reason's order (Wave 5 section 6.6): truncated, stale, incomplete, role
+    // the reason's order (Wave 5 section 6.6): truncated, stale, incomplete, grant
     if (stale) return cannot(stale.moved_to !== null ? `a stale answer is not ${what}; the question moved on to ${stale.moved_to}, run that` : `a stale answer is not ${what}; the registry moved to epoch ${epoch}, run the question again`);
-    if (!holds(need)) return cannot(`${what} needs the ${need} entitlement`);
+    if (!holdsGrant(grants, "release:work")) return cannot(`${doing} needs work on the Release page`);
     return null;
   };
   return {
@@ -118,13 +115,13 @@ export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, entitle
     rows,
     stale,
     truncated,
-    release: gate("operator", "released") ?? can,
-    promote: h.grain === "subject" ? (gate("operator", "promoted") ?? can) : cannot("only a subject handle is promoted into a cohort"),
+    release: gate("released", "releasing it") ?? can,
+    promote: h.grain === "subject" ? (gate("promoted", "promoting it") ?? can) : cannot("only a subject handle is promoted into a cohort"),
     export: rows !== "kept" ? cannot(rows === "withdrawn" ? "the handle was withdrawn" : "the rows were dropped by retention") : stale ? cannot("a stale answer is not exported; run the question again") : canExport ? can : cannot("export is not open to you on this desk"),
   };
 }
 
 /** The states, newest first. */
-export function surface(handles: HandleRow[], record: DeskRecord, epoch: number, entitlements: string[], canExport: boolean): ResultState[] {
-  return [...handles].sort((a, b) => b.id - a.id).map((h) => stateOf(h, record, epoch, entitlements, canExport));
+export function surface(handles: HandleRow[], record: DeskRecord, epoch: number, grants: readonly string[], canExport: boolean): ResultState[] {
+  return [...handles].sort((a, b) => b.id - a.id).map((h) => stateOf(h, record, epoch, grants, canExport));
 }

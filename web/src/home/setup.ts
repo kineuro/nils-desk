@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// What makes an install ready to start. Until it is, an operator's Home is the
-// page of these steps: each worked out from what the parts report, whether
-// the desk needs it, and whether what it needs is there. Home's steps say the
-// words; this says which of them hold the rest of the desk back.
+// What makes an install ready to start. Until it is, Home is the page of these
+// steps for a person who may see the install: each worked out from what the
+// parts report, whether the desk needs it, and whether what it needs is there.
+// Home's steps say the words; this says which of them hold the rest of the
+// desk back.
 
+import { needsWork } from "../access";
 import type { Capabilities } from "../capabilities";
-import { holds } from "../deployment";
+import { may } from "../grants";
 import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
 import type { Install } from "../settings/supervise";
@@ -77,13 +79,25 @@ export function minimumMet(all: SetupStep[]): boolean {
 
 /**
  * Whether an install is ready to start, as far as the shell can tell from the
- * places and the backups it keeps: always for a person who does not set an
- * install up, and null while the places are not read yet.
+ * places and the backups it keeps: always for a person who may not see the
+ * install, and null while the places are not read yet.
  */
 export function ready(caps: Capabilities, install: Install | null, places: Place[] | null, archives: Backups | null): boolean | null {
-  if (!holds(caps, "operator")) return true;
+  if (!may(caps, "install:see")) return true;
   if (places === null) return null;
   return minimumMet(setupSteps({ caps, install, places, batches: null, backups: null, archives, purposes: null }));
+}
+
+/**
+ * Why backing up to the engine's backup folder is not offered to this person,
+ * in words, or null when it is. Naming the folder adds or changes places as
+ * well as the backups, so it asks for work on both pages (record 25).
+ */
+export function backupFolderRefusal(caps: Capabilities): string | null {
+  return needsWork(caps, "Backing up to the engine's backup folder", [
+    ["database:work", "the Database page"],
+    ["places:work", "the Places page"],
+  ]);
 }
 
 /** How far setup is, in a sentence. */

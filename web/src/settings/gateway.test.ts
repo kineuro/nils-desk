@@ -1,34 +1,50 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Kvasir page's words: Kvasir's health, the machine's card, which
-// backends show where, each model's line and admission, what a check found,
-// what goes when a backend is removed, and where each station goes.
+// backends show where, each model's facts and admission, what a check found,
+// what goes when a backend is removed, who looks at the page and a refusal
+// for want of a grant, and where each station goes as its line draws it.
 
 import { describe, expect, it } from "vitest";
+import type { Capabilities } from "../capabilities";
+import type { Grant } from "../grants";
 import {
   admissionWords,
+  answersWords,
+  carriesWords,
   checkWords,
   closedLead,
   closedTo,
+  defaultModel,
   destinationWords,
   gatewayHealth,
+  goesToWords,
+  grantWords,
   listWords,
   machineWords,
-  modelMeta,
   modelOf,
-  purposeLines,
+  onRuntime,
+  plainly,
+  providerName,
   removalWords,
+  routes,
+  runtimeOfBackend,
   shownBackends,
   stationOf,
+  subscribedStations,
   targets,
+  tokensWords,
   usedFor,
+  viewerOf,
   whereWords,
+  type Viewer,
 } from "./gateway";
-import type { AdmissionRecord, Backend, PurposeRow } from "./kvasir";
+import { type AdmissionRecord, type Backend, KvasirError, type PurposeRow, type Subscription } from "./kvasir";
 import type { Install } from "./supervise";
 
 const local: Backend = { id: "local", kind: "openai-completions", locality: "local", provider: null, credential: null, models: ["qwen38-27b"], health: { warming: false, running: 1, concurrency: 8 } };
 const minimax: Backend = { id: "minimax", kind: "anthropic-messages", locality: "remote", provider: "minimax", credential: true, models: ["MiniMax-M3"], health: { warming: false, running: 0, concurrency: 4 } };
 const chatgpt: Backend = { id: "chatgpt", kind: "openai-codex-responses", locality: "remote", provider: "chatgpt", credential: null, models: [], health: {}, builtin: true };
+const runtime: Backend = { id: "llama-cpp", kind: "openai-completions", locality: "local", provider: null, credential: null, models: ["Qwen3.6-27B-Q4_K_M"], health: {} };
 
 const purpose = (over: Partial<PurposeRow>): PurposeRow => ({
   purpose: "assistant.concierge",
@@ -45,6 +61,28 @@ const purpose = (over: Partial<PurposeRow>): PurposeRow => ({
 
 const record = (over: Partial<AdmissionRecord>): AdmissionRecord => ({ id: 1, backend: "local", model: "qwen38-27b", runtime: { name: "sglang", version: "0.5.2", build: "" }, at: Date.parse("2026-09-15T10:00:00Z"), passed: true, ...over });
 
+const sub = (over: Partial<Subscription> = {}): Subscription => ({
+  provider: "chatgpt",
+  name: "ChatGPT",
+  for: "person",
+  state: "signed_out",
+  user_code: null,
+  verification_uri: null,
+  expires_at: null,
+  since: null,
+  model: null,
+  models: [],
+  error: null,
+  ...over,
+});
+
+const caps = (grants: Grant[], mode: "off" | "local" | "oidc" = "local") => ({ person: { subject: "someone", display_name: "Someone", grants, detail: "plain", groups: [] }, desk: { mode } }) as unknown as Capabilities;
+
+const admin: Viewer = { work: true, subscribes: true, system: false };
+const person: Viewer = { work: false, subscribes: true, system: false };
+const seer: Viewer = { work: false, subscribes: false, system: false };
+const alone: Viewer = { work: true, subscribes: true, system: true };
+
 describe("Kvasir", () => {
   it("says whether it is warm and how busy its streams are", () => {
     expect(gatewayHealth([local, minimax])).toEqual({ tone: "ok", words: "warm", streams: "1 of 12 streams busy" });
@@ -59,17 +97,50 @@ describe("Kvasir", () => {
     expect(machineWords(null)).toEqual({ card: null, advice: [] });
   });
 
-  it("shows the models it holds in the table, and ChatGPT through subscriptions under Subscriptions", () => {
+  it("shows the models it holds as cards, and ChatGPT through subscriptions as the subscription's card", () => {
     expect(shownBackends([local, chatgpt, minimax])).toEqual({ held: [local, minimax], subscriptions: [chatgpt] });
     expect(shownBackends([])).toEqual({ held: [], subscriptions: [] });
   });
 });
 
+describe("who looks at the page (record 25)", () => {
+  it("works on Kvasir with Kvasir: Work, and signs a subscription of their own in with the assistant and Kvasir: See", () => {
+    expect(viewerOf(caps(["kvasir:work", "kvasir:see"]), null)).toEqual({ work: true, subscribes: false, system: false });
+    expect(viewerOf(caps(["kvasir:work", "assistant:use"]), sub())).toEqual({ work: true, subscribes: true, system: false });
+    expect(viewerOf(caps(["kvasir:see", "assistant:use"]), sub())).toEqual({ work: false, subscribes: true, system: false });
+    expect(viewerOf(caps(["kvasir:see"]), sub())).toEqual({ work: false, subscribes: false, system: false });
+    expect(viewerOf(caps(["assistant:use"]), sub())).toEqual({ work: false, subscribes: false, system: false });
+  });
+
+  it("reads the subscription as the install's where Kvasir says so, or where nobody signs in", () => {
+    expect(viewerOf(caps(["kvasir:work", "assistant:use"]), sub({ for: "system" })).system).toBe(true);
+    expect(viewerOf(caps(["kvasir:work", "assistant:use"], "off"), null).system).toBe(true);
+  });
+
+  it("names a grant as the Identity page does", () => {
+    expect(grantWords("kvasir:work")).toBe("Kvasir: Work");
+    expect(grantWords("kvasir:see")).toBe("Kvasir: See");
+    expect(grantWords("assistant:use")).toBe("the assistant");
+    expect(grantWords("assistant-settings:see")).toBe("Assistant settings: See");
+  });
+
+  it("says a refusal for want of a grant in plain words, and leaves any other refusal as it came", () => {
+    const refused = (body: unknown) => new KvasirError(403, "refused", body as KvasirError["body"]);
+    expect((plainly(refused({ error: { code: "no_grant", needs: ["assistant:use", "kvasir:see"] } })) as Error).message).toBe(
+      "A subscription of your own needs the assistant and Kvasir: See. Someone with Identity: Work gives them on the Identity page.",
+    );
+    expect((plainly(refused({ error: { code: "no_grant", needs: ["kvasir:work"] } })) as Error).message).toBe("This needs Kvasir: Work, which you do not hold. Someone with Identity: Work gives it on the Identity page.");
+    expect((plainly(refused({ error: { code: "no_grant", message: "no grant" } })) as Error).message).toBe("This needs a grant you do not hold. Someone with Identity: Work gives it on the Identity page.");
+    expect((plainly(refused({ error: { code: "not_a_person" } })) as Error).message).toMatch(/^Kvasir keeps a subscription for a person/u);
+    const other = new KvasirError(409, "in the list already", {});
+    expect(plainly(other)).toBe(other);
+  });
+});
+
 describe("a model", () => {
-  it("says the context it takes, whether it reasons, and where its prompts go", () => {
-    expect(modelMeta({ id: "qwen38-27b", contextWindow: 32768, reasoning: true }, "local")).toBe("32,768 tokens · reasoning");
-    expect(modelMeta(undefined, "remote")).toBe("a provider's model");
-    expect(modelMeta(undefined, "local")).toBe("");
+  it("says the context it takes, and where its prompts go", () => {
+    expect(tokensWords({ id: "qwen38-27b", contextWindow: 32768, reasoning: true })).toBe("32,768 tokens");
+    expect(tokensWords(undefined)).toBeNull();
     expect(whereWords("local")).toEqual({ tone: "ok", words: "stays in your systems" });
     expect(whereWords("remote")).toEqual({ tone: "caution", words: "leaves your systems" });
   });
@@ -117,12 +188,29 @@ describe("a model", () => {
     expect(checkWords([])).toEqual({ passed: false, words: "Kvasir checked no model." });
   });
 
-  it("says which stations use its backend", () => {
+  it("says which stations use its backend, and which go to ChatGPT", () => {
     const purposes = [purpose({}), purpose({ purpose: "assistant.ask-help" }), purpose({ purpose: "assistant.operator", content: "catalog", backend: "minimax", locality: "remote" })];
     expect(usedFor(local, purposes)).toBe("concierge, ask-help");
     expect(usedFor(minimax, purposes)).toBe("operator");
     expect(usedFor({ ...local, id: "spare" }, purposes)).toBe("nothing yet");
+    expect(answersWords("local", purposes)).toBe("answers concierge and ask-help");
+    expect(answersWords("spare", purposes)).toBe("answers no station yet");
+    expect(answersWords("local", null)).toBeNull();
     expect(stationOf("desk.search")).toBe("desk.search");
+    expect(subscribedStations([purpose({ backend: "chatgpt", locality: "remote" }), purpose({ purpose: "assistant.ask-help" })], [local, chatgpt])).toEqual(["concierge"]);
+    expect(subscribedStations(null, null)).toEqual([]);
+  });
+
+  it("knows the runtime's backend, the runtime a server reported, a provider's name, and the default model in your systems", () => {
+    expect(onRuntime(runtime)).toBe(true);
+    expect(onRuntime(local)).toBe(false);
+    expect(runtimeOfBackend(local, [record({}), record({ at: 0, runtime: { name: "vllm", version: "0.9", build: "" } })])).toBe("SGLang");
+    expect(runtimeOfBackend(local, [record({ runtime: { name: "unknown", version: "", build: "" } })])).toBeNull();
+    expect(runtimeOfBackend(local, null)).toBeNull();
+    expect(providerName(minimax)).toBe("MiniMax");
+    expect(providerName({ ...minimax, provider: "acme" })).toBe("acme");
+    expect(defaultModel([chatgpt, minimax, local, runtime])).toBe("qwen38-27b");
+    expect(defaultModel([minimax])).toBeNull();
   });
 });
 
@@ -155,23 +243,53 @@ describe("removing a backend", () => {
   });
 });
 
-describe("where each station goes", () => {
-  it("is said station by station, with who allowed a move and whether another backend may take it", () => {
-    const operator = purpose({ purpose: "assistant.operator", content: "catalog", backend: "minimax", locality: "remote", default: false, acknowledged: { by: "admin", at: Date.parse("2026-09-16T09:00:00Z"), text: null } });
-    const identifiers = purpose({ purpose: "desk.identity", content: "identifiers" });
-    const lines = purposeLines([purpose({}), operator, identifiers], [local, minimax]);
-    expect(lines[0]).toMatchObject({ station: "concierge", carries: "rows", goesTo: "qwen38-27b, in your systems", locality: "local", allowed: null, movable: true });
-    expect(lines[1]).toMatchObject({ station: "operator", carries: "catalogue", goesTo: "MiniMax-M3, a provider", locality: "remote", movable: true });
-    expect(lines[1].allowed).toMatch(/^allowed by admin on /);
-    expect(lines[2]).toMatchObject({ carries: "identifiers", movable: false });
+describe("where each station goes (record 25)", () => {
+  const at = (viewer: Viewer, subscription: Subscription | null = null) => ({ viewer, admissions: [record({})], subscription });
+
+  it("draws a station's line: its name and what it carries, the box of where it goes, and who allowed it", () => {
+    const operator = purpose({ purpose: "assistant.operator", content: "catalog", backend: "minimax", locality: "remote", default: false });
+    const keyword = purpose({ purpose: "assistant.keyword-tune", backend: "local" });
+    const askHelp = purpose({ purpose: "assistant.ask-help", backend: "llama-cpp" });
+    const concierge = purpose({ backend: "minimax", locality: "remote", default: false, acknowledged: { by: "admin", at: Date.parse("2026-09-14T09:00:00Z"), text: "why" } });
+    const lines = routes([askHelp, keyword, operator, concierge], [runtime, local, minimax, chatgpt], at(admin));
+    expect(lines[0]).toMatchObject({
+      station: "ask-help",
+      carries: "carries rows",
+      to: { mark: { icon: "chip", tone: "brand" }, title: "Qwen3.6-27B-Q4_K_M", meta: "this machine, llama.cpp", where: { tone: "ok", words: "stays in your systems" } },
+      side: null,
+      movable: true,
+    });
+    expect(lines[1].to).toMatchObject({ mark: { icon: "engine", tone: "neutral" }, title: "qwen38-27b", meta: "your server, SGLang" });
+    expect(lines[2]).toMatchObject({ carries: "carries the catalogue", side: "no rows, so no reason needed", to: { mark: { icon: "cloud", tone: "caution" }, title: "MiniMax-M3", meta: "MiniMax, a provider", where: { tone: "caution", words: "leaves your systems" } } });
+    expect(lines[3].side).toMatch(/^allowed by admin on 14 Sept? 2026, for this station$/u);
+    expect(carriesWords("identifiers")).toBe("carries identifiers");
   });
 
-  it("names ChatGPT as each person's own subscription, or the install's on a desk that signs nobody in", () => {
-    const viaChatgpt = purpose({ purpose: "assistant.operator", content: "catalog", backend: "chatgpt", locality: "remote", default: false });
-    expect(purposeLines([viaChatgpt], [local, chatgpt])[0].goesTo).toBe("Each person's own ChatGPT subscription");
-    expect(purposeLines([viaChatgpt], [local, chatgpt], true)[0].goesTo).toBe("The install's ChatGPT subscription");
+  it("says where a server is only to a person with Kvasir: Work, and lets only them move a station", () => {
+    const lines = routes([purpose({})], [local, minimax], at(person));
+    expect(lines[0].to.meta).toBe("a server in your systems");
+    expect(lines[0].movable).toBe(false);
+    expect(routes([purpose({ content: "identifiers" })], [local, minimax], at(admin))[0].movable).toBe(false);
+  });
+
+  it("names ChatGPT as each person's own subscription, the person's own, or the install's", () => {
+    const viaChatgpt = purpose({ backend: "chatgpt", locality: "remote", default: false });
+    const title = (viewer: Viewer, s: Subscription | null = null) => routes([viaChatgpt], [local, chatgpt], at(viewer, s))[0].to;
+    expect(title(admin, sub({ state: "signed_in", model: "gpt-5.5" }))).toMatchObject({ title: "Each person's own ChatGPT subscription", meta: "the default model in your systems for anyone without one" });
+    expect(title(seer)).toMatchObject({ title: "Each person's own ChatGPT subscription" });
+    expect(title(person, sub())).toMatchObject({ title: "Your own ChatGPT subscription", meta: "qwen38-27b until you sign in" });
+    expect(title(person, sub({ state: "signed_in", model: "gpt-5.5", models: [{ id: "gpt-5.5", name: "GPT-5.5", context_window: 272000 }] }))).toMatchObject({ meta: "GPT-5.5, signed in" });
+    expect(title(alone, sub({ for: "system" }))).toMatchObject({ title: "The install's ChatGPT subscription", meta: "qwen38-27b until it is signed in" });
     expect(destinationWords(chatgpt)).toBe("Each person's own ChatGPT subscription");
+    expect(destinationWords(chatgpt, true)).toBe("The install's ChatGPT subscription");
     expect(destinationWords(local)).toBe("qwen38-27b");
+  });
+
+  it("says a station goes nowhere where its backend is gone, and why where the model on this machine is stopped", () => {
+    const [gone, stopped] = routes([purpose({ backend: "spare" }), purpose({ backend: "llama-cpp" })], [minimax], at(admin));
+    expect(gone.to).toMatchObject({ title: "nowhere yet", meta: "no model in your systems answers it yet", where: null });
+    expect(stopped.to.meta).toBe("its model on this machine is stopped");
+    expect(goesToWords(gone.to)).toBe("nowhere yet, no model in your systems answers it yet");
   });
 
   it("offers a station only the backends it may move to, ChatGPT among them, and says what a move needs", () => {
