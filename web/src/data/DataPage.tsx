@@ -7,6 +7,7 @@
 // setup's bring-in flow opens in a dialog.
 
 import { useCallback, useEffect, useState } from "react";
+import { needsWork } from "../access";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -35,6 +36,11 @@ export function DataPage({ caps, install, onChanged }: { caps: Capabilities; ins
   const [said, setSaid] = useState<string | null>(null);
   const places = useKept(placesKept);
   const works = may(caps, "data:work");
+  // a source's handling is kept on its place, so changing it asks for work on the Data and the Places pages
+  const handling = needsWork(caps, "Changing how a source is handled", [
+    ["data:work", "the Data page"],
+    ["places:work", "the Places page"],
+  ]);
 
   const read = useCallback(() => {
     sources
@@ -112,6 +118,7 @@ export function DataPage({ caps, install, onChanged }: { caps: Capabilities; ins
         <Digests
           source={current}
           works={works}
+          handling={handling}
           said={said}
           onDigest={() => digestNew(current)}
           onHandling={() => setHandlingOf(current)}
@@ -182,8 +189,8 @@ function SourceCard({ source: s, on, onPick }: { source: Source; on: boolean; on
   );
 }
 
-function Digests(props: { source: Source; works: boolean; said: string | null; onDigest: () => void; onHandling: () => void }) {
-  const { source: s, works, said, onDigest, onHandling } = props;
+function Digests(props: { source: Source; works: boolean; handling: string | null; said: string | null; onDigest: () => void; onHandling: () => void }) {
+  const { source: s, works, handling, said, onDigest, onHandling } = props;
   const handled = handlingWords(s.handling);
   return (
     <section className="panel digests">
@@ -195,7 +202,7 @@ function Digests(props: { source: Source; works: boolean; said: string | null; o
             {s.totals.refused_files > 0 ? ` · ${n(s.totals.refused_files)} files refused` : ""}
           </p>
         </div>
-        {works && (
+        {handling === null && (
           <button type="button" className="button secondary small" onClick={onHandling}>
             <Icon name="pencil" />
             Handling
@@ -208,6 +215,7 @@ function Digests(props: { source: Source; works: boolean; said: string | null; o
           </button>
         )}
       </div>
+      {handling !== null && <p className="meta digests-said">{handling}</p>}
       {said && <p className="meta digests-said">{said}</p>}
       {s.digests.recent.length === 0 && <p className="meta digests-said">Nothing has read this source yet.</p>}
       {s.digests.recent.map((d) => (
