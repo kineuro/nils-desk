@@ -117,7 +117,7 @@ const SEE_WORK: readonly Level[] = ["hidden", "see", "work"];
 /** A line for each page, in the order the form and the profile draw them. */
 export const PAGE_LINES: readonly PageLine[] = [
   { id: "assistant", title: "Assistant", mark: "Assistant", named: "Assistant", settings: false, levels: ["hidden", "use"], see: "Talk with the assistant, in conversations of their own" },
-  { id: "query", title: "Query", mark: "Query", named: "Query", settings: false, levels: SEE_WORK, see: "See the query cards people share", work: "ask, and save cards" },
+  { id: "query", title: "Query", mark: "Query", named: "Query", settings: false, levels: SEE_WORK, see: "Ask, run and chart questions, and open the cards people share", work: "keep cards and selections, and queue ask jobs" },
   { id: "data", title: "Data", mark: "Data", named: "Data", settings: false, levels: SEE_WORK, see: "See sources and batches", work: "bring DICOM in, start and cancel digests" },
   { id: "review", title: "Review", mark: "Review", named: "Review", settings: false, levels: SEE_WORK, see: "See what waits for a person", work: "decide, and tune the rules" },
   { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "See the releases made", work: "make a release and hand it over" },

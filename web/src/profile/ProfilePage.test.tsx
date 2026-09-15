@@ -31,7 +31,7 @@ describe("a person's own page", () => {
     expect(html).toContain("The desk keeps the people");
     expect(html).toContain('<span class="tag">Reviewers</span>');
     expect(html).toMatch(/<b>Assistant<\/b><span class="state"><span class="amark do">use<\/span><\/span>/u);
-    expect(html).toMatch(/<b>Query<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">See the query cards people share, ask, and save cards\.<\/span>/u);
+    expect(html).toMatch(/<b>Query<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">Ask, run and chart questions, and open the cards people share, keep cards and selections, and queue ask jobs\.<\/span>/u);
     expect(html).toMatch(/<b>Data<\/b><span class="state"><span class="amark">see<\/span><\/span>/u);
     expect(html).toMatch(/<div class="arow deep"><b>Kvasir<\/b>/u);
     expect(html).toContain("<b>Release and Pipelines</b>");

@@ -75,7 +75,8 @@ describe("the pages as levels", () => {
   });
 
   it("words a page in the form and on a person's profile", () => {
-    expect(lineWords(line("query"))).toBe("See the query cards people share. Work: ask, and save cards.");
+    expect(lineWords(line("query"))).toBe("Ask, run and chart questions, and open the cards people share. Work: keep cards and selections, and queue ask jobs.");
+    expect(yourWords(line("query"), "see")).toBe("Ask, run and chart questions, and open the cards people share.");
     expect(lineWords(line("audit"))).toBe("See who did what, and when.");
     expect(yourWords(line("review"), "work")).toBe("See what waits for a person, decide, and tune the rules.");
     expect(yourWords(line("data"), "see")).toBe("See sources and batches.");
