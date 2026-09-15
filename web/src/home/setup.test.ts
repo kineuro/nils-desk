@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
+import { SETS } from "../grants";
 import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
 import type { Install } from "../settings/supervise";
@@ -16,7 +17,7 @@ function caps(over: Partial<Capabilities> = {}): Capabilities {
     kvasir: { models: [{ id: "MiniMax-M3", locality: "remote" }] },
     assistant: { stations: [{ id: "concierge" }] },
     apps: [],
-    person: { subject: "operator", display_name: "the operator", entitlements: ["admin"], roles: ["admin"] },
+    person: { subject: "operator", display_name: "the operator", grants: SETS.admin.grants, detail: "sensitive", groups: ["Admins"] },
     desk: {
       version: "1.0.0-alpha.16",
       mode: "off",
@@ -99,9 +100,10 @@ describe("the rest of the desk", () => {
     expect(progressWords(setupSteps(facts({ archives: archives("day", null) }), now))).toBe("3 of the 4 steps the desk needs are done.");
   });
 
-  it("is open to a person who does not set an install up, and unknown until the places are read", () => {
-    const reader = caps({ person: { subject: "r", display_name: "r", entitlements: ["reader"], roles: ["reader"] } });
+  it("is open to a person who may not see the install, and unknown until the places are read", () => {
+    const reader = caps({ person: { subject: "r", display_name: "r", grants: SETS.reader.grants, detail: "plain", groups: ["Readers"] } });
     expect(ready(reader, null, null, null)).toBe(true);
+    expect(ready(caps({ person: { subject: "i", display_name: "i", grants: ["install:see"], detail: "plain", groups: [] } }), install, null, null)).toBeNull();
     expect(ready(caps(), install, null, null)).toBeNull();
     expect(ready(caps(), install, registryAndBackups, archives("day", null))).toBe(false);
     expect(ready(caps(), install, [...registryAndBackups, place(3, "incoming", "source", "/srv/incoming")], archives("day", null))).toBe(true);

@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Bringing DICOM in, the step of setup that names a source. Where the engine
-// lists its own ingest locations to an operator, folders are chosen there at
-// any depth, looked inside and digested, one digest each (the picker in
-// data/Picker.tsx). Otherwise, and for an admin who wants a folder outside
-// those locations, a folder is typed or chosen by clicking through this
-// machine's folders, looked inside by the supervisor on this host, each
-// folder inside ticked to become a batch of its own, and the folder added as
-// a source. The engine starts again to read it, which the supervisor does and
-// says how it went; the command a person would run by hand is beside the
-// buttons. That flow is the one the Places page adds a source with.
+// lists its own ingest locations to a person with work on Data, folders are
+// chosen there at any depth, looked inside and digested, one digest each (the
+// picker in data/Picker.tsx). Otherwise, and for a person with work on the
+// install who wants a folder outside those locations, a folder is typed or
+// chosen by clicking through this machine's folders, looked inside by the
+// supervisor on this host, each folder inside ticked to become a batch of its
+// own, and the folder added as a source. The engine starts again to read it,
+// which the supervisor does and says how it went; the command a person would
+// run by hand is beside the buttons. That flow is the one the Places page
+// adds a source with.
 
 import { useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { IngestPicker } from "../data/Picker";
-import { door, holds } from "../deployment";
+import { door } from "../deployment";
+import { may } from "../grants";
 import type { Place } from "../objects/client";
 import { sayLater } from "../assistant/client";
 import { stationOf, stationsServed } from "../assistant/stations";
@@ -37,9 +39,9 @@ type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } 
 export function BringInForm(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onDone: (words?: string) => void }) {
   const { caps, install, places, onDone } = props;
   const [outside, setOutside] = useState(false);
-  // the engine lists its ingest locations to an operator; the supervisor answers an admin
-  const listed = door(caps, "POST /api/ingest/folders") && holds(caps, "operator");
-  const supervised = install !== null && holds(caps, "admin");
+  // the engine lists its ingest locations to a person with work on Data; the host's folders need work on the install
+  const listed = door(caps, "POST /api/ingest/folders") && may(caps, "data:work");
+  const supervised = install !== null && may(caps, "install:work");
   if (listed && !outside) {
     return (
       <IngestPicker
@@ -65,8 +67,8 @@ function HostForm(props: { caps: Capabilities; install: Install | null; places: 
   const [seen, setSeen] = useState<Seen>({ kind: "idle" });
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [act, setAct] = useState<Act>({ kind: "idle" });
-  // the supervisor answers an admin; the install is its answer
-  const supervised = install !== null && holds(caps, "admin");
+  // the supervisor answers a person with work on the install; the install is its answer
+  const supervised = install !== null && may(caps, "install:work");
   // and restarts the engine only where a service manager keeps it running
   const restarts = supervised && install !== null && keptRunning(install);
   const folder = path.trim().replace(/\/+$/, "");

@@ -2,12 +2,13 @@
 // Home's four tiles (Wave 5 section 6.1, D55): what the registry holds, what
 // needs you, what is running, and what changed since you were last here.
 // Each is offered only where the engine serves the door it reads and the
-// person holds the entitlement that door wants, and each is words over that
+// person holds the grant that door wants, and each is words over that
 // one door's answer. None of them ever shows a row of a person.
 
 import type { JobRow } from "../ask/client";
-import type { Capabilities, Entitlement } from "../capabilities";
-import { door, holds } from "../deployment";
+import type { Capabilities } from "../capabilities";
+import { door } from "../deployment";
+import { may, type Grant } from "../grants";
 import type { Summary } from "../objects/client";
 
 export type TileId = "holds" | "needs" | "running" | "since";
@@ -19,16 +20,16 @@ export interface Tile {
   meta: string;
 }
 
-const OFFERED: [TileId, string, Entitlement][] = [
-  ["holds", "GET /api/summary", "reader"],
-  ["needs", "GET /api/review", "reviewer"],
-  ["running", "GET /api/jobs", "reviewer"],
-  ["since", "GET /api/summary", "reader"],
+const OFFERED: [TileId, string, Grant][] = [
+  ["holds", "GET /api/summary", "query:see"],
+  ["needs", "GET /api/review", "review:see"],
+  ["running", "GET /api/jobs", "pipelines:see"],
+  ["since", "GET /api/summary", "query:see"],
 ];
 
 /** The tiles this person sees, in order. */
 export function tilesOffered(caps: Capabilities): TileId[] {
-  return OFFERED.filter(([, d, e]) => door(caps, d) && holds(caps, e)).map(([id]) => id);
+  return OFFERED.filter(([, d, g]) => door(caps, d) && may(caps, g)).map(([id]) => id);
 }
 
 const count = (x: number) => x.toLocaleString("en-GB");

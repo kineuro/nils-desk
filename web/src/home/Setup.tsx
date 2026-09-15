@@ -2,14 +2,15 @@
 // Getting started (Wave 5 section 6.1): the steps that make an install ready
 // for real work, each worked out from what the parts report and acted on
 // where it stands, and beside them what each word of NILS means. Until every
-// step the desk needs is done, an operator's Home is this page; Settings
-// keeps it afterwards as Setup.
+// step the desk needs is done, Home is this page for a person who may see the
+// install; Settings keeps it afterwards as Setup.
 
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { door as served, holds } from "../deployment";
+import { door as served } from "../deployment";
+import { may } from "../grants";
 import { objects, type Place } from "../objects/client";
 import { placesKept } from "../objects/kept";
 import { data, ops } from "../ops/client";
@@ -67,13 +68,13 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
   const archives = useKept(backupsKept);
   const [extra, setExtra] = useState<Extra>(NONE);
   const [open, setOpen] = useState<SetupId | "none" | null>(null);
-  const admin = holds(caps, "admin");
+  const readsBackups = may(caps, "database:see");
   const placesServed = served(caps, "GET /api/places");
 
   const load = useCallback(() => {
     const has = (d: string) => served(caps, d);
     if (has("GET /api/places")) void placesKept.refresh().catch(() => undefined);
-    if (admin && has("GET /api/backups")) void backupsKept.refresh().catch(() => undefined);
+    if (readsBackups && has("GET /api/backups")) void backupsKept.refresh().catch(() => undefined);
     void Promise.all([
       has("GET /api/batches") ? quietly(data.batches(1000)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs")
@@ -81,9 +82,9 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
         : null,
       caps.kvasir !== null ? quietly(kvasir.purposes()).then((r) => r?.purposes.map((p) => ({ purpose: p.purpose, content: p.content, backend: p.backend })) ?? null) : null,
       has("GET /api/packs") ? quietly(data.packs()).then((r) => r?.packs ?? null) : null,
-      admin && has("GET /api/status") ? quietly(database.status()).then((s) => s?.registry ?? null) : null,
+      readsBackups && has("GET /api/status") ? quietly(database.status()).then((s) => s?.registry ?? null) : null,
     ]).then(([batches, jobs, purposes, packs, status]) => setExtra({ batches, jobs, purposes, packs: packs ?? [], status }));
-  }, [caps, admin]);
+  }, [caps, readsBackups]);
 
   useEffect(() => {
     load();
@@ -264,7 +265,8 @@ function SourcesBody(props: { caps: Capabilities; install: Install | null; place
 function BackupsBody(props: { caps: Capabilities; install: Install | null; places: Place[]; archives: Backups | null; status: RegistryStatus | null; onDone: () => void }) {
   const { caps, install, places, archives, status, onDone } = props;
   const acting = useActing();
-  if (!holds(caps, "admin")) return <p className="meta">An admin names where the registry's backups go, and when they run, on the Database page.</p>;
+  if (!may(caps, "database:see")) return <p className="meta">Where the registry's backups go, and when they run, are named on the Database page.</p>;
+  const changes = may(caps, "database:work");
   const live = places.filter((p) => p.retired_at === null);
   const registry = live.find((p) => p.role === "registry") ?? null;
   const named = registry?.guarantees?.["backup"];
@@ -337,17 +339,17 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
         </div>
       )}
       <div className="row actions">
-        {!backup && dir && (
+        {changes && !backup && dir && (
           <button type="button" className="button" disabled={acting.working} onClick={nameDir}>
             Back up to the engine's backup folder
           </button>
         )}
-        {backup && archives && archives.schedule.every === "off" && (
+        {changes && backup && archives && archives.schedule.every === "off" && (
           <button type="button" className="button" disabled={acting.working} onClick={daily}>
             Back up every day at 02:00
           </button>
         )}
-        {backup && archives && dir && !newest && (
+        {changes && backup && archives && dir && !newest && (
           <button type="button" className={archives.schedule.every === "off" ? "button secondary" : "button"} disabled={acting.working} onClick={backUp}>
             Back up now
           </button>
@@ -368,13 +370,13 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
 
 function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }) {
   const mode = caps.desk.mode;
-  const admin = holds(caps, "admin");
+  const changes = may(caps, "identity:work");
   const users = useKept(usersKept);
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
-    if (mode === "local" && admin) usersKept.ensure();
-  }, [mode, admin]);
+    if (mode === "local" && changes) usersKept.ensure();
+  }, [mode, changes]);
 
   return (
     <>
@@ -387,7 +389,7 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
           </div>
         ))}
       </div>
-      {mode === "local" && admin && (
+      {mode === "local" && changes && (
         <div className="row actions">
           <button type="button" className="button secondary small" disabled={!users.value} onClick={() => setAdding(true)}>
             <Icon name="plus" />
@@ -417,13 +419,13 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
 }
 
 function ModelBody({ caps }: { caps: Capabilities }) {
-  // Kvasir holds its models itself (record 23), so an admin adds one on its page; setup still can
+  // Kvasir holds its models itself (record 23), so a model is added on its page; setup still can
   const reaches = caps.kvasir !== null;
   return (
     <>
       <p className="meta">
         {reaches
-          ? "An admin adds a model on the Kvasir page, where Kvasir tests it before holding it. Running setup again changes it too."
+          ? "A model is added on the Kvasir page, where Kvasir tests it before holding it. Running setup again changes it too."
           : "The assistant's model is chosen when NILS is set up, and running setup again changes it."}
       </p>
       <div className="row actions">
