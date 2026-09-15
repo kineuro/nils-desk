@@ -9,7 +9,6 @@ import { DoorError } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { SETS, type Grant } from "../grants";
 import {
-  LADDER,
   PAGE_LINES,
   accessStats,
   addRefusal,
@@ -25,7 +24,6 @@ import {
   levelOf,
   levelsOf,
   lineWords,
-  lit,
   locked,
   marksOf,
   memberCount,
@@ -37,11 +35,7 @@ import {
   reachWords,
   refusalWords,
   seenWords,
-  stepBelow,
   summaryWords,
-  topStep,
-  withAssist,
-  withStep,
   yourWords,
   type Access,
   type Group,
@@ -259,24 +253,5 @@ describe("the words", () => {
       { label: "The desk answers", value: "The network", tone: "caution" },
     ]);
     expect(accessStats(caps("oidc"), null, null).map((s) => s.label)).toEqual(["Sign-in", "The desk answers"]);
-  });
-});
-
-describe("the ladder", () => {
-  it("lights every step up to the highest a person holds", () => {
-    expect(topStep(["reader", "assist"])).toBe("reader");
-    expect(topStep(["operator", "reader"])).toBe("operator");
-    expect(topStep(["assist"])).toBeNull();
-    expect(LADDER.map((s) => lit(["reviewer"], s))).toEqual([true, true, false, false]);
-    expect(LADDER.map((s) => lit([], s))).toEqual([false, false, false, false]);
-  });
-
-  it("keeps assist apart from the step chosen", () => {
-    expect(withStep(["reader", "assist"], "operator")).toEqual(["operator", "assist"]);
-    expect(withStep(["admin"], null)).toEqual([]);
-    expect(withAssist(["reader"], true)).toEqual(["reader", "assist"]);
-    expect(withAssist(["reader", "assist"], false)).toEqual(["reader"]);
-    expect(stepBelow("reviewer")).toBe("reader");
-    expect(stepBelow("reader")).toBeNull();
   });
 });

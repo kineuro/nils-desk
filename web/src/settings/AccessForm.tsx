@@ -211,6 +211,8 @@ export interface PersonFormProps {
   mode: "local" | "oidc";
   /** The groups the desk keeps, or null while they are read. */
   groups: readonly Group[] | null;
+  /** Why the groups could not be read. */
+  why?: string | null;
   /** The person changed, or null to add one. */
   person: Person | null;
   /** The usernames the desk keeps already. */
@@ -316,13 +318,17 @@ export function PersonForm(props: PersonFormProps) {
             </dd>
           </dl>
         )}
-        <GroupChips
-          groups={all}
-          chosen={chosen}
-          follow={follow}
-          onToggle={(id) => setChosen((c) => (c.some((x) => sameGroup(x, id)) ? c.filter((x) => !sameGroup(x, id)) : [...c, id]))}
-          onMake={() => setMaking(true)}
-        />
+        {props.why ? (
+          <p className="warn">The groups could not be read: {props.why}</p>
+        ) : (
+          <GroupChips
+            groups={all}
+            chosen={chosen}
+            follow={follow}
+            onToggle={(id) => setChosen((c) => (c.some((x) => sameGroup(x, id)) ? c.filter((x) => !sameGroup(x, id)) : [...c, id]))}
+            onMake={() => setMaking(true)}
+          />
+        )}
         <div className="field alist-head">
           <span className="label">The pages they see, and where they may work</span>
         </div>

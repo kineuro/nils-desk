@@ -5,7 +5,7 @@
 // add up to, when each last signed in, and where the desk answers.
 
 import { DoorError, door } from "../ask/client";
-import type { Capabilities, Entitlement } from "../capabilities";
+import type { Capabilities } from "../capabilities";
 import { DETAILS, GRANTS, isGrant, type Detail, type Grant } from "../grants";
 import type { Stat } from "./stats";
 
@@ -408,38 +408,6 @@ export function refusalWords(e: unknown, what: "person" | "group"): string {
     return `The desk answered ${e.status}.`;
   }
   return e instanceof Error ? e.message : String(e);
-}
-
-/** The ladder of what a person may do; each step includes the ones before it. */
-export const LADDER: Entitlement[] = ["reader", "reviewer", "operator", "admin"];
-
-/** The highest step a person holds, or none. */
-export function topStep(entitlements: string[]): Entitlement | null {
-  for (const step of [...LADDER].reverse()) if (entitlements.includes(step)) return step;
-  return null;
-}
-
-/** Whether a step is lit on a person's ladder. */
-export function lit(entitlements: string[], step: Entitlement): boolean {
-  const top = topStep(entitlements);
-  return top !== null && LADDER.indexOf(step) <= LADDER.indexOf(top);
-}
-
-/** The step below one, or none below the first. */
-export function stepBelow(step: Entitlement): Entitlement | null {
-  const at = LADDER.indexOf(step);
-  return at > 0 ? LADDER[at - 1] : null;
-}
-
-/** What a person holds once a step is chosen: that step, and assist as it was. */
-export function withStep(entitlements: string[], step: Entitlement | null): string[] {
-  return [...(step ? [step] : []), ...(entitlements.includes("assist") ? ["assist"] : [])];
-}
-
-/** What a person holds with assist given or taken. */
-export function withAssist(entitlements: string[], on: boolean): string[] {
-  const rest = entitlements.filter((e) => e !== "assist");
-  return on ? [...rest, "assist"] : rest;
 }
 
 /** When a person last signed in, as a person says it. */
