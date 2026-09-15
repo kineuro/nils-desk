@@ -12,6 +12,8 @@ export interface ReleaseSource {
   kind: "handle" | "hand";
   handle?: HandleRow;
   cohorts?: string[];
+  /** Record 26: every subject a digest of these datasets brought in. */
+  datasets?: string[];
   subjects?: string[];
   axes?: string[];
 }
@@ -58,7 +60,11 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
     if (!src.handle) return { ok: false, why: "a handle" };
     if (src.handle.grain !== "stack") return { ok: false, why: `a release reads stacks; this handle is at the ${src.handle.grain} grain. Set the answer set to a stack set and run again` };
     if (src.handle.truncated) return { ok: false, why: "a truncated answer is not released" };
-    if (stacks.length === 0) return { ok: false, why: "the handle's rows are not here yet" };
+    // the door reads a stack handle's keys itself, and refuses one that no longer reproduces; rows read here are sent as they are
+    if (stacks.length === 0) {
+      body.handle = src.handle.id;
+      return { ok: true, body, summary: `${src.handle.row_count.toLocaleString("en-US")} stacks of handle ${src.handle.id}` };
+    }
     body.stacks = stacks;
     return { ok: true, body, summary: `${stacks.length} stacks off handle ${src.handle.id}` };
   }
@@ -66,6 +72,10 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
   if (src.cohorts?.length) {
     body.cohorts = src.cohorts;
     parts.push(`every current member of ${src.cohorts.join(", ")}`);
+  }
+  if (src.datasets?.length) {
+    body.datasets = src.datasets;
+    parts.push(`every subject brought in by ${src.datasets.join(", ")}`);
   }
   if (src.subjects?.length) {
     body.subjects = src.subjects;
@@ -75,7 +85,7 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
     body.axes = src.axes;
     parts.push(`stacks holding ${src.axes.join(" and ")}`);
   }
-  if (parts.length === 0) return { ok: false, why: "a cohort, subjects or an axis value to select by" };
+  if (parts.length === 0) return { ok: false, why: "a cohort, a dataset, subjects or an axis value to select by" };
   return { ok: true, body, summary: parts.join("; ") };
 }
 

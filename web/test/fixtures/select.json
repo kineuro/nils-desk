@@ -1,0 +1,6 @@
+{
+  "items": [{ "item": { "cohort": "north" }, "how": "every current member" }],
+  "selection": { "cohorts": ["north"] },
+  "unresolved": [],
+  "reaches": { "subjects": 212, "studies": 240, "stacks": 3106, "files": 118400, "bytes": 15743000000 }
+}

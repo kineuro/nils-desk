@@ -1,0 +1,62 @@
+[
+  {
+    "name": "north",
+    "owner": "astrid",
+    "description": "the north site, every subject its folder brings in",
+    "subjects": 212,
+    "sessions": 240,
+    "stacks": 3106,
+    "feeds": ["north-3t"],
+    "from": { "kind": "source", "detail": { "place": "north-3t" } },
+    "waiting": 62,
+    "releases": 1,
+    "created_at": "2026-05-11T09:12:00Z",
+    "last_joined": "2026-09-15T08:40:00Z",
+    "retired_at": null
+  },
+  {
+    "name": "north-7t",
+    "owner": "astrid",
+    "description": "the 7T arm of the grant",
+    "subjects": 84,
+    "sessions": 96,
+    "stacks": 1240,
+    "feeds": [],
+    "from": { "kind": "promotion", "detail": { "card": "north at 7T", "document": 41, "version": 2, "handle": 77 } },
+    "waiting": 0,
+    "releases": 0,
+    "created_at": "2026-09-15T11:58:00Z",
+    "last_joined": "2026-09-15T11:58:00Z",
+    "retired_at": null
+  },
+  {
+    "name": "pilot",
+    "owner": "erik",
+    "description": null,
+    "subjects": 40,
+    "sessions": 88,
+    "stacks": 1433,
+    "feeds": [],
+    "from": { "kind": "manual", "detail": { "by": "astrid", "subjects": 40 } },
+    "waiting": 0,
+    "releases": 0,
+    "created_at": "2026-09-03T14:00:00Z",
+    "last_joined": "2026-09-03T14:00:00Z",
+    "retired_at": null
+  },
+  {
+    "name": "ct-lab",
+    "owner": null,
+    "description": null,
+    "subjects": 0,
+    "sessions": 0,
+    "stacks": 0,
+    "feeds": ["ct-lab"],
+    "from": { "kind": "source", "detail": { "place": "ct-lab" } },
+    "waiting": 0,
+    "releases": 0,
+    "created_at": "2026-09-10T10:00:00Z",
+    "last_joined": null,
+    "retired_at": null
+  }
+]

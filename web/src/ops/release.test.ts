@@ -25,10 +25,16 @@ describe("the release form", () => {
     expect(releaseBody({ kind: "handle", handle: { ...stackHandle, grain: "session" } }, { name: "s", out: "/o" }, [1])).toMatchObject({ ok: false });
     expect(releaseBody({ kind: "handle", handle: { ...stackHandle, truncated: true } }, { name: "s", out: "/o" }, [1])).toMatchObject({ ok: false, why: "a truncated answer is not released" });
   });
-  it("a hand selection needs a cohort, subjects or an axis", () => {
+  it("a hand selection needs a cohort, a dataset, subjects or an axis", () => {
     expect(releaseBody({ kind: "hand" }, { name: "s", out: "/o" }, [])).toMatchObject({ ok: false });
     const r = releaseBody({ kind: "hand", cohorts: ["ms-a"], axes: ["base=T1w"] }, { name: "s", out: "/o" }, []);
     expect(r).toEqual({ ok: true, body: { name: "s", out: "/o", cohorts: ["ms-a"], axes: ["base=T1w"] }, summary: "every current member of ms-a; stacks holding base=T1w" });
+    const d = releaseBody({ kind: "hand", datasets: ["north-3t"] }, { name: "s", out: "/o", layout: "bids" }, []);
+    expect(d).toEqual({ ok: true, body: { name: "s", out: "/o", layout: "bids", datasets: ["north-3t"] }, summary: "every subject brought in by north-3t" });
     expect(list("a, b\n c,,")).toEqual(["a", "b", "c"]);
+  });
+  it("a card's answer with no rows read here is sent as its handle, which the door reads itself", () => {
+    const r = releaseBody({ kind: "handle", handle: stackHandle }, { name: "sept", out: "/srv/out/sept" }, []);
+    expect(r).toEqual({ ok: true, body: { name: "sept", out: "/srv/out/sept", handle: 75 }, summary: "250 stacks of handle 75" });
   });
 });

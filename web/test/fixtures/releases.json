@@ -1,0 +1,52 @@
+{
+  "count": 2,
+  "releases": [
+    {
+      "id": 5,
+      "name": "pilot-2026.09.10.1",
+      "version": "1",
+      "root": "/exports/pilot-2026.09.10.1",
+      "started_at": "2026-09-10T13:00:00Z",
+      "files": 18210,
+      "subjects": 40,
+      "sessions": 88,
+      "unchanged": 0,
+      "moved": 0,
+      "rewritten": 18210,
+      "added": 18210,
+      "removed": 0,
+      "layout": "descriptive",
+      "actor": "erik",
+      "withdrawn_at": "2026-09-12T08:00:00Z",
+      "withdrawn_by": "astrid",
+      "withdrawn_why": "wrong scheme",
+      "handed_over": null,
+      "policies": [{ "dataset": "archive-2019", "dates": "year", "uids": "remap" }]
+    },
+    {
+      "id": 4,
+      "name": "north-2026.08.21.1",
+      "version": "1",
+      "root": "/exports/north-2026.08.21.1",
+      "started_at": "2026-08-21T10:00:00Z",
+      "files": 61200,
+      "subjects": 174,
+      "sessions": 190,
+      "unchanged": 0,
+      "moved": 0,
+      "rewritten": 61200,
+      "added": 61200,
+      "removed": 0,
+      "layout": "bids",
+      "actor": "astrid",
+      "withdrawn_at": null,
+      "withdrawn_by": null,
+      "withdrawn_why": null,
+      "handed_over": "2026-08-22T09:00:00Z",
+      "policies": [
+        { "dataset": "north-3t", "dates": "shift", "uids": "remap" },
+        { "dataset": "archive-2019", "dates": "shift", "uids": "remap" }
+      ]
+    }
+  ]
+}
