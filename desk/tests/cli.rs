@@ -3,8 +3,9 @@
 //! The command line keeps the groups and what each person holds, as setup
 //! and an operator use it: `user add --admin` joins Admins, `group
 //! add|set|remove` and `user access` change the store the service reads,
-//! `--entitlement` and `user grant` still answer for one release, and no
-//! change leaves nobody who may change people and groups.
+//! each change touching only what it names, `--entitlement` and `user
+//! grant` still answer for one release, and no change leaves nobody who may
+//! change people and groups.
 
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -165,7 +166,8 @@ fn the_command_line_keeps_groups_and_what_each_person_holds() {
     );
     assert!(line.contains("assistant:use"), "{line}");
 
-    // user access replaces the groups, the grants and the detail
+    // user access changes only what it names: bo's groups and detail here,
+    // and the grant bo holds alone stays
     let r = ok(
         &[
             "user",
@@ -185,11 +187,53 @@ fn the_command_line_keeps_groups_and_what_each_person_holds() {
     );
     let bo = store().access("bo", None);
     assert_eq!(names("bo"), ["Readers"]);
-    assert!(bo.own.is_empty());
+    assert_eq!(bo.own, grants::normalise(["assistant:use"]));
     assert_eq!(bo.own_detail, Some(Detail::Sensitive));
-    assert_eq!(bo.access.list(), grants::set("reader").unwrap().list());
-    assert_eq!(bo.access.detail, Detail::Sensitive);
-    // user grant still answers, with entitlements, for one release
+    let mut want = grants::set("reader").unwrap();
+    want.add(&Access::new(["assistant:use"], Detail::Sensitive));
+    assert_eq!(bo.access, want);
+    // the grants alone, leaving the groups and the detail
+    ok(
+        &[
+            "user",
+            "access",
+            "bo",
+            "--grant",
+            "kvasir:see",
+            "--grant",
+            "query:see",
+        ],
+        None,
+    );
+    let bo = store().access("bo", None);
+    assert_eq!(names("bo"), ["Readers"]);
+    assert_eq!(bo.own, grants::normalise(["kvasir:see", "query:see"]));
+    assert_eq!(bo.own_detail, Some(Detail::Sensitive));
+    // naming nothing is refused, saying what to name; --none goes with nothing else
+    let r = run(&["user", "access", "bo"], None);
+    assert_eq!(r.code, 2, "{}", r.out);
+    for flag in ["--group", "--grant", "--detail", "--none"] {
+        assert!(r.err.contains(flag), "{flag}: {}", r.err);
+    }
+    let r = run(
+        &["user", "access", "bo", "--none", "--group", "Readers"],
+        None,
+    );
+    assert_eq!(r.code, 2, "{}", r.out);
+    assert!(r.err.contains("cannot be used with"), "{}", r.err);
+    assert_eq!(
+        names("bo"),
+        ["Readers"],
+        "a refused command changes nothing"
+    );
+    // --none takes every group, grant and detail of bo's own away
+    ok(&["user", "access", "bo", "--none"], None);
+    let bo = store().access("bo", None);
+    assert!(names("bo").is_empty() && bo.own.is_empty() && bo.own_detail.is_none());
+    assert!(bo.access.is_empty());
+    // user grant still answers, with entitlements, for one release: the sets
+    // become what the person holds, as they did, their groups too
+    ok(&["user", "access", "dy", "--group", "Scanner people"], None);
     ok(&["user", "grant", "dy", "--entitlement", "operator"], None);
     assert_eq!(
         store().access("dy", None).access,
@@ -197,11 +241,103 @@ fn the_command_line_keeps_groups_and_what_each_person_holds() {
     );
     assert!(names("dy").is_empty());
 
-    // group set replaces what a group gives and follows
+    // group set changes only what it names: the grants here, not the detail
     ok(&["group", "set", "Readers", "--grant", "query:see"], None);
     let readers = store().book().group_named("Readers").unwrap().clone();
     assert_eq!(readers.access, Access::new(["query:see"], Detail::Plain));
     assert!(readers.follows.is_empty());
+    ok(
+        &["group", "set", "Scanner people", "--detail", "sensitive"],
+        None,
+    );
+    let scanners = store()
+        .book()
+        .group_named("Scanner people")
+        .unwrap()
+        .clone();
+    assert_eq!(
+        scanners.access,
+        Access::new(["data:work", "review:see"], Detail::Sensitive),
+        "its grants stay"
+    );
+    assert_eq!(scanners.follows, ["neuro-scanner"], "and what it follows");
+    ok(
+        &[
+            "group",
+            "set",
+            "Scanner people",
+            "--follows",
+            "neuro-mr",
+            "--follows",
+            "neuro-ct",
+        ],
+        None,
+    );
+    let scanners = store()
+        .book()
+        .group_named("Scanner people")
+        .unwrap()
+        .clone();
+    assert_eq!(scanners.follows, ["neuro-mr", "neuro-ct"]);
+    assert_eq!(
+        scanners.access,
+        Access::new(["data:work", "review:see"], Detail::Sensitive)
+    );
+    // cleared, and renamed
+    ok(
+        &[
+            "group",
+            "set",
+            "Scanner people",
+            "--no-grants",
+            "--no-follows",
+            "--rename",
+            "Scanners",
+        ],
+        None,
+    );
+    let book = store().book();
+    assert!(book.group_named("Scanner people").is_none());
+    let scanners = book.group_named("Scanners").unwrap();
+    assert!(scanners.access.grants.is_empty() && scanners.follows.is_empty());
+    assert_eq!(scanners.access.detail, Detail::Sensitive);
+    // naming nothing is refused, saying what to name; a list and its clearing
+    // do not go together; a name taken or a group not there is refused by name
+    let r = run(&["group", "set", "Scanners"], None);
+    assert_eq!(r.code, 2, "{}", r.out);
+    for flag in [
+        "--grant",
+        "--no-grants",
+        "--detail",
+        "--follows",
+        "--no-follows",
+        "--rename",
+    ] {
+        assert!(r.err.contains(flag), "{flag}: {}", r.err);
+    }
+    let r = run(
+        &[
+            "group",
+            "set",
+            "Scanners",
+            "--grant",
+            "query:see",
+            "--no-grants",
+        ],
+        None,
+    );
+    assert_eq!(r.code, 2, "{}", r.out);
+    assert!(r.err.contains("cannot be used with"), "{}", r.err);
+    refused(
+        &["group", "set", "Scanners", "--rename", "Readers"],
+        None,
+        "exists",
+    );
+    refused(
+        &["group", "set", "Nothing", "--detail", "plain"],
+        None,
+        "no group named Nothing",
+    );
 
     // anna alone may change people and groups: none of these may leave nobody who can
     refused(&["group", "remove", "Admins"], None, "identity:work");
@@ -210,9 +346,23 @@ fn the_command_line_keeps_groups_and_what_each_person_holds() {
         None,
         "identity:work",
     );
-    refused(&["user", "access", "anna"], None, "identity:work");
+    refused(
+        &["group", "set", "Admins", "--no-grants"],
+        None,
+        "identity:work",
+    );
+    refused(&["user", "access", "anna", "--none"], None, "identity:work");
+    refused(
+        &["user", "access", "anna", "--group", "Readers"],
+        None,
+        "identity:work",
+    );
     assert_eq!(names("anna"), ["Admins"]);
-    refused(&["user", "access", "zed"], None, "no user named zed");
+    refused(
+        &["user", "access", "zed", "--none"],
+        None,
+        "no user named zed",
+    );
     refused(
         &["group", "remove", "Nothing"],
         None,
