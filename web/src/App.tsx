@@ -242,7 +242,7 @@ export function App() {
           {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={setupReady ? () => setLeft(true) : undefined} />}
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
-          {ready && active?.id === "data" && <DataPage caps={caps} install={install} onChanged={changed} />}
+          {ready && active?.id === "data" && <DataPage caps={caps} install={install} onChanged={changed} page={route.page} arg={route.arg} sub={route.sub} />}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}

@@ -4,6 +4,17 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- The Data page as shape C: the batch is the thread. Data has two pages in the side, Datasets and Cohorts. Each dataset is a card with its name and folder, what arrives through it (identified, de-identified by someone else, or our own codes in PatientID), the cohort it feeds, its two trees (the originals, locked, and the pseudonymised tree the registry reads), its subjects, stacks and batches, its newest batch in a line, and a state: held, to sort, reading now, not read yet, not sorted, or up to date. Now lists the open jobs from the engine's event stream, updated every second, or read every few seconds where the stream refuses or the engine has none: what each does, who started it and since when, how far it is with its rate and what is left, the files a pseudonymisation holds until mapped, the steps queued after a job as one dashed card, and a failed job with its error and one next move; Cancel keeps its button and says why when a person lacks the verb's grant. The chosen dataset's batches follow, each with five marks (pseudonymised, walked, digested, classified, reviewed) read from the batch's stages where the engine gives them, and each opening its own page.
+- Add a dataset: the name and the folder, what arrives, who a file is about (a DICOM keyword or a folder of the path, and the identifier's type from the registry's list or a new one made here, with the shapes probed over a sample where the folder lies under a source), the map as a CSV read in the browser, its columns named for what they are, and what the engine says it would do before anything is written, whether a file whose identifier the map does not know is held or coded, and the cohort the subjects join. A folder that holds a v0 cohort layout is declared as one: dcm-raw renamed dcm-anon, v0's map filed, the originals left. Add and bring in adds the dataset, starts the engine again where a service keeps it running, files the map and queues the bring-in.
+- Bring in what is new, as one chain: pseudonymise, then digest the pseudonymised tree, then fingerprint and classify with the dataset's pack, each step queued after the one before it; or the first step alone. A dataset that arrives de-identified or coded starts at the digest. The dialog says the grants each step needs, and about how long the first step takes at the machine's last measured rate where the engine gives one.
+- The addresses `#data/datasets`, `#data/cohorts`, `#data/batch/<id>` and `#data/datasets/<name>/pseudonymisation`; the last three open a page that says which slice brings it.
+
+### Changed
+
+- The sources view is the Datasets page, and the words with it: Datasets, Add a dataset, Bring in what is new. On an engine before record 26 the page reads as before, with the digest queued alone and a dataset's handling declared from its card's menu.
+
 ## [1.0.0-alpha.28] - 2026-09-15
 
 ### Added

@@ -1,0 +1,148 @@
+{
+  "count": 3,
+  "window_days": 90,
+  "rates": { "pseudonymize": 1400, "digest": 410 },
+  "sources": [
+    {
+      "id": 1,
+      "name": "incoming",
+      "path": "/srv/imaging/incoming",
+      "guarantees": {},
+      "probed": null,
+      "handling": { "arrives": "identified", "on_release": { "dates": "keep", "uids": "remap", "deface": false } },
+      "handling_declared": true,
+      "roots": 1,
+      "arrives": "identified",
+      "trees": {
+        "originals": { "path": "/srv/imaging/incoming/derivatives/dcm-original", "files": 18420, "bytes": 2449860000 },
+        "anon": { "path": "/srv/imaging/incoming/derivatives/dcm-anon", "files": 16208, "last_written": "2026-09-15T21:02:00Z" }
+      },
+      "identity": { "id_type": "personal-number", "from": [{ "field": "PatientID" }], "fallback": null },
+      "unmapped": "hold",
+      "cohort": "incoming",
+      "tags": { "keep_demographics": true, "remove": [], "keep": [] },
+      "held": { "files": 4, "identifiers": 2 },
+      "originals_kept": "kept",
+      "digests": {
+        "count": 4,
+        "first": { "id": 2, "name": "first read", "state": "done", "started_at": "2026-05-11T09:00:00Z", "finished_at": "2026-05-11T10:00:00Z" },
+        "last": { "id": 9, "name": "incoming-2026-09-15", "state": "done", "started_at": "2026-09-15T21:02:00Z", "finished_at": "2026-09-15T21:40:00Z" },
+        "recent": [
+          {
+            "id": 9,
+            "name": "incoming-2026-09-15",
+            "state": "done",
+            "started_at": "2026-09-15T21:02:00Z",
+            "finished_at": "2026-09-15T21:40:00Z",
+            "job_id": 121,
+            "files": { "seen": 2208, "new": 2208, "changed": 0, "unchanged": 0, "refused": 0 },
+            "subjects_added": 38,
+            "stacks_added": 412,
+            "classified": 0,
+            "to_sort": 0,
+            "pseudonymised": { "files": 2208, "changed": 0, "held": 4, "job": 120 },
+            "chain": [120, 121, null, null]
+          },
+          {
+            "id": 7,
+            "name": "incoming-2026-08-20",
+            "state": "done",
+            "started_at": "2026-08-20T21:04:00Z",
+            "finished_at": "2026-08-20T22:10:00Z",
+            "job_id": 77,
+            "files": { "seen": 2222, "new": 2208, "changed": 14, "unchanged": 0, "refused": 0 },
+            "subjects_added": 41,
+            "stacks_added": 486,
+            "classified": 486,
+            "to_sort": 12,
+            "pseudonymised": { "files": 2208, "changed": 14, "held": 0, "job": 76 },
+            "chain": [76, 77, 78, 79]
+          }
+        ]
+      },
+      "totals": { "subjects": 212, "studies": 240, "sessions": 240, "stacks": 3106, "refused_files": 0, "to_sort": 12 }
+    },
+    {
+      "id": 2,
+      "name": "exchange-ct",
+      "path": "/srv/imaging/exchange-ct",
+      "guarantees": {},
+      "probed": null,
+      "handling": { "arrives": "deidentified", "on_release": { "dates": "keep", "uids": "preserve", "deface": false } },
+      "handling_declared": true,
+      "roots": 1,
+      "arrives": "deidentified",
+      "trees": { "originals": null, "anon": { "path": "/srv/imaging/exchange-ct/derivatives/dcm-anon", "files": 6112, "last_written": "2026-08-15T10:00:00Z" } },
+      "identity": { "id_type": "site-id", "from": [{ "field": "PatientID" }], "fallback": null },
+      "unmapped": "hold",
+      "cohort": "exchange-ct",
+      "tags": { "keep_demographics": true, "remove": [], "keep": [] },
+      "held": { "files": 0, "identifiers": 0 },
+      "originals_kept": "kept",
+      "digests": {
+        "count": 1,
+        "first": { "id": 5, "name": "exchange-ct", "state": "done", "started_at": "2026-08-15T10:00:00Z", "finished_at": "2026-08-15T10:20:00Z" },
+        "last": { "id": 5, "name": "exchange-ct", "state": "done", "started_at": "2026-08-15T10:00:00Z", "finished_at": "2026-08-15T10:20:00Z" },
+        "recent": [
+          {
+            "id": 5,
+            "name": "exchange-ct",
+            "state": "done",
+            "started_at": "2026-08-15T10:00:00Z",
+            "finished_at": "2026-08-15T10:20:00Z",
+            "job_id": 50,
+            "files": { "seen": 6112, "new": 6112, "changed": 0, "unchanged": 0, "refused": 0 },
+            "subjects_added": 38,
+            "stacks_added": 900,
+            "classified": 0,
+            "to_sort": 0,
+            "pseudonymised": null,
+            "chain": [null, 50, null, null]
+          }
+        ]
+      },
+      "totals": { "subjects": 38, "studies": 40, "sessions": 40, "stacks": 900, "refused_files": 0, "to_sort": 0 }
+    },
+    {
+      "id": 3,
+      "name": "exports-2019",
+      "path": "/srv/imaging/exports-2019",
+      "guarantees": {},
+      "probed": null,
+      "handling": { "arrives": "deidentified", "on_release": { "dates": "keep", "uids": "preserve", "deface": false } },
+      "handling_declared": true,
+      "roots": 1,
+      "arrives": "coded",
+      "trees": { "originals": null, "anon": { "path": "/srv/imaging/exports-2019/derivatives/dcm-anon", "files": 1433, "last_written": "2026-07-02T08:00:00Z" } },
+      "identity": null,
+      "unmapped": "code",
+      "cohort": null,
+      "tags": { "keep_demographics": true, "remove": [], "keep": [] },
+      "held": { "files": 0, "identifiers": 0 },
+      "originals_kept": "kept",
+      "digests": {
+        "count": 2,
+        "first": { "id": 1, "name": "exports-2019", "state": "done", "started_at": "2026-06-01T08:00:00Z", "finished_at": "2026-06-01T08:30:00Z" },
+        "last": { "id": 6, "name": "exports-2019-2", "state": "done", "started_at": "2026-07-02T08:00:00Z", "finished_at": "2026-07-02T08:10:00Z" },
+        "recent": [
+          {
+            "id": 6,
+            "name": "exports-2019-2",
+            "state": "done",
+            "started_at": "2026-07-02T08:00:00Z",
+            "finished_at": "2026-07-02T08:10:00Z",
+            "job_id": 40,
+            "files": { "seen": 1433, "new": 0, "changed": 0, "unchanged": 1433, "refused": 0 },
+            "subjects_added": 0,
+            "stacks_added": 0,
+            "classified": 0,
+            "to_sort": 0,
+            "pseudonymised": null,
+            "chain": [null, 40, 41, 42]
+          }
+        ]
+      },
+      "totals": { "subjects": 41, "studies": 60, "sessions": 60, "stacks": 1433, "refused_files": 0, "to_sort": 0 }
+    }
+  ]
+}

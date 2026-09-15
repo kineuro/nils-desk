@@ -47,7 +47,7 @@ export function sections(caps: Capabilities, ready: boolean | null = true, conve
   // the assistant helps set an install up as well, so it does not wait for it
   if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: [{ id: "new", title: "New conversation", depth: 1 }, ...conversations, { id: "all", title: "All conversations", depth: 1 }, { id: "shared", title: "Shared", depth: 1 }, { id: "memory", title: "Memory", depth: 1 }] });
   if (ready !== true) return out;
-  for (const p of PLACEHOLDERS) if (may(caps, p.grant) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon });
+  for (const p of PLACEHOLDERS) if (may(caps, p.grant) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon, ...(p.pages ? { pages: p.pages } : {}) });
   return out;
 }
 
