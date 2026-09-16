@@ -20,6 +20,7 @@ import {
   provenanceWords,
   reachesWords,
   releases,
+  chartLabels,
   stepChart,
   suggestedName,
   type Cohort,
@@ -158,6 +159,35 @@ describe("members over time", () => {
     expect(stepChart([])).toBeNull();
     // the fixture's five events end at 212 members
     expect(stepChart(north.joins)!.points.map((p) => p.total)).toEqual([92, 135, 176, 174, 212]);
+  });
+  it("labels the first and the last step always, thins the ones between so no two draw within 60 of each other or over each other, and writes today only where it clears the last", () => {
+    const monthly: Join[] = Array.from({ length: 12 }, (_, i) => ({ when: `2025-${String(i + 1).padStart(2, "0")}-10T00:00:00Z`, what: "batch", subjects: 10, by: "the rule" }));
+    const labels = chartLabels(stepChart(monthly)!, NOW);
+    const steps = labels.filter((l) => l.kind === "step");
+    expect(steps[0]).toMatchObject({ x: 60, total: 10, words: "10 Jan 2025 · first", anchor: "start" });
+    expect(steps[steps.length - 1]).toMatchObject({ x: 540, total: 120, words: "10 Dec 2025" });
+    expect(steps.length).toBeLessThan(12);
+    for (let i = 1; i < labels.length; i++) expect(labels[i].x - labels[i - 1].x, `${labels[i - 1].words} then ${labels[i].words}`).toBeGreaterThanOrEqual(60);
+    // a date at the last step, 60 before the end, never clears "today" written back from the end: today gives way, the end dot marks it
+    expect(labels[labels.length - 1]).toMatchObject({ kind: "step", x: 540 });
+    // a last step of today, at 540, would draw its time over today at 600: today gives way
+    const recent: Join[] = [
+      { when: "2026-05-11T00:00:00Z", what: "first read", subjects: 50, by: "the rule" },
+      { when: "2026-09-15T05:39:00Z", what: "batch", subjects: 4, by: "the rule" },
+    ];
+    const words = chartLabels(stepChart(recent)!, NOW).map((l) => l.words);
+    expect(words[0]).toBe("11 May · first");
+    expect(words[1]).toMatch(/^today \d\d:\d\d$/u);
+    expect(words).toHaveLength(2);
+    // one join long ago: its label and today
+    expect(chartLabels(stepChart([monthly[0]])!, NOW).map((l) => l.words)).toEqual(["10 Jan 2025 · first", "today"]);
+    // thirty steps sixteen apart: the first and the last are named, the steps too near the last give way, and every label keeps its distance
+    const dense: Join[] = Array.from({ length: 30 }, (_, i) => ({ when: new Date(Date.UTC(2025, 0, 1 + i * 7)).toISOString(), what: "batch", subjects: 2, by: "the rule" }));
+    const thinned = chartLabels(stepChart(dense)!, NOW);
+    expect(thinned[0].x).toBe(60);
+    expect(thinned[thinned.length - 1]).toMatchObject({ kind: "step", x: 540 });
+    expect(thinned.length).toBeGreaterThan(2);
+    for (let i = 1; i < thinned.length; i++) expect(thinned[i].x - thinned[i - 1].x).toBeGreaterThanOrEqual(60);
   });
 });
 

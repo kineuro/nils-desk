@@ -54,7 +54,11 @@ describe("a cohort's page", () => {
     expect(html).toContain('aria-label="members over time, 212 now"');
     expect(html).toContain(">212</text>");
     expect(html).toContain(">11 May · first</text>");
-    expect(html).toContain(">today</text>");
+    // the last step joined today, so its label says so and the end's own "today" gives way rather than draw over it
+    expect(html).toMatch(/>today \d\d:\d\d<\/text>/u);
+    expect(html).not.toContain(">today</text>");
+    const xs = [...html.matchAll(/<text class="lab" x="([\d.]+)"/gu)].map((m) => Number(m[1]));
+    for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(60);
   });
 
   it("lists how they joined, newest first, with a way to the batch or the audit", () => {

@@ -271,6 +271,50 @@ export function stepChart(joins: Join[], width = 640, height = 120): StepChart |
   return { points, line: line.join(" "), area: `${points[0].x},${base} ${line.join(" ")} ${today},${base}`, end: { x: today, y: last.y }, width, height, base };
 }
 
+/** A label under or above the step chart: a step's date with its members, or "today" at the end. */
+export interface ChartLabel {
+  kind: "step" | "today";
+  x: number;
+  y: number;
+  total: number;
+  words: string;
+  anchor: "start" | "end";
+}
+
+/** About how wide a label draws in the chart's units at the face the chart sets: six a character. */
+const LABEL_CHAR = 6;
+
+/**
+ * The labels of a step chart, thinned so that no two draw within `gap` of
+ * each other and none over another: the first and the last step always, the
+ * steps between them that keep their distance from both, and "today" at
+ * the end only where it clears the last label. A step's members are written
+ * above the same steps.
+ */
+export function chartLabels(chart: StepChart, now = new Date(), gap = 60): ChartLabel[] {
+  const pts = chart.points;
+  if (pts.length === 0) return [];
+  const label = (p: StepPoint, i: number): ChartLabel => ({ kind: "step", x: p.x, y: p.y, total: p.total, words: i === 0 && p.delta > 0 ? `${whenWords(p.when, now)} · first` : whenWords(p.when, now), anchor: "start" });
+  const width = (l: ChartLabel) => l.words.length * LABEL_CHAR;
+  // b stands clear of a when it starts at least the gap after a, and past a's words
+  const clears = (a: ChartLabel, b: ChartLabel) => b.x - a.x >= gap && b.x >= a.x + width(a) + 8;
+  const out: ChartLabel[] = [label(pts[0], 0)];
+  const last = pts.length > 1 ? label(pts[pts.length - 1], pts.length - 1) : null;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const l = label(pts[i], i);
+    if (last && clears(out[out.length - 1], l) && clears(l, last)) out.push(l);
+  }
+  if (last) {
+    // the last step is always named; a step too near it gives way, the first never
+    while (out.length > 1 && !clears(out[out.length - 1], last)) out.pop();
+    out.push(last);
+  }
+  const tail = out[out.length - 1];
+  const today: ChartLabel = { kind: "today", x: chart.end.x, y: chart.end.y, total: tail.total, words: "today", anchor: "end" };
+  if (chart.end.x - width(today) >= tail.x + width(tail) + 8 && chart.end.x - tail.x >= gap) out.push(today);
+  return out;
+}
+
 /** The membership dialog's body: the codes pasted, added or taken out, and the reason recorded on every membership. */
 export function membersBody(add: string, remove: string, why: string): { ok: true; body: MembersBody; summary: string } | { ok: false; why: string } {
   const adding = pastedList(add);

@@ -18,7 +18,7 @@ import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { cohorts, delta, ledeWords, membersBody, stepChart, type CohortDetail, type Join } from "./cohorts";
+import { chartLabels, cohorts, delta, ledeWords, membersBody, stepChart, type CohortDetail, type Join } from "./cohorts";
 import { whenWords } from "./sources";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; cohort: CohortDetail };
@@ -340,28 +340,26 @@ export function holdingWords(s: CohortDetail["sources_holding"][number]): string
 }
 
 function StepChartView({ chart, now }: { chart: NonNullable<ReturnType<typeof stepChart>>; now: Date }) {
-  // the values and the dates under at most six of the steps, the first and the last always
-  const every = Math.max(1, Math.ceil(chart.points.length / 6));
-  const shown = chart.points.filter((_, i) => i % every === 0 || i === chart.points.length - 1);
+  // the dates under the steps and the members above them, thinned so no two labels draw over each other
+  const labels = chartLabels(chart, now);
   return (
     <svg className="chart" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label={`members over time, ${chart.points[chart.points.length - 1].total} now`}>
       <line className="axis" x1="30" y1={chart.base} x2={chart.width - 10} y2={chart.base} />
       <polygon className="area" points={chart.area} />
       <polyline className="line" points={chart.line} />
       <circle className="end" cx={chart.end.x} cy={chart.end.y} r="3" />
-      {shown.map((p, i) => (
-        <text key={`v${i}`} className="val" x={p.x + 4} y={Math.max(9, p.y - 6)}>
-          {n(p.total)}
+      {labels
+        .filter((l) => l.kind === "step")
+        .map((l) => (
+          <text key={`v${l.x}`} className="val" x={l.x + 4} y={Math.max(9, l.y - 6)}>
+            {n(l.total)}
+          </text>
+        ))}
+      {labels.map((l) => (
+        <text key={`l${l.kind}${l.x}`} className="lab" x={l.x} y={chart.base + 14} textAnchor={l.anchor}>
+          {l.words}
         </text>
       ))}
-      {shown.map((p, i) => (
-        <text key={`l${i}`} className="lab" x={p.x} y={chart.base + 14}>
-          {i === 0 && p.delta > 0 ? `${whenWords(p.when, now)} · first` : whenWords(p.when, now)}
-        </text>
-      ))}
-      <text className="lab" x={chart.end.x} y={chart.base + 14} textAnchor="end">
-        today
-      </text>
     </svg>
   );
 }
