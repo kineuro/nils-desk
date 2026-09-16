@@ -38,7 +38,14 @@ export interface Cohort {
   owner: string | null;
   description: string | null;
   subjects: number;
-  sessions: number;
+  /**
+   * The sessions of its members, counted out of the session cache as it
+   * stands, under the window that cache was built with. Null where nobody
+   * has built it: the sessions are derived rather than stored, building
+   * them is a person's act, and a cohort whose sessions nobody has built
+   * has no answer rather than none of them.
+   */
+  sessions: number | null;
   stacks: number;
   /** The datasets whose digests feed it. */
   feeds: string[];
@@ -112,7 +119,14 @@ export interface Release extends ReleaseRow {
   dates?: string | null;
   uids?: string | null;
   handed_over?: string | null;
-  policies?: { dataset: string; dates: string; uids: string }[];
+  policies?: { dataset: string; dates: string; uids: string; from?: string }[];
+  /**
+   * The scheme that named the release's sessions, as its row recorded it
+   * (record 26 section 13): `naming` is `date`, `months` or `ordinal`, the
+   * last being sessions numbered in date order. Absent where the engine's
+   * releases door does not carry it.
+   */
+  session_scheme?: { naming?: string; window_days?: number } | string | null;
 }
 
 /** What a selection reaches, from the select door, without anything written. */
@@ -147,6 +161,22 @@ function within(iso: string | null, ms: number, now: number): boolean {
   if (!iso) return false;
   const t = Date.parse(iso);
   return Number.isFinite(t) && now - t < ms && now - t >= -ms;
+}
+
+/** A cohort's sessions in a card's or a strip's number slot: the count, or, where nobody has built the session cache they are counted out of, that they are not built yet. */
+export function sessionsWords(sessions: number | null): string {
+  return sessions === null ? "not built yet" : n(sessions);
+}
+
+/** The same where the count stands beside its word in a sentence: "240 sessions", or that nobody has built them. */
+export function sessionsPhrase(sessions: number | null): string {
+  return sessions === null ? "sessions not built yet" : `${n(sessions)} sessions`;
+}
+
+/** What stands under a cohort's sessions: whose they are and the window the cache was built under, or, where nobody has built it, that building it is a person's act. */
+export function sessionsMeta(sessions: number | null, windowDays: number | null): string {
+  if (sessions === null) return "building them is a person's act";
+  return windowDays === null ? "of its members" : `of its members · ${n(windowDays)}-day window`;
 }
 
 /** What a cohort's card says first: what waits on Review, that it is empty, that it is new, or that it is sorted. */
@@ -340,6 +370,8 @@ export function suggestedName(base: string, existing: readonly { name: string }[
 
 export interface LeavingLine {
   dataset: string;
+  /** Its date policy, which is what decides whether its sessions can be labelled by the date; null where its handling was not read. */
+  dates: "keep" | "shift" | "year" | null;
   words: string;
   note: string | null;
 }
@@ -354,11 +386,47 @@ export function leavingWords(h: Source["handling"] | null): string {
 
 /** One line per dataset holding files of the selection: how its files leave, read from its own handling, and why it is in the list. */
 export function leavingLines(sources: readonly Source[], holding: readonly SourceHolding[] | null): LeavingLine[] {
-  if (holding === null) return sources.map((s) => ({ dataset: s.name, words: leavingWords(s.handling), note: null }));
+  if (holding === null) return sources.map((s) => ({ dataset: s.name, dates: s.handling?.on_release?.dates ?? null, words: leavingWords(s.handling), note: null }));
   return holding.map((h) => {
     const s = sources.find((x) => x.name === h.name) ?? null;
-    return { dataset: h.name, words: leavingWords(s?.handling ?? null), note: h.feeds ? "the dataset's handling" : `${n(h.subjects)} ${h.subjects === 1 ? "subject has" : "subjects have"} files there too` };
+    return {
+      dataset: h.name,
+      dates: s?.handling?.on_release?.dates ?? null,
+      words: leavingWords(s?.handling ?? null),
+      note: h.feeds ? "the dataset's handling" : `${n(h.subjects)} ${h.subjects === 1 ? "subject has" : "subjects have"} files there too`,
+    };
   });
+}
+
+/**
+ * Record 26 section 13 with section 4.3: a dataset that declares its dates
+ * moved cannot have its sessions labelled by the date, since the tree would
+ * carry the date the files no longer do, so the release numbers them in date
+ * order instead and its row records the scheme that named them. Null where no
+ * dataset in play moves its dates.
+ */
+export function sessionNamingNote(lines: readonly LeavingLine[], scheme: string): string | null {
+  const moving = lines.filter((l) => l.dates === "shift" || l.dates === "year").map((l) => l.dataset);
+  if (moving.length === 0) return null;
+  const which = moving.length === 1 ? `${moving[0]} moves its dates` : `${moving.slice(0, -1).join(", ")} and ${moving[moving.length - 1]} move their dates`;
+  const end = scheme.trim() === "" ? "Name a months or ordinal scheme above to choose the labels yourself." : "The scheme named above stands where it labels by months or by a number.";
+  return `${which}, so a session labelled by its date would put back in the tree the date its files no longer carry: the sessions are numbered in date order instead. ${end}`;
+}
+
+/**
+ * How a release named its sessions, as its row recorded it: the scheme's own
+ * naming where the row carries one, and otherwise, where a dataset's files
+ * left with their dates moved, that they were numbered in date order. Null
+ * where the row says neither.
+ */
+export function releaseSessionNaming(r: Release): string | null {
+  const s = r.session_scheme;
+  const naming = typeof s === "string" ? s : (s?.naming ?? null);
+  const moved = [r.dates, ...(r.policies ?? []).map((p) => p.dates)].some((d) => d === "shift" || d === "year");
+  if (naming === "ordinal") return "numbered in date order";
+  if (naming === "months") return "labelled by months";
+  if (naming === "date") return "labelled by date";
+  return moved ? "numbered in date order" : null;
 }
 
 /** A release row's dates and UIDs policy, in a word each: from its own columns, else from the policies it recorded per dataset. */

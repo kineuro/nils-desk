@@ -27,7 +27,8 @@ const caps = (grants: Grant[] = [...GRANTS], doors: string[] = DOORS) =>
     desk: { version: "1.0.0", mode: "off", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
   }) as unknown as Capabilities;
 
-const draw = (c: Capabilities, cohort: CohortDetail | null = north, why: string | null = null) => renderToStaticMarkup(<CohortBody caps={c} cohort={cohort} why={why} now={NOW} onAct={none} onStart={none} />);
+const draw = (c: Capabilities, cohort: CohortDetail | null = north, why: string | null = null, windowDays: number | null = 90) =>
+  renderToStaticMarkup(<CohortBody caps={c} cohort={cohort} why={why} now={NOW} windowDays={windowDays} onAct={none} onStart={none} />);
 
 describe("a cohort's page", () => {
   const html = draw(caps());
@@ -44,9 +45,19 @@ describe("a cohort's page", () => {
 
   it("counts subjects, sessions, stacks and what waits, with the way to Review", () => {
     expect(html).toContain('<span class="k">subjects</span><span class="v">212</span><span class="meta">38 joined today · 2 left</span>');
-    expect(html).toContain('<span class="k">sessions</span><span class="v">240</span>');
+    expect(html).toContain('<span class="k">sessions</span><span class="v">240</span><span class="meta">of its members · 90-day window</span>');
     expect(html).toContain('<span class="k">stacks</span><span class="v">3,106</span><span class="meta">3,044 sorted</span>');
     expect(html).toContain('<div class="wait"><span class="k">waiting</span><span class="v">62</span><span class="meta">on Review</span><a class="tail" href="#review?cohort=north">Open on Review');
+  });
+
+  it("says the sessions are not built yet where nobody has built the cache they are counted out of", () => {
+    const unbuilt = draw(caps(), { ...north, sessions: null });
+    expect(unbuilt).toContain('<span class="k">sessions</span><span class="v">not built yet</span>');
+    expect(unbuilt).toContain("building them is a person");
+    expect(unbuilt).not.toContain("90-day window");
+    // the subjects and the stacks are counted all the same, and an engine that says no window still counts the sessions
+    expect(unbuilt).toContain('<span class="v">3,106</span>');
+    expect(draw(caps(), north, null, null)).toContain('<span class="v">240</span><span class="meta">of its members</span>');
   });
 
   it("draws the members over time as a step chart from the joins", () => {

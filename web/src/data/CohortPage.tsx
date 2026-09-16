@@ -13,12 +13,13 @@ import { startBody } from "../ask/start";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
+import { objects } from "../objects/client";
 import { keepingRefusal } from "../query/cards";
 import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { chartLabels, cohorts, delta, ledeWords, membersBody, stepChart, type CohortDetail, type Join } from "./cohorts";
+import { chartLabels, cohorts, delta, ledeWords, membersBody, sessionsMeta, sessionsWords, stepChart, type CohortDetail, type Join } from "./cohorts";
 import { whenWords } from "./sources";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; cohort: CohortDetail };
@@ -46,6 +47,12 @@ export function CohortPage({ caps, name }: { caps: Capabilities; name: string })
     read();
   }, [read]);
 
+  // record 26: the sessions are counted out of the session cache, so the strip says the window it was built under
+  const [windowDays, setWindowDays] = useState<number | null>(null);
+  useEffect(() => {
+    if (served(caps, "GET /api/summary")) objects.summary().then((s) => setWindowDays(s.sessions.window_days ?? null), () => undefined);
+  }, [caps]);
+
   // a query started from this cohort: counted by the start door, kept as a card, and opened
   const start = () => {
     setBusy({ phase: "starting a query", since: Date.now() });
@@ -70,7 +77,7 @@ export function CohortPage({ caps, name }: { caps: Capabilities; name: string })
 
   const cohort = load.kind === "ready" ? load.cohort : null;
   return (
-    <CohortBody caps={caps} cohort={cohort} since={load.kind === "loading" ? load.since : null} why={load.kind === "failed" ? load.why : null} said={said} busy={busy} onAct={setOpen} onStart={start}>
+    <CohortBody caps={caps} cohort={cohort} since={load.kind === "loading" ? load.since : null} why={load.kind === "failed" ? load.why : null} said={said} busy={busy} windowDays={windowDays} onAct={setOpen} onStart={start}>
       {cohort && open === "members" && <MembersDialog cohort={cohort} onClose={() => setOpen(null)} onDone={done} />}
       {cohort && open === "rename" && <RenameDialog cohort={cohort} onClose={() => setOpen(null)} />}
       {cohort && open === "retire" && <RetireDialog cohort={cohort} onClose={() => setOpen(null)} onDone={done} />}
@@ -86,6 +93,8 @@ export interface CohortBodyProps {
   said?: string | null;
   busy?: { phase: string; since: number } | null;
   now?: number;
+  /** The window the session cache was built under, where the summary said; null where it did not. */
+  windowDays?: number | null;
   onAct: (act: Act) => void;
   onStart: () => void;
   children?: React.ReactNode;
@@ -101,7 +110,7 @@ export function cohortActs(caps: Capabilities, name: string) {
 }
 
 /** The page as it draws from what it read. */
-export function CohortBody({ caps, cohort: c, since = null, why, said = null, busy = null, now = Date.now(), onAct, onStart, children }: CohortBodyProps) {
+export function CohortBody({ caps, cohort: c, since = null, why, said = null, busy = null, now = Date.now(), windowDays = null, onAct, onStart, children }: CohortBodyProps) {
   const today = new Date(now);
   const acts = c ? cohortActs(caps, c.name) : null;
   const chart = c ? stepChart(c.joins) : null;
@@ -165,8 +174,8 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
               </div>
               <div className="done">
                 <span className="k">sessions</span>
-                <span className="v">{n(c.sessions)}</span>
-                <span className="meta">of its members</span>
+                <span className="v">{sessionsWords(c.sessions)}</span>
+                <span className="meta">{sessionsMeta(c.sessions, windowDays)}</span>
               </div>
               <div className="done">
                 <span className="k">stacks</span>

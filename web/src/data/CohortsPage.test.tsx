@@ -26,7 +26,8 @@ const caps = (grants: Grant[] = [...GRANTS], doors: string[] = ["POST /api/cohor
     desk: { version: "1.0.0", mode: "off", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
   }) as unknown as Capabilities;
 
-const draw = (c: Capabilities, l: Cohort[] | null = list, why: string | null = null) => renderToStaticMarkup(<CohortsBody caps={c} list={l} why={why} now={NOW} onNew={none} />);
+const draw = (c: Capabilities, l: Cohort[] | null = list, why: string | null = null, windowDays: number | null = 90) =>
+  renderToStaticMarkup(<CohortsBody caps={c} list={l} why={why} now={NOW} windowDays={windowDays} onNew={none} />);
 
 describe("Data / Cohorts", () => {
   const html = draw(caps());
@@ -41,6 +42,7 @@ describe("Data / Cohorts", () => {
     expect(html).toContain("fed by the dataset <b>north-3t</b>");
     expect(html).toContain("promoted from the card <b>north at 7T</b> · v2 · today");
     expect(html).toContain("by hand <b>astrid</b> · 40 subjects from a list · 3 Sep");
+    expect(html).toContain("<b>240</b>sessions");
     expect(html).toContain("<b>3,106</b>stacks");
     expect(html).toContain('<span class="meta">1 release · owner astrid · since 11 May</span>');
     expect(html).toContain("fills when ct-lab is digested");
@@ -59,6 +61,15 @@ describe("Data / Cohorts", () => {
     expect(html).toContain("A hand adds them");
     expect(html).toContain(">From a list</button>");
     expect(html).toContain("Sessions and stacks are never members");
+  });
+
+  it("counts the sessions out of the session cache: the window it was built under, and not built yet where nobody has", () => {
+    expect(html).toContain("The sessions counted here are the ones the session cache holds, built under a 90-day window; where nobody has built it they are not built yet, and a person builds them.");
+    // an engine whose summary the page could not read says the rest all the same
+    expect(draw(caps(), list, null, null)).toContain("the ones the session cache holds; where nobody has built it");
+    const unbuilt = draw(caps(), list.map((c) => ({ ...c, sessions: null })));
+    expect(unbuilt).toContain("<b>not built yet</b>sessions");
+    expect(unbuilt).not.toContain("<b>240</b>sessions");
   });
 
   it("offers no new cohort to a person who may only look, or where the engine has no door", () => {

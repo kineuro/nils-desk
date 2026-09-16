@@ -101,6 +101,9 @@ describe("the import's report", () => {
     expect(lines[0].words).toBe("212 named · 209 known · 3 new, with codes derived from their number");
     expect(lines[1].words).toBe("1,296 filed · 1,240 already known · 56 new · 1 new type");
     expect(lines[2].words).toBe("4 of 4 released");
+    // record 26: which type released them, and the type they were held under where it is another
+    const byType = reportLines({ ...report, held_released_by: [{ type: "site-id", held_as: "personnummer", files: 3 }, { type: "personnummer", held_as: "personnummer", files: 1 }] });
+    expect(byType[2].words).toBe("4 of 4 released: 3 by site-id, held as personnummer · 1 by personnummer");
     expect(lines[3].words).toBe("2: provisional subjects become their canonical ones · the old codes stay as identifiers");
     expect(lines[4].tone).toBe("ok");
     const refused = reportLines({ ...report, held_released: 0, merges: [], conflicts: [{ row: 12, why: "already on another subject" }] });

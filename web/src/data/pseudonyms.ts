@@ -52,15 +52,31 @@ export interface ImportColumn {
   id_type?: string;
 }
 
-/** What an import will do, said before it writes; the same report is a filed import's result. The engine names the new types or counts them, and says the held files released as a count or as released of held. */
+/**
+ * Which identifier type released how many held files, and the type those
+ * rows were held under (record 26): a value the dataset's rule read as its
+ * own type and the map names as another releases its files all the same,
+ * and the row is keyed under the map's type so the next run finds the
+ * identity the map filed.
+ */
+export interface HeldReleased {
+  type: string;
+  held_as: string;
+  files: number;
+}
+
+/** What an import will do, said before it writes; the same report is a filed import's result. The engine names the new types or counts them, and says the held files released as a count or as released of held, and by which type. */
 export interface ImportReport {
   subjects: { named: number; known: number; new: number };
   identifiers: { filed: number; known: number; new: number; types_new: number | string[] };
   held_released: number | { released: number; of: number };
+  /** Absent from an engine before record 26. */
+  held_released_by?: HeldReleased[];
   merges: { alias: string; canonical: string }[];
   conflicts: { row: number; why: string }[];
 }
 
+/* a held row of the pseudonymiser's table, as the held door lists it */
 export interface HeldRow {
   shape: string;
   files: number;
@@ -305,6 +321,14 @@ export function heldReleasedWords(r: ImportReport): string {
   return `${n(h.released)} of ${n(h.of)} released`;
 }
 
+/** Which type released them: "3 by study-id, held as personnummer · 1 by personnummer", the type they were held under named only where it is another. */
+export function heldTypeWords(by: readonly HeldReleased[] | undefined): string {
+  return (by ?? [])
+    .filter((r) => r.files > 0)
+    .map((r) => `${n(r.files)} by ${r.type}${r.held_as && r.held_as !== r.type ? `, held as ${r.held_as}` : ""}`)
+    .join(" · ");
+}
+
 /** What the report says, line by line, for the dialog. */
 export function reportLines(r: ImportReport): { label: string; words: string; tone?: "caution" | "ok" }[] {
   const s = r.subjects;
@@ -316,7 +340,7 @@ export function reportLines(r: ImportReport): { label: string; words: string; to
   return [
     { label: "subjects", words: `${n(s.named)} named · ${n(s.known)} known · ${n(s.new)} new, with codes derived from their number` },
     { label: "identifiers", words: `${n(i.filed)} filed · ${n(i.known)} already known · ${n(i.new)} new${typesNew > 0 ? ` · ${n(typesNew)} new ${typesNew === 1 ? "type" : "types"}${named}` : ""}` },
-    { label: "held files", words: heldReleasedWords(r) },
+    { label: "held files", words: [heldReleasedWords(r), heldTypeWords(r.held_released_by)].filter(Boolean).join(": ") },
     { label: "merges", words: merges === 0 ? "none" : `${n(merges)}: ${merges === 1 ? "a provisional subject becomes its canonical one" : "provisional subjects become their canonical ones"} · the old codes stay as identifiers`, tone: merges > 0 ? "caution" : undefined },
     { label: "conflicts", words: conflicts === 0 ? "0 · an identifier already on another subject would be listed here first, and nothing written" : `${n(conflicts)}: nothing is written until they are resolved`, tone: conflicts > 0 ? "caution" : "ok" },
   ];

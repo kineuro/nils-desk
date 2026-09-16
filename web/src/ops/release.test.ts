@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
 import type { HandleRow } from "../ask/client";
-import { confirmed, confirmName, list, releaseBody, stackIds } from "./release";
+import { confirmed, confirmName, DATASETS_OWN, list, overrideNote, releaseBody, stackIds } from "./release";
 
 const stackHandle: HandleRow = {
   id: 75, name: null, grain: "stack", row_count: 250, content_hash: "x", principal: "anna@ward-3", actor: {}, created_at: "", epoch: 1, pack_version: "0.1.1",
@@ -32,6 +32,33 @@ describe("the release form", () => {
     const d = releaseBody({ kind: "hand", datasets: ["north-3t"] }, { name: "s", out: "/o", layout: "bids" }, []);
     expect(d).toEqual({ ok: true, body: { name: "s", out: "/o", layout: "bids", datasets: ["north-3t"] }, summary: "every subject brought in by north-3t" });
     expect(list("a, b\n c,,")).toEqual(["a", "b", "c"]);
+  });
+  it("names the dates and the UIDs only where a person overrode each dataset's own", () => {
+    // record 26 section 13: a body carrying either is a run under the caller's
+    // flags, under which no dataset's declared policy applies and moved dates
+    // are refused rather than numbered. The dialog's own state must never
+    // become one: neither its default nor an empty value is sent.
+    const dialog = { name: "s", out: "/o", layout: "bids", dates: DATASETS_OWN, uids: DATASETS_OWN };
+    expect(releaseBody({ kind: "hand", cohorts: ["ms-a"] }, dialog, [])).toEqual({
+      ok: true,
+      body: { name: "s", out: "/o", layout: "bids", cohorts: ["ms-a"] },
+      summary: "every current member of ms-a",
+    });
+    expect(releaseBody({ kind: "hand", cohorts: ["ms-a"] }, { name: "s", out: "/o", dates: "", uids: "  " }, [])).toEqual({
+      ok: true,
+      body: { name: "s", out: "/o", cohorts: ["ms-a"] },
+      summary: "every current member of ms-a",
+    });
+    const over = releaseBody({ kind: "hand", cohorts: ["ms-a"] }, { ...dialog, dates: "shift", uids: "preserve" }, []);
+    expect(over).toMatchObject({ ok: true, body: { dates: "shift", uids: "preserve" } });
+  });
+  it("says what an override costs, and says nothing while each dataset's own stands", () => {
+    expect(overrideNote(DATASETS_OWN, DATASETS_OWN)).toBeNull();
+    expect(overrideNote(undefined, "")).toBeNull();
+    expect(overrideNote(DATASETS_OWN, "remap")).toBe("An override sets the policy for every file of this release, so no dataset's own applies to its own files.");
+    expect(overrideNote("shift", DATASETS_OWN)).toContain("refused where the sessions are named by the date");
+    expect(overrideNote("year", DATASETS_OWN)).toContain("name a months or ordinal scheme above, or keep the dates");
+    expect(overrideNote("keep", DATASETS_OWN)).not.toContain("refused");
   });
   it("a card's answer with no rows read here is sent as its handle, which the door reads itself", () => {
     const r = releaseBody({ kind: "handle", handle: stackHandle }, { name: "sept", out: "/srv/out/sept" }, []);

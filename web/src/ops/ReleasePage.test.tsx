@@ -11,7 +11,7 @@ import type { DeskRecord, HandleRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { Release } from "../data/cohorts";
 import { GRANTS, type Grant } from "../grants";
-import { releasableCards, ReleasesBody, releasingRefusal } from "./ReleasePage";
+import { NewReleaseDialog, releasableCards, ReleasesBody, releasingRefusal } from "./ReleasePage";
 
 const rows = (releasesFixture as { releases: Release[] }).releases;
 const NOW = Date.parse("2026-09-15T12:00:00Z");
@@ -43,7 +43,7 @@ describe("the Release page", () => {
     expect(html).toContain("<th>Name</th><th>Version</th><th>Layout</th><th>Dates</th><th>UIDs</th>");
     expect(html).toContain('<b class="path">north-2026.08.21.1</b>');
     expect(html).toContain("<td>bids</td><td>shifted</td><td>remapped</td>");
-    expect(html).toContain('<td class="num">174</td><td class="num">190</td>');
+    expect(html).toContain('<td class="num">174</td><td class="num">190<span class="meta">numbered in date order</span></td>');
     expect(html).toContain("<td>astrid</td><td>22 Aug</td><td></td>");
     expect(html).toContain('<tr class="withdrawn">');
     expect(html).toContain("<td>descriptive</td><td>to the year</td><td>remapped</td>");
@@ -64,6 +64,31 @@ describe("the Release page", () => {
     expect(draw(caps(), null, "refused")).toContain('<p class="warn">The releases could not be read: refused</p>');
     expect(draw(caps(), [])).toContain("No release yet.");
     expect(renderToStaticMarkup(<ReleasesBody caps={caps()} list={[]} why={null} lists={false} now={NOW} onNew={none} />)).toContain("does not list its releases");
+  });
+
+  it("says beside the sessions how each release named them, where its row or its policies say", () => {
+    const rows = (releasesFixture as { releases: Release[] }).releases;
+    // the pilot release cut its dates to the year, so its sessions could not be labelled by the date
+    expect(html).toContain('<td class="num">88<span class="meta">numbered in date order</span></td>');
+    // a release under a scheme of its own says what that scheme named them
+    const months = draw(caps(), [{ ...rows[1], session_scheme: { naming: "months" } }]);
+    expect(months).toContain('<span class="meta">labelled by months</span>');
+    // and one whose dates never moved says nothing of the naming at all
+    const kept = draw(caps(), [{ ...rows[1], policies: [{ dataset: "north-3t", dates: "keep", uids: "remap" }] }]);
+    expect(kept).toContain('<td class="num">190</td>');
+    expect(kept).not.toContain("numbered in date order");
+  });
+
+  it("sends no leaving policy of its own: each dataset's own applies until a person overrides it in the dialog", () => {
+    const dialog = renderToStaticMarkup(<NewReleaseDialog caps={caps()} cohort="north" existing={rows} onClose={none} onDone={none} />);
+    expect(dialog).toContain("Each dataset&#x27;s own leaving policy applies to its own files.");
+    expect(dialog).toContain("Nothing is sent for the dates or the UIDs unless you override them here.");
+    expect(dialog).toContain('aria-label="Dates for every file"');
+    expect(dialog).toContain('aria-label="UIDs for every file"');
+    expect(dialog).toContain("dates: each dataset&#x27;s own");
+    expect(dialog).toContain("UIDs: each dataset&#x27;s own");
+    // nothing is overridden as it opens, so the caution that an override brings is not there yet
+    expect(dialog).not.toContain("An override sets the policy");
   });
 
   it("offers as a card's answer only a complete stack answer the person may release", () => {

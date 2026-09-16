@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { desk, results, type DeskRecord, type HandleRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { cohorts, leavingLines, policyWords, reachesWords, releases, suggestedName, type Cohort, type CohortDetail, type Release, type Selected } from "../data/cohorts";
+import { cohorts, leavingLines, policyWords, reachesWords, releases, releaseSessionNaming, sessionNamingNote, sessionsPhrase, suggestedName, type Cohort, type CohortDetail, type Release, type Selected } from "../data/cohorts";
 import { sources, whenWords, type Source } from "../data/sources";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -23,7 +23,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
-import { releaseBody, type ReleaseSource } from "./release";
+import { DATASETS_OWN, overrideNote, releaseBody, type ReleaseSource } from "./release";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Release[] };
 
@@ -131,6 +131,8 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, lists
             <tbody>
               {list.map((r) => {
                 const policy = policyWords(r);
+                // record 26 section 13 with section 4.3: a release whose dates moved numbers its sessions in date order, and the row records the scheme that named them
+                const naming = releaseSessionNaming(r);
                 return (
                   <tr key={r.id} className={r.withdrawn_at ? "withdrawn" : undefined}>
                     <td>
@@ -141,7 +143,10 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, lists
                     <td>{policy.dates}</td>
                     <td>{policy.uids}</td>
                     <td className="num">{r.subjects !== null ? n(r.subjects) : ""}</td>
-                    <td className="num">{typeof r.sessions === "number" ? n(r.sessions) : ""}</td>
+                    <td className="num">
+                      {typeof r.sessions === "number" ? n(r.sessions) : ""}
+                      {naming && <span className="meta">{naming}</span>}
+                    </td>
                     <td className="nowrap">{whenWords(r.started_at, today)}</td>
                     <td>{r.actor ?? ""}</td>
                     <td>{r.handed_over ? whenWords(r.handed_over, today) : "not yet"}</td>
@@ -182,6 +187,10 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
   const [named, setNamed] = useState<string | null>(null);
   const [layout, setLayout] = useState("bids");
   const [scheme, setScheme] = useState("");
+  // record 26 section 13: the dates and the UIDs are each dataset's own until a person overrides them here, and nothing is sent for them until then
+  const [dates, setDates] = useState(DATASETS_OWN);
+  const [uids, setUids] = useState(DATASETS_OWN);
+  const [windowDays, setWindowDays] = useState<number | null>(null);
   const [placeId, setPlaceId] = useState<number | null>(null);
   const [out, setOut] = useState("");
   const [selected, setSelected] = useState<Selected | null>(null);
@@ -200,7 +209,14 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
         () => setCards([]),
       );
     else setCards([]);
-    if (served(caps, "GET /api/sources")) sources.list().then((r) => setSrcs(r.sources), () => setSrcs([]));
+    if (served(caps, "GET /api/sources"))
+      sources.list().then(
+        (r) => {
+          setSrcs(r.sources);
+          setWindowDays(typeof r.window_days === "number" ? r.window_days : null);
+        },
+        () => setSrcs([]),
+      );
     else setSrcs([]);
   }, [caps, epoch]);
 
@@ -225,8 +241,11 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
   const place: Place | null = exports.find((p) => p.id === placeId) ?? exports[0] ?? null;
   const written = place ? `${place.path.replace(/\/+$/, "")}/${name}` : out.trim();
   const src: ReleaseSource = of === "cohort" ? { kind: "hand", cohorts: cohort ? [cohort] : [] } : { kind: "handle", handle: card?.handle };
-  const built = releaseBody(src, { name, out: written, layout, scheme_name: scheme || undefined }, []);
+  const built = releaseBody(src, { name, out: written, layout, scheme_name: scheme || undefined, dates, uids }, []);
   const lines = srcs ? leavingLines(srcs, of === "cohort" ? (detail?.sources_holding ?? null) : null) : [];
+  const override = overrideNote(dates, uids);
+  // with nothing overridden each dataset's own policy stands, and a dataset that declares its dates moved has that release's sessions numbered in date order
+  const naming = override === null ? sessionNamingNote(lines, scheme) : null;
   const waiting = of === "cohort" ? (detail?.waiting ?? list?.find((c) => c.name === cohort)?.waiting ?? 0) : 0;
   const selects = of === "cohort" && cohort !== "" && served(caps, "POST /api/select");
 
@@ -252,7 +271,7 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
       });
   };
 
-  const summary = (c: Cohort) => `${n(c.subjects)} subjects · ${n(c.sessions)} sessions · ${n(c.stacks)} stacks${c.waiting > 0 ? `, ${n(c.waiting)} still waiting on Review` : ""}`;
+  const summary = (c: Cohort) => `${n(c.subjects)} subjects · ${sessionsPhrase(c.sessions)} · ${n(c.stacks)} stacks${c.waiting > 0 ? `, ${n(c.waiting)} still waiting on Review` : ""}`;
   const chosenCohort = list?.find((c) => c.name === cohort) ?? null;
 
   return (
@@ -361,6 +380,32 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
               <span className="input scheme">
                 <input value={scheme} placeholder="the registry's scheme, as bound today" onChange={(e) => setScheme(e.target.value)} aria-label="Session scheme" />
               </span>
+              {(windowDays !== null || naming !== null) && (
+                <span className="meta">{[windowDays === null ? null : `The session cache was built under a ${n(windowDays)}-day window.`, naming].filter(Boolean).join(" ")}</span>
+              )}
+            </dd>
+          </div>
+          <div className="facts-pair">
+            <dt>override</dt>
+            <dd>
+              <span className="row wrap">
+                <span className="input">
+                  <select value={dates} onChange={(e) => setDates(e.target.value)} aria-label="Dates for every file">
+                    <option value={DATASETS_OWN}>dates: each dataset&apos;s own</option>
+                    <option value="keep">dates kept</option>
+                    <option value="shift">dates shifted</option>
+                    <option value="year">dates cut to the year</option>
+                  </select>
+                </span>
+                <span className="input">
+                  <select value={uids} onChange={(e) => setUids(e.target.value)} aria-label="UIDs for every file">
+                    <option value={DATASETS_OWN}>UIDs: each dataset&apos;s own</option>
+                    <option value="remap">UIDs remapped</option>
+                    <option value="preserve">UIDs kept</option>
+                  </select>
+                </span>
+              </span>
+              <span className={override === null ? "meta" : "warn"}>{override ?? "Each dataset's own leaving policy applies to its own files. Nothing is sent for the dates or the UIDs unless you override them here."}</span>
             </dd>
           </div>
           <div className="facts-pair">

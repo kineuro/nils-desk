@@ -37,14 +37,42 @@ export function stackIds(columns: Column[], rows: unknown[][]): number[] {
   return rows.map((r) => Number(r[at])).filter((n) => Number.isInteger(n));
 }
 
+/** What the dialog's date and UID selects hold while nothing is overridden: each dataset's own declared policy, which the body must not name. */
+export const DATASETS_OWN = "datasets";
+
 export interface ReleaseForm {
   name: string;
   out: string;
   layout?: string;
+  /**
+   * The run's date policy, sent only where the person overrode each
+   * dataset's own. Record 26 section 13: a body naming `dates` or `uids` is
+   * a run under the caller's flags, and then no dataset's declared policy
+   * applies and moved dates with sessions named by the date are refused
+   * rather than numbered. Absent, or `datasets`, leaves each dataset's own.
+   */
   dates?: string;
+  /** The same for the UIDs. */
+  uids?: string;
   on_unknown?: string;
   pack?: string;
   scheme_name?: string;
+}
+
+/**
+ * What an override costs, for the dialog to say before the run: naming
+ * either policy makes the run one under the caller's flags, so no dataset's
+ * own applies to its own files, and dates that move are then refused where
+ * the sessions are named by the date rather than numbered in date order
+ * (record 26 section 13 with section 4.3). Null where nothing is overridden.
+ */
+export function overrideNote(dates: string | undefined, uids: string | undefined): string | null {
+  const d = dates?.trim() || DATASETS_OWN;
+  const u = uids?.trim() || DATASETS_OWN;
+  if (d === DATASETS_OWN && u === DATASETS_OWN) return null;
+  const said = "An override sets the policy for every file of this release, so no dataset's own applies to its own files.";
+  const moves = d === "shift" || d === "year";
+  return moves ? `${said} Dates that move are then refused where the sessions are named by the date: name a months or ordinal scheme above, or keep the dates.` : said;
 }
 
 /** The body of POST /api/releases, or why there is none yet. */
@@ -52,9 +80,16 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
   if (!f.name.trim()) return { ok: false, why: "a name for the release" };
   if (!f.out.trim()) return { ok: false, why: "where to write, a directory on the engine's host" };
   const body: Json = { name: f.name.trim(), out: f.out.trim() };
-  for (const k of ["layout", "dates", "on_unknown", "pack", "scheme_name"] as const) {
+  for (const k of ["layout", "on_unknown", "pack", "scheme_name"] as const) {
     const v = f[k]?.trim();
     if (v) body[k] = v;
+  }
+  // record 26 section 13: only an override the person chose is named here. A
+  // body carrying dates or uids is a run under the caller's flags, under
+  // which a dataset's own declared policy can never take effect.
+  for (const k of ["dates", "uids"] as const) {
+    const v = f[k]?.trim();
+    if (v && v !== DATASETS_OWN) body[k] = v;
   }
   if (src.kind === "handle") {
     if (!src.handle) return { ok: false, why: "a handle" };

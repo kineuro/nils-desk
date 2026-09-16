@@ -9,11 +9,12 @@ import type React from "react";
 import { needsWork } from "../access";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
+import { objects } from "../objects/client";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { cohorts, cohortState, membersBody, metaWords, provenanceLine, type Cohort } from "./cohorts";
+import { cohorts, cohortState, membersBody, metaWords, provenanceLine, sessionsWords, type Cohort } from "./cohorts";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Cohort[] };
 
@@ -22,14 +23,19 @@ const n = (v: number) => v.toLocaleString("en-US");
 export function CohortsPage({ caps }: { caps: Capabilities }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [making, setMaking] = useState<{ list: boolean } | null>(null);
+  // record 26: every count of sessions is of the session cache as it stands, so the page says the window it was built under
+  const [windowDays, setWindowDays] = useState<number | null>(null);
   useEffect(() => {
     cohorts
       .list()
       .then((list) => setLoad({ kind: "ready", list }))
       .catch((e: Error) => setLoad({ kind: "failed", why: e.message }));
   }, []);
+  useEffect(() => {
+    if (served(caps, "GET /api/summary")) objects.summary().then((s) => setWindowDays(s.sessions.window_days ?? null), () => undefined);
+  }, [caps]);
   return (
-    <CohortsBody caps={caps} list={load.kind === "ready" ? load.list : null} since={load.kind === "loading" ? load.since : null} why={load.kind === "failed" ? load.why : null} onNew={(list) => setMaking({ list })}>
+    <CohortsBody caps={caps} list={load.kind === "ready" ? load.list : null} since={load.kind === "loading" ? load.since : null} why={load.kind === "failed" ? load.why : null} windowDays={windowDays} onNew={(list) => setMaking({ list })}>
       {making && <NewCohortDialog caps={caps} fromList={making.list} taken={load.kind === "ready" ? load.list.map((c) => c.name) : []} onClose={() => setMaking(null)} />}
     </CohortsBody>
   );
@@ -42,6 +48,8 @@ export interface CohortsBodyProps {
   since?: number | null;
   why: string | null;
   now?: number;
+  /** The window the session cache was built under, where the summary said; null where it did not. */
+  windowDays?: number | null;
   onNew: (fromList: boolean) => void;
   children?: React.ReactNode;
 }
@@ -53,7 +61,7 @@ export function makingRefusal(caps: Capabilities): string | null {
 }
 
 /** The page as it draws from what it read. */
-export function CohortsBody({ caps, list, since = null, why, now = Date.now(), onNew, children }: CohortsBodyProps) {
+export function CohortsBody({ caps, list, since = null, why, now = Date.now(), windowDays = null, onNew, children }: CohortsBodyProps) {
   const making = makingRefusal(caps);
   const live = (list ?? []).filter((c) => !c.retired_at);
   const retired = (list ?? []).filter((c) => c.retired_at);
@@ -169,7 +177,7 @@ export function CohortsBody({ caps, list, since = null, why, now = Date.now(), o
         <Icon name="lock" />
         <div className="note-body">
           <p className="note-detail">
-            Review, Release and the Query start from cohorts. A subject in two cohorts is counted in each and decided once. Sessions and stacks are never members: a cohort names people, and a query card names what of theirs.
+            Review, Release and the Query start from cohorts. A subject in two cohorts is counted in each and decided once. Sessions and stacks are never members: a cohort names people, and a query card names what of theirs. The sessions counted here are the ones the session cache holds{windowDays === null ? "" : `, built under a ${n(windowDays)}-day window`}; where nobody has built it they are not built yet, and a person builds them.
           </p>
         </div>
       </div>
@@ -203,7 +211,7 @@ function CohortCard({ cohort: c, now }: { cohort: Cohort; now: number }) {
           <b>{n(c.subjects)}</b>subjects
         </span>
         <span>
-          <b>{n(c.sessions)}</b>sessions
+          <b>{sessionsWords(c.sessions)}</b>sessions
         </span>
         <span>
           <b>{n(c.stacks)}</b>stacks
