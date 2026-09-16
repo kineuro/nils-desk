@@ -4,7 +4,7 @@
 // overlay a word makes at each pack contract, what a rehearsal and a closure
 // say, why an axis was judged so, and the words of a refusal.
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DoorError } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { OverlayRow, ReviewItem, Signals } from "../ops/client";
@@ -23,12 +23,15 @@ import {
   mapHref,
   overlayChange,
   refusalWords,
+  scopeBatches,
   scopeDoc,
   scopeString,
+  siteWordCount,
   siteWords,
   stackOf,
   tryWords,
   valueCounts,
+  withDocuments,
   wordOverlay,
   type PackDoc,
 } from "./client";
@@ -207,5 +210,50 @@ describe("what settles an identity question", () => {
     expect(mapHref(item("identity.unmapped", { evidence: { place: "north", files: 160 } }))).toBe("#data/datasets/north/pseudonymisation");
     expect(mapHref(item("identity.unmapped", { ref: { dataset: "south" } }))).toBe("#data/datasets/south/pseudonymisation");
     expect(mapHref(item("identity.unmapped"))).toBe("#review/identifiers");
+  });
+});
+
+describe("the site's words and the scope chips", () => {
+  const row = (id: number, status: string, document?: OverlayRow["document"]): OverlayRow => ({ id, name: `o${id}`, status, scope: { over: "everything", keyed: {} }, ...(document === undefined ? {} : { document }) });
+  it("count the words adopted overlays add, lists and buckets alike, and none of a proposed one", () => {
+    const overlays = [
+      row(1, "adopted", { lists: { "base.T2w": { add: ["xx special", "t2-star"], remove: ["old"] } } }),
+      row(2, "adopted", { buckets: { localizer_words: { add: ["scout"], remove: [] } }, lists: { "technique.MS-EPI": { add: ["ms_epi"], remove: [] } } }),
+      row(3, "proposed", { lists: { "base.T1w": { add: ["mprage2"], remove: [] } } }),
+      row(4, "adopted"),
+    ];
+    expect(siteWordCount(overlays)).toBe(4);
+    expect(siteWordCount([])).toBe(0);
+  });
+  it("read each adopted or proposed overlay's own door for its document, the newest first, and keep a row whose read fails", async () => {
+    const read = vi.fn(async (id: number) => {
+      if (id === 3) throw new Error("gone");
+      return row(id, "adopted", { lists: { "base.T2w": { add: [`w${id}`], remove: [] } } });
+    });
+    const rows = await withDocuments([row(1, "adopted"), row(2, "refused"), row(3, "proposed"), row(4, "adopted", { lists: {} })], read, 24);
+    expect(read.mock.calls.map((c) => c[0])).toEqual([3, 1]);
+    expect(rows.map((r) => [r.id, r.document !== undefined])).toEqual([[1, true], [2, false], [3, false], [4, true]]);
+    expect(siteWordCount(rows)).toBe(1);
+    // the limit keeps the reads to the newest
+    read.mockClear();
+    await withDocuments([row(1, "adopted"), row(2, "adopted"), row(3, "adopted")], read, 2);
+    expect(read.mock.calls.map((c) => c[0])).toEqual([3, 2]);
+  });
+  it("name one chip per thread: a pseudonymise batch is left out, and one name stands once", () => {
+    const batches = [
+      { id: 12, name: "north-grow-2026-09-16", kind: "digest" },
+      { id: 11, name: "north-grow-2026-09-16", kind: "pseudonymize" },
+      { id: 10, name: "south-2026-09-16", kind: "digest" },
+      { id: 9, name: "old-2026-09-16", kind: "digest" },
+      { id: 8, name: "old-2026-09-16", kind: "digest" },
+      { id: 7, name: "older", kind: "digest" },
+    ];
+    expect(scopeBatches(batches)).toEqual([
+      { id: 12, name: "north-grow-2026-09-16", kind: "digest" },
+      { id: 10, name: "south-2026-09-16", kind: "digest" },
+      { id: 9, name: "old-2026-09-16", kind: "digest" },
+    ]);
+    // an older engine names no kind: every batch is a thread of its own
+    expect(scopeBatches([{ id: 2, name: "b" }, { id: 1, name: "a" }]).map((s) => s.kind)).toEqual([null, null]);
   });
 });

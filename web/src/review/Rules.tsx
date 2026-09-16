@@ -28,11 +28,14 @@ import {
   overlayChange,
   refusalWords,
   review,
+  scopeBatches,
   scopeString,
   scopeWords,
+  siteWordCount,
   siteWords,
   tryWords,
   valueCounts,
+  withDocuments,
   wordOverlay,
   type Closure,
   type OverlayDoc,
@@ -171,7 +174,12 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
   const readsSignals = served(caps, "GET /api/classify/signals") && may.decide;
 
   const reload = useCallback(() => {
-    if (served(caps, "GET /api/overlays")) ops.overlays().then((r) => setOverlays(r.overlays), () => setOverlays([]));
+    if (!served(caps, "GET /api/overlays")) return;
+    // the list door leaves each overlay's document out; the words on the strip and in the table are read from each overlay's own door
+    ops
+      .overlays()
+      .then((r) => withDocuments(r.overlays, (id) => ops.overlay(id)))
+      .then(setOverlays, () => setOverlays([]));
   }, [caps]);
 
   useEffect(() => {
@@ -211,8 +219,9 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
   const unsureOpen = signals ? Object.values(signals.open_review ?? {}).reduce((s, v) => s + v, 0) : items.filter((i) => i.status === "open" && familyOf(i.kind) === "unsure").length;
   const adopted = overlays.filter((o) => o.status === "adopted");
   const proposed = overlays.filter((o) => o.status === "proposed");
-  const adoptedWords = adopted.reduce((s, o) => s + overlayChange(o).reduce((t, c) => t + (c.words.match(/\+ ([^-]+)/u)?.[1].split(",").length ?? 0), 0), 0);
+  const adoptedWords = siteWordCount(overlays);
   const origins = originsOf(signals);
+  const threads = scopeBatches(batches);
   const tunable = assistantOffered(caps) && stationsServed(caps).includes("keyword-tune") && may.decide;
 
   useEffect(() => {
@@ -257,8 +266,8 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
           <h2>Axes</h2>
           <span className="meta">in the order they are decided; an axis may read one before it</span>
           <span className="chips">
-            {batches.slice(0, 3).map((b) => (
-              <button key={b.id} type="button" className={current.kind === "batch" && current.id === b.id ? "opt on" : "opt"} onClick={() => setScope({ kind: "batch", id: b.id, name: b.name })}>
+            {threads.map((b) => (
+              <button key={b.id} type="button" className={current.kind === "batch" && current.id === b.id ? "opt on" : "opt"} title={b.kind ? `${b.kind} batch ${b.name}` : undefined} onClick={() => setScope({ kind: "batch", id: b.id, name: b.name })}>
                 batch {b.name}
               </button>
             ))}

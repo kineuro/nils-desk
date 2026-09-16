@@ -9,7 +9,7 @@
 import { door, DoorError, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { may, sees } from "../grants";
-import { ops, overlayScope, type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
+import { ops, overlayScope, type Batch, type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
 import { href } from "../routes";
 import { kindOf } from "./triage";
 
@@ -436,6 +436,58 @@ function scopeOfDoc(doc: Json): string {
   const s = (doc.scope ?? {}) as Json;
   const [k, v] = Object.entries(s)[0] ?? [];
   return k ? `${k} ${String(v)}` : "everything";
+}
+
+/** The words the adopted overlays add, across every list and bucket: the strip's "site words". */
+export function siteWordCount(overlays: OverlayRow[]): number {
+  let count = 0;
+  for (const o of overlays) {
+    if (o.status !== "adopted") continue;
+    const doc = (o.document ?? {}) as Json;
+    for (const map of [doc.lists, doc.buckets]) {
+      if (!map || typeof map !== "object") continue;
+      for (const e of Object.values(map as Json)) {
+        const add = (e as Json | null)?.add;
+        if (Array.isArray(add)) count += add.filter((w) => typeof w === "string" && w.trim() !== "").length;
+      }
+    }
+  }
+  return count;
+}
+
+/**
+ * The overlays with their documents: the list door answers a row without
+ * its document, and each overlay's own door carries it, so the adopted and
+ * proposed ones, the newest first up to `limit`, are read one by one. A row
+ * whose read fails stays as listed.
+ */
+export async function withDocuments(rows: OverlayRow[], read: (id: number) => Promise<OverlayRow>, limit = 24): Promise<OverlayRow[]> {
+  const wanted = rows.filter((o) => o.document === undefined && (o.status === "adopted" || o.status === "proposed")).sort((a, b) => b.id - a.id).slice(0, limit);
+  const full = new Map<number, OverlayRow>();
+  await Promise.all(wanted.map((o) => read(o.id).then((f) => full.set(o.id, f), () => undefined)));
+  return rows.map((o) => {
+    const f = full.get(o.id);
+    return f ? { ...o, document: f.document, tried: f.tried, why: f.why } : o;
+  });
+}
+
+/** A batch as the scope chips name it: one chip per thread, so a pseudonymise batch never stands beside its digest batch of the same name. */
+export interface ScopeBatch {
+  id: number;
+  name: string;
+  kind: string | null;
+}
+
+/** The newest threads for the scope chips: pseudonymise batches left out (the digest of the thread carries the name), one chip per name. */
+export function scopeBatches(batches: Pick<Batch, "id" | "name" | "kind">[], limit = 3): ScopeBatch[] {
+  const out: ScopeBatch[] = [];
+  for (const b of batches) {
+    if (b.kind === "pseudonymize") continue;
+    if (out.some((s) => s.name === b.name)) continue;
+    out.push({ id: b.id, name: b.name, kind: b.kind ?? null });
+    if (out.length >= limit) break;
+  }
+  return out;
 }
 
 /** The counts of one value, from the signals: by value when the engine gives it, else null. */

@@ -79,6 +79,8 @@ export interface AuditRow extends Json {
 export interface Batch {
   id: number;
   name: string;
+  /** Record 26: the verb that made it, `digest` or `pseudonymize`; a thread's two batches share a name. An older engine names none. */
+  kind?: string | null;
   state: string;
   started_at: string;
   finished_at: string | null;
@@ -111,6 +113,7 @@ export interface OverlayRow {
   author?: string;
   actor?: unknown;
   tried?: Json;
+  /** The overlay itself; the list door leaves it out, and each overlay's own door carries it. */
   document?: Json;
   why?: string;
 }
