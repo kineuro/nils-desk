@@ -11,6 +11,7 @@ export interface Summary {
   /** How many cohorts the registry names; the names are the keys of by_cohort. */
   cohorts: number;
   subjects: Counts;
+  /** The sessions, with `window_days`, the window the session cache was built under, which is what every count of sessions here is of (record 26). */
   sessions: Counts & { window_days?: number };
   stacks: Counts;
   /** Null unless the summary was asked since a date. */

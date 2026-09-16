@@ -43,10 +43,13 @@ export function day(iso: string): string {
 
 export function holdsTile(s: Summary, schema?: number): Tile {
   const subjects = s.subjects.total;
+  // record 26: the sessions are counted out of the session cache, so the tile says the window it was built under
+  const sessions = of(s.sessions.total, "session", "sessions");
+  const window = typeof s.sessions.window_days === "number" ? `${sessions} in a ${count(s.sessions.window_days)}-day window` : sessions;
   const meta =
     subjects === 0
       ? ["subjects", `epoch ${count(s.epoch)}`, schema !== undefined ? `schema ${schema}` : null]
-      : [subjects === 1 ? "subject" : "subjects", of(s.sessions.total, "session", "sessions"), of(s.stacks.total, "stack", "stacks"), `epoch ${count(s.epoch)}`];
+      : [subjects === 1 ? "subject" : "subjects", window, of(s.stacks.total, "stack", "stacks"), `epoch ${count(s.epoch)}`];
   return { id: "holds", eyebrow: "The registry holds", value: count(subjects), meta: meta.filter(Boolean).join(" · ") };
 }
 

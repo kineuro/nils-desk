@@ -1,62 +1,88 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Data page: where scans come from. Each source place is a card with how
-// what comes in through it is handled, what it holds and how often it has
-// been read; the chosen source lists its digests, newest first, each with its
-// four stages: walked, digested, classified, reviewed. A digest of what is
-// new is queued from here, a source's handling is declared here, and the
-// setup's bring-in flow opens in a dialog.
+// The Data page as shape C (record 26, D1): the batch is the thread. Each
+// dataset is a card with what arrives through it, the cohort it feeds, its two
+// trees, what it holds and its newest batch; Now lists the open jobs from the
+// engine's event stream; the chosen dataset's batches follow, each with its
+// five marks and each opening its own page. A dataset is added in a dialog,
+// what is new is brought in as one chain, and how a dataset is pseudonymised
+// and how it leaves are changed on its Pseudonymisation page. The section's
+// other pages, the cohorts, a batch and a dataset's pseudonymisation, are
+// mounted by the shell beside this one.
 
 import { useCallback, useEffect, useState } from "react";
-import { needsWork } from "../access";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
-import { BringInForm } from "../home/BringIn";
-import type { Pack } from "../home/look";
 import { placesKept } from "../objects/kept";
-import { data, ops } from "../ops/client";
-import { href } from "../routes";
+import { href, narrow } from "../routes";
+import { MoreMenu } from "../settings/cards";
 import type { Install } from "../settings/supervise";
-import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
-import { digestMarks, fileWords, handlingWords, sourceState, sources, whenWords, type Handling, type Source } from "./sources";
+import { AddDataset } from "./AddDataset";
+import { BringInNew } from "./BringInNew";
+import {
+  arrivesOf,
+  arrivesWords,
+  batchTail,
+  cohortWords,
+  cohorts as cohortsDoor,
+  datasetState,
+  jobs as jobsDoor,
+  lastLine,
+  record26,
+  sources,
+  STAGES,
+  stripMarks,
+  treeLines,
+  type Batch,
+  type Dataset,
+  type Rates,
+} from "./datasets";
+import { NowSection, useLiveJobs } from "./Now";
+import { fileWords, whenWords } from "./sources";
 
-type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Source[] };
+type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[]; rates: Rates | null };
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-export function DataPage({ caps, install, onChanged }: { caps: Capabilities; install: Install | null; onChanged: () => void }) {
+/** The Datasets page; `dataset` is the one the address names, #data/datasets/<name>, chosen on arrival. */
+export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabilities; install: Install | null; onChanged: () => void; dataset?: string | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
-  const [chosen, setChosen] = useState<string | null>(null);
-  const [handlingOf, setHandlingOf] = useState<Source | null>(null);
-  const [bringing, setBringing] = useState(false);
-  const [packs, setPacks] = useState<Pack[]>([]);
+  const [chosen, setChosen] = useState<string | null>(dataset ?? null);
+  const [bringing, setBringing] = useState<Dataset | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [cohorts, setCohorts] = useState<string[]>([]);
   const [said, setSaid] = useState<string | null>(null);
   const places = useKept(placesKept);
+  const jobs = useLiveJobs(caps);
   const works = may(caps, "data:work");
-  // a source's handling is kept on its place, so changing it asks for work on the Data and the Places pages
-  const handling = needsWork(caps, "Changing how a source is handled", [
-    ["data:work", "the Data page"],
-    ["places:work", "the Places page"],
-  ]);
+  const modern = record26(caps);
+  useEffect(() => {
+    if (dataset) setChosen(dataset);
+  }, [dataset]);
 
   const read = useCallback(() => {
     sources
       .list()
-      .then((r) => setLoad({ kind: "ready", list: r.sources }))
+      .then((r) => setLoad({ kind: "ready", list: r.sources, rates: r.rates ?? null }))
       .catch((e: Error) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: e.message })));
   }, []);
 
   useEffect(() => {
     read();
     if (served(caps, "GET /api/places")) void placesKept.ensure();
-    if (served(caps, "GET /api/packs")) data.packs().then((r) => setPacks(r.packs as Pack[]), () => setPacks([]));
+    if (served(caps, "GET /api/cohorts")) cohortsDoor.list().then((r) => setCohorts(r.cohorts.map((c) => c.name)), () => setCohorts([]));
   }, [read, caps]);
 
-  // while a digest reads, the page reads again every twenty seconds
-  const reading = load.kind === "ready" && load.list.some((s) => s.digests.recent.some((d) => d.state === "running"));
+  // the datasets are read again when a job ends, and every twenty seconds while one runs
+  const openCount = (jobs.open ?? []).filter((j) => j.state !== "done" && j.state !== "failed" && j.state !== "cancelled").length;
+  const reading = load.kind === "ready" && (openCount > 0 || load.list.some((s) => s.digests.recent.some((d) => d.state === "running")));
+  useEffect(() => {
+    if (load.kind === "ready") read();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a change in the open jobs is what reads again
+  }, [openCount]);
   useEffect(() => {
     if (!reading) return;
     const t = setInterval(read, 20_000);
@@ -64,15 +90,17 @@ export function DataPage({ caps, install, onChanged }: { caps: Capabilities; ins
   }, [reading, read]);
 
   const list = load.kind === "ready" ? load.list : [];
+  const rates = load.kind === "ready" ? load.rates : null;
   const current = list.find((s) => s.name === chosen) ?? list[0] ?? null;
+  const known = [...new Set([...cohorts, ...list.map((d) => d.cohort).filter((c): c is string => typeof c === "string" && c !== "")])];
 
-  const digestNew = (s: Source) => {
+  const readAgain = (b: Batch, d: Dataset) => {
     setSaid(null);
-    ops
-      .enqueue(["digest", `@${s.name}`], `${s.name}-${new Date().toISOString().slice(0, 10)}`)
+    jobsDoor
+      .enqueue(["digest", "--name", b.name, `@${d.name}`], b.name)
       .then((j) => {
-        setSaid(`A digest of ${s.name} is queued as job ${j.job}; the page shows it once it starts.`);
-        read();
+        setSaid(`${b.name} is read again as job ${j.job}.`);
+        jobs.refresh();
       })
       .catch((e: Error) => setSaid(e.message));
   };
@@ -82,229 +110,263 @@ export function DataPage({ caps, install, onChanged }: { caps: Capabilities; ins
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">Data</span>
-          <h1>Sources</h1>
-          <p className="lede">Where scans come from. A source keeps every digest of it: each time files land, a digest reads what is new or changed.</p>
+          <h1>Datasets</h1>
+          <p className="lede">
+            {modern
+              ? "One dataset, one folder, one name. Identified data is pseudonymised into its own tree before anything reads it: the registry never points at an identified file."
+              : "One dataset, one folder, one name. Each keeps every batch of it: each time files land, a batch reads what is new or changed."}
+          </p>
         </div>
-        <a className="button secondary" href={href("settings", "places")}>
-          <Icon name="folder" />
-          Add a source
-        </a>
         {works && (
-          <button type="button" className="button" onClick={() => setBringing(true)}>
-            <Icon name="plus" />
-            Bring DICOM in
+          <button type="button" className="button secondary" onClick={() => setAdding(true)}>
+            <Icon name="folder" />
+            Add a dataset
+          </button>
+        )}
+        {works && current && (
+          <button type="button" className="button" onClick={() => setBringing(current)}>
+            <Icon name="play" />
+            Bring in what is new
           </button>
         )}
       </div>
-      {load.kind === "loading" && <Wait phase="reading the sources" since={load.since} size="panel" />}
-      {load.kind === "failed" && <p className="warn">The sources could not be read: {load.why}</p>}
+      {load.kind === "loading" && <Wait phase="reading the datasets" since={load.since} size="panel" />}
+      {load.kind === "failed" && <p className="warn">The datasets could not be read: {load.why}</p>}
       {load.kind === "ready" && list.length === 0 && (
         <div className="note">
           <Icon name="info" />
           <div className="note-body">
-            <p className="note-lead">No source yet.</p>
-            <p className="note-detail">A source is a folder of DICOM that NILS reads and never writes to. Bring DICOM in to add one and read it.</p>
+            <p className="note-lead">No dataset yet.</p>
+            <p className="note-detail">A dataset is a folder of DICOM with a name. {modern ? "What arrives identified is pseudonymised into its own tree before the registry reads it." : "NILS reads it and never writes to it."} Add one to bring its files in.</p>
           </div>
         </div>
       )}
       {list.length > 0 && (
-        <div className="source-cards">
-          {list.map((s) => (
-            <SourceCard key={s.id} source={s} on={current?.id === s.id} onPick={() => setChosen(s.name)} />
+        <div className="sgrid">
+          {list.map((d) => (
+            <DatasetCard
+              key={d.id}
+              dataset={d}
+              on={current?.id === d.id}
+              works={works}
+              onPick={() => setChosen(d.name)}
+              onBringIn={() => setBringing(d)}
+            />
           ))}
         </div>
       )}
-      {current && (
-        <Digests
-          source={current}
-          works={works}
-          handling={handling}
-          said={said}
-          onDigest={() => digestNew(current)}
-          onHandling={() => setHandlingOf(current)}
-        />
+      {said && <p className="meta">{said}</p>}
+      <NowSection caps={caps} jobs={jobs} onSaid={setSaid} />
+      {current && <Batches dataset={current} works={works} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
+      {modern && list.length > 0 && (
+        <div className="note gated">
+          <Icon name="lock" />
+          <div className="note-body">
+            <p className="note-lead">One person is one subject, wherever they come from, under however many numbers</p>
+            <p className="note-detail">
+              Every identifier a person was ever seen under is filed on their one subject in the sealed store, so any of them arriving in any dataset lands on the same code. An identifier the store does not know holds its files until someone maps it. UIDs are kept, so a study brought in twice is the same study.
+            </p>
+          </div>
+        </div>
       )}
-      {handlingOf && (
-        <HandlingDialog
-          source={handlingOf}
-          onClose={() => setHandlingOf(null)}
-          onSaved={() => {
-            setHandlingOf(null);
+      {bringing && (
+        <BringInNew
+          caps={caps}
+          dataset={bringing}
+          rates={rates}
+          onClose={() => setBringing(null)}
+          onDone={(words) => {
+            setBringing(null);
+            setSaid(words);
+            jobs.refresh();
             read();
           }}
         />
       )}
-      {bringing && (
-        <Dialog title="Bring DICOM in" icon="folder" onClose={() => setBringing(false)} foot={<span className="meta">Each folder you tick becomes a digest of its own.</span>}>
-          <BringInForm
-            caps={caps}
-            install={install}
-            places={places.value?.places ?? []}
-            packs={packs}
-            onDone={(words) => {
-              setBringing(false);
-              void placesKept.refresh().catch(() => undefined);
-              onChanged();
-              // what was queued, said on the page once the dialog closes
-              if (words) setSaid(words);
-              read();
-            }}
-          />
-        </Dialog>
+      {adding && (
+        <AddDataset
+          caps={caps}
+          install={install}
+          places={places.value?.places ?? []}
+          cohorts={known}
+          onClose={() => setAdding(false)}
+          onDone={(words) => {
+            setAdding(false);
+            setSaid(words);
+            void placesKept.refresh().catch(() => undefined);
+            onChanged();
+            jobs.refresh();
+            read();
+          }}
+        />
       )}
     </section>
   );
 }
 
-function SourceCard({ source: s, on, onPick }: { source: Source; on: boolean; onPick: () => void }) {
-  const state = sourceState(s);
-  const handled = handlingWords(s.handling);
+function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onPick: () => void; onBringIn: () => void }) {
+  const { dataset: d, on, works, onPick, onBringIn } = props;
+  const state = datasetState(d);
+  const arrives = arrivesWords(arrivesOf(d));
+  const cohort = cohortWords(d);
+  const trees = treeLines(d);
   return (
-    <button type="button" className={on ? "source-card on" : "source-card"} aria-pressed={on} onClick={onPick}>
-      <span className="source-name">
+    <div className={on ? "scard on" : "scard"} aria-current={on ? "true" : undefined} onClick={onPick}>
+      <div className="name">
         <Icon name="folder" />
-        <span className="grow">{s.name}</span>
-        <span className={`tag ${state.tone === "neutral" ? "" : state.tone}`}>{state.words}</span>
-      </span>
-      <span className="source-path">{s.path}</span>
-      <span className={s.handling.arrives === "identified" ? "source-handling gated" : "source-handling ok"}>
-        <Icon name={s.handling.arrives === "identified" ? "lock" : "shield"} />
-        {handled.arrives}
-      </span>
-      <span className="source-nums">
-        <span>
-          <b>{n(s.totals.subjects)}</b>subjects
+        <button type="button" className="scard-pick grow" aria-pressed={on} onClick={onPick}>
+          {d.name}
+        </button>
+        <span className={state.tone === "neutral" ? "tag" : `tag ${state.tone}`}>{state.words}</span>
+        <span onClick={(e) => e.stopPropagation()}>
+          <MoreMenu label={`More for ${d.name}`}>
+            {works && (
+              <button type="button" onClick={onBringIn}>
+                Bring in what is new
+              </button>
+            )}
+            <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>
+          </MoreMenu>
         </span>
-        <span>
-          <b>{n(s.totals.sessions)}</b>sessions
-        </span>
-        <span>
-          <b>{n(s.totals.stacks)}</b>stacks
-        </span>
-      </span>
-      <span className="meta">
-        {s.digests.count === 0 ? "not read yet" : `${s.digests.count} ${s.digests.count === 1 ? "digest" : "digests"} · last ${whenWords(s.digests.last?.started_at ?? null)}`}
-      </span>
-    </button>
-  );
-}
-
-function Digests(props: { source: Source; works: boolean; handling: string | null; said: string | null; onDigest: () => void; onHandling: () => void }) {
-  const { source: s, works, handling, said, onDigest, onHandling } = props;
-  const handled = handlingWords(s.handling);
-  return (
-    <section className="panel digests">
-      <div className="digests-head">
-        <div className="grow">
-          <h2>Digests of {s.name}</h2>
-          <p className="meta">
-            {handled.arrives}; {handled.release}
-            {s.totals.refused_files > 0 ? ` · ${n(s.totals.refused_files)} files refused` : ""}
-          </p>
-        </div>
-        {handling === null && (
-          <button type="button" className="button secondary small" onClick={onHandling}>
-            <Icon name="pencil" />
-            Handling
-          </button>
-        )}
-        {works && (
-          <button type="button" className="button small" onClick={onDigest}>
-            <Icon name="play" />
-            Digest what is new
-          </button>
-        )}
       </div>
-      {handling !== null && <p className="meta digests-said">{handling}</p>}
-      {said && <p className="meta digests-said">{said}</p>}
-      {s.digests.recent.length === 0 && <p className="meta digests-said">Nothing has read this source yet.</p>}
-      {s.digests.recent.map((d) => (
-        <div key={d.id} className="digest-row">
-          <span className="num digest-when">{whenWords(d.started_at)}</span>
-          <div className="digest-name">
-            <span className="path">{d.name}</span>
-            <span className="meta">{d.state === "running" ? `reading: ${n(d.files.seen)} files so far` : fileWords(d)}</span>
-          </div>
-          <div className="marks" aria-label="walked, digested, classified, reviewed">
-            {digestMarks(d).map((m) => (
-              <span key={m.name} className="mark-cell" title={`${m.name}: ${m.words}`}>
-                <i className={`mark ${m.mark}`} />
-                <span className="meta">{m.words}</span>
-              </span>
-            ))}
-          </div>
-          <span className="digest-state">
-            {d.state === "running" ? <span className="tag brand">reading</span> : (d.to_sort ?? 0) > 0 ? <span className="tag caution">{n(d.to_sort ?? 0)} to sort</span> : d.state === "done" ? <span className="tag ok">sorted</span> : <span className="tag">{d.state}</span>}
+      <span className="where">{d.path}</span>
+      <div className="row">
+        <span className={`privacy ${arrives.tone}`}>
+          <Icon name={arrives.icon} />
+          {arrives.words}
+        </span>
+        {cohort && (
+          <span className={d.cohort ? "tag brand users" : "tag"}>
+            {d.cohort && <Icon name="users" />}
+            {cohort}
           </span>
+        )}
+      </div>
+      {trees.length > 0 && (
+        <div className="trees">
+          {trees.map((t, i) => (
+            <span key={t.path}>
+              {i > 0 && <Icon name="arrow" />}
+              <Icon name={t.icon} />
+              <span className="path">{t.path}</span> {t.words}
+            </span>
+          ))}
         </div>
-      ))}
-      {s.digests.count > s.digests.recent.length && <p className="meta digests-said">The {s.digests.recent.length} newest of {s.digests.count} digests.</p>}
-    </section>
+      )}
+      <div className="nums">
+        <div>
+          <b>{n(d.totals.subjects)}</b>
+          <span>subjects</span>
+        </div>
+        <div>
+          <b>{n(d.totals.stacks)}</b>
+          <span>stacks</span>
+        </div>
+        <div>
+          <b>{n(d.digests.count)}</b>
+          <span>{d.digests.count === 1 ? "batch" : "batches"}</span>
+        </div>
+      </div>
+      <span className="meta">{lastLine(d)}</span>
+    </div>
   );
 }
 
-function HandlingDialog({ source: s, onClose, onSaved }: { source: Source; onClose: () => void; onSaved: () => void }) {
-  const [h, setH] = useState<Handling>(s.handling);
-  const [why, setWhy] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const refused = h.on_release.dates !== "keep" && h.on_release.uids === "preserve";
-  const release = (patch: Partial<Handling["on_release"]>) => setH((was) => ({ ...was, on_release: { ...was.on_release, ...patch } }));
-  const save = () => {
-    setSaving(true);
-    setWhy(null);
-    sources
-      .setHandling(s.id, h)
-      .then(onSaved)
-      .catch((e: Error) => {
-        setSaving(false);
-        setWhy(e.message);
-      });
-  };
-  const choice = (name: string, checked: boolean, onPick: () => void, words: string) => (
-    <label className="choice">
-      <input type="radio" name={name} checked={checked} onChange={onPick} />
-      {words}
-    </label>
-  );
+function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; works: boolean; onBringIn: () => void; onAgain: (b: Batch) => void }) {
+  const recent = d.digests.recent;
+  const held = d.held?.files ?? 0;
   return (
-    <Dialog
-      title={`How ${s.name} is handled`}
-      icon="lock"
-      onClose={onClose}
-      foot={
-        <div className="row actions">
-          <button type="button" className="button" disabled={saving || refused} onClick={save}>
-            Save
+    <section className="stack roomy" aria-label={`the batches of ${d.name}`}>
+      <div className="section-head rule-top">
+        <h2>Batches of {d.name}</h2>
+        <span className="meta">
+          each time new files were brought in
+          {d.totals.refused_files > 0 ? ` · ${n(d.totals.refused_files)} files refused` : ""}
+          {held > 0 ? ` · ${n(held)} held until mapped` : ""}
+        </span>
+        <a className="button secondary small" href={href("data", "datasets", d.name, "pseudonymisation")}>
+          Pseudonymisation
+        </a>
+        {works && (
+          <button type="button" className="button small" onClick={onBringIn}>
+            <Icon name="play" />
+            Bring in what is new
           </button>
-          <button type="button" className="button secondary" onClick={onClose}>
-            Cancel
-          </button>
-          {why && <span className="warn">{why}</span>}
+        )}
+      </div>
+      {recent.length === 0 && <p className="meta">Nothing has read this dataset yet.</p>}
+      {recent.length > 0 && (
+        <div className="table-wrap">
+          <table className="thin batches">
+            <thead>
+              <tr>
+                <th>Batch</th>
+                <th>When</th>
+                <th>Files</th>
+                <th>Subjects</th>
+                <th className="strip-head">{STAGES.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" · ")}</th>
+                <th className="acts">
+                  <span className="sr-only">Next</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {recent.map((b) => {
+                const marks = stripMarks(b);
+                const tail = batchTail(b);
+                return (
+                  <tr key={b.id}>
+                    <td>
+                      <a className="path batch-link" href={href("data", "batch", String(b.id))}>
+                        {b.name}
+                      </a>
+                    </td>
+                    <td className="num">{whenWords(b.started_at)}</td>
+                    <td className="num">{b.state === "running" ? `${n(b.files.seen)} so far` : fileWords(b)}</td>
+                    <td className="num">{b.subjects_added === 0 ? "none new" : `${n(b.subjects_added)} new`}</td>
+                    <td>
+                      <div className="mini five" role="img" aria-label={marks.map((m) => `${m.name}: ${m.words}`).join(", ")} title={marks.map((m) => `${m.name}: ${m.words}`).join("\n")}>
+                        {marks.map((m) => (
+                          <i key={m.name} className={m.mark === "none" ? undefined : m.mark} />
+                        ))}
+                      </div>
+                    </td>
+                    <td className="acts">
+                      {tail.kind === "held" && (
+                        <a className="tail" href={href("data", "datasets", d.name, "pseudonymisation")}>
+                          {tail.words}
+                          <Icon name="chevron-right" />
+                        </a>
+                      )}
+                      {tail.kind === "sort" && (
+                        <a className="tail" href={narrow(href("review"), { batch: b.id })}>
+                          {tail.words}
+                          <Icon name="chevron-right" />
+                        </a>
+                      )}
+                      {tail.kind === "again" && works && (
+                        <button type="button" className="link-button tail" onClick={() => onAgain(b)}>
+                          {tail.words}
+                          <Icon name="chevron-right" />
+                        </button>
+                      )}
+                      {tail.kind === "again" && !works && <span className="tag">{b.state}</span>}
+                      {tail.kind === "reading" && <span className="tag brand">reading</span>}
+                      {tail.kind === "sorted" && (
+                        <span className="tag ok">
+                          <Icon name="check" />
+                          sorted
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      }
-    >
-      <div className="field">
-        <span className="label">What comes in</span>
-        {choice("arrives", h.arrives === "identified", () => setH({ ...h, arrives: "identified" }), "Identified, as the scanners send it")}
-        {choice("arrives", h.arrives === "deidentified", () => setH({ ...h, arrives: "deidentified" }), "Already de-identified")}
-      </div>
-      <div className="field">
-        <span className="label">Dates, when it is released</span>
-        {choice("dates", h.on_release.dates === "keep", () => release({ dates: "keep" }), "Kept as recorded")}
-        {choice("dates", h.on_release.dates === "shift", () => release({ dates: "shift" }), "Shifted, by one offset per subject")}
-        {choice("dates", h.on_release.dates === "year", () => release({ dates: "year" }), "Cut to the year")}
-      </div>
-      <div className="field">
-        <span className="label">UIDs, when it is released</span>
-        {choice("uids", h.on_release.uids === "remap", () => release({ uids: "remap" }), "Remapped")}
-        {choice("uids", h.on_release.uids === "preserve", () => release({ uids: "preserve" }), "Preserved")}
-      </div>
-      <label className="choice">
-        <input type="checkbox" checked={h.on_release.deface} onChange={(e) => release({ deface: e.target.checked })} />
-        Faces removed before it leaves
-      </label>
-      {refused && <p className="warn">Dates that move cannot keep the original UIDs. Remap the UIDs, or keep the dates.</p>}
-      <p className="meta">Subject codes are pseudonymous in every source. A release reads this handling; defacing is a pipeline still to be built, so for now the choice is kept for it.</p>
-    </Dialog>
+      )}
+      {d.digests.count > recent.length && <p className="meta">The {recent.length} newest of {d.digests.count} batches.</p>}
+    </section>
   );
 }

@@ -72,9 +72,9 @@ export function keeper<T>(read: () => Promise<T>): Keeper<T> {
   };
 }
 
-/** What a keeper holds now, drawn again whenever it changes. */
+/** What a keeper holds now, drawn again whenever it changes; the same when a page is drawn to static markup. */
 export function useKept<T>(k: Keeper<T>): Kept<T> {
-  return useSyncExternalStore(k.subscribe, k.get);
+  return useSyncExternalStore(k.subscribe, k.get, k.get);
 }
 
 /** How long ago something was read: just now, 4 minutes ago, 2 hours ago. */

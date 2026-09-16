@@ -242,15 +242,19 @@ table.thin th.tick, table.thin td.tick { width: 30px; }
 .update-head h2 { flex: 1; color: var(--n-text); }
 .update ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.2rem; }
 .update-foot { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-.section-head { display: flex; align-items: baseline; gap: 0.6rem; padding-top: 0.6rem; }
-.section-head h2 { flex: 1; }
+/* a section's head wraps on a narrow window: the title keeps its line, and what stands beside it and its buttons go under */
+.section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.3rem 0.6rem; padding-top: 0.6rem; }
+/* the title's basis is its own width, so a head wraps what stands beside it under the title rather than squeeze the title to a word a line */
+.section-head h2 { flex: 1 1 auto; }
 .stack { display: grid; gap: 0.3rem; }
 /* a scroll wrapper holds what is set absolutely inside it, or a hidden label in a far column widens the page */
 .table-wrap { overflow-x: auto; position: relative; }
 .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
 .card { padding: 1rem 1.1rem; display: grid; gap: 0.65rem; align-content: start; }
-.card-head { gap: 0.6rem; }
-.card-head h2 { flex: 1; }
+/* a card's head wraps too, and a line that points on from a card breaks rather than widen it */
+.card-head { flex-wrap: wrap; gap: 0.3rem 0.6rem; }
+.card-head h2 { flex: 1 1 auto; }
+.card .tail { white-space: normal; }
 .card table.thin tr:last-child td { border-bottom: 0; }
 .restart-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .restart-row .input { min-height: 1.65rem; font-size: var(--n-text-size-small); }
@@ -1069,3 +1073,281 @@ button.steps-line:hover { background: var(--n-bg-hover); }
   .side, .side.open, .side-gap, .side-pages, .side-chevron { transition: none; }
   .dialog[open], .dialog[open]::backdrop { animation: none; }
 }
+
+/* ------------------------------------------------------------ record 26, D1: the Data page as shape C (datasets with two trees, Now from the event stream, the batches with five marks, Add a dataset, Bring in what is new) */
+.sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); gap: 0.9rem; }
+.scard { display: grid; gap: 0.55rem; align-content: start; min-width: 0; padding: 0.85rem 0.95rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); cursor: pointer; }
+.scard:hover { border-color: var(--n-brand-line); }
+.scard.on { border-color: var(--n-brand-line); box-shadow: inset 0 3px 0 var(--n-brand); }
+.scard .name { display: flex; align-items: center; gap: 0.5rem; min-width: 0; font-weight: 600; }
+.scard .name > .i { color: var(--n-text-faint); }
+.scard-pick { min-width: 0; padding: 0; border: 0; background: transparent; color: var(--n-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scard-pick:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 2px; border-radius: 2px; }
+.scard .where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: 12.5px; color: var(--n-text-faint); }
+.scard > .row { flex-wrap: wrap; gap: 0.3rem 0.6rem; }
+.scard .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
+.scard .nums b { display: block; font-family: var(--n-font-serif); font-weight: 400; font-size: 1.15rem; line-height: 1.2; }
+.scard .nums span { font-size: 12px; color: var(--n-text-faint); }
+.scard > .meta { overflow-wrap: anywhere; }
+.scard .more-menu > summary { min-height: 1.5rem; padding: 0 0.3rem; }
+.scard .more-list > a, .scard .more-list > a:hover { padding: 0.4rem 0.55rem; border-radius: var(--n-radius); color: var(--n-text); font-size: var(--n-text-size-small); text-decoration: none; }
+.scard .more-list > a:hover { background: var(--n-bg-hover); }
+.privacy { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 12px; font-weight: 500; }
+.privacy.gated { color: var(--n-gated-fg); }
+.privacy.ok { color: var(--n-ok-fg); }
+.tag.users .i { width: 12px; height: 12px; }
+/* the two trees of a dataset */
+.trees { display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.5rem; font-size: 12.5px; color: var(--n-text-dim); }
+.trees > span { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; min-width: 0; }
+.trees .i { flex: none; width: 13px; height: 13px; color: var(--n-text-faint); }
+.trees .path { font-size: 12px; white-space: nowrap; }
+/* the five marks of a batch in its row */
+.mini { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; min-width: 7rem; }
+.mini.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.mini i { display: block; height: 6px; border-radius: 2px; background: var(--n-bg-sunken); }
+.mini i.done { background: var(--n-ok-icon); }
+.mini i.now { background: var(--n-brand); }
+.mini i.wait { background: var(--n-caution-icon); }
+.mini i.failed { background: var(--n-blocked-icon); }
+table.thin.batches th.strip-head { width: 30%; }
+table.thin.batches .batch-link { font-weight: 500; overflow-wrap: anywhere; }
+/* a link or a button that ends a line and points on (the Data page, a batch's page, the Pseudonymisation page and the cohorts share it) */
+.tail { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+.tail .i { width: 13px; height: 13px; flex: none; color: var(--n-text-faint); }
+button.tail { padding: 0; font: inherit; }
+button.tail.link-button { justify-self: start; white-space: normal; text-align: left; }
+button.tail.link-button:disabled { color: var(--n-text-faint); cursor: default; text-decoration: none; }
+/* the stage strip: one cell a stage, its top edge in the stage's colour; the batch page, the Data page's small strip and the Rules page's pack strip share it */
+.strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.strip.five { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.strip > div { display: grid; gap: 0.15rem; align-content: start; min-width: 0; padding: 0.55rem 0.7rem 0.6rem; border-top: 4px solid var(--n-bg-sunken); background: var(--n-bg-raised); }
+.strip > div.done { border-top-color: var(--n-ok-icon); }
+.strip > div.now { border-top-color: var(--n-brand); }
+.strip > div.wait { border-top-color: var(--n-caution-icon); }
+.strip > div.failed { border-top-color: var(--n-blocked-icon); }
+.strip .k { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--n-text-faint); }
+.strip .v { font-family: var(--n-font-serif); font-size: 1.35rem; line-height: 1.15; min-height: 1.15em; }
+.strip .v small { font-family: var(--n-font-sans); font-size: 13px; color: var(--n-text-faint); }
+.strip .meta { min-width: 0; overflow-wrap: anywhere; }
+.strip.small > div { padding: 0.3rem 0.5rem 0.35rem; border-top-width: 3px; }
+.strip.small .v { font-size: 1.05rem; }
+.strip.small .k { font-size: 11px; }
+/* the jobs now, from the engine's event stream: the Data page and Pipelines share the cards */
+.jobs-now { display: grid; gap: 0.5rem; }
+.job { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 0.2rem 0.8rem; align-items: center; padding: 0.65rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.job > .sq { grid-row: 1 / span 2; width: 32px; height: 32px; }
+.job > .what { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.6rem; min-width: 0; }
+.job > .what b { font-weight: 500; }
+.job > .what .meta { overflow-wrap: anywhere; }
+.job > .acts { grid-column: 3; grid-row: 1 / span 2; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.3rem; }
+.job > .how { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.7rem; min-width: 0; }
+.job .local-track { flex: 1 1 8rem; max-width: 18rem; }
+.job.queued { background: transparent; border-style: dashed; }
+.job.failed { border-color: var(--n-blocked-line); }
+.job.cancelled, .job.done { color: var(--n-text-dim); }
+.job .blocked .reason { max-width: 12rem; text-align: right; }
+.now-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 1rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.now-line > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.now-line .i { width: 13px; height: 13px; }
+/* the steps of a bring-in and of a v0 folder, a batch's timeline and a station's run, as a timeline */
+.tl { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; }
+.tl li { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 0.6rem; padding: 0.35rem 0; font-size: 14px; }
+.tl li::before { content: ""; width: 8px; height: 8px; margin: 6px 0 0 3px; border-radius: 50%; background: var(--n-neutral-icon); }
+.tl li.done::before { background: var(--n-ok-icon); }
+.tl li.now::before { background: var(--n-brand); }
+.tl li.wait::before { background: var(--n-caution-icon); }
+.tl li.failed::before { background: var(--n-blocked-icon); }
+.tl li + li::after { content: ""; position: absolute; top: -8px; left: 6.5px; height: 14px; border-left: 1px solid var(--n-line); }
+.tl li > span { display: grid; gap: 0.1rem; min-width: 0; }
+.tl .meta { display: block; overflow-wrap: anywhere; }
+.tl b { font-weight: 500; }
+/* Add a dataset and Bring in what is new */
+.dataset-names { align-items: start; }
+.batch-name { max-width: 18rem; }
+.map-columns { display: grid; gap: 0.5rem; }
+.map-columns table.thin td { padding-top: 0.3rem; padding-bottom: 0.3rem; }
+.map-columns .input { min-height: 1.9rem; }
+.report { display: grid; gap: 0.2rem; margin: 0; padding: 0 0 0 1.1rem; font-size: var(--n-text-size-small); }
+dl.facts .input { display: inline-flex; }
+@media (max-width: 860px) {
+  /* on a narrow window the five stages keep two a row, and a job's acts go under its words */
+  .strip, .strip.five { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .job { grid-template-columns: 32px minmax(0, 1fr); }
+  .job > .acts { grid-column: 2; grid-row: auto; justify-content: flex-start; }
+  .job > .sq { grid-row: 1; }
+  .job .blocked .reason { text-align: left; }
+}
+@media (max-width: 640px) {
+  table.thin.batches th:nth-child(3), table.thin.batches td:nth-child(3), table.thin.batches th:nth-child(4), table.thin.batches td:nth-child(4) { display: none; }
+}
+
+/* ---------------------------------------------------------------- record 26, D2: a batch's page, a dataset's Pseudonymisation page, and Pipelines as the jobs */
+/* a page with an aside: the main column and, at the right, the cards that stand beside it */
+.bpage { display: grid; grid-template-columns: minmax(0, 1fr) 22rem; gap: 1.1rem 1.4rem; align-items: start; max-width: 76rem; }
+.bpage > .main { display: grid; gap: 1.1rem; min-width: 0; }
+.bpage > .aside { display: grid; gap: 1.1rem; min-width: 0; }
+.bpage .data-head { align-items: flex-end; }
+/* the trail above a page: where it was opened from; a batch's page, a dataset's Pseudonymisation and a cohort's page share it */
+.trail { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; min-width: 0; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.trail .i { width: 13px; height: 13px; }
+.trail > span:last-child { color: var(--n-text-dim); overflow-wrap: anywhere; }
+/* a count by name as bars, the unsure in the caution colour */
+.bybase { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 0.35rem 0.8rem; align-items: center; font-size: 14px; }
+.bybase .bar { height: 8px; border-radius: 2px; background: var(--n-bg-sunken); overflow: hidden; }
+.bybase .bar i { display: block; height: 100%; background: var(--n-brand-line); }
+.bybase .bar i.unsure { background: var(--n-caution-icon); }
+.bybase-row { display: contents; }
+/* counts by reason, or by shape */
+.reasons { display: grid; gap: 0.3rem; }
+.reason { display: grid; grid-template-columns: minmax(0, 1fr) max-content; gap: 0.6rem; align-items: baseline; font-size: 14px; }
+.reason b { font-family: var(--n-font-serif); font-weight: 400; }
+/* the two trees of a dataset */
+.tree-card { display: grid; gap: 0.3rem; min-width: 0; padding: 0.7rem 0.85rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); font-size: 14px; }
+.tree-card.on { background: var(--n-bg-raised); border-color: var(--n-brand-line); box-shadow: inset 0 3px 0 var(--n-brand); }
+.tree-card .row { gap: 0.4rem; }
+.tree-card .path { min-width: 0; overflow-wrap: anywhere; }
+.tree-card .meta { overflow-wrap: anywhere; }
+.panel.card.held { border-color: var(--n-caution-line); }
+.held-lede { font-size: 14px; }
+.radio-row.off { color: var(--n-text-faint); cursor: default; }
+.column-role { display: grid; gap: 0.3rem; min-width: 16rem; }
+/* the identity-check station's run, as a panel on the page */
+.check { gap: 0.9rem; }
+.check-head { align-items: flex-start; gap: 0.8rem; }
+.check-head > .grow { display: grid; gap: 0.2rem; min-width: 0; }
+.check .panel.card { padding: 0.8rem 0.9rem; }
+/* the jobs as cards, on their own page */
+.pipelines { display: grid; gap: 1.1rem; align-content: start; max-width: 76rem; }
+@media (max-width: 1100px) {
+  .bpage { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .column-role { min-width: 12rem; }
+}
+/* ---------------------------------------------------------------- end of record 26, D2 */
+
+/* ---------------------------------------------------------------- record 26: Data / Cohorts, a cohort's page, New cohort from a card, and the Release page */
+/* the cohorts as cards: what waits on each, where its members come from, its three numbers and its last line; the dashed card makes a new one */
+.ccard, a.ccard, a.ccard:hover { display: grid; gap: 0.5rem; align-content: start; min-width: 0; padding: 0.85rem 0.95rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; text-align: left; text-decoration: none; }
+a.ccard:hover { border-color: var(--n-brand-line); }
+.ccard.new { border-color: var(--n-brand-line); box-shadow: inset 0 3px 0 var(--n-brand); }
+.ccard .name { display: flex; align-items: center; gap: 0.5rem; min-width: 0; font-weight: 600; }
+.ccard .name > .i { color: var(--n-text-faint); }
+.ccard .name .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ccard .from { display: flex; align-items: flex-start; gap: 0.35rem; min-width: 0; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.ccard .from > .i { width: 14px; height: 14px; margin-top: 3px; color: var(--n-text-faint); }
+.ccard .from-words { min-width: 0; overflow-wrap: anywhere; }
+.ccard .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; font-size: 12px; color: var(--n-text-faint); }
+.ccard .nums b { display: block; font-family: var(--n-font-serif); font-size: 1.15rem; font-weight: 400; line-height: 1.2; color: var(--n-text); }
+.ccard .meta { overflow-wrap: anywhere; }
+button.ccard.add { place-content: center; justify-items: center; border-style: dashed; background: transparent; color: var(--n-text-faint); text-align: center; cursor: pointer; }
+button.ccard.add:hover { border-color: var(--n-brand-line); color: var(--n-brand-text); }
+.ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.9rem; }
+.way { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 0.15rem 0.7rem; align-content: start; padding: 0.8rem 0.9rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.way > .sq { grid-row: 1 / span 3; }
+.way > b { font-weight: 500; }
+.way > .meta { grid-column: 2; }
+.way > .row { grid-column: 2; padding-top: 0.2rem; }
+.retired > summary { cursor: pointer; }
+.retired-list { display: grid; gap: 0.25rem; margin: 0.4rem 0 0; padding-left: 1.1rem; }
+.retired-list li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; }
+/* a cohort's page: the main column and its aside, the trail above, the four tiles and the step chart */
+.cpage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 22rem); gap: 1.1rem 1.4rem; align-items: start; max-width: 76rem; }
+.cpage > .main { display: grid; gap: 1.1rem; min-width: 0; }
+.cpage > .aside { display: grid; gap: 1.1rem; min-width: 0; }
+.cpage .data-head h1 { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.cpage .data-head h1 .tag { font-family: var(--n-font-sans); }
+.cohort-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+.cohort-strip > div { display: grid; gap: 0.15rem; align-content: start; min-width: 0; padding: 0.55rem 0.7rem 0.6rem; border-top: 4px solid var(--n-bg-sunken); background: var(--n-bg-raised); }
+.cohort-strip > div.done { border-top-color: var(--n-ok-icon); }
+.cohort-strip > div.wait { border-top-color: var(--n-caution-icon); }
+.cohort-strip .k { font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--n-text-faint); }
+.cohort-strip .v { font-family: var(--n-font-serif); font-size: 1.35rem; line-height: 1.15; }
+.cohort-strip .meta { min-width: 0; overflow-wrap: anywhere; }
+.cohort-strip .tail { justify-self: start; margin-top: 0.15rem; font-size: var(--n-text-size-small); }
+.chart { display: block; width: 100%; height: auto; overflow: visible; }
+.chart .axis { stroke: var(--n-line); stroke-width: 1; }
+.chart .lab { fill: var(--n-text-faint); font: 11px var(--n-font-sans); }
+.chart .val { fill: var(--n-text-dim); font: 500 11px var(--n-font-sans); }
+.chart .area { fill: var(--n-brand-soft); }
+.chart .line { fill: none; stroke: var(--n-brand-text); stroke-width: 1.6; stroke-linejoin: round; }
+.chart .end { fill: var(--n-brand-text); }
+table.thin.joins td { vertical-align: top; }
+table.thin.joins td:nth-child(2) { overflow-wrap: anywhere; }
+/* the releases as a table, a withdrawn one dimmed; New release's session scheme and export place inside its facts */
+table.thin.releases td.num, table.thin.releases td.nowrap { white-space: nowrap; }
+table.thin.releases tr.withdrawn td { color: var(--n-text-faint); }
+table.thin.releases tr.withdrawn td b { text-decoration: line-through; text-decoration-color: var(--n-text-faint); }
+dl.facts .input.scheme { min-height: 1.75rem; font-size: var(--n-text-size-small); }
+dl.facts .row.wrap { flex-wrap: wrap; gap: 0.3rem 0.6rem; }
+dl.facts .row.wrap .input { min-height: 1.75rem; }
+.choices > .input { margin-left: calc(16px + 0.55rem); }
+@media (max-width: 1100px) {
+  .cpage { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 860px) {
+  .ways { grid-template-columns: minmax(0, 1fr); }
+  /* a release's row keeps its name, subjects, when and whether it was handed over; the rest is on wider windows */
+  table.thin.releases th:nth-child(2), table.thin.releases td:nth-child(2), table.thin.releases th:nth-child(3), table.thin.releases td:nth-child(3), table.thin.releases th:nth-child(4), table.thin.releases td:nth-child(4), table.thin.releases th:nth-child(5), table.thin.releases td:nth-child(5), table.thin.releases th:nth-child(7), table.thin.releases td:nth-child(7), table.thin.releases th:nth-child(9), table.thin.releases td:nth-child(9) { display: none; }
+  /* a join's who and its link go on wider windows; when, what and how many stay */
+  table.thin.joins th:nth-child(4), table.thin.joins td:nth-child(4) { display: none; }
+}
+@media (max-width: 640px) {
+  .cohort-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cpage .data-head > .button { flex: 1 1 auto; }
+}
+/* ---------------------------------------------------------------- end of record 26: Data / Cohorts, a cohort's page, New cohort from a card, and the Release page */
+
+/* ---------------------------------------------------------------- record 26, D4: the Review page (the queue by cohort, the rules with every axis, the identifiers), Why is this, the viewer in its dialog, and a station's run */
+/* the page's three sub-pages as chips under the head, the cohorts, and what was just done */
+.review .chips.pages a { text-decoration: none; }
+.review .chips.pages a:hover { border-color: var(--n-brand-line); color: var(--n-text); }
+.review .chips.pages a.on:hover { color: var(--n-brand-fg); }
+.review .chips .opt b { margin-left: 0.35rem; font-weight: 500; }
+.review .chips-note { margin-left: 0.4rem; }
+.review .said { display: flex; align-items: center; gap: 0.4rem; color: var(--n-ok-fg); }
+/* the three kinds on top, each a card with its count first */
+.needs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.9rem; }
+.need { display: grid; gap: 0.3rem; align-content: start; min-width: 0; padding: 0.75rem 0.9rem; border: 1px solid var(--n-caution-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.need.quiet { border-color: var(--n-line); color: var(--n-text-dim); }
+.need .value { font-family: var(--n-font-serif); font-size: 1.45rem; line-height: 1.15; color: var(--n-text); }
+.need .row { padding-top: 0.2rem; }
+/* the queue: a decided row fades, the acts keep to the right */
+table.thin.queue tr.decided td { color: var(--n-text-faint); }
+table.thin.queue td.path, table.thin.rules td.words .path { overflow-wrap: anywhere; }
+/* the rules: the pack strip in one line of four, the axes rail, the words with the site's on top */
+.review .section-head .chips { flex: 0 1 auto; }
+table.thin.rules td.words { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; min-width: 12rem; }
+table.thin.rules td.words .tag { white-space: normal; }
+table.thin.proposals td b { font-weight: 500; }
+/* the explanation's decision: the value beside its scope */
+.input.select select { padding-right: 0.2rem; }
+/* the viewer in a dialog: axial, coronal, sagittal as tabs, the stage with the server's first picture over it, the footer's numbers */
+.viewer { display: grid; gap: 0.5rem; min-width: 0; }
+.viewer-axes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; }
+.viewer-axes button { min-height: 1.65rem; padding: 0 0.65rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text-dim); font: inherit; font-size: var(--n-text-size-small); cursor: pointer; }
+.viewer-axes button.on { border-color: var(--n-brand-text); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
+.viewer-stage { position: relative; aspect-ratio: 1; max-height: 60vh; overflow: hidden; border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.viewer-element { position: absolute; inset: 0; }
+.viewer-first { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+.viewer-mpr { display: grid; gap: 0.4rem; }
+.viewer-mpr img { display: block; width: 100%; max-height: 60vh; object-fit: contain; border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.viewer-mpr input[type="range"] { width: 100%; accent-color: var(--n-brand); }
+.viewer-foot { overflow-wrap: anywhere; }
+.viewer.gated .failure { margin: 0; }
+@media (min-width: 641px) {
+  .dialog:has(.viewer) { width: min(52rem, calc(100vw - 2rem)); }
+  .dialog:has(.run) { width: min(48rem, calc(100vw - 2rem)); }
+}
+/* a station's run: its head, the phases as a timeline, the probe's shapes as bars, the acts */
+.run { display: grid; gap: 1rem; align-content: start; min-width: 0; }
+.run-head { align-items: flex-start; gap: 0.8rem; }
+.run-title { display: grid; gap: 0.2rem; min-width: 0; }
+.run-title h2 { overflow-wrap: anywhere; }
+.run-acts { flex-wrap: wrap; }
+@media (max-width: 860px) {
+  .needs { grid-template-columns: minmax(0, 1fr); }
+  /* the queue and the rules keep what a row is about in sight; the batch and the flag go under on wider windows only */
+  table.thin.queue th:nth-child(3), table.thin.queue td:nth-child(3), table.thin.rules th:nth-child(3), table.thin.rules td:nth-child(3) { display: none; }
+}
+/* ---------------------------------------------------------------- end of record 26, D4 */

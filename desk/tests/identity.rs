@@ -29,7 +29,7 @@ async fn fake_engine() -> String {
             get(|| async {
                 axum::Json(json!({
                     "engine": {"name": "nils", "version": "1.0.0-alpha.0"},
-                    "contracts": {"openapi": "4", "review_item": "4", "pack": "4", "suite": "2", "mcp": "2"},
+                    "contracts": {"openapi": "5", "review_item": "4", "pack": "5", "suite": "2", "mcp": "2"},
                     "doors": ["GET /api/capabilities", "POST /api/jobs", "GET /api/jobs", "POST /api/ask/run", "GET /api/ask/handles", "GET /api/packs"],
                     "policy": [], "auth": "oidc", "principal": "x", "roles": [], "registry": {"epoch": 1}, "packs": [],
                 }))

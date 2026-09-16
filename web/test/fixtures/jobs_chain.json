@@ -1,0 +1,63 @@
+{
+  "count": 4,
+  "jobs": [
+    {
+      "id": 122,
+      "kind": "digest",
+      "name": "incoming-2026-09-15",
+      "state": "queued",
+      "started_at": "2026-09-15T21:02:00Z",
+      "heartbeat_at": null,
+      "finished_at": null,
+      "progress": null,
+      "error": null,
+      "args": { "argv": ["digest", "@incoming"], "principal": "astrid" },
+      "result": null,
+      "then": [["fingerprint"], ["classify", "--pack", "mri"]],
+      "chain": { "before": 120, "after": null }
+    },
+    {
+      "id": 121,
+      "kind": "digest",
+      "name": "archive-2026-09-15",
+      "state": "running",
+      "started_at": "2026-09-15T21:04:00Z",
+      "heartbeat_at": "2026-09-15T21:30:00Z",
+      "finished_at": null,
+      "progress": { "seen": 11420, "parsed": 11400, "quarantined": 3, "unchanged": 0, "ingested": 11380, "elapsed_s": 1560.0, "batch_id": 10, "epoch": 400, "writes": 40 },
+      "error": null,
+      "args": { "argv": ["digest", "@archive"], "principal": "astrid" },
+      "result": null,
+      "then": [["fingerprint"], ["classify", "--pack", "mri"]],
+      "chain": { "before": null, "after": null }
+    },
+    {
+      "id": 120,
+      "kind": "pseudonymize",
+      "name": "incoming-2026-09-15",
+      "state": "running",
+      "started_at": "2026-09-15T21:02:00Z",
+      "heartbeat_at": "2026-09-15T21:03:15Z",
+      "finished_at": null,
+      "progress": { "written": 1766, "of": 2208, "held": 4, "unchanged": 0, "refused": 0, "elapsed_s": 75.0 },
+      "error": null,
+      "args": { "argv": ["pseudonymize", "@incoming"], "principal": "astrid" },
+      "result": null,
+      "then": [["digest", "@incoming"], ["fingerprint"], ["classify", "--pack", "mri"]],
+      "chain": { "before": null, "after": 122 }
+    },
+    {
+      "id": 117,
+      "kind": "digest",
+      "name": "exchange-ct",
+      "state": "failed",
+      "started_at": "2026-08-15T10:00:00Z",
+      "heartbeat_at": "2026-08-15T10:00:05Z",
+      "finished_at": "2026-08-15T10:00:06Z",
+      "progress": { "seen": 0, "parsed": 0, "quarantined": 0, "unchanged": 0, "ingested": 0, "elapsed_s": 5.0 },
+      "error": "no pack reads CT",
+      "args": { "argv": ["digest", "@exchange-ct"], "principal": "astrid" },
+      "result": null
+    }
+  ]
+}

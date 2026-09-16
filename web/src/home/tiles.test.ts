@@ -63,6 +63,13 @@ describe("the words", () => {
     const s = summary({ epoch: 1412, subjects: { total: 48, by_cohort: {} }, sessions: { total: 172, by_cohort: {} }, stacks: { total: 1, by_cohort: {} } });
     expect(holdsTile(s, 37)).toMatchObject({ value: "48", meta: "subjects · 172 sessions · 1 stack · epoch 1,412" });
   });
+  it("name the window the session cache was built under, where the summary says it", () => {
+    const s = summary({ epoch: 1412, subjects: { total: 48, by_cohort: {} }, sessions: { total: 172, by_cohort: {}, window_days: 90 }, stacks: { total: 1, by_cohort: {} } });
+    expect(holdsTile(s, 37)).toMatchObject({ meta: "subjects · 172 sessions in a 90-day window · 1 stack · epoch 1,412" });
+    // one session, one day, and an engine that says no window at all
+    const one = summary({ subjects: { total: 1, by_cohort: {} }, sessions: { total: 1, by_cohort: {}, window_days: 1 }, stacks: { total: 0, by_cohort: {} } });
+    expect(holdsTile(one).meta).toBe("subject · 1 session in a 1-day window · 0 stacks · epoch 0");
+  });
   it("say what needs you and what runs", () => {
     expect(needsTile(0).meta).toBe("nothing to review");
     expect(needsTile(1)).toMatchObject({ value: "1", meta: "review item open" });

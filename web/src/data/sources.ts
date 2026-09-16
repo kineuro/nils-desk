@@ -4,6 +4,7 @@
 // and the words and marks the page draws from them.
 
 import { door } from "../ask/client";
+import type { SourcesAnswer } from "./datasets";
 
 export interface Handling {
   arrives: "identified" | "deidentified";
@@ -37,9 +38,9 @@ export interface Source {
   totals: { subjects: number; studies: number; sessions: number; stacks: number; refused_files: number; to_sort: number };
 }
 
+/** The one sources door: every source as a dataset at record 26, with the fields an older engine leaves out, and the rates where the engine measured them. */
 export const sources = {
-  list: (recent = 12) => door<{ count: number; window_days: number; sources: Source[] }>("GET", `/api/sources?recent=${recent}`),
-  setHandling: (id: number, handling: Handling) => door<Record<string, unknown>>("PUT", `/api/places/${id}`, { handling }),
+  list: (recent = 12) => door<SourcesAnswer>("GET", `/api/sources?recent=${recent}`),
 };
 
 export type Mark = "done" | "now" | "wait" | "failed" | "none";

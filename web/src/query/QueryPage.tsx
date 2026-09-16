@@ -19,7 +19,9 @@ import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnos
 import { editor, setsOf } from "../ask/editor";
 import { countWords, startBody, type From, type Started } from "../ask/start";
 import type { Capabilities } from "../capabilities";
-import { sees } from "../grants";
+import { PromoteDialog } from "../data/PromoteDialog";
+import { door as served } from "../deployment";
+import { may, sees } from "../grants";
 import { objects, type DocumentRow } from "../objects/client";
 import { href } from "../routes";
 import { assistantModel, assistantOffered } from "../sections";
@@ -187,7 +189,10 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const [busy, setBusy] = useState<{ phase: string; since: number } | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const [rows, setRows] = useState<Preview | null>(null);
-  const [answered, setAnswered] = useState<{ count: number; truncated: boolean } | null>(null);
+  const [answered, setAnswered] = useState<{ count: number; truncated: boolean; handle: number; grain: string } | null>(null);
+  // record 26: a complete answer becomes a cohort, the subjects of its rows at any grain
+  const [promoting, setPromoting] = useState(false);
+  const promotable = served(caps, "POST /api/ask/handles/{id}/promote") && may(caps, "data:work");
   const [since] = useState(() => Date.now());
   const [profile, setProfile] = useState<{ set: string; field: string; value: Profile } | null>(null);
   const [profileWhy, setProfileWhy] = useState<string | null>(null);
@@ -322,7 +327,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
     ask
       .run(id)
       .then((r) => {
-        setAnswered({ count: r.row_count, truncated: r.truncated });
+        setAnswered({ count: r.row_count, truncated: r.truncated, handle: r.handle, grain: r.grain });
         setBusy(null);
       })
       .catch((e: Error) => {
@@ -564,12 +569,34 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               <span className="timeline-body">
                 <b>The answer</b>
                 <span className="meta">{answered ? `${answered.truncated ? "at least " : ""}${n(answered.count)} rows` : "not run in this view"}</span>
+                {answered && !answered.truncated && promotable && (
+                  <span className="row actions">
+                    <button type="button" className="button secondary small" disabled={busy !== null} onClick={() => setPromoting(true)}>
+                      <Icon name="users" />
+                      Make a cohort
+                    </button>
+                  </span>
+                )}
               </span>
             </div>
           </section>
           {keeping === null && !lists && <p className="meta">Starting from a list of identifiers asks to see sex and age in records.</p>}
         </aside>
       </div>
+      {promoting && answered && (
+        <PromoteDialog
+          caps={caps}
+          card={{ id, name: cardTitle((doc.ask as Json).name as string | undefined, answer), version: versions.find((v) => v.id === id)?.label ?? null }}
+          answer={{
+            handle: answered.handle,
+            rows: answered.count,
+            grain: answered.grain,
+            subjects: profile && profile.set === answer && typeof (profile.value.counts as Record<string, unknown>).subjects === "number" ? ((profile.value.counts as Record<string, unknown>).subjects as number) : null,
+            epoch: caps.engine?.registry.epoch ?? null,
+          }}
+          onClose={() => setPromoting(false)}
+        />
+      )}
     </section>
   );
 }
