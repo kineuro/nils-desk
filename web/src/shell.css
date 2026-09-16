@@ -1351,3 +1351,35 @@ table.thin.proposals td b { font-weight: 500; }
   table.thin.queue th:nth-child(3), table.thin.queue td:nth-child(3), table.thin.rules th:nth-child(3), table.thin.rules td:nth-child(3) { display: none; }
 }
 /* ---------------------------------------------------------------- end of record 26, D4 */
+
+/* ---------------------------------------------------------------- record 27: the desk says less */
+/* a fact as its value: a small label over the value, and no sentence beside it; dl.facts keeps the label-left rows of every other page */
+.values { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: 0.7rem 1.2rem; }
+.values > div { display: grid; gap: 0.1rem; align-content: start; min-width: 0; }
+.values .k { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--n-text-faint); }
+.values .v { font-size: 14.5px; line-height: 1.35; min-width: 0; overflow-wrap: anywhere; }
+/* the sentence that used to stand beside a value, closed until it is asked for */
+.says { min-width: 0; }
+.says > summary { display: inline-flex; align-items: center; gap: 0.3rem; font-size: var(--n-text-size-small); color: var(--n-brand-text); list-style: none; cursor: pointer; }
+.says > summary::-webkit-details-marker { display: none; }
+.says > summary:hover { color: var(--n-brand-hover); text-decoration: underline; text-underline-offset: 3px; }
+.says > p { max-width: 64ch; margin-top: 0.35rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
+/* how the removed tags fall in their four groups: one bar, and the legend under it */
+.tagbar { display: flex; height: 10px; overflow: hidden; border-radius: 2px; background: var(--n-bg-sunken); }
+.tagbar i { display: block; height: 100%; }
+.legend { flex-wrap: wrap; gap: 0.25rem 1rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.legend > span { display: inline-flex; align-items: center; gap: 0.35rem; min-width: 0; }
+.legend .dot { width: 9px; height: 9px; border-radius: 2px; }
+.tagbar i.patient, .dot.patient { background: var(--n-tag-patient); }
+.tagbar i.provider, .dot.provider { background: var(--n-tag-provider); }
+.tagbar i.trial, .dot.trial { background: var(--n-tag-trial); }
+.tagbar i.institution, .dot.institution { background: var(--n-tag-institution); }
+/* the two trees as a flow: the originals, an arrow, the pseudonymised tree */
+.flow-two { display: grid; grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); gap: 0.6rem; align-items: center; }
+.flow-two > .i { color: var(--n-text-faint); }
+@media (max-width: 640px) {
+  /* on a phone the two trees stack, and the arrow turns down between them */
+  .flow-two { grid-template-columns: minmax(0, 1fr); }
+  .flow-two > .i { justify-self: center; transform: rotate(90deg); }
+}
+/* ---------------------------------------------------------------- end of record 27 */

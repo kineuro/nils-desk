@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Pseudonymisation page of a dataset, in four sections: identifiers
-// become codes (the rule, the map by type, the code, where the identifiers
-// are kept, what is held, what merged); the pseudonymised tree (the two
-// trees and the tag facts, tag group by tag group); who sees what (the
-// detail levels with how many people hold each); and when it leaves (the
-// leaving policy). At the side: the files held until mapped with their
-// three ways out, the two questions the identity-check station answers,
-// and what waits on Review. Provide a map reads a CSV on this machine,
-// guesses each column, rehearses the import and files it; Change edits the
-// dataset's fields through its place, and where the originals stand is not
-// among them, since only the act that moves or removes the files writes
-// that. What a dialog was told is held here, by the page, so that reading
-// the dataset again under an open dialog never loses an answer. Every
-// control is gated on the door behind it: an engine without the door leaves
-// one line in its place.
+// The Pseudonymisation page of a dataset (record 27, R1): the value, not the
+// sentence. Identity holds the two trees, what a file's identifier is read
+// from and what the map knows; Tags holds the removed tags by group and what
+// this dataset adds to them; When it leaves holds the dates, the UIDs and the
+// faces. What used to stand in grey beside every value is behind one
+// disclosure a card. At the side: the files held until mapped with their
+// three ways out, where the originals stand with the acts on them, the two
+// questions the identity-check station answers, and what waits on Review.
+// Provide a map reads a CSV on this machine, guesses each column, rehearses
+// the import and files it; Change edits the dataset's fields through its
+// place, and where the originals stand is not among them, since only the act
+// that moves or removes the files writes that. What a dialog was told is held
+// here, by the page, so that reading the dataset again under an open dialog
+// never loses an answer. Every control is gated on the door behind it: an
+// engine without the door leaves one line in its place.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -21,13 +21,12 @@ import { needsWork } from "../access";
 import { stations, stationsServed, type StationRun, type Verdict } from "../assistant/stations";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
-import { may, sees, type Detail } from "../grants";
+import { may, sees } from "../grants";
 import { objects } from "../objects/client";
 import { ops, type ReviewItem } from "../ops/client";
 import { href } from "../routes";
 import { assistantOffered } from "../sections";
 import { messageOf } from "../settings/common";
-import { identity, RECORD_WORDS, type Access } from "../settings/identity";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -37,11 +36,9 @@ import {
   bytesWords,
   changePatch,
   datasets,
-  detailCounts,
   guessRole,
   heldGroups,
   heldLine,
-  identityWords,
   importColumns,
   leavingRefusal,
   leavingWords,
@@ -61,7 +58,6 @@ import {
   ruleWords,
   sawOf,
   shapeWords,
-  subjectsWords,
   tagList,
   typeName,
   vaultedInto,
@@ -91,13 +87,41 @@ type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string }
 type Opened = { kind: "map" } | { kind: "held" } | { kind: "change" } | { kind: "vault"; ask: VaultAsk } | { kind: "purge"; ask: PurgeAsk } | null;
 type Check = { kind: "idle" } | { kind: "running"; question: string; since: number; run: StationRun | null } | { kind: "done"; question: string; run: StationRun; verdict: Verdict | null } | { kind: "failed"; question: string; why: string };
 
+/** A fact as its value: what it is in small letters, then the value alone. */
+type Cell = { k: string; v: string; title?: string };
+
 const n = (v: number) => v.toLocaleString("en-US");
 
-export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; name: string; onChanged?: () => void }) {
+/** A tree's files, or that the engine has not counted them yet. */
+const filesWords = (files: number | null | undefined) => (typeof files === "number" ? `${n(files)} ${files === 1 ? "file" : "files"}` : countWords(files));
+
+function Values({ cells }: { cells: Cell[] }) {
+  return (
+    <div className="values">
+      {cells.map((c) => (
+        <div key={c.k} title={c.title}>
+          <span className="k">{c.k}</span>
+          <span className="v">{c.v}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The sentence that used to stand beside every value, closed until it is asked for. */
+function Says({ head, children }: { head: string; children: string }) {
+  return (
+    <details className="says">
+      <summary>{head}</summary>
+      <p>{children}</p>
+    </details>
+  );
+}
+
+export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Capabilities; name: string; onChanged?: () => void; onOpenTags?: () => void }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [types, setTypes] = useState<TypesDoc | null>(null);
   const [held, setHeld] = useState<HeldRow[] | null>(null);
-  const [access, setAccess] = useState<Access | null>(null);
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [opened, setOpened] = useState<Opened>(null);
   const [check, setCheck] = useState<Check>({ kind: "idle" });
@@ -129,7 +153,6 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
       .catch((e: unknown) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: messageOf(e) })));
     if (served(caps, "GET /api/linkage/types")) linkage.types().then(setTypes, () => setTypes(null));
     if (heldServed) linkage.held(name).then(setHeld, () => setHeld(null));
-    if (may(caps, "identity:see") && caps.desk.mode !== "off") identity.access().then(setAccess, () => setAccess(null));
     if (served(caps, "GET /api/review") && may(caps, "review:see")) ops.review("open", undefined, 500).then((r) => setReview(r.items), () => undefined);
     if (served(caps, "GET /api/places") && may(caps, "places:see")) objects.places().then((r) => setPlaces(r.places), () => setPlaces([]));
   }, [name, caps, heldServed]);
@@ -208,22 +231,74 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
   const heldFiles = dataset.held?.files ?? (held ?? []).reduce((s, r) => s + r.files, 0);
   const heldIds = dataset.held?.identifiers ?? (held ?? []).length;
   const groups = heldGroups(held ?? []);
-  const counts = detailCounts(access);
   const acts = originalsActs(caps, dataset);
   const identityItems = review.filter((i) => /^(identity|linkage)[.:]/.test(i.kind) && ofDataset(i, name));
   const waiting = waitingLines(identityItems, dataset.held?.files ?? null);
   const pixelItems = review.filter((i) => /pixel|burn/.test(i.kind) && ofDataset(i, name));
   const arrives = dataset.arrives ?? (dataset.handling?.arrives === "deidentified" ? "deidentified" : "identified");
   const onRelease = dataset.handling?.on_release;
-  const typeLine = types
-    ? [
-        types.types.map((t) => `${t.name}${typeof t.identifiers === "number" ? ` ${n(t.identifiers)}` : ""}`).join(" · "),
-        typeof types.several === "number" ? `${n(types.several)} subjects carry more than one type` : null,
-        types.filed && types.filed.length > 0 ? `filed ${types.filed.slice(-3).map((d) => whenWords(d)).join(", ")}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
+  const batches = [...new Set(groups.flatMap((g) => g.batches))];
+
+  // who a file is about: where the identifier is read, and what kind of identifier it is
+  const rule = dataset.identity ?? null;
+  const from = rule?.from?.[0];
+  const readFrom = from?.field ? from.field : from?.path ? `folder ${from.path.segment} of the path` : "PatientID";
+  const verbatim = rule?.code === "verbatim" || arrives === "coded";
+  const originalsTree = dataset.trees?.originals ?? null;
+  const anonTree = dataset.trees?.anon ?? null;
+  const tags = dataset.tags ?? null;
+  // TODO (record 27, R3): this opens the tag chooser, which shows all hundred tags by group and records a kept one as this dataset's own exception. Until R3 builds it, it opens the lists Change already holds.
+  const openTags = onOpenTags ?? (changing === null ? () => setOpened({ kind: "change" }) : null);
+
+  const mapCells: Cell[] = [];
+  if (types === null) mapCells.push({ k: "the map", v: served(caps, "GET /api/linkage/types") ? "not read" : "not listed here" });
+  else if (types.types.length === 0) mapCells.push({ k: "the map", v: "nothing filed yet" });
+  else {
+    const filed = types.filed && types.filed.length > 0 ? `filed ${types.filed.slice(-3).map((d) => whenWords(d)).join(", ")}` : undefined;
+    if (typeof types.identifiers === "number") mapCells.push({ k: "identifiers", v: n(types.identifiers), title: filed });
+    mapCells.push({
+      k: types.types.length === 1 ? "type" : "types",
+      v: types.types.map((t) => `${t.name}${typeof t.identifiers === "number" ? ` ${n(t.identifiers)}` : ""}`).join(" · "),
+      title: typeof types.several === "number" ? `${n(types.several)} subjects carry more than one` : undefined,
+    });
+    if (typeof types.subjects === "number") mapCells.push({ k: "subjects", v: n(types.subjects) });
+  }
+
+  const identityCells: Cell[] = [
+    { k: "read from", v: readFrom },
+    { k: "identifier", v: verbatim ? "taken as the code" : (rule?.id_type ?? "through the map") },
+    ...mapCells,
+    { k: "an unknown one", v: dataset.unmapped === "code" ? "coded from itself" : "held until mapped" },
+    ...(types === null
+      ? []
+      : [
+          {
+            k: "merged",
+            v: types.merged && types.merged.subjects > 0 ? `${n(types.merged.subjects)} subjects` : "none",
+            title: types.merged?.last ? `last ${whenWords(types.merged.last)}` : undefined,
+          },
+        ]),
+  ];
+
+  const tagCells: Cell[] = [
+    { k: "removed", v: `${REMOVED_TOTAL} tags` },
+    { k: "PatientID", v: "the code" },
+    { k: "kept on purpose", v: tags?.keep_demographics === false ? "none, by this dataset" : "sex, weight, size" },
+    { k: "written", v: "PatientAge", title: "computed before the birth date goes" },
+    { k: "kept", v: "dates, times, UIDs" },
+    { k: "private tags", v: "dropped, bar the pack's own" },
+    { k: "overlays, curves", v: "dropped" },
+    { k: "also removed", v: tags && tags.remove.length > 0 ? tags.remove.join(", ") : "none" },
+    { k: "also kept", v: tags && tags.keep.length > 0 ? tags.keep.join(", ") : "none" },
+    { k: "pixels", v: "untouched" },
+    { k: "re-runs", v: "only what changed" },
+  ];
+
+  const leavingCells: Cell[] = [
+    { k: "dates", v: onRelease?.dates === "shift" ? "shifted" : onRelease?.dates === "year" ? "cut to the year" : "kept" },
+    { k: "UIDs", v: onRelease?.uids === "remap" ? "remapped from the key" : "kept" },
+    { k: "faces", v: onRelease?.deface ? "removed" : "kept" },
+  ];
 
   return (
     <section className="bpage">
@@ -241,7 +316,9 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
         <div className="data-head">
           <div className="grow">
             <h1>Pseudonymisation of {dataset.name}</h1>
-            <p className="lede">Who each file is about, what the pseudonymised tree keeps, who sees what, and what leaves.</p>
+            <p className="lede">
+              Arrives {arrives === "identified" ? "identified" : arrives === "deidentified" ? "de-identified" : "coded"} · {heldFiles > 0 ? `${n(heldFiles)} files held` : "nothing held"}
+            </p>
           </div>
           {maps && (
             <button type="button" className="button secondary" onClick={() => setOpened({ kind: "map" })}>
@@ -278,61 +355,43 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             <span className="sq brand">
               <Icon name="key" />
             </span>
-            <h2>1 · Identifiers become codes</h2>
-            {heldFiles > 0 && <span className="tag caution">{n(heldFiles)} files held</span>}
+            <h2>Identity</h2>
+            {heldFiles > 0 && <span className="tag caution">{n(heldFiles)} held</span>}
           </div>
-          <dl className="facts">
-            <dt>who a file is about</dt>
-            <dd>
-              {identityWords(dataset)} <span className="meta">· a type is chosen from the registry's list or made new</span>
-            </dd>
-            <dt>the map</dt>
-            <dd>
-              {types === null && (served(caps, "GET /api/linkage/types") ? "the types could not be read" : "this engine does not list the map's types")}
-              {types !== null && types.types.length === 0 && "no map filed yet: the identifiers are hashed under the key"}
-              {types !== null && types.types.length > 0 && (
-                <>
-                  {typeof types.identifiers === "number" && typeof types.subjects === "number"
-                    ? `${n(types.identifiers)} identifiers of ${n(types.types.length)} ${types.types.length === 1 ? "type" : "types"} on ${n(types.subjects)} subjects`
-                    : `${n(types.types.length)} ${types.types.length === 1 ? "type" : "types"}`}{" "}
-                  <span className="meta">· {typeLine}</span>
-                </>
-              )}
-            </dd>
-            <dt>the code</dt>
-            <dd>
-              {subjectsWords(dataset)} <span className="meta">· the same wherever they are seen</span>
-            </dd>
-            <dt>the identifiers</dt>
-            <dd>
-              sealed in the linkage store beside the registry, never in it <span className="meta">· every reading audited</span>
-            </dd>
-            <dt>held</dt>
-            <dd>
-              {heldFiles === 0 ? (
-                <>
-                  nothing held <span className="meta">· {dataset.unmapped === "code" ? "an unmapped identifier gets a code derived from it" : "an unmapped identifier holds its files until a map names it"}</span>
-                </>
-              ) : (
-                <>
-                  <b>{n(heldFiles)} files</b> of {n(heldIds)} {heldIds === 1 ? "identifier" : "identifiers"} the map does not know{groups[0]?.since ? `, since ${whenWords(groups[0].since)}` : ""}{" "}
-                  <span className="meta">
-                    ·{" "}
-                    <button type="button" className="link-button" onClick={() => setOpened({ kind: "held" })}>
-                      map them
-                    </button>
-                  </span>
-                </>
-              )}
-            </dd>
-            <dt>merged</dt>
-            <dd>
-              {types?.merged && types.merged.subjects > 0
-                ? `${n(types.merged.subjects)} subjects became fewer${types.merged.last ? ` on ${whenWords(types.merged.last)}` : ""}, when a map said so`
-                : "no subject merged yet"}{" "}
-              <span className="meta">· the old codes stay as their identifiers</span>
-            </dd>
-          </dl>
+          <div className="flow-two">
+            <div className="tree-card">
+              <div className="row">
+                <Icon name="lock" />
+                <b className="path">{originalsTree?.path ?? "derivatives/dcm-original"}</b>
+              </div>
+              <div className="row">
+                <b>{originalsTree ? filesWords(originalsTree.files) : "none"}</b>
+                <span className="meta">{originalsTree ? "locked" : "it arrives with no identifiers"}</span>
+              </div>
+            </div>
+            <Icon name="arrow" />
+            <div className="tree-card on">
+              <div className="row">
+                <Icon name="shield" />
+                <b className="path">{anonTree?.path ?? dataset.path}</b>
+              </div>
+              <div className="row">
+                <b>{filesWords(anonTree?.files)}</b>
+                <span className="meta">the registry's source{anonTree?.last_written ? ` · written ${whenWords(anonTree.last_written)}` : ""}</span>
+              </div>
+            </div>
+          </div>
+          <Values cells={identityCells} />
+          <Says head="Where the identifiers are kept">
+            Sealed in the store beside the registry, never in it, and every reading recorded. A code comes from the map and the key, so one person is one code in every dataset. The tree is laid out
+            code, study, series, instance.
+          </Says>
+          {may(caps, "identity:see") && (
+            <a className="tail" href={href("settings", "identity")}>
+              Who sees what, on Identity
+              <Icon name="chevron-right" />
+            </a>
+          )}
         </section>
 
         <section className="panel card">
@@ -340,144 +399,32 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             <span className="sq brand">
               <Icon name="shield" />
             </span>
-            <h2>2 · The pseudonymised tree</h2>
-            <span className="meta">tags only; pixels are never touched</span>
+            <h2>Tags</h2>
           </div>
-          <div className="pair">
-            <div className="tree-card">
-              <div className="row">
-                <Icon name="lock" />
-                <b className="path">{dataset.trees?.originals?.path ?? "derivatives/dcm-original"}</b>
-              </div>
-              <span className="meta">
-                {dataset.trees?.originals ? `${countWords(dataset.trees.originals.files)} files · ${typeof dataset.trees.originals.bytes === "number" ? `${bytesWords(dataset.trees.originals.bytes)} · ` : ""}` : arrives === "identified" ? "" : "no originals: the files arrive without identifiers · "}
-                locked to the stewards · read by the pseudonymiser only · never a source
-              </span>
-              <span className="meta">{originalsWords(dataset.originals_kept, vaulted ?? vaultedInto(dataset))}</span>
-              {(acts.vault || acts.purge) && (
-                <div className="row">
-                  {acts.vault && (
-                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "vault", ask: NOTHING_ASKED })}>
-                      Vault it
-                    </button>
-                  )}
-                  {acts.purge && (
-                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "purge", ask: NOTHING_TYPED })}>
-                      Purge it
-                    </button>
-                  )}
-                </div>
-              )}
-              {acts.refusal !== null && <span className="meta">{acts.refusal}</span>}
-            </div>
-            <div className="tree-card on">
-              <div className="row">
-                <Icon name="shield" />
-                <b className="path">{dataset.trees?.anon?.path ?? dataset.path}</b>
-              </div>
-              <span className="meta">
-                {dataset.trees?.anon ? `${countWords(dataset.trees.anon.files)} files · ` : ""}
-                written by NILS only · the registry's source{dataset.trees?.anon?.last_written ? ` · last written ${whenWords(dataset.trees.anon.last_written)}` : ""}
-              </span>
-              <span className="meta">layout from facts: code, study, series, instance · never the original path</span>
-            </div>
-          </div>
-          <dl className="facts">
-            <dt>PatientID</dt>
-            <dd>the code</dd>
-            <dt>removed</dt>
-            <dd>
-              {REMOVED_TOTAL} tags in four groups: {REMOVED_GROUPS.map((g) => `${g.group} ${g.tags}`).join(", ")} <span className="meta">· the earlier list, tag for tag</span>
-            </dd>
-            <dt>kept on purpose</dt>
-            <dd>
-              {dataset.tags?.keep_demographics === false ? (
-                <>
-                  <b>sex, weight, size</b> removed <span className="meta">· this dataset opted out of keeping them</span>
-                </>
-              ) : (
-                <>
-                  <b>sex, weight, size</b> <span className="meta">· in the patient group, but covariates, not identifiers: an opt-out here, recorded</span>
-                </>
-              )}
-            </dd>
-            <dt>written</dt>
-            <dd>
-              <b>PatientAge</b>, computed before the birth date goes
-            </dd>
-            <dt>kept</dt>
-            <dd>
-              <b>dates, times and UIDs</b>: the same study brought in twice is one study <span className="meta">· the date tags are the release's date policy</span>
-            </dd>
-            <dt>private tags</dt>
-            <dd>
-              all dropped; the pack keeps what it names by creator <span className="meta">· b-values, directions, the vendor fields it reads</span>
-            </dd>
-            <dt>overlays, curves</dt>
-            <dd>dropped</dd>
-            <dt>this dataset also</dt>
-            <dd>
-              {dataset.tags && (dataset.tags.remove.length > 0 || dataset.tags.keep.length > 0) ? (
-                <>
-                  {dataset.tags.remove.length > 0 && (
-                    <>
-                      removes {dataset.tags.remove.map((t, i) => (
-                        <span key={t}>
-                          {i > 0 ? ", " : ""}
-                          <span className="path">{t}</span>
-                        </span>
-                      ))}
-                    </>
-                  )}
-                  {dataset.tags.remove.length > 0 && dataset.tags.keep.length > 0 ? " · " : ""}
-                  {dataset.tags.keep.length > 0 && (
-                    <>
-                      keeps {dataset.tags.keep.map((t, i) => (
-                        <span key={t}>
-                          {i > 0 ? ", " : ""}
-                          <span className="path">{t}</span>
-                        </span>
-                      ))}
-                    </>
-                  )}
-                </>
-              ) : (
-                "removes nothing extra · keeps nothing extra"
-              )}{" "}
-              <span className="meta">· a declared list, written on every batch</span>
-            </dd>
-            <dt>text in pixels</dt>
-            <dd>a file that says nothing about it is marked, never read as clean</dd>
-            <dt>re-runs</dt>
-            <dd>only new or changed originals are written again</dd>
-          </dl>
-        </section>
-
-        <section className="panel card">
-          <div className="row card-head">
-            <span className="sq brand">
-              <Icon name="users" />
-            </span>
-            <h2>3 · Who sees what</h2>
-            <span className="meta">set per person on Identity</span>
-          </div>
-          <div className="strip small">
-            {(["plain", "quasi", "sensitive"] as Detail[]).map((d) => (
-              <div key={d} className={access ? "done" : undefined}>
-                <span className="k">{d}</span>
-                <span className="v">
-                  {access ? n(counts[d]) : ""}
-                  <small> {access ? (counts[d] === 1 ? "person" : "people") : caps.desk.mode === "off" ? "everyone here" : "people"}</small>
-                </span>
-                <span className="meta">{RECORD_WORDS[d].says}</span>
-              </div>
+          <div className="tagbar" aria-label="the removed tags by group">
+            {REMOVED_GROUPS.map((g) => (
+              <i key={g.group} className={g.group} style={{ width: `${(g.tags / REMOVED_TOTAL) * 100}%` }} />
             ))}
-            <div>
-              <span className="k">a job</span>
-              <span className="v">as its person</span>
-              <span className="meta">never reads more than who queued it</span>
-            </div>
           </div>
+          <div className="row legend">
+            {REMOVED_GROUPS.map((g) => (
+              <span key={g.group}>
+                <i className={`dot ${g.group}`} />
+                {g.group} {g.tags}
+              </span>
+            ))}
+          </div>
+          <Values cells={tagCells} />
+          {openTags && (
+            <div className="row">
+              <button type="button" className="button secondary small" onClick={openTags}>
+                Choose tags
+              </button>
+            </div>
+          )}
+          <Says head="Why the UIDs are kept">
+            Dates, times and UIDs stay in the file, so the same study brought in twice is one study and not two. What becomes of them when the scans leave is the card below.
+          </Says>
         </section>
 
         <section className="panel card">
@@ -485,32 +432,12 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             <span className="sq brand">
               <Icon name="release" />
             </span>
-            <h2>4 · When it leaves</h2>
-            <span className="meta">on top of the tree, written on every release</span>
+            <h2>When it leaves</h2>
           </div>
-          <dl className="facts">
-            <dt>dates</dt>
-            <dd>
-              <b>{onRelease?.dates === "shift" ? "shifted" : onRelease?.dates === "year" ? "cut to the year" : "kept"}</b>
-              {onRelease?.dates === "shift" && (
-                <>
-                  , one offset per person, every date in the file <span className="meta">· the offset lives with the identifiers</span>
-                </>
-              )}
-            </dd>
-            <dt>UIDs</dt>
-            <dd>
-              <b>{onRelease?.uids === "remap" ? "remapped" : "kept"}</b>
-              {onRelease?.uids === "remap" && (
-                <>
-                  {" "}
-                  from the key <span className="meta">· shifted dates with kept UIDs is refused</span>
-                </>
-              )}
-            </dd>
-            <dt>faces</dt>
-            <dd>{onRelease?.deface ? "removed by a pipeline over the released tree" : "kept · removing them is a pipeline over the released tree"}</dd>
-          </dl>
+          <Values cells={leavingCells} />
+          <Says head="What is refused">
+            Dates that move cannot keep the original UIDs, and that pair is refused. A shift is one offset a person, kept with the identifiers. Faces go by a pipeline over the released tree.
+          </Says>
         </section>
       </div>
 
@@ -520,8 +447,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             <Icon name="alert" size="lg" />
             <h2>Held until mapped</h2>
           </div>
-          {!heldServed && heldFiles === 0 && <p className="meta">This engine does not hold files for a map.</p>}
-          {heldServed && heldFiles === 0 && <p className="meta">Nothing is held: every identifier seen is in the map.</p>}
+          {heldFiles === 0 && <p className="meta">{heldServed ? "Nothing held." : "This engine holds no files for a map."}</p>}
           {groups.length > 0 && (
             <div className="reasons">
               {groups.map((g, i) => (
@@ -537,8 +463,9 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
           {heldFiles > 0 && groups.length === 0 && <p className="meta">{n(heldFiles)} files held; this engine does not list them by shape.</p>}
           {heldFiles > 0 && (
             <span className="meta">
-              {groups[0]?.since ? `since ${whenWords(groups[0].since)} · ` : ""}
-              {groups.flatMap((g) => g.batches).length > 0 ? `batch ${[...new Set(groups.flatMap((g) => g.batches))].join(", ")} · ` : ""}they stay in the originals
+              {n(heldIds)} {heldIds === 1 ? "identifier" : "identifiers"}
+              {groups[0]?.since ? ` · since ${whenWords(groups[0].since)}` : ""}
+              {batches.length > 0 ? ` · batch ${batches.join(", ")}` : ""}
             </span>
           )}
           {heldFiles > 0 && (
@@ -557,6 +484,33 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
               )}
             </div>
           )}
+        </section>
+        <section className="panel card">
+          <div className="row card-head">
+            <Icon name="lock" size="lg" />
+            <h2>The originals</h2>
+          </div>
+          <Values
+            cells={[
+              { k: "where they stand", v: originalsWords(dataset.originals_kept, vaulted ?? vaultedInto(dataset)) },
+              ...(typeof originalsTree?.bytes === "number" ? [{ k: "size", v: bytesWords(originalsTree.bytes) }] : []),
+            ]}
+          />
+          {(acts.vault || acts.purge) && (
+            <div className="row">
+              {acts.vault && (
+                <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "vault", ask: NOTHING_ASKED })}>
+                  Vault it
+                </button>
+              )}
+              {acts.purge && (
+                <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "purge", ask: NOTHING_TYPED })}>
+                  Purge it
+                </button>
+              )}
+            </div>
+          )}
+          {acts.refusal !== null && <span className="meta">{acts.refusal}</span>}
         </section>
         <section className="panel card">
           <div className="row card-head">

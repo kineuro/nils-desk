@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The Pseudonymisation page of a dataset says less (record 27). A fact stands as its value under a small label, and the sentence that used to stand in grey beside every value is behind one disclosure a card, closed until it is asked for. Identity holds the two trees as a flow, what a file's identifier is read from and its type, what the map holds, and what becomes of an identifier the map does not know; Tags holds the removed tags as one bar in their four groups, what is kept on purpose, written, kept and dropped, and this dataset's own lists, with Choose tags beside them; When it leaves holds the dates, the UIDs and the faces. Where the originals stand, and the acts on them, move to the side of the page, and who sees what is one line to the Identity page, where it is set. Every fact the page carried is still on it.
+
 ## [1.0.0-alpha.29] - 2026-09-16
 
 ### Added
