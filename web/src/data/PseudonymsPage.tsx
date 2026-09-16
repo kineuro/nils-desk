@@ -85,7 +85,8 @@ import { countWords } from "./datasets";
 import { PurgeDialog, VaultDialog } from "./Originals";
 import { sources, whenWords, type Handling } from "./sources";
 
-type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; dataset: Dataset | null };
+// the whole sources answer is held, not the one dataset alone: a vault goes into no dataset's folder or trees, another's as much as this one's
+type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; dataset: Dataset | null; datasets: Dataset[] };
 // what a dialog has been told is held here, by the page, so that reading the dataset again under an open dialog never takes a person's answers away
 type Opened = { kind: "map" } | { kind: "held" } | { kind: "change" } | { kind: "vault"; ask: VaultAsk } | { kind: "purge"; ask: PurgeAsk } | null;
 type Check = { kind: "idle" } | { kind: "running"; question: string; since: number; run: StationRun | null } | { kind: "done"; question: string; run: StationRun; verdict: Verdict | null } | { kind: "failed"; question: string; why: string };
@@ -119,8 +120,9 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
     sources
       .list()
       .then((r) => {
-        const found = (r.sources as Dataset[]).find((s) => s.name === name) ?? null;
-        setLoad({ kind: "ready", dataset: found });
+        const all = r.sources as Dataset[];
+        const found = all.find((s) => s.name === name) ?? null;
+        setLoad({ kind: "ready", dataset: found, datasets: all });
         // what an act on the originals would do, as the engine answers it, without doing any of it
         if (found && served(caps, "GET /api/places/{id}/originals")) originalsDoor.look(found.id).then(setLook, () => setLook(null));
       })
@@ -169,6 +171,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
   }, [acting, read]);
 
   const dataset = load.kind === "ready" ? load.dataset : null;
+  const datasets = load.kind === "ready" ? load.datasets : [];
 
   const ask = (question: string) => {
     setCheck({ kind: "running", question, since: Date.now(), run: null });
@@ -650,6 +653,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
           dataset={dataset}
           look={look}
           places={places}
+          datasets={datasets}
           ask={opened.ask}
           onAsk={(ask) => setOpened((was) => (was?.kind === "vault" ? { kind: "vault", ask } : was))}
           onClose={() => setOpened(null)}

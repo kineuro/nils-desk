@@ -325,13 +325,33 @@ describe("acting on the originals of a dataset", () => {
       { id: 12, name: "unsaid", path: "/vault/unsaid", retired_at: null },
     ];
     // the backup role before any refusal: the source, the export place, a retired place, the three declared inside the dataset and the one whose role the door does not say are all left out
-    expect(vaultChoices(places, d, null).map((p) => p.name)).toEqual(["attic", "cold-store"]);
-    expect(vaultChoices(places, d, "backup").map((p) => p.name)).toEqual(["attic", "cold-store"]);
+    expect(vaultChoices(places, d, null, [d]).map((p) => p.name)).toEqual(["attic", "cold-store"]);
+    expect(vaultChoices(places, d, "backup", [d]).map((p) => p.name)).toEqual(["attic", "cold-store"]);
     // the role the engine named in a refusal stands in the backup role's place
-    expect(vaultChoices(places, d, "export").map((p) => p.name)).toEqual(["exports"]);
-    expect(vaultChoices(places, d, "share")).toEqual([]);
+    expect(vaultChoices(places, d, "export", [d]).map((p) => p.name)).toEqual(["exports"]);
+    expect(vaultChoices(places, d, "share", [d])).toEqual([]);
     // the dataset's own place is out by its id, whatever role it carries
-    expect(vaultChoices(places, { ...d, id: 2 }, null).map((p) => p.name)).toEqual(["cold-store"]);
+    expect(vaultChoices(places, { ...d, id: 2 }, null, [d]).map((p) => p.name)).toEqual(["cold-store"]);
+  });
+
+  it("leaves out a place inside another dataset, since the engine writes outside no dataset's own trees", () => {
+    const orchard: Dataset = {
+      ...base,
+      id: 21,
+      name: "orchard",
+      path: "/scans/orchard",
+      trees: { originals: { path: "/scans/orchard/derivatives/dcm-original", files: 640, bytes: 82000000 }, anon: { path: "/scans/orchard/derivatives/dcm-anon", files: 640, last_written: null } },
+      originals_kept: "kept",
+    };
+    const places: PlaceRow[] = [
+      { id: 6, name: "cold-store", role: "backup", path: "/vault/cold", retired_at: null },
+      { id: 22, name: "orchard-attic", role: "backup", path: "/scans/orchard/attic", retired_at: null },
+      { id: 23, name: "lake-attic", role: "backup", path: "/scans/lake/attic", retired_at: null },
+    ];
+    // vaulting the lake: a backup place declared inside the orchard is refused as surely as one inside the lake, so neither is offered
+    expect(vaultChoices(places, d, null, [d, orchard]).map((p) => p.name)).toEqual(["cold-store"]);
+    // and the same the other way round, since no dataset's folders are a place for another's originals
+    expect(vaultChoices(places, orchard, null, [d, orchard]).map((p) => p.name)).toEqual(["cold-store"]);
   });
 
   const row = (state: JobRow["state"], over: { error?: string; result?: Record<string, unknown> } = {}): Parameters<typeof actEnded>[1] => ({

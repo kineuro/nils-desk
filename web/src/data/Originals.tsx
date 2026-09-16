@@ -33,6 +33,7 @@ import {
   type PlaceRow,
   type PurgeAsk,
   type VaultAsk,
+  type VaultFrom,
 } from "./pseudonyms";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -54,14 +55,16 @@ export function VaultBody(props: {
   dataset: Dataset;
   look: OriginalsLook | null;
   places: readonly PlaceRow[];
+  /** Every dataset the page read, so that no place inside one of them is offered for a vault the engine would refuse. */
+  datasets: readonly VaultFrom[];
   /** What the dialog has been told, held by the page. */
   ask: VaultAsk;
   onAsk: (ask: VaultAsk) => void;
   onClose: () => void;
   onVault: () => void;
 }) {
-  const { caps, dataset: d, look, places, ask, onAsk, onClose, onVault } = props;
-  const choices = vaultChoices(places, d, ask.role);
+  const { caps, dataset: d, look, places, datasets, ask, onAsk, onClose, onVault } = props;
+  const choices = vaultChoices(places, d, ask.role, datasets);
   const wanted = ask.role ?? VAULT_ROLE;
   const ready = vaultReady(ask);
   const foot = (
@@ -104,12 +107,15 @@ export function VaultBody(props: {
             </select>
           </div>
         ) : (
-          <p className="meta">No place with the {wanted} role stands outside {d.name}; one is added on the Places page.</p>
+          <p className="meta">
+            No place with the {wanted} role stands outside every dataset; a place declared inside one, this dataset or another, is under a source place the engine will not write into. One outside every
+            dataset's folder and trees is added on the Places page.
+          </p>
         )}
         <span className="meta">
           {ask.role
-            ? `The engine takes a place with the ${ask.role} role for this, as it said when it refused.`
-            : `The engine takes a place with the ${VAULT_ROLE} role for this, and never one inside the dataset itself.`}
+            ? `The engine takes a place with the ${ask.role} role for this, as it said when it refused, and never one inside a dataset.`
+            : `The engine takes a place with the ${VAULT_ROLE} role for this, and never one inside a dataset, this one or another.`}
         </span>
       </div>
       <div className="field">
@@ -141,12 +147,13 @@ export function VaultDialog(props: {
   dataset: Dataset;
   look: OriginalsLook | null;
   places: readonly PlaceRow[];
+  datasets: readonly VaultFrom[];
   ask: VaultAsk;
   onAsk: (ask: VaultAsk) => void;
   onClose: () => void;
   onQueued: (job: number, into: string) => void;
 }) {
-  const { caps, dataset, look, places, ask, onAsk, onClose, onQueued } = props;
+  const { caps, dataset, look, places, datasets, ask, onAsk, onClose, onQueued } = props;
 
   const vault = () => {
     const body = vaultAsked(ask);
@@ -158,7 +165,7 @@ export function VaultDialog(props: {
       .catch((e: unknown) => onAsk(vaultRefused(ask, messageOf(e), rolesOf(places))));
   };
 
-  return <VaultBody caps={caps} dataset={dataset} look={look} places={places} ask={ask} onAsk={onAsk} onClose={onClose} onVault={vault} />;
+  return <VaultBody caps={caps} dataset={dataset} look={look} places={places} datasets={datasets} ask={ask} onAsk={onAsk} onClose={onClose} onVault={vault} />;
 }
 
 /* ---------------------------------------------------------------- Purge it */

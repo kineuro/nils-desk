@@ -18,7 +18,9 @@ import { PurgeBody, VaultBody, VaultDialog } from "./Originals";
 import { ChangeDialog } from "./PseudonymsPage";
 import { NOTHING_ASKED, NOTHING_TYPED, vaultAsked, type OriginalsActs, type OriginalsLook, type PlaceRow, type PurgeAsk, type VaultAsk } from "./pseudonyms";
 
-const [incoming] = (answer as SourcesAnswer).sources;
+// every dataset of the answer, as the page holds it: the dialog offers no place inside any of them
+const { sources: allDatasets } = answer as SourcesAnswer;
+const [incoming] = allDatasets;
 const none = () => undefined;
 
 const caps = (detail: Detail = "sensitive", grants: readonly Grant[] = GRANTS): Capabilities =>
@@ -54,7 +56,7 @@ const places: PlaceRow[] = [
 ];
 
 const vault = (ask: Partial<VaultAsk> = {}, over: Partial<Parameters<typeof VaultBody>[0]> = {}) =>
-  renderToStaticMarkup(<VaultBody caps={caps()} dataset={incoming} look={look} places={places} ask={{ ...NOTHING_ASKED, ...ask }} onAsk={none} onClose={none} onVault={none} {...over} />);
+  renderToStaticMarkup(<VaultBody caps={caps()} dataset={incoming} look={look} places={places} datasets={allDatasets} ask={{ ...NOTHING_ASKED, ...ask }} onAsk={none} onClose={none} onVault={none} {...over} />);
 
 const purge = (ask: Partial<PurgeAsk> = {}, over: Partial<Parameters<typeof PurgeBody>[0]> = {}) =>
   renderToStaticMarkup(<PurgeBody caps={caps()} dataset={incoming} look={look} ask={{ ...NOTHING_TYPED, ...ask }} onAsk={none} onClose={none} onPurge={none} {...over} />);
@@ -80,10 +82,15 @@ describe("Vault it", () => {
     expect(html).not.toContain("old-vault");
     expect(html).not.toContain("hole");
     expect(html).not.toContain("unsaid");
-    expect(html).toContain("The engine takes a place with the backup role for this, and never one inside the dataset itself.");
-    // no backup place outside the dataset: the dialog says so rather than offering what would be refused
+    expect(html).toContain("The engine takes a place with the backup role for this, and never one inside a dataset, this one or another.");
+    // a backup place declared inside another dataset of the same answer is refused as surely as one inside this dataset, so it is not offered either
+    const elsewhere = vault({}, { places: [...places, { id: 11, name: "ct-attic", role: "backup", path: "/srv/imaging/exchange-ct/attic", retired_at: null }] });
+    expect(elsewhere).not.toContain("ct-attic");
+    // no backup place outside the datasets: the dialog says why nothing is offered, and what a person would add to have one
     const bare = vault({}, { places: [places[0], places[4]] });
-    expect(bare).toContain("No place with the backup role stands outside incoming");
+    expect(bare).toContain("No place with the backup role stands outside every dataset");
+    expect(bare).toContain("is under a source place the engine will not write into");
+    expect(bare).toContain("One outside every dataset&#x27;s folder and trees is added on the Places page.");
     expect(bare).not.toContain("<select");
   });
 
@@ -97,7 +104,7 @@ describe("Vault it", () => {
   it("keeps to the role the engine named when it refused, in the engine's own words", () => {
     const refused = vault({ refusal: "the originals of a source go to a place with the backup role", role: "backup" });
     expect(refused).toContain("the originals of a source go to a place with the backup role");
-    expect(refused).toContain("The engine takes a place with the backup role for this, as it said when it refused.");
+    expect(refused).toContain("The engine takes a place with the backup role for this, as it said when it refused, and never one inside a dataset.");
     expect(refused).toContain("cold-store · backup");
     // another role named: the places of that role stand in the backup ones' place
     const other = vault({ refusal: "the originals go to a place with the export role", role: "export" });
@@ -105,7 +112,7 @@ describe("Vault it", () => {
     expect(other).not.toContain("cold-store");
     // a role no place here carries: the dialog says so rather than offering what the engine would refuse
     const noPlace = vault({ refusal: "the originals go to a place with the exchange role", role: "exchange" });
-    expect(noPlace).toContain("No place with the exchange role stands outside incoming");
+    expect(noPlace).toContain("No place with the exchange role stands outside every dataset");
     expect(noPlace).not.toContain("cold-store");
   });
 
@@ -120,7 +127,7 @@ describe("Vault it", () => {
     const onAsk = (next: VaultAsk) => {
       ask = next;
     };
-    const draw = () => renderToStaticMarkup(<VaultDialog caps={caps()} dataset={incoming} look={look} places={places} ask={ask} onAsk={onAsk} onClose={none} onQueued={none} />);
+    const draw = () => renderToStaticMarkup(<VaultDialog caps={caps()} dataset={incoming} look={look} places={places} datasets={allDatasets} ask={ask} onAsk={onAsk} onClose={none} onQueued={none} />);
     expect(draw()).toContain('disabled="">Vault it</button>');
     // the person chooses the place, and gives the reason a few seconds later
     onAsk({ ...ask, into: "cold-store" });

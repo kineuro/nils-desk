@@ -343,22 +343,29 @@ function under(path: string, folder: string): boolean {
   return p === f || p.startsWith(`${f}/`);
 }
 
-/** The dataset a vault moves out of: its place and the folders that are its own. */
+/** A dataset a vault must stay out of, the one it moves out of among them: its place and the folders that are its own. */
 export type VaultFrom = Pick<Dataset, "id" | "path" | "trees">;
+
+/** The folders a dataset holds: the place it stands on, and either of its trees. */
+function datasetFolders(d: VaultFrom): string[] {
+  return [d.path, d.trees?.originals?.path, d.trees?.anon?.path].filter((p): p is string => typeof p === "string" && p.trim() !== "");
+}
 
 /**
  * The places a vault may go to, as the engine takes them rather than as a
  * guess: a place of the backup role, or of the role the engine named when it
- * refused one; in force; not the dataset's own place; and not inside the
- * dataset, since a place declared on its folder or in either tree is under a
- * source place and every vault into one is refused. A place whose role the
- * door does not say is left out rather than offered.
+ * refused one; in force; not the dataset's own place; and not inside any
+ * dataset, this one or another, since a place declared on a dataset's folder
+ * or in either of its trees is under a source place, and the engine, which
+ * writes outside no dataset's own trees, refuses every vault into one. The
+ * datasets are the ones the page read at the sources door. A place whose role
+ * the door does not say is left out rather than offered.
  */
-export function vaultChoices(places: readonly PlaceRow[], from: VaultFrom, role: string | null): PlaceRow[] {
+export function vaultChoices(places: readonly PlaceRow[], from: VaultFrom, role: string | null, datasets: readonly VaultFrom[]): PlaceRow[] {
   const wanted = role ?? VAULT_ROLE;
-  const own = [from.path, from.trees?.originals?.path, from.trees?.anon?.path].filter((p): p is string => typeof p === "string" && p.trim() !== "");
+  const inside = [from, ...datasets].flatMap(datasetFolders);
   return places
-    .filter((p) => (p.retired_at ?? null) === null && p.id !== from.id && typeof p.role === "string" && p.role === wanted && !own.some((f) => under(p.path, f)))
+    .filter((p) => (p.retired_at ?? null) === null && p.id !== from.id && typeof p.role === "string" && p.role === wanted && !inside.some((f) => under(p.path, f)))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
