@@ -66,7 +66,7 @@ describe("Vault it", () => {
     const html = vault();
     expect(html).toContain("Vault the originals of incoming</h2>");
     expect(html).toContain("18,420 files · 2.4 GB");
-    expect(html).toContain("4 held until mapped move with them");
+    expect(html).toContain(">held until mapped</span><span class=\"v\">4 move with them<");
     expect(html).toContain("/srv/imaging/incoming/derivatives/dcm-original");
     expect(html).toContain('<option value="cold-store">cold-store · backup · /vault/cold</option>');
     expect(html).toContain("The pseudonymised tree, the registry and every person's code are untouched".replace("'", "&#x27;"));
@@ -143,14 +143,19 @@ describe("Vault it", () => {
 });
 
 describe("Purge it", () => {
-  it("says what the engine answered, that it cannot be undone, and what a held file's original is", () => {
+  it("says what the engine answered as four numbers and a forecast, each reason with its own count, and that it cannot be undone", () => {
     const html = purge();
     expect(html).toContain("Purge the originals of incoming</h2>");
-    expect(html).toContain("<dt>files</dt>");
-    expect(html).toContain("18,420 files · 2.4 GB");
-    expect(html).toContain("18,402 files have a pseudonymised copy the engine checked");
-    expect(html).toContain("18 files have no checked copy in dcm-anon");
-    expect(html).toContain("4 files are held until mapped: their originals are what a map would still release");
+    // the survey: four numbers, each under its own small label, and the sentence that they are a forecast
+    expect(html).toContain('<span class="k">files</span><span class="v">18,420</span>');
+    expect(html).toContain('<span class="k">size</span><span class="v">2.4 GB</span>');
+    expect(html).toContain('<span class="k">copy checked</span><span class="v">18,402</span>');
+    expect(html).toContain('<span class="k">held until mapped</span><span class="v">4</span>');
+    expect(html).toContain("What the engine last saw: a forecast, not a promise.");
+    // and each reason a purge can be held back on, with its own count
+    expect(html).toContain("<b class=\"num\">4</b><span>files wait for a map</span>");
+    expect(html).toContain("Their originals are what a map would still release.");
+    expect(html).toContain("<b class=\"num\">18</b><span>files have no checked copy</span>");
     expect(html).toContain("This cannot be undone");
     expect(html).toContain("Purging removes the only identified copy of those scans");
     expect(html).toContain("once it is purged, a map releases nothing for it");
@@ -170,6 +175,10 @@ describe("Purge it", () => {
     const refused = purge({ typed: "incoming", why: "the originals live on tape now" }, { look: { ...look, ready: false, why } });
     expect(refused).toContain(why);
     expect(refused).toContain('disabled="">Purge it</button>');
+    // while the engine refuses, every reason that has a count of its own stands with it
+    expect(refused).toContain('<div class="why stands"><b class="num">4</b>');
+    expect(refused).toContain('<div class="why stands"><b class="num">18</b>');
+    expect(purge()).not.toContain("why stands");
     // a refusal with no words of the engine's still stops the act, and an unread door says only that
     expect(purge({ typed: "incoming", why: "why" }, { look: { ...look, ready: false } })).toContain("The engine refuses to purge these originals and gives no reason.");
     expect(purge({ typed: "incoming", why: "why" }, { look: null })).toContain("The engine has not said what purging would do here.");

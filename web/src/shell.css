@@ -1383,3 +1383,26 @@ table.thin.proposals td b { font-weight: 500; }
   .flow-two > .i { justify-self: center; transform: rotate(90deg); }
 }
 /* ---------------------------------------------------------------- end of record 27 */
+
+/* ---------------------------------------------------------------- record 27, R2 and R6: the batches' thread, the folder picked for a dataset, the counts a purge waits on */
+/* a batch's thread in its row: one cell a stage, its top edge in the stage's colour and its letter under it, in the order the head above names them */
+.thread { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 3px; min-width: 6.5rem; }
+.thread > span { padding-top: 0.2rem; border-top: 3px solid var(--n-bg-sunken); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-align: center; color: var(--n-text-faint); }
+.thread > span.done { border-top-color: var(--n-ok-icon); color: var(--n-ok-fg); }
+.thread > span.now { border-top-color: var(--n-brand); color: var(--n-brand-text); }
+.thread > span.wait { border-top-color: var(--n-caution-icon); color: var(--n-caution-fg); }
+.thread > span.failed { border-top-color: var(--n-blocked-icon); color: var(--n-blocked-fg); }
+/* a count with what it stands for: what a purge would reach, and what holds it back */
+.whys { display: grid; gap: 0.45rem; }
+.why { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0 0.7rem; align-items: baseline; }
+.why > b { font-family: var(--n-font-serif); font-weight: 400; font-size: 1.15rem; line-height: 1.2; }
+.why > span { min-width: 0; overflow-wrap: anywhere; }
+.why > .meta { grid-column: 2; }
+.why.stands > b, .why.stands > span:not(.meta) { color: var(--n-caution-fg); }
+/* a row of controls is a grid item, so its own minimum is the widest control in it: a select with a long choice in it may shrink like every other field here */
+.field-row { min-width: 0; }
+/* the folder a dataset is declared on: the engine's own picker inside the dialog, and what a look found in the folder chosen */
+.pick-folder { gap: 0.45rem; min-width: 0; }
+.pick-folder .browser-list.picker-list { max-height: 13rem; }
+.pick-folder > .button.quiet { justify-self: start; }
+.pick-folder > .values { padding-top: 0.15rem; }
