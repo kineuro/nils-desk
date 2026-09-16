@@ -1364,9 +1364,10 @@ table.thin.proposals td b { font-weight: 500; }
 .says > summary::-webkit-details-marker { display: none; }
 .says > summary:hover { color: var(--n-brand-hover); text-decoration: underline; text-underline-offset: 3px; }
 .says > p { max-width: 64ch; margin-top: 0.35rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
-/* how the removed tags fall in their four groups: one bar, and the legend under it */
+/* how the removed tags fall in their groups: one bar, and the legend under it */
 .tagbar { display: flex; height: 10px; overflow: hidden; border-radius: 2px; background: var(--n-bg-sunken); }
-.tagbar i { display: block; height: 100%; }
+/* a group the desk has no colour for is a segment like any other rather than a gap in the bar */
+.tagbar i { display: block; height: 100%; background: var(--n-neutral-line); }
 .legend { flex-wrap: wrap; gap: 0.25rem 1rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
 .legend > span { display: inline-flex; align-items: center; gap: 0.35rem; min-width: 0; }
 .legend .dot { width: 9px; height: 9px; border-radius: 2px; }

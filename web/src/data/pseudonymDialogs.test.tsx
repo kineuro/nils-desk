@@ -8,15 +8,28 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import servedPolicy from "../../test/fixtures/pseudonymize_tags.json";
 import answer from "../../test/fixtures/sources_record26.json";
 import type { Capabilities } from "../capabilities";
 import { GRANTS, type Detail, type Grant } from "../grants";
 import type { Dataset, SourcesAnswer } from "./datasets";
+import type { TagPolicy } from "./policy";
 import { HeldDialog, MapColumns, MapDialog } from "./PseudonymsPage";
 import { guessRole, lookAt, type HeldRow, type IdType } from "./pseudonyms";
 import { TagsDialog } from "./Tags";
 
-const DOORS = ["PUT /api/places/{id}", "POST /api/linkage/imports", "POST /api/linkage/types", "GET /api/linkage/held", "POST /api/linkage/held/code", "POST /api/linkage/held/reveal"];
+const DOORS = [
+  "GET /api/pseudonymize/tags",
+  "PUT /api/places/{id}",
+  "POST /api/linkage/imports",
+  "POST /api/linkage/types",
+  "GET /api/linkage/held",
+  "POST /api/linkage/held/code",
+  "POST /api/linkage/held/reveal",
+];
+
+/** What the engine serves of its own policy; the chooser draws from this and from nothing the desk kept. */
+const policy = servedPolicy as unknown as TagPolicy;
 
 const caps = (grants: readonly Grant[] = GRANTS, detail: Detail = "sensitive", doors: string[] = DOORS): Capabilities =>
   ({
@@ -46,7 +59,7 @@ const types: IdType[] = [
 ];
 const none = () => undefined;
 
-const chooser = (over: Partial<Parameters<typeof TagsDialog>[0]> = {}) => renderToStaticMarkup(<TagsDialog caps={caps()} dataset={dataset} onClose={none} onSaved={none} {...over} />);
+const chooser = (over: Partial<Parameters<typeof TagsDialog>[0]> = {}) => renderToStaticMarkup(<TagsDialog caps={caps()} dataset={dataset} policy={policy} onClose={none} onSaved={none} {...over} />);
 
 describe("the tag chooser", () => {
   it("shows every one of the hundred with its name, its group and what becomes of it", () => {
@@ -75,12 +88,12 @@ describe("the tag chooser", () => {
     expect(own).toContain('<span class="k">this dataset&#x27;s own</span><span class="v">1</span>');
   });
 
-  it("says of the rows nothing can remove why, and gives them no tick", () => {
+  it("says of the rows nothing can remove why, in the engine's own words, and gives them no tick", () => {
     const html = chooser();
-    expect(html).toContain("replaced by the subject&#x27;s code");
-    expect(html).toContain("computed from the birth date before it goes, and written");
-    expect(html).toContain("never removed; remapped when the scans leave");
-    expect(html).toContain("kept: a covariate, not an identifier");
+    expect(html).toContain("which the linkage store and the registry");
+    expect(html).toContain("computed from the birth date and the study date and put in place of whatever was there");
+    expect(html).toContain("what says how to read the file; without it no reader opens it");
+    expect(html).toContain("a covariate, kept unless the dataset opts out");
     // the three the engine settles carry a lock rather than a checkbox, and no checkbox is ticked for them
     expect(html).not.toContain('aria-label="Keep it 0010,0020"');
     expect(html).toContain('aria-label="Keep it 0010,0010"');
@@ -88,7 +101,7 @@ describe("the tag chooser", () => {
 
   it("offers Save and the tag box to a person who may change them, and words in their place to one who may not", () => {
     expect(chooser()).toContain(">Save</button>");
-    expect(chooser()).toContain("A tag the hundred do not hold");
+    expect(chooser()).toContain("A tag this dataset removes as well");
     const reader = chooser({ caps: caps(["data:see"]) });
     expect(reader).not.toContain(">Save</button>");
     expect(reader).toContain("Choosing which tags go needs work on the Data page and on the Places page");
@@ -97,6 +110,22 @@ describe("the tag chooser", () => {
     const old = chooser({ caps: caps(GRANTS, "sensitive", []) });
     expect(old).not.toContain(">Save</button>");
     expect(old).toContain("This engine does not take a change to a dataset here.");
+  });
+
+  it("keeps no list of its own for an engine that serves none, and still edits what this dataset says", () => {
+    const own: Dataset = { ...dataset, tags: { keep_demographics: true, remove: ["0008,1030"], keep: ["0008,1010"] } };
+    const html = chooser({ dataset: own, policy: null, caps: caps(GRANTS, "sensitive", ["PUT /api/places/{id}"]) });
+    expect(html).toContain("This engine does not serve the list of tags the pseudonymiser removes");
+    // not one tag, count or bar the desk kept a copy of
+    expect(html).not.toContain("tagbar");
+    expect(html).not.toContain("0010,0010");
+    expect(html).not.toContain("PatientName");
+    // what this dataset says of itself is still shown, still named, and still saved
+    expect(html).toContain("0008,1030");
+    expect(html).toContain("StationName");
+    expect(html).toContain(">Save</button>");
+    // an engine that does serve it has simply not answered yet, which is not the same thing
+    expect(chooser({ policy: null })).toContain("Reading what the pseudonymiser removes.");
   });
 });
 

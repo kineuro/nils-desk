@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The tag chooser reads what the pseudonymiser removes from the engine that owns it (record 28). The engine now serves that policy, so the desk no longer carries a copy of it: Choose tags lists what the door serves, each tag with the group holding it and what becomes of it in the engine's own words, and the desk supplies the names and nothing else. A tag the desk has no name for is listed all the same, with its number, its group and what happens to it, since what is removed is the engine's to say and a missing word is a gap in the words. The bar and the count on the Tags card are read from the same answer. Against an engine that serves no such list the chooser says so in a sentence and shows what this dataset keeps and removes of its own, which is edited and saved exactly as before.
+
 ## [1.0.0-alpha.30] - 2026-09-16
 
 ### Changed
