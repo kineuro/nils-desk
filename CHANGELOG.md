@@ -4,6 +4,8 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.29] - 2026-09-16
+
 ### Added
 
 - The Data page as shape C: the batch is the thread. Data has two pages in the side, Datasets and Cohorts. Each dataset is a card with its name and folder, what arrives through it (identified, de-identified by someone else, or our own codes in PatientID), the cohort it feeds, its two trees (the originals, locked, and the pseudonymised tree the registry reads), its subjects, stacks and batches, its newest batch in a line, and a state: held, to sort, reading now, not read yet, not sorted, or up to date. Now lists the open jobs from the engine's event stream, updated every second, or read every few seconds where the stream refuses or the engine has none: what each does, who started it and since when, how far it is with its rate and what is left, the files a pseudonymisation holds until mapped, the steps queued after a job as one dashed card, and a failed job with its error and one next move; Cancel keeps its button and says why when a person lacks the verb's grant. The chosen dataset's batches follow, each with five marks (pseudonymised, walked, digested, classified, reviewed) read from the batch's stages where the engine gives them, and each opening its own page.
