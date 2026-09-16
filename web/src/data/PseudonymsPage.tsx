@@ -61,7 +61,6 @@ import {
   ruleWords,
   sawOf,
   shapeWords,
-  tagList,
   typeName,
   vaultedInto,
   waitingLines,
@@ -608,6 +607,7 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
           dataset={dataset}
           acts={acts}
           onAct={(did) => setOpened(did === "vault" ? { kind: "vault", ask: NOTHING_ASKED } : { kind: "purge", ask: NOTHING_TYPED })}
+          onTags={openTags}
           onClose={() => setOpened(null)}
           onSaved={() => {
             setOpened(null);
@@ -1302,13 +1302,25 @@ export function HeldDialog({ caps, dataset, rows, onClose, onMap, onCode }: { ca
 
 /* ---------------------------------------------------------------- Change */
 
-export function ChangeDialog({ dataset, acts, onAct, onClose, onSaved }: { dataset: Dataset; acts: OriginalsActs; onAct: (did: "vault" | "purge") => void; onClose: () => void; onSaved: () => void }) {
+export function ChangeDialog({
+  dataset,
+  acts,
+  onAct,
+  onTags,
+  onClose,
+  onSaved,
+}: {
+  dataset: Dataset;
+  acts: OriginalsActs;
+  onAct: (did: "vault" | "purge") => void;
+  /** To the chooser, which owns the tag lists this form used to hold too. */
+  onTags: () => void;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [arrives, setArrives] = useState<NonNullable<Dataset["arrives"]>>(dataset.arrives ?? (dataset.handling?.arrives === "deidentified" ? "deidentified" : "identified"));
   const [unmapped, setUnmapped] = useState<"hold" | "code">(dataset.unmapped ?? "hold");
   const [cohort, setCohort] = useState(dataset.cohort ?? "");
-  const [demographics, setDemographics] = useState(dataset.tags?.keep_demographics ?? true);
-  const [remove, setRemove] = useState((dataset.tags?.remove ?? []).join("\n"));
-  const [keep, setKeep] = useState((dataset.tags?.keep ?? []).join("\n"));
   const [onRelease, setOnRelease] = useState<Handling["on_release"]>(dataset.handling?.on_release ?? { dates: "keep", uids: "remap", deface: false });
   const [why, setWhy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1317,8 +1329,9 @@ export function ChangeDialog({ dataset, acts, onAct, onClose, onSaved }: { datas
   const save = () => {
     setSaving(true);
     setWhy(null);
-    // where the originals stand is not among the fields: only the act that moves or removes the files writes that word
-    const patch = changePatch({ arrives, unmapped, cohort, tags: { keep_demographics: demographics, remove: tagList(remove), keep: tagList(keep) }, on_release: onRelease });
+    // where the originals stand is not among the fields: only the act that moves or removes the files writes that word. Nor are the tag
+    // lists, which the chooser owns: a form that sent them would undo what the chooser wrote since this one was opened
+    const patch = changePatch({ arrives, unmapped, cohort, on_release: onRelease });
     datasets
       .set(dataset.id, patch)
       .then(onSaved)
@@ -1368,29 +1381,14 @@ export function ChangeDialog({ dataset, acts, onAct, onClose, onSaved }: { datas
       </div>
       <div className="field">
         <span className="label">Tags</span>
-        <label className="choice">
-          <input type="checkbox" checked={demographics} disabled={saving} onChange={(e) => setDemographics(e.target.checked)} />
-          Keep sex, weight and size: covariates, not identifiers
-        </label>
-        <div className="fields2">
-          <div className="field">
-            <label className="label" htmlFor="dataset-remove">
-              Also remove
-            </label>
-            <div className="input mono">
-              <textarea id="dataset-remove" rows={3} value={remove} disabled={saving} placeholder="StudyDescription" onChange={(e) => setRemove(e.target.value)} />
-            </div>
-          </div>
-          <div className="field">
-            <label className="label" htmlFor="dataset-keep">
-              Also keep
-            </label>
-            <div className="input mono">
-              <textarea id="dataset-keep" rows={3} value={keep} disabled={saving} placeholder="one tag keyword a line" onChange={(e) => setKeep(e.target.value)} />
-            </div>
-          </div>
+        <span className="meta">
+          Which tags this dataset keeps and removes, on top of the four groups that go on every batch, is chosen in Choose tags, where all hundred are listed with what becomes of each.
+        </span>
+        <div className="row">
+          <button type="button" className="button quiet small" disabled={saving} onClick={onTags}>
+            Choose tags
+          </button>
         </div>
-        <span className="meta">The four groups go on every batch; these lists are this dataset's own, on top.</span>
       </div>
       <div className="field">
         <span className="label">The originals</span>

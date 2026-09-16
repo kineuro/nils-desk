@@ -18,7 +18,7 @@ import { VERBS } from "../ops/verbs";
 import { identityActs } from "../review/client";
 import { kindOf } from "../review/triage";
 import type { Access } from "../settings/identity";
-import type { Dataset, DatasetFields, IdentityRule, OriginalsKept, Tags } from "./datasets";
+import type { Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
 import type { Handling } from "./sources";
 import { GROUP_TAGS, STANDARD_TOTAL } from "./tags";
 
@@ -36,22 +36,28 @@ export type DatasetPatch = Partial<DatasetFields> & {
   handling?: Handling;
 };
 
-/** What a person may change about a dataset on the Pseudonymisation page. */
+/**
+ * What a person may change about a dataset on the Pseudonymisation page. The
+ * tag lists are not among them: the chooser edits those, and two forms seeded
+ * from the same dataset would each send the whole block and undo the other.
+ */
 export interface DatasetChange {
   arrives: NonNullable<DatasetFields["arrives"]>;
   unmapped: NonNullable<DatasetFields["unmapped"]>;
   cohort: string;
-  tags: NonNullable<Tags>;
   on_release: Handling["on_release"];
 }
 
-/** What the Change form sends: its own fields, and nothing of the originals. */
+/**
+ * What the Change form sends: its own fields, nothing of the originals and
+ * nothing of the tags, which the place keeps as they stand where the body
+ * names none.
+ */
 export function changePatch(c: DatasetChange): DatasetPatch {
   return {
     arrives: c.arrives,
     unmapped: c.unmapped,
     cohort: c.cohort.trim() || null,
-    tags: c.tags,
     handling: { arrives: c.arrives === "identified" ? "identified" : "deidentified", on_release: c.on_release },
   };
 }
@@ -305,29 +311,6 @@ export function actEnded(did: "vault" | "purge", row: Pick<JobRow, "state" | "er
 export function movingWords(look: OriginalsLook | null): string {
   if (look === null) return "the engine has not said";
   return `${n(look.files)} ${look.files === 1 ? "file" : "files"} · ${bytesWords(look.bytes)}`;
-}
-
-/** What the door answered, line by line, for the purge dialog. */
-export function originalsLines(look: OriginalsLook): { label: string; words: string; tone?: "caution" }[] {
-  return [
-    { label: "files", words: movingWords(look) },
-    { label: "verified", words: `${n(look.verified)} ${look.verified === 1 ? "file has" : "files have"} a pseudonymised copy the engine checked` },
-    {
-      label: "not verified",
-      words: look.unverified === 0 ? "none: every file is accounted for in dcm-anon" : `${n(look.unverified)} ${look.unverified === 1 ? "file has" : "files have"} no checked copy in dcm-anon`,
-      tone: look.unverified > 0 ? "caution" : undefined,
-    },
-    {
-      label: "held",
-      words:
-        look.held === 0
-          ? "none"
-          : look.held === 1
-            ? "1 file is held until mapped: its original is what a map would still release"
-            : `${n(look.held)} files are held until mapped: their originals are what a map would still release`,
-      tone: look.held > 0 ? "caution" : undefined,
-    },
-  ];
 }
 
 /** Why the engine will not purge, in its own words; null when it says it would. */
@@ -646,13 +629,15 @@ export function mapRefusal(guesses: Guess[]): string | null {
 export const MAX_MAP_ROWS = 100000;
 
 /**
- * Why the file cannot go to the import door as it stands, or null: the engine
- * reads comma-separated files with a header row, and takes a hundred thousand
- * rows in one call.
+ * Why the file cannot go to the import door as it stands, or null. The rules
+ * are the engine's own: a first line naming the columns, rows under it, and a
+ * hundred thousand rows at most in one call. How the file separates its
+ * columns is not among them, and cannot be: the columns are read here and the
+ * rows are posted as values, so no delimiter of the file's ever reaches the
+ * engine.
  */
 export function csvRefusal(csv: Csv): string | null {
   if (csv.header.length === 0 || csv.header.every((h) => h.trim() === "")) return "The first line names the columns, and this file has no such line.";
-  if (csv.delimiter !== ",") return `The engine reads comma-separated files only, and this one separates its columns with ${csv.delimiter === ";" ? "semicolons" : "tabs"}. Save it again as CSV.`;
   if (csv.rows.length === 0) return "The file has a header and no rows under it.";
   if (csv.rows.length > MAX_MAP_ROWS)
     return `${n(csv.rows.length)} rows: the engine takes ${n(MAX_MAP_ROWS)} in one go. Split the file, or leave it where the engine can read it and file it as a job.`;
@@ -860,8 +845,3 @@ export function detailCounts(access: Access | null): Record<Detail, number> {
 export const REMOVED_GROUPS: { group: string; tags: number }[] = GROUP_TAGS;
 
 export const REMOVED_TOTAL = STANDARD_TOTAL;
-
-/** A list typed as words, one tag a line or comma-separated, each once. */
-export function tagList(text: string): string[] {
-  return [...new Set(text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean))];
-}
