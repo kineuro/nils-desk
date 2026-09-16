@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// One cohort's page: what it is and whose, its four numbers with what waits on
-// Review, its members over time as a step chart, how they joined newest
-// first, and beside it the datasets holding its people, its releases and the
+// One cohort's page (record 27, R5c): its four tiles, its members over time,
+// and the join log as a table of when, what, how many, who and why. A retired
+// cohort reads as retired from its tag and its lede, without a paragraph
+// about it. Beside it: the datasets holding its people, its releases and the
 // queries to start from it. Add or take out members with a reason, rename it,
-// retire it (its members and history stay), or release it.
+// retire it, or release it.
 
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
@@ -18,6 +19,7 @@ import { keepingRefusal } from "../query/cards";
 import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
+import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { chartLabels, cohorts, delta, ledeWords, membersBody, sessionsMeta, sessionsWords, stepChart, type CohortDetail, type Join } from "./cohorts";
 import { whenWords } from "./sources";
@@ -197,7 +199,6 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
             <section className="panel card">
               <div className="row card-head">
                 <h2>Members over time</h2>
-                <span className="meta">each join adds its subjects, each leave takes them away</span>
               </div>
               {chart ? <StepChartView chart={chart} now={today} /> : <p className="meta">Nobody has joined yet.</p>}
             </section>
@@ -280,7 +281,6 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                 ))}
               </dl>
             )}
-            <span className="meta">a person in two datasets is one subject here</span>
           </section>
           <section className="panel card">
             <div className="row card-head">
@@ -294,9 +294,7 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                 {c.releases.map((r) => (
                   <div key={r.name} className="facts-pair">
                     <dt>{r.name}</dt>
-                    <dd>
-                      {[r.layout ?? null, r.subjects !== null ? `${n(r.subjects)} subjects` : null, r.withdrawn_at ? "withdrawn" : r.handed_over ? "handed over" : "not handed over"].filter(Boolean).join(" · ")}
-                    </dd>
+                    <dd>{[r.layout ?? null, r.subjects !== null ? `${n(r.subjects)} subjects` : null, r.withdrawn_at ? "withdrawn" : r.handed_over ? "handed over" : "not handed over"].filter(Boolean).join(" · ")}</dd>
                   </div>
                 ))}
               </dl>
@@ -321,7 +319,6 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                     <Icon name="chevron-right" />
                   </button>
                 ))}
-                <span className="meta">Each opens a card on everyone in {c.name}; the card narrows to their sessions or their stacks step by step.</span>
               </>
             ) : (
               <p className="meta">{acts.starting}</p>
@@ -403,7 +400,7 @@ function MembersDialog({ cohort: c, onClose, onDone }: { cohort: CohortDetail; o
       onClose={onClose}
       foot={
         <div className="row actions">
-          <span className="meta grow">{built.ok ? `${built.summary}; leaving closes the membership, nothing is erased.` : `Needs ${built.why}.`}</span>
+          <span className="meta grow">{built.ok ? built.summary : `Needs ${built.why}.`}</span>
           <button type="button" className="button secondary" onClick={onClose}>
             Cancel
           </button>
@@ -436,7 +433,9 @@ function MembersDialog({ cohort: c, onClose, onDone }: { cohort: CohortDetail; o
           <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="consent withdrawn, from the grant's list" />
         </span>
       </label>
-      <p className="meta">Every membership records who did it, when and why. A code the registry does not know is named back, not added.</p>
+      <Says head="What is recorded">
+        Every membership records who did it, when and why. Leaving closes the membership and erases nothing. A code the registry does not know is named back, not added.
+      </Says>
       {failed && <p className="warn">{failed}</p>}
     </Dialog>
   );
@@ -469,7 +468,7 @@ function RenameDialog({ cohort: c, onClose }: { cohort: CohortDetail; onClose: (
       onClose={onClose}
       foot={
         <div className="row actions">
-          <span className="meta grow">Its members, history and releases keep to it under the new name.</span>
+          <span className="meta grow">Its members, history and releases keep to it.</span>
           <button type="button" className="button secondary" onClick={onClose}>
             Cancel
           </button>
@@ -518,6 +517,7 @@ function RetireDialog({ cohort: c, onClose, onDone }: { cohort: CohortDetail; on
       onClose={onClose}
       foot={
         <div className="row actions">
+          <span className="meta grow">{back ? "It returns with the members and history it kept." : "Its members and history stay."}</span>
           <button type="button" className="button secondary" onClick={onClose}>
             Cancel
           </button>
@@ -527,19 +527,11 @@ function RetireDialog({ cohort: c, onClose, onDone }: { cohort: CohortDetail; on
         </div>
       }
     >
-      {back ? (
-        <p>It returns to the lists with the members and history it kept.</p>
-      ) : (
-        <div className="note">
-          <Icon name="info" />
-          <div className="note-body">
-            <p className="note-lead">Its members and history stay.</p>
-            <p className="note-detail">
-              A retired cohort leaves the lists: Review, Release and the Query no longer offer it. Nothing is erased, and it can be brought back from its page.
-            </p>
-          </div>
-        </div>
-      )}
+      <Says head={back ? "What coming back changes" : "What retiring changes"}>
+        {back
+          ? "It returns to the lists, and Review, Release and the Query offer it again."
+          : "A retired cohort leaves the lists: Review, Release and the Query no longer offer it. Nothing is erased, and it can be brought back from its page."}
+      </Says>
       {failed && <p className="warn">{failed}</p>}
     </Dialog>
   );

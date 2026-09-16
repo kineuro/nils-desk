@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// A batch's own page: the thread of the Data page. Its name and which
-// dataset it came from, the five stages as a strip with the job under each,
-// what it added by base, the files it refused by reason, the jobs that ran
-// on it, and at the side its timeline, the dataset's pseudonymisation facts
-// and where else its files show. A digest of what is new, a read of the
-// refused files and a sort of what waits are queued from here. Every part
-// reads one door, and a door the engine does not serve leaves a line in
-// its place.
+// A batch's page (record 27, R5b): the batch is the thread. The five stages
+// are one strip across the top, each with its count and a word of state.
+// Below: what it added by base, the refused files by reason with what to do
+// about each, and the chain of jobs with what each stage did. At the side its
+// timeline, the dataset's pseudonymisation as values, and where else its
+// files show. Every count and every link stands; the commentary is gone.
 
 import { useCallback, useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
@@ -18,12 +16,13 @@ import { data, ops, type ReviewItem } from "../ops/client";
 import { href, narrow } from "../routes";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
+import { Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { addedByBase, batches, datasetOf, eventMark, jobWords, ledeWords, tookWords, verbWords, type BatchDoc } from "./batch";
 import { chainJobs } from "./datasets";
 import { arrivesWords, leavingWords, subjectsWords, type Dataset } from "./pseudonyms";
 import { sources, whenWords, type Source } from "./sources";
-import { byReason, jobsOfBatch, reasonWords, stages, type Stage } from "./stages";
+import { byReason, jobsOfBatch, reasonWords, remedyWords, stages, stateWords, type Stage } from "./stages";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; batch: BatchDoc };
 type Timeline = { kind: "none" } | { kind: "loading" } | { kind: "ready"; events: Event[] } | { kind: "failed"; why: string };
@@ -92,7 +91,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
     batches
       .readAgain(dataset, retry, chained && (dataset.trees?.originals ?? null) !== null)
       .then((j) => {
-        setSaid(retry ? `The ${n(refusedCount)} refused files are read again as job ${j.job}; a cancelled read marks nothing gone.` : `A read of ${dataset.name} is queued as job ${j.job}.`);
+        setSaid(retry ? `The ${n(refusedCount)} refused files are read again as job ${j.job}.` : `A read of ${dataset.name} is queued as job ${j.job}.`);
         read();
       })
       .catch((e: unknown) => setSaid(messageOf(e)));
@@ -168,9 +167,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
               <div className="bybase">
                 {byBase.map((r) => {
                   const max = Math.max(...byBase.map((x) => x.count), 1);
-                  return (
-                    <BaseBar key={r.base} label={r.base} count={r.count} width={(r.count / max) * 100} unsure={r.unsure} />
-                  );
+                  return <BaseBar key={r.base} label={r.base} count={r.count} width={(r.count / max) * 100} unsure={r.unsure} />;
                 })}
               </div>
             ) : (
@@ -187,7 +184,10 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
               <div className="reasons">
                 {reasons.map((r) => (
                   <div key={r.reason} className="reason">
-                    <span>{reasonWords(r.reason)}</span>
+                    <span>
+                      {reasonWords(r.reason)}
+                      <span className="meta">{remedyWords(r.reason)}</span>
+                    </span>
                     <b>{n(r.count)}</b>
                   </div>
                 ))}
@@ -201,9 +201,8 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
                     Read the {n(refusedCount)} again
                   </button>
                 ) : (
-                  <span className="meta">Reading them again is Data work.</span>
+                  <span className="meta">Reading them again needs work on the Data page.</span>
                 )}
-                <span className="meta">a cancelled read marks nothing gone</span>
               </div>
             )}
           </section>
@@ -211,7 +210,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
         <section className="stack roomy">
           <div className="section-head rule-top">
             <h2>Jobs on this batch</h2>
-            <span className="meta">what did each stage</span>
+            <span className="meta">what each stage did</span>
           </div>
           {mine.length === 0 && <p className="meta">{served(caps, "GET /api/jobs") ? "No job of this batch is listed." : "This engine does not list its jobs."}</p>}
           {mine.length > 0 && (
@@ -220,7 +219,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
                 <thead>
                   <tr>
                     <th>Job</th>
-                    <th>Verb</th>
+                    <th>Step</th>
                     <th>By</th>
                     <th>When</th>
                     <th>Took</th>
@@ -313,7 +312,7 @@ function ofBatch(i: ReviewItem, id: number): boolean {
   return ref.batch === id || ref.batch_id === id || (i.scope === "batch" && String(ref.id ?? "") === String(id));
 }
 
-/** The five stages, each with its count, its line and its job. */
+/** The five stages, each with its count, a word of state, its line and its job. */
 export function StageStrip({ strip, jobs, batch }: { strip: Stage[]; jobs: JobRow[]; batch: BatchDoc }) {
   const took = (ids: number[]) => {
     const rows = ids.map((id) => jobs.find((j) => j.id === id)).filter((j): j is JobRow => j !== undefined);
@@ -330,6 +329,7 @@ export function StageStrip({ strip, jobs, batch }: { strip: Stage[]; jobs: JobRo
             {s.count === null ? "" : n(s.count)}
             {s.unit && <small> {s.unit}</small>}
           </span>
+          <span className="meta state">{stateWords(s.mark)}</span>
           <span className="meta">{s.words}</span>
           {s.name === "reviewed" ? (
             s.mark === "wait" ? (
@@ -371,15 +371,13 @@ function BaseBar({ label, count, width, unsure }: { label: string; count: number
 export function PseudonymisationFacts({ dataset }: { dataset: Dataset }) {
   return (
     <>
-      <dl className="facts">
-        <dt>arrives</dt>
-        <dd>{arrivesWords(dataset)}</dd>
-        <dt>subjects</dt>
-        <dd>{subjectsWords(dataset)}</dd>
-        <dt>on release</dt>
-        <dd>{leavingWords(dataset.handling?.on_release)}</dd>
-      </dl>
-      <span className="meta">set on the dataset, applied when its scans leave</span>
+      <Values
+        cells={[
+          { k: "arrives", v: arrivesWords(dataset) },
+          { k: "subjects", v: subjectsWords(dataset) },
+          { k: "on release", v: leavingWords(dataset.handling?.on_release) },
+        ]}
+      />
       <a className="tail" href={href("data", "datasets", dataset.name, "pseudonymisation")}>
         Pseudonymisation of {dataset.name}
         <Icon name="chevron-right" />

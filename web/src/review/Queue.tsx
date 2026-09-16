@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The queue (record 26): a cohort's open items, the costliest first. On top,
-// the three kinds as cards: the stacks the rules are unsure of, with Sort
-// them and the rules' guess accepted in bulk for the ones triage says need
-// no reading; the identity questions, named for what they are (subjects that
-// may be one person twice, files held until mapped, subjects coded without a
-// map); the sessions that moved. Each row is decided, looked at in the viewer
-// with its evidence, or seen; held files are mapped on their dataset's
+// The queue (record 27, R5d): a cohort's open items, the costliest first. On
+// top, the three kinds as cards, each a count, a phrase and the one act that
+// goes with it. Every row action stands: a row is decided, looked at in the
+// viewer with its evidence, or seen; held files are mapped on their dataset's
 // Pseudonymisation page and never decided here.
 
 import { lazy, Suspense, useMemo, useState } from "react";
@@ -15,7 +12,7 @@ import { whenWords } from "../data/sources";
 import { ops, type ReviewItem } from "../ops/client";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
-import { Icon } from "../ui/Icon";
+import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { acts, batchOf, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
 import { bulkPlan, kindOf, needsReading, sortByCost } from "./triage";
@@ -221,7 +218,6 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, onDec
             <b>{n(c.open)}</b>
           </button>
         ))}
-        {summary && <span className="meta chips-note">a subject in two cohorts shows in both, decided once</span>}
       </div>
       {batch !== null && (
         <p className="meta">
@@ -242,7 +238,7 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, onDec
                   </button>
                   {may && c.bulk > 0 && (
                     <button type="button" className="button quiet small" onClick={() => setBulk(true)}>
-                      Accept the rules' guess for {n(c.bulk)}
+                      Accept the rules&apos; guess for {n(c.bulk)}
                     </button>
                   )}
                 </>
@@ -277,15 +273,11 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, onDec
           )}
         </div>
         <QueueTable items={shown} may={may} onDecide={onDecide} onLook={(i, s) => setLook({ item: i, stack: s })} onSee={(i) => setFamily(familyOf(i.kind))} />
+        <Says head="How the queue is shared out">
+          A subject in two cohorts shows on both queues and is decided once. Deciding needs work on the Review page. A rule proposed here is tried on the cohort&apos;s stacks first, and adopting it needs
+          work on the Data page too, since it changes how data is sorted.
+        </Says>
       </section>
-      <div className="note gated">
-        <Icon name="lock" />
-        <div className="note-body">
-          <p className="note-detail">
-            Deciding needs Review: Work. A rule proposed here (an overlay) is tried on the cohort's stacks first and adopted by someone with Data: Work too, since it changes how data is sorted.
-          </p>
-        </div>
-      </div>
       {look && <LookDialog item={look.item} stack={look.stack} onClose={() => setLook(null)} onExplain={() => { const l = look; setLook(null); onExplain(l.item, l.stack); }} onDecide={may ? () => { const l = look; setLook(null); onDecide(l.item); } : null} />}
       {bulk && <BulkDialog items={open.filter((i) => familyOf(i.kind) === "unsure")} onClose={() => setBulk(false)} onDone={(words) => { setBulk(false); onChanged(words); }} />}
     </>
@@ -379,7 +371,7 @@ export function BulkDialog({ items, onClose, onDone }: { items: ReviewItem[]; on
       }
     >
       <p className="lede">
-        {n(plan.accepts.length)} {plan.accepts.length === 1 ? "item" : "items"} about {n(plan.stacks)} stacks keep the value the rules guessed, each acknowledged on its own audit row.
+        {n(plan.accepts.length)} {plan.accepts.length === 1 ? "item" : "items"} about {n(plan.stacks)} stacks keep the value the rules guessed, each on its own audit row.
       </p>
       {plan.refused.length > 0 && (
         <div className="field">

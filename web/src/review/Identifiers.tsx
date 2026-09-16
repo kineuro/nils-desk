@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The identity questions (record 26): two codes that share one identifier,
-// files held until the map names their identifier, subjects coded from an
-// identifier the map does not know. Each kind counts its items and says what
-// settles it: a collision is decided or merged; held files are mapped on the
-// dataset's Pseudonymisation page and never decided; a provisional subject is
-// merged into the one it stands for. A merge needs Data: Work and detail
-// sensitive.
+// The identity questions (record 27, R5d): two codes that share one
+// identifier, files held until the map names their identifier, subjects coded
+// from an identifier the map does not know. Each kind says its remedy in a
+// phrase; what settles it at length is one disclosure. A collision is decided
+// or merged; held files are mapped on the dataset's Pseudonymisation page and
+// never decided here; a provisional subject is merged into the one it stands
+// for.
 
 import { useState } from "react";
 import type { Json } from "../ask/client";
@@ -15,7 +15,7 @@ import { door as served } from "../deployment";
 import type { ReviewItem } from "../ops/client";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
-import { Icon } from "../ui/Icon";
+import { Says } from "../ui/Says";
 import { acts, datasetOf, familyOf, identityActs, itemWords, refusalWords, review } from "./client";
 import { kindOf, sortByCost } from "./triage";
 
@@ -28,10 +28,10 @@ export interface IdentifiersProps {
   onChanged: (words: string) => void;
 }
 
-const KINDS: { what: string; title: string; words: string; settles: string }[] = [
-  { what: "collision", title: "may be one person twice", words: "two codes share one identifier", settles: "a merge of the alias into the canonical subject, or a decision that they are two" },
-  { what: "unmapped", title: "held until mapped", words: "files whose identifier the map does not know", settles: "the map, on the dataset's Pseudonymisation page; the next bring-in writes them. Nothing is decided here" },
-  { what: "provisional", title: "coded without a map", words: "subjects coded from an identifier the map does not know", settles: "a merge into the subject it stands for, or a map that names the identifier and merges it" },
+const KINDS: { what: string; title: string; remedy: string }[] = [
+  { what: "collision", title: "may be one person twice", remedy: "merge them, or decide they are two" },
+  { what: "unmapped", title: "held until mapped", remedy: "map them on the dataset" },
+  { what: "provisional", title: "coded without a map", remedy: "merge into the subject it stands for" },
 ];
 
 /** The identity items by what they are: the three kinds record 26 names, and anything else the engine raised. */
@@ -61,12 +61,13 @@ export function IdentifiersPage({ caps, items, onDecide, onChanged }: Identifier
               <div key={g.what} className={g.items.length === 0 ? "need quiet" : "need"}>
                 <span className="value">{n(g.items.length)}</span>
                 <span>{k.title}</span>
-                <span className="meta">{g.items.length === 0 ? "nothing waits" : `${k.words}${datasets.length > 0 ? ` · from ${datasets.join(", ")}` : ""}`}</span>
+                <span className="meta">{g.items.length === 0 ? "nothing waits" : k.remedy}</span>
+                {g.items.length > 0 && datasets.length > 0 && <span className="meta">{datasets.join(", ")}</span>}
               </div>
             );
           })}
       </div>
-      {total === 0 && <p className="lede">No identity question waits. A subject stays one subject however many identifiers it carries.</p>}
+      {total === 0 && <p className="lede">Nothing waits here.</p>}
       {groups
         .filter((g) => g.items.length > 0)
         .map((g) => {
@@ -75,7 +76,7 @@ export function IdentifiersPage({ caps, items, onDecide, onChanged }: Identifier
             <section key={g.what} className="stack roomy">
               <div className="section-head rule-top">
                 <h2>{k ? k.title.charAt(0).toUpperCase() + k.title.slice(1) : "Other identity questions"}</h2>
-                <span className="meta">{k ? `settled by ${k.settles}` : ""}</span>
+                <span className="meta">{k ? k.remedy : ""}</span>
               </div>
               <div className="table-wrap">
                 <table className="thin">
@@ -132,14 +133,11 @@ export function IdentifiersPage({ caps, items, onDecide, onChanged }: Identifier
             </section>
           );
         })}
-      <div className="note gated">
-        <Icon name="lock" />
-        <div className="note-body">
-          <p className="note-detail">
-            The map and a merge read identifiers, so they need Data: Work and records in full. The shapes and counts here are open to anyone who may see the Review page; an identifier itself never appears on it.
-          </p>
-        </div>
-      </div>
+      <Says head="What settles each of them">
+        A collision is merged, or decided to be two. Held files are mapped on the dataset&apos;s Pseudonymisation page, and the next bring-in writes them. Nothing is decided here. A subject coded without a
+        map is merged into the one it stands for, by a merge or by a map that names its identifier. The map and a merge read identifiers, so they need work on the Data page and records in full; the shapes
+        and counts here are open to anyone who may see this page, and an identifier itself never appears on it.
+      </Says>
       {merging && <MergeDialog item={merging} onClose={() => setMerging(null)} onDone={(w) => { setMerging(null); onChanged(w); }} />}
     </>
   );
@@ -159,7 +157,7 @@ export function MergeDialog({ item, onClose, onDone }: { item: ReviewItem; onClo
     setRefused(null);
     review
       .merge(canonical.trim(), alias.trim(), why.trim())
-      .then((r) => onDone(`Merging ${alias.trim()} into ${canonical.trim()} as job ${r.job}; every row of the alias moves to the canonical subject.`))
+      .then((r) => onDone(`Merging ${alias.trim()} into ${canonical.trim()} as job ${r.job}.`))
       .catch((e: unknown) => {
         setBusy(false);
         setRefused(refusalWords(e));
@@ -204,9 +202,10 @@ export function MergeDialog({ item, onClose, onDone }: { item: ReviewItem; onClo
           <input value={why} placeholder="what says they are one person" aria-label="Why" onChange={(e) => setWhy(e.target.value)} />
         </span>
       </div>
-      <p className="meta">
-        Every row of the alias, its studies, stacks, memberships, identities and decisions, moves to the subject that stays; the alias's code is filed on it as an identifier, and the alias is marked merged and leaves every list. The audit records the merge and the epoch moves.
-      </p>
+      <Says head="What a merge moves">
+        Every row of the alias, its studies, stacks, memberships, identities and decisions, moves to the subject that stays. The alias&apos;s code is filed on it as an identifier, and the alias is marked
+        merged and leaves every list. The audit records it.
+      </Says>
     </Dialog>
   );
 }

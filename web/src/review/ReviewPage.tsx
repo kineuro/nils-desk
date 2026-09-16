@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Review page (record 26): what needs a person. Three pages under one
-// head: the queue by cohort, the rules with every axis and its words, and
-// the identity questions. The page reads the queue and its summary once and
-// again after every act, and holds the dialogs the three share: a decision,
-// a look in the viewer, why one stack was judged so, and a word for the site.
+// The Review page (record 27, R5d): what needs a person, in three pages under
+// one head, each with a head of a line. The page reads the queue and its
+// summary once and again after every act, and holds the dialogs the three
+// share: a decision, a look in the viewer, why one stack was judged so, and a
+// word for the site.
 
 import { useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -30,9 +30,9 @@ export function subOf(page: string | null): ReviewSub {
 }
 
 const HEAD: Record<ReviewSub, { title: string; lede: string }> = {
-  queue: { title: "What needs a person", lede: "A scan the rules could not place, two records that may be one person, a visit that moved. Pick a cohort and take its queue." },
-  rules: { title: "How scans are sorted", lede: "The pack decides, axis by axis: a flag, a word, or physics. Every word list is the site's to grow, for a scanner, a batch or everywhere, tried on real stacks before anyone adopts it." },
-  identifiers: { title: "Who a file is about", lede: "A subject stays one subject however it arrives. What the map does not settle, and what two codes share, waits here." },
+  queue: { title: "What needs a person", lede: "Unsure scans, subjects that may be one person, sessions that moved." },
+  rules: { title: "How scans are sorted", lede: "Eleven axes. Every list the pack opens is the site's to grow." },
+  identifiers: { title: "Who a file is about", lede: "What the map does not settle, and what two codes share." },
 };
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; items: ReviewItem[]; summary: ReviewSummary | null };

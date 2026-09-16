@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Why is this a T2w (record 26): the explain door read for one stack, axis
-// by axis with how sure the pack was and because of what; a decision
-// otherwise at a scope, through the stack's review item; and the way to
-// teach the rules instead, a word for the site's list tried on the batch
-// first. On an engine without the door, the item's own evidence stands in.
+// Why is this a T2w (record 27, R5d): the explain door read for one stack,
+// axis by axis with how sure the pack was and because of what, the whole
+// evidence kept. A decision otherwise at a scope goes through the stack's
+// review item; the way to teach the rules instead is a word for the site,
+// tried on the batch first. On an engine without the door, the item's own
+// evidence stands in.
 
 import { useEffect, useState } from "react";
 import type { Json } from "../ask/client";
@@ -13,6 +14,7 @@ import { ops, type ReviewItem } from "../ops/client";
 import { whenWords } from "../data/sources";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
+import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { acts, batchOf, becauseWords, membersOf, refusalWords, review, SCOPES, type Explain, type ExplainAxis, type Scope } from "./client";
 import { kindOf } from "./triage";
@@ -215,19 +217,14 @@ export function ExplainDialog({ caps, stack, item, onClose, onLook, onAddWord, o
               ))}
             </span>
           </div>
-          <span className="meta">
-            {item === null
-              ? "A decision goes through the stack's review item; none opened this."
-              : !acts(caps).decide
-                ? "Deciding needs work on the Review page."
-                : "A person's decision outranks the rules and survives re-sorting. A new pack that disagrees raises a new item; it never overwrites."}
-          </span>
+          {item === null && <span className="meta">A decision goes through the stack&apos;s review item; none opened this.</span>}
+          {item !== null && !acts(caps).decide && <span className="meta">Deciding needs work on the Review page.</span>}
         </div>
       )}
-      <div className="field">
-        <span className="label">Or teach the rules</span>
-        <span className="meta">If the series description holds a word the pack should know, add it to one of the site's lists and try it on the batch first.</span>
-      </div>
+      <Says head="Decide it, or teach the rules">
+        A person&apos;s decision outranks the rules and survives re-sorting. If the series description holds a word the pack should know, add it to one of the site&apos;s lists instead and try it on the
+        batch first: that moves every stack the word reaches, not this one alone.
+      </Says>
     </Dialog>
   );
 }
