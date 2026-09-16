@@ -8,6 +8,7 @@
 import type { JobRow } from "../ask/client";
 import type { Batch, ReviewItem } from "../ops/client";
 import type { BatchDoc, BatchStages } from "./batch";
+import { chainJobs } from "./datasets";
 
 export type StageName = "pseudonymised" | "walked" | "digested" | "classified" | "reviewed";
 
@@ -39,10 +40,14 @@ const VERB: Record<StageName, string[]> = {
   reviewed: [],
 };
 
-/** The jobs that touched a batch: named on its stages, named for it, or carrying its id in their arguments. */
-export function jobsOfBatch(batch: Batch & Partial<Pick<BatchDoc, "stages" | "chain">>, jobs: JobRow[]): JobRow[] {
+/**
+ * The jobs that touched a batch: named on its stages or on its chain, named
+ * for it, or carrying its id in their arguments. `thread` is the chain the
+ * sources door gives for the same batch, where the page read it there.
+ */
+export function jobsOfBatch(batch: Batch & Partial<Pick<BatchDoc, "stages" | "chain">>, jobs: JobRow[], thread: number[] = []): JobRow[] {
   const id = String(batch.id);
-  const onStages = new Set<number>([...stageJobIds(batch.stages ?? null), ...(batch.chain ?? [])]);
+  const onStages = new Set<number>([...stageJobIds(batch.stages ?? null), ...chainJobs(batch.chain), ...thread]);
   return jobs.filter((j) => {
     if (onStages.has(j.id)) return true;
     const argv = (j.args?.argv as string[] | undefined) ?? [];

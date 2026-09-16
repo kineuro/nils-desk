@@ -20,6 +20,7 @@ import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { addedByBase, batches, datasetOf, eventMark, jobWords, ledeWords, tookWords, verbWords, type BatchDoc } from "./batch";
+import { chainJobs } from "./datasets";
 import { arrivesWords, leavingWords, subjectsWords, type Dataset } from "./pseudonyms";
 import { sources, whenWords, type Source } from "./sources";
 import { byReason, jobsOfBatch, reasonWords, stages, type Stage } from "./stages";
@@ -74,9 +75,12 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
   }, [running, read]);
 
   const dataset = batch ? datasetOf(batch, list) : null;
-  const mine = batch ? jobsOfBatch(batch, jobs).sort((a, b) => a.id - b.id) : [];
+  // the same batch among the dataset's digests names the jobs of its thread by
+  // stage, which the jobs table takes beside the ones the batch row names
+  const digest = dataset?.digests.recent.find((d) => d.id === id) ?? null;
+  const mine = batch ? jobsOfBatch(batch, jobs, chainJobs(digest?.chain)).sort((a, b) => a.id - b.id) : [];
   const classified = batch?.stages?.classified ?? null;
-  const toSort = classified ? Math.max(0, classified.of - classified.stacks) : (dataset?.digests.recent.find((d) => d.id === id)?.to_sort ?? 0);
+  const toSort = classified ? Math.max(0, classified.of - classified.stacks) : (digest?.to_sort ?? 0);
   const refusedCount = batch?.stages?.walked.refused ?? batch?.quarantined ?? (refused?.length ?? 0);
   const reasons = refused ? byReason(refused) : [];
   const byBase = batch ? addedByBase(batch) : null;

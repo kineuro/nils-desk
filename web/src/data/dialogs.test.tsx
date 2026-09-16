@@ -94,7 +94,7 @@ describe("Add a dataset", () => {
 
 describe("Bring in what is new", () => {
   it("lays out pseudonymise, digest and sort as one chain for an identified dataset, with the note about grants and the estimate", () => {
-    const html = renderToStaticMarkup(<BringInNew caps={caps()} dataset={incoming} rates={{ pseudonymize: 1400 }} onClose={none} onDone={none} />);
+    const html = renderToStaticMarkup(<BringInNew caps={caps()} dataset={incoming} rates={{ pseudonymize: { files_per_s: 1400, files: 4430 } }} onClose={none} onDone={none} />);
     expect(html).toContain("Bring in what is new</h2>");
     expect(html).toContain("<dt>new in the originals</dt>");
     expect(html).toContain("2,212 files");
@@ -106,7 +106,7 @@ describe("Bring in what is new", () => {
     expect(html).toContain("All three, as one thread</b>");
     expect(html).toContain("Pseudonymise only</b>");
     expect(html).toContain("sorting needs work on the Pipelines page");
-    expect(html).toContain("About 2,212 files at 1,400 a second on this machine");
+    expect(html).toContain("About 2,212 files at 1,400 a second on this machine, measured over 4,430 files");
     expect(html).toContain("Bring in</button>");
   });
 

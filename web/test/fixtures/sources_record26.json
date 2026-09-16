@@ -1,7 +1,7 @@
 {
   "count": 3,
   "window_days": 90,
-  "rates": { "pseudonymize": 1400, "digest": 410 },
+  "rates": { "pseudonymize": { "files_per_s": 1400, "files": 4430 }, "digest": { "files_per_s": 410, "files": 11324 } },
   "sources": [
     {
       "id": 1,
@@ -41,7 +41,7 @@
             "classified": 0,
             "to_sort": 0,
             "pseudonymised": { "files": 2208, "changed": 0, "held": 4, "job": 120 },
-            "chain": [120, 121, null, null]
+            "chain": { "pseudonymize": 120, "digest": 121, "classify": [] }
           },
           {
             "id": 7,
@@ -56,7 +56,7 @@
             "classified": 486,
             "to_sort": 12,
             "pseudonymised": { "files": 2208, "changed": 14, "held": 0, "job": 76 },
-            "chain": [76, 77, 78, 79]
+            "chain": { "pseudonymize": 76, "digest": 77, "classify": [78, 79] }
           }
         ]
       },
@@ -97,7 +97,7 @@
             "classified": 0,
             "to_sort": 0,
             "pseudonymised": null,
-            "chain": [null, 50, null, null]
+            "chain": { "pseudonymize": null, "digest": 50, "classify": [] }
           }
         ]
       },
@@ -138,7 +138,7 @@
             "classified": 0,
             "to_sort": 0,
             "pseudonymised": null,
-            "chain": [null, 40, 41, 42]
+            "chain": { "pseudonymize": null, "digest": 40, "classify": [41, 42] }
           }
         ]
       },

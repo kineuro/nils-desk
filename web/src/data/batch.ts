@@ -8,6 +8,7 @@
 import { door, type JobRow } from "../ask/client";
 import type { Event } from "../objects/client";
 import { ops, type Batch } from "../ops/client";
+import type { Chain } from "./datasets";
 import type { Source } from "./sources";
 import { identityWords, type Dataset } from "./pseudonyms";
 
@@ -26,8 +27,8 @@ export interface BatchDoc extends Batch {
   /** The dataset the batch read, when the engine names it on the row. */
   dataset?: string | null;
   place?: string | null;
-  /** The jobs of the batch's chain, by stage. */
-  chain?: number[] | null;
+  /** The jobs of the batch's thread by stage, where the engine names them on the row. */
+  chain?: Chain | null;
   pyramid?: { offered: boolean; place: string; command: string[] } | null;
 }
 

@@ -76,6 +76,12 @@ describe("the stage strip of an engine that reports the stages", () => {
     expect(stageJobIds(reported)).toEqual([117, 118, 118, 119, 120]);
     expect(jobsOfBatch(doc, jobs).map((j) => j.id)).toEqual([117, 118, 119, 120]);
   });
+  it("takes the jobs of the thread beside them: the chain on the row, and the one the sources door names", () => {
+    const bare: BatchDoc = { ...batch, id: 9, name: "spring-scans-2026-08-20" };
+    expect(jobsOfBatch(bare, jobs).map((j) => j.id)).toEqual([]);
+    expect(jobsOfBatch(bare, jobs, [117, 119]).map((j) => j.id)).toEqual([117, 119]);
+    expect(jobsOfBatch({ ...bare, chain: { pseudonymize: 117, digest: 118, classify: [119, 120] } }, jobs).map((j) => j.id)).toEqual([117, 118, 119, 120]);
+  });
 });
 
 describe("the refused files", () => {

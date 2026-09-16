@@ -74,10 +74,17 @@ export interface Pseudonymised {
   job: number | null;
 }
 
-/** A digest as the sources door lists it at record 26: with what the pseudonymiser did first, and the chain of jobs by stage. */
+/** The jobs of a batch's thread by stage (record 26): the pseudonymise step before the digest, the digest that read it, and the runs that sorted its stacks. */
+export interface Chain {
+  pseudonymize: number | null;
+  digest: number | null;
+  classify: number[];
+}
+
+/** A digest as the sources door lists it at record 26: with what the pseudonymiser did first, and the jobs of its thread by stage. */
 export interface Batch extends Digest {
   pseudonymised?: Pseudonymised | null;
-  chain?: (number | null)[] | null;
+  chain?: Chain | null;
 }
 
 /** A source place as the sources door lists it at record 26; every new field is absent from an older engine. */
@@ -93,10 +100,22 @@ export interface Dataset extends Omit<Source, "digests"> {
   originals_kept?: OriginalsKept;
 }
 
-/** Files a second, as the engine last measured them on this machine, when the sources door says. */
+/**
+ * What a step does on this machine, as the engine last measured it: the files
+ * a second of the last run of that step that read or wrote at least a hundred
+ * files, and how many files it was measured over, so a resume run of ten files
+ * is not quoted as the machine's speed. An engine before record 26 answered a
+ * bare number and says nothing of what it measured.
+ */
+export interface Rate {
+  files_per_s: number;
+  files?: number | null;
+}
+
+/** The rates of the sources door, each null where the engine has measured none. */
 export interface Rates {
-  pseudonymize?: number;
-  digest?: number;
+  pseudonymize?: Rate | number | null;
+  digest?: Rate | number | null;
 }
 
 export interface SourcesAnswer {
@@ -308,6 +327,12 @@ export function batchTail(b: Batch): { kind: "held" | "sort" | "again" | "sorted
   return { kind: "sorted", words: "sorted", count: 0 };
 }
 
+/** Every job a batch's thread names, in the order it ran them: the pseudonymise step, the digest, then the runs that sorted it. */
+export function chainJobs(chain: Chain | null | undefined): number[] {
+  if (!chain) return [];
+  return [chain.pseudonymize, chain.digest, ...(chain.classify ?? [])].filter((id): id is number => typeof id === "number");
+}
+
 /** How many files of the originals no pseudonymised copy stands for yet: new files and the held ones, when the trees are known. */
 export function newInOriginals(d: Dataset): number | null {
   if (!d.trees?.originals || typeof d.trees.originals.files !== "number" || typeof d.trees.anon.files !== "number") return null;
@@ -362,12 +387,21 @@ export function chainWords(then: string[][] | null | undefined): string {
   return names.map((v) => `then ${v}`).join(", ");
 }
 
-/** About how long the first step takes at the machine's last measured rate, or nothing where none was measured. */
-export function estimateWords(files: number | null, rate: number | null | undefined, thenWhat = "the digest"): string | null {
-  if (files === null || !rate || rate <= 0) return null;
-  const seconds = Math.max(1, Math.round(files / rate));
+/** A rate as this desk reads it: the measured run of record 26, an older engine's bare number, or nothing where none was measured. */
+export function rateOf(rate: Rate | number | null | undefined): Rate | null {
+  if (typeof rate === "number") return rate > 0 ? { files_per_s: rate } : null;
+  if (!rate || typeof rate.files_per_s !== "number" || rate.files_per_s <= 0) return null;
+  return typeof rate.files === "number" && rate.files > 0 ? { files_per_s: rate.files_per_s, files: rate.files } : { files_per_s: rate.files_per_s };
+}
+
+/** About how long the first step takes at the machine's last measured rate, and what that rate was measured over; nothing where none was measured. */
+export function estimateWords(files: number | null, rate: Rate | number | null | undefined, thenWhat = "the digest"): string | null {
+  const measured = rateOf(rate);
+  if (files === null || measured === null) return null;
+  const seconds = Math.max(1, Math.round(files / measured.files_per_s));
   const span = seconds < 60 ? `${seconds} ${seconds === 1 ? "second" : "seconds"}` : seconds < 3600 ? `${Math.round(seconds / 60)} ${Math.round(seconds / 60) === 1 ? "minute" : "minutes"}` : `${(seconds / 3600).toFixed(1)} hours`;
-  return `About ${n(files)} files at ${n(Math.round(rate))} a second on this machine: ${span}, then ${thenWhat}.`;
+  const over = typeof measured.files === "number" ? `, measured over ${n(measured.files)} files` : "";
+  return `About ${n(files)} files at ${n(Math.round(measured.files_per_s))} a second on this machine${over}: ${span}, then ${thenWhat}.`;
 }
 
 /** The name a bring-in takes: the dataset and the day. */

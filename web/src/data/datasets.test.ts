@@ -17,6 +17,7 @@ import {
   batchTail,
   bringInBody,
   bringInSteps,
+  chainJobs,
   chainWords,
   cohortChoices,
   cohortOf,
@@ -34,6 +35,7 @@ import {
   parseCsv,
   places,
   probeWords,
+  rateOf,
   record26,
   reportLines,
   stripMarks,
@@ -159,6 +161,14 @@ describe("the five marks of a batch", () => {
     expect(stripMarks(old).map((m) => m.mark)).toEqual(["none", "done", "done", "done", "wait"]);
     expect(stripMarks(exchange.digests.recent[0])[0]).toEqual({ name: "pseudonymised", mark: "none", words: "not said" });
   });
+  it("name the jobs of the thread by stage, so a page walks from a digest to what wrote and sorted it", () => {
+    expect(chainJobs(newest.chain)).toEqual([120, 121]);
+    expect(chainJobs(earlier.chain)).toEqual([76, 77, 78, 79]);
+    expect(chainJobs(exchange.digests.recent[0].chain)).toEqual([50]);
+    // an older engine names none
+    expect(chainJobs(older(incoming).digests.recent[0].chain)).toEqual([]);
+    expect(chainJobs(null)).toEqual([]);
+  });
   it("offer the held files, what to sort, a read again, or say it is sorted", () => {
     expect(batchTail(newest)).toEqual({ kind: "held", words: "4 held: map them", count: 4 });
     expect(batchTail(earlier)).toEqual({ kind: "sort", words: "Sort 12", count: 12 });
@@ -207,12 +217,19 @@ describe("bringing in what is new", () => {
     await jobs.enqueue(["digest", "@incoming", "--name", "b"], "b", [["fingerprint"]]);
     expect(calls[2].body).toEqual({ command: ["digest", "@incoming", "--name", "b"], name: "b", then: [["fingerprint"]] });
   });
-  it("estimates the first step from the machine's last measured rate, and says nothing without one", () => {
+  it("estimates the first step from the machine's last measured rate, and says what that rate was measured over", () => {
+    expect(estimateWords(2208, { files_per_s: 1400, files: 4430 }, "the digest")).toBe("About 2,208 files at 1,400 a second on this machine, measured over 4,430 files: 2 seconds, then the digest.");
+    expect(estimateWords(120000, { files_per_s: 1400, files: 4430 }, "the digest")).toBe("About 120,000 files at 1,400 a second on this machine, measured over 4,430 files: 1 minute, then the digest.");
+    // the files a rate was taken from stand beside it, so a fast little run is read for what it is
+    expect(estimateWords(20, { files_per_s: 9900.4, files: 800 })).toBe("About 20 files at 9,900 a second on this machine, measured over 800 files: 1 second, then the digest.");
+    // an engine before record 26 answers a bare number and says nothing of what it measured
     expect(estimateWords(2208, 1400, "the digest")).toBe("About 2,208 files at 1,400 a second on this machine: 2 seconds, then the digest.");
-    expect(estimateWords(120000, 1400, "the digest")).toBe("About 120,000 files at 1,400 a second on this machine: 1 minute, then the digest.");
     expect(estimateWords(2208, null)).toBeNull();
-    expect(estimateWords(null, 1400)).toBeNull();
-    expect((answer as SourcesAnswer).rates?.pseudonymize).toBe(1400);
+    expect(estimateWords(2208, { files_per_s: 0, files: 0 })).toBeNull();
+    expect(estimateWords(null, { files_per_s: 1400, files: 4430 })).toBeNull();
+    expect(rateOf((answer as SourcesAnswer).rates?.pseudonymize)).toEqual({ files_per_s: 1400, files: 4430 });
+    expect(rateOf(1400)).toEqual({ files_per_s: 1400 });
+    expect(rateOf(undefined)).toBeNull();
   });
   it("knows an engine at record 26 by its contract or by the trees its sources carry", () => {
     expect(record26(caps())).toBe(true);
