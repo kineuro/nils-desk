@@ -6,6 +6,11 @@
 // digest of its own. A digest reads only under a source place, so a folder no
 // source place holds is added as a source first, which asks for work on the
 // Places page too. The engine lists nothing outside its locations.
+//
+// It chooses one folder as readily as many (record 27, R2b): with
+// `choose="one"` a row is picked rather than ticked, the folder picked is the
+// caller's to hold, and the list that queues a digest each is not drawn, since
+// Add a dataset declares the folder itself rather than digesting it.
 
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -41,9 +46,21 @@ import {
 
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
 
-export function IngestPicker(props: { places: Place[]; onDone: (words: string) => void; outside?: React.ReactNode; adding: string | null }) {
+export function IngestPicker(props: {
+  places: Place[];
+  /** The words of what was queued, in the many-folder choice. */
+  onDone?: (words: string) => void;
+  outside?: React.ReactNode;
+  adding: string | null;
+  /** Many folders, each a digest of its own (the default), or one folder for the caller to hold. */
+  choose?: "many" | "one";
+  /** The folder picked, in the single choice. */
+  picked?: Chosen | null;
+  onPick?: (folder: Chosen) => void;
+}) {
   // `adding`: why a folder may not be added as a source here, in words, or null when it may
-  const { places, onDone, outside, adding } = props;
+  const { places, onDone, outside, adding, picked = null, onPick } = props;
+  const one = props.choose === "one";
   // the folder open, or null for the locations
   const [at, setAt] = useState<string | null>(null);
   const [roots, setRoots] = useState<IngestRoot[] | null>(null);
@@ -220,7 +237,7 @@ export function IngestPicker(props: { places: Place[]; onDone: (words: string) =
     const words = queuedWords(queued);
     setChosen([]);
     setAct({ kind: "done", words });
-    onDone(words);
+    onDone?.(words);
   };
 
   const chosenAt = new Set(chosen.map((c) => c.at));
@@ -291,8 +308,12 @@ export function IngestPicker(props: { places: Place[]; onDone: (words: string) =
               const item: Chosen = { at: `@${r.name}`, path: r.path, place: r.place };
               const on = chosenAt.has(item.at);
               return (
-                <div key={r.name} className={on ? "picker-row on" : "picker-row"}>
-                  <input type="checkbox" checked={on} disabled={working} onChange={() => tick(item)} aria-label={`Choose ${item.at}`} />
+                <div key={r.name} className={one ? (picked?.at === item.at ? "picker-row on" : "picker-row") : on ? "picker-row on" : "picker-row"}>
+                  {one ? (
+                    <input type="radio" name="picked-folder" checked={picked?.at === item.at} onChange={() => onPick?.(item)} aria-label={`Choose ${item.at}`} />
+                  ) : (
+                    <input type="checkbox" checked={on} disabled={working} onChange={() => tick(item)} aria-label={`Choose ${item.at}`} />
+                  )}
                   <button type="button" className="picker-open" onClick={() => go(item.at)}>
                     <Icon name="disk" />
                     <span className="picker-label">
@@ -312,8 +333,12 @@ export function IngestPicker(props: { places: Place[]; onDone: (words: string) =
               const on = chosenAt.has(item.at);
               const locked = f.readable === false;
               return (
-                <div key={f.name} data-name={f.name} className={on ? "picker-row on" : "picker-row"}>
-                  <input type="checkbox" checked={on} disabled={working || locked} onChange={() => tick(item)} aria-label={`Choose ${item.at}`} />
+                <div key={f.name} data-name={f.name} className={one ? (picked?.at === item.at ? "picker-row on" : "picker-row") : on ? "picker-row on" : "picker-row"}>
+                  {one ? (
+                    <input type="radio" name="picked-folder" checked={picked?.at === item.at} disabled={locked} onChange={() => onPick?.(item)} aria-label={`Choose ${item.at}`} />
+                  ) : (
+                    <input type="checkbox" checked={on} disabled={working || locked} onChange={() => tick(item)} aria-label={`Choose ${item.at}`} />
+                  )}
                   <button type="button" className="picker-open" disabled={locked} onClick={() => go(item.at)}>
                     <Icon name={locked ? "lock" : "folder"} />
                     <span className="picker-label">
@@ -336,14 +361,19 @@ export function IngestPicker(props: { places: Place[]; onDone: (words: string) =
         {current && (
           <div className="browser-foot picker-foot">
             <span className="path browser-path">{current.at}</span>
-            {!held(current) && adding === null && (
+            {!one && !held(current) && adding === null && (
               <button type="button" className="button quiet small" disabled={working} onClick={() => addSource(current)}>
                 Add this folder as a source
               </button>
             )}
-            {!held(current) && adding !== null && !chosenAt.has(current.at) && <span className="meta">{adding}</span>}
-            <button type="button" className="button secondary small" disabled={working} onClick={() => tick(current)}>
-              {chosenAt.has(current.at) ? "Leave this folder out" : "Choose this folder"}
+            {!one && !held(current) && adding !== null && !chosenAt.has(current.at) && <span className="meta">{adding}</span>}
+            <button
+              type="button"
+              className="button secondary small"
+              disabled={working || (one && picked?.at === current.at)}
+              onClick={() => (one ? onPick?.(current) : tick(current))}
+            >
+              {one ? (picked?.at === current.at ? "This folder is chosen" : "Choose this folder") : chosenAt.has(current.at) ? "Leave this folder out" : "Choose this folder"}
             </button>
           </div>
         )}
@@ -356,6 +386,7 @@ export function IngestPicker(props: { places: Place[]; onDone: (words: string) =
           </button>
         </div>
       )}
+      {!one && (
       <div className="field">
         <span className="label">Chosen</span>
         {chosen.length === 0 ? (
@@ -379,18 +410,23 @@ export function IngestPicker(props: { places: Place[]; onDone: (words: string) =
           </ul>
         )}
       </div>
-      {unheld > 0 && (
+      )}
+      {!one && unheld > 0 && (
         <p className="meta">
           {adding === null ? "A digest reads only under a source place: add each folder marked as a source first, or a folder they are inside." : `A digest reads only under a source place, and a folder marked is under none. ${adding}`}
         </p>
       )}
-      <div className="row actions">
-        <button type="button" className="button" disabled={chosen.length === 0 || unheld > 0 || working} onClick={() => void queue()}>
-          <Icon name="play" />
-          {digestWords(chosen.length)}
-        </button>
-        {outside}
-      </div>
+      {(!one || outside) && (
+        <div className="row actions">
+          {!one && (
+            <button type="button" className="button" disabled={chosen.length === 0 || unheld > 0 || working} onClick={() => void queue()}>
+              <Icon name="play" />
+              {digestWords(chosen.length)}
+            </button>
+          )}
+          {outside}
+        </div>
+      )}
       {act.kind === "working" && <Wait phase={act.phase} since={act.since} />}
       {act.kind === "done" && <p className="ok-words">{act.words}</p>}
       {act.kind === "failed" && <p className="warn">{act.why}</p>}

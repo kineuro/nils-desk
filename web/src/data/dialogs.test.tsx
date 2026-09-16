@@ -76,9 +76,27 @@ describe("Add a dataset", () => {
 
   it("keeps to the folder and the old handling on an engine before record 26, in one line", () => {
     const html = renderToStaticMarkup(<AddDataset caps={caps(GRANTS, "4", ["GET /api/sources", "GET /api/jobs", "POST /api/jobs"])} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
-    expect(html).toContain("This engine keeps no dataset fields yet");
+    expect(html).toContain("This engine keeps none of these choices yet");
     expect(html).not.toContain("Who a file is about");
     expect(html).not.toContain("Upload a CSV");
+  });
+
+  it("browses the engine's own folders for anyone who may add a dataset, with no grant on the install", () => {
+    // work on Data and the folders door is all it takes: no install grant, and the supervisor is never asked
+    const folders = ["GET /api/sources", "POST /api/jobs", "POST /api/ingest/folders", "POST /api/ingest/look", "GET /api/linkage/types", "POST /api/linkage/imports"];
+    const html = renderToStaticMarkup(<AddDataset caps={caps(["data:work", "data:see", "places:work"], "5", folders)} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
+    expect(html).toContain('class="field pick-folder"');
+    expect(html).toContain('aria-label="the folders above this one"');
+    expect(html).toContain('aria-current="location">locations<');
+    // and a folder outside the engine's locations is still typed, from the same place
+    expect(html).toContain("A folder outside these");
+    expect(html).not.toContain('id="dataset-path"');
+    // without the folders door, or without work on Data, the path field stands where the picker would
+    const noDoor = renderToStaticMarkup(<AddDataset caps={caps()} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
+    expect(noDoor).toContain('id="dataset-path"');
+    expect(noDoor).not.toContain("A folder outside these");
+    const noWork = renderToStaticMarkup(<AddDataset caps={caps(["data:see", "places:work"], "5", folders)} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
+    expect(noWork).toContain('id="dataset-path"');
   });
 
   it("says which page's work adding a folder needs when a person lacks it", () => {

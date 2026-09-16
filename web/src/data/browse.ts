@@ -7,6 +7,7 @@
 // admin on the host.
 
 import { door } from "../ask/client";
+import type { Layout } from "./datasets";
 
 /** A place in force that holds a folder. */
 export interface PlaceRef {
@@ -70,6 +71,8 @@ export interface Look {
   here: Omit<LookedFolder, "name" | "looked"> | null;
   folders: LookedFolder[];
   timed_out: boolean;
+  /** The layout the folder holds, where the engine names one: a v0 cohort folder. */
+  layout?: Layout | null;
 }
 
 /** The folders a page asks for. */
@@ -80,4 +83,10 @@ export const ingest = {
   folders: (at: string, filter: string, after: string | null, limit = PAGE) =>
     door<FolderPage>("POST", "/api/ingest/folders", { at, limit, ...(filter ? { filter } : {}), ...(after ? { after } : {}) }),
   look: (at: string, names: string[]) => door<Look>("POST", "/api/ingest/look", { at, names }),
+  /**
+   * What is in one folder, by its location or by a bare absolute path, which
+   * the look door takes at contract 5: the way the desk looks at a folder
+   * before a dataset is declared on it.
+   */
+  lookHere: (folder: string) => door<Look>("POST", "/api/ingest/look", folder.startsWith("@") ? { at: folder, names: [] } : { path: folder, names: [] }),
 };
