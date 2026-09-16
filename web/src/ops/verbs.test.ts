@@ -34,7 +34,7 @@ describe("a job's command line", () => {
 });
 
 describe("the verb in words", () => {
-  const QUEUED = ["pseudonymize", "bring-in", "digest", "fingerprint", "classify", "pick", "session", "pyramid", "release", "handover", "linkage import", "linkage merge", "backup", "verify", "ask run"];
+  const QUEUED = ["pseudonymize", "bring-in", "digest", "fingerprint", "classify", "pick", "session", "pyramid", "release", "handover", "linkage import", "linkage merge", "originals vault", "originals purge", "backup", "verify", "ask run"];
   it("has words for every verb the door queues, so no card reads Running", () => {
     for (const verb of QUEUED) {
       const words = VERBS[verb];
@@ -60,6 +60,23 @@ describe("the verb in words", () => {
     expect(targetOf(job(["digest", "--name", "x"], "digest"))).toBe("x");
     expect(targetOf(job(["fingerprint"], "fingerprint"))).toBeNull();
     expect(targetOf(job(["fingerprint"], "north-2026-09-16"))).toBe("north-2026-09-16");
+  });
+  it("names an act on the originals by the act, wherever the line carries it, and by the bare verb where it carries none", () => {
+    const vaulting = job(["/home/lab/nils", "--registry", "/r", "originals", "vault", "@north", "--into", "cold-store", "--why", "tape"], "north");
+    expect(verbOf(vaulting)).toBe("originals vault");
+    expect(doingWords(vaulting)).toBe("Vaulting the originals of north");
+    expect(endedWords(vaulting, "done")).toBe("Vaulting of north done");
+    expect(cancelNeeds(vaulting)).toEqual(["data:work", "the Data page"]);
+    // the act may stand anywhere on the line, as a flag's value
+    const purging = job(["originals", "@north/dcm-original", "--do", "purge", "--why", "on tape"]);
+    expect(verbOf(purging)).toBe("originals purge");
+    expect(endedWords(purging, "stopped")).toBe("Purge of north stopped");
+    // a line that names no act, and a job the engine gives by its kind alone, are still not read as Running
+    expect(doingWords(job(["originals", "@north"]))).toBe("Acting on the originals of north");
+    expect(doingWords({ args: {}, kind: "originals", name: "north" })).toBe("Acting on the originals of north");
+    // neither is simply run again
+    expect(nextMove(vaulting)).toBeNull();
+    expect(nextMove(purging)).toBeNull();
   });
   it("reads the rest from the line: the place without its tree, the name, the pack; the worker is the worker", () => {
     expect(endedWords(job(["/home/lab/nils", "--registry", "/r", "pseudonymize", "@north/dcm-original", "--name", "north-2026-09-16"]), "stopped")).toBe("Pseudonymisation of north stopped");

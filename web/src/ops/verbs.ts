@@ -50,6 +50,9 @@ export const VERBS: Record<string, VerbWords> = {
   handover: { doing: "Handing over", noun: "handover", link: "of", named: true, icon: "release", ...release, again: "Hand over again" },
   "linkage import": { doing: "Filing the map for", noun: "map import", link: "for", named: true, icon: "key", ...data, again: "File again" },
   "linkage merge": { doing: "Merging subjects", noun: "merge", link: "of", named: false, icon: "key", ...data, again: "Merge again" },
+  "originals vault": { doing: "Vaulting the originals of", noun: "vaulting", link: "of", named: true, icon: "lock", ...data, again: null },
+  "originals purge": { doing: "Purging the originals of", noun: "purge", link: "of", named: true, icon: "alert", ...data, again: null },
+  originals: { doing: "Acting on the originals of", noun: "originals", link: "of", named: true, icon: "lock", ...data, again: null },
   backup: { doing: "Backing up", noun: "backup", link: "of", named: false, icon: "disk", ...database, again: "Back up again" },
   verify: { doing: "Checking", noun: "check", link: "of", named: false, icon: "disk", ...database, again: "Check again" },
   restore: { doing: "Restoring", noun: "restore", link: "of", named: false, icon: "disk", ...database, again: "Restore again" },
@@ -87,12 +90,21 @@ export function commandOf(job: Pick<JobRow, "args">): string[] {
   return argv;
 }
 
-/** The verb, or the two-word verb of `ask`, `linkage` and `clinical`; `ingest probe` is the probe; the queue's own worker is the worker. */
+/**
+ * The verb, or the two-word verb of `ask`, `linkage` and `clinical`; `ingest
+ * probe` is the probe; an act on a dataset's originals is named by the act its
+ * line carries, wherever on the line it stands, and by the bare verb where the
+ * line carries none; the queue's own worker is the worker.
+ */
 export function verbOf(job: Pick<JobRow, "args" | "kind">): string {
   if (job.kind === "worker") return "worker";
   const c = commandOf(job);
   const first = c[0] ?? job.kind;
   if ((first === "ask" || first === "linkage" || first === "clinical") && c[1]) return `${first} ${c[1]}`;
+  if (first === "originals") {
+    const did = c.find((a) => a === "vault" || a === "purge");
+    return did ? `originals ${did}` : "originals";
+  }
   if (first === "ingest" && c[1] === "probe") return "probe";
   return first;
 }
