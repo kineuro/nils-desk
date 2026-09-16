@@ -17,6 +17,9 @@ import {
   bytesWords,
   changePatch,
   confirmsName,
+  csvRefusal,
+  MAX_MAP_ROWS,
+  reportOf,
   detailCounts,
   guessRole,
   heldGroups,
@@ -97,7 +100,8 @@ describe("what a column looks like", () => {
   });
   it("means the person's number, the code, a type of the registry's, or a new type named after the header", () => {
     const look = lookAt("x", ["1"]);
-    expect(guessRole("canonical_pn", look, types)).toEqual({ role: "canonical", id_type: null, new_type: null });
+    // the column that stands for the person files under a type like any other, since the engine takes canonical:<type> and refuses it without one
+    expect(guessRole("canonical_pn", look, types)).toEqual({ role: "canonical", id_type: "personnummer", new_type: null });
     expect(guessRole("subject_code", look, types)).toEqual({ role: "code", id_type: null, new_type: null });
     expect(guessRole("Personnummer", look, types)).toEqual({ role: "identifier", id_type: "personnummer", new_type: null });
     expect(guessRole("lake id", look, types)).toEqual({ role: "identifier", id_type: "lake-id", new_type: null });
@@ -109,14 +113,57 @@ describe("what a column looks like", () => {
     const guesses = [guessRole("pn", lookAt("pn", ["1"]), types), guessRole("canonical_pn", lookAt("c", ["1"]), types), guessRole("Orchard", lookAt("o", ["1"]), types), guessRole("note", lookAt("n", [""]), types)];
     expect(importColumns(["pn", "canonical_pn", "Orchard", "note"], guesses)).toEqual([
       { header: "pn", role: "identifier", id_type: "personnummer" },
-      { header: "canonical_pn", role: "canonical" },
+      { header: "canonical_pn", role: "canonical", id_type: "personnummer" },
       { header: "Orchard", role: "identifier", id_type: "orchard" },
       { header: "note", role: "ignore" },
     ]);
     expect(mapRefusal(guesses)).toBeNull();
-    expect(mapRefusal([guesses[3]])).toBe("At least one column is an identifier or the person's number.");
+    expect(mapRefusal([guesses[3]])).toBe("At least one column is an identifier, or the number that stands for the person.");
     expect(mapRefusal([guesses[1], guesses[1]])).toBe("One column stands for the person; two are chosen.");
-    expect(mapRefusal([guesses[1]])).toBe("The person's number alone maps nothing: add an identifier column or the code.");
+    // the engine takes a map of the person's numbers alone: each row resolves a subject, derives its code and releases what was held under it
+    expect(mapRefusal([guesses[1]])).toBeNull();
+    // two code columns, and an identifier column naming no type, are the engine's own refusals
+    const code = guessRole("subject_code", lookAt("s", ["1"]), types);
+    expect(mapRefusal([guesses[0], code, code])).toBe("One column is the code; two are chosen.");
+    expect(mapRefusal([{ role: "identifier", id_type: null, new_type: null }])).toBe("Every identifier column names its type: pick one of the site's, or make a new one.");
+    // several identifier columns of one type are several identifiers of one person, and are refused by nothing
+    expect(mapRefusal([guesses[0], guesses[0], code])).toBeNull();
+  });
+});
+
+describe("what the map's file must be, and what its report says in every branch", () => {
+  it("takes a comma-separated file with a header and rows under it, and nothing else", () => {
+    expect(csvRefusal(parseCsv("pn,code\n1,S-1\n"))).toBeNull();
+    expect(csvRefusal(parseCsv("pn;code\n1;S-1\n"))).toBe("The engine reads comma-separated files only, and this one separates its columns with semicolons. Save it again as CSV.");
+    expect(csvRefusal(parseCsv("pn\tcode\n1\tS-1\n"))).toBe("The engine reads comma-separated files only, and this one separates its columns with tabs. Save it again as CSV.");
+    expect(csvRefusal(parseCsv("pn,code\n"))).toBe("The file has a header and no rows under it.");
+    expect(csvRefusal({ header: [], rows: [], delimiter: "," })).toBe("The first line names the columns, and this file has no such line.");
+    // the door takes a hundred thousand rows in one call and answers the rest with a refusal, so the file is stopped here instead
+    const many = { header: ["pn"], rows: Array.from({ length: MAX_MAP_ROWS + 1 }, () => ["199001019999"]), delimiter: "," };
+    expect(csvRefusal(many)).toBe("100,001 rows: the engine takes 100,000 in one go. Split the file, or leave it where the engine can read it and file it as a job.");
+    expect(csvRefusal({ ...many, rows: many.rows.slice(0, MAX_MAP_ROWS) })).toBeNull();
+  });
+
+  it("reads the report with the same keys whatever the engine left out, so a refused run renders no undefined number", () => {
+    const empty = reportOf({});
+    expect(empty).toEqual({
+      subjects: { named: 0, known: 0, new: 0 },
+      identifiers: { filed: 0, known: 0, new: 0, types_new: 0 },
+      held_released: 0,
+      held_released_by: [],
+      merges: [],
+      conflicts: [],
+    });
+    expect(reportLines(empty).map((l) => l.words.includes("undefined"))).toEqual([false, false, false, false, false]);
+    expect(reportLines(reportOf(null))[0].words).toBe("0 named · 0 known · 0 new, with codes derived from their number");
+    // what the engine does say is kept, the rows it read among it
+    const said = reportOf({ rows: 12, subjects: { named: 12, known: 10, new: 2 }, identifiers: { filed: 12, known: 10, new: 2, types_new: ["site-id"] }, held_released: { released: 3, of: 4 }, conflicts: [{ row: 4, why: "on another subject" }] });
+    expect(said.rows).toBe(12);
+    expect(said.identifiers.types_new).toEqual(["site-id"]);
+    expect(said.held_released).toEqual({ released: 3, of: 4 });
+    expect(said.conflicts).toEqual([{ row: 4, why: "on another subject" }]);
+    // and nonsense in place of a list is no list at all, never a crash
+    expect(reportOf({ merges: "several", conflicts: 3 })).toMatchObject({ merges: [], conflicts: [] });
   });
 });
 
