@@ -18,6 +18,7 @@ import { stations, stationsServed, type StationRun, type Verdict } from "../assi
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may, sees, type Detail } from "../grants";
+import { objects } from "../objects/client";
 import { ops, type ReviewItem } from "../ops/client";
 import { href } from "../routes";
 import { assistantOffered } from "../sections";
@@ -41,7 +42,9 @@ import {
   linkage,
   lookAt,
   mapRefusal,
-  ORIGINALS_WORDS,
+  originals as originalsDoor,
+  originalsActs,
+  originalsWords,
   parseCsv,
   proposedRule,
   REMOVED_GROUPS,
@@ -53,6 +56,7 @@ import {
   subjectsWords,
   tagList,
   typeName,
+  vaultedInto,
   waitingLines,
   type ColumnLook,
   type Csv,
@@ -62,14 +66,17 @@ import {
   type HeldRow,
   type IdType,
   type ImportReport,
+  type OriginalsLook,
+  type PlaceRow,
   type Revealed,
   type TypesDoc,
 } from "./pseudonyms";
 import { countWords } from "./datasets";
+import { PurgeDialog, VaultDialog } from "./Originals";
 import { sources, whenWords, type Handling } from "./sources";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; dataset: Dataset | null };
-type Opened = { kind: "map" } | { kind: "held" } | { kind: "change" } | null;
+type Opened = { kind: "map" } | { kind: "held" } | { kind: "change" } | { kind: "vault" } | { kind: "purge" } | null;
 type Check = { kind: "idle" } | { kind: "running"; question: string; since: number; run: StationRun | null } | { kind: "done"; question: string; run: StationRun; verdict: Verdict | null } | { kind: "failed"; question: string; why: string };
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -83,6 +90,11 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
   const [opened, setOpened] = useState<Opened>(null);
   const [check, setCheck] = useState<Check>({ kind: "idle" });
   const [said, setSaid] = useState<string | null>(null);
+  const [look, setLook] = useState<OriginalsLook | null>(null);
+  const [places, setPlaces] = useState<PlaceRow[]>([]);
+  /** Where the originals went, as this desk saw them go; the engine keeps the state, not the place. */
+  const [vaulted, setVaulted] = useState<string | null>(null);
+  const [acting, setActing] = useState<{ job: number; did: "vault" | "purge"; into: string | null } | null>(null);
   const works = may(caps, "data:work");
   const maps = works && served(caps, "POST /api/linkage/imports");
   const heldServed = served(caps, "GET /api/linkage/held");
@@ -95,18 +107,50 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
   const read = useCallback(() => {
     sources
       .list()
-      .then((r) => setLoad({ kind: "ready", dataset: (r.sources as Dataset[]).find((s) => s.name === name) ?? null }))
+      .then((r) => {
+        const found = (r.sources as Dataset[]).find((s) => s.name === name) ?? null;
+        setLoad({ kind: "ready", dataset: found });
+        // what an act on the originals would do, as the engine answers it, without doing any of it
+        if (found && served(caps, "GET /api/places/{id}/originals")) originalsDoor.look(found.id).then(setLook, () => setLook(null));
+      })
       .catch((e: unknown) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: messageOf(e) })));
     if (served(caps, "GET /api/linkage/types")) linkage.types().then(setTypes, () => setTypes(null));
     if (heldServed) linkage.held(name).then(setHeld, () => setHeld(null));
     if (may(caps, "identity:see") && caps.desk.mode !== "off") identity.access().then(setAccess, () => setAccess(null));
     if (served(caps, "GET /api/review") && may(caps, "review:see")) ops.review("open", undefined, 500).then((r) => setReview(r.items), () => undefined);
+    if (served(caps, "GET /api/places") && may(caps, "places:see")) objects.places().then((r) => setPlaces(r.places), () => setPlaces([]));
   }, [name, caps, heldServed]);
 
   useEffect(() => {
     setLoad({ kind: "loading", since: Date.now() });
     read();
   }, [read]);
+
+  // an act on the originals is a job like any other: Now and Pipelines show it while it runs, and the card says the new state once it ends
+  useEffect(() => {
+    if (acting === null) return;
+    let alive = true;
+    const t = setInterval(() => {
+      ops.job(acting.job).then(
+        (row) => {
+          if (!alive || row.state === "queued" || row.state === "running" || row.state === "cancelling") return;
+          setActing(null);
+          if (row.state === "done") {
+            if (acting.did === "vault") setVaulted(acting.into);
+            setSaid(acting.did === "vault" ? `The originals are vaulted${acting.into ? ` into ${acting.into}` : ""}.` : "The originals are purged; the pseudonymised tree is all that is left.");
+          } else {
+            setSaid(`The ${acting.did} of the originals ${row.state}: ${row.error ?? "the engine recorded no reason"}.`);
+          }
+          read();
+        },
+        () => undefined,
+      );
+    }, 2000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, [acting, read]);
 
   const dataset = load.kind === "ready" ? load.dataset : null;
 
@@ -146,6 +190,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
   const heldIds = dataset.held?.identifiers ?? (held ?? []).length;
   const groups = heldGroups(held ?? []);
   const counts = detailCounts(access);
+  const acts = originalsActs(caps, dataset);
   const identityItems = review.filter((i) => /^(identity|linkage)[.:]/.test(i.kind) && ofDataset(i, name));
   const waiting = waitingLines(identityItems, dataset.held?.files ?? null);
   const pixelItems = review.filter((i) => /pixel|burn/.test(i.kind) && ofDataset(i, name));
@@ -289,7 +334,22 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
                 {dataset.trees?.originals ? `${countWords(dataset.trees.originals.files)} files · ${typeof dataset.trees.originals.bytes === "number" ? `${bytesWords(dataset.trees.originals.bytes)} · ` : ""}` : arrives === "identified" ? "" : "no originals: the files arrive without identifiers · "}
                 locked to the stewards · read by the pseudonymiser only · never a source
               </span>
-              <span className="meta">{ORIGINALS_WORDS[dataset.originals_kept ?? "kept"]}</span>
+              <span className="meta">{originalsWords(dataset.originals_kept, vaulted ?? vaultedInto(dataset))}</span>
+              {(acts.vault || acts.purge) && (
+                <div className="row">
+                  {acts.vault && (
+                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "vault" })}>
+                      Vault it
+                    </button>
+                  )}
+                  {acts.purge && (
+                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "purge" })}>
+                      Purge it
+                    </button>
+                  )}
+                </div>
+              )}
+              {acts.refusal !== null && <span className="meta">{acts.refusal}</span>}
             </div>
             <div className="tree-card on">
               <div className="row">
@@ -563,6 +623,35 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             setSaid(`${dataset.name} is changed; the next bring-in reads it so.`);
             read();
             onChanged?.();
+          }}
+        />
+      )}
+      {opened?.kind === "vault" && (
+        <VaultDialog
+          caps={caps}
+          dataset={dataset}
+          look={look}
+          places={places}
+          onClose={() => setOpened(null)}
+          onQueued={(job, into) => {
+            setOpened(null);
+            setActing({ job, did: "vault", into });
+            setSaid(`Vaulting the originals of ${dataset.name} into ${into} is queued as job ${job}; Now and Pipelines show it while it runs.`);
+            read();
+          }}
+        />
+      )}
+      {opened?.kind === "purge" && (
+        <PurgeDialog
+          caps={caps}
+          dataset={dataset}
+          look={look}
+          onClose={() => setOpened(null)}
+          onQueued={(job) => {
+            setOpened(null);
+            setActing({ job, did: "purge", into: null });
+            setSaid(`Purging the originals of ${dataset.name} is queued as job ${job}; Now and Pipelines show it while it runs.`);
+            read();
           }}
         />
       )}

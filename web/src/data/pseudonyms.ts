@@ -7,8 +7,12 @@
 // words each fact takes. Identifiers never pass through here except in the
 // rows of a map a person chose, posted once to the import door.
 
+import { needsWork } from "../access";
 import { door } from "../ask/client";
+import type { Capabilities } from "../capabilities";
+import { door as served } from "../deployment";
 import type { Detail } from "../grants";
+import type { Place } from "../objects/client";
 import type { ReviewItem } from "../ops/client";
 import { identityActs } from "../review/client";
 import { kindOf } from "../review/triage";
@@ -153,6 +157,142 @@ export const ORIGINALS_WORDS: Record<OriginalsKept, string> = {
   vaulted: "vaulted: moved out of the way, not read",
   purged: "purged: the pseudonymised tree is all that is left",
 };
+
+/* ---------------------------------------------------------------- the originals: vaulted or purged */
+
+/**
+ * What the originals door answers of a dataset: what an act on them would
+ * move or remove, said without doing any of it. `ready` is the engine's own
+ * verdict and `why` its own words when it is false; the desk shows that
+ * sentence as it stands and never writes one of its own in its place.
+ */
+export interface OriginalsLook {
+  files: number;
+  bytes: number;
+  /** The files whose pseudonymised copy the engine has checked, and those it has not. */
+  verified: number;
+  unverified: number;
+  /** The files held until a map names their identifier: their originals are what a map would still release. */
+  held: number;
+  ready: boolean;
+  why?: string | null;
+}
+
+/** What is asked of the originals: moved into another place, or removed for good. */
+export type OriginalsAct = { do: "vault"; into: string; why: string } | { do: "purge"; why: string };
+
+export const originals = {
+  /** What the act would do, without doing it. */
+  look: (id: number) => door<OriginalsLook>("GET", `/api/places/${id}/originals`),
+  /** Vault them into a place, or purge them: a job of kind `originals`, or a refusal in words. */
+  act: (id: number, body: OriginalsAct) => door<{ job: number; state?: string }>("POST", `/api/places/${id}/originals`, body),
+};
+
+/** Which acts the originals card offers, and the words that stand in their place when it offers none. */
+export interface OriginalsActs {
+  vault: boolean;
+  purge: boolean;
+  refusal: string | null;
+}
+
+/**
+ * What a person may do to a dataset's originals: nothing at all where the
+ * dataset has none, where they are purged already, or where the engine serves
+ * no door, which leaves the card exactly as it reads today; else Vault it
+ * while they are still here and Purge it either way, or, for a person who has
+ * no work on Data, the page that work is on.
+ */
+export function originalsActs(caps: Capabilities, d: Pick<Dataset, "trees" | "originals_kept">): OriginalsActs {
+  const none: OriginalsActs = { vault: false, purge: false, refusal: null };
+  if (!d.trees?.originals || !served(caps, "POST /api/places/{id}/originals")) return none;
+  const kept = d.originals_kept ?? "kept";
+  if (kept === "purged") return none;
+  const refusal = needsWork(caps, "Vaulting or purging the originals", [["data:work", "the Data page"]]);
+  if (refusal !== null) return { vault: false, purge: false, refusal };
+  return { vault: kept === "kept", purge: true, refusal: null };
+}
+
+/** Where the originals stand, in the line under their tree: kept here, vaulted into a place, purged. */
+export function originalsWords(kept: OriginalsKept | undefined, into?: string | null): string {
+  const state = kept ?? "kept";
+  if (state === "vaulted" && into && into.trim() !== "") return `vaulted into ${into.trim()}`;
+  return ORIGINALS_WORDS[state];
+}
+
+/** The place the engine names beside a vaulted state, where it names one; record 26 fixes the state alone. */
+export function vaultedInto(d: Dataset): string | null {
+  const named = (d as Dataset & { originals_vault?: unknown }).originals_vault;
+  return typeof named === "string" && named.trim() !== "" ? named.trim() : null;
+}
+
+/** What the act would move: the files and what they weigh. */
+export function movingWords(look: OriginalsLook | null): string {
+  if (look === null) return "the engine has not said";
+  return `${n(look.files)} ${look.files === 1 ? "file" : "files"} · ${bytesWords(look.bytes)}`;
+}
+
+/** What the door answered, line by line, for the purge dialog. */
+export function originalsLines(look: OriginalsLook): { label: string; words: string; tone?: "caution" }[] {
+  return [
+    { label: "files", words: movingWords(look) },
+    { label: "verified", words: `${n(look.verified)} ${look.verified === 1 ? "file has" : "files have"} a pseudonymised copy the engine checked` },
+    {
+      label: "not verified",
+      words: look.unverified === 0 ? "none: every file is accounted for in dcm-anon" : `${n(look.unverified)} ${look.unverified === 1 ? "file has" : "files have"} no checked copy in dcm-anon`,
+      tone: look.unverified > 0 ? "caution" : undefined,
+    },
+    {
+      label: "held",
+      words:
+        look.held === 0
+          ? "none"
+          : look.held === 1
+            ? "1 file is held until mapped: its original is what a map would still release"
+            : `${n(look.held)} files are held until mapped: their originals are what a map would still release`,
+      tone: look.held > 0 ? "caution" : undefined,
+    },
+  ];
+}
+
+/** Why the engine will not purge, in its own words; null when it says it would. */
+export function purgeRefusal(look: OriginalsLook | null): string | null {
+  // the door was not read, so nothing of the engine's can be said: the act waits rather than guesses
+  if (look === null) return "The engine has not said what purging would do here.";
+  if (look.ready) return null;
+  const why = typeof look.why === "string" ? look.why.trim() : "";
+  return why !== "" ? why : "The engine refuses to purge these originals and gives no reason.";
+}
+
+/** A place as the vault dialog reads it. */
+export type PlaceRow = Pick<Place, "id" | "name" | "role" | "path" | "retired_at">;
+
+/** The places a vault may go to: every live place but the dataset's own, narrowed to a role where one is named, by name. */
+export function vaultChoices(places: readonly PlaceRow[], datasetId: number, role: string | null): PlaceRow[] {
+  return places.filter((p) => p.retired_at === null && p.id !== datasetId && (role === null || p.role === role)).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * The role the engine named in a refusal, read against the roles the places
+ * themselves carry. The dataset's own role is passed over unless it is the
+ * only one named, and of the rest the last one named wins, since a refusal
+ * names where the originals may go last.
+ */
+export function roleNamed(refusal: string, roles: readonly string[]): string | null {
+  const words = refusal.toLowerCase();
+  const found = roles
+    .filter((r) => /^[a-z-]+$/.test(r))
+    .map((role) => ({ role, at: words.search(new RegExp(`\\b${role}\\b`, "u")) }))
+    .filter((r) => r.at >= 0)
+    .sort((a, b) => a.at - b.at);
+  const rest = found.filter((r) => r.role !== "source");
+  const pick = (rest.length > 0 ? rest : found).slice(-1)[0];
+  return pick ? pick.role : null;
+}
+
+/** Whether the confirmation is the dataset's own name, the spaces around it forgiven. */
+export function confirmsName(typed: string, name: string): boolean {
+  return name.trim() !== "" && typed.trim() === name.trim();
+}
 
 /** Bytes as a person reads them. */
 export function bytesWords(b: number): string {

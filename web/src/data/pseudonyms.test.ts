@@ -6,11 +6,13 @@
 // words each fact takes. The numbers and names here are made up.
 
 import { describe, expect, it } from "vitest";
+import type { Capabilities } from "../capabilities";
 import type { ReviewItem } from "../ops/client";
 import type { Access } from "../settings/identity";
 import {
   arrivesWords,
   bytesWords,
+  confirmsName,
   detailCounts,
   guessRole,
   heldGroups,
@@ -22,9 +24,15 @@ import {
   leavingWords,
   lookAt,
   mapRefusal,
+  movingWords,
+  originalsActs,
+  originalsLines,
+  originalsWords,
   parseCsv,
   proposedRule,
+  purgeRefusal,
   reportLines,
+  roleNamed,
   ruleWords,
   sawOf,
   shapeOf,
@@ -32,9 +40,13 @@ import {
   subjectsWords,
   tagList,
   typeName,
+  vaultChoices,
+  vaultedInto,
   type Dataset,
   type IdType,
   type ImportReport,
+  type OriginalsLook,
+  type PlaceRow,
 } from "./pseudonyms";
 
 const types: IdType[] = [
@@ -207,5 +219,102 @@ describe("what waits on Review, on the Pseudonymisation page", () => {
     expect(waitingLines([item(1, "identity.unmapped", { files: 160 })], 160).map((w) => w.kind)).toEqual(["held"]);
     expect(waitingLines([item(2, "identity.collision"), item(5, "linkage.conflict")], 0)).toEqual([{ kind: "twice", words: "2 subjects may be one person twice" }]);
     expect(waitingLines([], 0)).toEqual([]);
+  });
+});
+
+describe("acting on the originals of a dataset", () => {
+  const anon = { path: "/scans/lake/derivatives/dcm-anon", files: 18416, last_written: null };
+  const base = {
+    id: 4,
+    name: "lake",
+    path: "/scans/lake",
+    guarantees: {},
+    probed: null,
+    handling: { arrives: "identified" as const, on_release: { dates: "keep" as const, uids: "remap" as const, deface: false } },
+    handling_declared: true,
+    roots: 1,
+    digests: { count: 0, first: null, last: null, recent: [] },
+    totals: { subjects: 0, studies: 0, sessions: 0, stacks: 0, refused_files: 0, to_sort: 0 },
+    trees: { originals: { path: "/scans/lake/derivatives/dcm-original", files: 18420, bytes: 2449860000 }, anon },
+  };
+  const d: Dataset = { ...base, originals_kept: "kept" };
+  const caps = (grants: string[], doors: string[]) => ({ engine: { doors }, person: { grants, detail: "sensitive" }, desk: {} }) as unknown as Capabilities;
+  const both = caps(["data:work", "data:see"], ["GET /api/places/{id}/originals", "POST /api/places/{id}/originals"]);
+  const look: OriginalsLook = { files: 18420, bytes: 2449860000, verified: 18402, unverified: 18, held: 4, ready: true };
+
+  it("says where they stand, with the place where one is known", () => {
+    expect(originalsWords(undefined)).toBe("kept here");
+    expect(originalsWords("kept")).toBe("kept here");
+    expect(originalsWords("vaulted", "cold-store")).toBe("vaulted into cold-store");
+    expect(originalsWords("vaulted")).toBe("vaulted: moved out of the way, not read");
+    expect(originalsWords("vaulted", "  ")).toBe("vaulted: moved out of the way, not read");
+    expect(originalsWords("purged")).toBe("purged: the pseudonymised tree is all that is left");
+    expect(vaultedInto({ ...d, originals_vault: "cold-store" } as Dataset)).toBe("cold-store");
+    expect(vaultedInto(d)).toBeNull();
+  });
+
+  it("offers the acts only where the engine serves the door, the dataset has originals and the person works on Data", () => {
+    expect(originalsActs(both, d)).toEqual({ vault: true, purge: true, refusal: null });
+    // vaulted: only the purge is left; purged: the card says so and offers nothing
+    expect(originalsActs(both, { ...d, originals_kept: "vaulted" })).toEqual({ vault: false, purge: true, refusal: null });
+    expect(originalsActs(both, { ...d, originals_kept: "purged" })).toEqual({ vault: false, purge: false, refusal: null });
+    // an engine without the door, and a dataset with no originals, leave the card exactly as it reads today
+    expect(originalsActs(caps(["data:work"], []), d)).toEqual({ vault: false, purge: false, refusal: null });
+    expect(originalsActs(both, { ...d, trees: { originals: null, anon } })).toEqual({ vault: false, purge: false, refusal: null });
+    expect(originalsActs(caps(["data:see"], ["POST /api/places/{id}/originals"]), d)).toEqual({
+      vault: false,
+      purge: false,
+      refusal: "Vaulting or purging the originals needs work on the Data page.",
+    });
+  });
+
+  it("says what the act would reach, line by line, and what a held file's original still is", () => {
+    expect(movingWords(look)).toBe("18,420 files · 2.4 GB");
+    expect(movingWords(null)).toBe("the engine has not said");
+    const lines = originalsLines(look);
+    expect(lines.map((l) => l.label)).toEqual(["files", "verified", "not verified", "held"]);
+    expect(lines[1].words).toBe("18,402 files have a pseudonymised copy the engine checked");
+    expect(lines[2]).toEqual({ label: "not verified", words: "18 files have no checked copy in dcm-anon", tone: "caution" });
+    expect(lines[3].words).toBe("4 files are held until mapped: their originals are what a map would still release");
+    const clean = originalsLines({ ...look, unverified: 0, held: 0 });
+    expect(clean[2].words).toBe("none: every file is accounted for in dcm-anon");
+    expect(clean[2].tone).toBeUndefined();
+    expect(clean[3].words).toBe("none");
+    expect(originalsLines({ ...look, held: 1 })[3].words).toBe("1 file is held until mapped: its original is what a map would still release");
+  });
+
+  it("refuses a purge in the engine's own words, never in the desk's", () => {
+    expect(purgeRefusal(look)).toBeNull();
+    expect(purgeRefusal({ ...look, ready: false, why: "3,204 files have no verified copy in dcm-anon" })).toBe("3,204 files have no verified copy in dcm-anon");
+    expect(purgeRefusal({ ...look, ready: false, why: "  " })).toBe("The engine refuses to purge these originals and gives no reason.");
+    expect(purgeRefusal({ ...look, ready: false })).toBe("The engine refuses to purge these originals and gives no reason.");
+    expect(purgeRefusal(null)).toBe("The engine has not said what purging would do here.");
+  });
+
+  it("reads the role the engine named in a refusal, and keeps the places to it", () => {
+    const roles = ["source", "backup", "export", "share"];
+    expect(roleNamed("the originals of a source go to a place with the backup role", roles)).toBe("backup");
+    expect(roleNamed("a vault is an export place", roles)).toBe("export");
+    // the dataset's own role is passed over, unless it is the only one named
+    expect(roleNamed("only a source place holds originals", roles)).toBe("source");
+    expect(roleNamed("the engine will not move these", roles)).toBeNull();
+    const places: PlaceRow[] = [
+      { id: 4, name: "lake", role: "source", path: "/scans/lake", retired_at: null },
+      { id: 6, name: "cold-store", role: "backup", path: "/vault/cold", retired_at: null },
+      { id: 2, name: "attic", role: "backup", path: "/vault/attic", retired_at: null },
+      { id: 7, name: "gone", role: "backup", path: "/vault/gone", retired_at: "2026-01-04T09:00:00Z" },
+    ];
+    expect(vaultChoices(places, 4, null).map((p) => p.name)).toEqual(["attic", "cold-store"]);
+    expect(vaultChoices(places, 4, "backup").map((p) => p.name)).toEqual(["attic", "cold-store"]);
+    expect(vaultChoices(places, 4, "export")).toEqual([]);
+    expect(vaultChoices(places, 6, null).map((p) => p.name)).toEqual(["attic", "lake"]);
+  });
+
+  it("takes the dataset's own name as the purge's confirmation", () => {
+    expect(confirmsName("lake", "lake")).toBe(true);
+    expect(confirmsName(" lake ", "lake")).toBe(true);
+    expect(confirmsName("Lake", "lake")).toBe(false);
+    expect(confirmsName("", "lake")).toBe(false);
+    expect(confirmsName("", "")).toBe(false);
   });
 });
