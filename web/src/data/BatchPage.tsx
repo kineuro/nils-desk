@@ -373,9 +373,9 @@ export function PseudonymisationFacts({ dataset }: { dataset: Dataset }) {
     <>
       <Values
         cells={[
-          { k: "arrives", v: arrivesWords(dataset) },
+          { k: "how files come in", v: arrivesWords(dataset) },
           { k: "subjects", v: subjectsWords(dataset) },
-          { k: "on release", v: leavingWords(dataset.handling?.on_release) },
+          { k: "when it leaves", v: leavingWords(dataset.handling?.on_release) },
         ]}
       />
       <a className="tail" href={href("data", "datasets", dataset.name, "pseudonymisation")}>

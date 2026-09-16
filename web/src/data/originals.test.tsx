@@ -116,9 +116,11 @@ describe("Vault it", () => {
     expect(noPlace).not.toContain("cold-store");
   });
 
-  it("says the detail the engine reads these acts at", () => {
-    expect(vault()).toContain("Run under your detail, sensitive.");
-    expect(vault({}, { caps: caps("quasi") })).toContain("needs detail sensitive; this account sees less");
+  it("says in plain words how far into a record these acts are read, naming nothing of the engine's own", () => {
+    expect(vault()).toContain("Run as someone cleared to see identifiers");
+    const less = vault({}, { caps: caps("quasi") });
+    expect(less).toContain("you are not cleared to");
+    expect(less).not.toContain("detail sensitive");
   });
 
   it("keeps the place a person chose when the dialog is drawn again between choosing and asking", () => {
@@ -158,7 +160,12 @@ describe("Purge it", () => {
     expect(html).toContain("<b class=\"num\">18</b><span>files have no checked copy</span>");
     expect(html).toContain("This cannot be undone");
     expect(html).toContain("Purging removes the only identified copy of those scans");
+    expect(html).toContain("nothing brings those files back");
     expect(html).toContain("once it is purged, a map releases nothing for it");
+    // and what a purge leaves alone, which is everything that was read: the engine touches neither the pseudonymised tree, the registry's rows nor the linkage store
+    expect(html).toContain("What this leaves untouched");
+    expect(html).toContain("The pseudonymised tree, the registry and every person");
+    expect(html).toContain("code stay as they are");
     expect(html).toContain("Type incoming to confirm");
   });
 
@@ -193,7 +200,7 @@ describe("Purge it", () => {
 describe("Change", () => {
   const acts: OriginalsActs = { vault: true, purge: true, refusal: null };
   const change = (over: Partial<Parameters<typeof ChangeDialog>[0]> = {}) =>
-    renderToStaticMarkup(<ChangeDialog dataset={incoming} acts={acts} onAct={none} onClose={none} onSaved={none} {...over} />);
+    renderToStaticMarkup(<ChangeDialog dataset={incoming} acts={acts} onAct={none} onTags={none} onClose={none} onSaved={none} {...over} />);
 
   it("declares nothing of where the originals stand, and puts the act that decides it one click away", () => {
     const html = change();
@@ -214,12 +221,22 @@ describe("Change", () => {
     expect(html).toContain("What arrives</span>");
     expect(html).toContain("An identifier the map does not know</span>");
     expect(html).toContain("Feeds a cohort");
-    expect(html).toContain("Keep sex, weight and size: covariates, not identifiers");
-    expect(html).toContain("Also remove");
-    expect(html).toContain("Also keep");
     expect(html).toContain("Dates, when it leaves</span>");
     expect(html).toContain("UIDs, when it leaves</span>");
     expect(html).toContain("Faces removed before it leaves");
+  });
+
+  it("leaves the tag lists to the chooser, and holds none of its own", () => {
+    const html = change();
+    // both surfaces wrote the same three lists, each seeded at its own opening, so saving one after the other put the other's back
+    expect(html).toContain(">Choose tags</button>");
+    expect(html).toContain("where all hundred are listed with what becomes of each");
+    expect(html).not.toContain('id="dataset-remove"');
+    expect(html).not.toContain('id="dataset-keep"');
+    expect(html).not.toContain("Keep sex, weight and size");
+    // and the boxes that invited a keyword the engine never took are gone with them
+    expect(html).not.toContain("StudyDescription");
+    expect(html).not.toContain("one tag keyword a line");
   });
 
   it("says why the acts are not offered where a person may not ask for them", () => {

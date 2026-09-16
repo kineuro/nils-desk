@@ -35,7 +35,6 @@ import {
   NOTHING_ASKED,
   NOTHING_TYPED,
   originalsActs,
-  originalsLines,
   originalsWords,
   parseCsv,
   proposedRule,
@@ -50,7 +49,6 @@ import {
   shapeOf,
   shapeWords,
   subjectsWords,
-  tagList,
   typeName,
   vaultAsked,
   vaultChoices,
@@ -132,10 +130,21 @@ describe("what a column looks like", () => {
 });
 
 describe("what the map's file must be, and what its report says in every branch", () => {
-  it("takes a comma-separated file with a header and rows under it, and nothing else", () => {
+  it("takes a file with a header and rows under it, whatever separates its columns", () => {
     expect(csvRefusal(parseCsv("pn,code\n1,S-1\n"))).toBeNull();
-    expect(csvRefusal(parseCsv("pn;code\n1;S-1\n"))).toBe("The engine reads comma-separated files only, and this one separates its columns with semicolons. Save it again as CSV.");
-    expect(csvRefusal(parseCsv("pn\tcode\n1\tS-1\n"))).toBe("The engine reads comma-separated files only, and this one separates its columns with tabs. Save it again as CSV.");
+    // what a spreadsheet writes in a Swedish locale: the columns are read here and the rows are posted as values, so the file's own
+    // separator reaches the engine in nothing, and a file the desk once sent a person away to save again imports as it is
+    const semicolons = parseCsv("pn;code\n199001019999;S-1\n199002029999;S-2\n");
+    expect(csvRefusal(semicolons)).toBeNull();
+    expect(semicolons.header).toEqual(["pn", "code"]);
+    expect(semicolons.rows).toEqual([
+      ["199001019999", "S-1"],
+      ["199002029999", "S-2"],
+    ]);
+    // and the columns of such a file are read for what they are, exactly as a comma-separated one's are
+    expect(guessRole(semicolons.header[0], lookAt(semicolons.header[0], semicolons.rows.map((r) => r[0])), types)).toEqual({ role: "identifier", id_type: "personnummer", new_type: null });
+    expect(guessRole(semicolons.header[1], lookAt(semicolons.header[1], semicolons.rows.map((r) => r[1])), types).role).toBe("code");
+    expect(csvRefusal(parseCsv("pn\tcode\n1\tS-1\n"))).toBeNull();
     expect(csvRefusal(parseCsv("pn,code\n"))).toBe("The file has a header and no rows under it.");
     expect(csvRefusal({ header: [], rows: [], delimiter: "," })).toBe("The first line names the columns, and this file has no such line.");
     // the door takes a hundred thousand rows in one call and answers the rest with a refusal, so the file is stopped here instead
@@ -261,7 +270,6 @@ describe("the words of a dataset", () => {
     expect(leavingRefusal({ dates: "keep", uids: "preserve", deface: false })).toBeNull();
     expect(bytesWords(2.4e12)).toBe("2.4 TB");
     expect(bytesWords(5e8)).toBe("500 MB");
-    expect(tagList("StudyDescription, SeriesDescription\nStudyDescription")).toEqual(["StudyDescription", "SeriesDescription"]);
   });
 });
 
@@ -330,19 +338,9 @@ describe("acting on the originals of a dataset", () => {
     });
   });
 
-  it("says what the act would reach, line by line, and what a held file's original still is", () => {
+  it("says what the act would move, in files and in what they weigh", () => {
     expect(movingWords(look)).toBe("18,420 files · 2.4 GB");
     expect(movingWords(null)).toBe("the engine has not said");
-    const lines = originalsLines(look);
-    expect(lines.map((l) => l.label)).toEqual(["files", "verified", "not verified", "held"]);
-    expect(lines[1].words).toBe("18,402 files have a pseudonymised copy the engine checked");
-    expect(lines[2]).toEqual({ label: "not verified", words: "18 files have no checked copy in dcm-anon", tone: "caution" });
-    expect(lines[3].words).toBe("4 files are held until mapped: their originals are what a map would still release");
-    const clean = originalsLines({ ...look, unverified: 0, held: 0 });
-    expect(clean[2].words).toBe("none: every file is accounted for in dcm-anon");
-    expect(clean[2].tone).toBeUndefined();
-    expect(clean[3].words).toBe("none");
-    expect(originalsLines({ ...look, held: 1 })[3].words).toBe("1 file is held until mapped: its original is what a map would still release");
   });
 
   it("refuses a purge in the engine's own words, never in the desk's", () => {
@@ -473,22 +471,23 @@ describe("what a change to the dataset sends", () => {
     arrives: "identified",
     unmapped: "hold",
     cohort: "  nmosd  ",
-    tags: { keep_demographics: true, remove: ["StudyDescription"], keep: [] },
     on_release: { dates: "shift", uids: "remap", deface: false },
   };
 
-  it("sends the dataset's own fields, and nothing of where the originals stand", () => {
+  it("sends the dataset's own fields, and nothing of where the originals stand or of the tags", () => {
     const patch = changePatch(fields);
     expect(patch).toEqual({
       arrives: "identified",
       unmapped: "hold",
       cohort: "nmosd",
-      tags: { keep_demographics: true, remove: ["StudyDescription"], keep: [] },
       handling: { arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: false } },
     });
     // the two the act alone may write are not among the keys: a form cannot declare the originals purged while they are on disk
     expect(Object.keys(patch)).not.toContain("originals_kept");
     expect(Object.keys(patch)).not.toContain("originals_vault");
+    // nor are the tag lists, which the chooser owns: a body that names none leaves them as they stand, so saving this form after the
+    // chooser cannot undo what the chooser wrote
+    expect(Object.keys(patch)).not.toContain("tags");
     // a cohort taken away is sent as none, and a coded dataset is handled as de-identified
     expect(changePatch({ ...fields, cohort: "   " }).cohort).toBeNull();
     expect(changePatch({ ...fields, arrives: "coded" }).handling?.arrives).toBe("deidentified");

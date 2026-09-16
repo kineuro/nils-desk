@@ -67,9 +67,11 @@ function Says({ head, children }: { head: string; children: string }) {
   );
 }
 
-/** What the foot says of the detail these acts are read at. */
+/** What the foot says of how far into a record these acts are read. */
 function detailWords(caps: Capabilities): string {
-  return sees(caps, "sensitive") ? "Run under your detail, sensitive." : "Acting on the originals needs detail sensitive; this account sees less, so the engine will refuse it.";
+  return sees(caps, "sensitive")
+    ? "Run as someone cleared to see identifiers, and recorded as yours."
+    : "Acting on the originals means reading identifiers, and you are not cleared to; the engine will refuse it.";
 }
 
 /** The roles the places themselves carry, for reading the role out of a refusal. */
@@ -267,10 +269,14 @@ export function PurgeBody(props: {
         <div className="note-body">
           <p className="note-lead">This cannot be undone</p>
           <p className="note-detail">
-            Purging removes the only identified copy of those scans. A held file's original is what a map would still release; once it is purged, a map releases nothing for it.
+            Purging removes the only identified copy of those scans, and nothing brings those files back. A held file's original is what a map would still release; once it is purged, a map releases
+            nothing for it.
           </p>
         </div>
       </div>
+      <Says head="What this leaves untouched">
+        The pseudonymised tree, the registry and every person's code stay as they are: nothing that was read changes, and nothing is read again. The original files alone go, and they go for good.
+      </Says>
       <div className="field">
         <label className="label" htmlFor="purge-why">
           Why
