@@ -4,6 +4,8 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.30] - 2026-09-16
+
 ### Changed
 
 - The Datasets page says less (record 27). Its lede is six words, and what the two trees are for is a disclosure, closed until it is asked for. A dataset's card is its name, the state it is in, its folder, how its files come in, the cohort it feeds, its two trees in one line and its three numbers, with the commentary that stood beside each of them gone. Each batch in the table carries its thread as five cells, one a stage, coloured as that stage stands and named in one letter under the head that spells the five in order, so where a batch got to is read at a glance. That one person is one subject, wherever they come from, is a disclosure rather than a standing paragraph.
