@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Bring in what is new (record 26, D1): the chain that reads a dataset's new
-// files, as one job with the rest queued after it: pseudonymise for a dataset
-// that arrives identified, then digest the pseudonymised tree, then
-// fingerprint and classify with the dataset's pack; or the first step alone.
-// A dataset that arrives de-identified or coded has no first step. Where the
-// engine queues nothing after a job, the digest is queued alone, as before.
+// Bring in what is new (record 26, D1): the thread that reads a dataset's new
+// files, queued as the engine's own `bring-in`, which unfolds into the steps
+// the dataset needs under one name: pseudonymise for a dataset that arrives
+// identified, then digest the pseudonymised tree, then fingerprint and
+// classify with the dataset's pack; or the first step alone, named the same
+// way. A dataset that arrives de-identified or coded has no first step. Where
+// the engine queues nothing after a job, the digest is queued alone, as before.
 
 import { useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -34,12 +35,13 @@ export function BringInNew(props: { caps: Capabilities; dataset: Dataset; rates:
   const go = () => {
     setQueueing(true);
     setWhy(null);
-    const body = chains ? bringInBody(d, name.trim() || bringInName(d.name), pack, only) : { command: ["digest", `@${d.name}`], name: name.trim() || bringInName(d.name), then: [] };
+    const batch = name.trim() || bringInName(d.name);
+    const body = chains ? bringInBody(d, batch, pack, only) : { command: ["digest", `@${d.name}`], name: batch };
     jobs
-      .enqueue(body.command, body.name, body.then)
+      .enqueue(body.command, body.name)
       .then((j) => {
-        const rest = body.then.length > 0 ? `, with ${body.then.length} ${body.then.length === 1 ? "step" : "steps"} queued after it` : "";
-        onDone(`${first === "Pseudonymise" && chains ? "The pseudonymisation" : "A digest"} of ${d.name} is queued as job ${j.job}${rest}; Now shows it once it starts.`);
+        if (chains && !only) onDone(`Bringing in what is new in ${d.name} is queued as job ${j.job}, its ${steps.length} steps one thread named ${batch}; Now shows it once it starts.`);
+        else onDone(`${first === "Pseudonymise" && chains ? "The pseudonymisation" : "A digest"} of ${d.name} is queued as job ${j.job}; Now shows it once it starts.`);
       })
       .catch((e: Error) => {
         setQueueing(false);
@@ -117,8 +119,8 @@ export function BringInNew(props: { caps: Capabilities; dataset: Dataset; rates:
             <label className="radio-row">
               <input type="radio" name="bring-in-how" checked={!only} disabled={queueing} onChange={() => setOnly(false)} />
               <span>
-                <b>{steps.length === 3 ? "All three, as one chain" : "Both, as one chain"}</b>
-                <span className="meta">Each step starts when the one before is done. {steps.length === 3 ? "Three" : "Two"} jobs, one line on the batch.</span>
+                <b>{steps.length === 3 ? "All three, as one thread" : "Both, as one thread"}</b>
+                <span className="meta">The engine queues each step when the one before is done, every step under the name above: one line on the batch.</span>
               </span>
             </label>
             <label className="radio-row">

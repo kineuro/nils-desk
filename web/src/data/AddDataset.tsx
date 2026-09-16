@@ -106,8 +106,8 @@ export async function addDataset(plan: AddPlan, phase: (words: string) => void):
   // a job names the folder by its place, which the engine learns when it starts again
   if (plan.bringIn && plan.restart) {
     phase("queueing the bring-in");
-    const j = await patiently(() => jobs.enqueue(plan.bringIn!.command, plan.bringIn!.name, plan.bringIn!.then));
-    said.push(`job ${j.job} brings in what is there${plan.bringIn.then.length > 0 ? `, with ${plan.bringIn.then.length} ${plan.bringIn.then.length === 1 ? "step" : "steps"} after it` : ""}`);
+    const j = await patiently(() => jobs.enqueue(plan.bringIn!.command, plan.bringIn!.name));
+    said.push(`job ${j.job} brings in what is there as the thread ${plan.bringIn.name}`);
   } else if (!plan.restart) {
     said.push(plan.bringIn ? "the engine reads it once it starts again, and Bring in what is new is offered from its card then" : "the engine reads it once it starts again");
   }

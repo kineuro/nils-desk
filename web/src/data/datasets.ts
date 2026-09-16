@@ -324,26 +324,21 @@ export function packFor(caps: Capabilities, name?: string | null): string | null
 export interface BringIn {
   command: string[];
   name: string;
-  then: string[][];
 }
 
 /**
- * Bring in what is new, as one job with the rest queued after it: the
- * pseudonymiser first for a dataset that arrives identified, then the digest
- * of the pseudonymised tree, then the fingerprint and the classification with
- * the dataset's pack. `only` stops after the first step. A dataset that
- * arrives de-identified or coded has no first step. Without a pack the chain
- * ends at the fingerprint.
+ * Bring in what is new, as the engine's own thread: `bring-in @dataset
+ * --name N --pack P`, which the engine unfolds into the steps the dataset
+ * needs (the pseudonymiser first for one that arrives identified, then the
+ * digest of the pseudonymised tree, then the fingerprint and the
+ * classification), every step under the one name, so the batches of the
+ * thread join. `only` queues the first step alone, named the same way: the
+ * pseudonymiser for an identified dataset, the digest for any other.
  */
 export function bringInBody(d: Pick<Dataset, "name" | "arrives" | "handling">, name: string, pack: string | null, only = false): BringIn {
   const at = `@${d.name}`;
-  const steps: string[][] = [];
-  if (arrivesOf(d) === "identified") steps.push(["pseudonymize", at]);
-  steps.push(["digest", at]);
-  steps.push(["fingerprint"]);
-  if (pack) steps.push(["classify", "--pack", pack]);
-  const [first, ...rest] = steps;
-  return { command: first, name, then: only ? [] : rest };
+  if (only) return { command: [arrivesOf(d) === "identified" ? "pseudonymize" : "digest", at, "--name", name], name };
+  return { command: ["bring-in", at, "--name", name, ...(pack ? ["--pack", pack] : [])], name };
 }
 
 /** The steps of a bring-in as a person reads them, for the dialog's timeline. */

@@ -169,17 +169,18 @@ describe("the five marks of a batch", () => {
 });
 
 describe("bringing in what is new", () => {
-  it("is one job with the rest queued after it: pseudonymise, then digest, then fingerprint and classify with the pack", () => {
+  it("is the engine's own thread, bring-in @dataset with the name and the pack, so every step carries the one name", () => {
     expect(bringInBody(incoming, "incoming-2026-09-15", "mri")).toEqual({
-      command: ["pseudonymize", "@incoming"],
+      command: ["bring-in", "@incoming", "--name", "incoming-2026-09-15", "--pack", "mri"],
       name: "incoming-2026-09-15",
-      then: [["digest", "@incoming"], ["fingerprint"], ["classify", "--pack", "mri"]],
     });
+    expect(bringInBody(exchange, "b", "mri")).toEqual({ command: ["bring-in", "@exchange-ct", "--name", "b", "--pack", "mri"], name: "b" });
+    expect(bringInBody(exports, "b", null)).toEqual({ command: ["bring-in", "@exports-2019", "--name", "b"], name: "b" });
   });
-  it("stops after the first step when asked, starts at the digest for a de-identified or coded dataset, and ends at the fingerprint without a pack", () => {
-    expect(bringInBody(incoming, "b", "mri", true)).toEqual({ command: ["pseudonymize", "@incoming"], name: "b", then: [] });
-    expect(bringInBody(exchange, "b", "mri")).toEqual({ command: ["digest", "@exchange-ct"], name: "b", then: [["fingerprint"], ["classify", "--pack", "mri"]] });
-    expect(bringInBody(exports, "b", null)).toEqual({ command: ["digest", "@exports-2019"], name: "b", then: [["fingerprint"]] });
+  it("queues the first step alone when asked, named the same way: the pseudonymiser for an identified dataset, the digest for any other", () => {
+    expect(bringInBody(incoming, "b", "mri", true)).toEqual({ command: ["pseudonymize", "@incoming", "--name", "b"], name: "b" });
+    expect(bringInBody(exchange, "b", "mri", true)).toEqual({ command: ["digest", "@exchange-ct", "--name", "b"], name: "b" });
+    expect(bringInBody(exports, "b", null, true)).toEqual({ command: ["digest", "@exports-2019", "--name", "b"], name: "b" });
     expect(bringInSteps(incoming, "mri", "0.1.1").map((s) => s.title)).toEqual(["Pseudonymise", "Digest", "Sort"]);
     expect(bringInSteps(exchange, null).map((s) => s.title)).toEqual(["Digest", "Sort"]);
     expect(bringInSteps(incoming, "mri", "0.1.1")[1].words).toContain("join the cohort incoming");
@@ -189,7 +190,7 @@ describe("bringing in what is new", () => {
     expect(chainWords([["fingerprint"]])).toBe("then sort");
     expect(chainWords([])).toBe("");
   });
-  it("posts the job with `then`, and without it where nothing is queued after", async () => {
+  it("posts the thread as one job named on the body too, and `then` only where something is queued after", async () => {
     const calls: { path: string; body: unknown }[] = [];
     vi.stubGlobal(
       "fetch",
@@ -199,10 +200,12 @@ describe("bringing in what is new", () => {
       }),
     );
     const body = bringInBody(incoming, "incoming-2026-09-15", "mri");
-    await jobs.enqueue(body.command, body.name, body.then);
-    expect(calls[0]).toEqual({ path: "/api/jobs", body: { command: ["pseudonymize", "@incoming"], name: "incoming-2026-09-15", then: [["digest", "@incoming"], ["fingerprint"], ["classify", "--pack", "mri"]] } });
+    await jobs.enqueue(body.command, body.name);
+    expect(calls[0]).toEqual({ path: "/api/jobs", body: { command: ["bring-in", "@incoming", "--name", "incoming-2026-09-15", "--pack", "mri"], name: "incoming-2026-09-15" } });
     await jobs.enqueue(["digest", "@incoming"], "b", []);
     expect(calls[1].body).toEqual({ command: ["digest", "@incoming"], name: "b" });
+    await jobs.enqueue(["digest", "@incoming", "--name", "b"], "b", [["fingerprint"]]);
+    expect(calls[2].body).toEqual({ command: ["digest", "@incoming", "--name", "b"], name: "b", then: [["fingerprint"]] });
   });
   it("estimates the first step from the machine's last measured rate, and says nothing without one", () => {
     expect(estimateWords(2208, 1400, "the digest")).toBe("About 2,208 files at 1,400 a second on this machine: 2 seconds, then the digest.");

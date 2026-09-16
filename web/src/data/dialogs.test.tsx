@@ -103,7 +103,7 @@ describe("Bring in what is new", () => {
     expect(html).toContain("Digest</b>");
     expect(html).toContain("Sort</b>");
     expect(html).toContain("classify with mri 0.1.1");
-    expect(html).toContain("All three, as one chain</b>");
+    expect(html).toContain("All three, as one thread</b>");
     expect(html).toContain("Pseudonymise only</b>");
     expect(html).toContain("sorting needs work on the Pipelines page");
     expect(html).toContain("About 2,212 files at 1,400 a second on this machine");
@@ -113,7 +113,7 @@ describe("Bring in what is new", () => {
   it("starts at the digest for a coded dataset, and omits the estimate where the engine measured no rate", () => {
     const html = renderToStaticMarkup(<BringInNew caps={caps()} dataset={exports} rates={null} onClose={none} onDone={none} />);
     expect(html).not.toContain("Pseudonymise</b>");
-    expect(html).toContain("Both, as one chain</b>");
+    expect(html).toContain("Both, as one thread</b>");
     expect(html).toContain("Digest only</b>");
     expect(html).not.toContain("on this machine");
   });
