@@ -20,7 +20,6 @@ import { kindOf } from "../review/triage";
 import type { Access } from "../settings/identity";
 import type { Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
 import type { Handling } from "./sources";
-import { GROUP_TAGS, STANDARD_TOTAL } from "./tags";
 
 // A dataset is the sources door's row as the Data page types it; the same shape is read from here.
 export type { Arrives, Dataset, IdentityRule, IdentitySource, Trees } from "./datasets";
@@ -836,12 +835,3 @@ export function detailCounts(access: Access | null): Record<Detail, number> {
   for (const p of access?.people ?? []) out[p.access.detail] += 1;
   return out;
 }
-
-/**
- * The tags the pseudonymiser removes, in the engine's four groups, counted
- * from the list itself (`./tags`) rather than written out again here, so the
- * bar on the card and the rows in the chooser can never disagree.
- */
-export const REMOVED_GROUPS: { group: string; tags: number }[] = GROUP_TAGS;
-
-export const REMOVED_TOTAL = STANDARD_TOTAL;

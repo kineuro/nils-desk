@@ -30,6 +30,7 @@ import { messageOf } from "../settings/common";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { useKept } from "../ui/kept";
 import {
   actEnded,
   arrivesWords,
@@ -55,8 +56,6 @@ import {
   originalsWords,
   parseCsv,
   proposedRule,
-  REMOVED_GROUPS,
-  REMOVED_TOTAL,
   reportLines,
   ruleWords,
   sawOf,
@@ -82,6 +81,7 @@ import {
 } from "./pseudonyms";
 import { countWords } from "./datasets";
 import { PurgeDialog, VaultDialog } from "./Originals";
+import { policyKept } from "./policy";
 import { sources, whenWords, type Handling } from "./sources";
 import { TagsDialog } from "./Tags";
 
@@ -132,6 +132,9 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
   const [said, setSaid] = useState<{ words: string; failed: boolean } | null>(null);
   const [look, setLook] = useState<OriginalsLook | null>(null);
   const [places, setPlaces] = useState<PlaceRow[]>([]);
+  /** What the pseudonymiser does to the standard elements it acts on, as the engine that owns it serves it (record 28). */
+  const policy = useKept(policyKept);
+  const removedTags = policy.value;
   /** Where the originals went, as this desk saw them go; the engine keeps the state, not the place. */
   const [vaulted, setVaulted] = useState<string | null>(null);
   const [acting, setActing] = useState<{ job: number; did: "vault" | "purge"; into: string | null } | null>(null);
@@ -155,6 +158,7 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
         if (found && served(caps, "GET /api/places/{id}/originals")) originalsDoor.look(found.id).then(setLook, () => setLook(null));
       })
       .catch((e: unknown) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: messageOf(e) })));
+    if (served(caps, "GET /api/pseudonymize/tags")) void policyKept.ensure();
     if (served(caps, "GET /api/linkage/types")) linkage.types().then(setTypes, () => setTypes(null));
     if (heldServed) linkage.held(name).then(setHeld, () => setHeld(null));
     if (served(caps, "GET /api/review") && may(caps, "review:see")) ops.review("open", undefined, 500).then((r) => setReview(r.items), () => undefined);
@@ -285,7 +289,8 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
   ];
 
   const tagCells: Cell[] = [
-    { k: "removed", v: `${REMOVED_TOTAL} tags` },
+    // what the pseudonymiser removes is the engine's to say: an engine that does not say it leaves the line out rather than carry a number of the desk's own
+    ...(removedTags ? [{ k: "removed", v: `${removedTags.count} tags` }] : []),
     { k: "PatientID", v: "the code" },
     { k: "kept on purpose", v: tags?.keep_demographics === false ? "none, by this dataset" : "sex, weight, size" },
     { k: "written", v: "PatientAge", title: "computed before the birth date goes" },
@@ -405,19 +410,23 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
             </span>
             <h2>Tags</h2>
           </div>
-          <div className="tagbar" aria-label="the removed tags by group">
-            {REMOVED_GROUPS.map((g) => (
-              <i key={g.group} className={g.group} style={{ width: `${(g.tags / REMOVED_TOTAL) * 100}%` }} />
-            ))}
-          </div>
-          <div className="row legend">
-            {REMOVED_GROUPS.map((g) => (
-              <span key={g.group}>
-                <i className={`dot ${g.group}`} />
-                {g.group} {g.tags}
-              </span>
-            ))}
-          </div>
+          {removedTags && (
+            <>
+              <div className="tagbar" aria-label="the removed tags by group">
+                {removedTags.categories.map((g) => (
+                  <i key={g.category} className={g.category} style={{ width: `${(g.count / removedTags.count) * 100}%` }} />
+                ))}
+              </div>
+              <div className="row legend">
+                {removedTags.categories.map((g) => (
+                  <span key={g.category}>
+                    <i className={`dot ${g.category}`} />
+                    {g.category} {g.count}
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
           <Values cells={tagCells} />
           <div className="row">
             <button type="button" className="button secondary small" onClick={openTags}>
@@ -593,6 +602,7 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
         <TagsDialog
           caps={caps}
           dataset={dataset}
+          policy={removedTags}
           onClose={() => setOpened(null)}
           onSaved={(words) => {
             setOpened(null);

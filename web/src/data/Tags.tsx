@@ -1,16 +1,23 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The tag chooser (record 27, R3a): all hundred tags the pseudonymiser
-// removes, what each one is, and what becomes of it under this dataset. A
-// search box and the four groups narrow the list; ticking a row keeps that
-// tag, which is this dataset's own exception on top of the hundred; a tag the
-// hundred do not hold can be named here and this dataset removes it too. The
-// rows the engine settles itself say so and cannot be ticked: the identifier
-// is replaced by the subject's code, the age is computed and written, and the
-// two tags that make a file a file are never removed. The summary counts what
-// leaves and what stays, from the same rules, so it can never read a hundred
-// removed while four of them are kept. Saving writes the lists on the
-// dataset's place, where they live; a person who may not change them reads
-// the same page and is told so in words.
+// The tag chooser (record 27, R3a; record 28). Every tag the pseudonymiser
+// acts on, read from the engine that owns the policy, and what becomes of
+// each under this dataset. A search box and the groups narrow the list;
+// ticking a row keeps that tag, which is this dataset's own exception on top
+// of what the engine removes; a tag the engine does not remove can be named
+// here and this dataset removes it too. The rows the engine settles itself
+// carry its own words and cannot be ticked: the identifier is replaced by the
+// subject's code, the age is computed and written in place, and the two tags
+// that make a file a file are never removed. The summary counts what leaves
+// and what stays by those same rules, so it can never read every tag removed
+// while some are kept. Saving writes the lists on the dataset's place, where
+// they live; a person who may not change them reads the same page and is told
+// so in words.
+//
+// The desk supplies the names and nothing else. An engine that does not serve
+// the policy leaves the list unknown, and the chooser says so in one sentence
+// rather than showing a list the desk kept of its own: what this dataset keeps
+// and removes is still shown and still edited, since that is the dataset's and
+// its place still takes it.
 
 import { useState } from "react";
 import { needsWork } from "../access";
@@ -20,32 +27,36 @@ import { messageOf } from "../settings/common";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import type { Dataset } from "./datasets";
+import { addRemoved, countWords, dropRemoved, keepTag, matches, sameTags, tagCounts, tagRows, tagsOf, type TagPolicy, type TagRow } from "./policy";
 import { datasets } from "./pseudonyms";
-import {
-  addRemoved,
-  countWords,
-  dropRemoved,
-  GROUPS,
-  GROUP_TAGS,
-  keepTag,
-  matches,
-  sameTags,
-  STANDARD_TOTAL,
-  tagCounts,
-  tagRows,
-  tagsOf,
-  type TagGroup,
-  type TagRow,
-} from "./tags";
 
-type Only = TagGroup | "all";
+/** What each group is, in the few words a filter can carry: the engine names them, the desk says what they are. */
+const GROUP_WORDS: Record<string, string> = {
+  patient: "who the patient is",
+  provider: "who performed, referred, read and reported",
+  trial: "which trial, arm, site and protocol",
+  institution: "where it was done",
+};
 
 /** What the rows of one fate read as, where the row's own words are not the whole of it. */
 const TICK_LABEL = "Keep it";
 
-export function TagsDialog({ caps, dataset, onClose, onSaved }: { caps: Capabilities; dataset: Dataset; onClose: () => void; onSaved: (words: string) => void }) {
+export function TagsDialog({
+  caps,
+  dataset,
+  policy,
+  onClose,
+  onSaved,
+}: {
+  caps: Capabilities;
+  dataset: Dataset;
+  /** What the engine serves of its own policy, or null where it serves none and where it has not answered yet. */
+  policy: TagPolicy | null;
+  onClose: () => void;
+  onSaved: (words: string) => void;
+}) {
   const [tags, setTags] = useState(() => tagsOf(dataset.tags));
-  const [only, setOnly] = useState<Only>("all");
+  const [only, setOnly] = useState<string>("all");
   const [search, setSearch] = useState("");
   const [adding, setAdding] = useState("");
   const [why, setWhy] = useState<string | null>(null);
@@ -57,13 +68,17 @@ export function TagsDialog({ caps, dataset, onClose, onSaved }: { caps: Capabili
   const takes = served(caps, "PUT /api/places/{id}");
   const mayChange = changing === null && takes;
 
-  const rows = tagRows(tags);
-  const counts = tagCounts(tags);
-  const shown = rows.filter((r) => (only === "all" || r.group === only) && matches(r, search));
+  const rows = tagRows(policy, tags);
+  const counts = policy ? tagCounts(policy, tags) : null;
+  const shown = rows.filter((r) => (only === "all" || r.category === only) && matches(r, search));
   const untouched = sameTags(tags, tagsOf(dataset.tags));
+  // an engine that serves the policy has simply not answered yet; one that does not serve it never will
+  const unknown = served(caps, "GET /api/pseudonymize/tags")
+    ? "Reading what the pseudonymiser removes."
+    : "This engine does not serve the list of tags the pseudonymiser removes, so the desk does not show one. It removes them all the same; what this dataset keeps and removes of its own is below.";
 
   const add = () => {
-    const asked = addRemoved(tags, adding);
+    const asked = addRemoved(policy, tags, adding);
     if ("refusal" in asked) {
       setWhy(asked.refusal);
       return;
@@ -104,49 +119,56 @@ export function TagsDialog({ caps, dataset, onClose, onSaved }: { caps: Capabili
   return (
     <Dialog title={`Tags of ${dataset.name}`} icon="shield" onClose={onClose} foot={foot}>
       <div className="tagpick">
-        <div className="values">
-          <div>
-            <span className="k">removed</span>
-            <span className="v">{counts.removed}</span>
-          </div>
-          <div>
-            <span className="k">kept</span>
-            <span className="v">{counts.kept}</span>
-          </div>
-          <div>
-            <span className="k">this dataset's own</span>
-            <span className="v">{counts.extra === 0 ? "none" : counts.extra}</span>
-          </div>
-        </div>
-        <div className="tagbar" aria-label="the removed tags by group">
-          {GROUP_TAGS.map((g) => (
-            <i key={g.group} className={g.group} style={{ width: `${(g.tags / STANDARD_TOTAL) * 100}%` }} />
-          ))}
-        </div>
-        <details className="says">
-          <summary>How these add up</summary>
-          <p>
-            The pseudonymiser removes {STANDARD_TOTAL} tags in four groups, the same on every dataset. {countWords(counts)}. Sex, weight and size are covariates and stay unless this dataset says
-            otherwise; the age is worked out from the birth date before it goes and written back; the identifier becomes the subject's code; and the two tags that make a file a file are remapped when
-            the scans leave, never removed. Keeping beats removing, so a tag cannot be on both lists.
-          </p>
-        </details>
+        {policy && counts ? (
+          <>
+            <div className="values">
+              <div>
+                <span className="k">removed</span>
+                <span className="v">{counts.removed}</span>
+              </div>
+              <div>
+                <span className="k">kept</span>
+                <span className="v">{counts.kept}</span>
+              </div>
+              <div>
+                <span className="k">this dataset's own</span>
+                <span className="v">{counts.extra === 0 ? "none" : counts.extra}</span>
+              </div>
+            </div>
+            <div className="tagbar" aria-label="the removed tags by group">
+              {policy.categories.map((g) => (
+                <i key={g.category} className={g.category} style={{ width: `${(g.count / policy.count) * 100}%` }} />
+              ))}
+            </div>
+            <details className="says">
+              <summary>How these add up</summary>
+              <p>
+                The pseudonymiser removes {policy.count} tags in {policy.categories.length} groups, the same on every dataset. {countWords(counts)}. What the engine keeps or settles itself says so on
+                its own row, in the engine's words, and cannot be ticked away. Keeping beats removing, so a tag cannot be on both lists.
+              </p>
+            </details>
+          </>
+        ) : (
+          <p className="meta">{unknown}</p>
+        )}
 
         <div className="tagpick-find">
           <div className="input">
             <input value={search} placeholder="Find a tag or a name" aria-label="Find a tag or a name" onChange={(e) => setSearch(e.target.value)} />
           </div>
-          <div className="row presets">
-            <button type="button" className={only === "all" ? "opt on" : "opt"} onClick={() => setOnly("all")}>
-              all {STANDARD_TOTAL}
-            </button>
-            {GROUPS.map((g) => (
-              <button key={g.group} type="button" className={only === g.group ? "opt on" : "opt"} title={g.what} onClick={() => setOnly(g.group)}>
-                <i className={`dot ${g.group}`} />
-                {g.group} {GROUP_TAGS.find((t) => t.group === g.group)?.tags ?? 0}
+          {policy && (
+            <div className="row presets">
+              <button type="button" className={only === "all" ? "opt on" : "opt"} onClick={() => setOnly("all")}>
+                all {policy.count}
               </button>
-            ))}
-          </div>
+              {policy.categories.map((g) => (
+                <button key={g.category} type="button" className={only === g.category ? "opt on" : "opt"} title={GROUP_WORDS[g.category]} onClick={() => setOnly(g.category)}>
+                  <i className={`dot ${g.category}`} />
+                  {g.category} {g.count}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="table-wrap">
@@ -164,12 +186,12 @@ export function TagsDialog({ caps, dataset, onClose, onSaved }: { caps: Capabili
               {shown.length === 0 && (
                 <tr>
                   <td colSpan={5} className="meta">
-                    No tag here answers to {search.trim() === "" ? "this group" : `"${search.trim()}"`}.
+                    {rows.length === 0 ? "This dataset keeps and removes nothing of its own." : `No tag here answers to ${search.trim() === "" ? "this group" : `"${search.trim()}"`}.`}
                   </td>
                 </tr>
               )}
               {shown.map((r) => (
-                <Row key={r.tag} row={r} disabled={!mayChange || saving} onKeep={(keep) => setTags(keepTag(tags, r.tag, keep))} onDrop={() => setTags(dropRemoved(tags, r.tag))} />
+                <Row key={r.tag} row={r} disabled={!mayChange || saving} onKeep={(keep) => setTags(keepTag(policy, tags, r.tag, keep))} onDrop={() => setTags(dropRemoved(tags, r.tag))} />
               ))}
             </tbody>
           </table>
@@ -178,7 +200,7 @@ export function TagsDialog({ caps, dataset, onClose, onSaved }: { caps: Capabili
         {mayChange && (
           <div className="field">
             <label className="label" htmlFor="tag-add">
-              A tag the hundred do not hold
+              A tag this dataset removes as well
             </label>
             <div className="tagpick-add">
               <div className="input mono">
@@ -203,7 +225,7 @@ export function TagsDialog({ caps, dataset, onClose, onSaved }: { caps: Capabili
                 Remove it too
               </button>
             </div>
-            <span className="meta">Four hexadecimal digits, a comma, four more. This dataset removes it beside the hundred; every other dataset is untouched.</span>
+            <span className="meta">Four hexadecimal digits, a comma, four more. This dataset removes it beside the rest; every other dataset is untouched.</span>
           </div>
         )}
 
@@ -222,7 +244,7 @@ export function TagsDialog({ caps, dataset, onClose, onSaved }: { caps: Capabili
 }
 
 function Row({ row, disabled, onKeep, onDrop }: { row: TagRow; disabled: boolean; onKeep: (keep: boolean) => void; onDrop: () => void }) {
-  const group = row.group ?? (row.fate === "added" ? "this dataset's own" : "always");
+  const group = row.category ?? (row.fixed ? "always" : "this dataset's own");
   return (
     <tr className={row.kept && !row.fixed ? "kept" : undefined}>
       <td className="tick">
@@ -237,7 +259,7 @@ function Row({ row, disabled, onKeep, onDrop }: { row: TagRow; disabled: boolean
         )}
       </td>
       <td className="path">{row.tag}</td>
-      <td>{row.name ?? <span className="meta">no name in the standard</span>}</td>
+      <td>{row.name ?? <span className="meta">{row.name === null ? "no name in the standard" : "this desk has no name for it"}</span>}</td>
       <td className="tag-group meta">{group}</td>
       <td className={row.fate === "removed" || row.fate === "added" ? undefined : "tag-stays"}>{row.words}</td>
     </tr>

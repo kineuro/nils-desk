@@ -1,0 +1,558 @@
+{
+  "count": 100,
+  "categories": [
+    {
+      "category": "patient",
+      "count": 34
+    },
+    {
+      "category": "trial",
+      "count": 23
+    },
+    {
+      "category": "provider",
+      "count": 38
+    },
+    {
+      "category": "institution",
+      "count": 5
+    }
+  ],
+  "fates": [
+    "removed",
+    "replaced",
+    "kept"
+  ],
+  "tags": [
+    {
+      "tag": "0008,0080",
+      "category": "institution",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,0081",
+      "category": "institution",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,0090",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,0092",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,0094",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,0096",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1010",
+      "category": "institution",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1040",
+      "category": "institution",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1041",
+      "category": "institution",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1048",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1049",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1050",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1052",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1060",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1062",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,106E",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1070",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1072",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,1080",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0008,2111",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,0010",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,0021",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,0030",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,0032",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,0040",
+      "category": "patient",
+      "fate": "kept",
+      "why": "a covariate, kept unless the dataset opts out"
+    },
+    {
+      "tag": "0010,0050",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,0101",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,0102",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,1000",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,1001",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,1002",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,1010",
+      "category": "patient",
+      "fate": "replaced",
+      "why": "computed from the birth date and the study date and put in place of whatever was there, before the birth date goes, where the file carries both and no age of its own"
+    },
+    {
+      "tag": "0010,1020",
+      "category": "patient",
+      "fate": "kept",
+      "why": "a covariate, kept unless the dataset opts out"
+    },
+    {
+      "tag": "0010,1030",
+      "category": "patient",
+      "fate": "kept",
+      "why": "a covariate, kept unless the dataset opts out"
+    },
+    {
+      "tag": "0010,1040",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,1060",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,1080",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,1081",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,1090",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,2000",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,2110",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,2150",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,2152",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,2154",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,2160",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,2180",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,21A0",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,21B0",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,21C0",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,21D0",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,21F0",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,2297",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,2298",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0010,4000",
+      "category": "patient",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0010",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0020",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0021",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0030",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0031",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0040",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0042",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0050",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0051",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0060",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0071",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0072",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0081",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0082",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0083",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0084",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0085",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0086",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0087",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0088",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0089",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0090",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0012,0091",
+      "category": "trial",
+      "fate": "removed"
+    },
+    {
+      "tag": "0032,1032",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0032,1033",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0032,1060",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,0006",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,0007",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,0009",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,000B",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,0253",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,0254",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,0260",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,0275",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,1001",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,1002",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,1102",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,1103",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,1104",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,1400",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,A073",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,A075",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0040,A730",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0070,0084",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0070,0086",
+      "category": "provider",
+      "fate": "removed"
+    },
+    {
+      "tag": "0400,0561",
+      "category": "provider",
+      "fate": "removed"
+    }
+  ],
+  "code": {
+    "tag": "0010,0020",
+    "fate": "replaced",
+    "why": "the subject's code, which the linkage store and the registry's key decide; a run never chooses one of its own"
+  },
+  "mandatory": [
+    {
+      "tag": "0008,0016",
+      "fate": "kept",
+      "why": "what says how to read the file; without it no reader opens it"
+    },
+    {
+      "tag": "0008,0018",
+      "fate": "kept",
+      "why": "what names this one instance; the copy keeps it, so a tree holding it already holds this file"
+    }
+  ],
+  "covariates": {
+    "fate": "kept",
+    "opt_out": "keep_demographics",
+    "tags": [
+      "0010,0040",
+      "0010,1030",
+      "0010,1020"
+    ]
+  }
+}
