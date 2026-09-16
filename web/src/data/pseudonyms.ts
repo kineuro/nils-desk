@@ -8,26 +8,52 @@
 // rows of a map a person chose, posted once to the import door.
 
 import { needsWork } from "../access";
-import { door } from "../ask/client";
+import { door, type JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import type { Detail } from "../grants";
 import type { Place } from "../objects/client";
 import type { ReviewItem } from "../ops/client";
+import { VERBS } from "../ops/verbs";
 import { identityActs } from "../review/client";
 import { kindOf } from "../review/triage";
 import type { Access } from "../settings/identity";
-import type { Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
+import type { Dataset, DatasetFields, IdentityRule, OriginalsKept, Tags } from "./datasets";
 import type { Handling } from "./sources";
 
 // A dataset is the sources door's row as the Data page types it; the same shape is read from here.
 export type { Arrives, Dataset, IdentityRule, IdentitySource, Trees } from "./datasets";
 
-/** The fields a change to the dataset sends to its place: the dataset fields the places door takes, the originals and the handling. */
+/**
+ * The fields a change to the dataset sends to its place: the dataset fields
+ * the places door takes, and the handling. Where the originals stand is not
+ * among them and never will be: `originals_kept` and the place they went to
+ * are written by the act that moved or removed the files, so that the word on
+ * the card cannot say purged while the files are on disk.
+ */
 export type DatasetPatch = Partial<DatasetFields> & {
-  originals_kept?: OriginalsKept;
   handling?: Handling;
 };
+
+/** What a person may change about a dataset on the Pseudonymisation page. */
+export interface DatasetChange {
+  arrives: NonNullable<DatasetFields["arrives"]>;
+  unmapped: NonNullable<DatasetFields["unmapped"]>;
+  cohort: string;
+  tags: NonNullable<Tags>;
+  on_release: Handling["on_release"];
+}
+
+/** What the Change form sends: its own fields, and nothing of the originals. */
+export function changePatch(c: DatasetChange): DatasetPatch {
+  return {
+    arrives: c.arrives,
+    unmapped: c.unmapped,
+    cohort: c.cohort.trim() || null,
+    tags: c.tags,
+    handling: { arrives: c.arrives === "identified" ? "identified" : "deidentified", on_release: c.on_release },
+  };
+}
 
 export interface IdType {
   name: string;
@@ -225,6 +251,47 @@ export function vaultedInto(d: Dataset): string | null {
   return typeof named === "string" && named.trim() !== "" ? named.trim() : null;
 }
 
+/** How an act on the originals ended: done, stopped by a person, or failed. */
+export type ActEnd = "done" | "stopped" | "failed";
+
+/**
+ * Whether the job row says the act was stopped rather than broken: the state
+ * the engine records for a cancel, and what an engine that still calls a stop
+ * a failure leaves behind, its own result or its own first word.
+ */
+export function actStopped(row: Pick<JobRow, "state" | "error" | "result">): boolean {
+  if (row.state === "cancelled") return true;
+  if (row.state !== "failed") return false;
+  const result = (row.result ?? null) as Record<string, unknown> | null;
+  if (result?.cancelled === true) return true;
+  return /^\s*stopped\b/iu.test(row.error ?? "");
+}
+
+const ACT_NOUN = { vault: VERBS["originals vault"].noun, purge: VERBS["originals purge"].noun } as const;
+
+/**
+ * What the card says when an act on the originals ended. A stop is not a
+ * failure: what was moved or removed stays that way, the rest are where they
+ * were, and asking for the act again goes on from there, which is the move
+ * the card offers beside these words. A failure is said in the engine's own.
+ */
+export function actEnded(did: "vault" | "purge", row: Pick<JobRow, "state" | "error" | "result">, into: string | null): { end: ActEnd; words: string } {
+  const place = into !== null && into.trim() !== "" ? into.trim() : null;
+  if (row.state === "done") {
+    return { end: "done", words: did === "vault" ? `The originals are vaulted${place ? ` into ${place}` : ""}.` : "The originals are purged; the pseudonymised tree is all that is left." };
+  }
+  const noun = ACT_NOUN[did];
+  if (actStopped(row)) {
+    const words =
+      did === "vault"
+        ? `The ${noun} of the originals stopped: what was moved is ${place ? `in ${place}` : "at the place it was going to"}, the rest are still here, and Vault it again goes on from there.`
+        : `The ${noun} of the originals stopped: what was removed is gone, the rest are still here, and Purge it again goes on from there.`;
+    return { end: "stopped", words };
+  }
+  const why = (row.error ?? "").trim().replace(/\.+$/u, "");
+  return { end: "failed", words: `The ${noun} of the originals failed: ${why !== "" ? why : "the engine recorded no reason"}.` };
+}
+
 /** What the act would move: the files and what they weigh. */
 export function movingWords(look: OriginalsLook | null): string {
   if (look === null) return "the engine has not said";
@@ -263,12 +330,36 @@ export function purgeRefusal(look: OriginalsLook | null): string | null {
   return why !== "" ? why : "The engine refuses to purge these originals and gives no reason.";
 }
 
-/** A place as the vault dialog reads it. */
-export type PlaceRow = Pick<Place, "id" | "name" | "role" | "path" | "retired_at">;
+/** A place as the vault dialog reads it; an engine that says nothing of a place's role leaves it out. */
+export type PlaceRow = Pick<Place, "id" | "name" | "path"> & { role?: Place["role"] | string | null; retired_at?: string | null };
 
-/** The places a vault may go to: every live place but the dataset's own, narrowed to a role where one is named, by name. */
-export function vaultChoices(places: readonly PlaceRow[], datasetId: number, role: string | null): PlaceRow[] {
-  return places.filter((p) => p.retired_at === null && p.id !== datasetId && (role === null || p.role === role)).sort((a, b) => a.name.localeCompare(b.name));
+/** The role the engine takes the originals into, until it names another in a refusal. */
+export const VAULT_ROLE = "backup";
+
+/** Whether a path is a folder itself or lies under it. */
+function under(path: string, folder: string): boolean {
+  const p = path.replace(/\/+$/u, "");
+  const f = folder.replace(/\/+$/u, "");
+  return p === f || p.startsWith(`${f}/`);
+}
+
+/** The dataset a vault moves out of: its place and the folders that are its own. */
+export type VaultFrom = Pick<Dataset, "id" | "path" | "trees">;
+
+/**
+ * The places a vault may go to, as the engine takes them rather than as a
+ * guess: a place of the backup role, or of the role the engine named when it
+ * refused one; in force; not the dataset's own place; and not inside the
+ * dataset, since a place declared on its folder or in either tree is under a
+ * source place and every vault into one is refused. A place whose role the
+ * door does not say is left out rather than offered.
+ */
+export function vaultChoices(places: readonly PlaceRow[], from: VaultFrom, role: string | null): PlaceRow[] {
+  const wanted = role ?? VAULT_ROLE;
+  const own = [from.path, from.trees?.originals?.path, from.trees?.anon?.path].filter((p): p is string => typeof p === "string" && p.trim() !== "");
+  return places
+    .filter((p) => (p.retired_at ?? null) === null && p.id !== from.id && typeof p.role === "string" && p.role === wanted && !own.some((f) => under(p.path, f)))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /**
@@ -292,6 +383,66 @@ export function roleNamed(refusal: string, roles: readonly string[]): string | n
 /** Whether the confirmation is the dataset's own name, the spaces around it forgiven. */
 export function confirmsName(typed: string, name: string): boolean {
   return name.trim() !== "" && typed.trim() === name.trim();
+}
+
+/* ---------------------------------------------------------------- what a dialog was told */
+
+/**
+ * What the vault dialog has been told: the place, the reason, whether the act
+ * is on its way, the engine's own refusal of the last try and the role it
+ * named in it. The page holds this, not the dialog, so that reading the
+ * dataset again under an open dialog cannot take a person's answers away.
+ */
+export interface VaultAsk {
+  into: string;
+  why: string;
+  sending: boolean;
+  refusal: string | null;
+  role: string | null;
+}
+
+/** What the purge dialog has been told: the reason and the dataset's name typed out. */
+export interface PurgeAsk {
+  typed: string;
+  why: string;
+  sending: boolean;
+  refusal: string | null;
+}
+
+export const NOTHING_ASKED: VaultAsk = { into: "", why: "", sending: false, refusal: null, role: null };
+export const NOTHING_TYPED: PurgeAsk = { typed: "", why: "", sending: false, refusal: null };
+
+/** Whether the vault may be asked for: a place and a reason, with nothing already on its way. */
+export function vaultReady(ask: VaultAsk): boolean {
+  return ask.into.trim() !== "" && ask.why.trim() !== "" && !ask.sending;
+}
+
+/** Whether the purge may be asked for: the engine says it would, the name is typed out and a reason is given. */
+export function purgeReady(ask: PurgeAsk, name: string, look: OriginalsLook | null): boolean {
+  return purgeRefusal(look) === null && confirmsName(ask.typed, name) && ask.why.trim() !== "" && !ask.sending;
+}
+
+/** What the act door is sent, from what the dialog was told. */
+export function vaultAsked(ask: VaultAsk): Extract<OriginalsAct, { do: "vault" }> {
+  return { do: "vault", into: ask.into.trim(), why: ask.why.trim() };
+}
+
+export function purgeAsked(ask: PurgeAsk): Extract<OriginalsAct, { do: "purge" }> {
+  return { do: "purge", why: ask.why.trim() };
+}
+
+/**
+ * The ask after the engine refused it: its words stand as they are, and where
+ * it named a role the places are kept to that role and the place is chosen
+ * again, since the one chosen is not a place it takes.
+ */
+export function vaultRefused(ask: VaultAsk, words: string, roles: readonly string[]): VaultAsk {
+  const named = roleNamed(words, roles);
+  return { ...ask, sending: false, refusal: words, role: named ?? ask.role, into: named === null ? ask.into : "" };
+}
+
+export function purgeRefused(ask: PurgeAsk, words: string): PurgeAsk {
+  return { ...ask, sending: false, refusal: words };
 }
 
 /** Bytes as a person reads them. */

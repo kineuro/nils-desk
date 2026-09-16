@@ -8,10 +8,14 @@
 // three ways out, the two questions the identity-check station answers,
 // and what waits on Review. Provide a map reads a CSV on this machine,
 // guesses each column, rehearses the import and files it; Change edits the
-// dataset's fields through its place. Every control is gated on the door
-// behind it: an engine without the door leaves one line in its place.
+// dataset's fields through its place, and where the originals stand is not
+// among them, since only the act that moves or removes the files writes
+// that. What a dialog was told is held here, by the page, so that reading
+// the dataset again under an open dialog never loses an answer. Every
+// control is gated on the door behind it: an engine without the door leaves
+// one line in its place.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { needsWork } from "../access";
 import { stations, stationsServed, type StationRun, type Verdict } from "../assistant/stations";
@@ -28,8 +32,10 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import {
+  actEnded,
   arrivesWords,
   bytesWords,
+  changePatch,
   datasets,
   detailCounts,
   guessRole,
@@ -42,6 +48,8 @@ import {
   linkage,
   lookAt,
   mapRefusal,
+  NOTHING_ASKED,
+  NOTHING_TYPED,
   originals as originalsDoor,
   originalsActs,
   originalsWords,
@@ -61,22 +69,25 @@ import {
   type ColumnLook,
   type Csv,
   type Dataset,
-  type DatasetPatch,
   type Guess,
   type HeldRow,
   type IdType,
   type ImportReport,
+  type OriginalsActs,
   type OriginalsLook,
   type PlaceRow,
+  type PurgeAsk,
   type Revealed,
   type TypesDoc,
+  type VaultAsk,
 } from "./pseudonyms";
 import { countWords } from "./datasets";
 import { PurgeDialog, VaultDialog } from "./Originals";
 import { sources, whenWords, type Handling } from "./sources";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; dataset: Dataset | null };
-type Opened = { kind: "map" } | { kind: "held" } | { kind: "change" } | { kind: "vault" } | { kind: "purge" } | null;
+// what a dialog has been told is held here, by the page, so that reading the dataset again under an open dialog never takes a person's answers away
+type Opened = { kind: "map" } | { kind: "held" } | { kind: "change" } | { kind: "vault"; ask: VaultAsk } | { kind: "purge"; ask: PurgeAsk } | null;
 type Check = { kind: "idle" } | { kind: "running"; question: string; since: number; run: StationRun | null } | { kind: "done"; question: string; run: StationRun; verdict: Verdict | null } | { kind: "failed"; question: string; why: string };
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -89,7 +100,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [opened, setOpened] = useState<Opened>(null);
   const [check, setCheck] = useState<Check>({ kind: "idle" });
-  const [said, setSaid] = useState<string | null>(null);
+  const [said, setSaid] = useState<{ words: string; failed: boolean } | null>(null);
   const [look, setLook] = useState<OriginalsLook | null>(null);
   const [places, setPlaces] = useState<PlaceRow[]>([]);
   /** Where the originals went, as this desk saw them go; the engine keeps the state, not the place. */
@@ -121,10 +132,17 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
     if (served(caps, "GET /api/places") && may(caps, "places:see")) objects.places().then((r) => setPlaces(r.places), () => setPlaces([]));
   }, [name, caps, heldServed]);
 
+  // the dataset is read again whenever the desk's capabilities change; only another dataset blanks the page, since blanking it takes down whatever is open over it and a dialog's answers with it
+  const showing = useRef<string | null>(null);
   useEffect(() => {
-    setLoad({ kind: "loading", since: Date.now() });
+    if (showing.current !== name) {
+      showing.current = name;
+      setLoad({ kind: "loading", since: Date.now() });
+      setOpened(null);
+      setLook(null);
+    }
     read();
-  }, [read]);
+  }, [name, read]);
 
   // an act on the originals is a job like any other: Now and Pipelines show it while it runs, and the card says the new state once it ends
   useEffect(() => {
@@ -135,12 +153,10 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
         (row) => {
           if (!alive || row.state === "queued" || row.state === "running" || row.state === "cancelling") return;
           setActing(null);
-          if (row.state === "done") {
-            if (acting.did === "vault") setVaulted(acting.into);
-            setSaid(acting.did === "vault" ? `The originals are vaulted${acting.into ? ` into ${acting.into}` : ""}.` : "The originals are purged; the pseudonymised tree is all that is left.");
-          } else {
-            setSaid(`The ${acting.did} of the originals ${row.state}: ${row.error ?? "the engine recorded no reason"}.`);
-          }
+          // a stop is not a failure: the act says so in its own words, and the card goes on offering it
+          const ended = actEnded(acting.did, row, acting.into);
+          if (ended.end === "done" && acting.did === "vault") setVaulted(acting.into);
+          setSaid({ words: ended.words, failed: ended.end === "failed" });
           read();
         },
         () => undefined,
@@ -167,10 +183,10 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
     linkage
       .codeHeld(name)
       .then((j) => {
-        setSaid(`The held files get codes derived from their identifiers, as job ${j.job}; a later map merges them into the right person.`);
+        setSaid({ words: `The held files get codes derived from their identifiers, as job ${j.job}; a later map merges them into the right person.`, failed: false });
         read();
       })
-      .catch((e: unknown) => setSaid(messageOf(e)));
+      .catch((e: unknown) => setSaid({ words: messageOf(e), failed: true }));
   };
 
   if (load.kind === "loading") return <Wait phase="reading the dataset" since={load.since} size="panel" />;
@@ -237,7 +253,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             </button>
           )}
         </div>
-        {said && <p className="meta">{said}</p>}
+        {said && <p className={said.failed ? "warn" : "meta"}>{said.words}</p>}
         {changing !== null && <p className="meta">{changing}</p>}
         {check.kind !== "idle" && (
           <CheckPanel
@@ -246,7 +262,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             check={check}
             onClose={() => setCheck({ kind: "idle" })}
             onUsed={(words) => {
-              setSaid(words);
+              setSaid({ words, failed: false });
               setCheck({ kind: "idle" });
               read();
               onChanged?.();
@@ -338,12 +354,12 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
               {(acts.vault || acts.purge) && (
                 <div className="row">
                   {acts.vault && (
-                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "vault" })}>
+                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "vault", ask: NOTHING_ASKED })}>
                       Vault it
                     </button>
                   )}
                   {acts.purge && (
-                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "purge" })}>
+                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "purge", ask: NOTHING_TYPED })}>
                       Purge it
                     </button>
                   )}
@@ -596,7 +612,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
           onClose={() => setOpened(null)}
           onFiled={(words) => {
             setOpened(null);
-            setSaid(words);
+            setSaid({ words, failed: false });
             read();
           }}
         />
@@ -617,10 +633,12 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
       {opened?.kind === "change" && (
         <ChangeDialog
           dataset={dataset}
+          acts={acts}
+          onAct={(did) => setOpened(did === "vault" ? { kind: "vault", ask: NOTHING_ASKED } : { kind: "purge", ask: NOTHING_TYPED })}
           onClose={() => setOpened(null)}
           onSaved={() => {
             setOpened(null);
-            setSaid(`${dataset.name} is changed; the next bring-in reads it so.`);
+            setSaid({ words: `${dataset.name} is changed; the next bring-in reads it so.`, failed: false });
             read();
             onChanged?.();
           }}
@@ -632,11 +650,13 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
           dataset={dataset}
           look={look}
           places={places}
+          ask={opened.ask}
+          onAsk={(ask) => setOpened((was) => (was?.kind === "vault" ? { kind: "vault", ask } : was))}
           onClose={() => setOpened(null)}
           onQueued={(job, into) => {
             setOpened(null);
             setActing({ job, did: "vault", into });
-            setSaid(`Vaulting the originals of ${dataset.name} into ${into} is queued as job ${job}; Now and Pipelines show it while it runs.`);
+            setSaid({ words: `Vaulting the originals of ${dataset.name} into ${into} is queued as job ${job}; Now and Pipelines show it while it runs.`, failed: false });
             read();
           }}
         />
@@ -646,11 +666,13 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
           caps={caps}
           dataset={dataset}
           look={look}
+          ask={opened.ask}
+          onAsk={(ask) => setOpened((was) => (was?.kind === "purge" ? { kind: "purge", ask } : was))}
           onClose={() => setOpened(null)}
           onQueued={(job) => {
             setOpened(null);
             setActing({ job, did: "purge", into: null });
-            setSaid(`Purging the originals of ${dataset.name} is queued as job ${job}; Now and Pipelines show it while it runs.`);
+            setSaid({ words: `Purging the originals of ${dataset.name} is queued as job ${job}; Now and Pipelines show it while it runs.`, failed: false });
             read();
           }}
         />
@@ -1165,14 +1187,13 @@ export function HeldDialog({ caps, dataset, rows, onClose, onMap, onCode }: { ca
 
 /* ---------------------------------------------------------------- Change */
 
-export function ChangeDialog({ dataset, onClose, onSaved }: { dataset: Dataset; onClose: () => void; onSaved: () => void }) {
+export function ChangeDialog({ dataset, acts, onAct, onClose, onSaved }: { dataset: Dataset; acts: OriginalsActs; onAct: (did: "vault" | "purge") => void; onClose: () => void; onSaved: () => void }) {
   const [arrives, setArrives] = useState<NonNullable<Dataset["arrives"]>>(dataset.arrives ?? (dataset.handling?.arrives === "deidentified" ? "deidentified" : "identified"));
   const [unmapped, setUnmapped] = useState<"hold" | "code">(dataset.unmapped ?? "hold");
   const [cohort, setCohort] = useState(dataset.cohort ?? "");
   const [demographics, setDemographics] = useState(dataset.tags?.keep_demographics ?? true);
   const [remove, setRemove] = useState((dataset.tags?.remove ?? []).join("\n"));
   const [keep, setKeep] = useState((dataset.tags?.keep ?? []).join("\n"));
-  const [originals, setOriginals] = useState<NonNullable<Dataset["originals_kept"]>>(dataset.originals_kept ?? "kept");
   const [onRelease, setOnRelease] = useState<Handling["on_release"]>(dataset.handling?.on_release ?? { dates: "keep", uids: "remap", deface: false });
   const [why, setWhy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1181,14 +1202,8 @@ export function ChangeDialog({ dataset, onClose, onSaved }: { dataset: Dataset; 
   const save = () => {
     setSaving(true);
     setWhy(null);
-    const patch: DatasetPatch = {
-      arrives,
-      unmapped,
-      cohort: cohort.trim() || null,
-      tags: { keep_demographics: demographics, remove: tagList(remove), keep: tagList(keep) },
-      originals_kept: originals,
-      handling: { arrives: arrives === "identified" ? "identified" : "deidentified", on_release: onRelease },
-    };
+    // where the originals stand is not among the fields: only the act that moves or removes the files writes that word
+    const patch = changePatch({ arrives, unmapped, cohort, tags: { keep_demographics: demographics, remove: tagList(remove), keep: tagList(keep) }, on_release: onRelease });
     datasets
       .set(dataset.id, patch)
       .then(onSaved)
@@ -1264,9 +1279,26 @@ export function ChangeDialog({ dataset, onClose, onSaved }: { dataset: Dataset; 
       </div>
       <div className="field">
         <span className="label">The originals</span>
-        {radio("originals", originals === "kept", () => setOriginals("kept"), "Kept: read by the pseudonymiser only")}
-        {radio("originals", originals === "vaulted", () => setOriginals("vaulted"), "Vaulted: moved out of the way, not read")}
-        {radio("originals", originals === "purged", () => setOriginals("purged"), "Purged: the pseudonymised tree is all that is left")}
+        <p className="meta">{originalsWords(dataset.originals_kept, vaultedInto(dataset))}</p>
+        <span className="meta">
+          What becomes of them is not settled here. They are vaulted into another place or purged, and the act itself moves or removes the files; only that act writes the word the card reads, so it
+          can never say purged while the files are still on disk.
+        </span>
+        {(acts.vault || acts.purge) && (
+          <div className="row">
+            {acts.vault && (
+              <button type="button" className="button quiet small" disabled={saving} onClick={() => onAct("vault")}>
+                Vault it
+              </button>
+            )}
+            {acts.purge && (
+              <button type="button" className="button quiet small" disabled={saving} onClick={() => onAct("purge")}>
+                Purge it
+              </button>
+            )}
+          </div>
+        )}
+        {acts.refusal !== null && <span className="meta">{acts.refusal}</span>}
       </div>
       <div className="field">
         <span className="label">Dates, when it leaves</span>

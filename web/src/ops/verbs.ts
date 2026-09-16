@@ -50,7 +50,8 @@ export const VERBS: Record<string, VerbWords> = {
   handover: { doing: "Handing over", noun: "handover", link: "of", named: true, icon: "release", ...release, again: "Hand over again" },
   "linkage import": { doing: "Filing the map for", noun: "map import", link: "for", named: true, icon: "key", ...data, again: "File again" },
   "linkage merge": { doing: "Merging subjects", noun: "merge", link: "of", named: false, icon: "key", ...data, again: "Merge again" },
-  "originals vault": { doing: "Vaulting the originals of", noun: "vaulting", link: "of", named: true, icon: "lock", ...data, again: null },
+  // a vault that stopped moved what it moved and left the rest: the same command goes on from there, which is why it has a next move where the purge has none
+  "originals vault": { doing: "Vaulting the originals of", noun: "vaulting", link: "of", named: true, icon: "lock", ...data, again: "Vault the rest" },
   "originals purge": { doing: "Purging the originals of", noun: "purge", link: "of", named: true, icon: "alert", ...data, again: null },
   originals: { doing: "Acting on the originals of", noun: "originals", link: "of", named: true, icon: "lock", ...data, again: null },
   backup: { doing: "Backing up", noun: "backup", link: "of", named: false, icon: "disk", ...database, again: "Back up again" },

@@ -74,8 +74,8 @@ describe("the verb in words", () => {
     // a line that names no act, and a job the engine gives by its kind alone, are still not read as Running
     expect(doingWords(job(["originals", "@north"]))).toBe("Acting on the originals of north");
     expect(doingWords({ args: {}, kind: "originals", name: "north" })).toBe("Acting on the originals of north");
-    // neither is simply run again
-    expect(nextMove(vaulting)).toBeNull();
+    // a vault that stopped moved what it moved and left the rest, so the same command goes on from there; a purge is never queued again from a card
+    expect(nextMove(vaulting)).toEqual({ label: "Vault the rest", command: ["originals", "vault", "@north", "--into", "cold-store", "--why", "tape"] });
     expect(nextMove(purging)).toBeNull();
   });
   it("reads the rest from the line: the place without its tree, the name, the pack; the worker is the worker", () => {

@@ -6,12 +6,16 @@
 // words each fact takes. The numbers and names here are made up.
 
 import { describe, expect, it } from "vitest";
+import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { ReviewItem } from "../ops/client";
 import type { Access } from "../settings/identity";
 import {
+  actEnded,
+  actStopped,
   arrivesWords,
   bytesWords,
+  changePatch,
   confirmsName,
   detailCounts,
   guessRole,
@@ -25,12 +29,17 @@ import {
   lookAt,
   mapRefusal,
   movingWords,
+  NOTHING_ASKED,
+  NOTHING_TYPED,
   originalsActs,
   originalsLines,
   originalsWords,
   parseCsv,
   proposedRule,
+  purgeAsked,
+  purgeReady,
   purgeRefusal,
+  purgeRefused,
   reportLines,
   roleNamed,
   ruleWords,
@@ -40,13 +49,19 @@ import {
   subjectsWords,
   tagList,
   typeName,
+  vaultAsked,
   vaultChoices,
   vaultedInto,
+  vaultReady,
+  vaultRefused,
   type Dataset,
+  type DatasetChange,
   type IdType,
   type ImportReport,
   type OriginalsLook,
   type PlaceRow,
+  type PurgeAsk,
+  type VaultAsk,
 } from "./pseudonyms";
 
 const types: IdType[] = [
@@ -303,11 +318,78 @@ describe("acting on the originals of a dataset", () => {
       { id: 6, name: "cold-store", role: "backup", path: "/vault/cold", retired_at: null },
       { id: 2, name: "attic", role: "backup", path: "/vault/attic", retired_at: null },
       { id: 7, name: "gone", role: "backup", path: "/vault/gone", retired_at: "2026-01-04T09:00:00Z" },
+      { id: 8, name: "exports", role: "export", path: "/exports", retired_at: null },
+      { id: 9, name: "hole", role: "backup", path: "/scans/lake/derivatives/dcm-original/hole", retired_at: null },
+      { id: 10, name: "anon-hole", role: "backup", path: "/scans/lake/derivatives/dcm-anon/hole", retired_at: null },
+      { id: 11, name: "on-itself", role: "backup", path: "/scans/lake/", retired_at: null },
+      { id: 12, name: "unsaid", path: "/vault/unsaid", retired_at: null },
     ];
-    expect(vaultChoices(places, 4, null).map((p) => p.name)).toEqual(["attic", "cold-store"]);
-    expect(vaultChoices(places, 4, "backup").map((p) => p.name)).toEqual(["attic", "cold-store"]);
-    expect(vaultChoices(places, 4, "export")).toEqual([]);
-    expect(vaultChoices(places, 6, null).map((p) => p.name)).toEqual(["attic", "lake"]);
+    // the backup role before any refusal: the source, the export place, a retired place, the three declared inside the dataset and the one whose role the door does not say are all left out
+    expect(vaultChoices(places, d, null).map((p) => p.name)).toEqual(["attic", "cold-store"]);
+    expect(vaultChoices(places, d, "backup").map((p) => p.name)).toEqual(["attic", "cold-store"]);
+    // the role the engine named in a refusal stands in the backup role's place
+    expect(vaultChoices(places, d, "export").map((p) => p.name)).toEqual(["exports"]);
+    expect(vaultChoices(places, d, "share")).toEqual([]);
+    // the dataset's own place is out by its id, whatever role it carries
+    expect(vaultChoices(places, { ...d, id: 2 }, null).map((p) => p.name)).toEqual(["cold-store"]);
+  });
+
+  const row = (state: JobRow["state"], over: { error?: string; result?: Record<string, unknown> } = {}): Parameters<typeof actEnded>[1] => ({
+    state,
+    error: over.error ?? null,
+    result: (over.result ?? null) as JobRow["result"],
+  });
+
+  it("keeps what a dialog was told outside the dialog, so drawing it again loses no answer", () => {
+    expect(vaultReady(NOTHING_ASKED)).toBe(false);
+    const chose: VaultAsk = { ...NOTHING_ASKED, into: " cold-store ", why: " on tape " };
+    expect(vaultReady(chose)).toBe(true);
+    expect(vaultReady({ ...chose, sending: true })).toBe(false);
+    expect(vaultAsked(chose)).toEqual({ do: "vault", into: "cold-store", why: "on tape" });
+    expect(purgeReady(NOTHING_TYPED, "lake", look)).toBe(false);
+    const typed: PurgeAsk = { ...NOTHING_TYPED, typed: "lake", why: "on tape" };
+    expect(purgeReady(typed, "lake", look)).toBe(true);
+    expect(purgeReady(typed, "lake", { ...look, ready: false, why: "18 files have no verified copy" })).toBe(false);
+    expect(purgeReady({ ...typed, sending: true }, "lake", look)).toBe(false);
+    expect(purgeAsked(typed)).toEqual({ do: "purge", why: "on tape" });
+  });
+
+  it("keeps the engine's refusal, and asks for the place again only where it named another role", () => {
+    const roles = ["source", "backup", "export"];
+    const chose: VaultAsk = { ...NOTHING_ASKED, into: "exports", why: "on tape", sending: true };
+    expect(vaultRefused(chose, "the originals of a source go to a place with the backup role", roles)).toEqual({
+      into: "",
+      why: "on tape",
+      sending: false,
+      refusal: "the originals of a source go to a place with the backup role",
+      role: "backup",
+    });
+    // a refusal that names no role leaves the choice as it was: the person reads it and decides
+    const mute = vaultRefused(chose, "a release of this dataset is still running", roles);
+    expect(mute.into).toBe("exports");
+    expect(mute.role).toBeNull();
+    expect(mute.sending).toBe(false);
+    expect(purgeRefused({ ...NOTHING_TYPED, typed: "lake", sending: true }, "409: a release is still running")).toEqual({ typed: "lake", why: "", sending: false, refusal: "409: a release is still running" });
+  });
+
+  it("says how an act ended, a stop in its own words and never as a failure", () => {
+    expect(actEnded("vault", row("done"), "cold-store")).toEqual({ end: "done", words: "The originals are vaulted into cold-store." });
+    expect(actEnded("vault", row("done"), null).words).toBe("The originals are vaulted.");
+    expect(actEnded("purge", row("done"), null).words).toBe("The originals are purged; the pseudonymised tree is all that is left.");
+    const stopped = actEnded("vault", row("cancelled", { error: "stopped: what was done stays done; run it again to go on" }), "cold-store");
+    expect(stopped).toEqual({ end: "stopped", words: "The vaulting of the originals stopped: what was moved is in cold-store, the rest are still here, and Vault it again goes on from there." });
+    expect(actEnded("purge", row("cancelled"), null).words).toBe("The purge of the originals stopped: what was removed is gone, the rest are still here, and Purge it again goes on from there.");
+    // an engine that still records a stop as a failure is read the same way, by its own result or by its own first word
+    expect(actEnded("vault", row("failed", { result: { cancelled: true } }), "cold-store").end).toBe("stopped");
+    expect(actEnded("vault", row("failed", { error: "stopped: what was done stays done" }), null).end).toBe("stopped");
+    expect(actStopped(row("running"))).toBe(false);
+    expect(actStopped(row("failed", { error: "a file of that name is already there" }))).toBe(false);
+    // a failure is the engine's own words, with one full stop at the end of them
+    expect(actEnded("vault", row("failed", { error: "a file of that name is already at the destination." }), "cold-store")).toEqual({
+      end: "failed",
+      words: "The vaulting of the originals failed: a file of that name is already at the destination.",
+    });
+    expect(actEnded("purge", row("failed"), null).words).toBe("The purge of the originals failed: the engine recorded no reason.");
   });
 
   it("takes the dataset's own name as the purge's confirmation", () => {
@@ -316,5 +398,32 @@ describe("acting on the originals of a dataset", () => {
     expect(confirmsName("Lake", "lake")).toBe(false);
     expect(confirmsName("", "lake")).toBe(false);
     expect(confirmsName("", "")).toBe(false);
+  });
+});
+
+describe("what a change to the dataset sends", () => {
+  const fields: DatasetChange = {
+    arrives: "identified",
+    unmapped: "hold",
+    cohort: "  nmosd  ",
+    tags: { keep_demographics: true, remove: ["StudyDescription"], keep: [] },
+    on_release: { dates: "shift", uids: "remap", deface: false },
+  };
+
+  it("sends the dataset's own fields, and nothing of where the originals stand", () => {
+    const patch = changePatch(fields);
+    expect(patch).toEqual({
+      arrives: "identified",
+      unmapped: "hold",
+      cohort: "nmosd",
+      tags: { keep_demographics: true, remove: ["StudyDescription"], keep: [] },
+      handling: { arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: false } },
+    });
+    // the two the act alone may write are not among the keys: a form cannot declare the originals purged while they are on disk
+    expect(Object.keys(patch)).not.toContain("originals_kept");
+    expect(Object.keys(patch)).not.toContain("originals_vault");
+    // a cohort taken away is sent as none, and a coded dataset is handled as de-identified
+    expect(changePatch({ ...fields, cohort: "   " }).cohort).toBeNull();
+    expect(changePatch({ ...fields, arrives: "coded" }).handling?.arrives).toBe("deidentified");
   });
 });
