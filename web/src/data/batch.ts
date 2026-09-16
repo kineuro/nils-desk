@@ -84,11 +84,22 @@ export function jobWords(ids: number[]): string {
   return sorted.length === 1 ? `job ${sorted[0]}` : `jobs ${sorted.join(", ")}`;
 }
 
-/** The verb a job ran, as its command line reads: "digest @spring-scans", "classify --pack mri 0.1.1". */
+/**
+ * The verb a job ran, as its command line reads: "digest @spring-scans",
+ * "classify --pack mri 0.1.1". The engine records the line it was queued
+ * with; the argv it ran under carries the worker's own binary and
+ * `--registry <dir>` in front, which are stripped so a row never reads the
+ * binary as a verb.
+ */
 export function verbWords(job: JobRow): string {
-  const argv = (job.args?.argv as string[] | undefined) ?? [];
+  const queued = (job.args?.queued as string[] | undefined) ?? [];
+  if (queued.length > 0) return queued.join(" ");
+  let argv = (job.args?.argv as string[] | undefined) ?? [];
   if (argv.length === 0) return job.kind;
-  return argv.join(" ");
+  if (argv[0].includes("/") || argv[0] === "nils" || argv[0].endsWith(".exe")) argv = argv.slice(1);
+  if (argv[0] === "--registry" || argv[0] === "--home") argv = argv.slice(2);
+  else if (argv[0]?.startsWith("--registry=") || argv[0]?.startsWith("--home=")) argv = argv.slice(1);
+  return argv.length === 0 ? job.kind : argv.join(" ");
 }
 
 export interface BaseRow {

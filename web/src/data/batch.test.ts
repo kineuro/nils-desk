@@ -4,6 +4,7 @@
 // event is drawn.
 
 import { describe, expect, it } from "vitest";
+import type { JobRow } from "../ask/client";
 import { addedByBase, datasetOf, eventMark, jobWords, ledeWords, tookWords, verbWords, type BatchDoc } from "./batch";
 import type { Dataset } from "./pseudonyms";
 import type { Source } from "./sources";
@@ -49,6 +50,12 @@ describe("the words of a batch", () => {
   });
   it("read the verb off the command line", () => {
     expect(verbWords({ id: 1, kind: "digest", name: null, state: "done", started_at: "", heartbeat_at: null, finished_at: null, progress: null, error: null, args: { argv: ["digest", "@spring-scans"] }, result: null })).toBe("digest @spring-scans");
+  });
+  it("read the line the engine queued, not the worker's binary and registry", () => {
+    const ran = (args: Record<string, unknown>): JobRow => ({ id: 1, kind: "pseudonymize", name: null, state: "done", started_at: "", heartbeat_at: null, finished_at: null, progress: null, error: null, args, result: null });
+    expect(verbWords(ran({ queued: ["pseudonymize", "@spring-scans", "--name", "spring"], argv: ["/opt/nils/nils", "--registry", "/srv/registry", "pseudonymize", "@spring-scans", "--name", "spring"] }))).toBe("pseudonymize @spring-scans --name spring");
+    expect(verbWords(ran({ argv: ["/opt/nils/nils", "--registry", "/srv/registry", "digest", "@spring-scans"] }))).toBe("digest @spring-scans");
+    expect(verbWords(ran({}))).toBe("pseudonymize");
   });
   it("open with the dataset, the jobs that pseudonymised and read it, and the identity rule", () => {
     const d: Dataset = { ...source("spring-scans"), identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } };
