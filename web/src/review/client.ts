@@ -372,29 +372,61 @@ export function valueEditable(pack: PackDoc, axis: string, value: string): boole
 }
 
 /**
- * Whether the axis takes a word at all. An engine that listed the axis's
- * values answers per value; one that only numbered them still names the
- * lists it opens, so an axis whose values are not listed is not mistaken
- * for one that carries no words.
+ * Whether the pack reaches the axis by a word anywhere: a word on one of its
+ * values, or a list the pack opens on it, which is a word list a site may grow
+ * whether or not it holds a word today. A door that only numbered an axis's
+ * values says nothing either way, so such an axis is not taken for a wordless
+ * one. This is what the page marks as "no words", and it is the pack's answer:
+ * whether this engine lets a site amend those words is the separate question
+ * `axisEditable` asks.
  */
-export function axisEditable(pack: PackDoc, a: PackAxis): boolean {
-  if (a.values.some((v) => valueEditable(pack, a.axis, v.value))) return true;
+export function axisHasWords(pack: PackDoc, a: PackAxis): boolean {
+  if (a.values.length === 0) return true;
+  if (a.values.some((v) => v.keywords.length > 0 || v.list !== null)) return true;
   return pack.lists.some((l) => l.startsWith(`${a.axis}.`));
 }
 
 /**
- * Why an axis takes no word, in a person's words: it carries none anywhere
- * and is decided from the other axes, or the engine's pack lets a site amend
- * other lists than this one.
+ * Whether a site may add a word anywhere on the axis, under the same contract
+ * test each value is read under: the pack computes the lists it opens at every
+ * contract, and only contract 5 lets a site amend by them, so an engine at
+ * contract 4 is answered by its buckets alone. An engine that only numbered an
+ * axis's values still names the lists it opens, so such an axis is not
+ * mistaken for one no word may be added to.
+ */
+export function axisEditable(pack: PackDoc, a: PackAxis): boolean {
+  if (a.values.some((v) => valueEditable(pack, a.axis, v.value))) return true;
+  if (pack.contract < 5) return false;
+  return pack.lists.some((l) => l.startsWith(`${a.axis}.`));
+}
+
+/**
+ * Why an axis takes no word from a site, in a person's words: it carries none
+ * anywhere and is decided from the other axes, or it carries words this engine
+ * does not let a site amend.
  */
 export function whyNoWords(pack: PackDoc, a: PackAxis): string {
-  if (a.values.length > 0 && a.values.every((v) => v.keywords.length === 0)) {
+  if (a.values.length > 0 && !axisHasWords(pack, a)) {
     return a.phase === "disposition"
       ? "No words anywhere: it is decided from the axes above it."
       : "No words anywhere: a flag or a rule decides it.";
   }
   if (a.values.length === 0) return "This engine lists no value of this axis, so it lists no words either.";
-  return `This engine lets a site grow ${pack.buckets && Object.keys(pack.buckets).length > 0 ? Object.keys(pack.buckets).join(", ") : "no list"} only.`;
+  const amendable = Object.keys(pack.buckets);
+  if (amendable.length > 0) return `This engine lets a site grow ${amendable.join(", ")} only.`;
+  return "This pack opens no word list on this axis, so a site adds none to it.";
+}
+
+/**
+ * Why a site adds no word to one value, in a person's words. Two different
+ * things are refused the same way, so each says which it is: a value reached
+ * by no word at all takes none from anyone, and a value carrying words this
+ * engine does not let a site amend is refused by the engine, not by the pack.
+ */
+export function whyNoWordHere(pack: PackDoc, a: PackAxis, v: PackValue): string {
+  const reached = v.keywords.length > 0 || v.list !== null || pack.lists.includes(`${a.axis}.${v.value}`);
+  if (!reached) return "This value is reached by no word, so a site adds none to it.";
+  return whyNoWords(pack, a);
 }
 
 /** A value's words split in two: the ones the pack shipped, and the ones the site added. */
@@ -402,6 +434,42 @@ export function wordsOf(v: PackValue): { shipped: string[]; added: string[] } {
   const added = v.site?.add ?? [];
   const lower = new Set(added.map((w) => w.toLowerCase()));
   return { shipped: v.keywords.filter((w) => !lower.has(w.toLowerCase())), added };
+}
+
+/** One word on a value, as the page draws it: the pack's own, one a site adopted, or one only proposed. */
+export interface ValueWord {
+  word: string;
+  from: "pack" | "site" | "proposed";
+  /** Which scope adopted or proposed it; null for the pack's own words, and where no overlay on the page names the scope. */
+  scope: string | null;
+}
+
+/**
+ * A value's words in the order the page draws them: the pack's own first,
+ * then the ones a site adopted, each with the scope that adopted it, then the
+ * ones only proposed. The two answers are joined because neither is whole on
+ * its own. The pack door names a site's adopted words among the value's own at
+ * pack contract 5; at contract 4 a site amends a bucket, which the door names
+ * on no value, so the adopted overlays answer for those. A word both answer to
+ * is drawn once, with the scope the overlay names.
+ */
+export function valueWords(v: PackValue, overlays: OverlayRow[], axis: string): ValueWord[] {
+  const site = siteWords(overlays, axis, v.value);
+  const named = new Map(site.adopted.map((s) => [s.word.toLowerCase(), s.scope]));
+  const { shipped, added } = wordsOf(v);
+  const out: ValueWord[] = shipped.filter((w) => !named.has(w.toLowerCase())).map((word) => ({ word, from: "pack" as const, scope: null }));
+  const drawn = new Set<string>();
+  for (const word of added) {
+    drawn.add(word.toLowerCase());
+    out.push({ word, from: "site", scope: named.get(word.toLowerCase()) ?? null });
+  }
+  for (const s of site.adopted) {
+    if (drawn.has(s.word.toLowerCase())) continue;
+    drawn.add(s.word.toLowerCase());
+    out.push({ word: s.word, from: "site", scope: s.scope });
+  }
+  for (const s of site.proposed) out.push({ word: s.word, from: "proposed", scope: s.scope });
+  return out;
 }
 
 /** The axes rail: each axis with what its rules are made of, in words. */

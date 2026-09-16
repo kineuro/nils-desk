@@ -25,6 +25,7 @@ import {
   acts,
   axisCounts,
   axisEditable,
+  axisHasWords,
   axisWords,
   closureWords,
   familyOf,
@@ -36,20 +37,21 @@ import {
   scopeString,
   scopeWords,
   siteWordCount,
-  siteWords,
   tryWords,
   valueCounts,
   valueEditable,
+  valueWords,
+  whyNoWordHere,
   whyNoWords,
   withDocuments,
   wordOverlay,
-  wordsOf,
   type Closure,
   type OverlayDoc,
   type PackAxis,
   type PackDoc,
   type Scope,
   type TryResult,
+  type ValueWord,
 } from "./client";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -74,9 +76,9 @@ export interface RulesProps {
   onChanged: (words: string) => void;
 }
 
-/** What an axis says on the rail: how many lists it opens, or that it takes no word. */
+/** What an axis says on the rail: how many word lists it opens, how many values it has, or that the pack reaches it by no word. */
 export function railWords(pack: PackDoc, a: PackAxis): string {
-  if (!axisEditable(pack, a)) return "no words";
+  if (!axisHasWords(pack, a)) return "no words";
   return axisWords(a) || `${n(a.counted)} values`;
 }
 
@@ -90,7 +92,7 @@ export function AxisRail({ pack, chosen, onPick }: { pack: PackDoc; chosen: stri
           type="button"
           role="tab"
           aria-selected={chosen === a.axis}
-          className={`${chosen === a.axis ? "on" : ""}${axisEditable(pack, a) ? "" : " none"}`.trim()}
+          className={`${chosen === a.axis ? "on" : ""}${axisHasWords(pack, a) ? "" : " none"}`.trim()}
           onClick={() => onPick(a.axis)}
         >
           <span>{a.axis}</span>
@@ -101,25 +103,49 @@ export function AxisRail({ pack, chosen, onPick }: { pack: PackDoc; chosen: stri
   );
 }
 
-/** The chosen axis's values: each with its words, the site's apart from the pack's, its counts and Add a word. */
+/** A word's own note: which scope adopted it, or that it is proposed and not adopted yet. */
+function wordTitle(w: ValueWord): string | undefined {
+  if (w.from === "pack") return undefined;
+  if (w.from === "site") return w.scope ? `adopted for ${w.scope}` : "adopted by this site";
+  return w.scope ? `proposed for ${w.scope}, not adopted yet` : "proposed, not adopted yet";
+}
+
+/** What a word says beside itself, so the scope is read and not only hovered: who adopted it, or that it is only proposed. */
+function wordScope(w: ValueWord): string | null {
+  if (w.from === "pack") return null;
+  if (w.from === "site") return w.scope ?? "this site";
+  return w.scope ? `${w.scope}, proposed` : "proposed";
+}
+
+/** The chosen axis's values: each with its words, the site's apart from the pack's, how it is reached, its counts and Add a word. */
 export function AxisValues({ pack, axis, signals, overlays, may, onAdd }: { pack: PackDoc; axis: PackAxis; signals: Signals | null; overlays: OverlayRow[]; may: boolean; onAdd: (value: string) => void }) {
   const [all, setAll] = useState(false);
   const shadowed = new Set(signals?.shadowed_keywords ?? []);
   const counts = axisCounts(signals, axis.axis);
+  // an engine that counts by axis alone still says how the axis fared, whether or not its values were listed
+  const tally =
+    counts && !signals?.by_value ? (
+      <p className="meta">
+        {n(counts.sorted)} sorted on this axis, {n(counts.unsure)} unsure.
+      </p>
+    ) : null;
   if (axis.values.length === 0) {
-    return <p className="meta">{axis.counted > 0 ? `${n(axis.counted)} values; this engine lists their words with its next release.` : "No value of its own; a route sets them."}</p>;
+    return (
+      <>
+        <p className="meta">{axis.counted > 0 ? `${n(axis.counted)} values; this engine lists their words with its next release.` : "No value of its own; a route sets them."}</p>
+        {tally}
+      </>
+    );
   }
   const rows = all ? axis.values : axis.values.slice(0, 10);
   return (
     <>
       <div className="vlist">
         {rows.map((v) => {
-          const { shipped, added } = wordsOf(v);
-          const proposed = siteWords(overlays, axis.axis, v.value).proposed;
+          const words = valueWords(v, overlays, axis.axis);
           const c = valueCounts(signals, axis.axis, v.value);
           const editable = valueEditable(pack, axis.axis, v.value);
           const shadow = v.keywords.find((k) => shadowed.has(k));
-          const none = shipped.length === 0 && added.length === 0 && proposed.length === 0;
           return (
             <div key={v.value} className="vrow">
               <div className="vhead">
@@ -138,31 +164,24 @@ export function AxisValues({ pack, axis, signals, overlays, may, onAdd }: { pack
                       Add a word
                     </button>
                   ) : (
-                    <button type="button" className="button quiet small" disabled title="This value is reached by no word, so a site adds none to it.">
+                    <button type="button" className="button quiet small" disabled title={whyNoWordHere(pack, axis, v)}>
                       Add a word
                     </button>
                   ))}
               </div>
-              {!none && (
+              {words.length > 0 && (
                 <div className="words-row">
-                  {shipped.map((w) => (
-                    <span key={w} className="word">
-                      {w}
-                    </span>
-                  ))}
-                  {added.map((w) => (
-                    <span key={`a${w}`} className="word site" title="added by this site">
-                      {w}
-                    </span>
-                  ))}
-                  {proposed.map((s, i) => (
-                    <span key={`p${i}`} className="word proposed" title={`proposed for ${s.scope}`}>
-                      {s.word}
+                  {words.map((w, i) => (
+                    <span key={`${w.from}-${i}-${w.word}`} className={w.from === "pack" ? "word" : `word ${w.from}`} title={wordTitle(w)}>
+                      {w.word}
+                      {wordScope(w) && <small className="scope">{wordScope(w)}</small>}
                     </span>
                   ))}
                 </div>
               )}
-              {none && <span className="meta">{v.flag ? `no words · ${v.flag}` : "no words · a rule decides"}</span>}
+              {words.length === 0 && <span className="meta">no words · {v.flag ? "a flag decides" : "a rule decides"}</span>}
+              {/* how a value is reached stays the pack's: it is shown whether or not a word reaches it too */}
+              {v.flag && <span className="meta">reached first by {v.flag}</span>}
               {shadow && (
                 <span className="meta">
                   <span className="path">{shadow}</span> stands behind an earlier word
@@ -177,11 +196,7 @@ export function AxisValues({ pack, axis, signals, overlays, may, onAdd }: { pack
           All {n(axis.values.length)} values
         </button>
       )}
-      {counts && !signals?.by_value && (
-        <p className="meta">
-          {n(counts.sorted)} sorted on this axis, {n(counts.unsure)} unsure.
-        </p>
-      )}
+      {tally}
     </>
   );
 }
@@ -254,6 +269,8 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
   const threads = scopeBatches(batches);
   const tunable = assistantOffered(caps) && stationsServed(caps).includes("keyword-tune") && may.decide;
   const editable = pack && chosen ? axisEditable(pack, chosen) : false;
+  // what the pack says of the axis, which is a different question from what this engine lets a site amend
+  const wordless = pack && chosen ? !axisHasWords(pack, chosen) : false;
 
   return (
     <>
@@ -318,7 +335,7 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
             <div className="row card-head">
               <h2>{chosen.axis}</h2>
               <span className="tag">{chosen.multi ? "several at once" : "one value"}</span>
-              {!editable && <span className="tag caution">no words</span>}
+              {wordless && <span className="tag caution">no words</span>}
               <span className="grow" />
               {may.decide && !editable && (
                 <button type="button" className="button quiet small" disabled title={whyNoWords(pack, chosen)}>
@@ -328,6 +345,7 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
             </div>
             {!editable && <p className="meta">{whyNoWords(pack, chosen)}</p>}
             <AxisValues
+              key={chosen.axis}
               pack={pack}
               axis={chosen}
               signals={signals}

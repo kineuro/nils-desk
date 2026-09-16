@@ -6,7 +6,7 @@
 // the site's adopted overlays already put on one, and the three axes that
 // carry no words anywhere. Made up, and shaped as packs/mri answers.
 
-import { packDoc } from "./client";
+import { packDoc, type PackDoc } from "./client";
 
 export const PACK = packDoc({
   pack: "mri",
@@ -116,3 +116,12 @@ export const PACK = packDoc({
 
 /** The three axes the pack reaches by no word at all: they are decided from the others. */
 export const NO_WORDS = ["disposition", "convertible", "role"];
+
+/**
+ * The same pack as an engine at pack contract 4 answers it. The engine
+ * computes the lists a pack opens whatever its contract, so `lists` stands as
+ * it is; but at contract 4 a site amends the four buckets alone, and a word it
+ * adopted onto one is named on no value, so the door attaches no `site` to any
+ * of them. What the page says of such a pack is the test of both.
+ */
+export const PACK_4: PackDoc = { ...PACK, contract: 4, axes: PACK.axes.map((a) => ({ ...a, values: a.values.map((v) => ({ ...v, site: null })) })) };
