@@ -1447,3 +1447,34 @@ table.thin.proposals td b { font-weight: 500; }
   .rail button .meta { display: none; }
 }
 /* ---------------------------------------------------------------- end of record 27, R5 */
+/* ---------------------------------------------------------------- record 27, R3 and R4: the tag chooser, the held files, the map */
+/* the chooser: the summary and the bar, the search and the four groups, then every tag as a row */
+.tagpick { display: grid; gap: 1rem; min-width: 0; }
+.tagpick-find { display: grid; gap: 0.5rem; min-width: 0; }
+.tagpick .presets .opt .dot { flex: none; width: 9px; height: 9px; margin-right: 0.4rem; border-radius: 2px; }
+/* a tag this dataset keeps out of its group's removal is marked as it stands, in both themes */
+table.thin.tagpick-table tr.kept td { background: var(--n-brand-bg); }
+/* a name like PatientPrimaryLanguageModifierCodeSequence is one long word: it wraps, so what happens to the tag stays in sight on a phone */
+table.thin.tagpick-table td { overflow-wrap: anywhere; }
+table.thin.tagpick-table td.path { white-space: nowrap; }
+table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
+.tag-stays { color: var(--n-brand-text); }
+/* a tag of this dataset's own, typed as gggg,eeee beside the button that adds it */
+.tagpick-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.tagpick-add .input { flex: 1 1 9rem; min-width: 0; }
+/* the map, step by step: the file, the columns with the first values under each, the rehearsal */
+.mapsteps { display: grid; gap: 1rem; min-width: 0; }
+.col-first { margin-top: 0.2rem; font-family: var(--n-font-mono); font-size: 12px; color: var(--n-text-faint); overflow-wrap: anywhere; }
+.map-cols .column-role { min-width: 12rem; }
+@media (min-width: 641px) {
+  .dialog:has(.tagpick) { width: min(50rem, calc(100vw - 2rem)); }
+  .dialog:has(.mapsteps) { width: min(46rem, calc(100vw - 2rem)); }
+}
+@media (max-width: 640px) {
+  /* on a phone a tag keeps its number, its name and what happens to it; the group is in those words already */
+  table.thin.tagpick-table th.tag-group, table.thin.tagpick-table td.tag-group { display: none; }
+  /* and a column keeps its header, its first values and what it means; the shape is a second reading of those values */
+  table.thin.map-cols th.col-look, table.thin.map-cols td.col-look { display: none; }
+  .map-cols .column-role { min-width: 0; }
+}
+/* ---------------------------------------------------------------- end of record 27, R3 and R4 */
