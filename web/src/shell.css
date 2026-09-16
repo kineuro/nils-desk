@@ -242,15 +242,19 @@ table.thin th.tick, table.thin td.tick { width: 30px; }
 .update-head h2 { flex: 1; color: var(--n-text); }
 .update ul { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.2rem; }
 .update-foot { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-.section-head { display: flex; align-items: baseline; gap: 0.6rem; padding-top: 0.6rem; }
-.section-head h2 { flex: 1; }
+/* a section's head wraps on a narrow window: the title keeps its line, and what stands beside it and its buttons go under */
+.section-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.3rem 0.6rem; padding-top: 0.6rem; }
+/* the title's basis is its own width, so a head wraps what stands beside it under the title rather than squeeze the title to a word a line */
+.section-head h2 { flex: 1 1 auto; }
 .stack { display: grid; gap: 0.3rem; }
 /* a scroll wrapper holds what is set absolutely inside it, or a hidden label in a far column widens the page */
 .table-wrap { overflow-x: auto; position: relative; }
 .pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
 .card { padding: 1rem 1.1rem; display: grid; gap: 0.65rem; align-content: start; }
-.card-head { gap: 0.6rem; }
-.card-head h2 { flex: 1; }
+/* a card's head wraps too, and a line that points on from a card breaks rather than widen it */
+.card-head { flex-wrap: wrap; gap: 0.3rem 0.6rem; }
+.card-head h2 { flex: 1 1 auto; }
+.card .tail { white-space: normal; }
 .card table.thin tr:last-child td { border-bottom: 0; }
 .restart-row { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
 .restart-row .input { min-height: 1.65rem; font-size: var(--n-text-size-small); }
@@ -1312,7 +1316,6 @@ dl.facts .row.wrap .input { min-height: 1.75rem; }
 table.thin.queue tr.decided td { color: var(--n-text-faint); }
 table.thin.queue td.path, table.thin.rules td.words .path { overflow-wrap: anywhere; }
 /* the rules: the pack strip in one line of four, the axes rail, the words with the site's on top */
-.review .section-head { flex-wrap: wrap; }
 .review .section-head .chips { flex: 0 1 auto; }
 table.thin.rules td.words { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.4rem; min-width: 12rem; }
 table.thin.rules td.words .tag { white-space: normal; }
