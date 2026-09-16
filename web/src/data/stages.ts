@@ -164,6 +164,29 @@ export function byReason(files: Record<string, unknown>[]): { reason: string; co
   return [...counts.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count);
 }
 
+/** What to do about a refusal of this class, in a phrase (record 27, R5b). */
+export function remedyWords(reason: string): string {
+  const words: Record<string, string> = {
+    not_dicom: "nothing to do: it was never a scan",
+    no_pixel_data: "nothing to do: it carries no image",
+    truncated: "copy it from the source again, then read the refused files",
+    unreadable: "copy it from the source again, then read the refused files",
+    parse_error: "read it again; if it holds, keep one file and say so",
+    unsupported_transfer_syntax: "read it again after the next engine update",
+    walk_error: "check the disk, then read the refused files again",
+  };
+  return words[reason] ?? "read the refused files again";
+}
+
+/** A stage's state in one word, for the strip. */
+export function stateWords(mark: StageMark): string {
+  if (mark === "done") return "done";
+  if (mark === "now") return "running";
+  if (mark === "wait") return "waiting";
+  if (mark === "failed") return "failed";
+  return "not a step";
+}
+
 /** A refusal's class, as a person reads it. */
 export function reasonWords(reason: string): string {
   const words: Record<string, string> = {

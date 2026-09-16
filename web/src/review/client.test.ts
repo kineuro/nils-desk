@@ -33,6 +33,7 @@ import {
   valueCounts,
   withDocuments,
   wordOverlay,
+  wordsOf,
   type PackDoc,
 } from "./client";
 import { PACK } from "./pack.fixture";
@@ -83,20 +84,53 @@ describe("what an item says", () => {
 });
 
 describe("a pack read into axes and words", () => {
-  it("lists values in the pack's order whether the door sent them as a list or by name, with their flag in words", () => {
-    expect(PACK.axes.map((a) => a.axis)).toEqual(["provenance", "technique", "base", "body_part", "post_contrast"]);
-    const t = PACK.axes[1];
+  // record 27, R5a: the fixture carries all eleven axes the pack declares, in the order
+  // they are decided, so the axes are named rather than reached by their position
+  const named = (name: string) => PACK.axes.find((a) => a.axis === name)!;
+  it("lists every axis in the order it is decided, and its values as the door sent them", () => {
+    expect(PACK.axes.map((a) => a.axis)).toEqual([
+      "provenance",
+      "technique",
+      "modifier",
+      "construct",
+      "base",
+      "body_part",
+      "post_contrast",
+      "directory_type",
+      "disposition",
+      "convertible",
+      "role",
+    ]);
+    const t = named("technique");
     expect(t.values.map((v) => v.value)).toEqual(["MS-EPI", "DWI-EPI", "SS-GRE"]);
-    expect(t.values[0]).toEqual({ value: "MS-EPI", label: "RESOLVE", family: "EPI", keywords: ["resolve", "muse"], flag: "is_epi_diff_resolve, else has_segmented_kspace and has_epi", threshold: null });
-    expect(PACK.axes[2].values[0].flag).toBe("is_t1");
-    expect(PACK.axes[2].values[0].threshold).toBe(0.65);
+    expect(t.values[0]).toEqual({
+      value: "MS-EPI",
+      label: "RESOLVE",
+      family: "EPI",
+      keywords: ["resolve", "muse"],
+      flag: "is_epi_diff_resolve, else has_segmented_kspace and has_epi",
+      threshold: null,
+      list: "technique.MS-EPI",
+      site: null,
+    });
+    expect(named("base").values[0].flag).toBe("is_t1");
+    expect(named("base").values[0].threshold).toBe(0.65);
+  });
+  it("reads the list a site may amend, and what the site's adopted overlays already put on one", () => {
+    expect(PACK.lists).toContain("technique.MS-EPI");
+    expect(PACK.lists).not.toContain("disposition.acquisition");
+    expect(named("disposition").values[0].list).toBeNull();
+    expect(named("construct").values[0].site).toEqual({ add: ["ep2d_site"], remove: [], overlays: [7] });
+    expect(wordsOf(named("construct").values[0])).toEqual({ shipped: ["adc", "trace"], added: ["ep2d_site"] });
+    expect(named("disposition").phase).toBe("disposition");
+    expect(named("base").phase).toBe("class");
   });
   it("says what an axis's rules are made of, and counts values an older door only numbered", () => {
-    expect(axisWords(PACK.axes[1])).toBe("3 lists");
-    expect(axisWords(PACK.axes[0])).toBe("1 list");
-    expect(axisWords(PACK.axes[2])).toBe("flags and physics");
-    expect(axisWords(PACK.axes[3])).toBe("4 values");
-    expect(PACK.axes[3].counted).toBe(4);
+    expect(axisWords(named("technique"))).toBe("3 lists");
+    expect(axisWords(named("provenance"))).toBe("2 lists");
+    expect(axisWords(named("base"))).toBe("flags and physics");
+    expect(axisWords(named("body_part"))).toBe("4 values");
+    expect(named("body_part").counted).toBe(4);
     expect(PACK.flags).toBe(138);
   });
 });
@@ -118,6 +152,11 @@ describe("the overlay a word makes", () => {
     expect(refused.overlay).toBeNull();
     expect(refused.why).toMatch(/only contrast_positive, contrast_negative, localizer_words, diffusion_tokens/u);
     expect(wordOverlay(PACK, "technique", "SS-GRE", [], [], scope).why).toBe("Write a word first.");
+  });
+  it("refuses a value the pack reaches by no word, at contract 5, rather than write an overlay the engine would refuse", () => {
+    const made = wordOverlay(PACK, "disposition", "acquisition", ["working"], [], scope);
+    expect(made.overlay).toBeNull();
+    expect(made.why).toBe("disposition acquisition is reached by no word, so a site adds none to it.");
   });
 });
 

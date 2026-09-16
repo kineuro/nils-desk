@@ -50,10 +50,12 @@ describe("Data / Cohorts", () => {
     expect(html).toContain('class="ccard new"');
   });
 
+  // record 27, R5c: the three-column explainer and the paragraph above it are one disclosure,
+  // so the three ways keep their words and their links but no longer take a section of their own
   it("offers a new cohort three ways, and the dashed card, to work on the Data page", () => {
     expect(html).toContain("New cohort");
     expect(html).toContain('class="ccard add"');
-    expect(html).toContain("<h2>Three ways a subject joins</h2>");
+    expect(html).toContain("<summary>Three ways a subject joins</summary>");
     expect(html).toContain("A dataset feeds it");
     expect(html).toContain('href="#data"');
     expect(html).toContain("A query promotes them");
@@ -64,9 +66,10 @@ describe("Data / Cohorts", () => {
   });
 
   it("counts the sessions out of the session cache: the window it was built under, and not built yet where nobody has", () => {
-    expect(html).toContain("The sessions counted here are the ones the session cache holds, built under a 90-day window; where nobody has built it they are not built yet, and a person builds them.");
+    expect(html).toContain("Out of the session cache as it stands, built under a 90-day window.");
+    expect(html).toContain("Where nobody has built it they are not built yet");
     // an engine whose summary the page could not read says the rest all the same
-    expect(draw(caps(), list, null, null)).toContain("the ones the session cache holds; where nobody has built it");
+    expect(draw(caps(), list, null, null)).toContain("Out of the session cache as it stands. Where nobody has built it");
     const unbuilt = draw(caps(), list.map((c) => ({ ...c, sessions: null })));
     expect(unbuilt).toContain("<b>not built yet</b>sessions");
     expect(unbuilt).not.toContain("<b>240</b>sessions");
@@ -78,7 +81,7 @@ describe("Data / Cohorts", () => {
     expect(look).not.toContain(">New cohort<");
     expect(look).not.toContain('class="ccard add"');
     expect(look).toContain("Making a cohort needs work on the Data page.");
-    expect(look).toContain("needs work on the Data page</span>");
+    expect(look).not.toContain(">From a list</button>");
     expect(makingRefusal(caps([...GRANTS], []))).toBe("This engine has no door for making a cohort.");
   });
 

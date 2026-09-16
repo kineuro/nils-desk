@@ -1406,3 +1406,44 @@ table.thin.proposals td b { font-weight: 500; }
 .pick-folder .browser-list.picker-list { max-height: 13rem; }
 .pick-folder > .button.quiet { justify-self: start; }
 .pick-folder > .values { padding-top: 0.15rem; }
+/* ---------------------------------------------------------------- record 27, R5: Rules by axis, and the rest of the pages said shorter */
+/* the pack's axes on one side, the chosen axis on the other */
+.axes-two { display: grid; grid-template-columns: minmax(0, 12rem) minmax(0, 1fr); gap: 1rem; align-items: start; }
+.rail { display: grid; gap: 2px; align-content: start; min-width: 0; }
+.rail button { display: grid; gap: 0.05rem; justify-items: start; min-width: 0; padding: 0.35rem 0.55rem; border: 1px solid transparent; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.rail button > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+.rail button:hover { background: var(--n-bg-hover); }
+.rail button.on { border-color: var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
+.rail button:focus-visible { outline: 2px solid var(--n-focus); outline-offset: -2px; }
+/* an axis reached by no word is shown all the same, and says so rather than go missing */
+.rail button.none > span:first-child { color: var(--n-text-dim); }
+/* the chosen axis's values: one block a value, its words under it */
+.vlist { display: grid; gap: 0.1rem; }
+.vrow { display: grid; gap: 0.25rem; min-width: 0; padding: 0.5rem 0 0.55rem; border-top: 1px solid var(--n-line); }
+.vrow:first-child { border-top: 0; }
+.vhead { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.25rem 0.55rem; min-width: 0; }
+.vhead b { font-weight: 600; overflow-wrap: anywhere; }
+.vhead .button { align-self: center; }
+.words-row { display: flex; flex-wrap: wrap; gap: 0.25rem; min-width: 0; }
+/* a word the pack shipped, and, in the brand's own colours, one this site added; a dashed one is proposed and not adopted yet */
+.word { display: inline-flex; align-items: center; min-width: 0; padding: 0 0.35rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); color: var(--n-text-dim); font-family: var(--n-font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.word.site { border-color: var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
+.word.proposed { border-style: dashed; border-color: var(--n-brand-line); background: transparent; color: var(--n-brand-text); }
+/* a disclosure inside a card or a dialog keeps to the grid rather than stretch it */
+.card > .says, .dialog-body > .says, .field > .says { min-width: 0; }
+/* a stage's state in one word, in the colour its cell is marked with */
+.strip .state { font-weight: 500; }
+.strip > div.done .state { color: var(--n-ok-fg); }
+.strip > div.now .state { color: var(--n-brand-text); }
+.strip > div.wait .state { color: var(--n-caution-fg); }
+.strip > div.failed .state { color: var(--n-blocked-fg); }
+/* what to do about a refusal, under the reason it is counted by */
+.reason .meta { display: block; }
+@media (max-width: 860px) {
+  /* the rail becomes chips over the axis it chose, and each chip keeps to its name */
+  .axes-two { grid-template-columns: minmax(0, 1fr); }
+  .rail { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+  .rail button { padding: 0.15rem 0.5rem; border-color: var(--n-neutral-line); }
+  .rail button .meta { display: none; }
+}
+/* ---------------------------------------------------------------- end of record 27, R5 */
