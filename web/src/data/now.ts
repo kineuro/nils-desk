@@ -285,6 +285,17 @@ export function nowWords(live: Live, count: number): string {
 
 export type Live = { kind: "stream" } | { kind: "polling"; why: string } | { kind: "still" };
 
+/** What one `jobs` event of the stream carries: the epoch and the open jobs; null for a line the desk cannot read. */
+export function parseJobsEvent(data: string): { epoch: number | null; jobs: ChainedJob[] } | null {
+  try {
+    const v = JSON.parse(data) as { epoch?: unknown; jobs?: unknown };
+    if (!Array.isArray(v.jobs)) return null;
+    return { epoch: typeof v.epoch === "number" ? v.epoch : null, jobs: v.jobs as ChainedJob[] };
+  } catch {
+    return null;
+  }
+}
+
 /** What the page needs of an event stream, so a test can stand one in. */
 export interface EventSourceLike {
   addEventListener(type: string, listener: (e: { data?: string }) => void): void;
@@ -351,16 +362,14 @@ export function liveJobs(o: LiveOptions): () => void {
     let heard = false;
     source.addEventListener("jobs", (e) => {
       if (stopped) return;
-      try {
-        const data = JSON.parse(e.data ?? "{}") as { jobs?: ChainedJob[] };
-        if (!heard) {
-          heard = true;
-          o.onLive({ kind: "stream" });
-        }
-        o.onJobs(Array.isArray(data.jobs) ? data.jobs : []);
-      } catch {
-        // a line the desk cannot read is left alone; the next second brings another
+      // a line the desk cannot read is left alone; the next second brings another
+      const got = parseJobsEvent(e.data ?? "");
+      if (!got) return;
+      if (!heard) {
+        heard = true;
+        o.onLive({ kind: "stream" });
       }
+      o.onJobs(got.jobs);
     });
     source.addEventListener("error", () => {
       if (stopped || source === null) return;

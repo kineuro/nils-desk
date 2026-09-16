@@ -6,7 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import type { JobRow } from "../ask/client";
-import { parseJobsEvent } from "./events";
+import { parseJobsEvent } from "../data/now";
 import { cancelGrant, cardOf, countByFilter, filterJobs, nextMove, progressOf, targetOf, thenWords, titleOf, type ChainedJob } from "./pipelines";
 
 const at = "2026-09-15T21:02:00Z";

@@ -161,7 +161,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
   return (
     <section className="bpage">
       <div className="main">
-        <div className="crumb">
+        <div className="trail">
           <Icon name="data" />
           <a href={href("data")}>Data</a>
           <span>/</span>
@@ -503,7 +503,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
           </div>
           {identityItems.length === 0 && pixelItems.length === 0 && <p className="meta">Nothing of this dataset waits on Review.</p>}
           {identityItems.length > 0 && (
-            <a className="tail" href={href("review")}>
+            <a className="tail" href={href("review", "identifiers")}>
               {n(identityItems.length)} {identityItems.length === 1 ? "identity question" : "identity questions"}: subjects that may be one person twice
               <Icon name="chevron-right" />
             </a>

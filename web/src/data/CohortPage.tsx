@@ -14,7 +14,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { keepingRefusal } from "../query/cards";
-import { href } from "../routes";
+import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -178,7 +178,7 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                 <span className="v">{n(c.waiting)}</span>
                 <span className="meta">{c.waiting > 0 ? "on Review" : "nothing waits"}</span>
                 {c.waiting > 0 && may(caps, "review:see") && (
-                  <a className="tail" href={href("review")}>
+                  <a className="tail" href={narrow(href("review"), { cohort: c.name })}>
                     Open on Review
                     <Icon name="chevron-right" />
                   </a>
@@ -224,7 +224,7 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                             <td>{j.by}</td>
                             <td className="acts">
                               {typeof j.batch === "number" && (
-                                <a className="tail" href={href("data", "batches", String(j.batch))}>
+                                <a className="tail" href={href("data", "batch", String(j.batch))}>
                                   The batch
                                   <Icon name="chevron-right" />
                                 </a>

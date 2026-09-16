@@ -4,13 +4,13 @@
 // the next move), the grant that cancels it by its verb, a queued chain's
 // place in the line, and the filter by state.
 
-import type { JobRow } from "../ask/client";
+import type { ChainedJob, JobRow } from "../ask/client";
 import type { Grant } from "../grants";
 import type { IconName } from "../ui/Icon";
 import { whenWords } from "../data/sources";
 
-/** A job row as an engine that chains jobs reports it. */
-export type ChainedJob = JobRow & { then?: string[][] | null; chain?: { before: number | null; after: number | null } | null };
+/** A job row as an engine that chains jobs reports it: the one shape, defined beside the job row. */
+export type { ChainedJob } from "../ask/client";
 
 export type CardTone = "running" | "queued" | "done" | "failed" | "cancelled";
 

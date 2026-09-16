@@ -43,7 +43,7 @@ describe("the stage strip as it draws", () => {
     expect(html).toContain("2,222");
     expect(html).toContain("job 117 · 2 min");
     expect(html).toContain("jobs 119, 120");
-    expect(html).toContain('href="#review/batch/9"');
+    expect(html).toContain('href="#review?batch=9"');
     expect(html).toContain("Open on Review");
     expect(html).not.toContain("undefined");
   });

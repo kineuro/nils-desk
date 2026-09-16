@@ -42,7 +42,7 @@ export const batches = {
   /** Fingerprint, then classify with the pack: the two jobs that sort what a batch added. */
   sort: async (pack: string | null, chained: boolean) => {
     const classify = ["classify", ...(pack ? ["--pack", pack] : [])];
-    if (chained) return door<{ job: number; state: string }>("POST", "/api/jobs", { command: ["fingerprint"], then: [classify] });
+    if (chained) return ops.enqueue(["fingerprint"], undefined, [classify]);
     const first = await ops.enqueue(["fingerprint"]);
     await ops.enqueue(classify);
     return first;

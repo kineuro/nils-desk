@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Pipelines page: the jobs as cards. Now, live from the engine's event
-// stream where it serves one, is what runs and what waits in a chain; under
+// stream where it serves one (the Data page's one reader of it, which falls
+// back to reading the door), is what runs and what waits in a chain; under
 // it every job the engine lists, filtered by state, each a card that says
 // what it did, for whom, how far it got, what stopped it and the next move.
 // A cancel goes by the verb's grant: a digest is Data work, a sort
@@ -10,14 +11,14 @@
 import { useCallback, useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
+import { useLiveJobs } from "../data/Now";
+import { nowWords } from "../data/now";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
-import { agoWords } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { ops } from "./client";
-import { useOpenJobs } from "./events";
 import { cardOf, countByFilter, FILTERS, filterJobs, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -25,7 +26,7 @@ const n = (v: number) => v.toLocaleString("en-US");
 const GRANT_PAGE: Record<string, string> = { "data:work": "Data", "pipelines:work": "Pipelines", "release:work": "Release", "database:work": "Database", "query:work": "Query" };
 
 export function PipelinesPage({ caps }: { caps: Capabilities }) {
-  const open = useOpenJobs(caps);
+  const live = useLiveJobs(caps);
   const [all, setAll] = useState<JobRow[] | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const [filter, setFilter] = useState<StateFilter>("all");
@@ -59,7 +60,7 @@ export function PipelinesPage({ caps }: { caps: Capabilities }) {
   }, [read]);
 
   // a job that ends leaves Now; the list under it is read again to show how it ended
-  const openIds = open.jobs === null ? null : open.jobs.map((j) => j.id).join(",");
+  const openIds = live.open === null ? null : live.open.map((j) => j.id).join(",");
   useEffect(() => {
     if (openIds !== null) read();
   }, [openIds, read]);
@@ -69,6 +70,7 @@ export function PipelinesPage({ caps }: { caps: Capabilities }) {
     work
       .then(() => {
         setSaid(words);
+        live.refresh();
         read();
       })
       .catch((e: unknown) => setSaid(messageOf(e)));
@@ -92,7 +94,7 @@ export function PipelinesPage({ caps }: { caps: Capabilities }) {
     );
   };
 
-  const nowJobs = (open.jobs ?? all?.filter((j) => j.state === "running" || j.state === "queued" || j.state === "cancelling") ?? []).filter((j) => !dismissed.has(j.id));
+  const nowJobs = (live.open ?? all?.filter((j) => j.state === "running" || j.state === "queued" || j.state === "cancelling") ?? []).filter((j) => !dismissed.has(j.id));
   const recentFailed = (all ?? []).filter((j) => (j.state === "failed" || j.state === "cancelled") && !dismissed.has(j.id) && Date.parse(j.finished_at ?? j.started_at) > now - 7 * 86_400_000).slice(0, 5);
   const shown = filterJobs(all ?? [], filter).filter((j) => !dismissed.has(j.id));
   const counts = countByFilter(all ?? []);
@@ -111,17 +113,15 @@ export function PipelinesPage({ caps }: { caps: Capabilities }) {
       {why && all === null && <p className="warn">The jobs could not be read: {why}</p>}
       <div className="section-head rule-top">
         <h2>Now</h2>
-        <span className="meta">
-          {open.live ? "live from the engine" : open.at !== null ? `read ${agoWords(open.at, now)}` : "reading"} · {n(nowJobs.length)} {nowJobs.length === 1 ? "job" : "jobs"}
-        </span>
+        <span className="meta">{nowWords(live.live, nowJobs.length)}</span>
       </div>
-      {open.jobs === null && all === null && lists && <Wait phase="reading the jobs" since={since} size="panel" />}
-      {(open.jobs !== null || all !== null) && nowJobs.length === 0 && recentFailed.length === 0 && <p className="meta">Nothing runs and nothing waits.</p>}
-      {(nowJobs.length > 0 || recentFailed.length > 0) && <div className="now">{[...nowJobs, ...recentFailed.filter((f) => !nowJobs.some((j) => j.id === f.id))].map(card)}</div>}
+      {live.open === null && all === null && lists && <Wait phase="reading the jobs" since={since} size="panel" />}
+      {(live.open !== null || all !== null) && nowJobs.length === 0 && recentFailed.length === 0 && <p className="meta">Nothing runs and nothing waits.</p>}
+      {(nowJobs.length > 0 || recentFailed.length > 0) && <div className="jobs-now">{[...nowJobs, ...recentFailed.filter((f) => !nowJobs.some((j) => j.id === f.id))].map(card)}</div>}
       <div className="now-line">
         <span>
           <Icon name="pulse" />
-          {open.live ? "Updated every second while a job runs" : "Read again every few seconds while a job runs"}
+          {live.live.kind === "stream" ? "Updated every second while a job runs" : "Read again every few seconds while a job runs"}
         </span>
         <span>
           <Icon name="clock" />A cancel stops at the next heartbeat; what is written stays written
@@ -138,7 +138,7 @@ export function PipelinesPage({ caps }: { caps: Capabilities }) {
         </div>
       </div>
       {all !== null && shown.length === 0 && <p className="meta">No job {filter === "all" ? "yet" : filter}.</p>}
-      {shown.length > 0 && <div className="now">{shown.map(card)}</div>}
+      {shown.length > 0 && <div className="jobs-now">{shown.map(card)}</div>}
       <div className="note gated">
         <Icon name="lock" />
         <div className="note-body">

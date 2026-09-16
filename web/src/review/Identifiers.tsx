@@ -106,7 +106,7 @@ export function IdentifiersPage({ caps, items, onDecide, onChanged }: Identifier
                           <td className="acts">
                             <span className="row-actions">
                               {(g.what === "unmapped" || g.what === "provisional") && dataset && (
-                                <a className="button secondary small" href={href("data", "pseudonymisation", dataset)}>
+                                <a className="button secondary small" href={href("data", "datasets", dataset, "pseudonymisation")}>
                                   Map them
                                 </a>
                               )}

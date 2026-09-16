@@ -9,7 +9,7 @@
 import { door, DoorError, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { may, sees } from "../grants";
-import { type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
+import { ops, type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
 import { kindOf } from "./triage";
 
 const q = (params: Record<string, string | number | boolean | undefined | null>) => {
@@ -107,8 +107,8 @@ export interface Closure {
 }
 
 export const review = {
-  list: (f: { status?: string; kind?: string; cohort?: string; limit?: number }) =>
-    door<{ count: number; items: ReviewItem[] }>("GET", `/api/review${q({ status: f.status, kind: f.kind, cohort: f.cohort, limit: f.limit ?? 200 })}`),
+  /** The queue, through the one door the operations client types; `cohort` narrows it at record 26. */
+  list: (f: { status?: string; kind?: string; cohort?: string; limit?: number }) => ops.review(f.status, f.kind, f.limit ?? 200, f.cohort),
   summary: (cohort?: string) => door<ReviewSummary>("GET", `/api/review/summary${q({ cohort })}`),
   explain: (stack: number) => door<Explain>("GET", `/api/explain/${stack}`),
   pack: (name: string) => door<Json>("GET", `/api/packs/${encodeURIComponent(name)}`).then(packDoc),

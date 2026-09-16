@@ -15,7 +15,7 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import type { Event } from "../objects/client";
 import { data, ops, type ReviewItem } from "../ops/client";
-import { href } from "../routes";
+import { href, narrow } from "../routes";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -121,7 +121,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
   return (
     <section className="bpage">
       <div className="main">
-        <div className="crumb">
+        <div className="trail">
           <Icon name="data" />
           <a href={href("data")}>Data</a>
           <span>/</span>
@@ -284,7 +284,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
             <h2>Also here</h2>
           </div>
           {refusedCount > 0 && (
-            <a className="tail" href={href("review", "batch", String(id))}>
+            <a className="tail" href={narrow(href("review"), { batch: id })}>
               The {n(refusedCount)} refused files, on Review
               <Icon name="chevron-right" />
             </a>
@@ -331,7 +331,7 @@ export function StageStrip({ strip, jobs, batch }: { strip: Stage[]; jobs: JobRo
             s.mark === "wait" ? (
               <>
                 {s.since && <span className="meta">since {whenWords(s.since)}</span>}
-                <a className="tail" href={href("review", "batch", String(batch.id))}>
+                <a className="tail" href={narrow(href("review"), { batch: batch.id })}>
                   Open on Review
                   <Icon name="chevron-right" />
                 </a>

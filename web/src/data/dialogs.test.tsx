@@ -3,7 +3,7 @@
 // what arrives, who a file is about and the map, or as the v0 folder variant
 // when the look found one; Bring in what is new with its steps, its chain and
 // its estimate, or the digest alone on an engine that queues nothing after a
-// job; and the page's placeholders for what the slices beside this one build.
+// job; and the Datasets page as it opens, with the dataset the address names.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -130,18 +130,11 @@ describe("Bring in what is new", () => {
   });
 });
 
-describe("the Data section's other pages", () => {
-  const page = (p: string | null, arg: string | null = null, sub: string | null = null) => renderToStaticMarkup(<DataPage caps={caps(SETS.operator.grants)} install={null} onChanged={none} page={p} arg={arg} sub={sub} />);
-  it("say which slice brings the cohorts, a batch and a dataset's pseudonymisation, each with the way back", () => {
-    expect(page("cohorts")).toContain("<h1>Cohorts</h1>");
-    expect(page("cohorts")).toContain("comes with the cohorts slice");
-    expect(page("batch", "12")).toContain("<h1>Batch 12</h1>");
-    expect(page("datasets", "incoming", "pseudonymisation")).toContain("<h1>Pseudonymisation of incoming</h1>");
-    expect(page("datasets", "incoming", "pseudonymisation")).toContain('href="#data/datasets"');
-  });
-  it("open the datasets by default, and for the datasets page itself", () => {
-    expect(page(null)).toContain("<h1>Datasets</h1>");
-    expect(page("datasets")).toContain("Add a dataset</button>");
-    expect(page("datasets")).toContain("reading the datasets");
+describe("the Datasets page", () => {
+  const page = (dataset: string | null = null) => renderToStaticMarkup(<DataPage caps={caps(SETS.operator.grants)} install={null} onChanged={none} dataset={dataset} />);
+  it("opens on the datasets, reading them, whether or not the address names one", () => {
+    expect(page()).toContain("<h1>Datasets</h1>");
+    expect(page()).toContain("Add a dataset</button>");
+    expect(page("incoming")).toContain("reading the datasets");
   });
 });

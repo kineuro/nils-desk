@@ -273,6 +273,12 @@ export interface JobRow {
   result: Json | null;
 }
 
+/** A job row at record 26: the commands queued after it once it ends done, and the jobs before and after it in a chain; an older engine sends neither. */
+export interface ChainedJob extends JobRow {
+  then?: string[][] | null;
+  chain?: { before: number | null; after: number | null } | null;
+}
+
 /** The desk's own record: which document a run came from, which document followed which. */
 export interface DeskRecord {
   results: { handle: number; document: number; subject: string; made_at: string }[];

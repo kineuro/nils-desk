@@ -254,7 +254,7 @@ export function App() {
           {ready && active?.id === "data" && route.page === "cohorts" && route.arg && <CohortPage caps={caps} name={route.arg} />}
           {ready && active?.id === "data" && route.page === "cohorts" && !route.arg && <CohortsPage caps={caps} />}
           {ready && active?.id === "data" && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || (route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation") || route.page === "cohorts") && (
-            <DataPage caps={caps} install={install} onChanged={changed} page={route.page} arg={route.arg} sub={route.sub} />
+            <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} />
           )}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
           {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} />}

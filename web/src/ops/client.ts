@@ -2,7 +2,7 @@
 // The operations and data doors (Wave 4c section 7.5), thin: each is one
 // engine door with its parameters, through the desk's proxy.
 
-import { type Json, type JobRow } from "../ask/client";
+import { type ChainedJob, type Json } from "../ask/client";
 
 async function door<T>(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<T> {
   const r = await fetch(path, {
@@ -115,10 +115,12 @@ export interface OverlayRow {
 }
 
 export const ops = {
-  jobs: (all = false, limit = 50) => door<{ count: number; jobs: JobRow[] }>("GET", `/api/jobs${q({ all: all ? 1 : undefined, limit })}`),
-  job: (id: number) => door<JobRow>("GET", `/api/jobs/${id}`),
+  jobs: (all = false, limit = 50) => door<{ count: number; jobs: ChainedJob[] }>("GET", `/api/jobs${q({ all: all ? 1 : undefined, limit })}`),
+  job: (id: number) => door<ChainedJob>("GET", `/api/jobs/${id}`),
   cancel: (id: number) => door<{ job: number; state: string }>("POST", `/api/jobs/${id}/cancel`),
-  enqueue: (command: string[], name?: string) => door<{ job: number; state: string }>("POST", "/api/jobs", name ? { command, name } : { command }),
+  /** A job, and at record 26 the commands queued after it once it ends done. */
+  enqueue: (command: string[], name?: string, then?: string[][]) =>
+    door<{ job: number; state: string }>("POST", "/api/jobs", { command, ...(name ? { name } : {}), ...(then && then.length > 0 ? { then } : {}) }),
   /** Record 26: `cohort` narrows the queue to the subjects with an open membership there, on an engine that serves the filter. */
   review: (status?: string, kind?: string, limit = 50, cohort?: string) => door<{ count: number; items: ReviewItem[] }>("GET", `/api/review${q({ status, kind, limit, cohort })}`),
   reviewItem: (id: number) => door<ReviewItem>("GET", `/api/review/${id}`),

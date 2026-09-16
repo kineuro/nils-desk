@@ -9,10 +9,21 @@
 // files in, and the linkage doors file the map. An engine before record 26
 // answers none of the new fields, and every word here reads without them.
 
-import { door, type JobRow } from "../ask/client";
+import { door, type ChainedJob } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { Place } from "../objects/client";
+import { ops } from "../ops/client";
+import { cohorts as cohortDoors } from "./cohorts";
+import type { IdType, ImportColumn, ImportReport } from "./pseudonyms";
 import { digestMarks, fileWords, whenWords, type Digest, type Mark, type Source } from "./sources";
+
+// The doors more than one page reads are typed once and read from here: the sources door (with `sources`), the jobs
+// doors (the operations client), the linkage types and imports (with the Pseudonymisation page), the cohorts (with
+// the Cohorts page). The shapes below are the ones the other pages import.
+export { sources } from "./sources";
+export { linkage } from "./pseudonyms";
+export type { ChainedJob, IdType as LinkageType, ImportReport };
+export type MapColumn = ImportColumn;
 
 export type Arrives = "identified" | "deidentified" | "coded";
 export type Unmapped = "hold" | "code";
@@ -25,9 +36,10 @@ export interface IdentitySource {
   pattern?: string;
 }
 
-/** The identity rule of a dataset, as the digest and the pseudonymiser read it. */
+/** The identity rule of a dataset, as the digest and the pseudonymiser read it; `code: verbatim` takes the identifier as the code. */
 export interface IdentityRule {
   id_type: string;
+  code?: "verbatim";
   from: IdentitySource[];
   fallback?: string | null;
 }
@@ -112,37 +124,7 @@ export interface DatasetFields {
   move_into_anon?: boolean;
 }
 
-export interface LinkageType {
-  name: string;
-  description?: string | null;
-}
-
 export type ColumnRole = "identifier" | "canonical" | "code" | "ignore";
-
-export interface MapColumn {
-  header: string;
-  role: ColumnRole;
-  id_type?: string;
-}
-
-/** What an import will do, said before it writes; the same report is a filed import's result. */
-export interface ImportReport {
-  subjects: { named: number; known: number; new: number };
-  identifiers: { filed: number; known: number; new: number; types_new: string[] };
-  held_released: number;
-  merges: { alias: string; canonical: string }[];
-  conflicts: { row: number; why: string }[];
-}
-
-/** A job row at record 26: what is queued after it, and the jobs before and after it in a chain. */
-export interface ChainedJob extends JobRow {
-  then?: string[][] | null;
-  chain?: { before: number | null; after: number | null } | null;
-}
-
-export const sources = {
-  list: (recent = 12) => door<SourcesAnswer>("GET", `/api/sources?recent=${recent}`),
-};
 
 export const places = {
   add: (body: { name: string; role: "source"; path: string; guarantees: Record<string, unknown> } & Partial<DatasetFields>) => door<Place & { layout?: Layout | null }>("POST", "/api/places", body),
@@ -154,27 +136,21 @@ export const look = {
   layout: (folder: string) => door<{ layout?: Layout | null }>("POST", "/api/ingest/look", folder.startsWith("@") ? { at: folder, names: [] } : { path: folder, names: [] }),
 };
 
+/** The jobs doors as the Data page calls them, each the operations client's own. */
 export const jobs = {
   /** A job, with the commands queued after it once it ends done (record 26). */
-  enqueue: (command: string[], name?: string, then?: string[][]) =>
-    door<{ job: number; state: string }>("POST", "/api/jobs", { command, ...(name ? { name } : {}), ...(then && then.length > 0 ? { then } : {}) }),
-  open: () => door<{ count: number; jobs: ChainedJob[] }>("GET", "/api/jobs"),
-  recent: (limit = 50) => door<{ count: number; jobs: ChainedJob[] }>("GET", `/api/jobs?all=1&limit=${limit}`),
-  job: (id: number) => door<ChainedJob>("GET", `/api/jobs/${id}`),
-  cancel: (id: number) => door<{ job: number; state: string }>("POST", `/api/jobs/${id}/cancel`),
+  enqueue: (command: string[], name?: string, then?: string[][]) => ops.enqueue(command, name, then),
+  open: () => ops.jobs(false, 200),
+  recent: (limit = 50) => ops.jobs(true, limit),
+  job: (id: number) => ops.job(id),
+  cancel: (id: number) => ops.cancel(id),
   /** Candidate identity rules probed over a sample of a location, as a job; the result is shapes only. */
   probe: (location: string, rules: IdentityRule[], sample?: number) => door<{ job: number; state: string }>("POST", "/api/ingest/probe", { location, rules, ...(sample ? { sample } : {}) }),
 };
 
-export const linkage = {
-  types: () => door<{ types: LinkageType[] }>("GET", "/api/linkage/types"),
-  addType: (name: string, description: string) => door<LinkageType>("POST", "/api/linkage/types", { name, description }),
-  import: (body: { place?: string; columns: MapColumn[]; rows: string[][]; dry_run: boolean }) => door<ImportReport | { job: number; state: string }>("POST", "/api/linkage/imports", body),
-};
-
 export const cohorts = {
-  /** The cohorts by name, for the one a dataset feeds; the cohorts slice draws the rest. */
-  list: () => door<{ cohorts: { name: string; retired_at?: string | null }[] }>("GET", "/api/cohorts").then((r) => ({ cohorts: r.cohorts.filter((c) => !c.retired_at) })),
+  /** The cohorts by name, the retired left out, for the one a dataset feeds; the Cohorts page reads the whole row. */
+  list: () => cohortDoors.list().then((all) => ({ cohorts: all.filter((c) => !c.retired_at) })),
 };
 
 /** The engine's event stream: the open jobs every second, through the desk's proxy. */
@@ -486,9 +462,12 @@ export function columnsRefusal(columns: MapColumn[]): string | null {
 export function reportLines(r: ImportReport): { tone: "ok" | "caution" | "neutral"; words: string }[] {
   const out: { tone: "ok" | "caution" | "neutral"; words: string }[] = [];
   out.push({ tone: "neutral", words: `${n(r.subjects.named)} subjects named: ${n(r.subjects.known)} known, ${n(r.subjects.new)} new` });
-  const types = r.identifiers.types_new.length > 0 ? `; new types: ${r.identifiers.types_new.join(", ")}` : "";
+  // the engine names the new types, or counts them
+  const typesNew = r.identifiers.types_new;
+  const types = Array.isArray(typesNew) ? (typesNew.length > 0 ? `; new types: ${typesNew.join(", ")}` : "") : typesNew > 0 ? `; ${n(typesNew)} new ${typesNew === 1 ? "type" : "types"}` : "";
   out.push({ tone: "neutral", words: `${n(r.identifiers.filed)} identifiers filed: ${n(r.identifiers.known)} known, ${n(r.identifiers.new)} new${types}` });
-  if (r.held_released > 0) out.push({ tone: "ok", words: `${n(r.held_released)} held ${r.held_released === 1 ? "file is" : "files are"} released` });
+  const released = typeof r.held_released === "number" ? r.held_released : r.held_released.released;
+  if (released > 0) out.push({ tone: "ok", words: `${n(released)} held ${released === 1 ? "file is" : "files are"} released` });
   if (r.merges.length > 0) out.push({ tone: "caution", words: `${n(r.merges.length)} ${r.merges.length === 1 ? "subject merges" : "subjects merge"} into another: ${r.merges.map((m) => `${m.alias} into ${m.canonical}`).join(", ")}` });
   if (r.conflicts.length > 0) out.push({ tone: "caution", words: `${n(r.conflicts.length)} ${r.conflicts.length === 1 ? "conflict" : "conflicts"}, on which nothing is written: ${r.conflicts.map((c) => `row ${c.row}, ${c.why}`).join("; ")}` });
   return out;

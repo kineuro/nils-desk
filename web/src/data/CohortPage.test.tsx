@@ -46,7 +46,7 @@ describe("a cohort's page", () => {
     expect(html).toContain('<span class="k">subjects</span><span class="v">212</span><span class="meta">38 joined today · 2 left</span>');
     expect(html).toContain('<span class="k">sessions</span><span class="v">240</span>');
     expect(html).toContain('<span class="k">stacks</span><span class="v">3,106</span><span class="meta">3,044 sorted</span>');
-    expect(html).toContain('<div class="wait"><span class="k">waiting</span><span class="v">62</span><span class="meta">on Review</span><a class="tail" href="#review">Open on Review');
+    expect(html).toContain('<div class="wait"><span class="k">waiting</span><span class="v">62</span><span class="meta">on Review</span><a class="tail" href="#review?cohort=north">Open on Review');
   });
 
   it("draws the members over time as a step chart from the joins", () => {
@@ -63,7 +63,7 @@ describe("a cohort's page", () => {
     expect(html).toContain("<td>taken out by hand: consent withdrawn</td>");
     expect(html).toContain('<td class="num nowrap">2 left</td>');
     expect(html).toContain('<td class="num nowrap">92 joined</td>');
-    expect(html).toContain('href="#data/batches/19"');
+    expect(html).toContain('href="#data/batch/19"');
     expect(html).toContain('href="#settings/audit"');
     expect(joinWords({ when: "", what: "", subjects: -3, by: "" })).toBe("3 left");
   });

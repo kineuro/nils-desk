@@ -10,53 +10,17 @@
 import { door } from "../ask/client";
 import type { Detail } from "../grants";
 import type { Access } from "../settings/identity";
-import type { Handling, Source } from "./sources";
+import type { Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
+import type { Handling } from "./sources";
 
-export type Arrives = "identified" | "deidentified" | "coded";
+// A dataset is the sources door's row as the Data page types it; the same shape is read from here.
+export type { Arrives, Dataset, IdentityRule, IdentitySource, Trees } from "./datasets";
 
-export interface IdentitySource {
-  field?: string;
-  path?: { segment: number };
-  pattern?: string;
-}
-
-/** The rule that says who a file is about, as the engine's digest reads it. */
-export interface IdentityRule {
-  id_type: string;
-  code?: "verbatim";
-  from: IdentitySource[];
-}
-
-export interface Trees {
-  originals: { path: string; files: number; bytes: number } | null;
-  anon: { path: string; files: number; last_written: string | null };
-}
-
-/** What the sources door adds to a source that is a dataset. */
-export interface DatasetFacts {
-  arrives?: Arrives;
-  trees?: Trees | null;
-  identity?: IdentityRule | null;
-  unmapped?: "hold" | "code";
-  cohort?: string | null;
-  tags?: { keep_demographics: boolean; remove: string[]; keep: string[] };
-  held?: { files: number; identifiers: number };
-  originals_kept?: "kept" | "vaulted" | "purged";
-}
-
-export type Dataset = Source & DatasetFacts;
-
-/** The fields a change to the dataset sends to its place. */
-export interface DatasetPatch {
-  arrives?: Arrives;
-  identity?: IdentityRule | null;
-  unmapped?: "hold" | "code";
-  cohort?: string | null;
-  tags?: { keep_demographics: boolean; remove: string[]; keep: string[] };
-  originals_kept?: "kept" | "vaulted" | "purged";
+/** The fields a change to the dataset sends to its place: the dataset fields the places door takes, the originals and the handling. */
+export type DatasetPatch = Partial<DatasetFields> & {
+  originals_kept?: OriginalsKept;
   handling?: Handling;
-  move_into_anon?: boolean;
-}
+};
 
 export interface IdType {
   name: string;
@@ -85,9 +49,10 @@ export interface ImportColumn {
   id_type?: string;
 }
 
+/** What an import will do, said before it writes; the same report is a filed import's result. The engine names the new types or counts them, and says the held files released as a count or as released of held. */
 export interface ImportReport {
   subjects: { named: number; known: number; new: number };
-  identifiers: { filed: number; known: number; new: number; types_new: number };
+  identifiers: { filed: number; known: number; new: number; types_new: number | string[] };
   held_released: number | { released: number; of: number };
   merges: { alias: string; canonical: string }[];
   conflicts: { row: number; why: string }[];
@@ -164,7 +129,7 @@ export function leavingRefusal(h: Handling["on_release"]): string | null {
   return h.dates !== "keep" && h.uids === "preserve" ? "Dates that move cannot keep the original UIDs. Remap the UIDs, or keep the dates." : null;
 }
 
-export const ORIGINALS_WORDS: Record<NonNullable<DatasetFacts["originals_kept"]>, string> = {
+export const ORIGINALS_WORDS: Record<OriginalsKept, string> = {
   kept: "kept here",
   vaulted: "vaulted: moved out of the way, not read",
   purged: "purged: the pseudonymised tree is all that is left",
@@ -343,9 +308,11 @@ export function reportLines(r: ImportReport): { label: string; words: string; to
   const i = r.identifiers;
   const merges = r.merges?.length ?? 0;
   const conflicts = r.conflicts?.length ?? 0;
+  const typesNew = Array.isArray(i.types_new) ? i.types_new.length : i.types_new;
+  const named = Array.isArray(i.types_new) && i.types_new.length > 0 ? ` (${i.types_new.join(", ")})` : "";
   return [
     { label: "subjects", words: `${n(s.named)} named · ${n(s.known)} known · ${n(s.new)} new, with codes derived from their number` },
-    { label: "identifiers", words: `${n(i.filed)} filed · ${n(i.known)} already known · ${n(i.new)} new${i.types_new > 0 ? ` · ${n(i.types_new)} new ${i.types_new === 1 ? "type" : "types"}` : ""}` },
+    { label: "identifiers", words: `${n(i.filed)} filed · ${n(i.known)} already known · ${n(i.new)} new${typesNew > 0 ? ` · ${n(typesNew)} new ${typesNew === 1 ? "type" : "types"}${named}` : ""}` },
     { label: "held files", words: heldReleasedWords(r) },
     { label: "merges", words: merges === 0 ? "none" : `${n(merges)}: ${merges === 1 ? "a provisional subject becomes its canonical one" : "provisional subjects become their canonical ones"} · the old codes stay as identifiers`, tone: merges > 0 ? "caution" : undefined },
     { label: "conflicts", words: conflicts === 0 ? "0 · an identifier already on another subject would be listed here first, and nothing written" : `${n(conflicts)}: nothing is written until they are resolved`, tone: conflicts > 0 ? "caution" : "ok" },

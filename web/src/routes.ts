@@ -46,3 +46,12 @@ export function href(section: string, page?: string | null, arg?: string | null,
   const opened = `#${section}/${page}/${encodeURIComponent(arg)}`;
   return sub ? `${opened}/${sub}` : opened;
 }
+
+/** A hash narrowed after a question mark: #review?batch=12. An empty value is left out, and a hash with nothing to narrow is answered as it is. */
+export function narrow(hash: string, query: Record<string, string | number | null | undefined>): string {
+  const q = Object.entries(query)
+    .filter(([, v]) => v !== null && v !== undefined && v !== "")
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join("&");
+  return q ? `${hash}?${q}` : hash;
+}

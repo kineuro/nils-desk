@@ -4,21 +4,19 @@
 // trees, what it holds and its newest batch; Now lists the open jobs from the
 // engine's event stream; the chosen dataset's batches follow, each with its
 // five marks and each opening its own page. A dataset is added in a dialog,
-// what is new is brought in as one chain, and a dataset's handling is still
-// declared from its card until the Pseudonymisation page replaces it. The
-// section's other pages, the cohorts, a batch and a dataset's
-// pseudonymisation, come with the slices beside this one.
+// what is new is brought in as one chain, and how a dataset is pseudonymised
+// and how it leaves are changed on its Pseudonymisation page. The section's
+// other pages, the cohorts, a batch and a dataset's pseudonymisation, are
+// mounted by the shell beside this one.
 
 import { useCallback, useEffect, useState } from "react";
-import { needsWork } from "../access";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { placesKept } from "../objects/kept";
-import { href } from "../routes";
+import { href, narrow } from "../routes";
 import { MoreMenu } from "../settings/cards";
 import type { Install } from "../settings/supervise";
-import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
@@ -33,7 +31,6 @@ import {
   datasetState,
   jobs as jobsDoor,
   lastLine,
-  places as placesDoor,
   record26,
   sources,
   STAGES,
@@ -44,49 +41,16 @@ import {
   type Rates,
 } from "./datasets";
 import { NowSection, useLiveJobs } from "./Now";
-import { fileWords, whenWords, type Handling } from "./sources";
+import { fileWords, whenWords } from "./sources";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[]; rates: Rates | null };
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-export function DataPage(props: { caps: Capabilities; install: Install | null; onChanged: () => void; page: string | null; arg: string | null; sub: string | null }) {
-  const { page, arg, sub } = props;
-  if (page === "cohorts") {
-    return <Coming eyebrow="Data / Cohorts" title="Cohorts" words="Every cohort as a card: who is in it, where they came from, and what waits on them. A query's answer becomes a cohort from its card." slice="the cohorts slice" />;
-  }
-  if (page === "batch" && arg) {
-    return <Coming eyebrow={`Data / Batch ${arg}`} title={`Batch ${arg}`} words="One batch followed through its five stages: what was pseudonymised, walked, digested, classified and reviewed, with the jobs that did each and the files it refused." slice="the batch page slice" />;
-  }
-  if (page === "datasets" && arg && sub === "pseudonymisation") {
-    return <Coming eyebrow={`Data / ${arg}`} title={`Pseudonymisation of ${arg}`} words="How this dataset is pseudonymised: the identity rule, the map and what it will do, the files held until mapped, the tags removed, and the originals." slice="the Pseudonymisation page slice" />;
-  }
-  return <Datasets {...props} />;
-}
-
-/** A page of the section another slice builds: what it will show, and the way back. */
-function Coming({ eyebrow, title, words, slice }: { eyebrow: string; title: string; words: string; slice: string }) {
-  return (
-    <section className="placeholder">
-      <span className="placeholder-icon">
-        <Icon name="data" size="xl" />
-      </span>
-      <span className="eyebrow">{eyebrow}</span>
-      <h1>{title}</h1>
-      <p className="lede">{words}</p>
-      <p className="meta">This page comes with {slice} of the desk, beside this release.</p>
-      <a className="button secondary small" href={href("data", "datasets")}>
-        <Icon name="chevron-left" />
-        Datasets
-      </a>
-    </section>
-  );
-}
-
-function Datasets({ caps, install, onChanged }: { caps: Capabilities; install: Install | null; onChanged: () => void }) {
+/** The Datasets page; `dataset` is the one the address names, #data/datasets/<name>, chosen on arrival. */
+export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabilities; install: Install | null; onChanged: () => void; dataset?: string | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
-  const [chosen, setChosen] = useState<string | null>(null);
-  const [handlingOf, setHandlingOf] = useState<Dataset | null>(null);
+  const [chosen, setChosen] = useState<string | null>(dataset ?? null);
   const [bringing, setBringing] = useState<Dataset | null>(null);
   const [adding, setAdding] = useState(false);
   const [cohorts, setCohorts] = useState<string[]>([]);
@@ -95,11 +59,9 @@ function Datasets({ caps, install, onChanged }: { caps: Capabilities; install: I
   const jobs = useLiveJobs(caps);
   const works = may(caps, "data:work");
   const modern = record26(caps);
-  // a dataset's handling is kept on its place, so changing it asks for work on the Data and the Places pages
-  const handling = needsWork(caps, "Changing how a dataset is handled", [
-    ["data:work", "the Data page"],
-    ["places:work", "the Places page"],
-  ]);
+  useEffect(() => {
+    if (dataset) setChosen(dataset);
+  }, [dataset]);
 
   const read = useCallback(() => {
     sources
@@ -187,18 +149,15 @@ function Datasets({ caps, install, onChanged }: { caps: Capabilities; install: I
               dataset={d}
               on={current?.id === d.id}
               works={works}
-              modern={modern}
-              handling={handling === null}
               onPick={() => setChosen(d.name)}
               onBringIn={() => setBringing(d)}
-              onHandling={() => setHandlingOf(d)}
             />
           ))}
         </div>
       )}
       {said && <p className="meta">{said}</p>}
       <NowSection caps={caps} jobs={jobs} onSaid={setSaid} />
-      {current && <Batches dataset={current} works={works} modern={modern} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
+      {current && <Batches dataset={current} works={works} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
       {modern && list.length > 0 && (
         <div className="note gated">
           <Icon name="lock" />
@@ -209,16 +168,6 @@ function Datasets({ caps, install, onChanged }: { caps: Capabilities; install: I
             </p>
           </div>
         </div>
-      )}
-      {handlingOf && (
-        <HandlingDialog
-          dataset={handlingOf}
-          onClose={() => setHandlingOf(null)}
-          onSaved={() => {
-            setHandlingOf(null);
-            read();
-          }}
-        />
       )}
       {bringing && (
         <BringInNew
@@ -255,8 +204,8 @@ function Datasets({ caps, install, onChanged }: { caps: Capabilities; install: I
   );
 }
 
-function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; modern: boolean; handling: boolean; onPick: () => void; onBringIn: () => void; onHandling: () => void }) {
-  const { dataset: d, on, works, modern, handling, onPick, onBringIn, onHandling } = props;
+function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onPick: () => void; onBringIn: () => void }) {
+  const { dataset: d, on, works, onPick, onBringIn } = props;
   const state = datasetState(d);
   const arrives = arrivesWords(arrivesOf(d));
   const cohort = cohortWords(d);
@@ -269,23 +218,16 @@ function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; mod
           {d.name}
         </button>
         <span className={state.tone === "neutral" ? "tag" : `tag ${state.tone}`}>{state.words}</span>
-        {(works || handling) && (
-          <span onClick={(e) => e.stopPropagation()}>
-            <MoreMenu label={`More for ${d.name}`}>
-              {works && (
-                <button type="button" onClick={onBringIn}>
-                  Bring in what is new
-                </button>
-              )}
-              {modern && <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>}
-              {handling && (
-                <button type="button" onClick={onHandling}>
-                  Handling
-                </button>
-              )}
-            </MoreMenu>
-          </span>
-        )}
+        <span onClick={(e) => e.stopPropagation()}>
+          <MoreMenu label={`More for ${d.name}`}>
+            {works && (
+              <button type="button" onClick={onBringIn}>
+                Bring in what is new
+              </button>
+            )}
+            <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>
+          </MoreMenu>
+        </span>
       </div>
       <span className="where">{d.path}</span>
       <div className="row">
@@ -330,7 +272,7 @@ function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; mod
   );
 }
 
-function Batches({ dataset: d, works, modern, onBringIn, onAgain }: { dataset: Dataset; works: boolean; modern: boolean; onBringIn: () => void; onAgain: (b: Batch) => void }) {
+function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; works: boolean; onBringIn: () => void; onAgain: (b: Batch) => void }) {
   const recent = d.digests.recent;
   const held = d.held?.files ?? 0;
   return (
@@ -342,11 +284,9 @@ function Batches({ dataset: d, works, modern, onBringIn, onAgain }: { dataset: D
           {d.totals.refused_files > 0 ? ` · ${n(d.totals.refused_files)} files refused` : ""}
           {held > 0 ? ` · ${n(held)} held until mapped` : ""}
         </span>
-        {modern && (
-          <a className="button secondary small" href={href("data", "datasets", d.name, "pseudonymisation")}>
-            Pseudonymisation
-          </a>
-        )}
+        <a className="button secondary small" href={href("data", "datasets", d.name, "pseudonymisation")}>
+          Pseudonymisation
+        </a>
         {works && (
           <button type="button" className="button small" onClick={onBringIn}>
             <Icon name="play" />
@@ -399,7 +339,7 @@ function Batches({ dataset: d, works, modern, onBringIn, onAgain }: { dataset: D
                         </a>
                       )}
                       {tail.kind === "sort" && (
-                        <a className="tail" href={href("review")}>
+                        <a className="tail" href={narrow(href("review"), { batch: b.id })}>
                           {tail.words}
                           <Icon name="chevron-right" />
                         </a>
@@ -428,71 +368,5 @@ function Batches({ dataset: d, works, modern, onBringIn, onAgain }: { dataset: D
       )}
       {d.digests.count > recent.length && <p className="meta">The {recent.length} newest of {d.digests.count} batches.</p>}
     </section>
-  );
-}
-
-function HandlingDialog({ dataset: d, onClose, onSaved }: { dataset: Dataset; onClose: () => void; onSaved: () => void }) {
-  const [h, setH] = useState<Handling>(d.handling);
-  const [why, setWhy] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const refused = h.on_release.dates !== "keep" && h.on_release.uids === "preserve";
-  const release = (patch: Partial<Handling["on_release"]>) => setH((was) => ({ ...was, on_release: { ...was.on_release, ...patch } }));
-  const save = () => {
-    setSaving(true);
-    setWhy(null);
-    placesDoor
-      .set(d.id, { handling: h })
-      .then(onSaved)
-      .catch((e: Error) => {
-        setSaving(false);
-        setWhy(e.message);
-      });
-  };
-  const choice = (name: string, checked: boolean, onPick: () => void, words: string) => (
-    <label className="choice">
-      <input type="radio" name={name} checked={checked} onChange={onPick} />
-      {words}
-    </label>
-  );
-  return (
-    <Dialog
-      title={`How ${d.name} is handled`}
-      icon="lock"
-      onClose={onClose}
-      foot={
-        <div className="row actions">
-          <button type="button" className="button" disabled={saving || refused} onClick={save}>
-            Save
-          </button>
-          <button type="button" className="button secondary" onClick={onClose}>
-            Cancel
-          </button>
-          {why && <span className="warn">{why}</span>}
-        </div>
-      }
-    >
-      <div className="field">
-        <span className="label">What comes in</span>
-        {choice("arrives", h.arrives === "identified", () => setH({ ...h, arrives: "identified" }), "Identified, as the scanners send it")}
-        {choice("arrives", h.arrives === "deidentified", () => setH({ ...h, arrives: "deidentified" }), "Already de-identified")}
-      </div>
-      <div className="field">
-        <span className="label">Dates, when it is released</span>
-        {choice("dates", h.on_release.dates === "keep", () => release({ dates: "keep" }), "Kept as recorded")}
-        {choice("dates", h.on_release.dates === "shift", () => release({ dates: "shift" }), "Shifted, by one offset per subject")}
-        {choice("dates", h.on_release.dates === "year", () => release({ dates: "year" }), "Cut to the year")}
-      </div>
-      <div className="field">
-        <span className="label">UIDs, when it is released</span>
-        {choice("uids", h.on_release.uids === "remap", () => release({ uids: "remap" }), "Remapped")}
-        {choice("uids", h.on_release.uids === "preserve", () => release({ uids: "preserve" }), "Preserved")}
-      </div>
-      <label className="choice">
-        <input type="checkbox" checked={h.on_release.deface} onChange={(e) => release({ deface: e.target.checked })} />
-        Faces removed before it leaves
-      </label>
-      {refused && <p className="warn">Dates that move cannot keep the original UIDs. Remap the UIDs, or keep the dates.</p>}
-      <p className="meta">Subject codes are pseudonymous in every dataset. A release reads this handling; defacing is a pipeline still to be built, so for now the choice is kept for it.</p>
-    </Dialog>
   );
 }
