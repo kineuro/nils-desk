@@ -18,8 +18,9 @@ import { VERBS } from "../ops/verbs";
 import { identityActs } from "../review/client";
 import { kindOf } from "../review/triage";
 import type { Access } from "../settings/identity";
-import type { Dataset, DatasetFields, IdentityRule, OriginalsKept, Tags } from "./datasets";
+import type { Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
 import type { Handling } from "./sources";
+import { GROUP_TAGS, STANDARD_TOTAL } from "./tags";
 
 // A dataset is the sources door's row as the Data page types it; the same shape is read from here.
 export type { Arrives, Dataset, IdentityRule, IdentitySource, Trees } from "./datasets";
@@ -35,22 +36,28 @@ export type DatasetPatch = Partial<DatasetFields> & {
   handling?: Handling;
 };
 
-/** What a person may change about a dataset on the Pseudonymisation page. */
+/**
+ * What a person may change about a dataset on the Pseudonymisation page. The
+ * tag lists are not among them: the chooser edits those, and two forms seeded
+ * from the same dataset would each send the whole block and undo the other.
+ */
 export interface DatasetChange {
   arrives: NonNullable<DatasetFields["arrives"]>;
   unmapped: NonNullable<DatasetFields["unmapped"]>;
   cohort: string;
-  tags: NonNullable<Tags>;
   on_release: Handling["on_release"];
 }
 
-/** What the Change form sends: its own fields, and nothing of the originals. */
+/**
+ * What the Change form sends: its own fields, nothing of the originals and
+ * nothing of the tags, which the place keeps as they stand where the body
+ * names none.
+ */
 export function changePatch(c: DatasetChange): DatasetPatch {
   return {
     arrives: c.arrives,
     unmapped: c.unmapped,
     cohort: c.cohort.trim() || null,
-    tags: c.tags,
     handling: { arrives: c.arrives === "identified" ? "identified" : "deidentified", on_release: c.on_release },
   };
 }
@@ -97,6 +104,8 @@ export interface HeldReleased {
 
 /** What an import will do, said before it writes; the same report is a filed import's result. The engine names the new types or counts them, and says the held files released as a count or as released of held, and by which type. */
 export interface ImportReport {
+  /** The rows the door read, where it says. */
+  rows?: number;
   subjects: { named: number; known: number; new: number };
   identifiers: { filed: number; known: number; new: number; types_new: number | string[] };
   held_released: number | { released: number; of: number };
@@ -126,8 +135,14 @@ const list = <T>(v: unknown, key: string): T[] => (Array.isArray(v) ? (v as T[])
 export const linkage = {
   types: () => door<TypesDoc | IdType[]>("GET", "/api/linkage/types").then((r) => (Array.isArray(r) ? { types: r } : r)),
   addType: (name: string, description: string) => door<IdType>("POST", "/api/linkage/types", { name, description }),
-  /** A map: rehearsed with `dry_run`, which answers the report; applied, which answers the job whose result is the same report. */
-  import: (body: { place?: string; columns: ImportColumn[]; rows: string[][]; dry_run: boolean }) => door<ImportReport & { job?: number; state?: string }>("POST", "/api/linkage/imports", body),
+  /**
+   * A map: rehearsed with `dry_run`, which answers the report at once; applied,
+   * which answers the job whose result is the same report. `make_types` is sent
+   * whenever a column names a type the store has not got, the rehearsal
+   * included, since without it the engine refuses the whole file rather than
+   * reading it.
+   */
+  import: (body: { place?: string; columns: ImportColumn[]; rows: string[][]; dry_run: boolean; make_types?: boolean }) => door<ImportReport & { job?: number; state?: string }>("POST", "/api/linkage/imports", body),
   held: (place: string) => door<unknown>("GET", `/api/linkage/held?place=${encodeURIComponent(place)}`).then((r) => list<HeldRow>(r, "held")),
   codeHeld: (place: string) => door<{ job: number; state: string }>("POST", "/api/linkage/held/code", { place }),
   reveal: (place: string) => door<unknown>("POST", "/api/linkage/held/reveal", { place }).then((r) => list<Revealed>(r, "identifiers")),
@@ -296,29 +311,6 @@ export function actEnded(did: "vault" | "purge", row: Pick<JobRow, "state" | "er
 export function movingWords(look: OriginalsLook | null): string {
   if (look === null) return "the engine has not said";
   return `${n(look.files)} ${look.files === 1 ? "file" : "files"} · ${bytesWords(look.bytes)}`;
-}
-
-/** What the door answered, line by line, for the purge dialog. */
-export function originalsLines(look: OriginalsLook): { label: string; words: string; tone?: "caution" }[] {
-  return [
-    { label: "files", words: movingWords(look) },
-    { label: "verified", words: `${n(look.verified)} ${look.verified === 1 ? "file has" : "files have"} a pseudonymised copy the engine checked` },
-    {
-      label: "not verified",
-      words: look.unverified === 0 ? "none: every file is accounted for in dcm-anon" : `${n(look.unverified)} ${look.unverified === 1 ? "file has" : "files have"} no checked copy in dcm-anon`,
-      tone: look.unverified > 0 ? "caution" : undefined,
-    },
-    {
-      label: "held",
-      words:
-        look.held === 0
-          ? "none"
-          : look.held === 1
-            ? "1 file is held until mapped: its original is what a map would still release"
-            : `${n(look.held)} files are held until mapped: their originals are what a map would still release`,
-      tone: look.held > 0 ? "caution" : undefined,
-    },
-  ];
 }
 
 /** Why the engine will not purge, in its own words; null when it says it would. */
@@ -547,6 +539,12 @@ export function lookAt(header: string, values: string[]): ColumnLook {
   return { header, shape, filled: filled.length, distinct, words: parts.join(", ") };
 }
 
+/**
+ * What a column means. An identifier column and the column that stands for
+ * the person both name a type, since the engine takes `identifier:<type>` and
+ * `canonical:<type>` and refuses either without one; the code column and an
+ * ignored one name none.
+ */
 export interface Guess {
   role: ColumnRole;
   /** The registry's type, when the header names one. */
@@ -580,36 +578,95 @@ export function typeName(header: string): string {
     .slice(0, 40);
 }
 
+/** The type a header names, and the type to make when none does. */
+function typedAs(header: string, h: string, types: IdType[]): { id_type: string | null; new_type: string | null } {
+  const known = typeNamed(h, types);
+  if (known) return { id_type: known.name, new_type: null };
+  return { id_type: null, new_type: typeName(header) || "identifier" };
+}
+
 /** What a column means, guessed from its header and what it holds: the person's number, the code, a type of the registry's, or a new type named after the header. */
 export function guessRole(header: string, look: ColumnLook, types: IdType[]): Guess {
   const h = plain(header);
   if (look.filled === 0) return { role: "ignore", id_type: null, new_type: null };
-  if (h.includes("canonical") || h === "person" || h === "personnumber") return { role: "canonical", id_type: null, new_type: null };
+  if (h.includes("canonical") || h === "person" || h === "personnumber") {
+    // the column that stands for the person is filed under a type like any other, so its own name is read for one
+    const bare = h.replace("canonical", "") || h;
+    return { role: "canonical", ...typedAs(header.replace(/canonical[\s_-]*/iu, "") || header, bare, types) };
+  }
   if (h === "code" || h === "subjectcode" || h === "subject" || h === "nilscode" || h === "pseudonym") return { role: "code", id_type: null, new_type: null };
-  const known = typeNamed(h, types);
-  if (known) return { role: "identifier", id_type: known.name, new_type: null };
-  return { role: "identifier", id_type: null, new_type: typeName(header) || "identifier" };
+  return { role: "identifier", ...typedAs(header, h, types) };
 }
 
-/** The columns as the import door takes them; a new type is named as its type until it is made. */
+/** The columns as the import door takes them; a new type is named as its type until it is made. Both kinds of identifier column carry one. */
 export function importColumns(header: string[], guesses: Guess[]): ImportColumn[] {
   return header.map((h, i) => {
     const g = guesses[i];
-    if (g.role === "identifier") return { header: h, role: "identifier", id_type: g.id_type ?? g.new_type ?? typeName(h) };
+    if (g.role === "identifier" || g.role === "canonical") return { header: h, role: g.role, id_type: g.id_type ?? g.new_type ?? typeName(h) };
     return { header: h, role: g.role };
   });
 }
 
-/** Why the map cannot be filed as the columns stand, or null. */
+/**
+ * Why the map cannot be filed as the columns stand, or null. The rules are
+ * the engine's own: one column at most stands for the person and one at most
+ * is the code, at least one column is an identifier of some kind, and every
+ * identifier column names its type. Several identifier columns of one type
+ * are several identifiers of one subject and are refused by nothing.
+ */
 export function mapRefusal(guesses: Guess[]): string | null {
   const ids = guesses.filter((g) => g.role === "identifier").length;
   const canonical = guesses.filter((g) => g.role === "canonical").length;
   const code = guesses.filter((g) => g.role === "code").length;
-  if (ids === 0 && canonical === 0) return "At least one column is an identifier or the person's number.";
+  if (ids === 0 && canonical === 0) return "At least one column is an identifier, or the number that stands for the person.";
   if (canonical > 1) return "One column stands for the person; two are chosen.";
   if (code > 1) return "One column is the code; two are chosen.";
-  if (ids === 0 && code === 0) return "The person's number alone maps nothing: add an identifier column or the code.";
+  if (guesses.some((g) => (g.role === "identifier" || g.role === "canonical") && g.id_type === null && g.new_type === null)) return "Every identifier column names its type: pick one of the site's, or make a new one.";
   return null;
+}
+
+/** The most rows the import door takes in one call. */
+export const MAX_MAP_ROWS = 100000;
+
+/**
+ * Why the file cannot go to the import door as it stands, or null. The rules
+ * are the engine's own: a first line naming the columns, rows under it, and a
+ * hundred thousand rows at most in one call. How the file separates its
+ * columns is not among them, and cannot be: the columns are read here and the
+ * rows are posted as values, so no delimiter of the file's ever reaches the
+ * engine.
+ */
+export function csvRefusal(csv: Csv): string | null {
+  if (csv.header.length === 0 || csv.header.every((h) => h.trim() === "")) return "The first line names the columns, and this file has no such line.";
+  if (csv.rows.length === 0) return "The file has a header and no rows under it.";
+  if (csv.rows.length > MAX_MAP_ROWS)
+    return `${n(csv.rows.length)} rows: the engine takes ${n(MAX_MAP_ROWS)} in one go. Split the file, or leave it where the engine can read it and file it as a job.`;
+  return null;
+}
+
+const count = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);
+
+/**
+ * The report as the dialog reads it, whatever the engine left out of it: every
+ * branch carries the same keys, so a run that refused, or an older engine that
+ * says less, never renders an undefined number beside a label.
+ */
+export function reportOf(raw: unknown): ImportReport {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const s = (r.subjects ?? {}) as Record<string, unknown>;
+  const i = (r.identifiers ?? {}) as Record<string, unknown>;
+  const held = r.held_released;
+  const by = Array.isArray(r.held_released_by) ? (r.held_released_by as HeldReleased[]).filter((h) => h && typeof h.type === "string") : [];
+  const types = Array.isArray(i.types_new) ? (i.types_new as unknown[]).filter((t): t is string => typeof t === "string") : count(i.types_new);
+  return {
+    ...(typeof r.rows === "number" ? { rows: r.rows } : {}),
+    subjects: { named: count(s.named), known: count(s.known), new: count(s.new) },
+    identifiers: { filed: count(i.filed), known: count(i.known), new: count(i.new), types_new: types },
+    held_released: held && typeof held === "object" ? { released: count((held as Record<string, unknown>).released), of: count((held as Record<string, unknown>).of) } : count(held),
+    held_released_by: by,
+    merges: Array.isArray(r.merges) ? (r.merges as ImportReport["merges"]).filter((m) => m && typeof m.alias === "string") : [],
+    conflicts: Array.isArray(r.conflicts) ? (r.conflicts as ImportReport["conflicts"]).filter((c) => c && typeof c.why === "string") : [],
+  };
 }
 
 /** The held files a dry run releases, as "4 of 4". */
@@ -780,17 +837,11 @@ export function detailCounts(access: Access | null): Record<Detail, number> {
   return out;
 }
 
-/** The tags the pseudonymiser removes, in v0's four groups, tag for tag. */
-export const REMOVED_GROUPS: { group: string; tags: number }[] = [
-  { group: "patient", tags: 34 },
-  { group: "provider", tags: 38 },
-  { group: "trial", tags: 23 },
-  { group: "institution", tags: 5 },
-];
+/**
+ * The tags the pseudonymiser removes, in the engine's four groups, counted
+ * from the list itself (`./tags`) rather than written out again here, so the
+ * bar on the card and the rows in the chooser can never disagree.
+ */
+export const REMOVED_GROUPS: { group: string; tags: number }[] = GROUP_TAGS;
 
-export const REMOVED_TOTAL = REMOVED_GROUPS.reduce((s, g) => s + g.tags, 0);
-
-/** A list typed as words, one tag a line or comma-separated, each once. */
-export function tagList(text: string): string[] {
-  return [...new Set(text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean))];
-}
+export const REMOVED_TOTAL = STANDARD_TOTAL;

@@ -84,6 +84,12 @@
   --n-grain-event: #F2E6DE;
   --n-grain-group: #EFE2E6;
 
+  /* the four groups the removed tags fall in, so one bar reads the same in both themes */
+  --n-tag-patient: #7A1F5A;
+  --n-tag-provider: #1F4D66;
+  --n-tag-trial: #1F6E43;
+  --n-tag-institution: #B9621C;
+
   /* focus */
   --n-focus: #7A1F5A;
 
@@ -122,6 +128,10 @@
     --n-grain-instance: #322E22;
     --n-grain-event: #342A25;
     --n-grain-group: #33272C;
+    --n-tag-patient: #B57CA1;
+    --n-tag-provider: #8FBDD6;
+    --n-tag-trial: #7FCB9A;
+    --n-tag-institution: #E3A46A;
     --n-focus: #B57CA1;
     --n-scrim: #00000080;
   }
@@ -157,6 +167,10 @@
   --n-grain-instance: #322E22;
   --n-grain-event: #342A25;
   --n-grain-group: #33272C;
+  --n-tag-patient: #B57CA1;
+  --n-tag-provider: #8FBDD6;
+  --n-tag-trial: #7FCB9A;
+  --n-tag-institution: #E3A46A;
   --n-focus: #B57CA1;
   --n-scrim: #00000080;
 }

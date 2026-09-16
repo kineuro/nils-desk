@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// How scans are sorted (record 26): the pack in a strip, the scope a rule
-// change is scoped to, the axes in the order they are decided, the chosen
-// axis's values with their words and flags and how they fared in the scope,
-// a word added to a list and tried on real stacks before it is proposed, the
-// proposals with what adopting each would move, and the keyword-tune station
-// started on the chosen scope and axis.
+// How scans are sorted (record 27, R5a): every axis the pack declares, not
+// the four word lists the old page showed. The axes stand on one side and the
+// chosen one on the other, with its values and the words that reach each.
+// Which values take a word is the pack's own answer, not a list fixed here,
+// so an axis reached by no word anywhere is shown, marked as such, and its
+// Add a word refused with the reason. A word the site added is drawn apart
+// from one the pack shipped. The proposal flow is unchanged: rehearse on real
+// stacks through the try door, propose an overlay, adopt it.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Json } from "../ask/client";
@@ -17,10 +19,13 @@ import { data, ops, overlayScope, type Batch, type OverlayRow, type ReviewItem, 
 import { assistantOffered } from "../sections";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
+import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import {
   acts,
   axisCounts,
+  axisEditable,
+  axisHasWords,
   axisWords,
   closureWords,
   familyOf,
@@ -32,9 +37,12 @@ import {
   scopeString,
   scopeWords,
   siteWordCount,
-  siteWords,
   tryWords,
   valueCounts,
+  valueEditable,
+  valueWords,
+  whyNoWordHere,
+  whyNoWords,
   withDocuments,
   wordOverlay,
   type Closure,
@@ -43,9 +51,13 @@ import {
   type PackDoc,
   type Scope,
   type TryResult,
+  type ValueWord,
 } from "./client";
 
 const n = (v: number) => v.toLocaleString("en-US");
+
+/** What counts as a word, wherever a word is added or read. */
+const WORD_RULE = 'Matching ignores capitals. A word is a plain piece of text, not a pattern. Spaces at either end are part of it, so " -k" is not "-k".';
 
 /** Where a word is added: the axis and the value, in a scope, on a pack. */
 export interface WordAt {
@@ -64,97 +76,128 @@ export interface RulesProps {
   onChanged: (words: string) => void;
 }
 
-/** The chosen axis's values as a table: value, words with the site's on top, flag, decided, unsure. */
-export function AxisTable(props: { axis: PackAxis; signals: Signals | null; overlays: OverlayRow[]; may: boolean; all: boolean; onAll: () => void; onAdd: (value: string) => void }) {
-  const { axis, signals, overlays, may, all, onAll, onAdd } = props;
-  const shadowed = new Set(signals?.shadowed_keywords ?? []);
-  const rows = all ? axis.values : axis.values.slice(0, 8);
-  const more = axis.values.slice(8);
-  const counts = axisCounts(signals, axis.axis);
+/** What an axis says on the rail: how many word lists it opens, how many values it has, or that the pack reaches it by no word. */
+export function railWords(pack: PackDoc, a: PackAxis): string {
+  if (!axisHasWords(pack, a)) return "no words";
+  return axisWords(a) || `${n(a.counted)} values`;
+}
+
+/** The pack's axes, in the order they are decided; one that takes no word says so rather than go missing. */
+export function AxisRail({ pack, chosen, onPick }: { pack: PackDoc; chosen: string; onPick: (axis: string) => void }) {
   return (
-    <div className="table-wrap">
-      <table className="thin rules">
-        <thead>
-          <tr>
-            <th>{axis.axis}</th>
-            <th>Words</th>
-            <th>Flag</th>
-            <th className="num">Decided</th>
-            <th className="num">Unsure</th>
-            <th className="acts" />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((v) => {
-            const site = siteWords(overlays, axis.axis, v.value);
-            const c = valueCounts(signals, axis.axis, v.value);
-            const shadow = v.keywords.find((k) => shadowed.has(k));
-            const under = [v.label && v.label !== v.value ? `shown as ${v.label}` : null, v.family ? `family ${v.family}` : null].filter(Boolean).join(" · ");
-            return (
-              <tr key={v.value}>
-                <td>
-                  <b>{v.value}</b>
-                  {under && <div className="meta">{under}</div>}
-                </td>
-                <td className="words">
-                  <span className="path">{v.keywords.join(", ")}</span>
-                  {site.adopted.map((s, i) => (
-                    <span key={`a${i}`} className="tag ok">
-                      + {s.word} for {s.scope}
-                    </span>
-                  ))}
-                  {site.proposed.map((s, i) => (
-                    <span key={`p${i}`} className="tag brand">
-                      + {s.word} proposed
-                    </span>
-                  ))}
-                  {shadow && (
-                    <span className="meta">
-                      {" "}
-                      · <span className="path">{shadow}</span> shadowed behind an earlier word
-                    </span>
-                  )}
-                  {v.keywords.length === 0 && site.adopted.length === 0 && site.proposed.length === 0 && <span className="meta">no words; {v.flag ? "a flag decides" : "a rule decides"}</span>}
-                </td>
-                <td className="meta">{v.flag ?? ""}</td>
-                <td className="num">{c ? n(c.decided) : ""}</td>
-                <td className="num">{c ? n(c.unsure) : ""}</td>
-                <td className="acts">
-                  {may && (
+    <div className="rail" role="tablist" aria-label="the pack's axes">
+      {pack.axes.map((a) => (
+        <button
+          key={a.axis}
+          type="button"
+          role="tab"
+          aria-selected={chosen === a.axis}
+          className={`${chosen === a.axis ? "on" : ""}${axisHasWords(pack, a) ? "" : " none"}`.trim()}
+          onClick={() => onPick(a.axis)}
+        >
+          <span>{a.axis}</span>
+          <span className="meta">{railWords(pack, a)}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** A word's own note: which scope adopted it, or that it is proposed and not adopted yet. */
+function wordTitle(w: ValueWord): string | undefined {
+  if (w.from === "pack") return undefined;
+  if (w.from === "site") return w.scope ? `adopted for ${w.scope}` : "adopted by this site";
+  return w.scope ? `proposed for ${w.scope}, not adopted yet` : "proposed, not adopted yet";
+}
+
+/** What a word says beside itself, so the scope is read and not only hovered: who adopted it, or that it is only proposed. */
+function wordScope(w: ValueWord): string | null {
+  if (w.from === "pack") return null;
+  if (w.from === "site") return w.scope ?? "this site";
+  return w.scope ? `${w.scope}, proposed` : "proposed";
+}
+
+/** The chosen axis's values: each with its words, the site's apart from the pack's, how it is reached, its counts and Add a word. */
+export function AxisValues({ pack, axis, signals, overlays, may, onAdd }: { pack: PackDoc; axis: PackAxis; signals: Signals | null; overlays: OverlayRow[]; may: boolean; onAdd: (value: string) => void }) {
+  const [all, setAll] = useState(false);
+  const shadowed = new Set(signals?.shadowed_keywords ?? []);
+  const counts = axisCounts(signals, axis.axis);
+  // an engine that counts by axis alone still says how the axis fared, whether or not its values were listed
+  const tally =
+    counts && !signals?.by_value ? (
+      <p className="meta">
+        {n(counts.sorted)} sorted on this axis, {n(counts.unsure)} unsure.
+      </p>
+    ) : null;
+  if (axis.values.length === 0) {
+    return (
+      <>
+        <p className="meta">{axis.counted > 0 ? `${n(axis.counted)} values; this engine lists their words with its next release.` : "No value of its own; a route sets them."}</p>
+        {tally}
+      </>
+    );
+  }
+  const rows = all ? axis.values : axis.values.slice(0, 10);
+  return (
+    <>
+      <div className="vlist">
+        {rows.map((v) => {
+          const words = valueWords(v, overlays, axis.axis);
+          const c = valueCounts(signals, axis.axis, v.value);
+          const editable = valueEditable(pack, axis.axis, v.value);
+          const shadow = v.keywords.find((k) => shadowed.has(k));
+          return (
+            <div key={v.value} className="vrow">
+              <div className="vhead">
+                <b>{v.value}</b>
+                {v.label && v.label !== v.value && <span className="meta">{v.label}</span>}
+                {v.family && <span className="meta">{v.family}</span>}
+                <span className="grow" />
+                {c && (
+                  <span className="meta num">
+                    {n(c.decided)} sorted{c.unsure > 0 ? ` · ${n(c.unsure)} unsure` : ""}
+                  </span>
+                )}
+                {may &&
+                  (editable ? (
                     <button type="button" className="button quiet small" onClick={() => onAdd(v.value)}>
                       Add a word
                     </button>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
-          {!all && more.length > 0 && (
-            <tr>
-              <td colSpan={6} className="meta">
-                {n(more.length)} more {more.length === 1 ? "value" : "values"}: {more.slice(0, 6).map((v) => v.value).join(", ")}
-                {more.length > 6 ? ", and more" : ""} ·{" "}
-                <button type="button" className="link-button" onClick={onAll}>
-                  show all
-                </button>
-              </td>
-            </tr>
-          )}
-          {axis.values.length === 0 && (
-            <tr>
-              <td colSpan={6} className="meta">
-                {axis.counted > 0 ? `${n(axis.counted)} values; this engine lists their words with its next release.` : "This axis has no values of its own; a route sets them."}
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      {counts && !signals?.by_value && (
-        <p className="meta">
-          On this axis in the scope: {n(counts.sorted)} stacks sorted, {n(counts.unsure)} unsure. This engine counts by axis; by value comes with its next release.
-        </p>
+                  ) : (
+                    <button type="button" className="button quiet small" disabled title={whyNoWordHere(pack, axis, v)}>
+                      Add a word
+                    </button>
+                  ))}
+              </div>
+              {words.length > 0 && (
+                <div className="words-row">
+                  {words.map((w, i) => (
+                    <span key={`${w.from}-${i}-${w.word}`} className={w.from === "pack" ? "word" : `word ${w.from}`} title={wordTitle(w)}>
+                      {w.word}
+                      {wordScope(w) && <small className="scope">{wordScope(w)}</small>}
+                    </span>
+                  ))}
+                </div>
+              )}
+              {words.length === 0 && <span className="meta">no words · {v.flag ? "a flag decides" : "a rule decides"}</span>}
+              {/* how a value is reached stays the pack's: it is shown whether or not a word reaches it too */}
+              {v.flag && <span className="meta">reached first by {v.flag}</span>}
+              {shadow && (
+                <span className="meta">
+                  <span className="path">{shadow}</span> stands behind an earlier word
+                </span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {!all && axis.values.length > rows.length && (
+        <button type="button" className="link-button" onClick={() => setAll(true)}>
+          All {n(axis.values.length)} values
+        </button>
       )}
-    </div>
+      {tally}
+    </>
   );
 }
 
@@ -166,7 +209,6 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
   const [signals, setSignals] = useState<Signals | null>(null);
   const [scope, setScope] = useState<Scope | null>(null);
   const [axis, setAxis] = useState<string | null>(null);
-  const [all, setAll] = useState(false);
   const [adding, setAdding] = useState<WordAt | null>(null);
   const [tuning, setTuning] = useState(false);
   const [since] = useState(() => Date.now());
@@ -175,7 +217,7 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
 
   const reload = useCallback(() => {
     if (!served(caps, "GET /api/overlays")) return;
-    // the list door leaves each overlay's document out; the words on the strip and in the table are read from each overlay's own door
+    // the list door leaves each overlay's document out; the words are read from each overlay's own door
     ops
       .overlays()
       .then((r) => withDocuments(r.overlays, (id) => ops.overlay(id)))
@@ -213,20 +255,22 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
     };
   }, [key, readsSignals]);
 
-  const chosen = pack?.axes.find((a) => a.axis === axis) ?? pack?.axes.find((a) => a.values.some((v) => v.keywords.length > 0)) ?? pack?.axes[0] ?? null;
-  const lists = pack ? pack.axes.reduce((s, a) => s + a.values.filter((v) => v.keywords.length > 0).length, 0) : 0;
+  useEffect(() => {
+    if (wordAt) setAdding(wordAt);
+  }, [wordAt]);
+
+  const chosen = pack?.axes.find((a) => a.axis === axis) ?? pack?.axes[0] ?? null;
+  const lists = pack ? pack.axes.reduce((s, a) => s + a.values.filter((v) => valueEditable(pack, a.axis, v.value)).length, 0) : 0;
   const first = pack?.axes[0] ? axisCounts(signals, pack.axes[0].axis) : null;
   const unsureOpen = signals ? Object.values(signals.open_review ?? {}).reduce((s, v) => s + v, 0) : items.filter((i) => i.status === "open" && familyOf(i.kind) === "unsure").length;
   const adopted = overlays.filter((o) => o.status === "adopted");
   const proposed = overlays.filter((o) => o.status === "proposed");
-  const adoptedWords = siteWordCount(overlays);
   const origins = originsOf(signals);
   const threads = scopeBatches(batches);
   const tunable = assistantOffered(caps) && stationsServed(caps).includes("keyword-tune") && may.decide;
-
-  useEffect(() => {
-    if (wordAt) setAdding(wordAt);
-  }, [wordAt]);
+  const editable = pack && chosen ? axisEditable(pack, chosen) : false;
+  // what the pack says of the axis, which is a different question from what this engine lets a site amend
+  const wordless = pack && chosen ? !axisHasWords(pack, chosen) : false;
 
   return (
     <>
@@ -234,73 +278,93 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
         <div className="done">
           <span className="k">pack</span>
           <span className="v">{pack ? `${pack.pack} ${pack.version}` : packWhy ? "none" : ""}</span>
-          <span className="meta">{pack ? `contract ${pack.contract} · ${pack.axes.length} axes · ${n(pack.flags)} flags · ${n(lists)} word lists` : (packWhy ?? "reading the pack")}</span>
+          <span className="meta">{pack ? `${pack.axes.length} axes · ${n(lists)} word lists` : (packWhy ?? "reading the pack")}</span>
         </div>
         <div className={first ? "done" : ""}>
-          <span className="k">sorted by it</span>
+          <span className="k">sorted</span>
           <span className="v">
             {first ? n(first.sorted) : ""}
             {first && <small> stacks</small>}
           </span>
-          <span className="meta">{first ? `in ${scopeWords(current)}` : readsSignals ? "counted once the signals are read" : "the signals need Review: Work"}</span>
+          <span className="meta">{first ? scopeWords(current) : readsSignals ? "counted with the signals" : "needs work on the Review page"}</span>
         </div>
         <div className={unsureOpen > 0 ? "wait" : "done"}>
           <span className="k">unsure</span>
           <span className="v">{n(unsureOpen)}</span>
-          <span className="meta">below the pack's confidence · on the queue</span>
+          <span className="meta">on the queue</span>
         </div>
         <div className="done">
           <span className="k">site words</span>
           <span className="v">
-            {n(adoptedWords)}
+            {n(siteWordCount(overlays))}
             <small> adopted</small>
           </span>
           <span className="meta">
-            across {n(adopted.length)} {adopted.length === 1 ? "overlay" : "overlays"} · {n(proposed.length)} proposed
+            {n(adopted.length)} adopted · {n(proposed.length)} proposed
           </span>
         </div>
       </div>
 
-      <section className="stack roomy">
-        <div className="section-head rule-top">
-          <h2>Axes</h2>
-          <span className="meta">in the order they are decided; an axis may read one before it</span>
-          <span className="chips">
-            {threads.map((b) => (
-              <button key={b.id} type="button" className={current.kind === "batch" && current.id === b.id ? "opt on" : "opt"} title={b.kind ? `${b.kind} batch ${b.name}` : undefined} onClick={() => setScope({ kind: "batch", id: b.id, name: b.name })}>
-                batch {b.name}
-              </button>
-            ))}
-            {origins.slice(0, 3).map((o) => (
-              <button key={o} type="button" className={current.kind === "origin" && current.name === o ? "opt on" : "opt"} onClick={() => setScope({ kind: "origin", name: o })}>
-                scanner {o}
-              </button>
-            ))}
-            <button type="button" className={current.kind === "everything" ? "opt on" : "opt"} onClick={() => setScope(everything)}>
-              everything
+      <div className="section-head rule-top">
+        <h2>Axes</h2>
+        <span className="meta">in the order they are decided</span>
+        <span className="chips">
+          {threads.map((b) => (
+            <button key={b.id} type="button" className={current.kind === "batch" && current.id === b.id ? "opt on" : "opt"} onClick={() => setScope({ kind: "batch", id: b.id, name: b.name })}>
+              batch {b.name}
             </button>
-          </span>
+          ))}
+          {origins.slice(0, 3).map((o) => (
+            <button key={o} type="button" className={current.kind === "origin" && current.name === o ? "opt on" : "opt"} onClick={() => setScope({ kind: "origin", name: o })}>
+              scanner {o}
+            </button>
+          ))}
+          <button type="button" className={current.kind === "everything" ? "opt on" : "opt"} onClick={() => setScope(everything)}>
+            everything
+          </button>
+        </span>
+      </div>
+      {!pack && !packWhy && <Wait phase="reading the pack" since={since} size="panel" />}
+      {packWhy && <p className="warn">The pack could not be read: {packWhy}</p>}
+
+      {pack && chosen && (
+        <div className="axes-two">
+          <AxisRail pack={pack} chosen={chosen.axis} onPick={setAxis} />
+
+          <section className="panel card">
+            <div className="row card-head">
+              <h2>{chosen.axis}</h2>
+              <span className="tag">{chosen.multi ? "several at once" : "one value"}</span>
+              {wordless && <span className="tag caution">no words</span>}
+              <span className="grow" />
+              {may.decide && !editable && (
+                <button type="button" className="button quiet small" disabled title={whyNoWords(pack, chosen)}>
+                  Add a word
+                </button>
+              )}
+            </div>
+            {!editable && <p className="meta">{whyNoWords(pack, chosen)}</p>}
+            <AxisValues
+              key={chosen.axis}
+              pack={pack}
+              axis={chosen}
+              signals={signals}
+              overlays={overlays}
+              may={may.decide && served(caps, "POST /api/classify/try")}
+              onAdd={(value) => setAdding({ axis: chosen.axis, value, scope: current, pack: pack.pack })}
+            />
+            <Says head="What counts as a word">{WORD_RULE}</Says>
+            <Says head="What a word is matched against">
+              The pack's normalised text of the series description, the protocol and the sequence names. The flags and physics, and the order values are tried in, stay the pack's: changing them is a new pack version.
+            </Says>
+          </section>
         </div>
-        {!pack && !packWhy && <Wait phase="reading the pack" since={since} size="panel" />}
-        {packWhy && <p className="warn">The pack could not be read: {packWhy}</p>}
-        {pack && (
-          <div className="chips axes">
-            {pack.axes.map((a) => (
-              <button key={a.axis} type="button" className={chosen?.axis === a.axis ? "opt on" : "opt"} aria-pressed={chosen?.axis === a.axis} onClick={() => { setAxis(a.axis); setAll(false); }}>
-                {a.axis}
-                {axisWords(a) && <b>{axisWords(a)}</b>}
-              </button>
-            ))}
-          </div>
-        )}
-        {chosen && <AxisTable axis={chosen} signals={signals} overlays={overlays} may={may.decide && served(caps, "POST /api/classify/try")} all={all} onAll={() => setAll(true)} onAdd={(value) => setAdding({ axis: chosen.axis, value, scope: current, pack: pack?.pack ?? null })} />}
-        <span className="meta">A word is matched against the pack's normalised text of the series description, protocol and sequence names. The flags and physics, and the order values are tried in, stay the pack's; a change to them is a new pack version.</span>
-      </section>
+      )}
 
       <section className="stack roomy">
         <div className="section-head rule-top">
           <h2>Proposals</h2>
-          <span className="meta">tried on real stacks; adopting re-sorts the scope</span>
+          <span className="meta">tried on real stacks first</span>
           {tunable && (
             <button type="button" className="button secondary small" onClick={() => setTuning(true)}>
               <Icon name="assistant" />
@@ -308,29 +372,47 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
             </button>
           )}
         </div>
-        <ProposalsTable caps={caps} overlays={overlays} onChanged={(w) => { reload(); onChanged(w); }} />
+        <ProposalsTable
+          caps={caps}
+          overlays={overlays}
+          onChanged={(w) => {
+            reload();
+            onChanged(w);
+          }}
+        />
+        <Says head="Who may adopt a word">
+          Adopting re-sorts the scope, so it needs work on the Review page and on the Data page. It says first what it moves and which query cards stop reproducing. A decision on one scan is different: it overrides the rules for that scan, series, subject or scanner.
+        </Says>
       </section>
-
-      <div className="note gated">
-        <Icon name="lock" />
-        <div className="note-body">
-          <p className="note-detail">
-            Adopting needs Review: Work and Data: Work, since it changes how data is sorted; it says first what it moves and which cards stop reproducing. A decision on one scan is different: it overrides the rules for that scan, series, subject or scanner and survives re-sorting.
-          </p>
-        </div>
-      </div>
 
       {adding && (
         <AddWordDialog
           caps={caps}
           at={adding}
           pack={pack && (adding.pack === null || adding.pack === pack.pack) ? pack : null}
-          onClose={() => { setAdding(null); onWordClose(); }}
-          onProposed={(w) => { setAdding(null); onWordClose(); reload(); onChanged(w); }}
+          onClose={() => {
+            setAdding(null);
+            onWordClose();
+          }}
+          onProposed={(w) => {
+            setAdding(null);
+            onWordClose();
+            reload();
+            onChanged(w);
+          }}
         />
       )}
       {tuning && chosen && (
-        <TuneDialog caps={caps} scope={current} axis={chosen.axis} onClose={() => setTuning(false)} onChanged={(w) => { reload(); onChanged(w); }} />
+        <TuneDialog
+          caps={caps}
+          scope={current}
+          axis={chosen.axis}
+          onClose={() => setTuning(false)}
+          onChanged={(w) => {
+            reload();
+            onChanged(w);
+          }}
+        />
       )}
     </>
   );
@@ -381,7 +463,7 @@ export function ProposalsTable({ caps, overlays, onChanged }: { caps: Capabiliti
       })
       .then(() => {
         setBusy(null);
-        onChanged(`Refused ${o.name}; it stays proposed in the registry, its item closed.`);
+        onChanged(`Refused ${o.name}; its item is closed.`);
       })
       .catch((e: unknown) => {
         setBusy(null);
@@ -454,16 +536,13 @@ export function ProposalsTable({ caps, overlays, onChanged }: { caps: Capabiliti
           {rows.length === 0 && (
             <tr>
               <td colSpan={5} className="meta">
-                No overlay yet. Add a word to a list above, or tune with the assistant.
+                No overlay yet.
               </td>
             </tr>
           )}
         </tbody>
       </table>
       {why && <p className="warn">{why}</p>}
-      {Object.values(closures).some((c) => c && c.handles.length > 0) && (
-        <p className="meta">{Object.values(closures).filter((c): c is Closure => c !== null && c.handles.length > 0).map(closureWords).map((w) => w.note).join(" ")}</p>
-      )}
     </div>
   );
 }
@@ -514,7 +593,7 @@ export function AddWordDialog({ caps, at, pack: given, onClose, onProposed }: { 
     setWhy(null);
     review
       .propose(name, tried.overlay, scopeString(scope), reason.trim() || `adds ${list.join(", ")} to ${at.axis} ${at.value}`)
-      .then((r) => onProposed(`Proposed ${name} as overlay ${r.overlay}; it waits on the queue for someone with Data: Work to adopt.`))
+      .then((r) => onProposed(`Proposed ${name} as overlay ${r.overlay}; it waits on the queue to be adopted.`))
       .catch((e: unknown) => {
         setBusy(false);
         setWhy(refusalWords(e));
@@ -547,16 +626,24 @@ export function AddWordDialog({ caps, at, pack: given, onClose, onProposed }: { 
       }
     >
       {value && (
-        <p className="meta">
-          {at.value}
-          {value.label && value.label !== at.value ? ` (${value.label})` : ""} matches today: <span className="path">{value.keywords.join(", ") || "no word"}</span>
-        </p>
+        <div className="field">
+          <span className="label">Matches today</span>
+          <div className="words-row">
+            {value.keywords.length === 0 && <span className="meta">no word</span>}
+            {value.keywords.map((w) => (
+              <span key={w} className="word">
+                {w}
+              </span>
+            ))}
+          </div>
+        </div>
       )}
       <div className="field">
         <span className="label">The word, or words separated by commas</span>
         <span className="input mono">
           <input value={words} placeholder="as it appears in the series description" aria-label="The word" disabled={tried !== null} onChange={(e) => setWords(e.target.value)} />
         </span>
+        <Says head="What counts as a word">{WORD_RULE}</Says>
       </div>
       <div className="field">
         <span className="label">For</span>
@@ -590,11 +677,7 @@ export function AddWordDialog({ caps, at, pack: given, onClose, onProposed }: { 
           </span>
         </div>
       )}
-      <p className="meta">
-        {proposable
-          ? "Proposing puts an overlay on the queue beside a review item; adopting it needs Data: Work as well and re-sorts the scope."
-          : "Trying writes nothing. Proposing needs work on the Review page."}
-      </p>
+      {!proposable && <p className="meta">Trying writes nothing. Proposing needs work on the Review page.</p>}
     </Dialog>
   );
 }
@@ -640,7 +723,7 @@ export function TuneDialog({ caps, scope, axis, onClose, onChanged }: { caps: Ca
     ops
       .reviewAccept(o.item, `refused the overlay ${o.name} proposed by keyword-tune`)
       .then(() => {
-        setDone("Refused; the overlay stays proposed in the registry, its item closed.");
+        setDone("Refused; its item is closed.");
         onChanged(`Refused ${o.name}.`);
       })
       .catch((e: unknown) => setWhy(refusalWords(e)))
@@ -692,7 +775,7 @@ export function TuneDialog({ caps, scope, axis, onClose, onChanged }: { caps: Ca
           <Icon name="lock" />
           <div className="note-body">
             <p className="note-lead">Adopting is yours</p>
-            <p className="note-detail">{closureWords(closure).note} Needs Review: Work and Data: Work.</p>
+            <p className="note-detail">{closureWords(closure).note} It needs work on the Review page and on the Data page.</p>
           </div>
         </div>
       )}

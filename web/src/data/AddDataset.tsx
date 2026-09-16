@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Add a dataset (record 26, D1): a name and a folder, what arrives through
-// it, who a file is about with the identifier's type from the registry's list
-// or a new one made here, the shapes probed over a sample, the map as a CSV
-// whose columns are named for what they are and whose report is read before
-// anything is written, what happens to a file whose identifier the map does
-// not know, and the cohort its subjects join. A folder that holds a v0 cohort
-// layout is declared as one: dcm-raw renamed, v0's map filed, the originals
-// left. Adding a folder as a dataset asks for work on the Data and the Places
-// pages, and starts the engine again where a service keeps it running.
+// Add a dataset (record 27, R2b): the folder is chosen in the engine's own
+// picker, which lists the folders of its ingest locations and says what a look
+// found inside each, so anyone who may add a dataset browses without a grant
+// on the install; a folder outside those locations is typed instead, and the
+// same look door says what is in it by its bare path. Then how the files come
+// in, who a file is about with the identifier's type from the registry's list
+// or a new one made here, the map as a CSV whose columns are named for what
+// they are and whose report is read before anything is written, what happens
+// to a file whose identifier the map does not know, and the cohort its
+// subjects join. A folder that holds a v0 cohort layout is declared as one:
+// dcm-raw renamed, v0's map filed, the originals left. Adding a folder as a
+// dataset asks for work on the Data and the Places pages, and starts the
+// engine again where a service keeps it running.
 
 import { useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -25,24 +29,20 @@ import { Command } from "../ui/Command";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { ingest, type Look } from "./browse";
 import {
   bringInBody,
   bringInName,
   cohortChoices,
   cohortOf,
-  columnsRefusal,
-  guessColumns,
   identityOf,
   jobs,
   linkage,
   locationOf,
-  look,
   packFor,
-  parseCsv,
   places as placesDoor,
   probeWords,
   record26,
-  reportLines,
   v0Words,
   type Arrives,
   type BringIn,
@@ -54,19 +54,54 @@ import {
   type MapColumn,
   type Unmapped,
 } from "./datasets";
-import { newFolderRefusal } from "./picker";
+import { IngestPicker } from "./Picker";
+import { lookWords, newFolderRefusal, type Chosen } from "./picker";
+// the map is read and refused by the Pseudonymisation page's own rules, so a file this dialog takes is one that page would take too
+import { csvRefusal, guessRole, importColumns, lookAt, mapRefusal, parseCsv, reportLines, reportOf, typeName, type ColumnLook, type Guess } from "./pseudonyms";
 
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
+
+/** A fact as its value: what it is in small letters, then the value alone. */
+type Cell = { k: string; v: string };
+
+/** A column of the map: its header, what the values under it look like, and what it means. */
+interface Column {
+  header: string;
+  look: ColumnLook;
+  guess: Guess;
+}
 
 /** The map as uploaded: its file, its columns named, and what the engine said it would do. */
 interface Map {
   file: string;
-  header: string[];
   rows: string[][];
-  columns: MapColumn[];
+  columns: Column[];
   report: ImportReport | null;
   checking: boolean;
   why: string | null;
+}
+
+/**
+ * The types the columns name that the site has not got. The import makes
+ * these itself when it is told to; told nothing, the engine makes each of
+ * them a conflict instead, and a map with a conflict is not filed at all.
+ */
+export function typesToMake(columns: { header: string; guess: Guess }[], known: LinkageType[] | null): string[] {
+  const names = new Set((known ?? []).map((t) => t.name));
+  const wanted = columns.filter((c) => c.guess.role === "identifier" || c.guess.role === "canonical").map((c) => c.guess.id_type ?? c.guess.new_type ?? typeName(c.header));
+  return [...new Set(wanted.filter((t) => t !== "" && !names.has(t)))];
+}
+
+/** The map as the import door takes it, rehearsed or filed: the columns named for what they are, and the word that makes the types they name that the site has not got. */
+export function mapImport(columns: { header: string; guess: Guess }[], rows: string[][], known: LinkageType[] | null): { columns: MapColumn[]; rows: string[][]; make_types: boolean } {
+  return {
+    columns: importColumns(
+      columns.map((c) => c.header),
+      columns.map((c) => c.guess),
+    ),
+    rows,
+    make_types: typesToMake(columns, known).length > 0,
+  };
 }
 
 export interface AddPlan {
@@ -76,8 +111,40 @@ export interface AddPlan {
   fields: DatasetFields | null;
   /** Start the engine again, so it reads the new folder: only where a service keeps it running. */
   restart: boolean;
-  map: { columns: MapColumn[]; rows: string[][] } | null;
+  map: { columns: MapColumn[]; rows: string[][]; make_types: boolean } | null;
   bringIn: BringIn | null;
+}
+
+function Values({ cells }: { cells: Cell[] }) {
+  return (
+    <div className="values">
+      {cells.map((c) => (
+        <div key={c.k}>
+          <span className="k">{c.k}</span>
+          <span className="v">{c.v}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The sentence that used to stand beside a control, closed until it is asked for. */
+function Says({ head, children }: { head: string; children: string }) {
+  return (
+    <details className="says">
+      <summary>{head}</summary>
+      <p>{children}</p>
+    </details>
+  );
+}
+
+/** What a look found in a folder, in a few words, or why nothing was found. */
+function insideWords(l: Look): string {
+  if (l.exists === false) return "nothing is there";
+  if (l.directory === false) return "a file, not a folder";
+  if (l.readable === false) return "the engine cannot read it";
+  if (!l.here) return l.timed_out ? "the look did not answer in time" : "nothing found";
+  return lookWords({ name: "", looked: true, ...l.here }).words || "no files";
 }
 
 /**
@@ -100,7 +167,7 @@ export async function addDataset(plan: AddPlan, phase: (words: string) => void):
   const said: string[] = [`${plan.name} is a dataset${renamed}`];
   if (plan.map) {
     phase("filing the map");
-    const r = await patiently(() => linkage.import({ place: plan.name, columns: plan.map!.columns, rows: plan.map!.rows, dry_run: false }));
+    const r = await patiently(() => linkage.import({ place: plan.name, columns: plan.map!.columns, rows: plan.map!.rows, make_types: plan.map!.make_types, dry_run: false }));
     said.push("job" in r ? `the map is filed as job ${r.job}` : "the map is filed");
   }
   // a job names the folder by its place, which the engine learns when it starts again
@@ -123,12 +190,16 @@ export function AddDataset(props: {
   cohorts: string[];
   /** A folder already looked at, with what the look found, for a dialog opened from it. */
   initial?: { path: string; layout: Layout | null };
-  layoutOf?: (folder: string) => Promise<Layout | null>;
+  /** What a look finds in a folder before it is declared: what is inside it, and the layout it holds. */
+  lookAt?: (folder: string) => Promise<Look>;
   onClose: () => void;
   onDone: (words: string) => void;
 }) {
   const { caps, install, places, cohorts, onClose, onDone } = props;
   const [path, setPath] = useState(props.initial?.path ?? "");
+  // the folder as the engine names it, @location/relative, when it was picked in the engine's own picker
+  const [at, setAt] = useState<string | null>(null);
+  const [outside, setOutside] = useState(false);
   const [typed, setTyped] = useState<string | null>(null);
   const [arrives, setArrives] = useState<Arrives>("identified");
   const [fieldChoice, setFieldChoice] = useState<FieldChoice>("PatientID");
@@ -142,6 +213,10 @@ export function AddDataset(props: {
   const [unmapped, setUnmapped] = useState<Unmapped>("hold");
   const [cohort, setCohort] = useState<string | null>(null);
   const [layout, setLayout] = useState<Layout | null>(props.initial?.layout ?? null);
+  const [found, setFound] = useState<Look | null>(null);
+  /** Why the engine did not say what is in the folder, in its own words. */
+  const [lookWhy, setLookWhy] = useState<string | null>(null);
+  const [looking, setLooking] = useState<number | null>(null);
   const [act, setAct] = useState<Act>({ kind: "idle" });
   const fileRef = useRef<HTMLInputElement>(null);
   const probing = useRef(0);
@@ -155,18 +230,41 @@ export function AddDataset(props: {
   const restarts = supervised && install !== null && keptRunning(install);
   const adding = newFolderRefusal(caps);
   const working = act.kind === "working";
-  const looks = modern && served(caps, "POST /api/ingest/look");
+  // the engine lists its own ingest locations to a person with work on Data; the host's folders need work on the install
+  const lists = served(caps, "POST /api/ingest/folders") && may(caps, "data:work");
+  // the same work looks inside a folder by its bare path, which only an engine of record 26 takes
+  const looks = modern && served(caps, "POST /api/ingest/look") && may(caps, "data:work");
+  const picking = lists && !outside;
   const typesServed = served(caps, "GET /api/linkage/types");
   const importsServed = modern && served(caps, "POST /api/linkage/imports") && may(caps, "data:work");
   const probes = modern && served(caps, "POST /api/ingest/probe") && may(caps, "data:work");
   const v0 = v0Words(layout);
-  const location = absolute ? locationOf(folder, places) : null;
+  const location = at ?? (absolute ? locationOf(folder, places) : null);
   const from = fieldChoice === "path" ? ({ kind: "path", segment } as const) : ({ kind: "field", field: fieldChoice === "other" ? otherField : fieldChoice } as const);
   const identity = identityOf(from, idType);
   const choices = cohortChoices(name, cohorts);
   const cohortChoice = cohort ?? choices[0]?.value ?? "none";
   const words = install ? addFolderWords(install) : null;
-  const layoutOf = props.layoutOf ?? ((f: string) => look.layout(f).then((r) => r.layout ?? null));
+  const lookInside = props.lookAt ?? ((f: string) => ingest.lookHere(f));
+  const picked: Chosen | null = at !== null ? { at, path: folder, place: null } : null;
+  /** The types of the map's columns the site has not got, which the import makes. */
+  const newTypes = map ? typesToMake(map.columns, types) : [];
+
+  /**
+   * Another folder chosen: what was said of the one before it is let go. The
+   * probe read that folder, the map was uploaded for it and the identifier's
+   * type was chosen from what it holds, so none of the three is carried over.
+   */
+  const chooseFolder = (next: string, where: string | null) => {
+    if (next.trim().replace(/\/+$/, "") === folder && where === at) return;
+    setAt(where);
+    setPath(next);
+    probing.current += 1;
+    setProbe({ kind: "idle" });
+    setMap(null);
+    setNewType(null);
+    setIdType(types?.[0]?.name ?? "");
+  };
 
   // the registry's identifier types, once
   useEffect(() => {
@@ -185,16 +283,29 @@ export function AddDataset(props: {
     };
   }, [typesServed]);
 
-  // once the folder settles, the look says whether it holds a v0 cohort layout
+  // once the folder settles, one look says what is inside it and whether it holds a v0 cohort layout
   useEffect(() => {
     if (props.initial && folder === props.initial.path.trim().replace(/\/+$/, "")) return;
+    setFound(null);
     setLayout(null);
+    setLookWhy(null);
     if (!looks || !absolute) return;
     let alive = true;
     const t = setTimeout(() => {
-      layoutOf(folder)
-        .then((l) => alive && setLayout(l))
-        .catch(() => alive && setLayout(null));
+      setLooking(Date.now());
+      lookInside(folder)
+        .then((l) => {
+          if (!alive) return;
+          setFound(l);
+          setLayout(l.layout ?? null);
+        })
+        .catch((e: unknown) => {
+          // a folder the engine would not look inside read as an empty one: the look is what tells a person what is there before they declare on it, so what stopped it is said
+          if (alive) setLookWhy(`The engine did not look inside this folder: ${messageOf(e)}`);
+        })
+        .finally(() => {
+          if (alive) setLooking(null);
+        });
     }, 600);
     return () => {
       alive = false;
@@ -207,29 +318,50 @@ export function AddDataset(props: {
     file
       .text()
       .then((text) => {
-        const { header, rows } = parseCsv(text);
-        if (header.length === 0) return setMap({ file: file.name, header, rows, columns: [], report: null, checking: false, why: "The file has no header row." });
-        const columns = guessColumns(header, idType || null);
-        const next: Map = { file: file.name, header, rows, columns, report: null, checking: false, why: null };
+        const csv = parseCsv(text);
+        // what the engine will not read is said here, before a row of it is posted anywhere
+        const refused = csvRefusal(csv);
+        if (refused !== null) return setMap({ file: file.name, rows: [], columns: [], report: null, checking: false, why: refused });
+        const columns = csv.header.map((h, i) => {
+          const look = lookAt(
+            h,
+            csv.rows.map((r) => r[i] ?? ""),
+          );
+          return { header: h, look, guess: guessRole(h, look, types ?? []) };
+        });
+        const next: Map = { file: file.name, rows: csv.rows, columns, report: null, checking: false, why: null };
         setMap(next);
         check(next);
       })
-      .catch((e: unknown) => setMap({ file: file.name, header: [], rows: [], columns: [], report: null, checking: false, why: messageOf(e) }));
+      .catch((e: unknown) => setMap({ file: file.name, rows: [], columns: [], report: null, checking: false, why: messageOf(e) }));
   };
 
   /** The dry run: what the engine would do with the map as its columns stand. */
   const check = (m: Map) => {
-    const refusal = columnsRefusal(m.columns);
+    const refusal = mapRefusal(m.columns.map((c) => c.guess));
     if (refusal || !importsServed) return setMap({ ...m, report: null, why: refusal });
     setMap({ ...m, checking: true, why: null });
     linkage
-      .import({ columns: m.columns, rows: m.rows, dry_run: true })
-      .then((r) => setMap((was) => (was && was.file === m.file ? { ...was, checking: false, report: "job" in r ? null : r, why: "job" in r ? "The engine filed the map at once rather than rehearsing it." : null } : was)))
+      .import({ ...mapImport(m.columns, m.rows, types), dry_run: true })
+      .then((r) => setMap((was) => (was && was.file === m.file ? { ...was, checking: false, report: "job" in r ? null : reportOf(r), why: "job" in r ? "The engine filed the map at once rather than rehearsing it." : null } : was)))
       .catch((e: unknown) => setMap((was) => (was && was.file === m.file ? { ...was, checking: false, report: null, why: messageOf(e) } : was)));
   };
 
-  const setColumn = (i: number, patch: Partial<MapColumn>) =>
-    setMap((m) => (m ? { ...m, columns: m.columns.map((c, k) => (k === i ? { ...c, ...patch } : c)), report: null } : m));
+  const setGuess = (i: number, guess: Guess) => setMap((m) => (m ? { ...m, columns: m.columns.map((c, k) => (k === i ? { ...c, guess } : c)), report: null } : m));
+
+  /** A column's role: one that files under a type keeps the type it has, or is read for one again. */
+  const setRole = (i: number, c: Column, role: ColumnRole) => {
+    if (role !== "identifier" && role !== "canonical") return setGuess(i, { role, id_type: null, new_type: null });
+    if (c.guess.id_type !== null || c.guess.new_type !== null) return setGuess(i, { ...c.guess, role });
+    const g = guessRole(c.header, c.look, types ?? []);
+    setGuess(i, { role, id_type: g.id_type, new_type: g.new_type ?? (typeName(c.header) || "identifier") });
+  };
+
+  /** A column's type: one of the site's, or a name for one the import makes. */
+  const setType = (i: number, c: Column, name: string) => {
+    const known = (types ?? []).some((t) => t.name === name);
+    setGuess(i, { ...c.guess, id_type: known ? name : null, new_type: known ? null : name });
+  };
 
   const addType = () => {
     if (!newType) return;
@@ -281,7 +413,7 @@ export function AddDataset(props: {
       path: folder,
       fields,
       restart: restarts,
-      map: map && map.report && map.report.conflicts.length === 0 && importsServed ? { columns: map.columns, rows: map.rows } : null,
+      map: map && map.report && map.report.conflicts.length === 0 && importsServed ? mapImport(map.columns, map.rows, types) : null,
       bringIn: chain,
     };
     const say = (phase: string) => setAct({ kind: "working", phase, since: Date.now() });
@@ -292,6 +424,58 @@ export function AddDataset(props: {
       })
       .catch((e: unknown) => setAct({ kind: "failed", why: messageOf(e) }));
   };
+
+  const folderSection = (
+    <div className="field pick-folder">
+      <span className="label">Folder</span>
+      {picking ? (
+        <IngestPicker
+          places={places}
+          adding={adding}
+          choose="one"
+          picked={picked}
+          onPick={(c) => chooseFolder(c.path, c.at)}
+          outside={
+            <button
+              type="button"
+              className="button quiet small"
+              disabled={working}
+              onClick={() => {
+                // the folder is no longer one of the engine's locations, so it is no longer named as one
+                setOutside(true);
+                setAt(null);
+              }}
+            >
+              <Icon name="folder-search" />A folder outside these
+            </button>
+          }
+        />
+      ) : (
+        <>
+          <PathField
+            id="dataset-path"
+            value={path}
+            placeholder="/srv/imaging/incoming"
+            disabled={working}
+            browse={supervised}
+            known={knownFolders(places, install?.dir ?? null)}
+            onChange={(p) => chooseFolder(p, null)}
+          />
+          {lists && (
+            <button type="button" className="button quiet small" disabled={working} onClick={() => setOutside(false)}>
+              <Icon name="arrow-up" />
+              The engine's locations
+            </button>
+          )}
+        </>
+      )}
+      {looking !== null && <Wait phase="looking inside the folder" since={looking} />}
+      {folder !== "" && (found !== null || at !== null) && (
+        <Values cells={[{ k: "chosen", v: at ?? folder }, ...(at !== null ? [{ k: "folder", v: folder }] : []), ...(found ? [{ k: "inside", v: insideWords(found) }] : [])]} />
+      )}
+      {lookWhy && <p className="warn">{lookWhy}</p>}
+    </div>
+  );
 
   const mapSection = (
     <div className="field">
@@ -304,12 +488,12 @@ export function AddDataset(props: {
               <Icon name="file" />
               {map ? "Another CSV" : v0 ? "Choose the file" : "Upload a CSV"}
             </button>
-            <span className="meta">{v0 ? "v0's CSV of PatientID and subject_code imports as it is; every person keeps the code they had." : "identifier to code, or identifier to the number that stands for the person; several files, several types, any time"}</span>
+            <span className="meta">{v0 ? "every person keeps the code they had" : "identifier to code, or to the person's number"}</span>
           </div>
           {map && (
             <div className="map-columns">
               <p className="meta">
-                <span className="path">{map.file}</span>: {map.rows.length.toLocaleString("en-US")} rows. Name each column for what it is.
+                <span className="path">{map.file}</span>: {map.rows.length.toLocaleString("en-US")} rows
               </p>
               <div className="table-wrap">
                 <table className="thin">
@@ -328,7 +512,7 @@ export function AddDataset(props: {
                         </td>
                         <td>
                           <div className="input">
-                            <select value={c.role} aria-label={`What ${c.header || `column ${i + 1}`} is`} disabled={working} onChange={(e) => setColumn(i, { role: e.target.value as ColumnRole })}>
+                            <select value={c.guess.role} aria-label={`What ${c.header || `column ${i + 1}`} is`} disabled={working} onChange={(e) => setRole(i, c, e.target.value as ColumnRole)}>
                               <option value="identifier">an identifier</option>
                               <option value="canonical">the canonical identifier</option>
                               <option value="code">the code</option>
@@ -336,12 +520,27 @@ export function AddDataset(props: {
                             </select>
                           </div>
                         </td>
-                        <td>{(c.role === "identifier" || c.role === "canonical") && <TypeSelect value={c.id_type ?? ""} types={types} disabled={working} label={`The type of ${c.header || `column ${i + 1}`}`} onChange={(t) => setColumn(i, { id_type: t })} />}</td>
+                        <td>
+                          {(c.guess.role === "identifier" || c.guess.role === "canonical") && (
+                            <TypeSelect
+                              value={c.guess.id_type ?? c.guess.new_type ?? ""}
+                              types={types}
+                              disabled={working}
+                              label={`The type of ${c.header || `column ${i + 1}`}`}
+                              onChange={(t) => setType(i, c, t)}
+                            />
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              {newTypes.length > 0 && (
+                <p className="meta">
+                  {newTypes.length === 1 ? `The type ${newTypes[0]} is not one of the site's, and is made when the map is filed.` : `The types ${newTypes.join(", ")} are not the site's, and are made when the map is filed.`}
+                </p>
+              )}
               <div className="row actions">
                 <button type="button" className="button secondary small" disabled={map.checking || working} onClick={() => check(map)}>
                   Check the map
@@ -352,11 +551,11 @@ export function AddDataset(props: {
               {map.report && (
                 <ul className="report">
                   {reportLines(map.report).map((l) => (
-                    <li key={l.words} className={l.tone === "caution" ? "warn" : l.tone === "ok" ? "ok-words" : undefined}>
-                      {l.words}
+                    <li key={l.label} className={l.tone === "caution" ? "warn" : l.tone === "ok" ? "ok-words" : undefined}>
+                      {l.label}: {l.words}
                     </li>
                   ))}
-                  <li className="meta">{map.report.conflicts.length > 0 ? "Nothing is written while a conflict stands." : "Filed once the dataset is added; it holds for every dataset."}</li>
+                  <li className="meta">{map.report.conflicts.length > 0 ? "Nothing is written while a conflict stands." : "Filed once the dataset is added."}</li>
                 </ul>
               )}
             </div>
@@ -371,14 +570,14 @@ export function AddDataset(props: {
             <input type="radio" name="unmapped" checked={unmapped === "hold"} disabled={working} onChange={() => setUnmapped("hold")} />
             <span>
               <b>Hold files whose identifier the map does not know</b>
-              <span className="meta">They stay in the originals until someone maps them. The dataset says how many.</span>
+              <span className="meta">They wait in the originals until someone maps them.</span>
             </span>
           </label>
           <label className="radio-row">
             <input type="radio" name="unmapped" checked={unmapped === "code"} disabled={working} onChange={() => setUnmapped("code")} />
             <span>
               <b>Give them a code from the identifier</b>
-              <span className="meta">The same identifier always gives the same code; the subject is marked unmapped so a later map can merge it.</span>
+              <span className="meta">The same identifier always gives the same code; a later map merges it.</span>
             </span>
           </label>
         </div>
@@ -401,7 +600,6 @@ export function AddDataset(props: {
             ))}
           </select>
         </div>
-        {v0 && cohortChoice.startsWith("new:") && <span className="meta">v0's cohort of the same name, made now</span>}
       </div>
     </div>
   );
@@ -423,7 +621,7 @@ export function AddDataset(props: {
       {act.kind === "done" && <p className="ok-words">{act.words}</p>}
       {adding !== null && <p className="meta">{adding}</p>}
       <div className="row actions">
-        <span className="meta grow">{restarts ? "Adding a dataset restarts the engine, about 20 s." : supervised || !absolute ? "" : "The engine reads a new dataset once it starts again."}</span>
+        <span className="meta grow">{restarts ? "Adding a dataset restarts the engine, about 20 s." : supervised || !absolute ? "" : "The engine reads it once it starts again."}</span>
         <button type="button" className="button secondary" disabled={working} onClick={onClose}>
           Cancel
         </button>
@@ -441,20 +639,13 @@ export function AddDataset(props: {
 
   return (
     <Dialog title="Add a dataset" icon="folder" onClose={onClose} foot={foot}>
-      <div className="fields2 dataset-names">
-        <div className="field">
-          <label className="label" htmlFor="dataset-name">
-            Name
-          </label>
-          <div className="input mono">
-            <input id="dataset-name" value={name} spellCheck={false} disabled={working} onChange={(e) => setTyped(e.target.value)} />
-          </div>
-        </div>
-        <div className="field">
-          <label className="label" htmlFor="dataset-path">
-            Folder
-          </label>
-          <PathField id="dataset-path" value={path} placeholder="/srv/imaging/incoming" disabled={working} browse={supervised} known={knownFolders(places, install?.dir ?? null)} onChange={setPath} />
+      {folderSection}
+      <div className="field">
+        <label className="label" htmlFor="dataset-name">
+          Name
+        </label>
+        <div className="input mono">
+          <input id="dataset-name" value={name} spellCheck={false} disabled={working} onChange={(e) => setTyped(e.target.value)} />
         </div>
       </div>
       {v0 ? (
@@ -472,19 +663,19 @@ export function AddDataset(props: {
               <li className="now">
                 <span>
                   <b>dcm-raw is renamed dcm-anon</b>
-                  <span className="meta">A rename, nothing rewritten. It becomes the registry's source.</span>
+                  <span className="meta">A rename; nothing is rewritten.</span>
                 </span>
               </li>
               <li>
                 <span>
                   <b>v0's map is filed</b>
-                  <span className="meta">Its identifier to code pairs go into the sealed store, so every person keeps the code they had, and their number is known if it arrives again.</span>
+                  <span className="meta">Every person keeps the code they had.</span>
                 </span>
               </li>
               <li>
                 <span>
                   <b>The originals stay</b>
-                  <span className="meta">dcm-original is locked and never read again unless new files land there; then they are pseudonymised into dcm-anon like any other.</span>
+                  <span className="meta">dcm-original is locked, and read again only for new files.</span>
                 </span>
               </li>
             </ul>
@@ -495,9 +686,7 @@ export function AddDataset(props: {
             <div className="note">
               <Icon name="lock" />
               <div className="note-body">
-                <p className="note-detail">
-                  The {v0.skipped.toLocaleString("en-US")} files v0 skipped are in dcm-original only; they are pseudonymised on the first bring-in, or held if their identifier is not in the map.
-                </p>
+                <p className="note-detail">The {v0.skipped.toLocaleString("en-US")} files v0 skipped are in dcm-original only; the first bring-in pseudonymises them.</p>
               </div>
             </div>
           )}
@@ -505,27 +694,27 @@ export function AddDataset(props: {
       ) : modern ? (
         <>
           <div className="field">
-            <span className="label">What arrives</span>
+            <span className="label">How the files come in</span>
             <div className="choices" role="radiogroup">
               <label className="radio-row">
                 <input type="radio" name="arrives" checked={arrives === "identified"} disabled={working} onChange={() => setArrives("identified")} />
                 <span>
                   <b>Identified, from the scanners</b>
-                  <span className="meta">Pseudonymised into derivatives/dcm-anon before anything reads it. The originals stay in derivatives/dcm-original, locked to the stewards.</span>
+                  <span className="meta">Pseudonymised into dcm-anon first; the originals stay locked.</span>
                 </span>
               </label>
               <label className="radio-row">
                 <input type="radio" name="arrives" checked={arrives === "deidentified"} disabled={working} onChange={() => setArrives("deidentified")} />
                 <span>
                   <b>De-identified by someone else</b>
-                  <span className="meta">Moved into dcm-anon as sent, in place, instantly. Its identifiers are mapped to our codes by the map below.</span>
+                  <span className="meta">Moved in as sent; the map gives it our codes.</span>
                 </span>
               </label>
               <label className="radio-row">
                 <input type="radio" name="arrives" checked={arrives === "coded"} disabled={working} onChange={() => setArrives("coded")} />
                 <span>
                   <b>Our own codes already in PatientID</b>
-                  <span className="meta">Moved into dcm-anon; the codes are taken as they are.</span>
+                  <span className="meta">Moved in; the codes are taken as they are.</span>
                 </span>
               </label>
             </div>
@@ -559,7 +748,7 @@ export function AddDataset(props: {
                   </button>
                 )}
                 {probes && (
-                  <button type="button" className="button secondary small" disabled={working || !location || !identity || probe.kind === "working"} title={!location ? "The folder lies under no source yet; probe once the dataset is added." : undefined} onClick={runProbe}>
+                  <button type="button" className="button secondary small" disabled={working || !location || !identity || probe.kind === "working"} title={!location ? "The folder lies under no location of the engine's; probe once the dataset is added." : undefined} onClick={runProbe}>
                     Probe the shapes
                   </button>
                 )}
@@ -581,12 +770,13 @@ export function AddDataset(props: {
                   {newType.why && <span className="warn">{newType.why}</span>}
                 </div>
               )}
-              <span className="meta">
-                {types && types.length > 0 ? `The type is one of the registry's (${types.map((t) => t.name).join(", ")}) or a new one made here.` : typesServed ? "The registry names no type yet; make one here." : "The type is the name the registry files the identifier under."}
-                {probe.kind === "done" ? ` ${probe.words}` : ""}
-              </span>
               {probe.kind === "working" && <Wait phase={probe.phase} since={probe.since} />}
+              {probe.kind === "done" && <span className="meta">{probe.words}</span>}
               {probe.kind === "failed" && <span className="warn">{probe.why}</span>}
+              <Says head="What the type is for">
+                The type is the name the sealed store files an identifier under, so one person is one subject however many numbers they arrive under. Probe the shapes reads a sample and answers in
+                shapes and counts, never a value, and writes nothing.
+              </Says>
             </div>
           )}
           {arrives !== "coded" && mapSection}
@@ -607,7 +797,7 @@ export function AddDataset(props: {
               </label>
             </div>
           </div>
-          <p className="meta">This engine keeps no dataset fields yet: the folder is added as a source, read as it is, and its handling is declared from the card.</p>
+          <p className="meta">This engine keeps none of these choices yet: the folder is added and read as it is.</p>
         </>
       )}
     </Dialog>

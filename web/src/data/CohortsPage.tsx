@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Data / Cohorts: who belongs to what. One card per cohort with what waits on
-// it, where its members come from, its counts and its releases; a new cohort
-// from here, and the three ways a subject joins: a dataset feeds it, a query
-// card promotes them, a hand adds them from a list.
+// Data / Cohorts (record 27, R5c): who belongs to what. One card per cohort
+// with what waits on it, where its members come from and its counts. How a
+// subject joins, and what a cohort is and is not, are two disclosures rather
+// than a paragraph and three columns. A new cohort is made from here, empty
+// or from a pasted list.
 
 import { useEffect, useState } from "react";
 import type React from "react";
@@ -13,6 +14,7 @@ import { objects } from "../objects/client";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
+import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { cohorts, cohortState, membersBody, metaWords, provenanceLine, sessionsWords, type Cohort } from "./cohorts";
 
@@ -71,15 +73,18 @@ export function CohortsBody({ caps, list, since = null, why, now = Date.now(), w
         <div className="grow">
           <span className="eyebrow">Data</span>
           <h1>Cohorts</h1>
-          <p className="lede">
-            Who belongs to what. A cohort is a set of subjects and nothing else: make one, rename it, retire it, add or take out whom you like. Every join and leave is recorded with its reason: a dataset fed it, a query promoted it, or a hand did it.
-          </p>
+          <p className="lede">Who belongs to what.</p>
         </div>
         {making === null && (
-          <button type="button" className="button" onClick={() => onNew(false)}>
-            <Icon name="plus" />
-            New cohort
-          </button>
+          <>
+            <button type="button" className="button" onClick={() => onNew(false)}>
+              <Icon name="plus" />
+              New cohort
+            </button>
+            <button type="button" className="button secondary" onClick={() => onNew(true)}>
+              From a list
+            </button>
+          </>
         )}
       </div>
       {list === null && !why && <Wait phase="reading the cohorts" since={since ?? now} size="panel" />}
@@ -90,7 +95,7 @@ export function CohortsBody({ caps, list, since = null, why, now = Date.now(), w
           <Icon name="info" />
           <div className="note-body">
             <p className="note-lead">No cohort yet.</p>
-            <p className="note-detail">Set one on a dataset so every digest fills it, promote a query card's answer, or make one and paste a list of codes.</p>
+            <p className="note-detail">Set one on a dataset, promote a query card&apos;s answer, or paste a list of codes.</p>
           </div>
         </div>
       )}
@@ -108,54 +113,6 @@ export function CohortsBody({ caps, list, since = null, why, now = Date.now(), w
           )}
         </div>
       )}
-      <section className="stack roomy">
-        <div className="section-head rule-top">
-          <h2>Three ways a subject joins</h2>
-          <span className="meta">each join is recorded with who, when and what brought it</span>
-        </div>
-        <div className="ways">
-          <div className="way">
-            <span className="sq brand">
-              <Icon name="folder" />
-            </span>
-            <b>A dataset feeds it</b>
-            <span className="meta">Set on the dataset. Every digest adds the new subjects it brings in, so a folder that grows keeps its cohort whole.</span>
-            <div className="row">
-              <a className="button secondary small" href={href("data")}>
-                Set on a dataset
-              </a>
-            </div>
-          </div>
-          <div className="way">
-            <span className="sq brand">
-              <Icon name="search" />
-            </span>
-            <b>A query promotes them</b>
-            <span className="meta">A complete answer becomes members, the subjects of its rows at any grain, with the query's version and epoch on each. A subset of any cohort is one query away.</span>
-            <div className="row">
-              <a className="button secondary small" href={href("query")}>
-                From a query card
-              </a>
-            </div>
-          </div>
-          <div className="way">
-            <span className="sq brand">
-              <Icon name="pencil" />
-            </span>
-            <b>A hand adds them</b>
-            <span className="meta">Paste codes, or take some out, with a reason. Leaving closes the membership; nothing is erased.</span>
-            <div className="row">
-              {making === null ? (
-                <button type="button" className="button secondary small" onClick={() => onNew(true)}>
-                  From a list
-                </button>
-              ) : (
-                <span className="meta">needs work on the Data page</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
       {retired.length > 0 && (
         <details className="retired">
           <summary className="meta">
@@ -173,14 +130,18 @@ export function CohortsBody({ caps, list, since = null, why, now = Date.now(), w
           </ul>
         </details>
       )}
-      <div className="note gated">
-        <Icon name="lock" />
-        <div className="note-body">
-          <p className="note-detail">
-            Review, Release and the Query start from cohorts. A subject in two cohorts is counted in each and decided once. Sessions and stacks are never members: a cohort names people, and a query card names what of theirs. The sessions counted here are the ones the session cache holds{windowDays === null ? "" : `, built under a ${n(windowDays)}-day window`}; where nobody has built it they are not built yet, and a person builds them.
-          </p>
-        </div>
-      </div>
+      <Says head="Three ways a subject joins">
+        <a href={href("data")}>A dataset feeds it</a>, so every digest adds the new subjects it brings in. <a href={href("query")}>A query promotes them</a>, at any grain, with the card kept beside the
+        membership. A hand adds them from a list, or takes them out. Every join and leave is recorded with who, when and why; leaving closes the membership and erases nothing.
+      </Says>
+      <Says head="What a cohort is, and what it is not">
+        A set of subjects and nothing else: make one, rename it, retire it, add or take out whom you like. Review, Release and the Query all start from one. A subject in two cohorts is counted in each and
+        decided once. Sessions and stacks are never members: a cohort names people, and a query card names what of theirs.
+      </Says>
+      <Says head="How the sessions are counted">
+        Out of the session cache as it stands{windowDays === null ? "" : `, built under a ${n(windowDays)}-day window`}. Where nobody has built it they are not built yet, and building them is a person&apos;s
+        act.
+      </Says>
       {children}
     </section>
   );
@@ -259,7 +220,7 @@ export function NewCohortDialog({ caps, fromList, taken, onClose }: { caps: Capa
       onClose={onClose}
       foot={
         <div className="row actions">
-          <span className="meta grow">{refusal ? `Needs ${refusal}.` : "The cohort appears on Data / Cohorts at once."}</span>
+          <span className="meta grow">{refusal ? `Needs ${refusal}.` : "It appears on Cohorts at once."}</span>
           <button type="button" className="button secondary" onClick={onClose}>
             Cancel
           </button>
@@ -299,11 +260,10 @@ export function NewCohortDialog({ caps, fromList, taken, onClose }: { caps: Capa
                 <textarea value={codes} rows={5} onChange={(e) => setCodes(e.target.value)} />
               </span>
             </label>
-            <p className="meta">Each joins by hand, with the why above as the reason. Codes the registry does not know are named back, not added.</p>
+            <p className="meta">Each joins by hand, with the why above as the reason. A code the registry does not know is named back, not added.</p>
           </div>
         </details>
       )}
-      <p className="meta">A cohort names people. Set it on a dataset so every digest fills it, or promote a query card's answer into it later.</p>
       {failed && <p className="warn">{failed}</p>}
     </Dialog>
   );

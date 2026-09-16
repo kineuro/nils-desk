@@ -17,6 +17,9 @@ import {
   bytesWords,
   changePatch,
   confirmsName,
+  csvRefusal,
+  MAX_MAP_ROWS,
+  reportOf,
   detailCounts,
   guessRole,
   heldGroups,
@@ -32,7 +35,6 @@ import {
   NOTHING_ASKED,
   NOTHING_TYPED,
   originalsActs,
-  originalsLines,
   originalsWords,
   parseCsv,
   proposedRule,
@@ -47,7 +49,6 @@ import {
   shapeOf,
   shapeWords,
   subjectsWords,
-  tagList,
   typeName,
   vaultAsked,
   vaultChoices,
@@ -97,7 +98,8 @@ describe("what a column looks like", () => {
   });
   it("means the person's number, the code, a type of the registry's, or a new type named after the header", () => {
     const look = lookAt("x", ["1"]);
-    expect(guessRole("canonical_pn", look, types)).toEqual({ role: "canonical", id_type: null, new_type: null });
+    // the column that stands for the person files under a type like any other, since the engine takes canonical:<type> and refuses it without one
+    expect(guessRole("canonical_pn", look, types)).toEqual({ role: "canonical", id_type: "personnummer", new_type: null });
     expect(guessRole("subject_code", look, types)).toEqual({ role: "code", id_type: null, new_type: null });
     expect(guessRole("Personnummer", look, types)).toEqual({ role: "identifier", id_type: "personnummer", new_type: null });
     expect(guessRole("lake id", look, types)).toEqual({ role: "identifier", id_type: "lake-id", new_type: null });
@@ -109,14 +111,68 @@ describe("what a column looks like", () => {
     const guesses = [guessRole("pn", lookAt("pn", ["1"]), types), guessRole("canonical_pn", lookAt("c", ["1"]), types), guessRole("Orchard", lookAt("o", ["1"]), types), guessRole("note", lookAt("n", [""]), types)];
     expect(importColumns(["pn", "canonical_pn", "Orchard", "note"], guesses)).toEqual([
       { header: "pn", role: "identifier", id_type: "personnummer" },
-      { header: "canonical_pn", role: "canonical" },
+      { header: "canonical_pn", role: "canonical", id_type: "personnummer" },
       { header: "Orchard", role: "identifier", id_type: "orchard" },
       { header: "note", role: "ignore" },
     ]);
     expect(mapRefusal(guesses)).toBeNull();
-    expect(mapRefusal([guesses[3]])).toBe("At least one column is an identifier or the person's number.");
+    expect(mapRefusal([guesses[3]])).toBe("At least one column is an identifier, or the number that stands for the person.");
     expect(mapRefusal([guesses[1], guesses[1]])).toBe("One column stands for the person; two are chosen.");
-    expect(mapRefusal([guesses[1]])).toBe("The person's number alone maps nothing: add an identifier column or the code.");
+    // the engine takes a map of the person's numbers alone: each row resolves a subject, derives its code and releases what was held under it
+    expect(mapRefusal([guesses[1]])).toBeNull();
+    // two code columns, and an identifier column naming no type, are the engine's own refusals
+    const code = guessRole("subject_code", lookAt("s", ["1"]), types);
+    expect(mapRefusal([guesses[0], code, code])).toBe("One column is the code; two are chosen.");
+    expect(mapRefusal([{ role: "identifier", id_type: null, new_type: null }])).toBe("Every identifier column names its type: pick one of the site's, or make a new one.");
+    // several identifier columns of one type are several identifiers of one person, and are refused by nothing
+    expect(mapRefusal([guesses[0], guesses[0], code])).toBeNull();
+  });
+});
+
+describe("what the map's file must be, and what its report says in every branch", () => {
+  it("takes a file with a header and rows under it, whatever separates its columns", () => {
+    expect(csvRefusal(parseCsv("pn,code\n1,S-1\n"))).toBeNull();
+    // what a spreadsheet writes in a Swedish locale: the columns are read here and the rows are posted as values, so the file's own
+    // separator reaches the engine in nothing, and a file the desk once sent a person away to save again imports as it is
+    const semicolons = parseCsv("pn;code\n199001019999;S-1\n199002029999;S-2\n");
+    expect(csvRefusal(semicolons)).toBeNull();
+    expect(semicolons.header).toEqual(["pn", "code"]);
+    expect(semicolons.rows).toEqual([
+      ["199001019999", "S-1"],
+      ["199002029999", "S-2"],
+    ]);
+    // and the columns of such a file are read for what they are, exactly as a comma-separated one's are
+    expect(guessRole(semicolons.header[0], lookAt(semicolons.header[0], semicolons.rows.map((r) => r[0])), types)).toEqual({ role: "identifier", id_type: "personnummer", new_type: null });
+    expect(guessRole(semicolons.header[1], lookAt(semicolons.header[1], semicolons.rows.map((r) => r[1])), types).role).toBe("code");
+    expect(csvRefusal(parseCsv("pn\tcode\n1\tS-1\n"))).toBeNull();
+    expect(csvRefusal(parseCsv("pn,code\n"))).toBe("The file has a header and no rows under it.");
+    expect(csvRefusal({ header: [], rows: [], delimiter: "," })).toBe("The first line names the columns, and this file has no such line.");
+    // the door takes a hundred thousand rows in one call and answers the rest with a refusal, so the file is stopped here instead
+    const many = { header: ["pn"], rows: Array.from({ length: MAX_MAP_ROWS + 1 }, () => ["199001019999"]), delimiter: "," };
+    expect(csvRefusal(many)).toBe("100,001 rows: the engine takes 100,000 in one go. Split the file, or leave it where the engine can read it and file it as a job.");
+    expect(csvRefusal({ ...many, rows: many.rows.slice(0, MAX_MAP_ROWS) })).toBeNull();
+  });
+
+  it("reads the report with the same keys whatever the engine left out, so a refused run renders no undefined number", () => {
+    const empty = reportOf({});
+    expect(empty).toEqual({
+      subjects: { named: 0, known: 0, new: 0 },
+      identifiers: { filed: 0, known: 0, new: 0, types_new: 0 },
+      held_released: 0,
+      held_released_by: [],
+      merges: [],
+      conflicts: [],
+    });
+    expect(reportLines(empty).map((l) => l.words.includes("undefined"))).toEqual([false, false, false, false, false]);
+    expect(reportLines(reportOf(null))[0].words).toBe("0 named · 0 known · 0 new, with codes derived from their number");
+    // what the engine does say is kept, the rows it read among it
+    const said = reportOf({ rows: 12, subjects: { named: 12, known: 10, new: 2 }, identifiers: { filed: 12, known: 10, new: 2, types_new: ["site-id"] }, held_released: { released: 3, of: 4 }, conflicts: [{ row: 4, why: "on another subject" }] });
+    expect(said.rows).toBe(12);
+    expect(said.identifiers.types_new).toEqual(["site-id"]);
+    expect(said.held_released).toEqual({ released: 3, of: 4 });
+    expect(said.conflicts).toEqual([{ row: 4, why: "on another subject" }]);
+    // and nonsense in place of a list is no list at all, never a crash
+    expect(reportOf({ merges: "several", conflicts: 3 })).toMatchObject({ merges: [], conflicts: [] });
   });
 });
 
@@ -214,7 +270,6 @@ describe("the words of a dataset", () => {
     expect(leavingRefusal({ dates: "keep", uids: "preserve", deface: false })).toBeNull();
     expect(bytesWords(2.4e12)).toBe("2.4 TB");
     expect(bytesWords(5e8)).toBe("500 MB");
-    expect(tagList("StudyDescription, SeriesDescription\nStudyDescription")).toEqual(["StudyDescription", "SeriesDescription"]);
   });
 });
 
@@ -283,19 +338,9 @@ describe("acting on the originals of a dataset", () => {
     });
   });
 
-  it("says what the act would reach, line by line, and what a held file's original still is", () => {
+  it("says what the act would move, in files and in what they weigh", () => {
     expect(movingWords(look)).toBe("18,420 files · 2.4 GB");
     expect(movingWords(null)).toBe("the engine has not said");
-    const lines = originalsLines(look);
-    expect(lines.map((l) => l.label)).toEqual(["files", "verified", "not verified", "held"]);
-    expect(lines[1].words).toBe("18,402 files have a pseudonymised copy the engine checked");
-    expect(lines[2]).toEqual({ label: "not verified", words: "18 files have no checked copy in dcm-anon", tone: "caution" });
-    expect(lines[3].words).toBe("4 files are held until mapped: their originals are what a map would still release");
-    const clean = originalsLines({ ...look, unverified: 0, held: 0 });
-    expect(clean[2].words).toBe("none: every file is accounted for in dcm-anon");
-    expect(clean[2].tone).toBeUndefined();
-    expect(clean[3].words).toBe("none");
-    expect(originalsLines({ ...look, held: 1 })[3].words).toBe("1 file is held until mapped: its original is what a map would still release");
   });
 
   it("refuses a purge in the engine's own words, never in the desk's", () => {
@@ -426,22 +471,23 @@ describe("what a change to the dataset sends", () => {
     arrives: "identified",
     unmapped: "hold",
     cohort: "  nmosd  ",
-    tags: { keep_demographics: true, remove: ["StudyDescription"], keep: [] },
     on_release: { dates: "shift", uids: "remap", deface: false },
   };
 
-  it("sends the dataset's own fields, and nothing of where the originals stand", () => {
+  it("sends the dataset's own fields, and nothing of where the originals stand or of the tags", () => {
     const patch = changePatch(fields);
     expect(patch).toEqual({
       arrives: "identified",
       unmapped: "hold",
       cohort: "nmosd",
-      tags: { keep_demographics: true, remove: ["StudyDescription"], keep: [] },
       handling: { arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: false } },
     });
     // the two the act alone may write are not among the keys: a form cannot declare the originals purged while they are on disk
     expect(Object.keys(patch)).not.toContain("originals_kept");
     expect(Object.keys(patch)).not.toContain("originals_vault");
+    // nor are the tag lists, which the chooser owns: a body that names none leaves them as they stand, so saving this form after the
+    // chooser cannot undo what the chooser wrote
+    expect(Object.keys(patch)).not.toContain("tags");
     // a cohort taken away is sent as none, and a coded dataset is handled as de-identified
     expect(changePatch({ ...fields, cohort: "   " }).cohort).toBeNull();
     expect(changePatch({ ...fields, arrives: "coded" }).handling?.arrives).toBe("deidentified");

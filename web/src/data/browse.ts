@@ -7,6 +7,7 @@
 // admin on the host.
 
 import { door } from "../ask/client";
+import type { Layout } from "./datasets";
 
 /** A place in force that holds a folder. */
 export interface PlaceRef {
@@ -16,7 +17,20 @@ export interface PlaceRef {
 
 export interface IngestRoot {
   name: string;
+  /**
+   * Where `@name` resolves to, which since contract 5 is the pseudonymised
+   * tree of the dataset declared on the location, and the folder itself where
+   * no dataset is declared on it.
+   */
   path: string;
+  /**
+   * The folder the engine was started with: the folder itself, whatever is
+   * declared on it. An engine before contract 5 says nothing here, and there
+   * the folder and `path` are one and the same.
+   */
+  given?: string;
+  /** The dataset's originals, which `@name/originals` names; null where the location holds none. */
+  originals?: string | null;
   place: PlaceRef | null;
 }
 
@@ -70,6 +84,8 @@ export interface Look {
   here: Omit<LookedFolder, "name" | "looked"> | null;
   folders: LookedFolder[];
   timed_out: boolean;
+  /** The layout the folder holds, where the engine names one: a v0 cohort folder. */
+  layout?: Layout | null;
 }
 
 /** The folders a page asks for. */
@@ -80,4 +96,10 @@ export const ingest = {
   folders: (at: string, filter: string, after: string | null, limit = PAGE) =>
     door<FolderPage>("POST", "/api/ingest/folders", { at, limit, ...(filter ? { filter } : {}), ...(after ? { after } : {}) }),
   look: (at: string, names: string[]) => door<Look>("POST", "/api/ingest/look", { at, names }),
+  /**
+   * What is in one folder, by its location or by a bare absolute path, which
+   * the look door takes at contract 5: the way the desk looks at a folder
+   * before a dataset is declared on it.
+   */
+  lookHere: (folder: string) => door<Look>("POST", "/api/ingest/look", folder.startsWith("@") ? { at: folder, names: [] } : { path: folder, names: [] }),
 };

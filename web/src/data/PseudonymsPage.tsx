@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Pseudonymisation page of a dataset, in four sections: identifiers
-// become codes (the rule, the map by type, the code, where the identifiers
-// are kept, what is held, what merged); the pseudonymised tree (the two
-// trees and the tag facts, tag group by tag group); who sees what (the
-// detail levels with how many people hold each); and when it leaves (the
-// leaving policy). At the side: the files held until mapped with their
-// three ways out, the two questions the identity-check station answers,
-// and what waits on Review. Provide a map reads a CSV on this machine,
-// guesses each column, rehearses the import and files it; Change edits the
-// dataset's fields through its place, and where the originals stand is not
-// among them, since only the act that moves or removes the files writes
-// that. What a dialog was told is held here, by the page, so that reading
-// the dataset again under an open dialog never loses an answer. Every
-// control is gated on the door behind it: an engine without the door leaves
-// one line in its place.
+// The Pseudonymisation page of a dataset (record 27, R1): the value, not the
+// sentence. Identity holds the two trees, what a file's identifier is read
+// from and what the map knows; Tags holds the removed tags by group and what
+// this dataset adds to them; When it leaves holds the dates, the UIDs and the
+// faces. What used to stand in grey beside every value is behind one
+// disclosure a card. At the side: the files held until mapped with their
+// three ways out, where the originals stand with the acts on them, the two
+// questions the identity-check station answers, and what waits on Review.
+// Provide a map reads a CSV on this machine, guesses each column, rehearses
+// the import and files it; Change edits the dataset's fields through its
+// place, and where the originals stand is not among them, since only the act
+// that moves or removes the files writes that. What a dialog was told is held
+// here, by the page, so that reading the dataset again under an open dialog
+// never loses an answer. Every control is gated on the door behind it: an
+// engine without the door leaves one line in its place.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -21,13 +21,12 @@ import { needsWork } from "../access";
 import { stations, stationsServed, type StationRun, type Verdict } from "../assistant/stations";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
-import { may, sees, type Detail } from "../grants";
+import { may, sees } from "../grants";
 import { objects } from "../objects/client";
 import { ops, type ReviewItem } from "../ops/client";
 import { href } from "../routes";
 import { assistantOffered } from "../sections";
 import { messageOf } from "../settings/common";
-import { identity, RECORD_WORDS, type Access } from "../settings/identity";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -36,18 +35,19 @@ import {
   arrivesWords,
   bytesWords,
   changePatch,
+  csvRefusal,
   datasets,
-  detailCounts,
   guessRole,
   heldGroups,
   heldLine,
-  identityWords,
   importColumns,
   leavingRefusal,
   leavingWords,
   linkage,
   lookAt,
   mapRefusal,
+  MAX_MAP_ROWS,
+  reportOf,
   NOTHING_ASKED,
   NOTHING_TYPED,
   originals as originalsDoor,
@@ -61,12 +61,11 @@ import {
   ruleWords,
   sawOf,
   shapeWords,
-  subjectsWords,
-  tagList,
   typeName,
   vaultedInto,
   waitingLines,
   type ColumnLook,
+  type ColumnRole,
   type Csv,
   type Dataset,
   type Guess,
@@ -84,20 +83,49 @@ import {
 import { countWords } from "./datasets";
 import { PurgeDialog, VaultDialog } from "./Originals";
 import { sources, whenWords, type Handling } from "./sources";
+import { TagsDialog } from "./Tags";
 
 // the whole sources answer is held, not the one dataset alone: a vault goes into no dataset's folder or trees, another's as much as this one's
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; dataset: Dataset | null; datasets: Dataset[] };
 // what a dialog has been told is held here, by the page, so that reading the dataset again under an open dialog never takes a person's answers away
-type Opened = { kind: "map" } | { kind: "held" } | { kind: "change" } | { kind: "vault"; ask: VaultAsk } | { kind: "purge"; ask: PurgeAsk } | null;
+type Opened = { kind: "map" } | { kind: "held" } | { kind: "change" } | { kind: "tags" } | { kind: "vault"; ask: VaultAsk } | { kind: "purge"; ask: PurgeAsk } | null;
 type Check = { kind: "idle" } | { kind: "running"; question: string; since: number; run: StationRun | null } | { kind: "done"; question: string; run: StationRun; verdict: Verdict | null } | { kind: "failed"; question: string; why: string };
+
+/** A fact as its value: what it is in small letters, then the value alone. */
+type Cell = { k: string; v: string; title?: string };
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; name: string; onChanged?: () => void }) {
+/** A tree's files, or that the engine has not counted them yet. */
+const filesWords = (files: number | null | undefined) => (typeof files === "number" ? `${n(files)} ${files === 1 ? "file" : "files"}` : countWords(files));
+
+function Values({ cells }: { cells: Cell[] }) {
+  return (
+    <div className="values">
+      {cells.map((c) => (
+        <div key={c.k} title={c.title}>
+          <span className="k">{c.k}</span>
+          <span className="v">{c.v}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The sentence that used to stand beside every value, closed until it is asked for. */
+function Says({ head, children }: { head: string; children: string }) {
+  return (
+    <details className="says">
+      <summary>{head}</summary>
+      <p>{children}</p>
+    </details>
+  );
+}
+
+export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Capabilities; name: string; onChanged?: () => void; onOpenTags?: () => void }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [types, setTypes] = useState<TypesDoc | null>(null);
   const [held, setHeld] = useState<HeldRow[] | null>(null);
-  const [access, setAccess] = useState<Access | null>(null);
   const [review, setReview] = useState<ReviewItem[]>([]);
   const [opened, setOpened] = useState<Opened>(null);
   const [check, setCheck] = useState<Check>({ kind: "idle" });
@@ -129,7 +157,6 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
       .catch((e: unknown) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: messageOf(e) })));
     if (served(caps, "GET /api/linkage/types")) linkage.types().then(setTypes, () => setTypes(null));
     if (heldServed) linkage.held(name).then(setHeld, () => setHeld(null));
-    if (may(caps, "identity:see") && caps.desk.mode !== "off") identity.access().then(setAccess, () => setAccess(null));
     if (served(caps, "GET /api/review") && may(caps, "review:see")) ops.review("open", undefined, 500).then((r) => setReview(r.items), () => undefined);
     if (served(caps, "GET /api/places") && may(caps, "places:see")) objects.places().then((r) => setPlaces(r.places), () => setPlaces([]));
   }, [name, caps, heldServed]);
@@ -208,22 +235,74 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
   const heldFiles = dataset.held?.files ?? (held ?? []).reduce((s, r) => s + r.files, 0);
   const heldIds = dataset.held?.identifiers ?? (held ?? []).length;
   const groups = heldGroups(held ?? []);
-  const counts = detailCounts(access);
   const acts = originalsActs(caps, dataset);
   const identityItems = review.filter((i) => /^(identity|linkage)[.:]/.test(i.kind) && ofDataset(i, name));
   const waiting = waitingLines(identityItems, dataset.held?.files ?? null);
   const pixelItems = review.filter((i) => /pixel|burn/.test(i.kind) && ofDataset(i, name));
   const arrives = dataset.arrives ?? (dataset.handling?.arrives === "deidentified" ? "deidentified" : "identified");
   const onRelease = dataset.handling?.on_release;
-  const typeLine = types
-    ? [
-        types.types.map((t) => `${t.name}${typeof t.identifiers === "number" ? ` ${n(t.identifiers)}` : ""}`).join(" · "),
-        typeof types.several === "number" ? `${n(types.several)} subjects carry more than one type` : null,
-        types.filed && types.filed.length > 0 ? `filed ${types.filed.slice(-3).map((d) => whenWords(d)).join(", ")}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : null;
+  const batches = [...new Set(groups.flatMap((g) => g.batches))];
+
+  // who a file is about: where the identifier is read, and what kind of identifier it is
+  const rule = dataset.identity ?? null;
+  const from = rule?.from?.[0];
+  const readFrom = from?.field ? from.field : from?.path ? `folder ${from.path.segment} of the path` : "PatientID";
+  const verbatim = rule?.code === "verbatim" || arrives === "coded";
+  const originalsTree = dataset.trees?.originals ?? null;
+  const anonTree = dataset.trees?.anon ?? null;
+  const tags = dataset.tags ?? null;
+  // the chooser shows all hundred by group, what becomes of each and what this dataset keeps; a person who may not change them still reads it
+  const openTags = onOpenTags ?? (() => setOpened({ kind: "tags" }));
+
+  const mapCells: Cell[] = [];
+  if (types === null) mapCells.push({ k: "the map", v: served(caps, "GET /api/linkage/types") ? "not read" : "not listed here" });
+  else if (types.types.length === 0) mapCells.push({ k: "the map", v: "nothing filed yet" });
+  else {
+    const filed = types.filed && types.filed.length > 0 ? `filed ${types.filed.slice(-3).map((d) => whenWords(d)).join(", ")}` : undefined;
+    if (typeof types.identifiers === "number") mapCells.push({ k: "identifiers", v: n(types.identifiers), title: filed });
+    mapCells.push({
+      k: types.types.length === 1 ? "type" : "types",
+      v: types.types.map((t) => `${t.name}${typeof t.identifiers === "number" ? ` ${n(t.identifiers)}` : ""}`).join(" · "),
+      title: typeof types.several === "number" ? `${n(types.several)} subjects carry more than one` : undefined,
+    });
+    if (typeof types.subjects === "number") mapCells.push({ k: "subjects", v: n(types.subjects) });
+  }
+
+  const identityCells: Cell[] = [
+    { k: "read from", v: readFrom },
+    { k: "identifier", v: verbatim ? "taken as the code" : (rule?.id_type ?? "through the map") },
+    ...mapCells,
+    { k: "an unknown one", v: dataset.unmapped === "code" ? "coded from itself" : "held until mapped" },
+    ...(types === null
+      ? []
+      : [
+          {
+            k: "merged",
+            v: types.merged && types.merged.subjects > 0 ? `${n(types.merged.subjects)} subjects` : "none",
+            title: types.merged?.last ? `last ${whenWords(types.merged.last)}` : undefined,
+          },
+        ]),
+  ];
+
+  const tagCells: Cell[] = [
+    { k: "removed", v: `${REMOVED_TOTAL} tags` },
+    { k: "PatientID", v: "the code" },
+    { k: "kept on purpose", v: tags?.keep_demographics === false ? "none, by this dataset" : "sex, weight, size" },
+    { k: "written", v: "PatientAge", title: "computed before the birth date goes" },
+    { k: "kept", v: "dates, times, UIDs" },
+    { k: "private tags", v: "dropped, bar the pack's own" },
+    { k: "overlays, curves", v: "dropped" },
+    { k: "also removed", v: tags && tags.remove.length > 0 ? tags.remove.join(", ") : "none" },
+    { k: "also kept", v: tags && tags.keep.length > 0 ? tags.keep.join(", ") : "none" },
+    { k: "pixels", v: "untouched" },
+    { k: "re-runs", v: "only what changed" },
+  ];
+
+  const leavingCells: Cell[] = [
+    { k: "dates", v: onRelease?.dates === "shift" ? "shifted" : onRelease?.dates === "year" ? "cut to the year" : "kept" },
+    { k: "UIDs", v: onRelease?.uids === "remap" ? "remapped from the key" : "kept" },
+    { k: "faces", v: onRelease?.deface ? "removed" : "kept" },
+  ];
 
   return (
     <section className="bpage">
@@ -241,7 +320,9 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
         <div className="data-head">
           <div className="grow">
             <h1>Pseudonymisation of {dataset.name}</h1>
-            <p className="lede">Who each file is about, what the pseudonymised tree keeps, who sees what, and what leaves.</p>
+            <p className="lede">
+              Arrives {arrives === "identified" ? "identified" : arrives === "deidentified" ? "de-identified" : "coded"} · {heldFiles > 0 ? `${n(heldFiles)} files held` : "nothing held"}
+            </p>
           </div>
           {maps && (
             <button type="button" className="button secondary" onClick={() => setOpened({ kind: "map" })}>
@@ -278,61 +359,43 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             <span className="sq brand">
               <Icon name="key" />
             </span>
-            <h2>1 · Identifiers become codes</h2>
-            {heldFiles > 0 && <span className="tag caution">{n(heldFiles)} files held</span>}
+            <h2>Identity</h2>
+            {heldFiles > 0 && <span className="tag caution">{n(heldFiles)} held</span>}
           </div>
-          <dl className="facts">
-            <dt>who a file is about</dt>
-            <dd>
-              {identityWords(dataset)} <span className="meta">· a type is chosen from the registry's list or made new</span>
-            </dd>
-            <dt>the map</dt>
-            <dd>
-              {types === null && (served(caps, "GET /api/linkage/types") ? "the types could not be read" : "this engine does not list the map's types")}
-              {types !== null && types.types.length === 0 && "no map filed yet: the identifiers are hashed under the key"}
-              {types !== null && types.types.length > 0 && (
-                <>
-                  {typeof types.identifiers === "number" && typeof types.subjects === "number"
-                    ? `${n(types.identifiers)} identifiers of ${n(types.types.length)} ${types.types.length === 1 ? "type" : "types"} on ${n(types.subjects)} subjects`
-                    : `${n(types.types.length)} ${types.types.length === 1 ? "type" : "types"}`}{" "}
-                  <span className="meta">· {typeLine}</span>
-                </>
-              )}
-            </dd>
-            <dt>the code</dt>
-            <dd>
-              {subjectsWords(dataset)} <span className="meta">· the same wherever they are seen</span>
-            </dd>
-            <dt>the identifiers</dt>
-            <dd>
-              sealed in the linkage store beside the registry, never in it <span className="meta">· every reading audited</span>
-            </dd>
-            <dt>held</dt>
-            <dd>
-              {heldFiles === 0 ? (
-                <>
-                  nothing held <span className="meta">· {dataset.unmapped === "code" ? "an unmapped identifier gets a code derived from it" : "an unmapped identifier holds its files until a map names it"}</span>
-                </>
-              ) : (
-                <>
-                  <b>{n(heldFiles)} files</b> of {n(heldIds)} {heldIds === 1 ? "identifier" : "identifiers"} the map does not know{groups[0]?.since ? `, since ${whenWords(groups[0].since)}` : ""}{" "}
-                  <span className="meta">
-                    ·{" "}
-                    <button type="button" className="link-button" onClick={() => setOpened({ kind: "held" })}>
-                      map them
-                    </button>
-                  </span>
-                </>
-              )}
-            </dd>
-            <dt>merged</dt>
-            <dd>
-              {types?.merged && types.merged.subjects > 0
-                ? `${n(types.merged.subjects)} subjects became fewer${types.merged.last ? ` on ${whenWords(types.merged.last)}` : ""}, when a map said so`
-                : "no subject merged yet"}{" "}
-              <span className="meta">· the old codes stay as their identifiers</span>
-            </dd>
-          </dl>
+          <div className="flow-two">
+            <div className="tree-card">
+              <div className="row">
+                <Icon name="lock" />
+                <b className="path">{originalsTree?.path ?? "derivatives/dcm-original"}</b>
+              </div>
+              <div className="row">
+                <b>{originalsTree ? filesWords(originalsTree.files) : "none"}</b>
+                <span className="meta">{originalsTree ? "locked" : "it arrives with no identifiers"}</span>
+              </div>
+            </div>
+            <Icon name="arrow" />
+            <div className="tree-card on">
+              <div className="row">
+                <Icon name="shield" />
+                <b className="path">{anonTree?.path ?? dataset.path}</b>
+              </div>
+              <div className="row">
+                <b>{filesWords(anonTree?.files)}</b>
+                <span className="meta">the registry's source{anonTree?.last_written ? ` · written ${whenWords(anonTree.last_written)}` : ""}</span>
+              </div>
+            </div>
+          </div>
+          <Values cells={identityCells} />
+          <Says head="Where the identifiers are kept">
+            Sealed in the store beside the registry, never in it, and every reading recorded. A code comes from the map and the key, so one person is one code in every dataset. The tree is laid out
+            code, study, series, instance.
+          </Says>
+          {may(caps, "identity:see") && (
+            <a className="tail" href={href("settings", "identity")}>
+              Who sees what, on Identity
+              <Icon name="chevron-right" />
+            </a>
+          )}
         </section>
 
         <section className="panel card">
@@ -340,144 +403,30 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             <span className="sq brand">
               <Icon name="shield" />
             </span>
-            <h2>2 · The pseudonymised tree</h2>
-            <span className="meta">tags only; pixels are never touched</span>
+            <h2>Tags</h2>
           </div>
-          <div className="pair">
-            <div className="tree-card">
-              <div className="row">
-                <Icon name="lock" />
-                <b className="path">{dataset.trees?.originals?.path ?? "derivatives/dcm-original"}</b>
-              </div>
-              <span className="meta">
-                {dataset.trees?.originals ? `${countWords(dataset.trees.originals.files)} files · ${typeof dataset.trees.originals.bytes === "number" ? `${bytesWords(dataset.trees.originals.bytes)} · ` : ""}` : arrives === "identified" ? "" : "no originals: the files arrive without identifiers · "}
-                locked to the stewards · read by the pseudonymiser only · never a source
-              </span>
-              <span className="meta">{originalsWords(dataset.originals_kept, vaulted ?? vaultedInto(dataset))}</span>
-              {(acts.vault || acts.purge) && (
-                <div className="row">
-                  {acts.vault && (
-                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "vault", ask: NOTHING_ASKED })}>
-                      Vault it
-                    </button>
-                  )}
-                  {acts.purge && (
-                    <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "purge", ask: NOTHING_TYPED })}>
-                      Purge it
-                    </button>
-                  )}
-                </div>
-              )}
-              {acts.refusal !== null && <span className="meta">{acts.refusal}</span>}
-            </div>
-            <div className="tree-card on">
-              <div className="row">
-                <Icon name="shield" />
-                <b className="path">{dataset.trees?.anon?.path ?? dataset.path}</b>
-              </div>
-              <span className="meta">
-                {dataset.trees?.anon ? `${countWords(dataset.trees.anon.files)} files · ` : ""}
-                written by NILS only · the registry's source{dataset.trees?.anon?.last_written ? ` · last written ${whenWords(dataset.trees.anon.last_written)}` : ""}
-              </span>
-              <span className="meta">layout from facts: code, study, series, instance · never the original path</span>
-            </div>
-          </div>
-          <dl className="facts">
-            <dt>PatientID</dt>
-            <dd>the code</dd>
-            <dt>removed</dt>
-            <dd>
-              {REMOVED_TOTAL} tags in four groups: {REMOVED_GROUPS.map((g) => `${g.group} ${g.tags}`).join(", ")} <span className="meta">· the earlier list, tag for tag</span>
-            </dd>
-            <dt>kept on purpose</dt>
-            <dd>
-              {dataset.tags?.keep_demographics === false ? (
-                <>
-                  <b>sex, weight, size</b> removed <span className="meta">· this dataset opted out of keeping them</span>
-                </>
-              ) : (
-                <>
-                  <b>sex, weight, size</b> <span className="meta">· in the patient group, but covariates, not identifiers: an opt-out here, recorded</span>
-                </>
-              )}
-            </dd>
-            <dt>written</dt>
-            <dd>
-              <b>PatientAge</b>, computed before the birth date goes
-            </dd>
-            <dt>kept</dt>
-            <dd>
-              <b>dates, times and UIDs</b>: the same study brought in twice is one study <span className="meta">· the date tags are the release's date policy</span>
-            </dd>
-            <dt>private tags</dt>
-            <dd>
-              all dropped; the pack keeps what it names by creator <span className="meta">· b-values, directions, the vendor fields it reads</span>
-            </dd>
-            <dt>overlays, curves</dt>
-            <dd>dropped</dd>
-            <dt>this dataset also</dt>
-            <dd>
-              {dataset.tags && (dataset.tags.remove.length > 0 || dataset.tags.keep.length > 0) ? (
-                <>
-                  {dataset.tags.remove.length > 0 && (
-                    <>
-                      removes {dataset.tags.remove.map((t, i) => (
-                        <span key={t}>
-                          {i > 0 ? ", " : ""}
-                          <span className="path">{t}</span>
-                        </span>
-                      ))}
-                    </>
-                  )}
-                  {dataset.tags.remove.length > 0 && dataset.tags.keep.length > 0 ? " · " : ""}
-                  {dataset.tags.keep.length > 0 && (
-                    <>
-                      keeps {dataset.tags.keep.map((t, i) => (
-                        <span key={t}>
-                          {i > 0 ? ", " : ""}
-                          <span className="path">{t}</span>
-                        </span>
-                      ))}
-                    </>
-                  )}
-                </>
-              ) : (
-                "removes nothing extra · keeps nothing extra"
-              )}{" "}
-              <span className="meta">· a declared list, written on every batch</span>
-            </dd>
-            <dt>text in pixels</dt>
-            <dd>a file that says nothing about it is marked, never read as clean</dd>
-            <dt>re-runs</dt>
-            <dd>only new or changed originals are written again</dd>
-          </dl>
-        </section>
-
-        <section className="panel card">
-          <div className="row card-head">
-            <span className="sq brand">
-              <Icon name="users" />
-            </span>
-            <h2>3 · Who sees what</h2>
-            <span className="meta">set per person on Identity</span>
-          </div>
-          <div className="strip small">
-            {(["plain", "quasi", "sensitive"] as Detail[]).map((d) => (
-              <div key={d} className={access ? "done" : undefined}>
-                <span className="k">{d}</span>
-                <span className="v">
-                  {access ? n(counts[d]) : ""}
-                  <small> {access ? (counts[d] === 1 ? "person" : "people") : caps.desk.mode === "off" ? "everyone here" : "people"}</small>
-                </span>
-                <span className="meta">{RECORD_WORDS[d].says}</span>
-              </div>
+          <div className="tagbar" aria-label="the removed tags by group">
+            {REMOVED_GROUPS.map((g) => (
+              <i key={g.group} className={g.group} style={{ width: `${(g.tags / REMOVED_TOTAL) * 100}%` }} />
             ))}
-            <div>
-              <span className="k">a job</span>
-              <span className="v">as its person</span>
-              <span className="meta">never reads more than who queued it</span>
-            </div>
           </div>
+          <div className="row legend">
+            {REMOVED_GROUPS.map((g) => (
+              <span key={g.group}>
+                <i className={`dot ${g.group}`} />
+                {g.group} {g.tags}
+              </span>
+            ))}
+          </div>
+          <Values cells={tagCells} />
+          <div className="row">
+            <button type="button" className="button secondary small" onClick={openTags}>
+              Choose tags
+            </button>
+          </div>
+          <Says head="Why the UIDs are kept">
+            Dates, times and UIDs stay in the file, so the same study brought in twice is one study and not two. What becomes of them when the scans leave is the card below.
+          </Says>
         </section>
 
         <section className="panel card">
@@ -485,32 +434,12 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             <span className="sq brand">
               <Icon name="release" />
             </span>
-            <h2>4 · When it leaves</h2>
-            <span className="meta">on top of the tree, written on every release</span>
+            <h2>When it leaves</h2>
           </div>
-          <dl className="facts">
-            <dt>dates</dt>
-            <dd>
-              <b>{onRelease?.dates === "shift" ? "shifted" : onRelease?.dates === "year" ? "cut to the year" : "kept"}</b>
-              {onRelease?.dates === "shift" && (
-                <>
-                  , one offset per person, every date in the file <span className="meta">· the offset lives with the identifiers</span>
-                </>
-              )}
-            </dd>
-            <dt>UIDs</dt>
-            <dd>
-              <b>{onRelease?.uids === "remap" ? "remapped" : "kept"}</b>
-              {onRelease?.uids === "remap" && (
-                <>
-                  {" "}
-                  from the key <span className="meta">· shifted dates with kept UIDs is refused</span>
-                </>
-              )}
-            </dd>
-            <dt>faces</dt>
-            <dd>{onRelease?.deface ? "removed by a pipeline over the released tree" : "kept · removing them is a pipeline over the released tree"}</dd>
-          </dl>
+          <Values cells={leavingCells} />
+          <Says head="What is refused">
+            Dates that move cannot keep the original UIDs, and that pair is refused. A shift is one offset a person, kept with the identifiers. Faces go by a pipeline over the released tree.
+          </Says>
         </section>
       </div>
 
@@ -520,8 +449,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             <Icon name="alert" size="lg" />
             <h2>Held until mapped</h2>
           </div>
-          {!heldServed && heldFiles === 0 && <p className="meta">This engine does not hold files for a map.</p>}
-          {heldServed && heldFiles === 0 && <p className="meta">Nothing is held: every identifier seen is in the map.</p>}
+          {heldFiles === 0 && <p className="meta">{heldServed ? "Nothing held." : "This engine holds no files for a map."}</p>}
           {groups.length > 0 && (
             <div className="reasons">
               {groups.map((g, i) => (
@@ -537,8 +465,9 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
           {heldFiles > 0 && groups.length === 0 && <p className="meta">{n(heldFiles)} files held; this engine does not list them by shape.</p>}
           {heldFiles > 0 && (
             <span className="meta">
-              {groups[0]?.since ? `since ${whenWords(groups[0].since)} · ` : ""}
-              {groups.flatMap((g) => g.batches).length > 0 ? `batch ${[...new Set(groups.flatMap((g) => g.batches))].join(", ")} · ` : ""}they stay in the originals
+              {n(heldIds)} {heldIds === 1 ? "identifier" : "identifiers"}
+              {groups[0]?.since ? ` · since ${whenWords(groups[0].since)}` : ""}
+              {batches.length > 0 ? ` · batch ${batches.join(", ")}` : ""}
             </span>
           )}
           {heldFiles > 0 && (
@@ -557,6 +486,33 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
               )}
             </div>
           )}
+        </section>
+        <section className="panel card">
+          <div className="row card-head">
+            <Icon name="lock" size="lg" />
+            <h2>The originals</h2>
+          </div>
+          <Values
+            cells={[
+              { k: "where they stand", v: originalsWords(dataset.originals_kept, vaulted ?? vaultedInto(dataset)) },
+              ...(typeof originalsTree?.bytes === "number" ? [{ k: "size", v: bytesWords(originalsTree.bytes) }] : []),
+            ]}
+          />
+          {(acts.vault || acts.purge) && (
+            <div className="row">
+              {acts.vault && (
+                <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "vault", ask: NOTHING_ASKED })}>
+                  Vault it
+                </button>
+              )}
+              {acts.purge && (
+                <button type="button" className="button quiet small" onClick={() => setOpened({ kind: "purge", ask: NOTHING_TYPED })}>
+                  Purge it
+                </button>
+              )}
+            </div>
+          )}
+          {acts.refusal !== null && <span className="meta">{acts.refusal}</span>}
         </section>
         <section className="panel card">
           <div className="row card-head">
@@ -633,11 +589,25 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
           }}
         />
       )}
+      {opened?.kind === "tags" && (
+        <TagsDialog
+          caps={caps}
+          dataset={dataset}
+          onClose={() => setOpened(null)}
+          onSaved={(words) => {
+            setOpened(null);
+            setSaid({ words, failed: false });
+            read();
+            onChanged?.();
+          }}
+        />
+      )}
       {opened?.kind === "change" && (
         <ChangeDialog
           dataset={dataset}
           acts={acts}
           onAct={(did) => setOpened(did === "vault" ? { kind: "vault", ask: NOTHING_ASKED } : { kind: "purge", ask: NOTHING_TYPED })}
+          onTags={openTags}
           onClose={() => setOpened(null)}
           onSaved={() => {
             setOpened(null);
@@ -828,14 +798,28 @@ interface Column {
   header: string;
   look: ColumnLook;
   guess: Guess;
+  /** The first values under the header, as the file has them. */
+  first: string[];
   /** The description of a new type, typed here. */
   description: string;
 }
 
-/** A column's meaning, as the select names it. */
-function roleValue(g: Guess): string {
-  if (g.role === "identifier") return g.id_type ? `type:${g.id_type}` : "new";
-  return g.role;
+/** What a column can be, in the order the select offers them. The engine takes these four and no others. */
+const ROLES: { value: ColumnRole; words: string }[] = [
+  { value: "identifier", words: "an identifier" },
+  { value: "canonical", words: "the number the code comes from" },
+  { value: "code", words: "the code itself" },
+  { value: "ignore", words: "not read" },
+];
+
+/** Whether a column of this role files under a type of the site's. */
+function typed(role: ColumnRole): boolean {
+  return role === "identifier" || role === "canonical";
+}
+
+/** The type a column files under, as the type select names it. */
+function typeValue(g: Guess): string {
+  return g.id_type !== null ? `type:${g.id_type}` : "new";
 }
 
 export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Capabilities; dataset: Dataset; types: IdType[]; onClose: () => void; onFiled: (words: string) => void }) {
@@ -854,43 +838,70 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
     f.text()
       .then((text) => {
         const csv = parseCsv(text);
-        if (csv.header.length === 0 || csv.rows.length === 0) {
-          setWhy("The file has no rows under a header.");
+        // what the engine will not read is said here, before a row of it is posted anywhere
+        const refused = csvRefusal(csv);
+        if (refused !== null) {
+          setFile(null);
+          setColumns([]);
+          setWhy(refused);
           return;
         }
         setFile({ name: f.name, csv });
         setColumns(
           csv.header.map((h, i) => {
-            const look = lookAt(h, csv.rows.map((r) => r[i] ?? ""));
-            return { header: h, look, guess: guessRole(h, look, types), description: "" };
+            const values = csv.rows.map((r) => r[i] ?? "");
+            const look = lookAt(h, values);
+            return { header: h, look, guess: guessRole(h, look, types), first: values.filter((v) => v.trim() !== "").slice(0, 3), description: "" };
           }),
         );
       })
       .catch((err: unknown) => setWhy(messageOf(err)));
   };
 
-  const setGuess = (i: number, value: string) => {
+  // a column changed, so what the rehearsal said no longer stands for these columns: it is asked again before anything can be filed
+  const change = (i: number, patch: (c: Column) => Column) => {
     setRehearsal({ kind: "idle" });
-    setColumns((was) =>
-      was.map((c, j) => {
-        if (j !== i) return c;
-        if (value === "new") return { ...c, guess: { role: "identifier", id_type: null, new_type: typeName(c.header) || "identifier" } };
-        if (value.startsWith("type:")) return { ...c, guess: { role: "identifier", id_type: value.slice(5), new_type: null } };
-        return { ...c, guess: { role: value as Guess["role"], id_type: null, new_type: null } };
-      }),
-    );
+    setColumns((was) => was.map((c, j) => (j === i ? patch(c) : c)));
   };
 
-  const refusal = columns.length > 0 ? mapRefusal(columns.map((c) => c.guess)) : null;
-  const newTypes = columns.filter((c) => c.guess.role === "identifier" && c.guess.new_type !== null);
-  const newTypeRefusal = newTypes.length > 0 && !makesTypes ? "This engine does not make identifier types; choose one of the registry's." : newTypes.some((c) => c.description.trim() === "") ? "A new type is made with a description." : null;
-  const body = (dryRun: boolean) => ({ place: dataset.name, columns: importColumns(columns.map((c) => c.header), columns.map((c) => c.guess)), rows: file?.csv.rows ?? [], dry_run: dryRun });
+  const setRole = (i: number, role: ColumnRole) =>
+    change(i, (c) => {
+      if (!typed(role)) return { ...c, guess: { role, id_type: null, new_type: null } };
+      if (c.guess.id_type !== null || c.guess.new_type !== null) return { ...c, guess: { ...c.guess, role } };
+      const g = guessRole(c.header, c.look, types);
+      return { ...c, guess: { role, id_type: g.id_type, new_type: g.new_type ?? (typeName(c.header) || "identifier") } };
+    });
+
+  const setType = (i: number, value: string) =>
+    change(i, (c) =>
+      value === "new" ? { ...c, guess: { ...c.guess, id_type: null, new_type: typeName(c.header) || "identifier" } } : { ...c, guess: { ...c.guess, id_type: value.slice(5), new_type: null } },
+    );
+
+  const guesses = columns.map((c) => c.guess);
+  const refusal = columns.length > 0 ? mapRefusal(guesses) : null;
+  const newTypes = columns.filter((c) => typed(c.guess.role) && c.guess.new_type !== null);
+  const newTypeRefusal =
+    newTypes.length === 0
+      ? null
+      : !makesTypes
+        ? "This engine makes no new types; choose one the site already has."
+        : newTypes.some((c) => c.description.trim() === "")
+          ? "A new type is made with a description: say in a few words what one of them is."
+          : null;
+  // the types a column names that the site has not got are made by the import itself; without that word the engine refuses the whole file rather than reading it
+  const body = (dryRun: boolean) => ({
+    place: dataset.name,
+    columns: importColumns(columns.map((c) => c.header), guesses),
+    rows: file?.csv.rows ?? [],
+    dry_run: dryRun,
+    make_types: newTypes.length > 0,
+  });
 
   const rehearse = () => {
     setRehearsal({ kind: "working", phase: "rehearsing the map", since: Date.now() });
     linkage
       .import(body(true))
-      .then((r) => setRehearsal({ kind: "report", report: r }))
+      .then((r) => setRehearsal({ kind: "report", report: reportOf(r) }))
       .catch((e: unknown) => setRehearsal({ kind: "failed", why: messageOf(e) }));
   };
 
@@ -908,17 +919,18 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
   };
 
   const report = rehearsal.kind === "report" ? rehearsal.report : null;
-  const conflicts = report?.conflicts?.length ?? 0;
+  const conflicts = report === null ? 0 : report.conflicts.length;
   const working = rehearsal.kind === "working";
+  const ready = file !== null && refusal === null && newTypeRefusal === null && !working;
 
   const foot = (
     <div className="row actions">
-      <span className="meta grow">{sensitive ? "Filed under your detail, sensitive." : "Filing a map needs detail sensitive; this account sees less, so the engine will refuse it."}</span>
+      <span className="meta grow">{sensitive ? "Read on this machine, posted once, and recorded as filed by you." : "Filing a map means reading identifiers, and you are not cleared to; the engine will refuse it."}</span>
       <button type="button" className="button secondary" onClick={onClose}>
         Cancel
       </button>
       {report === null ? (
-        <button type="button" className="button" disabled={file === null || refusal !== null || newTypeRefusal !== null || working} onClick={rehearse}>
+        <button type="button" className="button" disabled={!ready} onClick={rehearse}>
           See what it will do
         </button>
       ) : (
@@ -931,127 +943,189 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
 
   return (
     <Dialog title={`Provide a map for ${dataset.name}`} icon="file" onClose={onClose} foot={foot}>
-      <div className="field">
-        <span className="label">File</span>
-        <div className="field-row">
-          {file ? (
-            <>
-              <span className="chip">
-                <Icon name="file" />
-                {file.name}
-              </span>
-              <span className="meta">
-                {n(file.csv.rows.length)} rows · {n(file.csv.header.length)} columns · read on this machine, never kept
-              </span>
-            </>
-          ) : (
-            <span className="meta">A CSV of identifiers and who they belong to. It is read here and posted once to the engine.</span>
-          )}
-          <input type="file" accept=".csv,.tsv,.txt,text/csv,text/plain" onChange={pick} aria-label="Choose a CSV" />
-        </div>
-        {why && <p className="warn">{why}</p>}
-      </div>
-      {columns.length > 0 && (
+      <div className="mapsteps">
         <div className="field">
-          <span className="label">What each column is</span>
-          <div className="table-wrap">
-            <table className="thin">
-              <thead>
-                <tr>
-                  <th>Column</th>
-                  <th>Looks like</th>
-                  <th>Means</th>
-                </tr>
-              </thead>
-              <tbody>
-                {columns.map((c, i) => (
-                  <tr key={c.header}>
-                    <td className="path">{c.header}</td>
-                    <td className="meta">{c.look.words}</td>
-                    <td>
-                      <div className="column-role">
-                        <div className="input">
-                          <select value={roleValue(c.guess)} disabled={working} onChange={(e) => setGuess(i, e.target.value)} aria-label={`What ${c.header} means`}>
-                            {types.map((t) => (
-                              <option key={t.name} value={`type:${t.name}`}>
-                                an identifier of type {t.name}
-                              </option>
-                            ))}
-                            <option value="new">a new type: {c.guess.new_type ?? (typeName(c.header) || "identifier")}</option>
-                            <option value="canonical">the number that stands for the person</option>
-                            <option value="code">the code itself</option>
-                            <option value="ignore">ignored</option>
-                          </select>
-                        </div>
-                        {c.guess.role === "identifier" && c.guess.new_type !== null && (
-                          <div className="input">
-                            <input
-                              value={c.description}
-                              placeholder={`What a ${c.guess.new_type} is`}
-                              disabled={working}
-                              aria-label={`Describe the type ${c.guess.new_type}`}
-                              onChange={(e) => setColumns((was) => was.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <span className="label">1 &middot; The file</span>
+          <div className="field-row">
+            {file ? (
+              <>
+                <span className="chip">
+                  <Icon name="file" />
+                  {file.name}
+                </span>
+                <span className="meta">
+                  {n(file.csv.rows.length)} rows &middot; {n(file.csv.header.length)} columns
+                </span>
+              </>
+            ) : (
+              <span className="meta">A CSV: commas, one header row naming the columns, and a row for each person or identifier.</span>
+            )}
+            <input type="file" accept=".csv,text/csv,text/plain" onChange={pick} aria-label="Choose a CSV" />
           </div>
-          <span className="meta">
-            Any shape works: identifier to code, identifier to the person's number, or several identifiers in one row. A column may be ignored. A type is picked from the registry's list
-            {types.length > 0 ? ` (${types.map((t) => t.name).join(", ")})` : ""} or made here, with a description.
-          </span>
-          {refusal && <p className="warn">{refusal}</p>}
-          {!refusal && newTypeRefusal && <p className="warn">{newTypeRefusal}</p>}
+          <span className="meta">Up to {n(MAX_MAP_ROWS)} rows at once. It is read here in the browser and posted once to the engine; nothing of it is kept on this machine.</span>
+          {why && <p className="warn">{why}</p>}
         </div>
-      )}
-      {rehearsal.kind === "working" && <Wait phase={rehearsal.phase} since={rehearsal.since} />}
-      {rehearsal.kind === "failed" && <p className="warn">{rehearsal.why}</p>}
-      {report && (
-        <div className="field">
-          <span className="label">What it will do</span>
-          <dl className="facts">
-            {reportLines(report).map((l) => (
-              <div key={l.label} className="facts-pair">
-                <dt>{l.label}</dt>
-                <dd className={l.tone === "caution" ? "warn" : undefined}>{l.words}</dd>
-              </div>
-            ))}
-          </dl>
-          {conflicts > 0 && (
-            <div className="table-wrap">
-              <table className="thin">
-                <thead>
-                  <tr>
-                    <th className="num">Row</th>
-                    <th>Conflict</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {report.conflicts.slice(0, 50).map((c) => (
-                    <tr key={`${c.row}-${c.why}`}>
-                      <td className="num">{c.row}</td>
-                      <td>{c.why}</td>
-                    </tr>
+
+        {columns.length > 0 && (
+          <div className="field">
+            <span className="label">2 &middot; What each column is</span>
+            <MapColumns columns={columns} types={types} working={working} onRole={setRole} onType={setType} onDescription={(i, text) => change(i, (x) => ({ ...x, description: text }))} />
+            <span className="meta">
+              Several identifier columns in one row are several identifiers of one person. One column at most is the code and one at most is the number the code comes from; the rest are identifiers or
+              are not read. Every identifier column files under a type of the site&rsquo;s{types.length > 0 ? ` (${types.map((t) => t.name).join(", ")})` : ""}, or under a new one made here with a
+              description.
+            </span>
+            {refusal && <p className="warn">{refusal}</p>}
+            {!refusal && newTypeRefusal && <p className="warn">{newTypeRefusal}</p>}
+          </div>
+        )}
+
+        {columns.length > 0 && (
+          <div className="field">
+            <span className="label">3 &middot; The rehearsal</span>
+            {rehearsal.kind === "idle" && (
+              <span className="meta">
+                The engine reads the whole file and writes nothing: how many subjects it knows and how many are new, the identifiers it would file, the held files it would release, and every conflict.
+                Nothing can be filed until it has run and come back clean.
+              </span>
+            )}
+            {rehearsal.kind === "working" && <Wait phase={rehearsal.phase} since={rehearsal.since} />}
+            {rehearsal.kind === "failed" && <p className="warn">{rehearsal.why}</p>}
+            {report && (
+              <>
+                <dl className="facts">
+                  {reportLines(report).map((l) => (
+                    <div key={l.label} className="facts-pair">
+                      <dt>{l.label}</dt>
+                      <dd className={l.tone === "caution" ? "warn" : undefined}>{l.words}</dd>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-              {report.conflicts.length > 50 && <span className="meta">The first 50 of {n(report.conflicts.length)} conflicts.</span>}
-            </div>
-          )}
-        </div>
-      )}
-      <div className="note gated">
-        <Icon name="lock" />
-        <div className="note-body">
-          <p className="note-detail">Filed in the sealed store beside the registry, never in it. From now on any of these identifiers arriving in any dataset lands on the same subject, without a map.</p>
+                </dl>
+                {conflicts > 0 && (
+                  <div className="table-wrap">
+                    <table className="thin">
+                      <thead>
+                        <tr>
+                          <th className="num">Row</th>
+                          <th>Conflict</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {report.conflicts.slice(0, 50).map((c) => (
+                          <tr key={`${c.row}-${c.why}`}>
+                            <td className="num">{c.row}</td>
+                            <td>{c.why}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {report.conflicts.length > 50 && <span className="meta">The first 50 of {n(report.conflicts.length)}.</span>}
+                  </div>
+                )}
+                <span className="meta">
+                  {conflicts > 0
+                    ? "The map is read whole and applied whole: while one conflict stands, nothing at all is written. Mend those rows and rehearse it again."
+                    : "The map is read whole and applied whole, so what is above is what will happen. Filing it queues the work; held files it names are pseudonymised and brought in after."}
+                </span>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="note gated">
+          <Icon name="lock" />
+          <div className="note-body">
+            <p className="note-detail">
+              The identifiers go to the sealed store beside the registry, never into the registry itself, and filing a map is recorded against you. From now on any of these identifiers arriving in any
+              dataset lands on the same person, with no map at all.
+            </p>
+          </div>
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * The columns the file was found to have, each with the first values under it
+ * and what it means. The roles are written out one by one rather than looped
+ * over: a select whose children come out of a loop as a fragment is not laid
+ * out as options everywhere, and a role the engine does not take would be a
+ * refusal of the whole file.
+ */
+export function MapColumns({
+  columns,
+  types,
+  working,
+  onRole,
+  onType,
+  onDescription,
+}: {
+  columns: Column[];
+  types: IdType[];
+  working: boolean;
+  onRole: (i: number, role: ColumnRole) => void;
+  onType: (i: number, value: string) => void;
+  onDescription: (i: number, text: string) => void;
+}) {
+  return (
+    <div className="table-wrap">
+      <table className="thin map-cols">
+        <thead>
+          <tr>
+            <th>Column</th>
+            <th className="col-look">Looks like</th>
+            <th>Means</th>
+          </tr>
+        </thead>
+        <tbody>
+          {columns.map((c, i) => (
+            <tr key={c.header}>
+              <td>
+                <span className="path">{c.header}</span>
+                <div className="col-first">{c.first.length > 0 ? c.first.join(", ") : "empty"}</div>
+              </td>
+              <td className="meta col-look">{c.look.words}</td>
+              <td>
+                <div className="column-role">
+                  <div className="input">
+                    <select value={c.guess.role} disabled={working} onChange={(e) => onRole(i, e.target.value as ColumnRole)} aria-label={`What ${c.header} means`}>
+                      <option value="identifier">{ROLES[0].words}</option>
+                      <option value="canonical">{ROLES[1].words}</option>
+                      <option value="code">{ROLES[2].words}</option>
+                      <option value="ignore">{ROLES[3].words}</option>
+                    </select>
+                  </div>
+                  {typed(c.guess.role) && (
+                    <div className="input">
+                      <select value={typeValue(c.guess)} disabled={working} onChange={(e) => onType(i, e.target.value)} aria-label={`The type of ${c.header}`}>
+                        {types.map((t) => (
+                          <option key={t.name} value={`type:${t.name}`}>
+                            of type {t.name}
+                          </option>
+                        ))}
+                        <option value="new">a new type: {c.guess.new_type ?? (typeName(c.header) || "identifier")}</option>
+                      </select>
+                    </div>
+                  )}
+                  {typed(c.guess.role) && c.guess.new_type !== null && (
+                    <div className="input">
+                      <input
+                        value={c.description}
+                        placeholder={`What a ${c.guess.new_type} is`}
+                        disabled={working}
+                        aria-label={`Describe the type ${c.guess.new_type}`}
+                        onChange={(e) => onDescription(i, e.target.value)}
+                      />
+                    </div>
+                  )}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -1063,8 +1137,12 @@ export function HeldDialog({ caps, dataset, rows, onClose, onMap, onCode }: { ca
   const [way, setWay] = useState<Way>("map");
   const [revealed, setRevealed] = useState<{ kind: "idle" } | { kind: "working"; since: number } | { kind: "shown"; rows: Revealed[] } | { kind: "failed"; why: string }>({ kind: "idle" });
   const sensitive = sees(caps, "sensitive");
+  const maps = served(caps, "POST /api/linkage/imports");
   const codes = served(caps, "POST /api/linkage/held/code");
   const reveals = served(caps, "POST /api/linkage/held/reveal") && sensitive;
+  const groups = heldGroups(rows);
+  const files = dataset.held?.files ?? rows.reduce((s, r) => s + r.files, 0);
+  const identifiers = dataset.held?.identifiers ?? rows.length;
   const reveal = () => {
     setRevealed({ kind: "working", since: Date.now() });
     linkage
@@ -1088,8 +1166,8 @@ export function HeldDialog({ caps, dataset, rows, onClose, onMap, onCode }: { ca
         Close
       </button>
       {way === "map" && (
-        <button type="button" className="button" onClick={onMap}>
-          Upload a CSV
+        <button type="button" className="button" disabled={!maps} onClick={onMap}>
+          Provide a map
         </button>
       )}
       {way === "code" && (
@@ -1106,46 +1184,79 @@ export function HeldDialog({ caps, dataset, rows, onClose, onMap, onCode }: { ca
   );
   return (
     <Dialog title={`Held until mapped · ${dataset.name}`} icon="alert" onClose={onClose} foot={foot}>
-      <p className="lede held-lede">
-        Files whose identifier the map does not know. They stay in <span className="path">dcm-original</span>, reach neither <span className="path">dcm-anon</span> nor the registry, and are counted on their batch until someone says who they are about.
-      </p>
-      <div className="table-wrap">
-        <table className="thin">
-          <thead>
-            <tr>
-              <th>Identifier</th>
-              <th className="num">Files</th>
-              <th>Looks like</th>
-              <th>Batch</th>
-              <th>Since</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={5} className="meta">
-                  {dataset.held && dataset.held.files > 0 ? `${n(dataset.held.files)} files held; this engine does not list them by shape.` : "Nothing is held."}
-                </td>
-              </tr>
-            )}
-            {rows.map((r, i) => (
-              <tr key={`${r.shape}-${r.batch ?? ""}-${i}`}>
-                <td>
-                  <span className="path">{r.shape}</span> <span className="meta">shape only</span>
-                </td>
-                <td className="num">{n(r.files)}</td>
-                <td className="meta">{i === 0 ? `${shapeWords(r.shape)}, an identifier the map does not have` : `${shapeWords(r.shape)}, another shape in the identifier field`}</td>
-                <td className="path">{r.batch ?? ""}</td>
-                <td className="num">{r.first_seen ? whenWords(r.first_seen) : ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="note caution">
+        <Icon name="alert" />
+        <div className="note-body">
+          <p className="note-lead">
+            {n(files)} {files === 1 ? "file" : "files"}, {n(identifiers)} {identifiers === 1 ? "identifier" : "identifiers"} the map does not know
+          </p>
+          <p className="note-detail">
+            They stay in <span className="path">dcm-original</span>. They reach neither <span className="path">dcm-anon</span> nor the registry, no one is counted as their subject, and nothing of
+            them is lost: they wait here until someone says who they are about.
+          </p>
+        </div>
       </div>
-      <div className="choices">
-        {choice("map", "Provide a map", "A CSV naming these identifiers, their type, and the person's number or code. The files are pseudonymised and brought in as soon as it is filed.", served(caps, "POST /api/linkage/imports"))}
-        {choice("code", "Code them anyway", "Each gets a code derived from its identifier and a subject marked unmapped. A later map merges them into the right person.", codes)}
-        {choice("reveal", "Reveal them to me", sensitive ? "Show the identifiers themselves, once, audited." : "Show the identifiers themselves, once, audited. Needs detail sensitive, which this account does not hold.", reveals)}
+      <div className="field">
+        <span className="label">The shapes they have</span>
+        <div className="table-wrap">
+          <table className="thin">
+            <thead>
+              <tr>
+                <th>Shape</th>
+                <th className="num">Files</th>
+                <th className="num">Identifiers</th>
+                <th>Batch</th>
+                <th>First seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="meta">
+                    {files > 0 ? `${n(files)} files held; this engine does not list them by shape.` : "Nothing is held."}
+                  </td>
+                </tr>
+              )}
+              {groups.map((g) => (
+                <tr key={g.shape}>
+                  <td>
+                    <span className="path">{g.shape}</span> <span className="meta">{shapeWords(g.shape)}</span>
+                  </td>
+                  <td className="num">{n(g.files)}</td>
+                  <td className="num">{n(g.identifiers)}</td>
+                  <td className="path">{g.batches.join(", ")}</td>
+                  <td className="num">{g.since ? whenWords(g.since) : ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <span className="meta">A shape, never a value: every digit shows as 9 and every letter as A.</span>
+      </div>
+      <div className="field">
+        <span className="label">Three ways out</span>
+        <div className="choices">
+          {choice(
+            "map",
+            "Provide a map",
+            "A CSV naming these identifiers and who they belong to. The files are pseudonymised and brought in as soon as it is filed, and the same identifiers arriving again land on the same people.",
+            maps,
+          )}
+          {choice(
+            "code",
+            "Code them anyway",
+            "Each gets a code worked out from its own identifier, and its subject is marked as coded without a map. The files come in at the next run; a later map folds them into the right person.",
+            codes,
+          )}
+          {choice(
+            "reveal",
+            "Reveal them to me",
+            sensitive
+              ? "The identifiers themselves, shown once and never written down here. Each one is recorded as read by you."
+              : "The identifiers themselves. Only someone cleared to see identifiers may ask for this, and you are not.",
+            reveals,
+          )}
+        </div>
       </div>
       {revealed.kind === "working" && <Wait phase="reading the identifiers" since={revealed.since} />}
       {revealed.kind === "failed" && <p className="warn">{revealed.why}</p>}
@@ -1191,13 +1302,25 @@ export function HeldDialog({ caps, dataset, rows, onClose, onMap, onCode }: { ca
 
 /* ---------------------------------------------------------------- Change */
 
-export function ChangeDialog({ dataset, acts, onAct, onClose, onSaved }: { dataset: Dataset; acts: OriginalsActs; onAct: (did: "vault" | "purge") => void; onClose: () => void; onSaved: () => void }) {
+export function ChangeDialog({
+  dataset,
+  acts,
+  onAct,
+  onTags,
+  onClose,
+  onSaved,
+}: {
+  dataset: Dataset;
+  acts: OriginalsActs;
+  onAct: (did: "vault" | "purge") => void;
+  /** To the chooser, which owns the tag lists this form used to hold too. */
+  onTags: () => void;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [arrives, setArrives] = useState<NonNullable<Dataset["arrives"]>>(dataset.arrives ?? (dataset.handling?.arrives === "deidentified" ? "deidentified" : "identified"));
   const [unmapped, setUnmapped] = useState<"hold" | "code">(dataset.unmapped ?? "hold");
   const [cohort, setCohort] = useState(dataset.cohort ?? "");
-  const [demographics, setDemographics] = useState(dataset.tags?.keep_demographics ?? true);
-  const [remove, setRemove] = useState((dataset.tags?.remove ?? []).join("\n"));
-  const [keep, setKeep] = useState((dataset.tags?.keep ?? []).join("\n"));
   const [onRelease, setOnRelease] = useState<Handling["on_release"]>(dataset.handling?.on_release ?? { dates: "keep", uids: "remap", deface: false });
   const [why, setWhy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -1206,8 +1329,9 @@ export function ChangeDialog({ dataset, acts, onAct, onClose, onSaved }: { datas
   const save = () => {
     setSaving(true);
     setWhy(null);
-    // where the originals stand is not among the fields: only the act that moves or removes the files writes that word
-    const patch = changePatch({ arrives, unmapped, cohort, tags: { keep_demographics: demographics, remove: tagList(remove), keep: tagList(keep) }, on_release: onRelease });
+    // where the originals stand is not among the fields: only the act that moves or removes the files writes that word. Nor are the tag
+    // lists, which the chooser owns: a form that sent them would undo what the chooser wrote since this one was opened
+    const patch = changePatch({ arrives, unmapped, cohort, on_release: onRelease });
     datasets
       .set(dataset.id, patch)
       .then(onSaved)
@@ -1257,29 +1381,14 @@ export function ChangeDialog({ dataset, acts, onAct, onClose, onSaved }: { datas
       </div>
       <div className="field">
         <span className="label">Tags</span>
-        <label className="choice">
-          <input type="checkbox" checked={demographics} disabled={saving} onChange={(e) => setDemographics(e.target.checked)} />
-          Keep sex, weight and size: covariates, not identifiers
-        </label>
-        <div className="fields2">
-          <div className="field">
-            <label className="label" htmlFor="dataset-remove">
-              Also remove
-            </label>
-            <div className="input mono">
-              <textarea id="dataset-remove" rows={3} value={remove} disabled={saving} placeholder="StudyDescription" onChange={(e) => setRemove(e.target.value)} />
-            </div>
-          </div>
-          <div className="field">
-            <label className="label" htmlFor="dataset-keep">
-              Also keep
-            </label>
-            <div className="input mono">
-              <textarea id="dataset-keep" rows={3} value={keep} disabled={saving} placeholder="one tag keyword a line" onChange={(e) => setKeep(e.target.value)} />
-            </div>
-          </div>
+        <span className="meta">
+          Which tags this dataset keeps and removes, on top of the four groups that go on every batch, is chosen in Choose tags, where all hundred are listed with what becomes of each.
+        </span>
+        <div className="row">
+          <button type="button" className="button quiet small" disabled={saving} onClick={onTags}>
+            Choose tags
+          </button>
         </div>
-        <span className="meta">The four groups go on every batch; these lists are this dataset's own, on top.</span>
       </div>
       <div className="field">
         <span className="label">The originals</span>

@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Acting on a dataset's originals (record 26): the two dialogs behind Vault
-// it and Purge it on the Pseudonymisation page. Vaulting moves them into
-// another place, one of those the engine takes rather than any place at all,
-// and says what it leaves alone; purging removes them for good, so it says
-// what the engine answered the act would reach, asks why, and asks for the
-// dataset's name typed out. Neither dialog decides anything the engine
-// decides: a refusal is shown in the engine's own words, and the act itself
-// is a job like any other. Neither holds a person's answers either: the page
-// holds them, so that a read under an open dialog cannot lose a choice.
-// Each has a body that holds nothing, so a test can draw it in any state.
+// Acting on a dataset's originals (record 27, R6): the two dialogs behind
+// Vault it and Purge it on the Pseudonymisation page, as counts rather than
+// paragraphs. Vaulting moves them into another place, one of those the engine
+// takes rather than any place at all, and says what it leaves alone; purging
+// shows what the engine answered the act would reach as four numbers and a
+// forecast, each reason it could be held back on its own line with its own
+// count, then the reason for it and the dataset's name typed out. Neither
+// dialog decides anything the engine decides: a refusal is shown in the
+// engine's own words, the purge waits while the engine says it is not ready,
+// and the act itself is a job like any other. Neither holds a person's answers
+// either: the page holds them, so that a read under an open dialog cannot lose
+// a choice. Each has a body that holds nothing, so a test can draw it in any
+// state.
 
 import type { Capabilities } from "../capabilities";
 import { sees } from "../grants";
@@ -16,9 +19,9 @@ import { messageOf } from "../settings/common";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import {
+  bytesWords,
   movingWords,
   originals,
-  originalsLines,
   purgeAsked,
   purgeReady,
   purgeRefusal,
@@ -38,14 +41,65 @@ import {
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-/** What the foot says of the detail these acts are read at. */
+/** A fact as its value: what it is in small letters, then the value alone. */
+type Cell = { k: string; v: string };
+
+function Values({ cells }: { cells: Cell[] }) {
+  return (
+    <div className="values">
+      {cells.map((c) => (
+        <div key={c.k}>
+          <span className="k">{c.k}</span>
+          <span className="v">{c.v}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The sentence that used to stand beside a value, closed until it is asked for. */
+function Says({ head, children }: { head: string; children: string }) {
+  return (
+    <details className="says">
+      <summary>{head}</summary>
+      <p>{children}</p>
+    </details>
+  );
+}
+
+/** What the foot says of how far into a record these acts are read. */
 function detailWords(caps: Capabilities): string {
-  return sees(caps, "sensitive") ? "Run under your detail, sensitive." : "Acting on the originals needs detail sensitive; this account sees less, so the engine will refuse it.";
+  return sees(caps, "sensitive")
+    ? "Run as someone cleared to see identifiers, and recorded as yours."
+    : "Acting on the originals means reading identifiers, and you are not cleared to; the engine will refuse it.";
 }
 
 /** The roles the places themselves carry, for reading the role out of a refusal. */
 function rolesOf(places: readonly PlaceRow[]): string[] {
   return [...new Set(places.map((p) => p.role).filter((r): r is string => typeof r === "string"))];
+}
+
+/**
+ * What could hold a purge back, each with its own count. The engine decides,
+ * not this list: a reason stands only while the engine says it is not ready,
+ * and any reason it counts for itself, files that changed since they were
+ * read among them, is in its own words under these lines.
+ */
+function heldBack(look: OriginalsLook): { key: string; count: number; words: string; meta: string }[] {
+  return [
+    {
+      key: "map",
+      count: look.held,
+      words: look.held === 1 ? "file waits for a map" : "files wait for a map",
+      meta: "Their originals are what a map would still release.",
+    },
+    {
+      key: "copy",
+      count: look.unverified,
+      words: look.unverified === 1 ? "file has no checked copy" : "files have no checked copy",
+      meta: "No copy the engine checked stands for them in dcm-anon.",
+    },
+  ];
 }
 
 /* ---------------------------------------------------------------- Vault it */
@@ -80,17 +134,13 @@ export function VaultBody(props: {
   );
   return (
     <Dialog title={`Vault the originals of ${d.name}`} icon="lock" onClose={onClose} foot={foot}>
-      <dl className="facts">
-        <dt>what moves</dt>
-        <dd>
-          {movingWords(look)}
-          {look !== null && look.held > 0 && <span className="meta"> · {n(look.held)} held until mapped move with them</span>}
-        </dd>
-        <dt>from</dt>
-        <dd>
-          <span className="path">{d.trees?.originals?.path ?? "derivatives/dcm-original"}</span>
-        </dd>
-      </dl>
+      <Values
+        cells={[
+          { k: "what moves", v: movingWords(look) },
+          { k: "from", v: d.trees?.originals?.path ?? "derivatives/dcm-original" },
+          ...(look !== null && look.held > 0 ? [{ k: "held until mapped", v: `${n(look.held)} move with them` }] : []),
+        ]}
+      />
       <div className="field">
         <label className="label" htmlFor="vault-into">
           Where it goes
@@ -128,16 +178,10 @@ export function VaultBody(props: {
         <span className="meta">Recorded on the act, with who asked for it.</span>
       </div>
       {ask.refusal && <p className="warn">{ask.refusal}</p>}
-      <div className="note">
-        <Icon name="info" />
-        <div className="note-body">
-          <p className="note-lead">What this moves, and what it leaves</p>
-          <p className="note-detail">
-            It moves the originals out of the dataset and into the place above. The pseudonymised tree, the registry and every person's code are untouched: nothing that was read changes, and nothing is
-            read again.
-          </p>
-        </div>
-      </div>
+      <Says head="What this leaves untouched">
+        It moves the originals out of the dataset and into the place above. The pseudonymised tree, the registry and every person's code are untouched: nothing that was read changes, and nothing is read
+        again.
+      </Says>
     </Dialog>
   );
 }
@@ -199,25 +243,40 @@ export function PurgeBody(props: {
       {look === null ? (
         <p className="meta">This engine has not said what is there to purge.</p>
       ) : (
-        <dl className="facts">
-          {originalsLines(look).map((l) => (
-            <div key={l.label} className="facts-pair">
-              <dt>{l.label}</dt>
-              <dd className={l.tone === "caution" ? "warn" : undefined}>{l.words}</dd>
-            </div>
-          ))}
-        </dl>
+        <>
+          <Values
+            cells={[
+              { k: "files", v: n(look.files) },
+              { k: "size", v: bytesWords(look.bytes) },
+              { k: "copy checked", v: n(look.verified) },
+              { k: "held until mapped", v: n(look.held) },
+            ]}
+          />
+          <span className="meta">What the engine last saw: a forecast, not a promise.</span>
+          <div className="whys">
+            {heldBack(look).map((r) => (
+              <div key={r.key} className={!look.ready && r.count > 0 ? "why stands" : "why"}>
+                <b className="num">{n(r.count)}</b>
+                <span>{r.words}</span>
+                <span className="meta">{r.meta}</span>
+              </div>
+            ))}
+          </div>
+        </>
       )}
       <div className="note caution">
         <Icon name="alert" />
         <div className="note-body">
           <p className="note-lead">This cannot be undone</p>
           <p className="note-detail">
-            Purging removes the only identified copy of those scans. The pseudonymised tree, the registry and every person's code stay as they are, and nothing brings the original files back. A held
-            file's original is what a map would still release; once it is purged, a map releases nothing for it.
+            Purging removes the only identified copy of those scans, and nothing brings those files back. A held file's original is what a map would still release; once it is purged, a map releases
+            nothing for it.
           </p>
         </div>
       </div>
+      <Says head="What this leaves untouched">
+        The pseudonymised tree, the registry and every person's code stay as they are: nothing that was read changes, and nothing is read again. The original files alone go, and they go for good.
+      </Says>
       <div className="field">
         <label className="label" htmlFor="purge-why">
           Why

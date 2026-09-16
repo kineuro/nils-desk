@@ -47,16 +47,32 @@ export interface ExplainAxis {
   decision?: { kind: string; actor: string; why: string | null } | null;
 }
 
+/** What the site's adopted overlays put on one list, as the pack door reports it. */
+export interface SiteEdit {
+  add: string[];
+  remove: string[];
+  overlays: number[];
+}
+
 /** One value of one axis as the pack door lists it: its words, its flag and, from the signals, how it fared. */
 export interface PackValue {
   value: string;
   label: string | null;
   family: string | null;
+  /** The words that reach it, the site's adopted ones among them. */
   keywords: string[];
   /** The flag or the combination of flags the pack tries first, in words. */
   flag: string | null;
   /** The confidence threshold the value asks a person under, when the pack names one. */
   threshold: number | null;
+  /**
+   * The word list a site may amend, as `axis.value`, or null where this
+   * value is reached by no word and a site may add none. The pack computes
+   * it: a value the axis tries by keyword, or one a keyword rule sets.
+   */
+  list: string | null;
+  /** What the site's adopted overlays already put on that list; null where they put nothing. */
+  site: SiteEdit | null;
 }
 
 export interface PackAxis {
@@ -67,6 +83,8 @@ export interface PackAxis {
   /** How many values the door counted, when it listed no words. */
   counted: number;
   review_below: number | null;
+  /** When the axis is decided: what the stack is, or what to do with it. */
+  phase: string | null;
 }
 
 /** The pack as the door answers it, with what this page reads of it. */
@@ -79,6 +97,8 @@ export interface PackDoc {
   axes: PackAxis[];
   /** The four lists an engine at pack contract 4 lets a site amend, by name. */
   buckets: Record<string, string[]>;
+  /** The word lists a site may amend at pack contract 5, by `axis.value`. */
+  lists: string[];
 }
 
 /** An overlay document as the try and the propose doors take it. */
@@ -198,7 +218,7 @@ export function itemWords(item: ReviewItem): string {
     const value = text(ev.value) ?? text(ev.guess);
     if (k.what === "vote") return `${values.length > 1 ? values.join(" or ") : k.area}, the vote split${alike}`;
     if (k.what === "missing") return `no ${k.area} fits${alike}`;
-    if (k.what === "low_confidence") return `${value ? `${value}? ` : ""}${k.area} below the pack's confidence${alike}`;
+    if (k.what === "low_confidence") return `${value ? `${value}? ` : ""}the rules were not sure of ${k.area}${alike}`;
     if (k.what === "decision") return `a decision on ${k.area} disagrees with the rules${alike}`;
     return `${k.area}: ${k.what}${alike}`;
   }
@@ -281,6 +301,7 @@ export function packDoc(raw: Json): PackDoc {
   if (raw.buckets && typeof raw.buckets === "object") {
     for (const [name, words] of Object.entries(raw.buckets as Json)) if (Array.isArray(words)) buckets[name] = words.map(String);
   }
+  const lists = Array.isArray(raw.lists) ? raw.lists.map(String) : [];
   return {
     pack: text(raw.pack) ?? text(raw.name) ?? "",
     version: text(raw.version) ?? "",
@@ -295,15 +316,25 @@ export function packDoc(raw: Json): PackDoc {
         : listed && typeof listed === "object"
           ? Object.entries(listed as Json).map(([value, v]) => packValue({ value, ...((v as Json) ?? {}) }))
           : [];
-      const counted = num(listed) ?? values.length;
-      return { axis: name, multi: a.multi === true, values, counted, review_below: num(a.review_below) };
+      const counted = num(listed) ?? num(a.count) ?? values.length;
+      return { axis: name, multi: a.multi === true, values, counted, review_below: num(a.review_below), phase: text(a.phase) };
     }),
     buckets,
+    lists,
   };
 }
 
+function siteEdit(v: unknown): SiteEdit | null {
+  if (!v || typeof v !== "object") return null;
+  const s = v as Json;
+  const add = Array.isArray(s.add) ? s.add.map(String) : [];
+  const remove = Array.isArray(s.remove) ? s.remove.map(String) : [];
+  const overlays = Array.isArray(s.overlays) ? s.overlays.flatMap((o) => (typeof o === "number" ? [o] : [])) : [];
+  return add.length === 0 && remove.length === 0 ? null : { add, remove, overlays };
+}
+
 function packValue(v: Json | string): PackValue {
-  if (typeof v === "string") return { value: v, label: null, family: null, keywords: [], flag: null, threshold: null };
+  if (typeof v === "string") return { value: v, label: null, family: null, keywords: [], flag: null, threshold: null, list: null, site: null };
   const keywords = Array.isArray(v.keywords) ? v.keywords.map(String) : Array.isArray(v.words) ? v.words.map(String) : [];
   const det = (v.detection ?? v.flags ?? null) as Json | string[] | string | null;
   let flag: string | null = null;
@@ -315,7 +346,130 @@ function packValue(v: Json | string): PackValue {
     if (Array.isArray(det.combination) && det.combination.length > 0) parts.push(`${parts.length > 0 ? "else " : ""}${det.combination.map(String).join(" and ")}`);
     flag = parts.length > 0 ? parts.join(", ") : null;
   }
-  return { value: text(v.value) ?? text(v.name) ?? "", label: text(v.label), family: text(v.family), keywords, flag, threshold: num(v.threshold) ?? num(v.below) };
+  return {
+    value: text(v.value) ?? text(v.name) ?? "",
+    label: text(v.label),
+    family: text(v.family),
+    keywords,
+    flag,
+    threshold: num(v.threshold) ?? num(v.below),
+    list: text(v.list),
+    site: siteEdit(v.site),
+  };
+}
+
+/**
+ * What a site may add a word to, as the pack computes it rather than as the
+ * desk fixes it: a value carrying a list of its own at pack contract 5, or,
+ * on an older engine, one standing for a bucket the pack lets a site amend.
+ */
+export function valueEditable(pack: PackDoc, axis: string, value: string): boolean {
+  const key = `${axis}.${value}`;
+  if (pack.contract >= 5 && pack.lists.length > 0) return pack.lists.includes(key);
+  if (pack.contract >= 5) return (pack.axes.find((a) => a.axis === axis)?.values.find((v) => v.value === value)?.list ?? null) !== null;
+  const bucket = BUCKET_OF[key] ?? null;
+  return bucket !== null && bucket in pack.buckets;
+}
+
+/**
+ * Whether the pack reaches the axis by a word anywhere: a word on one of its
+ * values, or a list the pack opens on it, which is a word list a site may grow
+ * whether or not it holds a word today. A door that only numbered an axis's
+ * values says nothing either way, so such an axis is not taken for a wordless
+ * one. This is what the page marks as "no words", and it is the pack's answer:
+ * whether this engine lets a site amend those words is the separate question
+ * `axisEditable` asks.
+ */
+export function axisHasWords(pack: PackDoc, a: PackAxis): boolean {
+  if (a.values.length === 0) return true;
+  if (a.values.some((v) => v.keywords.length > 0 || v.list !== null)) return true;
+  return pack.lists.some((l) => l.startsWith(`${a.axis}.`));
+}
+
+/**
+ * Whether a site may add a word anywhere on the axis, under the same contract
+ * test each value is read under: the pack computes the lists it opens at every
+ * contract, and only contract 5 lets a site amend by them, so an engine at
+ * contract 4 is answered by its buckets alone. An engine that only numbered an
+ * axis's values still names the lists it opens, so such an axis is not
+ * mistaken for one no word may be added to.
+ */
+export function axisEditable(pack: PackDoc, a: PackAxis): boolean {
+  if (a.values.some((v) => valueEditable(pack, a.axis, v.value))) return true;
+  if (pack.contract < 5) return false;
+  return pack.lists.some((l) => l.startsWith(`${a.axis}.`));
+}
+
+/**
+ * Why an axis takes no word from a site, in a person's words: it carries none
+ * anywhere and is decided from the other axes, or it carries words this engine
+ * does not let a site amend.
+ */
+export function whyNoWords(pack: PackDoc, a: PackAxis): string {
+  if (a.values.length > 0 && !axisHasWords(pack, a)) {
+    return a.phase === "disposition"
+      ? "No words anywhere: it is decided from the axes above it."
+      : "No words anywhere: a flag or a rule decides it.";
+  }
+  if (a.values.length === 0) return "This engine lists no value of this axis, so it lists no words either.";
+  const amendable = Object.keys(pack.buckets);
+  if (amendable.length > 0) return `This engine lets a site grow ${amendable.join(", ")} only.`;
+  return "This pack opens no word list on this axis, so a site adds none to it.";
+}
+
+/**
+ * Why a site adds no word to one value, in a person's words. Two different
+ * things are refused the same way, so each says which it is: a value reached
+ * by no word at all takes none from anyone, and a value carrying words this
+ * engine does not let a site amend is refused by the engine, not by the pack.
+ */
+export function whyNoWordHere(pack: PackDoc, a: PackAxis, v: PackValue): string {
+  const reached = v.keywords.length > 0 || v.list !== null || pack.lists.includes(`${a.axis}.${v.value}`);
+  if (!reached) return "This value is reached by no word, so a site adds none to it.";
+  return whyNoWords(pack, a);
+}
+
+/** A value's words split in two: the ones the pack shipped, and the ones the site added. */
+export function wordsOf(v: PackValue): { shipped: string[]; added: string[] } {
+  const added = v.site?.add ?? [];
+  const lower = new Set(added.map((w) => w.toLowerCase()));
+  return { shipped: v.keywords.filter((w) => !lower.has(w.toLowerCase())), added };
+}
+
+/** One word on a value, as the page draws it: the pack's own, one a site adopted, or one only proposed. */
+export interface ValueWord {
+  word: string;
+  from: "pack" | "site" | "proposed";
+  /** Which scope adopted or proposed it; null for the pack's own words, and where no overlay on the page names the scope. */
+  scope: string | null;
+}
+
+/**
+ * A value's words in the order the page draws them: the pack's own first,
+ * then the ones a site adopted, each with the scope that adopted it, then the
+ * ones only proposed. The two answers are joined because neither is whole on
+ * its own. The pack door names a site's adopted words among the value's own at
+ * pack contract 5; at contract 4 a site amends a bucket, which the door names
+ * on no value, so the adopted overlays answer for those. A word both answer to
+ * is drawn once, with the scope the overlay names.
+ */
+export function valueWords(v: PackValue, overlays: OverlayRow[], axis: string): ValueWord[] {
+  const site = siteWords(overlays, axis, v.value);
+  const named = new Map(site.adopted.map((s) => [s.word.toLowerCase(), s.scope]));
+  const { shipped, added } = wordsOf(v);
+  const out: ValueWord[] = shipped.filter((w) => !named.has(w.toLowerCase())).map((word) => ({ word, from: "pack" as const, scope: null }));
+  const drawn = new Set<string>();
+  for (const word of added) {
+    drawn.add(word.toLowerCase());
+    out.push({ word, from: "site", scope: named.get(word.toLowerCase()) ?? null });
+  }
+  for (const s of site.adopted) {
+    if (drawn.has(s.word.toLowerCase())) continue;
+    drawn.add(s.word.toLowerCase());
+    out.push({ word: s.word, from: "site", scope: s.scope });
+  }
+  for (const s of site.proposed) out.push({ word: s.word, from: "proposed", scope: s.scope });
+  return out;
 }
 
 /** The axes rail: each axis with what its rules are made of, in words. */
@@ -365,7 +519,11 @@ export function wordOverlay(pack: PackDoc, axis: string, value: string, add: str
   if (words.length === 0 && gone.length === 0) return { overlay: null, why: "Write a word first." };
   const key = `${axis}.${value}`;
   const base: OverlayDoc = { pack: pack.pack, scope: scopeDoc(scope), ...(name ? { name, version: "1.0.0" } : {}) };
-  if (pack.contract >= 5) return { overlay: { ...base, lists: { [key]: { add: words, remove: gone } } }, why: null };
+  if (pack.contract >= 5) {
+    // the pack says which lists a site may amend; a value reached by no word has none, and the engine would refuse the overlay
+    if (!valueEditable(pack, axis, value)) return { overlay: null, why: `${axis} ${value} is reached by no word, so a site adds none to it.` };
+    return { overlay: { ...base, lists: { [key]: { add: words, remove: gone } } }, why: null };
+  }
   const bucket = BUCKET_OF[key] ?? Object.keys(pack.buckets).find((b) => b === key || b === `${axis}_${value}`.toLowerCase());
   if (!bucket || !(bucket in pack.buckets)) {
     const editable = Object.keys(pack.buckets);
@@ -528,7 +686,7 @@ export function becauseWords(a: ExplainAxis): string {
     return `a rule: ${first.rule}${first.rule_set ? ` of ${first.rule_set}` : ""}`;
   }
   if (a.value === null) return "no rule fired; nothing";
-  return `${tier || "a rule"}${a.confidence < 0.65 ? ", below the pack's confidence, so it asked" : ""}`;
+  return `${tier || "a rule"}${a.confidence < 0.65 ? ", not sure enough, so it asked" : ""}`;
 }
 
 /** Whether the person may decide, adopt, or merge here (record 25's grants, record 26's detail). */

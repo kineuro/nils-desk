@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Deciding one item (record 26): a classifier question takes a value, or
+// Deciding one item (record 27, R5d): a classifier question takes a value, or
 // nothing, at a scope (this scan, its series, this subject, this scanner) and
-// goes through the apply door; any other item is acknowledged with why. A
-// person's decision outranks the rules and survives re-sorting; the engine's
-// ranking says when one does not outrank the one before it.
+// goes through the apply door; any other item is acknowledged with why. Every
+// field of the old dialog stands; what a decision is worth against the rules
+// is one disclosure.
 
 import { useState } from "react";
 import { ops, type ReviewItem } from "../ops/client";
 import { Dialog } from "../ui/Dialog";
+import { Says } from "../ui/Says";
 import { itemWords, refusalWords, SCOPES, type PackDoc } from "./client";
 import { kindOf } from "./triage";
 
@@ -95,7 +96,6 @@ export function DecideDialog({ item, pack, guess = null, onClose, onDone }: Deci
               </button>
             ))}
           </span>
-          <span className="meta">A person's decision outranks the rules and survives re-sorting. A new pack that disagrees raises a new item; it never overwrites.</span>
         </div>
       )}
       <div className="field">
@@ -104,7 +104,11 @@ export function DecideDialog({ item, pack, guess = null, onClose, onDone }: Deci
           <input value={why} placeholder={axis ? "what you saw, in a few words" : "why it needs no decision"} aria-label="Why" onChange={(e) => setWhy(e.target.value)} />
         </span>
       </div>
-      {!axis && <p className="meta">Acknowledging records who looked and closes the item without a decision. An identity question is settled on the Identifiers page, by a map or a merge.</p>}
+      <Says head="What a decision is worth">
+        {axis
+          ? "A person's decision outranks the rules and survives re-sorting. A new pack that disagrees raises a new item; it never overwrites."
+          : "Acknowledging records who looked and closes the item without a decision. An identity question is settled on the Identifiers page, by a map or a merge."}
+      </Says>
     </Dialog>
   );
 }

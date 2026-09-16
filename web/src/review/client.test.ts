@@ -11,6 +11,8 @@ import type { OverlayRow, ReviewItem, Signals } from "../ops/client";
 import {
   acts,
   axisCounts,
+  axisEditable,
+  axisHasWords,
   axisWords,
   batchOf,
   becauseWords,
@@ -31,11 +33,16 @@ import {
   stackOf,
   tryWords,
   valueCounts,
+  valueEditable,
+  valueWords,
+  whyNoWordHere,
+  whyNoWords,
   withDocuments,
   wordOverlay,
+  wordsOf,
   type PackDoc,
 } from "./client";
-import { PACK } from "./pack.fixture";
+import { NO_WORDS, PACK, PACK_4 } from "./pack.fixture";
 
 function item(id: number, kind: string, scope: string, over: Partial<ReviewItem> = {}): ReviewItem {
   return { id, kind, scope, status: "open", created_at: "2026-09-10T10:00:00Z", ...over };
@@ -83,21 +90,127 @@ describe("what an item says", () => {
 });
 
 describe("a pack read into axes and words", () => {
-  it("lists values in the pack's order whether the door sent them as a list or by name, with their flag in words", () => {
-    expect(PACK.axes.map((a) => a.axis)).toEqual(["provenance", "technique", "base", "body_part", "post_contrast"]);
-    const t = PACK.axes[1];
+  // record 27, R5a: the fixture carries all eleven axes the pack declares, in the order
+  // they are decided, so the axes are named rather than reached by their position
+  const named = (name: string) => PACK.axes.find((a) => a.axis === name)!;
+  it("lists every axis in the order it is decided, and its values as the door sent them", () => {
+    expect(PACK.axes.map((a) => a.axis)).toEqual([
+      "provenance",
+      "technique",
+      "modifier",
+      "construct",
+      "base",
+      "body_part",
+      "post_contrast",
+      "directory_type",
+      "disposition",
+      "convertible",
+      "role",
+    ]);
+    const t = named("technique");
     expect(t.values.map((v) => v.value)).toEqual(["MS-EPI", "DWI-EPI", "SS-GRE"]);
-    expect(t.values[0]).toEqual({ value: "MS-EPI", label: "RESOLVE", family: "EPI", keywords: ["resolve", "muse"], flag: "is_epi_diff_resolve, else has_segmented_kspace and has_epi", threshold: null });
-    expect(PACK.axes[2].values[0].flag).toBe("is_t1");
-    expect(PACK.axes[2].values[0].threshold).toBe(0.65);
+    expect(t.values[0]).toEqual({
+      value: "MS-EPI",
+      label: "RESOLVE",
+      family: "EPI",
+      keywords: ["resolve", "muse"],
+      flag: "is_epi_diff_resolve, else has_segmented_kspace and has_epi",
+      threshold: null,
+      list: "technique.MS-EPI",
+      site: null,
+    });
+    expect(named("base").values[0].flag).toBe("is_t1");
+    expect(named("base").values[0].threshold).toBe(0.65);
+  });
+  it("reads the list a site may amend, and what the site's adopted overlays already put on one", () => {
+    expect(PACK.lists).toContain("technique.MS-EPI");
+    expect(PACK.lists).not.toContain("disposition.acquisition");
+    expect(named("disposition").values[0].list).toBeNull();
+    expect(named("construct").values[0].site).toEqual({ add: ["ep2d_site"], remove: [], overlays: [7] });
+    expect(wordsOf(named("construct").values[0])).toEqual({ shipped: ["adc", "trace"], added: ["ep2d_site"] });
+    expect(named("disposition").phase).toBe("disposition");
+    expect(named("base").phase).toBe("class");
   });
   it("says what an axis's rules are made of, and counts values an older door only numbered", () => {
-    expect(axisWords(PACK.axes[1])).toBe("3 lists");
-    expect(axisWords(PACK.axes[0])).toBe("1 list");
-    expect(axisWords(PACK.axes[2])).toBe("flags and physics");
-    expect(axisWords(PACK.axes[3])).toBe("4 values");
-    expect(PACK.axes[3].counted).toBe(4);
+    expect(axisWords(named("technique"))).toBe("3 lists");
+    expect(axisWords(named("provenance"))).toBe("2 lists");
+    expect(axisWords(named("base"))).toBe("flags and physics");
+    expect(axisWords(named("body_part"))).toBe("4 values");
+    expect(named("body_part").counted).toBe(4);
     expect(PACK.flags).toBe(138);
+  });
+});
+
+describe("what a site may add a word to", () => {
+  const named = (name: string) => PACK.axes.find((a) => a.axis === name)!;
+  const ENGINE = "This engine lets a site grow contrast_positive, contrast_negative, localizer_words, diffusion_tokens only.";
+
+  it("reads the axis under the same contract test as the value, since the engine computes the lists at every contract", () => {
+    // the engine computes a pack's lists from its rules whatever the contract, so a
+    // contract-4 pack answers the same lists while letting a site amend its buckets alone
+    expect(PACK_4.lists).toContain("technique.MS-EPI");
+    expect(valueEditable(PACK_4, "technique", "MS-EPI")).toBe(false);
+    expect(axisEditable(PACK_4, named("technique"))).toBe(false);
+    expect(valueEditable(PACK_4, "post_contrast", "yes")).toBe(true);
+    expect(axisEditable(PACK_4, named("post_contrast"))).toBe(true);
+    expect(axisEditable(PACK, named("technique"))).toBe(true);
+    // an axis this door only numbered still names the lists the pack opens on it
+    expect(axisEditable(PACK, named("body_part"))).toBe(true);
+    expect(axisEditable(PACK_4, named("body_part"))).toBe(false);
+  });
+
+  it("marks an axis wordless only where the pack reaches it by no word, whatever this engine lets a site amend", () => {
+    expect(axisHasWords(PACK, named("technique"))).toBe(true);
+    expect(axisHasWords(PACK_4, named("technique"))).toBe(true);
+    // base holds no word today, and the list the pack opens on it is a word list all the same
+    expect(axisHasWords(PACK, named("base"))).toBe(true);
+    expect(axisHasWords(PACK, named("body_part"))).toBe(true);
+    for (const name of NO_WORDS) expect(axisHasWords(PACK, named(name))).toBe(false);
+  });
+
+  it("says why no word may be added, the pack's reason apart from this engine's", () => {
+    expect(whyNoWords(PACK, named("disposition"))).toBe("No words anywhere: it is decided from the axes above it.");
+    expect(whyNoWords(PACK_4, named("technique"))).toBe(ENGINE);
+    expect(whyNoWords({ ...PACK_4, buckets: {} }, named("technique"))).toBe("This pack opens no word list on this axis, so a site adds none to it.");
+    expect(whyNoWordHere(PACK, named("disposition"), named("disposition").values[0])).toBe("This value is reached by no word, so a site adds none to it.");
+    // the value carries words: it is this engine that amends no list of them, not the pack that reaches it by none
+    expect(whyNoWordHere(PACK_4, named("technique"), named("technique").values[0])).toBe(ENGINE);
+    expect(whyNoWordHere(PACK_4, named("base"), named("base").values[0])).toBe(ENGINE);
+  });
+
+  it("joins a value's words: the pack's own, the site's with the scope that adopted each, then the ones only proposed", () => {
+    const rows: OverlayRow[] = [
+      { id: 1, name: "site-resolve", status: "adopted", scope: "scanner Prisma 3T", document: { lists: { "technique.MS-EPI": { add: ["ms_epi"], remove: [] } } } },
+      { id: 2, name: "tune", status: "proposed", scope: "batch alpha", document: { lists: { "technique.MS-EPI": { add: ["resolve_2"], remove: [] } } } },
+    ];
+    expect(valueWords(named("technique").values[0], rows, "technique")).toEqual([
+      { word: "resolve", from: "pack", scope: null },
+      { word: "muse", from: "pack", scope: null },
+      { word: "ms_epi", from: "site", scope: "scanner Prisma 3T" },
+      { word: "resolve_2", from: "proposed", scope: "batch alpha" },
+    ]);
+    // this door named the site's word among the value's own: it is the site's, and no overlay on the page says for which scope
+    const own = named("construct").values[0];
+    expect(valueWords(own, [], "construct")).toEqual([
+      { word: "adc", from: "pack", scope: null },
+      { word: "trace", from: "pack", scope: null },
+      { word: "ep2d_site", from: "site", scope: null },
+    ]);
+    const adopted: OverlayRow[] = [{ id: 3, name: "site-ep2d", status: "adopted", scope: "everything", document: { lists: { "construct.diffusion": { add: ["ep2d_site"], remove: [] } } } }];
+    expect(valueWords(own, adopted, "construct")).toEqual([
+      { word: "adc", from: "pack", scope: null },
+      { word: "trace", from: "pack", scope: null },
+      { word: "ep2d_site", from: "site", scope: "everything" },
+    ]);
+    // at contract 4 the door attaches the site's word to no value, and the adopted overlay answers for it through its bucket
+    const four = PACK_4.axes.find((a) => a.axis === "construct")!.values[0];
+    const bucket: OverlayRow[] = [{ id: 4, name: "site-ep2d", status: "adopted", scope: "everything", document: { buckets: { diffusion_tokens: { add: ["ep2d_site"], remove: [] } } } }];
+    expect(four.site).toBeNull();
+    expect(valueWords(four, bucket, "construct")).toEqual([
+      { word: "adc", from: "pack", scope: null },
+      { word: "trace", from: "pack", scope: null },
+      { word: "ep2d_site", from: "site", scope: "everything" },
+    ]);
   });
 });
 
@@ -118,6 +231,11 @@ describe("the overlay a word makes", () => {
     expect(refused.overlay).toBeNull();
     expect(refused.why).toMatch(/only contrast_positive, contrast_negative, localizer_words, diffusion_tokens/u);
     expect(wordOverlay(PACK, "technique", "SS-GRE", [], [], scope).why).toBe("Write a word first.");
+  });
+  it("refuses a value the pack reaches by no word, at contract 5, rather than write an overlay the engine would refuse", () => {
+    const made = wordOverlay(PACK, "disposition", "acquisition", ["working"], [], scope);
+    expect(made.overlay).toBeNull();
+    expect(made.why).toBe("disposition acquisition is reached by no word, so a site adds none to it.");
   });
 });
 

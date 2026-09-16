@@ -66,7 +66,7 @@ describe("Vault it", () => {
     const html = vault();
     expect(html).toContain("Vault the originals of incoming</h2>");
     expect(html).toContain("18,420 files · 2.4 GB");
-    expect(html).toContain("4 held until mapped move with them");
+    expect(html).toContain(">held until mapped</span><span class=\"v\">4 move with them<");
     expect(html).toContain("/srv/imaging/incoming/derivatives/dcm-original");
     expect(html).toContain('<option value="cold-store">cold-store · backup · /vault/cold</option>');
     expect(html).toContain("The pseudonymised tree, the registry and every person's code are untouched".replace("'", "&#x27;"));
@@ -116,9 +116,11 @@ describe("Vault it", () => {
     expect(noPlace).not.toContain("cold-store");
   });
 
-  it("says the detail the engine reads these acts at", () => {
-    expect(vault()).toContain("Run under your detail, sensitive.");
-    expect(vault({}, { caps: caps("quasi") })).toContain("needs detail sensitive; this account sees less");
+  it("says in plain words how far into a record these acts are read, naming nothing of the engine's own", () => {
+    expect(vault()).toContain("Run as someone cleared to see identifiers");
+    const less = vault({}, { caps: caps("quasi") });
+    expect(less).toContain("you are not cleared to");
+    expect(less).not.toContain("detail sensitive");
   });
 
   it("keeps the place a person chose when the dialog is drawn again between choosing and asking", () => {
@@ -143,17 +145,27 @@ describe("Vault it", () => {
 });
 
 describe("Purge it", () => {
-  it("says what the engine answered, that it cannot be undone, and what a held file's original is", () => {
+  it("says what the engine answered as four numbers and a forecast, each reason with its own count, and that it cannot be undone", () => {
     const html = purge();
     expect(html).toContain("Purge the originals of incoming</h2>");
-    expect(html).toContain("<dt>files</dt>");
-    expect(html).toContain("18,420 files · 2.4 GB");
-    expect(html).toContain("18,402 files have a pseudonymised copy the engine checked");
-    expect(html).toContain("18 files have no checked copy in dcm-anon");
-    expect(html).toContain("4 files are held until mapped: their originals are what a map would still release");
+    // the survey: four numbers, each under its own small label, and the sentence that they are a forecast
+    expect(html).toContain('<span class="k">files</span><span class="v">18,420</span>');
+    expect(html).toContain('<span class="k">size</span><span class="v">2.4 GB</span>');
+    expect(html).toContain('<span class="k">copy checked</span><span class="v">18,402</span>');
+    expect(html).toContain('<span class="k">held until mapped</span><span class="v">4</span>');
+    expect(html).toContain("What the engine last saw: a forecast, not a promise.");
+    // and each reason a purge can be held back on, with its own count
+    expect(html).toContain("<b class=\"num\">4</b><span>files wait for a map</span>");
+    expect(html).toContain("Their originals are what a map would still release.");
+    expect(html).toContain("<b class=\"num\">18</b><span>files have no checked copy</span>");
     expect(html).toContain("This cannot be undone");
     expect(html).toContain("Purging removes the only identified copy of those scans");
+    expect(html).toContain("nothing brings those files back");
     expect(html).toContain("once it is purged, a map releases nothing for it");
+    // and what a purge leaves alone, which is everything that was read: the engine touches neither the pseudonymised tree, the registry's rows nor the linkage store
+    expect(html).toContain("What this leaves untouched");
+    expect(html).toContain("The pseudonymised tree, the registry and every person");
+    expect(html).toContain("code stay as they are");
     expect(html).toContain("Type incoming to confirm");
   });
 
@@ -170,6 +182,10 @@ describe("Purge it", () => {
     const refused = purge({ typed: "incoming", why: "the originals live on tape now" }, { look: { ...look, ready: false, why } });
     expect(refused).toContain(why);
     expect(refused).toContain('disabled="">Purge it</button>');
+    // while the engine refuses, every reason that has a count of its own stands with it
+    expect(refused).toContain('<div class="why stands"><b class="num">4</b>');
+    expect(refused).toContain('<div class="why stands"><b class="num">18</b>');
+    expect(purge()).not.toContain("why stands");
     // a refusal with no words of the engine's still stops the act, and an unread door says only that
     expect(purge({ typed: "incoming", why: "why" }, { look: { ...look, ready: false } })).toContain("The engine refuses to purge these originals and gives no reason.");
     expect(purge({ typed: "incoming", why: "why" }, { look: null })).toContain("The engine has not said what purging would do here.");
@@ -184,7 +200,7 @@ describe("Purge it", () => {
 describe("Change", () => {
   const acts: OriginalsActs = { vault: true, purge: true, refusal: null };
   const change = (over: Partial<Parameters<typeof ChangeDialog>[0]> = {}) =>
-    renderToStaticMarkup(<ChangeDialog dataset={incoming} acts={acts} onAct={none} onClose={none} onSaved={none} {...over} />);
+    renderToStaticMarkup(<ChangeDialog dataset={incoming} acts={acts} onAct={none} onTags={none} onClose={none} onSaved={none} {...over} />);
 
   it("declares nothing of where the originals stand, and puts the act that decides it one click away", () => {
     const html = change();
@@ -205,12 +221,22 @@ describe("Change", () => {
     expect(html).toContain("What arrives</span>");
     expect(html).toContain("An identifier the map does not know</span>");
     expect(html).toContain("Feeds a cohort");
-    expect(html).toContain("Keep sex, weight and size: covariates, not identifiers");
-    expect(html).toContain("Also remove");
-    expect(html).toContain("Also keep");
     expect(html).toContain("Dates, when it leaves</span>");
     expect(html).toContain("UIDs, when it leaves</span>");
     expect(html).toContain("Faces removed before it leaves");
+  });
+
+  it("leaves the tag lists to the chooser, and holds none of its own", () => {
+    const html = change();
+    // both surfaces wrote the same three lists, each seeded at its own opening, so saving one after the other put the other's back
+    expect(html).toContain(">Choose tags</button>");
+    expect(html).toContain("where all hundred are listed with what becomes of each");
+    expect(html).not.toContain('id="dataset-remove"');
+    expect(html).not.toContain('id="dataset-keep"');
+    expect(html).not.toContain("Keep sex, weight and size");
+    // and the boxes that invited a keyword the engine never took are gone with them
+    expect(html).not.toContain("StudyDescription");
+    expect(html).not.toContain("one tag keyword a line");
   });
 
   it("says why the acts are not offered where a person may not ask for them", () => {

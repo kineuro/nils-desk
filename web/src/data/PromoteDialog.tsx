@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// New cohort from a card: a complete answer at any grain becomes members, the
-// subjects of its rows, with the card's version and epoch on every
-// membership; or they join a cohort that exists. The engine files them as a
-// job, and the cohort's card is on Data / Cohorts at once.
+// New cohort from a card (record 27, R5c): a complete answer at any grain
+// becomes members, the subjects of its rows. Every field of the old dialog
+// stands; what the promotion carries with it is one disclosure. The engine
+// files them as a job, and the cohort's card is on Data / Cohorts at once.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -10,6 +10,7 @@ import { door as served } from "../deployment";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
+import { Says, Values } from "../ui/Says";
 import { cohorts, type Cohort } from "./cohorts";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -89,7 +90,7 @@ export function PromoteDialog({ caps, card, answer, onClose }: { caps: Capabilit
         onClose={onClose}
         foot={
           <div className="row actions">
-            <span className="meta grow">Job {made.job} files the memberships; the card is on Data / Cohorts at once.</span>
+            <span className="meta grow">Job {made.job} files the memberships.</span>
             <button type="button" className="button secondary" onClick={onClose}>
               Close
             </button>
@@ -101,7 +102,7 @@ export function PromoteDialog({ caps, card, answer, onClose }: { caps: Capabilit
         }
       >
         <p>
-          {who.charAt(0).toLowerCase() + who.slice(1)} join <span className="path">{made.cohort}</span>, with the card&apos;s version and epoch on each membership.
+          {who.charAt(0).toLowerCase() + who.slice(1)} join <span className="path">{made.cohort}</span>.
         </p>
       </Dialog>
     );
@@ -114,7 +115,7 @@ export function PromoteDialog({ caps, card, answer, onClose }: { caps: Capabilit
       onClose={onClose}
       foot={
         <div className="row actions">
-          <span className="meta grow">{refusal ? `Needs ${refusal}.` : "The card appears on Data / Cohorts at once."}</span>
+          <span className="meta grow">{refusal ? `Needs ${refusal}.` : "It appears on Cohorts at once."}</span>
           <button type="button" className="button secondary" onClick={onClose}>
             Cancel
           </button>
@@ -124,21 +125,12 @@ export function PromoteDialog({ caps, card, answer, onClose }: { caps: Capabilit
         </div>
       }
     >
-      <dl className="facts">
-        <div className="facts-pair">
-          <dt>card</dt>
-          <dd>
-            <b>{card.name}</b>
-            {card.version && <span className="meta"> · version {card.version}</span>}
-          </dd>
-        </div>
-        <div className="facts-pair">
-          <dt>answer</dt>
-          <dd>
-            <span className="num">{answerWords(answer)}</span> · complete{answer.epoch !== null ? ` · epoch ${answer.epoch}` : ""}
-          </dd>
-        </div>
-      </dl>
+      <Values
+        cells={[
+          { k: "card", v: card.version ? `${card.name} · version ${card.version}` : card.name },
+          { k: "answer", v: `${answerWords(answer)} · complete` },
+        ]}
+      />
       <div className="field">
         <span className="label">Who joins</span>
         <div className="choices">
@@ -146,14 +138,13 @@ export function PromoteDialog({ caps, card, answer, onClose }: { caps: Capabilit
             <input type="radio" name="into" checked={into === "new"} onChange={() => setInto("new")} />
             <span>
               <b>{who}, as a new cohort</b>
-              <span className="meta">A cohort names people. The card keeps naming what of theirs, so a release from this card gives exactly them.</span>
             </span>
           </label>
           <label className="radio-row">
             <input type="radio" name="into" checked={into === "existing"} onChange={() => setInto("existing")} />
             <span>
               <b>Add them to an existing cohort</b>
-              <span className="meta">Choose one. Subjects already in it stay as they are.</span>
+              <span className="meta">subjects already in it stay as they are</span>
             </span>
           </label>
         </div>
@@ -199,15 +190,11 @@ export function PromoteDialog({ caps, card, answer, onClose }: { caps: Capabilit
           <input value={why} onChange={(e) => setWhy(e.target.value)} placeholder="the 7T arm of the grant" />
         </span>
       </label>
-      <div className="note">
-        <Icon name="info" />
-        <div className="note-body">
-          <p className="note-detail">
-            The card is pinned by the cohort and keeps its version and epoch on every membership. When new rows land, run the card again and promote it again: only the new subjects join.
-            {into === "new" && owner.trim() !== "" && ` The owner is recorded as ${owner.trim()}.`}
-          </p>
-        </div>
-      </div>
+      <Says head="What the cohort keeps from this card">
+        A cohort names people; the card goes on naming what of theirs, so a release from it gives exactly them. The card is pinned by the cohort, and which version of it answered is kept on every
+        membership. When new rows land, run the card again and promote it again: only the new subjects join.
+        {into === "new" && owner.trim() !== "" ? ` The owner is recorded as ${owner.trim()}.` : ""}
+      </Says>
       {failed && <p className="warn">{failed}</p>}
     </Dialog>
   );
