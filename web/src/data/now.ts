@@ -10,10 +10,13 @@
 import { needsWork } from "../access";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import type { Grant } from "../grants";
 import type { IconName } from "../ui/Icon";
+import { cancelNeeds, commandOf, doingWords, endedWords, nextMove as nextOf, wordsOf } from "../ops/verbs";
 import { chainWords, type ChainedJob } from "./datasets";
 import { whenWords } from "./sources";
+
+// the words of a verb are the one table's, shared with the Pipelines page
+export { cancelNeeds, doingWords, targetOf } from "../ops/verbs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -28,98 +31,10 @@ export function isOpen(j: JobRow): boolean {
   return OPEN.has(j.state);
 }
 
-/** The verb of a job as its argv names it, else its kind. */
-function verbOf(j: JobRow): string {
-  const argv = j.args?.argv ?? [];
-  if (argv[0] === "linkage") return "linkage";
-  if (argv[0] === "ingest" && argv[1] === "probe") return "probe";
-  return argv[0] ?? j.kind;
-}
-
-/** What a job reads or writes: the location its argv names, by its place, else the job's name. */
-export function targetOf(j: JobRow): string | null {
-  const argv = j.args?.argv ?? [];
-  const at = argv.find((a) => a.startsWith("@"));
-  if (at) return at.slice(1).split("/")[0] || null;
-  return j.name;
-}
-
-const DOING: Record<string, string> = {
-  pseudonymize: "Pseudonymising",
-  digest: "Digesting",
-  ingest: "Digesting",
-  fingerprint: "Fingerprinting",
-  classify: "Sorting",
-  linkage: "Filing the map for",
-  probe: "Probing the shapes of",
-  release: "Releasing",
-  handover: "Handing over",
-  backup: "Backing up",
-  verify: "Verifying",
-  restore: "Restoring",
-  session: "Building the sessions of",
-  pick: "Picking from",
-  pyramid: "Building pyramids for",
-  synth: "Making up",
-  ask: "Running a question over",
-};
-
-const NOUN: Record<string, string> = {
-  pseudonymize: "pseudonymisation",
-  digest: "digest",
-  ingest: "digest",
-  fingerprint: "fingerprint",
-  classify: "sort",
-  linkage: "map import",
-  probe: "probe",
-  release: "release",
-  handover: "handover",
-  backup: "backup",
-  verify: "check",
-  restore: "restore",
-  session: "session build",
-  pick: "pick",
-  pyramid: "pyramid build",
-  synth: "synthesis",
-  ask: "question",
-};
-
-/** What a job does, as a person reads it: "Pseudonymising incoming". */
-export function doingWords(j: JobRow): string {
-  const verb = verbOf(j);
-  const target = targetOf(j);
-  const doing = DOING[verb] ?? `Running ${verb}`;
-  return target && !["backup", "verify", "restore"].includes(verb) ? `${doing} ${target}` : doing;
-}
-
-/** The grant a verb's cancel needs, and the page as a person reads it. */
-export function cancelNeeds(j: JobRow): [Grant, string] {
-  switch (verbOf(j)) {
-    case "pseudonymize":
-    case "digest":
-    case "ingest":
-    case "linkage":
-    case "probe":
-    case "synth":
-      return ["data:work", "the Data page"];
-    case "release":
-    case "handover":
-      return ["release:work", "the Release page"];
-    case "backup":
-    case "verify":
-    case "restore":
-      return ["database:work", "the Database page"];
-    case "ask":
-      return ["query:work", "the Query page"];
-    default:
-      return ["pipelines:work", "the Pipelines page"];
-  }
-}
-
 /** Why this person may not cancel a job, in words, or null when they may. */
 export function cancelRefusal(caps: Capabilities, j: JobRow): string | null {
   const [grant, page] = cancelNeeds(j);
-  return needsWork(caps, `Cancelling a ${NOUN[verbOf(j)] ?? "job"}`, [[grant, page]]);
+  return needsWork(caps, `Cancelling a ${wordsOf(j).noun}`, [[grant, page]]);
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -173,23 +88,10 @@ function sinceWords(iso: string, now: Date): string {
   return w.startsWith("today ") ? `since ${w.slice("today ".length)}` : w ? `since ${w}` : "";
 }
 
-const ICON: Record<string, IconName> = { pseudonymize: "shield", release: "release", handover: "release", backup: "disk", verify: "disk", restore: "disk", linkage: "key", probe: "search", ask: "search" };
-
-/** The next move after a failed job: the same command again, for the verbs that read. */
+/** The next move after a failed job: the same command again under the same name, for a verb that is simply run again. */
 function nextMove(j: JobRow): { label: string; command: string[]; name: string | null } | null {
-  const argv = j.args?.argv ?? [];
-  if (argv.length === 0) return null;
-  switch (verbOf(j)) {
-    case "digest":
-    case "ingest":
-    case "pseudonymize":
-      return { label: "Read again", command: argv, name: j.name };
-    case "fingerprint":
-    case "classify":
-      return { label: "Sort again", command: argv, name: j.name };
-    default:
-      return null;
-  }
+  const next = nextOf(j);
+  return next ? { ...next, name: j.name } : null;
 }
 
 /**
@@ -210,10 +112,10 @@ export function jobCards(open: ChainedJob[], failed: ChainedJob[], caps: Capabil
   const who = (j: JobRow) => (typeof j.args?.principal === "string" ? j.args.principal : null);
   for (const j of [...people].sort((a, b) => a.id - b.id)) {
     if (j.state === "queued" && j.chain?.before !== null && j.chain?.before !== undefined && byId.has(j.chain.before)) continue;
-    const verb = verbOf(j);
+    const icon: IconName = wordsOf(j).icon;
     // what follows: the job's own list, else the queued rows that wait for it and what waits for them
     const queuedAfter = chained.get(j.id) ?? [];
-    const then = j.then && j.then.length > 0 ? j.then : [...queuedAfter.map((q) => q.args?.argv ?? [q.kind]), ...queuedAfter.flatMap((q) => q.then ?? [])];
+    const then = j.then && j.then.length > 0 ? j.then : [...queuedAfter.map((q) => (commandOf(q).length > 0 ? commandOf(q) : [q.kind])), ...queuedAfter.flatMap((q) => q.then ?? [])];
     const line = [`job ${j.id}`, who(j), sinceWords(j.started_at, at), chainWords(then)].filter(Boolean).join(" · ");
     if (j.state === "queued") {
       out.push({ key: `job ${j.id}`, id: j.id, kind: "queued", icon: "clock", tone: "neutral", what: doingWords(j), line: `queued · ${line}`, progress: null, cancel: { label: "Drop", refusal: cancelRefusal(caps, j) }, failed: null });
@@ -223,7 +125,7 @@ export function jobCards(open: ChainedJob[], failed: ChainedJob[], caps: Capabil
       key: `job ${j.id}`,
       id: j.id,
       kind: "running",
-      icon: ICON[verb] ?? "play",
+      icon,
       tone: "brand",
       what: j.state === "cancelling" ? `${doingWords(j)}, stopping` : doingWords(j),
       line,
@@ -253,14 +155,13 @@ export function jobCards(open: ChainedJob[], failed: ChainedJob[], caps: Capabil
   for (const j of ofPeople(failed).filter((j) => j.state === "failed").sort((a, b) => b.id - a.id)) {
     const p = progressOf(j, now);
     const line = [`job ${j.id}`, whenWords(j.finished_at ?? j.started_at, at), p?.words ?? null].filter(Boolean).join(" · ");
-    const target = targetOf(j);
     out.push({
       key: `failed ${j.id}`,
       id: j.id,
       kind: "failed",
       icon: "alert",
       tone: "caution",
-      what: `${(NOUN[verbOf(j)] ?? "job").charAt(0).toUpperCase()}${(NOUN[verbOf(j)] ?? "job").slice(1)}${target ? ` of ${target}` : ""} stopped`,
+      what: endedWords(j, "stopped"),
       line,
       progress: null,
       cancel: null,

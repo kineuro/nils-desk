@@ -49,7 +49,7 @@ describe("a job's card", () => {
     expect(c.tone).toBe("queued");
     expect(c.icon).toBe("clock");
     expect(c.waits).toBe(120);
-    expect(c.then).toEqual(["then fingerprint", "then classification with mri"]);
+    expect(c.then).toEqual(["then fingerprint", "then sort with mri"]);
     expect(c.meta).toBe("job 122 · astrid");
     expect(thenWords(["session", "--scheme", "x"])).toBe("then session build");
   });
@@ -68,7 +68,9 @@ describe("a job's card", () => {
   it("finds what the verb acts on", () => {
     expect(targetOf(job(1, ["digest", "@lake/dcm-anon"], "done"))).toBe("lake");
     expect(targetOf(job(1, ["classify", "--pack", "mri"], "done"))).toBe("mri");
-    expect(targetOf(job(1, ["backup"], "done", { name: "nightly" }))).toBe("nightly");
+    // a backup is not of its name: the name is the schedule's
+    expect(targetOf(job(1, ["backup"], "done", { name: "nightly" }))).toBeNull();
+    expect(targetOf(job(1, ["linkage", "import", "/x/map.csv", "--place", "north"], "done", { name: "north" }))).toBe("north");
     expect(targetOf(job(1, ["backup"], "done"))).toBeNull();
   });
 });

@@ -20,10 +20,10 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { ops } from "./client";
 import { cardOf, countByFilter, FILTERS, filterJobs, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
+import { wordsOf } from "./verbs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-const GRANT_PAGE: Record<string, string> = { "data:work": "Data", "pipelines:work": "Pipelines", "release:work": "Release", "database:work": "Database", "query:work": "Query" };
 
 export function PipelinesPage({ caps }: { caps: Capabilities }) {
   const live = useLiveJobs(caps);
@@ -79,14 +79,13 @@ export function PipelinesPage({ caps }: { caps: Capabilities }) {
   const card = (j: JobRow) => {
     const c = cardOf(j as ChainedJob, now);
     const holds = may(caps, c.cancel);
-    const page = GRANT_PAGE[c.cancel] ?? "Pipelines";
     const mayCancel = holds && cancels;
     const mayQueue = holds && queues;
     return (
       <Card
         key={j.id}
         card={c}
-        reason={holds ? null : `needs work on the ${page} page`}
+        reason={holds ? null : `needs work on ${wordsOf(j).page}`}
         onCancel={mayCancel && (c.tone === "running" || c.tone === "queued") ? () => act(c.tone === "queued" ? `Job ${j.id} is dropped from the queue.` : `Job ${j.id} stops at its next heartbeat; what is written stays written.`, ops.cancel(j.id)) : null}
         onNext={mayQueue && c.next ? () => act(`Queued again as a new job.`, ops.enqueue(c.next!.command)) : null}
         onDismiss={c.tone === "failed" || c.tone === "cancelled" ? () => setDismissed((was) => new Set([...was, j.id])) : null}
