@@ -6,6 +6,7 @@
 // words each fact takes. The numbers and names here are made up.
 
 import { describe, expect, it } from "vitest";
+import type { ReviewItem } from "../ops/client";
 import type { Access } from "../settings/identity";
 import {
   arrivesWords,
@@ -14,6 +15,7 @@ import {
   guessRole,
   heldGroups,
   heldLine,
+  waitingLines,
   identityWords,
   importColumns,
   leavingRefusal,
@@ -183,5 +185,24 @@ describe("the words of a dataset", () => {
     expect(bytesWords(2.4e12)).toBe("2.4 TB");
     expect(bytesWords(5e8)).toBe("500 MB");
     expect(tagList("StudyDescription, SeriesDescription\nStudyDescription")).toEqual(["StudyDescription", "SeriesDescription"]);
+  });
+});
+
+describe("what waits on Review, on the Pseudonymisation page", () => {
+  const item = (id: number, kind: string, evidence: Record<string, unknown> = {}, status = "open"): ReviewItem => ({ id, kind, scope: "subject", status, created_at: "2026-09-16T05:00:00Z", evidence });
+  it("names each identity question for what it is, the held files first, and the dataset's own count over the items'", () => {
+    const items = [item(1, "identity.unmapped", { files: 160, shape: "AA9999" }), item(2, "identity.collision", { sessions: 2 }), item(3, "identity.provisional"), item(4, "identity.unmapped", { files: 20 }, "superseded")];
+    expect(waitingLines(items, 160)).toEqual([
+      { kind: "held", words: "160 files held until mapped: map them" },
+      { kind: "twice", words: "1 subject may be one person twice" },
+      { kind: "provisional", words: "1 subject coded without a map: merge them" },
+    ]);
+    // the items' counts stand in where the sources door counts nothing
+    expect(waitingLines(items, null)[0].words).toBe("160 files held until mapped: map them");
+    expect(waitingLines([item(1, "identity.unmapped", { files: 1 })], 0)[0].words).toBe("1 file held until mapped: map them");
+    // a held item is never "one person twice"
+    expect(waitingLines([item(1, "identity.unmapped", { files: 160 })], 160).map((w) => w.kind)).toEqual(["held"]);
+    expect(waitingLines([item(2, "identity.collision"), item(5, "linkage.conflict")], 0)).toEqual([{ kind: "twice", words: "2 subjects may be one person twice" }]);
+    expect(waitingLines([], 0)).toEqual([]);
   });
 });

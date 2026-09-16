@@ -2,8 +2,11 @@
 // The queue (record 26): a cohort's open items, the costliest first. On top,
 // the three kinds as cards: the stacks the rules are unsure of, with Sort
 // them and the rules' guess accepted in bulk for the ones triage says need
-// no reading; the subjects that may be one person; the sessions that moved.
-// Each row is decided, looked at in the viewer with its evidence, or seen.
+// no reading; the identity questions, named for what they are (subjects that
+// may be one person twice, files held until mapped, subjects coded without a
+// map); the sessions that moved. Each row is decided, looked at in the viewer
+// with its evidence, or seen; held files are mapped on their dataset's
+// Pseudonymisation page and never decided here.
 
 import { lazy, Suspense, useMemo, useState } from "react";
 import type { Json } from "../ask/client";
@@ -14,13 +17,51 @@ import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { acts, batchOf, cohortChips, familyOf, itemWords, kindTag, membersOf, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
+import { acts, batchOf, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
 import { bulkPlan, kindOf, needsReading, sortByCost } from "./triage";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
 // the viewer carries cornerstone with it, so it is read only when a stack is looked at
 const Viewer = lazy(() => import("../viewer/Viewer").then((m) => ({ default: m.Viewer })));
+
+/** A card on top of the queue: what its kind counts and says, and the one act that goes with it. */
+export interface NeedCard {
+  family: Family;
+  value: string;
+  words: string;
+  meta: string;
+  bulk: number;
+  count: number;
+  /** The identity card's act, by what waits: Decide, Map them or Merge, each a page. */
+  act: { label: string; href: string } | null;
+}
+
+/** The identity card: what waits there is named for what it is, the costliest kind first. */
+function identityCard(identity: ReviewItem[]): NeedCard {
+  const twice = identity.filter((i) => identityActs(i).decide);
+  const held = identity.filter((i) => kindOf(i.kind).what === "unmapped");
+  const provisional = identity.filter((i) => kindOf(i.kind).what === "provisional");
+  const files = held.reduce((s, i) => s + (typeof (i.evidence as Json | null)?.files === "number" ? ((i.evidence as Json).files as number) : membersOf(i)), 0);
+  const sources = [...new Set(identity.map(datasetOf).filter((d): d is string => d !== null))];
+  const from = sources.length > 0 ? `from ${sources.length === 1 ? "dataset" : "datasets"} ${sources.join(" and ")}` : null;
+  const heldWords = held.length > 0 ? `${n(files)} ${files === 1 ? "file" : "files"} held until mapped` : null;
+  const provisionalWords = provisional.length > 0 ? `${n(provisional.length)} coded without a map` : null;
+  const identifiers = href("review", "identifiers");
+  const base = { family: "identity" as const, bulk: 0, count: identity.length };
+  if (twice.length > 0) {
+    return { ...base, value: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"}`, words: "may be one person twice", meta: ["the same identifier under two codes", from, heldWords, provisionalWords].filter(Boolean).join(" · "), act: { label: "Decide", href: identifiers } };
+  }
+  if (held.length > 0) {
+    // one dataset's held files are mapped on its own page; several are named on the Identifiers page
+    const heldSources = [...new Set(held.map(datasetOf).filter((d): d is string => d !== null))];
+    return { ...base, value: `${n(files)} ${files === 1 ? "file" : "files"}`, words: "held until mapped", meta: ["an identifier the map does not know", from, provisionalWords].filter(Boolean).join(" · "), act: { label: "Map them", href: heldSources.length === 1 ? mapHref(held[0]) : identifiers } };
+  }
+  if (provisional.length > 0) {
+    return { ...base, value: `${n(provisional.length)} ${provisional.length === 1 ? "subject" : "subjects"}`, words: "coded without a map", meta: ["merged into the person it stands for by a merge, or by a map that names the identifier", from].filter(Boolean).join(" · "), act: { label: "Merge", href: identifiers } };
+  }
+  return { ...base, value: "0 subjects", words: "may be one person twice", meta: "", act: null };
+}
 
 export interface QueueProps {
   caps: Capabilities;
@@ -36,7 +77,7 @@ export interface QueueProps {
 }
 
 /** The three cards on top, from the open items: what each kind counts and says. */
-export function needsOf(items: ReviewItem[]): { family: Family; value: string; words: string; meta: string; bulk: number; count: number }[] {
+export function needsOf(items: ReviewItem[]): NeedCard[] {
   const open = items.filter((i) => i.status === "open");
   const of = (f: Family) => open.filter((i) => familyOf(i.kind) === f);
   const unsure = of("unsure");
@@ -47,8 +88,6 @@ export function needsOf(items: ReviewItem[]): { family: Family; value: string; w
   const top = [...axes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([a]) => a);
   const missing = unsure.filter((i) => kindOf(i.kind).what === "missing").reduce((s, i) => s + membersOf(i), 0);
   const bulk = bulkPlan(unsure, unsure.map((i) => i.id)).accepts.length;
-  const identity = of("identity");
-  const sources = [...new Set(identity.flatMap((i) => (typeof (i.evidence as Json | null)?.place === "string" ? [(i.evidence as Json).place as string] : [])))];
   const moved = of("moved");
   const schemes = [...new Set(moved.flatMap((i) => (typeof (i.evidence as Json | null)?.scheme === "string" ? [(i.evidence as Json).scheme as string] : [])))];
   return [
@@ -61,15 +100,9 @@ export function needsOf(items: ReviewItem[]): { family: Family; value: string; w
         .join(" · "),
       bulk,
       count: unsure.length,
+      act: null,
     },
-    {
-      family: "identity",
-      value: `${n(identity.length)} ${identity.length === 1 ? "subject" : "subjects"}`,
-      words: "may be one person twice",
-      meta: [identity.length > 0 ? "the same identifier under two codes" : null, sources.length > 0 ? `from ${sources.length === 1 ? "source" : "sources"} ${sources.join(" and ")}` : null].filter(Boolean).join(" · "),
-      bulk: 0,
-      count: identity.length,
-    },
+    identityCard(of("identity")),
     {
       family: "moved",
       value: `${n(moved.length)} ${moved.length === 1 ? "session" : "sessions"}`,
@@ -77,6 +110,7 @@ export function needsOf(items: ReviewItem[]): { family: Family; value: string; w
       meta: [schemes.length > 0 ? `the scheme ${schemes.join(", ")} read new dates` : null, moved.length > 0 ? "cards that pinned them are marked" : null].filter(Boolean).join(" · "),
       bulk: 0,
       count: moved.length,
+      act: null,
     },
   ];
 }
@@ -133,7 +167,17 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
                         See
                       </button>
                     )}
-                    {may && i.status === "open" && family !== "moved" && (
+                    {family === "identity" && i.status === "open" && identityActs(i).map && (
+                      <a className="button secondary small" href={mapHref(i)}>
+                        Map them
+                      </a>
+                    )}
+                    {family === "identity" && i.status === "open" && identityActs(i).merge && !identityActs(i).decide && (
+                      <a className="button secondary small" href={href("review", "identifiers")}>
+                        Merge
+                      </a>
+                    )}
+                    {may && i.status === "open" && family !== "moved" && (family !== "identity" || identityActs(i).decide) && (
                       <button type="button" className="button small" onClick={() => onDecide(i)}>
                         Decide
                       </button>
@@ -204,8 +248,8 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, onDec
                 </>
               )}
               {c.family === "identity" && (
-                <a className={c.count === 0 ? "button small" : "button small"} aria-disabled={c.count === 0} href={href("review", "identifiers")}>
-                  Decide
+                <a className="button small" aria-disabled={c.act === null} href={c.act?.href ?? href("review", "identifiers")}>
+                  {c.act?.label ?? "Decide"}
                 </a>
               )}
               {c.family === "moved" && (

@@ -53,6 +53,7 @@ import {
   subjectsWords,
   tagList,
   typeName,
+  waitingLines,
   type ColumnLook,
   type Csv,
   type Dataset,
@@ -146,6 +147,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
   const groups = heldGroups(held ?? []);
   const counts = detailCounts(access);
   const identityItems = review.filter((i) => /^(identity|linkage)[.:]/.test(i.kind) && ofDataset(i, name));
+  const waiting = waitingLines(identityItems, dataset.held?.files ?? null);
   const pixelItems = review.filter((i) => /pixel|burn/.test(i.kind) && ofDataset(i, name));
   const arrives = dataset.arrives ?? (dataset.handling?.arrives === "deidentified" ? "deidentified" : "identified");
   const onRelease = dataset.handling?.on_release;
@@ -502,12 +504,20 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
             <Icon name="review" size="lg" />
             <h2>Waiting</h2>
           </div>
-          {identityItems.length === 0 && pixelItems.length === 0 && <p className="meta">Nothing of this dataset waits on Review.</p>}
-          {identityItems.length > 0 && (
-            <a className="tail" href={href("review", "identifiers")}>
-              {n(identityItems.length)} {identityItems.length === 1 ? "identity question" : "identity questions"}: subjects that may be one person twice
-              <Icon name="chevron-right" />
-            </a>
+          {waiting.length === 0 && pixelItems.length === 0 && <p className="meta">Nothing of this dataset waits on Review.</p>}
+          {waiting.map((w) =>
+            w.kind === "held" ? (
+              // the held files are mapped here: the map, or the three ways out
+              <button key={w.kind} type="button" className="tail link-button" onClick={() => setOpened({ kind: maps ? "map" : "held" })}>
+                {w.words}
+                <Icon name="chevron-right" />
+              </button>
+            ) : (
+              <a key={w.kind} className="tail" href={href("review", "identifiers")}>
+                {w.words}
+                <Icon name="chevron-right" />
+              </a>
+            ),
           )}
           {pixelItems.length > 0 && (
             <a className="tail" href={href("review")}>

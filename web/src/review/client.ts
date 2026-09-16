@@ -10,6 +10,7 @@ import { door, DoorError, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { may, sees } from "../grants";
 import { ops, overlayScope, type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
+import { href } from "../routes";
 import { kindOf } from "./triage";
 
 const q = (params: Record<string, string | number | boolean | undefined | null>) => {
@@ -221,6 +222,27 @@ export function itemWords(item: ReviewItem): string {
     return `a session ${k.what.replace(/_/g, " ")}${scheme ? ` under ${scheme}` : ""}`;
   }
   return k.what ? `${k.area} ${k.what.replace(/_/g, " ")}` : item.kind;
+}
+
+/**
+ * What settles an identity question, by what it is: two codes sharing one
+ * identifier are decided to be two or merged into one; files held until
+ * mapped are mapped, on their dataset's Pseudonymisation page, and never
+ * decided here; a subject coded without a map is merged into the one it
+ * stands for, by a merge or by a map that names its identifier.
+ */
+export function identityActs(item: Pick<ReviewItem, "kind">): { decide: boolean; merge: boolean; map: boolean } {
+  if (familyOf(item.kind) !== "identity") return { decide: false, merge: false, map: false };
+  const what = kindOf(item.kind).what;
+  if (what === "unmapped") return { decide: false, merge: false, map: true };
+  if (what === "provisional") return { decide: false, merge: true, map: true };
+  return { decide: true, merge: true, map: false };
+}
+
+/** Where Map them leads: the dataset's Pseudonymisation page when the item names its dataset, else the Identifiers page, which names each. */
+export function mapHref(item: ReviewItem): string {
+  const dataset = datasetOf(item);
+  return dataset ? href("data", "datasets", dataset, "pseudonymisation") : href("review", "identifiers");
 }
 
 /** The kind on a row, in one word, and its tone. */

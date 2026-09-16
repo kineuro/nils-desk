@@ -2,9 +2,10 @@
 // The identity questions (record 26): two codes that share one identifier,
 // files held until the map names their identifier, subjects coded from an
 // identifier the map does not know. Each kind counts its items and says what
-// settles it: the map on the dataset's Pseudonymisation page, a decision on
-// the item, or a merge of the alias into the canonical subject, which needs
-// Data: Work and detail sensitive.
+// settles it: a collision is decided or merged; held files are mapped on the
+// dataset's Pseudonymisation page and never decided; a provisional subject is
+// merged into the one it stands for. A merge needs Data: Work and detail
+// sensitive.
 
 import { useState } from "react";
 import type { Json } from "../ask/client";
@@ -15,7 +16,7 @@ import type { ReviewItem } from "../ops/client";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
-import { acts, datasetOf, familyOf, itemWords, refusalWords, review } from "./client";
+import { acts, datasetOf, familyOf, identityActs, itemWords, refusalWords, review } from "./client";
 import { kindOf, sortByCost } from "./triage";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -29,8 +30,8 @@ export interface IdentifiersProps {
 
 const KINDS: { what: string; title: string; words: string; settles: string }[] = [
   { what: "collision", title: "may be one person twice", words: "two codes share one identifier", settles: "a merge of the alias into the canonical subject, or a decision that they are two" },
-  { what: "unmapped", title: "held until mapped", words: "files whose identifier the map does not know", settles: "the map, on the dataset's Pseudonymisation page; the next bring-in writes them" },
-  { what: "provisional", title: "coded without a map", words: "subjects coded from an identifier the map does not know", settles: "a map that names the identifier, which merges the provisional subject into the one it stands for" },
+  { what: "unmapped", title: "held until mapped", words: "files whose identifier the map does not know", settles: "the map, on the dataset's Pseudonymisation page; the next bring-in writes them. Nothing is decided here" },
+  { what: "provisional", title: "coded without a map", words: "subjects coded from an identifier the map does not know", settles: "a merge into the subject it stands for, or a map that names the identifier and merges it" },
 ];
 
 /** The identity items by what they are: the three kinds record 26 names, and anything else the engine raised. */
@@ -105,17 +106,17 @@ export function IdentifiersPage({ caps, items, onDecide, onChanged }: Identifier
                           <td className="num">{whenWords(i.created_at)}</td>
                           <td className="acts">
                             <span className="row-actions">
-                              {(g.what === "unmapped" || g.what === "provisional") && dataset && (
+                              {identityActs(i).map && dataset && (
                                 <a className="button secondary small" href={href("data", "datasets", dataset, "pseudonymisation")}>
                                   Map them
                                 </a>
                               )}
-                              {g.what === "collision" && merges && (
+                              {identityActs(i).merge && merges && (
                                 <button type="button" className="button secondary small" onClick={() => setMerging(i)}>
                                   Merge
                                 </button>
                               )}
-                              {may.decide && (
+                              {may.decide && identityActs(i).decide && (
                                 <button type="button" className="button small" onClick={() => onDecide(i)}>
                                   Decide
                                 </button>

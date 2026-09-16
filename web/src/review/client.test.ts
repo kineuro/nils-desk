@@ -17,8 +17,10 @@ import {
   closureWords,
   cohortChips,
   familyOf,
+  identityActs,
   itemWords,
   kindTag,
+  mapHref,
   overlayChange,
   refusalWords,
   scopeDoc,
@@ -189,5 +191,21 @@ describe("a refusal and the person's acts", () => {
     expect(acts(caps(["review:work", "data:work"], "sensitive"))).toEqual({ decide: true, adopt: true, merge: true });
     expect(acts(caps(["review:work"], "quasi"))).toEqual({ decide: true, adopt: false, merge: false });
     expect(acts(caps(["review:see", "data:work"], "sensitive"))).toEqual({ decide: false, adopt: false, merge: true });
+  });
+});
+
+describe("what settles an identity question", () => {
+  const item = (kind: string, over: Partial<ReviewItem> = {}): ReviewItem => ({ id: 1, kind, scope: "subject", status: "open", created_at: "2026-09-16T05:00:00Z", ...over });
+  it("is decided or merged for a collision, mapped for held files and never decided, merged for a provisional subject", () => {
+    expect(identityActs(item("identity.collision"))).toEqual({ decide: true, merge: true, map: false });
+    expect(identityActs(item("linkage.conflict"))).toEqual({ decide: true, merge: true, map: false });
+    expect(identityActs(item("identity.unmapped"))).toEqual({ decide: false, merge: false, map: true });
+    expect(identityActs(item("identity.provisional"))).toEqual({ decide: false, merge: true, map: true });
+    expect(identityActs(item("base:vote"))).toEqual({ decide: false, merge: false, map: false });
+  });
+  it("leads Map them to the dataset's Pseudonymisation page, or to the Identifiers page when the item names no dataset", () => {
+    expect(mapHref(item("identity.unmapped", { evidence: { place: "north", files: 160 } }))).toBe("#data/datasets/north/pseudonymisation");
+    expect(mapHref(item("identity.unmapped", { ref: { dataset: "south" } }))).toBe("#data/datasets/south/pseudonymisation");
+    expect(mapHref(item("identity.unmapped"))).toBe("#review/identifiers");
   });
 });

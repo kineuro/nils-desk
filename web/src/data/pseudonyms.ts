@@ -9,6 +9,9 @@
 
 import { door } from "../ask/client";
 import type { Detail } from "../grants";
+import type { ReviewItem } from "../ops/client";
+import { identityActs } from "../review/client";
+import { kindOf } from "../review/triage";
 import type { Access } from "../settings/identity";
 import type { Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
 import type { Handling } from "./sources";
@@ -347,6 +350,33 @@ export function heldGroups(rows: HeldRow[]): HeldGroup[] {
 /** A group's line: "12 digits, not in the map", then "AAA999, a second shape". */
 export function heldLine(g: HeldGroup, index: number): string {
   return index === 0 ? `${shapeWords(g.shape)}, not in the map` : `${shapeWords(g.shape)}, ${index === 1 ? "a second shape" : "another shape"}`;
+}
+
+/** What of a dataset waits on Review, one line a kind: held files to map here, subjects that may be one person twice, subjects coded without a map. */
+export interface WaitingLine {
+  kind: "held" | "twice" | "provisional";
+  words: string;
+}
+
+/**
+ * The dataset's identity questions named for what they are, the held files
+ * first since they are mapped on this page. `heldFiles` is the dataset's own
+ * count when the sources door gives one; the items' counts stand in for it.
+ */
+export function waitingLines(items: ReviewItem[], heldFiles: number | null): WaitingLine[] {
+  const open = items.filter((i) => i.status === "open");
+  const held = open.filter((i) => kindOf(i.kind).what === "unmapped");
+  const twice = open.filter((i) => identityActs(i).decide);
+  const provisional = open.filter((i) => kindOf(i.kind).what === "provisional");
+  const out: WaitingLine[] = [];
+  if (held.length > 0) {
+    const counted = held.reduce((s, i) => s + (typeof (i.evidence as Record<string, unknown> | null)?.files === "number" ? ((i.evidence as Record<string, unknown>).files as number) : 0), 0);
+    const files = heldFiles !== null && heldFiles > 0 ? heldFiles : counted;
+    out.push({ kind: "held", words: files > 0 ? `${n(files)} ${files === 1 ? "file" : "files"} held until mapped: map them` : "files held until mapped: map them" });
+  }
+  if (twice.length > 0) out.push({ kind: "twice", words: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"} may be one person twice` });
+  if (provisional.length > 0) out.push({ kind: "provisional", words: `${n(provisional.length)} ${provisional.length === 1 ? "subject" : "subjects"} coded without a map: merge them` });
+  return out;
 }
 
 /* ---------------------------------------------------------------- the identity-check station's run */
