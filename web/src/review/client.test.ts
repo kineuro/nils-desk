@@ -131,7 +131,10 @@ describe("what a rehearsal, a closure and a proposal say", () => {
       { id: 1, name: "site-mprage", version: "1.0.0", status: "adopted", scope: "scanner Prisma 3T", document: { lists: { "technique.VFA-GRE": { add: ["t1_mpr"], remove: [] } } } },
       { id: 2, name: "tune-technique", version: "1.0.0", status: "proposed", scope: "batch alpha-2026-08-20", document: { lists: { "technique.SP-GRE": { add: ["fl3d_vibe"], remove: ["flash"] } } } },
       { id: 3, name: "tune-post_contrast", version: "1.0.0", status: "adopted", document: { scope: { batch: "12" }, buckets: { contrast_positive: { add: ["km", "gado"], remove: [] } } } },
+      // an engine at OpenAPI 5 answers the scope as an object
+      { id: 4, name: "site-words", version: "1", status: "adopted", scope: { over: "batch:11", keyed: { batch: "11" } }, document: { lists: { "base.T2w": { add: ["xx special"], remove: [] } } } },
     ];
+    expect(siteWords(rows, "base", "T2w").adopted).toEqual([{ word: "xx special", scope: "batch:11" }]);
     expect(overlayChange(rows[1])).toEqual([{ title: "technique · SP-GRE", words: "+ fl3d_vibe - flash" }]);
     expect(overlayChange(rows[2])).toEqual([{ title: "contrast_positive", words: "+ km, gado" }]);
     expect(siteWords(rows, "technique", "VFA-GRE")).toEqual({ adopted: [{ word: "t1_mpr", scope: "scanner Prisma 3T" }], proposed: [] });

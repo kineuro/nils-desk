@@ -106,12 +106,20 @@ export interface OverlayRow {
   name: string;
   version?: string;
   status: string;
-  scope?: string;
+  /** Where it applies: a string on an older engine, `{over, keyed}` since OpenAPI 5. */
+  scope?: string | { over?: string; keyed?: Record<string, string> } | null;
   author?: string;
   actor?: unknown;
   tried?: Json;
   document?: Json;
   why?: string;
+}
+
+/** An overlay's scope in words, whichever shape the engine answered it in; null when it names none. */
+export function overlayScope(o: Pick<OverlayRow, "scope">): string | null {
+  if (typeof o.scope === "string") return o.scope;
+  if (o.scope && typeof o.scope === "object" && typeof o.scope.over === "string") return o.scope.over;
+  return null;
 }
 
 export const ops = {

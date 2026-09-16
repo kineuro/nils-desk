@@ -44,9 +44,15 @@ export interface IdentityRule {
   fallback?: string | null;
 }
 
+/** The counts are null on a place the engine has not probed since it was declared, or since the update that gave it trees. */
 export interface Trees {
-  originals: { path: string; files: number; bytes: number } | null;
-  anon: { path: string; files: number; last_written: string | null };
+  originals: { path: string; files: number | null; bytes: number | null } | null;
+  anon: { path: string; files: number | null; last_written: string | null };
+}
+
+/** A tree's file count in words, or that the engine has not counted it yet. */
+export function countWords(files: number | null | undefined): string {
+  return typeof files === "number" ? files.toLocaleString("en-US") : "not counted yet";
 }
 
 export interface Tags {
@@ -209,10 +215,10 @@ export function treeLines(d: Dataset): TreeLine[] {
   if (!d.trees) return [];
   const out: TreeLine[] = [];
   const last = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
-  if (d.trees.originals) out.push({ icon: "lock", path: last(d.trees.originals.path), words: `${n(d.trees.originals.files)} · locked` });
+  if (d.trees.originals) out.push({ icon: "lock", path: last(d.trees.originals.path), words: `${countWords(d.trees.originals.files)} · locked` });
   const anon = d.trees.anon;
   const how = arrivesOf(d) === "identified" ? "the source" : arrivesOf(d) === "deidentified" ? "moved in, files as sent" : "codes taken verbatim";
-  out.push({ icon: "shield", path: last(anon.path), words: `${n(anon.files)} · ${how}` });
+  out.push({ icon: "shield", path: last(anon.path), words: `${countWords(anon.files)} · ${how}` });
   return out;
 }
 
@@ -304,7 +310,7 @@ export function batchTail(b: Batch): { kind: "held" | "sort" | "again" | "sorted
 
 /** How many files of the originals no pseudonymised copy stands for yet: new files and the held ones, when the trees are known. */
 export function newInOriginals(d: Dataset): number | null {
-  if (!d.trees?.originals) return null;
+  if (!d.trees?.originals || typeof d.trees.originals.files !== "number" || typeof d.trees.anon.files !== "number") return null;
   return Math.max(0, d.trees.originals.files - d.trees.anon.files);
 }
 

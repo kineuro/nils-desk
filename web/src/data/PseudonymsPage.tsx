@@ -64,6 +64,7 @@ import {
   type Revealed,
   type TypesDoc,
 } from "./pseudonyms";
+import { countWords } from "./datasets";
 import { sources, whenWords, type Handling } from "./sources";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; dataset: Dataset | null };
@@ -283,7 +284,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
                 <b className="path">{dataset.trees?.originals?.path ?? "derivatives/dcm-original"}</b>
               </div>
               <span className="meta">
-                {dataset.trees?.originals ? `${n(dataset.trees.originals.files)} files · ${bytesWords(dataset.trees.originals.bytes)} · ` : arrives === "identified" ? "" : "no originals: the files arrive without identifiers · "}
+                {dataset.trees?.originals ? `${countWords(dataset.trees.originals.files)} files · ${typeof dataset.trees.originals.bytes === "number" ? `${bytesWords(dataset.trees.originals.bytes)} · ` : ""}` : arrives === "identified" ? "" : "no originals: the files arrive without identifiers · "}
                 locked to the stewards · read by the pseudonymiser only · never a source
               </span>
               <span className="meta">{ORIGINALS_WORDS[dataset.originals_kept ?? "kept"]}</span>
@@ -294,7 +295,7 @@ export function PseudonymsPage({ caps, name, onChanged }: { caps: Capabilities; 
                 <b className="path">{dataset.trees?.anon?.path ?? dataset.path}</b>
               </div>
               <span className="meta">
-                {dataset.trees?.anon ? `${n(dataset.trees.anon.files)} files · ` : ""}
+                {dataset.trees?.anon ? `${countWords(dataset.trees.anon.files)} files · ` : ""}
                 written by NILS only · the registry's source{dataset.trees?.anon?.last_written ? ` · last written ${whenWords(dataset.trees.anon.last_written)}` : ""}
               </span>
               <span className="meta">layout from facts: code, study, series, instance · never the original path</span>

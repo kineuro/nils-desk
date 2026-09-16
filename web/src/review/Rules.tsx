@@ -13,7 +13,7 @@ import { stationsServed } from "../assistant/stations";
 import type { Verdict } from "../assistant/stations";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
-import { data, ops, type Batch, type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
+import { data, ops, overlayScope, type Batch, type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
 import { assistantOffered } from "../sections";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
@@ -412,7 +412,7 @@ export function ProposalsTable({ caps, overlays, onChanged }: { caps: Capabiliti
                     {o.name} {o.version ?? ""}
                   </div>
                 </td>
-                <td>{o.scope ?? "everything"}</td>
+                <td>{overlayScope(o) ?? "everything"}</td>
                 <td>{t ? tryWords(t) : (o.why ?? "")}</td>
                 <td>
                   {who}

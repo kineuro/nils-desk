@@ -9,7 +9,7 @@
 import { door, DoorError, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { may, sees } from "../grants";
-import { ops, type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
+import { ops, overlayScope, type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
 import { kindOf } from "./triage";
 
 const q = (params: Record<string, string | number | boolean | undefined | null>) => {
@@ -403,7 +403,7 @@ export function siteWords(overlays: OverlayRow[], axis: string, value: string): 
     if (bucket && buckets && buckets[bucket]) edits.push(buckets[bucket] as Json);
     for (const e of edits) {
       const add = Array.isArray(e.add) ? e.add.map(String) : [];
-      const scope = o.scope ?? scopeOfDoc(doc);
+      const scope = overlayScope(o) ?? scopeOfDoc(doc);
       for (const word of add) (o.status === "adopted" ? adopted : o.status === "proposed" ? proposed : []).push({ word, scope });
     }
   }

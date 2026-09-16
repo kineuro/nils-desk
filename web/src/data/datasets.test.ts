@@ -112,6 +112,10 @@ describe("a dataset's card", () => {
     expect(treeLines(older(incoming))).toEqual([]);
     expect(newInOriginals(incoming)).toBe(2212);
     expect(newInOriginals(exchange)).toBeNull();
+    // a place the engine has not probed since the update that gave it trees counts nothing yet
+    const unprobed = { ...exchange, trees: { originals: null, anon: { path: exchange.trees!.anon.path, files: null, last_written: null } } };
+    expect(treeLines(unprobed)).toEqual([{ icon: "shield", path: "dcm-anon", words: "not counted yet · moved in, files as sent" }]);
+    expect(newInOriginals({ ...incoming, trees: { ...incoming.trees!, anon: { ...incoming.trees!.anon, files: null } } })).toBeNull();
   });
 
   it("ends with its newest batch: what was pseudonymised, the new subjects, what is held", () => {
