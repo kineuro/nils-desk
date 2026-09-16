@@ -17,7 +17,20 @@ export interface PlaceRef {
 
 export interface IngestRoot {
   name: string;
+  /**
+   * Where `@name` resolves to, which since contract 5 is the pseudonymised
+   * tree of the dataset declared on the location, and the folder itself where
+   * no dataset is declared on it.
+   */
   path: string;
+  /**
+   * The folder the engine was started with: the folder itself, whatever is
+   * declared on it. An engine before contract 5 says nothing here, and there
+   * the folder and `path` are one and the same.
+   */
+  given?: string;
+  /** The dataset's originals, which `@name/originals` names; null where the location holds none. */
+  originals?: string | null;
   place: PlaceRef | null;
 }
 

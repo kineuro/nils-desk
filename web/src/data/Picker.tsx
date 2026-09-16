@@ -36,9 +36,11 @@ import {
   lookNames,
   lookWords,
   mergePage,
+  openChosen,
   parentAt,
   pathInside,
   queuedWords,
+  rootChosen,
   rootWords,
   toggleChosen,
   type Chosen,
@@ -244,7 +246,7 @@ export function IngestPicker(props: {
   const note = page ? folderNote(page) : null;
   const counts = page ? listWords(page, rows.length, filter) : null;
   const unheld = chosen.filter((c) => !held(c)).length;
-  const current: Chosen | null = page && page.exists !== false && page.directory !== false && page.readable !== false ? { at: page.at, path: page.path, place: page.place } : null;
+  const current: Chosen | null = page ? openChosen(page, roots) : null;
 
   return (
     <div className="step-form">
@@ -305,7 +307,7 @@ export function IngestPicker(props: {
           {at === null && roots !== null && roots.length === 0 && <p className="meta browser-files">The engine was started with no ingest location, so there is nothing here to choose from.</p>}
           {at === null &&
             (roots ?? []).map((r) => {
-              const item: Chosen = { at: `@${r.name}`, path: r.path, place: r.place };
+              const item: Chosen = rootChosen(r);
               const on = chosenAt.has(item.at);
               return (
                 <div key={r.name} className={one ? (picked?.at === item.at ? "picker-row on" : "picker-row") : on ? "picker-row on" : "picker-row"}>
