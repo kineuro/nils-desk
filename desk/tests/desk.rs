@@ -23,7 +23,7 @@ async fn engine_speaking(openapi: &'static str, suite: &'static str) -> String {
             get(move || async move {
                 axum::Json(json!({
                     "engine": {"name": "nils", "version": "1.0.0-alpha.0"},
-                    "contracts": {"openapi": openapi, "review_item": "4", "pack": "4", "suite": suite, "mcp": "2"},
+                    "contracts": {"openapi": openapi, "review_item": "4", "pack": "5", "suite": suite, "mcp": "2"},
                     "doors": ["GET /api/capabilities", "POST /api/jobs", "GET /api/jobs", "POST /api/ask/run", "GET /api/ask/handles", "GET /api/packs"],
                     "policy": [], "auth": "token", "principal": "desk@lab",
                     "roles": ["reader", "reviewer", "operator", "admin"],
@@ -45,9 +45,9 @@ async fn engine_speaking(openapi: &'static str, suite: &'static str) -> String {
     url
 }
 
-/// A fake engine speaking the contracts this desk speaks: openapi 4, suite 2.
+/// A fake engine speaking the contracts this desk speaks: openapi 5, suite 2.
 async fn fake_engine() -> String {
-    engine_speaking("4", "2").await
+    engine_speaking("5", "2").await
 }
 
 async fn desk(engine: &str, assistant: Option<&str>) -> (String, Arc<nils_desk::Desk>) {
@@ -224,22 +224,22 @@ async fn verdict(openapi: &'static str, suite: &'static str) -> (Arc<nils_desk::
 
 #[tokio::test]
 async fn an_engine_speaking_a_contract_the_desk_does_not_is_refused_by_name() {
-    // this desk speaks openapi 4 and suite 2, where a person holds grants
-    assert_eq!((nils_desk::OPENAPI, nils_desk::SUITE), ("4", "2"));
-    let (desk, v) = verdict("4", "2").await;
+    // this desk speaks openapi 5 (record 26) and suite 2, where a person holds grants
+    assert_eq!((nils_desk::OPENAPI, nils_desk::SUITE), ("5", "2"));
+    let (desk, v) = verdict("5", "2").await;
     assert!(v.unwrap().is_none(), "the same majors are no mismatch");
     let nobody = nils_desk::session::nobody();
     let doc = nils_desk::capabilities::document(&desk, &nobody, None).await;
     assert!(doc["desk"]["contract_mismatch"].is_null(), "{doc}");
     assert_eq!(
         doc["desk"]["contracts"],
-        json!({"openapi": "4", "suite": "2"})
+        json!({"openapi": "5", "suite": "2"})
     );
     // an engine behind on either major is refused by name, and the desk does not start
     for (openapi, suite, named) in [
-        ("3", "2", "openapi 3 against 4"),
-        ("4", "1", "suite 1 against 2"),
-        ("3", "1", "openapi 3 against 4, suite 1 against 2"),
+        ("4", "2", "openapi 4 against 5"),
+        ("5", "1", "suite 1 against 2"),
+        ("4", "1", "openapi 4 against 5, suite 1 against 2"),
     ] {
         let (desk, v) = verdict(openapi, suite).await;
         let e = v.expect_err("refused");
@@ -251,10 +251,10 @@ async fn an_engine_speaking_a_contract_the_desk_does_not_is_refused_by_name() {
         let m = &doc["desk"]["contract_mismatch"];
         assert_eq!(m["major"], true, "{doc}");
         assert_eq!(m["found"], json!({"openapi": openapi, "suite": suite}));
-        assert_eq!(m["speaks"], json!({"openapi": "4", "suite": "2"}));
+        assert_eq!(m["speaks"], json!({"openapi": "5", "suite": "2"}));
     }
     // an engine ahead of the desk is a warning the shell shows, not a refusal
-    let (_, v) = verdict("5", "2").await;
+    let (_, v) = verdict("6", "2").await;
     let m = v.unwrap().expect("a warning");
     assert!(!m.major);
     assert!(m.message.contains("ahead"), "{}", m.message);
@@ -357,7 +357,7 @@ async fn an_export_pages_the_handle_with_the_purpose_and_the_desk_records_runs_a
             get(|| async {
                 axum::Json(json!({
                     "engine": {"name": "nils", "version": "1.0.0-alpha.0"},
-                    "contracts": {"openapi": "4", "review_item": "4", "pack": "4", "suite": "2", "mcp": "2"},
+                    "contracts": {"openapi": "5", "review_item": "4", "pack": "5", "suite": "2", "mcp": "2"},
                     "doors": ["GET /api/ask/handles"], "policy": [], "auth": "token", "principal": "desk@lab",
                     "roles": ["reader"], "registry": {"epoch": 7}, "packs": [],
                 }))
