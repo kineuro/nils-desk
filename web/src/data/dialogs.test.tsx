@@ -4,16 +4,23 @@
 // when the look found one; Bring in what is new with its steps, its chain and
 // its estimate, or the digest alone on an engine that queues nothing after a
 // job; and the Datasets page as it opens, with the dataset the address names.
+// With them, the two things Add a dataset hands the engine: the folder it
+// declares on, which is the folder a person picked and never the pseudonymised
+// tree of a dataset declared on it already, and the map it files, whose types
+// the site has not got are made by the import itself.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import answer from "../../test/fixtures/sources_record26.json";
 import type { Capabilities } from "../capabilities";
 import { GRANTS, SETS, type Grant } from "../grants";
-import { AddDataset } from "./AddDataset";
+import { AddDataset, mapImport, typesToMake } from "./AddDataset";
 import { BringInNew } from "./BringInNew";
+import type { FolderPage, IngestRoot } from "./browse";
 import { DataPage } from "./DataPage";
 import type { SourcesAnswer } from "./datasets";
+import { openChosen, rootChosen } from "./picker";
+import type { Guess } from "./pseudonyms";
 
 const sources = (answer as SourcesAnswer).sources;
 const [incoming, , exports] = sources;
@@ -107,6 +114,75 @@ describe("Add a dataset", () => {
     expect(noData).toContain("this account has no work on the Data page.");
     expect(noData).toContain("Filing a map needs work on the Data page");
     expect(noData).not.toContain("Upload a CSV");
+  });
+
+  it("makes the types a map names that the site has not got, since an unknown type is a conflict and a map with one is never filed", () => {
+    const id = (id_type: string | null, new_type: string | null): Guess => ({ role: "identifier", id_type, new_type });
+    const code: Guess = { role: "code", id_type: null, new_type: null };
+    const known = [{ name: "personnummer", description: null }];
+    // the column that stands for the person names a type of its own, as every identifier column does
+    const naming = [
+      { header: "personnummer", guess: id("personnummer", null) },
+      { header: "canonical_pn", guess: { role: "canonical", id_type: null, new_type: "pn" } as Guess },
+      { header: "study id", guess: id(null, "study-id") },
+      { header: "code", guess: code },
+    ];
+    expect(typesToMake(naming, known)).toEqual(["pn", "study-id"]);
+    const body = mapImport(naming, [["199001019999", "199001019999", "S-01", "0001"]], known);
+    expect(body.make_types).toBe(true);
+    expect(body.columns).toEqual([
+      { header: "personnummer", role: "identifier", id_type: "personnummer" },
+      { header: "canonical_pn", role: "canonical", id_type: "pn" },
+      { header: "study id", role: "identifier", id_type: "study-id" },
+      { header: "code", role: "code" },
+    ]);
+    // a map that names only types the site has already is filed without making any
+    const settled = [{ header: "personnummer", guess: id("personnummer", null) }, { header: "code", guess: code }];
+    expect(typesToMake(settled, known)).toEqual([]);
+    expect(mapImport(settled, [], known).make_types).toBe(false);
+  });
+});
+
+describe("the folder a dataset is declared on", () => {
+  // since contract 5 the folders door answers `path` as @name resolves it, which for a location a dataset is declared on is that dataset's pseudonymised tree, and `given` as the folder itself
+  const declared: IngestRoot = {
+    name: "incoming",
+    path: "/srv/imaging/incoming/derivatives/dcm-anon",
+    given: "/srv/imaging/incoming",
+    originals: "/srv/imaging/incoming/derivatives/dcm-original",
+    place: { name: "incoming", role: "source" },
+  };
+  const bare: IngestRoot = { name: "archive", path: "/srv/archive", given: "/srv/archive", place: null };
+
+  it("is the location's own folder, never the pseudonymised tree of the dataset declared on it already", () => {
+    expect(rootChosen(declared)).toEqual({ at: "@incoming", path: "/srv/imaging/incoming", place: { name: "incoming", role: "source" } });
+    expect(rootChosen(declared).path).not.toContain("dcm-anon");
+    expect(rootChosen(bare).path).toBe("/srv/archive");
+    // an engine that says nothing of the folder it was given has the folder and the tree as one
+    expect(rootChosen({ name: "old", path: "/srv/old", place: null }).path).toBe("/srv/old");
+  });
+
+  it("is that folder again where the location itself is open, and the engine's own path for a folder below it", () => {
+    const page = (at: string, rel: string, path: string): FolderPage => ({
+      at,
+      root: "incoming",
+      rel,
+      path,
+      parent: rel === "" ? null : "@incoming",
+      exists: true,
+      directory: true,
+      readable: true,
+      place: null,
+      folders: [],
+      next: null,
+      total: 0,
+      files: { count: 0, more: false },
+      partial: false,
+      timed_out: false,
+    });
+    expect(openChosen(page("@incoming", "", "/srv/imaging/incoming/derivatives/dcm-anon"), [declared])?.path).toBe("/srv/imaging/incoming");
+    expect(openChosen(page("@incoming/sub-001", "sub-001", "/srv/imaging/incoming/derivatives/dcm-anon/sub-001"), [declared])?.path).toBe("/srv/imaging/incoming/derivatives/dcm-anon/sub-001");
+    expect(openChosen({ ...page("@incoming", "", "/srv/imaging/incoming"), readable: false }, [declared])).toBeNull();
   });
 });
 

@@ -141,9 +141,43 @@ export function listWords(p: FolderPage, shown: number, filter: string): string 
 
 export interface Chosen {
   at: string;
-  /** The folder's path on the engine's machine, for adding it as a source. */
+  /**
+   * The folder itself on the engine's machine, for adding it as a source or
+   * declaring a dataset on it: the folder the engine was given, never the
+   * pseudonymised tree `@name` resolves to for a location a dataset is
+   * declared on already.
+   */
   path: string;
   place: PlaceRef | null;
+}
+
+/**
+ * The folder a location stands for: the folder the engine was started with,
+ * which the folders door gives as `given`. Its `path` is where `@name`
+ * resolves to, and for a location that holds a dataset already that is the
+ * dataset's pseudonymised tree, which is nobody's folder to declare on. An
+ * engine that says nothing of the folder it was given has the two as one.
+ */
+export function folderOf(r: IngestRoot): string {
+  return r.given ?? r.path;
+}
+
+/** A location as a folder that can be chosen: its own folder, under the name a digest would use. */
+export function rootChosen(r: IngestRoot): Chosen {
+  return { at: atOf(r.name, []), path: folderOf(r), place: r.place };
+}
+
+/**
+ * The folder open as a folder that can be chosen, or null where it cannot be
+ * read. At a location itself the folder is the location's own, since the page
+ * answers the path `@name` resolves to; below one the page's path is the
+ * folder's own already.
+ */
+export function openChosen(page: FolderPage, roots: readonly IngestRoot[] | null): Chosen | null {
+  if (page.exists === false || page.directory === false || page.readable === false) return null;
+  const p = parseAt(page.at);
+  const root = p !== null && p.rel.length === 0 ? (roots ?? []).find((r) => r.name === p.root) : undefined;
+  return { at: page.at, path: root ? folderOf(root) : page.path, place: page.place };
 }
 
 /** Whether a source place holds a chosen folder, so it can be digested. */

@@ -35,18 +35,14 @@ import {
   bringInName,
   cohortChoices,
   cohortOf,
-  columnsRefusal,
-  guessColumns,
   identityOf,
   jobs,
   linkage,
   locationOf,
   packFor,
-  parseCsv,
   places as placesDoor,
   probeWords,
   record26,
-  reportLines,
   v0Words,
   type Arrives,
   type BringIn,
@@ -60,21 +56,52 @@ import {
 } from "./datasets";
 import { IngestPicker } from "./Picker";
 import { lookWords, newFolderRefusal, type Chosen } from "./picker";
+// the map is read and refused by the Pseudonymisation page's own rules, so a file this dialog takes is one that page would take too
+import { csvRefusal, guessRole, importColumns, lookAt, mapRefusal, parseCsv, reportLines, reportOf, typeName, type ColumnLook, type Guess } from "./pseudonyms";
 
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
 
 /** A fact as its value: what it is in small letters, then the value alone. */
 type Cell = { k: string; v: string };
 
+/** A column of the map: its header, what the values under it look like, and what it means. */
+interface Column {
+  header: string;
+  look: ColumnLook;
+  guess: Guess;
+}
+
 /** The map as uploaded: its file, its columns named, and what the engine said it would do. */
 interface Map {
   file: string;
-  header: string[];
   rows: string[][];
-  columns: MapColumn[];
+  columns: Column[];
   report: ImportReport | null;
   checking: boolean;
   why: string | null;
+}
+
+/**
+ * The types the columns name that the site has not got. The import makes
+ * these itself when it is told to; told nothing, the engine makes each of
+ * them a conflict instead, and a map with a conflict is not filed at all.
+ */
+export function typesToMake(columns: { header: string; guess: Guess }[], known: LinkageType[] | null): string[] {
+  const names = new Set((known ?? []).map((t) => t.name));
+  const wanted = columns.filter((c) => c.guess.role === "identifier" || c.guess.role === "canonical").map((c) => c.guess.id_type ?? c.guess.new_type ?? typeName(c.header));
+  return [...new Set(wanted.filter((t) => t !== "" && !names.has(t)))];
+}
+
+/** The map as the import door takes it, rehearsed or filed: the columns named for what they are, and the word that makes the types they name that the site has not got. */
+export function mapImport(columns: { header: string; guess: Guess }[], rows: string[][], known: LinkageType[] | null): { columns: MapColumn[]; rows: string[][]; make_types: boolean } {
+  return {
+    columns: importColumns(
+      columns.map((c) => c.header),
+      columns.map((c) => c.guess),
+    ),
+    rows,
+    make_types: typesToMake(columns, known).length > 0,
+  };
 }
 
 export interface AddPlan {
@@ -84,7 +111,7 @@ export interface AddPlan {
   fields: DatasetFields | null;
   /** Start the engine again, so it reads the new folder: only where a service keeps it running. */
   restart: boolean;
-  map: { columns: MapColumn[]; rows: string[][] } | null;
+  map: { columns: MapColumn[]; rows: string[][]; make_types: boolean } | null;
   bringIn: BringIn | null;
 }
 
@@ -140,7 +167,7 @@ export async function addDataset(plan: AddPlan, phase: (words: string) => void):
   const said: string[] = [`${plan.name} is a dataset${renamed}`];
   if (plan.map) {
     phase("filing the map");
-    const r = await patiently(() => linkage.import({ place: plan.name, columns: plan.map!.columns, rows: plan.map!.rows, dry_run: false }));
+    const r = await patiently(() => linkage.import({ place: plan.name, columns: plan.map!.columns, rows: plan.map!.rows, make_types: plan.map!.make_types, dry_run: false }));
     said.push("job" in r ? `the map is filed as job ${r.job}` : "the map is filed");
   }
   // a job names the folder by its place, which the engine learns when it starts again
@@ -187,6 +214,8 @@ export function AddDataset(props: {
   const [cohort, setCohort] = useState<string | null>(null);
   const [layout, setLayout] = useState<Layout | null>(props.initial?.layout ?? null);
   const [found, setFound] = useState<Look | null>(null);
+  /** Why the engine did not say what is in the folder, in its own words. */
+  const [lookWhy, setLookWhy] = useState<string | null>(null);
   const [looking, setLooking] = useState<number | null>(null);
   const [act, setAct] = useState<Act>({ kind: "idle" });
   const fileRef = useRef<HTMLInputElement>(null);
@@ -203,7 +232,8 @@ export function AddDataset(props: {
   const working = act.kind === "working";
   // the engine lists its own ingest locations to a person with work on Data; the host's folders need work on the install
   const lists = served(caps, "POST /api/ingest/folders") && may(caps, "data:work");
-  const looks = served(caps, "POST /api/ingest/look");
+  // the same work looks inside a folder by its bare path, which only an engine of record 26 takes
+  const looks = modern && served(caps, "POST /api/ingest/look") && may(caps, "data:work");
   const picking = lists && !outside;
   const typesServed = served(caps, "GET /api/linkage/types");
   const importsServed = modern && served(caps, "POST /api/linkage/imports") && may(caps, "data:work");
@@ -215,8 +245,26 @@ export function AddDataset(props: {
   const choices = cohortChoices(name, cohorts);
   const cohortChoice = cohort ?? choices[0]?.value ?? "none";
   const words = install ? addFolderWords(install) : null;
-  const lookAt = props.lookAt ?? ((f: string) => ingest.lookHere(f));
+  const lookInside = props.lookAt ?? ((f: string) => ingest.lookHere(f));
   const picked: Chosen | null = at !== null ? { at, path: folder, place: null } : null;
+  /** The types of the map's columns the site has not got, which the import makes. */
+  const newTypes = map ? typesToMake(map.columns, types) : [];
+
+  /**
+   * Another folder chosen: what was said of the one before it is let go. The
+   * probe read that folder, the map was uploaded for it and the identifier's
+   * type was chosen from what it holds, so none of the three is carried over.
+   */
+  const chooseFolder = (next: string, where: string | null) => {
+    if (next.trim().replace(/\/+$/, "") === folder && where === at) return;
+    setAt(where);
+    setPath(next);
+    probing.current += 1;
+    setProbe({ kind: "idle" });
+    setMap(null);
+    setNewType(null);
+    setIdType(types?.[0]?.name ?? "");
+  };
 
   // the registry's identifier types, once
   useEffect(() => {
@@ -240,18 +288,20 @@ export function AddDataset(props: {
     if (props.initial && folder === props.initial.path.trim().replace(/\/+$/, "")) return;
     setFound(null);
     setLayout(null);
+    setLookWhy(null);
     if (!looks || !absolute) return;
     let alive = true;
     const t = setTimeout(() => {
       setLooking(Date.now());
-      lookAt(folder)
+      lookInside(folder)
         .then((l) => {
           if (!alive) return;
           setFound(l);
           setLayout(l.layout ?? null);
         })
-        .catch(() => {
-          if (alive) setFound(null);
+        .catch((e: unknown) => {
+          // a folder the engine would not look inside read as an empty one: the look is what tells a person what is there before they declare on it, so what stopped it is said
+          if (alive) setLookWhy(`The engine did not look inside this folder: ${messageOf(e)}`);
         })
         .finally(() => {
           if (alive) setLooking(null);
@@ -268,29 +318,50 @@ export function AddDataset(props: {
     file
       .text()
       .then((text) => {
-        const { header, rows } = parseCsv(text);
-        if (header.length === 0) return setMap({ file: file.name, header, rows, columns: [], report: null, checking: false, why: "The file has no header row." });
-        const columns = guessColumns(header, idType || null);
-        const next: Map = { file: file.name, header, rows, columns, report: null, checking: false, why: null };
+        const csv = parseCsv(text);
+        // what the engine will not read is said here, before a row of it is posted anywhere
+        const refused = csvRefusal(csv);
+        if (refused !== null) return setMap({ file: file.name, rows: [], columns: [], report: null, checking: false, why: refused });
+        const columns = csv.header.map((h, i) => {
+          const look = lookAt(
+            h,
+            csv.rows.map((r) => r[i] ?? ""),
+          );
+          return { header: h, look, guess: guessRole(h, look, types ?? []) };
+        });
+        const next: Map = { file: file.name, rows: csv.rows, columns, report: null, checking: false, why: null };
         setMap(next);
         check(next);
       })
-      .catch((e: unknown) => setMap({ file: file.name, header: [], rows: [], columns: [], report: null, checking: false, why: messageOf(e) }));
+      .catch((e: unknown) => setMap({ file: file.name, rows: [], columns: [], report: null, checking: false, why: messageOf(e) }));
   };
 
   /** The dry run: what the engine would do with the map as its columns stand. */
   const check = (m: Map) => {
-    const refusal = columnsRefusal(m.columns);
+    const refusal = mapRefusal(m.columns.map((c) => c.guess));
     if (refusal || !importsServed) return setMap({ ...m, report: null, why: refusal });
     setMap({ ...m, checking: true, why: null });
     linkage
-      .import({ columns: m.columns, rows: m.rows, dry_run: true })
-      .then((r) => setMap((was) => (was && was.file === m.file ? { ...was, checking: false, report: "job" in r ? null : r, why: "job" in r ? "The engine filed the map at once rather than rehearsing it." : null } : was)))
+      .import({ ...mapImport(m.columns, m.rows, types), dry_run: true })
+      .then((r) => setMap((was) => (was && was.file === m.file ? { ...was, checking: false, report: "job" in r ? null : reportOf(r), why: "job" in r ? "The engine filed the map at once rather than rehearsing it." : null } : was)))
       .catch((e: unknown) => setMap((was) => (was && was.file === m.file ? { ...was, checking: false, report: null, why: messageOf(e) } : was)));
   };
 
-  const setColumn = (i: number, patch: Partial<MapColumn>) =>
-    setMap((m) => (m ? { ...m, columns: m.columns.map((c, k) => (k === i ? { ...c, ...patch } : c)), report: null } : m));
+  const setGuess = (i: number, guess: Guess) => setMap((m) => (m ? { ...m, columns: m.columns.map((c, k) => (k === i ? { ...c, guess } : c)), report: null } : m));
+
+  /** A column's role: one that files under a type keeps the type it has, or is read for one again. */
+  const setRole = (i: number, c: Column, role: ColumnRole) => {
+    if (role !== "identifier" && role !== "canonical") return setGuess(i, { role, id_type: null, new_type: null });
+    if (c.guess.id_type !== null || c.guess.new_type !== null) return setGuess(i, { ...c.guess, role });
+    const g = guessRole(c.header, c.look, types ?? []);
+    setGuess(i, { role, id_type: g.id_type, new_type: g.new_type ?? (typeName(c.header) || "identifier") });
+  };
+
+  /** A column's type: one of the site's, or a name for one the import makes. */
+  const setType = (i: number, c: Column, name: string) => {
+    const known = (types ?? []).some((t) => t.name === name);
+    setGuess(i, { ...c.guess, id_type: known ? name : null, new_type: known ? null : name });
+  };
 
   const addType = () => {
     if (!newType) return;
@@ -342,7 +413,7 @@ export function AddDataset(props: {
       path: folder,
       fields,
       restart: restarts,
-      map: map && map.report && map.report.conflicts.length === 0 && importsServed ? { columns: map.columns, rows: map.rows } : null,
+      map: map && map.report && map.report.conflicts.length === 0 && importsServed ? mapImport(map.columns, map.rows, types) : null,
       bringIn: chain,
     };
     const say = (phase: string) => setAct({ kind: "working", phase, since: Date.now() });
@@ -363,12 +434,18 @@ export function AddDataset(props: {
           adding={adding}
           choose="one"
           picked={picked}
-          onPick={(c) => {
-            setAt(c.at);
-            setPath(c.path);
-          }}
+          onPick={(c) => chooseFolder(c.path, c.at)}
           outside={
-            <button type="button" className="button quiet small" disabled={working} onClick={() => setOutside(true)}>
+            <button
+              type="button"
+              className="button quiet small"
+              disabled={working}
+              onClick={() => {
+                // the folder is no longer one of the engine's locations, so it is no longer named as one
+                setOutside(true);
+                setAt(null);
+              }}
+            >
               <Icon name="folder-search" />A folder outside these
             </button>
           }
@@ -382,10 +459,7 @@ export function AddDataset(props: {
             disabled={working}
             browse={supervised}
             known={knownFolders(places, install?.dir ?? null)}
-            onChange={(p) => {
-              setAt(null);
-              setPath(p);
-            }}
+            onChange={(p) => chooseFolder(p, null)}
           />
           {lists && (
             <button type="button" className="button quiet small" disabled={working} onClick={() => setOutside(false)}>
@@ -396,7 +470,10 @@ export function AddDataset(props: {
         </>
       )}
       {looking !== null && <Wait phase="looking inside the folder" since={looking} />}
-      {folder !== "" && (found !== null || at !== null) && <Values cells={[{ k: "chosen", v: at ?? folder }, ...(found ? [{ k: "inside", v: insideWords(found) }] : [])]} />}
+      {folder !== "" && (found !== null || at !== null) && (
+        <Values cells={[{ k: "chosen", v: at ?? folder }, ...(at !== null ? [{ k: "folder", v: folder }] : []), ...(found ? [{ k: "inside", v: insideWords(found) }] : [])]} />
+      )}
+      {lookWhy && <p className="warn">{lookWhy}</p>}
     </div>
   );
 
@@ -435,7 +512,7 @@ export function AddDataset(props: {
                         </td>
                         <td>
                           <div className="input">
-                            <select value={c.role} aria-label={`What ${c.header || `column ${i + 1}`} is`} disabled={working} onChange={(e) => setColumn(i, { role: e.target.value as ColumnRole })}>
+                            <select value={c.guess.role} aria-label={`What ${c.header || `column ${i + 1}`} is`} disabled={working} onChange={(e) => setRole(i, c, e.target.value as ColumnRole)}>
                               <option value="identifier">an identifier</option>
                               <option value="canonical">the canonical identifier</option>
                               <option value="code">the code</option>
@@ -443,12 +520,27 @@ export function AddDataset(props: {
                             </select>
                           </div>
                         </td>
-                        <td>{(c.role === "identifier" || c.role === "canonical") && <TypeSelect value={c.id_type ?? ""} types={types} disabled={working} label={`The type of ${c.header || `column ${i + 1}`}`} onChange={(t) => setColumn(i, { id_type: t })} />}</td>
+                        <td>
+                          {(c.guess.role === "identifier" || c.guess.role === "canonical") && (
+                            <TypeSelect
+                              value={c.guess.id_type ?? c.guess.new_type ?? ""}
+                              types={types}
+                              disabled={working}
+                              label={`The type of ${c.header || `column ${i + 1}`}`}
+                              onChange={(t) => setType(i, c, t)}
+                            />
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              {newTypes.length > 0 && (
+                <p className="meta">
+                  {newTypes.length === 1 ? `The type ${newTypes[0]} is not one of the site's, and is made when the map is filed.` : `The types ${newTypes.join(", ")} are not the site's, and are made when the map is filed.`}
+                </p>
+              )}
               <div className="row actions">
                 <button type="button" className="button secondary small" disabled={map.checking || working} onClick={() => check(map)}>
                   Check the map
@@ -459,8 +551,8 @@ export function AddDataset(props: {
               {map.report && (
                 <ul className="report">
                   {reportLines(map.report).map((l) => (
-                    <li key={l.words} className={l.tone === "caution" ? "warn" : l.tone === "ok" ? "ok-words" : undefined}>
-                      {l.words}
+                    <li key={l.label} className={l.tone === "caution" ? "warn" : l.tone === "ok" ? "ok-words" : undefined}>
+                      {l.label}: {l.words}
                     </li>
                   ))}
                   <li className="meta">{map.report.conflicts.length > 0 ? "Nothing is written while a conflict stands." : "Filed once the dataset is added."}</li>
