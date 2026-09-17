@@ -4,6 +4,8 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.32] - 2026-09-17
+
 ### Fixed
 
 - The banner saying the engine is ahead of this desk no longer stands after everything has been updated. This desk is generated from the engine's HTTP contract 6, which added the pseudonymiser's tag list to contract 5, and it now says so. Beside that it names the oldest contract it works against, which is 5: an engine below that is refused as it always was, and an engine at 5 is older than this desk and works, since a contract only ever adds doors and the desk asks whether a door is served before it uses one. An engine older than the desk in that way is said at the command line and changes nothing on the pages, so the engine and the desk are still released apart.
