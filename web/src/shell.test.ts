@@ -63,8 +63,16 @@ describe("the states of a fresh install", () => {
   });
   it("names a major contract mismatch before anything else", () => {
     const d = fresh();
-    d.desk.contract_mismatch = { found: { openapi: "4" }, speaks: { openapi: "3" }, major: true };
+    d.desk.contract_mismatch = { found: { openapi: "4" }, speaks: { openapi: "6" }, major: true, direction: "behind" };
     expect(state(d).kind).toBe("contract_mismatch");
+  });
+  it("stops for neither an engine older than the desk nor one newer, since only a major mismatch stops it", () => {
+    const older = fresh();
+    older.desk.contract_mismatch = { found: { openapi: "5" }, speaks: { openapi: "6" }, major: false, direction: "behind" };
+    expect(state(older).kind).toBe("ready");
+    const newer = fresh();
+    newer.desk.contract_mismatch = { found: { openapi: "7" }, speaks: { openapi: "6" }, major: false, direction: "ahead" };
+    expect(state(newer).kind).toBe("ready");
   });
   it("waits for the model backend's first token when a gateway is installed", () => {
     const d = fresh();
