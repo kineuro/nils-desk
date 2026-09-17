@@ -15,7 +15,7 @@ use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 
 use crate::config::Upstream;
-use crate::{OPENAPI, SUITE, Shared, VERSION, session};
+use crate::{OPENAPI, OPENAPI_FLOOR, SUITE, SUITE_FLOOR, Shared, VERSION, session};
 
 const FRESH: Duration = Duration::from_secs(5);
 
@@ -38,6 +38,10 @@ pub struct Mismatch {
     pub found: Value,
     pub speaks: Value,
     pub major: bool,
+    /// Which side of this desk the engine is on, `"ahead"` or `"behind"`, so
+    /// that the shell says which of the two is the older without working it
+    /// out from the numbers again.
+    pub direction: &'static str,
     pub message: String,
 }
 
@@ -96,36 +100,48 @@ async fn fetch(desk: &Shared, up: &Upstream, path: &str) -> Result<Value, String
     r.json().await.map_err(|e| e.to_string())
 }
 
-/// The engine's contract versions against this desk's (Wave 4c §6.7): a
-/// version the desk does not speak refuses, by name; an engine ahead of the
-/// desk is a warning the shell also shows.
+/// The engine's contract versions against this desk's (Wave 4c §6.7, record
+/// 28). The floor decides, not the version the desk was generated from: an
+/// engine below the floor is refused by name, since the desk needs doors it
+/// does not serve. An engine at or above the floor and below what the desk
+/// was generated from is older and still usable, because a contract only ever
+/// adds doors and the desk asks whether a door is served before it uses one;
+/// that is a note, never a refusal. An engine ahead of the desk is a warning
+/// the shell also shows.
 pub fn check(engine: &Value) -> Result<Option<Mismatch>, Box<Mismatch>> {
     let found = json!({
         "openapi": engine["contracts"]["openapi"].as_str().unwrap_or(""),
         "suite": engine["contracts"]["suite"].as_str().unwrap_or(""),
     });
     let speaks = json!({"openapi": OPENAPI, "suite": SUITE});
+    let floor = json!({"openapi": OPENAPI_FLOOR, "suite": SUITE_FLOOR});
     let num = |v: &Value| v.as_str().and_then(|s| s.trim().parse::<u32>().ok());
-    let mut behind = Vec::new();
+    // below the floor, so a door the desk needs is missing: the desk refuses
+    let mut under = Vec::new();
+    // at or above the floor and behind this desk: usable, and worth saying
+    let mut older = Vec::new();
     let mut ahead = Vec::new();
     for name in ["openapi", "suite"] {
-        let (f, s) = (num(&found[name]), num(&speaks[name]).unwrap_or(0));
-        match f {
-            None => behind.push(format!("{name} (the engine names none)")),
-            Some(f) if f < s => behind.push(format!("{name} {f} against {s}")),
+        let s = num(&speaks[name]).unwrap_or(0);
+        let bottom = num(&floor[name]).unwrap_or(0);
+        match num(&found[name]) {
+            None => under.push(format!("{name} (the engine names none)")),
+            Some(f) if f < bottom => under.push(format!("{name} {f} against {bottom}")),
+            Some(f) if f < s => older.push(format!("{name} {f} against {s}")),
             Some(f) if f > s => ahead.push(format!("{name} {f} against {s}")),
             _ => {}
         }
     }
-    if !behind.is_empty() {
+    if !under.is_empty() {
         let message = format!(
-            "contract mismatch: the engine speaks {} and this desk speaks openapi {OPENAPI} and suite {SUITE}; the desk does not start",
-            behind.join(", ")
+            "contract mismatch: the engine speaks {}, and this desk needs at least openapi {OPENAPI_FLOOR} and suite {SUITE_FLOOR}; the desk does not start",
+            under.join(", ")
         );
         return Err(Box::new(Mismatch {
             found,
             speaks,
             major: true,
+            direction: "behind",
             message,
         }));
     }
@@ -138,6 +154,20 @@ pub fn check(engine: &Value) -> Result<Option<Mismatch>, Box<Mismatch>> {
             found,
             speaks,
             major: false,
+            direction: "ahead",
+            message,
+        }));
+    }
+    if !older.is_empty() {
+        let message = format!(
+            "the engine is older than this desk: {}; it serves every door the desk needs, and what it does not serve the desk does not show",
+            older.join(", ")
+        );
+        return Ok(Some(Mismatch {
+            found,
+            speaks,
+            major: false,
+            direction: "behind",
             message,
         }));
     }
@@ -238,10 +268,10 @@ pub async fn document(
             let m = match check(e) {
                 Ok(None) => Value::Null,
                 Ok(Some(m)) => {
-                    json!({"found": m.found, "speaks": m.speaks, "major": m.major, "message": m.message})
+                    json!({"found": m.found, "speaks": m.speaks, "major": m.major, "direction": m.direction, "message": m.message})
                 }
                 Err(m) => {
-                    json!({"found": m.found, "speaks": m.speaks, "major": m.major, "message": m.message})
+                    json!({"found": m.found, "speaks": m.speaks, "major": m.major, "direction": m.direction, "message": m.message})
                 }
             };
             (e.clone(), true, m)

@@ -29,10 +29,17 @@ use axum::routing::{any, get, post, put};
 pub use config::Config;
 
 /// The contract versions this desk was generated from (Wave 4c §6.7, and
-/// record 26 for OpenAPI 5): an engine behind either major is refused by
-/// name, and one ahead is a warning the shell shows.
-pub const OPENAPI: &str = "5";
+/// record 28 for OpenAPI 6), and beside each the oldest the desk still works
+/// against. The floor is the one that decides: an engine below it is refused
+/// by name, since the desk needs doors it does not serve. An engine at or
+/// above the floor but below what the desk was generated from is older and
+/// still usable, because every contract since the floor only added doors and
+/// the desk asks whether a door is served before it uses one (record 28). An
+/// engine ahead of the desk is a warning the shell shows.
+pub const OPENAPI: &str = "6";
+pub const OPENAPI_FLOOR: &str = "5";
 pub const SUITE: &str = "2";
+pub const SUITE_FLOOR: &str = "2";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Everything a request handler reaches.

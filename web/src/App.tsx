@@ -203,7 +203,9 @@ export function App() {
           Made-up data: this registry was built by {caps.engine.registry.synthetic}. Nothing here is a real person or a real scan.
         </div>
       )}
-      {caps.desk.contract_mismatch && !caps.desk.contract_mismatch.major && (
+      {/* only when the engine knows doors this desk does not: an engine older than the desk
+          serves everything the desk needs, and the desk already shows nothing it does not serve */}
+      {caps.desk.contract_mismatch && !caps.desk.contract_mismatch.major && caps.desk.contract_mismatch.direction === "ahead" && (
         <div className="banner" role="note">
           The engine is ahead of this desk. Everything here still works; update the desk to see what the engine added.
         </div>

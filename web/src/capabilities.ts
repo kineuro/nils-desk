@@ -55,7 +55,8 @@ export interface Capabilities {
     contracts: Record<string, string>;
     /** The named states of section 7.2 the desk itself reports. */
     engine_reachable: boolean;
-    contract_mismatch: null | { found: Record<string, string>; speaks: Record<string, string>; major: boolean };
+    /** What the engine speaks against this desk: `major` stops the desk, and `direction` says which of the two is the older. */
+    contract_mismatch: null | { found: Record<string, string>; speaks: Record<string, string>; major: boolean; direction: "ahead" | "behind" };
     /** How a person logs in, by mode: none in off mode. */
     login: null | { kind: "password" | "redirect"; url: string };
     signed_in: boolean;
