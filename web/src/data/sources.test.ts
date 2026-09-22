@@ -2,7 +2,7 @@
 // The marks and words the Data page draws from the sources door.
 
 import { describe, expect, it } from "vitest";
-import { digestMarks, fileWords, handlingWords, sourceState, whenWords, type Digest, type Source } from "./sources";
+import { DATES_KEPT, datesWord, digestMarks, fileWords, handlingWords, sourceState, whenWords, type Digest, type Source } from "./sources";
 
 const digest = (over: Partial<Digest> = {}): Digest => ({
   id: 1,
@@ -52,11 +52,23 @@ describe("a source's card", () => {
     expect(sourceState(source([])).words).toBe("not read yet");
   });
   it("says how the source is handled", () => {
-    expect(handlingWords({ arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: true } })).toEqual({
+    expect(handlingWords({ arrives: "identified", on_release: { uids: "remap", deface: true } })).toEqual({
       arrives: "arrives identified",
-      release: "on release: dates shifted, UIDs remapped, faces removed",
+      release: "on release: UIDs remapped, faces removed",
     });
+    expect(handlingWords({ arrives: "deidentified", on_release: { uids: "preserve", deface: false } }).release).toBe("released as it is");
+    // a caller from before may still send keep, which says nothing
     expect(handlingWords({ arrives: "deidentified", on_release: { dates: "keep", uids: "preserve", deface: false } }).release).toBe("released as it is");
+    // an engine from before may still answer a stored policy: it is said as it stands, not crashed on
+    expect(handlingWords({ arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: false } }).release).toBe("on release: dates shifted, UIDs remapped");
+  });
+  it("says a stored date policy in a word, every release since keeping the date", () => {
+    expect(datesWord(undefined)).toBe("kept");
+    expect(datesWord(null)).toBe("kept");
+    expect(datesWord("keep")).toBe("kept");
+    expect(datesWord("shift")).toBe("shifted");
+    expect(datesWord("year")).toBe("cut to the year");
+    expect(DATES_KEPT).toContain("(M00, M06)");
   });
   it("counts a digest's files and says when briefly", () => {
     expect(fileWords(digest())).toBe("2,208 new · 14 changed · 9,102 unchanged");

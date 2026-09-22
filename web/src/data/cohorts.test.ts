@@ -21,7 +21,6 @@ import {
   reachesWords,
   releases,
   releaseSessionNaming,
-  sessionNamingNote,
   sessionsMeta,
   sessionsPhrase,
   sessionsWords,
@@ -218,8 +217,9 @@ describe("adding and taking out by hand", () => {
 });
 
 describe("a new release", () => {
-  const source = (name: string, dates: "keep" | "shift" | "year", uids: "remap" | "preserve", deface = false): Source =>
-    ({ id: 1, name, path: `/data/${name}`, guarantees: {}, probed: null, handling: { arrives: "identified", on_release: { dates, uids, deface } }, handling_declared: true, roots: 1, digests: { count: 1, first: null, last: null, recent: [] }, totals: { subjects: 1, studies: 1, sessions: 1, stacks: 1, refused_files: 0, to_sort: 0 } }) as Source;
+  // `dates` only as an engine from before may still answer it; since record 38 S3 a handling carries none
+  const source = (name: string, uids: "remap" | "preserve", deface = false, dates?: string): Source =>
+    ({ id: 1, name, path: `/data/${name}`, guarantees: {}, probed: null, handling: { arrives: "identified", on_release: dates === undefined ? { uids, deface } : { dates, uids, deface } }, handling_declared: true, roots: 1, digests: { count: 1, first: null, last: null, recent: [] }, totals: { subjects: 1, studies: 1, sessions: 1, stacks: 1, refused_files: 0, to_sort: 0 } }) as Source;
   it("is named for what it is of, the day and the next number", () => {
     const day = new Date("2026-09-15T12:00:00");
     expect(suggestedName("north", [], day)).toBe("north-2026.09.15.1");
@@ -228,30 +228,17 @@ describe("a new release", () => {
     expect(suggestedName("  ", [], day)).toBe("release-2026.09.15.1");
   });
   it("says how the files of each dataset leave, from that dataset's own handling", () => {
-    const sources = [source("north-3t", "shift", "remap"), source("archive-2019", "year", "preserve", true)];
+    const sources = [source("north-3t", "remap"), source("archive-2019", "preserve", true)];
     expect(leavingLines(sources, north.sources_holding)).toEqual([
-      { dataset: "north-3t", dates: "shift", words: "dates shifted, one offset per subject · UIDs remapped · faces kept", note: "the dataset's handling" },
-      { dataset: "archive-2019", dates: "year", words: "dates cut to the year · UIDs kept · faces removed", note: "6 subjects have files there too" },
+      { dataset: "north-3t", words: "dates kept · UIDs remapped · faces kept", note: "the dataset's handling" },
+      { dataset: "archive-2019", words: "dates kept · UIDs kept · faces removed", note: "6 subjects have files there too" },
     ]);
     // a dataset the sources door did not list says so; a card's answer lists every dataset
     expect(leavingLines([sources[0]], north.sources_holding)[1].words).toBe("handling not read");
     expect(leavingLines(sources, null).map((l) => l.dataset)).toEqual(["north-3t", "archive-2019"]);
-    expect(leavingLines([source("x", "keep", "remap")], null)[0].words).toBe("dates kept · UIDs remapped · faces kept");
-  });
-  it("says before the run that a dataset whose dates move has its sessions numbered in date order", () => {
-    const lines = leavingLines([source("north-3t", "shift", "remap"), source("archive-2019", "keep", "remap")], null);
-    expect(sessionNamingNote(lines, "")).toBe(
-      "north-3t moves its dates, so a session labelled by its date would put back in the tree the date its files no longer carry: the sessions are numbered in date order instead. Name a months or ordinal scheme above to choose the labels yourself.",
-    );
-    // a scheme named by the person stands where it labels by months or by a number
-    expect(sessionNamingNote(lines, " months ")).toContain("The scheme named above stands where it labels by months or by a number.");
-    // every dataset whose dates move is named, and nothing is said where none does
-    const both = leavingLines([source("north-3t", "shift", "remap"), source("archive-2019", "year", "remap")], null);
-    expect(sessionNamingNote(both, "")).toContain("north-3t and archive-2019 move their dates");
-    expect(sessionNamingNote(leavingLines([source("north-3t", "keep", "remap")], null), "")).toBeNull();
-    expect(sessionNamingNote([], "")).toBeNull();
-    // a dataset the sources door did not list says nothing of its dates, so nothing is claimed of them
-    expect(sessionNamingNote([{ dataset: "x", dates: null, words: "handling not read", note: null }], "")).toBeNull();
+    expect(leavingLines([source("x", "remap", false, "keep")], null)[0].words).toBe("dates kept · UIDs remapped · faces kept");
+    // a policy an older engine still answers is said as it stands, never crashed on
+    expect(leavingLines([source("x", "remap", false, "shift")], null)[0].words).toBe("dates shifted · UIDs remapped · faces kept");
   });
   it("reads off a release row how its sessions were named", () => {
     const rows = (releasesFixture as { releases: Release[] }).releases;
@@ -268,7 +255,8 @@ describe("a new release", () => {
   });
   it("reads a release row's policy from its own columns, else from what it recorded per dataset", () => {
     const rows = (releasesFixture as { releases: Release[] }).releases;
-    expect(policyWords(rows[0])).toEqual({ dates: "to the year", uids: "remapped" });
+    // rows from before keep the policy they were released under
+    expect(policyWords(rows[0])).toEqual({ dates: "cut to the year", uids: "remapped" });
     expect(policyWords(rows[1])).toEqual({ dates: "shifted", uids: "remapped" });
     expect(policyWords({ ...rows[1], dates: "keep", uids: "preserve" })).toEqual({ dates: "kept", uids: "kept" });
     expect(policyWords({ ...rows[1], policies: undefined })).toEqual({ dates: "", uids: "" });

@@ -16,7 +16,7 @@ const source = (name: string, digests: number[] = []): Source =>
     path: `/scans/${name}`,
     guarantees: {},
     probed: null,
-    handling: { arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: false } },
+    handling: { arrives: "identified", on_release: { uids: "remap", deface: false } },
     handling_declared: true,
     roots: 1,
     digests: { count: digests.length, first: null, last: null, recent: digests.map((id) => ({ id, name: `${name}-${id}`, state: "done", started_at: null, finished_at: null, job_id: null, files: { seen: 0, new: 0, changed: 0, unchanged: 0, refused: 0 }, subjects_added: 0, stacks_added: 0 })) },

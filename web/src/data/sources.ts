@@ -8,8 +8,36 @@ import type { SourcesAnswer } from "./datasets";
 
 export interface Handling {
   arrives: "identified" | "deidentified";
-  on_release: { dates: "keep" | "shift" | "year"; uids: "remap" | "preserve"; deface: boolean };
+  on_release: OnRelease;
 }
+
+/**
+ * How a dataset's files leave: the UIDs remapped or kept, and the faces.
+ * Every release keeps the real date (record 38 S3), so the dates are not a
+ * choice and are never sent. `dates` is read only where an engine from
+ * before still answers a stored policy, and is said as it stands.
+ */
+export interface OnRelease {
+  uids: "remap" | "preserve";
+  deface: boolean;
+  readonly dates?: string | null;
+}
+
+/**
+ * A stored date policy in a word. Every release keeps the real date now, so
+ * `keep` or nothing is what the engine answers; `shift` and `year` are read
+ * only on a release row, or a handling, written before, and said as what
+ * they did then.
+ */
+export function datesWord(v: string | null | undefined): string {
+  if (!v || v === "keep") return "kept";
+  if (v === "shift") return "shifted";
+  if (v === "year") return "cut to the year";
+  return v;
+}
+
+/** Where a date must not show in a path, what to do instead: the words every page that speaks of the dates ends on. */
+export const DATES_KEPT = "Every release keeps the real date. Where a date must not show in a path, label the sessions by months since baseline (M00, M06) with a session scheme.";
 
 export interface Digest {
   id: number;
@@ -79,8 +107,8 @@ export function sourceState(s: Source): { words: string; tone: "brand" | "cautio
 /** How a source is handled, in a few words for its card. */
 export function handlingWords(h: Handling): { arrives: string; release: string } {
   const parts: string[] = [];
-  if (h.on_release.dates === "shift") parts.push("dates shifted");
-  if (h.on_release.dates === "year") parts.push("dates cut to the year");
+  // a policy from before, where an older engine still answers one; the dates are kept otherwise and not said
+  if (h.on_release.dates && h.on_release.dates !== "keep") parts.push(`dates ${datesWord(h.on_release.dates)}`);
   if (h.on_release.uids === "remap") parts.push("UIDs remapped");
   if (h.on_release.deface) parts.push("faces removed");
   return {

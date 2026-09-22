@@ -9,8 +9,8 @@ import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { desk, results, type DeskRecord, type HandleRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { cohorts, leavingLines, policyWords, reachesWords, releases, releaseSessionNaming, sessionNamingNote, sessionsPhrase, suggestedName, type Cohort, type CohortDetail, type Release, type Selected } from "../data/cohorts";
-import { sources, whenWords, type Source } from "../data/sources";
+import { cohorts, leavingLines, policyWords, reachesWords, releases, releaseSessionNaming, sessionsPhrase, suggestedName, type Cohort, type CohortDetail, type Release, type Selected } from "../data/cohorts";
+import { DATES_KEPT, sources, whenWords, type Source } from "../data/sources";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { placesKept } from "../objects/kept";
@@ -131,7 +131,7 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, lists
             <tbody>
               {list.map((r) => {
                 const policy = policyWords(r);
-                // record 26 section 13 with section 4.3: a release whose dates moved numbers its sessions in date order, and the row records the scheme that named them
+                // a row keeps the policy it was released under: one from before record 38 S3 may read shifted or cut to the year, and numbered its sessions in date order
                 const naming = releaseSessionNaming(r);
                 return (
                   <tr key={r.id} className={r.withdrawn_at ? "withdrawn" : undefined}>
@@ -187,8 +187,8 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
   const [named, setNamed] = useState<string | null>(null);
   const [layout, setLayout] = useState("bids");
   const [scheme, setScheme] = useState("");
-  // record 26 section 13: the dates and the UIDs are each dataset's own until a person overrides them here, and nothing is sent for them until then
-  const [dates, setDates] = useState(DATASETS_OWN);
+  // record 26 section 13: the UIDs are each dataset's own until a person overrides them here, and nothing is sent for them until then.
+  // The dates are no choice: every release keeps the real date (record 38 S3)
   const [uids, setUids] = useState(DATASETS_OWN);
   const [windowDays, setWindowDays] = useState<number | null>(null);
   const [placeId, setPlaceId] = useState<number | null>(null);
@@ -241,11 +241,9 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
   const place: Place | null = exports.find((p) => p.id === placeId) ?? exports[0] ?? null;
   const written = place ? `${place.path.replace(/\/+$/, "")}/${name}` : out.trim();
   const src: ReleaseSource = of === "cohort" ? { kind: "hand", cohorts: cohort ? [cohort] : [] } : { kind: "handle", handle: card?.handle };
-  const built = releaseBody(src, { name, out: written, layout, scheme_name: scheme || undefined, dates, uids }, []);
+  const built = releaseBody(src, { name, out: written, layout, scheme_name: scheme || undefined, uids }, []);
   const lines = srcs ? leavingLines(srcs, of === "cohort" ? (detail?.sources_holding ?? null) : null) : [];
-  const override = overrideNote(dates, uids);
-  // with nothing overridden each dataset's own policy stands, and a dataset that declares its dates moved has that release's sessions numbered in date order
-  const naming = override === null ? sessionNamingNote(lines, scheme) : null;
+  const override = overrideNote(uids);
   const waiting = of === "cohort" ? (detail?.waiting ?? list?.find((c) => c.name === cohort)?.waiting ?? 0) : 0;
   const selects = of === "cohort" && cohort !== "" && served(caps, "POST /api/select");
 
@@ -380,23 +378,13 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
               <span className="input scheme">
                 <input value={scheme} placeholder="the registry's scheme, as bound today" onChange={(e) => setScheme(e.target.value)} aria-label="Session scheme" />
               </span>
-              {(windowDays !== null || naming !== null) && (
-                <span className="meta">{[windowDays === null ? null : `The session cache was built under a ${n(windowDays)}-day window.`, naming].filter(Boolean).join(" ")}</span>
-              )}
+              <span className="meta">{[windowDays === null ? null : `The session cache was built under a ${n(windowDays)}-day window.`, DATES_KEPT].filter(Boolean).join(" ")}</span>
             </dd>
           </div>
           <div className="facts-pair">
             <dt>override</dt>
             <dd>
               <span className="row wrap">
-                <span className="input">
-                  <select value={dates} onChange={(e) => setDates(e.target.value)} aria-label="Dates for every file">
-                    <option value={DATASETS_OWN}>dates: each dataset&apos;s own</option>
-                    <option value="keep">dates kept</option>
-                    <option value="shift">dates shifted</option>
-                    <option value="year">dates cut to the year</option>
-                  </select>
-                </span>
                 <span className="input">
                   <select value={uids} onChange={(e) => setUids(e.target.value)} aria-label="UIDs for every file">
                     <option value={DATASETS_OWN}>UIDs: each dataset&apos;s own</option>
@@ -405,7 +393,7 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
                   </select>
                 </span>
               </span>
-              <span className={override === null ? "meta" : "warn"}>{override ?? "Each dataset's own leaving policy applies to its own files. Nothing is sent for the dates or the UIDs unless you override them here."}</span>
+              <span className={override === null ? "meta" : "warn"}>{override ?? "Each dataset's own leaving policy applies to its own files. Nothing is sent for the UIDs unless you override them here."}</span>
             </dd>
           </div>
           <div className="facts-pair">

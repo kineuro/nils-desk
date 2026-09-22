@@ -226,6 +226,18 @@ describe("Change", () => {
     expect(html).toContain("Faces removed before it leaves");
   });
 
+  it("offers no date choice: the dates are kept, and months since baseline stand in where a date must not show in a path", () => {
+    const html = change();
+    expect(html).not.toContain('name="dates"');
+    expect(html).not.toContain("Shifted");
+    expect(html).not.toContain("Cut to the year");
+    expect(html).toContain("Kept as recorded");
+    expect(html).toContain("label the sessions by months since baseline (M00, M06)");
+    // a date policy an older engine still answers is never carried into what Save writes
+    const old = change({ dataset: { ...incoming, handling: { arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: false } } } });
+    expect(old).toContain("dates kept · UIDs remapped · faces kept");
+  });
+
   it("leaves the tag lists to the chooser, and holds none of its own", () => {
     const html = change();
     // both surfaces wrote the same three lists, each seeded at its own opening, so saving one after the other put the other's back

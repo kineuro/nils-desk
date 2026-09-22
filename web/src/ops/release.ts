@@ -37,7 +37,7 @@ export function stackIds(columns: Column[], rows: unknown[][]): number[] {
   return rows.map((r) => Number(r[at])).filter((n) => Number.isInteger(n));
 }
 
-/** What the dialog's date and UID selects hold while nothing is overridden: each dataset's own declared policy, which the body must not name. */
+/** What the dialog's UID select holds while nothing is overridden: each dataset's own declared policy, which the body must not name. */
 export const DATASETS_OWN = "datasets";
 
 export interface ReleaseForm {
@@ -45,14 +45,13 @@ export interface ReleaseForm {
   out: string;
   layout?: string;
   /**
-   * The run's date policy, sent only where the person overrode each
-   * dataset's own. Record 26 section 13: a body naming `dates` or `uids` is
-   * a run under the caller's flags, and then no dataset's declared policy
-   * applies and moved dates with sessions named by the date are refused
-   * rather than numbered. Absent, or `datasets`, leaves each dataset's own.
+   * The run's UID policy, sent only where the person overrode each
+   * dataset's own. Record 26 section 13: a body naming `uids` is a run under
+   * the caller's flags, and then no dataset's declared policy applies.
+   * Absent, or `datasets`, leaves each dataset's own. There is no date
+   * policy to send: every release keeps the real date (record 38 S3), and
+   * the door refuses any but `keep`.
    */
-  dates?: string;
-  /** The same for the UIDs. */
   uids?: string;
   on_unknown?: string;
   pack?: string;
@@ -60,19 +59,15 @@ export interface ReleaseForm {
 }
 
 /**
- * What an override costs, for the dialog to say before the run: naming
- * either policy makes the run one under the caller's flags, so no dataset's
- * own applies to its own files, and dates that move are then refused where
- * the sessions are named by the date rather than numbered in date order
- * (record 26 section 13 with section 4.3). Null where nothing is overridden.
+ * What an override costs, for the dialog to say before the run: naming the
+ * UID policy makes the run one under the caller's flags, so no dataset's own
+ * applies to its own files (record 26 section 13). Null where nothing is
+ * overridden.
  */
-export function overrideNote(dates: string | undefined, uids: string | undefined): string | null {
-  const d = dates?.trim() || DATASETS_OWN;
+export function overrideNote(uids: string | undefined): string | null {
   const u = uids?.trim() || DATASETS_OWN;
-  if (d === DATASETS_OWN && u === DATASETS_OWN) return null;
-  const said = "An override sets the policy for every file of this release, so no dataset's own applies to its own files.";
-  const moves = d === "shift" || d === "year";
-  return moves ? `${said} Dates that move are then refused where the sessions are named by the date: name a months or ordinal scheme above, or keep the dates.` : said;
+  if (u === DATASETS_OWN) return null;
+  return "An override sets the UID policy for every file of this release, so no dataset's own applies to its own files.";
 }
 
 /** The body of POST /api/releases, or why there is none yet. */
@@ -85,12 +80,11 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
     if (v) body[k] = v;
   }
   // record 26 section 13: only an override the person chose is named here. A
-  // body carrying dates or uids is a run under the caller's flags, under
-  // which a dataset's own declared policy can never take effect.
-  for (const k of ["dates", "uids"] as const) {
-    const v = f[k]?.trim();
-    if (v && v !== DATASETS_OWN) body[k] = v;
-  }
+  // body carrying uids is a run under the caller's flags, under which a
+  // dataset's own declared policy can never take effect. The dates are never
+  // named: every release keeps the real date (record 38 S3).
+  const uids = f.uids?.trim();
+  if (uids && uids !== DATASETS_OWN) body.uids = uids;
   if (src.kind === "handle") {
     if (!src.handle) return { ok: false, why: "a handle" };
     if (src.handle.grain !== "stack") return { ok: false, why: `a release reads stacks; this handle is at the ${src.handle.grain} grain. Set the answer set to a stack set and run again` };
