@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.37] - 2026-09-23
+
+Released beside the engine's 1.0.0-alpha.37, whose release keeps the real date.
+
 ### Removed
 
 - The dates are no longer a choice when data leaves (record 38). Every release keeps the real date, so the date policies that shifted the dates by one offset a person or cut them to the year are gone from the desk, as they are from the engine. How a dataset is pseudonymised no longer offers them: its dates read kept as recorded, and the pair it used to refuse, dates that move with the UIDs kept, cannot arise. New release no longer has a dates override, and sends no dates; the UIDs are still each dataset's own until overridden there. The note that a dataset moving its dates has the release's sessions numbered in date order is gone with them. Where a date must not show in a path, the release dialog, the dataset's page and its Change dialog say to label the sessions by months since baseline (M00, M06) with a session scheme. A release made before keeps the policy it was released under: the Releases table still reads shifted or cut to the year on such a row, with its sessions numbered in date order, and a dataset whose handling an older engine still answers with a date policy is shown as it stands and never sent it back.
