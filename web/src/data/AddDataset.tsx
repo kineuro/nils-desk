@@ -407,7 +407,7 @@ export function AddDataset(props: {
           ...(arrives !== "identified" && !v0 ? { move_into_anon: true } : {}),
         }
       : null;
-    const chain = bringIn ? (modern ? bringInBody({ name, arrives: fields?.arrives, handling: { arrives: "identified", on_release: { dates: "keep", uids: "remap", deface: false } } }, bringInName(name), packFor(caps)) : { command: ["digest", "--name", name, `@${name}`], name, then: [] }) : null;
+    const chain = bringIn ? (modern ? bringInBody({ name, arrives: fields?.arrives, handling: { arrives: "identified", on_release: { uids: "remap", deface: false } } }, bringInName(name), packFor(caps)) : { command: ["digest", "--name", name, `@${name}`], name, then: [] }) : null;
     const plan: AddPlan = {
       name,
       path: folder,

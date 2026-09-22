@@ -42,7 +42,6 @@ import {
   heldGroups,
   heldLine,
   importColumns,
-  leavingRefusal,
   leavingWords,
   linkage,
   lookAt,
@@ -82,7 +81,7 @@ import {
 import { countWords } from "./datasets";
 import { PurgeDialog, VaultDialog } from "./Originals";
 import { policyKept } from "./policy";
-import { sources, whenWords, type Handling } from "./sources";
+import { DATES_KEPT, datesWord, sources, whenWords, type Handling } from "./sources";
 import { TagsDialog } from "./Tags";
 
 // the whole sources answer is held, not the one dataset alone: a vault goes into no dataset's folder or trees, another's as much as this one's
@@ -304,7 +303,7 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
   ];
 
   const leavingCells: Cell[] = [
-    { k: "dates", v: onRelease?.dates === "shift" ? "shifted" : onRelease?.dates === "year" ? "cut to the year" : "kept" },
+    { k: "dates", v: datesWord(onRelease?.dates) },
     { k: "UIDs", v: onRelease?.uids === "remap" ? "remapped from the key" : "kept" },
     { k: "faces", v: onRelease?.deface ? "removed" : "kept" },
   ];
@@ -446,8 +445,8 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
             <h2>When it leaves</h2>
           </div>
           <Values cells={leavingCells} />
-          <Says head="What is refused">
-            Dates that move cannot keep the original UIDs, and that pair is refused. A shift is one offset a person, kept with the identifiers. Faces go by a pipeline over the released tree.
+          <Says head="Why the dates are kept">
+            {`${DATES_KEPT} Faces go by a pipeline over the released tree.`}
           </Says>
         </section>
       </div>
@@ -1331,10 +1330,10 @@ export function ChangeDialog({
   const [arrives, setArrives] = useState<NonNullable<Dataset["arrives"]>>(dataset.arrives ?? (dataset.handling?.arrives === "deidentified" ? "deidentified" : "identified"));
   const [unmapped, setUnmapped] = useState<"hold" | "code">(dataset.unmapped ?? "hold");
   const [cohort, setCohort] = useState(dataset.cohort ?? "");
-  const [onRelease, setOnRelease] = useState<Handling["on_release"]>(dataset.handling?.on_release ?? { dates: "keep", uids: "remap", deface: false });
+  // the dates are not among what is chosen or sent: a policy an older engine still answers is dropped here, so Now says what Save writes
+  const [onRelease, setOnRelease] = useState<Handling["on_release"]>({ uids: dataset.handling?.on_release?.uids ?? "remap", deface: dataset.handling?.on_release?.deface ?? false });
   const [why, setWhy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const refusal = leavingRefusal(onRelease);
   const release = (patch: Partial<Handling["on_release"]>) => setOnRelease((was) => ({ ...was, ...patch }));
   const save = () => {
     setSaving(true);
@@ -1358,7 +1357,7 @@ export function ChangeDialog({
   );
   const foot = (
     <div className="row actions">
-      <button type="button" className="button" disabled={saving || refusal !== null} onClick={save}>
+      <button type="button" className="button" disabled={saving} onClick={save}>
         Save
       </button>
       <button type="button" className="button secondary" onClick={onClose}>
@@ -1425,9 +1424,8 @@ export function ChangeDialog({
       </div>
       <div className="field">
         <span className="label">Dates, when it leaves</span>
-        {radio("dates", onRelease.dates === "keep", () => release({ dates: "keep" }), "Kept as recorded")}
-        {radio("dates", onRelease.dates === "shift", () => release({ dates: "shift" }), "Shifted, by one offset per person")}
-        {radio("dates", onRelease.dates === "year", () => release({ dates: "year" }), "Cut to the year")}
+        <span>Kept as recorded</span>
+        <span className="meta">{DATES_KEPT}</span>
       </div>
       <div className="field">
         <span className="label">UIDs, when it leaves</span>
@@ -1438,7 +1436,6 @@ export function ChangeDialog({
         <input type="checkbox" checked={onRelease.deface} disabled={saving} onChange={(e) => release({ deface: e.target.checked })} />
         Faces removed before it leaves, by a pipeline over the released tree
       </label>
-      {refusal && <p className="warn">{refusal}</p>}
       <p className="meta">The tree is not rewritten by a change here; the next bring-in reads the dataset so, and a release reads the leaving policy of the files it takes.</p>
       <p className="meta">Now: {arrivesWords({ ...dataset, arrives })} · {leavingWords(onRelease)}</p>
     </Dialog>

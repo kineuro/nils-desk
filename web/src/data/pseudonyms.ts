@@ -19,7 +19,7 @@ import { identityActs } from "../review/client";
 import { kindOf } from "../review/triage";
 import type { Access } from "../settings/identity";
 import type { Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
-import type { Handling } from "./sources";
+import { datesWord, type Handling } from "./sources";
 
 // A dataset is the sources door's row as the Data page types it; the same shape is read from here.
 export type { Arrives, Dataset, IdentityRule, IdentitySource, Trees } from "./datasets";
@@ -57,7 +57,8 @@ export function changePatch(c: DatasetChange): DatasetPatch {
     arrives: c.arrives,
     unmapped: c.unmapped,
     cohort: c.cohort.trim() || null,
-    handling: { arrives: c.arrives === "identified" ? "identified" : "deidentified", on_release: c.on_release },
+    // the dates are not a choice (record 38 S3): a stored policy read off an older engine is never sent back, which the engine would refuse
+    handling: { arrives: c.arrives === "identified" ? "identified" : "deidentified", on_release: { uids: c.on_release.uids, deface: c.on_release.deface } },
   };
 }
 
@@ -178,18 +179,13 @@ export function identityWords(d: Dataset): string {
   return `${source}, through the map`;
 }
 
-/** What the leaving policy does: "dates shifted · UIDs remapped · faces kept". */
+/** What the leaving policy does: "dates kept · UIDs remapped · faces kept". The dates are kept on every release; a policy an older engine still answers is said as it stands. */
 export function leavingWords(h: Handling["on_release"] | undefined): string {
   if (!h) return "as the tree stands";
-  const dates = h.dates === "shift" ? "dates shifted" : h.dates === "year" ? "dates cut to the year" : "dates kept";
+  const dates = `dates ${datesWord(h.dates)}`;
   const uids = h.uids === "remap" ? "UIDs remapped" : "UIDs kept";
   const faces = h.deface ? "faces removed" : "faces kept";
   return `${dates} · ${uids} · ${faces}`;
-}
-
-/** Whether the leaving policy stands: shifted dates with kept UIDs is refused. */
-export function leavingRefusal(h: Handling["on_release"]): string | null {
-  return h.dates !== "keep" && h.uids === "preserve" ? "Dates that move cannot keep the original UIDs. Remap the UIDs, or keep the dates." : null;
 }
 
 export const ORIGINALS_WORDS: Record<OriginalsKept, string> = {

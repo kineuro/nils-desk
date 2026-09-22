@@ -57,7 +57,7 @@ describe("the pseudonymisation facts beside a batch", () => {
       path: "/scans/lake",
       guarantees: {},
       probed: null,
-      handling: { arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: false } },
+      handling: { arrives: "identified", on_release: { uids: "remap", deface: false } },
       handling_declared: true,
       roots: 1,
       digests: { count: 0, first: null, last: null, recent: [] },
@@ -67,7 +67,7 @@ describe("the pseudonymisation facts beside a batch", () => {
     const html = renderToStaticMarkup(<PseudonymisationFacts dataset={d} />);
     expect(html).toContain("pseudonymised into dcm-anon");
     expect(html).toContain("codes from the map and the key");
-    expect(html).toContain("dates shifted · UIDs remapped · faces kept");
+    expect(html).toContain("dates kept · UIDs remapped · faces kept");
     expect(html).toContain('href="#data/datasets/lake/pseudonymisation"');
   });
 });

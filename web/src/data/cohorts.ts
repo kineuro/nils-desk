@@ -8,7 +8,7 @@
 import { door, type Json } from "../ask/client";
 import { pastedList } from "../ask/start";
 import type { ReleaseRow } from "../ops/client";
-import { whenWords, type Source } from "./sources";
+import { datesWord, whenWords, type Source } from "./sources";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -370,8 +370,6 @@ export function suggestedName(base: string, existing: readonly { name: string }[
 
 export interface LeavingLine {
   dataset: string;
-  /** Its date policy, which is what decides whether its sessions can be labelled by the date; null where its handling was not read. */
-  dates: "keep" | "shift" | "year" | null;
   words: string;
   note: string | null;
 }
@@ -379,19 +377,19 @@ export interface LeavingLine {
 /** How files leave under a dataset's leaving policy, in words. */
 export function leavingWords(h: Source["handling"] | null): string {
   if (!h) return "handling not read";
-  const dates = h.on_release.dates === "shift" ? "dates shifted, one offset per subject" : h.on_release.dates === "year" ? "dates cut to the year" : "dates kept";
+  // every release keeps the real date; a policy an older engine still answers is said as it stands
+  const dates = `dates ${datesWord(h.on_release.dates)}`;
   const uids = h.on_release.uids === "remap" ? "UIDs remapped" : "UIDs kept";
   return [dates, uids, h.on_release.deface ? "faces removed" : "faces kept"].join(" · ");
 }
 
 /** One line per dataset holding files of the selection: how its files leave, read from its own handling, and why it is in the list. */
 export function leavingLines(sources: readonly Source[], holding: readonly SourceHolding[] | null): LeavingLine[] {
-  if (holding === null) return sources.map((s) => ({ dataset: s.name, dates: s.handling?.on_release?.dates ?? null, words: leavingWords(s.handling), note: null }));
+  if (holding === null) return sources.map((s) => ({ dataset: s.name, words: leavingWords(s.handling), note: null }));
   return holding.map((h) => {
     const s = sources.find((x) => x.name === h.name) ?? null;
     return {
       dataset: h.name,
-      dates: s?.handling?.on_release?.dates ?? null,
       words: leavingWords(s?.handling ?? null),
       note: h.feeds ? "the dataset's handling" : `${n(h.subjects)} ${h.subjects === 1 ? "subject has" : "subjects have"} files there too`,
     };
@@ -399,24 +397,10 @@ export function leavingLines(sources: readonly Source[], holding: readonly Sourc
 }
 
 /**
- * Record 26 section 13 with section 4.3: a dataset that declares its dates
- * moved cannot have its sessions labelled by the date, since the tree would
- * carry the date the files no longer do, so the release numbers them in date
- * order instead and its row records the scheme that named them. Null where no
- * dataset in play moves its dates.
- */
-export function sessionNamingNote(lines: readonly LeavingLine[], scheme: string): string | null {
-  const moving = lines.filter((l) => l.dates === "shift" || l.dates === "year").map((l) => l.dataset);
-  if (moving.length === 0) return null;
-  const which = moving.length === 1 ? `${moving[0]} moves its dates` : `${moving.slice(0, -1).join(", ")} and ${moving[moving.length - 1]} move their dates`;
-  const end = scheme.trim() === "" ? "Name a months or ordinal scheme above to choose the labels yourself." : "The scheme named above stands where it labels by months or by a number.";
-  return `${which}, so a session labelled by its date would put back in the tree the date its files no longer carry: the sessions are numbered in date order instead. ${end}`;
-}
-
-/**
  * How a release named its sessions, as its row recorded it: the scheme's own
- * naming where the row carries one, and otherwise, where a dataset's files
- * left with their dates moved, that they were numbered in date order. Null
+ * naming where the row carries one, and otherwise, on a row from before
+ * record 38 S3 whose files left with their dates moved, that they were
+ * numbered in date order. Every release since keeps the real date. Null
  * where the row says neither.
  */
 export function releaseSessionNaming(r: Release): string | null {
@@ -433,7 +417,8 @@ export function releaseSessionNaming(r: Release): string | null {
 export function policyWords(r: Release): { dates: string; uids: string } {
   const word = (v: string | null | undefined, kind: "dates" | "uids"): string | null => {
     if (!v) return null;
-    if (kind === "dates") return v === "shift" ? "shifted" : v === "year" ? "to the year" : "kept";
+    // a row keeps the policy it was released under, so a release from before may still read shifted or cut to the year
+    if (kind === "dates") return datesWord(v);
     return v === "remap" ? "remapped" : "kept";
   };
   const fold = (kind: "dates" | "uids"): string => {

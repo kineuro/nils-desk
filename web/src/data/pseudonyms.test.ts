@@ -27,7 +27,6 @@ import {
   waitingLines,
   identityWords,
   importColumns,
-  leavingRefusal,
   leavingWords,
   lookAt,
   mapRefusal,
@@ -254,7 +253,7 @@ describe("the identity-check station's run", () => {
 });
 
 describe("the words of a dataset", () => {
-  const base = { id: 1, name: "lake", path: "/scans/lake", guarantees: {}, probed: null, handling: { arrives: "identified" as const, on_release: { dates: "shift" as const, uids: "remap" as const, deface: false } }, handling_declared: true, roots: 1, digests: { count: 0, first: null, last: null, recent: [] }, totals: { subjects: 0, studies: 0, sessions: 0, stacks: 0, refused_files: 0, to_sort: 0 } };
+  const base = { id: 1, name: "lake", path: "/scans/lake", guarantees: {}, probed: null, handling: { arrives: "identified" as const, on_release: { uids: "remap" as const, deface: false } }, handling_declared: true, roots: 1, digests: { count: 0, first: null, last: null, recent: [] }, totals: { subjects: 0, studies: 0, sessions: 0, stacks: 0, refused_files: 0, to_sort: 0 } };
   it("say how it arrives, where the codes come from, the rule and what leaves", () => {
     const d: Dataset = { ...base, arrives: "identified", identity: { id_type: "personnummer", from: [{ field: "PatientID" }] }, unmapped: "hold" };
     expect(arrivesWords(d)).toBe("identified; pseudonymised into dcm-anon before anything reads it");
@@ -264,10 +263,10 @@ describe("the words of a dataset", () => {
     expect(identityWords({ ...d, arrives: "coded", identity: { id_type: "subject-code", code: "verbatim", from: [{ path: { segment: 2 } }] } })).toBe("folder 2 of the path, taken verbatim as the code");
     expect(arrivesWords({ ...base })).toBe("identified; pseudonymised into dcm-anon before anything reads it");
     expect(arrivesWords({ ...base, arrives: "deidentified" })).toBe("de-identified; moved into dcm-anon as sent, identifiers mapped when read");
-    expect(leavingWords(d.handling.on_release)).toBe("dates shifted · UIDs remapped · faces kept");
+    expect(leavingWords(d.handling.on_release)).toBe("dates kept · UIDs remapped · faces kept");
     expect(leavingWords(undefined)).toBe("as the tree stands");
-    expect(leavingRefusal({ dates: "shift", uids: "preserve", deface: false })).toContain("cannot keep");
-    expect(leavingRefusal({ dates: "keep", uids: "preserve", deface: false })).toBeNull();
+    // an engine from before may still answer a stored policy: said as it stands
+    expect(leavingWords({ dates: "year", uids: "remap", deface: true })).toBe("dates cut to the year · UIDs remapped · faces removed");
     expect(bytesWords(2.4e12)).toBe("2.4 TB");
     expect(bytesWords(5e8)).toBe("500 MB");
   });
@@ -471,7 +470,7 @@ describe("what a change to the dataset sends", () => {
     arrives: "identified",
     unmapped: "hold",
     cohort: "  nmosd  ",
-    on_release: { dates: "shift", uids: "remap", deface: false },
+    on_release: { uids: "remap", deface: false },
   };
 
   it("sends the dataset's own fields, and nothing of where the originals stand or of the tags", () => {
@@ -480,8 +479,10 @@ describe("what a change to the dataset sends", () => {
       arrives: "identified",
       unmapped: "hold",
       cohort: "nmosd",
-      handling: { arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: false } },
+      handling: { arrives: "identified", on_release: { uids: "remap", deface: false } },
     });
+    // the dates are not a choice: a policy read off an older engine is never sent back, which the engine would refuse
+    expect(changePatch({ ...fields, on_release: { dates: "shift", uids: "remap", deface: true } }).handling?.on_release).toEqual({ uids: "remap", deface: true });
     // the two the act alone may write are not among the keys: a form cannot declare the originals purged while they are on disk
     expect(Object.keys(patch)).not.toContain("originals_kept");
     expect(Object.keys(patch)).not.toContain("originals_vault");
