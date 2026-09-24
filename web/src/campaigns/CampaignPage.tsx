@@ -43,11 +43,14 @@ import {
   type LabelSet,
 } from "./client";
 import { StateBar, Tabs } from "./parts";
+import type { RaterStats as Pace } from "./reader";
+import { R48, statsFor } from "./readerDoors";
+import { RaterStats } from "./ReaderParts";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
 
-type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; c: Campaign; answers: Answer[] | null; sets: LabelSet[] };
+type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; c: Campaign; answers: Answer[] | null; sets: LabelSet[]; stats: Pace | null };
 
 export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities; id: string; missing?: number | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
@@ -56,16 +59,17 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   const readsSets = served(caps, "GET /api/label-sets") && mayAny(caps, "campaigns:see", "review:see");
   const read = useCallback(() => {
     const sets = readsSets ? campaigns.labelSets().catch(() => [] as LabelSet[]) : Promise.resolve([] as LabelSet[]);
-    Promise.all([campaigns.one(id), campaigns.answers(id).catch(() => null), sets])
-      .then(([c, answers, all]) => setLoad({ kind: "ready", c, answers, sets: all.filter((s) => s.campaign_id === c.id) }))
+    const stats = served(caps, R48.stats) ? statsFor(id).catch(() => null) : Promise.resolve(null);
+    Promise.all([campaigns.one(id), campaigns.answers(id).catch(() => null), sets, stats])
+      .then(([c, answers, all, pace]) => setLoad({ kind: "ready", c, answers, sets: all.filter((s) => s.campaign_id === c.id), stats: pace }))
       .catch((e: unknown) => setLoad({ kind: "failed", why: refusedWords(e) }));
-  }, [readsSets, id]);
+  }, [readsSets, id, caps]);
   useEffect(() => read(), [read]);
   if (load.kind === "loading") return <Wait phase="reading the campaign" since={load.since} size="panel" />;
   if (load.kind === "failed") return <p className="warn">The campaign could not be read: {load.why}</p>;
   const c = load.c;
   return (
-    <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} said={said} missing={missing} onAct={setActing}>
+    <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} stats={load.stats} said={said} missing={missing} onAct={setActing}>
       {acting === "close" && (
         <CloseDialog
           campaign={c}
@@ -98,6 +102,8 @@ export interface CampaignBodyProps {
   campaign: Campaign;
   answers: Answer[] | null;
   sets: LabelSet[];
+  /** Each rater's pace, where the engine counts it (record 48 R1). */
+  stats?: Pace | null;
   said?: string | null;
   /** The state the items table shows; all when null. */
   filter?: string | null;
@@ -108,7 +114,7 @@ export interface CampaignBodyProps {
 }
 
 /** One campaign as it draws from what it read. */
-export function CampaignBody({ caps, campaign: c, answers, sets, said = null, filter: initial = null, missing = null, onAct, children }: CampaignBodyProps) {
+export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, said = null, filter: initial = null, missing = null, onAct, children }: CampaignBodyProps) {
   const [filter, setFilter] = useState<string | null>(initial);
   const items = c.items ?? [];
   const shown = filter ? items.filter((i) => i.state === filter) : items;
@@ -250,6 +256,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, said = null, fi
           ))}
         </p>
       )}
+      {stats && stats.raters.length > 0 && <RaterStats stats={stats} />}
       <h2>Items</h2>
       <div className="chips">
         <button type="button" className={filter === null ? "opt on" : "opt"} onClick={() => setFilter(null)}>

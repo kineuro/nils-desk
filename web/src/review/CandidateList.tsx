@@ -18,9 +18,15 @@ export interface CandidateListProps {
   onChoose: ((c: AskedCandidate) => void) | null;
   onNone: (() => void) | null;
   busy?: boolean;
+  /** The key that chooses each candidate, in order (the reader's); none drawn when absent. */
+  keys?: string;
+  /** The candidate chosen now, drawn pressed (the reader's). */
+  chosen?: AskedCandidate | null;
+  /** Without the two disclosures, where the page shows the evidence itself (the reader's lines). */
+  bare?: boolean;
 }
 
-export function CandidateList({ asked, onChoose, onNone, busy = false }: CandidateListProps) {
+export function CandidateList({ asked, onChoose, onNone, busy = false, keys = "", chosen = null, bare = false }: CandidateListProps) {
   const axes = [...new Set([...asked.axes, ...Object.keys(asked.rules)])];
   return (
     <div className="stack roomy">
@@ -28,9 +34,12 @@ export function CandidateList({ asked, onChoose, onNone, busy = false }: Candida
         <p className="meta">No legal candidate to offer.</p>
       ) : (
         <ol className="candidates" aria-label="Legal candidates, most probable first">
-          {asked.candidates.map((c) => (
-            <li key={JSON.stringify(c.values)} className="candidate">
-              <span className="p num">{p(c.p)}</span>
+          {asked.candidates.map((c, i) => (
+            <li key={JSON.stringify(c.values)} className={chosen && JSON.stringify(chosen.values) === JSON.stringify(c.values) ? "candidate on" : "candidate"}>
+              <span className="p num">
+                {keys[i] && <kbd>{keys[i]}</kbd>}
+                {p(c.p)}
+              </span>
               <span className="cand-values">
                 {Object.entries(c.values).map(([axis, v]) => (
                   <span key={axis} className={asked.differ.includes(axis) ? "tag caution differ" : "tag"} title={asked.differ.includes(axis) ? "the two systems disagree here" : undefined}>
@@ -61,6 +70,7 @@ export function CandidateList({ asked, onChoose, onNone, busy = false }: Candida
           </button>
         </div>
       )}
+      {!bare && (
       <details className="says">
         <summary>Both systems{asked.differ.length > 0 ? `, disagreeing on ${asked.differ.join(", ")}` : ", agreeing"}</summary>
         {asked.model?.name && <p className="meta">The model is {asked.model.name}.</p>}
@@ -94,7 +104,8 @@ export function CandidateList({ asked, onChoose, onNone, busy = false }: Candida
           </table>
         </div>
       </details>
-      {asked.certificate && (
+      )}
+      {!bare && asked.certificate && (
         <details className="says">
           <summary>The certificate</summary>
           <div className="values">

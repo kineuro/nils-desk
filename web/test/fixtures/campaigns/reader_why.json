@@ -1,0 +1,41 @@
+{
+  "stack": 1207,
+  "pack": "mri",
+  "version": "0.4.0",
+  "detail": "quasi",
+  "header": {"repetition_time": 2300, "echo_time": 2.98, "inversion_time": 900, "flip_angle": 9, "text_sequence_name": "*tfl3d1_16ns", "image_type": ["ORIGINAL", "PRIMARY", "M"], "n_slices": 176},
+  "asked": {
+    "item": 4812,
+    "confidence": 0.71,
+    "agree": ["base", "technique"],
+    "candidates": [
+      {"values": {"base": "T1w", "technique": "MPRAGE", "modifier": ["FatSat"]}, "p": 0.71},
+      {"values": {"base": "T1w", "technique": "MPRAGE", "modifier": []}, "p": 0.22},
+      {"values": {"base": "T2w", "technique": "TSE", "modifier": ["FatSat"]}, "p": 0.04, "legal": false}
+    ]
+  },
+  "axes": [
+    {"axis": "base", "value": "T1w", "confidence": 0.97, "tier": "physics", "set_by": {"kind": "rule", "actor": null},
+     "decided": {"rule_set": "base", "rule": "technique:MPRAGE", "clause": 0, "tier": "physics", "source": "header",
+                 "reads": {"fields": ["inversion_time", "repetition_time"], "texts": [], "axes": ["technique"], "flags": ["inversion"]},
+                 "header": {"inversion_time": 900, "repetition_time": 2300}, "matched": "t1_mprage"},
+     "voted": [{"rule_set": "keyword", "rule": "T1w", "clause": 0, "tier": "keyword", "value": "T1w", "restates": false},
+               {"rule_set": "base", "rule": "restate", "clause": 1, "tier": "physics", "value": "T1w", "restates": true}],
+     "disagree": false, "s1": [{"value": "T1w", "p": 0.93}, {"value": "T2w", "p": 0.07}], "model_p": {"T1w": 0.93, "T2w": 0.07},
+     "line": "base: T1w by base/technique:MPRAGE [t1_mprage], TI 900 TR 2300; System 1 T1w 0.93"},
+    {"axis": "technique", "value": "MPRAGE", "confidence": 0.95, "tier": "physics", "set_by": {"kind": "rule", "actor": null},
+     "decided": {"rule_set": "technique", "rule": "MPRAGE", "clause": 2, "tier": "physics", "source": "header",
+                 "reads": {"fields": ["scanning_sequence", "mr_acquisition_type"], "texts": [], "axes": [], "flags": ["3d", "inversion"]},
+                 "header": {"scanning_sequence": ["GR", "IR"]}},
+     "voted": [], "disagree": false, "s1": [{"value": "MPRAGE", "p": 0.9}],
+     "line": "technique: MPRAGE by technique/MPRAGE, scanning sequence GR\\IR; System 1 MPRAGE 0.90"},
+    {"axis": "modifier", "value": null, "confidence": 0.5, "tier": "none", "set_by": {"kind": "rule", "actor": null}, "decided": null,
+     "voted": [], "disagree": false, "s1": [{"value": "FatSat", "p": 0.76}, {"value": null, "p": 0.24}],
+     "line": "modifier: (nothing); System 1 FatSat 0.76"},
+    {"axis": "disposition", "value": "acquisition", "confidence": 1, "tier": "physics", "set_by": {"kind": "person", "actor": "carol@walk"}, "decided": null, "voted": [], "disagree": false,
+     "line": "disposition: acquisition, a person's (carol@walk)"}
+  ],
+  "item": 301,
+  "suggested": null,
+  "worth": {"disagree": true, "confidence": 0.71, "asked": true}
+}

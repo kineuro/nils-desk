@@ -53,3 +53,35 @@
 .campaigns .chips .opt b, .campaign .chips .opt b { margin-left: 0.35rem; font-weight: 500; }
 .campaigns .chips.pages a, .campaign .chips.pages a, .label-sets .chips.pages a, .label-set .chips.pages a { text-decoration: none; }
 .campaigns-list td.acts .button + .button { margin-left: 0.4rem; }
+
+/* The reader (record 48 R1): the suggestion filled in, the evidence one line
+   per axis, the pace, the order, and like stacks as a batch. */
+.reader-bar { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin: 0 0 0.6rem; }
+.pace { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.suggest { display: grid; gap: 0.4rem; padding: 0.5rem 0.7rem; border: 1px solid var(--n-line); border-left-width: 3px; border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.suggest.agree { border-left-color: var(--n-ok-icon); }
+.suggest.differ { border-left-color: var(--n-caution-icon); }
+.suggest-words { margin: 0; }
+.suggest .candidate { grid-template-columns: 5rem 1fr auto; }
+.suggest .candidate.on { border-color: var(--n-brand-line); background: var(--n-bg-selected); }
+.suggest .candidate .p kbd { margin-right: 0.4rem; }
+.evidence-lines { display: grid; gap: 0.25rem; }
+.evidence-toggle { justify-self: start; font-size: var(--n-text-size-small); }
+.evidence { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; font-size: var(--n-text-size-small); }
+.evidence .ev { display: grid; grid-template-columns: 5.5rem 6.5rem minmax(0, 1fr); gap: 0.5rem; align-items: baseline; padding: 0.15rem 0; border-bottom: 1px solid var(--n-line); }
+.evidence .ev.differ .ev-value { color: var(--n-caution-fg); }
+.evidence .ev-axis { color: var(--n-text-faint); }
+.evidence .ev-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.evidence .ev-why { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--n-text-dim); }
+.evidence .ev-more { grid-column: 1 / -1; margin: 0.2rem 0 0.3rem; }
+.evidence .ev-read { margin-right: 0.7rem; white-space: nowrap; font-family: var(--n-font-mono); }
+.batch { display: grid; gap: 0.6rem; }
+.batch-head { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+.batch-values { display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }
+.batch-counts { margin: 0; font-variant-numeric: tabular-nums; }
+.batch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 0.5rem; }
+.batch-cell { border: 2px solid transparent; border-radius: var(--n-radius); cursor: pointer; }
+.batch-cell:hover { border-color: var(--n-line-strong); }
+.batch-cell.held { border-color: var(--n-caution-line); background: var(--n-caution-bg); }
+.batch-cell[aria-disabled="true"] { cursor: default; }
+.batch-cell:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
