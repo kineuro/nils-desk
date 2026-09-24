@@ -6,7 +6,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ReviewItem } from "../ops/client";
-import { needsOf, ofBatch, QueueTable } from "./Queue";
+import { itemKey } from "./client";
+import { needsOf, ofBatch, ofRun, QueueTable } from "./Queue";
 import { bulkPlan } from "./triage";
 
 function item(id: number, kind: string, scope: string, over: Partial<ReviewItem> = {}): ReviewItem {
@@ -93,5 +94,25 @@ describe("the identity questions on the queue", () => {
     expect(html).toContain('href="#data/datasets/north/pseudonymisation">Map them</a>');
     expect(html).toContain('href="#review/identifiers">Merge</a>');
     expect(html.match(/>Decide<\/button>/gu)).toHaveLength(1);
+  });
+});
+
+describe("a run's pipeline:qc items below detail quasi", () => {
+  // as the engine lists them (w49 dd41d9a): one entry a check or reason, no id, a count held to 5
+  const grouped = [
+    { kind: "pipeline:qc", grouped: true, scope: "run", status: "open", ref: { run_id: 9, pipeline: "volumes@1" }, evidence: { status: "breach", check: "snr >= 8" }, group_key: "run:9", units: 6 },
+    { kind: "pipeline:qc", grouped: true, scope: "run", status: "open", ref: { run_id: 9, pipeline: "volumes@1" }, evidence: { status: "breach", check: "holes <= 200" }, group_key: "run:9", units: null, withheld: true },
+    { kind: "pipeline:qc", grouped: true, scope: "run", status: "open", ref: { run_id: 9, pipeline: "volumes@1" }, evidence: { status: "failed", check: null }, group_key: "run:9", units: 7 },
+  ] as unknown as ReviewItem[];
+  it("draws each group with its check and count, fewer than five where withheld, and nothing to open or decide", () => {
+    const html = renderToStaticMarkup(<QueueTable items={grouped} may onDecide={() => undefined} onLook={() => undefined} onSee={() => undefined} />);
+    expect(html).toContain("snr &gt;= 8 in run 9: 6 units");
+    expect(html).toContain("holes &lt;= 200 in run 9: fewer than five units");
+    expect(html).toContain("failed in run 9: 7 units");
+    expect(html).not.toContain(">Decide</button>");
+    expect(html).not.toContain("undefined");
+    expect(html.match(/counted at your detail/gu)).toHaveLength(3);
+    expect(ofRun(grouped, 9)).toHaveLength(3);
+    expect(new Set(grouped.map(itemKey)).size).toBe(3);
   });
 });

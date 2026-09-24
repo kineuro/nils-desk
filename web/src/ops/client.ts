@@ -39,6 +39,10 @@ export interface ReviewItem {
   members?: number | unknown[] | null;
   group_key?: string | null;
   accepted_by?: string | null;
+  /** Record 49 R4b: below detail quasi a run's pipeline:qc items come as one entry a check or reason, with no id and the count of units (null where it stands for 1 to 4). */
+  grouped?: boolean;
+  units?: number | null;
+  withheld?: boolean;
 }
 
 export interface ReleaseRow {

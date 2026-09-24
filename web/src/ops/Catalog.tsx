@@ -4,6 +4,10 @@
 // Run on a selection takes a saved selection, the descriptor's parameters and
 // the models or label set it reads, and shows what the run will write before
 // it is queued. With no runtime, the catalog says why and offers no Run.
+// Record 49 A7: the dialog shows the engine's pre-flight before Run (units,
+// missing inputs and why, time, GPU, budget) and each parameter's range; a
+// run's number opens its page; the assistant's analysis-plan station, where
+// it is served, turns a question into a plan the person starts.
 
 import { useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -16,6 +20,10 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
+import { stations } from "../assistant/stations";
+import { plansOffered } from "./PlanPage";
+import { PreflightPanel } from "./Preflight";
+import { PLAN_STATION, preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
 import { catalog, catalogActs, imageWords, needsOf, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { ops } from "./client";
 
@@ -37,6 +45,7 @@ export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: 
   if (load.kind === "failed") return <p className="warn">The catalog could not be read: {load.why}</p>;
   return (
     <>
+      {plansOffered(caps) && <PlanAsk />}
       <CatalogBody caps={caps} pipelines={load.pipelines} capability={load.capability} runs={load.runs} onRun={setRunning} />
       {running && (
         <RunDialog
@@ -59,6 +68,7 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
   const acts = catalogActs(caps, capability);
   const active = pipelines.filter((p) => p.state !== "retired");
   const proposals = may(caps, "review:see") && served(caps, "GET /api/review");
+  const opens = runActs(caps).open;
   return (
     <section className="stack roomy">
       {capability && !capability.enabled && (
@@ -137,7 +147,7 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
                 const c = runCounts(r);
                 return (
                   <tr key={r.id}>
-                    <td className="num">{r.id}</td>
+                    <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
                     <td>{r.pipeline}</td>
                     <td className="path">{r.selection ?? ""}</td>
                     <td>
@@ -193,12 +203,34 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
   };
   const errors = params.map((p) => paramError(p, values[p.id] ?? "")).filter((e): e is string => e !== null);
   const missing = needs.models.some((m, i) => !m.optional && chosenModels[i] === "") || (needs.labels !== null && !needs.labels.optional && labels === "");
-  const ready = over !== null && errors.length === 0 && !missing && !busy;
+  const changed = Object.fromEntries(Object.entries(values).filter(([id, v]) => v.trim() !== "" && String(params.find((p) => p.id === id)?.["default-value"] ?? "") !== v.trim()));
+  // record 49 A7: the engine's pre-flight, asked again as the selection or a parameter changes
+  const checks = runActs(caps).preflight;
+  const [pre, setPre] = useState<{ key: string; p: Preflight | null; why: string | null } | null>(null);
+  const preKey = over && errors.length === 0 ? JSON.stringify([over, changed]) : null;
+  useEffect(() => {
+    if (!checks || preKey === null || over === null) return;
+    let alive = true;
+    const t = setTimeout(() => {
+      runDoors.preflight(pipeline.id, over, changed).then(
+        (p) => alive && setPre({ key: preKey, p, why: null }),
+        (e: unknown) => alive && setPre({ key: preKey, p: null, why: engineWords(e) }),
+      );
+    }, 300);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [checks, preKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const current = pre !== null && pre.key === preKey ? pre : null;
+  const gate = preflightGate(current?.p ?? null);
+  const checked = !checks || (current !== null && current.p !== null);
+  const ready = over !== null && errors.length === 0 && !missing && !busy && checked && gate.go;
   const command = over
     ? runCommand({
         pipeline,
         over,
-        params: Object.fromEntries(Object.entries(values).filter(([id, v]) => v.trim() !== "" && String(params.find((p) => p.id === id)?.["default-value"] ?? "") !== v.trim())),
+        params: changed,
         models: chosenModels.filter((m) => m !== ""),
         labels: labels === "" ? null : Number(labels),
       })
@@ -262,7 +294,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
               <input value={values[p.id] ?? ""} placeholder={p["default-value"] !== undefined ? String(p["default-value"]) : p.optional ? "optional" : ""} aria-label={p.name} onChange={(e) => setValues((v) => ({ ...v, [p.id]: e.target.value }))} />
             )}
           </span>
-          {paramError(p, values[p.id] ?? "") && <span className="warn">{paramError(p, values[p.id] ?? "")}</span>}
+          {paramError(p, values[p.id] ?? "") ? <span className="warn">{paramError(p, values[p.id] ?? "")}</span> : rangeWords(p) && <span className="meta">{rangeWords(p)}</span>}
         </div>
       ))}
       {needs.models.map((m, i) => (
@@ -296,6 +328,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
           </span>
         </div>
       )}
+      {checks && over !== null && <PreflightPanel p={current?.p ?? null} checking={current === null && errors.length === 0} why={current?.why ?? null} />}
       <div className="note brand">
         <Icon name="info" />
         <div className="note-body">
@@ -311,5 +344,41 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
         The selection is frozen into its stacks when the run starts and pinned, every parameter is recorded with its default filled, and the image is the one the catalog pins. A model&apos;s proposals are evidence until a person commits them.
       </Says>
     </Dialog>
+  );
+}
+
+/** A question to the assistant's analysis-plan station; its plan opens as a run filled in, which the person starts. */
+function PlanAsk() {
+  const [question, setQuestion] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [why, setWhy] = useState<string | null>(null);
+  const ask = () => {
+    const q = question.trim();
+    if (q === "") return;
+    setBusy(true);
+    setWhy(null);
+    stations.start(PLAN_STATION, q).then(
+      (r) => {
+        location.hash = href("pipelines", "plan", r.run);
+      },
+      (e: unknown) => {
+        setBusy(false);
+        setWhy(engineWords(e));
+      },
+    );
+  };
+  return (
+    <div className="field">
+      <span className="label">Plan with the assistant</span>
+      <div className="field-row">
+        <span className="input grow">
+          <input value={question} placeholder="hippocampal volume in the MS patients with a 3D T1" aria-label="The question to plan a run for" onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask()} />
+        </span>
+        <button type="button" className="button secondary small" disabled={busy || question.trim() === ""} onClick={ask}>
+          Plan
+        </button>
+      </div>
+      {why && <span className="warn">{why}</span>}
+    </div>
   );
 }

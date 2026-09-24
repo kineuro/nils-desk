@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Analyses with help on the Pipelines page (record 49 A7). Run on a selection shows the engine's pre-flight before Run: units ready of the whole, the units that lack an input folded by why, stacks left out, the estimated time, the GPU and the lane's budget, and Run waits while the engine names a blocker; each parameter shows its range from the descriptor. A run's number opens its page: the units by state (running, waiting, done, failed, kept on resume), Cancel while its job runs and Resume when it stopped, its table of measures as the ask reads it (one row per scan at detail quasi; below it the totals over groups by sex or scanner, which the engine withholds for a group under 5 scans, with that note), its checks and breaches with a link to their review items, and the files it made. Where the assistant serves the analysis-plan station, a question becomes a plan shown as a run filled in with its pre-flight, and one button starts it. A door the engine lacks offers nothing.
+
 ## [1.0.0-alpha.38] - 2026-09-24
 
 Released beside the engine's 1.0.0-alpha.38 and Kvasir's 1.0.0-alpha.8: the models and campaigns grants, the engine's HTTP contract 7, and a model server on the Kvasir page.
