@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// System 1's candidate list (record 45 R5, S7) against the fixture of the
+// fixed evidence shape: only legal candidates render, most probable first;
+// the axes the two systems disagree on are marked; both systems' evidence
+// and the certificate sit in disclosures; choosing one answers the asked
+// item whole with values.
+
+import { renderToStaticMarkup } from "react-dom/server";
+import { describe, expect, it } from "vitest";
+import { ASKED_EXAMPLE, ASKED_ITEM, ASKED_PACK } from "./asked.fixture";
+import { askedOf, chooseBody, legal } from "./asked";
+import { CandidateList } from "./CandidateList";
+import { familyOf } from "./client";
+
+describe("the asked evidence", () => {
+  it("keeps only legal candidates, most probable first, and counts what it left out", () => {
+    const a = askedOf(ASKED_ITEM, ASKED_PACK)!;
+    expect(a.stack).toBe(4410);
+    expect(a.candidates.map((c) => [c.values.base, c.p])).toEqual([
+      ["FLAIR", 0.71],
+      ["T2w", 0.22],
+      ["PDw", 0.04],
+      ["T1w", 0.02],
+    ]);
+    expect(a.dropped).toBe(5);
+    expect(a.axes).toEqual(["base", "technique", "modifier", "post_contrast"]);
+    expect(a.differ).toEqual(["base", "modifier"]);
+    expect(a.certificate).toEqual({ risk: 0.05, delta: 0.01, threshold: 0.9, score: 0.71, group: "T2-like", auto: false });
+    expect(a.model?.name).toBe("system1@0.1.0");
+    expect(familyOf(ASKED_ITEM.kind)).toBe("asked");
+  });
+  it("refuses a candidate the pack does not allow, a probability that is not one, and a set on a single axis", () => {
+    expect(legal({ values: { base: "DIR" }, p: 0.1 }, ASKED_PACK)).toBeNull();
+    expect(legal({ values: { base: "T2w" }, p: 1.2 }, ASKED_PACK)).toBeNull();
+    expect(legal({ values: { base: ["T2w"] }, p: 0.1 }, ASKED_PACK)).toBeNull();
+    expect(legal({ values: { nowhere: "x" }, p: 0.1 }, ASKED_PACK)).toBeNull();
+    expect(legal({ values: {}, p: 0.1 }, ASKED_PACK)).toBeNull();
+    expect(legal({ values: { modifier: [] }, p: 0.1 }, ASKED_PACK)).toEqual({ values: { modifier: [] }, p: 0.1 });
+    expect(legal({ values: { base: null }, p: 0.1 }, ASKED_PACK)).toEqual({ values: { base: null }, p: 0.1 });
+    expect(legal({ values: { base: "T2w" }, p: 0.1 }, ASKED_PACK, ["base", "technique"])).toBeNull();
+  });
+  it("reads the contract's own example: its three candidates, the axis the systems disagree on, the certificate", () => {
+    const a = askedOf(ASKED_EXAMPLE)!;
+    expect(a.candidates.map((c) => c.p)).toEqual([0.71, 0.22, 0.04]);
+    expect(a.differ).toEqual(["modifier"]);
+    expect(a.rules.base.label_model_p).toEqual({ T1w: 0.97, T2w: 0.03 });
+    expect(a.certificate?.group).toBe("siemens|3T|head");
+    const html = renderToStaticMarkup(<CandidateList asked={a} onChoose={null} onNone={null} />);
+    expect(html.match(/<li class="candidate">/gu)).toHaveLength(3);
+    expect(html).toContain("modifier none");
+    expect(html).toContain("T1w<span class=\"meta\"> · base/technique:MPRAGE</span><span class=\"meta\"> · 2 votes</span><span class=\"meta\"> · p 0.97</span>");
+  });
+});
+
+describe("the candidate list", () => {
+  const a = askedOf(ASKED_ITEM, ASKED_PACK)!;
+  const html = renderToStaticMarkup(<CandidateList asked={a} onChoose={() => undefined} onNone={() => undefined} />);
+  it("renders the legal candidates and nothing else", () => {
+    expect(html.match(/<li class="candidate">/gu)).toHaveLength(4);
+    expect(html).not.toContain("base DIR");
+    expect(html).not.toContain("GRE");
+    expect(html).toContain("5 candidates left out: not legal under this pack.");
+    expect(html).toContain("modifier no value");
+    const order = [...html.matchAll(/<span class="p num">([0-9.]+)<\/span>/gu)].map((m) => m[1]);
+    expect(order).toEqual(["0.71", "0.22", "0.04", "0.02"]);
+    expect(html.match(/>Choose<\/button>/gu)).toHaveLength(4);
+    expect(html).toContain(">None of these</button>");
+  });
+  it("marks the axes the systems disagree on and keeps their evidence and the certificate closed", () => {
+    expect(html).toContain('<span class="tag caution differ" title="the two systems disagree here">base FLAIR</span>');
+    expect(html).toContain('<span class="tag">technique TSE</span>');
+    expect(html).toContain("modifier none");
+    expect(html).toContain("<summary>Both systems, disagreeing on base, modifier</summary>");
+    expect(html).toContain("T2w<span class=\"meta\"> · base/te_long</span><span class=\"meta\"> · 2 votes</span><span class=\"meta\"> · p 0.58</span>");
+    expect(html).toContain("The model is system1@0.1.0.");
+    expect(html).toContain('<span class="k">risk level</span><span class="v">0.05</span>');
+    expect(html).toContain("<td>FLAIR · p 0.74</td>");
+    expect(html).toContain("<summary>The certificate</summary>");
+    expect(html).toContain('<span class="k">group</span><span class="v">T2-like</span>');
+  });
+  it("offers no choice to a person who may only see", () => {
+    const seen = renderToStaticMarkup(<CandidateList asked={a} onChoose={null} onNone={null} />);
+    expect(seen).not.toContain(">Choose</button>");
+    expect(seen).not.toContain("None of these");
+  });
+  it("chooses by answering the asked item whole: every asked axis, a set where it is multi-valued, null for none", () => {
+    expect(chooseBody(a, a.candidates[0], "w")).toEqual({ values: { base: "FLAIR", technique: "TSE", modifier: ["IR"], post_contrast: "no" }, scope: "stack", why: "w" });
+    // no value on an axis is answered as null
+    expect((chooseBody(a, a.candidates[3], "w").values as Record<string, unknown>).modifier).toBeNull();
+  });
+});

@@ -1,0 +1,35 @@
+{
+  "assignment": {
+    "id": 12,
+    "campaign_id": 6,
+    "item_id": 200,
+    "principal": "alice@walk",
+    "role": "rater",
+    "round": 1,
+    "state": "leased",
+    "created_at": "2026-09-24T09:55:13Z",
+    "leased_at": "2026-09-24T09:55:13Z",
+    "lease_until": "2026-09-24T10:10:13Z",
+    "ended_at": null
+  },
+  "item": {
+    "id": 200,
+    "campaign_id": 6,
+    "position": 3,
+    "review_item_id": 200,
+    "stack_id": 4,
+    "subject_id": null,
+    "session_day": null,
+    "key": "stack:4",
+    "input_derivative_ids": null,
+    "state": "open",
+    "round": 1,
+    "agreement": null,
+    "metric": null,
+    "outcome": null,
+    "decision_id": null,
+    "pick_id": null,
+    "resolved_at": null
+  },
+  "held": false
+}

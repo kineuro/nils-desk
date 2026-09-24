@@ -21,3 +21,5 @@ web/public/codecs/*.js
 web/public/codecs/*.wasm
 web/public/codecs/LICENSE-*.txt
 !web/public/codecs/decode.worker.js
+# the viewer's bench page, built by vite.bench.config.ts
+web/dist-bench/

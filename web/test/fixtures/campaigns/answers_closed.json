@@ -1,0 +1,44 @@
+{
+  "campaign": 1,
+  "count": 2,
+  "answers": [
+    {
+      "id": 1,
+      "campaign_id": 1,
+      "item_id": 1,
+      "assignment_id": 1,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "author_kind": "person",
+      "value": "T1w",
+      "form": null,
+      "derivative_id": null,
+      "why": "looks T1",
+      "actor_detail": {
+        "kind": "absent"
+      },
+      "answered_at": "2026-09-24T09:52:17Z",
+      "model_id": null
+    },
+    {
+      "id": 2,
+      "campaign_id": 1,
+      "item_id": 1,
+      "assignment_id": 2,
+      "principal": "bob@walk",
+      "role": "rater",
+      "round": 1,
+      "author_kind": "person",
+      "value": "T2w",
+      "form": null,
+      "derivative_id": null,
+      "why": null,
+      "actor_detail": {
+        "kind": "absent"
+      },
+      "answered_at": "2026-09-24T09:52:41Z",
+      "model_id": null
+    }
+  ]
+}

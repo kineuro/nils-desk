@@ -1,0 +1,120 @@
+{
+  "campaign": 6,
+  "count": 6,
+  "answers": [
+    {
+      "id": 4,
+      "campaign_id": 6,
+      "item_id": 197,
+      "assignment_id": 5,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "author_kind": "person",
+      "value": "T1w",
+      "form": null,
+      "derivative_id": null,
+      "why": null,
+      "actor_detail": {
+        "kind": "absent"
+      },
+      "answered_at": "2026-09-24T09:55:11Z",
+      "model_id": null
+    },
+    {
+      "id": 5,
+      "campaign_id": 6,
+      "item_id": 197,
+      "assignment_id": 6,
+      "principal": "bob@walk",
+      "role": "rater",
+      "round": 1,
+      "author_kind": "person",
+      "value": "T1w",
+      "form": null,
+      "derivative_id": null,
+      "why": null,
+      "actor_detail": {
+        "kind": "absent"
+      },
+      "answered_at": "2026-09-24T09:55:12Z",
+      "model_id": null
+    },
+    {
+      "id": 6,
+      "campaign_id": 6,
+      "item_id": 198,
+      "assignment_id": 7,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "author_kind": "person",
+      "value": "T2w",
+      "form": null,
+      "derivative_id": null,
+      "why": null,
+      "actor_detail": {
+        "kind": "absent"
+      },
+      "answered_at": "2026-09-24T09:55:12Z",
+      "model_id": null
+    },
+    {
+      "id": 7,
+      "campaign_id": 6,
+      "item_id": 198,
+      "assignment_id": 8,
+      "principal": "bob@walk",
+      "role": "rater",
+      "round": 1,
+      "author_kind": "person",
+      "value": "T2w",
+      "form": null,
+      "derivative_id": null,
+      "why": null,
+      "actor_detail": {
+        "kind": "absent"
+      },
+      "answered_at": "2026-09-24T09:55:12Z",
+      "model_id": null
+    },
+    {
+      "id": 8,
+      "campaign_id": 6,
+      "item_id": 199,
+      "assignment_id": 9,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "author_kind": "person",
+      "value": "T1w",
+      "form": null,
+      "derivative_id": null,
+      "why": null,
+      "actor_detail": {
+        "kind": "absent"
+      },
+      "answered_at": "2026-09-24T09:55:12Z",
+      "model_id": null
+    },
+    {
+      "id": 9,
+      "campaign_id": 6,
+      "item_id": 199,
+      "assignment_id": 10,
+      "principal": "bob@walk",
+      "role": "rater",
+      "round": 1,
+      "author_kind": "person",
+      "value": "T2w",
+      "form": null,
+      "derivative_id": null,
+      "why": null,
+      "actor_detail": {
+        "kind": "absent"
+      },
+      "answered_at": "2026-09-24T09:55:13Z",
+      "model_id": null
+    }
+  ]
+}

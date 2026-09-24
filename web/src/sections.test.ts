@@ -57,10 +57,13 @@ describe("the sections of an install that is set up", () => {
     const reviewing = { ...served, person: { ...served.person, grants: ["review:see" as const], detail: "plain" as const } };
     expect(sections(reviewing).map((s) => s.id)).toEqual(["home", "review"]);
   });
-  it("add no section for the models and campaigns grants, whose pages are not built yet", () => {
+  it("add Models where the engine lists models and Campaigns where it lists campaigns (record 45)", () => {
     const later = { ...served, engine: { ...served.engine!, doors: [...doors, "GET /api/models", "GET /api/campaigns"] }, person: { ...served.person, grants: ["models:work" as const, "models:see" as const, "campaigns:work" as const, "campaigns:see" as const] } };
-    expect(sections(later).map((s) => s.id)).toEqual(["home"]);
+    expect(sections(later).map((s) => s.id)).toEqual(["home", "campaigns", "models"]);
     expect(tilesOffered(later)).toEqual([]);
+    // an engine without the models door shows no Models, whatever the person holds
+    const older = { ...later, engine: { ...later.engine, doors: [...doors, "GET /api/campaigns"] } };
+    expect(sections(older).map((s) => s.id)).toEqual(["home", "campaigns"]);
   });
   it("wait while an install is not set up for a person who may see it, with Home named for its first page, and while that is not known", () => {
     expect(sections(served, false)).toEqual([{ id: "home", title: "Get started", icon: "home" }]);

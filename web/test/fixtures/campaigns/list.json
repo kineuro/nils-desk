@@ -1,0 +1,319 @@
+{
+  "count": 6,
+  "campaigns": [
+    {
+      "id": 6,
+      "name": "base-check",
+      "owner": "carol@walk",
+      "status": "open",
+      "question": {
+        "kind": "axis",
+        "axis": "base",
+        "values": [
+          "DWI",
+          "PWI",
+          "SWI",
+          "T1rho",
+          "T2rho",
+          "T2starw",
+          "T2w",
+          "PDw",
+          "T1w",
+          "MTw",
+          "Unknown"
+        ]
+      },
+      "grain": "stack",
+      "source": {
+        "selection": "probe@1"
+      },
+      "handle_id": 5,
+      "content_hash": "7bb01034808d3532fa3c923d21938feee7d4a18b1ffae52932a958decddf3eb8",
+      "epoch": 4,
+      "pack_version": "mri@0.4.0",
+      "raters_per_item": 2,
+      "rater_policy": {
+        "raters": [],
+        "adjudicators": [
+          "carol@walk"
+        ]
+      },
+      "adjudication": {
+        "when": "disagree",
+        "metric": "exact",
+        "threshold": 0.8
+      },
+      "closes_into": "decision",
+      "lease_seconds": 900,
+      "created_at": "2026-09-24T09:55:11Z",
+      "closed_at": null,
+      "closed_by": null,
+      "agreement": null,
+      "counts": {
+        "items": {
+          "agreed": 2,
+          "needs_adjudication": 1,
+          "open": 3
+        },
+        "assignments": {
+          "leased": 1,
+          "offered": 1,
+          "submitted": 6
+        },
+        "answers": 6
+      }
+    },
+    {
+      "id": 5,
+      "name": "probe-pick",
+      "owner": "carol@walk",
+      "status": "open",
+      "question": {
+        "kind": "pick",
+        "role": "main_t1",
+        "scheme": "default"
+      },
+      "grain": "session",
+      "source": {
+        "selection": "probe-sessions@1"
+      },
+      "handle_id": 4,
+      "content_hash": "79ea7b74668d10b634ff4baee6ed4dd940c7dcc00ac4999a6c9fa4ac1b2874b9",
+      "epoch": 4,
+      "pack_version": "mri@0.4.0",
+      "raters_per_item": 1,
+      "rater_policy": {
+        "raters": [],
+        "adjudicators": []
+      },
+      "adjudication": {
+        "when": "disagree",
+        "metric": "exact",
+        "threshold": 0.8
+      },
+      "closes_into": "pick",
+      "lease_seconds": 3600,
+      "created_at": "2026-09-24T09:53:09Z",
+      "closed_at": null,
+      "closed_by": null,
+      "agreement": null,
+      "counts": {
+        "items": {
+          "open": 172
+        },
+        "assignments": {},
+        "answers": 0
+      }
+    },
+    {
+      "id": 4,
+      "name": "probe-mask",
+      "owner": "carol@walk",
+      "status": "open",
+      "question": {
+        "kind": "derivative",
+        "derivative_kind": "mask"
+      },
+      "grain": "stack",
+      "source": {
+        "selection": "probe@1"
+      },
+      "handle_id": 3,
+      "content_hash": "7bb01034808d3532fa3c923d21938feee7d4a18b1ffae52932a958decddf3eb8",
+      "epoch": 3,
+      "pack_version": "mri@0.4.0",
+      "raters_per_item": 1,
+      "rater_policy": {
+        "raters": [],
+        "adjudicators": []
+      },
+      "adjudication": {
+        "when": "never",
+        "metric": "external",
+        "threshold": 0.8
+      },
+      "closes_into": "none",
+      "lease_seconds": 3600,
+      "created_at": "2026-09-24T09:53:01Z",
+      "closed_at": null,
+      "closed_by": null,
+      "agreement": null,
+      "counts": {
+        "items": {
+          "open": 6
+        },
+        "assignments": {},
+        "answers": 0
+      }
+    },
+    {
+      "id": 3,
+      "name": "probe-free",
+      "owner": "carol@walk",
+      "status": "open",
+      "question": {
+        "kind": "free"
+      },
+      "grain": "stack",
+      "source": {
+        "selection": "probe@1"
+      },
+      "handle_id": 2,
+      "content_hash": "7bb01034808d3532fa3c923d21938feee7d4a18b1ffae52932a958decddf3eb8",
+      "epoch": 3,
+      "pack_version": "mri@0.4.0",
+      "raters_per_item": 1,
+      "rater_policy": {
+        "raters": [],
+        "adjudicators": []
+      },
+      "adjudication": {
+        "when": "disagree",
+        "metric": "exact",
+        "threshold": 0.8
+      },
+      "closes_into": "none",
+      "lease_seconds": 3600,
+      "created_at": "2026-09-24T09:53:01Z",
+      "closed_at": null,
+      "closed_by": null,
+      "agreement": null,
+      "counts": {
+        "items": {
+          "open": 6
+        },
+        "assignments": {},
+        "answers": 0
+      }
+    },
+    {
+      "id": 2,
+      "name": "probe-form",
+      "owner": "carol@walk",
+      "status": "open",
+      "question": {
+        "kind": "form",
+        "schema": {
+          "properties": {
+            "motion": {
+              "enum": [
+                "none",
+                "mild",
+                "severe"
+              ]
+            },
+            "lesions": {
+              "type": "integer"
+            },
+            "contrast": {
+              "type": "boolean"
+            },
+            "note": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "motion"
+          ]
+        }
+      },
+      "grain": "stack",
+      "source": {
+        "handle": 1
+      },
+      "handle_id": 1,
+      "content_hash": "7bb01034808d3532fa3c923d21938feee7d4a18b1ffae52932a958decddf3eb8",
+      "epoch": 3,
+      "pack_version": "mri@0.4.0",
+      "raters_per_item": 1,
+      "rater_policy": {
+        "raters": [],
+        "adjudicators": []
+      },
+      "adjudication": {
+        "when": "disagree",
+        "metric": "exact",
+        "threshold": 0.8
+      },
+      "closes_into": "none",
+      "lease_seconds": 3600,
+      "created_at": "2026-09-24T09:53:01Z",
+      "closed_at": null,
+      "closed_by": null,
+      "agreement": null,
+      "counts": {
+        "items": {
+          "open": 6
+        },
+        "assignments": {},
+        "answers": 0
+      }
+    },
+    {
+      "id": 1,
+      "name": "probe-axis",
+      "owner": "carol@walk",
+      "status": "closed",
+      "question": {
+        "kind": "axis",
+        "axis": "base",
+        "values": [
+          "DWI",
+          "PWI",
+          "SWI",
+          "T1rho",
+          "T2rho",
+          "T2starw",
+          "T2w",
+          "PDw",
+          "T1w",
+          "MTw",
+          "Unknown"
+        ]
+      },
+      "grain": "stack",
+      "source": {
+        "selection": "probe@1"
+      },
+      "handle_id": 1,
+      "content_hash": "7bb01034808d3532fa3c923d21938feee7d4a18b1ffae52932a958decddf3eb8",
+      "epoch": 2,
+      "pack_version": "mri@0.4.0",
+      "raters_per_item": 2,
+      "rater_policy": {
+        "raters": [],
+        "adjudicators": [
+          "carol@walk"
+        ]
+      },
+      "adjudication": {
+        "when": "disagree",
+        "metric": "exact",
+        "threshold": 0.8
+      },
+      "closes_into": "decision",
+      "lease_seconds": 600,
+      "created_at": "2026-09-24T09:52:13Z",
+      "closed_at": "2026-09-24T09:52:52Z",
+      "closed_by": "carol@walk",
+      "agreement": {
+        "items": 1,
+        "raters_per_item": 2,
+        "exact": 0.0,
+        "fleiss_kappa": -1.0,
+        "cohen_kappa": 0.0
+      },
+      "counts": {
+        "items": {
+          "open": 5,
+          "resolved": 1
+        },
+        "assignments": {
+          "released": 1,
+          "submitted": 3
+        },
+        "answers": 3
+      }
+    }
+  ]
+}

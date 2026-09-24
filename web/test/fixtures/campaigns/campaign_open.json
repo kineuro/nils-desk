@@ -1,0 +1,304 @@
+{
+  "id": 6,
+  "name": "base-check",
+  "owner": "carol@walk",
+  "status": "open",
+  "question": {
+    "kind": "axis",
+    "axis": "base",
+    "values": [
+      "DWI",
+      "PWI",
+      "SWI",
+      "T1rho",
+      "T2rho",
+      "T2starw",
+      "T2w",
+      "PDw",
+      "T1w",
+      "MTw",
+      "Unknown"
+    ]
+  },
+  "grain": "stack",
+  "source": {
+    "selection": "probe@1"
+  },
+  "handle_id": 5,
+  "content_hash": "7bb01034808d3532fa3c923d21938feee7d4a18b1ffae52932a958decddf3eb8",
+  "epoch": 4,
+  "pack_version": "mri@0.4.0",
+  "raters_per_item": 2,
+  "rater_policy": {
+    "raters": [],
+    "adjudicators": [
+      "carol@walk"
+    ]
+  },
+  "adjudication": {
+    "when": "disagree",
+    "metric": "exact",
+    "threshold": 0.8
+  },
+  "closes_into": "decision",
+  "lease_seconds": 900,
+  "created_at": "2026-09-24T09:55:11Z",
+  "closed_at": null,
+  "closed_by": null,
+  "agreement": {
+    "items": 3,
+    "raters_per_item": 2,
+    "exact": 0.6666666666666666,
+    "fleiss_kappa": 0.33333333333333326,
+    "cohen_kappa": 0.39999999999999997
+  },
+  "counts": {
+    "items": {
+      "agreed": 2,
+      "needs_adjudication": 1,
+      "open": 3
+    },
+    "assignments": {
+      "leased": 1,
+      "offered": 1,
+      "submitted": 6
+    },
+    "answers": 6
+  },
+  "items": [
+    {
+      "id": 197,
+      "campaign_id": 6,
+      "position": 0,
+      "review_item_id": 197,
+      "stack_id": 1,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:1",
+      "input_derivative_ids": null,
+      "state": "agreed",
+      "round": 1,
+      "agreement": 1.0,
+      "metric": null,
+      "outcome": {
+        "value": "T1w",
+        "form": null,
+        "answers": [
+          4,
+          5
+        ]
+      },
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 198,
+      "campaign_id": 6,
+      "position": 1,
+      "review_item_id": 198,
+      "stack_id": 2,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:2",
+      "input_derivative_ids": null,
+      "state": "agreed",
+      "round": 1,
+      "agreement": 1.0,
+      "metric": null,
+      "outcome": {
+        "value": "T2w",
+        "form": null,
+        "answers": [
+          6,
+          7
+        ]
+      },
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 199,
+      "campaign_id": 6,
+      "position": 2,
+      "review_item_id": 199,
+      "stack_id": 3,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:3",
+      "input_derivative_ids": null,
+      "state": "needs_adjudication",
+      "round": 2,
+      "agreement": null,
+      "metric": null,
+      "outcome": null,
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 200,
+      "campaign_id": 6,
+      "position": 3,
+      "review_item_id": 200,
+      "stack_id": 4,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:4",
+      "input_derivative_ids": null,
+      "state": "open",
+      "round": 1,
+      "agreement": null,
+      "metric": null,
+      "outcome": null,
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 201,
+      "campaign_id": 6,
+      "position": 4,
+      "review_item_id": 201,
+      "stack_id": 5,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:5",
+      "input_derivative_ids": null,
+      "state": "open",
+      "round": 1,
+      "agreement": null,
+      "metric": null,
+      "outcome": null,
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 202,
+      "campaign_id": 6,
+      "position": 5,
+      "review_item_id": 202,
+      "stack_id": 6,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:6",
+      "input_derivative_ids": null,
+      "state": "open",
+      "round": 1,
+      "agreement": null,
+      "metric": null,
+      "outcome": null,
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    }
+  ],
+  "assignments": [
+    {
+      "id": 5,
+      "campaign_id": 6,
+      "item_id": 197,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "state": "submitted",
+      "created_at": "2026-09-24T09:55:11Z",
+      "leased_at": "2026-09-24T09:55:11Z",
+      "lease_until": "2026-09-24T10:10:11Z",
+      "ended_at": "2026-09-24T09:55:11Z"
+    },
+    {
+      "id": 6,
+      "campaign_id": 6,
+      "item_id": 197,
+      "principal": "bob@walk",
+      "role": "rater",
+      "round": 1,
+      "state": "submitted",
+      "created_at": "2026-09-24T09:55:12Z",
+      "leased_at": "2026-09-24T09:55:12Z",
+      "lease_until": "2026-09-24T10:10:12Z",
+      "ended_at": "2026-09-24T09:55:12Z"
+    },
+    {
+      "id": 7,
+      "campaign_id": 6,
+      "item_id": 198,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "state": "submitted",
+      "created_at": "2026-09-24T09:55:12Z",
+      "leased_at": "2026-09-24T09:55:12Z",
+      "lease_until": "2026-09-24T10:10:12Z",
+      "ended_at": "2026-09-24T09:55:12Z"
+    },
+    {
+      "id": 8,
+      "campaign_id": 6,
+      "item_id": 198,
+      "principal": "bob@walk",
+      "role": "rater",
+      "round": 1,
+      "state": "submitted",
+      "created_at": "2026-09-24T09:55:12Z",
+      "leased_at": "2026-09-24T09:55:12Z",
+      "lease_until": "2026-09-24T10:10:12Z",
+      "ended_at": "2026-09-24T09:55:12Z"
+    },
+    {
+      "id": 9,
+      "campaign_id": 6,
+      "item_id": 199,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "state": "submitted",
+      "created_at": "2026-09-24T09:55:12Z",
+      "leased_at": "2026-09-24T09:55:12Z",
+      "lease_until": "2026-09-24T10:10:12Z",
+      "ended_at": "2026-09-24T09:55:12Z"
+    },
+    {
+      "id": 10,
+      "campaign_id": 6,
+      "item_id": 199,
+      "principal": "bob@walk",
+      "role": "rater",
+      "round": 1,
+      "state": "submitted",
+      "created_at": "2026-09-24T09:55:13Z",
+      "leased_at": "2026-09-24T09:55:13Z",
+      "lease_until": "2026-09-24T10:10:13Z",
+      "ended_at": "2026-09-24T09:55:13Z"
+    },
+    {
+      "id": 11,
+      "campaign_id": 6,
+      "item_id": 199,
+      "principal": "carol@walk",
+      "role": "adjudicator",
+      "round": 2,
+      "state": "offered",
+      "created_at": "2026-09-24T09:55:13Z",
+      "leased_at": null,
+      "lease_until": null,
+      "ended_at": null
+    },
+    {
+      "id": 12,
+      "campaign_id": 6,
+      "item_id": 200,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "state": "leased",
+      "created_at": "2026-09-24T09:55:13Z",
+      "leased_at": "2026-09-24T09:55:13Z",
+      "lease_until": "2026-09-24T10:10:13Z",
+      "ended_at": null
+    }
+  ]
+}

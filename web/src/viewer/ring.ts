@@ -2,10 +2,16 @@
 // The slab ring (Wave 5 section 8.2, from the viewer study): a ring of
 // slabs around the current plane, fetched ahead in the scroll direction,
 // evicted behind, so the whole stack is never resident; the level whose
-// plane fits the viewport; the numbers the footer reads off. Pure, so the
-// gate can hold them.
+// plane fits the viewport; the numbers the footer reads off; and for the
+// three planes (record 45 S2) the level the volume is held at and the order
+// its slabs are fetched in. Pure, so the gate can hold them.
+
+import { levelShape, type Manifest } from "./doors";
 
 export const SLAB = 32;
+
+/** The planes' budget (record 45 S2, ruled 2026-09-24): 256 MB of texture, level 1 for a 220 x 1024 x 1024 stack and level 2 for the 2500-plane one, as study A3's examples have it. */
+export const VOLUME_BUDGET = 256 * 1024 * 1024;
 
 /** The slab a plane sits in. */
 export function slabOf(z: number, slab = SLAB): number {
@@ -67,4 +73,40 @@ export function placeTile(plane: Uint16Array, nx: number, ny: number, tile: numb
   const w = Math.min(tw, nx - tx0);
   const h = Math.min(th, ny - ty0);
   for (let y = 0; y < h; y++) plane.set(pixels.subarray(y * tw, y * tw + w), (ty0 + y) * nx + tx0);
+}
+
+export interface VolumePlan {
+  level: number;
+  /** Every stride-th plane of the level, when the stack is deeper than the card's 3D texture. */
+  stride: number;
+  /** [nx, ny, nz] of the volume as it is held. */
+  dims: [number, number, number];
+  bytes: number;
+}
+
+/** The level rule: the finest level whose planes fit the card and whose volume fits the budget; null when none does. */
+export function volumeLevel(m: Manifest, budget = VOLUME_BUDGET, max3d = 2048): VolumePlan | null {
+  for (let level = 0; level < m.levels; level++) {
+    const [nz, ny, nx] = levelShape(m, level);
+    if (ny > max3d || nx > max3d) continue;
+    const stride = Math.max(1, Math.ceil(nz / max3d));
+    const depth = Math.ceil(nz / stride);
+    const bytes = depth * ny * nx * 2;
+    if (bytes <= budget) return { level, stride, dims: [nx, ny, depth], bytes };
+  }
+  return null;
+}
+
+/** The slabs in the order they are fetched: the one holding the current plane, then outwards one on each side in turn. */
+export function fillOrder(slabs: number, at: number): number[] {
+  const out: number[] = [];
+  const c = Math.min(Math.max(0, at), slabs - 1);
+  for (let d = 0; out.length < slabs; d++) {
+    if (d === 0) out.push(c);
+    else {
+      if (c + d < slabs) out.push(c + d);
+      if (c - d >= 0) out.push(c - d);
+    }
+  }
+  return out;
 }

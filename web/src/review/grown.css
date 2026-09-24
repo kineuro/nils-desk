@@ -1,0 +1,23 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* Wave 45's review parts, in the theme's tokens: the session board, the
+   change matrix and the candidate list. Kept beside them rather than in the
+   shell's sheet, which other slices edit too. */
+
+.board { display: grid; gap: 0.6rem; }
+.bundle { display: grid; gap: 0.35rem; padding: 0.6rem 0.7rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.bundle.on { border-color: var(--n-brand-text); background: var(--n-brand-soft); }
+.bundle-head { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+.bundle-tiles { display: flex; gap: 0.35rem; overflow-x: auto; }
+
+.matrix td.num button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-decoration-color: var(--n-line-strong); }
+.matrix td.on { background: var(--n-brand-soft); }
+.matrix th.from { text-align: left; }
+
+.candidates { display: grid; gap: 0.35rem; margin: 0; padding: 0; list-style: none; }
+.candidate { display: grid; grid-template-columns: 4rem 1fr auto; align-items: center; gap: 0.6rem; padding: 0.45rem 0.6rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.candidate .p { font-family: var(--n-font-mono); }
+.cand-values { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.cand-values .differ { border-style: dashed; }
+
+.model-events { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
+.checks-edit { display: grid; gap: 0.35rem; }

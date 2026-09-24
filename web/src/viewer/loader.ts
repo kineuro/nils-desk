@@ -7,8 +7,11 @@
 
 import * as cs from "@cornerstonejs/core";
 import { DecodePool } from "./decode";
-import { doors, levelShape, levelSpacing, type Manifest } from "./doors";
-import { direction, plan, SLAB, slabOf, tileGrid } from "./ring";
+import { doors, levelShape, levelSpacing, storedValue, storedWindow, type Manifest } from "./doors";
+
+export { storedValue, storedWindow, viewWindow } from "./doors";
+import { dot, geometry, planePosition } from "./geometry";
+import { direction, plan, SLAB, slabOf } from "./ring";
 
 export interface Counters {
   bytes: number;
@@ -42,13 +45,20 @@ export function parseImageId(id: string): { stack: number; level: number; z: num
   return { stack: Number(m[1]), level: Number(m[2]), z: Number(m[3]) };
 }
 
+/** The decode pool, made on first use and shared by the stack's ring and the volume. */
+export function decoder(): DecodePool {
+  if (!pool) pool = new DecodePool();
+  return pool;
+}
+
+
 /** Open a stack: its manifest once, its metadata provider, the pool. */
 export async function open(stack: number): Promise<Manifest> {
   const have = stacks.get(stack);
   if (have) return have.manifest;
   const manifest = await doors.manifest(stack);
   stacks.set(stack, { manifest, slabs: new Map(), inflight: new Map(), previous: null });
-  if (!pool) pool = new DecodePool();
+  decoder();
   return manifest;
 }
 
@@ -81,9 +91,7 @@ async function fetchSlab(stack: number, s: Stack, level: number, slab: number): 
   if (s.slabs.has(k)) return;
   const pending = s.inflight.get(k);
   if (pending) return pending;
-  const [nz, ny, nx] = levelShape(s.manifest, level);
-  const { ty, tx } = tileGrid(ny, nx, s.manifest.tile);
-  const per = ty * tx;
+  const [nz] = levelShape(s.manifest, level);
   const z0 = slab * SLAB;
   const z1 = Math.min(nz, z0 + SLAB);
   const p = doors
@@ -91,9 +99,7 @@ async function fetchSlab(stack: number, s: Stack, level: number, slab: number): 
     .then((r) => {
       counters.bytes += r.bytes;
       counters.fetches += 1;
-      const planes: Uint8Array[][] = [];
-      for (let i = 0; i < z1 - z0; i++) planes.push(r.tiles.slice(i * per, (i + 1) * per));
-      s.slabs.set(k, { tiles: planes, bytes: r.bytes });
+      s.slabs.set(k, { tiles: r.planes, bytes: r.bytes });
     })
     .finally(() => s.inflight.delete(k));
   s.inflight.set(k, p);
@@ -125,7 +131,8 @@ async function loadPlane(id: string): Promise<cs.Types.IImage> {
   const early = ahead.get(id);
   if (early) {
     ahead.delete(id);
-    s.previous = z;
+    // the ring moves with the plane shown, decoded ahead or not: it fetches ahead and evicts behind, so the slabs stay bounded
+    ring(stack, s, level, z).catch(() => undefined);
     decodeAhead(stack, s, level, z, dir);
     return early;
   }
@@ -179,8 +186,8 @@ async function decodePlane(id: string, stack: number, s: Stack, level: number, z
     maxPixelValue: max,
     slope: 1,
     intercept: 0,
-    windowCenter: m.window.center,
-    windowWidth: m.window.width,
+    windowCenter: storedValue(m, m.window.center),
+    windowWidth: storedWindow(m).upper - storedWindow(m).lower,
     getPixelData: () => plane,
     rows: ny,
     columns: nx,
@@ -214,15 +221,19 @@ export function register(): void {
     const m = s.manifest;
     const [, ny, nx] = levelShape(m, level);
     const [dz, dy, dx] = levelSpacing(m, level);
+    const g = geometry(m);
     switch (type) {
       case "imagePixelModule":
         return { bitsAllocated: 16, bitsStored: 16, highBit: 15, samplesPerPixel: 1, photometricInterpretation: "MONOCHROME2", pixelRepresentation: m.dtype === "int16" ? 1 : 0 };
-      case "imagePlaneModule":
-        return { imageOrientationPatient: [1, 0, 0, 0, 1, 0], imagePositionPatient: [0, 0, z * dz], rowCosines: [1, 0, 0], columnCosines: [0, 1, 0], rowPixelSpacing: dy, columnPixelSpacing: dx, pixelSpacing: [dy, dx], sliceThickness: dz, sliceLocation: z * dz, frameOfReferenceUID: `nils-${stack}`, rows: ny, columns: nx };
+      case "imagePlaneModule": {
+        // the manifest's orientation and origin (record 45 E2); axial at the origin when it names none
+        const position = planePosition(g, m.spacing, level, z);
+        return { imageOrientationPatient: [...g.row, ...g.col], imagePositionPatient: position, rowCosines: g.row, columnCosines: g.col, rowPixelSpacing: dy, columnPixelSpacing: dx, pixelSpacing: [dy, dx], sliceThickness: dz, sliceLocation: dot(position, g.normal), frameOfReferenceUID: `nils-${stack}`, rows: ny, columns: nx };
+      }
       case "generalSeriesModule":
         return { modality: "OT" };
       case "voiLutModule":
-        return { windowCenter: [m.window.center], windowWidth: [m.window.width] };
+        return { windowCenter: [storedValue(m, m.window.center)], windowWidth: [storedWindow(m).upper - storedWindow(m).lower] };
       case "modalityLutModule":
         return { rescaleSlope: 1, rescaleIntercept: 0 };
       default:

@@ -45,6 +45,7 @@ export const VERBS: Record<string, VerbWords> = {
   classify: { doing: "Sorting", noun: "sort", link: "with", named: true, icon: "branch", ...pipelines, again: "Sort again" },
   pick: { doing: "Picking from", noun: "pick", link: "of", named: true, icon: "branch", ...pipelines, again: "Pick again" },
   session: { doing: "Building the sessions of", noun: "session build", link: "of", named: true, icon: "branch", ...pipelines, again: "Build again" },
+  run: { doing: "Running", noun: "pipeline run", link: "of", named: true, icon: "branch", ...pipelines, again: "Run again" },
   pyramid: { doing: "Building pyramids for", noun: "pyramid build", link: "for", named: true, icon: "layers", ...pipelines, again: "Build again" },
   release: { doing: "Releasing", noun: "release", link: "of", named: true, icon: "release", ...release, again: "Release again" },
   handover: { doing: "Handing over", noun: "handover", link: "of", named: true, icon: "release", ...release, again: "Hand over again" },

@@ -38,6 +38,8 @@ export const PLACEHOLDERS: Placeholder[] = [
     ],
   },
   { id: "review", title: "Review", icon: "review", grant: "review:see", door: "GET /api/review", words: "What needs a person's judgement: a scan the rules could not place, a subject to confirm.", built: true },
+  { id: "campaigns", title: "Campaigns", icon: "users", grant: "campaigns:see", door: "GET /api/campaigns", words: "One question asked of many items, rated by people, adjudicated, closed into decisions.", built: true },
+  { id: "models", title: "Models", icon: "chip", grant: "models:see", door: "GET /api/models", words: "The registered models by task: one promoted per slot, each admitted by a check first.", built: true },
   { id: "release", title: "Release", icon: "release", grant: "release:see", door: "POST /api/releases", words: "Hand results out as a release, a BIDS tree or a table, written to an export place.", built: true },
   { id: "pipelines", title: "Pipelines", icon: "branch", grant: "pipelines:see", door: "GET /api/jobs", words: "The jobs that ran and are running: digests, backups and releases.", built: true },
 ];

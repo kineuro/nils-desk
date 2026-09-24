@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>NILS viewer bench</title>
+    <style>
+      .bench { padding: 8px; }
+      .bench .viewer-stage { width: var(--bench-plane, 512px); max-height: none; }
+      .bench .viewer-planes { grid-template-columns: repeat(3, var(--bench-plane, 512px)); }
+    </style>
+  </head>
+  <body>
+    <!-- the viewer's bench (record 45 S2): the viewer or a grid of tiles alone, driven by scripts/viewer-bench.mjs; never part of the desk's build -->
+    <div id="root"></div>
+    <script type="module" src="/src/viewer/bench.tsx"></script>
+  </body>
+</html>

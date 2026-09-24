@@ -1,0 +1,227 @@
+{
+  "id": 2,
+  "name": "probe-form",
+  "owner": "carol@walk",
+  "status": "open",
+  "question": {
+    "kind": "form",
+    "schema": {
+      "properties": {
+        "motion": {
+          "enum": [
+            "none",
+            "mild",
+            "severe"
+          ]
+        },
+        "lesions": {
+          "type": "integer"
+        },
+        "contrast": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "motion"
+      ]
+    }
+  },
+  "grain": "stack",
+  "source": {
+    "handle": 1
+  },
+  "handle_id": 1,
+  "content_hash": "7bb01034808d3532fa3c923d21938feee7d4a18b1ffae52932a958decddf3eb8",
+  "epoch": 3,
+  "pack_version": "mri@0.4.0",
+  "raters_per_item": 1,
+  "rater_policy": {
+    "raters": [],
+    "adjudicators": []
+  },
+  "adjudication": {
+    "when": "disagree",
+    "metric": "exact",
+    "threshold": 0.8
+  },
+  "closes_into": "none",
+  "lease_seconds": 3600,
+  "created_at": "2026-09-24T09:53:01Z",
+  "closed_at": null,
+  "closed_by": null,
+  "agreement": {
+    "items": 1,
+    "raters_per_item": 1,
+    "exact": null,
+    "fleiss_kappa": null,
+    "cohen_kappa": null
+  },
+  "counts": {
+    "items": {
+      "agreed": 1,
+      "open": 5
+    },
+    "assignments": {
+      "leased": 1,
+      "submitted": 1
+    },
+    "answers": 1
+  },
+  "items": [
+    {
+      "id": 7,
+      "campaign_id": 2,
+      "position": 0,
+      "review_item_id": 7,
+      "stack_id": 1,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:1",
+      "input_derivative_ids": null,
+      "state": "agreed",
+      "round": 1,
+      "agreement": 1.0,
+      "metric": null,
+      "outcome": {
+        "value": null,
+        "form": {
+          "motion": "mild",
+          "lesions": 2,
+          "contrast": false
+        },
+        "answers": [
+          10
+        ]
+      },
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 8,
+      "campaign_id": 2,
+      "position": 1,
+      "review_item_id": 8,
+      "stack_id": 2,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:2",
+      "input_derivative_ids": null,
+      "state": "open",
+      "round": 1,
+      "agreement": null,
+      "metric": null,
+      "outcome": null,
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 9,
+      "campaign_id": 2,
+      "position": 2,
+      "review_item_id": 9,
+      "stack_id": 3,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:3",
+      "input_derivative_ids": null,
+      "state": "open",
+      "round": 1,
+      "agreement": null,
+      "metric": null,
+      "outcome": null,
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 10,
+      "campaign_id": 2,
+      "position": 3,
+      "review_item_id": 10,
+      "stack_id": 4,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:4",
+      "input_derivative_ids": null,
+      "state": "open",
+      "round": 1,
+      "agreement": null,
+      "metric": null,
+      "outcome": null,
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 11,
+      "campaign_id": 2,
+      "position": 4,
+      "review_item_id": 11,
+      "stack_id": 5,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:5",
+      "input_derivative_ids": null,
+      "state": "open",
+      "round": 1,
+      "agreement": null,
+      "metric": null,
+      "outcome": null,
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    },
+    {
+      "id": 12,
+      "campaign_id": 2,
+      "position": 5,
+      "review_item_id": 12,
+      "stack_id": 6,
+      "subject_id": null,
+      "session_day": null,
+      "key": "stack:6",
+      "input_derivative_ids": null,
+      "state": "open",
+      "round": 1,
+      "agreement": null,
+      "metric": null,
+      "outcome": null,
+      "decision_id": null,
+      "pick_id": null,
+      "resolved_at": null
+    }
+  ],
+  "assignments": [
+    {
+      "id": 13,
+      "campaign_id": 2,
+      "item_id": 7,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "state": "submitted",
+      "created_at": "2026-09-24T09:55:19Z",
+      "leased_at": "2026-09-24T09:55:19Z",
+      "lease_until": "2026-09-24T10:55:19Z",
+      "ended_at": "2026-09-24T09:55:19Z"
+    },
+    {
+      "id": 14,
+      "campaign_id": 2,
+      "item_id": 8,
+      "principal": "alice@walk",
+      "role": "rater",
+      "round": 1,
+      "state": "leased",
+      "created_at": "2026-09-24T09:55:19Z",
+      "leased_at": "2026-09-24T09:55:19Z",
+      "lease_until": "2026-09-24T10:55:19Z",
+      "ended_at": null
+    }
+  ]
+}

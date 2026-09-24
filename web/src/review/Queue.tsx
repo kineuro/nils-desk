@@ -14,7 +14,7 @@ import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { acts, batchOf, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
+import { acts, batchOf, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
 import { bulkPlan, kindOf, needsReading, sortByCost } from "./triage";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -174,7 +174,12 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
                         Merge
                       </a>
                     )}
-                    {may && i.status === "open" && family !== "moved" && (family !== "identity" || identityActs(i).decide) && (
+                    {family !== null && PAGED.includes(family) && (
+                      <a className="button secondary small" href={href("review", family)}>
+                        Open
+                      </a>
+                    )}
+                    {may && i.status === "open" && family !== "moved" && (family === null || !PAGED.includes(family)) && (family !== "identity" || identityActs(i).decide) && (
                       <button type="button" className="button small" onClick={() => onDecide(i)}>
                         Decide
                       </button>
