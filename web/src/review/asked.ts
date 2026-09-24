@@ -187,14 +187,15 @@ export function rulesP(r: RulesAxis): number | null {
   return null;
 }
 
-/** The decisions choosing a candidate writes in Review: one apply per axis, on the stack's open item of that axis, a value or no value; an axis without one, or a set on a multi-valued axis, is named as left. */
-export function choosePlan(c: AskedCandidate, stack: number | null, open: ReviewItem[]): { applies: { item: ReviewItem; axis: string; value: string | null }[]; left: string[] } {
-  const applies: { item: ReviewItem; axis: string; value: string | null }[] = [];
-  const left: string[] = [];
-  for (const [axis, v] of Object.entries(c.values)) {
-    const item = open.find((i) => i.status === "open" && i.kind.startsWith(`${axis}:`) && !i.kind.endsWith(":model") && num(obj(i.ref).stack_id) === stack);
-    if (item && !Array.isArray(v)) applies.push({ item, axis, value: v });
-    else left.push(axis);
-  }
-  return { applies, left };
+/**
+ * The apply body choosing a candidate sends to the asked item itself: the
+ * whole answer as `values`, every asked axis a value, a set on a multi-valued
+ * axis, or null for none, which the engine holds to the pack's legal
+ * combinations and writes as one decision per axis in one transaction with
+ * the item closed (record 45 R5).
+ */
+export function chooseBody(a: Pick<Asked, "axes">, c: AskedCandidate, why: string): Json {
+  const values: Record<string, AxisValue> = {};
+  for (const axis of a.axes.length > 0 ? a.axes : Object.keys(c.values)) values[axis] = c.values[axis] ?? null;
+  return { values, scope: "stack", why };
 }

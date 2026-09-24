@@ -79,7 +79,8 @@ describe("the model family", () => {
   it("sends a body that names the model, the axis, from and to, and never a confidence an older engine would commit everything by", () => {
     expect(commitBody({ model: "bodypart-head@1", axis: "body_part", from: "spine", to: "chest" })).toEqual({ model: "bodypart-head@1", axis: "body_part", to: "chest", from: "spine" });
     expect(commitBody({ model: "m@1", axis: "body_part", to: "head" }, true)).toEqual({ model: "m@1", axis: "body_part", to: "head", anyway: true });
-    expect(commitBody({ model: "m@1", axis: "body_part", from: null, to: "head" })).toEqual({ model: "m@1", axis: "body_part", to: "head", from: null });
+    // the door reads null as not asked, so no value goes as an empty text
+    expect(commitBody({ model: "m@1", axis: "body_part", from: null, to: "head" })).toEqual({ model: "m@1", axis: "body_part", to: "head", from: "" });
     expect(commitBody({ model: "m@1", axis: "body_part", to: "head" })).not.toHaveProperty("min_confidence");
     // the matrix's rows as a filter's from: not named where not known, null for no value
     expect([fromOfRow(NOW_UNKNOWN), fromOfRow(NO_VALUE), fromOfRow("spine")]).toEqual([undefined, null, "spine"]);

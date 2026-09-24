@@ -12,7 +12,7 @@ import { may } from "../grants";
 import { ops, type ReviewItem } from "../ops/client";
 import { Dialog } from "../ui/Dialog";
 import { Wait } from "../ui/Wait";
-import { askedOf, choosePlan, valueWords, type Asked, type AskedCandidate } from "./asked";
+import { askedOf, chooseBody, valueWords, type Asked, type AskedCandidate } from "./asked";
 import { askPeopleHref, asksPeople } from "./askPeople";
 import { CandidateList } from "./CandidateList";
 import { refusalWords, review, type PackDoc } from "./client";
@@ -198,12 +198,11 @@ export function AskedTable({ asked, onOpen }: { asked: Asked[]; onOpen: (a: Aske
 
 export function AskedFamily({ caps, packName, onExplain, onChanged }: { caps: Capabilities; packName: string | null; onExplain: (item: ReviewItem, stack: number) => void; onChanged: (words: string) => void }) {
   const [load, again] = useRead(async () => {
-    const [asked, open, pack] = await Promise.all([
+    const [asked, pack] = await Promise.all([
       review.list({ kind: "classify.asked", status: "open", limit: 500 }),
-      review.list({ status: "open", limit: 500 }),
       packName ? review.pack(packName).catch(() => null) : Promise.resolve(null),
     ]);
-    return { asked: asked.items, open: open.items, pack };
+    return { asked: asked.items, pack };
   });
   const [opened, setOpened] = useState<Asked | null>(null);
   const pack: PackDoc | null = load.kind === "ready" ? load.value.pack : null;
@@ -229,7 +228,6 @@ export function AskedFamily({ caps, packName, onExplain, onChanged }: { caps: Ca
         <AskedDialog
           caps={caps}
           asked={opened}
-          open={load.value.open}
           onClose={() => setOpened(null)}
           onNone={opened.stack !== null ? () => { const a = opened; setOpened(null); onExplain(a.item, a.stack as number); } : null}
           onDone={(w) => {
@@ -243,20 +241,21 @@ export function AskedFamily({ caps, packName, onExplain, onChanged }: { caps: Ca
   );
 }
 
-/** One stack's candidates: choosing one decides each axis through the stack's open item of it, then closes the asked item. */
-export function AskedDialog({ caps, asked, open, onClose, onNone, onDone }: { caps: Capabilities; asked: Asked; open: ReviewItem[]; onClose: () => void; onNone: (() => void) | null; onDone: (words: string) => void }) {
+/** One stack's candidates: choosing one answers the asked item whole, one decision per axis in one transaction (record 45 R5). */
+export function AskedDialog({ caps, asked, onClose, onNone, onDone }: { caps: Capabilities; asked: Asked; onClose: () => void; onNone: (() => void) | null; onDone: (words: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   const work = may(caps, "review:work");
   const choose = async (c: AskedCandidate) => {
-    const plan = choosePlan(c, asked.stack, open);
     setBusy(true);
     setRefused(null);
     const why = `chose System 1's candidate at p ${c.p.toFixed(2)}`;
     try {
-      for (const a of plan.applies) await ops.reviewApply(a.item.id, { ...(a.value === null ? { nothing: true } : { value: a.value }), scope: "stack", why });
-      await ops.reviewAccept(asked.item.id, why);
-      onDone(`Decided ${plan.applies.map((a) => `${a.axis} ${a.value ?? "no value"}`).join(", ") || "nothing"} for stack ${asked.stack ?? ""}${plan.left.length > 0 ? `; ${plan.left.join(", ")} had no open question and stay as sorted` : ""}.`);
+      const r = (await ops.reviewApply(asked.item.id, chooseBody(asked, c, why))) as { staged?: boolean };
+      const said = Object.entries(c.values)
+        .map(([axis, v]) => `${axis} ${valueWords(v)}`)
+        .join(", ");
+      onDone(`Decided ${said || "nothing"} for stack ${asked.stack ?? ""}${r.staged ? ", staged for a person to commit" : ""}.`);
     } catch (e) {
       setBusy(false);
       setRefused(refusalWords(e));

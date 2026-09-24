@@ -155,9 +155,12 @@ export interface CommitFilter {
   from?: string | null;
 }
 
-/** The body of `POST /api/decisions/commit` for a filter. Never a confidence alone: an engine that does not know the model filter commits by what it knows, so the body names only what narrows (an engine without it refuses with no filter named). */
+/**
+ * The body of `POST /api/decisions/commit` for a filter. Never a confidence alone: an engine that does not know the model filter commits by what it knows, so the body names only what narrows (an engine without it refuses with no filter named).
+ * The door reads an empty text as no value and null as not asked (record 45 E3), so no value is sent as "" and a from not known is left out.
+ */
 export function commitBody(f: CommitFilter, anyway = false): Json {
-  return { model: f.model, axis: f.axis, to: f.to, ...(f.from !== undefined ? { from: f.from } : {}), ...(anyway ? { anyway: true } : {}) };
+  return { model: f.model, axis: f.axis, to: f.to, ...(f.from !== undefined ? { from: f.from ?? "" } : {}), ...(anyway ? { anyway: true } : {}) };
 }
 
 /** What a commit by the filter would put in force, counted from the groups the page read: the staged part only. */

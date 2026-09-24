@@ -2,14 +2,13 @@
 // System 1's candidate list (record 45 R5, S7) against the fixture of the
 // fixed evidence shape: only legal candidates render, most probable first;
 // the axes the two systems disagree on are marked; both systems' evidence
-// and the certificate sit in disclosures; choosing one decides each axis
-// through the stack's open item of it.
+// and the certificate sit in disclosures; choosing one answers the asked
+// item whole with values.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { ReviewItem } from "../ops/client";
 import { ASKED_EXAMPLE, ASKED_ITEM, ASKED_PACK } from "./asked.fixture";
-import { askedOf, choosePlan, legal } from "./asked";
+import { askedOf, chooseBody, legal } from "./asked";
 import { CandidateList } from "./CandidateList";
 import { familyOf } from "./client";
 
@@ -84,20 +83,9 @@ describe("the candidate list", () => {
     expect(seen).not.toContain(">Choose</button>");
     expect(seen).not.toContain("None of these");
   });
-  it("chooses through the stack's open item of each axis, and names the axes that have none", () => {
-    const open: ReviewItem[] = [
-      { id: 11, kind: "base:low_confidence", scope: "stack", status: "open", created_at: "", ref: { stack_id: 4410 } },
-      { id: 12, kind: "technique:vote", scope: "stack", status: "open", created_at: "", ref: { stack_id: 4410 } },
-      { id: 13, kind: "base:missing", scope: "stack", status: "open", created_at: "", ref: { stack_id: 9 } },
-    ];
-    const plan = choosePlan(a.candidates[0], a.stack, open);
-    expect(plan.applies.map((x) => [x.item.id, x.axis, x.value])).toEqual([
-      [11, "base", "FLAIR"],
-      [12, "technique", "TSE"],
-    ]);
-    expect(plan.left).toEqual(["modifier", "post_contrast"]);
-    // no value on an axis is decided as no value
-    const none = choosePlan(a.candidates[3], a.stack, [{ id: 14, kind: "modifier:missing", scope: "stack", status: "open", created_at: "", ref: { stack_id: 4410 } }]);
-    expect(none.applies.map((x) => [x.axis, x.value])).toEqual([["modifier", null]]);
+  it("chooses by answering the asked item whole: every asked axis, a set where it is multi-valued, null for none", () => {
+    expect(chooseBody(a, a.candidates[0], "w")).toEqual({ values: { base: "FLAIR", technique: "TSE", modifier: ["IR"], post_contrast: "no" }, scope: "stack", why: "w" });
+    // no value on an axis is answered as null
+    expect((chooseBody(a, a.candidates[3], "w").values as Record<string, unknown>).modifier).toBeNull();
   });
 });
