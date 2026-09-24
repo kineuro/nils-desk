@@ -31,11 +31,11 @@ const seer: Viewer = { work: false, subscribes: false, system: false };
 const alone: Viewer = { work: true, subscribes: true, system: true };
 
 describe("Add a model's choices", () => {
-  it("offers a person with Kvasir: Work a download where Kvasir serves its local models, a server and a provider, and a subscription of their own with the assistant", () => {
-    expect(addChoices(admin, { local, subscription: sub() })).toEqual(["download", "server", "provider", "subscription"]);
-    expect(addChoices(worker, { local, subscription: sub() })).toEqual(["download", "server", "provider"]);
-    expect(addChoices(admin, { local: null, subscription: null })).toEqual(["server", "provider"]);
-    expect(addChoices(admin, { local: undefined, subscription: sub() })).toEqual(["server", "provider", "subscription"]);
+  it("offers a person with Kvasir: Work a download where Kvasir serves its local models, a model server's list, a server and a provider, and a subscription of their own with the assistant", () => {
+    expect(addChoices(admin, { local, subscription: sub() })).toEqual(["download", "modelserver", "server", "provider", "subscription"]);
+    expect(addChoices(worker, { local, subscription: sub() })).toEqual(["download", "modelserver", "server", "provider"]);
+    expect(addChoices(admin, { local: null, subscription: null })).toEqual(["modelserver", "server", "provider"]);
+    expect(addChoices(admin, { local: undefined, subscription: sub() })).toEqual(["modelserver", "server", "provider", "subscription"]);
   });
 
   it("offers a person who may use the assistant and see Kvasir only a subscription of their own, and anyone else nothing", () => {
@@ -45,7 +45,7 @@ describe("Add a model's choices", () => {
   });
 
   it("offers the install's subscription where nobody signs in", () => {
-    expect(addChoices(alone, { local, subscription: sub({ for: "system" }) })).toEqual(["download", "server", "provider", "subscription"]);
+    expect(addChoices(alone, { local, subscription: sub({ for: "system" }) })).toEqual(["download", "modelserver", "server", "provider", "subscription"]);
   });
 
   it("says each choice as the dialog draws it", () => {

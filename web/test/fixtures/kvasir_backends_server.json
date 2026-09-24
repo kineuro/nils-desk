@@ -1,0 +1,56 @@
+{
+  "backends": [
+    {
+      "id": "127-0-0-1",
+      "kind": "openai-completions",
+      "locality": "local",
+      "base_url": "http://127.0.0.1:18741/v1",
+      "added_by": "anna@lab",
+      "added_at": 1790246382952,
+      "provider": "127-0-0-1",
+      "credential": true,
+      "models": [
+        "qwen38-27b",
+        "qwen3.8-flash-next"
+      ],
+      "entries": [
+        {
+          "id": "qwen38-27b",
+          "name": "qwen38-27b",
+          "reasoning": true,
+          "context_window": 262144,
+          "max_tokens": 65536,
+          "admitted": true,
+          "aliases": [
+            "qwen38-27b-fast"
+          ],
+          "status": "loaded"
+        },
+        {
+          "id": "qwen3.8-flash-next",
+          "name": "qwen3.8-flash-next",
+          "reasoning": true,
+          "context_window": 262144,
+          "max_tokens": 65536,
+          "admitted": true,
+          "aliases": [
+            "flash-next"
+          ],
+          "status": "cold"
+        }
+      ],
+      "builtin": false,
+      "server": true,
+      "card": null,
+      "concurrency": 8,
+      "health": {
+        "warming": false,
+        "firstTokenAt": 1790246383492,
+        "lastError": "400: {\"message\":\"the prompt is longer than the context\"}",
+        "running": 0,
+        "concurrency": 8,
+        "queued": 0
+      }
+    }
+  ]
+}

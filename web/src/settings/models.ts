@@ -10,12 +10,14 @@ import {
   admissionTitle,
   admissionWords,
   answersWords,
+  countedStations,
   MARKS,
   modelOf,
   onRuntime,
   providerName,
   runtimeOfBackend,
   shownBackends,
+  stationOf,
   tokensWords,
   type CatalogueModel,
   type Mark,
@@ -24,9 +26,10 @@ import {
 } from "./gateway";
 import type { AdmissionRecord, Backend, LocalStatus, PurposeRow, Subscription } from "./kvasir";
 import { downloadChoiceWords } from "./local";
+import { stationsOf, statusTag } from "./modelserver";
 
-/** Where a model comes from, as Add a model asks it first. */
-export type Choice = "download" | "server" | "provider" | "subscription";
+/** Where a model comes from, as Add a model asks it first; record 47 adds a model server's list, ticked. */
+export type Choice = "download" | "modelserver" | "server" | "provider" | "subscription";
 
 /**
  * The choices Add a model offers, in order: downloading to this machine where
@@ -37,7 +40,7 @@ export type Choice = "download" | "server" | "provider" | "subscription";
 export function addChoices(viewer: Viewer, at: { local: LocalStatus | null | undefined; subscription: Subscription | null }): Choice[] {
   const out: Choice[] = [];
   if (viewer.work && at.local) out.push("download");
-  if (viewer.work) out.push("server", "provider");
+  if (viewer.work) out.push("modelserver", "server", "provider");
   if (at.subscription && (at.subscription.for === "system" ? viewer.work || viewer.subscribes : viewer.subscribes)) out.push("subscription");
   return out;
 }
@@ -45,6 +48,7 @@ export function addChoices(viewer: Viewer, at: { local: LocalStatus | null | und
 /** A choice as the dialog draws it: the mark of where the model runs, its title and what it means for the prompts. */
 export function choiceWords(c: Choice, at: { local: LocalStatus | null | undefined; subscription: Subscription | null }): { mark: Mark; title: string; words: string } {
   if (c === "download") return { mark: { icon: "update", tone: "brand" }, title: "Download it to this machine", words: downloadChoiceWords(at.local?.runtime) };
+  if (c === "modelserver") return { mark: MARKS.server, title: "A model server", words: "Kvasir or OpenAI compatible · tick its models" };
   if (c === "server") return { mark: MARKS.server, title: "A model server of yours", words: "SGLang, vLLM or Ollama · stays in your systems" };
   if (c === "provider") return { mark: MARKS.provider, title: "A provider", words: "With your key · leaves your systems" };
   const name = at.subscription?.name ?? "ChatGPT";
@@ -96,7 +100,7 @@ export function backendCards(
   at: { viewer: Viewer; catalogue: CatalogueModel[]; admissions: AdmissionRecord[] | null; purposes: PurposeRow[] | null; now: number; checking: string | null; drawn: string[] },
 ): ModelCard[] {
   const work = at.viewer.work;
-  const cards = shownBackends(backends).held.flatMap((b) =>
+  const cards = shownBackends(backends).held.filter((b) => b.server !== true).flatMap((b) =>
     b.models
       .map((model, i) => ({ model, first: i === 0 }))
       .filter(({ model }) => !(onRuntime(b) && at.drawn.includes(model)))
@@ -121,4 +125,50 @@ export function backendCards(
       }),
   );
   return cards.sort((x, y) => KINDS[x.kind] - KINDS[y.kind]);
+}
+
+/** Record 47: one model of a server's card, with where it stands on the server, its admission and the stations it answers. */
+export interface ServerModel {
+  id: string;
+  aliases: string[];
+  status: { tone: Tone; words: string } | null;
+  tag: CardTag;
+  answers: { words: string; title: string | null } | null;
+}
+
+/** Record 47: a model server Kvasir holds as one backend, drawn as one card listing its models. */
+export interface ServerCard {
+  key: string;
+  backend: Backend;
+  name: string;
+  mark: Mark;
+  where: string;
+  facts: string | null;
+  models: ServerModel[];
+}
+
+/** Record 47: every model server Kvasir holds, one card each; where it answers and its streams are said to Kvasir: Work alone. */
+export function serverCards(backends: Backend[], at: { viewer: Viewer; catalogue: CatalogueModel[]; admissions: AdmissionRecord[] | null; purposes: PurposeRow[] | null; now: number; checking: string | null }): ServerCard[] {
+  return shownBackends(backends)
+    .held.filter((b) => b.server === true)
+    .map((b) => ({
+      key: `server/${b.id}`,
+      backend: b,
+      name: b.id,
+      mark: MARKS.server,
+      where: "Model server",
+      facts: facts(at.viewer.work ? [b.base_url ?? null, b.concurrency ? `${b.concurrency} streams` : null] : []),
+      models: b.models.map((model): ServerModel => {
+        const entry = b.entries?.find((e) => e.id === model);
+        const admission = admissionWords(model, b, modelOf(b, model, at.catalogue), at.admissions, { now: at.now, checking: at.checking === b.id });
+        const tokens = tokensWords(modelOf(b, model, at.catalogue));
+        return {
+          id: model,
+          aliases: entry?.aliases ?? [],
+          status: statusTag(entry?.status),
+          tag: { tone: admission.tone, words: admission.words, dot: true, title: facts([admissionTitle(admission), tokens]) },
+          answers: at.purposes === null ? null : countedStations(stationsOf(b, model, at.purposes).map((p) => stationOf(p.purpose))),
+        };
+      }),
+    }));
 }
