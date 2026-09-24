@@ -14,7 +14,7 @@ import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { acts, batchOf, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
+import { acts, batchOf, isGrouped, itemKey, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
 import { bulkPlan, kindOf, needsReading, sortByCost } from "./triage";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -150,7 +150,7 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
             const ev = (i.evidence ?? {}) as Json;
             const scheme = typeof ev.scheme === "string" ? ev.scheme : null;
             return (
-              <tr key={i.id} className={i.status === "open" ? "" : "decided"}>
+              <tr key={itemKey(i)} className={i.status === "open" ? "" : "decided"}>
                 <td>
                   <span className={`tag ${tag.tone}`}>{tag.words}</span>
                 </td>
@@ -159,7 +159,7 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
                   {i.status !== "open" && <span className="meta"> · {i.status}</span>}
                 </td>
                 <td className="path">{family === "moved" && scheme ? `scheme ${scheme}` : (b.name ?? (b.id !== null ? `batch ${b.id}` : ""))}</td>
-                <td className="num">{whenWords(i.created_at)}</td>
+                <td className="num">{i.created_at ? whenWords(i.created_at) : ""}</td>
                 <td className="acts">
                   <span className="row-actions">
                     {family === "unsure" && stack !== null && (
@@ -187,7 +187,8 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
                         Open
                       </a>
                     )}
-                    {may && i.status === "open" && family !== "moved" && (family === null || !PAGED.includes(family)) && (family !== "identity" || identityActs(i).decide) && (
+                    {isGrouped(i) && <span className="meta">counted at your detail</span>}
+                    {may && !isGrouped(i) && i.status === "open" && family !== "moved" && (family === null || !PAGED.includes(family)) && (family !== "identity" || identityActs(i).decide) && (
                       <button type="button" className="button small" onClick={() => onDecide(i)}>
                         Decide
                       </button>

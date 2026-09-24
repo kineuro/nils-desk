@@ -214,8 +214,32 @@ export function datasetOf(item: ReviewItem): string | null {
 }
 
 /** What one item is about, in a line, from its kind and the evidence its kind describes. */
+/** Whether an entry is a group the engine counted below detail quasi: no id, nothing to open or decide one by one. */
+export function isGrouped(item: ReviewItem): boolean {
+  return item.grouped === true || typeof item.id !== "number";
+}
+
+/** A stable key for a row: the item's id, or a group's run, reason and check. */
+export function itemKey(item: ReviewItem): string {
+  if (!isGrouped(item)) return String(item.id);
+  const ev = (item.evidence ?? {}) as Json;
+  return `${item.group_key ?? ""}|${item.status}|${text(ev.status) ?? ""}|${text(ev.check) ?? ""}`;
+}
+
+/** A group's count of units: a number, or "fewer than five" where the engine withheld it. */
+export function unitsWords(units: number | null | undefined): string {
+  return units === null || units === undefined ? "fewer than five" : n(units);
+}
+
 export function itemWords(item: ReviewItem): string {
   const k = kindOf(item.kind);
+  if (item.kind === "pipeline:qc" && isGrouped(item)) {
+    const ev = (item.evidence ?? {}) as Json;
+    const run = num(((item.ref ?? {}) as Json).run_id);
+    const what = text(ev.check) ?? (text(ev.status) === "breach" ? "a check" : (text(ev.status) ?? "failed"));
+    const units = item.units === 1 ? "1 unit" : `${unitsWords(item.units)} units`;
+    return `${what}${run !== null ? ` in run ${run}` : ""}: ${units}`;
+  }
   const ev = (item.evidence ?? {}) as Json;
   const members = membersOf(item);
   const alike = members > 1 ? ` · ${n(members)} stacks alike` : "";

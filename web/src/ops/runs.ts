@@ -257,13 +257,14 @@ function heldOf(o: Json, key: string): Held {
 }
 
 /** A run's checks and breaches, from its summary: each unit's breaches at detail quasi, only the counts by check below it. */
-export function checksOf(r: RunDetail): { declared: number; breaches: Held; unchecked: number; units: { unit: string | null; breaches: Breach[] }[]; items: number; totals: boolean } {
+export function checksOf(r: RunDetail): { declared: number; breaches: Held; unchecked: number; units: { unit: string | null; breaches: Breach[] }[]; items: Held; totals: boolean } {
   const s = obj(r.summary);
   const numbers = obj(s.numbers);
   const c = obj(numbers.checks);
   const totals = totalsOnly(r);
   const list = totals ? [] : Array.isArray(s.breaches) ? (s.breaches as Json[]) : [];
-  const items = Array.isArray(s.review_items) ? s.review_items.length : (num(s.review_items) ?? 0);
+  // a count since the engine's dd41d9a (null where withheld), a list of ids before it
+  const items: Held = Array.isArray(s.review_items) ? s.review_items.length : s.review_items === null ? null : (num(s.review_items) ?? 0);
   return {
     declared: num(c.declared) ?? 0,
     breaches: heldOf(c, "breaches"),

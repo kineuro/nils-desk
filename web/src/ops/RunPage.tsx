@@ -243,10 +243,10 @@ export function RunView(props: {
           </table>
         </div>
       )}
-      {checks.items > 0 && acts.review && (
+      {checks.items !== 0 && acts.review && (
         <p className="meta">
           <a href={narrow(href("review"), { run: r.id })}>
-            {n(checks.items)} review {checks.items === 1 ? "item" : "items"}
+            {heldWords(checks.items)} review {checks.items === 1 ? "item" : "items"}
           </a>{" "}
           for the failures and breaches of this run
         </p>

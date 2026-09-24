@@ -295,6 +295,13 @@ describe("a run's page", () => {
     expect(html).not.toContain(">0<");
     expect(html).toContain("withheld below detail quasi");
     expect(html).toContain('href="#review?run=1"');
+    // review_items as the engine counts them since dd41d9a: a number, null where withheld
+    expect(checksOf({ ...held, summary: { ...held.summary, review_items: null } }).items).toBeNull();
+    expect(checksOf({ ...held, summary: { ...held.summary, review_items: 7 } }).items).toBe(7);
+    expect(checksOf({ ...held, summary: { ...held.summary, review_items: 0 } }).items).toBe(0);
+    expect(draw(plain(), { ...held, summary: { ...held.summary, review_items: null } }, totals)).toContain(">fewer than five review items</a>");
+    expect(draw(plain(), { ...held, summary: { ...held.summary, review_items: 7 } }, totals)).toContain(">7 review items</a>");
+    expect(draw(plain(), { ...held, summary: { ...held.summary, review_items: 0 } }, totals)).not.toContain("review item");
   });
   it("counts the breaches by check from the run's summary", () => {
     expect(checksOf(RUN)).toMatchObject({ declared: 2, breaches: 1, unchecked: 0, items: 1 });
