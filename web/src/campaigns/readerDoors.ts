@@ -13,12 +13,12 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { review } from "../review/client";
-import { campaigns, type AnswerBody, type Claimed, type Item, type Question } from "./client";
-import { acceptedOf, batchesOf, readingFromAsked, readingOf, statsOf, askedAxes, type Batch, type Order, type RaterStat, type Reading } from "./reader";
+import { campaigns, type Claimed, type Item, type Question } from "./client";
+import { acceptedOf, askedAxes, batchesOf, HOLD_BACK, readingFromAsked, readingOf, statsOf, type Batch, type Order, type RaterStat, type Reading } from "./reader";
 
 /** The doors a record 48 engine adds, as its OpenAPI 7 names them. */
 export const R48 = {
-  line: "GET /api/campaigns/{id}/items/{item}/evidence",
+  line: "GET /api/campaigns/{id}/items/{item}/why",
   batches: "GET /api/campaigns/{id}/batches",
   accept: "POST /api/campaigns/{id}/batches/{batch}/accept",
   stats: "GET /api/campaigns/{id}/stats",
@@ -33,11 +33,10 @@ export function valueOrderServed(caps: Capabilities): boolean {
   return served(caps, R48.line) || served(caps, R48.batches) || served(caps, R48.stats);
 }
 
-/** A claim, in value order where the engine offers it; `item` asks for a held-back stack by name, which an engine that does not know it ignores. */
-export function claimIn(c: number | string, role: "rater" | "adjudicator", order: Order, item: number | null = null): Promise<Claimed & { next?: unknown }> {
+/** A claim, in value order where the engine offers it (record 48 R1: `order` value; an adjudicator's is always by position). */
+export function claimIn(c: number | string, role: "rater" | "adjudicator", order: Order): Promise<Claimed & { next?: unknown }> {
   const body: Json = { role };
-  if (order === "value") body.order = "value";
-  if (item !== null) body.item = item;
+  if (order === "value" && role === "rater") body.order = "value";
   return door<Claimed & { next?: unknown }>("POST", `/api/campaigns/${id(c)}/claim`, body);
 }
 
@@ -46,20 +45,6 @@ export function hintOf(c: { next?: unknown }): number[] {
   const n = c.next;
   if (!Array.isArray(n)) return [];
   return n.flatMap((x) => (typeof x === "number" ? [x] : x && typeof x === "object" && typeof (x as Json).stack_id === "number" ? [(x as Json).stack_id as number] : []));
-}
-
-/**
- * The answer with what the reader knew beside it (record 48 R1): the seconds
- * it took on the desk's clock, the answer that was suggested, as an answer's
- * value says it (the engine compares the two and keeps whether it changed),
- * and how many axes changed. An engine before record 48 ignores them.
- */
-export function timed(body: AnswerBody, seconds: number | null, changes: number | null, suggested: AnswerBody["value"] | null): AnswerBody {
-  const out: AnswerBody = { ...body };
-  if (seconds !== null) out.seconds = Math.round(seconds * 1000) / 1000;
-  if (suggested !== null && suggested !== undefined) out.suggested = suggested;
-  if (changes !== null) out.changes = changes;
-  return out;
 }
 
 const lines = new Map<string, Promise<Reading | null>>();
@@ -75,7 +60,7 @@ export function readingFor(caps: Capabilities, c: number | string, q: Question, 
   const have = lines.get(k);
   if (have) return have;
   let p: Promise<Reading | null>;
-  if (served(caps, R48.line)) p = door<Json>("GET", `/api/campaigns/${id(c)}/items/${item.id}/evidence`).then(readingOf);
+  if (served(caps, R48.line)) p = door<Json>("GET", `/api/campaigns/${id(c)}/items/${item.id}/why`).then((raw) => narrowed(readingOf(raw), askedAxes(q)));
   else if (may(caps, "review:see")) {
     const ev = item.review_item_id !== null ? campaigns.reviewItem(item.review_item_id).then((r) => r.evidence ?? null, () => null) : Promise.resolve(null);
     const ex = item.stack_id !== null && served(caps, "GET /api/explain/{stack}") ? review.explain(item.stack_id).catch(() => null) : Promise.resolve(null);
@@ -86,24 +71,31 @@ export function readingFor(caps: Capabilities, c: number | string, q: Question, 
   return kept;
 }
 
+/** A reading's lines narrowed to the axes the question asks; the why door speaks of every axis of the stack. */
+function narrowed(r: Reading, axes: string[]): Reading {
+  return axes.length === 0 ? r : { ...r, lines: r.lines.filter((l) => axes.includes(l.axis)) };
+}
+
 /** Forget the readings (a test). */
 export function forgetReadings(): void {
   lines.clear();
 }
 
-export function batchesFor(c: number | string): Promise<Batch[]> {
-  return door<Json>("GET", `/api/campaigns/${id(c)}/batches`).then(batchesOf);
+/** The batches of like stacks open to the caller, each with as many of its items as `sample` asks (a grid's worth). */
+export function batchesFor(c: number | string, q: Question, items: Pick<Item, "id" | "stack_id">[], sample = 60): Promise<Batch[]> {
+  const stacks = new Map(items.map((i) => [i.id, i.stack_id]));
+  return door<Json>("GET", `/api/campaigns/${id(c)}/batches?sample=${sample}`).then((r) => batchesOf(r, (i) => stacks.get(i) ?? null, q.kind === "axis" ? (q.axis ?? null) : null));
 }
 
 /**
- * Accept a batch's suggestion for every stack in it but the held back; the
- * engine leases and answers each as its own item, marked as given to a
- * batch, the suggestion kept beside it.
+ * Accept a batch's suggestion in one move: the engine leases and answers
+ * each item as its own, marked as given to a batch, and holds a tenth back
+ * at random to be read alone. Where the person held some back, only the
+ * others shown are named.
  */
-export function acceptBatch(c: number | string, q: Question, b: Batch, plan: { accept: number[]; read: number[] }, seconds: number | null): Promise<{ accepted: number; held: number[] }> {
-  const value = q.kind === "axis" && q.axis ? b.values[q.axis] : b.values;
-  const body: Json = { items: plan.accept, hold: plan.read, value: value as Json[string], suggested: value as Json[string], ...(seconds !== null ? { seconds: Math.round(seconds * 1000) / 1000 } : {}) };
-  return door<Json>("POST", `/api/campaigns/${id(c)}/batches/${encodeURIComponent(b.key)}/accept`, body).then((r) => acceptedOf(r, plan));
+export function acceptBatch(c: number | string, b: Batch, plan: { items: number[] | null }, holdBack = HOLD_BACK): Promise<{ accepted: number; held: number[]; refused: number }> {
+  const body: Json = { hold_back: holdBack, ...(plan.items ? { items: plan.items } : {}) };
+  return door<Json>("POST", `/api/campaigns/${id(c)}/batches/${encodeURIComponent(b.key)}/accept`, body).then(acceptedOf);
 }
 
 export function statsFor(c: number | string): Promise<RaterStat[]> {

@@ -22,8 +22,8 @@ import type { Capabilities, EngineCapabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { warmStack } from "../viewer/prefetch";
 import { campaigns, emptyDraft, makeBody, type Campaign, type Given } from "./client";
-import { acceptPlan, baselineOf, changesOf, complete, givenOf, givenOfCandidate, median, Prefetcher, suggestedValue, suggestionOf, upcoming } from "./reader";
-import { acceptBatch, batchesFor, claimIn, forgetReadings, hintOf, R48, readingFor, statsFor, timed, valueOrderServed } from "./readerDoors";
+import { acceptPlan, baselineOf, changesOf, complete, givenOf, givenOfCandidate, median, planWords, Prefetcher, suggestionOf, upcoming } from "./reader";
+import { acceptBatch, batchesFor, claimIn, forgetReadings, hintOf, R48, readingFor, statsFor, valueOrderServed } from "./readerDoors";
 import { bodyOf, given, keyAct, rowsOf, seatOf } from "./workspace";
 
 const ENGINE = process.env.READER_WALK_ENGINE ?? "";
@@ -120,7 +120,7 @@ describe.skipIf(!ENGINE || PEOPLE.length < 2)("the reader walked on a live engin
       const ch = changesOf(q, baselineOf(q, s), g);
       if (ch !== null && ch > 0) changed++;
       const holding = seat;
-      await as(ALICE, () => campaigns.answer(c.id, holding.assignment.id, timed(body.body, (performance.now() - t) / 1000, ch, suggestedValue(q, s))));
+      await as(ALICE, () => campaigns.answer(c.id, holding.assignment.id, body.body));
       answered.add(item.id);
       const now = performance.now();
       perDecision.push((now - t) / 1000);
@@ -150,26 +150,34 @@ describe.skipIf(!ENGINE || PEOPLE.length < 2)("the reader walked on a live engin
     }
     const c = await make(`reader-batch-${STAMP}`);
     const t0 = performance.now();
-    const batches = await as(ALICE, () => batchesFor(c.id));
-    say(`batches: ${batches.length}, of ${batches.map((b) => `${b.items.length} (${b.held.length} held)`).join(", ")}`);
+    const batches = await as(ALICE, () => batchesFor(c.id, c.question, c.items ?? []));
+    say(`batches: ${batches.length}, of ${batches.map((b) => `${b.count} (${b.words}: ${JSON.stringify(b.values)})`).join("; ")}`);
     expect(batches.length).toBeGreaterThan(0);
     const b = batches[0];
     const plan = acceptPlan(b, new Set());
-    const r = await as(ALICE, () => acceptBatch(c.id, c.question, b, plan, (performance.now() - t0) / 1000));
+    say(`the batch view says: ${planWords(plan)}`);
+    const r = await as(ALICE, () => acceptBatch(c.id, b, plan));
     const took = (performance.now() - t0) / 1000;
-    say(`accepted ${r.accepted} in ${took.toFixed(3)} s (${(took / Math.max(1, r.accepted)).toFixed(3)} s a stack); held back ${r.held.length}`);
-    expect(r.accepted).toBe(plan.accept.length);
-    // the held back come next, one by one
-    for (const held of r.held) {
-      const seat = seatOf(await as(ALICE, () => claimIn(c.id, "rater", "value", held)));
-      expect(seat.kind).toBe("holding");
-      if (seat.kind !== "holding") break;
-      say(`held back item ${held}: claimed item ${seat.item.id}`);
-      const s = suggestionOf(c.question, await as(ALICE, () => readingFor(caps, c.id, c.question, seat.item)));
+    say(`accepted ${r.accepted} in ${took.toFixed(3)} s with the batches read (${(took / Math.max(1, r.accepted)).toFixed(4)} s a stack); held back ${r.held.length}, refused ${r.refused}`);
+    expect(r.accepted + r.held.length).toBe(b.count);
+    expect(r.held.length).toBe(plan.drawn);
+    // the held back are no later batch's: they are read one by one
+    const again = await as(ALICE, () => batchesFor(c.id, c.question, c.items ?? []));
+    expect(again.flatMap((x) => x.items.map((i) => i.item)).some((i) => r.held.includes(i))).toBe(false);
+    const read = new Set<number>();
+    let seat = seatOf(await as(ALICE, () => claimIn(c.id, "rater", "value")));
+    while (seat.kind === "holding") {
+      const holding = seat;
+      read.add(holding.item.id);
+      const s = suggestionOf(c.question, await as(ALICE, () => readingFor(caps, c.id, c.question, holding.item)));
       const g = givenOf(c.question, s);
       const body = g && complete(c.question, g) ? bodyOf(c.question, g) : bodyOf(c.question, { kind: "value", value: "T1w" });
-      if (body.ok) await as(ALICE, () => campaigns.answer(c.id, seat.assignment.id, body.body));
+      if (!body.ok) break;
+      await as(ALICE, () => campaigns.answer(c.id, holding.assignment.id, body.body));
+      seat = seatOf(await as(ALICE, () => claimIn(c.id, "rater", "value")));
     }
+    say(`read one by one after the batch: ${read.size}, the held back among them: ${r.held.filter((i) => read.has(i)).length} of ${r.held.length}`);
+    expect(r.held.every((i) => read.has(i))).toBe(true);
     if (served(caps, R48.stats)) {
       const mine = (await as(CAROL, () => statsFor(c.id))).find((x) => x.principal === ALICE.who);
       say(`the engine's pace after the batch: ${mine?.decisions} decisions, ${mine?.batched} in batches`);

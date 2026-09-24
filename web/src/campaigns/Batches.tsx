@@ -3,8 +3,8 @@
 // same answer suggested) as one grid of tiles, the answer they share above
 // them. A person looks, holds back any that look wrong with a click, and
 // accepts the rest in one move; each accepted stack is still its own
-// decision, and the random few the engine held back for the certificate's
-// draw are queued to be read one by one. Keys: Enter accepts, `n` the next
+// decision, and a random tenth the engine holds back at the accept is left
+// to be read one by one. Keys: Enter accepts, `n` the next
 // batch, `b` back to one by one.
 
 import { useMemo, useState } from "react";
@@ -43,57 +43,57 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
       </div>
     );
   const plan = acceptPlan(b, mine);
-  const byItem = new Map(b.items.map((i) => [i.item, i]));
+  const shown = b.items.length;
   return (
     <div className="batch" aria-label={`batch ${at + 1} of ${batches.length}`}>
       <div className="batch-head">
         <span className="eyebrow">
-          batch {at + 1} of {batches.length} · {b.items.length} like stacks
+          batch {at + 1} of {batches.length} · {b.count} like {b.count === 1 ? "stack" : "stacks"}
+          {shown < b.count ? ` · ${shown} shown` : ""}
         </span>
-        <b className="batch-words">{b.words}</b>
         <span className="batch-values">
           {Object.entries(b.values).map(([axis, v]) => (
-            <span key={axis} className="tag">
+            <span key={axis} className="tag ok">
               {axis} {valueWords(v)}
             </span>
           ))}
         </span>
+        <span className="meta batch-words">{b.words}</span>
       </div>
       {said && <p className="meta said">{said}</p>}
       <p className="batch-counts" role="status" aria-live="polite">
-        <b>{plan.accept.length}</b> take the suggestion · <b>{plan.read.length}</b> held back
-        {b.held.length > 0 ? ` (${b.held.length} drawn for the certificate${mine.size > 0 ? `, ${[...mine].filter((i) => byItem.has(i)).length} by you` : ""})` : ""}
+        <b>{plan.n - plan.drawn}</b> take the suggestion · <b>{plan.drawn + plan.read.length}</b> held back
+        {plan.drawn > 0 ? ` (${plan.drawn} at random for the draw${plan.read.length > 0 ? `, ${plan.read.length} by you` : ""})` : ""}
+        {plan.items !== null && shown < b.count ? `; the ${b.count - shown} not shown wait for a later move` : ""}
       </p>
       <div className="batch-grid">
         {b.items.map((i) => {
-          const drawn = b.held.includes(i.item);
-          const held = drawn || mine.has(i.item);
+          const held = mine.has(i.item);
           return (
             <div
               key={i.item}
               className={held ? "batch-cell held" : "batch-cell"}
               role="button"
-              tabIndex={drawn ? -1 : 0}
+              tabIndex={0}
               aria-pressed={held}
-              aria-disabled={drawn}
-              aria-label={`${i.stack !== null ? `stack ${i.stack}` : `item ${i.item}`}: ${drawn ? "held back for the certificate's draw" : held ? "held back by you; press to let it take the suggestion" : "takes the suggestion; press to hold it back"}`}
-              onClick={() => !drawn && onHold(i.item)}
+              aria-label={`${i.stack !== null ? `stack ${i.stack}` : `item ${i.item}`}: ${held ? "held back by you; press to let it take the suggestion" : "takes the suggestion; press to hold it back"}`}
+              onClick={() => onHold(i.item)}
               onKeyDown={(e) => {
-                if (e.key === " " && !drawn) {
+                if (e.key === " ") {
                   e.preventDefault();
                   e.stopPropagation();
                   onHold(i.item);
                 }
               }}
             >
-              {i.stack !== null ? <Tile stack={i.stack} sync={sync} size={size} caption={held ? (drawn ? "held for the draw" : "held by you") : `stack ${i.stack}`} /> : <span className="meta">item {i.item}</span>}
+              {i.stack !== null ? <Tile stack={i.stack} sync={sync} size={size} caption={held ? "held by you" : `stack ${i.stack}`} /> : <span className="meta">item {i.item}</span>}
             </div>
           );
         })}
       </div>
       <div className="row actions">
-        <button type="button" className="button" disabled={busy || plan.accept.length === 0} onClick={onAccept} title={planWords(plan)}>
-          Accept for {plan.accept.length} <kbd>Enter</kbd>
+        <button type="button" className="button" disabled={busy || plan.n === 0} onClick={onAccept} title={planWords(plan)}>
+          Accept for {plan.n} <kbd>Enter</kbd>
         </button>
         <button type="button" className="button secondary" disabled={busy || batches.length < 2} onClick={onNext}>
           Next batch <kbd>n</kbd>

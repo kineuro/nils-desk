@@ -35,8 +35,8 @@ import {
 import { AxisRows, blank, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
 import { BatchView, type BatchViewProps } from "./Batches";
 import type { AskedCandidate } from "../review/asked";
-import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, suggestedValue, Clock, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type Order, type Pace, type Reading, type Suggestion } from "./reader";
-import { acceptBatch, batchesFor, claimIn, hintOf, R48, readingFor, timed, valueOrderServed } from "./readerDoors";
+import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type Order, type Pace, type Reading, type Suggestion } from "./reader";
+import { acceptBatch, batchesFor, claimIn, hintOf, R48, readingFor, valueOrderServed } from "./readerDoors";
 import { EvidenceLines, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { StackView } from "./StackView";
 import { warmStack } from "../viewer/prefetch";
@@ -101,8 +101,6 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   prefetch.current ??= new Prefetcher(warmStack, 2);
   const orderNow = useRef(order);
   orderNow.current = order;
-  // held-back stacks to read one by one, asked for by name before the next by order
-  const heldQueue = useRef<number[]>([]);
   const answeredHere = useRef(new Set<number>());
   const hint = useRef<number[]>([]);
 
@@ -113,11 +111,9 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const claim = useCallback(
     (note: string | null = null) => {
       setSeat({ kind: "claiming" });
-      const named = heldQueue.current.shift() ?? null;
-      claimIn(id, role, orderNow.current, named)
+      claimIn(id, role, orderNow.current)
         .then((c) => {
           hint.current = hintOf(c);
-          if (c.item) heldQueue.current = heldQueue.current.filter((i) => i !== c.item!.id);
           setSeat(seatOf(c, note));
         })
         .catch((e: unknown) => setSeat({ kind: "failed", why: refusedWords(e) }));
@@ -233,7 +229,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     const seconds = clock.current.stop(holding.item.id, Date.now());
     const changes = changesOf(q, baselineOf(q, suggestion), g);
     campaigns
-      .answer(id, holding.assignment.id, timed(b.body, seconds, changes, suggestedValue(q, suggestion)))
+      .answer(id, holding.assignment.id, b.body)
       .then((r) => {
         setDone((d) => d + 1);
         setPace((p) => paced(p, seconds, changes));
@@ -248,7 +244,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         setRefused(refusedWords(e));
       })
       .finally(() => setBusy(false));
-  }, [q, holding, busy, g, why, id, claim, suggested, suggestion]);
+  }, [q, holding, busy, g, why, id, claim, suggestion]);
 
   // the batches of like stacks (record 48 R1)
   const batchesOffered = served(caps, R48.batches) && (q?.kind === "axis" || q?.kind === "axes") && role === "rater";
@@ -259,39 +255,40 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     setMine(new Set());
     setBatchSaid(null);
     batchShown.current = Date.now();
-    batchesFor(id).then(setBatches, (e: unknown) => {
+    batchesFor(id, q!, campaign?.items ?? []).then(setBatches, (e: unknown) => {
       setBatches([]);
       setBatchSaid(refusedWords(e));
     });
-  }, [id]);
+  }, [id, q, campaign]);
   const acceptNow = useCallback(() => {
     const b = batches?.[batchAt];
     if (!b || busy) return;
     const plan = acceptPlan(b, mine);
-    if (plan.accept.length === 0) return;
+    if (plan.n === 0) return;
     const seconds = batchShown.current === null ? null : (Date.now() - batchShown.current) / 1000;
     setBusy(true);
-    acceptBatch(id, q!, b, plan, seconds)
+    acceptBatch(id, b, plan)
       .then((r) => {
         setPace((p) => paced(p, seconds, 0, r.accepted));
         setDone((d) => d + r.accepted);
         setOpen((o) => (o === null ? o : Math.max(0, o - r.accepted)));
-        heldQueue.current = [...heldQueue.current, ...r.held.filter((i) => !heldQueue.current.includes(i))];
-        for (const i of plan.accept) answeredHere.current.add(i);
-        const words = `Accepted ${r.accepted} of ${b.words}; ${r.held.length} held back, read next one by one.`;
+        const held = r.held.length + plan.read.length;
+        const words = `Accepted ${r.accepted} like stacks; ${held} held back to read one by one${r.refused > 0 ? `; ${r.refused} refused` : ""}.`;
         setSaid(words);
         setBatchSaid(words);
         setMine(new Set());
-        const rest = (batches ?? []).filter((x) => x.key !== b.key);
-        setBatches(rest);
-        setBatchAt((a) => Math.min(a, Math.max(0, rest.length - 1)));
         batchShown.current = Date.now();
+        // the batches again: what is left open to this person now
+        batchesFor(id, q!, campaign?.items ?? []).then((rest) => {
+          setBatches(rest);
+          setBatchAt((a) => Math.min(a, Math.max(0, rest.length - 1)));
+        }, () => setBatches([]));
         // the item held now may have been in the batch; the claim hands back what is still mine, or the next
         claim();
       })
       .catch((e: unknown) => setBatchSaid(refusedWords(e)))
       .finally(() => setBusy(false));
-  }, [batches, batchAt, busy, mine, id, claim, q]);
+  }, [batches, batchAt, busy, mine, id, claim, q, campaign]);
   const hold = useCallback((i: number) => setMine((m) => {
     const n = new Set(m);
     if (n.has(i)) n.delete(i);

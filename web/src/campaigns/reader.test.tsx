@@ -7,7 +7,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import askedItem from "../../test/fixtures/campaigns/reader_asked.json";
-import lineDoc from "../../test/fixtures/campaigns/reader_line.json";
+import whyDoc from "../../test/fixtures/campaigns/reader_why.json";
 import claimed from "../../test/fixtures/campaigns/claim.json";
 import openCampaign from "../../test/fixtures/campaigns/campaign_open.json";
 import type { Json } from "../ask/client";
@@ -43,7 +43,7 @@ import {
   upcoming,
   type Reading,
 } from "./reader";
-import { hintOf, R48, timed, valueOrderServed } from "./readerDoors";
+import { hintOf, R48, valueOrderServed } from "./readerDoors";
 import { EvidenceLines, PaceCount, SuggestionBar } from "./ReaderParts";
 import { blank } from "./renderers";
 import { WorkspaceBody, type WorkspaceBodyProps } from "./Workspace";
@@ -51,36 +51,48 @@ import { bodyOf, keyAct, rowsOf, seatOf } from "./workspace";
 
 const AXES: Question = { kind: "axes", axes: ["base", "technique", "modifier"], values: { base: ["DWI", "T1w", "T2w"], technique: ["MPRAGE", "TSE", "SE"], modifier: ["FatSat", "FLAIR"] } };
 const BASE: Question = { kind: "axis", axis: "base", values: ["DWI", "T1w", "T2w"] };
-const reading = readingOf(lineDoc as unknown as Json);
+const whole = readingOf(whyDoc as unknown as Json);
+// as the reader holds it: the lines of the axes the question asks
+const reading: Reading = { ...whole, lines: whole.lines.filter((l) => askedAxes(AXES).includes(l.axis)) };
 const asked = (askedItem as { evidence: Json }).evidence;
 
 describe("the evidence line", () => {
-  it("reads the engine's door: flags, rule and clause, the header values read, votes, words, System 1", () => {
-    expect(reading.item).toBe(301);
-    expect(reading.stack).toBe(1207);
-    expect(reading.batch).toBe("siemens-mprage-t1");
-    expect(reading.value).toBe(0.29);
-    const base = reading.lines.find((l) => l.axis === "base")!;
+  it("reads the why door: flags, rule and clause, the header values read, votes, words, System 1", () => {
+    expect(whole.item).toBe(301);
+    expect(whole.stack).toBe(1207);
+    expect(whole.axes).toEqual(["base", "technique", "modifier", "disposition"]);
+    // the value order's worth: disagreement first, then the least sure
+    expect(whole.value).toBeCloseTo(1.29);
+    const base = whole.lines[0];
     expect(base.flags).toEqual(["inversion"]);
-    expect(base.clause).toBe("TI > 700 and TR < 3000");
-    expect(base.reads).toContainEqual(["TI", "900"]);
-    expect(base.reads).toContainEqual(["image type", "ORIGINAL\\PRIMARY\\M"]);
-    expect(base.model).toEqual({ value: "T1w", p: 0.93, weighed: ["TI", "words"] });
-    // a list of {name, value} reads as well as an object
-    expect(reading.lines[1].reads).toEqual([
-      ["MR acquisition type", "3D"],
-      ["scanning sequence", "GR\\IR"],
+    expect(base.rule).toBe("technique:MPRAGE");
+    expect(base.clause).toBe("clause 0");
+    expect(base.reads).toEqual([
+      ["TI", "900"],
+      ["TR", "2300"],
     ]);
-    // below the detail that shows words, none are drawn and the line says so
-    expect(reading.lines[1].words).toBeNull();
+    // a clause that only restates another axis is no vote
+    expect(base.votes).toEqual([
+      { rule: "base/technique:MPRAGE", value: "T1w" },
+      { rule: "keyword/T1w", value: "T1w" },
+    ]);
+    expect(base.words).toEqual(["t1_mprage"]);
+    expect(base.model).toEqual({ value: "T1w", p: 0.93, weighed: [] });
+    expect(base.agree).toBe(true);
+    expect(whole.lines[1].reads).toEqual([["scanning sequence", "GR\\IR"]]);
+    // below detail quasi the door leaves the words out, and the line says so
+    expect(whole.lines[1].words).toBeNull();
+    expect(whole.lines[2].agree).toBe(false);
+    // a person's decision names who, not a rule
+    expect(whole.lines[3].rule).toBe("a person's decision");
     // an illegal candidate is never drawn
-    expect(reading.candidates.map((c) => c.p)).toEqual([0.71, 0.22]);
+    expect(whole.candidates.map((c) => c.p)).toEqual([0.71, 0.22]);
   });
 
   it("says the value, then what decided it, in one line", () => {
     const w = lineWords(reading.lines[0]);
     expect(w.value).toBe("T1w");
-    expect(w.why).toEqual(["flags inversion", "rule technique:MPRAGE (TI > 700 and TR < 3000)", "TR 2300 TE 2.98 TI 900 flip angle 9 sequence name *tfl3d1_16ns image type ORIGINAL\\PRIMARY\\M", "“t1”, “mprage”", "1 more vote", "System 1 T1w 0.93"]);
+    expect(w.why).toEqual(["flags inversion", "rule technique:MPRAGE", "TI 900 TR 2300", "“t1_mprage”", "1 more vote", "System 1 T1w 0.93"]);
     expect(lineWords(reading.lines[2]).value).toBe("no value");
   });
 
@@ -216,10 +228,6 @@ describe("the clock and the pace", () => {
     expect(paceWords(NO_PACE)).toBe("no decisions yet");
   });
 
-  it("carries the seconds and the suggestion beside the answer", () => {
-    expect(timed({ value: "T1w" }, 2.34567, 0, "T1w")).toEqual({ value: "T1w", seconds: 2.346, changes: 0, suggested: "T1w" });
-    expect(timed({ value: "T1w" }, null, null, null)).toEqual({ value: "T1w" });
-  });
 });
 
 describe("the pictures ready", () => {
@@ -271,40 +279,54 @@ describe("the pictures ready", () => {
 
 describe("batches of like stacks", () => {
   const raw = {
-    batches: [
-      { key: "b1", words: "Siemens MPRAGE, T1w suggested", values: { base: "T1w", technique: "MPRAGE" }, items: [{ item: 1, stack_id: 10 }, { item: 2, stack_id: 11 }, { item: 3, stack_id: 12 }, { item: 4, stack_id: 13 }, 5], held: [3] },
-      { key: "b2", items: [] },
+    campaign: 7,
+    open: 40,
+    sealed: 2,
+    unsuggested: 3,
+    count: 2,
+    groups: [
+      { key: "a1b2c3", count: 30, suggested: "T1w", signature: { rules: { base: "base/technique:MPRAGE" }, header: { text_sequence_name: "*tfl3d1_16ns", repetition_time: 2300 } }, sample: [1, 2, 3, 4, 5] },
+      { key: "d4e5f6", count: 0, suggested: "T2w", signature: {}, sample: [] },
     ],
   };
-  const batches = batchesOf(raw);
+  const stacks: Record<number, number> = { 1: 10, 2: 11, 3: 12, 4: 13 };
+  const batches = batchesOf(raw, (i) => stacks[i] ?? null, "base");
   const b = batches[0];
 
-  it("reads the batches door, an empty batch left out", () => {
+  it("reads the batches door: the suggestion, what the stacks share, the items shown with their stacks", () => {
     expect(batches.length).toBe(1);
-    expect(b.items.map((i) => i.item)).toEqual([1, 2, 3, 4, 5]);
-    expect(b.items[4].stack).toBeNull();
-    expect(b.held).toEqual([3]);
+    expect(b.values).toEqual({ base: "T1w" });
+    expect(b.count).toBe(30);
+    expect(b.words).toBe("sequence *tfl3d1_16ns · TR 2300 · base by base/technique:MPRAGE");
+    expect(b.items.map((i) => i.stack)).toEqual([10, 11, 12, 13, null]);
+    // an axes question's suggestion is an object
+    expect(batchesOf({ groups: [{ key: "k", count: 1, suggested: { base: "T1w", modifier: null }, sample: [9] }] })[0].values).toEqual({ base: "T1w", modifier: null });
   });
 
-  it("accepts for all but the held back: the engine's draw and the ones the person held", () => {
-    const plan = acceptPlan(b, new Set([4]));
-    expect(plan).toEqual({ accept: [1, 2, 5], read: [3, 4] });
-    expect(planWords(plan)).toBe("3 stacks take the suggestion; 2 held back to read one by one.");
-    expect(planWords(acceptPlan({ ...b, held: [] }, new Set()))).toBe("5 stacks take the suggestion.");
-    expect(acceptedOf({ accepted: [1, 2, 5], held: [3, 4] }, plan)).toEqual({ accepted: 3, held: [3, 4] });
-    // an engine that answers counts only
-    expect(acceptedOf({ accepted: 3 }, plan)).toEqual({ accepted: 3, held: [3, 4] });
+  it("accepts the whole batch with a tenth held back, or only the shown others where the person held some", () => {
+    const whole = acceptPlan(b, new Set());
+    expect(whole).toEqual({ items: null, n: 30, drawn: 3, read: [] });
+    expect(planWords(whole)).toBe("27 stacks take the suggestion; 3 held back to read one by one.");
+    const some = acceptPlan(b, new Set([4]));
+    expect(some).toEqual({ items: [1, 2, 3, 5], n: 4, drawn: 1, read: [4] });
+    expect(planWords(some)).toBe("3 stacks take the suggestion; 2 held back to read one by one.");
+    // a batch of one holds none back
+    expect(acceptPlan({ ...b, count: 1, items: [b.items[0]] }, new Set()).drawn).toBe(0);
+    expect(acceptedOf({ campaign: 7, batch: "a1b2c3", hold_back: 0.1, accepted: [{ item: 1, answer: 5, state: "agreed" }, { item: 2, answer: 6, state: "agreed" }], held_back: [3], refused: [] })).toEqual({ accepted: 2, held: [3], refused: 0 });
   });
 
   it("draws the grid with its counts, the held marked, one move to accept", () => {
     const none = () => undefined;
     const html = renderToStaticMarkup(<BatchView batches={batches} at={0} mine={new Set([4])} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} />);
-    expect(html).toContain("batch 1 of 1 · 5 like stacks");
+    expect(html).toContain("batch 1 of 1 · 30 like stacks · 5 shown");
     expect(html).toContain("<b>3</b> take the suggestion · <b>2</b> held back");
-    expect(html).toContain("Accept for 3");
-    expect(html).toContain("held back for the certificate&#x27;s draw");
+    expect(html).toContain("the 25 not shown wait for a later move");
+    expect(html).toContain("Accept for 4");
     expect(html).toContain("held back by you");
-    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(2);
+    expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1);
+    const all = renderToStaticMarkup(<BatchView batches={batches} at={0} mine={new Set()} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} />);
+    expect(all).toContain("<b>27</b> take the suggestion · <b>3</b> held back (3 at random for the draw)");
+    expect(all).toContain("Accept for 30");
     const empty = renderToStaticMarkup(<BatchView batches={[]} at={0} mine={new Set()} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} />);
     expect(empty).toContain("No batch of like stacks is left here.");
   });
@@ -329,9 +351,9 @@ describe("the reader's parts", () => {
     expect(shut).toContain("how it was decided");
     expect(shut).not.toContain("ev-more");
     const opened = renderToStaticMarkup(<EvidenceLines lines={reading.lines} open onToggle={() => undefined} />);
-    expect(opened).toContain("held: TI &gt; 700 and TR &lt; 3000");
+    expect(opened).toContain("base/technique:MPRAGE · held: clause 0");
     expect(opened).toContain("not at this detail");
-    expect(opened).toContain("weighed TI, words");
+    expect(opened).toContain("FatSat · p 0.76");
   });
 
   it("puts the suggestion, the lines, the pace and the order in the workspace", () => {

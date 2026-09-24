@@ -49,6 +49,8 @@ export interface Reading {
   candidates: AskedCandidate[];
   /** The engine's own suggestion, where it names one; else the desk derives it from the lines and candidates. */
   suggested: Record<string, AxisValue> | null;
+  /** An axis question's suggestion, where the engine names it as one value. */
+  suggestedOne?: string | null;
   /** The item's value to the model (record 48 "order by value"), where the engine says it. */
   value: number | null;
   /** The batch of like stacks the item belongs to, where the engine groups them. */
@@ -103,6 +105,59 @@ export function lineOf(axis: string, raw: Json): AxisLine {
   };
 }
 
+/** The engine's short names for the header fields a reader is shown (its reader's CORE and MORE). */
+export const HEADER_WORDS: Record<string, string> = {
+  repetition_time: "TR",
+  echo_time: "TE",
+  inversion_time: "TI",
+  flip_angle: "flip",
+  text_sequence_name: "sequence",
+  image_type: "image type",
+  scanning_sequence: "scanning sequence",
+  sequence_variant: "sequence variant",
+  scan_options: "scan options",
+  mr_acquisition_type: "acquisition",
+  echo_train_length: "echo train",
+  orientation: "orientation",
+  n_slices: "slices",
+};
+
+/**
+ * One axis of the why door (GET /api/campaigns/{id}/items/{item}/why, record
+ * 48 R1): `decided` the rule that carried the value, its clause, what the
+ * clause reads (fields, flags) and the header values among them, the words
+ * it matched at detail quasi; `voted` the other rules; `s1` System 1's
+ * values with their probability where it asked. `agree` is whether System
+ * 1's item lists the axis among those both systems agree on, null where it
+ * did not ask.
+ */
+export function whyLine(raw: Json, asked: Json | null): AxisLine {
+  const axis = text(raw.axis) ?? "";
+  const d = raw.decided && typeof raw.decided === "object" ? obj(raw.decided) : null;
+  const reads = d ? obj(d.reads) : {};
+  const header = pairs(d?.header).map(([k, v]) => [HEADER_WORDS[k] ?? k.replace(/_/g, " "), v] as [string, string]);
+  const s1 = Array.isArray(raw.s1) ? raw.s1.map(obj) : [];
+  const top = s1[0] ?? null;
+  const value = axisValue(raw.value);
+  const setBy = obj(raw.set_by);
+  const byWhom = text(setBy.kind) && setBy.kind !== "rule" ? `a ${setBy.kind as string}'s decision` : null;
+  const voted = Array.isArray(raw.voted) ? raw.voted.map(obj).filter((v) => v.restates !== true) : [];
+  return {
+    axis,
+    value: value === undefined ? null : value,
+    flags: texts(reads.flags),
+    rule_set: d ? text(d.rule_set) : null,
+    rule: d ? text(d.rule) : byWhom,
+    clause: d && d.clause !== null && d.clause !== undefined ? `clause ${String(d.clause)}` : null,
+    reads: header,
+    votes: [...(d && text(d.rule) ? [{ rule: `${text(d.rule_set) ? `${d.rule_set as string}/` : ""}${d.rule as string}`, value: typeof value === "string" ? value : null }] : []), ...voted.flatMap((v) => (text(v.rule) ? [{ rule: `${text(v.rule_set) ? `${v.rule_set as string}/` : ""}${v.rule as string}`, value: text(v.value) }] : []))],
+    words: d && d.matched !== undefined ? texts(d.matched) : null,
+    model: top ? { value: text(top.value), p: num(top.p), weighed: [] } : null,
+    confidence: num(raw.confidence),
+    agree: asked ? texts(asked.agree).includes(axis) : null,
+  };
+}
+
 /** A legal candidate from the evidence, or null; illegal or odd ones are never drawn (record 45 R5). */
 function candidateOf(raw: unknown, axes: string[]): AskedCandidate | null {
   const r = obj(raw);
@@ -126,30 +181,38 @@ function candidateOf(raw: unknown, axes: string[]): AskedCandidate | null {
  * engine names one.
  */
 export function readingOf(raw: Json): Reading {
+  const asked = raw.asked && typeof raw.asked === "object" && !Array.isArray(raw.asked) ? obj(raw.asked) : null;
   const lines: AxisLine[] = [];
+  const whyShape = Array.isArray(raw.axes) && raw.axes.some((a) => a && typeof a === "object");
+  if (whyShape) for (const a of (raw.axes as unknown[]).map(obj)) if (text(a.axis)) lines.push(whyLine(a, asked));
   if (Array.isArray(raw.lines)) for (const l of raw.lines.map(obj)) if (text(l.axis)) lines.push(lineOf(l.axis as string, l));
   const perAxis = raw.axes && typeof raw.axes === "object" && !Array.isArray(raw.axes) ? obj(raw.axes) : {};
   for (const [axis, l] of Object.entries(perAxis)) if (!lines.some((x) => x.axis === axis)) lines.push(lineOf(axis, obj(l)));
-  const asked = Array.isArray(raw.axes) ? texts(raw.axes) : Array.isArray(raw.asked) ? texts(raw.asked) : lines.map((l) => l.axis);
-  const candidates = (Array.isArray(raw.candidates) ? raw.candidates : []).flatMap((c) => candidateOf(c, asked) ?? []).sort((a, b) => b.p - a.p);
-  const s = raw.suggestion ?? raw.suggested;
-  const sv = s && typeof s === "object" && !Array.isArray(s) ? obj(obj(s).values ?? s) : null;
+  const named = whyShape ? lines.map((l) => l.axis) : Array.isArray(raw.axes) ? texts(raw.axes) : Array.isArray(raw.asked) ? texts(raw.asked) : lines.map((l) => l.axis);
+  const rawCandidates = Array.isArray(raw.candidates) ? raw.candidates : asked && Array.isArray(asked.candidates) ? asked.candidates : [];
+  // a candidate names the axes System 1 asked about, which may be fewer than the stack's
+  const candidates = rawCandidates.flatMap((c) => candidateOf(c, []) ?? []).sort((a, b) => b.p - a.p);
+  const s = raw.suggestion !== undefined ? raw.suggestion : raw.suggested;
   let suggested: Record<string, AxisValue> | null = null;
-  if (sv) {
+  let suggestedOne: string | null = null;
+  if (typeof s === "string" && s !== "") suggestedOne = s;
+  else if (s && typeof s === "object" && !Array.isArray(s)) {
     suggested = {};
-    for (const [axis, v] of Object.entries(sv)) {
+    for (const [axis, v] of Object.entries(obj(obj(s).values ?? s))) {
       const x = axisValue(v);
       if (x !== undefined) suggested[axis] = x;
     }
   }
+  const worth = obj(raw.worth);
   return {
     item: num(raw.item) ?? num(raw.item_id),
     stack: num(raw.stack) ?? num(raw.stack_id),
-    axes: asked,
+    axes: named,
     lines,
     candidates,
     suggested,
-    value: num(raw.value),
+    suggestedOne,
+    value: num(raw.value) ?? (num(worth.confidence) !== null ? 1 - (worth.confidence as number) + (worth.disagree === true ? 1 : 0) : null),
     batch: text(raw.batch) ?? (num(raw.batch) !== null ? String(raw.batch) : null),
   };
 }
@@ -262,7 +325,18 @@ function norm(v: AxisValue | undefined): string[] | string | null {
 export function suggestionOf(q: Question, r: Reading | null): Suggestion | null {
   if (!r || (q.kind !== "axis" && q.kind !== "axes")) return null;
   const axes = askedAxes(q);
-  const top = r.candidates[0] ?? null;
+  // the candidates as the question asks them: every asked axis named, one per answer to it, most probable first
+  const fit: AskedCandidate[] = [];
+  for (const c of r.candidates) {
+    if (!axes.every((a) => a in c.values)) continue;
+    const values: Record<string, AxisValue> = {};
+    for (const a of axes) values[a] = c.values[a];
+    const had = fit.find((f) => axes.every((a) => same(f.values[a], values[a])));
+    if (had) had.p = Math.round((had.p + c.p) * 1e6) / 1e6;
+    else fit.push({ values, p: c.p });
+  }
+  fit.sort((a, b) => b.p - a.p);
+  const top = fit[0] ?? null;
   const values: Record<string, AxisValue> = {};
   const agreed: string[] = [];
   const differ: string[] = [];
@@ -271,6 +345,7 @@ export function suggestionOf(q: Question, r: Reading | null): Suggestion | null 
     const cand = top && axis in top.values ? top.values[axis] : undefined;
     let v: AxisValue | undefined;
     if (r.suggested && axis in r.suggested) v = r.suggested[axis];
+    else if (q.kind === "axis" && r.suggestedOne) v = r.suggestedOne;
     else if (line?.agree === false) v = undefined;
     else if (cand !== undefined && line?.agree === true) v = cand;
     else if (cand !== undefined && line && line.value !== null && same(cand, line.value)) v = cand;
@@ -284,9 +359,9 @@ export function suggestionOf(q: Question, r: Reading | null): Suggestion | null 
   }
   // a combination the pack forbids is never filled in: the differing axes are left open
   const g = givenOf(q, { values });
-  if (g && illegal(q, g)) return { values: {}, agreed: [], differ: axes, offered: r.candidates.slice(0, CANDIDATE_KEYS.length), p: top?.p ?? null };
+  if (g && illegal(q, g)) return { values: {}, agreed: [], differ: axes, offered: fit.slice(0, CANDIDATE_KEYS.length), p: top?.p ?? null };
   if (agreed.length === 0 && differ.length === 0) return null;
-  return { values, agreed, differ, offered: differ.length > 0 ? r.candidates.slice(0, CANDIDATE_KEYS.length) : [], p: top?.p ?? null };
+  return { values, agreed, differ, offered: differ.length > 0 ? fit.slice(0, CANDIDATE_KEYS.length) : [], p: top?.p ?? null };
 }
 
 /** The given answer a suggestion fills in: an axis's value, or an axes answer with the agreed axes set (none for an empty set). */
@@ -368,10 +443,11 @@ const valueWords = (v: AxisValue) => (v === null ? "no value" : Array.isArray(v)
 export function lineWords(l: AxisLine): { value: string; why: string[] } {
   const why: string[] = [];
   if (l.flags.length > 0) why.push(`flags ${l.flags.join(", ")}`);
-  if (l.rule) why.push(`rule ${l.rule}${l.clause ? ` (${l.clause})` : ""}`);
+  // the clause's own words where they say more than the header values that follow
+  if (l.rule) why.push(`rule ${l.rule}${l.clause && l.reads.length === 0 ? ` (${l.clause})` : ""}`);
   if (l.reads.length > 0) why.push(l.reads.map(([k, v]) => `${k} ${v}`).join(" "));
   if (l.words && l.words.length > 0) why.push(`“${l.words.join("”, “")}”`);
-  const others = l.votes.filter((v) => v.rule !== l.rule);
+  const others = l.votes.filter((v) => v.rule !== l.rule && v.rule !== `${l.rule_set}/${l.rule}`);
   if (others.length > 0) why.push(`${others.length} more ${others.length === 1 ? "vote" : "votes"}`);
   if (l.model && l.model.value !== null) why.push(`System 1 ${l.model.value}${l.model.p !== null ? ` ${l.model.p.toFixed(2)}` : ""}`);
   return { value: valueWords(l.value), why };
@@ -504,43 +580,83 @@ export class Prefetcher {
 
 // ---------------------------------------------------------------- batches
 
-/** Like stacks the engine groups (same sequence, same answer suggested), offered as one move (record 48 R1). */
+/** Like stacks the engine groups (the same deciding rules and header physics, the same answer suggested), offered as one move (record 48 R1). */
 export interface Batch {
   key: string;
   /** What the stacks share, in a few words. */
   words: string;
-  /** The answer suggested for every stack in it. */
+  /** The answer suggested for every stack in it, by axis. */
   values: Record<string, AxisValue>;
+  /** How many items the batch holds. */
+  count: number;
+  /** The items the door named, with their stacks where the campaign's items say them. */
   items: { item: number; stack: number | null }[];
-  /** The items the engine holds back for individual reading: a random few that stay in the certificate's draw. */
-  held: number[];
 }
 
-/** A batch door's answer, read leniently. */
-export function batchesOf(raw: Json): Batch[] {
-  const list = Array.isArray(raw.batches) ? raw.batches : Array.isArray(raw) ? (raw as unknown[]) : [];
+/** The share of an accepted batch the engine holds back at random to be read alone (the door's default). */
+export const HOLD_BACK = 0.1;
+
+function signatureWords(sig: Json): string {
+  const rules = Object.entries(obj(sig.rules)).map(([axis, r]) => `${axis} by ${String(r)}`);
+  const header = pairs(sig.header).map(([k, v]) => `${HEADER_WORDS[k] ?? k.replace(/_/g, " ")} ${v}`);
+  return [...header, ...rules].join(" · ");
+}
+
+/**
+ * The batches door's answer ({groups: [{key, count, suggested, signature,
+ * sample}]}), read leniently; `stackOf` names an item's stack from the
+ * campaign's items, and `axis` is an axis question's, whose suggestion is
+ * one value.
+ */
+export function batchesOf(raw: Json, stackOf: (item: number) => number | null = () => null, axis: string | null = null): Batch[] {
+  const list = Array.isArray(raw.groups) ? raw.groups : Array.isArray(raw.batches) ? raw.batches : [];
   return list.map(obj).flatMap((b, i) => {
-    const items = (Array.isArray(b.items) ? b.items : []).flatMap((x) => {
-      if (typeof x === "number") return [{ item: x, stack: null }];
+    const ids = (Array.isArray(b.sample) ? b.sample : Array.isArray(b.items) ? b.items : []).flatMap((x) => {
+      if (typeof x === "number") return [x];
       const o = obj(x);
       const item = num(o.item) ?? num(o.item_id) ?? num(o.id);
-      return item === null ? [] : [{ item, stack: num(o.stack) ?? num(o.stack_id) }];
+      return item === null ? [] : [item];
     });
-    if (items.length === 0) return [];
+    const count = num(b.count) ?? ids.length;
+    if (count === 0) return [];
     const values: Record<string, AxisValue> = {};
-    for (const [axis, v] of Object.entries(obj(b.values ?? b.suggestion ?? b.value))) {
-      const x = axisValue(v);
-      if (x !== undefined) values[axis] = x;
-    }
-    const held = (Array.isArray(b.held) ? b.held : Array.isArray(b.held_back) ? b.held_back : []).flatMap((x) => (typeof x === "number" ? [x] : num(obj(x).item) !== null ? [num(obj(x).item)!] : num(obj(x).item_id) !== null ? [num(obj(x).item_id)!] : []));
-    const key = text(b.key) ?? (num(b.key) !== null ? String(b.key) : num(b.id) !== null ? String(b.id) : `batch ${i + 1}`);
-    return [{ key, words: text(b.words) ?? text(b.about) ?? text(b.sequence) ?? key, values, items, held }];
+    const sg = b.suggested ?? b.values;
+    if (typeof sg === "string" && axis) values[axis] = sg;
+    else
+      for (const [a, v] of Object.entries(obj(sg))) {
+        const x = axisValue(v);
+        if (x !== undefined) values[a] = x;
+      }
+    const key = text(b.key) ?? (num(b.key) !== null ? String(b.key) : `batch ${i + 1}`);
+    const words = text(b.words) ?? (b.signature ? signatureWords(obj(b.signature)) : "") ?? key;
+    return [{ key, words: words || key, values, count, items: ids.map((item) => ({ item, stack: stackOf(item) })) }];
   });
+}
+
+/**
+ * What accepting a batch does. With nothing held by the person, the whole
+ * batch is accepted and the engine holds back a tenth at random; where the
+ * person held some of the shown ones back, only the shown others are named,
+ * and the rest of the batch stays for a later move.
+ */
+export function acceptPlan(b: Batch, mine: Set<number>, share = HOLD_BACK): { items: number[] | null; n: number; drawn: number; read: number[] } {
+  const read = b.items.filter((i) => mine.has(i.item)).map((i) => i.item);
+  const items = read.length === 0 ? null : b.items.map((i) => i.item).filter((i) => !read.includes(i));
+  const n = items === null ? b.count : items.length;
+  const drawn = n > 1 ? Math.ceil(n * share) : 0;
+  return { items, n, drawn, read };
+}
+
+export function planWords(p: { n: number; drawn: number; read: number[] }): string {
+  const taking = p.n - p.drawn;
+  const a = `${taking} ${taking === 1 ? "stack takes" : "stacks take"} the suggestion`;
+  const held = p.drawn + p.read.length;
+  return held === 0 ? `${a}.` : `${a}; ${held} held back to read one by one.`;
 }
 
 export type BatchAct = { kind: "accept" } | { kind: "back" } | { kind: "next" } | { kind: "keys" };
 
-/** What a key does in the batch view: Enter accepts for all, `n` shows the next batch, `b` or Escape goes back to one by one. */
+/** What a key does in the batch view: Enter accepts, `n` shows the next batch, `b` or Escape goes back to one by one. */
 export function batchKey(key: string, inField: boolean): BatchAct | null {
   if (inField) return null;
   if (key === "Enter") return { kind: "accept" };
@@ -550,22 +666,12 @@ export function batchKey(key: string, inField: boolean): BatchAct | null {
   return null;
 }
 
-/** What accepting a batch does: which stacks take the suggestion now, and which are read one by one (the engine's held back, and any the person held). */
-export function acceptPlan(b: Batch, mine: Set<number>): { accept: number[]; read: number[] } {
-  const read = b.items.filter((i) => b.held.includes(i.item) || mine.has(i.item)).map((i) => i.item);
-  return { accept: b.items.map((i) => i.item).filter((i) => !read.includes(i)), read };
-}
-
-export function planWords(p: { accept: number[]; read: number[] }): string {
-  const a = `${p.accept.length} ${p.accept.length === 1 ? "stack takes" : "stacks take"} the suggestion`;
-  return p.read.length === 0 ? `${a}.` : `${a}; ${p.read.length} held back to read one by one.`;
-}
-
-/** What the accept door answered, read leniently. */
-export function acceptedOf(raw: Json, plan: { accept: number[]; read: number[] }): { accepted: number; held: number[] } {
-  const accepted = Array.isArray(raw.accepted) ? raw.accepted.length : (num(raw.accepted) ?? (Array.isArray(raw.answers) ? raw.answers.length : plan.accept.length));
-  const held = Array.isArray(raw.held) ? raw.held.flatMap((x) => (typeof x === "number" ? [x] : [])) : plan.read;
-  return { accepted, held };
+/** What the accept door answered ({accepted: [{item, answer, state}], held_back, refused}), read leniently. */
+export function acceptedOf(raw: Json): { accepted: number; held: number[]; refused: number } {
+  const accepted = Array.isArray(raw.accepted) ? raw.accepted.length : (num(raw.accepted) ?? 0);
+  const heldRaw = Array.isArray(raw.held_back) ? raw.held_back : Array.isArray(raw.held) ? raw.held : [];
+  const held = heldRaw.flatMap((x) => (typeof x === "number" ? [x] : []));
+  return { accepted, held, refused: Array.isArray(raw.refused) ? raw.refused.length : 0 };
 }
 
 // ---------------------------------------------------------------- the raters' pace
