@@ -43,14 +43,14 @@ import {
   type LabelSet,
 } from "./client";
 import { StateBar, Tabs } from "./parts";
-import type { RaterStat } from "./reader";
+import type { RaterStats as Pace } from "./reader";
 import { R48, statsFor } from "./readerDoors";
 import { RaterStats } from "./ReaderParts";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
 
-type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; c: Campaign; answers: Answer[] | null; sets: LabelSet[]; stats: RaterStat[] | null };
+type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; c: Campaign; answers: Answer[] | null; sets: LabelSet[]; stats: Pace | null };
 
 export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities; id: string; missing?: number | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
@@ -103,7 +103,7 @@ export interface CampaignBodyProps {
   answers: Answer[] | null;
   sets: LabelSet[];
   /** Each rater's pace, where the engine counts it (record 48 R1). */
-  stats?: RaterStat[] | null;
+  stats?: Pace | null;
   said?: string | null;
   /** The state the items table shows; all when null. */
   filter?: string | null;
@@ -256,7 +256,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           ))}
         </p>
       )}
-      {stats && stats.length > 0 && <RaterStats stats={stats} />}
+      {stats && stats.raters.length > 0 && <RaterStats stats={stats} />}
       <h2>Items</h2>
       <div className="chips">
         <button type="button" className={filter === null ? "opt on" : "opt"} onClick={() => setFilter(null)}>

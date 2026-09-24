@@ -14,7 +14,7 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import { review } from "../review/client";
 import { campaigns, type Claimed, type Item, type Question } from "./client";
-import { acceptedOf, askedAxes, batchesOf, HOLD_BACK, readingFromAsked, readingOf, statsOf, type Batch, type Order, type RaterStat, type Reading } from "./reader";
+import { acceptedOf, askedAxes, batchesOf, blindReading, bound, HOLD_BACK, readingFromAsked, readingOf, statsOf, type Batch, type Order, type RaterStats, type Reading } from "./reader";
 
 /** The doors a record 48 engine adds, as its OpenAPI 7 names them. */
 export const R48 = {
@@ -55,7 +55,7 @@ const lines = new Map<string, Promise<Reading | null>>();
  * may read the queue. Read once per item while the page lives, so the next
  * items' readings can be asked for before they are shown.
  */
-export function readingFor(caps: Capabilities, c: number | string, q: Question, item: Pick<Item, "id" | "stack_id" | "review_item_id">): Promise<Reading | null> {
+export function readingFor(caps: Capabilities, c: number | string, q: Question, item: Pick<Item, "id" | "stack_id" | "review_item_id" | "blind">): Promise<Reading | null> {
   const k = `${c}/${item.id}`;
   const have = lines.get(k);
   if (have) return have;
@@ -66,8 +66,10 @@ export function readingFor(caps: Capabilities, c: number | string, q: Question, 
     const ex = item.stack_id !== null && served(caps, "GET /api/explain/{stack}") ? review.explain(item.stack_id).catch(() => null) : Promise.resolve(null);
     p = Promise.all([ev, ex]).then(([e, x]) => (e || x ? readingFromAsked(e, x, item.stack_id, askedAxes(q)) : null));
   } else p = Promise.resolve(null);
-  const kept = p.catch(() => null);
+  const blind = item.blind === true;
+  const kept = p.catch(() => null).then((r) => (blind ? blindReading(r, item.stack_id, askedAxes(q)) : r));
   lines.set(k, kept);
+  bound(lines);
   return kept;
 }
 
@@ -82,9 +84,10 @@ export function forgetReadings(): void {
 }
 
 /** The batches of like stacks open to the caller, each with as many of its items as `sample` asks (a grid's worth). */
-export function batchesFor(c: number | string, q: Question, items: Pick<Item, "id" | "stack_id">[], sample = 60): Promise<Batch[]> {
+export function batchesFor(c: number | string, q: Question, items: Pick<Item, "id" | "stack_id" | "blind">[], sample = 60): Promise<Batch[]> {
   const stacks = new Map(items.map((i) => [i.id, i.stack_id]));
-  return door<Json>("GET", `/api/campaigns/${id(c)}/batches?sample=${sample}`).then((r) => batchesOf(r, (i) => stacks.get(i) ?? null, q.kind === "axis" ? (q.axis ?? null) : null));
+  const blind = new Set(items.filter((i) => i.blind === true).map((i) => i.id));
+  return door<Json>("GET", `/api/campaigns/${id(c)}/batches?sample=${sample}`).then((r) => batchesOf(r, (i) => stacks.get(i) ?? null, q.kind === "axis" ? (q.axis ?? null) : null, (i) => blind.has(i)));
 }
 
 /**
@@ -98,6 +101,6 @@ export function acceptBatch(c: number | string, b: Batch, plan: { items: number[
   return door<Json>("POST", `/api/campaigns/${id(c)}/batches/${encodeURIComponent(b.key)}/accept`, body).then(acceptedOf);
 }
 
-export function statsFor(c: number | string): Promise<RaterStat[]> {
+export function statsFor(c: number | string): Promise<RaterStats> {
   return door<Json>("GET", `/api/campaigns/${id(c)}/stats`).then(statsOf);
 }

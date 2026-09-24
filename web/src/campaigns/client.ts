@@ -87,6 +87,10 @@ export interface Item {
   decision_id: number | null;
   pick_id: number | null;
   resolved_at: string | null;
+  /** Record 48: an item of a sealed sample, read with nothing suggested and never in a batch. */
+  blind?: boolean;
+  /** Record 48 R1: a batch held it back to be read alone. */
+  held_back?: boolean;
 }
 
 export interface Assignment {

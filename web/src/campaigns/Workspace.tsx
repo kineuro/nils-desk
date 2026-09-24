@@ -40,7 +40,7 @@ import { acceptBatch, batchesFor, claimIn, hintOf, R48, readingFor, valueOrderSe
 import { EvidenceLines, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { StackView } from "./StackView";
 import { warmStack } from "../viewer/prefetch";
-import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, disagreementWords, given as choose, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
+import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, disagreementWords, enterOwnedBy, given as choose, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
 
 type Role = "rater" | "adjudicator";
 
@@ -336,8 +336,8 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       const t = e.target as HTMLElement | null;
       const inField = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
       if (t?.closest?.("dialog")) return;
-      // Enter on a link or an act's button is that link's or button's; on a value it answers
-      if (e.key === "Enter" && t && (t.tagName === "A" || (t.tagName === "BUTTON" && !t.closest(".axis-rows, .form-fields")))) return;
+      // Enter on a link, a button, a tile or a toggle is that element's alone; on the body or a value it answers
+      if (e.key === "Enter" && enterOwnedBy(t)) return;
       if (k.mode === "batch") {
         const b = e.ctrlKey ? null : batchKey(e.key, inField);
         if (!b) return;
@@ -405,6 +405,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       onAgain={() => claim()}
       lines={reading?.lines ?? null}
       suggestion={suggestion}
+      blind={reading?.blind === true || item?.blind === true}
       evOpen={evOpen}
       onEvidence={toggleEvidence}
       onCandidate={(c) => {
@@ -485,6 +486,8 @@ export interface WorkspaceBodyProps {
   lines?: AxisLine[] | null;
   /** The answer filled in and the candidates where the systems differ. */
   suggestion?: Suggestion | null;
+  /** The item is of a sealed sample, read blind (record 48). */
+  blind?: boolean;
   evOpen?: boolean;
   onEvidence?: () => void;
   onCandidate?: (c: AskedCandidate) => void;
@@ -574,6 +577,11 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
                 item {holding.item.position + 1}
                 {holding.item.round > 1 ? ` · round ${holding.item.round}` : ""}
               </span>
+              {(holding.item.blind || p.blind) && (
+                <span className="tag gated" title="of a sealed sample: read without a suggestion, never in a batch">
+                  blind
+                </span>
+              )}
               <span className={left !== null && left < 120 ? "tag caution" : "tag"} title={holding.assignment.lease_until ?? undefined}>
                 <Icon name="clock" />
                 {leaseWords(left)}

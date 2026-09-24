@@ -136,7 +136,11 @@ describe.skipIf(!ENGINE || PEOPLE.length < 2)("the reader walked on a live engin
     expect(perDecision.length).toBe(items.length);
     if (served(caps, R48.stats)) {
       const stats = await as(CAROL, () => statsFor(c.id));
-      const mine = stats.find((r) => r.principal === ALICE.who);
+      const mine = stats.raters.find((r) => r.principal === ALICE.who);
+      // a rater reads their own row alone
+      const own = await as(ALICE, () => statsFor(c.id));
+      say(`a rater's own read of the pace: ${own.raters.length} row, blind ${own.blind}`);
+      expect(own.raters.map((r) => r.principal)).toEqual([ALICE.who]);
       say(`the engine's pace for ${ALICE.who}: ${mine?.decisions} decisions, median ${mine?.median_seconds} s, changed ${mine?.changed}`);
       expect(mine?.decisions).toBe(items.length);
     }
@@ -179,7 +183,7 @@ describe.skipIf(!ENGINE || PEOPLE.length < 2)("the reader walked on a live engin
     say(`read one by one after the batch: ${read.size}, the held back among them: ${r.held.filter((i) => read.has(i)).length} of ${r.held.length}`);
     expect(r.held.every((i) => read.has(i))).toBe(true);
     if (served(caps, R48.stats)) {
-      const mine = (await as(CAROL, () => statsFor(c.id))).find((x) => x.principal === ALICE.who);
+      const mine = (await as(CAROL, () => statsFor(c.id))).raters.find((x) => x.principal === ALICE.who);
       say(`the engine's pace after the batch: ${mine?.decisions} decisions, ${mine?.batched} in batches`);
       expect(mine?.batched).toBe(r.accepted);
     }

@@ -7,7 +7,7 @@
 import type { Asked, AskedCandidate } from "../review/asked";
 import { CandidateList } from "../review/CandidateList";
 import type { ReviewItem } from "../ops/client";
-import { CANDIDATE_KEYS, lineWords, paceWords, suggestionWords, type AxisLine, type Order, type Pace, type RaterStat, type Suggestion } from "./reader";
+import { CANDIDATE_KEYS, lineWords, paceWords, suggestionWords, type AxisLine, type Order, type Pace, type RaterStats as RaterStatsDoc, type Suggestion } from "./reader";
 
 /** The suggestion as a line, and the legal candidates, each with its key, where the systems differ. */
 export function SuggestionBar({ s, chosen, onChoose, busy }: { s: Suggestion; chosen: AskedCandidate | null; onChoose: (c: AskedCandidate) => void; busy: boolean }) {
@@ -150,29 +150,37 @@ export function OrderToggle({ order, onOrder }: { order: Order; onOrder: (o: Ord
   );
 }
 
-/** Each rater's pace on the campaign page, as the engine counts it: decisions, the median seconds, the share of suggestions changed. */
-export function RaterStats({ stats }: { stats: RaterStat[] }) {
+const secs = (v: number | null) => (v === null ? "none" : v < 10 ? v.toFixed(1) : String(Math.round(v)));
+
+/**
+ * The pace on the campaign page, as the engine counts it: decisions, the
+ * median and ninetieth percentile seconds, the share of suggestions changed.
+ * Blind as the answers are: a rater sees their own row alone, and no totals.
+ */
+export function RaterStats({ stats }: { stats: RaterStatsDoc }) {
   const pct = (v: number | null) => (v === null ? "none" : `${Math.round(v * 100)}%`);
   return (
     <>
-      <h2>Pace</h2>
+      <h2>{stats.blind ? "Your pace" : "Pace"}</h2>
       <div className="table-wrap">
         <table className="thin rater-stats">
           <thead>
             <tr>
-              <th>Rater</th>
+              {!stats.blind && <th>Rater</th>}
               <th className="num">Decisions</th>
               <th className="num">Median s</th>
+              <th className="num">90% within s</th>
               <th className="num">Suggestions changed</th>
               <th className="num">In batches</th>
             </tr>
           </thead>
           <tbody>
-            {stats.map((r) => (
+            {stats.raters.map((r) => (
               <tr key={r.principal}>
-                <td>{r.principal}</td>
+                {!stats.blind && <td>{r.principal}</td>}
                 <td className="num">{r.decisions.toLocaleString("en-US")}</td>
-                <td className="num">{r.median_seconds === null ? "none" : r.median_seconds < 10 ? r.median_seconds.toFixed(1) : Math.round(r.median_seconds)}</td>
+                <td className="num">{secs(r.median_seconds)}</td>
+                <td className="num">{secs(r.p90_seconds)}</td>
                 <td className="num">{pct(r.changed)}</td>
                 <td className="num">{r.batched === null ? "none" : r.batched.toLocaleString("en-US")}</td>
               </tr>
@@ -180,6 +188,7 @@ export function RaterStats({ stats }: { stats: RaterStat[] }) {
           </tbody>
         </table>
       </div>
+      {stats.blind && <p className="meta">The others' pace is theirs, as their answers are, until the campaign closes.</p>}
     </>
   );
 }

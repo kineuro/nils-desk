@@ -21,6 +21,8 @@ import {
   askedAxes,
   baselineOf,
   batchesOf,
+  blindReading,
+  bound,
   batchKey,
   changesOf,
   chosenCandidate,
@@ -47,7 +49,7 @@ import { hintOf, R48, valueOrderServed } from "./readerDoors";
 import { EvidenceLines, PaceCount, SuggestionBar } from "./ReaderParts";
 import { blank } from "./renderers";
 import { WorkspaceBody, type WorkspaceBodyProps } from "./Workspace";
-import { bodyOf, keyAct, rowsOf, seatOf } from "./workspace";
+import { bodyOf, enterOwnedBy, keyAct, rowsOf, seatOf } from "./workspace";
 
 const AXES: Question = { kind: "axes", axes: ["base", "technique", "modifier"], values: { base: ["DWI", "T1w", "T2w"], technique: ["MPRAGE", "TSE", "SE"], modifier: ["FatSat", "FLAIR"] } };
 const BASE: Question = { kind: "axis", axis: "base", values: ["DWI", "T1w", "T2w"] };
@@ -425,22 +427,109 @@ describe("the reader's parts", () => {
     expect(valueOrderServed(capsFor({ engine: { campaigns: { claim_orders: ["position"] } }, doors: [...DOORS, R48.stats] }))).toBe(false);
   });
 
-  it("shows each rater's pace on the campaign page", () => {
-    const stats = statsOf({ raters: [{ principal: "alice@walk", decisions: 120, median_seconds: 3.4, suggested: 100, changed: 7, batched: 40 }, { rater: "bob@walk", answers: 3 }, { nobody: 1 }] });
-    expect(stats).toEqual([
-      { principal: "alice@walk", decisions: 120, median_seconds: 3.4, changed: 0.07, batched: 40 },
-      { principal: "bob@walk", decisions: 3, median_seconds: null, changed: null, batched: null },
-    ]);
+  it("shows each rater's pace on the campaign page, or a rater's own row alone", () => {
+    const all = statsOf({ all: { answers: 123 }, raters: [{ principal: "alice@walk", answers: 120, median_seconds: 3.4, p90_seconds: 7.2, suggested: 100, changed: 7, share_changed: 0.07, batched: 40 }, { rater: "bob@walk", answers: 3 }, { nobody: 1 }] });
+    expect(all).toEqual({
+      raters: [
+        { principal: "alice@walk", decisions: 120, median_seconds: 3.4, p90_seconds: 7.2, changed: 0.07, batched: 40 },
+        { principal: "bob@walk", decisions: 3, median_seconds: null, p90_seconds: null, changed: null, batched: null },
+      ],
+      blind: false,
+    });
     const c = openCampaign as unknown as Campaign;
-    const html = renderToStaticMarkup(<CampaignBody caps={capsFor()} campaign={c} answers={[]} sets={[]} stats={stats} onAct={() => undefined} />);
+    const html = renderToStaticMarkup(<CampaignBody caps={capsFor()} campaign={c} answers={[]} sets={[]} stats={all} onAct={() => undefined} />);
     expect(html).toContain("<h2>Pace</h2>");
     expect(html).toContain("alice@walk");
+    expect(html).toContain(">7.2<");
     expect(html).toContain(">7%<");
-    expect(renderToStaticMarkup(<CampaignBody caps={capsFor()} campaign={c} answers={[]} sets={[]} onAct={() => undefined} />)).not.toContain("<h2>Pace</h2>");
+    // the door's totals are never drawn
+    expect(html).not.toContain("123");
+    // a rater's own row, blind: no name column, no one else, no totals
+    const own = statsOf({ raters: [{ principal: "alice@walk", answers: 12, median_seconds: 2.5 }], blind: true });
+    const mine = renderToStaticMarkup(<CampaignBody caps={capsFor()} campaign={c} answers={[]} sets={[]} stats={own} onAct={() => undefined} />);
+    expect(mine).toContain("<h2>Your pace</h2>");
+    expect(mine).not.toContain("<th>Rater</th>");
+    expect(mine).toContain(">2.5<");
+    expect(renderToStaticMarkup(<CampaignBody caps={capsFor()} campaign={c} answers={[]} sets={[]} onAct={() => undefined} />)).not.toContain("Pace</h2>");
   });
 
   it("starts from a blank answer where nothing is suggested", () => {
     expect(givenOf(AXES, null)).toBeNull();
     expect(blank(AXES)).toEqual({ kind: "values", values: {} });
+  });
+});
+
+describe("the review's findings", () => {
+  const el = (tagName: string, opts: { role?: string; inRows?: boolean } = {}) => ({
+    tagName,
+    getAttribute: (n: string) => (n === "role" ? (opts.role ?? null) : null),
+    closest: (sel: string) => (opts.inRows && sel.includes(".axis-rows") ? {} : null),
+  });
+
+  it("leaves Enter to a focused button, link, tile or toggle; only the body and the answer controls answer", () => {
+    expect(enterOwnedBy(el("BUTTON"))).toBe(true);
+    expect(enterOwnedBy(el("A"))).toBe(true);
+    expect(enterOwnedBy(el("SUMMARY"))).toBe(true);
+    // a batch tile is a div with the button role
+    expect(enterOwnedBy(el("DIV", { role: "button" }))).toBe(true);
+    // a value on the rows answers
+    expect(enterOwnedBy(el("BUTTON", { inRows: true }))).toBe(false);
+    expect(enterOwnedBy(el("BODY"))).toBe(false);
+    expect(enterOwnedBy(el("SECTION"))).toBe(false);
+    expect(enterOwnedBy(null)).toBe(false);
+  });
+
+  it("reads a blind item with nothing filled in, no candidates, no System 1, and marks it", () => {
+    const r = readingOf({ ...(whyDoc as unknown as Json), blind: true, suggested: { base: "T1w" } });
+    expect(r.blind).toBe(true);
+    expect(r.candidates).toEqual([]);
+    expect(r.lines.every((l) => l.model === null && l.agree === null)).toBe(true);
+    expect(suggestionOf(AXES, r)).toBeNull();
+    expect(suggestionOf(BASE, { ...r, lines: r.lines.map((l) => ({ ...l, model: null })) })).toBeNull();
+    // the campaign's own mark makes any reading blind
+    const b = blindReading(reading, 1207, askedAxes(AXES));
+    expect(suggestionOf(AXES, b)).toBeNull();
+    expect(blindReading(null, 5, ["base"]).blind).toBe(true);
+    const open = openCampaign as unknown as Campaign;
+    const none = () => undefined;
+    const seat = seatOf({ ...(claimed as unknown as Claimed), item: { ...(claimed as unknown as Claimed).item!, blind: true } });
+    const html = renderToStaticMarkup(
+      <WorkspaceBody caps={capsFor()} campaign={open} role="rater" seat={seat} rows={rowsOf(open.question, null)} given={blank(open.question)} why="" marks={{}} split={null} raterAnswers={[]} evidence={null} candidates={[]} now={0} busy={false} refused={null} said={null} open={1} done={0} keys={false} onGiven={none} onWhy={none} onAnswer={none} onSkip={none} onStop={none} onKeys={none} onAgain={none} lines={b.lines} suggestion={null} />,
+    );
+    expect(html).toContain('class="tag gated"');
+    expect(html).toContain(">blind<");
+    expect(html).not.toContain("class=\"suggest");
+  });
+
+  it("never puts a blind item in a batch, and counts it out", () => {
+    const raw = { groups: [{ key: "k", count: 6, suggested: "T1w", signature: {}, sample: [1, 2, { item: 3, blind: true }, 4] }] };
+    const [b] = batchesOf(raw, () => null, "base", (i) => i === 2);
+    expect(b.items.map((i) => i.item)).toEqual([1, 4]);
+    expect(b.count).toBe(4);
+  });
+
+  it("labels a batch and a line without a sequence name below detail quasi", () => {
+    const [b] = batchesOf({ groups: [{ key: "k", count: 3, suggested: "T1w", signature: { rules: { base: "base/technique:MPRAGE" }, header: { repetition_time: 2300, text_sequence_name: null } }, sample: [1] }] }, () => null, "base");
+    expect(b.words).toBe("TR 2300 · base by base/technique:MPRAGE");
+    const plain = readingOf({ axes: [{ axis: "base", value: "T1w", decided: { rule_set: "base", rule: "r", reads: { flags: [] }, header: { repetition_time: 2300 } }, voted: [] }] });
+    expect(lineWords(plain.lines[0]).why.join(" ")).not.toContain("sequence");
+    expect(plain.lines[0].words).toBeNull();
+  });
+
+  it("keeps at most the last entries in its caches", async () => {
+    const m = new Map<number, number>();
+    for (let i = 0; i < 250; i++) m.set(i, i);
+    bound(m, 200);
+    expect(m.size).toBe(200);
+    expect(m.has(49)).toBe(false);
+    expect(m.has(50)).toBe(true);
+    const p = new Prefetcher(() => Promise.resolve(), 4, 3);
+    for (let i = 1; i <= 5; i++) {
+      p.want([i]);
+      await new Promise((r) => setTimeout(r, 0));
+    }
+    expect(p.warmed).toEqual([3, 4, 5]);
+    expect(p.has(1)).toBe(false);
+    expect(p.has(5)).toBe(true);
   });
 });

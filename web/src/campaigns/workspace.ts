@@ -134,6 +134,27 @@ export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: 
   return null;
 }
 
+/** An element as the key handler reads it (the DOM's, or a test's stand-in). */
+export interface KeyTarget {
+  tagName: string;
+  closest?: (selector: string) => unknown;
+  getAttribute?: (name: string) => string | null;
+}
+
+/**
+ * Whether Enter on the focused element is that element's own: a link, a
+ * button, a tile or a disclosure presses itself and nothing more. Only on
+ * the workspace's body or its answer controls (a value on the rows, a form's
+ * choice) does Enter answer, or accept a batch.
+ */
+export function enterOwnedBy(t: KeyTarget | null): boolean {
+  if (!t) return false;
+  const role = t.getAttribute?.("role") ?? null;
+  const interactive = ["A", "BUTTON", "SUMMARY"].includes(t.tagName) || (role !== null && ["button", "tab", "link", "checkbox", "option", "menuitem", "switch"].includes(role));
+  if (!interactive) return false;
+  return !t.closest?.(".axis-rows, .form-fields");
+}
+
 /** What the adjudicator sees beside the options: who gave what, by axis and value, from the raters' answers to this item. */
 export function marksOf(q: Question, answers: Answer[], item: number): Marks {
   const out: Marks = {};

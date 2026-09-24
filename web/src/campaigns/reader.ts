@@ -55,6 +55,8 @@ export interface Reading {
   value: number | null;
   /** The batch of like stacks the item belongs to, where the engine groups them. */
   batch: string | null;
+  /** An item of a sealed sample (record 48 R2): read blind, with nothing suggested and no candidates. */
+  blind?: boolean;
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -204,6 +206,9 @@ export function readingOf(raw: Json): Reading {
     }
   }
   const worth = obj(raw.worth);
+  // a sealed sample's item is read blind: whatever came with it is not shown
+  if (raw.blind === true)
+    return { item: num(raw.item) ?? num(raw.item_id), stack: num(raw.stack) ?? num(raw.stack_id), axes: named, lines: lines.map(blinded), candidates: [], suggested: null, suggestedOne: null, value: null, batch: null, blind: true };
   return {
     item: num(raw.item) ?? num(raw.item_id),
     stack: num(raw.stack) ?? num(raw.stack_id),
@@ -215,6 +220,17 @@ export function readingOf(raw: Json): Reading {
     value: num(raw.value) ?? (num(worth.confidence) !== null ? 1 - (worth.confidence as number) + (worth.disagree === true ? 1 : 0) : null),
     batch: text(raw.batch) ?? (num(raw.batch) !== null ? String(raw.batch) : null),
   };
+}
+
+/** A line as a blind item shows it: what System 1 said, and whether it agrees, left out. */
+function blinded(l: AxisLine): AxisLine {
+  return { ...l, model: null, agree: null };
+}
+
+/** A reading made blind (an item the campaign marks blind, whatever the door said). */
+export function blindReading(r: Reading | null, stack: number | null, axes: string[]): Reading {
+  if (!r) return { item: null, stack, axes, lines: [], candidates: [], suggested: null, suggestedOne: null, value: null, batch: null, blind: true };
+  return { ...r, lines: r.lines.map(blinded), candidates: [], suggested: null, suggestedOne: null, blind: true };
 }
 
 /** The explain door's axis rows (GET /api/explain/{stack}), as far as it goes. */
@@ -323,7 +339,8 @@ function norm(v: AxisValue | undefined): string[] | string | null {
  * question allows are filled in, and never a combination the pack forbids.
  */
 export function suggestionOf(q: Question, r: Reading | null): Suggestion | null {
-  if (!r || (q.kind !== "axis" && q.kind !== "axes")) return null;
+  // a blind item has nothing filled in: its answer measures the model, so nothing may lead it
+  if (!r || r.blind || (q.kind !== "axis" && q.kind !== "axes")) return null;
   const axes = askedAxes(q);
   // the candidates as the question asks them: every asked axis named, one per answer to it, most probable first
   const fit: AskedCandidate[] = [];
@@ -531,6 +548,18 @@ export function upcoming(current: Item | null, items: (Item & { value?: number |
   return stacks;
 }
 
+/** How many entries the reader's caches keep: the readings and the stacks warmed. */
+export const KEEP = 200;
+
+/** Forget the oldest entries of a set or map past `keep`, in the order they were added. */
+export function bound<K>(m: Set<K> | Map<K, unknown>, keep = KEEP): void {
+  while (m.size > keep) {
+    const first = m.keys().next();
+    if (first.done) break;
+    m.delete(first.value);
+  }
+}
+
 /**
  * Warms the next stacks' pictures a few at a time: each stack once, the
  * newest wish first, and a stack no longer wanted is dropped from the queue
@@ -543,12 +572,15 @@ export class Prefetcher {
   private done = new Set<number>();
   private running = new Set<number>();
   private queue: number[] = [];
-  /** The stacks warmed, in order; for the tests and the walk. */
+  /** The stacks warmed, in order, the last `keep` of them; for the tests and the walk. */
   readonly warmed: number[] = [];
 
-  constructor(warm: (stack: number) => Promise<unknown>, atOnce = 2) {
+  private keep: number;
+
+  constructor(warm: (stack: number) => Promise<unknown>, atOnce = 2, keep = KEEP) {
     this.warm = warm;
     this.at = atOnce;
+    this.keep = keep;
   }
 
   /** The stacks wanted now, most urgent first; anything queued and not wanted any more is dropped. */
@@ -571,7 +603,9 @@ export class Prefetcher {
         .finally(() => {
           this.running.delete(s);
           this.done.add(s);
+          bound(this.done, this.keep);
           this.warmed.push(s);
+          if (this.warmed.length > this.keep) this.warmed.shift();
           this.pump();
         });
     }
@@ -608,16 +642,18 @@ function signatureWords(sig: Json): string {
  * campaign's items, and `axis` is an axis question's, whose suggestion is
  * one value.
  */
-export function batchesOf(raw: Json, stackOf: (item: number) => number | null = () => null, axis: string | null = null): Batch[] {
+export function batchesOf(raw: Json, stackOf: (item: number) => number | null = () => null, axis: string | null = null, blind: (item: number) => boolean = () => false): Batch[] {
   const list = Array.isArray(raw.groups) ? raw.groups : Array.isArray(raw.batches) ? raw.batches : [];
   return list.map(obj).flatMap((b, i) => {
-    const ids = (Array.isArray(b.sample) ? b.sample : Array.isArray(b.items) ? b.items : []).flatMap((x) => {
-      if (typeof x === "number") return [x];
+    const named = (Array.isArray(b.sample) ? b.sample : Array.isArray(b.items) ? b.items : []).flatMap((x) => {
+      if (typeof x === "number") return [{ item: x, blind: blind(x) }];
       const o = obj(x);
       const item = num(o.item) ?? num(o.item_id) ?? num(o.id);
-      return item === null ? [] : [item];
+      return item === null ? [] : [{ item, blind: o.blind === true || blind(item) }];
     });
-    const count = num(b.count) ?? ids.length;
+    // an item of a sealed sample is never in a batch, whatever a door says
+    const ids = named.filter((i) => !i.blind).map((i) => i.item);
+    const count = Math.max(0, (num(b.count) ?? named.length) - (named.length - ids.length));
     if (count === 0) return [];
     const values: Record<string, AxisValue> = {};
     const sg = b.suggested ?? b.values;
@@ -680,21 +716,31 @@ export interface RaterStat {
   principal: string;
   decisions: number;
   median_seconds: number | null;
+  /** The ninetieth percentile, where the engine gives it. */
+  p90_seconds: number | null;
   /** Share of suggestions the rater changed, where the engine counts them. */
   changed: number | null;
   batched: number | null;
 }
 
-/** The stats door's per-rater rows, read leniently. */
-export function statsOf(raw: Json): RaterStat[] {
+/** The stats door's answer: each rater's row, or the caller's own alone where the answers are blind to them. */
+export interface RaterStats {
+  raters: RaterStat[];
+  /** Blind as the answers are: a rater reads their own row and no one else's, and no totals. */
+  blind: boolean;
+}
+
+/** The stats door's per-rater rows, read leniently; the door's totals over every rater are never read. */
+export function statsOf(raw: Json): RaterStats {
   const list = Array.isArray(raw.raters) ? raw.raters : Array.isArray(raw.readers) ? raw.readers : Array.isArray(raw.by_rater) ? raw.by_rater : [];
-  return list.map(obj).flatMap((r) => {
+  const raters = list.map(obj).flatMap((r) => {
     const who = text(r.principal) ?? text(r.rater) ?? text(r.reader);
     if (!who) return [];
     const decisions = num(r.decisions) ?? num(r.answers) ?? 0;
     const suggested = num(r.suggested);
     const changedN = num(r.changed);
     const changed = num(r.share_changed) ?? num(r.changed_share) ?? num(r.change_rate) ?? (changedN !== null && suggested ? changedN / suggested : null);
-    return [{ principal: who, decisions, median_seconds: num(r.median_seconds) ?? num(r.seconds_median) ?? num(r.median), changed, batched: num(r.batched) }];
+    return [{ principal: who, decisions, median_seconds: num(r.median_seconds) ?? num(r.seconds_median) ?? num(r.median), p90_seconds: num(r.p90_seconds), changed, batched: num(r.batched) }];
   });
+  return { raters, blind: raw.blind === true };
 }

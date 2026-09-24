@@ -79,7 +79,8 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
               aria-label={`${i.stack !== null ? `stack ${i.stack}` : `item ${i.item}`}: ${held ? "held back by you; press to let it take the suggestion" : "takes the suggestion; press to hold it back"}`}
               onClick={() => onHold(i.item)}
               onKeyDown={(e) => {
-                if (e.key === " ") {
+                // Space or Enter on a tile holds it back or lets it go; never the batch's accept
+                if (e.key === " " || e.key === "Enter") {
                   e.preventDefault();
                   e.stopPropagation();
                   onHold(i.item);
@@ -103,7 +104,7 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
           One by one <kbd>b</kbd>
         </button>
       </div>
-      <p className="meta">A click (or Space) on a tile holds it back to read one by one; the wheel moves every tile a plane at a time.</p>
+      <p className="meta">A click, Space or Enter on a tile holds it back to read one by one; the wheel moves every tile a plane at a time.</p>
     </div>
   );
 }
