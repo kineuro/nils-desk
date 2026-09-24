@@ -81,6 +81,7 @@ describe("a campaign read from the engine", () => {
   it("says what the close answered, and a closed campaign's panel counts what it resolved", () => {
     expect(closedWords(closeAnswer as Closed, "decision")).toBe("Closed: 1 decision, 5 unresolved.");
     expect(closedWords({ ...(closeAnswer as Closed), staged: true, decisions: [1, 2] }, "stage")).toBe("Closed: 2 decisions, staged, 5 unresolved.");
+    expect(closedWords({ ...(closeAnswer as Closed), skipped: [{ item: 4, why: "decided" }] }, "decision")).toBe("Closed: 1 decision, 5 unresolved; 1 skipped, decided by someone while the campaign was open.");
     expect(closure(closed).already).toBe(1);
     expect(closure(closed).writes.n).toBe(0);
   });

@@ -173,6 +173,8 @@ export interface Closed {
   resolved: number;
   unresolved: number;
   refused: unknown[];
+  /** Items whose stack (or an axis of it) someone decided while the campaign was open: that decision stands. */
+  skipped?: { item: number; why: string }[];
   staged: boolean;
   agreement: Agreement | null;
 }
@@ -511,7 +513,9 @@ export function closure(c: Campaign, answers: Answer[] | null = null): Closure {
 export function closedWords(r: Closed, into: string): string {
   const wrote = into === "pick" ? `${r.picks.length} ${r.picks.length === 1 ? "pick" : "picks"}` : into === "none" ? `${r.resolved} resolved` : `${r.decisions.length} ${r.decisions.length === 1 ? "decision" : "decisions"}${r.staged ? ", staged" : ""}`;
   const refused = r.refused.length > 0 ? `; ${r.refused.length} refused by a decision that outranks it` : "";
-  return `Closed: ${wrote}, ${r.unresolved} unresolved${refused}.`;
+  const n = r.skipped?.length ?? 0;
+  const skipped = n > 0 ? `; ${n} skipped, decided by someone while the campaign was open` : "";
+  return `Closed: ${wrote}, ${r.unresolved} unresolved${refused}${skipped}.`;
 }
 
 // ---------------------------------------------------------------- making one
