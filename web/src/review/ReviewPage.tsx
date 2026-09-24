@@ -16,23 +16,48 @@ import { familyOf, review, type PackDoc, type ReviewSummary } from "./client";
 import { DecideDialog } from "./Decide";
 import { kindOf } from "./triage";
 import { ExplainDialog } from "./Explain";
+import { AskedFamily, PicksFamily, ProposalsFamily } from "./Families";
 import { IdentifiersPage } from "./Identifiers";
 import { LookDialog, QueuePage } from "./Queue";
 import { RulesPage, type WordAt } from "./Rules";
 
-export type ReviewSub = "queue" | "rules" | "identifiers";
+export type ReviewSub = "queue" | "rules" | "identifiers" | "picks" | "proposals" | "asked";
+
+const SUBS: readonly ReviewSub[] = ["rules", "identifiers", "picks", "proposals", "asked"];
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-/** The page an address names: the queue unless it says rules or identifiers. */
+/** The page an address names: the queue unless it names another. */
 export function subOf(page: string | null): ReviewSub {
-  return page === "rules" || page === "identifiers" ? page : "queue";
+  return SUBS.find((s) => s === page) ?? "queue";
 }
+
+/** How many open items each grown family holds (record 45), from the summary where the engine gives one, else from the items read. */
+export function familyCounts(items: ReviewItem[], summary: ReviewSummary | null): Record<"picks" | "proposals" | "asked", number> {
+  const out = { picks: 0, proposals: 0, asked: 0 };
+  const add = (kind: string, count: number) => {
+    const f = familyOf(kind);
+    if (f === "picks" || f === "proposals" || f === "asked") out[f] += count;
+  };
+  if (summary) for (const [kind, count] of Object.entries(summary.by_kind)) add(kind, count);
+  else for (const i of items) if (i.status === "open") add(i.kind, 1);
+  return out;
+}
+
+/** The grown families' chips, each where the engine serves what it reads and something waits there, or where the page is open. */
+export const GROWN: { sub: "picks" | "proposals" | "asked"; title: string }[] = [
+  { sub: "picks", title: "Picks" },
+  { sub: "proposals", title: "Proposals" },
+  { sub: "asked", title: "Asked" },
+];
 
 const HEAD: Record<ReviewSub, { title: string; lede: string }> = {
   queue: { title: "What needs a person", lede: "Unsure scans, subjects that may be one person, sessions that moved." },
   rules: { title: "How scans are sorted", lede: "Eleven axes. Every list the pack opens is the site's to grow." },
   identifiers: { title: "Who a file is about", lede: "What the map does not settle, and what two codes share." },
+  picks: { title: "Which scan stands for a role", lede: "Occasions a pick run doubts. A person's pick stands through every later run." },
+  proposals: { title: "What models proposed", lede: "Staged until a person commits them. From the value held now to the value proposed." },
+  asked: { title: "What System 1 asks", lede: "Legal candidates for a whole stack, most probable first." },
 };
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; items: ReviewItem[]; summary: ReviewSummary | null };
@@ -81,6 +106,7 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
     read();
   };
   const head = HEAD[sub];
+  const grown = familyCounts(items, load.kind === "ready" ? load.summary : null);
 
   return (
     <section className="data review">
@@ -103,6 +129,12 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
           Identifiers
           {load.kind === "ready" && identity > 0 && <b>{n(identity)}</b>}
         </a>
+        {GROWN.filter((g) => sub === g.sub || grown[g.sub] > 0).map((g) => (
+          <a key={g.sub} className={sub === g.sub ? "opt on" : "opt"} href={href("review", g.sub)} aria-current={sub === g.sub ? "page" : undefined}>
+            {g.title}
+            {grown[g.sub] > 0 && <b>{n(grown[g.sub])}</b>}
+          </a>
+        ))}
       </div>
       {said && (
         <p className="meta said">
@@ -110,8 +142,8 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
           {said}
         </p>
       )}
-      {load.kind === "loading" && sub !== "rules" && <Wait phase="reading the queue" since={load.since} size="panel" />}
-      {load.kind === "failed" && <p className="warn">The queue could not be read: {load.why}</p>}
+      {load.kind === "loading" && (sub === "queue" || sub === "identifiers") && <Wait phase="reading the queue" since={load.since} size="panel" />}
+      {load.kind === "failed" && (sub === "queue" || sub === "identifiers") && <p className="warn">The queue could not be read: {load.why}</p>}
       {sub === "queue" && load.kind === "ready" && (
         <QueuePage
           caps={caps}
@@ -130,6 +162,9 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
       )}
       {sub === "rules" && <RulesPage caps={caps} items={items} wordAt={wordAt} onWordClose={() => setWordAt(null)} onChanged={changed} />}
       {sub === "identifiers" && load.kind === "ready" && <IdentifiersPage caps={caps} items={items} onDecide={setDeciding} onChanged={changed} />}
+      {sub === "picks" && <PicksFamily caps={caps} onChanged={changed} />}
+      {sub === "proposals" && <ProposalsFamily caps={caps} onChanged={changed} />}
+      {sub === "asked" && <AskedFamily caps={caps} packName={packName} onExplain={(item, stack) => setExplaining({ item, stack })} onChanged={changed} />}
       {deciding && <DecideDialog item={deciding} pack={pack} onClose={() => setDeciding(null)} onDone={(w) => { setDeciding(null); changed(w); }} />}
       {explaining && (
         <ExplainDialog

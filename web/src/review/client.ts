@@ -160,10 +160,16 @@ export function cohortChips(summary: ReviewSummary | null, items: ReviewItem[]):
 }
 
 /** The three kinds the queue is made of: a scan the rules could not place, subjects that may be one person, a session that moved. */
-export type Family = "unsure" | "identity" | "moved";
+export type Family = "unsure" | "identity" | "moved" | "picks" | "proposals" | "asked";
+
+/** The families with a page of their own under Review (record 45): a row there opens it. */
+export const PAGED: readonly Family[] = ["picks", "proposals", "asked"];
 
 export function familyOf(kind: string): Family | null {
   const k = kindOf(kind);
+  if (kind === "pick.border") return "picks";
+  if (kind === "classify.asked") return "asked";
+  if (k.classifier && k.what === "model") return "proposals";
   if (k.classifier) return "unsure";
   if (k.area === "identity" || k.area === "linkage") return "identity";
   if (k.area === "session") return "moved";
@@ -213,6 +219,15 @@ export function itemWords(item: ReviewItem): string {
   const ev = (item.evidence ?? {}) as Json;
   const members = membersOf(item);
   const alike = members > 1 ? ` · ${n(members)} stacks alike` : "";
+  if (item.kind === "pick.border") {
+    const ref = (item.ref ?? {}) as Json;
+    return `${text(ref.role) ?? "a role"} of subject ${num(ref.subject_id) ?? ""}${text(ref.session_day) ? ` on ${text(ref.session_day)}` : ""}: the pick run doubts it`;
+  }
+  if (item.kind === "classify.asked") return `System 1 asks about stack ${num(((item.ref ?? {}) as Json).stack_id) ?? ""}`;
+  if (k.classifier && k.what === "model") {
+    const model = text(ev.model) ?? "a model";
+    return `${text(ev.value) ?? "a value"} proposed by ${model}${text(ev.tier) ? ` at ${text(ev.tier)}` : ""}${alike}`;
+  }
   if (k.classifier) {
     const values = Array.isArray(ev.values) ? (ev.values as unknown[]).filter((v): v is string => typeof v === "string") : [];
     const value = text(ev.value) ?? text(ev.guess);
@@ -271,6 +286,9 @@ export function kindTag(kind: string): { words: string; tone: "gated" | "caution
   if (f === "identity") return { words: "identity", tone: "gated" };
   if (f === "unsure") return { words: "unsure", tone: "caution" };
   if (f === "moved") return { words: "moved", tone: "" };
+  if (f === "picks") return { words: "pick", tone: "caution" };
+  if (f === "proposals") return { words: "model", tone: "caution" };
+  if (f === "asked") return { words: "asked", tone: "caution" };
   return { words: kindOf(kind).area, tone: "" };
 }
 
