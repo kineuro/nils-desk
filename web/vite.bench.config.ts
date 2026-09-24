@@ -4,6 +4,11 @@
 // runs before an engine serves the doors, or against a tile server of its own.
 //
 //   INSTANCES_URL=http://127.0.0.1:8766 DESK_URL=http://127.0.0.1:7203 npx vite --config vite.bench.config.ts
+//
+// Built, it is the viewer's bench page alone (bench.html, record 45 S2) in
+// dist-bench/, which scripts/bench-serve.mjs serves in front of an engine:
+//
+//   npx vite build --config vite.bench.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
@@ -17,6 +22,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: { alias: { events } },
   optimizeDeps: { include: ["@cornerstonejs/core", "@cornerstonejs/tools", "events"] },
+  build: { outDir: "dist-bench", emptyOutDir: true, rollupOptions: { input: { bench: fileURLToPath(new URL("./bench.html", import.meta.url)) } } },
   server: {
     port: Number(process.env.PORT ?? 5183),
     proxy: {

@@ -29,6 +29,17 @@ export interface Manifest {
   /** Burned-in annotation held below the operator role: the tiles refuse and the render blanks the band. */
   held?: boolean;
   stack?: number;
+  /** Record 45 E2: the six direction cosines of a row and a column (DICOM's orientation); absent before, read as axial. */
+  orientation?: number[] | null;
+  /** Record 45 E2: false when the files did not say, and `orientation` is the axial the engine reads it as. */
+  orientation_known?: boolean;
+  /** Record 45 E2: the first plane's first pixel in the patient, mm; the planes run along row cross column. */
+  origin?: number[] | null;
+  /** Record 45 E2: whether the planes are parallel and evenly spaced; null when the files did not say. */
+  frame?: boolean | { parallel?: boolean; evenly_spaced?: boolean } | null;
+  /** Record 45 E2: the patient plane nearest the stack's, and whether the stack is oblique to it. */
+  plane?: string;
+  oblique?: boolean;
 }
 
 const H = { "X-Nils-Desk": "1" };
@@ -51,20 +62,24 @@ async function fail(r: Response): Promise<never> {
   throw new DoorError(r.status, body as Record<string, unknown>);
 }
 
-/** The tiles of one or more planes, as the door packs them: [u32 count][u32 offsets...][tiles...]. */
-export function unpackTiles(buf: ArrayBuffer): Uint8Array[] {
-  const view = new DataView(buf);
+/** One container as the door packs it: [u32 count][u32 offset...][parts...], little endian, each offset from the start of the container. */
+export function unpackTiles(buf: ArrayBuffer, at = 0, end = buf.byteLength): Uint8Array[] {
+  const view = new DataView(buf, at, end - at);
   const count = view.getUint32(0, true);
   const offsets: number[] = [];
   for (let i = 0; i < count; i++) offsets.push(view.getUint32(4 + i * 4, true));
-  const start = 4 + count * 4;
   const out: Uint8Array[] = [];
   for (let i = 0; i < count; i++) {
-    const a = start + offsets[i];
-    const b = i + 1 < count ? start + offsets[i + 1] : buf.byteLength;
+    const a = at + offsets[i];
+    const b = i + 1 < count ? at + offsets[i + 1] : end;
     out.push(new Uint8Array(buf, a, b - a));
   }
   return out;
+}
+
+/** A slab: the same container one level up, each part a plane's own container of tiles. */
+export function unpackSlab(buf: ArrayBuffer): Uint8Array[][] {
+  return unpackTiles(buf).map((plane) => unpackTiles(buf, plane.byteOffset, plane.byteOffset + plane.byteLength));
 }
 
 export const doors = {
@@ -80,12 +95,12 @@ export const doors = {
     const buf = await r.arrayBuffer();
     return { tiles: unpackTiles(buf), codec: r.headers.get("X-Nils-Codec") ?? "", bytes: buf.byteLength };
   },
-  /** Up to 32 planes, tiles in plane order; the door says how many tiles a plane has through the manifest. */
-  slab: async (stack: number, level: number, z0: number, z1: number, signal?: AbortSignal): Promise<{ tiles: Uint8Array[]; codec: string; bytes: number }> => {
+  /** Up to 32 planes (z1 exclusive), each plane's tiles in row-major order of its grid. */
+  slab: async (stack: number, level: number, z0: number, z1: number, signal?: AbortSignal): Promise<{ planes: Uint8Array[][]; codec: string; bytes: number }> => {
     const r = await fetch(`/api/instances/${stack}/slab/${level}/${z0}-${z1}`, { headers: H, signal });
     if (!r.ok) await fail(r);
     const buf = await r.arrayBuffer();
-    return { tiles: unpackTiles(buf), codec: r.headers.get("X-Nils-Codec") ?? "", bytes: buf.byteLength };
+    return { planes: unpackSlab(buf), codec: r.headers.get("X-Nils-Codec") ?? "", bytes: buf.byteLength };
   },
   /** The server's render of one plane with window and level applied, as an image URL; the first picture, the thin client's, the gated case's. */
   renderUrl: (stack: number, level: number, z: number, w: number, c: number, axis: "z" | "y" | "x" = "z"): string =>

@@ -1,0 +1,37 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* The viewer's own rules (record 45 S2): the three planes, the letters at a
+   picture's edges, the server's render drawn to scale, and the tile. The
+   dialog, the stage and the footer stay in shell.css with the Review page. */
+
+.viewer-stage[hidden], .viewer-planes[hidden] { display: none; }
+.viewer-planes { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: 0.4rem; }
+.viewer-plane { position: relative; aspect-ratio: 1; min-width: 0; overflow: hidden; border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.viewer-plane-server { display: grid; grid-template-rows: 1fr auto; aspect-ratio: auto; }
+.viewer-plane-server .viewer-render { aspect-ratio: 1; }
+.viewer-plane-server input[type="range"] { width: 100%; accent-color: var(--n-brand); }
+.viewer-plane-name { position: absolute; left: 0.4rem; bottom: 0.3rem; color: var(--n-text-on-brand); font-size: 11px; opacity: 0.7; pointer-events: none; }
+.viewer-plane-server .viewer-plane-name { bottom: 2rem; }
+.viewer-first .viewer-render { position: absolute; inset: 0; }
+
+/* the server's render, drawn to its size in mm and centred */
+.viewer-render { position: relative; width: 100%; height: 100%; display: grid; place-items: center; overflow: hidden; }
+.viewer-render canvas { display: block; max-width: 100%; max-height: 100%; }
+
+/* the letters at a picture's edges: where the patient's left, anterior and head are */
+.viewer-edge, .viewer-unknown { position: absolute; z-index: 1; color: var(--n-text-on-brand); font-family: var(--n-font-mono); font-size: 12px; font-weight: 500; line-height: 1; pointer-events: none; }
+.viewer-edge-top { top: 0.35rem; left: 50%; transform: translateX(-50%); }
+.viewer-edge-bottom { bottom: 0.35rem; left: 50%; transform: translateX(-50%); }
+.viewer-edge-left { left: 0.35rem; top: 50%; transform: translateY(-50%); }
+.viewer-edge-right { right: 0.35rem; top: 50%; transform: translateY(-50%); }
+.viewer-unknown { top: 0.35rem; right: 0.4rem; font-family: inherit; font-weight: 400; opacity: 0.8; }
+
+/* the tile: one plane from the render door, a caption under it */
+.tile { display: inline-grid; gap: 0.2rem; vertical-align: top; min-width: 0; }
+.tile-open { display: grid; gap: 0.2rem; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tile-open:focus-visible .tile-picture { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.tile-picture { position: relative; display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.tile-picture img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.tile-absent { padding: 0.3rem; color: var(--n-text-faint); font-size: 11px; text-align: center; }
+.tile-caption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
+.tile-plane { color: var(--n-text-faint); }
+.tiles { display: flex; flex-wrap: wrap; gap: 0.4rem; }
