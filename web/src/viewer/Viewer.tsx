@@ -43,7 +43,7 @@ export interface ViewerProps {
   level?: number | null;
   /** The view it opens on. */
   view?: "stack" | "planes";
-  /** The planes' budget in bytes, 512 MB when absent; a stack over it has the server's planes. */
+  /** The planes' budget in bytes, 256 MB when absent; a stack over it has the server's planes. */
   budget?: number;
   /** What the viewer did, for a page that watches it. */
   onEvent?: (e: ViewerEvent) => void;
@@ -370,6 +370,11 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
             </div>
           ))}
         </div>
+      )}
+      {view === "planes" && !fallback && volume && volume.stride > 1 && (
+        <p className="meta viewer-note">
+          Every {volume.stride === 2 ? "second" : volume.stride === 3 ? "third" : `${volume.stride}th`} plane: the stack is deeper than this card holds. The stack view has them all.
+        </p>
       )}
       {planesOpened && fallback && (
         <div className="viewer-planes" hidden={view !== "planes"}>

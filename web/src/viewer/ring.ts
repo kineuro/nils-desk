@@ -10,8 +10,8 @@ import { levelShape, type Manifest } from "./doors";
 
 export const SLAB = 32;
 
-/** The planes' budget (record 45 S2, study A3): 512 MB of texture. */
-export const VOLUME_BUDGET = 512 * 1024 * 1024;
+/** The planes' budget (record 45 S2, ruled 2026-09-24): 256 MB of texture, level 1 for a 220 x 1024 x 1024 stack and level 2 for the 2500-plane one, as study A3's examples have it. */
+export const VOLUME_BUDGET = 256 * 1024 * 1024;
 
 /** The slab a plane sits in. */
 export function slabOf(z: number, slab = SLAB): number {

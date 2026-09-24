@@ -3,9 +3,11 @@
 // cornerstone3D volume at one pyramid level, filled from the slab door slab
 // by slab from the current plane outwards, so a coronal line fills as the
 // bytes land. The level rule: the finest level whose volume fits the budget
-// (512 MB of texture by default) and the card's largest 3D texture; a stack
-// deeper than that texture takes every second (third...) plane. What does
-// not fit is the server's render, never a partial volume passed off as whole.
+// (256 MB of texture by default) and the card's largest 3D texture. A stack
+// deeper than that texture (2048 planes on most cards) is held at every
+// second (third...) plane, which the view says in a note and the footer
+// counts; the stack view keeps every plane (ruled 2026-09-24). What does not
+// fit is the server's render, never a partial volume passed off as whole.
 
 import * as cs from "@cornerstonejs/core";
 import { doors, levelShape, levelSpacing, type Manifest } from "./doors";

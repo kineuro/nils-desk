@@ -11,6 +11,7 @@
 .viewer-plane-server input[type="range"] { width: 100%; accent-color: var(--n-brand); }
 .viewer-plane-name { position: absolute; left: 0.4rem; bottom: 0.3rem; color: var(--n-text-on-brand); font-size: 11px; opacity: 0.7; pointer-events: none; }
 .viewer-plane-server .viewer-plane-name { bottom: 2rem; }
+.viewer-note { margin: 0; }
 .viewer-first .viewer-render { position: absolute; inset: 0; }
 
 /* the server's render, drawn to its size in mm and centred */
