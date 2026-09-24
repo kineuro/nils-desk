@@ -35,10 +35,10 @@ pub use config::Config;
 /// above the floor but below what the desk was generated from is older and
 /// still usable, because every contract since the floor only added doors and
 /// the desk asks whether a door is served before it uses one (record 28). An
-/// engine ahead of the desk is a warning the shell shows. Suite 3 only
-/// added grants to 2 (record 42 R7), so an engine at suite 2 is older and
-/// usable.
-pub const OPENAPI: &str = "6";
+/// engine ahead of the desk is a warning the shell shows. OpenAPI 7 and
+/// suite 3 (record 42) only added doors and grants to 6 and 2, so an engine
+/// at either is older and usable.
+pub const OPENAPI: &str = "7";
 pub const OPENAPI_FLOOR: &str = "5";
 pub const SUITE: &str = "3";
 pub const SUITE_FLOOR: &str = "2";
