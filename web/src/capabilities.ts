@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The deployment capabilities document (Wave 4c section 4.3), as
-// contracts/suite/v2/capabilities.schema.json fixes it. Everything the shell
+// contracts/suite/v3/capabilities.schema.json fixes it. Everything the shell
 // shows is a predicate over this one object and nothing else.
 
 import type { Detail, Grant } from "./grants";

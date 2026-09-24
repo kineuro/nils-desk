@@ -61,6 +61,13 @@ describe("a person's own page", () => {
     expect(html).toMatch(/title="No dates, subject codes, sex or age, scanner names or series descriptions\."><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Non-identifying/u);
   });
 
+  it("reads a grant for a page not built yet as a line, never a link, and never names that page hidden", () => {
+    const html = renderToStaticMarkup(<ProfilePage caps={caps(["query:see", "models:see"], "plain", { groups: [] })} />);
+    expect(html).toMatch(/<div class="arow"><b>Models<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Registered classifier models<\/span><\/div>/u);
+    expect(html).not.toMatch(/href="[^"]*(models|campaigns)/u);
+    expect(html).not.toContain("Campaigns");
+  });
+
   it("on a desk that signs nobody in, holds every page and says the subscription is the install's", () => {
     const html = renderToStaticMarkup(<ProfilePage caps={caps([...GRANTS], "sensitive", { mode: "off", groups: [] })} />);
     expect(html).toContain("Nobody signs in, so every page is open.");

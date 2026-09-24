@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The grants vocabulary against the vectors every part runs (record 25;
-// contracts/suite/v2/vectors/grants.json, copied as grants.vectors.json): the
+// contracts/suite/v3/vectors/grants.json, copied as grants.vectors.json): the
 // sets the ladder's names stand for, and what may and sees answer for a caller
 // whose grants and detail the vectors resolve.
 

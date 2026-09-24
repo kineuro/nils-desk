@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! The shared grants vectors (`contracts/suite/v2/vectors/grants.json`,
+//! The shared grants vectors (`contracts/suite/v3/vectors/grants.json`,
 //! copied verbatim to `tests/vectors/grants.json`), run where the desk meets
 //! them: the ladder's sets, which the migration makes its groups from; a
 //! list of names, as `--entitlement` and a legacy entitlement give them; a

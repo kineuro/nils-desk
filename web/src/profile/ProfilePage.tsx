@@ -68,7 +68,7 @@ export function YourAccess({ grants, detail }: { grants: readonly string[]; deta
   const shown = (settings: boolean) => PAGE_LINES.filter((l) => l.settings === settings && levelOf(grants, l) !== "hidden");
   const pages = shown(false);
   const settings = shown(true);
-  const hidden = [...PAGE_LINES.filter((l) => !l.settings && levelOf(grants, l) === "hidden").map((l) => l.title), ...(settings.length === 0 ? ["Settings"] : [])];
+  const hidden = [...PAGE_LINES.filter((l) => !l.settings && !l.soon && levelOf(grants, l) === "hidden").map((l) => l.title), ...(settings.length === 0 ? ["Settings"] : [])];
 
   const row = (line: PageLine) => {
     const level = levelOf(grants, line);

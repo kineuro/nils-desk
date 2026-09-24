@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // What a person may open, as grants, and how much of a record they see, as
-// detail (record 25; contracts/suite/v2/grants.schema.json). A grant names a
+// detail (record 25; contracts/suite/v3/grants.schema.json). A grant names a
 // page and how far a person goes there: see, or work, which includes see; the
 // assistant has use. The desk, the engine, Kvasir and the assistant share this
 // vocabulary, and each part guards its own doors with it.
@@ -12,6 +12,8 @@ export const GRANTS = [
   "assistant-settings:work",
   "assistant:use",
   "audit:see",
+  "campaigns:see",
+  "campaigns:work",
   "data:see",
   "data:work",
   "database:see",
@@ -22,6 +24,8 @@ export const GRANTS = [
   "install:work",
   "kvasir:see",
   "kvasir:work",
+  "models:see",
+  "models:work",
   "pipelines:see",
   "pipelines:work",
   "places:see",
@@ -44,10 +48,10 @@ export type Detail = (typeof DETAILS)[number];
 /** A ladder name, as a legacy entitlement or a station's ceiling still names it. */
 export type Step = "reader" | "reviewer" | "operator" | "admin";
 
-/** The sets the ladder's names and `assist` stand for (contracts/suite/v2/vectors/grants.json). */
+/** The sets the ladder's names and `assist` stand for (contracts/suite/v3/vectors/grants.json). */
 export const SETS: Record<Step | "assist", { grants: Grant[]; detail: Detail }> = {
   reader: { grants: ["data:see", "query:see", "query:work"], detail: "plain" },
-  reviewer: { grants: ["data:see", "pipelines:see", "query:see", "query:work", "review:see", "review:work"], detail: "quasi" },
+  reviewer: { grants: ["data:see", "models:see", "pipelines:see", "query:see", "query:work", "review:see", "review:work"], detail: "quasi" },
   operator: {
     grants: [
       "assistant-settings:see",
@@ -55,6 +59,8 @@ export const SETS: Record<Step | "assist", { grants: Grant[]; detail: Detail }> 
       "data:work",
       "install:see",
       "kvasir:see",
+      "models:see",
+      "models:work",
       "pipelines:see",
       "pipelines:work",
       "places:see",

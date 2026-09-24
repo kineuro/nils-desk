@@ -93,7 +93,7 @@ export const identity = {
 export type Level = "hidden" | "see" | "work" | "use";
 
 /** A page a grant names. */
-export type PageId = "assistant" | "query" | "data" | "review" | "release" | "pipelines" | "install" | "kvasir" | "assistant-settings" | "places" | "database" | "identity" | "audit";
+export type PageId = "assistant" | "query" | "data" | "review" | "release" | "pipelines" | "models" | "campaigns" | "install" | "kvasir" | "assistant-settings" | "places" | "database" | "identity" | "audit";
 
 export interface PageLine {
   id: PageId;
@@ -111,6 +111,8 @@ export interface PageLine {
   see: string;
   /** What working there adds, in a few words. */
   work?: string;
+  /** Granted before its page is built: never named as hidden, and not needed for Every page. */
+  soon?: boolean;
 }
 
 const SEE_WORK: readonly Level[] = ["hidden", "see", "work"];
@@ -123,6 +125,8 @@ export const PAGE_LINES: readonly PageLine[] = [
   { id: "review", title: "Review", mark: "Review", named: "Review", settings: false, levels: SEE_WORK, see: "What waits for a person", work: "decide, tune rules" },
   { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "Releases made", work: "make and hand over" },
   { id: "pipelines", title: "Pipelines", mark: "Pipelines", named: "Pipelines", settings: false, levels: SEE_WORK, see: "Runs and results", work: "start and cancel runs" },
+  { id: "models", title: "Models", mark: "Models", named: "Models", settings: false, levels: SEE_WORK, see: "Registered classifier models", work: "register, admit, promote", soon: true },
+  { id: "campaigns", title: "Campaigns", mark: "Campaigns", named: "Campaigns", settings: false, levels: SEE_WORK, see: "Annotation and curation campaigns", work: "claim, answer, export", soon: true },
   { id: "install", title: "The install", mark: "Install", named: "the install", settings: true, levels: SEE_WORK, see: "Overview, parts, setup", work: "restart, update" },
   { id: "kvasir", title: "Kvasir", mark: "Kvasir", named: "Kvasir", settings: true, levels: SEE_WORK, see: "Stations and models", work: "models, keys, stations" },
   { id: "assistant-settings", title: "The assistant's settings", mark: "Assistant settings", named: "the assistant's settings", settings: true, levels: SEE_WORK, see: "Reach and memory", work: "instructions, standing grants" },
@@ -288,19 +292,23 @@ export interface Mark {
   own: boolean;
 }
 
-/** Pages as marks: a page seen draws an outline, a page worked filled, one given to a person alone dashed. The pages, or the settings, all held at their top and none a person's own are one mark. */
+/** Pages as marks: a page seen draws an outline, a page worked filled, one given to a person alone dashed. The pages, or the settings, all held at their top and none a person's own are one mark; a page not built yet keeps its own mark unless it is held that way too. */
 export function marksOf(grants: readonly string[], own: ReadonlySet<PageId> = new Set()): Mark[] {
   const out: Mark[] = [];
+  const full = (l: PageLine) => levelOf(grants, l) === l.levels[l.levels.length - 1] && !own.has(l.id);
+  const mark = (l: PageLine) => {
+    const level = levelOf(grants, l);
+    if (level !== "hidden") out.push({ key: l.id, label: l.mark, work: level === "work" || level === "use", own: own.has(l.id) });
+  };
   for (const settings of [false, true]) {
     const lines = PAGE_LINES.filter((l) => l.settings === settings);
-    const levels = lines.map((l) => levelOf(grants, l));
-    if (lines.every((l, i) => levels[i] === l.levels[l.levels.length - 1] && !own.has(l.id))) {
+    const soon = lines.filter((l) => l.soon);
+    if (lines.every((l) => l.soon || full(l))) {
       out.push({ key: settings ? "settings" : "pages", label: settings ? "Every setting" : "Every page", work: true, own: false });
+      if (!soon.every(full)) soon.forEach(mark);
       continue;
     }
-    lines.forEach((l, i) => {
-      if (levels[i] !== "hidden") out.push({ key: l.id, label: l.mark, work: levels[i] === "work" || levels[i] === "use", own: own.has(l.id) });
-    });
+    lines.forEach(mark);
   }
   return out;
 }

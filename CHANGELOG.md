@@ -4,6 +4,15 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- The desk speaks suite contract 3 (record 42 R7), which adds four grants: `models:see` and `models:work` for the registered classifier models, and `campaigns:see` and `campaigns:work` for annotation and curation campaigns. The group editor and a person's access offer Models and Campaigns as pages, each at hidden, see or work; the reviewer's set now holds `models:see`, the operator's `models:see` and `models:work`, and the admin's all four. Their pages are not built yet, so the grants open no section, tile or link, a person's profile lists them only when held, and a group that holds every other page still reads as Every page. An engine at suite 2 is older and still usable.
+- The desk speaks the engine's HTTP contract 7, so an engine on 7 no longer shows the banner that the engine is ahead. Contract 7 only adds doors (the model registry, picks, derivatives, campaigns and label sets) and the actor rules for a model's or an agent's answer, none of which a person at the desk meets yet. The oldest engine the desk works against is still at contract 5, and one at 5 or 6 is older and usable.
+
+### Changed
+
+- Nothing changes for what an install already holds. A group made from a suite 2 set, such as the Admins group of an existing install, still answers to its ladder name wherever one is met (an app's entitlement, the export setting, the users list): a ladder name met as a need does not ask for the four new grants. Such a group gains no grant by itself; an admin gives Models and Campaigns in the group editor.
+
 ## [1.0.0-alpha.37] - 2026-09-23
 
 Released beside the engine's 1.0.0-alpha.37, whose release keeps the real date.

@@ -72,7 +72,8 @@ describe("the pages as levels", () => {
   });
 
   it("turns a choice page by page into one grant a page, in the vocabulary's order", () => {
-    expect(grantsOf(levelsOf(SETS.reviewer.grants))).toEqual(["data:see", "pipelines:see", "query:work", "review:work"]);
+    expect(grantsOf(levelsOf(SETS.reviewer.grants))).toEqual(["data:see", "models:see", "pipelines:see", "query:work", "review:work"]);
+    expect(grantsOf({ models: "work", campaigns: "see" })).toEqual(["campaigns:see", "models:work"]);
     expect(grantsOf({ assistant: "use", audit: "see", kvasir: "hidden" })).toEqual(["assistant:use", "audit:see"]);
     expect(grantsOf(levelsOf(everything))).toHaveLength(PAGE_LINES.length);
   });
@@ -80,6 +81,8 @@ describe("the pages as levels", () => {
   it("words a page in a few words, in the form and on a person's profile", () => {
     expect(lineWords(line("query"))).toBe("Ask, run and chart questions · work: keep cards, queue ask jobs");
     expect(lineWords(line("audit"))).toBe("Who did what, when");
+    expect(lineWords(line("models"))).toBe("Registered classifier models · work: register, admit, promote");
+    expect(lineWords(line("campaigns"))).toBe("Annotation and curation campaigns · work: claim, answer, export");
     expect(yourWords(line("query"), "see")).toBe("Ask, run and chart questions");
     expect(yourWords(line("review"), "work")).toBe("What waits for a person · decide, tune rules");
     expect(yourWords(line("assistant"), "use")).toBe("Chat with the assistant");
@@ -161,7 +164,15 @@ describe("the marks", () => {
 
   it("collapse to Every page and Every setting when all of them are held at their top", () => {
     expect(marksOf(everything).map((m) => m.label)).toEqual(["Every page", "Every setting"]);
-    expect(marksOf(SETS.admin.grants).map((m) => m.label)).toEqual(["Query", "Data", "Review", "Release", "Pipelines", "Every setting"]);
+    expect(marksOf(SETS.admin.grants).map((m) => m.label)).toEqual(["Query", "Data", "Review", "Release", "Pipelines", "Models", "Campaigns", "Every setting"]);
+    // a group made before models and campaigns had grants still reads as every page, and one of them held beside it keeps its mark
+    const before = everything.filter((g) => !/^(models|campaigns):/u.test(g));
+    expect(marksOf(before).map((m) => m.label)).toEqual(["Every page", "Every setting"]);
+    expect(marksOf([...before, "models:see"]).map((m) => [m.label, m.work])).toEqual([
+      ["Every page", true],
+      ["Models", false],
+      ["Every setting", true],
+    ]);
     expect(marksOf(everything.filter((g) => g !== "places:work")).map((m) => m.label)).toEqual(["Every page", "Install", "Kvasir", "Assistant settings", "Places", "Database", "Identity", "Audit"]);
     expect(marksOf(everything, new Set<PageId>(["query"])).map((m) => m.label)).toContain("Query");
   });
