@@ -10,7 +10,7 @@ import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
 import { review, type PackDoc } from "../review/client";
-import { href } from "../routes";
+import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { campaigns, CLOSES_WORDS, closesFor, emptyDraft, KIND_WORDS, kindsOffered, makeBody, makeRefusal, refused as refusedWords, type Draft, type DraftField, type SourceKind } from "./client";
 
@@ -42,7 +42,7 @@ export function MakeDialog({ caps, prefill, taken, onClose }: { caps: Capabiliti
       .make(body.body)
       .then((c) => {
         onClose();
-        location.hash = href("campaigns", String(c.id));
+        location.hash = narrow(href("campaigns", String(c.id)), { missing: c.pictures?.missing || null });
       })
       .catch((e: unknown) => {
         setBusy(false);

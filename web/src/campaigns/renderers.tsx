@@ -169,7 +169,7 @@ export function FreeText({ text, onChange }: { text: string; onChange: (t: strin
  * the candidates the item's evidence names are offered, and any stack of the
  * session may be named by number.
  */
-export function PickStacks({ role, candidates, stacks, onChange }: { role: string; candidates: number[]; stacks: number[]; onChange: (s: number[]) => void }) {
+export function PickStacks({ role, candidates, words = {}, stacks, onChange }: { role: string; candidates: number[]; words?: Record<number, string>; stacks: number[]; onChange: (s: number[]) => void }) {
   const toggle = (s: number) => onChange(stacks.includes(s) ? stacks.filter((x) => x !== s) : [...stacks, s]);
   return (
     <div className="form-fields">
@@ -180,6 +180,7 @@ export function PickStacks({ role, candidates, stacks, onChange }: { role: strin
             <button key={s} type="button" className={stacks.includes(s) ? "opt on" : "opt"} aria-pressed={stacks.includes(s)} onClick={() => toggle(s)}>
               {keyOf(0, i) && <kbd>{keyOf(0, i)}</kbd>}
               stack {s}
+              {words[s] && <span className="meta"> · {words[s]}</span>}
             </button>
           ))}
         </span>

@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
+import { door as served } from "../deployment";
 import { may } from "../grants";
 import { review, type PackDoc } from "../review/client";
 import { href } from "../routes";
@@ -18,6 +19,7 @@ import {
   answerWords,
   beatEvery,
   campaigns,
+  CANDIDATES,
   itemWords,
   leaseLeft,
   leaseWords,
@@ -53,6 +55,9 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const [keys, setKeys] = useState(false);
   const [done, setDone] = useState(0);
   const [open, setOpen] = useState<number | null>(null);
+  // a session item's stacks, where the engine names them (record 45); the session board of S5 draws them as tiles
+  const [pickable, setPickable] = useState<number[] | null>(null);
+  const [stackWords, setStackWords] = useState<Record<number, string>>({});
 
   // the capabilities are read again every few seconds; the workspace follows them without starting over
   const capsNow = useRef(caps);
@@ -105,6 +110,15 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     setWhy("");
     setRefused(null);
     setEvidence(null);
+    setPickable(null);
+    if (q.kind === "pick" && served(capsNow.current, CANDIDATES))
+      campaigns.candidates(id, item.id).then(
+        (r) => {
+          setPickable(r.candidates.map((x) => x.stack_id));
+          setStackWords(Object.fromEntries(r.candidates.map((x) => [x.stack_id, Object.values(x.axes).flat().join(" ")])));
+        },
+        () => undefined,
+      );
     if (item.review_item_id !== null && may(capsNow.current, "review:see")) campaigns.reviewItem(item.review_item_id).then((r) => setEvidence(r.evidence ?? null), () => undefined);
     if (role === "adjudicator") campaigns.answers(id).then(setAnswers, () => setAnswers([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -169,7 +183,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   );
 
   const rows = q ? rowsOf(q, pack) : [];
-  const candidates = candidatesOf(evidence);
+  const candidates = pickable ?? candidatesOf(evidence);
 
   // the keys
   const keyed = useRef({ q, rows, candidates, g, answer, giveBack });
@@ -212,6 +226,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       raterAnswers={role === "adjudicator" && item ? answers.filter((a) => a.item_id === item.id && a.role === "rater") : []}
       evidence={evidence}
       candidates={candidates}
+      stackWords={stackWords}
       now={now}
       busy={busy}
       refused={refused}
@@ -258,6 +273,8 @@ export interface WorkspaceBodyProps {
   raterAnswers: Answer[];
   evidence: Json | null;
   candidates: number[];
+  /** What the classifier says of each candidate stack, in a few words. */
+  stackWords?: Record<number, string>;
   now: number;
   busy: boolean;
   refused: string | null;
@@ -419,7 +436,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
         </>
       );
     case "pick":
-      return <PickStacks role={q.role ?? "the role"} candidates={p.candidates} stacks={g.kind === "stacks" ? g.stacks : []} onChange={(stacks) => p.onGiven({ kind: "stacks", stacks })} />;
+      return <PickStacks role={q.role ?? "the role"} candidates={p.candidates} words={p.stackWords} stacks={g.kind === "stacks" ? g.stacks : []} onChange={(stacks) => p.onGiven({ kind: "stacks", stacks })} />;
     case "form":
       return <FormFields schema={q.schema} form={g.kind === "form" ? g.form : {}} onChange={(form) => p.onGiven({ kind: "form", form })} />;
     case "free":

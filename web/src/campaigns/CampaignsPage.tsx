@@ -39,7 +39,7 @@ export function CampaignsPage({ caps, page, arg, query }: { caps: Capabilities; 
   if (page && /^\d+$/u.test(page)) {
     if (arg === "rate") return <Workspace key={`${page}/rate`} caps={caps} id={page} role="rater" />;
     if (arg === "adjudicate") return <Workspace key={`${page}/adj`} caps={caps} id={page} role="adjudicator" />;
-    return <CampaignPage caps={caps} id={page} />;
+    return <CampaignPage caps={caps} id={page} missing={query?.missing && /^\d+$/u.test(query.missing) ? Number(query.missing) : null} />;
   }
   return <ListPage caps={caps} prefill={prefillOf(query)} />;
 }

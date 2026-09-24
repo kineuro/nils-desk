@@ -64,6 +64,8 @@ export interface Agreement {
   exact: number | null;
   fleiss_kappa: number | null;
   cohen_kappa: number | null;
+  /** An axes campaign's agreement measured on each axis alone (record 45 E4). */
+  per_axis?: Record<string, Agreement>;
 }
 
 export interface Item {
@@ -81,7 +83,7 @@ export interface Item {
   round: number;
   agreement: number | null;
   metric: number | null;
-  outcome: { value?: unknown; form?: Json | null; answers?: number[]; derivative_id?: number | null } | null;
+  outcome: { value?: unknown; form?: Json | null; answers?: number[]; derivative_id?: number | null; per_axis?: Record<string, number>; decisions?: Record<string, number> } | null;
   decision_id: number | null;
   pick_id: number | null;
   resolved_at: string | null;
@@ -199,6 +201,25 @@ export interface LabelSet {
   files?: { "labels.tsv"?: string; "provenance.json"?: Json };
 }
 
+/** The stacks a session item's pick is made among. */
+export interface Candidates {
+  campaign: number;
+  item: number;
+  role: string;
+  count: number;
+  candidates: { stack_id: number; series_id?: number | null; axes: Record<string, string[]>; picked_by: number[] }[];
+  picks: { id: number; author_kind: string; actor?: string | null; stacks: number[]; score?: number | null }[];
+}
+
+/** How many of a new campaign's stacks have their picture, and the job that builds the rest (record 45 E1). */
+export interface Pictures {
+  stacks: number;
+  have: number;
+  missing: number;
+  place: string | null;
+  build?: string[];
+}
+
 /** What a campaign is made of, as the make door takes it. */
 export interface MakeBody extends Json {
   name: string;
@@ -226,7 +247,7 @@ export const campaigns = {
   list: () => door<{ count: number; campaigns: Campaign[] }>("GET", "/api/campaigns").then((r) => r.campaigns),
   one: (c: number | string) => door<Campaign>("GET", `/api/campaigns/${id(c)}`),
   answers: (c: number | string) => door<{ campaign: number; count: number; answers: Answer[] }>("GET", `/api/campaigns/${id(c)}/answers`).then((r) => r.answers),
-  make: (body: MakeBody) => door<Campaign>("POST", "/api/campaigns", body),
+  make: (body: MakeBody) => door<Campaign & { pictures?: Pictures }>("POST", "/api/campaigns", body),
   claim: (c: number | string, role: "rater" | "adjudicator" = "rater") => door<Claimed>("POST", `/api/campaigns/${id(c)}/claim`, { role }),
   answer: (c: number | string, assignment: number, body: AnswerBody) => door<Answered>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/answer`, body),
   release: (c: number | string, assignment: number) => door<Assignment>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/release`, {}),
@@ -243,6 +264,8 @@ export const campaigns = {
   labelSet: (n: number) => door<LabelSet>("GET", `/api/label-sets/${n}`),
   /** The review item behind a campaign item, for its evidence; review:see, so a rater without it reads nothing here. */
   reviewItem: (n: number) => door<{ id: number; kind: string; evidence: Json | null }>("GET", `/api/review/${n}`),
+  /** A session item's stacks for a pick question, with what the classifier says of each (record 45; detail quasi). */
+  candidates: (c: number | string, item: number) => door<Candidates>("GET", `/api/campaigns/${id(c)}/items/${item}/candidates`),
   /** The pack's words for an axis, where the person may read the pack. */
   pack: (name: string) => door<Json>("GET", `/api/packs/${encodeURIComponent(name)}`),
 };
@@ -269,10 +292,14 @@ export function kindsOffered(caps: Capabilities): string[] {
   return kinds;
 }
 
-/** Whether the engine asks the `axes` question (record 45 S1): the contract names it among the question kinds it serves. */
+/** The door a record 45 engine adds beside the axes question; OpenAPI 7 grew both in place, so the door is how the desk knows. */
+export const CANDIDATES = "GET /api/campaigns/{id}/items/{item}/candidates";
+
+/** Whether the engine asks the `axes` question (record 45 E4): it serves record 45's campaign doors and a pack to hold the answers to. */
 export function axesServed(caps: Capabilities): boolean {
   const kinds = (caps.engine as { campaigns?: { question_kinds?: unknown } } | null)?.campaigns?.question_kinds;
-  return Array.isArray(kinds) && kinds.includes("axes");
+  if (Array.isArray(kinds)) return kinds.includes("axes");
+  return served(caps, CANDIDATES) && (caps.engine?.packs.length ?? 0) > 0;
 }
 
 export const KIND_WORDS: Record<string, string> = {
@@ -443,7 +470,9 @@ export function closure(c: Campaign, answers: Answer[] | null = null): Closure {
   const byItem = new Map<number, Answer[]>();
   for (const a of answers ?? []) byItem.set(a.item_id, [...(byItem.get(a.item_id) ?? []), a]);
   const notPersons = ready.filter((i) => (byItem.get(i.id) ?? []).some((a) => a.author_kind !== "person")).length;
-  const n = ready.length;
+  // an axes item closes into one decision per axis (record 45 E4)
+  const perItem = c.question.kind === "axes" && (c.closes_into === "decision" || c.closes_into === "stage") ? Math.max(1, c.question.axes?.length ?? 1) : 1;
+  const n = ready.length * perItem;
   const plural = (one: string, many: string) => (n === 1 ? one : many);
   const words =
     c.closes_into === "decision"
@@ -457,8 +486,8 @@ export function closure(c: Campaign, answers: Answer[] | null = null): Closure {
     .map((s) => ({ state: s.state, words: s.words, n: items.filter((i) => i.state === s.state).length }))
     .filter((s) => s.n > 0);
   return {
-    writes: { n, words },
-    staged: c.closes_into === "decision" ? notPersons : 0,
+    writes: { n, words: perItem > 1 ? `${words}, one per axis of ${ready.length} ${ready.length === 1 ? "item" : "items"}` : words },
+    staged: c.closes_into === "decision" ? notPersons * perItem : 0,
     unresolved,
     unresolvedTotal: unresolved.reduce((a, s) => a + s.n, 0),
     leases: (c.assignments ?? []).filter((a) => a.state === "leased").length,
@@ -800,11 +829,29 @@ export function formFields(schema: FormSchema | undefined): { name: string; fiel
   return Object.entries(schema?.properties ?? {}).map(([name, field]) => ({ name, field, required: req.has(name) }));
 }
 
+/**
+ * An axes answer as an object. The engine takes the joint answer as an
+ * object and keeps it as one text, which is what the answers door and an
+ * item's outcome give back; both read here.
+ */
+export function jointValue(v: unknown): Json | null {
+  if (v && typeof v === "object" && !Array.isArray(v)) return v as Json;
+  if (typeof v === "string" && v.startsWith("{")) {
+    try {
+      const o = JSON.parse(v) as unknown;
+      return o && typeof o === "object" && !Array.isArray(o) ? (o as Json) : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
 /** An answer's value in words: a value, the stacks, a form's fields, a file. */
 export function answerWords(a: Pick<Answer, "value" | "form" | "derivative_id">): string {
   if (a.derivative_id !== null && a.derivative_id !== undefined) return `file ${a.derivative_id}${a.form ? ` · ${formWords(a.form)}` : ""}`;
   if (a.form) return formWords(a.form);
-  const v = a.value;
+  const v = jointValue(a.value) ?? a.value;
   if (v === undefined) return "(not shown at this detail)";
   if (Array.isArray(v)) return `stacks ${v.join(", ")}`;
   if (v && typeof v === "object")

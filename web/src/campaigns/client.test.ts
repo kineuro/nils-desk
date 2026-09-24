@@ -10,11 +10,12 @@ import openCampaign from "../../test/fixtures/campaigns/campaign_open.json";
 import formCampaign from "../../test/fixtures/campaigns/campaign_form.json";
 import closeAnswer from "../../test/fixtures/campaigns/close.json";
 import { parse } from "../routes";
-import { ADMIN, capsFor, RATER } from "./caps.fixture";
+import { ADMIN, capsFor, DOORS, RATER } from "./caps.fixture";
 import {
   agreementWords,
   answerBody,
   answerWords,
+  CANDIDATES,
   closedWords,
   closeRefusal,
   closure,
@@ -74,6 +75,7 @@ describe("a campaign read from the engine", () => {
     expect(closure(open, byModel).staged).toBe(1);
     expect(closure({ ...open, closes_into: "stage" }, answers).writes.words).toBe("staged decisions, for a person to commit");
     expect(closure({ ...open, closes_into: "none" }, answers).writes.words).toBe("review items closed with their outcomes");
+    expect(closure({ ...open, question: { kind: "axes", axes: ["base", "technique", "modifier"] } }, answers).writes).toEqual({ n: 6, words: "decisions in force, one per axis of 2 items" });
   });
 
   it("says what the close answered, and a closed campaign's panel counts what it resolved", () => {
@@ -103,6 +105,9 @@ describe("who may do what", () => {
   it("offers the axes question only where the engine asks it", () => {
     expect(kindsOffered(capsFor())).toEqual(["axis", "form", "free", "derivative", "pick"]);
     expect(kindsOffered(capsFor({ engine: { campaigns: { question_kinds: ["axis", "axes", "pick", "form", "derivative", "free"] } } }))).toContain("axes");
+    // a record 45 engine grew OpenAPI 7 in place: its candidates door says it asks axes, where a pack is served
+    expect(kindsOffered(capsFor({ doors: [...DOORS, CANDIDATES] }))).toEqual(["axis", "axes", "form", "free", "derivative", "pick"]);
+    expect(kindsOffered(capsFor({ doors: [...DOORS, CANDIDATES], engine: { packs: [] } }))).not.toContain("axes");
   });
 });
 
@@ -225,6 +230,7 @@ describe("answering", () => {
     expect(answers.map((a) => answerWords(a))).toContain("T1w");
     expect(answerWords({ value: [12, 14] })).toBe("stacks 12, 14");
     expect(answerWords({ value: { base: "T1w", modifier: ["FLAIR", "FS"] } })).toBe("base T1w · modifier FLAIR+FS");
+    expect(answerWords({ value: '{"base":"T1w","modifier":[],"technique":"MPRAGE"}' })).toBe("base T1w · modifier none · technique MPRAGE");
     expect(answerWords({ form: { motion: "mild" } })).toBe("motion mild");
     expect(answerWords({ derivative_id: 4 })).toBe("file 4");
     expect(answerWords({})).toBe("(not shown at this detail)");

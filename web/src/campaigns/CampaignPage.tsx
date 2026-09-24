@@ -49,7 +49,7 @@ const ROWS = 200;
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; c: Campaign; answers: Answer[] | null; sets: LabelSet[] };
 
-export function CampaignPage({ caps, id }: { caps: Capabilities; id: string }) {
+export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities; id: string; missing?: number | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [acting, setActing] = useState<"close" | "export" | null>(null);
   const [said, setSaid] = useState<string | null>(null);
@@ -65,7 +65,7 @@ export function CampaignPage({ caps, id }: { caps: Capabilities; id: string }) {
   if (load.kind === "failed") return <p className="warn">The campaign could not be read: {load.why}</p>;
   const c = load.c;
   return (
-    <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} said={said} onAct={setActing}>
+    <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} said={said} missing={missing} onAct={setActing}>
       {acting === "close" && (
         <CloseDialog
           campaign={c}
@@ -101,12 +101,14 @@ export interface CampaignBodyProps {
   said?: string | null;
   /** The state the items table shows; all when null. */
   filter?: string | null;
+  /** Stacks without their picture, as the make door counted them. */
+  missing?: number | null;
   onAct: (act: "close" | "export") => void;
   children?: React.ReactNode;
 }
 
 /** One campaign as it draws from what it read. */
-export function CampaignBody({ caps, campaign: c, answers, sets, said = null, filter: initial = null, onAct, children }: CampaignBodyProps) {
+export function CampaignBody({ caps, campaign: c, answers, sets, said = null, filter: initial = null, missing = null, onAct, children }: CampaignBodyProps) {
   const [filter, setFilter] = useState<string | null>(initial);
   const items = c.items ?? [];
   const shown = filter ? items.filter((i) => i.state === filter) : items;
@@ -168,6 +170,25 @@ export function CampaignBody({ caps, campaign: c, answers, sets, said = null, fi
         ]}
       />
       <StateBar counts={c.counts} />
+      {a?.per_axis && Object.keys(a.per_axis).length > 0 && (
+        <p className="meta">
+          By axis:{" "}
+          {Object.entries(a.per_axis)
+            .map(([axis, x]) => `${axis} ${pct(x.exact)}`)
+            .join(" · ")}
+        </p>
+      )}
+      {missing !== null && missing > 0 && (
+        <div className="note">
+          <Icon name="info" />
+          <div className="note-body">
+            <p className="note-lead">
+              {n(missing)} of its stacks {missing === 1 ? "has" : "have"} no picture yet.
+            </p>
+            <p className="note-detail">Raters see the stack once its pyramid is built: a job on Pipelines, pyramid build --handle {c.handle_id ?? "<handle>"}.</p>
+          </div>
+        </div>
+      )}
       <dl className="facts">
         <div className="facts-pair">
           <dt>source</dt>
@@ -296,6 +317,7 @@ function ItemRow({ item: i, answers, blind }: { item: Item; answers: Answer[]; b
       </td>
       <td>
         {i.outcome ? answerWords({ value: i.outcome.value, form: i.outcome.form ?? null, derivative_id: i.outcome.derivative_id ?? null }) : ""}
+        {i.outcome?.decisions && <span className="meta"> · decisions {Object.values(i.outcome.decisions).join(", ")}</span>}
         {i.decision_id !== null && <span className="meta"> · decision {i.decision_id}</span>}
         {i.pick_id !== null && <span className="meta"> · pick {i.pick_id}</span>}
       </td>

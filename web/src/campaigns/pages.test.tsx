@@ -132,6 +132,20 @@ describe("one campaign", () => {
     expect(html).toContain("The answers could not be read at this detail.");
   });
 
+  it("shows an axes campaign's agreement by axis, its decisions per item, and the stacks still without a picture", () => {
+    const axes: Campaign = {
+      ...open,
+      question: { kind: "axes", axes: ["base", "technique"] },
+      agreement: { ...open.agreement!, per_axis: { base: { ...open.agreement!, exact: 1 }, technique: { ...open.agreement!, exact: 0.5 } } },
+      items: [{ ...open.items![0], state: "resolved", outcome: { value: { base: "T1w", technique: "MPRAGE" }, decisions: { base: 11, technique: 12 } }, decision_id: null }],
+    };
+    const html = renderToStaticMarkup(<CampaignBody caps={capsFor()} campaign={axes} answers={[]} sets={[]} missing={4} onAct={none} />);
+    expect(html).toContain("By axis: base 100% · technique 50%");
+    expect(html).toContain("base T1w · technique MPRAGE<span class=\"meta\"> · decisions 11, 12</span>");
+    expect(html).toContain("4 of its stacks have no picture yet.");
+    expect(html).toContain("pyramid build --handle 5");
+  });
+
   it("shows what a close will write before it writes it", () => {
     const html = renderToStaticMarkup(<ClosurePanel campaign={open} plan={closure(open, answers)} />);
     expect(html).toContain("Writes 2 decisions in force.");

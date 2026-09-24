@@ -247,7 +247,8 @@ describe("the rater's workspace", () => {
       ["confidence", "0.41"],
       ["rule", "t1-by-te"],
     ]);
-    const pick = draw({ campaign: { ...open, question: { kind: "pick", role: "main_t1" } }, given: { kind: "stacks", stacks: [14] }, candidates: [12, 14] });
+    const pick = draw({ campaign: { ...open, question: { kind: "pick", role: "main_t1" } }, given: { kind: "stacks", stacks: [14] }, candidates: [12, 14], stackWords: { 12: "T1w MPRAGE" } });
+    expect(pick).toContain('stack 12<span class="meta"> · T1w MPRAGE</span>');
     expect(pick).toContain("The stacks that stand for main_t1");
     expect(pick).toContain('<kbd>2</kbd>stack 14');
   });
@@ -291,6 +292,10 @@ describe("the adjudicator's view", () => {
       { ...answers[1], value: { base: "T1w", technique: "SE" } },
     ];
     expect(disagreementWords(aq, two, item)).toBe("The raters differ on technique.");
+    // as the engine gives an axes answer back: one text
+    const kept = two.map((a) => ({ ...a, value: JSON.stringify(a.value) }));
+    expect(disagreementWords(aq, kept, item)).toBe("The raters differ on technique.");
+    expect(marksOf(aq, kept, item).technique).toEqual({ MPRAGE: ["alice@walk"], SE: ["bob@walk"] });
     expect(marksOf(aq, two, item)).toEqual({ base: { T1w: ["alice@walk", "bob@walk"] }, technique: { MPRAGE: ["alice@walk"], SE: ["bob@walk"] } });
   });
 });

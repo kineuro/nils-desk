@@ -18,8 +18,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { door } from "../ask/client";
 import type { Capabilities, EngineCapabilities } from "../capabilities";
-import { answerWords, campaigns, closure, emptyDraft, makeBody, type Answer, type Campaign, type Claimed } from "./client";
-import { beatSeat, bodyOf, disagreementWords, given, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
+import { answerWords, axesServed, campaigns, closure, emptyDraft, makeBody, type Answer, type Campaign, type Claimed, type Given } from "./client";
+import { beatSeat, bodyOf, disagreementWords, given, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
 import { blank } from "./renderers";
 
 const ENGINE = process.env.CAMPAIGN_WALK_ENGINE ?? "";
@@ -143,6 +143,83 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("a campaign walked by three people
     expect(rows).toBe(items.length);
     expect(everyAnswer.rows).toBe(kept.length);
     expect((await as(CAROL, () => campaigns.labelSets())).some((s) => s.id === outcomes.id)).toBe(true);
+  });
+
+  it("asks every axis of a stack at once, holds the answer to the pack, and closes one decision per axis", { timeout: 120_000 }, async (ctx) => {
+    if (!axesServed(caps)) {
+      say("axes: this engine does not ask the axes question; skipped");
+      ctx.skip();
+      return;
+    }
+    const sel = `walk-${STAMP}`;
+    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${sel}@1` }), name: `walk-axes-${STAMP}`, kind: "axes", axes: ["base", "technique", "modifier"], adjudicators: CAROL.who, closesInto: "decision" });
+    expect(made.ok).toBe(true);
+    if (!made.ok) return;
+    const c = await as(CAROL, () => campaigns.make(made.body));
+    const q = c.question;
+    const rows = rowsOf(q, null);
+    const items = c.items ?? [];
+    say(`axes: made ${c.name}, ${items.length} items, ${rows.map((r) => `${r.axis} ${r.values.length}${r.multi ? " several" : ""}`).join(", ")}; pictures ${c.pictures ? `${c.pictures.have} of ${c.pictures.stacks}` : "not said"}`);
+    expect(rows.find((r) => r.axis === "modifier")?.multi).toBe(true);
+    const odd = items[items.length - 1].stack_id;
+    // the desk refuses what the pack forbids before it is sent, and the engine refuses the same body in its own words
+    const bad: Given = { kind: "values", values: { base: "T2w", technique: "MPRAGE", modifier: null } };
+    const said = illegal(q, bad);
+    expect(said).toMatch(/sets base to T1w when technique is MPRAGE/u);
+    const first = seatOf(await as(ALICE, () => campaigns.claim(c.id)));
+    expect(first.kind).toBe("holding");
+    if (first.kind !== "holding") return;
+    const refusedBy = await as(ALICE, () => campaigns.answer(c.id, first.assignment.id, { value: { base: "T2w", technique: "MPRAGE", modifier: null } })).then(
+      () => null,
+      (e: Error) => e.message,
+    );
+    say(`axes: the desk said "${said}"; the engine said "${refusedBy}"`);
+    expect(refusedBy).toMatch(/T1w/u);
+    // the refusal wrote nothing: the same assignment takes the legal answer
+    await as(ALICE, () => campaigns.answer(c.id, first.assignment.id, { value: { base: "T1w", technique: "MPRAGE", modifier: null } }));
+    // two raters: base by key 9 (T1w), technique chosen, modifier none; bob differs on the technique of the last stack
+    const rate = async (person: typeof ALICE, technique: (stack: number) => string) => {
+      let seat: Seat = seatOf(await as(person, () => campaigns.claim(c.id)));
+      let n = 0;
+      while (seat.kind === "holding") {
+        const k = keyAct("9", { ctrl: false, inField: false, q, rows });
+        let g: Given = { kind: "values", values: {} };
+        if (k?.kind === "choose") g = given(q, g, k.row, k.value);
+        g = given(q, g, rows[1], technique(seat.item.stack_id ?? 0));
+        g = givenNone(g, "modifier");
+        expect(illegal(q, g)).toBeNull();
+        const body = bodyOf(q, g);
+        expect(body.ok).toBe(true);
+        if (!body.ok) break;
+        const holding = seat;
+        await as(person, () => campaigns.answer(c.id, holding.assignment.id, body.body));
+        n++;
+        seat = seatOf(await as(person, () => campaigns.claim(c.id)));
+      }
+      return n;
+    };
+    const a = 1 + (await rate(ALICE, () => "MPRAGE"));
+    const b = await rate(BOB, (stack) => (stack === odd ? "TSE" : "MPRAGE"));
+    say(`axes: alice answered ${a}, bob answered ${b}`);
+    expect([a, b]).toEqual([items.length, items.length]);
+    const adj = seatOf(await as(CAROL, () => campaigns.claim(c.id, "adjudicator")));
+    expect(adj.kind === "holding" && adj.item.stack_id).toBe(odd);
+    if (adj.kind !== "holding") return;
+    const seen = await as(CAROL, () => campaigns.answers(c.id));
+    const split = disagreementWords(q, seen, adj.item.id);
+    say(`axes: adjudicator sees: ${split}`);
+    expect(split).toBe("The raters differ on technique.");
+    const settle = bodyOf(q, { kind: "values", values: { base: "T1w", technique: "MPRAGE", modifier: null } }, "the walk's adjudicator");
+    if (settle.ok) await as(CAROL, () => campaigns.answer(c.id, adj.assignment.id, settle.body));
+    const before = await as(CAROL, () => campaigns.one(c.id));
+    const plan = closure(before, await as(CAROL, () => campaigns.answers(c.id)));
+    const closed = await as(CAROL, () => campaigns.close(c.id));
+    const after = await as(CAROL, () => campaigns.one(c.id));
+    const perItem = (after.items ?? []).map((i) => Object.keys(i.outcome?.decisions ?? {}).length);
+    say(`axes: closure panel said ${plan.writes.n} ${plan.writes.words}; the close wrote ${closed.decisions.length} decisions (${perItem.join(", ")} per item), ${closed.unresolved} unresolved; by axis ${Object.entries(after.agreement?.per_axis ?? {}).map(([k, v]) => `${k} ${v.exact}`).join(", ")}`);
+    expect(plan.writes.n).toBe(closed.decisions.length);
+    expect(closed.unresolved).toBe(0);
+    expect(perItem.every((x) => x === 3)).toBe(true);
   });
 
   it("puts an item whose lease ran out back in the pool, and the heartbeat says so", { timeout: 60_000 }, async () => {

@@ -5,9 +5,8 @@
 // The page and the headless walk share them, so the walk proves what the page
 // does rather than a copy of it.
 
-import type { Json } from "../ask/client";
 import type { PackDoc } from "../review/client";
-import { answerBody, answerWords, axisValues, itemWords, jointOf, keyValue, legalProblem, ROW_KEYS, stateWords, type Answer, type Answered, type Assignment, type Claimed, type Given, type Item, type Question } from "./client";
+import { answerBody, answerWords, axisValues, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, type Answer, type Answered, type Assignment, type Claimed, type Given, type Item, type Question } from "./client";
 import { choose, type Marks, type Row } from "./renderers";
 
 export type Seat =
@@ -125,8 +124,9 @@ export function marksOf(q: Question, answers: Answer[], item: number): Marks {
   for (const a of answers) {
     if (a.item_id !== item || a.role !== "rater") continue;
     if (q.kind === "axis" && q.axis && typeof a.value === "string") put(q.axis, a.value, a.principal);
-    if (q.kind === "axes" && a.value && typeof a.value === "object" && !Array.isArray(a.value)) {
-      for (const [axis, v] of Object.entries(a.value as Json)) for (const x of Array.isArray(v) ? v : v === null ? [] : [v]) put(axis, String(x), a.principal);
+    const joint = q.kind === "axes" ? jointValue(a.value) : null;
+    if (joint) {
+      for (const [axis, v] of Object.entries(joint)) for (const x of Array.isArray(v) ? v : v === null ? [] : [v]) put(axis, String(x), a.principal);
     }
   }
   return out;
@@ -138,7 +138,11 @@ export function disagreementWords(q: Question, answers: Answer[], item: number):
   if (mine.length < 2) return null;
   if (q.kind === "axes") {
     const axes = q.axes ?? [];
-    const differ = axes.filter((axis) => new Set(mine.map((a) => JSON.stringify(((a.value ?? {}) as Json)[axis] ?? null))).size > 1);
+    const said = (a: Answer, axis: string) => {
+      const v = (jointValue(a.value) ?? {})[axis];
+      return JSON.stringify(v === undefined || v === null || (Array.isArray(v) && v.length === 0) ? null : Array.isArray(v) ? [...v].sort() : v);
+    };
+    const differ = axes.filter((axis) => new Set(mine.map((a) => said(a, axis))).size > 1);
     return differ.length > 0 ? `The raters differ on ${differ.join(", ")}.` : "The raters agree on every axis; the metric sent it here.";
   }
   const distinct = new Set(mine.map((a) => answerWords(a)));
