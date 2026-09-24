@@ -22,6 +22,9 @@ export class KvasirError extends Error {
   }
 }
 
+/** A name in a door's path: encoded, with the colon a staged key's name carries kept as it is. */
+const segment = (name: string) => encodeURIComponent(name).replace(/%3A/gu, ":");
+
 async function door<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
   const r = await fetch(`/kvasir${path}`, {
     method,
@@ -398,8 +401,8 @@ export const kvasir = {
     door<{ id: string; key: string; shown: string }>("POST", "/v1/keys", expires_at ? { principal, purposes, max_class, expires_at } : { principal, purposes, max_class }),
   revoke: (id: string) => door<Json>("DELETE", `/v1/keys/${encodeURIComponent(id)}`),
   /** A backend's key, kept under the backend's id and never shown. */
-  credential: (backend: string, secret: string) => door<{ provider: string; stored: boolean; shown: string }>("PUT", `/v1/credentials/${encodeURIComponent(backend)}`, { secret }),
-  forget: (backend: string) => door<Json>("DELETE", `/v1/credentials/${encodeURIComponent(backend)}`),
+  credential: (backend: string, secret: string) => door<{ provider: string; stored: boolean; shown: string }>("PUT", `/v1/credentials/${segment(backend)}`, { secret }),
+  forget: (backend: string) => door<Json>("DELETE", `/v1/credentials/${segment(backend)}`),
   /** Record 47: a model server's models with their specs and loaded or cold state, its key named by the reference it is sealed under. */
   offered: (url: string, keyRef: string | null) =>
     door<Offer>("GET", `/v1/servers/models?url=${encodeURIComponent(url)}${keyRef ? `&key_ref=${encodeURIComponent(keyRef)}` : ""}`),

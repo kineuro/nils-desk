@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Add a model (records 23 and 25), the one dialog on the Kvasir page. It asks
 // first where the model comes from, offering only what the person may add:
-// downloading it to this machine, a model server of yours and a provider need
+// downloading it to this machine, a model server and a provider need
 // Kvasir: Work, and a ChatGPT subscription of one's own needs the assistant
 // with Kvasir: See (on a desk that signs nobody in, it is the install's). A
-// server or a provider is added once one short request to the model chosen
+// provider, or a server that lists no models, is added once one short request to the model chosen
 // answered for exactly what the dialog shows; Kvasir asks the model again
 // before it holds it, and says what each model said when one did not answer.
 // A model server (record 47) is asked for its list through Kvasir: its key is
-// sealed there first and only named after (R4), every model shows its specs
+// sealed there first under a staging name (R4), every model shows its specs
 // and whether it is loaded, and the ticked ones are admitted one by one, each
 // with the result Kvasir reports.
 
@@ -18,13 +18,16 @@ import { Dialog } from "../ui/Dialog";
 import {
   addable,
   addedWords,
+  CONTEXT_WINDOW,
   asksKey,
   description,
   draft,
   findRefusal,
   fingerprint,
+  HERE,
   listedWords,
   localityOf,
+  MAX_TOKENS,
   pickFrom,
   plainAddress,
   PRESETS,
@@ -42,7 +45,7 @@ import { useDownload } from "./DownloadModel";
 import { cardsOf, listWords, plainly } from "./gateway";
 import { KvasirError, kvasir, type LocalModel, type LocalStatus, type Locality, type Offer, type Subscription, type Ticked, triedOf } from "./kvasir";
 import { choiceWords, type Choice } from "./models";
-import { admittedWords, coldWords, listRefusal, resultTag, specWords, stageName, statusTag, tickable } from "./modelserver";
+import { admittedWords, coldWords, listRefusal, listsNothing, resultTag, specWords, stageName, statusTag, tickable } from "./modelserver";
 import { useSignInPart } from "./SubscriptionCard";
 import type { Install } from "./supervise";
 
@@ -56,8 +59,8 @@ export interface Added {
 /** Said under the address of a model server of yours, which may be on this machine or another. */
 export const SERVER_HINT = "Most often ends in /v1.";
 
-/** A model server of yours or a provider: its address and key, the models it lists, a test of the one chosen, and the add. */
-function useServer(where: "here" | "provider", props: { onClose: () => void; onDone: (words: string, added: Added) => void }): { body: React.ReactNode; foot: React.ReactNode; busy: boolean } {
+/** A provider: its address and key, the models it lists, a test of the one chosen, and the add. */
+function useServer(where: "provider", props: { onClose: () => void; onDone: (words: string, added: Added) => void }): { body: React.ReactNode; foot: React.ReactNode; busy: boolean } {
   const { onClose, onDone } = props;
   const id = useId();
   const [d, setD] = useState<Draft>(() => draft(where));
@@ -341,68 +344,92 @@ export interface HeldServer {
 }
 
 /**
- * Record 47: a model server by its address and key. The key goes to Kvasir's
- * credential door under a name made for this add and leaves the dialog at
- * once; Kvasir lists the server's models with it, admits the ticked ones on one
- * backend and moves the key under that backend. A key sealed for an add that
- * held nothing is forgotten when the dialog closes.
+ * A model server (records 23 and 47), the one way to add one: its address and
+ * key, then the list of what it serves. The key goes to Kvasir's credential
+ * door under a staging name, and the list is read with that name; where the
+ * server lists models the key leaves the dialog at once, Kvasir admits the
+ * ticked ones on one backend and moves the key under it (R4). Where it lists
+ * none, the admin types the model and it is tested and added as one model, the
+ * key going to Kvasir with the add as before. A staged key that nothing took
+ * over is forgotten when the dialog closes or the address changes.
  */
 function useModelServer(props: { from?: HeldServer | null; onClose: () => void; onDone: (words: string, added: Added) => void }): { body: React.ReactNode; foot: React.ReactNode; busy: boolean } {
   const { from = null, onClose, onDone } = props;
   const id = useId();
-  const [url, setUrl] = useState(from?.url ?? "");
+  const [url, setUrl] = useState(from?.url ?? HERE);
   const [key, setKey] = useState("");
   // the name the key typed here is sealed under; Kvasir takes it over once a model is held
-  const [stage, setStage] = useState<string | null>(null);
   const staged = useRef<string | null>(null);
   // the sealed key the listing worked with, named by reference; null for a server that takes none
-  const [ref, setRef] = useState<string | null>(null);
+  const [ref, setRef] = useState<string | null>(from?.backend ?? null);
   const [offer, setOffer] = useState<Offer | null>(null);
   const [ticked, setTicked] = useState<string[]>([]);
   const [results, setResults] = useState<Ticked[] | null>(null);
   const [held, setHeld] = useState<Added | null>(null);
+  // the server lists nothing: the model typed, and its numbers, for the one-model add
+  const [bare, setBare] = useState(false);
+  const [model, setModel] = useState("");
+  const [contextWindow, setContextWindow] = useState(String(CONTEXT_WINDOW));
+  const [maxTokens, setMaxTokens] = useState(String(MAX_TOKENS));
+  const [tested, setTested] = useState<Tested | null>(null);
+  const [refused, setRefused] = useState<string[]>([]);
   const listing = useActing();
   const admitting = useActing();
   const busy = listing.working || admitting.working;
 
-  const restage = (name: string | null) => {
-    staged.current = name;
-    setStage(name);
+  const unstage = () => {
+    if (staged.current) void kvasir.forget(staged.current).catch(() => undefined);
+    staged.current = null;
   };
   // a key sealed for this add and never taken over goes with the dialog
-  useEffect(
-    () => () => {
-      if (staged.current) void kvasir.forget(staged.current).catch(() => undefined);
-    },
-    [],
-  );
+  useEffect(() => () => unstage(), []);
 
   const address = plainAddress(url);
   const shortKey = key.trim().length > 0 && key.trim().length < 8;
   const cannotList = listRefusal(url) ?? (shortKey ? "a key has 8 characters or more" : null);
+  // the one-model add, as the draft the older path takes
+  const d: Draft = { ...draft("here"), baseUrl: url, keyed: key.trim() !== "", key, model, contextWindow, maxTokens };
+  const outcome = tested && !stale(d, tested) ? triedWords(tested.model) : null;
+  const cannotTest = bare ? testRefusal(d) : null;
 
   const list = () => {
     listing.act("asking Kvasir for the server's models", async () => {
+      setRefused([]);
+      setTested(null);
       try {
-        let named = ref ?? stage ?? from?.backend ?? null;
+        let named = ref;
         if (key.trim()) {
+          unstage();
           const name = stageName();
           await kvasir.credential(name, key.trim());
-          if (stage) void kvasir.forget(stage).catch(() => undefined);
-          restage(name);
-          setKey("");
+          staged.current = name;
           named = name;
         }
         let o: Offer;
         try {
-          o = await kvasir.offered(address, named);
+          try {
+            o = await kvasir.offered(address, named);
+          } catch (e) {
+            // a server Kvasir holds without a key has none sealed under its backend
+            if (!(named !== null && named === from?.backend && e instanceof KvasirError && e.status === 404)) throw e;
+            named = null;
+            o = await kvasir.offered(address, null);
+          }
         } catch (e) {
-          // a server Kvasir holds without a key has none sealed under its backend
-          if (!(named !== null && named === from?.backend && e instanceof KvasirError && e.status === 404)) throw e;
-          named = null;
-          o = await kvasir.offered(address, null);
+          if (!listsNothing(e)) throw e;
+          o = { url: address, models: [], server: null };
+        }
+        if (o.models.length === 0) {
+          // typed instead: the key goes with the one-model add, so the staged copy goes now
+          unstage();
+          setRef(null);
+          setOffer(null);
+          setBare(true);
+          return "It lists no models; type the one it serves.";
         }
         setRef(named);
+        setKey("");
+        setBare(false);
         setOffer(o);
         setTicked([]);
         setResults(null);
@@ -426,8 +453,8 @@ function useModelServer(props: { from?: HeldServer | null; onClose: () => void; 
         setTicked([]);
         // Kvasir sealed the key under the backend, and let the staged name go
         if (r.backend) {
-          restage(null);
-          if (ref !== null) setRef(r.backend.id);
+          if (ref !== null && ref === staged.current) setRef(r.backend.id);
+          staged.current = null;
           setHeld({ id: r.backend.id, locality: "local", models: r.backend.models });
         }
         return admittedWords(r.backend?.id ?? null, all);
@@ -437,8 +464,42 @@ function useModelServer(props: { from?: HeldServer | null; onClose: () => void; 
     });
   };
 
-  const tick = (model: string, on: boolean) => setTicked((t) => (on ? [...t.filter((x) => x !== model), model] : t.filter((x) => x !== model)));
+  const test = () => {
+    const asked = d;
+    admitting.act(`sending ${asked.model.trim()} one short request`, async () => {
+      setRefused([]);
+      try {
+        const r = await kvasir.test(description(asked, true));
+        const m = r.models.find((x) => x.id === asked.model.trim()) ?? r.models[0];
+        if (!m) throw new Error("Kvasir answered without a word about the model.");
+        setTested({ print: fingerprint(asked), model: m });
+        return "";
+      } catch (e) {
+        throw plainly(e);
+      }
+    });
+  };
+
+  const add = () => {
+    const asked = d;
+    admitting.act(`adding ${asked.model.trim()} to Kvasir`, async () => {
+      try {
+        const r = await kvasir.add(description(asked, true));
+        onDone(addedWords(asked.model.trim(), r.backend.id, r.backend.locality), r.backend);
+        return "";
+      } catch (e) {
+        const models = triedOf(e);
+        if (!models) throw plainly(e);
+        setTested(null);
+        setRefused(refusedWords(models));
+        throw new Error("Kvasir asked the model again before holding it, and did not add it.");
+      }
+    });
+  };
+
+  const tick = (m: string, on: boolean) => setTicked((t) => (on ? [...t.filter((x) => x !== m), m] : t.filter((x) => x !== m)));
   const cold = offer ? coldWords(offer, ticked) : null;
+  const quiet = admitting.acting.kind === "done" && admitting.acting.words === "";
 
   const body = (
     <>
@@ -456,8 +517,13 @@ function useModelServer(props: { from?: HeldServer | null; onClose: () => void; 
             disabled={busy || from !== null}
             onChange={(e) => {
               setUrl(e.target.value);
+              // a key sealed for one server is never sent to another
+              unstage();
+              setRef(null);
               setOffer(null);
               setResults(null);
+              setBare(false);
+              setTested(null);
             }}
           />
         </div>
@@ -470,7 +536,9 @@ function useModelServer(props: { from?: HeldServer | null; onClose: () => void; 
         <div className="input mono">
           <input id={`${id}-key`} type="password" autoComplete="off" value={key} disabled={busy} onChange={(e) => setKey(e.target.value)} />
         </div>
-        <span className="meta">{ref ? "Sealed in Kvasir. Type another to replace it." : from ? "Kvasir uses the key it holds. Type one to replace it." : "Optional. Sealed in Kvasir; the desk keeps nothing."}</span>
+        <span className="meta">
+          {ref ? (from && ref === from.backend ? "Kvasir uses the key it holds. Type one to replace it." : "Sealed in Kvasir. Type another to replace it.") : "Optional. Sealed in Kvasir; the desk keeps nothing."}
+        </span>
       </div>
       <div className="field">
         <span className="label">Its models</span>
@@ -482,12 +550,72 @@ function useModelServer(props: { from?: HeldServer | null; onClose: () => void; 
         </div>
         <Acted acting={listing.acting} />
         {offer && <ServerOffer offer={offer} ticked={ticked} results={results} busy={busy} onTick={tick} />}
+        {bare && (
+          <div className="input mono">
+            <input aria-label="The name the server knows the model by" value={model} spellCheck={false} autoComplete="off" disabled={busy} onChange={(e) => setModel(e.target.value)} />
+          </div>
+        )}
       </div>
-      {offer && <span className="meta">Each ticked model answers one question, then the admission suite.</span>}
+      {bare && (
+        <div className="fields2">
+          <div className="field">
+            <label className="label" htmlFor={`${id}-window`}>
+              Context window
+            </label>
+            <div className="input">
+              <input id={`${id}-window`} inputMode="numeric" value={contextWindow} disabled={busy} onChange={(e) => setContextWindow(e.target.value)} />
+            </div>
+          </div>
+          <div className="field">
+            <label className="label" htmlFor={`${id}-longest`}>
+              Longest answer
+            </label>
+            <div className="input">
+              <input id={`${id}-longest`} inputMode="numeric" value={maxTokens} disabled={busy} onChange={(e) => setMaxTokens(e.target.value)} />
+            </div>
+          </div>
+        </div>
+      )}
+      {(offer || bare) && <span className="meta">{bare ? "Checked with the admission suite before use." : "Each ticked model answers one question, then the admission suite."}</span>}
     </>
   );
 
-  const foot = (
+  const foot = bare ? (
+    <>
+      {outcome &&
+        (outcome.answered ? (
+          <p className="ok-words">{`${outcome.words} It can be added.`}</p>
+        ) : (
+          <div className="tried">
+            <p className="warn">{outcome.words}</p>
+            {outcome.detail && <p className="meta">{outcome.detail}</p>}
+          </div>
+        ))}
+      {stale(d, tested) && <p className="meta">Changed since the test; test it again.</p>}
+      {refused.length > 0 && (
+        <ul className="tried-list">
+          {refused.map((w) => (
+            <li key={w} className="warn">
+              {w}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!quiet && <Acted acting={admitting.acting} />}
+      {cannotTest && <p className="meta">{cannotTest}</p>}
+      <div className="row actions">
+        <button type="button" className="button secondary" disabled={cannotTest !== null || busy} onClick={test}>
+          Test
+        </button>
+        <button type="button" className="button" disabled={!addable(d, tested) || busy} onClick={add}>
+          Add
+        </button>
+        <button type="button" className="button secondary" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </>
+  ) : (
     <>
       {cold && <p className="warn">{cold}</p>}
       <Acted acting={admitting.acting} />
@@ -536,8 +664,7 @@ export function AddModel(props: {
   const { choices, local = null, install = null, subscription = null, stations = [], server: from = null, onClose, onDone, onQueued, onSubscription, onToken } = props;
   const id = useId();
   const [choice, setChoice] = useState<Choice | null>(choices[0] ?? null);
-  const listed = useModelServer({ from, onClose, onDone });
-  const server = useServer("here", { onClose, onDone });
+  const server = useModelServer({ from, onClose, onDone });
   const provider = useServer("provider", { onClose, onDone });
   const download = useDownload({
     token: local?.token ?? false,
@@ -549,8 +676,8 @@ export function AddModel(props: {
     onToken: (set) => onToken?.(set),
   });
   const signing = useSignInPart({ row: subscription, stations, follow: choice === "subscription", onChange: onSubscription, onClose });
-  const part = choice === "download" ? download : choice === "modelserver" ? listed : choice === "server" ? server : choice === "provider" ? provider : choice === "subscription" ? signing : null;
-  const busy = listed.busy || server.busy || provider.busy || download.busy || signing.busy;
+  const part = choice === "download" ? download : choice === "server" ? server : choice === "provider" ? provider : choice === "subscription" ? signing : null;
+  const busy = server.busy || provider.busy || download.busy || signing.busy;
 
   const foot = part?.foot ?? (
     <div className="row actions">

@@ -12,7 +12,7 @@ import held from "../../test/fixtures/kvasir_backends_server.json";
 import offered from "../../test/fixtures/kvasir_servers_models.json";
 import { stationModel, targets } from "./gateway";
 import { admittedOf, type Backend, KvasirError, kvasir, type Offer, type PurposeRow, type ServerAdmitted } from "./kvasir";
-import { admittedWords, coldWords, listRefusal, modelRemovalWords, resultTag, specWords, stageName, stationsOf, statusTag, tickable } from "./modelserver";
+import { admittedWords, coldWords, listRefusal, listsNothing, modelRemovalWords, resultTag, specWords, stageName, stationsOf, statusTag, tickable } from "./modelserver";
 
 const offer = offered as unknown as Offer;
 const done = admitted as unknown as ServerAdmitted;
@@ -59,8 +59,14 @@ describe("a model server's list", () => {
     expect(listRefusal("")).toBe("a server has an address");
     expect(listRefusal("kvasir.example.org/v1")).toBe("an address starts with http:// or https://");
     expect(listRefusal(" https://kvasir.example.org/v1/ ")).toBeNull();
-    expect(stageName(() => 0)).toBe("adding-00000000");
-    expect(stageName()).toMatch(/^adding-[0-9a-z]{8}$/u);
+    // a server that lists nothing Kvasir can read, or a Kvasir without the door, has its model typed; nothing answering is an error
+    expect(listsNothing(new KvasirError(502, "http://x/v1/models answered 404", { error: { code: "backend", message: "http://x/v1/models answered 404" } }))).toBe(true);
+    expect(listsNothing(new KvasirError(502, "http://x/v1/models lists no data", { error: { code: "backend", message: "http://x/v1/models lists no data" } }))).toBe(true);
+    expect(listsNothing(new KvasirError(404, "GET /v1/servers/models is not a door Kvasir has", { error: { code: "no_such_door", message: "" } }))).toBe(true);
+    expect(listsNothing(new KvasirError(502, "http://x/v1/models did not answer: fetch failed", { error: { code: "backend", message: "" } }))).toBe(false);
+    expect(listsNothing(new KvasirError(401, "the key was refused", { error: { code: "backend", message: "" } }))).toBe(false);
+    expect(stageName(() => 0)).toBe("server-staging:00000000");
+    expect(stageName()).toMatch(/^server-staging:[0-9a-z]{8}$/u);
   });
 });
 
@@ -115,24 +121,24 @@ describe("the doors", () => {
       calls.push({ method: String(init.method), url, body: init.body === undefined ? undefined : JSON.parse(String(init.body)) });
       return new Response("{}", { status: 200 });
     });
-    await kvasir.credential("adding-00000001", "the-server-key");
-    await kvasir.offered("https://kvasir.example.org/v1", "adding-00000001");
+    await kvasir.credential("server-staging:00000001", "the-server-key");
+    await kvasir.offered("https://kvasir.example.org/v1", "server-staging:00000001");
     await kvasir.offered("http://127.0.0.1:30000/v1", null);
-    await kvasir.admitServer({ url: "https://kvasir.example.org/v1", key_ref: "adding-00000001", models: ["qwen38-27b"] });
+    await kvasir.admitServer({ url: "https://kvasir.example.org/v1", key_ref: "server-staging:00000001", models: ["qwen38-27b"] });
     await kvasir.setPolicy("assistant.title", "card0", null, "flash-next");
     await kvasir.setPolicy("assistant.title", "card0", null);
     await kvasir.removeModel("card0", "qwen3.8-flash-next");
     expect(calls).toEqual([
-      { method: "PUT", url: "/kvasir/v1/credentials/adding-00000001", body: { secret: "the-server-key" } },
-      { method: "GET", url: "/kvasir/v1/servers/models?url=https%3A%2F%2Fkvasir.example.org%2Fv1&key_ref=adding-00000001", body: undefined },
+      { method: "PUT", url: "/kvasir/v1/credentials/server-staging:00000001", body: { secret: "the-server-key" } },
+      { method: "GET", url: "/kvasir/v1/servers/models?url=https%3A%2F%2Fkvasir.example.org%2Fv1&key_ref=server-staging%3A00000001", body: undefined },
       { method: "GET", url: "/kvasir/v1/servers/models?url=http%3A%2F%2F127.0.0.1%3A30000%2Fv1", body: undefined },
-      { method: "POST", url: "/kvasir/v1/servers", body: { url: "https://kvasir.example.org/v1", key_ref: "adding-00000001", models: ["qwen38-27b"] } },
+      { method: "POST", url: "/kvasir/v1/servers", body: { url: "https://kvasir.example.org/v1", key_ref: "server-staging:00000001", models: ["qwen38-27b"] } },
       { method: "PUT", url: "/kvasir/v1/purposes/assistant.title/policy", body: { backend: "card0", model: "flash-next" } },
       { method: "PUT", url: "/kvasir/v1/purposes/assistant.title/policy", body: { backend: "card0" } },
       { method: "DELETE", url: "/kvasir/v1/backends/card0/models/qwen3.8-flash-next", body: undefined },
     ]);
     // the key went to the credential door alone
-    expect(calls.filter((c) => JSON.stringify(c).includes("the-server-key")).map((c) => c.url)).toEqual(["/kvasir/v1/credentials/adding-00000001"]);
+    expect(calls.filter((c) => JSON.stringify(c).includes("the-server-key")).map((c) => c.url)).toEqual(["/kvasir/v1/credentials/server-staging:00000001"]);
   });
 
   it("answer each result where Kvasir held none, and refuse any other way", async () => {

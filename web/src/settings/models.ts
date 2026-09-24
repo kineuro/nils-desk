@@ -28,8 +28,8 @@ import type { AdmissionRecord, Backend, LocalStatus, PurposeRow, Subscription } 
 import { downloadChoiceWords } from "./local";
 import { stationsOf, statusTag } from "./modelserver";
 
-/** Where a model comes from, as Add a model asks it first; record 47 adds a model server's list, ticked. */
-export type Choice = "download" | "modelserver" | "server" | "provider" | "subscription";
+/** Where a model comes from, as Add a model asks it first; a model server lists what it serves (record 47). */
+export type Choice = "download" | "server" | "provider" | "subscription";
 
 /**
  * The choices Add a model offers, in order: downloading to this machine where
@@ -40,7 +40,7 @@ export type Choice = "download" | "modelserver" | "server" | "provider" | "subsc
 export function addChoices(viewer: Viewer, at: { local: LocalStatus | null | undefined; subscription: Subscription | null }): Choice[] {
   const out: Choice[] = [];
   if (viewer.work && at.local) out.push("download");
-  if (viewer.work) out.push("modelserver", "server", "provider");
+  if (viewer.work) out.push("server", "provider");
   if (at.subscription && (at.subscription.for === "system" ? viewer.work || viewer.subscribes : viewer.subscribes)) out.push("subscription");
   return out;
 }
@@ -48,8 +48,7 @@ export function addChoices(viewer: Viewer, at: { local: LocalStatus | null | und
 /** A choice as the dialog draws it: the mark of where the model runs, its title and what it means for the prompts. */
 export function choiceWords(c: Choice, at: { local: LocalStatus | null | undefined; subscription: Subscription | null }): { mark: Mark; title: string; words: string } {
   if (c === "download") return { mark: { icon: "update", tone: "brand" }, title: "Download it to this machine", words: downloadChoiceWords(at.local?.runtime) };
-  if (c === "modelserver") return { mark: MARKS.server, title: "A model server", words: "Kvasir or OpenAI compatible · tick its models" };
-  if (c === "server") return { mark: MARKS.server, title: "A model server of yours", words: "SGLang, vLLM or Ollama · stays in your systems" };
+  if (c === "server") return { mark: MARKS.server, title: "A model server", words: "Kvasir, SGLang, vLLM or Ollama · stays in your systems" };
   if (c === "provider") return { mark: MARKS.provider, title: "A provider", words: "With your key · leaves your systems" };
   const name = at.subscription?.name ?? "ChatGPT";
   const mark: Mark = { icon: "key", tone: "caution" };

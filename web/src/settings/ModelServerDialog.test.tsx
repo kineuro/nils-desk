@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A model server as the Kvasir page draws it (record 47), against what a
-// throwaway Kvasir answered for a server listing two models: Add a model's
+// throwaway Kvasir answered for a server listing two models: Add a model's one
 // "A model server" asks for an address and a key the desk never keeps; the
 // list shows every model with its specs and whether it is loaded, ticked or
 // held already, and each ticked model's result as Kvasir reported it; the
@@ -42,20 +42,19 @@ const card = (viewer: Viewer) => serverCards([server], { viewer, catalogue: [], 
 
 describe("Add a model: a model server", () => {
   it("asks for its address and a key the desk does not keep, with nothing to admit before its models are listed", () => {
-    const html = renderToStaticMarkup(<AddModel choices={["modelserver", "server", "provider"]} onClose={() => undefined} onDone={() => undefined} />);
+    const html = renderToStaticMarkup(<AddModel choices={["server", "provider"]} onClose={() => undefined} onDone={() => undefined} />);
     expect(html).toMatch(/<label class="pick on"><span class="sq">.*?<b>A model server<\/b>/u);
-    expect(html).toContain("<b>A model server of yours</b>");
-    expect(html).toContain("Its address");
+    expect(html.match(/<b>A model server/gu)).toHaveLength(1);
+    expect(html).toContain('value="http://127.0.0.1:30000/v1"');
     expect(html).toContain('type="password"');
     expect(html).toContain("Optional. Sealed in Kvasir; the desk keeps nothing.");
-    expect(html).toMatch(/<button type="button" class="button secondary small" disabled="">List its models<\/button>/u);
-    expect(html).toContain("a server has an address");
+    expect(html).toMatch(/<button type="button" class="button secondary small">List its models<\/button>/u);
     expect(html).toMatch(/<button type="button" class="button" disabled="">Admit<\/button>/u);
     expect(html).not.toContain("Context window");
   });
 
   it("opens on a server Kvasir holds, its address fixed and its key sealed already", () => {
-    const html = renderToStaticMarkup(<AddModel choices={["modelserver"]} server={{ url: "http://127.0.0.1:18741/v1", backend: server.id }} onClose={() => undefined} onDone={() => undefined} />);
+    const html = renderToStaticMarkup(<AddModel choices={["server"]} server={{ url: "http://127.0.0.1:18741/v1", backend: server.id }} onClose={() => undefined} onDone={() => undefined} />);
     expect(html).toContain('disabled="" value="http://127.0.0.1:18741/v1"');
     expect(html).toContain("Kvasir uses the key it holds. Type one to replace it.");
     expect(html).toMatch(/<button type="button" class="button secondary small">List its models<\/button>/u);

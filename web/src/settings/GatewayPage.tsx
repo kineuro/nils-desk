@@ -327,7 +327,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
       )}
       {more && (
         <AddModel
-          choices={["modelserver"]}
+          choices={["server"]}
           server={more}
           onClose={() => setMore(null)}
           onDone={(words) => {

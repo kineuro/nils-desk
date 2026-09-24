@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Add a model as it opens (record 25): it asks first where the model comes
 // from and offers only what the person may add, the first chosen; a model
-// server of yours at this machine's address with nothing to test or add
-// before its models are found; a provider with its key; and a subscription
+// server at this machine's address with nothing to admit before its models
+// are listed; a provider with its key; and a subscription
 // that says how signing in goes, what it carries, and when it is done.
 
 import { renderToStaticMarkup } from "react-dom/server";
@@ -43,7 +43,7 @@ describe("adding a model", () => {
     const html = dialog(["download", "server", "provider", "subscription"], sub());
     expect(html).toContain("Where it comes from");
     expect(html).toContain("<b>Download it to this machine</b>");
-    expect(html).toContain("<b>A model server of yours</b>");
+    expect(html).toContain("<b>A model server</b>");
     expect(html).toContain("<b>A provider</b>");
     expect(html).toContain("<b>Your own ChatGPT subscription</b>");
     expect(html.match(/class="pick on"/gu)).toHaveLength(1);
@@ -75,17 +75,16 @@ describe("adding a model", () => {
     expect(signed).not.toContain("Sign in to ChatGPT");
   });
 
-  it("asks a model server of yours for its address, on this machine's port as it opens, with Test and Add held back", () => {
+  it("asks a model server for its address, on this machine's port as it opens, and an optional key, with Admit held back until it lists its models", () => {
     const html = dialog(["server", "provider"]);
-    expect(html).toMatch(/<label class="pick on"><span class="sq">.*?<b>A model server of yours<\/b>/u);
+    expect(html).toMatch(/<label class="pick on"><span class="sq">.*?<b>A model server<\/b>/u);
     expect(html).toContain('value="http://127.0.0.1:30000/v1"');
     expect(html).toContain("Most often ends in /v1.");
-    expect(html).toContain("Find its models");
-    expect(html).toContain("It needs a key");
-    expect(html).not.toContain('type="password"');
-    expect(html).toContain("admission suite");
-    expect(html).toMatch(/<button type="button" class="button secondary" disabled="">Test<\/button>/u);
-    expect(html).toMatch(/<button type="button" class="button" disabled="">Add<\/button>/u);
+    expect(html).toContain("List its models");
+    expect(html).toContain('type="password"');
+    expect(html).toContain("Optional. Sealed in Kvasir; the desk keeps nothing.");
+    expect(html).not.toContain("Find its models");
+    expect(html).toMatch(/<button type="button" class="button" disabled="">Admit<\/button>/u);
   });
 
   it("asks a provider for its key", () => {

@@ -10,13 +10,13 @@
 
 import { listWords, stationModel, stationOf, type Tone } from "./gateway";
 import { plainAddress } from "./adding";
-import type { Backend, Offer, Offered, PurposeRow, ServedStatus, Ticked } from "./kvasir";
+import { type Backend, KvasirError, type Offer, type Offered, type PurposeRow, type ServedStatus, type Ticked } from "./kvasir";
 
 const count = (n: number) => n.toLocaleString("en-GB");
 
-/** A name for a key sealed only for this add: Kvasir moves it under the backend's own id once a model is held, and the dialog forgets it otherwise. */
+/** A name for a key sealed only for this add, which Kvasir takes as a key reference by its prefix: Kvasir moves it under the backend's own id once a model is held, and the dialog forgets it otherwise. */
 export function stageName(random: () => number = Math.random): string {
-  return `adding-${Math.floor(random() * 36 ** 8)
+  return `server-staging:${Math.floor(random() * 36 ** 8)
     .toString(36)
     .padStart(8, "0")}`;
 }
@@ -27,6 +27,14 @@ export function listRefusal(address: string): string | null {
   if (!a) return "a server has an address";
   if (!/^https?:\/\/\S+$/u.test(a)) return "an address starts with http:// or https://";
   return null;
+}
+
+/** Whether a listing's refusal means the server lists nothing Kvasir can read (an older OpenAI compatible server, or a Kvasir before record 47), so the admin types the model. */
+export function listsNothing(e: unknown): boolean {
+  if (!(e instanceof KvasirError)) return false;
+  const code = (e.body.error as { code?: unknown } | undefined)?.code;
+  if (e.status === 404 && code === "no_such_door") return true;
+  return e.status === 502 && code === "backend" && !/did not answer:/u.test(e.message);
 }
 
 /** A model's specs in one line, each only where the server says it. */
