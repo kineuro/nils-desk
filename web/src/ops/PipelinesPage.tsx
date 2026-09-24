@@ -15,9 +15,11 @@ import { useLiveJobs } from "../data/Now";
 import { nowWords } from "../data/now";
 import { door as served } from "../deployment";
 import { may } from "../grants";
+import { href } from "../routes";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { CatalogPage } from "./Catalog";
 import { ops } from "./client";
 import { cardOf, countByFilter, FILTERS, filterJobs, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
 import { wordsOf } from "./verbs";
@@ -25,7 +27,43 @@ import { wordsOf } from "./verbs";
 const n = (v: number) => v.toLocaleString("en-US");
 
 
-export function PipelinesPage({ caps }: { caps: Capabilities }) {
+/** The Pipelines page's two pages: the jobs, and since record 45 the catalog where the engine serves it. */
+export function PipelinesPage({ caps, page = null }: { caps: Capabilities; page?: string | null }) {
+  const catalog = may(caps, "pipelines:see") && served(caps, "GET /api/pipelines");
+  const [said, setSaid] = useState<string | null>(null);
+  if (page === "catalog" && catalog) {
+    return (
+      <section className="pipelines">
+        <div className="data-head">
+          <div className="grow">
+            <span className="eyebrow">Pipelines</span>
+            <h1>Catalog</h1>
+            <p className="lede">What this engine can run, pinned by image, and what each run made.</p>
+          </div>
+        </div>
+        <PipelinesChips on="catalog" />
+        {said && <p className="meta">{said}</p>}
+        <CatalogPage caps={caps} onQueued={setSaid} />
+      </section>
+    );
+  }
+  return <JobsPage caps={caps} catalog={catalog} />;
+}
+
+function PipelinesChips({ on }: { on: "jobs" | "catalog" }) {
+  return (
+    <div className="chips pages">
+      <a className={on === "jobs" ? "opt on" : "opt"} href={href("pipelines")} aria-current={on === "jobs" ? "page" : undefined}>
+        Jobs
+      </a>
+      <a className={on === "catalog" ? "opt on" : "opt"} href={href("pipelines", "catalog")} aria-current={on === "catalog" ? "page" : undefined}>
+        Catalog
+      </a>
+    </div>
+  );
+}
+
+function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
   const live = useLiveJobs(caps);
   const [all, setAll] = useState<JobRow[] | null>(null);
   const [why, setWhy] = useState<string | null>(null);
@@ -107,6 +145,7 @@ export function PipelinesPage({ caps }: { caps: Capabilities }) {
           <p className="lede">Everything heavy runs as a job the engine queues: digests, pseudonymisation, sorting, releases, backups. What runs is here as it runs; what ran stays.</p>
         </div>
       </div>
+      {catalog && <PipelinesChips on="jobs" />}
       {!lists && <p className="meta">This engine does not list its jobs.</p>}
       {said && <p className="meta">{said}</p>}
       {why && all === null && <p className="warn">The jobs could not be read: {why}</p>}

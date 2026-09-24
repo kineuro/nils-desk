@@ -15,6 +15,7 @@ import { CohortPage } from "./data/CohortPage";
 import { CohortsPage } from "./data/CohortsPage";
 import { DataPage } from "./data/DataPage";
 import { PseudonymsPage } from "./data/PseudonymsPage";
+import { ModelsPage } from "./models/ModelsPage";
 import { PipelinesPage } from "./ops/PipelinesPage";
 import { ReleasePage } from "./ops/ReleasePage";
 import { QueryPage } from "./query/QueryPage";
@@ -260,10 +261,11 @@ export function App() {
             <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} />
           )}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
-          {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} />}
+          {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} page={route.page} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "review" && <ReviewPage caps={caps} page={route.page} query={route.query} />}
           {ready && active?.id === "campaigns" && <CampaignsPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
+          {ready && active?.id === "models" && <ModelsPage caps={caps} page={route.page} arg={route.arg} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {onProfile && <ProfilePage caps={caps} />}
