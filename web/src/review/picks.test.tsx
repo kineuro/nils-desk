@@ -2,8 +2,8 @@
 // Picks in Review (record 45 S5): a `pick.border` item as a pick run writes
 // it (the shape copied from a synthetic engine's answer), read as its
 // occasion with the run's pick marked first; the board with a main toggle
-// and a required why; the pick question's answer as the campaign door takes
-// it; and the acts each grant and door leaves open.
+// and a required why; the pick question as the rating workspace draws it;
+// and the acts each grant and door leaves open.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -66,10 +66,12 @@ describe("the session board", () => {
     expect(html).not.toContain('aria-label="Why"');
     expect(html).toContain('<span class="tag brand">main</span>');
   });
-  it("renders the pick question with its Answer held until a main and a why are given", () => {
-    const html = renderToStaticMarkup(<PickQuestion role="t1w" candidates={borderOf(BORDER)!.candidates} onAnswer={() => undefined} pictures={false} />);
+  it("renders the pick question with the chosen acquisition marked main and the why left to the workspace", () => {
+    const html = renderToStaticMarkup(<PickQuestion role="t1w" candidates={borderOf(BORDER)!.candidates} stacks={[409]} onStacks={() => undefined} pictures={false} />);
     expect(html).toContain("Which acquisition stands for t1w on this occasion?");
-    expect(html).toMatch(/<button type="button" class="button" disabled="">Answer<\/button>/u);
+    expect(html).toContain('class="bundle on"');
+    expect(html).not.toContain('aria-label="Why"');
+    expect(html).not.toContain(">Answer</button>");
   });
 });
 

@@ -164,10 +164,11 @@ export function FreeText({ text, onChange }: { text: string; onChange: (t: strin
 }
 
 /**
- * The stacks that stand for the role on this occasion. The session board
- * (wave 45 S5) replaces this list with tiles that scroll in sync; until then
- * the candidates the item's evidence names are offered, and any stack of the
- * session may be named by number.
+ * The stacks that stand for the role on this occasion, where the engine does
+ * not name the session's candidates (an engine before record 45's candidates
+ * door, or a person below detail quasi): the candidates the item's evidence
+ * names are offered, and any stack of the session may be named by number.
+ * Where it does, the workspace draws the session board instead.
  */
 export function PickStacks({ role, candidates, words = {}, stacks, onChange }: { role: string; candidates: number[]; words?: Record<number, string>; stacks: number[]; onChange: (s: number[]) => void }) {
   const toggle = (s: number) => onChange(stacks.includes(s) ? stacks.filter((x) => x !== s) : [...stacks, s]);

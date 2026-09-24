@@ -208,7 +208,8 @@ export interface Candidates {
   role: string;
   count: number;
   candidates: { stack_id: number; series_id?: number | null; axes: Record<string, string[]>; picked_by: number[] }[];
-  picks: { id: number; author_kind: string; actor?: string | null; stacks: number[]; score?: number | null }[];
+  /** The picks standing for the role on the occasion: a run's with its scores and every candidate it considered, best first, and a person's. */
+  picks: { id: number; author_kind: string; actor?: string | null; stacks: number[]; score?: number | null; margin?: number | null; borders?: string[]; considered?: { stacks: number[]; score?: number | null }[] | null; model?: string | null }[];
 }
 
 /** How many of a new campaign's stacks have their picture, and the job that builds the rest (record 45 E1). */
@@ -252,12 +253,23 @@ export const campaigns = {
   answer: (c: number | string, assignment: number, body: AnswerBody) => door<Answered>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/answer`, body),
   release: (c: number | string, assignment: number) => door<Assignment>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/release`, {}),
   /**
-   * Keeps a lease. OpenAPI 7 has no door that lengthens one: a claim hands a
-   * live lease back as it is (held), so the heartbeat learns whether it still
-   * holds and how long. An engine that serves a renew door is asked there.
+   * Keeps a lease. The renew door (record 45) lengthens it by the campaign's
+   * lease from now and answers the assignment; where it answers 409 the lease
+   * ran out or the campaign closed, and a claim then says what the person
+   * holds now (the next item, or nothing). An engine before the door is
+   * claimed of: a claim hands a live lease back as it is (held), so the
+   * heartbeat learns whether it still holds and how long.
    */
   renew: (caps: Capabilities, c: number | string, assignment: number, role: "rater" | "adjudicator") =>
-    served(caps, RENEW) ? door<Assignment>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/renew`, {}).then((a) => ({ assignment: a, item: null, held: true }) as Claimed) : campaigns.claim(c, role),
+    served(caps, RENEW)
+      ? door<Assignment>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/renew`, {}).then(
+          (a) => ({ assignment: a, item: null, held: true }) as Claimed,
+          (e: unknown) => {
+            if (e instanceof DoorError && e.status === 409) return campaigns.claim(c, role);
+            throw e;
+          },
+        )
+      : campaigns.claim(c, role),
   close: (c: number | string) => door<Closed>("POST", `/api/campaigns/${id(c)}/close`, {}),
   export: (c: number | string, body: { of: "outcomes" | "answers"; name?: string; place?: string }) => door<LabelSet>("POST", `/api/campaigns/${id(c)}/export`, body),
   labelSets: () => door<{ count: number; label_sets: LabelSet[] }>("GET", "/api/label-sets").then((r) => r.label_sets),
@@ -270,7 +282,7 @@ export const campaigns = {
   pack: (name: string) => door<Json>("GET", `/api/packs/${encodeURIComponent(name)}`),
 };
 
-/** The door a later engine may add to lengthen a lease; the heartbeat uses it where it is served. */
+/** The door that lengthens a lease (record 45); the heartbeat uses it where it is served. */
 export const RENEW = "POST /api/campaigns/{id}/assignments/{assignment}/renew";
 
 // ---------------------------------------------------------------- the section
@@ -511,6 +523,10 @@ export interface Draft {
   source: SourceKind;
   /** name@version, a handle id, or a review kind; a kind ending in `*` or `.` is a prefix. */
   from: string;
+  /** Review items only: the job that raised them, at most how many, and the cohort Review was narrowed to (said, not sent). */
+  job?: number;
+  limit?: number;
+  cohort?: string;
   kind: string;
   axis: string;
   axes: string[];
@@ -537,11 +553,14 @@ export interface DraftField {
   required: boolean;
 }
 
-export function emptyDraft(prefill: { source?: SourceKind; from?: string } = {}): Draft {
+export function emptyDraft(prefill: Partial<Prefill> = {}): Draft {
   return {
     name: "",
     source: prefill.source ?? "selection",
     from: prefill.from ?? "",
+    ...(prefill.job ? { job: prefill.job } : {}),
+    ...(prefill.limit ? { limit: prefill.limit } : {}),
+    ...(prefill.cohort ? { cohort: prefill.cohort } : {}),
     kind: "axis",
     axis: "",
     axes: [],
@@ -599,7 +618,8 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
     source = { handle: Number(from) };
   } else {
     if (!from) return { ok: false, needs: "a review kind, such as base:vote, or a prefix such as base:" };
-    source = { review: /[*.:]$/u.test(from) ? { kind_prefix: from.replace(/\*$/u, "") } : { kind: from } };
+    const narrowed = { ...(d.job ? { job_id: d.job } : {}), ...(d.limit ? { limit: d.limit } : {}) };
+    source = { review: /[*.:]$/u.test(from) ? { kind_prefix: from.replace(/\*$/u, ""), ...narrowed } : { kind: from, ...narrowed } };
   }
   let question: Json;
   switch (d.kind) {
@@ -655,16 +675,38 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
   };
 }
 
-/** The address that opens the make dialog with its source filled in: from a selection, a result, or a Review filter. */
-export function makeHref(source: SourceKind, from: string | number): string {
-  return narrow(href("campaigns"), { make: source, from: String(from) });
+/**
+ * What another page fills the make dialog with: the source, and for Review
+ * items the job that raised them, at most how many, and the cohort the queue
+ * was narrowed to, which the dialog says and the engine's review source does
+ * not take.
+ */
+export interface Prefill {
+  source: SourceKind;
+  from: string;
+  job?: number;
+  limit?: number;
+  cohort?: string;
+}
+
+/**
+ * The one address that opens the make dialog with its source filled in:
+ * Query's from a selection or a result, Review's "Ask people about these"
+ * from its filter (`#campaigns?make=review&from=<kind or prefix>&job=&limit=&cohort=`).
+ */
+export function makeHref(source: SourceKind, from: string | number, more: { job?: number | null; limit?: number | null; cohort?: string | null } = {}): string {
+  return narrow(href("campaigns"), { make: source, from: String(from), job: more.job, limit: more.limit, cohort: more.cohort });
 }
 
 /** The dialog's prefill from an address's query, or null when it asks for none. */
-export function prefillOf(query: Record<string, string> | undefined): { source: SourceKind; from: string } | null {
+export function prefillOf(query: Record<string, string> | undefined): Prefill | null {
   const make = query?.make;
   if (make !== "selection" && make !== "handle" && make !== "review" && make !== "1") return null;
-  return { source: make === "1" ? "selection" : make, from: query?.from ?? "" };
+  const count = (v: string | undefined) => (v && /^[1-9]\d*$/u.test(v) ? Number(v) : undefined);
+  const job = make === "review" ? count(query?.job) : undefined;
+  const limit = make === "review" ? count(query?.limit) : undefined;
+  const cohort = make === "review" && query?.cohort ? query.cohort : undefined;
+  return { source: make === "1" ? "selection" : make, from: query?.from ?? "", ...(job ? { job } : {}), ...(limit ? { limit } : {}), ...(cohort ? { cohort } : {}) };
 }
 
 // ---------------------------------------------------------------- answering

@@ -12,7 +12,7 @@ import { may } from "../grants";
 import { review, type PackDoc } from "../review/client";
 import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
-import { campaigns, CLOSES_WORDS, closesFor, emptyDraft, KIND_WORDS, kindsOffered, makeBody, makeRefusal, refused as refusedWords, type Draft, type DraftField, type SourceKind } from "./client";
+import { campaigns, CLOSES_WORDS, closesFor, emptyDraft, KIND_WORDS, kindsOffered, makeBody, makeRefusal, refused as refusedWords, type Draft, type DraftField, type Prefill, type SourceKind } from "./client";
 
 const SOURCES: { kind: SourceKind; words: string; placeholder: string; says: string }[] = [
   { kind: "selection", words: "A selection", placeholder: "name@version", says: "Frozen now: its stacks, or its sessions for a pick, become the items." },
@@ -20,7 +20,7 @@ const SOURCES: { kind: SourceKind; words: string; placeholder: string; says: str
   { kind: "review", words: "Review items", placeholder: "base:vote, or base: for every base item", says: "The open items of that kind, adopted as they are; one open campaign asks each." },
 ];
 
-export function MakeDialog({ caps, prefill, taken, onClose }: { caps: Capabilities; prefill: { source: SourceKind; from: string }; taken: readonly string[]; onClose: () => void }) {
+export function MakeDialog({ caps, prefill, taken, onClose }: { caps: Capabilities; prefill: Prefill; taken: readonly string[]; onClose: () => void }) {
   const [d, setD] = useState<Draft>(() => emptyDraft(prefill));
   const [pack, setPack] = useState<PackDoc | null>(null);
   const [busy, setBusy] = useState(false);
@@ -98,6 +98,7 @@ export function MakeForm({ caps, draft: d, pack, onChange: set }: { caps: Capabi
           <input aria-label={src.words} value={d.from} onChange={(e) => set({ from: e.target.value })} placeholder={src.placeholder} />
         </span>
         <span className="meta">{src.says}</span>
+        {d.source === "review" && (d.job || d.limit || d.cohort) && <span className="meta">{narrowedWords(d)}</span>}
       </fieldset>
       <fieldset className="field">
         <legend className="label">Question</legend>
@@ -284,4 +285,12 @@ function FieldsEditor({ fields, onChange }: { fields: DraftField[]; onChange: (f
       </button>
     </fieldset>
   );
+}
+
+/** What Review narrowed the items to, in words: the job and the limit are sent with the source, the cohort is not. */
+export function narrowedWords(d: Pick<Draft, "job" | "limit" | "cohort">): string {
+  const parts = [d.job ? `only the items job ${d.job} raised` : "", d.limit ? `at most ${d.limit.toLocaleString("en-US")}` : ""].filter(Boolean);
+  const said = parts.length > 0 ? `${parts.join(", ")}.` : "";
+  const cohort = d.cohort ? `Review showed cohort ${d.cohort}; the campaign takes every open item of the kind, whatever its cohort.` : "";
+  return [said.charAt(0).toUpperCase() + said.slice(1), cohort].filter(Boolean).join(" ");
 }

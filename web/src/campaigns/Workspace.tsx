@@ -12,6 +12,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { review, type PackDoc } from "../review/client";
+import { PickQuestion, type BoardCandidate } from "../review/SessionBoard";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -33,7 +34,7 @@ import {
 } from "./client";
 import { AxisRows, blank, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
 import { StackView } from "./StackView";
-import { answeredWords, beatSeat, bodyOf, chosenOf, disagreementWords, given as choose, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
+import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, disagreementWords, given as choose, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
 
 type Role = "rater" | "adjudicator";
 
@@ -55,8 +56,9 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const [keys, setKeys] = useState(false);
   const [done, setDone] = useState(0);
   const [open, setOpen] = useState<number | null>(null);
-  // a session item's stacks, where the engine names them (record 45); the session board of S5 draws them as tiles
+  // a session item's stacks, where the engine names them (record 45), which the session board draws as tiles
   const [pickable, setPickable] = useState<number[] | null>(null);
+  const [board, setBoard] = useState<BoardCandidate[] | null>(null);
   const [stackWords, setStackWords] = useState<Record<number, string>>({});
 
   // the capabilities are read again every few seconds; the workspace follows them without starting over
@@ -111,10 +113,12 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     setRefused(null);
     setEvidence(null);
     setPickable(null);
+    setBoard(null);
     if (q.kind === "pick" && served(capsNow.current, CANDIDATES))
       campaigns.candidates(id, item.id).then(
         (r) => {
           setPickable(r.candidates.map((x) => x.stack_id));
+          setBoard(boardOf(r));
           setStackWords(Object.fromEntries(r.candidates.map((x) => [x.stack_id, Object.values(x.axes).flat().join(" ")])));
         },
         () => undefined,
@@ -183,11 +187,12 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   );
 
   const rows = q ? rowsOf(q, pack) : [];
-  const candidates = pickable ?? candidatesOf(evidence);
+  // on the board, a key chooses an acquisition, named by its first stack
+  const candidates = board && board.length > 0 ? board.map((b) => b.stacks[0]) : (pickable ?? candidatesOf(evidence));
 
   // the keys
-  const keyed = useRef({ q, rows, candidates, g, answer, giveBack });
-  keyed.current = { q, rows, candidates, g, answer, giveBack };
+  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack });
+  keyed.current = { q, rows, candidates, board, g, answer, giveBack };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
@@ -204,7 +209,10 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       else if (act.kind === "skip") k.giveBack("next");
       else if (act.kind === "keys") setKeys((x) => !x);
       else if (act.kind === "choose") setG((was) => choose(k.q!, was, act.row, act.value));
-      else if (act.kind === "pick") setG((was) => (was.kind === "stacks" ? { kind: "stacks", stacks: was.stacks.includes(act.stack) ? was.stacks.filter((s) => s !== act.stack) : [...was.stacks, act.stack] } : was));
+      else if (act.kind === "pick" && k.board && k.board.length > 0) {
+        const bundle = k.board.find((b) => b.stacks[0] === act.stack);
+        if (bundle) setG({ kind: "stacks", stacks: bundle.stacks });
+      } else if (act.kind === "pick") setG((was) => (was.kind === "stacks" ? { kind: "stacks", stacks: was.stacks.includes(act.stack) ? was.stacks.filter((s) => s !== act.stack) : [...was.stacks, act.stack] } : was));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -226,6 +234,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       raterAnswers={role === "adjudicator" && item ? answers.filter((a) => a.item_id === item.id && a.role === "rater") : []}
       evidence={evidence}
       candidates={candidates}
+      board={board}
       stackWords={stackWords}
       now={now}
       busy={busy}
@@ -273,6 +282,8 @@ export interface WorkspaceBodyProps {
   raterAnswers: Answer[];
   evidence: Json | null;
   candidates: number[];
+  /** A session item's candidates as the session board draws them, where the engine names them (record 45). */
+  board?: BoardCandidate[] | null;
   /** What the classifier says of each candidate stack, in a few words. */
   stackWords?: Record<number, string>;
   now: number;
@@ -343,7 +354,7 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
         <div className="rate-grid">
           <div className="rate-picture">
             {holding.item.stack_id !== null ? (
-              <StackView stack={holding.item.stack_id} />
+              <StackView stack={holding.item.stack_id} view={q.kind === "axis" || q.kind === "axes" ? "planes" : "stack"} />
             ) : (
               <p className="meta">{itemWords(holding.item)}: a session, answered from its stacks below.</p>
             )}
@@ -436,6 +447,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
         </>
       );
     case "pick":
+      if (p.board && p.board.length > 0) return <PickQuestion role={q.role ?? "the role"} candidates={p.board} stacks={g.kind === "stacks" ? g.stacks : []} onStacks={(stacks) => p.onGiven({ kind: "stacks", stacks })} />;
       return <PickStacks role={q.role ?? "the role"} candidates={p.candidates} words={p.stackWords} stacks={g.kind === "stacks" ? g.stacks : []} onChange={(stacks) => p.onGiven({ kind: "stacks", stacks })} />;
     case "form":
       return <FormFields schema={q.schema} form={g.kind === "form" ? g.form : {}} onChange={(form) => p.onGiven({ kind: "form", form })} />;

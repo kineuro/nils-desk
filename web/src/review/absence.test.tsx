@@ -7,6 +7,7 @@
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { emptyDraft, makeBody, prefillOf } from "../campaigns/client";
 import type { Capabilities } from "../capabilities";
 import type { Grant } from "../grants";
 import { GRANTS } from "../grants";
@@ -70,10 +71,15 @@ describe("ask people about these", () => {
     expect(asksPeople(capsWith([], [...GRANTS] as Grant[]))).toBe(false);
     expect(asksPeople(capsWith(["POST /api/campaigns"], ["review:work"]))).toBe(false);
   });
-  it("carries the Review filter to the maker in the agreed shape", () => {
-    expect(askPeopleHref({ kind: "body_part:model" })).toBe("#campaigns/new?from=review&kind=body_part%3Amodel");
-    expect(askPeopleHref({ kind_prefix: "base:", job: 12, limit: 200, cohort: "north" })).toBe("#campaigns/new?from=review&kind_prefix=base%3A&job=12&limit=200&cohort=north");
+  it("carries the Review filter to the maker through the maker's own address", () => {
+    expect(askPeopleHref({ kind: "body_part:model" })).toBe("#campaigns?make=review&from=body_part%3Amodel");
+    expect(askPeopleHref({ kind_prefix: "base:", job: 12, limit: 200, cohort: "north" })).toBe("#campaigns?make=review&from=base%3A&job=12&limit=200&cohort=north");
     const r = parse(askPeopleHref({ kind: "pick.border", cohort: "north" }));
-    expect([r.section, r.page, r.query]).toEqual(["campaigns", "new", { from: "review", kind: "pick.border", cohort: "north" }]);
+    expect(r.section).toBe("campaigns");
+    expect(prefillOf(r.query)).toEqual({ source: "review", from: "pick.border", cohort: "north" });
+    // the maker reads it back into the source the campaign door takes
+    const d = { ...emptyDraft(prefillOf(parse(askPeopleHref({ kind_prefix: "base", job: 12, limit: 200 })).query)!), name: "ask", axis: "base" };
+    const made = makeBody(d);
+    expect(made.ok && made.body.source).toEqual({ review: { kind_prefix: "base", job_id: 12, limit: 200 } });
   });
 });

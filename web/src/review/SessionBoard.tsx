@@ -3,12 +3,12 @@
 // role, each the stacks of one acquisition as small pictures that scroll
 // together, the run's pick marked, a main toggle and a why that is required.
 // A `pick.border` item opens it in Review, and a pick question in a campaign
-// renders it as its answer. The pictures come from the render door at the
-// smallest level; where no pyramid is built the tile says so.
+// renders it as its answer. The pictures are the viewer's tiles (record 45
+// S2), one TileSync a board, so the wheel over any of them moves them all;
+// where no pyramid is built the tile says so.
 
-import { useEffect, useState } from "react";
-import { Wait } from "../ui/Wait";
-import { doors, levelShape, type Manifest } from "../viewer/doors";
+import { useState } from "react";
+import { Tile, TileSync } from "../viewer/Tile";
 import "./grown.css";
 
 export interface BoardCandidate {
@@ -34,8 +34,7 @@ export interface BoardProps {
 
 export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = true }: BoardProps) {
   // one place along the stacks for every tile, so the bundles scroll together
-  const [at, setAt] = useState(0.5);
-  const step = (dy: number) => setAt((a) => Math.min(1, Math.max(0, a + (dy > 0 ? 0.03 : -0.03))));
+  const [sync] = useState(() => new TileSync());
   if (candidates.length === 0) return <p className="meta">The run considered nothing here.</p>;
   return (
     <div className="board">
@@ -54,9 +53,9 @@ export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = 
             {c.chosen && <span className="tag">the run&apos;s pick</span>}
           </div>
           {pictures && (
-            <div className="bundle-tiles" onWheel={(e) => step(e.deltaY)}>
+            <div className="bundle-tiles">
               {c.stacks.map((s) => (
-                <BoardTile key={s} stack={s} at={at} />
+                <Tile key={s} stack={s} sync={sync} size={128} />
               ))}
             </div>
           )}
@@ -77,51 +76,19 @@ export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = 
   );
 }
 
-type TileLoad = { kind: "loading"; since: number } | { kind: "none"; why: string } | { kind: "ready"; m: Manifest };
-
-/** One stack as a small picture at a place along it, from the render door. */
-export function BoardTile({ stack, at }: { stack: number; at: number }) {
-  const [load, setLoad] = useState<TileLoad>(() => ({ kind: "loading", since: Date.now() }));
-  useEffect(() => {
-    let alive = true;
-    doors.manifest(stack).then(
-      (m) => alive && setLoad({ kind: "ready", m }),
-      (e: { status?: number }) => alive && setLoad({ kind: "none", why: e.status === 403 ? "not at this detail" : e.status === 404 ? "no picture built" : "no picture" }),
-    );
-    return () => {
-      alive = false;
-    };
-  }, [stack]);
-  if (load.kind === "loading") return <span className="board-tile"><Wait phase="" since={load.since} /></span>;
-  if (load.kind === "none") return <span className="board-tile meta">{load.why}</span>;
-  const level = Math.max(0, Math.min(3, load.m.levels - 1));
-  const depth = levelShape(load.m, level)[0];
-  const z = Math.round(at * Math.max(0, depth - 1));
-  return (
-    <span className="board-tile">
-      <img src={doors.renderUrl(stack, level, z, load.m.window.width, load.m.window.center)} alt={`stack ${stack}, plane ${z + 1} of ${depth}`} loading="lazy" />
-    </span>
-  );
-}
-
 /**
  * The pick question's renderer (record 45 S5) for the rating workspace: the
- * board over the session's candidates, and the answer as the campaign door
- * takes it, the chosen stacks as a list with the why beside it.
+ * board over the session's candidates, which the candidates door names
+ * (record 45), with the chosen acquisition's stacks as the answer. The
+ * workspace keeps the why and the Answer, as for every question.
  */
-export function PickQuestion({ role, candidates, busy = false, onAnswer, pictures = true }: { role: string; candidates: BoardCandidate[]; busy?: boolean; onAnswer: (value: number[], why: string) => void; pictures?: boolean }) {
-  const [main, setMain] = useState<number | null>(null);
-  const [why, setWhy] = useState("");
-  const ready = main !== null && why.trim() !== "" && !busy;
+export function PickQuestion({ role, candidates, stacks, onStacks, pictures = true }: { role: string; candidates: BoardCandidate[]; stacks: number[]; onStacks: (stacks: number[]) => void; pictures?: boolean }) {
+  const key = (x: number[]) => [...x].sort((a, b) => a - b).join(",");
+  const main = candidates.findIndex((c) => key(c.stacks) === key(stacks));
   return (
     <div className="stack roomy">
       <p className="lede">Which acquisition stands for {role || "the role"} on this occasion?</p>
-      <SessionBoard candidates={candidates} main={main} onMain={setMain} why={why} onWhy={setWhy} pictures={pictures} />
-      <div className="row actions">
-        <button type="button" className="button" disabled={!ready} onClick={() => main !== null && onAnswer(candidates[main].stacks, why.trim())}>
-          Answer
-        </button>
-      </div>
+      <SessionBoard candidates={candidates} main={main >= 0 ? main : null} onMain={(i) => onStacks(candidates[i].stacks)} why="" onWhy={null} pictures={pictures} />
     </div>
   );
 }

@@ -27,7 +27,7 @@ import {
   sourceWords,
   agreementWords,
   type Campaign,
-  type SourceKind,
+  type Prefill,
 } from "./client";
 import { LabelSetPage, LabelSetsPage } from "./LabelSets";
 import { MakeDialog } from "./MakeCampaign";
@@ -46,9 +46,9 @@ export function CampaignsPage({ caps, page, arg, query }: { caps: Capabilities; 
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Campaign[] };
 
-function ListPage({ caps, prefill }: { caps: Capabilities; prefill: { source: SourceKind; from: string } | null }) {
+function ListPage({ caps, prefill }: { caps: Capabilities; prefill: Prefill | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
-  const [making, setMaking] = useState<{ source: SourceKind; from: string } | null>(prefill);
+  const [making, setMaking] = useState<Prefill | null>(prefill);
   useEffect(() => {
     campaigns
       .list()
@@ -57,7 +57,7 @@ function ListPage({ caps, prefill }: { caps: Capabilities; prefill: { source: So
   }, []);
   useEffect(() => {
     if (prefill) setMaking(prefill);
-  }, [prefill?.source, prefill?.from]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prefill?.source, prefill?.from, prefill?.job, prefill?.limit, prefill?.cohort]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <CampaignsBody caps={caps} list={load.kind === "ready" ? load.list : null} since={load.kind === "loading" ? load.since : null} why={load.kind === "failed" ? load.why : null} onMake={() => setMaking({ source: "selection", from: "" })}>
       {making && (

@@ -6,7 +6,8 @@
 // does rather than a copy of it.
 
 import type { PackDoc } from "../review/client";
-import { answerBody, answerWords, axisValues, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, type Answer, type Answered, type Assignment, type Claimed, type Given, type Item, type Question } from "./client";
+import type { BoardCandidate } from "../review/SessionBoard";
+import { answerBody, answerWords, axisValues, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Item, type Question } from "./client";
 import { choose, type Marks, type Row } from "./renderers";
 
 export type Seat =
@@ -157,3 +158,31 @@ export function answeredWords(r: Answered, item: Item): string {
 
 /** The body the workspace sends, or what it still needs; one place, so the page and the walk agree. */
 export const bodyOf = answerBody;
+
+/**
+ * The session board's candidates from the candidates door (record 45): what
+ * the run considered, best first, its own pick marked, then the session's
+ * other stacks one acquisition (series) a candidate, so a stack the run did
+ * not weigh can still be chosen.
+ */
+export function boardOf(c: Candidates): BoardCandidate[] {
+  const key = (x: number[]) => [...x].sort((a, b) => a - b).join(",");
+  const out: BoardCandidate[] = [];
+  const add = (stacks: number[], score: number | null, chosen: boolean) => {
+    if (stacks.length > 0 && !out.some((b) => key(b.stacks) === key(stacks))) out.push({ stacks, score, chosen });
+  };
+  const run = c.picks.find((p) => p.author_kind !== "person" && Array.isArray(p.considered));
+  for (const x of run?.considered ?? []) {
+    const stacks = Array.isArray(x.stacks) ? x.stacks.filter((s) => Number.isInteger(s)) : [];
+    add(stacks, typeof x.score === "number" ? x.score : null, run !== undefined && run.stacks.length > 0 && key(stacks) === key(run.stacks));
+  }
+  const taken = new Set(out.flatMap((b) => b.stacks));
+  const bySeries = new Map<string, number[]>();
+  for (const s of c.candidates) {
+    if (taken.has(s.stack_id)) continue;
+    const k = s.series_id != null ? `series ${s.series_id}` : `stack ${s.stack_id}`;
+    bySeries.set(k, [...(bySeries.get(k) ?? []), s.stack_id]);
+  }
+  for (const stacks of bySeries.values()) add(stacks, null, false);
+  return out;
+}

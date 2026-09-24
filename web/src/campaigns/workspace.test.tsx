@@ -17,10 +17,10 @@ import claimedAdj from "../../test/fixtures/campaigns/claim_adjudicator.json";
 import nothing from "../../test/fixtures/campaigns/claim_nothing.json";
 import { packDoc } from "../review/client";
 import { capsFor, RATER } from "./caps.fixture";
-import { beatEvery, leaseWords, type Answer, type Campaign, type Claimed, type Given } from "./client";
+import { beatEvery, leaseWords, type Answer, type Campaign, type Candidates, type Claimed, type Given } from "./client";
 import { answeringApp, blank } from "./renderers";
 import { candidatesOf, factsOf, WorkspaceBody, type WorkspaceBodyProps } from "./Workspace";
-import { answeredWords, beatSeat, chosenOf, disagreementWords, given, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
+import { answeredWords, beatSeat, boardOf, chosenOf, disagreementWords, given, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
 
 const open = openCampaign as unknown as Campaign;
 const closed = closedCampaign as unknown as Campaign;
@@ -297,5 +297,32 @@ describe("the adjudicator's view", () => {
     expect(disagreementWords(aq, kept, item)).toBe("The raters differ on technique.");
     expect(marksOf(aq, kept, item).technique).toEqual({ MPRAGE: ["alice@walk"], SE: ["bob@walk"] });
     expect(marksOf(aq, two, item)).toEqual({ base: { T1w: ["alice@walk", "bob@walk"] }, technique: { MPRAGE: ["alice@walk"], SE: ["bob@walk"] } });
+  });
+});
+
+describe("a pick question's session board", () => {
+  it("draws what the run considered, best first with its pick marked, then the session's other stacks by acquisition", () => {
+    const c: Candidates = {
+      campaign: 3,
+      item: 7,
+      role: "t1w",
+      count: 5,
+      candidates: [
+        { stack_id: 405, series_id: 50, axes: {}, picked_by: [] },
+        { stack_id: 406, series_id: 51, axes: { base: ["T1w"] }, picked_by: [81] },
+        { stack_id: 409, series_id: 52, axes: { base: ["T1w"] }, picked_by: [] },
+        { stack_id: 410, series_id: 53, axes: {}, picked_by: [] },
+        { stack_id: 411, series_id: 53, axes: {}, picked_by: [] },
+      ],
+      picks: [{ id: 81, author_kind: "rule", stacks: [406], score: 0.66, considered: [{ stacks: [406], score: 0.66 }, { stacks: [409], score: 0.64 }] }],
+    };
+    expect(boardOf(c).map((b) => [b.stacks, b.score, b.chosen])).toEqual([
+      [[406], 0.66, true],
+      [[409], 0.64, false],
+      [[405], null, false],
+      [[410, 411], null, false],
+    ]);
+    // no run's pick: every acquisition of the session, none marked
+    expect(boardOf({ ...c, picks: [] }).map((b) => b.stacks)).toEqual([[405], [406], [409], [410, 411]]);
   });
 });
