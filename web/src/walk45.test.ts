@@ -24,7 +24,7 @@ import { engineWords } from "./models/ModelsPage";
 import { catalog, runCommand } from "./ops/catalog";
 import { ops } from "./ops/client";
 import { review } from "./review/client";
-import { commitBody, commitPlan, decisions, modelGroups } from "./review/modelFamily";
+import { commitBody, commitPlan, committedWords, decisions, fromOfRow, modelGroups, NOW_UNKNOWN } from "./review/modelFamily";
 import { borderOf, pickBody, picks } from "./review/picks";
 
 const PICKS = process.env.WALK_PICKS ?? "";
@@ -127,27 +127,42 @@ describe.skipIf(MODELS === "")("models, a run and commit by filter", () => {
     expect(groups.filter((g) => !g.staged).map((g) => g.to)).toEqual(["spine"]);
     const chest = groups.find((g) => g.to === "chest")!;
     const stack = (((await ops.reviewItem(chest.item.id)) as unknown as Json).member_stacks as { stack_id: number }[] | undefined)?.[0]?.stack_id ?? null;
+    // what the stack holds now on the axis, as the explain door says it: null for no value
     const held = stack !== null ? ((await review.explain(stack)).axes.find((a) => a.axis === "body_part")?.value ?? null) : null;
     expect(held).not.toBe("chest");
 
-    const filter = { model: `${name}@1`, axis: "body_part", from: held, to: "chest" };
+    // the filter as the page makes it from the matrix: from where the group's evidence says what the stacks hold now, else not named
+    const row = chest.from ? Object.keys(chest.from)[0] : NOW_UNKNOWN;
+    const filter = { model: `${name}@1`, axis: "body_part", to: "chest", ...(fromOfRow(row) !== undefined ? { from: fromOfRow(row) } : {}) };
     const plan = commitPlan(groups, filter);
-    try {
-      const done = await decisions.commitWhere(commitBody(filter));
-      expect(done.committed).toBe(plan.groups);
-      const now = await read();
-      expect(now.find((g) => g.item.id === chest.item.id)).toBeUndefined();
-      expect([...new Set(now.filter((g) => g.staged).map((g) => g.to))]).toEqual(["brain"]);
-      expect(now.filter((g) => g.staged)).toHaveLength(groups.filter((g) => g.staged).length - plan.groups);
-      if (stack !== null) expect((await review.explain(stack)).axes.find((a) => a.axis === "body_part")?.value).toBe("chest");
-      console.log(`committed ${done.committed} by ${filter.model} ${filter.axis} from ${String(held)} to chest; ${done.left} left staged`);
-    } catch (e) {
-      // an engine without commit by model, from and to (before record 45 E3) names no filter it knows and commits nothing
-      expect(e).toBeInstanceOf(DoorError);
-      expect((e as DoorError).status).toBe(409);
-      const now = await read();
-      expect(now.filter((g) => g.staged).length).toBe(groups.filter((g) => g.staged).length);
-      console.log(`this engine refused the filter and committed nothing: ${engineWords(e)}`);
+    const staged = groups.filter((g) => g.staged).length;
+    let done = await decisions.commitWhere(commitBody(filter)).catch((e: unknown) => e);
+    // the registry moved on since the run staged them: the person ticks "commit anyway", as the panel offers
+    if (done instanceof DoorError && /moved on/u.test(engineWords(done))) done = await decisions.commitWhere(commitBody(filter, true)).catch((e: unknown) => e);
+    // the stack holds a value now, so the engine's own from filter is tried beside it and its answer said
+    if (held !== null && fromOfRow(row) === undefined) {
+      const byFrom = await decisions.commitWhere(commitBody({ ...filter, from: held }, true)).catch((e: unknown) => e);
+      console.log(`by from ${held} as well: ${byFrom instanceof Error ? engineWords(byFrom) : committedWords(byFrom as Awaited<ReturnType<typeof decisions.commitWhere>>)}`);
     }
+    const now = await read();
+    if (done instanceof DoorError) {
+      // an engine without commit by model, from and to (before record 45 E3) names no filter it knows and commits nothing
+      expect(done.status).toBe(409);
+      expect(now.filter((g) => g.staged)).toHaveLength(staged);
+      console.log(`this engine refused the filter and committed nothing: ${engineWords(done)}`);
+      return;
+    }
+    if (done instanceof Error) throw done;
+    const part = done as Awaited<ReturnType<typeof decisions.commitWhere>>;
+    expect(part.committed).toHaveLength(plan.groups);
+    expect(now.find((g) => g.item.id === chest.item.id)).toBeUndefined();
+    expect([...new Set(now.filter((g) => g.staged).map((g) => g.to))]).toEqual(["brain"]);
+    expect(now.filter((g) => g.staged)).toHaveLength(staged - plan.groups);
+    // the group is closed, its decision the model's and now in force
+    // (by status: the engine reads a kind with a colon only as written, not percent-encoded)
+    const closed = (await review.list({ status: "accepted", limit: 500 })).items.find((i) => i.id === chest.item.id)!;
+    expect(closed.status).toBe("accepted");
+    expect(part.committed).toContain((closed.decision as Json).decision);
+    console.log(`${committedWords(part)} (by ${filter.model}, ${filter.axis} ${"from" in filter ? `from ${String(filter.from)} ` : ""}to chest; the stack held ${String(held)})`);
   }, 90_000);
 });

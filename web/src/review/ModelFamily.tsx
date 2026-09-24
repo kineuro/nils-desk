@@ -11,7 +11,7 @@ import { ops } from "../ops/client";
 import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
 import { refusalWords } from "./client";
-import { axesOf, changeMatrix, commitBody, commitPlan, decisions, modelActs, modelsIn, NOW_UNKNOWN, type Cell, type CommitFilter, type ModelGroup } from "./modelFamily";
+import { axesOf, changeMatrix, commitBody, commitPlan, committedWords, decisions, fromOfRow, modelActs, modelsIn, type Cell, type CommitFilter, type ModelGroup } from "./modelFamily";
 import "./grown.css";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -154,7 +154,7 @@ export function ModelFamily({ caps, groups, askHref, onChanged }: { caps: Capabi
             </span>
             {acts.byFilter &&
               models.map((model) => (
-                <button key={model} type="button" className="button small" onClick={() => setFilter({ model, axis: shown, to: on.to, from: on.from === NOW_UNKNOWN ? null : on.from })}>
+                <button key={model} type="button" className="button small" onClick={() => setFilter({ model, axis: shown, to: on.to, from: fromOfRow(on.from) })}>
                   Commit by filter{models.length > 1 ? `: ${model}` : ""}
                 </button>
               ))}
@@ -190,14 +190,14 @@ export function CommitDialog({ groups, filter, onClose, onDone }: { groups: Mode
     setBusy(true);
     setRefused(null);
     decisions.commitWhere(commitBody(filter, moved)).then(
-      (r) => onDone(`Committed ${n(r.committed)} ${r.committed === 1 ? "decision" : "decisions"} on ${n(r.items)} ${r.items === 1 ? "item" : "items"}; ${n(r.left)} left staged.`),
+      (r) => onDone(committedWords(r)),
       (e: unknown) => {
         setBusy(false);
         setRefused(refusalWords(e));
       },
     );
   };
-  const what = `${filter.axis} ${filter.from !== null ? `from ${filter.from} ` : ""}to ${filter.to}`;
+  const what = `${filter.axis} ${filter.from === undefined ? "" : `from ${filter.from ?? "no value"} `}to ${filter.to}`;
   return (
     <Dialog
       title="Commit by filter"

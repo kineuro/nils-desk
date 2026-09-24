@@ -14,8 +14,11 @@ import type { ReviewItem } from "../ops/client";
 import { membersOf } from "./client";
 import { kindOf } from "./triage";
 
-/** Where the change matrix has no value the stacks hold now. */
+/** Where the evidence does not say what the stacks hold now. */
 export const NOW_UNKNOWN = "as sorted now";
+
+/** Where the stacks hold no value on the axis now. */
+export const NO_VALUE = "no value";
 
 export interface ModelGroup {
   item: ReviewItem;
@@ -62,7 +65,7 @@ function fromOf(v: unknown, members: number): Record<string, number> | null {
   if (typeof v === "string" && v !== "") return { [v]: members };
   if (v && typeof v === "object" && !Array.isArray(v)) {
     const out: Record<string, number> = {};
-    for (const [k, c] of Object.entries(v as Json)) if (typeof c === "number" && c > 0) out[k === "" || k === "null" ? "no value" : k] = c;
+    for (const [k, c] of Object.entries(v as Json)) if (typeof c === "number" && c > 0) out[k === "" || k === "null" ? NO_VALUE : k] = c;
     return Object.keys(out).length > 0 ? out : null;
   }
   return null;
@@ -148,13 +151,13 @@ export interface CommitFilter {
   model: string;
   axis: string;
   to: string;
-  /** Null where the evidence does not say what the stacks hold now: the commit is then by model and to. */
-  from: string | null;
+  /** The value held now; null for no value; absent where the evidence does not say, and the commit is then by model and to. */
+  from?: string | null;
 }
 
 /** The body of `POST /api/decisions/commit` for a filter. Never a confidence alone: an engine that does not know the model filter commits by what it knows, so the body names only what narrows (an engine without it refuses with no filter named). */
 export function commitBody(f: CommitFilter, anyway = false): Json {
-  return { model: f.model, axis: f.axis, to: f.to, ...(f.from !== null ? { from: f.from } : {}), ...(anyway ? { anyway: true } : {}) };
+  return { model: f.model, axis: f.axis, to: f.to, ...(f.from !== undefined ? { from: f.from } : {}), ...(anyway ? { anyway: true } : {}) };
 }
 
 /** What a commit by the filter would put in force, counted from the groups the page read: the staged part only. */
@@ -165,7 +168,7 @@ export function commitPlan(groups: ModelGroup[], f: CommitFilter): { groups: num
   for (const g of groups) {
     if (g.model !== f.model || g.axis !== f.axis || g.to !== f.to) continue;
     // where the evidence does not say what the stacks hold now, the whole group may be in the part: an upper bound
-    const count = f.from === null || g.from === null ? g.members : (g.from[f.from] ?? 0);
+    const count = f.from === undefined || g.from === null ? g.members : (g.from[f.from ?? NO_VALUE] ?? 0);
     if (count === 0) continue;
     if (g.staged) {
       staged += 1;
@@ -190,6 +193,28 @@ export function modelActs(caps: Capabilities): { commit: boolean; byFilter: bool
   };
 }
 
+/** What a commit by filter answered: the decisions put in force, by id, the items they closed, those left staged, and (record 45 E3) the group decisions the filter split. */
+export interface CommittedPart {
+  committed: number[];
+  items: number;
+  left: number;
+  split?: number[];
+}
+
 export const decisions = {
-  commitWhere: (body: Json) => door<{ committed: number; items: number; left: number }>("POST", "/api/decisions/commit", body),
+  commitWhere: (body: Json) => door<CommittedPart>("POST", "/api/decisions/commit", body),
 };
+
+/** A commit by filter's answer in words. */
+export function committedWords(r: CommittedPart): string {
+  const n = (v: number) => v.toLocaleString("en-US");
+  const c = Array.isArray(r.committed) ? r.committed.length : Number(r.committed) || 0;
+  const split = r.split?.length ?? 0;
+  return `Committed ${n(c)} ${c === 1 ? "decision" : "decisions"} on ${n(r.items)} ${r.items === 1 ? "item" : "items"}; ${n(r.left)} left staged${split > 0 ? `; ${n(split)} ${split === 1 ? "group was" : "groups were"} split, the rest of each left staged` : ""}.`;
+}
+
+/** A matrix row as a commit filter's from: not named where the evidence does not say, null for no value. */
+export function fromOfRow(row: string): string | null | undefined {
+  if (row === NOW_UNKNOWN) return undefined;
+  return row === NO_VALUE ? null : row;
+}
