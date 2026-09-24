@@ -9,7 +9,7 @@ import * as cs from "@cornerstonejs/core";
 import { DecodePool } from "./decode";
 import { doors, levelShape, levelSpacing, storedValue, storedWindow, type Manifest } from "./doors";
 
-export { storedValue, storedWindow } from "./doors";
+export { storedValue, storedWindow, viewWindow } from "./doors";
 import { dot, geometry, planePosition } from "./geometry";
 import { direction, plan, SLAB, slabOf } from "./ring";
 

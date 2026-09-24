@@ -18,7 +18,7 @@ import { classify, Failure, type Failed } from "../ui/Failure";
 import { Wait } from "../ui/Wait";
 import { doors, levelShape, levelSpacing, type Manifest } from "./doors";
 import { cameraLabels, geometry, nearestAxis, renderAxes, type Axis, type EdgeLabels, type Vec3 } from "./geometry";
-import { close, counters, imageId, open, register, storedWindow } from "./loader";
+import { close, counters, imageId, open, register, viewWindow } from "./loader";
 import { Letters, RenderPlane } from "./RenderPlane";
 import { fps, levelFor } from "./ring";
 import { dropVolume, fillVolume, volumePath, type Filling } from "./volume";
@@ -199,7 +199,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     });
     el.current.addEventListener(cs.Enums.Events.CAMERA_MODIFIED, () => letter("stack", vp));
     await vp.setStack(imageIds, z0);
-    vp.setProperties({ voiRange: storedWindow(manifest) });
+    vp.setProperties(viewWindow(manifest));
     vp.render();
     toolGroup(`tg-${stack}`).addViewport(ids.stack, re.id);
     setNumbers((n) => ({ ...n, level, z: z0 }));
@@ -259,10 +259,10 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     filling.current = f;
     report(0, false);
     await cs.setVolumesForViewports(re, [{ volumeId: f.volumeId }], planeIds);
-    const voi = storedWindow(manifest);
+    const shown = viewWindow(manifest);
     for (const p of PLANES) {
       const vp = re.getViewport(ids.planes[p]) as cs.VolumeViewport;
-      vp.setProperties({ voiRange: voi });
+      vp.setProperties(shown);
       const element = planeEls.current[p]!;
       element.addEventListener(cs.Enums.Events.CAMERA_MODIFIED, () => letter(p, vp));
       element.addEventListener(cs.Enums.Events.IMAGE_RENDERED, stamp);

@@ -56,11 +56,23 @@ export function storedValue(m: Pick<Manifest, "slope" | "intercept">, v: number)
   return (v - (m.intercept ?? 0)) / slope;
 }
 
-/** The window as stored values: the manifest names it in the modality's values. */
+/** The window as stored values: the manifest names it in the modality's values; a width below one is one, as the render door has it. */
 export function storedWindow(m: Manifest): { lower: number; upper: number } {
-  const a = storedValue(m, m.window.center - m.window.width / 2);
-  const b = storedValue(m, m.window.center + m.window.width / 2);
+  const width = Number.isFinite(m.window.width) ? Math.max(1, m.window.width) : 1;
+  const a = storedValue(m, m.window.center - width / 2);
+  const b = storedValue(m, m.window.center + width / 2);
   return { lower: Math.min(a, b), upper: Math.max(a, b) };
+}
+
+/**
+ * What the viewer sets on a viewport: the window in the stored values the
+ * planes hold, and the grey inverted where the rescale's slope is negative,
+ * since a higher stored value is then a lower value of the modality. The
+ * planes stay the stored values, so the stack and the three planes' volume
+ * read them alike.
+ */
+export function viewWindow(m: Manifest): { voiRange: { lower: number; upper: number }; invert: boolean } {
+  return { voiRange: storedWindow(m), invert: (m.slope ?? 1) < 0 };
 }
 
 const H = { "X-Nils-Desk": "1" };
