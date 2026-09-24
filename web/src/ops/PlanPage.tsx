@@ -18,10 +18,8 @@ import { Wait } from "../ui/Wait";
 import { catalog, runCommand, type Pipeline } from "./catalog";
 import { ops } from "./client";
 import { PreflightPanel } from "./Preflight";
-import { pipelineOf, preflightGate, rangeWords, runActs, runDocumentOf, runs, type Preflight, type RunDocument } from "./runs";
+import { PLAN_STATION, pipelineOf, preflightGate, rangeWords, runActs, runDocumentOf, runs, type Preflight, type RunDocument } from "./runs";
 
-/** The station that plans runs, where the assistant serves it. */
-export const PLAN_STATION = "analysis-plan";
 
 export function plansOffered(caps: Capabilities): boolean {
   return stationsServed(caps).includes(PLAN_STATION);
@@ -42,9 +40,9 @@ export function PlanPage({ caps, id }: { caps: Capabilities; id: string }) {
         run = await stations.run(id);
       }
       if (run.state !== "settled") throw new Error(run.error ?? `the station's run ${run.state}`);
-      const v = await stations.verdict(id);
-      const doc = v ? runDocumentOf(v.result) : null;
-      if (!doc) throw new Error("the station settled with no run document");
+      const read = runDocumentOf(await stations.verdict(id));
+      if ("refused" in read) throw new Error(read.refused);
+      const doc = read.doc;
       const c = await catalog.list();
       return { doc, pipeline: pipelineOf(c.pipelines, doc.pipeline) };
     };

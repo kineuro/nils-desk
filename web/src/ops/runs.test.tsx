@@ -273,23 +273,38 @@ describe("a run's page", () => {
 });
 
 describe("the assistant's plan", () => {
-  const verdict = {
+  const result = {
     run_document: { pipeline: "volumes", select: "selection:every@1", params: { low: 3 }, preflight: PRE, why: "Brain volume per scan is what the question asks; SNR is checked." },
     question: "brain volume in every scan",
   };
-  it("reads a run document from the station's verdict, in the shapes it may take", () => {
-    const doc = runDocumentOf(verdict)!;
+  const verdict = { station: "analysis-plan", result };
+  const docOf = (v: Parameters<typeof runDocumentOf>[0]) => {
+    const r = runDocumentOf(v);
+    if ("refused" in r) throw new Error(r.refused);
+    return r.doc;
+  };
+  it("reads the run document from an analysis-plan verdict's run_document", () => {
+    const doc = docOf(verdict);
     expect(doc.over).toEqual({ selection: "every", version: 1 });
     expect(doc.params).toEqual({ low: "3" });
     expect(doc.preflight?.units.total).toBe(12);
     expect(doc.question).toBe("brain volume in every scan");
-    expect(runDocumentOf({ document: { pipeline: "volumes@1", handle: 4, params: ["low=2"] } })).toMatchObject({ over: { handle: 4 }, params: { low: "2" } });
-    expect(runDocumentOf({ sentence: "no plan" })).toBeNull();
+    expect(docOf({ station: "analysis-plan", result: { run_document: { pipeline: "volumes@1", handle: 4, params: ["low=2"] } } })).toMatchObject({ over: { handle: 4 }, params: { low: "2" } });
+  });
+  it("refuses another station's verdict, and any shape but run_document", () => {
+    expect(runDocumentOf({ station: "ask-help", result })).toEqual({ refused: "this is not a plan: the run is of the ask-help station, not analysis-plan" });
+    expect(runDocumentOf({ result })).toMatchObject({ refused: expect.stringContaining("unnamed station") });
+    expect(runDocumentOf({ station: "analysis-plan", result: { document: result.run_document } })).toEqual({ refused: "the plan holds no run document" });
+    expect(runDocumentOf({ station: "analysis-plan", result: result.run_document })).toEqual({ refused: "the plan holds no run document" });
+    expect(runDocumentOf({ station: "analysis-plan", result: { run_document: { pipeline: "volumes" } } })).toEqual({ refused: "the run document names no selection or handle" });
+    expect(runDocumentOf(null)).toEqual({ refused: "the station's run left no verdict" });
+  });
+  it("finds the plan's pipeline in the catalog", () => {
     expect(pipelineOf([VOLUMES, { ...VOLUMES, id: 9, version: "2", label: "volumes@2" }], "volumes")?.label).toBe("volumes@2");
   });
   it("draws the plan filled in with its pre-flight and one button to start it", () => {
     const caps = capsWith(DOORS, [...WORK]);
-    const html = renderToStaticMarkup(<PlanView caps={caps} doc={runDocumentOf(verdict)!} pipeline={VOLUMES} live={PRE} liveWhy={null} busy={false} said={null} onStart={() => undefined} />);
+    const html = renderToStaticMarkup(<PlanView caps={caps} doc={docOf(verdict)} pipeline={VOLUMES} live={PRE} liveWhy={null} busy={false} said={null} onStart={() => undefined} />);
     expect(html).toContain("brain volume in every scan");
     expect(html).toContain("Brain volume per scan is what the question asks");
     expect(html).toContain("selection:every@1");
@@ -298,7 +313,7 @@ describe("the assistant's plan", () => {
     expect(html).not.toMatch(/disabled="">.*Start this run/u);
   });
   it("holds the button when the pre-flight is not ready, and offers none without the work grant", () => {
-    const doc = runDocumentOf(verdict)!;
+    const doc = docOf(verdict);
     const held = renderToStaticMarkup(<PlanView caps={capsWith(DOORS, [...WORK])} doc={doc} pipeline={VOLUMES} live={LESIONS} liveWhy={null} busy={false} said={null} onStart={() => undefined} />);
     expect(held).toMatch(/disabled="">.*Start this run/u);
     const reader = renderToStaticMarkup(<PlanView caps={capsWith(DOORS, ["pipelines:see"])} doc={doc} pipeline={VOLUMES} live={PRE} liveWhy={null} busy={false} said={null} onStart={null} />);

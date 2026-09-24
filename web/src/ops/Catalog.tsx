@@ -21,9 +21,9 @@ import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { stations } from "../assistant/stations";
-import { PLAN_STATION, plansOffered } from "./PlanPage";
+import { plansOffered } from "./PlanPage";
 import { PreflightPanel } from "./Preflight";
-import { preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
+import { PLAN_STATION, preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
 import { catalog, catalogActs, imageWords, needsOf, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { ops } from "./client";
 

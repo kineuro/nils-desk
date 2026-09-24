@@ -66,11 +66,15 @@ describe.skipIf(ENGINE === "" || TOKEN === "")("a question's plan to a run's tab
     const stacks = await runs.preflight(PIPELINE, { selection: sel.name, version: sel.version }, {});
     // the plan as the analysis-plan station would write it, with the pre-flight it saw
     const low = 3;
-    const doc = runDocumentOf({
-      run_document: { pipeline: PIPELINE, select: `selection:${sel.name}@${sel.version}`, params: { sleep: 1, low }, preflight: stacks, why: "A volume per scan answers the question; SNR is checked on each." },
-      question: "brain volume in every scan",
-    })!;
-    expect(doc).not.toBeNull();
+    const read = runDocumentOf({
+      station: "analysis-plan",
+      result: {
+        run_document: { pipeline: PIPELINE, select: `selection:${sel.name}@${sel.version}`, params: { sleep: 1, low }, preflight: stacks, why: "A volume per scan answers the question; SNR is checked on each." },
+        question: "brain volume in every scan",
+      },
+    });
+    if ("refused" in read) throw new Error(read.refused);
+    const doc = read.doc;
     const pipeline = pipelineOf(c.pipelines, doc.pipeline)!;
     expect(pipeline.label).toBe(`${PIPELINE}@1`);
 

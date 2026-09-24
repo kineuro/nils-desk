@@ -348,9 +348,10 @@ export function headerWords(name: string): string {
 /**
  * The assistant's run document (record 49 A5): the selection, the pipeline
  * and its version, the parameters within the descriptor's ranges, and the
- * pre-flight it saw, with the sentence that says why. Read from the station
- * run's verdict, where the result holds it as `run_document`, `document` or
- * itself; anything else is not a plan.
+ * pre-flight it saw, with the sentence that says why. Read only from a
+ * verdict of the analysis-plan station, and only from its result's
+ * `run_document`; any other verdict or shape is refused, so another
+ * station's document never opens as a run to start.
  */
 export interface RunDocument {
   pipeline: string;
@@ -361,10 +362,15 @@ export interface RunDocument {
   question: string | null;
 }
 
-export function runDocumentOf(result: unknown): RunDocument | null {
-  const r = obj(result);
-  const d = [r.run_document, r.document, r].map(obj).find((x) => typeof x.pipeline === "string") ?? null;
-  if (!d) return null;
+/** The station whose verdicts hold run documents. */
+export const PLAN_STATION = "analysis-plan";
+
+export function runDocumentOf(verdict: { station?: unknown; result?: unknown } | null): { doc: RunDocument } | { refused: string } {
+  if (!verdict) return { refused: "the station's run left no verdict" };
+  if (verdict.station !== PLAN_STATION) return { refused: `this is not a plan: the run is of the ${typeof verdict.station === "string" && verdict.station ? verdict.station : "unnamed"} station, not ${PLAN_STATION}` };
+  const r = obj(verdict.result);
+  const d = obj(r.run_document);
+  if (typeof d.pipeline !== "string") return { refused: "the plan holds no run document" };
   const pipeline = String(d.pipeline);
   let over: Over | null = null;
   const sel = typeof d.select === "string" ? d.select : typeof d.selection === "string" ? d.selection : null;
@@ -375,7 +381,7 @@ export function runDocumentOf(result: unknown): RunDocument | null {
     if (typeof s.name === "string" && num(s.version) !== null) over = { selection: s.name, version: num(s.version)! };
   }
   if (!over && num(d.handle) !== null) over = { handle: num(d.handle)! };
-  if (!over) return null;
+  if (!over) return { refused: "the run document names no selection or handle" };
   const params: Record<string, string> = {};
   const p = d.params;
   if (Array.isArray(p)) {
@@ -383,12 +389,14 @@ export function runDocumentOf(result: unknown): RunDocument | null {
   } else for (const [k, v] of Object.entries(obj(p))) if (v !== null && v !== undefined) params[k] = String(v);
   const pf = obj(d.preflight);
   return {
-    pipeline,
-    over,
-    params,
-    preflight: pf.units && typeof pf.ready === "boolean" ? (pf as unknown as Preflight) : null,
-    why: text(d.why) ?? text(d.explanation) ?? text(r.sentence),
-    question: text(d.question) ?? text(r.question),
+    doc: {
+      pipeline,
+      over,
+      params,
+      preflight: pf.units && typeof pf.ready === "boolean" ? (pf as unknown as Preflight) : null,
+      why: text(d.why) ?? text(d.explanation) ?? text(r.sentence),
+      question: text(d.question) ?? text(r.question),
+    },
   };
 }
 
