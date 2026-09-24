@@ -261,7 +261,7 @@ export function App() {
             <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} />
           )}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
-          {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} page={route.page} />}
+          {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "review" && <ReviewPage caps={caps} page={route.page} query={route.query} />}
           {ready && active?.id === "campaigns" && <CampaignsPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}

@@ -66,6 +66,7 @@ type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string }
 export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: string | null; query?: Record<string, string> }) {
   const sub = subOf(page);
   const batch = query?.batch && /^\d+$/.test(query.batch) ? Number(query.batch) : null;
+  const run = query?.run && /^\d+$/.test(query.run) ? Number(query.run) : null;
   const [cohort, setCohort] = useState<string>(query?.cohort ?? "");
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [said, setSaid] = useState<string | null>(null);
@@ -156,6 +157,7 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
             setSaid(null);
           }}
           batch={batch}
+          run={run}
           onDecide={setDeciding}
           onExplain={(item, stack) => setExplaining({ item, stack })}
           onChanged={changed}

@@ -68,6 +68,8 @@ export interface QueueProps {
   onCohort: (key: string) => void;
   /** The batch the page was reached from, when it was. */
   batch: number | null;
+  /** The pipeline run the page was reached from, when it was (record 49): its failures and breaches. */
+  run?: number | null;
   onDecide: (item: ReviewItem) => void;
   onExplain: (item: ReviewItem, stack: number) => void;
   onChanged: (words: string) => void;
@@ -116,6 +118,12 @@ export function needsOf(items: ReviewItem[]): NeedCard[] {
 export function ofBatch(items: ReviewItem[], batch: number | null): ReviewItem[] {
   if (batch === null) return items;
   return items.filter((i) => batchOf(i).id === batch);
+}
+
+/** The items of one pipeline run, when the page was reached from its page. */
+export function ofRun(items: ReviewItem[], run: number | null): ReviewItem[] {
+  if (run === null) return items;
+  return items.filter((i) => (i.ref as Record<string, unknown> | null | undefined)?.run_id === run);
 }
 
 /** The queue's table: the costliest first, each row with the act its kind takes. */
@@ -202,13 +210,13 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
   );
 }
 
-export function QueuePage({ caps, items, summary, cohort, onCohort, batch, onDecide, onExplain, onChanged }: QueueProps) {
+export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run = null, onDecide, onExplain, onChanged }: QueueProps) {
   const may = acts(caps).decide;
   const [family, setFamily] = useState<Family | null>(null);
   const [look, setLook] = useState<{ item: ReviewItem; stack: number } | null>(null);
   const [bulk, setBulk] = useState(false);
   const [all, setAll] = useState(false);
-  const inBatch = useMemo(() => ofBatch(items, batch), [items, batch]);
+  const inBatch = useMemo(() => ofRun(ofBatch(items, batch), run), [items, batch, run]);
   const open = inBatch.filter((i) => i.status === "open");
   const chips: CohortChip[] = cohortChips(summary, items);
   const cards = needsOf(inBatch);
@@ -227,6 +235,11 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, onDec
       {batch !== null && (
         <p className="meta">
           The items of batch {batch}. <a href={href("review")}>The whole queue</a>
+        </p>
+      )}
+      {run !== null && (
+        <p className="meta">
+          The items of pipeline run {run}. <a href={href("review")}>The whole queue</a>
         </p>
       )}
       <div className="needs">

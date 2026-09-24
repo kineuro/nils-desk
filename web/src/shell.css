@@ -1483,3 +1483,9 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
   .map-cols .column-role { min-width: 0; }
 }
 /* ---------------------------------------------------------------- end of record 27, R3 and R4 */
+
+/* Record 49 A7: the pre-flight before Run, and a run's page */
+.preflight .values { margin-top: 0.3rem; }
+.preflight-missing { margin: 0.3rem 0 0; padding-left: 1.1rem; font-size: var(--n-text-size-small); color: var(--n-text); }
+.preflight-missing li + li { margin-top: 0.15rem; }
+.run-page > .row.actions, .plan-page > .row.actions { align-items: center; gap: 0.5rem; }

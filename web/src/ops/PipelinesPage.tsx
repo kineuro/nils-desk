@@ -21,16 +21,47 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { CatalogPage } from "./Catalog";
 import { ops } from "./client";
+import { PlanPage, plansOffered } from "./PlanPage";
+import { RunPage } from "./RunPage";
+import { runActs } from "./runs";
 import { cardOf, countByFilter, FILTERS, filterJobs, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
 import { wordsOf } from "./verbs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
 
-/** The Pipelines page's two pages: the jobs, and since record 45 the catalog where the engine serves it. */
-export function PipelinesPage({ caps, page = null }: { caps: Capabilities; page?: string | null }) {
+/** The Pipelines page's two pages: the jobs, and since record 45 the catalog where the engine serves it; since record 49 a run's own page and the assistant's plan. */
+export function PipelinesPage({ caps, page = null, arg = null }: { caps: Capabilities; page?: string | null; arg?: string | null }) {
   const catalog = may(caps, "pipelines:see") && served(caps, "GET /api/pipelines");
   const [said, setSaid] = useState<string | null>(null);
+  if (page === "runs" && arg !== null && /^\d+$/.test(arg) && runActs(caps).open) {
+    return (
+      <section className="pipelines">
+        <div className="data-head">
+          <div className="grow">
+            <span className="eyebrow">Pipelines</span>
+            <h1>Run {arg}</h1>
+          </div>
+        </div>
+        <PipelinesChips on="catalog" />
+        <RunPage caps={caps} id={Number(arg)} />
+      </section>
+    );
+  }
+  if (page === "plan" && arg !== null && catalog && plansOffered(caps)) {
+    return (
+      <section className="pipelines">
+        <div className="data-head">
+          <div className="grow">
+            <span className="eyebrow">Pipelines</span>
+            <h1>A planned run</h1>
+          </div>
+        </div>
+        <PipelinesChips on="catalog" />
+        <PlanPage caps={caps} id={arg} />
+      </section>
+    );
+  }
   if (page === "catalog" && catalog) {
     return (
       <section className="pipelines">
