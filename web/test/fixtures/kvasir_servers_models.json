@@ -1,0 +1,62 @@
+{
+  "url": "http://127.0.0.1:18741/v1",
+  "models": [
+    {
+      "id": "qwen3.8-flash-next",
+      "aliases": [
+        "flash-next"
+      ],
+      "status": "cold",
+      "default": true,
+      "context_length": 262144,
+      "max_output_tokens": 65536,
+      "max_concurrent_requests": 4,
+      "reasoning": true,
+      "tools": true,
+      "vision": true,
+      "swap_in_seconds": 1,
+      "spec": {
+        "capabilities": {
+          "tools": true,
+          "reasoning": true,
+          "vision": true
+        },
+        "license": "Qwen Community License 1.0",
+        "swap_in_seconds": 1,
+        "max_concurrent_requests": 4
+      },
+      "held_by": null
+    },
+    {
+      "id": "qwen38-27b",
+      "aliases": [
+        "qwen38-27b-fast"
+      ],
+      "status": "loaded",
+      "default": false,
+      "context_length": 262144,
+      "max_output_tokens": 65536,
+      "max_concurrent_requests": 8,
+      "reasoning": true,
+      "tools": true,
+      "vision": false,
+      "swap_in_seconds": null,
+      "spec": {
+        "capabilities": {
+          "tools": true,
+          "reasoning": true,
+          "vision": false
+        },
+        "license": "Apache-2.0",
+        "max_concurrent_requests": 8
+      },
+      "held_by": null
+    }
+  ],
+  "server": {
+    "state": "ready",
+    "loaded": "qwen38-27b",
+    "last_swap_seconds": 115,
+    "note": "one card"
+  }
+}

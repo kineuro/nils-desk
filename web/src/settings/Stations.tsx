@@ -4,6 +4,8 @@
 // where it goes, with who allowed it beside. For a person with Kvasir: Work a
 // station's box opens the drawer that moves it: at once where nothing more is
 // needed, and with a written reason where rows of the archive would leave.
+// On a model server (record 47) the drawer picks a backend and one of its
+// models.
 
 import { useState } from "react";
 import { Dialog } from "../ui/Dialog";
@@ -68,22 +70,27 @@ export function MoveDrawer(props: { purpose: PurposeRow; backends: Backend[]; sy
   const { purpose, backends, system, now, toward = null, onClose, onDone } = props;
   const options = targets(purpose, backends);
   // opened from a provider just added, the move starts on that provider
-  const [to, setTo] = useState(options.find((o) => o.backend.id === toward)?.backend.id ?? options[0]?.backend.id ?? "");
+  const keyOf = (o: { backend: Backend; model?: string }) => `${o.backend.id}/${o.model ?? ""}`;
+  const [to, setTo] = useState(() => {
+    const first = options.find((o) => o.backend.id === toward) ?? options[0];
+    return first ? keyOf(first) : "";
+  });
   const [reason, setReason] = useState("");
   const moving = useActing();
-  const chosen = options.find((o) => o.backend.id === to) ?? null;
+  const chosen = options.find((o) => keyOf(o) === to) ?? null;
   const needs = chosen?.needs === "an acknowledgement";
   const station = stationOf(purpose.purpose);
 
   const move = () =>
     moving.act(`moving ${station}`, async () => {
       try {
-        await kvasir.setPolicy(purpose.purpose, to, needs ? reason.trim() : null);
+        if (!chosen) throw new Error("Choose where it goes.");
+        await kvasir.setPolicy(purpose.purpose, chosen.backend.id, needs ? reason.trim() : null, chosen.model ?? null);
       } catch (e) {
         throw plainly(e);
       }
       onDone();
-      return `${station} goes to ${chosen ? inSentence(chosen.backend, system) : to} now.`;
+      return `${station} goes to ${chosen?.model ?? (chosen ? inSentence(chosen.backend, system) : to)} now.`;
     });
 
   const foot = (
@@ -116,11 +123,11 @@ export function MoveDrawer(props: { purpose: PurposeRow; backends: Backend[]; sy
         <span className="label">Move it to</span>
         <div className="choices" role="radiogroup">
           {options.map((o) => (
-            <label key={o.backend.id} className="radio-row">
-              <input type="radio" name="move-to" checked={to === o.backend.id} disabled={moving.working} onChange={() => setTo(o.backend.id)} />
+            <label key={keyOf(o)} className="radio-row">
+              <input type="radio" name="move-to" checked={to === keyOf(o)} disabled={moving.working} onChange={() => setTo(keyOf(o))} />
               <span>
-                <span>{destinationWords(o.backend, system)}</span>
-                <span className="meta">{o.backend.locality === "local" ? "stays in your systems" : "leaves your systems"}</span>
+                <span>{o.model ?? destinationWords(o.backend, system)}</span>
+                <span className="meta">{[o.model !== undefined ? o.backend.id : null, o.backend.locality === "local" ? "stays in your systems" : "leaves your systems"].filter(Boolean).join(" · ")}</span>
               </span>
             </label>
           ))}

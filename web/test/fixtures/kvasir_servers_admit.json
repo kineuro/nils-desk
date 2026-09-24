@@ -1,0 +1,17 @@
+{
+  "backend": {
+    "id": "127-0-0-1",
+    "models": [
+      "qwen38-27b"
+    ]
+  },
+  "results": [
+    {
+      "id": "qwen38-27b",
+      "answered": true,
+      "admitted": true,
+      "record": 1,
+      "error": null
+    }
+  ]
+}

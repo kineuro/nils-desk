@@ -313,8 +313,9 @@ export function destinationOf(p: PurposeRow, backends: Backend[], at: { viewer: 
     if (viewer.subscribes && !viewer.work) return { mark: MARKS.subscription, title: `Your own ${name} subscription`, meta: model !== undefined ? model : until ? `${until} until you sign in` : null, where };
     return { mark: MARKS.subscription, title: `Each person's own ${name} subscription`, meta: until ? `${until} without one` : null, where };
   }
-  const model = b.models[0] ?? b.id;
+  const model = stationModel(p, b) ?? b.id;
   if (onRuntime(b)) return { mark: MARKS.runtime, title: model, meta: "this machine · llama.cpp", where };
+  if (b.server === true) return { mark: MARKS.server, title: model, meta: at.viewer.work ? `model server · ${b.id}` : "your systems", where };
   if (b.locality === "local") {
     const runtime = runtimeOfBackend(b, at.admissions);
     return { mark: MARKS.server, title: model, meta: at.viewer.work ? (runtime ? `your server · ${runtime}` : "your server") : "your systems", where };
@@ -364,12 +365,17 @@ export function routes(purposes: PurposeRow[], backends: Backend[], at: { viewer
 }
 
 /** The backends a purpose may move to, each saying whether the move needs an admin's written reason. */
-export function targets(p: PurposeRow, backends: Backend[]): { backend: Backend; needs: "nothing" | "an acknowledgement" }[] {
+export function targets(p: PurposeRow, backends: Backend[]): { backend: Backend; needs: "nothing" | "an acknowledgement"; model?: string }[] {
   return backends
-    .filter((b) => b.id !== p.backend)
-    .map((b) => ({ backend: b, open: opening(p, b) }))
+    .flatMap((b): { b: Backend; model: string | undefined }[] => (b.server === true ? b.models.filter((m) => b.id !== p.backend || stationModel(p, b) !== m).map((model) => ({ b, model })) : b.id !== p.backend ? [{ b, model: undefined }] : []))
+    .map(({ b, model }) => ({ backend: b, model, open: opening(p, b) }))
     .filter((t) => t.open !== "never")
-    .map((t) => ({ backend: t.backend, needs: t.open === "acknowledge" ? ("an acknowledgement" as const) : ("nothing" as const) }));
+    .map((t) => ({ backend: t.backend, needs: t.open === "acknowledge" ? ("an acknowledgement" as const) : ("nothing" as const), ...(t.model !== undefined ? { model: t.model } : {}) }));
+}
+
+/** Record 47: the model a station on a backend goes to: the one the table names, else the backend's first. */
+export function stationModel(p: PurposeRow, b: Backend): string | null {
+  return p.model && b.models.includes(p.model) ? p.model : (b.models[0] ?? null);
 }
 
 /**

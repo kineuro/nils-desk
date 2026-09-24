@@ -22,6 +22,9 @@ export class KvasirError extends Error {
   }
 }
 
+/** A name in a door's path: encoded, with the colon a staged key's name carries kept as it is. */
+const segment = (name: string) => encodeURIComponent(name).replace(/%3A/gu, ":");
+
 async function door<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
   const r = await fetch(`/kvasir${path}`, {
     method,
@@ -66,7 +69,14 @@ export interface BackendEntry {
   max_tokens: number;
   /** Whether a local model passed its admission; null for a provider's. */
   admitted: boolean | null;
+  /** Record 47: its other names on a model server. A Kvasir before record 47 says nothing. */
+  aliases?: string[];
+  /** Record 47: loaded or cold on the model server or card that serves it; null where Kvasir does not know. */
+  status?: ServedStatus | null;
 }
+
+/** Record 47: where a model stands on the server or card that serves it, one loaded at a time. */
+export type ServedStatus = "loaded" | "cold" | "loading" | "unknown";
 
 export interface BackendHealth {
   warming?: boolean;
@@ -96,6 +106,8 @@ export interface Backend {
   health: BackendHealth;
   /** ChatGPT through people's own subscriptions: the backend Kvasir has itself, never added or removed. */
   builtin?: boolean;
+  /** Record 47: a model server held as one backend, its models ticked from its list; one card on the page. */
+  server?: boolean;
 }
 
 /** One check of the admission suite on one model. */
@@ -124,6 +136,8 @@ export interface PurposeRow {
   content: "catalog" | "rows" | "identifiers";
   kind: "foreground" | "background";
   backend: string | null;
+  /** Record 47: the backend's model the station goes to, where the table names one; its first otherwise. */
+  model?: string | null;
   locality: "local" | "remote" | null;
   default: boolean;
   acknowledged: { by: string; at: number | null; text: string | null } | null;
@@ -176,6 +190,61 @@ export interface TriedModel {
 export interface Tried {
   listed: string[] | null;
   models: TriedModel[];
+}
+
+/** Record 47: one model a model server offers, with its specs as the server says them, before an admin ticks it. */
+export interface Offered {
+  id: string;
+  aliases: string[];
+  status: ServedStatus;
+  /** The model the server loads when it has nothing else to do. */
+  default: boolean;
+  context_length: number | null;
+  max_output_tokens: number | null;
+  max_concurrent_requests: number | null;
+  reasoning: boolean;
+  tools: boolean;
+  vision: boolean;
+  /** How long loading it takes on the server, where it says. */
+  swap_in_seconds: number | null;
+  spec?: Record<string, unknown>;
+  /** The backend here that holds it already, or null. */
+  held_by: string | null;
+}
+
+/** Record 47: what a model server lists, read through Kvasir; nothing is kept. */
+export interface Offer {
+  /** The address as Kvasir dials it. */
+  url: string;
+  models: Offered[];
+  /** What the server says of its card, such as the model loaded now. */
+  server: Record<string, unknown> | null;
+  note?: string;
+}
+
+/** Record 47: how one ticked model fared: asked one short question, then the admission suite where the server is in your systems. */
+export interface Ticked {
+  id: string;
+  answered: boolean;
+  /** Whether it passed admission; null where the server is remote, or it did not answer. */
+  admitted: boolean | null;
+  record: number | null;
+  error: { kind: TryKind; message: string } | null;
+}
+
+/** Record 47: what admitting a server's ticked models did: the one backend holding them, and each model's result. */
+export interface ServerAdmitted {
+  backend: { id: string; models: string[] } | null;
+  results: Ticked[];
+  note?: string;
+}
+
+/** Record 47: the models of a server asked for: its address, a key sealed in Kvasir named by reference (R4), the models ticked. */
+export interface ServerAsk {
+  url: string;
+  key_ref?: string;
+  models: string[];
+  id?: string;
 }
 
 /** A subscription a person signs in with (record 23). */
@@ -324,15 +393,28 @@ export const kvasir = {
   /** The admission suite run now on a backend's models, or one of them; it takes minutes. */
   admit: (backend: string, model?: string) => door<{ records: AdmissionRecord[] }>("POST", "/v1/admission/run", model ? { backend, model } : { backend }),
   purposes: () => door<{ purposes: PurposeRow[] }>("GET", "/v1/purposes"),
-  setPolicy: (purpose: string, backend: string, acknowledgement: string | null) =>
-    door<Json>("PUT", `/v1/purposes/${encodeURIComponent(purpose)}/policy`, acknowledgement ? { backend, acknowledgement } : { backend }),
+  /** Record 47: a station maps to a backend and, on a model server, one of its models. */
+  setPolicy: (purpose: string, backend: string, acknowledgement: string | null, model: string | null = null) =>
+    door<Json>("PUT", `/v1/purposes/${encodeURIComponent(purpose)}/policy`, { backend, ...(acknowledgement ? { acknowledgement } : {}), ...(model ? { model } : {}) }),
   keys: () => door<{ keys: KeyRow[] }>("GET", "/v1/keys"),
   mint: (principal: string, purposes: string[], max_class: string, expires_at: number | null) =>
     door<{ id: string; key: string; shown: string }>("POST", "/v1/keys", expires_at ? { principal, purposes, max_class, expires_at } : { principal, purposes, max_class }),
   revoke: (id: string) => door<Json>("DELETE", `/v1/keys/${encodeURIComponent(id)}`),
   /** A backend's key, kept under the backend's id and never shown. */
-  credential: (backend: string, secret: string) => door<{ provider: string; stored: boolean; shown: string }>("PUT", `/v1/credentials/${encodeURIComponent(backend)}`, { secret }),
-  forget: (backend: string) => door<Json>("DELETE", `/v1/credentials/${encodeURIComponent(backend)}`),
+  credential: (backend: string, secret: string) => door<{ provider: string; stored: boolean; shown: string }>("PUT", `/v1/credentials/${segment(backend)}`, { secret }),
+  forget: (backend: string) => door<Json>("DELETE", `/v1/credentials/${segment(backend)}`),
+  /** Record 47: a model server's models with their specs and loaded or cold state, its key named by the reference it is sealed under. */
+  offered: (url: string, keyRef: string | null) =>
+    door<Offer>("GET", `/v1/servers/models?url=${encodeURIComponent(url)}${keyRef ? `&key_ref=${encodeURIComponent(keyRef)}` : ""}`),
+  /** Record 47: the ticked models admitted one by one on the server's one backend; where none was held Kvasir answers 422 with each result. */
+  admitServer: (ask: ServerAsk) =>
+    door<ServerAdmitted>("POST", "/v1/servers", ask).catch((e: unknown) => {
+      const done = admittedOf(e);
+      if (done) return done;
+      throw e;
+    }),
+  /** Record 47: one model of a backend let go; the last lets the backend and its key go. */
+  removeModel: (backend: string, model: string) => door<Json>("DELETE", `/v1/backends/${encodeURIComponent(backend)}/models/${encodeURIComponent(model)}`),
   /** This person's own subscription, or the install's where nobody signs in; null where Kvasir does not serve the door yet. */
   subscriptions: () => unlessAbsent(door<{ subscriptions: Subscription[] }>("GET", "/v1/subscriptions")),
   /** A sign-in begun: a code the person enters at a link, then approves. Record 25: it needs the assistant and Kvasir: See. */
@@ -387,6 +469,12 @@ export function grantRefusalOf(e: unknown): GrantRefusal | null {
   if (error.code !== "no_grant") return null;
   const needs = Array.isArray(error.needs) ? error.needs.filter((g): g is string => typeof g === "string") : [];
   return { code: "no_grant", needs };
+}
+
+/** Record 47: each ticked model's result where Kvasir held none of them (422), or null for any other refusal. */
+export function admittedOf(e: unknown): ServerAdmitted | null {
+  if (!(e instanceof KvasirError) || e.status !== 422 || !Array.isArray(e.body.results)) return null;
+  return { backend: null, results: e.body.results as unknown as Ticked[] };
 }
 
 /** What each model said, where an add was refused because one did not answer. */

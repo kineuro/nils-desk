@@ -55,7 +55,7 @@ describe("Add a model's choices", () => {
       title: "Download it to this machine",
       words: "Hugging Face Hub · llama.cpp here · stays in your systems",
     });
-    expect(choiceWords("server", { local, subscription: null })).toMatchObject({ mark: { icon: "engine", tone: "neutral" }, title: "A model server of yours" });
+    expect(choiceWords("server", { local, subscription: null })).toMatchObject({ mark: { icon: "engine", tone: "neutral" }, title: "A model server", words: "Kvasir, SGLang, vLLM or Ollama · stays in your systems" });
     expect(choiceWords("provider", { local, subscription: null }).words).toBe("With your key · leaves your systems");
     expect(choiceWords("subscription", { local, subscription: sub() })).toEqual({
       mark: { icon: "key", tone: "caution" },

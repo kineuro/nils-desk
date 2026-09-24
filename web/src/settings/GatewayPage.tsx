@@ -10,15 +10,16 @@
 // person's own ChatGPT subscription where they may use the assistant and see
 // Kvasir, or the install's where nobody signs in. One Add a model offers what
 // the person may add, and one line holds the machine, where downloads go and
-// the Hugging Face token.
+// the Hugging Face token. A model server (record 47) is one card whose
+// models are removed one by one, and its models are listed again to tick more.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
-import { AddModel } from "./AddModel";
-import { BackendCard } from "./cards";
+import { AddModel, type HeldServer } from "./AddModel";
+import { BackendCard, ModelServerCard } from "./cards";
 import { ClosedStations } from "./ClosedStations";
 import { Acted, Head, Health, messageOf, useActing, type Acting } from "./common";
 import { answersWords, checkWords, gatewayHealth, listWords, plainly, removalWords, routes, subscribedStations, viewerOf, type CatalogueModel } from "./gateway";
@@ -26,7 +27,8 @@ import { backendsKept } from "./kept";
 import { kvasir, RUNTIME_BACKEND, type AdmissionRecord, type Backend, type PurposeRow, type Subscription } from "./kvasir";
 import { localOrder, servedAdmission, started } from "./local";
 import { LocalModelCard, MachineLine, useLocalModels } from "./LocalModels";
-import { addChoices, backendCards } from "./models";
+import { addChoices, backendCards, serverCards, type ModelCard } from "./models";
+import { modelRemovalWords } from "./modelserver";
 import { MoveDrawer, StationRoutes } from "./Stations";
 import { SubscriptionCard } from "./SubscriptionCard";
 import type { Install } from "./supervise";
@@ -52,6 +54,8 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   const [opened, setOpened] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Backend | null>(null);
+  const [letting, setLetting] = useState<{ backend: Backend; model: string } | null>(null);
+  const [more, setMore] = useState<HeldServer | null>(null);
   const [keying, setKeying] = useState<Backend | null>(null);
   const [checking, setChecking] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -98,9 +102,13 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   const served = locals.map((m) => (m.run ? servedAdmission(m.run, backends, admissions, now) : null));
   const drawn = locals.filter(started).map((m) => m.run?.model ?? "");
   const cards = backends ? backendCards(backends, { viewer, catalogue, admissions, purposes, now, checking, drawn }) : [];
+  const servers = backends ? serverCards(backends, { viewer, catalogue, admissions, purposes, now, checking }) : [];
 
   // a model added in the last hour, or loaded on llama.cpp, is read again until its admission settles
-  const settling = cards.some((c) => checking !== c.backend.id && SETTLING.has(c.tag.words)) || served.some((a) => a !== null && SETTLING.has(a.words));
+  const settling =
+    cards.some((c) => checking !== c.backend.id && SETTLING.has(c.tag.words)) ||
+    servers.some((c) => checking !== c.backend.id && c.models.some((m) => SETTLING.has(m.tag.words))) ||
+    served.some((a) => a !== null && SETTLING.has(a.words));
   useEffect(() => {
     if (!settling) return;
     const t = setInterval(load, 15_000);
@@ -148,7 +156,25 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   const onMachine = backends?.find((b) => b.id === RUNTIME_BACKEND) ?? null;
   const change = (s: Subscription) => setSubscriptions((all) => (all ?? []).map((x) => (x.provider === s.provider ? s : x)));
   const subscription = mine && <SubscriptionCard key="subscription" row={mine} stations={stations} follow={!adding} onChange={change} />;
-  const anything = cards.length > 0 || locals.length > 0;
+  const anything = cards.length > 0 || servers.length > 0 || locals.length > 0;
+  const backendCard = (c: ModelCard) => (
+    <BackendCard
+      key={c.key}
+      card={c}
+      work={viewer.work}
+      busy={acting.working}
+      onCheck={() => runCheck(c.backend)}
+      onKey={() => {
+        setSaid(null);
+        setKeying(c.backend);
+      }}
+      onForget={() => forget(c.backend)}
+      onRemove={() => {
+        setSaid(null);
+        setRemoving(c.backend);
+      }}
+    />
+  );
 
   return (
     <div className="settings">
@@ -240,24 +266,33 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
                 onCheck={onMachine ? () => runCheck(onMachine) : undefined}
               />
             ))}
-            {cards.map((c) => (
-              <BackendCard
+            {cards.filter((c) => c.kind === "runtime").map(backendCard)}
+            {servers.map((c) => (
+              <ModelServerCard
                 key={c.key}
                 card={c}
                 work={viewer.work}
                 busy={acting.working}
                 onCheck={() => runCheck(c.backend)}
+                onMore={() => {
+                  setSaid(null);
+                  setMore({ url: c.backend.base_url ?? "", backend: c.backend.id });
+                }}
                 onKey={() => {
                   setSaid(null);
                   setKeying(c.backend);
                 }}
-                onForget={() => forget(c.backend)}
+                onRemoveModel={(model) => {
+                  setSaid(null);
+                  setLetting({ backend: c.backend, model });
+                }}
                 onRemove={() => {
                   setSaid(null);
                   setRemoving(c.backend);
                 }}
               />
             ))}
+            {cards.filter((c) => c.kind !== "runtime").map(backendCard)}
             {viewer.work && subscription}
           </div>
         )}
@@ -288,6 +323,31 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
           }}
           onSubscription={change}
           onToken={local.tokenSet}
+        />
+      )}
+      {more && (
+        <AddModel
+          choices={["server"]}
+          server={more}
+          onClose={() => setMore(null)}
+          onDone={(words) => {
+            setMore(null);
+            setSaid(words);
+            load();
+          }}
+        />
+      )}
+      {letting && (
+        <RemoveModelDialog
+          backend={letting.backend}
+          model={letting.model}
+          purposes={purposes}
+          onClose={() => setLetting(null)}
+          onDone={(words) => {
+            setLetting(null);
+            setSaid(words);
+            load();
+          }}
         />
       )}
       {removing && backends && (
@@ -338,7 +398,8 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
 function KeyDialog({ backend, onClose, onDone }: { backend: Backend; onClose: () => void; onDone: (words: string) => void }) {
   const [secret, setSecret] = useState("");
   const saving = useActing();
-  const named = backend.models[0] ?? backend.id;
+  // record 47: a model server's key is the server's, not one model's
+  const named = backend.server === true ? backend.id : (backend.models[0] ?? backend.id);
   const short = secret.length < 8;
   const store = () =>
     saving.act(`storing the key for ${named}`, async () => {
@@ -414,6 +475,44 @@ function RemoveDialog(props: { backend: Backend; backends: Backend[]; purposes: 
   return (
     <Dialog title={`Remove ${named}?`} icon="alert" onClose={onClose} foot={foot}>
       {removalWords(backend, backends, purposes).map((w) => (
+        <p key={w}>{w}</p>
+      ))}
+    </Dialog>
+  );
+}
+
+/** Record 47: one model of a server let go, once the dialog has said what goes with it; the last lets the server go. */
+function RemoveModelDialog(props: { backend: Backend; model: string; purposes: PurposeRow[] | null; onClose: () => void; onDone: (words: string) => void }) {
+  const { backend, model, purposes, onClose, onDone } = props;
+  const removing = useActing();
+  const remove = () =>
+    removing.act(`removing ${model}`, async () => {
+      try {
+        await kvasir.removeModel(backend.id, model);
+      } catch (e) {
+        throw plainly(e);
+      }
+      onDone(`${model} is removed from ${backend.id}.`);
+      return "";
+    });
+
+  const foot = (
+    <>
+      <Said acting={removing.acting} />
+      <div className="row actions">
+        <button type="button" className="button" disabled={removing.working} onClick={remove}>
+          Remove it
+        </button>
+        <button type="button" className="button secondary" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </>
+  );
+
+  return (
+    <Dialog title={`Remove ${model}?`} icon="alert" onClose={onClose} foot={foot}>
+      {modelRemovalWords(backend, model, purposes).map((w) => (
         <p key={w}>{w}</p>
       ))}
     </Dialog>
