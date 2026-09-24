@@ -233,30 +233,83 @@ export function resumeCommand(r: Pick<RunDetail, "id">): string[] {
   return ["run", "--resume", String(r.id)];
 }
 
-/** A run's checks and breaches, from its summary. */
-export function checksOf(r: RunDetail): { declared: number; breaches: number; unchecked: number; units: { unit: string | null; breaches: Breach[] }[]; items: number } {
+/**
+ * A count the engine may withhold: a number, or null where it stands for 1 to
+ * 4 scans below detail quasi (record 49 R4b). Never read as 0.
+ */
+export type Held = number | null;
+
+/** A count in words: a withheld one is "fewer than five", never none. */
+export function heldWords(c: Held): string {
+  return c === null ? "fewer than five" : n(c);
+}
+
+/** Whether a run's summary is the engine's totals-only reading, below detail quasi. */
+export function totalsOnly(r: RunDetail): boolean {
+  return obj(r.summary).detail === "totals";
+}
+
+/** A count from the summary: a number, null where the engine withheld it, and 0 only where it said none or said nothing at all. */
+function heldOf(o: Json, key: string): Held {
+  const v = o[key];
+  if (v === null) return null;
+  return num(v) ?? 0;
+}
+
+/** A run's checks and breaches, from its summary: each unit's breaches at detail quasi, only the counts by check below it. */
+export function checksOf(r: RunDetail): { declared: number; breaches: Held; unchecked: number; units: { unit: string | null; breaches: Breach[] }[]; items: number; totals: boolean } {
   const s = obj(r.summary);
   const numbers = obj(s.numbers);
   const c = obj(numbers.checks);
-  const list = Array.isArray(s.breaches) ? (s.breaches as Json[]) : [];
+  const totals = totalsOnly(r);
+  const list = totals ? [] : Array.isArray(s.breaches) ? (s.breaches as Json[]) : [];
   const items = Array.isArray(s.review_items) ? s.review_items.length : (num(s.review_items) ?? 0);
   return {
     declared: num(c.declared) ?? 0,
-    breaches: num(c.breaches) ?? 0,
+    breaches: heldOf(c, "breaches"),
     unchecked: num(c.unchecked) ?? 0,
     units: list.map((b) => ({
       unit: text(b.unit),
       breaches: (Array.isArray(b.breaches) ? (b.breaches as Json[]) : []).map((x) => ({ metric: String(x.metric ?? ""), value: num(x.value), check: String(x.check ?? ""), op: text(x.op) ?? undefined, threshold: num(x.threshold) ?? undefined, description: text(x.description) })),
     })),
     items,
+    totals,
   };
 }
 
-/** The breaches folded by check: "snr >= 8 · 3 units". What a reader below detail quasi is shown: no unit, no value. */
-export function breachesByCheck(r: RunDetail): { check: string; units: number }[] {
+const heldOrder = (a: Held, b: Held) => (b ?? 0.5) - (a ?? 0.5);
+
+/** The breaches folded by check: "snr >= 8 · 3 units"; below detail quasi the engine's own counts, a withheld one null. */
+export function breachesByCheck(r: RunDetail): { check: string; units: Held }[] {
+  if (totalsOnly(r)) {
+    const list = obj(r.summary).breaches_by_check;
+    return (Array.isArray(list) ? (list as Json[]) : [])
+      .map((b) => ({ check: text(b.check) ?? text(b.metric) ?? "a check", units: heldOf(b, "units") }))
+      .sort((a, b) => heldOrder(a.units, b.units));
+  }
   const by = new Map<string, number>();
   for (const u of checksOf(r).units) for (const b of u.breaches) by.set(b.check || b.metric, (by.get(b.check || b.metric) ?? 0) + 1);
-  return [...by.entries()].map(([check, units]) => ({ check, units })).sort((a, b) => b.units - a.units);
+  return [...by.entries()].map(([check, units]) => ({ check, units })).sort((a, b) => heldOrder(a.units, b.units));
+}
+
+/** The units that failed, by reason, as the engine counts them below detail quasi; empty at quasi, where the units say it. */
+export function failuresByReason(r: RunDetail): { reason: string; units: Held }[] {
+  if (!totalsOnly(r)) return [];
+  const list = obj(r.summary).failures_by_reason;
+  return (Array.isArray(list) ? (list as Json[]) : []).map((f) => ({ reason: text(f.reason) ?? "failed", units: heldOf(f, "units") }));
+}
+
+/** Whether a run can say every unit that finished passed its checks: only when the engine counted no breach, never when it withheld the count. */
+export function allPassed(r: RunDetail): boolean {
+  const c = checksOf(r);
+  return c.declared > 0 && c.breaches === 0 && breachesByCheck(r).length === 0;
+}
+
+/** A run's units in totals, from the summary: done, failed (null where withheld), and the whole. */
+export function unitTotals(r: RunDetail): { total: number; succeeded: Held; failed: Held; over: number } {
+  const u = obj(obj(r.summary).units);
+  const failed = u.failed === null || u.unreported === null ? null : (num(u.failed) ?? 0) + (num(u.unreported) ?? 0);
+  return { total: num(u.total) ?? 0, succeeded: heldOf(u, "succeeded"), failed, over: num(obj(r.unit_states).over) ?? 0 };
 }
 
 /** The measure columns a pipeline declares: each table output's columns, and each check's metric, as the ask names them. */

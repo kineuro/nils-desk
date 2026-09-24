@@ -18,10 +18,13 @@ import { PlanView, plansOffered } from "./PlanPage";
 import { PreflightPanel } from "./Preflight";
 import { RunView, type Table } from "./RunPage";
 import {
+  allPassed,
   breachesByCheck,
   cellWords,
   checksOf,
   durationWords,
+  failuresByReason,
+  heldWords,
   groupBy,
   handleGone,
   measureColumns,
@@ -39,6 +42,7 @@ import {
   tableAsk,
   unitCounts,
   unitTone,
+  unitTotals,
   type Preflight,
   type RunDetail,
 } from "./runs";
@@ -246,6 +250,51 @@ describe("a run's page", () => {
     expect(html).toContain(">Cancel</button>");
     expect(html).toContain("kept on resume");
     expect(html).toContain("taken up 1 time");
+  });
+  it("reads the engine's totals below detail quasi: counts by check and reason, a withheld count fewer than five, never none", () => {
+    // as the engine answers a run below detail quasi (w49 e4d20ac)
+    const held: RunDetail = {
+      ...RUN,
+      status: "partial",
+      error: "withheld below detail quasi",
+      unit_states: { over: 12 },
+      units_run: [],
+      summary: {
+        detail: "totals",
+        units: { total: 12, succeeded: null, failed: null, skipped: 0, unreported: 0 },
+        numbers: { tables: { files: 10, rows: 10 }, measures: 20, checks: { declared: 2, breaches: null, unchecked: 0 } },
+        breaches: [],
+        breaches_by_check: [
+          { check: "holes <= 200", metric: "holes", units: null, withheld: true },
+          { check: "snr >= 8", metric: "snr", units: 6 },
+        ],
+        failures_by_reason: [{ reason: "failed", units: null, withheld: true }],
+        withheld: ["numbers.checks.breaches", "units"],
+        review_items: [1, 2],
+      },
+    };
+    expect(checksOf(held)).toMatchObject({ declared: 2, breaches: null, totals: true, units: [] });
+    expect(breachesByCheck(held)).toEqual([
+      { check: "snr >= 8", units: 6 },
+      { check: "holes <= 200", units: null },
+    ]);
+    expect(failuresByReason(held)).toEqual([{ reason: "failed", units: null }]);
+    expect(unitTotals(held)).toEqual({ total: 12, succeeded: null, failed: null, over: 12 });
+    expect(heldWords(null)).toBe("fewer than five");
+    expect(allPassed(held)).toBe(false);
+    // a withheld breach count with no check listed still never reads as all passed
+    expect(allPassed({ ...held, summary: { ...held.summary, breaches_by_check: [] } })).toBe(false);
+    expect(allPassed({ ...RUN, summary: { ...RUN.summary, breaches: [], numbers: { checks: { declared: 2, breaches: 0 } } } })).toBe(true);
+    const html = draw(plain(), held, totals);
+    expect(html).toContain("fewer than five breaches");
+    expect(html).toContain("<td class=\"path\">holes &lt;= 200</td><td class=\"num\">fewer than five</td>");
+    expect(html).toContain("<td class=\"num\">6</td>");
+    expect(html).toContain("Failed, by reason");
+    expect(html).toContain("12 of 12 over");
+    expect(html).not.toContain("Every unit that finished passed");
+    expect(html).not.toContain(">0<");
+    expect(html).toContain("withheld below detail quasi");
+    expect(html).toContain('href="#review?run=1"');
   });
   it("counts the breaches by check from the run's summary", () => {
     expect(checksOf(RUN)).toMatchObject({ declared: 2, breaches: 1, unchecked: 0, items: 1 });

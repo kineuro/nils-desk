@@ -17,7 +17,10 @@ import { Wait } from "../ui/Wait";
 import { catalog, type Pipeline } from "./catalog";
 import { ops } from "./client";
 import {
+  allPassed,
   breachesByCheck,
+  failuresByReason,
+  heldWords,
   cellWords,
   checksOf,
   groupBy,
@@ -30,6 +33,7 @@ import {
   runs,
   tableAsk,
   unitCounts,
+  unitTotals,
   unitTone,
   type Derivative,
   type RunDetail,
@@ -152,12 +156,23 @@ export function RunView(props: {
   const total = Number(((s.units ?? {}) as Record<string, unknown>).total ?? units.length);
   const checks = checksOf(r);
   const byCheck = breachesByCheck(r);
+  const failures = failuresByReason(r);
   const running = OPEN.has(r.status);
+  // below detail quasi the engine lists no unit: the totals are its own, a withheld one fewer than five
+  const totals = checks.totals ? unitTotals(r) : null;
+  const unitCells = totals
+    ? [
+        { k: "units", v: total > 0 ? `${n(totals.over)} of ${n(total)} over` : "none yet" },
+        ...(totals.failed !== 0 ? [{ k: "failed", v: heldWords(totals.failed) }] : []),
+      ]
+    : [
+        { k: "units", v: total > 0 ? `${n(counts.done + counts.kept)} of ${n(total)} done` : "none yet" },
+        ...(counts.failed > 0 ? [{ k: "failed", v: n(counts.failed) }] : []),
+        ...(counts.kept > 0 ? [{ k: "kept on resume", v: n(counts.kept) }] : []),
+      ];
   const cells = [
     { k: "status", v: r.status },
-    { k: "units", v: total > 0 ? `${n(counts.done + counts.kept)} of ${n(total)} done` : "none yet" },
-    ...(counts.failed > 0 ? [{ k: "failed", v: n(counts.failed) }] : []),
-    ...(counts.kept > 0 ? [{ k: "kept on resume", v: n(counts.kept) }] : []),
+    ...unitCells,
     { k: "over", v: r.selection ?? (r.handle_id ? `handle ${r.handle_id}` : "") },
     { k: "on", v: [r.runtime, r.device].filter(Boolean).join(", ") || "not yet" },
     { k: running ? "since" : "ran", v: whenWords(r.started_at ?? "") },
@@ -193,10 +208,11 @@ export function RunView(props: {
       <div className="section-head rule-top">
         <h2>Checks</h2>
         <span className="meta">
-          {checks.declared === 0 ? "none declared" : `${n(checks.declared)} declared · ${n(checks.breaches)} ${checks.breaches === 1 ? "breach" : "breaches"}${checks.unchecked > 0 ? ` · ${n(checks.unchecked)} unchecked` : ""}`}
+          {checks.declared === 0 ? "none declared" : `${n(checks.declared)} declared · ${heldWords(checks.breaches)} ${checks.breaches === 1 ? "breach" : "breaches"}${checks.unchecked > 0 ? ` · ${n(checks.unchecked)} unchecked` : ""}`}
         </span>
       </div>
-      {checks.breaches === 0 && checks.declared > 0 && !running && <p className="meta">Every unit that finished passed its checks.</p>}
+      {allPassed(r) && !running && <p className="meta">Every unit that finished passed its checks.</p>}
+      {checks.totals && <p className="meta">Counted by check at your detail; a count under five scans reads fewer than five.</p>}
       {byCheck.length > 0 && (
         <div className="table-wrap">
           <table className="thin">
@@ -204,15 +220,15 @@ export function RunView(props: {
               <tr>
                 <th>Check</th>
                 <th className="num">Units</th>
-                {acts.perScan && <th>Which</th>}
+                {acts.perScan && !checks.totals && <th>Which</th>}
               </tr>
             </thead>
             <tbody>
               {byCheck.map((c) => (
                 <tr key={c.check}>
                   <td className="path">{c.check}</td>
-                  <td className="num">{n(c.units)}</td>
-                  {acts.perScan && (
+                  <td className="num">{heldWords(c.units)}</td>
+                  {acts.perScan && !checks.totals && (
                     <td className="meta">
                       {checks.units
                         .filter((u) => u.breaches.some((b) => (b.check || b.metric) === c.check))
@@ -239,12 +255,35 @@ export function RunView(props: {
       <div className="section-head rule-top">
         <h2>Units</h2>
         <span className="meta">
-          {(Object.keys(TONE_WORDS) as UnitTone[])
-            .filter((t) => counts[t] > 0)
-            .map((t) => `${n(counts[t])} ${TONE_WORDS[t]}`)
-            .join(" · ") || "none yet"}
+          {totals
+            ? `${n(totals.over)} of ${n(total)} over`
+            : (Object.keys(TONE_WORDS) as UnitTone[])
+                .filter((t) => counts[t] > 0)
+                .map((t) => `${n(counts[t])} ${TONE_WORDS[t]}`)
+                .join(" · ") || "none yet"}
         </span>
       </div>
+      {totals && failures.length > 0 && (
+        <div className="table-wrap">
+          <table className="thin">
+            <thead>
+              <tr>
+                <th>Failed, by reason</th>
+                <th className="num">Units</th>
+              </tr>
+            </thead>
+            <tbody>
+              {failures.map((f) => (
+                <tr key={f.reason}>
+                  <td>{f.reason}</td>
+                  <td className="num">{heldWords(f.units)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {totals && <p className="meta">At your detail a run names no unit; its units are counted by state and reason.</p>}
       {units.length > 0 && (
         <div className="table-wrap">
           <table className="thin">
