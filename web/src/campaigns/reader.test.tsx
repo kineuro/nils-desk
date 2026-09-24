@@ -479,26 +479,42 @@ describe("the review's findings", () => {
     expect(enterOwnedBy(null)).toBe(false);
   });
 
-  it("reads a blind item with nothing filled in, no candidates, no System 1, and marks it", () => {
+  it("reads a blind item with no classification at all: only the raw header beside the pictures, an empty form", () => {
     const r = readingOf({ ...(whyDoc as unknown as Json), blind: true, suggested: { base: "T1w" } });
     expect(r.blind).toBe(true);
+    // no values in force, deciding rules, votes, words, line text, who set it, System 1 or candidates
+    expect(r.lines).toEqual([]);
     expect(r.candidates).toEqual([]);
-    expect(r.lines.every((l) => l.model === null && l.agree === null)).toBe(true);
+    expect([r.suggested, r.suggestedOne, r.value, r.batch]).toEqual([null, null, null, null]);
+    expect(JSON.stringify(r)).not.toMatch(/T1w|MPRAGE|technique:|keyword|carol@walk|person|System 1|t1_mprage/u);
+    // the raw header stays
+    expect(r.header).toContainEqual(["TR", "2300"]);
+    expect(r.header).toContainEqual(["TI", "900"]);
+    // the rater answers from an empty form: nothing suggested, Backspace goes back to blank
     expect(suggestionOf(AXES, r)).toBeNull();
-    expect(suggestionOf(BASE, { ...r, lines: r.lines.map((l) => ({ ...l, model: null })) })).toBeNull();
-    // the campaign's own mark makes any reading blind
-    const b = blindReading(reading, 1207, askedAxes(AXES));
+    expect(suggestionOf(BASE, r)).toBeNull();
+    expect(givenOf(AXES, suggestionOf(AXES, r))).toBeNull();
+    // the campaign's own mark makes any reading blind the same way
+    const b = blindReading({ ...reading, header: [["TR", "2300"]] }, 1207, askedAxes(AXES));
+    expect(b.lines).toEqual([]);
+    expect(b.header).toEqual([["TR", "2300"]]);
     expect(suggestionOf(AXES, b)).toBeNull();
-    expect(blindReading(null, 5, ["base"]).blind).toBe(true);
+    expect(blindReading(null, 5, ["base"])).toMatchObject({ blind: true, lines: [], header: [], stack: 5 });
     const open = openCampaign as unknown as Campaign;
     const none = () => undefined;
     const seat = seatOf({ ...(claimed as unknown as Claimed), item: { ...(claimed as unknown as Claimed).item!, blind: true } });
     const html = renderToStaticMarkup(
-      <WorkspaceBody caps={capsFor()} campaign={open} role="rater" seat={seat} rows={rowsOf(open.question, null)} given={blank(open.question)} why="" marks={{}} split={null} raterAnswers={[]} evidence={null} candidates={[]} now={0} busy={false} refused={null} said={null} open={1} done={0} keys={false} onGiven={none} onWhy={none} onAnswer={none} onSkip={none} onStop={none} onKeys={none} onAgain={none} lines={b.lines} suggestion={null} />,
+      <WorkspaceBody caps={capsFor()} campaign={open} role="rater" seat={seat} rows={rowsOf(open.question, null)} given={blank(open.question)} why="" marks={{}} split={null} raterAnswers={[]} evidence={null} candidates={[]} now={0} busy={false} refused={null} said={null} open={1} done={0} keys={false} onGiven={none} onWhy={none} onAnswer={none} onSkip={none} onStop={none} onKeys={none} onAgain={none} blind header={b.header} lines={reading.lines} suggestion={suggestionOf(AXES, reading)} />,
     );
     expect(html).toContain('class="tag gated"');
     expect(html).toContain(">blind<");
+    expect(html).toContain("<dt>TR</dt><dd>2300</dd>");
+    // even handed lines and a suggestion, a blind item draws neither
     expect(html).not.toContain("class=\"suggest");
+    expect(html).not.toContain("evidence-lines");
+    expect(html).not.toContain("technique:MPRAGE");
+    // the form is empty: no value pressed
+    expect(html).not.toContain('aria-pressed="true"');
   });
 
   it("never puts a blind item in a batch, and counts it out", () => {

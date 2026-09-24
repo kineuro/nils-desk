@@ -192,3 +192,18 @@ export function RaterStats({ stats }: { stats: RaterStatsDoc }) {
     </>
   );
 }
+
+/** A blind item's raw header values, all it shows beside its pictures: nothing of how it was classified. */
+export function HeaderValues({ header }: { header: [string, string][] }) {
+  if (header.length === 0) return null;
+  return (
+    <dl className="facts header-values" aria-label="header values">
+      {header.map(([k, v]) => (
+        <div key={k} className="facts-pair">
+          <dt>{k}</dt>
+          <dd>{v}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}

@@ -55,8 +55,10 @@ export interface Reading {
   value: number | null;
   /** The batch of like stacks the item belongs to, where the engine groups them. */
   batch: string | null;
-  /** An item of a sealed sample (record 48 R2): read blind, with nothing suggested and no candidates. */
+  /** An item of a sealed sample (record 48 R2): read blind, with no classification at all, nothing suggested and no candidates. */
   blind?: boolean;
+  /** The stack's raw header values as the door sends them (TR, TE, ...), in the engine's short names; all a blind item shows beside its pictures. */
+  header?: [string, string][];
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -206,10 +208,11 @@ export function readingOf(raw: Json): Reading {
     }
   }
   const worth = obj(raw.worth);
-  // a sealed sample's item is read blind: whatever came with it is not shown
-  if (raw.blind === true)
-    return { item: num(raw.item) ?? num(raw.item_id), stack: num(raw.stack) ?? num(raw.stack_id), axes: named, lines: lines.map(blinded), candidates: [], suggested: null, suggestedOne: null, value: null, batch: null, blind: true };
+  const header = pairs(raw.header).map(([k, v]) => [HEADER_WORDS[k] ?? k.replace(/_/g, " "), v] as [string, string]);
+  // a sealed sample's item is read blind: no classification at all, whatever came with it; the pictures and the raw header stay
+  if (raw.blind === true) return blindReading({ item: num(raw.item) ?? num(raw.item_id), stack: num(raw.stack) ?? num(raw.stack_id), axes: named, lines, candidates: [], suggested: null, value: null, batch: null, header }, null, named);
   return {
+    header,
     item: num(raw.item) ?? num(raw.item_id),
     stack: num(raw.stack) ?? num(raw.stack_id),
     axes: named,
@@ -222,15 +225,15 @@ export function readingOf(raw: Json): Reading {
   };
 }
 
-/** A line as a blind item shows it: what System 1 said, and whether it agrees, left out. */
-function blinded(l: AxisLine): AxisLine {
-  return { ...l, model: null, agree: null };
-}
-
-/** A reading made blind (an item the campaign marks blind, whatever the door said). */
+/**
+ * A reading made blind (an item of a sealed sample, by the door's mark or the
+ * campaign's): no classification of any kind, not the values in force, the
+ * deciding rules, the votes, the words, the line's text, who set it, System
+ * 1's word or a suggestion; only the stack's raw header values stay, beside
+ * the pictures. The rater answers from an empty form.
+ */
 export function blindReading(r: Reading | null, stack: number | null, axes: string[]): Reading {
-  if (!r) return { item: null, stack, axes, lines: [], candidates: [], suggested: null, suggestedOne: null, value: null, batch: null, blind: true };
-  return { ...r, lines: r.lines.map(blinded), candidates: [], suggested: null, suggestedOne: null, blind: true };
+  return { item: r?.item ?? null, stack: r?.stack ?? stack, axes: r?.axes ?? axes, lines: [], candidates: [], suggested: null, suggestedOne: null, value: null, batch: null, blind: true, header: r?.header ?? [] };
 }
 
 /** The explain door's axis rows (GET /api/explain/{stack}), as far as it goes. */

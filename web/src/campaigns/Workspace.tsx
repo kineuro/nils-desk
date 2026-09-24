@@ -37,7 +37,7 @@ import { BatchView, type BatchViewProps } from "./Batches";
 import type { AskedCandidate } from "../review/asked";
 import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type Order, type Pace, type Reading, type Suggestion } from "./reader";
 import { acceptBatch, batchesFor, claimIn, hintOf, R48, readingFor, valueOrderServed } from "./readerDoors";
-import { EvidenceLines, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
+import { EvidenceLines, HeaderValues, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { StackView } from "./StackView";
 import { warmStack } from "../viewer/prefetch";
 import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, disagreementWords, enterOwnedBy, given as choose, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
@@ -406,6 +406,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       lines={reading?.lines ?? null}
       suggestion={suggestion}
       blind={reading?.blind === true || item?.blind === true}
+      header={reading?.header ?? null}
       evOpen={evOpen}
       onEvidence={toggleEvidence}
       onCandidate={(c) => {
@@ -486,8 +487,10 @@ export interface WorkspaceBodyProps {
   lines?: AxisLine[] | null;
   /** The answer filled in and the candidates where the systems differ. */
   suggestion?: Suggestion | null;
-  /** The item is of a sealed sample, read blind (record 48). */
+  /** The item is of a sealed sample, read blind (record 48): no classification shown, only the pictures and the raw header. */
   blind?: boolean;
+  /** The stack's raw header values, shown for a blind item. */
+  header?: [string, string][] | null;
   evOpen?: boolean;
   onEvidence?: () => void;
   onCandidate?: (c: AskedCandidate) => void;
@@ -588,8 +591,9 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
               </span>
             </div>
             {holding.note && <p className="note-lead">{holding.note}</p>}
-            {p.suggestion && <SuggestionBar s={p.suggestion} chosen={chosenCandidate(q, p.suggestion.offered, p.given)} onChoose={(c) => p.onCandidate?.(c)} busy={p.busy} />}
-            {p.lines && p.lines.length > 0 && <EvidenceLines lines={p.lines} open={p.evOpen ?? false} onToggle={() => p.onEvidence?.()} />}
+            {!p.blind && p.suggestion && <SuggestionBar s={p.suggestion} chosen={chosenCandidate(q, p.suggestion.offered, p.given)} onChoose={(c) => p.onCandidate?.(c)} busy={p.busy} />}
+            {p.blind && p.header && <HeaderValues header={p.header} />}
+            {!p.blind && p.lines && p.lines.length > 0 && <EvidenceLines lines={p.lines} open={p.evOpen ?? false} onToggle={() => p.onEvidence?.()} />}
             {facts.length > 0 && (
               <dl className="facts">
                 {facts.map(([k, v]) => (
