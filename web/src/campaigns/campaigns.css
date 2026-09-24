@@ -1,0 +1,51 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* The Campaigns section (record 45 S3 and S4): the bar of items by state,
+   the rating workspace's two columns, the rows of values with their keys.
+   Theme tokens only, as the rest of the desk. */
+
+.state-bar { display: grid; gap: 0.2rem; min-width: 10rem; }
+.state-track { display: flex; height: 8px; border-radius: 2px; background: var(--n-bg-sunken); overflow: hidden; }
+.state-track i { display: block; height: 100%; }
+.state-track i.s-open { background: var(--n-neutral-line); }
+.state-track i.s-caution { background: var(--n-caution-icon); }
+.state-track i.s-ok { background: var(--n-ok-icon); }
+.state-track i.s-brand { background: var(--n-brand-icon); }
+.campaign > .state-bar { margin: 0.2rem 0 0.4rem; }
+
+.campaign-items .answer-chip { display: inline-block; margin-right: 0.6rem; white-space: nowrap; }
+.closure { display: grid; gap: 0.4rem; }
+.closure p { margin: 0; }
+.make-form { display: grid; gap: 0.8rem; }
+.make-form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.make-form .form-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.make-form .form-row .input { flex: 1 1 8rem; }
+
+.campaign-rate kbd,
+.axis-rows kbd,
+.form-fields kbd { display: inline-block; min-width: 1.1em; margin-right: 0.35rem; padding: 0 0.25rem; border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: var(--n-radius); background: var(--n-bg-raised); font-family: var(--n-font-mono); font-size: 11px; line-height: 1.35; text-align: center; color: var(--n-text-faint); }
+.campaign-rate .button kbd { margin: 0 0 0 0.2rem; background: transparent; color: inherit; border-color: currentColor; opacity: 0.7; }
+.rate-count { display: grid; justify-items: end; gap: 0.05rem; }
+.rate-count .k { font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.rate-count .v { font-family: var(--n-font-serif); font-size: 1.6rem; line-height: 1.1; }
+.rate-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(18rem, 2fr); gap: 1.2rem; align-items: start; }
+.rate-picture { min-width: 0; }
+.rate-side { display: grid; gap: 0.8rem; min-width: 0; }
+.rate-item { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
+.adjudicate { display: grid; gap: 0.3rem; padding: 0.6rem 0.8rem; border: 1px solid var(--n-caution-line); border-radius: var(--n-radius); background: var(--n-caution-bg); }
+.adjudicate .vlist { margin: 0; padding-left: 1rem; }
+.axis-rows { display: grid; gap: 0.7rem; }
+.axis-row { display: grid; gap: 0.3rem; }
+.axis-name { font-weight: 500; }
+.axis-values { display: flex; flex-wrap: wrap; gap: 0.4rem 0.9rem; }
+.axis-family { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+.axis-family-name { font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.axis-rows .said-by { margin-left: 0.35rem; padding: 0 0.3rem; border-radius: var(--n-radius); background: var(--n-caution-bg); color: var(--n-caution-fg); font-size: 11px; }
+.form-fields { display: grid; gap: 0.6rem; }
+.handoff { display: grid; gap: 0.5rem; }
+.handoff p { margin: 0; }
+.label-set pre { margin: 0.4rem 0 0; font-size: var(--n-text-size-small); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+@media (max-width: 860px) {
+  .rate-grid { grid-template-columns: minmax(0, 1fr); }
+  .campaigns-list th:nth-child(3), .campaigns-list td:nth-child(3) { display: none; }
+}

@@ -57,9 +57,9 @@ describe("the sections of an install that is set up", () => {
     const reviewing = { ...served, person: { ...served.person, grants: ["review:see" as const], detail: "plain" as const } };
     expect(sections(reviewing).map((s) => s.id)).toEqual(["home", "review"]);
   });
-  it("add no section for the models and campaigns grants, whose pages are not built yet", () => {
+  it("add no section for the models grants, whose page is not built yet, and Campaigns for its own", () => {
     const later = { ...served, engine: { ...served.engine!, doors: [...doors, "GET /api/models", "GET /api/campaigns"] }, person: { ...served.person, grants: ["models:work" as const, "models:see" as const, "campaigns:work" as const, "campaigns:see" as const] } };
-    expect(sections(later).map((s) => s.id)).toEqual(["home"]);
+    expect(sections(later).map((s) => s.id)).toEqual(["home", "campaigns"]);
     expect(tilesOffered(later)).toEqual([]);
   });
   it("wait while an install is not set up for a person who may see it, with Home named for its first page, and while that is not known", () => {

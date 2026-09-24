@@ -38,7 +38,7 @@ describe("a person's own page", () => {
     expect(html).toMatch(/<b>Data<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Sources and batches<\/span>/u);
     expect(html).toMatch(/<div class="arow deep"><b>Kvasir<\/b>/u);
     expect(html).toContain('<div class="arow hidden" title="Whoever may change people and groups can open them.">');
-    expect(html).toContain('<b>Release and Pipelines</b><span class="state meta">hidden</span></div>');
+    expect(html).toContain('<b>Release, Pipelines and Campaigns</b><span class="state meta">hidden</span></div>');
     expect(html).not.toContain("admin");
     expect(html).toMatch(/<b>Records<\/b><span class="state"><span class="tag records" title="Dates, subject codes, sex and age, scanner names and series and protocol descriptions\."><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Identifying/u);
   });
@@ -56,7 +56,7 @@ describe("a person's own page", () => {
 
   it("hides Settings with the pages when none under it is open", () => {
     const html = renderToStaticMarkup(<ProfilePage caps={caps(["query:see"], "plain", { groups: [] })} />);
-    expect(html).toContain("<b>Assistant, Data, Review, Release, Pipelines and Settings</b>");
+    expect(html).toContain("<b>Assistant, Data, Review, Release, Pipelines, Campaigns and Settings</b>");
     expect(html).toContain('<span class="meta">No groups</span>');
     expect(html).toMatch(/title="No dates, subject codes, sex or age, scanner names or series descriptions\."><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Non-identifying/u);
   });
@@ -65,7 +65,8 @@ describe("a person's own page", () => {
     const html = renderToStaticMarkup(<ProfilePage caps={caps(["query:see", "models:see"], "plain", { groups: [] })} />);
     expect(html).toMatch(/<div class="arow"><b>Models<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Registered classifier models<\/span><\/div>/u);
     expect(html).not.toMatch(/href="[^"]*(models|campaigns)/u);
-    expect(html).not.toContain("Campaigns");
+    // Models is not built yet and is never named hidden; Campaigns is built, and is
+    expect(html).toContain("<b>Assistant, Data, Review, Release, Pipelines, Campaigns and Settings</b>");
   });
 
   it("on a desk that signs nobody in, holds every page and says the subscription is the install's", () => {

@@ -21,6 +21,7 @@ import { QueryPage } from "./query/QueryPage";
 import { door, state } from "./deployment";
 import { may } from "./grants";
 import { Home } from "./home/Home";
+import { CampaignsPage } from "./campaigns/CampaignsPage";
 import { PlaceholderPage } from "./home/Placeholder";
 import { PLACEHOLDERS } from "./home/placeholders";
 import { ready as readyToStart } from "./home/setup";
@@ -262,6 +263,7 @@ export function App() {
           {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "review" && <ReviewPage caps={caps} page={route.page} query={route.query} />}
+          {ready && active?.id === "campaigns" && <CampaignsPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {onProfile && <ProfilePage caps={caps} />}

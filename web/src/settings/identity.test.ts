@@ -165,8 +165,8 @@ describe("the marks", () => {
   it("collapse to Every page and Every setting when all of them are held at their top", () => {
     expect(marksOf(everything).map((m) => m.label)).toEqual(["Every page", "Every setting"]);
     expect(marksOf(SETS.admin.grants).map((m) => m.label)).toEqual(["Query", "Data", "Review", "Release", "Pipelines", "Models", "Campaigns", "Every setting"]);
-    // a group made before models and campaigns had grants still reads as every page, and one of them held beside it keeps its mark
-    const before = everything.filter((g) => !/^(models|campaigns):/u.test(g));
+    // a group made before models had grants still reads as every page, and one of them held beside it keeps its mark; Campaigns is built, so it counts
+    const before = everything.filter((g) => !/^models:/u.test(g));
     expect(marksOf(before).map((m) => m.label)).toEqual(["Every page", "Every setting"]);
     expect(marksOf([...before, "models:see"]).map((m) => [m.label, m.work])).toEqual([
       ["Every page", true],

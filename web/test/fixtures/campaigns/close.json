@@ -1,0 +1,17 @@
+{
+  "decisions": [
+    1
+  ],
+  "picks": [],
+  "resolved": 1,
+  "unresolved": 5,
+  "refused": [],
+  "staged": false,
+  "agreement": {
+    "items": 1,
+    "raters_per_item": 2,
+    "exact": 0.0,
+    "fleiss_kappa": -1.0,
+    "cohen_kappa": 0.0
+  }
+}

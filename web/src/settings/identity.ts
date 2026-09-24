@@ -126,7 +126,7 @@ export const PAGE_LINES: readonly PageLine[] = [
   { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "Releases made", work: "make and hand over" },
   { id: "pipelines", title: "Pipelines", mark: "Pipelines", named: "Pipelines", settings: false, levels: SEE_WORK, see: "Runs and results", work: "start and cancel runs" },
   { id: "models", title: "Models", mark: "Models", named: "Models", settings: false, levels: SEE_WORK, see: "Registered classifier models", work: "register, admit, promote", soon: true },
-  { id: "campaigns", title: "Campaigns", mark: "Campaigns", named: "Campaigns", settings: false, levels: SEE_WORK, see: "Annotation and curation campaigns", work: "claim, answer, export", soon: true },
+  { id: "campaigns", title: "Campaigns", mark: "Campaigns", named: "Campaigns", settings: false, levels: SEE_WORK, see: "Annotation and curation campaigns", work: "claim, answer, export" },
   { id: "install", title: "The install", mark: "Install", named: "the install", settings: true, levels: SEE_WORK, see: "Overview, parts, setup", work: "restart, update" },
   { id: "kvasir", title: "Kvasir", mark: "Kvasir", named: "Kvasir", settings: true, levels: SEE_WORK, see: "Stations and models", work: "models, keys, stations" },
   { id: "assistant-settings", title: "The assistant's settings", mark: "Assistant settings", named: "the assistant's settings", settings: true, levels: SEE_WORK, see: "Reach and memory", work: "instructions, standing grants" },
