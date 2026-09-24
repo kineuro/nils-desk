@@ -21,7 +21,9 @@ describe("the grown families on the queue", () => {
   });
   it("are counted from the summary where the engine gives one, else from the items", () => {
     expect(familyCounts([], { by_kind: { "pick.border": 4, "body_part:model": 3, "base:model": 1, "classify.asked": 2, "base:missing": 9 }, cohorts: [], none: 0 })).toEqual({ picks: 4, proposals: 4, asked: 2 });
-    expect(familyCounts([BORDER, MODEL, ASKED_ITEM, UNSURE, { ...MODEL, id: 32, status: "staged" }], null)).toEqual({ picks: 1, proposals: 1, asked: 1 });
+    expect(familyCounts([BORDER, MODEL, ASKED_ITEM, UNSURE, { ...MODEL, id: 32, status: "accepted" }], null)).toEqual({ picks: 1, proposals: 1, asked: 1 });
+    // a model's staged groups wait for a person too, and the summary counts only what is open
+    expect(familyCounts([{ ...MODEL, id: 33, status: "staged" }], { by_kind: { "body_part:model": 2 }, cohorts: [], none: 0 }).proposals).toBe(3);
   });
   it("leave the rules' unsure card to the rules' own items", () => {
     const [unsure] = needsOf([BORDER, MODEL, ASKED_ITEM, UNSURE]);

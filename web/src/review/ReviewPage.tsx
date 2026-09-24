@@ -32,7 +32,7 @@ export function subOf(page: string | null): ReviewSub {
   return SUBS.find((s) => s === page) ?? "queue";
 }
 
-/** How many open items each grown family holds (record 45), from the summary where the engine gives one, else from the items read. */
+/** How many items wait in each grown family (record 45): the open ones, from the summary where the engine gives one, else from the items read, and a model's staged groups, which wait for a person to commit them. */
 export function familyCounts(items: ReviewItem[], summary: ReviewSummary | null): Record<"picks" | "proposals" | "asked", number> {
   const out = { picks: 0, proposals: 0, asked: 0 };
   const add = (kind: string, count: number) => {
@@ -41,6 +41,7 @@ export function familyCounts(items: ReviewItem[], summary: ReviewSummary | null)
   };
   if (summary) for (const [kind, count] of Object.entries(summary.by_kind)) add(kind, count);
   else for (const i of items) if (i.status === "open") add(i.kind, 1);
+  for (const i of items) if (i.status === "staged" && familyOf(i.kind) === "proposals") out.proposals += 1;
   return out;
 }
 
