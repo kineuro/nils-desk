@@ -18,9 +18,13 @@ import {
   closedWords,
   closeRefusal,
   closure,
+  conditionWords,
   emptyDraft,
   formProblem,
+  holds,
+  jointOf,
   kindsOffered,
+  legalProblem,
   makeBody,
   makeHref,
   prefillOf,
@@ -29,6 +33,7 @@ import {
   rateRefusal,
   sourceWords,
   type Answer,
+  type AxesConstraints,
   type Campaign,
   type Closed,
 } from "./client";
@@ -179,10 +184,36 @@ describe("answering", () => {
     expect(answerBody({ kind: "derivative", derivative_kind: "mask" }, { kind: "file", derivative: 9, form: {} })).toEqual({ ok: true, body: { derivative_id: 9 } });
   });
 
-  it("answers every axis of an axes question at once", () => {
+  it("answers every axis of an axes question at once, none where an axis has no value", () => {
     const q = { kind: "axes", axes: ["base", "technique"] };
-    expect(answerBody(q, { kind: "values", values: { base: "T1w" } })).toEqual({ ok: false, needs: "a value for technique" });
+    expect(answerBody(q, { kind: "values", values: { base: "T1w" } })).toEqual({ ok: false, needs: "a value for technique, or none" });
     expect(answerBody(q, { kind: "values", values: { base: "T1w", technique: "MPRAGE" } })).toEqual({ ok: true, body: { value: { base: "T1w", technique: "MPRAGE" } } });
+    expect(answerBody(q, { kind: "values", values: { base: "T1w", technique: null } })).toEqual({ ok: true, body: { value: { base: "T1w", technique: null } } });
+  });
+
+  it("holds an axes answer to the pack's legal combinations before it is sent", () => {
+    const constraints: AxesConstraints = {
+      pack: "mri@0.4.0",
+      values: { base: ["T1w", "T2w"], technique: ["MPRAGE", "TSE"], modifier: ["FLAIR", "IR", "FS"] },
+      multi: ["modifier"],
+      groups: { modifier: { IR_CONTRAST: ["FLAIR", "IR"] } },
+      implications: [{ rule: "base/mprage-is-t1", when: { axis: "technique", is: "MPRAGE" }, then: [{ axis: "base", value: "T1w" }] }],
+    };
+    const q = { kind: "axes", axes: ["base", "technique", "modifier"], constraints };
+    expect(legalProblem(constraints, jointOf({ base: "T2w", technique: "MPRAGE" }))).toBe(
+      "the pack's rule base/mprage-is-t1 sets base to T1w when technique is MPRAGE, and the answer says base is T2w",
+    );
+    expect(legalProblem(constraints, jointOf({ modifier: ["FLAIR", "IR"] }))).toBe("FLAIR and IR are in the exclusion group IR_CONTRAST of modifier, and at most one of them holds");
+    // an axis not chosen yet is not judged
+    expect(legalProblem(constraints, jointOf({ technique: "MPRAGE", base: "" }))).toBeNull();
+    expect(answerBody(q, { kind: "values", values: { base: "T2w", technique: "MPRAGE", modifier: null } })).toEqual({
+      ok: false,
+      needs: "a combination the pack allows: the pack's rule base/mprage-is-t1 sets base to T1w when technique is MPRAGE, and the answer says base is T2w",
+    });
+    expect(answerBody(q, { kind: "values", values: { base: "T1w", technique: "MPRAGE", modifier: ["FS"] } })).toEqual({ ok: true, body: { value: { base: "T1w", technique: "MPRAGE", modifier: ["FS"] } } });
+    expect(holds({ any: [{ axis: "base", is: "T1w" }, { axis: "technique", is: "TSE" }] }, { base: ["T2w"] })).toBeNull();
+    expect(holds({ not: { axis: "base", missing_or: "T1w" } }, { base: [] })).toBe(false);
+    expect(conditionWords({ all: [{ axis: "technique", is: "MPRAGE" }, { not: { axis: "modifier", is: "FS" } }] })).toBe("technique is MPRAGE and not modifier is FS");
   });
 
   it("checks a form as the engine does", () => {

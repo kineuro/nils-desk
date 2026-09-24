@@ -20,7 +20,7 @@ import { capsFor, RATER } from "./caps.fixture";
 import { beatEvery, leaseWords, type Answer, type Campaign, type Claimed, type Given } from "./client";
 import { answeringApp, blank } from "./renderers";
 import { candidatesOf, factsOf, WorkspaceBody, type WorkspaceBodyProps } from "./Workspace";
-import { answeredWords, beatSeat, chosenOf, disagreementWords, given, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
+import { answeredWords, beatSeat, chosenOf, disagreementWords, given, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
 
 const open = openCampaign as unknown as Campaign;
 const closed = closedCampaign as unknown as Campaign;
@@ -146,6 +146,36 @@ describe("the keys", () => {
     const html = draw({ campaign: { ...open, question: { kind: "axis", axis: "base", values: ["T1w", "DWI", "T2w", "Unknown"] } }, rows: [row] });
     expect(html).toContain('<span class="axis-family-name">anatomical</span>');
     expect(html.indexOf("T2w")).toBeLessThan(html.indexOf("DWI"));
+  });
+});
+
+describe("an axes question", () => {
+  const q = {
+    kind: "axes",
+    axes: ["base", "modifier"],
+    values: { base: ["T1w", "T2w"], modifier: ["FLAIR", "FS"] },
+    constraints: { values: { base: ["T1w", "T2w"], modifier: ["FLAIR", "FS"] }, multi: ["modifier"], groups: {}, implications: [{ rule: "r/flair-t2", when: { axis: "modifier", is: "FLAIR" }, then: [{ axis: "base", value: "T2w" }] }] },
+  };
+  const c = { ...open, question: q };
+  it("draws a row per axis, several on a multi-valued one, and none on each", () => {
+    const rows = rowsOf(q, null);
+    expect(rows.map((r) => [r.axis, r.values, r.multi === true])).toEqual([
+      ["base", ["T1w", "T2w"], false],
+      ["modifier", ["FLAIR", "FS"], true],
+    ]);
+    const html = draw({ campaign: c, rows, given: { kind: "values", values: { base: "T1w", modifier: null } } });
+    expect(html).toContain("<kbd>q</kbd>FLAIR");
+    expect(html).toContain('<span class="meta"> · several</span>');
+    expect(html).toContain('class="opt on" aria-pressed="true">none</button>');
+    expect(html).not.toContain("The pack does not allow this");
+  });
+
+  it("says what the pack forbids as the person chooses", () => {
+    let g = givenNone(blank(q), "base");
+    expect(chosenOf(q, g)).toEqual({ base: null });
+    g = given(q, { kind: "values", values: { base: "T1w" } }, rowsOf(q, null)[1], "FLAIR");
+    expect(illegal(q, g)).toBe("the pack's rule r/flair-t2 sets base to T2w when modifier is FLAIR, and the answer says base is T1w");
+    expect(draw({ campaign: c, rows: rowsOf(q, null), given: g })).toContain("The pack does not allow this: the pack&#x27;s rule r/flair-t2 sets base to T2w");
   });
 });
 

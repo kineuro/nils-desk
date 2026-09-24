@@ -21,7 +21,22 @@ export interface Row {
 export type Marks = Record<string, Record<string, string[]>>;
 
 /** One row per axis, the values grouped by family, each with the key that picks it. */
-export function AxisRows({ rows, chosen, marks = {}, onChoose }: { rows: Row[]; chosen: Record<string, string | string[]>; marks?: Marks; onChoose: (axis: string, value: string) => void }) {
+export function AxisRows({
+  rows,
+  chosen,
+  marks = {},
+  none = false,
+  onChoose,
+  onNone,
+}: {
+  rows: Row[];
+  chosen: Record<string, string | string[] | null>;
+  marks?: Marks;
+  /** Offer "none" on each row: an axes answer names every axis, and none says it has no value here. */
+  none?: boolean;
+  onChoose: (axis: string, value: string) => void;
+  onNone?: (axis: string) => void;
+}) {
   return (
     <div className="axis-rows">
       {rows.map((r, n) => {
@@ -51,6 +66,11 @@ export function AxisRows({ rows, chosen, marks = {}, onChoose }: { rows: Row[]; 
                   })}
                 </span>
               ))}
+              {none && (
+                <button type="button" className={on === null ? "opt on" : "opt"} aria-pressed={on === null} onClick={() => onNone?.(r.axis)}>
+                  none
+                </button>
+              )}
             </span>
           </div>
         );
@@ -71,7 +91,7 @@ function groupOf(r: Row): { family: string | null; values: { value: string; i: n
 }
 
 /** The value chosen on a row, as the given answer holds it after a choice: one value, or a set on a multi-valued axis. */
-export function choose(given: Record<string, string | string[]>, row: Row, value: string): Record<string, string | string[]> {
+export function choose(given: Record<string, string | string[] | null>, row: Row, value: string): Record<string, string | string[] | null> {
   if (!row.multi) return { ...given, [row.axis]: given[row.axis] === value ? "" : value };
   const was = Array.isArray(given[row.axis]) ? (given[row.axis] as string[]) : [];
   return { ...given, [row.axis]: was.includes(value) ? was.filter((v) => v !== value) : [...was, value] };

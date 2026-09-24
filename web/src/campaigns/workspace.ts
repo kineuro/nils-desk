@@ -7,7 +7,7 @@
 
 import type { Json } from "../ask/client";
 import type { PackDoc } from "../review/client";
-import { answerBody, answerWords, axisValues, itemWords, keyValue, ROW_KEYS, stateWords, type Answer, type Answered, type Assignment, type Claimed, type Given, type Item, type Question } from "./client";
+import { answerBody, answerWords, axisValues, itemWords, jointOf, keyValue, legalProblem, ROW_KEYS, stateWords, type Answer, type Answered, type Assignment, type Claimed, type Given, type Item, type Question } from "./client";
 import { choose, type Marks, type Row } from "./renderers";
 
 export type Seat =
@@ -60,7 +60,8 @@ export function rowsOf(q: Question, pack: PackDoc | null): Row[] {
       }
       values = order.flatMap((f) => values.filter((v) => (families[v] ?? "") === f));
     }
-    return { axis, values, ...(any ? { families } : {}), ...(p?.multi ? { multi: true } : {}) };
+    const multi = q.constraints?.multi ? q.constraints.multi.includes(axis) : p?.multi === true;
+    return { axis, values, ...(any ? { families } : {}), ...(multi ? { multi: true } : {}) };
   });
 }
 
@@ -71,8 +72,20 @@ export function given(q: Question, g: Given, row: Row, value: string): Given {
   return g;
 }
 
+/** An axes answer with one axis said to have no value here. */
+export function givenNone(g: Given, axis: string): Given {
+  const values = g.kind === "values" ? g.values : {};
+  return { kind: "values", values: { ...values, [axis]: values[axis] === null ? "" : null } };
+}
+
+/** Why the pack forbids the axes chosen so far, or null. */
+export function illegal(q: Question, g: Given): string | null {
+  if (q.kind !== "axes" || !q.constraints || g.kind !== "values") return null;
+  return legalProblem(q.constraints, jointOf(g.values));
+}
+
 /** The given answer as rows show it chosen. */
-export function chosenOf(q: Question, g: Given): Record<string, string | string[]> {
+export function chosenOf(q: Question, g: Given): Record<string, string | string[] | null> {
   if (g.kind === "value" && q.axis) return { [q.axis]: g.value };
   if (g.kind === "values") return g.values;
   return {};
@@ -113,7 +126,7 @@ export function marksOf(q: Question, answers: Answer[], item: number): Marks {
     if (a.item_id !== item || a.role !== "rater") continue;
     if (q.kind === "axis" && q.axis && typeof a.value === "string") put(q.axis, a.value, a.principal);
     if (q.kind === "axes" && a.value && typeof a.value === "object" && !Array.isArray(a.value)) {
-      for (const [axis, v] of Object.entries(a.value as Json)) for (const x of Array.isArray(v) ? v : [v]) put(axis, String(x), a.principal);
+      for (const [axis, v] of Object.entries(a.value as Json)) for (const x of Array.isArray(v) ? v : v === null ? [] : [v]) put(axis, String(x), a.principal);
     }
   }
   return out;

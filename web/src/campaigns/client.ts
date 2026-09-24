@@ -37,7 +37,24 @@ export interface Question {
   schema?: FormSchema;
   derivative_kind?: string;
   form?: FormSchema;
+  /** An axes question's legal combinations, frozen from the served pack when the campaign was made (record 45 E4). */
+  constraints?: AxesConstraints;
 }
+
+/** What an axes question holds its answers to: each asked axis's values, the multi-valued axes, the exclusion groups and the pack's implications. */
+export interface AxesConstraints {
+  pack?: string;
+  values?: Record<string, string[]>;
+  multi?: string[];
+  groups?: Record<string, Record<string, string[]>>;
+  implications?: { rule?: string; when: Condition; then: { axis: string; value: string; when?: Condition | null }[] }[];
+}
+
+/** The pack's condition language over axis values: true, false, {axis, is}, {axis, missing_or}, {all}, {any}, {not}. */
+export type Condition = boolean | { axis?: string; is?: string; missing_or?: string; all?: Condition[]; any?: Condition[]; not?: Condition };
+
+/** An axes answer as the engine reads it: each asked axis with its values, none for no value. */
+export type Joint = Record<string, string[]>;
 
 export type ItemState = "open" | "awaiting_metric" | "needs_adjudication" | "agreed" | "adjudicated" | "disagreed" | "resolved";
 
@@ -197,7 +214,7 @@ export interface MakeBody extends Json {
 
 /** The body of an answer: a value for an axis, a pick and a free question, a form for a form, a file for a derivative. */
 export interface AnswerBody extends Json {
-  value?: string | number[] | Record<string, string | string[]>;
+  value?: string | number[] | Record<string, string | string[] | null>;
   form?: Json;
   derivative_id?: number;
   why?: string;
@@ -633,7 +650,7 @@ export function axisValues(q: Question, axis?: string): string[] {
 /** A rater's answer as it is being given, before it is sent. */
 export type Given =
   | { kind: "value"; value: string }
-  | { kind: "values"; values: Record<string, string | string[]> }
+  | { kind: "values"; values: Record<string, string | string[] | null> }
   | { kind: "stacks"; stacks: number[] }
   | { kind: "form"; form: Json }
   | { kind: "file"; derivative: number | null; form: Json }
@@ -652,12 +669,17 @@ export function answerBody(q: Question, g: Given, why = ""): { ok: true; body: A
     }
     case "axes": {
       if (g.kind !== "values") return { ok: false, needs: "a value for each axis" };
+      // every asked axis is named; none says it has no value here
       const missing = (q.axes ?? []).filter((a) => {
         const v = g.values[a];
         return v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
       });
-      if (missing.length > 0) return { ok: false, needs: `a value for ${missing.join(", ")}` };
-      return { ok: true, body: { value: g.values, ...w } };
+      if (missing.length > 0) return { ok: false, needs: `a value for ${missing.join(", ")}, or none` };
+      const problem = q.constraints ? legalProblem(q.constraints, jointOf(g.values)) : null;
+      if (problem) return { ok: false, needs: `a combination the pack allows: ${problem}` };
+      const value: Record<string, string | string[] | null> = {};
+      for (const a of q.axes ?? []) value[a] = g.values[a] ?? null;
+      return { ok: true, body: { value, ...w } };
     }
     case "pick":
       if (g.kind !== "stacks" || g.stacks.length === 0) return { ok: false, needs: "the stacks that stand for the role" };
@@ -678,6 +700,82 @@ export function answerBody(q: Question, g: Given, why = ""): { ok: true; body: A
     default:
       return { ok: false, needs: `a question this desk knows (${q.kind})` };
   }
+}
+
+/** The chosen values as the engine reads an axes answer: an axis not chosen yet is left out, none is no value. */
+export function jointOf(values: Record<string, string | string[] | null>): Joint {
+  const out: Joint = {};
+  for (const [axis, v] of Object.entries(values)) {
+    if (v === undefined || v === "") continue;
+    out[axis] = v === null ? [] : Array.isArray(v) ? v : [v];
+  }
+  return out;
+}
+
+/** A condition on a partial answer: true, false, or null when it reads an axis the answer does not name yet. */
+export function holds(c: Condition | null | undefined, a: Joint): boolean | null {
+  if (typeof c === "boolean") return c;
+  if (!c || typeof c !== "object") return null;
+  if (c.axis !== undefined) {
+    const held = a[c.axis];
+    if (!held) return null;
+    if (c.is !== undefined) return held.includes(c.is);
+    if (c.missing_or !== undefined) return held.length === 0 || held.includes(c.missing_or);
+    return null;
+  }
+  if (c.all) {
+    const each = c.all.map((x) => holds(x, a));
+    if (each.includes(false)) return false;
+    return each.every((x) => x === true) ? true : null;
+  }
+  if (c.any) {
+    const each = c.any.map((x) => holds(x, a));
+    if (each.includes(true)) return true;
+    return each.every((x) => x === false) ? false : null;
+  }
+  if (c.not !== undefined) {
+    const h = holds(c.not, a);
+    return h === null ? null : !h;
+  }
+  return null;
+}
+
+/** A condition in words. */
+export function conditionWords(c: Condition | null | undefined): string {
+  if (typeof c === "boolean") return c ? "always" : "never";
+  if (!c) return "";
+  if (c.axis !== undefined && c.is !== undefined) return `${c.axis} is ${c.is}`;
+  if (c.axis !== undefined && c.missing_or !== undefined) return `${c.axis} is ${c.missing_or} or none`;
+  if (c.all) return c.all.map(conditionWords).join(" and ");
+  if (c.any) return c.any.map(conditionWords).join(" or ");
+  if (c.not !== undefined) return `not ${conditionWords(c.not)}`;
+  return "";
+}
+
+/**
+ * Why the pack forbids an answer, or null while it allows it, as the engine
+ * checks it: at most one member of an exclusion group, and what a rule whose
+ * condition holds sets. Shown as the person chooses, so a refusal is rare.
+ */
+export function legalProblem(c: AxesConstraints, a: Joint): string | null {
+  for (const [axis, groups] of Object.entries(c.groups ?? {})) {
+    const held = a[axis];
+    if (!held) continue;
+    for (const [group, members] of Object.entries(groups)) {
+      const both = held.filter((v) => members.includes(v));
+      if (both.length > 1) return `${both.join(" and ")} are in the exclusion group ${group} of ${axis}, and at most one of them holds`;
+    }
+  }
+  for (const imp of c.implications ?? []) {
+    if (holds(imp.when, a) !== true) continue;
+    for (const t of imp.then) {
+      if (t.when !== undefined && t.when !== null && holds(t.when, a) !== true) continue;
+      const held = a[t.axis];
+      if (!held) continue;
+      if (!held.includes(t.value)) return `the pack's rule ${imp.rule ?? ""} sets ${t.axis} to ${t.value} when ${conditionWords(imp.when)}, and the answer says ${t.axis} is ${held.length === 0 ? "nothing" : held.join(", ")}`.replace("rule  sets", "rule sets");
+    }
+  }
+  return null;
 }
 
 /** What a form still needs, in words, or null when it fits the schema. */
@@ -711,7 +809,7 @@ export function answerWords(a: Pick<Answer, "value" | "form" | "derivative_id">)
   if (Array.isArray(v)) return `stacks ${v.join(", ")}`;
   if (v && typeof v === "object")
     return Object.entries(v as Json)
-      .map(([k, x]) => `${k} ${Array.isArray(x) ? x.join("+") : String(x)}`)
+      .map(([k, x]) => `${k} ${Array.isArray(x) ? x.join("+") || "none" : x === null ? "none" : String(x)}`)
       .join(" · ");
   return String(v);
 }

@@ -31,7 +31,7 @@ import {
 } from "./client";
 import { AxisRows, blank, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
 import { StackView } from "./StackView";
-import { answeredWords, beatSeat, bodyOf, chosenOf, disagreementWords, given as choose, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
+import { answeredWords, beatSeat, bodyOf, chosenOf, disagreementWords, given as choose, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
 
 type Role = "rater" | "adjudicator";
 
@@ -405,7 +405,19 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
   switch (q.kind) {
     case "axis":
     case "axes":
-      return <AxisRows rows={p.rows} chosen={chosenOf(q, g)} marks={p.marks} onChoose={(axis, value) => p.onGiven(choose(q, g, p.rows.find((r) => r.axis === axis)!, value))} />;
+      return (
+        <>
+          <AxisRows
+            rows={p.rows}
+            chosen={chosenOf(q, g)}
+            marks={p.marks}
+            none={q.kind === "axes"}
+            onChoose={(axis, value) => p.onGiven(choose(q, g, p.rows.find((r) => r.axis === axis)!, value))}
+            onNone={(axis) => p.onGiven(givenNone(g, axis))}
+          />
+          {illegal(q, g) && <p className="warn">The pack does not allow this: {illegal(q, g)}.</p>}
+        </>
+      );
     case "pick":
       return <PickStacks role={q.role ?? "the role"} candidates={p.candidates} stacks={g.kind === "stacks" ? g.stacks : []} onChange={(stacks) => p.onGiven({ kind: "stacks", stacks })} />;
     case "form":
