@@ -1,0 +1,18 @@
+{
+  "campaign": 7,
+  "item": 301,
+  "stack_id": 1207,
+  "axes": ["base", "technique", "modifier"],
+  "lines": [
+    {"axis": "base", "value": "T1w", "flags": ["inversion"], "rule_set": "base", "rule": "technique:MPRAGE", "clause": "TI > 700 and TR < 3000", "reads": {"TR": 2300, "TE": 2.98, "TI": 900, "flip angle": 9, "sequence name": "*tfl3d1_16ns", "image type": ["ORIGINAL", "PRIMARY", "M"]}, "votes": [{"rule": "technique:MPRAGE", "value": "T1w"}, {"rule": "keyword:T1w", "value": "T1w"}], "words": ["t1", "mprage"], "model": {"value": "T1w", "p": 0.93, "weighed": ["TI", "words"]}, "confidence": 0.97, "agree": true},
+    {"axis": "technique", "value": "MPRAGE", "flags": ["3d", "inversion"], "rule_set": "technique", "rule": "MPRAGE", "clause": "3D and inversion and gradient echo", "reads": [{"name": "MR acquisition type", "value": "3D"}, {"name": "scanning sequence", "value": ["GR", "IR"]}], "votes": [{"rule": "MPRAGE", "value": "MPRAGE"}], "words": null, "model": {"value": "MPRAGE", "p": 0.9}, "confidence": 0.95, "agree": true},
+    {"axis": "modifier", "value": null, "flags": [], "rule_set": "modifier", "rule": null, "votes": [], "words": [], "model": {"value": "FatSat", "p": 0.76}, "agree": false}
+  ],
+  "candidates": [
+    {"values": {"base": "T1w", "technique": "MPRAGE", "modifier": ["FatSat"]}, "p": 0.71},
+    {"values": {"base": "T1w", "technique": "MPRAGE", "modifier": []}, "p": 0.22},
+    {"values": {"base": "T2w", "technique": "TSE", "modifier": ["FatSat"]}, "p": 0.04, "legal": false}
+  ],
+  "value": 0.29,
+  "batch": "siemens-mprage-t1"
+}

@@ -926,6 +926,9 @@ export function disagreement(answers: Answer[], item: number, round?: number): {
 /** The keys that pick a value: `1` to `0` on the first row, `q` to `p` on the second (v0's keys). */
 export const ROW_KEYS = ["1234567890", "qwertyuiop"];
 
+/** The keys that choose a shown candidate in the reader (record 48): the bottom row, left hand, never a value key. */
+export const CANDIDATE_KEYS = "zxcv";
+
 /** The value a key picks on a row of values, or null. */
 export function keyValue(key: string, row: number, values: string[]): string | null {
   const keys = ROW_KEYS[row];

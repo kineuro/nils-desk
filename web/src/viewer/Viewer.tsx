@@ -16,16 +16,16 @@ import * as tools from "@cornerstonejs/tools";
 import { DoorError } from "../ask/client";
 import { classify, Failure, type Failed } from "../ui/Failure";
 import { Wait } from "../ui/Wait";
-import { doors, levelShape, levelSpacing, type Manifest } from "./doors";
-import { cameraLabels, geometry, nearestAxis, renderAxes, type Axis, type EdgeLabels, type Vec3 } from "./geometry";
+import { doors, levelShape, type Manifest } from "./doors";
+import { cameraLabels, geometry, type EdgeLabels, type Vec3 } from "./geometry";
 import { close, counters, imageId, open, register, viewWindow } from "./loader";
+import { PLANES, serverPlane as serverPlaneOf, type Plane } from "./prefetch";
 import { Letters, RenderPlane } from "./RenderPlane";
 import { fps, levelFor } from "./ring";
 import { dropVolume, fillVolume, volumePath, type Filling } from "./volume";
 import "./viewer.css";
 
-export type Plane = "axial" | "coronal" | "sagittal";
-export const PLANES: Plane[] = ["axial", "coronal", "sagittal"];
+export { PLANES, type Plane } from "./prefetch";
 
 /** The ids a page watching the viewer (the bench) finds its viewports by. */
 export function viewerIds(stack: number): { engine: string; stack: string; planes: Record<Plane, string> } {
@@ -73,8 +73,6 @@ const ORIENT: Record<Plane, cs.Enums.OrientationAxis> = {
   coronal: cs.Enums.OrientationAxis.CORONAL,
   sagittal: cs.Enums.OrientationAxis.SAGITTAL,
 };
-/** The patient plane's normal, for the server axis that stands in for it. */
-const NORMAL: Record<Plane, Vec3> = { axial: [0, 0, 1], coronal: [0, 1, 0], sagittal: [1, 0, 0] };
 
 let inited: Promise<void> | null = null;
 function initOnce(): Promise<void> {
@@ -316,15 +314,10 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   if (!manifest) return <Wait phase="reading the stack's manifest" since={Date.now()} size="panel" />;
   const [nz, ny, nx] = manifest.shape;
   const g = geometry(manifest);
-  const serverLevel = Math.min(manifest.levels - 1, 2);
-  const serverShape = levelShape(manifest, serverLevel);
-  const serverSpacing = levelSpacing(manifest, serverLevel);
+  // the same addresses the reader warms ahead (prefetch.ts), so a warmed plane is drawn from the cache
   const serverPlane = (p: Plane, pos: number) => {
-    const axis: Axis = nearestAxis(g, NORMAL[p]);
-    const axes = renderAxes(g, serverShape, serverSpacing, axis);
-    const along = axis === "z" ? serverShape[0] : axis === "y" ? serverShape[1] : serverShape[2];
-    const index = Math.round(pos * (along - 1));
-    return <RenderPlane src={doors.renderUrl(stack, serverLevel, index, manifest.window.width, manifest.window.center, axis)} axes={axes} known={g.known} />;
+    const s = serverPlaneOf(stack, manifest, g, p, pos);
+    return <RenderPlane src={s.src} axes={s.axes} known={s.known} />;
   };
   const volumeDone = volume?.done ?? false;
   return (

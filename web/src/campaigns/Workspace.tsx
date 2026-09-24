@@ -33,10 +33,33 @@ import {
   type Item,
 } from "./client";
 import { AxisRows, blank, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
+import { BatchView, type BatchViewProps } from "./Batches";
+import type { AskedCandidate } from "../review/asked";
+import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, suggestedValue, Clock, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type Order, type Pace, type Reading, type Suggestion } from "./reader";
+import { acceptBatch, batchesFor, claimIn, hintOf, R48, readingFor, timed, valueOrderServed } from "./readerDoors";
+import { EvidenceLines, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { StackView } from "./StackView";
+import { warmStack } from "../viewer/prefetch";
 import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, disagreementWords, given as choose, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
 
 type Role = "rater" | "adjudicator";
+
+const ORDER_KEY = "nils.reader.order";
+const EVIDENCE_KEY = "nils.reader.evidence";
+function remembered(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function remember(key: string, v: string): void {
+  try {
+    localStorage.setItem(key, v);
+  } catch {
+    // a private window keeps nothing; the page works the same
+  }
+}
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -60,6 +83,28 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const [pickable, setPickable] = useState<number[] | null>(null);
   const [board, setBoard] = useState<BoardCandidate[] | null>(null);
   const [stackWords, setStackWords] = useState<Record<number, string>>({});
+  // the reader (record 48 R1)
+  const [order, setOrder] = useState<Order>(() => (valueOrderServed(caps) && remembered(ORDER_KEY) !== "position" ? "value" : "position"));
+  const [reading, setReading] = useState<Reading | null>(null);
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [suggested, setSuggested] = useState<Given | null>(null);
+  const [evOpen, setEvOpen] = useState(() => remembered(EVIDENCE_KEY) === "open");
+  const [pace, setPace] = useState<Pace>(NO_PACE);
+  const [mode, setMode] = useState<"one" | "batch">("one");
+  const [batches, setBatches] = useState<Batch[] | null>(null);
+  const [batchAt, setBatchAt] = useState(0);
+  const [mine, setMine] = useState<Set<number>>(() => new Set());
+  const [batchSaid, setBatchSaid] = useState<string | null>(null);
+  const clock = useRef(new Clock());
+  const batchShown = useRef<number | null>(null);
+  const prefetch = useRef<Prefetcher | null>(null);
+  prefetch.current ??= new Prefetcher(warmStack, 2);
+  const orderNow = useRef(order);
+  orderNow.current = order;
+  // held-back stacks to read one by one, asked for by name before the next by order
+  const heldQueue = useRef<number[]>([]);
+  const answeredHere = useRef(new Set<number>());
+  const hint = useRef<number[]>([]);
 
   // the capabilities are read again every few seconds; the workspace follows them without starting over
   const capsNow = useRef(caps);
@@ -68,9 +113,13 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const claim = useCallback(
     (note: string | null = null) => {
       setSeat({ kind: "claiming" });
-      campaigns
-        .claim(id, role)
-        .then((c) => setSeat(seatOf(c, note)))
+      const named = heldQueue.current.shift() ?? null;
+      claimIn(id, role, orderNow.current, named)
+        .then((c) => {
+          hint.current = hintOf(c);
+          if (c.item) heldQueue.current = heldQueue.current.filter((i) => i !== c.item!.id);
+          setSeat(seatOf(c, note));
+        })
         .catch((e: unknown) => setSeat({ kind: "failed", why: refusedWords(e) }));
     },
     [id, role],
@@ -104,16 +153,40 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const holding = seat.kind === "holding" ? seat : null;
   const assignmentId = holding?.assignment.id ?? null;
   const item = holding?.item ?? null;
+  const currentItem = useRef<number | null>(null);
+  currentItem.current = item?.id ?? null;
 
   // a new item starts from a blank answer; its review item's evidence where the person may read the queue; every answer for the adjudicator
   useEffect(() => {
     if (!q || assignmentId === null || !item) return;
-    setG(blank(q));
+    const fresh = blank(q);
+    setG(fresh);
     setWhy("");
     setRefused(null);
     setEvidence(null);
     setPickable(null);
     setBoard(null);
+    setReading(null);
+    setSuggestion(null);
+    setSuggested(null);
+    clock.current.start(item.id, Date.now());
+    if (q.kind === "axis" || q.kind === "axes") {
+      // the suggestion filled in, unless a key was pressed before it came
+      readingFor(capsNow.current, id, q, item).then((r) => {
+        if (currentItem.current !== item.id) return;
+        const s = suggestionOf(q, r);
+        const g0 = givenOf(q, s);
+        setReading(r);
+        setSuggestion(s);
+        setSuggested(g0);
+        if (g0) setG((was) => (JSON.stringify(was) === JSON.stringify(fresh) ? g0 : was));
+      });
+      // the next items: their pictures warmed and their readings asked for while this one is read
+      const items = campaign?.items ?? [];
+      const next = upcoming(item, items, answeredHere.current, orderNow.current, 2, hint.current);
+      prefetch.current?.want(next);
+      for (const n of items.filter((i) => i.stack_id !== null && next.includes(i.stack_id))) void readingFor(capsNow.current, id, q, n);
+    }
     if (q.kind === "pick" && served(capsNow.current, CANDIDATES))
       campaigns.candidates(id, item.id).then(
         (r) => {
@@ -123,7 +196,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         },
         () => undefined,
       );
-    if (item.review_item_id !== null && may(capsNow.current, "review:see")) campaigns.reviewItem(item.review_item_id).then((r) => setEvidence(r.evidence ?? null), () => undefined);
+    if (q.kind !== "axis" && q.kind !== "axes" && item.review_item_id !== null && may(capsNow.current, "review:see")) campaigns.reviewItem(item.review_item_id).then((r) => setEvidence(r.evidence ?? null), () => undefined);
     if (role === "adjudicator") campaigns.answers(id).then(setAnswers, () => setAnswers([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
@@ -157,17 +230,82 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       return;
     }
     setBusy(true);
+    const seconds = clock.current.stop(holding.item.id, Date.now());
+    const changes = changesOf(q, baselineOf(q, suggestion), g);
     campaigns
-      .answer(id, holding.assignment.id, b.body)
+      .answer(id, holding.assignment.id, timed(b.body, seconds, changes, suggestedValue(q, suggestion)))
       .then((r) => {
         setDone((d) => d + 1);
+        setPace((p) => paced(p, seconds, changes));
+        answeredHere.current.add(holding.item.id);
         setSaid(answeredWords(r, holding.item));
         setOpen((o) => (o === null ? o : Math.max(0, o - (r.state === "open" ? 0 : 1))));
         claim();
       })
-      .catch((e: unknown) => setRefused(refusedWords(e)))
+      .catch((e: unknown) => {
+        // the clock runs on while the person fixes it
+        if (seconds !== null) clock.current.start(holding.item.id, Date.now() - seconds * 1000);
+        setRefused(refusedWords(e));
+      })
       .finally(() => setBusy(false));
-  }, [q, holding, busy, g, why, id, claim]);
+  }, [q, holding, busy, g, why, id, claim, suggested, suggestion]);
+
+  // the batches of like stacks (record 48 R1)
+  const batchesOffered = served(caps, R48.batches) && (q?.kind === "axis" || q?.kind === "axes") && role === "rater";
+  const openBatches = useCallback(() => {
+    setMode("batch");
+    setBatches(null);
+    setBatchAt(0);
+    setMine(new Set());
+    setBatchSaid(null);
+    batchShown.current = Date.now();
+    batchesFor(id).then(setBatches, (e: unknown) => {
+      setBatches([]);
+      setBatchSaid(refusedWords(e));
+    });
+  }, [id]);
+  const acceptNow = useCallback(() => {
+    const b = batches?.[batchAt];
+    if (!b || busy) return;
+    const plan = acceptPlan(b, mine);
+    if (plan.accept.length === 0) return;
+    const seconds = batchShown.current === null ? null : (Date.now() - batchShown.current) / 1000;
+    setBusy(true);
+    acceptBatch(id, q!, b, plan, seconds)
+      .then((r) => {
+        setPace((p) => paced(p, seconds, 0, r.accepted));
+        setDone((d) => d + r.accepted);
+        setOpen((o) => (o === null ? o : Math.max(0, o - r.accepted)));
+        heldQueue.current = [...heldQueue.current, ...r.held.filter((i) => !heldQueue.current.includes(i))];
+        for (const i of plan.accept) answeredHere.current.add(i);
+        const words = `Accepted ${r.accepted} of ${b.words}; ${r.held.length} held back, read next one by one.`;
+        setSaid(words);
+        setBatchSaid(words);
+        setMine(new Set());
+        const rest = (batches ?? []).filter((x) => x.key !== b.key);
+        setBatches(rest);
+        setBatchAt((a) => Math.min(a, Math.max(0, rest.length - 1)));
+        batchShown.current = Date.now();
+        // the item held now may have been in the batch; the claim hands back what is still mine, or the next
+        claim();
+      })
+      .catch((e: unknown) => setBatchSaid(refusedWords(e)))
+      .finally(() => setBusy(false));
+  }, [batches, batchAt, busy, mine, id, claim, q]);
+  const hold = useCallback((i: number) => setMine((m) => {
+    const n = new Set(m);
+    if (n.has(i)) n.delete(i);
+    else n.add(i);
+    return n;
+  }), []);
+  const toggleEvidence = useCallback(() => setEvOpen((x) => {
+    remember(EVIDENCE_KEY, x ? "closed" : "open");
+    return !x;
+  }), []);
+  const chooseOrder = useCallback((o: Order) => {
+    remember(ORDER_KEY, o);
+    setOrder(o);
+  }, []);
 
   const giveBack = useCallback(
     (then: "next" | "stop") => {
@@ -191,8 +329,9 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const candidates = board && board.length > 0 ? board.map((b) => b.stacks[0]) : (pickable ?? candidatesOf(evidence));
 
   // the keys
-  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack });
-  keyed.current = { q, rows, candidates, board, g, answer, giveBack };
+  const offered = suggestion?.differ.length ? suggestion.offered : [];
+  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence });
+  keyed.current = { q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
@@ -202,10 +341,27 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       if (t?.closest?.("dialog")) return;
       // Enter on a link or an act's button is that link's or button's; on a value it answers
       if (e.key === "Enter" && t && (t.tagName === "A" || (t.tagName === "BUTTON" && !t.closest(".axis-rows, .form-fields")))) return;
-      const act = keyAct(e.key, { ctrl: e.ctrlKey, inField, q: k.q, rows: k.rows, candidates: k.candidates });
+      if (k.mode === "batch") {
+        const b = e.ctrlKey ? null : batchKey(e.key, inField);
+        if (!b) return;
+        e.preventDefault();
+        if (b.kind === "accept") k.acceptNow();
+        else if (b.kind === "next") setBatchAt((a) => (k.batchCount > 0 ? (a + 1) % k.batchCount : 0));
+        else if (b.kind === "back") setMode("one");
+        else setKeys((x) => !x);
+        return;
+      }
+      const act = keyAct(e.key, { ctrl: e.ctrlKey, inField, q: k.q, rows: k.rows, candidates: k.candidates, offered: k.offered.length, batches: k.batchesOffered });
       if (!act) return;
       e.preventDefault();
-      if (act.kind === "answer") k.answer();
+      if (act.kind === "candidate") {
+        const c = k.offered[act.index];
+        const cg = c ? givenOfCandidate(k.q, c) : null;
+        if (cg) setG(cg);
+      } else if (act.kind === "evidence") k.toggleEvidence();
+      else if (act.kind === "reset") setG(k.suggested ?? blank(k.q));
+      else if (act.kind === "batch") k.openBatches();
+      else if (act.kind === "answer") k.answer();
       else if (act.kind === "skip") k.giveBack("next");
       else if (act.kind === "keys") setKeys((x) => !x);
       else if (act.kind === "choose") setG((was) => choose(k.q!, was, act.row, act.value));
@@ -250,6 +406,34 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       onStop={() => giveBack("stop")}
       onKeys={() => setKeys((x) => !x)}
       onAgain={() => claim()}
+      lines={reading?.lines ?? null}
+      suggestion={suggestion}
+      evOpen={evOpen}
+      onEvidence={toggleEvidence}
+      onCandidate={(c) => {
+        const cg = givenOfCandidate(q!, c);
+        if (cg) setG(cg);
+      }}
+      pace={pace}
+      order={valueOrderServed(caps) ? order : null}
+      onOrder={chooseOrder}
+      batchesOffered={batchesOffered}
+      onBatches={openBatches}
+      batch={
+        mode === "batch"
+          ? {
+              batches,
+              at: batchAt,
+              mine,
+              busy,
+              said: batchSaid,
+              onHold: hold,
+              onAccept: acceptNow,
+              onNext: () => setBatchAt((a) => (batches && batches.length > 0 ? (a + 1) % batches.length : 0)),
+              onBack: () => setMode("one"),
+            }
+          : null
+      }
     />
   );
 }
@@ -300,6 +484,21 @@ export interface WorkspaceBodyProps {
   onStop: () => void;
   onKeys: () => void;
   onAgain: () => void;
+  /** The reader (record 48 R1): the evidence one line per axis, where it was read. */
+  lines?: AxisLine[] | null;
+  /** The answer filled in and the candidates where the systems differ. */
+  suggestion?: Suggestion | null;
+  evOpen?: boolean;
+  onEvidence?: () => void;
+  onCandidate?: (c: AskedCandidate) => void;
+  pace?: Pace;
+  /** The claim order, where the engine offers value order; null hides the toggle. */
+  order?: Order | null;
+  onOrder?: (o: Order) => void;
+  batchesOffered?: boolean;
+  onBatches?: () => void;
+  /** The batch view in place of the one stack, while it is open. */
+  batch?: BatchViewProps | null;
 }
 
 /** The workspace as it draws from what it holds. */
@@ -323,9 +522,20 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
         <div className="rate-count">
           <span className="k">open</span>
           <span className="v">{p.open === null ? "?" : n(p.open)}</span>
-          <span className="meta">{p.done > 0 ? `${n(p.done)} answered here` : "items"}</span>
+          {p.pace ? <PaceCount pace={p.pace} /> : <span className="meta">{p.done > 0 ? `${n(p.done)} answered here` : "items"}</span>}
         </div>
       </div>
+      {(p.order || p.batchesOffered) && !refusal && (
+        <div className="row reader-bar">
+          {p.order && p.onOrder && <OrderToggle order={p.order} onOrder={p.onOrder} />}
+          <span className="grow" />
+          {p.batchesOffered && p.onBatches && !p.batch && (
+            <button type="button" className="button secondary small" onClick={p.onBatches}>
+              Like stacks in batches <kbd>b</kbd>
+            </button>
+          )}
+        </div>
+      )}
       {p.said && (
         <p className="meta said">
           <Icon name="check" />
@@ -350,7 +560,8 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
           </div>
         </div>
       )}
-      {holding && (
+      {!refusal && p.batch && <BatchView {...p.batch} />}
+      {holding && !p.batch && (
         <div className="rate-grid">
           <div className="rate-picture">
             {holding.item.stack_id !== null ? (
@@ -372,6 +583,8 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
               </span>
             </div>
             {holding.note && <p className="note-lead">{holding.note}</p>}
+            {p.suggestion && <SuggestionBar s={p.suggestion} chosen={chosenCandidate(q, p.suggestion.offered, p.given)} onChoose={(c) => p.onCandidate?.(c)} busy={p.busy} />}
+            {p.lines && p.lines.length > 0 && <EvidenceLines lines={p.lines} open={p.evOpen ?? false} onToggle={() => p.onEvidence?.()} />}
             {facts.length > 0 && (
               <dl className="facts">
                 {facts.map(([k, v]) => (
@@ -419,7 +632,7 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
                 <kbd>?</kbd>
               </button>
             </div>
-            {p.keys && <KeyList rows={p.rows.length} />}
+            {p.keys && <KeyList rows={p.rows.length} reader={q.kind === "axis" || q.kind === "axes"} candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} />}
           </div>
         </div>
       )}
@@ -472,9 +685,39 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
   }
 }
 
-function KeyList({ rows }: { rows: number }) {
+function KeyList({ rows, reader = false, candidates = 0, batches = false }: { rows: number; reader?: boolean; candidates?: number; batches?: boolean }) {
   return (
     <dl className="facts keys">
+      {reader && (
+        <div className="facts-pair">
+          <dt>Enter</dt>
+          <dd>confirm the answer filled in</dd>
+        </div>
+      )}
+      {candidates > 0 && (
+        <div className="facts-pair">
+          <dt>{CANDIDATE_KEYS.slice(0, candidates).split("").join(" ")}</dt>
+          <dd>choose a candidate</dd>
+        </div>
+      )}
+      {reader && (
+        <div className="facts-pair">
+          <dt>h</dt>
+          <dd>how each axis was decided</dd>
+        </div>
+      )}
+      {reader && (
+        <div className="facts-pair">
+          <dt>Backspace</dt>
+          <dd>back to the suggestion</dd>
+        </div>
+      )}
+      {batches && (
+        <div className="facts-pair">
+          <dt>b</dt>
+          <dd>like stacks in batches</dd>
+        </div>
+      )}
       {rows > 0 && (
         <div className="facts-pair">
           <dt>1 to 0</dt>

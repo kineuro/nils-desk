@@ -7,7 +7,7 @@
 
 import type { PackDoc } from "../review/client";
 import type { BoardCandidate } from "../review/SessionBoard";
-import { answerBody, answerWords, axisValues, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Item, type Question } from "./client";
+import { answerBody, answerWords, axisValues, CANDIDATE_KEYS, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Item, type Question } from "./client";
 import { choose, type Marks, type Row } from "./renderers";
 
 export type Seat =
@@ -91,14 +91,26 @@ export function chosenOf(q: Question, g: Given): Record<string, string | string[
   return {};
 }
 
-export type KeyAct = { kind: "choose"; row: Row; value: string } | { kind: "pick"; stack: number } | { kind: "answer" } | { kind: "skip" } | { kind: "keys" };
+export type KeyAct =
+  | { kind: "choose"; row: Row; value: string }
+  | { kind: "pick"; stack: number }
+  | { kind: "answer" }
+  | { kind: "skip" }
+  | { kind: "keys" }
+  | { kind: "candidate"; index: number }
+  | { kind: "evidence" }
+  | { kind: "reset" }
+  | { kind: "batch" };
 
 /**
  * What a key does in the workspace (v0's keys where they fit): `1` to `0` on
  * the first row of values, `q` to `p` on the second, Enter answers, `s` gives
  * the item back, `?` lists the keys. In a text field only Ctrl+Enter acts.
+ * The reader's keys (record 48) on an axis or axes question: `z` to `v`
+ * choose a shown candidate, `h` opens the evidence, Backspace goes back to
+ * the suggestion, `b` opens the batches where the engine offers them.
  */
-export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: Question; rows: Row[]; candidates?: number[] }): KeyAct | null {
+export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: Question; rows: Row[]; candidates?: number[]; offered?: number; batches?: boolean }): KeyAct | null {
   if (opts.inField) return key === "Enter" && opts.ctrl ? { kind: "answer" } : null;
   if (key === "Enter") return { kind: "answer" };
   if (key === "?") return { kind: "keys" };
@@ -106,6 +118,13 @@ export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: 
   if (opts.q.kind === "pick" && opts.candidates) {
     const s = keyValue(key, 0, opts.candidates.map(String));
     if (s !== null) return { kind: "pick", stack: Number(s) };
+  }
+  if (opts.q.kind === "axis" || opts.q.kind === "axes") {
+    const c = CANDIDATE_KEYS.indexOf(key.toLowerCase());
+    if (c >= 0 && c < (opts.offered ?? 0)) return { kind: "candidate", index: c };
+    if (key === "h" || key === "H") return { kind: "evidence" };
+    if (key === "Backspace") return { kind: "reset" };
+    if ((key === "b" || key === "B") && opts.batches) return { kind: "batch" };
   }
   for (let r = 0; r < Math.min(opts.rows.length, ROW_KEYS.length); r++) {
     const v = keyValue(key, r, opts.rows[r].values);
