@@ -12,7 +12,7 @@ import { may } from "../grants";
 import { ops, type ReviewItem } from "../ops/client";
 import { Dialog } from "../ui/Dialog";
 import { Wait } from "../ui/Wait";
-import { askedOf, choosePlan, type Asked, type AskedCandidate } from "./asked";
+import { askedOf, choosePlan, valueWords, type Asked, type AskedCandidate } from "./asked";
 import { askPeopleHref, asksPeople } from "./askPeople";
 import { CandidateList } from "./CandidateList";
 import { refusalWords, review, type PackDoc } from "./client";
@@ -171,7 +171,7 @@ export function AskedTable({ asked, onOpen }: { asked: Asked[]; onOpen: (a: Aske
             return (
               <tr key={a.item.id}>
                 <td className="num">{a.stack ?? ""}</td>
-                <td>{top ? Object.entries(top.values).map(([k, v]) => `${k} ${Array.isArray(v) ? v.join("+") || "none" : v}`).join(" · ") : "no legal candidate"}</td>
+                <td>{top ? Object.entries(top.values).map(([k, v]) => `${k} ${valueWords(v)}`).join(" · ") : "no legal candidate"}</td>
                 <td className="num">{top ? top.p.toFixed(2) : ""}</td>
                 <td className="num">{n(a.candidates.length)}</td>
                 <td className="num">{whenWords(a.item.created_at)}</td>
@@ -254,9 +254,9 @@ export function AskedDialog({ caps, asked, open, onClose, onNone, onDone }: { ca
     setRefused(null);
     const why = `chose System 1's candidate at p ${c.p.toFixed(2)}`;
     try {
-      for (const a of plan.applies) await ops.reviewApply(a.item.id, { value: a.value, scope: "stack", why });
+      for (const a of plan.applies) await ops.reviewApply(a.item.id, { ...(a.value === null ? { nothing: true } : { value: a.value }), scope: "stack", why });
       await ops.reviewAccept(asked.item.id, why);
-      onDone(`Decided ${plan.applies.map((a) => `${a.axis} ${a.value}`).join(", ") || "nothing"} for stack ${asked.stack ?? ""}${plan.left.length > 0 ? `; ${plan.left.join(", ")} had no open question and stay as sorted` : ""}.`);
+      onDone(`Decided ${plan.applies.map((a) => `${a.axis} ${a.value ?? "no value"}`).join(", ") || "nothing"} for stack ${asked.stack ?? ""}${plan.left.length > 0 ? `; ${plan.left.join(", ")} had no open question and stay as sorted` : ""}.`);
     } catch (e) {
       setBusy(false);
       setRefused(refusalWords(e));

@@ -7,7 +7,7 @@
 // stack to a person axis by axis.
 
 import type { Asked, AskedCandidate } from "./asked";
-import { modelTop, valueWords } from "./asked";
+import { modelTop, rulesP, valueWords } from "./asked";
 import "./grown.css";
 
 const p = (v: number | null) => (v === null ? "" : v.toFixed(2));
@@ -21,7 +21,7 @@ export interface CandidateListProps {
 }
 
 export function CandidateList({ asked, onChoose, onNone, busy = false }: CandidateListProps) {
-  const axes = [...new Set([...asked.candidates.flatMap((c) => Object.keys(c.values)), ...Object.keys(asked.rules)])];
+  const axes = [...new Set([...asked.axes, ...Object.keys(asked.rules)])];
   return (
     <div className="stack roomy">
       {asked.candidates.length === 0 ? (
@@ -63,6 +63,7 @@ export function CandidateList({ asked, onChoose, onNone, busy = false }: Candida
       )}
       <details className="says">
         <summary>Both systems{asked.differ.length > 0 ? `, disagreeing on ${asked.differ.join(", ")}` : ", agreeing"}</summary>
+        {asked.model?.name && <p className="meta">The model is {asked.model.name}.</p>}
         <div className="table-wrap">
           <table className="thin">
             <thead>
@@ -83,7 +84,7 @@ export function CandidateList({ asked, onChoose, onNone, busy = false }: Candida
                       {r?.value ?? "no value"}
                       {r?.rule ? <span className="meta"> · {r.rule_set ? `${r.rule_set}/` : ""}{r.rule}</span> : null}
                       {r && r.votes.length > 1 ? <span className="meta"> · {r.votes.length} votes</span> : null}
-                      {r?.label_model_p != null ? <span className="meta"> · p {p(r.label_model_p)}</span> : null}
+                      {r && rulesP(r) !== null ? <span className="meta"> · p {p(rulesP(r))}</span> : null}
                     </td>
                     <td>{m ? `${m.value} · p ${p(m.p)}` : "no answer"}</td>
                   </tr>
@@ -106,13 +107,19 @@ export function CandidateList({ asked, onChoose, onNone, busy = false }: Candida
               <span className="v">{p(asked.certificate.threshold)}</span>
             </div>
             <div>
-              <span className="k">epsilon</span>
-              <span className="v">{p(asked.certificate.epsilon)}</span>
+              <span className="k">risk level</span>
+              <span className="v">{p(asked.certificate.risk)}</span>
             </div>
             <div>
               <span className="k">delta</span>
               <span className="v">{p(asked.certificate.delta)}</span>
             </div>
+            {asked.certificate.auto !== null && (
+              <div>
+                <span className="k">decided without a person</span>
+                <span className="v">{asked.certificate.auto ? "yes" : "no"}</span>
+              </div>
+            )}
             {asked.certificate.group && (
               <div>
                 <span className="k">group</span>

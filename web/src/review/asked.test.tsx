@@ -8,7 +8,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ReviewItem } from "../ops/client";
-import { ASKED_ITEM, ASKED_PACK } from "./asked.fixture";
+import { ASKED_EXAMPLE, ASKED_ITEM, ASKED_PACK } from "./asked.fixture";
 import { askedOf, choosePlan, legal } from "./asked";
 import { CandidateList } from "./CandidateList";
 import { familyOf } from "./client";
@@ -23,9 +23,11 @@ describe("the asked evidence", () => {
       ["PDw", 0.04],
       ["T1w", 0.02],
     ]);
-    expect(a.dropped).toBe(4);
+    expect(a.dropped).toBe(5);
+    expect(a.axes).toEqual(["base", "technique", "modifier", "post_contrast"]);
     expect(a.differ).toEqual(["base", "modifier"]);
-    expect(a.certificate).toEqual({ epsilon: 0.05, delta: 0.01, threshold: 0.9, score: 0.71, group: "T2-like" });
+    expect(a.certificate).toEqual({ risk: 0.05, delta: 0.01, threshold: 0.9, score: 0.71, group: "T2-like", auto: false });
+    expect(a.model?.name).toBe("system1@0.1.0");
     expect(familyOf(ASKED_ITEM.kind)).toBe("asked");
   });
   it("refuses a candidate the pack does not allow, a probability that is not one, and a set on a single axis", () => {
@@ -35,6 +37,19 @@ describe("the asked evidence", () => {
     expect(legal({ values: { nowhere: "x" }, p: 0.1 }, ASKED_PACK)).toBeNull();
     expect(legal({ values: {}, p: 0.1 }, ASKED_PACK)).toBeNull();
     expect(legal({ values: { modifier: [] }, p: 0.1 }, ASKED_PACK)).toEqual({ values: { modifier: [] }, p: 0.1 });
+    expect(legal({ values: { base: null }, p: 0.1 }, ASKED_PACK)).toEqual({ values: { base: null }, p: 0.1 });
+    expect(legal({ values: { base: "T2w" }, p: 0.1 }, ASKED_PACK, ["base", "technique"])).toBeNull();
+  });
+  it("reads the contract's own example: its three candidates, the axis the systems disagree on, the certificate", () => {
+    const a = askedOf(ASKED_EXAMPLE)!;
+    expect(a.candidates.map((c) => c.p)).toEqual([0.71, 0.22, 0.04]);
+    expect(a.differ).toEqual(["modifier"]);
+    expect(a.rules.base.label_model_p).toEqual({ T1w: 0.97, T2w: 0.03 });
+    expect(a.certificate?.group).toBe("siemens|3T|head");
+    const html = renderToStaticMarkup(<CandidateList asked={a} onChoose={null} onNone={null} />);
+    expect(html.match(/<li class="candidate">/gu)).toHaveLength(3);
+    expect(html).toContain("modifier none");
+    expect(html).toContain("T1w<span class=\"meta\"> · base/technique:MPRAGE</span><span class=\"meta\"> · 2 votes</span><span class=\"meta\"> · p 0.97</span>");
   });
 });
 
@@ -45,7 +60,8 @@ describe("the candidate list", () => {
     expect(html.match(/<li class="candidate">/gu)).toHaveLength(4);
     expect(html).not.toContain("base DIR");
     expect(html).not.toContain("GRE");
-    expect(html).toContain("4 candidates left out: not legal under this pack.");
+    expect(html).toContain("5 candidates left out: not legal under this pack.");
+    expect(html).toContain("modifier no value");
     const order = [...html.matchAll(/<span class="p num">([0-9.]+)<\/span>/gu)].map((m) => m[1]);
     expect(order).toEqual(["0.71", "0.22", "0.04", "0.02"]);
     expect(html.match(/>Choose<\/button>/gu)).toHaveLength(4);
@@ -56,7 +72,9 @@ describe("the candidate list", () => {
     expect(html).toContain('<span class="tag">technique TSE</span>');
     expect(html).toContain("modifier none");
     expect(html).toContain("<summary>Both systems, disagreeing on base, modifier</summary>");
-    expect(html).toContain("T2w<span class=\"meta\"> · base/te_long</span><span class=\"meta\"> · 2 votes</span>");
+    expect(html).toContain("T2w<span class=\"meta\"> · base/te_long</span><span class=\"meta\"> · 2 votes</span><span class=\"meta\"> · p 0.58</span>");
+    expect(html).toContain("The model is system1@0.1.0.");
+    expect(html).toContain('<span class="k">risk level</span><span class="v">0.05</span>');
     expect(html).toContain("<td>FLAIR · p 0.74</td>");
     expect(html).toContain("<summary>The certificate</summary>");
     expect(html).toContain('<span class="k">group</span><span class="v">T2-like</span>');
@@ -78,5 +96,8 @@ describe("the candidate list", () => {
       [12, "technique", "TSE"],
     ]);
     expect(plan.left).toEqual(["modifier", "post_contrast"]);
+    // no value on an axis is decided as no value
+    const none = choosePlan(a.candidates[3], a.stack, [{ id: 14, kind: "modifier:missing", scope: "stack", status: "open", created_at: "", ref: { stack_id: 4410 } }]);
+    expect(none.applies.map((x) => [x.axis, x.value])).toEqual([["modifier", null]]);
   });
 });
