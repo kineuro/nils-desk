@@ -108,6 +108,8 @@ export const runs = {
     door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { ...("selection" in over ? { select: `selection:${over.selection}@${over.version}` } : { handle: over.handle }), params }),
   get: (id: number) => door<RunDetail>("GET", `/api/pipeline-runs/${id}`),
   derivatives: (run: number) => door<{ derivatives: Derivative[] }>("GET", `/api/derivatives?run=${run}&limit=200`),
+  /** Save a stored ask document as the next version of a selection (PUT /api/ask/selections/{name}, query:work at detail quasi). */
+  saveSelection: (name: string, document_id: number) => door<{ id: number; name: string; version: number; hash: string }>("PUT", `/api/ask/selections/${encodeURIComponent(name)}`, { document_id }),
   job: (id: number) => door<{ id: number; state: string; started_at: string | null }>("GET", `/api/jobs/${id}`),
   /** The ask, as the Query page runs it: one bounded page of rows. */
   ask: (document: Json) =>
@@ -119,7 +121,7 @@ export const runs = {
 };
 
 /** What a person may do around a run, by grant and door; a door the engine lacks offers nothing. */
-export function runActs(caps: Capabilities): { preflight: boolean; open: boolean; queue: boolean; cancel: boolean; table: boolean; perScan: boolean; review: boolean; files: boolean } {
+export function runActs(caps: Capabilities): { preflight: boolean; open: boolean; queue: boolean; cancel: boolean; table: boolean; perScan: boolean; review: boolean; files: boolean; save: boolean } {
   const see = may(caps, "pipelines:see");
   const work = may(caps, "pipelines:work") && sees(caps, "quasi");
   return {
@@ -131,6 +133,7 @@ export function runActs(caps: Capabilities): { preflight: boolean; open: boolean
     perScan: sees(caps, "quasi"),
     review: may(caps, "review:see") && served(caps, "GET /api/review"),
     files: see && served(caps, "GET /api/derivatives"),
+    save: may(caps, "query:work") && sees(caps, "quasi") && served(caps, "PUT /api/ask/selections/{name}"),
   };
 }
 
@@ -360,6 +363,27 @@ export interface RunDocument {
   preflight: Preflight | null;
   why: string | null;
   question: string | null;
+  /** The station's own ask, stored as a draft, which the handle was frozen from: saved as a selection when the handle is gone. */
+  proposed: number | null;
+}
+
+/** Whether the engine's words say a handle is gone: unknown, or no longer keeping its stacks (the station's pre-flight handle is not kept). */
+export function handleGone(words: string | null | undefined): boolean {
+  if (!words) return false;
+  return /\bno handle \d+|\bhandle \d+ (keeps no|is (withdrawn|expired|gone|unknown))|\bunknown handle\b|\bhandle \d+ (was )?not found/iu.test(words);
+}
+
+/** A selection name for a plan saved from its proposed ask: the question's first words, then the day. */
+export function planSelectionName(question: string | null, today = new Date()): string {
+  const words = (question ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 5)
+    .join("-");
+  return `${words || "plan"}-${today.toISOString().slice(0, 10)}`;
 }
 
 /** The station whose verdicts hold run documents. */
@@ -396,6 +420,7 @@ export function runDocumentOf(verdict: { station?: unknown; result?: unknown } |
       preflight: pf.units && typeof pf.ready === "boolean" ? (pf as unknown as Preflight) : null,
       why: text(d.why) ?? text(d.explanation) ?? text(r.sentence),
       question: text(d.question) ?? text(r.question),
+      proposed: num(obj(d.proposed).document),
     },
   };
 }

@@ -23,9 +23,11 @@ import {
   checksOf,
   durationWords,
   groupBy,
+  handleGone,
   measureColumns,
   missingByWhy,
   pipelineOf,
+  planSelectionName,
   preflightCells,
   preflightGate,
   rangeWords,
@@ -319,6 +321,39 @@ describe("the assistant's plan", () => {
     const reader = renderToStaticMarkup(<PlanView caps={capsWith(DOORS, ["pipelines:see"])} doc={doc} pipeline={VOLUMES} live={PRE} liveWhy={null} busy={false} said={null} onStart={null} />);
     expect(reader).not.toContain("Start this run");
     expect(reader).toContain("Starting a run needs Pipelines: Work");
+  });
+  it("says when the engine's words mean the plan's handle is gone, and names a selection for it", () => {
+    expect(handleGone("no handle 41")).toBe(true);
+    expect(handleGone("handle 41 keeps no complete list of stacks; run its question again")).toBe(true);
+    expect(handleGone("no pipeline volumes@9 in the catalog")).toBe(false);
+    expect(handleGone(null)).toBe(false);
+    expect(planSelectionName("Brain volume in every scan?", new Date("2026-09-24T10:00:00Z"))).toBe("brain-volume-in-every-scan-2026-09-24");
+    expect(planSelectionName(null, new Date("2026-09-24T10:00:00Z"))).toBe("plan-2026-09-24");
+  });
+  it("offers to save the proposed ask as a selection when the handle is gone, and holds Start until a fresh pre-flight", () => {
+    const withHandle = { station: "analysis-plan", result: { run_document: { pipeline: "volumes", handle: 41, params: {}, preflight: PRE, proposed: { document: 88, cohorts: ["ms"], sessions: "all" }, question: "brain volume in every scan" } } };
+    const doc = docOf(withHandle);
+    expect(doc.proposed).toBe(88);
+    const caps = capsWith([...DOORS, "PUT /api/ask/selections/{name}"], [...WORK]);
+    const gone = renderToStaticMarkup(<PlanView caps={caps} doc={doc} pipeline={VOLUMES} live={null} liveWhy="no handle 41" busy={false} said={null} onStart={() => undefined} gone onSave={() => undefined} />);
+    expect(gone).toContain("no longer kept");
+    expect(gone).toContain(">Save as a selection</button>");
+    expect(gone).toContain('value="brain-volume-in-every-scan-');
+    expect(gone).toMatch(/disabled="">.*Start this run/u);
+    // saved: the run goes over the selection, and waits for its own pre-flight
+    const saved = { selection: "brain-volume-in-every-scan-2026-09-24", version: 1 };
+    const waiting = renderToStaticMarkup(<PlanView caps={caps} doc={doc} over={saved} pipeline={VOLUMES} live={null} liveWhy={null} busy={false} said={null} onStart={() => undefined} />);
+    expect(waiting).toContain("selection:brain-volume-in-every-scan-2026-09-24@1");
+    expect(waiting).not.toContain("12 of 12 ready");
+    expect(waiting).toMatch(/disabled="">.*Start this run/u);
+    const fresh = renderToStaticMarkup(<PlanView caps={caps} doc={doc} over={saved} pipeline={VOLUMES} live={PRE} liveWhy={null} busy={false} said={null} onStart={() => undefined} />);
+    expect(fresh).not.toMatch(/disabled="">.*Start this run/u);
+    // no save where the person may not save a selection, or the engine has no door
+    const reader = renderToStaticMarkup(<PlanView caps={capsWith(DOORS, [...WORK])} doc={doc} pipeline={VOLUMES} live={null} liveWhy="no handle 41" busy={false} said={null} onStart={() => undefined} gone onSave={null} />);
+    expect(reader).not.toContain("Save as a selection</button>");
+    expect(reader).toContain("Saving it as a selection needs Query: Work at detail quasi.");
+    expect(runActs(capsWith(DOORS, [...WORK])).save).toBe(false);
+    expect(runActs(caps).save).toBe(true);
   });
   it("is offered only where the assistant serves the analysis-plan station", () => {
     const caps = capsWith(DOORS, [...WORK]);

@@ -15,10 +15,10 @@ import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { catalog, runCommand, type Pipeline } from "./catalog";
+import { catalog, runCommand, type Over, type Pipeline } from "./catalog";
 import { ops } from "./client";
 import { PreflightPanel } from "./Preflight";
-import { PLAN_STATION, pipelineOf, preflightGate, rangeWords, runActs, runDocumentOf, runs, type Preflight, type RunDocument } from "./runs";
+import { handleGone, PLAN_STATION, pipelineOf, planSelectionName, preflightGate, rangeWords, runActs, runDocumentOf, runs, type Preflight, type RunDocument } from "./runs";
 
 
 export function plansOffered(caps: Capabilities): boolean {
@@ -59,23 +59,54 @@ export function PlanPage({ caps, id }: { caps: Capabilities; id: string }) {
   return <PlanRunner caps={caps} doc={load.doc} pipeline={load.pipeline} />;
 }
 
-/** The plan with a live pre-flight and the one button that starts it. */
+/** The plan with a live pre-flight and the one button that starts it; where the plan's handle is gone, its proposed ask saved as a selection first. */
 export function PlanRunner({ caps, doc, pipeline }: { caps: Capabilities; doc: RunDocument; pipeline: Pipeline | null }) {
   const acts = runActs(caps);
+  const [over, setOver] = useState<Over>(doc.over);
   const [live, setLive] = useState<Preflight | null>(null);
   const [liveWhy, setLiveWhy] = useState<string | null>(null);
+  const [gone, setGone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
+  const overKey = JSON.stringify(over);
   useEffect(() => {
     if (!pipeline || !acts.preflight) return;
-    runs.preflight(pipeline.id, doc.over, doc.params).then(setLive, (e: unknown) => setLiveWhy(engineWords(e)));
-  }, [pipeline?.id, acts.preflight]); // eslint-disable-line react-hooks/exhaustive-deps
+    setLive(null);
+    setLiveWhy(null);
+    runs.preflight(pipeline.id, over, doc.params).then(
+      (p) => {
+        setLive(p);
+        setGone(false);
+      },
+      (e: unknown) => {
+        const words = engineWords(e);
+        setLiveWhy(words);
+        setGone("handle" in over && handleGone(words));
+      },
+    );
+  }, [pipeline?.id, acts.preflight, overKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const save = (name: string) => {
+    if (doc.proposed === null) return;
+    setBusy(true);
+    setSaid(null);
+    runs.saveSelection(name, doc.proposed).then(
+      (s) => {
+        setBusy(false);
+        setSaid(`Saved as selection:${s.name}@${s.version}; checked again before it runs.`);
+        setOver({ selection: s.name, version: s.version });
+      },
+      (e: unknown) => {
+        setBusy(false);
+        setSaid(engineWords(e));
+      },
+    );
+  };
   const start = () => {
     if (!pipeline) return;
     setBusy(true);
     setSaid(null);
     ops
-      .enqueue(runCommand({ pipeline, over: doc.over, params: doc.params, models: [], labels: null }))
+      .enqueue(runCommand({ pipeline, over, params: doc.params, models: [], labels: null }))
       .then(async (j) => {
         setSaid(`Queued as job ${j.job}.`);
         // the run's row exists once the lane takes the job; open it then
@@ -90,20 +121,55 @@ export function PlanRunner({ caps, doc, pipeline }: { caps: Capabilities; doc: R
         }
       })
       .catch((e: unknown) => {
+        const words = engineWords(e);
         setBusy(false);
-        setSaid(engineWords(e));
+        setSaid(words);
+        if ("handle" in over && handleGone(words)) setGone(true);
       });
   };
-  return <PlanView caps={caps} doc={doc} pipeline={pipeline} live={live} liveWhy={liveWhy} busy={busy} said={said} onStart={acts.queue && pipeline ? start : null} />;
+  return (
+    <PlanView
+      caps={caps}
+      doc={doc}
+      over={over}
+      pipeline={pipeline}
+      live={live}
+      liveWhy={liveWhy}
+      busy={busy}
+      said={said}
+      onStart={acts.queue && pipeline ? start : null}
+      gone={gone}
+      onSave={gone && acts.save && doc.proposed !== null ? save : null}
+    />
+  );
 }
 
 /** The plan as the page draws it. */
-export function PlanView({ caps, doc, pipeline, live, liveWhy, busy, said, onStart }: { caps: Capabilities; doc: RunDocument; pipeline: Pipeline | null; live: Preflight | null; liveWhy: string | null; busy: boolean; said: string | null; onStart: (() => void) | null }) {
+export function PlanView(props: {
+  caps: Capabilities;
+  doc: RunDocument;
+  /** What the run goes over now: the plan's own, or the selection its proposed ask was saved as. */
+  over?: Over;
+  pipeline: Pipeline | null;
+  live: Preflight | null;
+  liveWhy: string | null;
+  busy: boolean;
+  said: string | null;
+  onStart: (() => void) | null;
+  /** The plan's handle is gone, as the engine said. */
+  gone?: boolean;
+  onSave?: ((name: string) => void) | null;
+}) {
+  const { caps, doc, pipeline, live, liveWhy, busy, said, onStart, gone = false, onSave = null } = props;
   const acts = runActs(caps);
-  const shown = live ?? doc.preflight;
-  const gate = preflightGate(acts.preflight ? live : doc.preflight);
-  const over = "selection" in doc.over ? `selection:${doc.over.selection}@${doc.over.version}` : `handle ${doc.over.handle}`;
+  const target = props.over ?? doc.over;
+  const moved = JSON.stringify(target) !== JSON.stringify(doc.over);
+  const shown = live ?? (moved || gone ? null : doc.preflight);
+  // with the door, only a fresh pre-flight of what the run goes over now lets Start go
+  const gate = acts.preflight ? (live === null ? { go: false, why: liveWhy } : preflightGate(live)) : preflightGate(doc.preflight);
+  const overWords = "selection" in target ? `selection:${target.selection}@${target.version}` : `handle ${target.handle}`;
   const params = pipeline?.parameters ?? [];
+  const [name, setName] = useState(() => planSelectionName(doc.question));
   return (
     <section className="stack roomy plan-page">
       {doc.question && <p className="lede">{doc.question}</p>}
@@ -126,7 +192,7 @@ export function PlanView({ caps, doc, pipeline, live, liveWhy, busy, said, onSta
             </tr>
             <tr>
               <th>Over</th>
-              <td className="path">{over}</td>
+              <td className="path">{overWords}</td>
             </tr>
             {params.map((p) => (
               <tr key={p.id}>
@@ -142,11 +208,35 @@ export function PlanView({ caps, doc, pipeline, live, liveWhy, busy, said, onSta
         </table>
       </div>
       {pipeline === null && <p className="warn">The catalog holds no pipeline {doc.pipeline}, so this plan cannot run here.</p>}
-      <PreflightPanel p={shown} checking={acts.preflight && live === null && liveWhy === null && pipeline !== null} why={liveWhy} />
+      {gone ? (
+        <div className="note caution">
+          <Icon name="alert" />
+          <div className="note-body">
+            <p className="note-lead">The plan&apos;s stacks are no longer kept</p>
+            {onSave ? (
+              <>
+                <p className="note-detail">Save the assistant&apos;s question as a selection; the run then goes over it, after a fresh pre-flight.</p>
+                <div className="field-row">
+                  <span className="input grow">
+                    <input value={name} aria-label="The selection's name" onChange={(e) => setName(e.target.value)} />
+                  </span>
+                  <button type="button" className="button secondary small" disabled={busy || name.trim() === ""} onClick={() => onSave(name.trim())}>
+                    Save as a selection
+                  </button>
+                </div>
+              </>
+            ) : (
+              <p className="note-detail">{doc.proposed === null ? "The plan holds no question to save as a selection; ask the assistant again." : "Saving it as a selection needs Query: Work at detail quasi."}</p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <PreflightPanel p={shown} checking={acts.preflight && live === null && liveWhy === null && pipeline !== null} why={liveWhy} />
+      )}
       {!acts.preflight && doc.preflight && <p className="meta">The pre-flight as the assistant saw it; this engine does not check again.</p>}
       <div className="row actions">
         {onStart ? (
-          <button type="button" className="button" disabled={busy || !gate.go} onClick={onStart}>
+          <button type="button" className="button" disabled={busy || gone || !gate.go} onClick={onStart}>
             <Icon name="play" />
             Start this run
           </button>
