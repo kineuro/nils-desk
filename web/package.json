@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
-    "types": "openapi-typescript ../../nils-v1/contracts/openapi/v3/openapi.yaml -o src/engine.d.ts",
+    "types": "openapi-typescript ../../nils-v1/contracts/openapi/v7/openapi.yaml -o src/engine.d.ts",
     "headless": "node scripts/headless.mjs",
     "walk:campaigns": "vitest run src/campaigns/walk.live.test.ts",
     "codecs": "node scripts/codecs.mjs",
