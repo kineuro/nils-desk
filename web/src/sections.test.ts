@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "./capabilities";
 import { GRANTS, SETS } from "./grants";
+import { tilesOffered } from "./home/tiles";
 import { PLACEHOLDERS } from "./home/placeholders";
 import { href, parse } from "./routes";
 import { assistantModel, assistantOffered, foot, initials, sections } from "./sections";
@@ -55,6 +56,11 @@ describe("the sections of an install that is set up", () => {
     expect(sections(reader).map((s) => s.id)).toEqual(["home", "query", "data"]);
     const reviewing = { ...served, person: { ...served.person, grants: ["review:see" as const], detail: "plain" as const } };
     expect(sections(reviewing).map((s) => s.id)).toEqual(["home", "review"]);
+  });
+  it("add no section for the models and campaigns grants, whose pages are not built yet", () => {
+    const later = { ...served, engine: { ...served.engine!, doors: [...doors, "GET /api/models", "GET /api/campaigns"] }, person: { ...served.person, grants: ["models:work" as const, "models:see" as const, "campaigns:work" as const, "campaigns:see" as const] } };
+    expect(sections(later).map((s) => s.id)).toEqual(["home"]);
+    expect(tilesOffered(later)).toEqual([]);
   });
   it("wait while an install is not set up for a person who may see it, with Home named for its first page, and while that is not known", () => {
     expect(sections(served, false)).toEqual([{ id: "home", title: "Get started", icon: "home" }]);

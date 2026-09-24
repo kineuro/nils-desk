@@ -45,9 +45,9 @@ async fn engine_speaking(openapi: &'static str, suite: &'static str) -> String {
     url
 }
 
-/// A fake engine speaking the contracts this desk speaks: openapi 6, suite 2.
+/// A fake engine speaking the contracts this desk speaks: openapi 6, suite 3.
 async fn fake_engine() -> String {
-    engine_speaking("6", "2").await
+    engine_speaking("6", "3").await
 }
 
 async fn desk(engine: &str, assistant: Option<&str>) -> (String, Arc<nils_desk::Desk>) {
@@ -225,23 +225,24 @@ async fn verdict(openapi: &'static str, suite: &'static str) -> (Arc<nils_desk::
 #[tokio::test]
 async fn the_floor_refuses_an_older_engine_and_the_desk_still_works_with_the_one_above_it() {
     // what this desk was generated from (record 28), and the oldest it works against
-    assert_eq!((nils_desk::OPENAPI, nils_desk::SUITE), ("6", "2"));
+    assert_eq!((nils_desk::OPENAPI, nils_desk::SUITE), ("6", "3"));
     assert_eq!(
         (nils_desk::OPENAPI_FLOOR, nils_desk::SUITE_FLOOR),
         ("5", "2")
     );
     let nobody = nils_desk::session::nobody();
     // the engine this desk was generated from: current, and nothing to say about it
-    let (desk, v) = verdict("6", "2").await;
+    let (desk, v) = verdict("6", "3").await;
     assert!(v.unwrap().is_none(), "the same versions are no mismatch");
     let doc = nils_desk::capabilities::document(&desk, &nobody, None).await;
     assert!(doc["desk"]["contract_mismatch"].is_null(), "{doc}");
     assert_eq!(
         doc["desk"]["contracts"],
-        json!({"openapi": "6", "suite": "2"})
+        json!({"openapi": "6", "suite": "3"})
     );
     // the engine release before it: older, and still usable. openapi 6 only added
-    // a door to 5 (record 28), so this is a note, never a refusal, and the desk starts
+    // a door to 5 (record 28), and suite 3 only grants to 2 (record 42 R7), so
+    // this is a note, never a refusal, and the desk starts
     let (desk, v) = verdict("5", "2").await;
     let m = v
         .expect("an engine at the floor is usable, not refused")
@@ -249,9 +250,13 @@ async fn the_floor_refuses_an_older_engine_and_the_desk_still_works_with_the_one
     assert!(!m.major, "{}", m.message);
     assert_eq!(m.direction, "behind");
     assert!(m.message.contains("openapi 5 against 6"), "{}", m.message);
+    assert!(m.message.contains("suite 2 against 3"), "{}", m.message);
     let doc = nils_desk::capabilities::document(&desk, &nobody, None).await;
     assert_eq!(doc["desk"]["contract_mismatch"]["major"], false, "{doc}");
     assert_eq!(doc["desk"]["contract_mismatch"]["direction"], "behind");
+    let (_, v) = verdict("6", "2").await;
+    let m = v.unwrap().expect("a suite 2 engine is older");
+    assert!(!m.major && m.direction == "behind", "{}", m.message);
     // an engine below the floor on either contract is refused by name, and the desk does not start
     for (openapi, suite, named) in [
         ("4", "2", "openapi 4 against 5"),
@@ -268,10 +273,10 @@ async fn the_floor_refuses_an_older_engine_and_the_desk_still_works_with_the_one
         let m = &doc["desk"]["contract_mismatch"];
         assert_eq!(m["major"], true, "{doc}");
         assert_eq!(m["found"], json!({"openapi": openapi, "suite": suite}));
-        assert_eq!(m["speaks"], json!({"openapi": "6", "suite": "2"}));
+        assert_eq!(m["speaks"], json!({"openapi": "6", "suite": "3"}));
     }
     // an engine ahead of the desk is a warning the shell shows, not a refusal
-    let (_, v) = verdict("7", "2").await;
+    let (_, v) = verdict("7", "3").await;
     let m = v.unwrap().expect("a warning");
     assert!(!m.major);
     assert_eq!(m.direction, "ahead");

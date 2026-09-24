@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-//! Grants and detail (`contracts/suite/v2/grants.schema.json`): what a
+//! Grants and detail (`contracts/suite/v3/grants.schema.json`): what a
 //! person may open, and how much of a record they see. A grant names a page
 //! and how far a person goes there: `see`, or `work`, which includes see;
 //! the assistant has `use`. Detail is ordered: `plain`, then `quasi` (sex and
@@ -19,6 +19,8 @@ pub const GRANTS: &[&str] = &[
     "assistant-settings:work",
     "assistant:use",
     "audit:see",
+    "campaigns:see",
+    "campaigns:work",
     "data:see",
     "data:work",
     "database:see",
@@ -29,6 +31,8 @@ pub const GRANTS: &[&str] = &[
     "install:work",
     "kvasir:see",
     "kvasir:work",
+    "models:see",
+    "models:work",
     "pipelines:see",
     "pipelines:work",
     "places:see",
@@ -47,13 +51,24 @@ pub const LADDER: &[&str] = &["reader", "reviewer", "operator", "admin"];
 /// The name that stands for the assistant.
 pub const ASSIST: &str = "assist";
 
+/// The grants suite version 3 added to the ladder's sets (record 42 R7).
+/// A ladder name met as a need is held without them, so a group made from a
+/// version 2 set answers to its name as before.
+const SINCE_V3: &[&str] = &[
+    "campaigns:see",
+    "campaigns:work",
+    "models:see",
+    "models:work",
+];
+
 const READER: &[&str] = &["data:see", "query:see", "query:work"];
-const REVIEWER: &[&str] = &["pipelines:see", "review:see", "review:work"];
+const REVIEWER: &[&str] = &["models:see", "pipelines:see", "review:see", "review:work"];
 const OPERATOR: &[&str] = &[
     "assistant-settings:see",
     "data:work",
     "install:see",
     "kvasir:see",
+    "models:work",
     "pipelines:work",
     "places:see",
     "places:work",
@@ -137,10 +152,16 @@ impl Access {
     }
 
     /// Whether this holds a grant, or a set by its name: every grant of the
-    /// set and at least its detail.
+    /// set but those version 3 added, and at least its detail.
     pub fn holds_name(&self, name: &str) -> bool {
         match set(name) {
-            Some(s) => s.grants.is_subset(&self.grants) && self.detail >= s.detail,
+            Some(s) => {
+                s.grants
+                    .iter()
+                    .filter(|g| !SINCE_V3.contains(&g.as_str()))
+                    .all(|g| self.grants.contains(g))
+                    && self.detail >= s.detail
+            }
             None => self.holds(name),
         }
     }
@@ -288,5 +309,46 @@ mod tests {
             assert_eq!(top_step(&s), Some(*step));
             below = s;
         }
+    }
+
+    /// The sets as suite version 2 had them: each version 3 set less the
+    /// grants it added.
+    fn v2(step: &str) -> Access {
+        let s = set(step).unwrap();
+        Access::new(
+            s.grants
+                .iter()
+                .map(String::as_str)
+                .filter(|g| !SINCE_V3.contains(g)),
+            s.detail,
+        )
+    }
+
+    #[test]
+    fn a_version_2_set_still_answers_to_its_name() {
+        for step in LADDER {
+            let old = v2(step);
+            assert_eq!(old == set(step).unwrap(), *step == "reader", "{step}");
+            assert!(old.holds_name(step), "{step}");
+            assert_eq!(top_step(&old), Some(*step));
+            assert_eq!(entitlements_of(&old), vec![step.to_string()]);
+        }
+        assert!(!v2("operator").holds_name("admin"));
+        assert!(!v2("reviewer").holds_name("operator"));
+    }
+
+    #[test]
+    fn the_campaign_grants_are_the_admins_alone() {
+        for step in LADDER {
+            let s = set(step).unwrap();
+            assert_eq!(s.holds("campaigns:work"), *step == "admin", "{step}");
+            assert_eq!(s.holds("models:see"), *step != "reader", "{step}");
+            assert_eq!(
+                s.holds("models:work"),
+                matches!(*step, "operator" | "admin"),
+                "{step}"
+            );
+        }
+        assert_eq!(GRANTS.len(), 28);
     }
 }
