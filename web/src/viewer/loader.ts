@@ -7,7 +7,9 @@
 
 import * as cs from "@cornerstonejs/core";
 import { DecodePool } from "./decode";
-import { doors, levelShape, levelSpacing, type Manifest } from "./doors";
+import { doors, levelShape, levelSpacing, storedValue, storedWindow, type Manifest } from "./doors";
+
+export { storedValue, storedWindow } from "./doors";
 import { dot, geometry, planePosition } from "./geometry";
 import { direction, plan, SLAB, slabOf } from "./ring";
 
@@ -49,11 +51,6 @@ export function decoder(): DecodePool {
   return pool;
 }
 
-/** The window as stored values: the manifest names it after the intercept, the planes hold the value plus the intercept. */
-export function storedWindow(m: Manifest): { lower: number; upper: number } {
-  const shift = m.intercept ?? 0;
-  return { lower: m.window.center + shift - m.window.width / 2, upper: m.window.center + shift + m.window.width / 2 };
-}
 
 /** Open a stack: its manifest once, its metadata provider, the pool. */
 export async function open(stack: number): Promise<Manifest> {
@@ -189,8 +186,8 @@ async function decodePlane(id: string, stack: number, s: Stack, level: number, z
     maxPixelValue: max,
     slope: 1,
     intercept: 0,
-    windowCenter: m.window.center + (m.intercept ?? 0),
-    windowWidth: m.window.width,
+    windowCenter: storedValue(m, m.window.center),
+    windowWidth: storedWindow(m).upper - storedWindow(m).lower,
     getPixelData: () => plane,
     rows: ny,
     columns: nx,
@@ -236,7 +233,7 @@ export function register(): void {
       case "generalSeriesModule":
         return { modality: "OT" };
       case "voiLutModule":
-        return { windowCenter: [m.window.center + (m.intercept ?? 0)], windowWidth: [m.window.width] };
+        return { windowCenter: [storedValue(m, m.window.center)], windowWidth: [storedWindow(m).upper - storedWindow(m).lower] };
       case "modalityLutModule":
         return { rescaleSlope: 1, rescaleIntercept: 0 };
       default:

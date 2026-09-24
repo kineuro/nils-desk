@@ -24,8 +24,16 @@ export interface Manifest {
   slab?: number;
   /** The engine's own shapes per level, when it names them (A6): [nz, ny, nx] and the tile grid. */
   level_shapes?: { level: number; shape: [number, number, number]; tiles: [number, number]; bytes?: number }[];
-  /** The raw value is pixel plus intercept, for the window's numbers. */
+  /**
+   * A stored value is the modality's as stored * slope + intercept (record 45
+   * E2, the file's rescale with a signed volume's shift folded in); the window
+   * is in the modality's values. A manifest from before has no slope, which
+   * reads as one, and its intercept is the shift alone.
+   */
   intercept?: number;
+  slope?: number;
+  /** The files did not share one rescale; the first file's is the manifest's. */
+  rescale_varies?: boolean;
   /** Burned-in annotation held below the operator role: the tiles refuse and the render blanks the band. */
   held?: boolean;
   stack?: number;
@@ -35,11 +43,24 @@ export interface Manifest {
   orientation_known?: boolean;
   /** Record 45 E2: the first plane's first pixel in the patient, mm; the planes run along row cross column. */
   origin?: number[] | null;
-  /** Record 45 E2: whether the planes are parallel and evenly spaced; null when the files did not say. */
+  /** Record 45 E2: whether the planes are parallel and evenly spaced; null in a manifest from before. */
   frame?: boolean | { parallel?: boolean; evenly_spaced?: boolean } | null;
   /** Record 45 E2: the patient plane nearest the stack's, and whether the stack is oblique to it. */
   plane?: string;
   oblique?: boolean;
+}
+
+/** A modality value as the planes store it: the manifest's value is stored * slope + intercept (record 45 E2). */
+export function storedValue(m: Pick<Manifest, "slope" | "intercept">, v: number): number {
+  const slope = m.slope !== undefined && m.slope !== 0 ? m.slope : 1;
+  return (v - (m.intercept ?? 0)) / slope;
+}
+
+/** The window as stored values: the manifest names it in the modality's values. */
+export function storedWindow(m: Manifest): { lower: number; upper: number } {
+  const a = storedValue(m, m.window.center - m.window.width / 2);
+  const b = storedValue(m, m.window.center + m.window.width / 2);
+  return { lower: Math.min(a, b), upper: Math.max(a, b) };
 }
 
 const H = { "X-Nils-Desk": "1" };
