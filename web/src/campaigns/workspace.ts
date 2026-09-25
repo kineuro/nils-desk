@@ -7,7 +7,7 @@
 
 import type { PackDoc } from "../review/client";
 import type { BoardCandidate } from "../review/SessionBoard";
-import { answerBody, answerWords, axisValues, CANDIDATE_KEYS, CANT_TELL, CANT_TELL_KEYS, cantTellOf, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, UNSURE_KEY, unsureOf, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Item, type Question } from "./client";
+import { answerBody, answeredAxes, answerWords, axisValues, CANDIDATE_KEYS, CANT_TELL, CANT_TELL_KEYS, cantTellOf, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, UNSURE_KEY, unsureOf, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Item, type Question } from "./client";
 import { choose, type Marks, type Row } from "./renderers";
 
 export type Seat =
@@ -38,9 +38,13 @@ export function beatSeat(seat: Seat, c: Claimed): Seat {
   return { kind: "done", why: `Your lease on ${was} ended, and ${c.why ?? "nothing is left for you"}.` };
 }
 
-/** The rows an axis or axes question draws, with the pack's families and multi-valued axes where the pack was read. */
+/**
+ * The rows an axis or axes question draws, with the pack's families and
+ * multi-valued axes where the pack was read. Only the axes the rater answers:
+ * a derived axis (record 48) is never a row.
+ */
 export function rowsOf(q: Question, pack: PackDoc | null): Row[] {
-  const axes = q.kind === "axis" ? (q.axis ? [q.axis] : []) : q.kind === "axes" ? (q.axes ?? []) : [];
+  const axes = answeredAxes(q);
   return axes.map((axis) => {
     const p = pack?.axes.find((a) => a.axis === axis) ?? null;
     let values = axisValues(q, axis);
@@ -106,7 +110,7 @@ export function pendingWords(q: Question, g: Given, unsure = false): string | nu
   if (q.kind !== "axes") return mark;
   const word = cantTellOf(q);
   const values = g.kind === "values" ? g.values : {};
-  const said = (q.axes ?? []).map((axis) => {
+  const said = answeredAxes(q).map((axis) => {
     const v = values[axis];
     const w = v === undefined || v === "" || (Array.isArray(v) && v.length === 0) ? "–" : v === null ? "none" : word !== null && v === word ? "can't tell" : Array.isArray(v) ? v.join("+") : v;
     return `${axis} ${w}`;
@@ -132,7 +136,47 @@ export type KeyAct =
   | { kind: "reset" }
   | { kind: "batch" }
   | { kind: "cant_tell"; row: Row }
-  | { kind: "unsure" };
+  | { kind: "unsure" }
+  | { kind: "header" }
+  | { kind: "find"; row: Row };
+
+/**
+ * Whether the rows are drawn compact (record 48, one screen): more rows than
+ * there are banks of value keys. Each row is then found by its number and
+ * answered by typing the first letters of a value; the value keys are not
+ * used.
+ */
+export const compactRows = (rows: Row[]): boolean => rows.length > ROW_KEYS.length;
+
+/** The key that finds a row in the compact rows: its number, `1` for the first, `0` for the tenth. */
+export const findKeyOf = (row: number): string | null => (row < 10 ? String((row + 1) % 10) : null);
+
+/** A row's values past this many are found by typing, never all drawn: a long vocabulary keeps to one line. */
+export const LONG_ROW = 16;
+
+/** One thing a row's find can choose: a value, none, or can't tell. */
+export type Found = { kind: "value"; value: string } | { kind: "none" } | { kind: "cant_tell" };
+
+/**
+ * What a row's find offers for the letters typed, best first: the values
+ * the letters begin, then those holding them anywhere, in the pack's order;
+ * none and can't tell by their words (can't tell also by `?`). Case and
+ * spaces, hyphens and stars do not count. Empty letters offer every value.
+ */
+export function findMatches(row: Row, typed: string, opts: { none?: boolean; cantTell?: boolean } = {}): Found[] {
+  const fold = (s: string) => s.toLowerCase().replace(/[\s\-_*']/gu, "");
+  const t = fold(typed);
+  const all: { found: Found; words: string[] }[] = [
+    ...row.values.map((value) => ({ found: { kind: "value", value } as Found, words: [value] })),
+    ...(opts.none ? [{ found: { kind: "none" } as Found, words: ["none"] }] : []),
+    ...(opts.cantTell ? [{ found: { kind: "cant_tell" } as Found, words: ["can't tell", "?"] }] : []),
+  ];
+  if (t === "") return all.map((x) => x.found);
+  const exact = all.filter((x) => x.words.some((w) => fold(w) === t));
+  const begins = all.filter((x) => !exact.includes(x) && x.words.some((w) => fold(w).startsWith(t)));
+  const holds = all.filter((x) => !exact.includes(x) && !begins.includes(x) && x.words.some((w) => fold(w).includes(t)));
+  return [...exact, ...begins, ...holds].map((x) => x.found);
+}
 
 /**
  * What a key does in the workspace (v0's keys where they fit): `1` to `0` on
@@ -144,8 +188,12 @@ export type KeyAct =
  * Where the engine takes them (record 48): on an axes question `a`, `d`,
  * `f`, `g`, `j`, `k`, `l` say can't tell on the first row, the second and
  * so on, and on any question `m` marks the answer unsure.
+ * After the first real read (record 48): `h` opens the whole header where
+ * the engine serves it and `H` the evidence; on three rows or more a row's
+ * number finds it (`1` the first) and its first letters answer it, in
+ * place of the value keys.
  */
-export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: Question; rows: Row[]; candidates?: number[]; offered?: number; batches?: boolean }): KeyAct | null {
+export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: Question; rows: Row[]; candidates?: number[]; offered?: number; batches?: boolean; header?: boolean }): KeyAct | null {
   if (opts.inField) return key === "Enter" && opts.ctrl ? { kind: "answer" } : null;
   if (key === "Enter") return { kind: "answer" };
   if (key === "?") return { kind: "keys" };
@@ -157,7 +205,9 @@ export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: 
   if (opts.q.kind === "axis" || opts.q.kind === "axes") {
     const c = CANDIDATE_KEYS.indexOf(key.toLowerCase());
     if (c >= 0 && c < (opts.offered ?? 0)) return { kind: "candidate", index: c };
-    if (key === "h" || key === "H") return { kind: "evidence" };
+    // h opens the whole header where the engine serves it (record 48), else the evidence as before; H is always the evidence
+    if (key === "h") return opts.header ? { kind: "header" } : { kind: "evidence" };
+    if (key === "H") return { kind: "evidence" };
     if (key === "Backspace") return { kind: "reset" };
     if ((key === "b" || key === "B") && opts.batches) return { kind: "batch" };
   }
@@ -166,6 +216,11 @@ export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: 
     if (r >= 0 && r < opts.rows.length) return { kind: "cant_tell", row: opts.rows[r] };
   }
   if ((key === UNSURE_KEY || key === UNSURE_KEY.toUpperCase()) && unsureOf(opts.q)) return { kind: "unsure" };
+  if (opts.q.kind === "axes" && compactRows(opts.rows)) {
+    const r = opts.rows.findIndex((_, i) => findKeyOf(i) === key);
+    if (r >= 0) return { kind: "find", row: opts.rows[r] };
+    return key === "s" || key === "S" ? { kind: "skip" } : null;
+  }
   for (let r = 0; r < Math.min(opts.rows.length, ROW_KEYS.length); r++) {
     const v = keyValue(key, r, opts.rows[r].values);
     if (v !== null) return { kind: "choose", row: opts.rows[r], value: v };

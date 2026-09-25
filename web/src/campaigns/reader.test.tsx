@@ -190,8 +190,11 @@ describe("the reader's keys", () => {
     expect(k("Backspace")).toEqual({ kind: "reset" });
     expect(k("b")).toEqual({ kind: "batch" });
     expect(k("b", { batches: false })).toBeNull();
-    // the value keys are untouched: none of the reader's keys is a value key
-    expect(k("1")?.kind).toBe("choose");
+    // the row keys are untouched: none of the reader's keys finds a row
+    expect(k("1")?.kind).toBe("find");
+    // with the whole header served, h opens it and H the evidence
+    expect(k("h", { header: true })).toEqual({ kind: "header" });
+    expect(k("H", { header: true })).toEqual({ kind: "evidence" });
     // and a text field keeps its letters
     expect(k("z", { inField: true })).toBeNull();
   });
@@ -404,9 +407,12 @@ describe("the reader's parts", () => {
     expect(html).toMatch(/aria-pressed="true"[^>]*>by value/u);
     expect(html).toContain("Like stacks in batches");
     expect(html).toContain("They agree on base, technique");
-    expect(html).toContain("rule technique:MPRAGE");
+    // the evidence is one key away (record 48, one screen): H opens it over the reader
+    expect(html).toContain("<kbd>H</kbd>how it was decided");
+    expect(html).not.toContain("rule technique:MPRAGE");
+    expect(renderToStaticMarkup(<WorkspaceBody {...props} evOpen />)).toContain("rule technique:MPRAGE");
     // the agreed values are drawn chosen on their rows
-    expect(html).toContain(`class="opt on" aria-pressed="true"><kbd>2</kbd>T1w`);
+    expect(html).toContain(`class="opt on" aria-pressed="true">T1w`);
     // the key list names the reader's keys
     expect(html).toContain("confirm the answer filled in");
     expect(html).toContain("<dt>z x</dt>");
@@ -508,7 +514,7 @@ describe("the review's findings", () => {
     );
     expect(html).toContain('class="tag gated"');
     expect(html).toContain(">blind<");
-    expect(html).toContain("<dt>TR</dt><dd>2300</dd>");
+    expect(html).toContain('<span class="hb-v">TR 2300</span>');
     // even handed lines and a suggestion, a blind item draws neither
     expect(html).not.toContain("class=\"suggest");
     expect(html).not.toContain("evidence-lines");

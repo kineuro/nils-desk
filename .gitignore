@@ -23,3 +23,6 @@ web/public/codecs/LICENSE-*.txt
 !web/public/codecs/decode.worker.js
 # the viewer's bench page, built by vite.bench.config.ts
 web/dist-bench/
+# the reader's layout check (playwright.config.ts) writes its results here
+web/test-results/
+web/playwright-report/

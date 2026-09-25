@@ -5,9 +5,11 @@
 // the app that makes it. Each is a controlled component: the workspace holds
 // what is given and sends it; a renderer only shows and changes it.
 
+import { useRef, useState, type KeyboardEvent } from "react";
 import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { cantTellKeyOf, formFields, keyOf, type FormSchema, type Given, type Item, type Question } from "./client";
+import { findKeyOf, findMatches, LONG_ROW, type Found } from "./workspace";
 
 /** One row of values: an axis, its values in the pack's order, and the families they group under where the pack says. */
 export interface Row {
@@ -80,6 +82,181 @@ export function AxisRows({
                 <CantTellButton on={on === cantTell} k={cantTellKeyOf(n)} who={marks[r.axis]?.[cantTell] ?? []} onClick={() => onCantTell?.(r.axis)} />
               )}
             </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The rows on one screen (record 48, after the first real read): many axes,
+ * some with long vocabularies, each row one line or two. A row is found by
+ * its number (`1` the first); its letters then narrow its values as they are
+ * typed, the best match lit, and Enter takes it. On a single-valued row
+ * Enter goes on to the next row; on a multi-valued row it toggles the value
+ * and stays, and Enter with nothing typed goes on. Tab goes on without
+ * choosing, Escape leaves. A short vocabulary is drawn whole in small
+ * chips; a long one shows what is chosen and lists its matches only while
+ * it is being typed into. Can't tell keeps its home-row key, none is typed
+ * or clicked.
+ */
+export function CompactRows({
+  rows,
+  chosen,
+  marks = {},
+  none = false,
+  cantTell = null,
+  onChoose,
+  onNone,
+  onCantTell,
+}: {
+  rows: Row[];
+  chosen: Record<string, string | string[] | null>;
+  marks?: Marks;
+  none?: boolean;
+  cantTell?: string | null;
+  onChoose: (axis: string, value: string) => void;
+  onNone?: (axis: string) => void;
+  onCantTell?: (axis: string) => void;
+}) {
+  const [typed, setTyped] = useState<Record<string, string>>({});
+  const [at, setAt] = useState<Record<string, number>>({});
+  const [finding, setFinding] = useState<string | null>(null);
+  const inputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const go = (n: number) => {
+    const next = rows[n];
+    if (next) inputs.current[next.axis]?.focus();
+    else inputs.current[rows[n - 1]?.axis ?? ""]?.blur();
+  };
+  const take = (r: Row, f: Found) => {
+    if (f.kind === "value") onChoose(r.axis, f.value);
+    else if (f.kind === "none") onNone?.(r.axis);
+    else onCantTell?.(r.axis);
+  };
+  const onKey = (e: KeyboardEvent<HTMLInputElement>, r: Row, n: number) => {
+    const t = typed[r.axis] ?? "";
+    const found = findMatches(r, t, { none, cantTell: cantTell !== null });
+    const i = Math.min(at[r.axis] ?? 0, Math.max(0, found.length - 1));
+    const clear = () => {
+      setTyped((x) => ({ ...x, [r.axis]: "" }));
+      setAt((x) => ({ ...x, [r.axis]: 0 }));
+    };
+    if (e.key === "Enter" && !e.ctrlKey) {
+      e.preventDefault();
+      if (t !== "" && found[i]) {
+        take(r, found[i]);
+        clear();
+        if (!r.multi || found[i].kind !== "value") go(n + 1);
+      } else {
+        clear();
+        go(n + 1);
+      }
+    } else if (e.key === "Tab") {
+      e.preventDefault();
+      clear();
+      go(e.shiftKey ? Math.max(0, n - 1) : n + 1);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      clear();
+      e.currentTarget.blur();
+    } else if (e.key === "ArrowDown" || e.key === "ArrowRight") {
+      if (t === "" && e.key === "ArrowRight") return;
+      e.preventDefault();
+      setAt((x) => ({ ...x, [r.axis]: Math.min(i + 1, found.length - 1) }));
+    } else if (e.key === "ArrowUp" || e.key === "ArrowLeft") {
+      if (t === "" && e.key === "ArrowLeft") return;
+      e.preventDefault();
+      setAt((x) => ({ ...x, [r.axis]: Math.max(0, i - 1) }));
+    }
+  };
+  return (
+    <div className="axis-rows compact">
+      {rows.map((r, n) => {
+        const on = chosen[r.axis];
+        const long = r.values.length > LONG_ROW;
+        const t = typed[r.axis] ?? "";
+        const open = finding === r.axis;
+        const found = open ? findMatches(r, t, { none, cantTell: cantTell !== null }) : [];
+        const lit = found[Math.min(at[r.axis] ?? 0, Math.max(0, found.length - 1))] ?? null;
+        const isLit = (f: Found) => open && t !== "" && lit !== null && JSON.stringify(lit) === JSON.stringify(f);
+        const matches = (v: string) => !open || t === "" || found.some((f) => f.kind === "value" && f.value === v);
+        const picked = (v: string) => (Array.isArray(on) ? on.includes(v) : on === v);
+        const chip = (value: string) => {
+          const who = marks[r.axis]?.[value] ?? [];
+          const f: Found = { kind: "value", value };
+          return (
+            <button
+              key={value}
+              type="button"
+              tabIndex={-1}
+              className={["opt", picked(value) ? "on" : "", isLit(f) ? "lit" : "", matches(value) || picked(value) ? "" : "dim"].filter(Boolean).join(" ")}
+              aria-pressed={picked(value)}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onChoose(r.axis, value)}
+              title={who.length > 0 ? `given by ${who.join(", ")}` : undefined}
+            >
+              {value}
+              {who.length > 0 && <span className="said-by">{who.length}</span>}
+            </button>
+          );
+        };
+        const key = findKeyOf(n);
+        const ct = cantTellKeyOf(n);
+        const chosenLong = long ? (Array.isArray(on) ? on : typeof on === "string" && on !== "" && on !== cantTell ? [on] : []) : [];
+        return (
+          <div key={r.axis} className={open ? "axis-row finding" : "axis-row"} role="group" aria-label={r.axis}>
+            <span className="axis-name" title={r.multi ? `${r.axis}: several may hold` : r.axis}>
+              {key && <kbd>{key}</kbd>}
+              {r.axis.replace(/_/g, " ")}
+              {r.multi && <span className="meta">+</span>}
+            </span>
+            <span className="axis-values">
+              {long ? chosenLong.map(chip) : r.values.map(chip)}
+              <input
+                ref={(el) => {
+                  inputs.current[r.axis] = el;
+                }}
+                className={long ? "axis-find" : "axis-find quiet"}
+                data-find={r.axis}
+                value={t}
+                placeholder={long ? `type to find (${r.values.length})` : ""}
+                aria-label={`find a value of ${r.axis}`}
+                onFocus={() => setFinding(r.axis)}
+                onBlur={() => setFinding((f) => (f === r.axis ? null : f))}
+                onChange={(e) => {
+                  setTyped((x) => ({ ...x, [r.axis]: e.target.value }));
+                  setAt((x) => ({ ...x, [r.axis]: 0 }));
+                }}
+                onKeyDown={(e) => onKey(e, r, n)}
+              />
+              {none && (
+                <button type="button" tabIndex={-1} className={["opt", on === null ? "on" : "", isLit({ kind: "none" }) ? "lit" : ""].filter(Boolean).join(" ")} aria-pressed={on === null} onMouseDown={(e) => e.preventDefault()} onClick={() => onNone?.(r.axis)}>
+                  none
+                </button>
+              )}
+              {cantTell !== null && (
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className={["opt", on === cantTell ? "on" : "", isLit({ kind: "cant_tell" }) ? "lit" : ""].filter(Boolean).join(" ")}
+                  aria-pressed={on === cantTell}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => onCantTell?.(r.axis)}
+                  title={(marks[r.axis]?.[cantTell] ?? []).length > 0 ? `given by ${(marks[r.axis]?.[cantTell] ?? []).join(", ")}` : "the data give no clue for this axis"}
+                >
+                  {ct && <kbd>{ct}</kbd>}
+                  {"can't tell"}
+                  {(marks[r.axis]?.[cantTell] ?? []).length > 0 && <span className="said-by">{(marks[r.axis]?.[cantTell] ?? []).length}</span>}
+                </button>
+              )}
+            </span>
+            {long && open && (
+              <span className="axis-pop" role="listbox" aria-label={`values of ${r.axis}`}>
+                {found.filter((f): f is { kind: "value"; value: string } => f.kind === "value").map((f) => chip(f.value))}
+                {found.length === 0 && <span className="meta">nothing begins or holds “{t}”</span>}
+              </span>
+            )}
           </div>
         );
       })}

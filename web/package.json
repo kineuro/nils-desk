@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
+    "layout": "playwright test",
     "types": "openapi-typescript ../../nils-v1/contracts/openapi/v7/openapi.yaml -o src/engine.d.ts",
     "headless": "node scripts/headless.mjs",
     "walk:campaigns": "vitest run src/campaigns/walk.live.test.ts",
@@ -28,11 +29,13 @@
     "temml": "0.13.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.20.2",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.6.0",
+    "jsdom": "^30.1.1",
     "typescript": "^5.8.0",
     "vite": "^7.0.0",
     "vitest": "^3.2.0"

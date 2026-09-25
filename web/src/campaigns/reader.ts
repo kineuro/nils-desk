@@ -10,7 +10,7 @@
 
 import type { Json } from "../ask/client";
 import type { AskedCandidate, AxisValue } from "../review/asked";
-import { axisValues, CANDIDATE_KEYS, type Given, type Item, type Question } from "./client";
+import { answeredAxes, axisValues, CANDIDATE_KEYS, cantTellOf, derivedAxes, type Derived, type Given, type Item, type Question } from "./client";
 import { illegal } from "./workspace";
 
 // ---------------------------------------------------------------- the evidence line
@@ -59,6 +59,12 @@ export interface Reading {
   blind?: boolean;
   /** The stack's raw header values as the door sends them (TR, TE, ...), in the engine's short names; all a blind item shows beside its pictures. */
   header?: [string, string][];
+  /** The header's text fields as the file has them (record 48): series description, protocol, sequence name, image type and the rest. */
+  texts?: Record<string, string>;
+  /** The physics (record 48): TR, TE, TI, flip angle, field, scanner, geometry. */
+  physics?: Record<string, string | number | (string | number)[]>;
+  /** The path of the whole-header door for this item, where the engine names it. */
+  headerDoor?: string | null;
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -209,10 +215,12 @@ export function readingOf(raw: Json): Reading {
   }
   const worth = obj(raw.worth);
   const header = pairs(raw.header).map(([k, v]) => [HEADER_WORDS[k] ?? k.replace(/_/g, " "), v] as [string, string]);
-  // a sealed sample's item is read blind: no classification at all, whatever came with it; the pictures and the raw header stay
-  if (raw.blind === true) return blindReading({ item: num(raw.item) ?? num(raw.item_id), stack: num(raw.stack) ?? num(raw.stack_id), axes: named, lines, candidates: [], suggested: null, value: null, batch: null, header }, null, named);
+  const file = fileOf(raw);
+  // a sealed sample's item is read blind: no classification at all, whatever came with it; the pictures, the header and its text stay
+  if (raw.blind === true) return blindReading({ item: num(raw.item) ?? num(raw.item_id), stack: num(raw.stack) ?? num(raw.stack_id), axes: named, lines, candidates: [], suggested: null, value: null, batch: null, header, ...file }, null, named);
   return {
     header,
+    ...file,
     item: num(raw.item) ?? num(raw.item_id),
     stack: num(raw.stack) ?? num(raw.stack_id),
     axes: named,
@@ -233,7 +241,190 @@ export function readingOf(raw: Json): Reading {
  * the pictures. The rater answers from an empty form.
  */
 export function blindReading(r: Reading | null, stack: number | null, axes: string[]): Reading {
-  return { item: r?.item ?? null, stack: r?.stack ?? stack, axes: r?.axes ?? axes, lines: [], candidates: [], suggested: null, suggestedOne: null, value: null, batch: null, blind: true, header: r?.header ?? [] };
+  const file = r ? { ...(r.texts ? { texts: r.texts } : {}), ...(r.physics ? { physics: r.physics } : {}), ...(r.headerDoor ? { headerDoor: r.headerDoor } : {}) } : {};
+  return { item: r?.item ?? null, stack: r?.stack ?? stack, axes: r?.axes ?? axes, lines: [], candidates: [], suggested: null, suggestedOne: null, value: null, batch: null, blind: true, header: r?.header ?? [], ...file };
+}
+
+/**
+ * What the file says of itself, from the why door (record 48, after the
+ * first real read): the header's text fields, the physics, and the path of
+ * the whole-header door. Blind hides NILS's answers, never the file, so a
+ * blind item keeps all three. A field the door does not send stays absent.
+ */
+export function fileOf(raw: Json): Pick<Reading, "texts" | "physics" | "headerDoor"> {
+  const out: Pick<Reading, "texts" | "physics" | "headerDoor"> = {};
+  if (raw.texts && typeof raw.texts === "object" && !Array.isArray(raw.texts)) {
+    const t: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw.texts as Json)) {
+      if (typeof v === "string" && v.trim() !== "") t[k] = v;
+      else if (Array.isArray(v) && v.length > 0) t[k] = v.map(String).join("\\");
+      else if (typeof v === "number") t[k] = String(v);
+    }
+    out.texts = t;
+  }
+  if (raw.physics && typeof raw.physics === "object" && !Array.isArray(raw.physics)) {
+    const p: Record<string, string | number | (string | number)[]> = {};
+    for (const [k, v] of Object.entries(raw.physics as Json)) {
+      if ((typeof v === "number" && Number.isFinite(v)) || (typeof v === "string" && v !== "")) p[k] = v;
+      else if (Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "number" || typeof x === "string")) p[k] = v as (string | number)[];
+    }
+    out.physics = p;
+  }
+  // a door on this engine's own API, never elsewhere
+  if (typeof raw.header_door === "string" && raw.header_door.startsWith("/api/")) out.headerDoor = raw.header_door;
+  return out;
+}
+
+// ---------------------------------------------------------------- the file's text and physics
+
+/** The text fields a reader reads first, in order, with their short names; a sequence name and its variant share a line. */
+const TEXT_FIRST: [string, string][] = [
+  ["series_description", "series"],
+  ["protocol_name", "protocol"],
+  ["sequence_name", "sequence"],
+  ["scanning_sequence", "scanning"],
+  ["image_type", "image type"],
+];
+
+/** Every other text field's short name; a field not named here is shown by its own name. */
+const TEXT_MORE: Record<string, string> = {
+  body_part_examined: "body part",
+  series_comments: "series comments",
+  image_comments: "image comments",
+  derivation_description: "derivation",
+  study_description: "study",
+  contrast_bolus_agent: "contrast agent",
+  contrast_bolus_route: "contrast route",
+  angio_flag: "angio",
+};
+
+/** The physics a reader reads first, as a line: the timing, then the field. */
+const PHYSICS_FIRST: [string, string, string][] = [
+  ["repetition_time", "TR", ""],
+  ["echo_time", "TE", ""],
+  ["inversion_time", "TI", ""],
+  ["flip_angle", "flip", ""],
+  ["echo_train_length", "ETL", ""],
+  ["diffusion_b_value", "b", ""],
+  ["dwi_b_values", "b", ""],
+  ["pixel_bandwidth", "bw", ""],
+  ["magnetic_field_strength", "", "T"],
+];
+
+/** The physics a reader reads second, as a line: the scanner and the geometry. */
+const PHYSICS_SECOND = ["manufacturer", "manufacturer_model_name", "slice_thickness", "spacing_between_slices", "rows", "columns", "acquisition_matrix", "pixel_spacing", "orientation", "n_slices", "n_instances"];
+
+const shortNum = (v: number) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 1000) / 1000));
+const physWords = (v: string | number | (string | number)[]) => (Array.isArray(v) ? v.map((x) => (typeof x === "number" ? shortNum(x) : x)).join("/") : typeof v === "number" ? shortNum(v) : v);
+
+/** One line of the header block: its short name, what it says, and the whole of it for a hover. */
+export interface HeaderLine {
+  key: string;
+  label: string;
+  value: string;
+}
+
+/**
+ * The header block's lines (record 48 "one screen"): the text fields a
+ * reader reads first (the sequence name with its variant, the scanning
+ * sequence with the acquisition type and the options); the other text
+ * fields on one line;
+ * then the physics on two lines, the timing and field first, the scanner and
+ * geometry second, and anything else the door sent on a third. Absent fields
+ * leave no line.
+ */
+export function headerLines(texts: Record<string, string> = {}, physics: Record<string, string | number | (string | number)[]> = {}): HeaderLine[] {
+  const out: HeaderLine[] = [];
+  for (const [k, label] of TEXT_FIRST) {
+    if (k === "sequence_name") {
+      const seq = [texts.sequence_name, texts.sequence_variant].filter((x) => x !== undefined && x !== "");
+      if (seq.length > 0) out.push({ key: k, label, value: seq.join(" · ") });
+      continue;
+    }
+    // the scanning sequence, the acquisition type and the scan options share a line
+    if (k === "scanning_sequence") {
+      const scan = [texts.scanning_sequence, texts.mr_acquisition_type, texts.scan_options !== undefined ? `options ${texts.scan_options}` : undefined].filter((x) => x !== undefined && x !== "");
+      if (scan.length > 0) out.push({ key: k, label, value: scan.join(" · ") });
+      continue;
+    }
+    if (texts[k] !== undefined) out.push({ key: k, label, value: texts[k] });
+  }
+  const shown = new Set([...TEXT_FIRST.map(([k]) => k), "sequence_variant", "mr_acquisition_type", "scan_options"]);
+  const more = Object.entries(texts).filter(([k]) => !shown.has(k));
+  if (more.length > 0) out.push({ key: "texts", label: "more", value: more.map(([k, v]) => `${TEXT_MORE[k] ?? k.replace(/_/g, " ")} ${v}`).join(" · ") });
+  const first = PHYSICS_FIRST.filter(([k]) => physics[k] !== undefined).map(([k, name, unit]) => `${name ? `${name} ` : ""}${physWords(physics[k])}${unit}`);
+  if (first.length > 0) out.push({ key: "physics", label: "physics", value: first.join("  ") });
+  const has = (k: string) => physics[k] !== undefined;
+  const second: string[] = [];
+  const scanner = ["manufacturer", "manufacturer_model_name"].filter(has).map((k) => physWords(physics[k]));
+  if (scanner.length > 0) second.push(scanner.join(" "));
+  const slices = ["slice_thickness", "spacing_between_slices"].filter(has).map((k) => physWords(physics[k]));
+  if (slices.length > 0) second.push(`${slices.join("/")} mm`);
+  if (has("rows") && has("columns")) second.push(`${physWords(physics.columns)}x${physWords(physics.rows)}`);
+  if (has("acquisition_matrix")) second.push(`matrix ${physWords(physics.acquisition_matrix)}`);
+  if (has("pixel_spacing")) second.push(`px ${physWords(physics.pixel_spacing)}`);
+  if (has("orientation")) second.push(physWords(physics.orientation));
+  if (has("n_slices")) second.push(`${physWords(physics.n_slices)} slices`);
+  else if (has("n_instances")) second.push(`${physWords(physics.n_instances)} files`);
+  if (second.length > 0) out.push({ key: "scanner", label: "scanner", value: second.join(" · ") });
+  const named = new Set([...PHYSICS_FIRST.map(([k]) => k), ...PHYSICS_SECOND]);
+  const rest = Object.entries(physics).filter(([k]) => !named.has(k));
+  if (rest.length > 0) out.push({ key: "physics_more", label: "more", value: rest.map(([k, v]) => `${k.replace(/_/g, " ")} ${physWords(v)}`).join(" · ") });
+  return out;
+}
+
+// ---------------------------------------------------------------- the derived axes
+
+/**
+ * A partial answer as the derive door takes it (record 48): the asked axes
+ * chosen so far, each as the answer would send it (none as null, can't tell
+ * as the question's word); an axis not chosen yet is left out, and the
+ * engine takes it as can't tell. Null where nothing is chosen.
+ */
+export function deriveValue(q: Question, g: Given): Record<string, string | string[] | null> | null {
+  if (q.kind !== "axes" || g.kind !== "values") return null;
+  const out: Record<string, string | string[] | null> = {};
+  for (const axis of answeredAxes(q)) {
+    const v = g.values[axis];
+    if (v === undefined || v === "" || (Array.isArray(v) && v.length === 0)) continue;
+    out[axis] = v;
+  }
+  return out;
+}
+
+/** The derive door's answer, read leniently: each axis a value, a set, none or can't tell. */
+export function derivedOf(raw: unknown): Derived | null {
+  const r = obj(raw).derived;
+  if (!r || typeof r !== "object" || Array.isArray(r)) return null;
+  const d = r as Json;
+  const out: Derived = {};
+  for (const [axis, v] of Object.entries(d)) {
+    if (v === null || typeof v === "string") out[axis] = v;
+    else if (Array.isArray(v)) out[axis] = v.filter((x): x is string => typeof x === "string");
+  }
+  return out;
+}
+
+/** The short names the derived line gives its axes. */
+const DERIVED_WORDS: Record<string, string> = { directory_type: "dir" };
+/** The order the derived line says them in, where the question does not name one. */
+const DERIVED_ORDER = ["directory_type", "disposition", "convertible", "role", "quality"];
+
+/**
+ * The derived axes in one line, as the question names them: `derived: dir
+ * anat · disposition acquisition · convertible yes · role t1w · quality
+ * none`; can't tell is `?`, none or an empty set is none.
+ */
+export function derivedWords(d: Derived, q: Question | null = null, cantTell = "cant_tell"): string {
+  const named = q ? derivedAxes(q) : [];
+  const order = [...(named.length > 0 ? named : DERIVED_ORDER).filter((a) => a in d), ...Object.keys(d).filter((a) => !(named.length > 0 ? named : DERIVED_ORDER).includes(a))];
+  const word = q ? (cantTellOf(q) ?? cantTell) : cantTell;
+  const said = order.map((axis) => {
+    const v = d[axis];
+    const w = v === null || (Array.isArray(v) && v.length === 0) ? "none" : v === word || v === "cant_tell" ? "?" : Array.isArray(v) ? v.map((x) => (x === word ? "?" : x)).join("+") : v;
+    return `${DERIVED_WORDS[axis] ?? axis.replace(/_/g, " ")} ${w}`;
+  });
+  return `derived: ${said.join(" · ")}`;
 }
 
 /** The explain door's axis rows (GET /api/explain/{stack}), as far as it goes. */
@@ -311,9 +502,9 @@ export interface Suggestion {
   p: number | null;
 }
 
-/** The axes a question asks. */
+/** The axes a question asks the rater: a derived axis (record 48) is the engine's to compute, never asked. */
 export function askedAxes(q: Question): string[] {
-  return q.kind === "axis" ? (q.axis ? [q.axis] : []) : q.kind === "axes" ? (q.axes ?? []) : [];
+  return answeredAxes(q);
 }
 
 /** How sure a lone candidate must be to be filled in when no rule speaks to its axis. */

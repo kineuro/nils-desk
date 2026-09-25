@@ -13,8 +13,9 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { review } from "../review/client";
-import { campaigns, type Claimed, type Item, type Question } from "./client";
-import { acceptedOf, askedAxes, batchesOf, blindReading, bound, HOLD_BACK, readingFromAsked, readingOf, statsOf, type Batch, type Order, type RaterStats, type Reading } from "./reader";
+import { DoorError } from "../ask/client";
+import { campaigns, DERIVE, HEADER, type Claimed, type Derived, type HeaderDoc, type Item, type Question } from "./client";
+import { acceptedOf, askedAxes, batchesOf, blindReading, bound, derivedOf, HOLD_BACK, readingFromAsked, readingOf, statsOf, type Batch, type Order, type RaterStats, type Reading } from "./reader";
 
 /** The doors a record 48 engine adds, as its OpenAPI 7 names them. */
 export const R48 = {
@@ -103,4 +104,79 @@ export function acceptBatch(c: number | string, b: Batch, plan: { items: number[
 
 export function statsFor(c: number | string): Promise<RaterStats> {
   return door<Json>("GET", `/api/campaigns/${id(c)}/stats`).then(statsOf);
+}
+
+// ---------------------------------------------------------------- record 48, after the first real read
+
+/**
+ * The whole-header door of an item: the path the why door names, else the
+ * door's own path where the engine serves it; null on an engine without it,
+ * where `h` keeps opening the evidence.
+ */
+export function headerDoorOf(caps: Capabilities, c: number | string, item: number, reading: Reading | null): string | null {
+  if (reading?.headerDoor) return reading.headerDoor;
+  return served(caps, HEADER) ? `/api/campaigns/${id(c)}/items/${item}/header` : null;
+}
+
+/** Read an item's whole header. */
+export function headerFor(path: string): Promise<HeaderDoc> {
+  return campaigns.header(path).then((d) => ({ ...d, fields: Array.isArray(d.fields) ? d.fields : [] }));
+}
+
+/** Whether to ask the derive door: the question names derived axes, or the engine lists the door. */
+export function deriveAsked(caps: Capabilities, q: Question): boolean {
+  return q.kind === "axes" && ((Array.isArray(q.derive) && q.derive.length > 0) || served(caps, DERIVE));
+}
+
+/** The derive door for one item, answering the derived axes of a partial answer. */
+export type DeriveDoor = (value: Record<string, string | string[] | null>) => Promise<Derived | null>;
+
+export function deriveDoor(c: number | string, item: number): DeriveDoor {
+  return (value) => campaigns.derive(c, item, value).then(derivedOf);
+}
+
+/**
+ * The derived line's clock (record 48): each change of the answer asks the
+ * derive door once the answer has been still for `wait` ms, and only the
+ * latest question's answer is shown; an earlier one arriving late is
+ * dropped. A 404 says the engine has no such door: the line is hidden and
+ * nothing more is asked. Another refusal leaves the line as it was.
+ */
+export class Deriver {
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  private asked = 0;
+  private gone = false;
+  constructor(
+    private door: DeriveDoor,
+    private show: (d: Derived | null, absent: boolean) => void,
+    private wait = 150,
+  ) {}
+
+  want(value: Record<string, string | string[] | null>): void {
+    if (this.gone) return;
+    if (this.timer !== null) clearTimeout(this.timer);
+    const n = ++this.asked;
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      this.door(value).then(
+        (d) => {
+          if (n === this.asked && !this.gone) this.show(d, false);
+        },
+        (e: unknown) => {
+          if (e instanceof DoorError && e.status === 404) {
+            this.gone = true;
+            this.show(null, true);
+          }
+        },
+      );
+    }, this.wait);
+  }
+
+  /** Stop: a timer pending is dropped and a late answer is not shown. */
+  stop(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    this.asked++;
+    this.gone = true;
+  }
 }

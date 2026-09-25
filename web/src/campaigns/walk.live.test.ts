@@ -19,7 +19,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { door } from "../ask/client";
 import type { Capabilities, EngineCapabilities } from "../capabilities";
 import { answerWords, axesServed, campaigns, closure, emptyDraft, makeBody, type Answer, type Campaign, type Claimed, type Given } from "./client";
-import { beatSeat, bodyOf, disagreementWords, given, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
+import { beatSeat, bodyOf, disagreementWords, findMatches, given, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
 import { blank } from "./renderers";
 
 const ENGINE = process.env.CAMPAIGN_WALK_ENGINE ?? "";
@@ -177,14 +177,16 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("a campaign walked by three people
     expect(refusedBy).toMatch(/T1w/u);
     // the refusal wrote nothing: the same assignment takes the legal answer
     await as(ALICE, () => campaigns.answer(c.id, first.assignment.id, { value: { base: "T1w", technique: "MPRAGE", modifier: null } }));
-    // two raters: base by key 9 (T1w), technique chosen, modifier none; bob differs on the technique of the last stack
+    // two raters: base found by its number and letters (T1w), technique chosen, modifier none; bob differs on the technique of the last stack
     const rate = async (person: typeof ALICE, technique: (stack: number) => string) => {
       let seat: Seat = seatOf(await as(person, () => campaigns.claim(c.id)));
       let n = 0;
       while (seat.kind === "holding") {
-        const k = keyAct("9", { ctrl: false, inField: false, q, rows });
+        // three rows: `1` finds the base row and its first letters find T1w (record 48, one screen)
+        const k = keyAct("1", { ctrl: false, inField: false, q, rows });
         let g: Given = { kind: "values", values: {} };
-        if (k?.kind === "choose") g = given(q, g, k.row, k.value);
+        const found = k?.kind === "find" ? findMatches(k.row, "t1w")[0] : null;
+        if (k?.kind === "find" && found?.kind === "value") g = given(q, g, k.row, found.value);
         g = given(q, g, rows[1], technique(seat.item.stack_id ?? 0));
         g = givenNone(g, "modifier");
         expect(illegal(q, g)).toBeNull();
