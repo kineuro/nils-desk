@@ -17,10 +17,10 @@ import claimedAdj from "../../test/fixtures/campaigns/claim_adjudicator.json";
 import nothing from "../../test/fixtures/campaigns/claim_nothing.json";
 import { packDoc } from "../review/client";
 import { capsFor, RATER } from "./caps.fixture";
-import { beatEvery, leaseWords, type Answer, type Campaign, type Candidates, type Claimed, type Given } from "./client";
+import { answerBody, answerWords, beatEvery, jointOf, leaseWords, legalProblem, type Answer, type Campaign, type Candidates, type Claimed, type Given } from "./client";
 import { answeringApp, blank } from "./renderers";
 import { candidatesOf, factsOf, WorkspaceBody, type WorkspaceBodyProps } from "./Workspace";
-import { answeredWords, beatSeat, boardOf, chosenOf, disagreementWords, given, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
+import { answeredWords, beatSeat, boardOf, chosenOf, disagreementWords, given, givenCantTell, givenNone, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
 
 const open = openCampaign as unknown as Campaign;
 const closed = closedCampaign as unknown as Campaign;
@@ -324,5 +324,115 @@ describe("a pick question's session board", () => {
     ]);
     // no run's pick: every acquisition of the session, none marked
     expect(boardOf({ ...c, picks: [] }).map((b) => b.stacks)).toEqual([[405], [406], [409], [410, 411]]);
+  });
+});
+
+describe("can't tell and unsure (record 48)", () => {
+  const constraints = { values: { base: ["T1w", "T2w"], modifier: ["FLAIR", "FS"] }, multi: ["modifier"], groups: { modifier: { IR: ["FLAIR", "FS"] } }, implications: [{ rule: "r/flair-t2", when: { axis: "modifier", is: "FLAIR" }, then: [{ axis: "base", value: "T2w" }] }] };
+  const q = { kind: "axes", axes: ["base", "modifier", "technique"], values: { base: ["T1w", "T2w"], modifier: ["FLAIR", "FS"], technique: ["SE", "GRE"] }, constraints, cant_tell: "cant_tell", unsure: true };
+  const older = { kind: "axes", axes: ["base", "modifier", "technique"], values: q.values, constraints };
+  const rows = rowsOf(q, null);
+  const at = (key: string, question: typeof q | typeof older = q, inField = false) => keyAct(key, { ctrl: false, inField, q: question, rows });
+  const c = { ...open, question: q };
+
+  it("says can't tell with a, d, f on the rows in turn, and marks unsure with m, where the question takes them", () => {
+    expect(at("a")).toEqual({ kind: "cant_tell", row: rows[0] });
+    expect(at("d")).toEqual({ kind: "cant_tell", row: rows[1] });
+    expect(at("F")).toEqual({ kind: "cant_tell", row: rows[2] });
+    // past the last row, and on an axis question, nothing
+    expect(at("g")).toBeNull();
+    expect(keyAct("a", { ctrl: false, inField: false, q: { kind: "axis", axis: "base", cant_tell: "cant_tell" }, rows: rows.slice(0, 1) })).toBeNull();
+    expect(at("m")).toEqual({ kind: "unsure" });
+    expect(keyAct("m", { ctrl: false, inField: false, q: { kind: "free", unsure: true }, rows: [] })).toEqual({ kind: "unsure" });
+    // no clash with the keys already there
+    expect(at("1")).toEqual({ kind: "choose", row: rows[0], value: "T1w" });
+    expect(at("s")).toEqual({ kind: "skip" });
+    expect(at("h")).toEqual({ kind: "evidence" });
+    expect(at("a", q, true)).toBeNull();
+    // an older engine names neither
+    expect(at("a", older)).toBeNull();
+    expect(at("m", older)).toBeNull();
+  });
+
+  it("toggles can't tell apart from none, and a value chosen after it replaces it", () => {
+    let g = givenCantTell(q, blank(q), "base");
+    expect(chosenOf(q, g)).toEqual({ base: "cant_tell" });
+    expect(chosenOf(q, givenCantTell(q, g, "base"))).toEqual({ base: "" });
+    g = givenNone(g, "modifier");
+    g = givenCantTell(q, g, "modifier");
+    expect(chosenOf(q, g)).toEqual({ base: "cant_tell", modifier: "cant_tell" });
+    expect(chosenOf(q, givenNone(g, "modifier"))).toEqual({ base: "cant_tell", modifier: null });
+    expect(chosenOf(q, given(q, g, rows[0], "T2w")).base).toBe("T2w");
+    expect(chosenOf(q, given(q, g, rows[1], "FS")).modifier).toEqual(["FS"]);
+    // an older engine's question takes no can't tell
+    expect(givenCantTell(older, blank(older), "base")).toEqual(blank(older));
+  });
+
+  it("sends can't tell for an axis and unsure only when set, and says can't tell among what is missing", () => {
+    const values = { base: "cant_tell", modifier: null, technique: "SE" };
+    expect(answerBody(q, { kind: "values", values })).toEqual({ ok: true, body: { value: values } });
+    expect(answerBody(q, { kind: "values", values }, "", true)).toEqual({ ok: true, body: { value: values, unsure: true } });
+    expect(answerBody(q, { kind: "values", values: { base: "cant_tell" } })).toEqual({ ok: false, needs: "a value for modifier, technique, or none, or can't tell" });
+    expect(answerBody(older, { kind: "values", values: { base: "T1w" } })).toEqual({ ok: false, needs: "a value for modifier, technique, or none" });
+    // an engine that does not take the mark is not sent it
+    expect(answerBody(older, { kind: "values", values: { base: "T1w", modifier: null, technique: "SE" } }, "", true)).toEqual({ ok: true, body: { value: { base: "T1w", modifier: null, technique: "SE" } } });
+    expect(answerBody({ kind: "free", unsure: true }, { kind: "text", text: "odd" }, "", true)).toEqual({ ok: true, body: { value: "odd", unsure: true } });
+  });
+
+  it("never holds can't tell to the pack's implications or exclusion groups", () => {
+    // FLAIR sets base to T2w; base can't tell names nothing, so nothing is broken
+    const g = { kind: "values" as const, values: { base: "cant_tell", modifier: ["FLAIR"], technique: "SE" } };
+    expect(jointOf(g.values)).toEqual({ modifier: ["FLAIR"], technique: ["SE"] });
+    expect(illegal(q, g)).toBeNull();
+    expect(answerBody(q, g).ok).toBe(true);
+    expect(legalProblem(constraints, { base: ["cant_tell"], modifier: ["FLAIR"] })).toBeNull();
+    // a value named still is
+    expect(illegal(q, { kind: "values", values: { base: "T1w", modifier: ["FLAIR"] } })).toContain("sets base to T2w");
+    expect(illegal(q, { kind: "values", values: { base: "cant_tell", modifier: "cant_tell" } })).toBeNull();
+  });
+
+  it("draws can't tell on every row with its key, the unsure toggle, and what will be sent", () => {
+    const g = { kind: "values" as const, values: { base: "cant_tell", modifier: null } };
+    const html = draw({ campaign: c, rows, given: g, unsure: true, keys: true });
+    expect(html).toContain("<kbd>a</kbd>can&#x27;t tell");
+    expect(html).toContain("<kbd>d</kbd>can&#x27;t tell");
+    expect(html).toContain("<kbd>f</kbd>can&#x27;t tell");
+    expect(html).toMatch(/class="opt on" aria-pressed="true"[^>]*><kbd>a<\/kbd>can&#x27;t tell/u);
+    expect(html).toContain('class="opt on" aria-pressed="true">none</button>');
+    expect(html).toContain("Unsure <kbd>m</kbd>");
+    expect(html).toContain("Sends: base can&#x27;t tell · modifier none · technique –");
+    expect(html).toContain('<span class="tag caution">unsure</span>');
+    expect(html).toContain("<dt>a d f</dt>");
+    expect(html).toContain("<dt>m</dt>");
+    expect(pendingWords(q, g, true)).toBe("base can't tell · modifier none · technique – · unsure");
+    // a blind item draws the same controls
+    expect(draw({ campaign: c, rows, given: g, blind: true, header: [] })).toContain("<kbd>a</kbd>can&#x27;t tell");
+  });
+
+  it("draws neither where the question does not carry them", () => {
+    const html = draw({ campaign: { ...open, question: older }, rows: rowsOf(older, null), given: blank(older), unsure: true, keys: true });
+    expect(html).not.toContain("can&#x27;t tell");
+    expect(html).not.toContain("Unsure");
+    expect(html).not.toContain("<dt>m</dt>");
+    expect(html).not.toContain('<span class="tag caution">unsure</span>');
+    expect(pendingWords(older, { kind: "values", values: { base: "T1w" } }, true)).toBe("base T1w · modifier – · technique –");
+  });
+
+  it("marks can't tell apart from none for the adjudicator, and counts it a disagreement against a value", () => {
+    const item = claimAdj.item!.id;
+    const two: Answer[] = [
+      { ...answers[0], value: JSON.stringify({ base: "cant_tell", modifier: null, technique: "SE" }), unsure: true },
+      { ...answers[1], value: JSON.stringify({ base: "T1w", modifier: null, technique: "SE" }) },
+    ];
+    expect(marksOf(q, two, item).base).toEqual({ cant_tell: ["alice@walk"], T1w: ["bob@walk"] });
+    expect(disagreementWords(q, two, item)).toBe("The raters differ on base.");
+    const both = [two[0], { ...two[1], value: two[0].value }];
+    expect(disagreementWords(q, both, item)).toBe("The raters agree on every axis; the metric sent it here.");
+    const noneAndCant = [two[0], { ...two[1], value: JSON.stringify({ base: null, modifier: null, technique: "SE" }) }];
+    expect(disagreementWords(q, noneAndCant, item)).toBe("The raters differ on base.");
+    expect(answerWords(two[0])).toBe("base can't tell · modifier none · technique SE");
+    const html = draw({ campaign: { ...c, status: "open" }, role: "adjudicator", caps: capsFor({ principal: "carol@walk" }), seat: seatOf(claimAdj), marks: marksOf(q, two, item), raterAnswers: two.filter((a) => a.item_id === item) });
+    expect(html).toContain('<span class="tag caution">unsure</span>');
+    expect(html).toContain('title="given by alice@walk"><kbd>a</kbd>can&#x27;t tell<span class="said-by">1</span>');
   });
 });

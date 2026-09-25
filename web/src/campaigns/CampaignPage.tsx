@@ -180,10 +180,15 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
         <p className="meta">
           By axis:{" "}
           {Object.entries(a.per_axis)
-            .map(([axis, x]) => `${axis} ${pct(x.exact)}`)
+            .map(([axis, x]) => `${axis} ${pct(x.exact)}${x.cant_tell ? ` (${n(x.cant_tell)} can't tell)` : ""}`)
             .join(" · ")}
         </p>
       )}
+      {a?.unsure ? (
+        <p className="meta">
+          {n(a.unsure)} {a.unsure === 1 ? "answer" : "answers"} marked unsure, for a second look.
+        </p>
+      ) : null}
       {missing !== null && missing > 0 && (
         <div className="note">
           <Icon name="info" />
@@ -319,6 +324,7 @@ function ItemRow({ item: i, answers, blind }: { item: Item; answers: Answer[]; b
               <span key={a.id} className="answer-chip" title={a.why ?? undefined}>
                 {a.principal.split("@")[0]}
                 {a.role === "adjudicator" ? " (adj.)" : ""} {answerWords(a)}
+                {a.unsure ? " · unsure" : ""}
               </span>
             ))}
       </td>

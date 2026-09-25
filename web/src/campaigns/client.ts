@@ -39,6 +39,10 @@ export interface Question {
   form?: FormSchema;
   /** An axes question's legal combinations, frozen from the served pack when the campaign was made (record 45 E4). */
   constraints?: AxesConstraints;
+  /** An axes question's reserved word for "can't tell" (record 48), which any asked axis takes as its value; absent on an engine before it. */
+  cant_tell?: string;
+  /** Whether the answer door takes the unsure mark (record 48); absent on an engine before it. */
+  unsure?: boolean;
 }
 
 /** What an axes question holds its answers to: each asked axis's values, the multi-valued axes, the exclusion groups and the pack's implications. */
@@ -65,7 +69,9 @@ export interface Agreement {
   fleiss_kappa: number | null;
   cohen_kappa: number | null;
   /** An axes campaign's agreement measured on each axis alone (record 45 E4). */
-  per_axis?: Record<string, Agreement>;
+  per_axis?: Record<string, Agreement & { cant_tell?: number }>;
+  /** How many answers were marked unsure (record 48). */
+  unsure?: number;
 }
 
 export interface Item {
@@ -155,6 +161,8 @@ export interface Answer {
   why?: string | null;
   answered_at: string;
   model_id?: number | null;
+  /** The rater wants a second look (record 48). */
+  unsure?: boolean;
 }
 
 export interface Claimed {
@@ -246,6 +254,8 @@ export interface AnswerBody extends Json {
   form?: Json;
   derivative_id?: number;
   why?: string;
+  /** Sent only when set, and only to an engine whose question says it takes it. */
+  unsure?: boolean;
 }
 
 const id = (c: number | string) => encodeURIComponent(String(c));
@@ -726,6 +736,17 @@ export function axisValues(q: Question, axis?: string): string[] {
   return [];
 }
 
+/** The word an axes answer gives an axis for "can't tell" where the question does not name its own (the engine's reserved word). */
+export const CANT_TELL = "cant_tell";
+
+/** The question's word for "can't tell", or null where the engine does not take it (an older engine, or not an axes question). */
+export function cantTellOf(q: Question): string | null {
+  return q.kind === "axes" && typeof q.cant_tell === "string" && q.cant_tell !== "" ? q.cant_tell : null;
+}
+
+/** Whether the answer door takes the unsure mark for this question. */
+export const unsureOf = (q: Question): boolean => q.unsure === true;
+
 /** A rater's answer as it is being given, before it is sent. */
 export type Given =
   | { kind: "value"; value: string }
@@ -737,8 +758,8 @@ export type Given =
   | { kind: "none" };
 
 /** Why the answer cannot be sent yet, or null with its body. Checks what the engine checks first, so a refusal is rare. */
-export function answerBody(q: Question, g: Given, why = ""): { ok: true; body: AnswerBody } | { ok: false; needs: string } {
-  const w = why.trim() ? { why: why.trim() } : {};
+export function answerBody(q: Question, g: Given, why = "", unsure = false): { ok: true; body: AnswerBody } | { ok: false; needs: string } {
+  const w = { ...(why.trim() ? { why: why.trim() } : {}), ...(unsure && unsureOf(q) ? { unsure: true } : {}) };
   switch (q.kind) {
     case "axis": {
       if (g.kind !== "value" || !g.value) return { ok: false, needs: "a value" };
@@ -748,13 +769,14 @@ export function answerBody(q: Question, g: Given, why = ""): { ok: true; body: A
     }
     case "axes": {
       if (g.kind !== "values") return { ok: false, needs: "a value for each axis" };
-      // every asked axis is named; none says it has no value here
+      // every asked axis is named; none says it has no value here, can't tell that the data give no clue
+      const cant = cantTellOf(q);
       const missing = (q.axes ?? []).filter((a) => {
         const v = g.values[a];
         return v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
       });
-      if (missing.length > 0) return { ok: false, needs: `a value for ${missing.join(", ")}, or none` };
-      const problem = q.constraints ? legalProblem(q.constraints, jointOf(g.values)) : null;
+      if (missing.length > 0) return { ok: false, needs: `a value for ${missing.join(", ")}, or none${cant ? ", or can't tell" : ""}` };
+      const problem = q.constraints ? legalProblem(q.constraints, jointOf(g.values, cant ?? CANT_TELL)) : null;
       if (problem) return { ok: false, needs: `a combination the pack allows: ${problem}` };
       const value: Record<string, string | string[] | null> = {};
       for (const a of q.axes ?? []) value[a] = g.values[a] ?? null;
@@ -781,11 +803,15 @@ export function answerBody(q: Question, g: Given, why = ""): { ok: true; body: A
   }
 }
 
-/** The chosen values as the engine reads an axes answer: an axis not chosen yet is left out, none is no value. */
-export function jointOf(values: Record<string, string | string[] | null>): Joint {
+/**
+ * The chosen values as the engine reads an axes answer for the pack's
+ * constraints: an axis not chosen yet is left out, and so is an axis the
+ * rater cannot tell, which names no value; none is no value.
+ */
+export function jointOf(values: Record<string, string | string[] | null>, cantTell = CANT_TELL): Joint {
   const out: Joint = {};
   for (const [axis, v] of Object.entries(values)) {
-    if (v === undefined || v === "") continue;
+    if (v === undefined || v === "" || v === cantTell) continue;
     out[axis] = v === null ? [] : Array.isArray(v) ? v : [v];
   }
   return out;
@@ -836,7 +862,9 @@ export function conditionWords(c: Condition | null | undefined): string {
  * checks it: at most one member of an exclusion group, and what a rule whose
  * condition holds sets. Shown as the person chooses, so a refusal is rare.
  */
-export function legalProblem(c: AxesConstraints, a: Joint): string | null {
+export function legalProblem(c: AxesConstraints, joint: Joint): string | null {
+  // an axis said to be can't tell names nothing, as an axis not chosen yet
+  const a: Joint = Object.fromEntries(Object.entries(joint).filter(([, v]) => !(v.length === 1 && v[0] === CANT_TELL)));
   for (const [axis, groups] of Object.entries(c.groups ?? {})) {
     const held = a[axis];
     if (!held) continue;
@@ -906,7 +934,7 @@ export function answerWords(a: Pick<Answer, "value" | "form" | "derivative_id">)
   if (Array.isArray(v)) return `stacks ${v.join(", ")}`;
   if (v && typeof v === "object")
     return Object.entries(v as Json)
-      .map(([k, x]) => `${k} ${Array.isArray(x) ? x.join("+") || "none" : x === null ? "none" : String(x)}`)
+      .map(([k, x]) => `${k} ${Array.isArray(x) ? x.join("+") || "none" : x === null ? "none" : x === CANT_TELL ? "can't tell" : String(x)}`)
       .join(" · ");
   return String(v);
 }
@@ -932,6 +960,20 @@ export const ROW_KEYS = ["1234567890", "qwertyuiop"];
 
 /** The keys that choose a shown candidate in the reader (record 48): the bottom row, left hand, never a value key. */
 export const CANDIDATE_KEYS = "zxcv";
+
+/**
+ * The keys that say "can't tell" on an axes question's rows (record 48), one
+ * per row: the home row from the left, less `s` (give back) and `h` (the
+ * evidence), so `a` on the first row, `d` on the second, then `f`, `g`, `j`,
+ * `k` and `l`. Pressed again it clears.
+ */
+export const CANT_TELL_KEYS = "adfgjkl";
+
+/** The key that marks the answer unsure, for a second look (record 48). */
+export const UNSURE_KEY = "m";
+
+/** The key that says can't tell on a row, or null past the last. */
+export const cantTellKeyOf = (row: number): string | null => CANT_TELL_KEYS[row] ?? null;
 
 /** The value a key picks on a row of values, or null. */
 export function keyValue(key: string, row: number, values: string[]): string | null {

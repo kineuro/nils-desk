@@ -7,7 +7,7 @@
 
 import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { formFields, keyOf, type FormSchema, type Given, type Item, type Question } from "./client";
+import { cantTellKeyOf, formFields, keyOf, type FormSchema, type Given, type Item, type Question } from "./client";
 
 /** One row of values: an axis, its values in the pack's order, and the families they group under where the pack says. */
 export interface Row {
@@ -26,16 +26,21 @@ export function AxisRows({
   chosen,
   marks = {},
   none = false,
+  cantTell = null,
   onChoose,
   onNone,
+  onCantTell,
 }: {
   rows: Row[];
   chosen: Record<string, string | string[] | null>;
   marks?: Marks;
   /** Offer "none" on each row: an axes answer names every axis, and none says it has no value here. */
   none?: boolean;
+  /** Offer "can't tell" on each row (record 48), with the question's word for it; null where the engine does not take it. */
+  cantTell?: string | null;
   onChoose: (axis: string, value: string) => void;
   onNone?: (axis: string) => void;
+  onCantTell?: (axis: string) => void;
 }) {
   return (
     <div className="axis-rows">
@@ -71,11 +76,24 @@ export function AxisRows({
                   none
                 </button>
               )}
+              {cantTell !== null && (
+                <CantTellButton on={on === cantTell} k={cantTellKeyOf(n)} who={marks[r.axis]?.[cantTell] ?? []} onClick={() => onCantTell?.(r.axis)} />
+              )}
             </span>
           </div>
         );
       })}
     </div>
+  );
+}
+
+function CantTellButton({ on, k, who, onClick }: { on: boolean; k: string | null; who: string[]; onClick: () => void }) {
+  return (
+    <button type="button" className={on ? "opt on" : "opt"} aria-pressed={on} onClick={onClick} title={who.length > 0 ? `given by ${who.join(", ")}` : "the data give no clue for this axis"}>
+      {k && <kbd>{k}</kbd>}
+      {"can't tell"}
+      {who.length > 0 && <span className="said-by">{who.length}</span>}
+    </button>
   );
 }
 

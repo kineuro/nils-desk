@@ -7,7 +7,7 @@
 
 import type { PackDoc } from "../review/client";
 import type { BoardCandidate } from "../review/SessionBoard";
-import { answerBody, answerWords, axisValues, CANDIDATE_KEYS, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Item, type Question } from "./client";
+import { answerBody, answerWords, axisValues, CANDIDATE_KEYS, CANT_TELL, CANT_TELL_KEYS, cantTellOf, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, UNSURE_KEY, unsureOf, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Item, type Question } from "./client";
 import { choose, type Marks, type Row } from "./renderers";
 
 export type Seat =
@@ -78,10 +78,40 @@ export function givenNone(g: Given, axis: string): Given {
   return { kind: "values", values: { ...values, [axis]: values[axis] === null ? "" : null } };
 }
 
-/** Why the pack forbids the axes chosen so far, or null. */
+/** An axes answer with one axis said to be can't tell (record 48), in the question's word; again, it clears. */
+export function givenCantTell(q: Question, g: Given, axis: string): Given {
+  const word = cantTellOf(q);
+  if (!word) return g;
+  const values = g.kind === "values" ? g.values : {};
+  return { kind: "values", values: { ...values, [axis]: values[axis] === word ? "" : word } };
+}
+
+/** Why the pack forbids the axes chosen so far, or null; an axis the rater cannot tell names nothing. */
 export function illegal(q: Question, g: Given): string | null {
   if (q.kind !== "axes" || !q.constraints || g.kind !== "values") return null;
-  return legalProblem(q.constraints, jointOf(g.values));
+  return legalProblem(q.constraints, jointOf(g.values, cantTellOf(q) ?? CANT_TELL));
+}
+
+/**
+ * The answer about to be sent, in one line: each asked axis with its value,
+ * none, can't tell, or a dash where nothing is chosen yet; and the unsure
+ * mark where it is set. Null for a question without rows.
+ */
+export function pendingWords(q: Question, g: Given, unsure = false): string | null {
+  const mark = unsure && unsureOf(q) ? "unsure" : null;
+  if (q.kind === "axis") {
+    const v = g.kind === "value" && g.value ? g.value : "–";
+    return [`${q.axis ?? "the axis"} ${v}`, mark].filter(Boolean).join(" · ");
+  }
+  if (q.kind !== "axes") return mark;
+  const word = cantTellOf(q);
+  const values = g.kind === "values" ? g.values : {};
+  const said = (q.axes ?? []).map((axis) => {
+    const v = values[axis];
+    const w = v === undefined || v === "" || (Array.isArray(v) && v.length === 0) ? "–" : v === null ? "none" : word !== null && v === word ? "can't tell" : Array.isArray(v) ? v.join("+") : v;
+    return `${axis} ${w}`;
+  });
+  return [...said, mark].filter(Boolean).join(" · ");
 }
 
 /** The given answer as rows show it chosen. */
@@ -100,7 +130,9 @@ export type KeyAct =
   | { kind: "candidate"; index: number }
   | { kind: "evidence" }
   | { kind: "reset" }
-  | { kind: "batch" };
+  | { kind: "batch" }
+  | { kind: "cant_tell"; row: Row }
+  | { kind: "unsure" };
 
 /**
  * What a key does in the workspace (v0's keys where they fit): `1` to `0` on
@@ -109,6 +141,9 @@ export type KeyAct =
  * The reader's keys (record 48) on an axis or axes question: `z` to `v`
  * choose a shown candidate, `h` opens the evidence, Backspace goes back to
  * the suggestion, `b` opens the batches where the engine offers them.
+ * Where the engine takes them (record 48): on an axes question `a`, `d`,
+ * `f`, `g`, `j`, `k`, `l` say can't tell on the first row, the second and
+ * so on, and on any question `m` marks the answer unsure.
  */
 export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: Question; rows: Row[]; candidates?: number[]; offered?: number; batches?: boolean }): KeyAct | null {
   if (opts.inField) return key === "Enter" && opts.ctrl ? { kind: "answer" } : null;
@@ -126,6 +161,11 @@ export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: 
     if (key === "Backspace") return { kind: "reset" };
     if ((key === "b" || key === "B") && opts.batches) return { kind: "batch" };
   }
+  if (cantTellOf(opts.q)) {
+    const r = CANT_TELL_KEYS.indexOf(key.toLowerCase());
+    if (r >= 0 && r < opts.rows.length) return { kind: "cant_tell", row: opts.rows[r] };
+  }
+  if ((key === UNSURE_KEY || key === UNSURE_KEY.toUpperCase()) && unsureOf(opts.q)) return { kind: "unsure" };
   for (let r = 0; r < Math.min(opts.rows.length, ROW_KEYS.length); r++) {
     const v = keyValue(key, r, opts.rows[r].values);
     if (v !== null) return { kind: "choose", row: opts.rows[r], value: v };
@@ -155,7 +195,7 @@ export function enterOwnedBy(t: KeyTarget | null): boolean {
   return !t.closest?.(".axis-rows, .form-fields");
 }
 
-/** What the adjudicator sees beside the options: who gave what, by axis and value, from the raters' answers to this item. */
+/** What the adjudicator sees beside the options: who gave what, by axis and value, from the raters' answers to this item; can't tell is marked under its own word, apart from none. */
 export function marksOf(q: Question, answers: Answer[], item: number): Marks {
   const out: Marks = {};
   const put = (axis: string, value: string, who: string) => {
