@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.44] - 2026-09-25
+
+Released beside the engine's 1.0.0-alpha.44: the reader looks an answer up. A row finds a value by any name it goes by, the rows follow each other through the pack's implications and exclusions, `/` finds a whole answer, the header's key facts stand whole, and the chosen view is kept. The vocabulary and combinations the engine serves are read where the engine has them. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
 ### Changed
 
 - The reader after the second real read (record 48): answering is looking up. A row finds a value by any name it goes by, from the names the engine serves with the question: its label, the pack's terms (a vendor's name for the sequence: BRAVO, IR-FSPGR, 3D TFE or TFL find MPRAGE) and the words its rules read, case, spaces and hyphens not counting; the row says why it matched ("BRAVO → MPRAGE").
