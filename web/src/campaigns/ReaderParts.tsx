@@ -320,9 +320,9 @@ export function HeaderDrawer({ doc, failed, onClose }: { doc: HeaderDoc | null; 
           </table>
         </div>
       )}
-      {out && (out.identifying || out.removed) ? (
+      {out && (out.identifying || out.below_detail) ? (
         <p className="meta">
-          Left out: {out.identifying ?? 0} identifying, {out.removed ?? 0} removed.
+          Left out: {out.identifying ?? 0} identifying, {out.below_detail ?? 0} below your detail level.
         </p>
       ) : null}
     </div>

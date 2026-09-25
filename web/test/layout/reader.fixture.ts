@@ -169,7 +169,7 @@ export const HEADER_DOC: HeaderDoc = {
     { level: "series", column: "flip_angle", keyword: "FlipAngle", tag: "(0018,1314)", value: 9 },
     ...Array.from({ length: 60 }, (_, i) => ({ level: "instance", column: null, keyword: `PrivateField${i + 1}`, tag: `(0019,10${String(i + 10).padStart(2, "0")})`, value: `value ${i + 1}` })),
   ],
-  left_out: { identifying: 7, removed: 3 },
+  left_out: { identifying: 7, below_detail: 3 },
 };
 
 /**

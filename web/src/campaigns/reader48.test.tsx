@@ -127,7 +127,7 @@ describe("the whole header, one key away", () => {
     const drawer = await until(() => host.querySelector(".header-drawer table") && host.querySelector(".header-drawer"));
     expect(log.some((a) => a.method === "GET" && a.path === `/api/campaigns/${CAMPAIGN_ID}/items/${ITEM_ID}/header`)).toBe(true);
     expect(drawer.querySelectorAll("tr").length).toBe(HEADER_DOC.fields.length);
-    expect(drawer.textContent).toContain("Left out: 7 identifying, 3 removed.");
+    expect(drawer.textContent).toContain("Left out: 7 identifying, 3 below your detail level.");
     const input = drawer.querySelector("input")!;
     expect(document.activeElement).toBe(input);
     await act(async () => {

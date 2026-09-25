@@ -327,7 +327,7 @@ export interface HeaderDoc {
   detail?: string;
   instance?: { instance_number?: number | null } | null;
   fields: HeaderField[];
-  left_out?: { identifying?: number; removed?: number } | null;
+  left_out?: { identifying?: number; below_detail?: number } | null;
 }
 
 export interface HeaderField {
