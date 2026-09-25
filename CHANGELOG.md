@@ -4,6 +4,15 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The reader after the second real read (record 48): answering is looking up. A row finds a value by any name it goes by, from the names the engine serves with the question: its label, the pack's terms (a vendor's name for the sequence: BRAVO, IR-FSPGR, 3D TFE or TFL find MPRAGE) and the words its rules read, case, spaces and hyphens not counting; the row says why it matched ("BRAVO → MPRAGE").
+- The rows follow each other. After each choice the pack's implications and exclusion groups are carried through the answer: a value another choice implies is filled in, marked implied and held until that choice changes (technique MPRAGE fills base T1w), and a value that can no longer hold is greyed and says why on hover (FLAIR greys STIR, a base of T2w greys MPRAGE). Clearing a choice releases what it implied. Can't tell stays open on every row. The answer sent is the settled one.
+- `/` finds a whole answer: typing any name of any value in it ("bravo", "mprage gd") offers whole combinations of the asked axes, the registry's most common first, where the engine counts them (a count across the registry that never includes the campaign's stacks or a sealed one, so it says nothing of the stack being read), then what the pack's shape settles for a value alone. Enter fills every row it names; the rater then changes what differs. The keys card lists it.
+- The header block hides nothing behind a hover: a long line wraps inside the block (the other fields' lines keep to two, and beside a suggestion the text keeps to a line), and the key facts (slices, orientation, slice thickness and spacing, pixel spacing, matrix, field, scanner) stand as pieces of their own on a line that wraps and is never cut. The header's doors read `h` header and `H` how decided.
+- The picture's view (the stack or three planes) a reader chooses is kept for the next item and the next visit, in the browser's storage where it keeps any. The viewer has no window presets to keep.
+- The layout check also proves the key facts are never cut, that the lookup and the whole-answer search fit, and that the view is kept.
+
 ## [1.0.0-alpha.43] - 2026-09-25
 
 Released beside the engine's 1.0.0-alpha.43: the reader on one screen, with the file's text on a blind item and the derived axes on a line of their own. The new header and derive doors are read where the engine has them. The desk still speaks the engine's HTTP contract 7 and suite contract 3.

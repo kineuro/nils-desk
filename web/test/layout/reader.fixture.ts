@@ -4,8 +4,10 @@
 // (jsdom): an axes question asking the seven axes a person answers, with the
 // MRI pack's own vocabularies, and deriving five; a blind item's why door
 // with long header text and the physics; the whole-header door; and a derive
-// door that carries an answer through a few of the pack's rules. Nothing
-// here is a real person or a real scan.
+// door that carries an answer through a few of the pack's rules; and after
+// the second real read, the names each value goes by, the pack's groups and
+// implications, and the combinations door. Nothing here is a real person or
+// a real scan.
 
 import type { Campaign, Claimed, HeaderDoc, Question } from "../../src/campaigns/client";
 
@@ -31,14 +33,56 @@ export const DERIVED_VOCAB: Record<string, string[]> = {
 export const ASKED = ["provenance", "technique", "modifier", "construct", "base", "body_part", "post_contrast"];
 export const DERIVED = ["directory_type", "disposition", "convertible", "role", "quality"];
 
+/** The MRI pack's exclusion groups and its implications among the seven asked axes, as the engine freezes them (nils_pack::legal). */
+export const GROUPS = {"modifier": {"IR_CONTRAST": ["FLAIR", "STIR", "DIR", "PSIR", "IR"], "TRAJECTORY": ["Radial", "Spiral"]}, "construct": {"QUANT_MAP": ["T1map", "T2map", "R1map", "R2map", "PDmap", "Qmap"]}};
+export const IMPLICATIONS = [{"rule": "base/technique:MPRAGE", "when": {"axis": "technique", "is": "MPRAGE"}, "then": [{"axis": "base", "value": "T1w"}]}, {"rule": "base/technique:MEMPRAGE", "when": {"axis": "technique", "is": "MEMPRAGE"}, "then": [{"axis": "base", "value": "T1w"}]}, {"rule": "base/technique:MP2RAGE", "when": {"axis": "technique", "is": "MP2RAGE"}, "then": [{"axis": "base", "value": "T1w"}]}, {"rule": "base/technique:TOF-MRA", "when": {"axis": "technique", "is": "TOF-MRA"}, "then": [{"axis": "base", "value": "T1w"}]}, {"rule": "base/technique:ME-GRE", "when": {"axis": "technique", "is": "ME-GRE"}, "then": [{"axis": "base", "value": "T2starw"}]}, {"rule": "base/technique:comb-ME-GRE", "when": {"axis": "technique", "is": "comb-ME-GRE"}, "then": [{"axis": "base", "value": "T2starw"}]}, {"rule": "base/technique:DWI-EPI", "when": {"axis": "technique", "is": "DWI-EPI"}, "then": [{"axis": "base", "value": "DWI"}]}, {"rule": "base/technique:ASL-EPI", "when": {"axis": "technique", "is": "ASL-EPI"}, "then": [{"axis": "base", "value": "PWI"}]}];
+
+/**
+ * A part of the names the engine serves with the question (record 48, the
+ * second real read): each value's label where it differs, the pack's terms
+ * and the words its rules read, as packs/mri/axes has them.
+ */
+export const NAMES = {
+  technique: {
+    MPRAGE: { terms: ["MP-RAGE", "BRAVO", "IR-FSPGR", "3D TFE", "TFL"], keywords: ["ir spgr"] },
+    "3D-TSE": { label: "SPACE", terms: ["CUBE", "VISTA", "3D FSE"], keywords: [] },
+    "FSP-GRE": { label: "TurboFLASH", terms: ["FSPGR", "TFE", "TFL"], keywords: [] },
+    bSSFP: { label: "FIESTA", terms: ["TrueFISP", "bFFE"], keywords: [] },
+    "ME-GRE": { label: "MEGRE", terms: ["multi-echo GRE"], keywords: [] },
+  },
+  base: { T1w: { terms: ["T1", "T1 weighted"], keywords: [] }, T2starw: { label: "T2*w", terms: ["T2*", "T2 star"], keywords: [] } },
+  modifier: { FLAIR: { terms: ["dark fluid"], keywords: [] }, FatSat: { terms: ["fat saturation", "SPIR", "SPAIR"], keywords: [] } },
+  construct: { SWI: { terms: ["susceptibility weighted imaging", "SWAN"], keywords: [] } },
+  post_contrast: { given: { label: "1", terms: ["post contrast", "Gd"], keywords: [] }, not_given: { label: "0", terms: ["pre contrast", "native"], keywords: [] } },
+};
+
 export const QUESTION: Question = {
   kind: "axes",
   axes: ASKED,
   derive: DERIVED,
   values: VOCAB,
-  constraints: { pack: "mri", values: VOCAB, multi: ["modifier", "construct"] },
+  constraints: { pack: "mri", values: VOCAB, multi: ["modifier", "construct"], groups: GROUPS, implications: IMPLICATIONS },
   cant_tell: "cant_tell",
   unsure: true,
+  vocabulary: NAMES,
+};
+
+/**
+ * The combinations door's answer (record 48, the second real read): how
+ * common each whole answer is across a made-up registry, most common first,
+ * never counting the campaign's stacks or a sealed one.
+ */
+export const COMBOS = {
+  campaign: 41,
+  axes: ASKED,
+  counted: 1210,
+  distinct: 3,
+  left_out: { outside: 4, illegal: 0, stacks: 500 },
+  combinations: [
+    { values: { provenance: "RawRecon", technique: "TSE", modifier: ["FLAIR"], construct: [], base: "T2w", body_part: "brain", post_contrast: "not_given" }, count: 700 },
+    { values: { provenance: "RawRecon", technique: "MPRAGE", modifier: [], construct: [], base: "T1w", body_part: "brain", post_contrast: "not_given" }, count: 400 },
+    { values: { provenance: "RawRecon", technique: "MPRAGE", modifier: [], construct: [], base: "T1w", body_part: "brain", post_contrast: "given" }, count: 110 },
+  ],
 };
 
 export const CAMPAIGN_ID = 41;
@@ -204,8 +248,8 @@ export interface Asked {
  * reader's tests. `derive` and `header` false answer 404, as an engine
  * before them; `why` false serves no text or physics.
  */
-export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; log?: Asked[] } = {}): typeof fetch {
-  const { derive = true, header = true, texts = true, seen = false, log = [] } = opts;
+export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; combos?: boolean; log?: Asked[] } = {}): typeof fetch {
+  const { derive = true, header = true, texts = true, seen = false, combos = true, log = [] } = opts;
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://desk.test");
@@ -236,14 +280,15 @@ export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: b
       return json(200, older);
     }
     if (method === "GET" && path === `${c}/items/${ITEM_ID}/header`) return header ? json(200, HEADER_DOC) : json(404, { error: "no such door" });
+    if (method === "GET" && path === `${c}/combinations`) return combos ? json(200, COMBOS) : json(404, { error: "no such door" });
     if (method === "POST" && path === `${c}/items/${ITEM_ID}/derive`) return derive ? json(200, { derived: deriveOf((body as { value?: Record<string, unknown> } | null)?.value ?? {}) }) : json(404, { error: "no such door" });
     return json(404, { error: `no door ${method} ${path}` });
   };
 }
 
 /** The doors the fake engine lists, record 48's new ones among them where asked. */
-export function doorsOf(opts: { derive?: boolean; header?: boolean } = {}): string[] {
-  const { derive = true, header = true } = opts;
+export function doorsOf(opts: { derive?: boolean; header?: boolean; combos?: boolean } = {}): string[] {
+  const { derive = true, header = true, combos = true } = opts;
   return [
     "GET /api/campaigns",
     "GET /api/campaigns/{id}",
@@ -255,5 +300,6 @@ export function doorsOf(opts: { derive?: boolean; header?: boolean } = {}): stri
     "GET /api/campaigns/{id}/items/{item}/why",
     ...(derive ? ["POST /api/campaigns/{id}/items/{item}/derive"] : []),
     ...(header ? ["GET /api/campaigns/{id}/items/{item}/header"] : []),
+    ...(combos ? ["GET /api/campaigns/{id}/combinations"] : []),
   ];
 }

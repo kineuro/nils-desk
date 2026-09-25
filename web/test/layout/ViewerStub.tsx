@@ -4,16 +4,22 @@
 // pictures out as the desk does. Each plane holds a square picture the size
 // of a typical stack's.
 
+import { useState } from "react";
 import "../../src/viewer/viewer.css";
 
-export function Viewer({ view = "stack" }: { stack: number; level?: number | null; view?: "stack" | "planes" }) {
+export function Viewer({ view: initial = "stack", onView }: { stack: number; level?: number | null; view?: "stack" | "planes"; onView?: (v: "stack" | "planes") => void }) {
+  const [view, setView] = useState(initial);
+  const choose = (v: "stack" | "planes") => {
+    setView(v);
+    onView?.(v);
+  };
   return (
     <div className="viewer">
       <div className="viewer-axes" role="tablist" aria-label="view">
-        <button type="button" role="tab" aria-selected={view === "stack"} className={view === "stack" ? "on" : ""}>
+        <button type="button" role="tab" aria-selected={view === "stack"} className={view === "stack" ? "on" : ""} onClick={() => choose("stack")}>
           the stack
         </button>
-        <button type="button" role="tab" aria-selected={view === "planes"} className={view === "planes" ? "on" : ""}>
+        <button type="button" role="tab" aria-selected={view === "planes"} className={view === "planes" ? "on" : ""} onClick={() => choose("planes")}>
           three planes
         </button>
       </div>

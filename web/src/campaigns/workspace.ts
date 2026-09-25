@@ -8,6 +8,7 @@
 import type { PackDoc } from "../review/client";
 import type { BoardCandidate } from "../review/SessionBoard";
 import { answerBody, answeredAxes, answerWords, axisValues, CANDIDATE_KEYS, CANT_TELL, CANT_TELL_KEYS, cantTellOf, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, UNSURE_KEY, unsureOf, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Item, type Question } from "./client";
+import { fold, hitWords, nameHit, vocabularyOf } from "./lookup";
 import { choose, type Marks, type Row } from "./renderers";
 
 export type Seat =
@@ -45,6 +46,7 @@ export function beatSeat(seat: Seat, c: Claimed): Seat {
  */
 export function rowsOf(q: Question, pack: PackDoc | null): Row[] {
   const axes = answeredAxes(q);
+  const vocab = vocabularyOf(q);
   return axes.map((axis) => {
     const p = pack?.axes.find((a) => a.axis === axis) ?? null;
     let values = axisValues(q, axis);
@@ -65,7 +67,8 @@ export function rowsOf(q: Question, pack: PackDoc | null): Row[] {
       values = order.flatMap((f) => values.filter((v) => (families[v] ?? "") === f));
     }
     const multi = q.constraints?.multi ? q.constraints.multi.includes(axis) : p?.multi === true;
-    return { axis, values, ...(any ? { families } : {}), ...(multi ? { multi: true } : {}) };
+    const names = vocab[axis];
+    return { axis, values, ...(any ? { families } : {}), ...(multi ? { multi: true } : {}), ...(names && Object.keys(names).length > 0 ? { names } : {}) };
   });
 }
 
@@ -138,7 +141,8 @@ export type KeyAct =
   | { kind: "cant_tell"; row: Row }
   | { kind: "unsure" }
   | { kind: "header" }
-  | { kind: "find"; row: Row };
+  | { kind: "find"; row: Row }
+  | { kind: "combo" };
 
 /**
  * Whether the rows are drawn compact (record 48, one screen): more rows than
@@ -154,28 +158,42 @@ export const findKeyOf = (row: number): string | null => (row < 10 ? String((row
 /** A row's values past this many are found by typing, never all drawn: a long vocabulary keeps to one line. */
 export const LONG_ROW = 16;
 
-/** One thing a row's find can choose: a value, none, or can't tell. */
-export type Found = { kind: "value"; value: string } | { kind: "none" } | { kind: "cant_tell" };
+/** One thing a row's find can choose: a value (and the name it was found by, where not its own: "BRAVO → MPRAGE"), none, or can't tell. */
+export type Found = { kind: "value"; value: string; via?: string } | { kind: "none" } | { kind: "cant_tell" };
+
+/** Whether two finds choose the same thing, whatever name found them. */
+export const sameFound = (a: Found | null, b: Found | null): boolean => !!a && !!b && a.kind === b.kind && (a.kind !== "value" || (b.kind === "value" && a.value === b.value));
 
 /**
- * What a row's find offers for the letters typed, best first: the values
- * the letters begin, then those holding them anywhere, in the pack's order;
- * none and can't tell by their words (can't tell also by `?`). Case and
- * spaces, hyphens and stars do not count. Empty letters offer every value.
+ * What a row's find offers for the letters typed, best first (record 48, the
+ * second real read): a value by any name it goes by, its identity, its
+ * label, the pack's terms (a vendor's name: BRAVO finds MPRAGE) or a word
+ * its rules read; a whole name before one the letters begin, before one
+ * that holds them; the value's own name before a term, before a rule's
+ * word; the pack's order among equals. None and can't tell by their words
+ * (can't tell also by `?`). Case, spaces, hyphens, stars and dots do not
+ * count. Empty letters offer every value.
  */
 export function findMatches(row: Row, typed: string, opts: { none?: boolean; cantTell?: boolean } = {}): Found[] {
-  const fold = (s: string) => s.toLowerCase().replace(/[\s\-_*']/gu, "");
   const t = fold(typed);
-  const all: { found: Found; words: string[] }[] = [
-    ...row.values.map((value) => ({ found: { kind: "value", value } as Found, words: [value] })),
+  const own: { found: Found; words: string[] }[] = [
     ...(opts.none ? [{ found: { kind: "none" } as Found, words: ["none"] }] : []),
     ...(opts.cantTell ? [{ found: { kind: "cant_tell" } as Found, words: ["can't tell", "?"] }] : []),
   ];
-  if (t === "") return all.map((x) => x.found);
-  const exact = all.filter((x) => x.words.some((w) => fold(w) === t));
-  const begins = all.filter((x) => !exact.includes(x) && x.words.some((w) => fold(w).startsWith(t)));
-  const holds = all.filter((x) => !exact.includes(x) && !begins.includes(x) && x.words.some((w) => fold(w).includes(t)));
-  return [...exact, ...begins, ...holds].map((x) => x.found);
+  if (t === "") return [...row.values.map((value) => ({ kind: "value", value }) as Found), ...own.map((x) => x.found)];
+  const scored: { found: Found; score: number; at: number }[] = [];
+  row.values.forEach((value, at) => {
+    const h = nameHit(value, row.names?.[value], typed);
+    if (!h) return;
+    const via = hitWords(h);
+    scored.push({ found: { kind: "value", value, ...(via ? { via } : {}) }, score: (h.fit === "exact" ? 0 : h.fit === "begins" ? 3 : 6) + (h.from === "own" ? 0 : h.from === "term" ? 1 : 2), at });
+  });
+  own.forEach((x, i) => {
+    const w = x.words.map(fold);
+    const score = w.some((f) => f === t) ? 0 : w.some((f) => f.startsWith(t)) ? 3 : w.some((f) => f.includes(t)) ? 6 : null;
+    if (score !== null) scored.push({ found: x.found, score, at: row.values.length + i });
+  });
+  return scored.sort((a, b) => a.score - b.score || a.at - b.at).map((x) => x.found);
 }
 
 /**
@@ -191,13 +209,16 @@ export function findMatches(row: Row, typed: string, opts: { none?: boolean; can
  * After the first real read (record 48): `h` opens the whole header where
  * the engine serves it and `H` the evidence; on three rows or more a row's
  * number finds it (`1` the first) and its first letters answer it, in
- * place of the value keys.
+ * place of the value keys. After the second real read: `/` finds a whole
+ * answer on those rows.
  */
 export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: Question; rows: Row[]; candidates?: number[]; offered?: number; batches?: boolean; header?: boolean }): KeyAct | null {
   if (opts.inField) return key === "Enter" && opts.ctrl ? { kind: "answer" } : null;
   if (key === "Enter") return { kind: "answer" };
   if (key === "?") return { kind: "keys" };
   if (opts.ctrl) return null;
+  // the whole-answer search (record 48, the second real read), on the compact rows of an axes question
+  if (key === "/" && opts.q.kind === "axes" && compactRows(opts.rows)) return { kind: "combo" };
   if (opts.q.kind === "pick" && opts.candidates) {
     const s = keyValue(key, 0, opts.candidates.map(String));
     if (s !== null) return { kind: "pick", stack: Number(s) };

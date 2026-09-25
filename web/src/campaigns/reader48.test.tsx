@@ -15,7 +15,7 @@ import type { Json } from "../ask/client";
 import { DoorError } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { answerBody, answeredAxes, type Given } from "./client";
-import { deriveValue, derivedOf, derivedWords, headerLines, readingOf, suggestionOf } from "./reader";
+import { deriveValue, derivedOf, derivedWords, headerLines, keyFacts, readingOf, suggestionOf } from "./reader";
 import { Deriver, forgetReadings, headerDoorOf } from "./readerDoors";
 import { Workspace } from "./Workspace";
 import { findMatches, keyAct, rowsOf } from "./workspace";
@@ -94,14 +94,33 @@ describe("a blind item shows the file", () => {
     expect(readingOf({ ...(WHY_BLIND as unknown as Json), header_door: "https://elsewhere/x" }).headerDoor).toBeUndefined();
   });
 
-  it("puts the key fields first, a sequence with its variant, the physics on two lines", () => {
+  it("puts the key fields first, a sequence with its variant, the key facts each its own piece with the scanner, then the timing", () => {
     const lines = headerLines(readingOf(WHY_BLIND as unknown as Json).texts, readingOf(WHY_BLIND as unknown as Json).physics);
-    expect(lines.map((l) => l.label)).toEqual(["series", "protocol", "sequence", "scanning", "image type", "more", "physics", "scanner", "more"]);
+    expect(lines.map((l) => l.label)).toEqual(["series", "protocol", "sequence", "scanning", "image type", "geometry", "timing", "more", "more"]);
     expect(lines[2].value).toBe("*tfl3d1_16ns · SK\\SP\\MP");
     expect(lines[3].value).toBe("GR\\IR · 3D · options IR\\PFP\\FS\\SAT1\\SAT2\\SAT3");
-    expect(lines[6].value).toBe("TR 2300  TE 2.98  TI 900  flip 9  ETL 1  bw 240  3T");
-    expect(lines[7].value).toBe("SIEMENS Prisma_fit · 1/1 mm · 240x256 · matrix 0/256/240/0 · px 1/1 · sagittal · 176 slices");
+    // the key facts (record 48, the second real read): slices, orientation, thickness, spacing, pixel spacing, matrix, field
+    expect(lines[5].facts).toEqual([
+      ["slices", "176"],
+      ["", "sagittal"],
+      ["thick", "1 mm"],
+      ["spacing", "1 mm"],
+      ["px", "1×1 mm"],
+      ["matrix", "256×240"],
+      ["", "3 T"],
+      ["", "SIEMENS Prisma_fit"],
+    ]);
+    expect(lines[6].value).toBe("TR 2300  TE 2.98  TI 900  flip 9  ETL 1  bw 240");
     expect(lines[8].value).toBe("number of averages 1 · imaged nucleus 1H");
+    // the image's own matrix is said where it differs from the acquisition's
+    expect(keyFacts({ rows: 512, columns: 512, acquisition_matrix: [0, 256, 256, 0] })).toEqual([
+      ["matrix", "256×256"],
+      ["image", "512×512"],
+    ]);
+    expect(keyFacts({ rows: 256, columns: 256, n_instances: 30 })).toEqual([
+      ["files", "30"],
+      ["matrix", "256×256"],
+    ]);
     expect(headerLines({}, {})).toEqual([]);
   });
 
@@ -255,7 +274,7 @@ describe("an engine before the new doors", () => {
     await until(() => !host.querySelector(".derived-line"));
     const block = await until(() => host.querySelector(".header-block"));
     expect(block.textContent).toContain("TR 2300");
-    expect(host.textContent).not.toContain("whole header");
+    expect(host.querySelector('.hb-doors [title="the whole header"]')).toBeNull();
     await press("h");
     expect(host.querySelector(".header-drawer")).toBeNull();
     expect(log.some((a) => a.path.endsWith("/header"))).toBe(false);
