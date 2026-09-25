@@ -3,7 +3,10 @@
 // laptop's 1440 by 900 and 1366 by 768, a blind Phase 0 item (seven asked
 // axes, five derived, the MRI pack's long vocabularies, long header text)
 // fits with nothing to scroll: not the page, not the right panel. Measured
-// in chromium, since jsdom lays nothing out.
+// in chromium, since jsdom lays nothing out. After the second real read: the
+// key facts are pieces of their own that are never cut, long text wraps, a
+// row finds a value by a vendor's name, `/` fills a whole answer, and the
+// picture's view is kept.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -113,6 +116,73 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator(".evidence-drawer")).toContainText("technique:first");
       await page.keyboard.press("Escape");
       await expect(page.locator(".evidence-drawer")).toHaveCount(0);
+    });
+
+    test("the key facts stand on their own, never cut, and long text wraps inside the block", async ({ page }) => {
+      await page.goto("/");
+      await expect(page.locator(".hb-facts")).toContainText("slices176");
+      const facts = await page.evaluate(() => {
+        const block = document.querySelector<HTMLElement>(".header-block")!.getBoundingClientRect();
+        const each = [...document.querySelectorAll<HTMLElement>(".hb-fact")].map((f) => {
+          const r = f.getBoundingClientRect();
+          return { text: f.textContent, cut: f.scrollWidth > f.clientWidth + 1, inside: r.left >= block.left - 1 && r.right <= block.right + 1 && r.bottom <= block.bottom + 1 };
+        });
+        const series = document.querySelector<HTMLElement>(".hb-line .hb-v")!;
+        return { each, seriesCut: series.scrollWidth > series.clientWidth + 1, seriesLines: Math.round(series.getBoundingClientRect().height / parseFloat(getComputedStyle(series).lineHeight)), seriesText: series.textContent };
+      });
+      expect(facts.each.map((f) => f.text)).toEqual(["slices176", "sagittal", "thick1 mm", "spacing1 mm", "px1×1 mm", "matrix256×240", "3 T", "SIEMENS Prisma_fit"]);
+      for (const f of facts.each) {
+        expect(f.cut, f.text ?? "").toBe(false);
+        expect(f.inside, f.text ?? "").toBe(true);
+      }
+      // the series description is whole on the page, wrapped rather than cut
+      expect(facts.seriesText).toBe("t1_mprage_sag_p2_iso_1.0mm_ND_research_protocol_repeat_after_motion_second_attempt_with_prescan_normalize");
+      expect(facts.seriesCut).toBe(false);
+      expect(facts.seriesLines).toBeGreaterThan(1);
+    });
+
+    test("bravo finds MPRAGE on its row, fills the base it implies and greys the others", async ({ page }) => {
+      await page.goto("/");
+      await expect(page.locator(".derived-line")).toContainText("derived:");
+      await page.locator("body").click({ position: { x: 5, y: 5 } });
+      await page.keyboard.press("2");
+      await page.keyboard.type("bravo");
+      await expect(page.locator('.axis-row[aria-label="technique"] .find-why')).toHaveText("BRAVO → MPRAGE");
+      await page.keyboard.press("Enter");
+      await expect(page.locator('.axis-row[aria-label="base"] .opt[data-value="T1w"]')).toHaveClass(/implied/);
+      await expect(page.locator('.axis-row[aria-label="base"] .opt[data-value="T2w"]')).toHaveClass(/out/);
+      await expect(page.locator('.axis-row[aria-label="base"] .opt[data-value="T2w"]')).toHaveAttribute("title", "not with this answer: technique is MPRAGE sets base T1w");
+      const m = await measure(page);
+      expect(m.panel.scroll).toBeLessThanOrEqual(m.panel.client);
+      expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
+    });
+
+    test("/ finds a whole answer by bravo and fills every row, and it still fits", async ({ page }) => {
+      await page.goto("/");
+      await expect(page.locator(".derived-line")).toContainText("derived:");
+      await page.locator("body").click({ position: { x: 5, y: 5 } });
+      await page.keyboard.press("/");
+      await expect(page.locator(".combo-find")).toBeFocused();
+      await page.keyboard.type("bravo");
+      await expect(page.locator(".combo-pop .combo").first()).toContainText("RawRecon · MPRAGE · none · none · T1w · brain · not_given");
+      await expect(page.locator(".combo-pop .combo").first()).toContainText("BRAVO → MPRAGE");
+      let m = await measure(page);
+      expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
+      await page.keyboard.press("Enter");
+      await expect(page.locator(".pending")).toContainText("provenance RawRecon · technique MPRAGE · modifier none · construct none · base T1w · body_part brain · post_contrast not_given");
+      await expect(page.locator(".derived-line")).toHaveText("derived: dir anat · disposition acquisition · convertible yes · role t1w · quality none");
+      m = await measure(page);
+      expect(m.used).toBeLessThanOrEqual(m.panel.client);
+      expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
+    });
+
+    test("the picture's view a reader chose is kept for the next visit", async ({ page }) => {
+      await page.goto("/");
+      await expect(page.locator('.viewer-axes [role="tab"]').nth(1)).toHaveAttribute("aria-selected", "true");
+      await page.locator('.viewer-axes [role="tab"]').first().click();
+      await page.reload();
+      await expect(page.locator(".header-block")).toBeVisible();
+      await expect(page.locator('.viewer-axes [role="tab"]').first()).toHaveAttribute("aria-selected", "true");
     });
 
     test("an engine before the new doors still fits", async ({ page }) => {

@@ -408,11 +408,11 @@ describe("the reader's parts", () => {
     expect(html).toContain("Like stacks in batches");
     expect(html).toContain("They agree on base, technique");
     // the evidence is one key away (record 48, one screen): H opens it over the reader
-    expect(html).toContain("<kbd>H</kbd>how it was decided");
+    expect(html).toContain("<kbd>H</kbd>how decided");
     expect(html).not.toContain("rule technique:MPRAGE");
     expect(renderToStaticMarkup(<WorkspaceBody {...props} evOpen />)).toContain("rule technique:MPRAGE");
     // the agreed values are drawn chosen on their rows
-    expect(html).toContain(`class="opt on" aria-pressed="true">T1w`);
+    expect(html).toMatch(/class="opt on" aria-pressed="true"[^>]*>T1w/u);
     // the key list names the reader's keys
     expect(html).toContain("confirm the answer filled in");
     expect(html).toContain("<dt>z x</dt>");

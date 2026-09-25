@@ -4,11 +4,12 @@
 // (the rest one key away), the pace counter, and the order toggle. Terse
 // (record 27), theme tokens only, every act a key.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { Asked, AskedCandidate } from "../review/asked";
 import { CandidateList } from "../review/CandidateList";
 import type { ReviewItem } from "../ops/client";
 import type { HeaderDoc } from "./client";
+import { comboWords, findCombos, hitWords, type Combination, type Vocabulary } from "./lookup";
 import { CANDIDATE_KEYS, headerLines, lineWords, paceWords, suggestionWords, type AxisLine, type HeaderLine, type Order, type Pace, type RaterStats as RaterStatsDoc, type Suggestion } from "./reader";
 
 /** The suggestion as a line, and the legal candidates, each with its key, where the systems differ. */
@@ -212,9 +213,12 @@ export function HeaderValues({ header }: { header: [string, string][] }) {
 
 /**
  * The file's own words beside the pictures (record 48, after the first real
- * read): the header's text fields a reader reads first, one per line, then
- * the physics, compact and in monospace. A long value is cut with an
- * ellipsis and whole on hover; `h` opens the whole header. Shown blind or
+ * read): the header's text fields a reader reads first, one per line, the
+ * key facts of the geometry and the field, then the timing and the scanner,
+ * compact and in monospace. After the second real read nothing hides behind
+ * a hover: a long line wraps inside the block, and each key fact (slices,
+ * orientation, thickness, spacing, pixel spacing, matrix, field) is a piece
+ * of its own that is never cut; `h` opens the whole header. Shown blind or
  * not: blind hides NILS's answers, never the file. Where the engine sends no
  * text or physics, the flat header values it sends stand in.
  */
@@ -224,11 +228,22 @@ export function HeaderBlock({ lines, flat = [], brief = false }: { lines: Header
   const shown: HeaderLine[] = kept.length > 0 ? kept : flat.length > 0 ? [{ key: "flat", label: "header", value: flat.map(([k, v]) => `${k} ${v}`).join("  ") }] : [];
   if (shown.length === 0) return null;
   return (
-    <div className="header-block" aria-label="the file's header">
+    <div className={brief ? "header-block brief" : "header-block"} aria-label="the file's header">
       {shown.map((l) => (
-        <div key={l.key} className="hb-line" title={`${l.label}: ${l.value}`}>
+        <div key={l.key} className={l.facts ? "hb-line hb-facts-line" : l.label === "more" ? "hb-line hb-more" : "hb-line"} title={`${l.label}: ${l.value}`}>
           <span className="hb-k">{l.label}</span>
-          <span className="hb-v">{l.value}</span>
+          {l.facts ? (
+            <span className="hb-v hb-facts">
+              {l.facts.map(([k, v]) => (
+                <span key={`${k}${v}`} className="hb-fact">
+                  {k && <span className="hb-fact-k">{k}</span>}
+                  <b>{v}</b>
+                </span>
+              ))}
+            </span>
+          ) : (
+            <span className="hb-v">{l.value}</span>
+          )}
         </div>
       ))}
     </div>
@@ -241,13 +256,13 @@ export function HeaderDoors({ whole = false, evidence = false, onWhole, onEviden
   return (
     <span className="hb-doors">
       {whole && (
-        <button type="button" className="link-button" onClick={onWhole}>
-          <kbd>h</kbd>whole header
+        <button type="button" className="link-button" onClick={onWhole} title="the whole header">
+          <kbd>h</kbd>header
         </button>
       )}
       {evidence && (
-        <button type="button" className="link-button" onClick={onEvidence}>
-          <kbd>H</kbd>how it was decided
+        <button type="button" className="link-button" onClick={onEvidence} title="how each axis was decided">
+          <kbd>H</kbd>how decided
         </button>
       )}
     </span>
@@ -368,5 +383,82 @@ export function DerivedLine({ words }: { words: string | null }) {
     <p className="meta derived-line" role="status" aria-live="polite" title={words ?? undefined}>
       {words ?? "derived: …"}
     </p>
+  );
+}
+
+/**
+ * The whole answer at once (record 48, the second real read): `/` and a few
+ * letters of any name in it ("bravo", "mprage t1", "3d tfe") offer whole
+ * combinations of the answered axes, the registry's most common first (a
+ * count across the registry that never includes this campaign's stacks or a
+ * sealed one, so it says nothing of the stack being read), then what the
+ * pack's shape offers for a value alone. Each says what it was found by
+ * ("BRAVO → MPRAGE"). Enter fills every row it names; the rater then
+ * changes what differs. Arrows move, Escape leaves.
+ */
+export function ComboSearch({ combos, vocab, axes, onTake, inputRef }: { combos: Combination[]; vocab: Vocabulary; axes: string[]; onTake: (c: Combination) => void; inputRef?: RefObject<HTMLInputElement | null> }) {
+  const [typed, setTyped] = useState("");
+  const [at, setAt] = useState(0);
+  const [open, setOpen] = useState(false);
+  const found = useMemo(() => findCombos(combos, typed, vocab, 8), [combos, typed, vocab]);
+  const i = Math.min(at, Math.max(0, found.length - 1));
+  const take = (n: number) => {
+    const h = found[n];
+    if (!h) return;
+    onTake(h.combo);
+    setTyped("");
+    setAt(0);
+    inputRef?.current?.blur();
+  };
+  return (
+    <div className={open ? "combo-search open" : "combo-search"}>
+      <kbd>/</kbd>
+      <input
+        ref={inputRef}
+        className="combo-find"
+        value={typed}
+        placeholder={open ? "a whole answer by any name: bravo, mprage t1, space flair" : "whole answer"}
+        aria-label="find a whole answer"
+        aria-expanded={open && typed !== ""}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setOpen(false)}
+        onChange={(e) => {
+          setTyped(e.target.value);
+          setAt(0);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && !e.ctrlKey) {
+            e.preventDefault();
+            e.stopPropagation();
+            take(i);
+          } else if (e.key === "Escape") {
+            e.preventDefault();
+            setTyped("");
+            e.currentTarget.blur();
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setAt(Math.min(i + 1, found.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setAt(Math.max(0, i - 1));
+          }
+        }}
+      />
+      {open && typed.trim() !== "" && (
+        <ul className="combo-pop" role="listbox" aria-label="whole answers">
+          {found.map((h, n) => {
+            const why = h.hits.map(hitWords).filter((w): w is string => w !== null);
+            return (
+              <li key={`${n}:${JSON.stringify(h.combo.values)}`} role="option" aria-selected={n === i} className={n === i ? "combo lit" : "combo"} onMouseDown={(e) => e.preventDefault()} onClick={() => take(n)} title={axes.filter((a) => h.combo.values[a] !== undefined).map((a) => `${a} ${comboWords(h.combo, [a])}`).join(" · ")}>
+                <span className="combo-values">{comboWords(h.combo, axes)}</span>
+                {why.length > 0 && <span className="via">{why.join(", ")}</span>}
+                {h.combo.seed && <span className="meta combo-seed">the pack</span>}
+              </li>
+            );
+          })}
+          {found.length === 0 && <li className="meta">no whole answer holds “{typed}”</li>}
+        </ul>
+      )}
+    </div>
   );
 }

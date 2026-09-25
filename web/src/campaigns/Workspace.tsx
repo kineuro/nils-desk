@@ -6,7 +6,7 @@
 // answer beside the options and the disagreement named. A rater sees no
 // other rater's answer.
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
@@ -23,6 +23,7 @@ import {
   CANDIDATES,
   CANT_TELL_KEYS,
   cantTellOf,
+  COMBINATIONS,
   itemWords,
   leaseLeft,
   leaseWords,
@@ -43,7 +44,8 @@ import { BatchView, type BatchViewProps } from "./Batches";
 import type { AskedCandidate } from "../review/asked";
 import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, deriveValue, derivedWords, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type HeaderLine, type Order, type Pace, type Reading, type Suggestion } from "./reader";
 import { acceptBatch, batchesFor, claimIn, deriveAsked, deriveDoor, Deriver, headerDoorOf, headerFor, hintOf, R48, readingFor, valueOrderServed } from "./readerDoors";
-import { DerivedLine, EvidenceDrawer, HeaderBlock, HeaderDoors, HeaderDrawer, headerLinesOf, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
+import { ComboSearch, DerivedLine, EvidenceDrawer, HeaderBlock, HeaderDoors, HeaderDrawer, headerLinesOf, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
+import { combinationsOf, seedsOf, settle, takeCombo, vocabularyOf, type Combination, type Settled } from "./lookup";
 import { StackView } from "./StackView";
 import { warmStack } from "../viewer/prefetch";
 import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
@@ -52,6 +54,10 @@ type Role = "rater" | "adjudicator";
 
 const ORDER_KEY = "nils.reader.order";
 const EVIDENCE_KEY = "nils.reader.evidence";
+// the picture's view a reader chose (record 48, the second real read), kept across items and visits
+const VIEW_KEY = "nils.reader.view";
+type View = "stack" | "planes";
+const viewRemembered = (): View => (remembered(VIEW_KEY) === "stack" ? "stack" : "planes");
 function remembered(key: string): string | null {
   try {
     return localStorage.getItem(key);
@@ -111,6 +117,15 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const [headerOpen, setHeaderOpen] = useState(false);
   const [headerDoc, setHeaderDoc] = useState<HeaderDoc | null>(null);
   const [headerFailed, setHeaderFailed] = useState<string | null>(null);
+  // the picture's view, the same for every item until the reader changes it
+  const [view, setView] = useState<View>(viewRemembered);
+  const chooseView = useCallback((v: View) => {
+    remember(VIEW_KEY, v);
+    setView(v);
+  }, []);
+  // the whole answers the search offers: the registry's, most common first (generic, never this campaign's stacks)
+  const [counted, setCounted] = useState<Combination[] | null>(null);
+  const combo = useRef<HTMLInputElement | null>(null);
   const clock = useRef(new Clock());
   const batchShown = useRef<number | null>(null);
   const prefetch = useRef<Prefetcher | null>(null);
@@ -161,6 +176,17 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   useEffect(() => {
     if (readsPack && packName) review.pack(packName).then(setPack, () => undefined);
   }, [readsPack, packName]);
+
+  const rows = useMemo(() => (q ? rowsOf(q, pack) : []), [q, pack]);
+  // what the choices settle on the other rows (record 48, the second real read); the answer sent is the settled one
+  const settled = useMemo<Settled>(() => settle(q, g, rows), [q, g, rows]);
+  const combos = useMemo(() => (q && q.kind === "axes" ? [...(counted ?? []), ...seedsOf(q, rows)] : []), [q, rows, counted]);
+  // the registry's combinations of the answered axes, once per campaign, where the engine counts them
+  const countsServed = q?.kind === "axes" && served(caps, COMBINATIONS);
+  useEffect(() => {
+    if (!countsServed) return;
+    campaigns.combinations(id).then((r) => setCounted(combinationsOf(r)), () => setCounted([]));
+  }, [countsServed, id]);
 
   const holding = seat.kind === "holding" ? seat : null;
   const assignmentId = holding?.assignment.id ?? null;
@@ -229,9 +255,9 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   // the derived line follows the answer as it changes (record 48)
   useEffect(() => {
     if (!q || !deriver.current) return;
-    const v = deriveValue(q, g);
+    const v = deriveValue(q, settled.given);
     if (v) deriver.current.want(v);
-  }, [q, g]);
+  }, [q, settled]);
   useEffect(() => () => deriver.current?.stop(), []);
 
   const headerDoor = item ? headerDoorOf(caps, id, item.id, reading) : null;
@@ -270,14 +296,14 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
 
   const answer = useCallback(() => {
     if (!q || !holding || busy) return;
-    const b = bodyOf(q, g, why, unsure);
+    const b = bodyOf(q, settled.given, why, unsure);
     if (!b.ok) {
       setRefused(`Needs ${b.needs}.`);
       return;
     }
     setBusy(true);
     const seconds = clock.current.stop(holding.item.id, Date.now());
-    const changes = changesOf(q, baselineOf(q, suggestion), g);
+    const changes = changesOf(q, baselineOf(q, suggestion), settled.given);
     campaigns
       .answer(id, holding.assignment.id, b.body)
       .then((r) => {
@@ -294,7 +320,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         setRefused(refusedWords(e));
       })
       .finally(() => setBusy(false));
-  }, [q, holding, busy, g, why, unsure, id, claim, suggestion]);
+  }, [q, holding, busy, settled, why, unsure, id, claim, suggestion]);
 
   // the batches of like stacks (record 48 R1)
   const batchesOffered = served(caps, R48.batches) && (q?.kind === "axis" || q?.kind === "axes") && role === "rater";
@@ -371,7 +397,6 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     [holding, busy, id, claim],
   );
 
-  const rows = q ? rowsOf(q, pack) : [];
   // on the board, a key chooses an acquisition, named by its first stack
   const candidates = board && board.length > 0 ? board.map((b) => b.stacks[0]) : (pickable ?? candidatesOf(evidence));
 
@@ -407,6 +432,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         if (cg) setG(cg);
       } else if (act.kind === "evidence") k.toggleEvidence();
       else if (act.kind === "header") k.openHeader();
+      else if (act.kind === "combo") combo.current?.focus();
       else if (act.kind === "find") document.querySelector<HTMLInputElement>(`[data-find="${act.row.axis.replace(/["\\]/g, "")}"]`)?.focus();
       else if (act.kind === "reset") setG(k.suggested ?? blank(k.q));
       else if (act.kind === "batch") k.openBatches();
@@ -435,6 +461,12 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       seat={seat}
       rows={rows}
       given={g}
+      settled={settled}
+      combos={combos}
+      comboRef={combo}
+      onCombo={(c) => q && setG((was) => takeCombo(q, was, c))}
+      view={view}
+      onView={chooseView}
       why={why}
       unsure={unsure}
       onUnsure={() => setUnsure((x) => !x)}
@@ -577,6 +609,15 @@ export interface WorkspaceBodyProps {
   onHeaderClose?: () => void;
   /** The derived axes in one line (record 48); null while the first answer is awaited; absent where the engine derives nothing. */
   derived?: string | null;
+  /** What the choices settle (record 48, the second real read): the answer with what they imply, and what can no longer hold. */
+  settled?: Settled;
+  /** The whole answers the combination search offers. */
+  combos?: Combination[];
+  comboRef?: RefObject<HTMLInputElement | null>;
+  onCombo?: (c: Combination) => void;
+  /** The picture's view, kept across items. */
+  view?: View;
+  onView?: (v: View) => void;
 }
 
 /** The workspace as it draws from what it holds. */
@@ -588,7 +629,7 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
   const left = holding ? leaseLeft(holding.assignment, p.now) : null;
   const facts = factsOf(p.evidence);
   // the answer about to be sent, the unsure mark apart as a tag
-  const pending = holding ? pendingWords(q, p.given) : null;
+  const pending = holding ? pendingWords(q, p.settled?.given ?? p.given) : null;
   // an axis or axes question is read on one screen (record 48): pictures left, the file and the rows right, nothing below the fold
   const one = q.kind === "axis" || q.kind === "axes";
   if (one) return <ReaderOne {...p} refusal={refusal} left={left} pending={pending} />;
@@ -702,10 +743,11 @@ function ReaderOne(p: Drawn) {
       {holding && !p.batch && (
         <div className="rate-grid">
           <div className="rate-picture">
-            {holding.item.stack_id !== null ? <StackView stack={holding.item.stack_id} view="planes" /> : <p className="meta">{itemWords(holding.item)}: a session, answered from its stacks below.</p>}
+            {holding.item.stack_id !== null ? <StackView stack={holding.item.stack_id} view={p.view ?? "planes"} onView={p.onView} /> : <p className="meta">{itemWords(holding.item)}: a session, answered from its stacks below.</p>}
           </div>
           <div className="rate-side" data-reader-panel="">
             <ItemLine {...p}>
+              {q.kind === "axes" && compact && p.combos && p.onCombo && <ComboSearch combos={p.combos} vocab={vocabularyOf(q)} axes={p.rows.map((r) => r.axis)} inputRef={p.comboRef} onTake={p.onCombo} />}
               <HeaderDoors whole={p.headerWhole ?? false} evidence={evidence} onWhole={p.onHeader} onEvidence={p.onEvidence} />
             </ItemLine>
             {holding.note && <p className="note-lead">{holding.note}</p>}
@@ -729,7 +771,7 @@ function ReaderOne(p: Drawn) {
             <Actions {...p} withWhy />
             {p.keys && (
               <div className="drawer keys-drawer" role="dialog" aria-label="keys">
-                <KeyList rows={p.rows.length} compact={compact} reader candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} cantTell={cantTellOf(q) !== null ? p.rows.length : 0} unsure={unsureOf(q)} header={p.headerWhole ?? false} evidence={evidence} />
+                <KeyList rows={p.rows.length} compact={compact} combos={q.kind === "axes" && compact} reader candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} cantTell={cantTellOf(q) !== null ? p.rows.length : 0} unsure={unsureOf(q)} header={p.headerWhole ?? false} evidence={evidence} />
               </div>
             )}
             {p.headerDrawer && <HeaderDrawer doc={p.headerDrawer.doc} failed={p.headerDrawer.failed} onClose={() => p.onHeaderClose?.()} />}
@@ -861,7 +903,8 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
           <>
             <CompactRows
               rows={p.rows}
-              chosen={chosenOf(q, g)}
+              chosen={chosenOf(q, p.settled?.given ?? g)}
+              settled={p.settled}
               marks={p.marks}
               none
               cantTell={cantTellOf(q)}
@@ -869,7 +912,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
               onChoose={(axis, value) => p.onGiven(choose(q, g, p.rows.find((r) => r.axis === axis)!, value))}
               onNone={(axis) => p.onGiven(givenNone(g, axis))}
             />
-            {illegal(q, g) && <p className="warn one-line" title={illegal(q, g) ?? undefined}>The pack does not allow this: {illegal(q, g)}.</p>}
+            {illegal(q, p.settled?.given ?? g) && <p className="warn one-line" title={illegal(q, p.settled?.given ?? g) ?? undefined}>The pack does not allow this: {illegal(q, p.settled?.given ?? g)}.</p>}
           </>
         );
       return (
@@ -913,7 +956,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
   }
 }
 
-function KeyList({ rows, compact = false, reader = false, candidates = 0, batches = false, cantTell = 0, unsure = false, header = false, evidence = false }: { rows: number; compact?: boolean; reader?: boolean; candidates?: number; batches?: boolean; cantTell?: number; unsure?: boolean; header?: boolean; evidence?: boolean }) {
+function KeyList({ rows, compact = false, combos = false, reader = false, candidates = 0, batches = false, cantTell = 0, unsure = false, header = false, evidence = false }: { rows: number; compact?: boolean; combos?: boolean; reader?: boolean; candidates?: number; batches?: boolean; cantTell?: number; unsure?: boolean; header?: boolean; evidence?: boolean }) {
   const pair = (k: string, d: string) => (
     <div className="facts-pair" key={k + d}>
       <dt>{k}</dt>
@@ -928,7 +971,9 @@ function KeyList({ rows, compact = false, reader = false, candidates = 0, batche
       {reader && (evidence || !header) && pair(header ? "H" : "h", "how each axis was decided")}
       {reader && pair("Backspace", "back to the suggestion")}
       {batches && pair("b", "like stacks in batches")}
-      {compact && pair(`1 to ${findKeyOf(rows - 1) ?? rows}`, "find a row, then type a value's first letters; Enter takes it and goes on, Tab goes on, Esc leaves")}
+      {combos && pair("/", "find a whole answer by any name in it (bravo, mprage t1); Enter fills every row, then change what differs")}
+      {compact && pair(`1 to ${findKeyOf(rows - 1) ?? rows}`, "find a row, then type any name of a value (a vendor's too: BRAVO finds MPRAGE); Enter takes it and goes on, Tab goes on, Esc leaves")}
+      {compact && pair("implied", "filled in by another choice, held until that choice changes; a greyed value says on hover why it cannot hold")}
       {!compact && rows > 0 && pair("1 to 0", "a value on the first row")}
       {!compact && rows > 1 && pair("q to p", "a value on the second row")}
       {cantTell > 0 && pair(CANT_TELL_KEYS.slice(0, cantTell).split("").join(" "), "can't tell on the first row, the second, and on; again clears it")}

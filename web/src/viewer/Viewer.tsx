@@ -47,6 +47,8 @@ export interface ViewerProps {
   budget?: number;
   /** What the viewer did, for a page that watches it. */
   onEvent?: (e: ViewerEvent) => void;
+  /** The view the person chose, for a page that keeps it for the next stack. */
+  onView?: (view: "stack" | "planes") => void;
 }
 
 interface Numbers {
@@ -107,7 +109,7 @@ function toolGroup(id: string): tools.Types.IToolGroup {
   return group;
 }
 
-export function Viewer({ stack, level: ruleLevel = null, view: initialView = "stack", budget, onEvent }: ViewerProps) {
+export function Viewer({ stack, level: ruleLevel = null, view: initialView = "stack", budget, onEvent, onView }: ViewerProps) {
   const ids = viewerIds(stack);
   const el = useRef<HTMLDivElement | null>(null);
   const planeEls = useRef<Record<Plane, HTMLDivElement | null>>({ axial: null, coronal: null, sagittal: null });
@@ -323,7 +325,16 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   return (
     <div className="viewer">
       <div className="viewer-axes" role="tablist" aria-label="view">
-        <button type="button" role="tab" aria-selected={view === "stack"} className={view === "stack" ? "on" : ""} onClick={() => setView("stack")}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === "stack"}
+          className={view === "stack" ? "on" : ""}
+          onClick={() => {
+            setView("stack");
+            onView?.("stack");
+          }}
+        >
           the stack
         </button>
         <button
@@ -334,6 +345,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
           onClick={() => {
             setView("planes");
             setPlanesOpened(true);
+            onView?.("planes");
           }}
         >
           three planes

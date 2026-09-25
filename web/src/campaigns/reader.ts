@@ -322,16 +322,52 @@ export interface HeaderLine {
   key: string;
   label: string;
   value: string;
+  /** The key facts, each its own short piece that is never cut (record 48, the second real read): [what, value]. */
+  facts?: [string, string][];
+}
+
+/** A matrix as rows by columns: the acquisition matrix's two non-zero entries (frequency rows, frequency columns, phase rows, phase columns). */
+function matrixWords(v: string | number | (string | number)[]): string | null {
+  if (!Array.isArray(v)) return typeof v === "string" && v !== "" ? v : null;
+  const n = v.map(Number).filter((x) => Number.isFinite(x) && x > 0);
+  return n.length === 2 ? `${shortNum(n[0])}×${shortNum(n[1])}` : n.length > 0 ? n.map(shortNum).join("×") : null;
+}
+
+/**
+ * The key facts of a stack's geometry and field (record 48, the second real
+ * read), each its own piece in a line that wraps and is never cut: the
+ * slices, the orientation, the slice thickness and spacing, the pixel
+ * spacing, the matrix (the acquisition's, and the image's where it differs),
+ * the field strength, and the scanner beside it. Absent facts leave no
+ * piece.
+ */
+export function keyFacts(physics: Record<string, string | number | (string | number)[]> = {}): [string, string][] {
+  const has = (k: string) => physics[k] !== undefined;
+  const out: [string, string][] = [];
+  if (has("n_slices")) out.push(["slices", physWords(physics.n_slices)]);
+  else if (has("n_instances")) out.push(["files", physWords(physics.n_instances)]);
+  if (has("orientation")) out.push(["", physWords(physics.orientation)]);
+  if (has("slice_thickness")) out.push(["thick", `${physWords(physics.slice_thickness)} mm`]);
+  if (has("spacing_between_slices")) out.push(["spacing", `${physWords(physics.spacing_between_slices)} mm`]);
+  if (has("pixel_spacing")) out.push(["px", `${Array.isArray(physics.pixel_spacing) ? physics.pixel_spacing.map((x) => (typeof x === "number" ? shortNum(x) : x)).join("×") : physWords(physics.pixel_spacing)} mm`]);
+  const acq = has("acquisition_matrix") ? matrixWords(physics.acquisition_matrix) : null;
+  const image = has("rows") && has("columns") ? `${physWords(physics.rows)}×${physWords(physics.columns)}` : null;
+  if (acq) out.push(["matrix", acq]);
+  if (image && image !== acq) out.push([acq ? "image" : "matrix", image]);
+  if (has("magnetic_field_strength")) out.push(["", `${physWords(physics.magnetic_field_strength)} T`]);
+  const scanner = ["manufacturer", "manufacturer_model_name"].filter(has).map((k) => physWords(physics[k]));
+  if (scanner.length > 0) out.push(["", scanner.join(" ")]);
+  return out;
 }
 
 /**
  * The header block's lines (record 48 "one screen"): the text fields a
  * reader reads first (the sequence name with its variant, the scanning
- * sequence with the acquisition type and the options); the other text
- * fields on one line;
- * then the physics on two lines, the timing and field first, the scanner and
- * geometry second, and anything else the door sent on a third. Absent fields
- * leave no line.
+ * sequence with the acquisition type and the options); the key facts of
+ * the geometry and the field, each its own piece and never cut (the second
+ * real read) with the scanner; the timing; then the other text fields on one
+ * line and anything else the door sent on another. Absent fields leave no
+ * line.
  */
 export function headerLines(texts: Record<string, string> = {}, physics: Record<string, string | number | (string | number)[]> = {}): HeaderLine[] {
   const out: HeaderLine[] = [];
@@ -349,24 +385,13 @@ export function headerLines(texts: Record<string, string> = {}, physics: Record<
     }
     if (texts[k] !== undefined) out.push({ key: k, label, value: texts[k] });
   }
+  const facts = keyFacts(physics);
+  if (facts.length > 0) out.push({ key: "facts", label: "geometry", value: facts.map(([k, v]) => (k ? `${k} ${v}` : v)).join(" · "), facts });
+  const first = PHYSICS_FIRST.filter(([k]) => physics[k] !== undefined && k !== "magnetic_field_strength").map(([k, name, unit]) => `${name ? `${name} ` : ""}${physWords(physics[k])}${unit}`);
+  if (first.length > 0) out.push({ key: "physics", label: "timing", value: first.join("  ") });
   const shown = new Set([...TEXT_FIRST.map(([k]) => k), "sequence_variant", "mr_acquisition_type", "scan_options"]);
   const more = Object.entries(texts).filter(([k]) => !shown.has(k));
   if (more.length > 0) out.push({ key: "texts", label: "more", value: more.map(([k, v]) => `${TEXT_MORE[k] ?? k.replace(/_/g, " ")} ${v}`).join(" · ") });
-  const first = PHYSICS_FIRST.filter(([k]) => physics[k] !== undefined).map(([k, name, unit]) => `${name ? `${name} ` : ""}${physWords(physics[k])}${unit}`);
-  if (first.length > 0) out.push({ key: "physics", label: "physics", value: first.join("  ") });
-  const has = (k: string) => physics[k] !== undefined;
-  const second: string[] = [];
-  const scanner = ["manufacturer", "manufacturer_model_name"].filter(has).map((k) => physWords(physics[k]));
-  if (scanner.length > 0) second.push(scanner.join(" "));
-  const slices = ["slice_thickness", "spacing_between_slices"].filter(has).map((k) => physWords(physics[k]));
-  if (slices.length > 0) second.push(`${slices.join("/")} mm`);
-  if (has("rows") && has("columns")) second.push(`${physWords(physics.columns)}x${physWords(physics.rows)}`);
-  if (has("acquisition_matrix")) second.push(`matrix ${physWords(physics.acquisition_matrix)}`);
-  if (has("pixel_spacing")) second.push(`px ${physWords(physics.pixel_spacing)}`);
-  if (has("orientation")) second.push(physWords(physics.orientation));
-  if (has("n_slices")) second.push(`${physWords(physics.n_slices)} slices`);
-  else if (has("n_instances")) second.push(`${physWords(physics.n_instances)} files`);
-  if (second.length > 0) out.push({ key: "scanner", label: "scanner", value: second.join(" · ") });
   const named = new Set([...PHYSICS_FIRST.map(([k]) => k), ...PHYSICS_SECOND]);
   const rest = Object.entries(physics).filter(([k]) => !named.has(k));
   if (rest.length > 0) out.push({ key: "physics_more", label: "more", value: rest.map(([k, v]) => `${k.replace(/_/g, " ")} ${physWords(v)}`).join(" · ") });

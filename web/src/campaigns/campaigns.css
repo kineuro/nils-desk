@@ -102,7 +102,7 @@
 .rate-count-line b { color: var(--n-text); }
 .reader-one .rate-grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(24rem, 34rem); grid-template-rows: minmax(0, 1fr); gap: 1rem; align-items: stretch; }
 .reader-one .rate-picture { min-height: 0; overflow: hidden; container-type: size; }
-.reader-one .rate-side { position: relative; display: flex; flex-direction: column; gap: 0.3rem; min-height: 0; overflow: auto; font-size: var(--n-text-size-small); }
+.reader-one .rate-side { position: relative; display: flex; flex-direction: column; gap: 0.25rem; min-height: 0; overflow: auto; font-size: var(--n-text-size-small); }
 .reader-one .rate-side > * { flex: none; }
 .reader-one .rate-item { gap: 0.4rem; }
 .reader-one .rate-item .tag { min-height: 1.2rem; }
@@ -116,10 +116,18 @@
 .reader-one .viewer-foot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* the file's words: compact, monospace, a line each, whole on hover */
-.header-block { display: grid; gap: 0; padding: 0.35rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-family: var(--n-font-mono); font-size: 12px; line-height: 1.3; }
+.header-block { display: grid; gap: 0; padding: 0.25rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-family: var(--n-font-mono); font-size: 12px; line-height: 1.2; }
 .hb-line { display: grid; grid-template-columns: 6.2rem minmax(0, 1fr); gap: 0.5rem; min-width: 0; }
 .hb-k { color: var(--n-text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hb-v { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the second real read: a long line wraps inside the block, nothing hides behind a hover; the other fields' lines keep to two */
+.hb-v { min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+.hb-more .hb-v { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+/* beside a suggestion the block is brief: the text keeps to a line, whole in the header one key away; the key facts still wrap */
+.header-block.brief .hb-line:not(.hb-facts-line) .hb-v { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hb-facts { display: flex; flex-wrap: wrap; gap: 0 0.7rem; }
+.hb-fact { white-space: nowrap; }
+.hb-fact b { font-weight: 600; color: var(--n-text); }
+.hb-fact-k { margin-right: 0.25rem; color: var(--n-text-faint); }
 .hb-doors { display: inline-flex; gap: 0.8rem; margin-left: auto; }
 .hb-doors .link-button { font-size: 12px; white-space: nowrap; }
 
@@ -134,6 +142,24 @@
 .axis-rows.compact .opt kbd { margin-right: 0.25rem; font-size: 10px; }
 .axis-rows.compact .opt.dim { opacity: 0.35; }
 .axis-rows.compact .opt.lit { outline: 2px solid var(--n-focus); outline-offset: 0; }
+/* the rows follow each other (the second real read): implied is filled and held, out is greyed and says why on hover */
+.axis-rows.compact .opt.implied { border-style: dashed; font-style: italic; cursor: default; }
+.axis-rows.compact .opt.out { opacity: 0.35; text-decoration: line-through; cursor: not-allowed; }
+.axis-rows.compact .opt .via, .combo .via { margin-left: 0.3rem; color: var(--n-text-faint); font-size: 10.5px; }
+.find-why { align-self: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; color: var(--n-text-faint); font-size: 11px; }
+.find-why.out { color: var(--n-caution-fg); }
+/* the whole answer at once, on /: one line, its offers over the rows */
+/* in the item's line, beside the header's doors, small until it is used; then it takes the line and its offers span the panel */
+.combo-search { display: flex; flex: 1 1 4rem; min-width: 3.5rem; align-items: center; gap: 0.3rem; }
+.combo-search.open { position: absolute; z-index: 4; top: 0; left: 0; right: 0; padding: 0.1rem 0; background: var(--n-bg-page); }
+.combo-search kbd { font-size: 10px; }
+.combo-find { flex: 1; min-width: 0; min-height: 1.3rem; padding: 0 0.4rem; border: 1px dashed var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; font-size: 12px; }
+.combo-find:focus { outline: 2px solid var(--n-focus); outline-offset: 0; border-style: solid; background: var(--n-bg-raised); }
+.combo-pop { position: absolute; z-index: 4; top: 1.9rem; left: 0; right: 0; margin: 0.15rem 0 0; padding: 0.25rem; list-style: none; border: 1px solid var(--n-line-strong); border-radius: var(--n-radius); background: var(--n-bg-raised); max-height: 16rem; overflow: auto; }
+.combo-pop .combo { display: flex; align-items: baseline; gap: 0.3rem; padding: 0.1rem 0.35rem; border-radius: var(--n-radius); cursor: pointer; font-family: var(--n-font-mono); font-size: 12px; }
+.combo-pop .combo.lit { outline: 2px solid var(--n-focus); outline-offset: -2px; }
+.combo-values { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.combo-seed { margin-left: auto; font-size: 10.5px; }
 .axis-find { width: 9rem; min-height: 1.3rem; padding: 0 0.35rem; border: 1px dashed var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; font-size: 12px; }
 .axis-find:focus { outline: 2px solid var(--n-focus); outline-offset: 0; border-style: solid; background: var(--n-bg-raised); }
 .axis-find.quiet { position: absolute; left: 0; top: 0; width: 6.4rem; opacity: 0; pointer-events: none; }

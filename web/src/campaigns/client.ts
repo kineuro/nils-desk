@@ -49,6 +49,13 @@ export interface Question {
    * never drawn as a row. Absent on an engine before it.
    */
   derive?: string[];
+  /**
+   * The names each value of an answered axis goes by (record 48, the second
+   * real read): its label, description, the pack's terms and the words its
+   * rules read, served from the pack with the question; the same for every
+   * stack. Absent on an engine before it. Read with `vocabularyOf`.
+   */
+  vocabulary?: Record<string, Record<string, { label?: string; description?: string; terms?: string[]; keywords?: string[] }>>;
 }
 
 /** What an axes question holds its answers to: each asked axis's values, the multi-valued axes, the exclusion groups and the pack's implications. */
@@ -313,11 +320,15 @@ export const campaigns = {
   derive: (c: number | string, item: number, value: Record<string, string | string[] | null>) => door<{ derived?: Json }>("POST", `/api/campaigns/${id(c)}/items/${item}/derive`, { value }),
   /** An item's whole stored header less direct identifiers (record 48), from the path the why door names. */
   header: (path: string) => door<HeaderDoc>("GET", path),
+  /** How common each combination of the answered axes is across the registry, never counting this campaign's stacks or a sealed one (record 48). */
+  combinations: (c: number | string, limit = 300) => door<Json>("GET", `/api/campaigns/${id(c)}/combinations?limit=${limit}`),
 };
 
 /** The doors record 48's first real read added: the derived axes of an answer, and an item's whole header. */
 export const DERIVE = "POST /api/campaigns/{id}/items/{item}/derive";
 export const HEADER = "GET /api/campaigns/{id}/items/{item}/header";
+/** The door the second real read added: how common each whole answer is, for the combination search. */
+export const COMBINATIONS = "GET /api/campaigns/{id}/combinations";
 
 /** The whole-header door's answer: one representative instance's stored header, direct identifiers left out. */
 export interface HeaderDoc {

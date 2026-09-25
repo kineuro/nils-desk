@@ -9,7 +9,8 @@ import { useRef, useState, type KeyboardEvent } from "react";
 import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { cantTellKeyOf, formFields, keyOf, type FormSchema, type Given, type Item, type Question } from "./client";
-import { findKeyOf, findMatches, LONG_ROW, type Found } from "./workspace";
+import type { ValueNames } from "./lookup";
+import { findKeyOf, findMatches, LONG_ROW, sameFound, type Found } from "./workspace";
 
 /** One row of values: an axis, its values in the pack's order, and the families they group under where the pack says. */
 export interface Row {
@@ -17,6 +18,8 @@ export interface Row {
   values: string[];
   families?: Record<string, string | null>;
   multi?: boolean;
+  /** The names each value goes by (record 48, the question's vocabulary), for the row's find. */
+  names?: Record<string, ValueNames>;
 }
 
 /** Who among the raters gave a value, for the adjudicator: value to principals. */
@@ -89,17 +92,32 @@ export function AxisRows({
   );
 }
 
+/** What the choices so far settle on the rows (record 48, the second real read): filled in by implication, or greyed with the reason. */
+export interface RowsSettled {
+  implied: Record<string, { values: string[]; by: string }>;
+  excluded: Record<string, Record<string, string>>;
+  noneExcluded: Record<string, string>;
+}
+
+const NOTHING_SETTLED: RowsSettled = { implied: {}, excluded: {}, noneExcluded: {} };
+
 /**
  * The rows on one screen (record 48, after the first real read): many axes,
  * some with long vocabularies, each row one line or two. A row is found by
  * its number (`1` the first); its letters then narrow its values as they are
- * typed, the best match lit, and Enter takes it. On a single-valued row
+ * typed, by any name a value goes by (BRAVO finds MPRAGE, and the row says
+ * so), the best match lit, and Enter takes it. On a single-valued row
  * Enter goes on to the next row; on a multi-valued row it toggles the value
  * and stays, and Enter with nothing typed goes on. Tab goes on without
  * choosing, Escape leaves. A short vocabulary is drawn whole in small
  * chips; a long one shows what is chosen and lists its matches only while
  * it is being typed into. Can't tell keeps its home-row key, none is typed
  * or clicked.
+ *
+ * After the second real read the rows follow each other: a value another
+ * choice implies is filled in and marked implied, held until that choice
+ * changes; a value that can no longer hold is greyed, says why on hover and
+ * cannot be taken; can't tell is always open.
  */
 export function CompactRows({
   rows,
@@ -107,15 +125,18 @@ export function CompactRows({
   marks = {},
   none = false,
   cantTell = null,
+  settled = NOTHING_SETTLED,
   onChoose,
   onNone,
   onCantTell,
 }: {
   rows: Row[];
+  /** The answer as it stands, what is implied filled in. */
   chosen: Record<string, string | string[] | null>;
   marks?: Marks;
   none?: boolean;
   cantTell?: string | null;
+  settled?: RowsSettled;
   onChoose: (axis: string, value: string) => void;
   onNone?: (axis: string) => void;
   onCantTell?: (axis: string) => void;
@@ -123,20 +144,37 @@ export function CompactRows({
   const [typed, setTyped] = useState<Record<string, string>>({});
   const [at, setAt] = useState<Record<string, number>>({});
   const [finding, setFinding] = useState<string | null>(null);
+  const [told, setTold] = useState<Record<string, string>>({});
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
   const go = (n: number) => {
     const next = rows[n];
     if (next) inputs.current[next.axis]?.focus();
     else inputs.current[rows[n - 1]?.axis ?? ""]?.blur();
   };
-  const take = (r: Row, f: Found) => {
+  const impliedOf = (axis: string, v: string) => settled.implied[axis]?.values.includes(v) ?? false;
+  const outOf = (axis: string, f: Found): string | null => (f.kind === "value" ? (settled.excluded[axis]?.[f.value] ?? null) : f.kind === "none" ? (settled.noneExcluded[axis] ?? null) : null);
+  // the legal matches first, what can no longer hold after them, the order kept inside each
+  const matchesOf = (r: Row, t: string) => {
+    const found = findMatches(r, t, { none, cantTell: cantTell !== null });
+    return [...found.filter((f) => outOf(r.axis, f) === null), ...found.filter((f) => outOf(r.axis, f) !== null)];
+  };
+  const take = (r: Row, f: Found): boolean => {
+    const out = outOf(r.axis, f);
+    if (out) {
+      setTold((x) => ({ ...x, [r.axis]: `${f.kind === "value" ? f.value : "none"}: ${out}` }));
+      return false;
+    }
+    setTold((x) => ({ ...x, [r.axis]: "" }));
+    // an implied value is held by the choice that implied it: taking it again changes nothing
+    if (f.kind === "value" && impliedOf(r.axis, f.value)) return true;
     if (f.kind === "value") onChoose(r.axis, f.value);
     else if (f.kind === "none") onNone?.(r.axis);
     else onCantTell?.(r.axis);
+    return true;
   };
   const onKey = (e: KeyboardEvent<HTMLInputElement>, r: Row, n: number) => {
     const t = typed[r.axis] ?? "";
-    const found = findMatches(r, t, { none, cantTell: cantTell !== null });
+    const found = matchesOf(r, t);
     const i = Math.min(at[r.axis] ?? 0, Math.max(0, found.length - 1));
     const clear = () => {
       setTyped((x) => ({ ...x, [r.axis]: "" }));
@@ -145,7 +183,7 @@ export function CompactRows({
     if (e.key === "Enter" && !e.ctrlKey) {
       e.preventDefault();
       if (t !== "" && found[i]) {
-        take(r, found[i]);
+        if (!take(r, found[i])) return;
         clear();
         if (!r.multi || found[i].kind !== "value") go(n + 1);
       } else {
@@ -177,26 +215,48 @@ export function CompactRows({
         const long = r.values.length > LONG_ROW;
         const t = typed[r.axis] ?? "";
         const open = finding === r.axis;
-        const found = open ? findMatches(r, t, { none, cantTell: cantTell !== null }) : [];
+        const found = open ? matchesOf(r, t) : [];
         const lit = found[Math.min(at[r.axis] ?? 0, Math.max(0, found.length - 1))] ?? null;
-        const isLit = (f: Found) => open && t !== "" && lit !== null && JSON.stringify(lit) === JSON.stringify(f);
+        const isLit = (f: Found) => open && t !== "" && sameFound(lit, f);
         const matches = (v: string) => !open || t === "" || found.some((f) => f.kind === "value" && f.value === v);
         const picked = (v: string) => (Array.isArray(on) ? on.includes(v) : on === v);
-        const chip = (value: string) => {
+        const implied = settled.implied[r.axis];
+        const chip = (value: string, via?: string) => {
           const who = marks[r.axis]?.[value] ?? [];
           const f: Found = { kind: "value", value };
+          const out = settled.excluded[r.axis]?.[value] ?? null;
+          const held = picked(value) && impliedOf(r.axis, value);
+          const names = r.names?.[value];
+          const title = [
+            held ? `implied: ${implied?.by ?? "another choice"}; change that to change this` : null,
+            out ? `not with this answer: ${out}` : null,
+            names?.label && names.label !== value ? names.label : null,
+            names?.description ?? null,
+            who.length > 0 ? `given by ${who.join(", ")}` : null,
+          ].filter(Boolean);
           return (
             <button
               key={value}
               type="button"
               tabIndex={-1}
-              className={["opt", picked(value) ? "on" : "", isLit(f) ? "lit" : "", matches(value) || picked(value) ? "" : "dim"].filter(Boolean).join(" ")}
+              className={["opt", picked(value) ? "on" : "", held ? "implied" : "", out && !picked(value) ? "out" : "", isLit(f) ? "lit" : "", matches(value) || picked(value) ? "" : "dim"].filter(Boolean).join(" ")}
               aria-pressed={picked(value)}
+              aria-disabled={held || (out !== null && !picked(value)) ? true : undefined}
+              data-value={value}
               onMouseDown={(e) => e.preventDefault()}
-              onClick={() => onChoose(r.axis, value)}
-              title={who.length > 0 ? `given by ${who.join(", ")}` : undefined}
+              onClick={() => {
+                if (held) return;
+                if (out && !picked(value)) {
+                  setTold((x) => ({ ...x, [r.axis]: `${value}: ${out}` }));
+                  return;
+                }
+                setTold((x) => ({ ...x, [r.axis]: "" }));
+                onChoose(r.axis, value);
+              }}
+              title={title.length > 0 ? title.join(" · ") : undefined}
             >
               {value}
+              {via && <span className="via">{via.split(" → ")[0]}</span>}
               {who.length > 0 && <span className="said-by">{who.length}</span>}
             </button>
           );
@@ -204,6 +264,10 @@ export function CompactRows({
         const key = findKeyOf(n);
         const ct = cantTellKeyOf(n);
         const chosenLong = long ? (Array.isArray(on) ? on : typeof on === "string" && on !== "" && on !== cantTell ? [on] : []) : [];
+        const noneOut = settled.noneExcluded[r.axis] ?? null;
+        const litVia = open && t !== "" && lit?.kind === "value" ? (lit.via ?? null) : null;
+        const litOut = open && t !== "" && lit ? outOf(r.axis, lit) : null;
+        const said = litOut ? `not with this answer: ${litOut}` : litVia ? litVia : !open && told[r.axis] ? told[r.axis] : implied && !open ? `implied: ${implied.by}` : null;
         return (
           <div key={r.axis} className={open ? "axis-row finding" : "axis-row"} role="group" aria-label={r.axis}>
             <span className="axis-name" title={r.multi ? `${r.axis}: several may hold` : r.axis}>
@@ -212,7 +276,7 @@ export function CompactRows({
               {r.multi && <span className="meta">+</span>}
             </span>
             <span className="axis-values">
-              {long ? chosenLong.map(chip) : r.values.map(chip)}
+              {long ? chosenLong.map((v) => chip(v)) : r.values.map((v) => chip(v))}
               <input
                 ref={(el) => {
                   inputs.current[r.axis] = el;
@@ -220,7 +284,7 @@ export function CompactRows({
                 className={long ? "axis-find" : "axis-find quiet"}
                 data-find={r.axis}
                 value={t}
-                placeholder={long ? `type to find (${r.values.length})` : ""}
+                placeholder={long ? `type a name (${r.values.length})` : ""}
                 aria-label={`find a value of ${r.axis}`}
                 onFocus={() => setFinding(r.axis)}
                 onBlur={() => setFinding((f) => (f === r.axis ? null : f))}
@@ -231,7 +295,16 @@ export function CompactRows({
                 onKeyDown={(e) => onKey(e, r, n)}
               />
               {none && (
-                <button type="button" tabIndex={-1} className={["opt", on === null ? "on" : "", isLit({ kind: "none" }) ? "lit" : ""].filter(Boolean).join(" ")} aria-pressed={on === null} onMouseDown={(e) => e.preventDefault()} onClick={() => onNone?.(r.axis)}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className={["opt", on === null ? "on" : "", noneOut && on !== null ? "out" : "", isLit({ kind: "none" }) ? "lit" : ""].filter(Boolean).join(" ")}
+                  aria-pressed={on === null}
+                  aria-disabled={noneOut && on !== null ? true : undefined}
+                  title={noneOut && on !== null ? `not with this answer: ${noneOut}` : undefined}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => (noneOut && on !== null ? setTold((x) => ({ ...x, [r.axis]: `none: ${noneOut}` })) : onNone?.(r.axis))}
+                >
                   none
                 </button>
               )}
@@ -250,11 +323,12 @@ export function CompactRows({
                   {(marks[r.axis]?.[cantTell] ?? []).length > 0 && <span className="said-by">{(marks[r.axis]?.[cantTell] ?? []).length}</span>}
                 </button>
               )}
+              {said && <span className={litOut || (!open && told[r.axis]) ? "find-why out" : "find-why"}>{said}</span>}
             </span>
             {long && open && (
               <span className="axis-pop" role="listbox" aria-label={`values of ${r.axis}`}>
-                {found.filter((f): f is { kind: "value"; value: string } => f.kind === "value").map((f) => chip(f.value))}
-                {found.length === 0 && <span className="meta">nothing begins or holds “{t}”</span>}
+                {found.filter((f): f is { kind: "value"; value: string; via?: string } => f.kind === "value").map((f) => chip(f.value, f.via))}
+                {found.length === 0 && <span className="meta">no name begins or holds “{t}”</span>}
               </span>
             )}
           </div>
