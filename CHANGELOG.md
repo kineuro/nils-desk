@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.40] - 2026-09-25
+
+No change of its own. Released beside the engine's 1.0.0-alpha.40 so the two stay in step: a container install names both images with the engine's version.
+
 ## [1.0.0-alpha.39] - 2026-09-25
 
 Released beside the engine's 1.0.0-alpha.39: review on one mechanism, the reader, and analyses with help on the Pipelines page. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
