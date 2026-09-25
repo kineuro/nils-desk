@@ -6,7 +6,7 @@
 // answer beside the options and the disagreement named. A rater sees no
 // other rater's answer.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
@@ -33,18 +33,20 @@ import {
   unsureOf,
   type Answer,
   type Campaign,
+  type Derived,
   type Given,
+  type HeaderDoc,
   type Item,
 } from "./client";
-import { AxisRows, blank, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
+import { AxisRows, blank, CompactRows, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
 import { BatchView, type BatchViewProps } from "./Batches";
 import type { AskedCandidate } from "../review/asked";
-import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type Order, type Pace, type Reading, type Suggestion } from "./reader";
-import { acceptBatch, batchesFor, claimIn, hintOf, R48, readingFor, valueOrderServed } from "./readerDoors";
-import { EvidenceLines, HeaderValues, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
+import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, deriveValue, derivedWords, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type HeaderLine, type Order, type Pace, type Reading, type Suggestion } from "./reader";
+import { acceptBatch, batchesFor, claimIn, deriveAsked, deriveDoor, Deriver, headerDoorOf, headerFor, hintOf, R48, readingFor, valueOrderServed } from "./readerDoors";
+import { DerivedLine, EvidenceDrawer, HeaderBlock, HeaderDoors, HeaderDrawer, headerLinesOf, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { StackView } from "./StackView";
 import { warmStack } from "../viewer/prefetch";
-import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, disagreementWords, enterOwnedBy, given as choose, givenCantTell, givenNone, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
+import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
 
 type Role = "rater" | "adjudicator";
 
@@ -101,6 +103,14 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const [batchAt, setBatchAt] = useState(0);
   const [mine, setMine] = useState<Set<number>>(() => new Set());
   const [batchSaid, setBatchSaid] = useState<string | null>(null);
+  // the derived axes of the answer as it stands (record 48); gone where the engine has no derive door
+  const [derived, setDerived] = useState<Derived | null>(null);
+  const [deriveGone, setDeriveGone] = useState(false);
+  const deriver = useRef<Deriver | null>(null);
+  // the whole header, one key away (record 48)
+  const [headerOpen, setHeaderOpen] = useState(false);
+  const [headerDoc, setHeaderDoc] = useState<HeaderDoc | null>(null);
+  const [headerFailed, setHeaderFailed] = useState<string | null>(null);
   const clock = useRef(new Clock());
   const batchShown = useRef<number | null>(null);
   const prefetch = useRef<Prefetcher | null>(null);
@@ -172,6 +182,18 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     setReading(null);
     setSuggestion(null);
     setSuggested(null);
+    setDerived(null);
+    setHeaderOpen(false);
+    setHeaderDoc(null);
+    setHeaderFailed(null);
+    deriver.current?.stop();
+    deriver.current = null;
+    if (deriveAsked(capsNow.current, q))
+      deriver.current = new Deriver(deriveDoor(id, item.id), (d, absent) => {
+        if (currentItem.current !== item.id) return;
+        if (absent) setDeriveGone(true);
+        else setDerived(d);
+      });
     clock.current.start(item.id, Date.now());
     if (q.kind === "axis" || q.kind === "axes") {
       // the suggestion filled in, unless a key was pressed before it came
@@ -203,6 +225,27 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     if (role === "adjudicator") campaigns.answers(id).then(setAnswers, () => setAnswers([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
+
+  // the derived line follows the answer as it changes (record 48)
+  useEffect(() => {
+    if (!q || !deriver.current) return;
+    const v = deriveValue(q, g);
+    if (v) deriver.current.want(v);
+  }, [q, g]);
+  useEffect(() => () => deriver.current?.stop(), []);
+
+  const headerDoor = item ? headerDoorOf(caps, id, item.id, reading) : null;
+  const openHeader = useCallback(() => {
+    if (!headerDoor) return;
+    setHeaderOpen(true);
+    setHeaderFailed(null);
+    if (headerDoc) return;
+    const at = currentItem.current;
+    headerFor(headerDoor).then(
+      (d) => currentItem.current === at && setHeaderDoc(d),
+      (e: unknown) => currentItem.current === at && setHeaderFailed(refusedWords(e)),
+    );
+  }, [headerDoor, headerDoc]);
 
   // the heartbeat: whether the lease still holds, and how long, from the engine
   const leaseSeconds = campaign?.lease_seconds ?? 3600;
@@ -334,15 +377,15 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
 
   // the keys
   const offered = suggestion?.differ.length ? suggestion.offered : [];
-  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence });
-  keyed.current = { q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence };
+  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence, header: headerDoor !== null, openHeader });
+  keyed.current = { q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence, header: headerDoor !== null, openHeader };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
       if (!k.q || e.altKey || e.metaKey) return;
       const t = e.target as HTMLElement | null;
       const inField = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
-      if (t?.closest?.("dialog")) return;
+      if (t?.closest?.("dialog, .drawer")) return;
       // Enter on a link, a button, a tile or a toggle is that element's alone; on the body or a value it answers
       if (e.key === "Enter" && enterOwnedBy(t)) return;
       if (k.mode === "batch") {
@@ -355,7 +398,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         else setKeys((x) => !x);
         return;
       }
-      const act = keyAct(e.key, { ctrl: e.ctrlKey, inField, q: k.q, rows: k.rows, candidates: k.candidates, offered: k.offered.length, batches: k.batchesOffered });
+      const act = keyAct(e.key, { ctrl: e.ctrlKey, inField, q: k.q, rows: k.rows, candidates: k.candidates, offered: k.offered.length, batches: k.batchesOffered, header: k.header });
       if (!act) return;
       e.preventDefault();
       if (act.kind === "candidate") {
@@ -363,6 +406,8 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         const cg = c ? givenOfCandidate(k.q, c) : null;
         if (cg) setG(cg);
       } else if (act.kind === "evidence") k.toggleEvidence();
+      else if (act.kind === "header") k.openHeader();
+      else if (act.kind === "find") document.querySelector<HTMLInputElement>(`[data-find="${act.row.axis.replace(/["\\]/g, "")}"]`)?.focus();
       else if (act.kind === "reset") setG(k.suggested ?? blank(k.q));
       else if (act.kind === "batch") k.openBatches();
       else if (act.kind === "cant_tell") setG((was) => givenCantTell(k.q!, was, act.row.axis));
@@ -418,6 +463,12 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       suggestion={suggestion}
       blind={reading?.blind === true || item?.blind === true}
       header={reading?.header ?? null}
+      headerLines={headerLinesOf(reading)}
+      headerWhole={headerDoor !== null}
+      onHeader={openHeader}
+      headerDrawer={headerOpen ? { doc: headerDoc, failed: headerFailed } : null}
+      onHeaderClose={() => setHeaderOpen(false)}
+      derived={deriver.current && !deriveGone ? (derived ? derivedWords(derived, q) : null) : undefined}
       evOpen={evOpen}
       onEvidence={toggleEvidence}
       onCandidate={(c) => {
@@ -516,6 +567,16 @@ export interface WorkspaceBodyProps {
   onBatches?: () => void;
   /** The batch view in place of the one stack, while it is open. */
   batch?: BatchViewProps | null;
+  /** The header block's lines (record 48): the file's text and physics, key fields first. */
+  headerLines?: HeaderLine[];
+  /** Whether `h` opens the whole header (the engine serves the door). */
+  headerWhole?: boolean;
+  onHeader?: () => void;
+  /** The whole header drawer while it is open. */
+  headerDrawer?: { doc: HeaderDoc | null; failed: string | null } | null;
+  onHeaderClose?: () => void;
+  /** The derived axes in one line (record 48); null while the first answer is awaited; absent where the engine derives nothing. */
+  derived?: string | null;
 }
 
 /** The workspace as it draws from what it holds. */
@@ -528,6 +589,9 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
   const facts = factsOf(p.evidence);
   // the answer about to be sent, the unsure mark apart as a tag
   const pending = holding ? pendingWords(q, p.given) : null;
+  // an axis or axes question is read on one screen (record 48): pictures left, the file and the rows right, nothing below the fold
+  const one = q.kind === "axis" || q.kind === "axes";
+  if (one) return <ReaderOne {...p} refusal={refusal} left={left} pending={pending} />;
   return (
     <section className="data campaign-rate">
       <div className="data-head">
@@ -544,72 +608,17 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
           {p.pace ? <PaceCount pace={p.pace} /> : <span className="meta">{p.done > 0 ? `${n(p.done)} answered here` : "items"}</span>}
         </div>
       </div>
-      {(p.order || p.batchesOffered) && !refusal && (
-        <div className="row reader-bar">
-          {p.order && p.onOrder && <OrderToggle order={p.order} onOrder={p.onOrder} />}
-          <span className="grow" />
-          {p.batchesOffered && p.onBatches && !p.batch && (
-            <button type="button" className="button secondary small" onClick={p.onBatches}>
-              Like stacks in batches <kbd>b</kbd>
-            </button>
-          )}
-        </div>
-      )}
-      {p.said && (
-        <p className="meta said">
-          <Icon name="check" />
-          {p.said}
-        </p>
-      )}
+      <Said said={p.said} />
       {refusal && <p className="warn">{refusal}</p>}
-      {!refusal && seat.kind === "claiming" && <Wait phase="claiming the next item" since={p.now} size="panel" />}
-      {!refusal && seat.kind === "failed" && <p className="warn">{seat.why}</p>}
-      {!refusal && seat.kind === "done" && (
-        <div className="note">
-          <Icon name="check" />
-          <div className="note-body">
-            <p className="note-lead">Nothing left for you.</p>
-            <p className="note-detail">{seat.why}</p>
-            <p>
-              <a href={href("campaigns", String(c.id))}>Back to {c.name}</a> ·{" "}
-              <button type="button" className="link-button" onClick={p.onAgain}>
-                Look again
-              </button>
-            </p>
-          </div>
-        </div>
-      )}
-      {!refusal && p.batch && <BatchView {...p.batch} />}
-      {holding && !p.batch && (
+      <SeatState {...p} refusal={refusal} />
+      {holding && (
         <div className="rate-grid">
           <div className="rate-picture">
-            {holding.item.stack_id !== null ? (
-              <StackView stack={holding.item.stack_id} view={q.kind === "axis" || q.kind === "axes" ? "planes" : "stack"} />
-            ) : (
-              <p className="meta">{itemWords(holding.item)}: a session, answered from its stacks below.</p>
-            )}
+            {holding.item.stack_id !== null ? <StackView stack={holding.item.stack_id} view="stack" /> : <p className="meta">{itemWords(holding.item)}: a session, answered from its stacks below.</p>}
           </div>
           <div className="rate-side">
-            <div className="rate-item">
-              <b>{itemWords(holding.item)}</b>
-              <span className="meta">
-                item {holding.item.position + 1}
-                {holding.item.round > 1 ? ` · round ${holding.item.round}` : ""}
-              </span>
-              {(holding.item.blind || p.blind) && (
-                <span className="tag gated" title="of a sealed sample: read without a suggestion, never in a batch">
-                  blind
-                </span>
-              )}
-              <span className={left !== null && left < 120 ? "tag caution" : "tag"} title={holding.assignment.lease_until ?? undefined}>
-                <Icon name="clock" />
-                {leaseWords(left)}
-              </span>
-            </div>
+            <ItemLine {...p} left={left} />
             {holding.note && <p className="note-lead">{holding.note}</p>}
-            {!p.blind && p.suggestion && <SuggestionBar s={p.suggestion} chosen={chosenCandidate(q, p.suggestion.offered, p.given)} onChoose={(c) => p.onCandidate?.(c)} busy={p.busy} />}
-            {p.blind && p.header && <HeaderValues header={p.header} />}
-            {!p.blind && p.lines && p.lines.length > 0 && <EvidenceLines lines={p.lines} open={p.evOpen ?? false} onToggle={() => p.onEvidence?.()} />}
             {facts.length > 0 && (
               <dl className="facts">
                 {facts.map(([k, v]) => (
@@ -620,21 +629,7 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
                 ))}
               </dl>
             )}
-            {role === "adjudicator" && (
-              <div className="adjudicate">
-                {p.split && <p className="note-lead">{p.split}</p>}
-                <ul className="vlist">
-                  {p.raterAnswers.map((a) => (
-                    <li key={a.id}>
-                      <b>{a.principal}</b> {answerWords(a)}
-                      {a.author_kind !== "person" && <span className="tag caution">{a.author_kind}</span>}
-                      {a.unsure && <span className="tag caution">unsure</span>}
-                      {a.why && <span className="meta"> · {a.why}</span>}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <Adjudicate {...p} />
             <Renderer {...p} item={holding.item} assignment={holding.assignment.id} />
             <label className="field">
               <span className="label">Why · optional</span>
@@ -654,31 +649,204 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
               </p>
             )}
             {p.refused && <p className="warn">{p.refused}</p>}
-            <div className="row actions">
-              <button type="button" className="button" disabled={p.busy} onClick={p.onAnswer}>
-                Answer <kbd>Enter</kbd>
-              </button>
-              <button type="button" className="button secondary" disabled={p.busy} onClick={p.onSkip} title="Back to the pool for others; never to you again">
-                Give back <kbd>s</kbd>
-              </button>
-              {unsureOf(q) && (
-                <button type="button" className={p.unsure ? "opt on" : "opt"} aria-pressed={p.unsure ?? false} disabled={p.busy} onClick={p.onUnsure} title="Answered, and wants a second look">
-                  Unsure <kbd>{UNSURE_KEY}</kbd>
-                </button>
-              )}
-              <span className="grow" />
-              <button type="button" className="button quiet" disabled={p.busy} onClick={p.onStop}>
-                Stop
-              </button>
-              <button type="button" className="icon-button" aria-label="Keys" aria-expanded={p.keys} onClick={p.onKeys}>
-                <kbd>?</kbd>
-              </button>
-            </div>
-            {p.keys && <KeyList rows={p.rows.length} reader={q.kind === "axis" || q.kind === "axes"} candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} cantTell={cantTellOf(q) !== null ? p.rows.length : 0} unsure={unsureOf(q)} />}
+            <Actions {...p} />
+            {p.keys && <KeyList rows={p.rows.length} unsure={unsureOf(q)} />}
           </div>
         </div>
       )}
     </section>
+  );
+}
+
+type Drawn = WorkspaceBodyProps & { refusal: string | null; left: number | null; pending: string | null };
+
+/**
+ * The reader on one screen (record 48, after the first real read): the
+ * pictures on the left, and on the right from the top the file's header
+ * text and physics, the asked rows, the derived line and the answer. On a
+ * laptop nothing needs scrolling: the page is the window's height, the rows
+ * are compact, and what does not fit a line (the whole header, the evidence,
+ * the keys) opens over the reader on a key.
+ */
+function ReaderOne(p: Drawn) {
+  const { campaign: c, role, seat, refusal } = p;
+  const q = c.question;
+  const holding = seat.kind === "holding" ? seat : null;
+  const blind = p.blind === true || holding?.item.blind === true;
+  const compact = compactRows(p.rows);
+  const lines = p.lines ?? [];
+  const evidence = !blind && lines.length > 0;
+  return (
+    <section className="data campaign-rate reader-one">
+      <div className="reader-head">
+        <span className="eyebrow">
+          <a href={href("campaigns")}>Campaigns</a> · <a href={href("campaigns", String(c.id))}>{c.name}</a>
+        </span>
+        <h1>{role === "adjudicator" ? "Adjudicate" : "Rate"}</h1>
+        <span className="grow said-slot">
+          <Said said={p.said} />
+        </span>
+        {p.order && p.onOrder && !refusal && <OrderToggle order={p.order} onOrder={p.onOrder} />}
+        {p.batchesOffered && p.onBatches && !p.batch && !refusal && (
+          <button type="button" className="button secondary small" onClick={p.onBatches}>
+            Like stacks in batches <kbd>b</kbd>
+          </button>
+        )}
+        <span className="rate-count-line">
+          <b>{p.open === null ? "?" : n(p.open)}</b> open · {p.pace ? <PaceCount pace={p.pace} /> : <span>{p.done > 0 ? `${n(p.done)} answered here` : "items"}</span>}
+        </span>
+      </div>
+      {refusal && <p className="warn">{refusal}</p>}
+      <SeatState {...p} />
+      {!refusal && p.batch && <BatchView {...p.batch} />}
+      {holding && !p.batch && (
+        <div className="rate-grid">
+          <div className="rate-picture">
+            {holding.item.stack_id !== null ? <StackView stack={holding.item.stack_id} view="planes" /> : <p className="meta">{itemWords(holding.item)}: a session, answered from its stacks below.</p>}
+          </div>
+          <div className="rate-side" data-reader-panel="">
+            <ItemLine {...p}>
+              <HeaderDoors whole={p.headerWhole ?? false} evidence={evidence} onWhole={p.onHeader} onEvidence={p.onEvidence} />
+            </ItemLine>
+            {holding.note && <p className="note-lead">{holding.note}</p>}
+            {!blind && p.suggestion && <SuggestionBar s={p.suggestion} chosen={chosenCandidate(q, p.suggestion.offered, p.given)} onChoose={(x) => p.onCandidate?.(x)} busy={p.busy} />}
+            <HeaderBlock lines={p.headerLines ?? []} flat={p.header ?? []} brief={!blind && (p.suggestion?.offered.length ?? 0) > 0} />
+            <Adjudicate {...p} />
+            <Renderer {...p} item={holding.item} assignment={holding.assignment.id} />
+            {p.derived !== undefined && <DerivedLine words={p.derived} />}
+            {p.pending !== null && (
+              <p className="meta pending" title={p.pending}>
+                Sends: {p.pending}
+                {p.unsure && unsureOf(q) && (
+                  <>
+                    {" "}
+                    <span className="tag caution">unsure</span>
+                  </>
+                )}
+              </p>
+            )}
+            {p.refused && <p className="warn one-line" title={p.refused}>{p.refused}</p>}
+            <Actions {...p} withWhy />
+            {p.keys && (
+              <div className="drawer keys-drawer" role="dialog" aria-label="keys">
+                <KeyList rows={p.rows.length} compact={compact} reader candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} cantTell={cantTellOf(q) !== null ? p.rows.length : 0} unsure={unsureOf(q)} header={p.headerWhole ?? false} evidence={evidence} />
+              </div>
+            )}
+            {p.headerDrawer && <HeaderDrawer doc={p.headerDrawer.doc} failed={p.headerDrawer.failed} onClose={() => p.onHeaderClose?.()} />}
+            {evidence && p.evOpen && <EvidenceDrawer lines={lines} onClose={() => p.onEvidence?.()} />}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function Said({ said }: { said: string | null }) {
+  if (!said) return null;
+  return (
+    <p className="meta said" title={said}>
+      <Icon name="check" />
+      {said}
+    </p>
+  );
+}
+
+function SeatState(p: WorkspaceBodyProps & { refusal: string | null }) {
+  const { seat, refusal, campaign: c } = p;
+  if (refusal) return null;
+  if (seat.kind === "claiming") return <Wait phase="claiming the next item" since={p.now} size="panel" />;
+  if (seat.kind === "failed") return <p className="warn">{seat.why}</p>;
+  if (seat.kind !== "done") return null;
+  return (
+    <div className="note">
+      <Icon name="check" />
+      <div className="note-body">
+        <p className="note-lead">Nothing left for you.</p>
+        <p className="note-detail">{seat.why}</p>
+        <p>
+          <a href={href("campaigns", String(c.id))}>Back to {c.name}</a> ·{" "}
+          <button type="button" className="link-button" onClick={p.onAgain}>
+            Look again
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function ItemLine(p: WorkspaceBodyProps & { left: number | null; children?: ReactNode }) {
+  const holding = p.seat.kind === "holding" ? p.seat : null;
+  if (!holding) return null;
+  return (
+    <div className="rate-item">
+      <b>{itemWords(holding.item)}</b>
+      <span className="meta">
+        item {holding.item.position + 1}
+        {holding.item.round > 1 ? ` · round ${holding.item.round}` : ""}
+      </span>
+      {(holding.item.blind || p.blind) && (
+        <span className="tag gated" title="of a sealed sample: read without a suggestion, never in a batch">
+          blind
+        </span>
+      )}
+      <span className={p.left !== null && p.left < 120 ? "tag caution" : "tag"} title={holding.assignment.lease_until ?? undefined}>
+        <Icon name="clock" />
+        {leaseWords(p.left)}
+      </span>
+      {p.children}
+    </div>
+  );
+}
+
+function Adjudicate(p: WorkspaceBodyProps) {
+  if (p.role !== "adjudicator") return null;
+  return (
+    <div className="adjudicate">
+      {p.split && <p className="note-lead">{p.split}</p>}
+      <ul className="vlist">
+        {p.raterAnswers.map((a) => (
+          <li key={a.id}>
+            <b>{a.principal}</b> {answerWords(a)}
+            {a.author_kind !== "person" && <span className="tag caution">{a.author_kind}</span>}
+            {a.unsure && <span className="tag caution">unsure</span>}
+            {a.why && <span className="meta"> · {a.why}</span>}
+            {a.derived && Object.keys(a.derived).length > 0 && <span className="meta derived-of"> · {derivedWords(a.derived, p.campaign.question)}</span>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Actions(p: WorkspaceBodyProps & { withWhy?: boolean }) {
+  const q = p.campaign.question;
+  return (
+    <div className="row actions">
+      <button type="button" className="button" disabled={p.busy} onClick={p.onAnswer}>
+        Answer <kbd>Enter</kbd>
+      </button>
+      <button type="button" className="button secondary" disabled={p.busy} onClick={p.onSkip} title="Back to the pool for others; never to you again">
+        Give back <kbd>s</kbd>
+      </button>
+      {unsureOf(q) && (
+        <button type="button" className={p.unsure ? "opt on" : "opt"} aria-pressed={p.unsure ?? false} disabled={p.busy} onClick={p.onUnsure} title="Answered, and wants a second look">
+          Unsure <kbd>{UNSURE_KEY}</kbd>
+        </button>
+      )}
+      {p.withWhy ? (
+        <span className="input why-input">
+          <input value={p.why} onChange={(e) => p.onWhy(e.target.value)} placeholder={p.role === "adjudicator" ? "why: what settles it" : "why · optional"} aria-label="why, optional" />
+        </span>
+      ) : (
+        <span className="grow" />
+      )}
+      <button type="button" className="button quiet" disabled={p.busy} onClick={p.onStop}>
+        Stop
+      </button>
+      <button type="button" className="icon-button" aria-label="Keys" aria-expanded={p.keys} onClick={p.onKeys}>
+        <kbd>?</kbd>
+      </button>
+    </div>
   );
 }
 
@@ -688,6 +856,22 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
   switch (q.kind) {
     case "axis":
     case "axes":
+      if (q.kind === "axes" && compactRows(p.rows))
+        return (
+          <>
+            <CompactRows
+              rows={p.rows}
+              chosen={chosenOf(q, g)}
+              marks={p.marks}
+              none
+              cantTell={cantTellOf(q)}
+              onCantTell={(axis) => p.onGiven(givenCantTell(q, g, axis))}
+              onChoose={(axis, value) => p.onGiven(choose(q, g, p.rows.find((r) => r.axis === axis)!, value))}
+              onNone={(axis) => p.onGiven(givenNone(g, axis))}
+            />
+            {illegal(q, g) && <p className="warn one-line" title={illegal(q, g) ?? undefined}>The pack does not allow this: {illegal(q, g)}.</p>}
+          </>
+        );
       return (
         <>
           <AxisRows
@@ -729,75 +913,29 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
   }
 }
 
-function KeyList({ rows, reader = false, candidates = 0, batches = false, cantTell = 0, unsure = false }: { rows: number; reader?: boolean; candidates?: number; batches?: boolean; cantTell?: number; unsure?: boolean }) {
+function KeyList({ rows, compact = false, reader = false, candidates = 0, batches = false, cantTell = 0, unsure = false, header = false, evidence = false }: { rows: number; compact?: boolean; reader?: boolean; candidates?: number; batches?: boolean; cantTell?: number; unsure?: boolean; header?: boolean; evidence?: boolean }) {
+  const pair = (k: string, d: string) => (
+    <div className="facts-pair" key={k + d}>
+      <dt>{k}</dt>
+      <dd>{d}</dd>
+    </div>
+  );
   return (
     <dl className="facts keys">
-      {reader && (
-        <div className="facts-pair">
-          <dt>Enter</dt>
-          <dd>confirm the answer filled in</dd>
-        </div>
-      )}
-      {candidates > 0 && (
-        <div className="facts-pair">
-          <dt>{CANDIDATE_KEYS.slice(0, candidates).split("").join(" ")}</dt>
-          <dd>choose a candidate</dd>
-        </div>
-      )}
-      {reader && (
-        <div className="facts-pair">
-          <dt>h</dt>
-          <dd>how each axis was decided</dd>
-        </div>
-      )}
-      {reader && (
-        <div className="facts-pair">
-          <dt>Backspace</dt>
-          <dd>back to the suggestion</dd>
-        </div>
-      )}
-      {batches && (
-        <div className="facts-pair">
-          <dt>b</dt>
-          <dd>like stacks in batches</dd>
-        </div>
-      )}
-      {rows > 0 && (
-        <div className="facts-pair">
-          <dt>1 to 0</dt>
-          <dd>a value on the first row</dd>
-        </div>
-      )}
-      {rows > 1 && (
-        <div className="facts-pair">
-          <dt>q to p</dt>
-          <dd>a value on the second row</dd>
-        </div>
-      )}
-      {cantTell > 0 && (
-        <div className="facts-pair">
-          <dt>{CANT_TELL_KEYS.slice(0, cantTell).split("").join(" ")}</dt>
-          <dd>can&apos;t tell on the first row, the second, and on; again clears it</dd>
-        </div>
-      )}
-      {unsure && (
-        <div className="facts-pair">
-          <dt>{UNSURE_KEY}</dt>
-          <dd>mark it unsure, for a second look</dd>
-        </div>
-      )}
-      <div className="facts-pair">
-        <dt>Enter</dt>
-        <dd>answer, then the next item</dd>
-      </div>
-      <div className="facts-pair">
-        <dt>s</dt>
-        <dd>give it back, then the next</dd>
-      </div>
-      <div className="facts-pair">
-        <dt>Ctrl+Enter</dt>
-        <dd>answer from a text field</dd>
-      </div>
+      {reader && pair("Enter", "confirm the answer filled in")}
+      {candidates > 0 && pair(CANDIDATE_KEYS.slice(0, candidates).split("").join(" "), "choose a candidate")}
+      {header && pair("h", "the whole header")}
+      {reader && (evidence || !header) && pair(header ? "H" : "h", "how each axis was decided")}
+      {reader && pair("Backspace", "back to the suggestion")}
+      {batches && pair("b", "like stacks in batches")}
+      {compact && pair(`1 to ${findKeyOf(rows - 1) ?? rows}`, "find a row, then type a value's first letters; Enter takes it and goes on, Tab goes on, Esc leaves")}
+      {!compact && rows > 0 && pair("1 to 0", "a value on the first row")}
+      {!compact && rows > 1 && pair("q to p", "a value on the second row")}
+      {cantTell > 0 && pair(CANT_TELL_KEYS.slice(0, cantTell).split("").join(" "), "can't tell on the first row, the second, and on; again clears it")}
+      {unsure && pair(UNSURE_KEY, "mark it unsure, for a second look")}
+      {pair("Enter", "answer, then the next item")}
+      {pair("s", "give it back, then the next")}
+      {pair("Ctrl+Enter", "answer from a text field")}
     </dl>
   );
 }

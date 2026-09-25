@@ -191,7 +191,7 @@ describe("the rater's workspace", () => {
     expect(html).toContain("<kbd>9</kbd>T1w");
     expect(html).toContain("Answer <kbd>Enter</kbd>");
     expect(html).toContain("Give back <kbd>s</kbd>");
-    expect(html).toContain('<span class="v">3</span>');
+    expect(html).toContain("<b>3</b> open");
     // a rater never sees another rater's answer
     expect(html).not.toContain("adjudicate");
     expect(html).not.toContain("bob@walk");
@@ -200,7 +200,7 @@ describe("the rater's workspace", () => {
   it("marks the value given and says what the engine refused", () => {
     const html = draw({ campaign: open, given: { kind: "value", value: "T2w" }, refused: "Refused: the lease ran out." });
     expect(html).toContain('class="opt on" aria-pressed="true"><kbd>7</kbd>T2w');
-    expect(html).toContain('<p class="warn">Refused: the lease ran out.</p>');
+    expect(html).toContain('title="Refused: the lease ran out.">Refused: the lease ran out.</p>');
   });
 
   it("says nothing is left, with the way back, and refuses a person the campaign does not name", () => {
@@ -344,8 +344,8 @@ describe("can't tell and unsure (record 48)", () => {
     expect(keyAct("a", { ctrl: false, inField: false, q: { kind: "axis", axis: "base", cant_tell: "cant_tell" }, rows: rows.slice(0, 1) })).toBeNull();
     expect(at("m")).toEqual({ kind: "unsure" });
     expect(keyAct("m", { ctrl: false, inField: false, q: { kind: "free", unsure: true }, rows: [] })).toEqual({ kind: "unsure" });
-    // no clash with the keys already there
-    expect(at("1")).toEqual({ kind: "choose", row: rows[0], value: "T1w" });
+    // no clash with the keys already there: on three rows or more a number finds its row (record 48, one screen)
+    expect(at("1")).toEqual({ kind: "find", row: rows[0] });
     expect(at("s")).toEqual({ kind: "skip" });
     expect(at("h")).toEqual({ kind: "evidence" });
     expect(at("a", q, true)).toBeNull();

@@ -43,6 +43,12 @@ export interface Question {
   cant_tell?: string;
   /** Whether the answer door takes the unsure mark (record 48); absent on an engine before it. */
   unsure?: boolean;
+  /**
+   * An axes question's derived axes (record 48, after the first real read):
+   * computed by the pack's rules from the rater's answer, never answered and
+   * never drawn as a row. Absent on an engine before it.
+   */
+  derive?: string[];
 }
 
 /** What an axes question holds its answers to: each asked axis's values, the multi-valued axes, the exclusion groups and the pack's implications. */
@@ -163,7 +169,12 @@ export interface Answer {
   model_id?: number | null;
   /** The rater wants a second look (record 48). */
   unsure?: boolean;
+  /** The derived axes the pack computed from this answer (record 48), where the engine keeps them. */
+  derived?: Derived | null;
 }
+
+/** Derived axes by name: a value, a set on a multi-valued axis, none (null), or can't tell. */
+export type Derived = Record<string, string | string[] | null>;
 
 export interface Claimed {
   assignment: Assignment | null;
@@ -177,6 +188,8 @@ export interface Answered {
   item: number;
   state: ItemState | string;
   adjudication: number | null;
+  /** The derived axes the engine stored with the answer (record 48). */
+  derived?: Derived | null;
 }
 
 export interface Closed {
@@ -296,7 +309,34 @@ export const campaigns = {
   candidates: (c: number | string, item: number) => door<Candidates>("GET", `/api/campaigns/${id(c)}/items/${item}/candidates`),
   /** The pack's words for an axis, where the person may read the pack. */
   pack: (name: string) => door<Json>("GET", `/api/packs/${encodeURIComponent(name)}`),
+  /** The derived axes of a partial answer (record 48): the asked axes chosen so far, the rest taken as can't tell. */
+  derive: (c: number | string, item: number, value: Record<string, string | string[] | null>) => door<{ derived?: Json }>("POST", `/api/campaigns/${id(c)}/items/${item}/derive`, { value }),
+  /** An item's whole stored header less direct identifiers (record 48), from the path the why door names. */
+  header: (path: string) => door<HeaderDoc>("GET", path),
 };
+
+/** The doors record 48's first real read added: the derived axes of an answer, and an item's whole header. */
+export const DERIVE = "POST /api/campaigns/{id}/items/{item}/derive";
+export const HEADER = "GET /api/campaigns/{id}/items/{item}/header";
+
+/** The whole-header door's answer: one representative instance's stored header, direct identifiers left out. */
+export interface HeaderDoc {
+  stack?: number | null;
+  item?: number | null;
+  blind?: boolean;
+  detail?: string;
+  instance?: { instance_number?: number | null } | null;
+  fields: HeaderField[];
+  left_out?: { identifying?: number; removed?: number } | null;
+}
+
+export interface HeaderField {
+  level?: string | null;
+  column?: string | null;
+  keyword?: string | null;
+  tag?: string | null;
+  value: unknown;
+}
 
 /** The door that lengthens a lease (record 45); the heartbeat uses it where it is served. */
 export const RENEW = "POST /api/campaigns/{id}/assignments/{assignment}/renew";
@@ -736,6 +776,17 @@ export function axisValues(q: Question, axis?: string): string[] {
   return [];
 }
 
+/** The axes a question's derived axes name; never answered by the rater. */
+export const derivedAxes = (q: Question): string[] => (q.kind === "axes" && Array.isArray(q.derive) ? q.derive.filter((a) => typeof a === "string") : []);
+
+/** The axes the rater answers: an axes question's asked axes less any it derives; an axis question's one axis. */
+export function answeredAxes(q: Question): string[] {
+  if (q.kind === "axis") return q.axis ? [q.axis] : [];
+  if (q.kind !== "axes") return [];
+  const derived = derivedAxes(q);
+  return (q.axes ?? []).filter((a) => !derived.includes(a));
+}
+
 /** The word an axes answer gives an axis for "can't tell" where the question does not name its own (the engine's reserved word). */
 export const CANT_TELL = "cant_tell";
 
@@ -771,15 +822,18 @@ export function answerBody(q: Question, g: Given, why = "", unsure = false): { o
       if (g.kind !== "values") return { ok: false, needs: "a value for each axis" };
       // every asked axis is named; none says it has no value here, can't tell that the data give no clue
       const cant = cantTellOf(q);
-      const missing = (q.axes ?? []).filter((a) => {
+      const asked = answeredAxes(q);
+      const missing = asked.filter((a) => {
         const v = g.values[a];
         return v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
       });
       if (missing.length > 0) return { ok: false, needs: `a value for ${missing.join(", ")}, or none${cant ? ", or can't tell" : ""}` };
-      const problem = q.constraints ? legalProblem(q.constraints, jointOf(g.values, cant ?? CANT_TELL)) : null;
+      // only the asked axes are sent and held to the pack; a derived axis is the engine's to compute
+      const said = Object.fromEntries(asked.filter((a) => a in g.values).map((a) => [a, g.values[a]]));
+      const problem = q.constraints ? legalProblem(q.constraints, jointOf(said, cant ?? CANT_TELL)) : null;
       if (problem) return { ok: false, needs: `a combination the pack allows: ${problem}` };
       const value: Record<string, string | string[] | null> = {};
-      for (const a of q.axes ?? []) value[a] = g.values[a] ?? null;
+      for (const a of asked) value[a] = g.values[a] ?? null;
       return { ok: true, body: { value, ...w } };
     }
     case "pick":
@@ -964,7 +1018,7 @@ export const CANDIDATE_KEYS = "zxcv";
 /**
  * The keys that say "can't tell" on an axes question's rows (record 48), one
  * per row: the home row from the left, less `s` (give back) and `h` (the
- * evidence), so `a` on the first row, `d` on the second, then `f`, `g`, `j`,
+ * whole header, or the evidence), so `a` on the first row, `d` on the second, then `f`, `g`, `j`,
  * `k` and `l`. Pressed again it clears.
  */
 export const CANT_TELL_KEYS = "adfgjkl";

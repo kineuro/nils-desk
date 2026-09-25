@@ -4,10 +4,12 @@
 // (the rest one key away), the pace counter, and the order toggle. Terse
 // (record 27), theme tokens only, every act a key.
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Asked, AskedCandidate } from "../review/asked";
 import { CandidateList } from "../review/CandidateList";
 import type { ReviewItem } from "../ops/client";
-import { CANDIDATE_KEYS, lineWords, paceWords, suggestionWords, type AxisLine, type Order, type Pace, type RaterStats as RaterStatsDoc, type Suggestion } from "./reader";
+import type { HeaderDoc } from "./client";
+import { CANDIDATE_KEYS, headerLines, lineWords, paceWords, suggestionWords, type AxisLine, type HeaderLine, type Order, type Pace, type RaterStats as RaterStatsDoc, type Suggestion } from "./reader";
 
 /** The suggestion as a line, and the legal candidates, each with its key, where the systems differ. */
 export function SuggestionBar({ s, chosen, onChoose, busy }: { s: Suggestion; chosen: AskedCandidate | null; onChoose: (c: AskedCandidate) => void; busy: boolean }) {
@@ -205,5 +207,166 @@ export function HeaderValues({ header }: { header: [string, string][] }) {
         </div>
       ))}
     </dl>
+  );
+}
+
+/**
+ * The file's own words beside the pictures (record 48, after the first real
+ * read): the header's text fields a reader reads first, one per line, then
+ * the physics, compact and in monospace. A long value is cut with an
+ * ellipsis and whole on hover; `h` opens the whole header. Shown blind or
+ * not: blind hides NILS's answers, never the file. Where the engine sends no
+ * text or physics, the flat header values it sends stand in.
+ */
+export function HeaderBlock({ lines, flat = [], brief = false }: { lines: HeaderLine[]; flat?: [string, string][]; brief?: boolean }) {
+  // brief beside a suggestion: the lines of the other fields give their room to the candidates, and stay one key away
+  const kept = brief ? lines.filter((l) => l.label !== "more") : lines;
+  const shown: HeaderLine[] = kept.length > 0 ? kept : flat.length > 0 ? [{ key: "flat", label: "header", value: flat.map(([k, v]) => `${k} ${v}`).join("  ") }] : [];
+  if (shown.length === 0) return null;
+  return (
+    <div className="header-block" aria-label="the file's header">
+      {shown.map((l) => (
+        <div key={l.key} className="hb-line" title={`${l.label}: ${l.value}`}>
+          <span className="hb-k">{l.label}</span>
+          <span className="hb-v">{l.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The doors beside the header block: `h` the whole header where the engine serves it, `H` how each axis was decided where it was. */
+export function HeaderDoors({ whole = false, evidence = false, onWhole, onEvidence }: { whole?: boolean; evidence?: boolean; onWhole?: () => void; onEvidence?: () => void }) {
+  if (!whole && !evidence) return null;
+  return (
+    <span className="hb-doors">
+      {whole && (
+        <button type="button" className="link-button" onClick={onWhole}>
+          <kbd>h</kbd>whole header
+        </button>
+      )}
+      {evidence && (
+        <button type="button" className="link-button" onClick={onEvidence}>
+          <kbd>H</kbd>how it was decided
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** The header block's lines from a reading: its text and physics where the engine sends them. */
+export const headerLinesOf = (r: { texts?: Record<string, string>; physics?: Record<string, string | number | (string | number)[]> } | null) => (r ? headerLines(r.texts, r.physics) : []);
+
+const fieldValue = (v: unknown) => (v === null || v === undefined ? "" : Array.isArray(v) ? v.map(String).join("\\") : typeof v === "object" ? JSON.stringify(v) : String(v));
+
+/**
+ * The whole header one key away (record 48): a drawer over the reader with
+ * a compact table of every stored field of one instance, direct identifiers
+ * left out, filtered as one types; Escape or `h` closes it.
+ */
+export function HeaderDrawer({ doc, failed, onClose }: { doc: HeaderDoc | null; failed: string | null; onClose: () => void }) {
+  const [typed, setTyped] = useState("");
+  const input = useRef<HTMLInputElement | null>(null);
+  useEffect(() => input.current?.focus(), []);
+  const rows = useMemo(() => {
+    const t = typed.trim().toLowerCase();
+    const all = doc?.fields ?? [];
+    if (!t) return all;
+    return all.filter((f) => [f.keyword, f.column, f.tag, fieldValue(f.value)].some((x) => typeof x === "string" && x.toLowerCase().includes(t)));
+  }, [doc, typed]);
+  const out = doc?.left_out ?? null;
+  return (
+    <div
+      className="drawer header-drawer"
+      role="dialog"
+      aria-label="the whole header"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" || (e.key === "h" && e.target !== input.current)) {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <div className="drawer-head">
+        <b>Whole header</b>
+        {doc?.instance?.instance_number != null && <span className="meta">instance {doc.instance.instance_number}</span>}
+        <span className="meta">{doc ? `${rows.length} of ${doc.fields.length} fields` : ""}</span>
+        <span className="grow" />
+        <button type="button" className="button quiet small" onClick={onClose}>
+          Close <kbd>Esc</kbd>
+        </button>
+      </div>
+      <span className="input mono drawer-find">
+        <input ref={input} value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="type to filter: a keyword, a tag or a value" aria-label="filter the header" />
+      </span>
+      {failed && <p className="warn">{failed}</p>}
+      {!doc && !failed && <p className="meta">reading the header</p>}
+      {doc && (
+        <div className="drawer-body">
+          <table className="thin header-table">
+            <tbody>
+              {rows.map((f, i) => (
+                <tr key={`${f.tag ?? f.column ?? f.keyword ?? ""}-${i}`}>
+                  <td className="ht-tag">{f.tag ?? ""}</td>
+                  <td className="ht-key">{f.keyword ?? f.column ?? ""}</td>
+                  <td className="ht-value" title={fieldValue(f.value)}>
+                    {fieldValue(f.value)}
+                  </td>
+                  <td className="ht-level">{f.level ?? ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {out && (out.identifying || out.removed) ? (
+        <p className="meta">
+          Left out: {out.identifying ?? 0} identifying, {out.removed ?? 0} removed.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/** The evidence in a drawer over the reader (record 48, one screen): one line per axis and the rest, `H` or Escape closes it. */
+export function EvidenceDrawer({ lines, onClose }: { lines: AxisLine[]; onClose: () => void }) {
+  const box = useRef<HTMLDivElement | null>(null);
+  useEffect(() => box.current?.focus(), []);
+  return (
+    <div
+      ref={box}
+      tabIndex={-1}
+      className="drawer evidence-drawer"
+      role="dialog"
+      aria-label="how it was decided"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" || e.key === "H") {
+          e.preventDefault();
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <div className="drawer-head">
+        <b>How it was decided</b>
+        <span className="grow" />
+        <button type="button" className="button quiet small" onClick={onClose}>
+          Close <kbd>Esc</kbd>
+        </button>
+      </div>
+      <div className="drawer-body">
+        <EvidenceLines lines={lines} open onToggle={onClose} />
+      </div>
+    </div>
+  );
+}
+
+/** The derived axes in one line, live as the answer changes (record 48): the rater's answer carried through the pack. */
+export function DerivedLine({ words }: { words: string | null }) {
+  return (
+    <p className="meta derived-line" role="status" aria-live="polite" title={words ?? undefined}>
+      {words ?? "derived: …"}
+    </p>
   );
 }

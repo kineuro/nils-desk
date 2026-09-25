@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The reader after the first real read (record 48). Blind hides NILS's answers, never the file: a blind item shows the header's text (series description, protocol, sequence name and variant, scanning sequence, acquisition type and scan options, image type, then the other text fields) and the physics (TR, TE, TI, flip angle, echo train, b values, bandwidth and field, then the scanner and the geometry) in a compact monospace block, a long value cut with an ellipsis and whole on hover. `h` opens the whole header of one instance, direct identifiers left out, filtered as one types; Escape closes it. The rater answers only the asked axes: where the question names derived axes, they are never drawn as rows or sent, and a line under the rows shows them live as the engine's derive door computes them from the answer as it stands (can't tell shown as `?`). The adjudicator sees each rater's derived axes beside the answer. An axis or axes question is read on one screen: the three planes on the left, and on the right the header block, compact rows, the derived line, one line saying what will be sent, and the answer. On three rows or more a row's number finds it and its first letters answer it, Enter taking the best match and going on to the next row; a long vocabulary lists its matches only while it is typed into. Can't tell keeps its home-row key and `m` still marks unsure. On an item read in the open the suggestion stays, each candidate on one line, and the evidence opens over the panel on `H`. An engine without the new fields or doors shows the flat header as before, no derived line, and `h` opens the evidence.
+- A layout check in chromium (Playwright) proves the reader fits 1440 by 900 and 1366 by 768 with no page or panel scroll, blind, in the open and on an older engine; CI runs it.
+
 ## [1.0.0-alpha.42] - 2026-09-25
 
 No change of its own. Released beside the engine's 1.0.0-alpha.42 so the two stay in step: a container install names both images with the engine's version. It still speaks the engine's HTTP contract 7 and suite contract 3.

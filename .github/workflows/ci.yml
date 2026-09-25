@@ -64,6 +64,23 @@ jobs:
         run: |
           cargo build
           test -s ../web/dist/index.html
+  layout:
+    # the reader on one screen (record 48): chromium measures the rating page at
+    # 1440 by 900 and 1366 by 768 and refuses any scroll, page or panel
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: the reader fits one screen
+        working-directory: web
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npx playwright test
   build:
     # on main only: the binaries a release of this commit takes
     if: github.event_name == 'push'
