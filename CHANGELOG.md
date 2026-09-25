@@ -4,13 +4,13 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.40] - 2026-09-25
+
+Released beside the engine's 1.0.0-alpha.40: can't tell on each axis and an unsure mark in the reader. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
 ### Added
 
 - Can't tell and unsure in the reader (record 48). Where the engine's axes question names its reserved word for it, every axis row offers "can't tell" beside none, keyed on the home row from the left (`a` on the first row, `d` on the second, then `f`, `g`, `j`, `k`, `l`); pressed again it clears. It is sent as that axis's value, stays apart from none, and is never held to the pack's implications or exclusion groups. Where the answer door takes it, `m` or the Unsure button marks the answer for a second look, sent as `unsure` only when set. A line above the buttons says what will be sent, can't tell and the unsure mark included, on a blind item as on any other. The adjudicator sees can't tell marked on its own and who marked an answer unsure; a rater's can't tell against another's value is a disagreement on that axis. The campaign page counts can't tell per axis and the answers marked unsure. An engine without these fields shows neither control.
-
-## [1.0.0-alpha.40] - 2026-09-25
-
-No change of its own. Released beside the engine's 1.0.0-alpha.40 so the two stay in step: a container install names both images with the engine's version.
 
 ## [1.0.0-alpha.39] - 2026-09-25
 
