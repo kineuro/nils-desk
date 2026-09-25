@@ -21,12 +21,16 @@ import {
   beatEvery,
   campaigns,
   CANDIDATES,
+  CANT_TELL_KEYS,
+  cantTellOf,
   itemWords,
   leaseLeft,
   leaseWords,
   questionWords,
   rateRefusal,
   refused as refusedWords,
+  UNSURE_KEY,
+  unsureOf,
   type Answer,
   type Campaign,
   type Given,
@@ -40,7 +44,7 @@ import { acceptBatch, batchesFor, claimIn, hintOf, R48, readingFor, valueOrderSe
 import { EvidenceLines, HeaderValues, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { StackView } from "./StackView";
 import { warmStack } from "../viewer/prefetch";
-import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, disagreementWords, enterOwnedBy, given as choose, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
+import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, disagreementWords, enterOwnedBy, given as choose, givenCantTell, givenNone, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
 
 type Role = "rater" | "adjudicator";
 
@@ -69,6 +73,8 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const [seat, setSeat] = useState<Seat>({ kind: "claiming" });
   const [g, setG] = useState<Given>({ kind: "none" });
   const [why, setWhy] = useState("");
+  // the rater wants a second look (record 48), sent beside the answer where the engine takes it
+  const [unsure, setUnsure] = useState(false);
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
@@ -158,6 +164,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     const fresh = blank(q);
     setG(fresh);
     setWhy("");
+    setUnsure(false);
     setRefused(null);
     setEvidence(null);
     setPickable(null);
@@ -220,7 +227,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
 
   const answer = useCallback(() => {
     if (!q || !holding || busy) return;
-    const b = bodyOf(q, g, why);
+    const b = bodyOf(q, g, why, unsure);
     if (!b.ok) {
       setRefused(`Needs ${b.needs}.`);
       return;
@@ -244,7 +251,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         setRefused(refusedWords(e));
       })
       .finally(() => setBusy(false));
-  }, [q, holding, busy, g, why, id, claim, suggestion]);
+  }, [q, holding, busy, g, why, unsure, id, claim, suggestion]);
 
   // the batches of like stacks (record 48 R1)
   const batchesOffered = served(caps, R48.batches) && (q?.kind === "axis" || q?.kind === "axes") && role === "rater";
@@ -358,6 +365,8 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       } else if (act.kind === "evidence") k.toggleEvidence();
       else if (act.kind === "reset") setG(k.suggested ?? blank(k.q));
       else if (act.kind === "batch") k.openBatches();
+      else if (act.kind === "cant_tell") setG((was) => givenCantTell(k.q!, was, act.row.axis));
+      else if (act.kind === "unsure") setUnsure((x) => !x);
       else if (act.kind === "answer") k.answer();
       else if (act.kind === "skip") k.giveBack("next");
       else if (act.kind === "keys") setKeys((x) => !x);
@@ -382,6 +391,8 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       rows={rows}
       given={g}
       why={why}
+      unsure={unsure}
+      onUnsure={() => setUnsure((x) => !x)}
       marks={role === "adjudicator" && item && q ? marksOf(q, answers, item.id) : {}}
       split={role === "adjudicator" && item && q ? disagreementWords(q, answers, item.id) : null}
       raterAnswers={role === "adjudicator" && item ? answers.filter((a) => a.item_id === item.id && a.role === "rater") : []}
@@ -460,6 +471,9 @@ export interface WorkspaceBodyProps {
   rows: Row[];
   given: Given;
   why: string;
+  /** The unsure mark (record 48), shown where the engine takes it. */
+  unsure?: boolean;
+  onUnsure?: () => void;
   marks: Marks;
   split: string | null;
   raterAnswers: Answer[];
@@ -512,6 +526,8 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
   const holding = seat.kind === "holding" ? seat : null;
   const left = holding ? leaseLeft(holding.assignment, p.now) : null;
   const facts = factsOf(p.evidence);
+  // the answer about to be sent, the unsure mark apart as a tag
+  const pending = holding ? pendingWords(q, p.given) : null;
   return (
     <section className="data campaign-rate">
       <div className="data-head">
@@ -612,6 +628,7 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
                     <li key={a.id}>
                       <b>{a.principal}</b> {answerWords(a)}
                       {a.author_kind !== "person" && <span className="tag caution">{a.author_kind}</span>}
+                      {a.unsure && <span className="tag caution">unsure</span>}
                       {a.why && <span className="meta"> · {a.why}</span>}
                     </li>
                   ))}
@@ -625,6 +642,17 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
                 <input value={p.why} onChange={(e) => p.onWhy(e.target.value)} placeholder={role === "adjudicator" ? "what settles it" : ""} />
               </span>
             </label>
+            {pending !== null && (
+              <p className="meta pending">
+                Sends: {pending}
+                {p.unsure && unsureOf(q) && (
+                  <>
+                    {" "}
+                    <span className="tag caution">unsure</span>
+                  </>
+                )}
+              </p>
+            )}
             {p.refused && <p className="warn">{p.refused}</p>}
             <div className="row actions">
               <button type="button" className="button" disabled={p.busy} onClick={p.onAnswer}>
@@ -633,6 +661,11 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
               <button type="button" className="button secondary" disabled={p.busy} onClick={p.onSkip} title="Back to the pool for others; never to you again">
                 Give back <kbd>s</kbd>
               </button>
+              {unsureOf(q) && (
+                <button type="button" className={p.unsure ? "opt on" : "opt"} aria-pressed={p.unsure ?? false} disabled={p.busy} onClick={p.onUnsure} title="Answered, and wants a second look">
+                  Unsure <kbd>{UNSURE_KEY}</kbd>
+                </button>
+              )}
               <span className="grow" />
               <button type="button" className="button quiet" disabled={p.busy} onClick={p.onStop}>
                 Stop
@@ -641,7 +674,7 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
                 <kbd>?</kbd>
               </button>
             </div>
-            {p.keys && <KeyList rows={p.rows.length} reader={q.kind === "axis" || q.kind === "axes"} candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} />}
+            {p.keys && <KeyList rows={p.rows.length} reader={q.kind === "axis" || q.kind === "axes"} candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} cantTell={cantTellOf(q) !== null ? p.rows.length : 0} unsure={unsureOf(q)} />}
           </div>
         </div>
       )}
@@ -662,6 +695,8 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
             chosen={chosenOf(q, g)}
             marks={p.marks}
             none={q.kind === "axes"}
+            cantTell={cantTellOf(q)}
+            onCantTell={(axis) => p.onGiven(givenCantTell(q, g, axis))}
             onChoose={(axis, value) => p.onGiven(choose(q, g, p.rows.find((r) => r.axis === axis)!, value))}
             onNone={(axis) => p.onGiven(givenNone(g, axis))}
           />
@@ -694,7 +729,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
   }
 }
 
-function KeyList({ rows, reader = false, candidates = 0, batches = false }: { rows: number; reader?: boolean; candidates?: number; batches?: boolean }) {
+function KeyList({ rows, reader = false, candidates = 0, batches = false, cantTell = 0, unsure = false }: { rows: number; reader?: boolean; candidates?: number; batches?: boolean; cantTell?: number; unsure?: boolean }) {
   return (
     <dl className="facts keys">
       {reader && (
@@ -737,6 +772,18 @@ function KeyList({ rows, reader = false, candidates = 0, batches = false }: { ro
         <div className="facts-pair">
           <dt>q to p</dt>
           <dd>a value on the second row</dd>
+        </div>
+      )}
+      {cantTell > 0 && (
+        <div className="facts-pair">
+          <dt>{CANT_TELL_KEYS.slice(0, cantTell).split("").join(" ")}</dt>
+          <dd>can&apos;t tell on the first row, the second, and on; again clears it</dd>
+        </div>
+      )}
+      {unsure && (
+        <div className="facts-pair">
+          <dt>{UNSURE_KEY}</dt>
+          <dd>mark it unsure, for a second look</dd>
         </div>
       )}
       <div className="facts-pair">
