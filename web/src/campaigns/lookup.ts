@@ -170,8 +170,9 @@ export function implied(c: AxesConstraints, chosen: Values, axes: string[], mult
 
 /**
  * Why the pack forbids a joint answer, in a few words, or null: two values
- * of one exclusion group, or an implication whose condition holds and whose
- * value the answer lacks. The engine's check (legalProblem) says the same at
+ * of one exclusion group, an implication whose condition holds and whose
+ * value the answer lacks, or an exclusion between axes (record 48) whose
+ * condition holds and whose value the answer has. The engine's check (legalProblem) says the same at
  * length; this is what a greyed value says on hover.
  */
 export function conflictOf(c: AxesConstraints, joint: Joint): string | null {
@@ -192,6 +193,11 @@ export function conflictOf(c: AxesConstraints, joint: Joint): string | null {
       if (!held || held.includes(t.value)) continue;
       return `${conditionWords(imp.when)} sets ${t.axis} ${t.value}`;
     }
+  }
+  for (const x of c.excludes ?? []) {
+    if (holds(x.when, a) !== true) continue;
+    const bad = (a[x.axis] ?? []).find((v) => x.values.includes(v));
+    if (bad !== undefined) return `${conditionWords(x.when)} rules out ${x.axis} ${bad}${x.why ? ` (${x.why})` : ""}`;
   }
   return null;
 }

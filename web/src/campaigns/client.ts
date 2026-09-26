@@ -58,13 +58,35 @@ export interface Question {
   vocabulary?: Record<string, Record<string, { label?: string; description?: string; terms?: string[]; keywords?: string[] }>>;
 }
 
-/** What an axes question holds its answers to: each asked axis's values, the multi-valued axes, the exclusion groups and the pack's implications. */
+/** What an axes question holds its answers to: each asked axis's values, the multi-valued axes, the exclusion groups, the pack's implications and, since pack contract 6 (record 48), its exclusions between axes and its hints. */
 export interface AxesConstraints {
   pack?: string;
   values?: Record<string, string[]>;
   multi?: string[];
   groups?: Record<string, Record<string, string[]>>;
   implications?: { rule?: string; when: Condition; then: { axis: string; value: string; when?: Condition | null }[] }[];
+  /** Hard: where `when` holds, none of `values` may hold on `axis`. Absent on a campaign made before them. */
+  excludes?: Exclude[];
+  /** Soft: where `when` holds, `value` is what is usual on `axis`, and `why` says why and where it is not. Shown, never enforced. */
+  hints?: Hint[];
+}
+
+/** One exclusion between axes (record 48): a value on one axis ruling values of another out. */
+export interface Exclude {
+  id: string;
+  when: Condition;
+  axis: string;
+  values: string[];
+  why?: string;
+}
+
+/** One hint (record 48): what is usual on an axis where a condition holds, with its reason. */
+export interface Hint {
+  id: string;
+  when: Condition;
+  axis: string;
+  value: string;
+  why?: string;
 }
 
 /** The pack's condition language over axis values: true, false, {axis, is}, {axis, missing_or}, {all}, {any}, {not}. */
@@ -924,8 +946,9 @@ export function conditionWords(c: Condition | null | undefined): string {
 
 /**
  * Why the pack forbids an answer, or null while it allows it, as the engine
- * checks it: at most one member of an exclusion group, and what a rule whose
- * condition holds sets. Shown as the person chooses, so a refusal is rare.
+ * checks it: at most one member of an exclusion group, what a rule whose
+ * condition holds sets, and none of what an exclusion between axes whose
+ * condition holds rules out. Shown as the person chooses, so a refusal is rare.
  */
 export function legalProblem(c: AxesConstraints, joint: Joint): string | null {
   // an axis said to be can't tell names nothing, as an axis not chosen yet
@@ -947,7 +970,23 @@ export function legalProblem(c: AxesConstraints, joint: Joint): string | null {
       if (!held.includes(t.value)) return `the pack's rule ${imp.rule ?? ""} sets ${t.axis} to ${t.value} when ${conditionWords(imp.when)}, and the answer says ${t.axis} is ${held.length === 0 ? "nothing" : held.join(", ")}`.replace("rule  sets", "rule sets");
     }
   }
+  for (const x of c.excludes ?? []) {
+    if (holds(x.when, a) !== true) continue;
+    const bad = (a[x.axis] ?? []).find((v) => x.values.includes(v));
+    if (bad !== undefined) return `the pack rules ${x.axis} ${bad} out when ${conditionWords(x.when)}${x.why ? `: ${x.why}` : ""}`;
+  }
   return null;
+}
+
+/**
+ * The pack's hints that hold for a joint answer (record 48): where a hint's
+ * condition holds and the answer does not already hold its value, what is
+ * usual there and why. Never a refusal; an axis said can't tell names
+ * nothing, as an axis not chosen yet.
+ */
+export function hintsFor(c: AxesConstraints, joint: Joint): Hint[] {
+  const a: Joint = Object.fromEntries(Object.entries(joint).filter(([, v]) => !(v.length === 1 && v[0] === CANT_TELL)));
+  return (c.hints ?? []).filter((h) => holds(h.when, a) === true && !(a[h.axis] ?? []).includes(h.value));
 }
 
 /** What a form still needs, in words, or null when it fits the schema. */

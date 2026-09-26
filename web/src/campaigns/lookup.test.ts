@@ -111,6 +111,24 @@ describe("what a choice settles", () => {
     expect(settle({ kind: "axis", axis: "base" } as Question, { kind: "value", value: "T1w" }, rows).implied).toEqual({});
   });
 
+  it("greys what an exclusion between axes rules out, and says why (record 48)", () => {
+    const x: Question = {
+      ...QUESTION,
+      constraints: {
+        ...QUESTION.constraints!,
+        excludes: [{ id: "swi-construct-not-spin-echo", when: { axis: "construct", is: "SWI" }, axis: "technique", values: ["TSE", "3D-TSE", "SE"], why: "SWI needs gradient-echo phase" }],
+      },
+    };
+    const s = settle(x, given({ construct: ["SWI"] }), rows);
+    expect(s.excluded.technique.TSE).toBe("construct is SWI rules out technique TSE (SWI needs gradient-echo phase)");
+    expect(s.excluded.technique.GRE).toBeUndefined();
+    // the other way round: a spin echo chosen greys SWI on the construct row
+    expect(settle(x, given({ technique: "TSE" }), rows).excluded.construct.SWI).toContain("rules out technique TSE");
+    expect(illegal(x, given({ construct: ["SWI"], technique: "SE" }))).toContain("the pack rules technique SE out when construct is SWI");
+    // a campaign frozen before exclusions greys nothing for them
+    expect(settle(QUESTION, given({ construct: ["SWI"] }), rows).excluded.technique?.TSE).toBeUndefined();
+  });
+
   it("says in a few words why a joint answer cannot hold", () => {
     const c = QUESTION.constraints!;
     expect(conflictOf(c, { technique: ["MPRAGE"], base: ["T2w"] })).toBe("technique is MPRAGE sets base T1w");
