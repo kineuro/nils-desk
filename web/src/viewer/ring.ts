@@ -6,7 +6,8 @@
 // three planes (record 45 S2) the level the volume is held at and the order
 // its slabs are fetched in. Pure, so the gate can hold them.
 
-import { levelShape, type Manifest } from "./doors";
+import { levelShape, levelSpacing, type Manifest } from "./doors";
+import { geometry, volumeGrid } from "./geometry";
 
 export const SLAB = 32;
 
@@ -86,8 +87,12 @@ export interface VolumePlan {
 
 /** The level rule: the finest level whose planes fit the card and whose volume fits the budget; null when none does. */
 export function volumeLevel(m: Manifest, budget = VOLUME_BUDGET, max3d = 2048): VolumePlan | null {
+  const g = geometry(m);
   for (let level = 0; level < m.levels; level++) {
-    const [nz, ny, nx] = levelShape(m, level);
+    const shape = levelShape(m, level);
+    const nz = shape[0];
+    // a sheared stack's grid is wider by its planes' drift (geometry.ts, volumeGrid)
+    const [nx, ny] = volumeGrid(g, shape, levelSpacing(m, 0), level).size;
     if (ny > max3d || nx > max3d) continue;
     const stride = Math.max(1, Math.ceil(nz / max3d));
     const depth = Math.ceil(nz / stride);

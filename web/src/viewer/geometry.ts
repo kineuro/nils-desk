@@ -23,6 +23,15 @@ export interface Geometry {
   known: boolean;
   /** False when the engine says the planes are not parallel or not evenly spaced. */
   regular: boolean;
+  /** The step from one plane to the next at level 0, mm: the manifest's `step`, else the normal by the spacing. */
+  step: Vec3;
+  /**
+   * A sheared stack's shift in its own plane from one plane to the next, mm
+   * along the row and the column; null when the step is along the normal
+   * (the whole stack drifts less than a tenth of a pixel) or the planes are
+   * not parallel, as the engine reads it.
+   */
+  shear: [number, number] | null;
 }
 
 export function cross(a: Vec3, b: Vec3): Vec3 {
@@ -56,12 +65,29 @@ export function geometry(m: Manifest): Geometry {
   const colIn = Array.isArray(o) && o.length === 6 ? vec3(o.slice(3, 6)) : null;
   const origin = vec3(m.origin) ?? [0, 0, 0];
   const regular = regularFrame(m.frame);
+  const dz = Array.isArray(m.spacing) && Number.isFinite(m.spacing[0]) ? m.spacing[0] : 1;
   if (m.orientation_known === false || !rowIn || !colIn || Math.abs(dot(norm(rowIn), norm(colIn))) > 0.01) {
-    return { row: [1, 0, 0], col: [0, 1, 0], normal: [0, 0, 1], origin, known: false, regular };
+    return { row: [1, 0, 0], col: [0, 1, 0], normal: [0, 0, 1], origin, known: false, regular, step: [0, 0, dz], shear: null };
   }
   const row = norm(rowIn);
   const col = norm(colIn);
-  return { row, col, normal: norm(cross(row, col)), origin, known: true, regular };
+  const normal = norm(cross(row, col));
+  const stepIn = vec3(m.step);
+  // a step that runs against the normal or along the plane is not the engine's: read as along the normal
+  const step: Vec3 = stepIn && dot(stepIn, normal) > 1e-6 ? stepIn : [normal[0] * dz, normal[1] * dz, normal[2] * dz];
+  // planes that are not parallel are not one volume, and not a shear
+  const parallel = !(m.frame && typeof m.frame === "object" && m.frame.parallel === false) && m.frame !== false;
+  return { row, col, normal, origin, known: true, regular, step, shear: parallel ? shearOf(row, col, step, m) : null };
+}
+
+/** The shift in the plane per plane, when the whole stack drifts a tenth of a pixel or more (the engine's rule). */
+function shearOf(row: Vec3, col: Vec3, step: Vec3, m: Manifest): [number, number] | null {
+  const a = dot(step, row);
+  const b = dot(step, col);
+  const gaps = Math.max(0, (m.shape?.[0] ?? 1) - 1);
+  const [, dy, dx] = m.spacing;
+  const drift = Math.hypot((a * gaps) / Math.max(dx, 1e-9), (b * gaps) / Math.max(dy, 1e-9));
+  return drift >= 0.1 ? [a, b] : null;
 }
 
 /** A pyramid level's pixel is the mean of a 2^level square of level 0's, so its centre sits half a square in. */
@@ -71,10 +97,72 @@ export function levelOrigin(g: Geometry, spacing: [number, number, number], leve
   return [0, 1, 2].map((i) => g.origin[i] + g.row[i] * dx * shift + g.col[i] * dy * shift) as Vec3;
 }
 
-/** The position of plane z at a level (every level keeps every plane). */
+/** The position of plane z at a level (every level keeps every plane): the origin and z steps, which a sheared stack takes partly in its plane. */
 export function planePosition(g: Geometry, spacing: [number, number, number], level: number, z: number): Vec3 {
   const o = levelOrigin(g, spacing, level);
-  return [0, 1, 2].map((i) => o[i] + g.normal[i] * spacing[0] * z) as Vec3;
+  return [0, 1, 2].map((i) => o[i] + g.step[i] * z) as Vec3;
+}
+
+/**
+ * The volume cornerstone holds for a level: a grid square to the stack's
+ * rows, columns and normal. A sheared stack's planes shift in their plane
+ * as they go, so its grid is wider by that drift and each plane is written
+ * shifted into it (`shift`, in the level's pixels, never negative), which
+ * puts every voxel where the planes' positions say, as dcm2niix does with a
+ * tilted gantry; a stack that is not sheared is its planes as they are.
+ */
+export interface Grid {
+  /** [nx, ny] of a plane in the grid. */
+  size: [number, number];
+  /** [dx, dy, dz] in mm, dz along the normal. */
+  spacing: [number, number, number];
+  origin: Vec3;
+  direction: [Vec3, Vec3, Vec3];
+  /** Where plane z of the level lands in the grid, in its pixels; [0, 0] unless sheared. */
+  shift: (z: number) => [number, number];
+}
+
+export function volumeGrid(g: Geometry, shape: [number, number, number], spacing: [number, number, number], level: number): Grid {
+  const [nz, ny, nx] = shape;
+  const f = 2 ** level;
+  const [dx, dy] = [spacing[2] * f, spacing[1] * f];
+  const dz = dot(g.step, g.normal);
+  const o = levelOrigin(g, spacing, level);
+  const direction: [Vec3, Vec3, Vec3] = [g.row, g.col, g.normal];
+  if (!g.shear) return { size: [nx, ny], spacing: [dx, dy, dz], origin: o, direction, shift: () => [0, 0] };
+  // the shift per plane in the level's pixels, and how far the first plane sits in so none is cut
+  const sx = g.shear[0] / dx;
+  const sy = g.shear[1] / dy;
+  const gaps = Math.max(0, nz - 1);
+  const offx = Math.max(0, -sx * gaps);
+  const offy = Math.max(0, -sy * gaps);
+  const size: [number, number] = [nx + Math.ceil(Math.abs(sx) * gaps - 1e-9), ny + Math.ceil(Math.abs(sy) * gaps - 1e-9)];
+  const origin = [0, 1, 2].map((i) => o[i] - g.row[i] * dx * offx - g.col[i] * dy * offy) as Vec3;
+  return { size, spacing: [dx, dy, dz], origin, direction, shift: (z) => [offx + sx * z, offy + sy * z] };
+}
+
+/** A plane written into a wider one at a fractional shift, linear between its four neighbours, nothing outside it. */
+export function shiftInto(src: ArrayLike<number>, nx: number, ny: number, dst: Uint16Array, at: number, NX: number, NY: number, ox: number, oy: number): void {
+  const ix = Math.floor(ox);
+  const iy = Math.floor(oy);
+  const fx = ox - ix;
+  const fy = oy - iy;
+  const v = (i: number, j: number) => (i < 0 || j < 0 || i >= nx || j >= ny ? 0 : src[j * nx + i]);
+  for (let J = 0; J < NY; J++) {
+    // dst (I, J) is src at (I - ox, J - oy): between (I - ix - 1, J - iy - 1) and (I - ix, J - iy)
+    const j1 = J - iy;
+    const j0 = j1 - 1;
+    if (j0 >= ny || j1 < 0) {
+      dst.fill(0, at + J * NX, at + (J + 1) * NX);
+      continue;
+    }
+    for (let I = 0; I < NX; I++) {
+      const i1 = I - ix;
+      const i0 = i1 - 1;
+      const val = v(i0, j0) * fx * fy + v(i1, j0) * (1 - fx) * fy + v(i0, j1) * fx * (1 - fy) + v(i1, j1) * (1 - fx) * (1 - fy);
+      dst[at + J * NX + I] = Math.round(val);
+    }
+  }
 }
 
 /** DICOM's patient axes: +x is the patient's left, +y posterior, +z superior (head). */

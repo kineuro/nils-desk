@@ -48,6 +48,14 @@ export interface Manifest {
   /** Record 45 E2: the patient plane nearest the stack's, and whether the stack is oblique to it. */
   plane?: string;
   oblique?: boolean;
+  /**
+   * The mean step from one plane to the next in the patient, mm, from the
+   * planes' positions: along the normal by spacing[0] for most stacks, with
+   * a part in the plane where the acquisition was sheared (a tilted gantry,
+   * a slab whose planes shift as they go). Absent before, read as along the
+   * normal.
+   */
+  step?: number[] | null;
 }
 
 /** A modality value as the planes store it: the manifest's value is stored * slope + intercept (record 45 E2). */

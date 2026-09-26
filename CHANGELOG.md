@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- A sheared stack's three planes show it where its planes are. The viewer reads the manifest's `step` (the engine's mean step from one plane to the next, from the planes' positions) and, where the step has a part in the plane (a tilted gantry, a slab whose planes shift as they go), holds the volume in a grid square to the stack's rows, columns and normal, wider by the planes' drift, each plane written into it at its own shift, as dcm2niix places such a stack. Before, the planes were stacked one above the other along the normal, and a head acquired with a 20 degree shear leaned by up to 36 degrees on the sagittal. The stack view places each plane at its own position too. A manifest without `step` reads as before.
+- Checks: unit tests on the step, the shear rule (a tenth of a pixel over the stack, as the engine reads it), the grid at every level for a forward and a backward shear, the shifted plane, and a synthetic head resampled through the grid; and in chromium, cornerstone drawing a head-like ellipsoid sampled at the true voxels of a gantry-tilted axial, an oblique axial of 0.5 x 0.5 x 5 mm voxels, a double oblique with an 18 degree shear and a sagittal running right to left, read back from the canvas: in both the stack's planes and the scanner's axes every plane is upright (within 1.5 degrees), in proportion (within 4 percent) and whole, the head's cap at the top; held unshifted, the same stacks fail it.
+
 ## [1.0.0-alpha.46] - 2026-09-26
 
 Released beside the engine's 1.0.0-alpha.46: the gallery, a hundred of a single-axis campaign's items checked at once with the value suggested, who suggested it and how sure, and accepted in one move, and a campaign's page that counts its suggestions from outside and brings more in from a file. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
