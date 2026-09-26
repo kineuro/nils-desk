@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.45] - 2026-09-26
+
+Released beside the engine's 1.0.0-alpha.45: the desk takes the whole screen, the reader's planes are cut along the stack's own axes with the scanner's axes one click away, the reader has compact and expanded rows and moves on to the next unanswered axis, and it holds an answer to the pack's exclusions between axes and shows its hints. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
+### Added
+
+- The reader holds an answer to the pack's exclusions between axes (pack contract 6, the MRI pack 0.6.0). An answer that holds both sides of an exclusion is refused with its reason, as the engine refuses it, and what an exclusion rules out is greyed on both rows with the reason on hover. A hint whose condition holds and whose value the answer does not hold yet is shown under the rows and never refuses an answer. A campaign made before the pack said either reads as before.
+
 ### Changed
 
 - The desk takes the window's width on any screen (record 48, after the learners report). No page is held to a fixed width any more (Home, Data, Query, Review, Campaigns, Pipelines, Settings and the rest); only running text keeps a readable measure. The layout check measures every section at 1366 by 768, 1440 by 900, 1920 by 1080 and 2560 by 1440.
