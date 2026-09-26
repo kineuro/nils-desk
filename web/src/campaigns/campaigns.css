@@ -214,3 +214,37 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .keys-drawer { inset: auto 0 2.6rem 0; max-height: calc(100% - 2.6rem); overflow: auto; }
 .keys-drawer dl.facts { gap: 0.15rem 0.8rem; }
 
+
+/* The gallery (record 50 R3): a hundred items of a one-axis campaign, each
+   small with its suggestion and how sure, checked at a glance and accepted
+   in one move. The page is the window's height; the grid scrolls inside it,
+   the bar with the accept stays in view. */
+.page:has(.gallery-page) { display: flex; flex-direction: column; padding: 0.6rem 1.1rem 0.7rem; overflow: hidden; }
+.gallery-page { display: flex; flex-direction: column; gap: 0.45rem; flex: 1; min-height: 0; }
+.gallery-head { display: flex; align-items: baseline; gap: 0.7rem; flex-wrap: wrap; }
+.gallery-head h1 { font-size: 1.25rem; line-height: 1.2; }
+.gallery-bar { display: flex; align-items: center; gap: 0.6rem 0.9rem; flex-wrap: wrap; padding: 0.35rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.gallery-bar kbd, .g-order kbd { display: inline-block; min-width: 1.1em; margin-right: 0.3rem; padding: 0 0.25rem; border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: var(--n-radius); background: var(--n-bg-raised); font-family: var(--n-font-mono); font-size: 11px; line-height: 1.35; text-align: center; color: var(--n-text-faint); }
+.gallery-bar .button kbd { margin: 0 0 0 0.3rem; background: transparent; color: inherit; border-color: currentColor; opacity: 0.7; }
+.g-order { display: inline-flex; align-items: center; gap: 0.35rem; }
+.g-keys { display: inline-flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; }
+.g-key { white-space: nowrap; }
+.g-tally { font-size: var(--n-text-size-small); font-variant-numeric: tabular-nums; color: var(--n-text-faint); }
+.g-tally b { color: var(--n-text); }
+.g-said { margin: 0; }
+.gallery-grid { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); gap: 0.5rem; align-content: start; padding: 2px; }
+.g-group-head { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.5rem; padding-top: 0.3rem; }
+.g-cell { display: grid; gap: 0.2rem; padding: 0.3rem; border: 2px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); cursor: pointer; min-width: 0; }
+.g-cell.g-low { border-color: var(--n-caution-line); }
+.g-cell.g-none { border-style: dashed; }
+.g-cell.changed { border-color: var(--n-brand-icon); background: var(--n-bg-sunken); }
+.g-cell.focused { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.g-pic { display: flex; justify-content: center; align-items: center; height: 96px; overflow: hidden; background: var(--n-bg-sunken); border-radius: var(--n-radius); }
+.g-pic img { max-width: 100%; max-height: 96px; height: auto; image-rendering: auto; }
+.g-line { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.g-pick { flex: 1; min-width: 0; font-size: 13px; }
+.g-conf { font-variant-numeric: tabular-nums; font-size: 12px; color: var(--n-text-faint); white-space: nowrap; }
+.g-low .g-conf { color: var(--n-caution-fg); }
+.g-by { display: flex; gap: 0.4rem; justify-content: space-between; font-size: 11px; color: var(--n-text-faint); min-width: 0; white-space: nowrap; overflow: hidden; }
+.g-by > span { overflow: hidden; text-overflow: ellipsis; }
+.g-was s { color: var(--n-text-faint); }

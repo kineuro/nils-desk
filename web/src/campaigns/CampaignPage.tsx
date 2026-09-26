@@ -46,6 +46,8 @@ import { StateBar, Tabs } from "./parts";
 import type { RaterStats as Pace } from "./reader";
 import { R48, statsFor } from "./readerDoors";
 import { RaterStats } from "./ReaderParts";
+import { galleryOffered } from "./gallery";
+import { Suggestions } from "./Suggestions";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -70,6 +72,7 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   const c = load.c;
   return (
     <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} stats={load.stats} said={said} missing={missing} onAct={setActing}>
+      <Suggestions caps={caps} campaign={c} />
       {acting === "close" && (
         <CloseDialog
           campaign={c}
@@ -141,6 +144,11 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
         {rate && (
           <a className="button" href={href("campaigns", String(c.id), "rate")}>
             Rate
+          </a>
+        )}
+        {rate && galleryOffered(caps, c.question) && (
+          <a className="button secondary" href={href("campaigns", String(c.id), "gallery")} title="a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move">
+            Gallery
           </a>
         )}
         {adjudicate && (

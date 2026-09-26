@@ -5,6 +5,7 @@
 //   #campaigns/<id>             one campaign
 //   #campaigns/<id>/rate        the rating workspace
 //   #campaigns/<id>/adjudicate  the adjudicator's view
+//   #campaigns/<id>/gallery     a hundred items of a one-axis campaign at once (record 50)
 //   #campaigns/label-sets[/<n>] the label sets, or one
 
 import { useEffect, useState } from "react";
@@ -31,6 +32,7 @@ import {
 } from "./client";
 import { LabelSetPage, LabelSetsPage } from "./LabelSets";
 import { MakeDialog } from "./MakeCampaign";
+import { Gallery } from "./Gallery";
 import { Workspace } from "./Workspace";
 import "./campaigns.css";
 
@@ -39,6 +41,7 @@ export function CampaignsPage({ caps, page, arg, query }: { caps: Capabilities; 
   if (page && /^\d+$/u.test(page)) {
     if (arg === "rate") return <Workspace key={`${page}/rate`} caps={caps} id={page} role="rater" />;
     if (arg === "adjudicate") return <Workspace key={`${page}/adj`} caps={caps} id={page} role="adjudicator" />;
+    if (arg === "gallery") return <Gallery key={`${page}/gallery`} caps={caps} id={page} />;
     return <CampaignPage caps={caps} id={page} missing={query?.missing && /^\d+$/u.test(query.missing) ? Number(query.missing) : null} />;
   }
   return <ListPage caps={caps} prefill={prefillOf(query)} />;
