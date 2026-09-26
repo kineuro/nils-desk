@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.46] - 2026-09-26
+
+Released beside the engine's 1.0.0-alpha.46: the gallery, a hundred of a single-axis campaign's items checked at once with the value suggested, who suggested it and how sure, and accepted in one move, and a campaign's page that counts its suggestions from outside and brings more in from a file. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
 ### Added
 
 - The gallery (record 50), for a campaign that asks one axis such as body part: `#campaigns/<id>/gallery`, opened by Gallery on the campaign's page. A hundred items at once, each a small picture of its stack (its own plane and the two across it) with the value suggested, who suggested it (v0's labels, a model, or the engine's rules) and how sure, the least certain first or grouped by suggestion. A number key or the item's picker corrects an item, a group the suggester read wrong is set in one move, and Accept all as shown (Ctrl+Enter) sends every item's own value; each is still its own answer by the person, with the suggestion kept beside it. The next hundred pictures load while the first are checked. Sealed items and the share the campaign holds back are never in it; they are read one by one. Needs the engine's gallery doors.
