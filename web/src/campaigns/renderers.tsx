@@ -118,6 +118,13 @@ const NOTHING_SETTLED: RowsSettled = { implied: {}, excluded: {}, noneExcluded: 
  * choice implies is filled in and marked implied, held until that choice
  * changes; a value that can no longer hold is greyed, says why on hover and
  * cannot be taken; can't tell is always open.
+ *
+ * After the learners report: `find` draws every row as a find box (the
+ * compact view), what is chosen or implied beside it as chips; without it
+ * the short rows are drawn whole (the expanded view). A value taken from a
+ * row's list, by Enter or by a click, clears the box, and the focus goes on
+ * to the next row still unanswered; a multi-valued row keeps the focus for
+ * another value until Enter on an empty box or Tab.
  */
 export function CompactRows({
   rows,
@@ -126,11 +133,14 @@ export function CompactRows({
   none = false,
   cantTell = null,
   settled = NOTHING_SETTLED,
+  find = false,
   onChoose,
   onNone,
   onCantTell,
 }: {
   rows: Row[];
+  /** Every row a find box (the compact view), not only the long ones. */
+  find?: boolean;
   /** The answer as it stands, what is implied filled in. */
   chosen: Record<string, string | string[] | null>;
   marks?: Marks;
@@ -150,6 +160,18 @@ export function CompactRows({
     const next = rows[n];
     if (next) inputs.current[next.axis]?.focus();
     else inputs.current[rows[n - 1]?.axis ?? ""]?.blur();
+  };
+  // a row is answered once it holds a value, none, can't tell, or what another choice implies
+  const answered = (axis: string) => {
+    const v = chosen[axis];
+    return v === null || (typeof v === "string" && v !== "") || (Array.isArray(v) && v.length > 0);
+  };
+  /** On from row n to the next row still unanswered, after it and then before it; out of the rows when every one is answered. */
+  const goOn = (n: number) => {
+    const order = [...rows.keys()].filter((i) => i > n).concat([...rows.keys()].filter((i) => i < n));
+    const next = order.find((i) => !answered(rows[i].axis));
+    if (next !== undefined) inputs.current[rows[next].axis]?.focus();
+    else inputs.current[rows[n]?.axis ?? ""]?.blur();
   };
   const impliedOf = (axis: string, v: string) => settled.implied[axis]?.values.includes(v) ?? false;
   const outOf = (axis: string, f: Found): string | null => (f.kind === "value" ? (settled.excluded[axis]?.[f.value] ?? null) : f.kind === "none" ? (settled.noneExcluded[axis] ?? null) : null);
@@ -185,10 +207,10 @@ export function CompactRows({
       if (t !== "" && found[i]) {
         if (!take(r, found[i])) return;
         clear();
-        if (!r.multi || found[i].kind !== "value") go(n + 1);
+        if (!r.multi || found[i].kind !== "value") goOn(n);
       } else {
         clear();
-        go(n + 1);
+        goOn(n);
       }
     } else if (e.key === "Tab") {
       e.preventDefault();
@@ -212,7 +234,7 @@ export function CompactRows({
     <div className="axis-rows compact">
       {rows.map((r, n) => {
         const on = chosen[r.axis];
-        const long = r.values.length > LONG_ROW;
+        const long = find || r.values.length > LONG_ROW;
         const t = typed[r.axis] ?? "";
         const open = finding === r.axis;
         const found = open ? matchesOf(r, t) : [];
@@ -221,7 +243,13 @@ export function CompactRows({
         const matches = (v: string) => !open || t === "" || found.some((f) => f.kind === "value" && f.value === v);
         const picked = (v: string) => (Array.isArray(on) ? on.includes(v) : on === v);
         const implied = settled.implied[r.axis];
-        const chip = (value: string, via?: string) => {
+        // a value taken from the row's list: the box clears, and a single-valued row goes on
+        const fromList = () => {
+          setTyped((x) => ({ ...x, [r.axis]: "" }));
+          setAt((x) => ({ ...x, [r.axis]: 0 }));
+          if (!r.multi) goOn(n);
+        };
+        const chip = (value: string, via?: string, listed = false) => {
           const who = marks[r.axis]?.[value] ?? [];
           const f: Found = { kind: "value", value };
           const out = settled.excluded[r.axis]?.[value] ?? null;
@@ -252,6 +280,7 @@ export function CompactRows({
                 }
                 setTold((x) => ({ ...x, [r.axis]: "" }));
                 onChoose(r.axis, value);
+                if (listed) fromList();
               }}
               title={title.length > 0 ? title.join(" · ") : undefined}
             >
@@ -327,7 +356,7 @@ export function CompactRows({
             </span>
             {long && open && (
               <span className="axis-pop" role="listbox" aria-label={`values of ${r.axis}`}>
-                {found.filter((f): f is { kind: "value"; value: string; via?: string } => f.kind === "value").map((f) => chip(f.value, f.via))}
+                {found.filter((f): f is { kind: "value"; value: string; via?: string } => f.kind === "value").map((f) => chip(f.value, f.via, true))}
                 {found.length === 0 && <span className="meta">no name begins or holds “{t}”</span>}
               </span>
             )}

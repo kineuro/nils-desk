@@ -36,3 +36,11 @@
 .tile-caption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .tile-plane { color: var(--n-text-faint); }
 .tiles { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+
+/* how the planes are cut (record 48): the stack's own planes or the scanner's axes, one pair of buttons */
+.viewer-cut { display: inline-flex; gap: 0; margin-left: 0.4rem; }
+.viewer-axes .viewer-cut button { border-radius: 0; }
+.viewer-axes .viewer-cut button:first-child { border-radius: var(--n-radius) 0 0 var(--n-radius); }
+.viewer-axes .viewer-cut button:last-child { border-left: 0; border-radius: 0 var(--n-radius) var(--n-radius) 0; }
+/* the viewer's numbers, out of the way until asked for */
+.viewer-axes .viewer-numbers-toggle { margin-left: auto; min-width: 1.65rem; padding: 0; border-radius: 50%; font-family: var(--n-font-serif); font-style: italic; color: var(--n-text-faint); }

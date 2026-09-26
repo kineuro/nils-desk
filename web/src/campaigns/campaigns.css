@@ -100,19 +100,34 @@
 .reader-head .order-toggle .opt { min-height: 1.5rem; font-size: 12px; }
 .rate-count-line { font-size: var(--n-text-size-small); color: var(--n-text-faint); font-variant-numeric: tabular-nums; }
 .rate-count-line b { color: var(--n-text); }
-.reader-one .rate-grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) minmax(24rem, 34rem); grid-template-rows: minmax(0, 1fr); gap: 1rem; align-items: stretch; }
+.reader-one .rate-grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(34rem, 26vw, 42rem); grid-template-rows: minmax(0, 1fr); gap: 1rem; align-items: stretch; }
 .reader-one .rate-picture { min-height: 0; overflow: hidden; container-type: size; }
 .reader-one .rate-side { position: relative; display: flex; flex-direction: column; gap: 0.25rem; min-height: 0; overflow: auto; font-size: var(--n-text-size-small); }
 .reader-one .rate-side > * { flex: none; }
 .reader-one .rate-item { gap: 0.4rem; }
 .reader-one .rate-item .tag { min-height: 1.2rem; }
 
-/* the pictures: the three planes as large as the left side allows, two over one */
+/* the pictures fill the left side, whatever the screen (record 48, after the
+   learners report): the plane the stack was acquired in large and the other
+   two at half its side, the three a block three units by two. On a side
+   wider than high the two stand beside the large one; on a side higher than
+   wide, under it; on a side much wider than high (over about 2.1 to 1) three
+   equal planes in a row are larger, and they take it. The stack view is the
+   largest square the side holds. 2.4rem is the view tabs' line and the gaps. */
 .reader-one .stack-view, .reader-one .viewer { height: 100%; min-height: 0; }
-.reader-one .viewer { align-content: start; gap: 0.35rem; }
-.reader-one .viewer-planes { --plane: min(calc(50cqw - 0.2rem), calc(50cqh - 2.2rem)); grid-template-columns: repeat(2, var(--plane)); grid-auto-rows: var(--plane); align-content: start; gap: 0.4rem; }
-.reader-one .viewer-plane { width: var(--plane); height: var(--plane); }
-.reader-one .viewer-stage { max-height: calc(100cqh - 3.4rem); max-width: calc(100cqh - 3.4rem); }
+.reader-one .viewer { align-content: start; grid-template-rows: auto minmax(0, 1fr); gap: 0.35rem; }
+.reader-one .viewer-planes { --gap: 0.4rem; --unit: min(calc((100cqw - 2 * var(--gap)) / 3), calc((100cqh - 2.4rem - var(--gap)) / 2)); grid-template-columns: calc(var(--unit) * 2 + var(--gap)) var(--unit); grid-template-rows: var(--unit) var(--unit); align-content: start; gap: var(--gap); }
+.reader-one .viewer-plane { width: 100%; height: 100%; aspect-ratio: auto; }
+.reader-one .viewer-plane.own { grid-row: 1 / span 2; order: -1; }
+@container (aspect-ratio < 1) {
+  .reader-one .viewer-planes { --unit: min(calc((100cqw - var(--gap)) / 2), calc((100cqh - 2.4rem - 2 * var(--gap)) / 3)); grid-template-columns: var(--unit) var(--unit); grid-template-rows: calc(var(--unit) * 2 + var(--gap)) var(--unit); }
+  .reader-one .viewer-plane.own { grid-row: auto; grid-column: 1 / span 2; }
+}
+@container (aspect-ratio > 2.1) {
+  .reader-one .viewer-planes { --unit: min(calc((100cqw - 2 * var(--gap)) / 3), calc(100cqh - 2.4rem)); grid-template-columns: repeat(3, var(--unit)); grid-template-rows: var(--unit); }
+  .reader-one .viewer-plane.own { grid-row: auto; }
+}
+.reader-one .viewer-stage { width: min(100cqw, calc(100cqh - 2.4rem)); max-height: none; }
 .reader-one .viewer-foot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* the file's words: compact, monospace, a line each, whole on hover */
@@ -198,3 +213,4 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .header-table .ht-value { max-width: 13rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .keys-drawer { inset: auto 0 2.6rem 0; max-height: calc(100% - 2.6rem); overflow: auto; }
 .keys-drawer dl.facts { gap: 0.15rem 0.8rem; }
+

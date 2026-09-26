@@ -7,8 +7,16 @@
 // lettered from the stack's orientation in its manifest. When the volume
 // path is not taken (no WebGL2, over the budget, a failure) the planes are
 // the server's render, and below detail quasi the render is all there is.
-// The footer carries the viewer's own numbers: first image, frames per second
-// over the last second, bytes moved, the volume's level and fill.
+// The viewer's own numbers (first image, frames per second over the last
+// second, bytes moved, the volume's level and fill) open on a small `i`
+// beside the views; they are not in a reader's way (record 48).
+//
+// An oblique stack (record 48, after the learners report) is cut in its own
+// planes by default: each of the three is the volume axis nearest the
+// patient's plane, turned the radiological way, so an axial planned along
+// the AC-PC line shows its sagittal and coronal with the head as the
+// operator aligned it rather than tilted by the planning angle. The
+// scanner's axes are one click away and kept (geometry.ts, planeCameras).
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as cs from "@cornerstonejs/core";
@@ -17,7 +25,7 @@ import { DoorError } from "../ask/client";
 import { classify, Failure, type Failed } from "../ui/Failure";
 import { Wait } from "../ui/Wait";
 import { doors, levelShape, type Manifest } from "./doors";
-import { cameraLabels, geometry, type EdgeLabels, type Vec3 } from "./geometry";
+import { cameraLabels, geometry, planeCameras, type EdgeLabels, type Planes, type Vec3 } from "./geometry";
 import { close, counters, imageId, open, register, viewWindow } from "./loader";
 import { PLANES, serverPlane as serverPlaneOf, type Plane } from "./prefetch";
 import { Letters, RenderPlane } from "./RenderPlane";
@@ -70,11 +78,27 @@ interface VolumeState {
   done: boolean;
 }
 
-const ORIENT: Record<Plane, cs.Enums.OrientationAxis> = {
-  axial: cs.Enums.OrientationAxis.AXIAL,
-  coronal: cs.Enums.OrientationAxis.CORONAL,
-  sagittal: cs.Enums.OrientationAxis.SAGITTAL,
-};
+// how the planes are cut, kept for the next stack and the next visit
+const PLANES_KEY = "nils.viewer.planes";
+function planesRemembered(): Planes {
+  try {
+    return localStorage.getItem(PLANES_KEY) === "patient" ? "patient" : "acquisition";
+  } catch {
+    return "acquisition";
+  }
+}
+function rememberPlanes(p: Planes): void {
+  try {
+    localStorage.setItem(PLANES_KEY, p);
+  } catch {
+    // a private window keeps nothing; the viewer works the same
+  }
+}
+
+/** Whether a stack lies off the scanner's axes: a row, a column or the normal more than about a degree from every axis. */
+export function isOblique(g: { row: Vec3; col: Vec3; normal: Vec3; known: boolean }): boolean {
+  return g.known && [g.row, g.col, g.normal].some((v) => Math.max(...v.map(Math.abs)) < 0.9998);
+}
 
 let inited: Promise<void> | null = null;
 function initOnce(): Promise<void> {
@@ -127,6 +151,11 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   const [labels, setLabels] = useState<Partial<Record<Plane | "stack", EdgeLabels>>>({});
   const [touched, setTouched] = useState<Partial<Record<Plane, boolean>>>({});
   const [serverPos, setServerPos] = useState<Record<Plane, number>>({ axial: 0.5, coronal: 0.5, sagittal: 0.5 });
+  const [cut, setCut] = useState<Planes>(planesRemembered);
+  const cutRef = useRef(cut);
+  cutRef.current = cut;
+  const [numbersOpen, setNumbersOpen] = useState(false);
+  const root = useRef<HTMLDivElement | null>(null);
   const stamps = useRef<number[]>([]);
   const engine = useRef<cs.RenderingEngine | null>(null);
   const filling = useRef<Filling | null>(null);
@@ -241,10 +270,11 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     const re = engine.current ?? new cs.RenderingEngine(ids.engine);
     engine.current = re;
     const planeIds = PLANES.map((p) => ids.planes[p]);
+    const cams = planeCameras(geometry(manifest), cutRef.current);
     for (const p of PLANES) {
       const element = planeEls.current[p];
       if (!element) throw new Error("the planes' elements are not on the page");
-      re.enableElement({ viewportId: ids.planes[p], type: cs.Enums.ViewportType.ORTHOGRAPHIC, element, defaultOptions: { orientation: ORIENT[p] } });
+      re.enableElement({ viewportId: ids.planes[p], type: cs.Enums.ViewportType.ORTHOGRAPHIC, element, defaultOptions: { orientation: cams[p] as cs.Types.OrientationVectors } });
     }
     const render = () => re.renderViewports(planeIds);
     const report = (filled: number, done: boolean) => {
@@ -294,6 +324,42 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     engine.current?.resize(true, true);
   }, [view]);
 
+  // the pictures grow with the window: cornerstone is told when the viewer's box changes
+  useEffect(() => {
+    const node = root.current;
+    if (!node || typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    const seen = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        try {
+          engine.current?.resize(true, true);
+        } catch {
+          // the engine is being taken down
+        }
+      });
+    });
+    seen.observe(node);
+    return () => {
+      cancelAnimationFrame(frame);
+      seen.disconnect();
+    };
+  }, [manifest]);
+
+  // the planes cut the other way: each viewport turned to its new camera
+  useEffect(() => {
+    const re = engine.current;
+    if (!re || !manifest || !filling.current) return;
+    const cams = planeCameras(geometry(manifest), cut);
+    for (const p of PLANES) {
+      const vp = re.getViewport(ids.planes[p]) as cs.VolumeViewport | undefined;
+      if (!vp) continue;
+      vp.setOrientation(cams[p] as cs.Types.OrientationVectors);
+      letter(p, vp);
+    }
+    re.renderViewports(PLANES.map((p) => ids.planes[p]));
+  }, [cut, manifest, ids.planes, letter]);
+
   // the footer's numbers, once a second
   useEffect(() => {
     const t = setInterval(() => {
@@ -322,8 +388,15 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     return <RenderPlane src={s.src} axes={s.axes} known={s.known} />;
   };
   const volumeDone = volume?.done ?? false;
+  const oblique = isOblique(g);
+  // the plane the stack was acquired in leads the three
+  const own = PLANES.find((p) => p === manifest.plane) ?? "axial";
+  const chooseCut = (c: Planes) => {
+    rememberPlanes(c);
+    setCut(c);
+  };
   return (
-    <div className="viewer">
+    <div className="viewer" ref={root}>
       <div className="viewer-axes" role="tablist" aria-label="view">
         <button
           type="button"
@@ -350,8 +423,21 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
         >
           three planes
         </button>
+        {view === "planes" && oblique && !fallback && (
+          <span className="viewer-cut" role="group" aria-label="how the planes are cut">
+            <button type="button" className={cut === "acquisition" ? "on" : ""} aria-pressed={cut === "acquisition"} onClick={() => chooseCut("acquisition")} title="the stack's own planes: the head as the operator aligned it, no tilt">
+              stack's planes
+            </button>
+            <button type="button" className={cut === "patient" ? "on" : ""} aria-pressed={cut === "patient"} onClick={() => chooseCut("patient")} title="the scanner's axes: the head as it lay, tilted by the planning angle">
+              scanner axes
+            </button>
+          </span>
+        )}
         {(manifest.annotation?.burned_in || manifest.held) && <span className="tag caution">burned-in annotation held</span>}
         {!g.regular && <span className="tag caution">planes not evenly spaced</span>}
+        <button type="button" className={numbersOpen ? "viewer-numbers-toggle on" : "viewer-numbers-toggle"} aria-expanded={numbersOpen} aria-label="the viewer's numbers" title="the viewer's numbers: loading, frames, bytes" onClick={() => setNumbersOpen((o) => !o)}>
+          i
+        </button>
       </div>
       <div className="viewer-stage" hidden={view !== "stack"}>
         <div ref={el} className="viewer-element" />
@@ -361,7 +447,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
       {planesOpened && !fallback && (
         <div className="viewer-planes" hidden={view !== "planes"}>
           {PLANES.map((p) => (
-            <div key={p} className="viewer-plane" onWheelCapture={() => setTouched((t) => (t[p] ? t : { ...t, [p]: true }))} onPointerDownCapture={() => setTouched((t) => (t[p] ? t : { ...t, [p]: true }))}>
+            <div key={p} className={p === own ? "viewer-plane own" : "viewer-plane"} onWheelCapture={() => setTouched((t) => (t[p] ? t : { ...t, [p]: true }))} onPointerDownCapture={() => setTouched((t) => (t[p] ? t : { ...t, [p]: true }))}>
               <div
                 ref={(node) => {
                   planeEls.current[p] = node;
@@ -384,7 +470,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
       {planesOpened && fallback && (
         <div className="viewer-planes" hidden={view !== "planes"}>
           {PLANES.map((p) => (
-            <div key={p} className="viewer-plane viewer-plane-server">
+            <div key={p} className={p === own ? "viewer-plane viewer-plane-server own" : "viewer-plane viewer-plane-server"}>
               {serverPlane(p, serverPos[p])}
               <span className="viewer-plane-name">{p}</span>
               <input type="range" min={0} max={1} step={0.001} value={serverPos[p]} onChange={(e) => setServerPos((s) => ({ ...s, [p]: Number(e.target.value) }))} aria-label={`${p} position`} />
@@ -392,12 +478,14 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
           ))}
         </div>
       )}
-      <p className="viewer-foot meta">
-        {numbers.firstImageMs !== null ? `first image ${numbers.firstImageMs} ms` : "first image pending"}; {numbers.fps} fps; {(numbers.bytes / 1e6).toFixed(1)} MB moved; {numbers.planes} planes decoded
-        {numbers.planes > 0 && ` at ${Math.round(numbers.decodeMs / numbers.planes)} ms each`}; level {numbers.level} of {manifest.levels}; plane {numbers.z + 1} of {nz}; {nx} by {ny} at {manifest.spacing[2]} mm
-        {volume && `; planes at level ${volume.level}${volume.stride > 1 ? `, every ${volume.stride} planes` : ""}, ${volume.done ? "whole" : `${volume.filled} of ${volume.depth}`}, ${Math.round(volume.bytes / 1e6)} MB`}
-        {fallback && `; planes from the server: ${fallback}`}; wheel scrolls, left windows, right zooms
-      </p>
+      {numbersOpen && (
+        <p className="viewer-foot meta">
+          {numbers.firstImageMs !== null ? `first image ${numbers.firstImageMs} ms` : "first image pending"}; {numbers.fps} fps; {(numbers.bytes / 1e6).toFixed(1)} MB moved; {numbers.planes} planes decoded
+          {numbers.planes > 0 && ` at ${Math.round(numbers.decodeMs / numbers.planes)} ms each`}; level {numbers.level} of {manifest.levels}; plane {numbers.z + 1} of {nz}; {nx} by {ny} at {manifest.spacing[2]} mm
+          {volume && `; planes at level ${volume.level}${volume.stride > 1 ? `, every ${volume.stride} planes` : ""}, ${volume.done ? "whole" : `${volume.filled} of ${volume.depth}`}, ${Math.round(volume.bytes / 1e6)} MB`}
+          {fallback && `; planes from the server: ${fallback}`}; wheel scrolls, left windows, right zooms
+        </p>
+      )}
     </div>
   );
 }

@@ -6,13 +6,16 @@
 // in chromium, since jsdom lays nothing out. After the second real read: the
 // key facts are pieces of their own that are never cut, long text wraps, a
 // row finds a value by a vendor's name, `/` fills a whole answer, and the
-// picture's view is kept.
+// picture's view is kept. After the learners report: on the large screens
+// as well.
 
 import { expect, test, type Page } from "@playwright/test";
 
 const VIEWPORTS = [
   { width: 1440, height: 900 },
   { width: 1366, height: 768 },
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
 ];
 
 async function measure(page: Page) {
@@ -64,7 +67,7 @@ for (const vp of VIEWPORTS) {
       await page.goto("/");
       await expect(page.locator(".derived-line")).toContainText("derived:");
       await page.locator("body").click({ position: { x: 5, y: 5 } });
-      // provenance, technique, modifier (several), construct, base, body part, contrast
+      // provenance, technique, modifier (several), construct, body part, contrast
       await page.keyboard.press("1");
       await page.keyboard.type("raw");
       await page.keyboard.press("Enter");
@@ -75,8 +78,7 @@ for (const vp of VIEWPORTS) {
       await page.keyboard.press("Enter");
       await page.keyboard.type("none");
       await page.keyboard.press("Enter");
-      await page.keyboard.type("t1w");
-      await page.keyboard.press("Enter");
+      // base is implied by MPRAGE: the focus goes on past it to the next axis unanswered
       await page.keyboard.type("brain");
       await page.keyboard.press("Enter");
       await page.keyboard.type("not");
