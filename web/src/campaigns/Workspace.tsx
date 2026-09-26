@@ -57,6 +57,10 @@ const EVIDENCE_KEY = "nils.reader.evidence";
 // the picture's view a reader chose (record 48, the second real read), kept across items and visits
 const VIEW_KEY = "nils.reader.view";
 type View = "stack" | "planes";
+// the rows compact (every axis a find box) or expanded (the short rows drawn whole), kept per person (record 48, after the learners report)
+const ROWS_KEY = "nils.reader.rows";
+type RowsView = "compact" | "expanded";
+const rowsRemembered = (who: string): RowsView => (remembered(`${ROWS_KEY}.${who}`) === "compact" ? "compact" : "expanded");
 const viewRemembered = (): View => (remembered(VIEW_KEY) === "stack" ? "stack" : "planes");
 function remembered(key: string): string | null {
   try {
@@ -123,6 +127,15 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     remember(VIEW_KEY, v);
     setView(v);
   }, []);
+  const who = caps.person.subject;
+  const [rowsView, setRowsView] = useState<RowsView>(() => rowsRemembered(who));
+  const chooseRows = useCallback(
+    (v: RowsView) => {
+      remember(`${ROWS_KEY}.${who}`, v);
+      setRowsView(v);
+    },
+    [who],
+  );
   // the whole answers the search offers: the registry's, most common first (generic, never this campaign's stacks)
   const [counted, setCounted] = useState<Combination[] | null>(null);
   const combo = useRef<HTMLInputElement | null>(null);
@@ -467,6 +480,8 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       onCombo={(c) => q && setG((was) => takeCombo(q, was, c))}
       view={view}
       onView={chooseView}
+      rowsView={rowsView}
+      onRowsView={chooseRows}
       why={why}
       unsure={unsure}
       onUnsure={() => setUnsure((x) => !x)}
@@ -618,6 +633,9 @@ export interface WorkspaceBodyProps {
   /** The picture's view, kept across items. */
   view?: View;
   onView?: (v: View) => void;
+  /** The rows compact or expanded, kept per person. */
+  rowsView?: RowsView;
+  onRowsView?: (v: RowsView) => void;
 }
 
 /** The workspace as it draws from what it holds. */
@@ -727,6 +745,7 @@ function ReaderOne(p: Drawn) {
         <span className="grow said-slot">
           <Said said={p.said} />
         </span>
+        {q.kind === "axes" && compact && p.onRowsView && !refusal && <RowsToggle view={p.rowsView ?? "expanded"} onView={p.onRowsView} />}
         {p.order && p.onOrder && !refusal && <OrderToggle order={p.order} onOrder={p.onOrder} />}
         {p.batchesOffered && p.onBatches && !p.batch && !refusal && (
           <button type="button" className="button secondary small" onClick={p.onBatches}>
@@ -780,6 +799,19 @@ function ReaderOne(p: Drawn) {
         </div>
       )}
     </section>
+  );
+}
+
+/** Compact (every axis a find box) or expanded (the short rows drawn whole), one pair of buttons. */
+function RowsToggle({ view, onView }: { view: RowsView; onView: (v: RowsView) => void }) {
+  return (
+    <span className="chips order-toggle rows-toggle" role="group" aria-label="the rows">
+      {(["compact", "expanded"] as const).map((v) => (
+        <button key={v} type="button" className={view === v ? "opt on" : "opt"} aria-pressed={view === v} onClick={() => onView(v)} title={v === "compact" ? "every axis a box: type any name of a value" : "the short rows drawn whole, a key per value"}>
+          {v}
+        </button>
+      ))}
+    </span>
   );
 }
 
@@ -905,6 +937,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
               rows={p.rows}
               chosen={chosenOf(q, p.settled?.given ?? g)}
               settled={p.settled}
+              find={p.rowsView === "compact"}
               marks={p.marks}
               none
               cantTell={cantTellOf(q)}
@@ -972,7 +1005,7 @@ function KeyList({ rows, compact = false, combos = false, reader = false, candid
       {reader && pair("Backspace", "back to the suggestion")}
       {batches && pair("b", "like stacks in batches")}
       {combos && pair("/", "find a whole answer by any name in it (bravo, mprage t1); Enter fills every row, then change what differs")}
-      {compact && pair(`1 to ${findKeyOf(rows - 1) ?? rows}`, "find a row, then type any name of a value (a vendor's too: BRAVO finds MPRAGE); Enter takes it and goes on, Tab goes on, Esc leaves")}
+      {compact && pair(`1 to ${findKeyOf(rows - 1) ?? rows}`, "find a row, then type any name of a value (a vendor's too: BRAVO finds MPRAGE); Enter or a click takes it, clears the box and goes on to the next axis unanswered (a multi-valued one stays for another), Tab goes on, Esc leaves")}
       {compact && pair("implied", "filled in by another choice, held until that choice changes; a greyed value says on hover why it cannot hold")}
       {!compact && rows > 0 && pair("1 to 0", "a value on the first row")}
       {!compact && rows > 1 && pair("q to p", "a value on the second row")}

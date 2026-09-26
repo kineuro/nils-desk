@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The desk takes the window's width on any screen (record 48, after the learners report). No page is held to a fixed width any more (Home, Data, Query, Review, Campaigns, Pipelines, Settings and the rest); only running text keeps a readable measure. The layout check measures every section at 1366 by 768, 1440 by 900, 1920 by 1080 and 2560 by 1440.
+- The reader's three planes fill the left side and grow with the screen: the plane the stack was acquired in large and the other two beside it or under it at half its side, or three equal planes in a row on a very wide side. The viewer follows the window when it is resized. The right panel keeps a readable width (34rem, up to 42rem on a large screen) and holds a seven-axis item without a scroll at every size checked.
+- An oblique stack is no longer drawn tilted. The three planes are cut along the stack's own axes by default: each plane is the volume axis nearest the patient's plane, turned the radiological way (head up, the patient's left on the right of an axial or coronal, the front on the left of a sagittal), so an axial planned along the AC-PC line shows its sagittal and coronal with the head as the operator aligned it, and no voxel is interpolated across the tilt. The scanner's axes (the head as it lay, tilted by the planning angle) are one click away on an oblique stack and the choice is kept. A stack square to the scanner looks the same either way. Checked on the cameras, on a synthetic volume resampled through them at 15 and 30 degrees, and in cornerstone in a real browser.
+- Compact and expanded rows, kept per person: in compact every asked axis is a find box that lists its values on focus, with what is chosen or implied beside it as chips; expanded is the rows as before. A value taken from a box's list, by Enter or a click, clears the box, and the focus goes on to the next axis still unanswered, past what another choice implies; a multi-valued axis keeps the focus for another value until Enter on an empty box or Tab. `/` still finds a whole answer.
+- The viewer's numbers (first image, frames, bytes moved, planes decoded) are behind a small `i` beside the views, not under the picture.
+
 ## [1.0.0-alpha.44] - 2026-09-25
 
 Released beside the engine's 1.0.0-alpha.44: the reader looks an answer up. A row finds a value by any name it goes by, the rows follow each other through the pack's implications and exclusions, `/` finds a whole answer, the header's key facts stand whole, and the chosen view is kept. The vocabulary and combinations the engine serves are read where the engine has them. The desk still speaks the engine's HTTP contract 7 and suite contract 3.

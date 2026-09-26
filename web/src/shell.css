@@ -68,6 +68,10 @@ a.person:hover, a.person[aria-current="page"] { color: var(--n-text); }
 .theme-switch { color: var(--n-text-faint); }
 .theme-switch:hover { color: var(--n-text); background: var(--n-bg-hover); }
 .page { padding: 1.6rem 2rem 2rem; overflow: auto; min-width: 0; min-height: 0; }
+/* a page takes the window's width, however wide (record 48, after the learners
+   report): no page is held to a fixed width, the columns and the tables grow
+   with the screen. Only running text keeps to a readable measure. */
+.page :is(.lede, .note-detail, .says > p, .step-body > p, .placeholder p) { max-width: var(--n-measure); }
 
 /* ------------------------------------------------------------ controls */
 .button { display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem; min-height: var(--n-control); padding: 0.4rem 0.9rem; border: 0; border-radius: var(--n-radius); background: var(--n-brand); color: var(--n-text-on-brand); font: inherit; font-weight: 500; white-space: nowrap; cursor: pointer; }
@@ -197,7 +201,7 @@ html:has(.dialog[open]) { overflow: hidden; }
 .tag.blocked { flex-direction: row; gap: 0.3rem; }
 
 /* ------------------------------------------------------------ home */
-.home { display: flex; flex-direction: column; gap: 1.3rem; max-width: 66rem; }
+.home { display: flex; flex-direction: column; gap: 1.3rem; }
 .home-head { display: grid; gap: 0.35rem; }
 .parts-strip { display: flex; align-items: center; gap: 1.1rem; padding: 0.65rem 1rem; flex-wrap: wrap; }
 .band { display: grid; }
@@ -234,7 +238,7 @@ table.thin th.tick, table.thin td.tick { width: 30px; }
 .top .update-note { display: inline-flex; align-items: center; gap: 0.4rem; color: var(--n-brand-text); font-size: var(--n-text-size-small); }
 
 /* ------------------------------------------------------------ settings */
-.settings { display: grid; gap: 1.3rem; align-content: start; max-width: 72rem; }
+.settings { display: grid; gap: 1.3rem; align-content: start; }
 .settings-head { display: grid; gap: 0.35rem; }
 .settings-head .row h1 { flex: 1; }
 .update { display: grid; gap: 0.75rem; padding: 1rem 1.1rem; border-color: var(--n-brand-line); background: var(--n-brand-bg); }
@@ -375,7 +379,7 @@ span.crumb:hover { background: transparent; }
 .chosen-note { flex: 1 1 10rem; min-width: 0; overflow-wrap: anywhere; }
 
 /* ------------------------------------------------------------ getting started */
-.setup { display: grid; gap: 1.3rem; max-width: 76rem; }
+.setup { display: grid; gap: 1.3rem; }
 .setup-head { display: grid; gap: 0.35rem; }
 .setup-title { gap: 1rem; flex-wrap: wrap; }
 .setup-title h1 { flex: 1; }
@@ -899,7 +903,7 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .talk-composer { position: sticky; bottom: 0; display: grid; gap: 0.4rem; padding: 0.6rem 0 0.2rem; background: var(--n-bg-page); }
 .talk-foot { gap: 0.6rem; flex-wrap: wrap; }
 .talk-head { flex-wrap: wrap; }
-.chat-history { display: grid; gap: 1rem; max-width: 56rem; margin: 0 auto; }
+.chat-history { display: grid; gap: 1rem; }
 .chat-history-tools { gap: 0.75rem; flex-wrap: wrap; }
 .chat-search { min-width: min(100%, 16rem); }
 .chat-group { display: grid; gap: 0.4rem; }
@@ -921,7 +925,7 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .station-pick select { padding: 0.1rem 0.3rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; }
 
 /* ------------------------------------------------------------ the Data page: sources and their digests */
-.data { display: grid; gap: 1.1rem; align-content: start; max-width: 76rem; }
+.data { display: grid; gap: 1.1rem; align-content: start; }
 .data-head { display: flex; align-items: flex-end; gap: 0.75rem; flex-wrap: wrap; }
 .data-head .grow { display: grid; gap: 0.3rem; min-width: 16rem; }
 .source-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); gap: 0.9rem; }
@@ -960,7 +964,7 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 }
 
 /* ------------------------------------------------------------ the Query page: cards, and a card with its steps */
-.query { display: grid; gap: 1.1rem; align-content: start; max-width: 84rem; }
+.query { display: grid; gap: 1.1rem; align-content: start; }
 .query-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); gap: 0.9rem; }
 .query-card-link, .query-card-link:hover { display: grid; gap: 0.45rem; align-content: start; padding: 0.85rem 0.95rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); text-decoration: none; }
 .query-card-link:hover { border-color: var(--n-brand-line); }
@@ -1183,7 +1187,7 @@ dl.facts .input { display: inline-flex; }
 
 /* ---------------------------------------------------------------- record 26, D2: a batch's page, a dataset's Pseudonymisation page, and Pipelines as the jobs */
 /* a page with an aside: the main column and, at the right, the cards that stand beside it */
-.bpage { display: grid; grid-template-columns: minmax(0, 1fr) 22rem; gap: 1.1rem 1.4rem; align-items: start; max-width: 76rem; }
+.bpage { display: grid; grid-template-columns: minmax(0, 1fr) clamp(22rem, 22vw, 30rem); gap: 1.1rem 1.4rem; align-items: start; }
 .bpage > .main { display: grid; gap: 1.1rem; min-width: 0; }
 .bpage > .aside { display: grid; gap: 1.1rem; min-width: 0; }
 .bpage .data-head { align-items: flex-end; }
@@ -1217,7 +1221,7 @@ dl.facts .input { display: inline-flex; }
 .check-head > .grow { display: grid; gap: 0.2rem; min-width: 0; }
 .check .panel.card { padding: 0.8rem 0.9rem; }
 /* the jobs as cards, on their own page */
-.pipelines { display: grid; gap: 1.1rem; align-content: start; max-width: 76rem; }
+.pipelines { display: grid; gap: 1.1rem; align-content: start; }
 @media (max-width: 1100px) {
   .bpage { grid-template-columns: minmax(0, 1fr); }
 }
@@ -1252,7 +1256,7 @@ button.ccard.add:hover { border-color: var(--n-brand-line); color: var(--n-brand
 .retired-list { display: grid; gap: 0.25rem; margin: 0.4rem 0 0; padding-left: 1.1rem; }
 .retired-list li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.6rem; }
 /* a cohort's page: the main column and its aside, the trail above, the four tiles and the step chart */
-.cpage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 22rem); gap: 1.1rem 1.4rem; align-items: start; max-width: 76rem; }
+.cpage { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, clamp(22rem, 22vw, 30rem)); gap: 1.1rem 1.4rem; align-items: start; }
 .cpage > .main { display: grid; gap: 1.1rem; min-width: 0; }
 .cpage > .aside { display: grid; gap: 1.1rem; min-width: 0; }
 .cpage .data-head h1 { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
