@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.48] - 2026-09-27
+
+Released beside the engine's 1.0.0-alpha.48, with no change of its own. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
 ## [1.0.0-alpha.47] - 2026-09-26
 
 Released beside the engine's 1.0.0-alpha.47: the reader after the first gold campaign, with a colour and a shape per value, one's own answers listed and corrected, the items held back to be read one by one named, and the next item read ahead; and a sheared stack's three planes shown where its planes are. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
