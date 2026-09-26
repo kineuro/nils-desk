@@ -93,6 +93,18 @@
   /* focus */
   --n-focus: #7A1F5A;
 
+  /* one colour per value of an axis (record 50, the first gold campaign), slot by the value's place; a shape beside each keeps it readable without colour */
+  --n-value-1: #1F5FA6; --n-value-1-bg: #E3EDF8;
+  --n-value-2: #B8500A; --n-value-2-bg: #FBE8D9;
+  --n-value-3: #1D7A4E; --n-value-3-bg: #DFF1E7;
+  --n-value-4: #A63D7A; --n-value-4-bg: #F6E2EE;
+  --n-value-5: #7A6A00; --n-value-5-bg: #F2EDD2;
+  --n-value-6: #0E7C86; --n-value-6-bg: #DBF0F2;
+  --n-value-7: #6A3FA6; --n-value-7-bg: #ECE3F6;
+  --n-value-8: #8C3B2A; --n-value-8-bg: #F3E0DB;
+  --n-value-9: #4A5A1E; --n-value-9-bg: #E7ECD8;
+  --n-value-10: #5A5A66; --n-value-10-bg: #E7E7EC;
+
   /* the veil under a drawer */
   --n-scrim: #1C1A1F40;
 }
@@ -133,6 +145,16 @@
     --n-tag-trial: #7FCB9A;
     --n-tag-institution: #E3A46A;
     --n-focus: #B57CA1;
+    --n-value-1: #7FB2EA; --n-value-1-bg: #1C2A3A;
+    --n-value-2: #F0A060; --n-value-2-bg: #3A2616;
+    --n-value-3: #6FCF9C; --n-value-3-bg: #183225;
+    --n-value-4: #E48BC0; --n-value-4-bg: #3A1E2E;
+    --n-value-5: #D9C45A; --n-value-5-bg: #332E14;
+    --n-value-6: #62C9D3; --n-value-6-bg: #16302F;
+    --n-value-7: #B79AE8; --n-value-7-bg: #2A2238;
+    --n-value-8: #E0937F; --n-value-8-bg: #36201A;
+    --n-value-9: #A9C46A; --n-value-9-bg: #262E18;
+    --n-value-10: #B5B5C0; --n-value-10-bg: #2A2A30;
     --n-scrim: #00000080;
   }
 }
@@ -172,5 +194,15 @@
   --n-tag-trial: #7FCB9A;
   --n-tag-institution: #E3A46A;
   --n-focus: #B57CA1;
+  --n-value-1: #7FB2EA; --n-value-1-bg: #1C2A3A;
+  --n-value-2: #F0A060; --n-value-2-bg: #3A2616;
+  --n-value-3: #6FCF9C; --n-value-3-bg: #183225;
+  --n-value-4: #E48BC0; --n-value-4-bg: #3A1E2E;
+  --n-value-5: #D9C45A; --n-value-5-bg: #332E14;
+  --n-value-6: #62C9D3; --n-value-6-bg: #16302F;
+  --n-value-7: #B79AE8; --n-value-7-bg: #2A2238;
+  --n-value-8: #E0937F; --n-value-8-bg: #36201A;
+  --n-value-9: #A9C46A; --n-value-9-bg: #262E18;
+  --n-value-10: #B5B5C0; --n-value-10-bg: #2A2A30;
   --n-scrim: #00000080;
 }

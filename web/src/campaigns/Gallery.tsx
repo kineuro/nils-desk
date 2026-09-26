@@ -9,14 +9,19 @@
 // suggester read wrong is set in one move. Stacks of a sealed sample and
 // the share the campaign holds back never show here: they are read alone.
 // Keys: 1 to 9 and 0 set the focused item, the arrows move, Backspace puts
-// the suggestion back, `o` changes the order, Ctrl+Enter accepts the page.
+// the suggestion back, `o` changes the order, Ctrl+Enter accepts the page,
+// `u` opens one's own answers to correct one (after the first gold
+// campaign). Each value has a colour and a shape of its own beside its key.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
-import { href } from "../routes";
+import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
 import { campaigns, refused as refusedWords, type Campaign } from "./client";
+import { MyAnswers } from "./MyAnswers";
+import { ValueMark, valueTone } from "./values";
 import {
+  aloneWords,
   acceptBody,
   acceptedWords,
   changed,
@@ -69,6 +74,7 @@ export function Gallery({ caps, id }: { caps: Capabilities; id: string }) {
   const [said, setSaid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(0);
+  const [mine, setMine] = useState(false);
   const order = useRef<GalleryOrder>(remembered());
 
   const load = useCallback(() => {
@@ -113,12 +119,12 @@ export function Gallery({ caps, id }: { caps: Capabilities; id: string }) {
   }, []);
 
   const grid = useRef<HTMLDivElement | null>(null);
-  const keyed = useRef({ s, accept, setOrder });
-  keyed.current = { s, accept, setOrder };
+  const keyed = useRef({ s, accept, setOrder, mine });
+  keyed.current = { s, accept, setOrder, mine };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
-      if (!k.s) return;
+      if (!k.s || k.mine) return;
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || (t.tagName === "SELECT" && e.key !== "Enter"))) return;
       if (e.altKey || e.metaKey || (e.ctrlKey && e.key !== "Enter")) return;
@@ -127,6 +133,7 @@ export function Gallery({ caps, id }: { caps: Capabilities; id: string }) {
       e.preventDefault();
       if (act.kind === "accept") k.accept();
       else if (act.kind === "order") k.setOrder(nextOrder(k.s.order));
+      else if (act.kind === "mine") setMine(true);
       else
         setS((x) => {
           if (!x) return x;
@@ -161,6 +168,8 @@ export function Gallery({ caps, id }: { caps: Capabilities; id: string }) {
       onFocus={(item) => setS((x) => (x ? { ...x, focus: item } : x))}
       onOrder={setOrder}
       onAccept={accept}
+      onMine={() => setMine(true)}
+      mine={mine && campaign ? <MyAnswers caps={caps} campaign={campaign} values={s?.page.values ?? []} back="gallery" onClose={() => setMine(false)} /> : null}
     />
   );
 }
@@ -189,6 +198,10 @@ export interface GalleryBodyProps {
   onFocus: (item: number) => void;
   onOrder: (o: GalleryOrder) => void;
   onAccept: () => void;
+  /** Open one's own answers, to correct one. */
+  onMine?: () => void;
+  /** One's own answers while they are open. */
+  mine?: React.ReactNode;
 }
 
 /** The gallery as it draws from its state. */
@@ -213,6 +226,11 @@ export function GalleryBody(p: GalleryBodyProps) {
         {s && <span className="meta g-count">{pageWords(s.page, s.page.items.length)}</span>}
         <span className="grow" />
         {p.done > 0 && <span className="meta">{p.done} accepted here</span>}
+        {p.onMine && p.campaign && (
+          <button type="button" className="button quiet small" onClick={p.onMine} title="your answers, the latest first, to correct one">
+            My answers <kbd>u</kbd>
+          </button>
+        )}
         {p.campaign && (
           <a className="button quiet small" href={href("campaigns", String(p.campaign.id), "rate")}>
             One by one
@@ -242,8 +260,9 @@ export function GalleryBody(p: GalleryBodyProps) {
             {values.map((v) => {
               const k = keyOfValue(values, v);
               return k ? (
-                <span key={v} className="g-key">
+                <span key={v} className="g-key" {...valueTone(values, v)}>
                   <kbd>{k}</kbd>
+                  <ValueMark values={values} value={v} />
                   {v}
                 </span>
               ) : null;
@@ -261,6 +280,14 @@ export function GalleryBody(p: GalleryBodyProps) {
         </div>
       )}
       {p.said && <p className="meta said g-said">{p.said}</p>}
+      {s && p.campaign && aloneWords(s.page) && (
+        <p className="meta g-alone" data-alone="">
+          <Icon name="info" />
+          <span>{aloneWords(s.page)}</span>
+          <a href={narrow(href("campaigns", String(p.campaign.id), "rate"), { alone: 1 })}>Read them one by one</a>
+        </p>
+      )}
+      {p.mine}
       {!s && !p.failed && <p className="meta">Reading the gallery…</p>}
       {s && s.page.items.length === 0 && <p className="meta">Nothing is left to check here. Held-back and sealed items are read one by one.</p>}
       {s && s.page.items.length > 0 && (
@@ -303,11 +330,12 @@ function Cell({ item: i, value, changed: ch, focused, values, onChoose, onFocus 
   const top = topClasses(i.confidences, 2);
   const cls = ["g-cell", `g-${tone(i)}`, ch ? "changed" : "", focused ? "focused" : ""].filter(Boolean).join(" ");
   return (
-    <div className={cls} data-item={i.item} aria-current={focused ? "true" : undefined} aria-label={`stack ${i.stack}: ${value ?? "no value"}${ch ? `, corrected from ${i.suggested ?? "none"}` : ""}`} title={titleOf(i)} onClick={() => onFocus(i.item)}>
+    <div className={cls} {...valueTone(values, value)} data-item={i.item} aria-current={focused ? "true" : undefined} aria-label={`stack ${i.stack}: ${value ?? "no value"}${ch ? `, corrected from ${i.suggested ?? "none"}` : ""}`} title={titleOf(i)} onClick={() => onFocus(i.item)}>
       <div className="g-pic">
         <img src={i.thumb} alt="" loading="eager" decoding="async" draggable={false} onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />
       </div>
       <div className="g-line">
+        <ValueMark values={values} value={value} />
         <select className="g-pick" value={value ?? ""} aria-label={`value of stack ${i.stack}`} onChange={(e) => {
             onChoose(i.item, e.target.value || null);
             // the keys act on the grid again once a value is picked

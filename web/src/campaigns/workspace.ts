@@ -7,13 +7,13 @@
 
 import type { PackDoc } from "../review/client";
 import type { BoardCandidate } from "../review/SessionBoard";
-import { answerBody, answeredAxes, answerWords, axisValues, CANDIDATE_KEYS, CANT_TELL, CANT_TELL_KEYS, cantTellOf, itemWords, jointOf, jointValue, hintsFor, keyValue, legalProblem, ROW_KEYS, stateWords, UNSURE_KEY, unsureOf, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Hint, type Item, type Question } from "./client";
+import { answerBody, answeredAxes, answerWords, axisValues, CANDIDATE_KEYS, CANT_TELL, CANT_TELL_KEYS, cantTellOf, itemWords, jointOf, jointValue, hintsFor, keyValue, legalProblem, ROW_KEYS, stateWords, UNSURE_KEY, unsureOf, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Hint, type Item, type MyAnswer, type Question } from "./client";
 import { fold, hitWords, nameHit, vocabularyOf } from "./lookup";
 import { choose, type Marks, type Row } from "./renderers";
 
 export type Seat =
   | { kind: "claiming" }
-  | { kind: "holding"; assignment: Assignment; item: Item; note: string | null }
+  | { kind: "holding"; assignment: Assignment; item: Item; note: string | null; amend?: MyAnswer }
   | { kind: "done"; why: string }
   | { kind: "failed"; why: string };
 
@@ -24,13 +24,27 @@ export function seatOf(c: Claimed, note: string | null = null): Seat {
 }
 
 /**
+ * The seat of a correction (record 50, after the first gold campaign): the
+ * item of one's own answer, opened to change it. It holds no lease, so its
+ * assignment is a stand-in no door is asked about: its id is the answer's,
+ * negative, so the page starts the item afresh.
+ */
+export function amendSeat(a: MyAnswer, item: Item | null, note: string | null = null): Seat {
+  const it: Item = item
+    ? { ...item, blind: item.blind === true || a.sealed }
+    : { id: a.item, position: a.position, review_item_id: null, stack_id: a.stack, input_derivative_ids: null, state: "agreed", round: a.round, agreement: null, metric: null, outcome: null, decision_id: null, pick_id: null, resolved_at: null, blind: a.sealed };
+  const assignment: Assignment = { id: -a.answer, item_id: a.item, principal: "", role: a.role === "adjudicator" ? "adjudicator" : "rater", round: a.round, state: "submitted", created_at: a.answered_at, leased_at: null, lease_until: null, ended_at: null };
+  return { kind: "holding", assignment, item: it, note, amend: a };
+}
+
+/**
  * What a heartbeat's answer does to the seat. The same assignment back means
  * the lease holds, with its time as the engine has it; another means the
  * lease ended and the engine handed the next item; none means it ended and
  * nothing is left.
  */
 export function beatSeat(seat: Seat, c: Claimed): Seat {
-  if (seat.kind !== "holding") return seat;
+  if (seat.kind !== "holding" || seat.amend) return seat;
   if (c.assignment && c.assignment.id === seat.assignment.id) return { ...seat, assignment: { ...seat.assignment, ...c.assignment } };
   // a renew door answers the assignment alone
   if (c.assignment && !c.item && c.assignment.id !== seat.assignment.id) return seat;
@@ -148,7 +162,8 @@ export type KeyAct =
   | { kind: "unsure" }
   | { kind: "header" }
   | { kind: "find"; row: Row }
-  | { kind: "combo" };
+  | { kind: "combo" }
+  | { kind: "undo" };
 
 /**
  * Whether the rows are drawn compact (record 48, one screen): more rows than
@@ -216,7 +231,8 @@ export function findMatches(row: Row, typed: string, opts: { none?: boolean; can
  * the engine serves it and `H` the evidence; on three rows or more a row's
  * number finds it (`1` the first) and its first letters answer it, in
  * place of the value keys. After the second real read: `/` finds a whole
- * answer on those rows.
+ * answer on those rows. After the first gold campaign: `u` undoes the last
+ * answer, opening it again to correct, where `u` is not a value's key.
  */
 export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: Question; rows: Row[]; candidates?: number[]; offered?: number; batches?: boolean; header?: boolean }): KeyAct | null {
   if (opts.inField) return key === "Enter" && opts.ctrl ? { kind: "answer" } : null;
@@ -246,6 +262,7 @@ export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: 
   if (opts.q.kind === "axes" && compactRows(opts.rows)) {
     const r = opts.rows.findIndex((_, i) => findKeyOf(i) === key);
     if (r >= 0) return { kind: "find", row: opts.rows[r] };
+    if (key === "u" || key === "U") return { kind: "undo" };
     return key === "s" || key === "S" ? { kind: "skip" } : null;
   }
   for (let r = 0; r < Math.min(opts.rows.length, ROW_KEYS.length); r++) {
@@ -253,6 +270,7 @@ export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: 
     if (v !== null) return { kind: "choose", row: opts.rows[r], value: v };
   }
   if (key === "s" || key === "S") return { kind: "skip" };
+  if (key === "u" || key === "U") return { kind: "undo" };
   return null;
 }
 

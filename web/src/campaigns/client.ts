@@ -344,7 +344,134 @@ export const campaigns = {
   header: (path: string) => door<HeaderDoc>("GET", path),
   /** How common each combination of the answered axes is across the registry, never counting this campaign's stacks or a sealed one (record 48). */
   combinations: (c: number | string, limit = 300) => door<Json>("GET", `/api/campaigns/${id(c)}/combinations?limit=${limit}`),
+  /** The caller's own answers still standing, most recent first, narrowed to one value where asked (record 50, after the first gold campaign). */
+  mine: (c: number | string, opts: { value?: string | null; limit?: number } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.value) q.set("value", opts.value);
+    q.set("limit", String(opts.limit ?? 500));
+    return door<Json>("GET", `/api/campaigns/${id(c)}/mine?${q.toString()}`).then(mineOf);
+  },
+  /** Correct one's own answer while the campaign is open: a new answer that supersedes it; the earlier one is kept. */
+  amend: (c: number | string, answer: number, body: AnswerBody) => door<Amended>("POST", `/api/campaigns/${id(c)}/answers/${answer}/amend`, body),
 };
+
+/** The doors that list one's own answers and correct one (record 50, after the first gold campaign). */
+export const MINE = "GET /api/campaigns/{id}/mine";
+export const AMEND = "POST /api/campaigns/{id}/answers/{answer}/amend";
+
+/** One of the caller's own answers, as the mine door lists it; never with a suggestion beside it. */
+export interface MyAnswer {
+  answer: number;
+  item: number;
+  stack: number | null;
+  position: number;
+  /** A single-axis question's value, an axes question's joint answer. */
+  value: unknown;
+  answered_at: string;
+  via: "claim" | "batch" | "amend" | string;
+  unsure: boolean;
+  /** The earlier answer this one corrected, where it corrected one. */
+  supersedes: number | null;
+  role: "rater" | "adjudicator" | string;
+  round: number;
+  thumb: string | null;
+  /** Of a sealed sample, read blind: only the rater's own answer is shown. */
+  sealed: boolean;
+}
+
+export interface Mine {
+  campaign: number;
+  principal: string;
+  /** The campaign is still open, so an answer may be corrected. */
+  open: boolean;
+  count: number;
+  total: number;
+  /** How many of the answers hold each value. */
+  values: Record<string, number>;
+  answers: MyAnswer[];
+}
+
+/** What a correction did: the new answer, the one it supersedes and where the item stands; `unchanged` where it said the same and nothing was written. */
+export interface Amended {
+  answer: number;
+  supersedes: number;
+  item: number;
+  state: ItemState | string;
+  adjudication: number | null;
+  derived?: Derived | null;
+  unchanged?: boolean;
+}
+
+/** The mine door's answer, read into one shape whatever it left out. */
+export function mineOf(raw: Json): Mine {
+  const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+  const list = Array.isArray(raw.answers) ? (raw.answers as Json[]) : [];
+  const values: Record<string, number> = {};
+  if (raw.values && typeof raw.values === "object" && !Array.isArray(raw.values)) for (const [k, v] of Object.entries(raw.values as Json)) if (num(v) !== null) values[k] = v as number;
+  const answers = list.flatMap((a): MyAnswer[] => {
+    const answer = num(a.answer);
+    const item = num(a.item);
+    if (answer === null || item === null) return [];
+    return [
+      {
+        answer,
+        item,
+        stack: num(a.stack),
+        position: num(a.position) ?? 0,
+        value: a.value ?? null,
+        answered_at: typeof a.answered_at === "string" ? a.answered_at : "",
+        via: typeof a.via === "string" ? a.via : "claim",
+        unsure: a.unsure === true,
+        supersedes: num(a.supersedes),
+        role: typeof a.role === "string" ? a.role : "rater",
+        round: num(a.round) ?? 1,
+        thumb: typeof a.thumb === "string" ? a.thumb : null,
+        sealed: a.sealed === true,
+      },
+    ];
+  });
+  return { campaign: num(raw.campaign) ?? 0, principal: typeof raw.principal === "string" ? raw.principal : "", open: raw.open !== false, count: num(raw.count) ?? answers.length, total: num(raw.total) ?? answers.length, values, answers };
+}
+
+/** An answer of one's own as the rows show it chosen, to correct it: an axis's value, an axes answer's joint; null for a question the reader does not correct. */
+export function givenOfMine(q: Question, value: unknown): Given | null {
+  if (q.kind === "axis") return typeof value === "string" ? { kind: "value", value } : null;
+  if (q.kind !== "axes") return null;
+  const axes = answeredAxes(q);
+  // a single-axis question's answer comes as the axis's value alone
+  if (typeof value === "string" && !value.startsWith("{") && axes.length === 1) return { kind: "values", values: { [axes[0]]: value } };
+  const joint = jointValue(value);
+  if (!joint) return null;
+  const values: Record<string, string | string[] | null> = {};
+  for (const [axis, v] of Object.entries(joint)) values[axis] = Array.isArray(v) ? (v.length === 0 ? null : v.map(String)) : v === null ? null : String(v);
+  return { kind: "values", values };
+}
+
+/** One's own answer in words, one line: the value, or each axis with its value. */
+export function mineWords(q: Question, value: unknown): string {
+  const g = givenOfMine(q, value);
+  if (!g) return answerWords({ value });
+  if (g.kind === "value") return g.value;
+  if (g.kind !== "values") return "";
+  const axes = answeredAxes(q);
+  if (axes.length === 1) {
+    const v = g.values[axes[0]];
+    return v === null ? "none" : Array.isArray(v) ? v.join("+") : (v ?? "");
+  }
+  return axes.map((a) => `${a} ${((v) => (v === null || v === undefined ? "none" : Array.isArray(v) ? v.join("+") : v))(g.values[a])}`).join(" · ");
+}
+
+/** A single-axis answer's value, for its colour: the value itself, or the one axis of a joint. */
+export function singleValueOf(q: Question, value: unknown): string | null {
+  const g = givenOfMine(q, value);
+  if (!g) return null;
+  if (g.kind === "value") return g.value;
+  if (g.kind !== "values") return null;
+  const axes = answeredAxes(q);
+  if (axes.length !== 1) return null;
+  const v = g.values[axes[0]];
+  return typeof v === "string" ? v : null;
+}
 
 /** The doors record 48's first real read added: the derived axes of an answer, and an item's whole header. */
 export const DERIVE = "POST /api/campaigns/{id}/items/{item}/derive";

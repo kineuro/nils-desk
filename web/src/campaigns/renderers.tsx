@@ -10,6 +10,7 @@ import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { cantTellKeyOf, formFields, keyOf, type FormSchema, type Given, type Item, type Question } from "./client";
 import type { ValueNames } from "./lookup";
+import { ValueMark, valueTone } from "./values";
 import { findKeyOf, findMatches, LONG_ROW, sameFound, type Found } from "./workspace";
 
 /** One row of values: an axis, its values in the pack's order, and the families they group under where the pack says. */
@@ -25,7 +26,7 @@ export interface Row {
 /** Who among the raters gave a value, for the adjudicator: value to principals. */
 export type Marks = Record<string, Record<string, string[]>>;
 
-/** One row per axis, the values grouped by family, each with the key that picks it. */
+/** One row per axis, the values grouped by family, each with the key that picks it and its colour and shape (record 50, after the first gold campaign). */
 export function AxisRows({
   rows,
   chosen,
@@ -67,8 +68,9 @@ export function AxisRows({
                     const picked = Array.isArray(on) ? on.includes(value) : on === value;
                     const who = marks[r.axis]?.[value] ?? [];
                     return (
-                      <button key={value} type="button" className={picked ? "opt on" : "opt"} aria-pressed={picked} onClick={() => onChoose(r.axis, value)} title={who.length > 0 ? `given by ${who.join(", ")}` : undefined}>
+                      <button key={value} type="button" className={picked ? "opt on" : "opt"} aria-pressed={picked} onClick={() => onChoose(r.axis, value)} title={who.length > 0 ? `given by ${who.join(", ")}` : undefined} {...valueTone(r.values, value)}>
                         {key && <kbd>{key}</kbd>}
+                        <ValueMark values={r.values} value={value} />
                         {value}
                         {who.length > 0 && <span className="said-by">{who.length}</span>}
                       </button>
@@ -271,6 +273,7 @@ export function CompactRows({
               aria-pressed={picked(value)}
               aria-disabled={held || (out !== null && !picked(value)) ? true : undefined}
               data-value={value}
+              {...valueTone(r.values, value)}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 if (held) return;
@@ -284,6 +287,7 @@ export function CompactRows({
               }}
               title={title.length > 0 ? title.join(" · ") : undefined}
             >
+              <ValueMark values={r.values} value={value} />
               {value}
               {via && <span className="via">{via.split(" → ")[0]}</span>}
               {who.length > 0 && <span className="said-by">{who.length}</span>}

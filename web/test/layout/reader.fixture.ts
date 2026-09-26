@@ -301,5 +301,8 @@ export function doorsOf(opts: { derive?: boolean; header?: boolean; combos?: boo
     ...(derive ? ["POST /api/campaigns/{id}/items/{item}/derive"] : []),
     ...(header ? ["GET /api/campaigns/{id}/items/{item}/header"] : []),
     ...(combos ? ["GET /api/campaigns/{id}/combinations"] : []),
+    // after the first gold campaign (record 50): one's own answers and their correction, a button in the reader's head
+    "GET /api/campaigns/{id}/mine",
+    "POST /api/campaigns/{id}/answers/{answer}/amend",
   ];
 }

@@ -4,7 +4,10 @@
 // what the mouse does, and giving an item back returns it to the pool for
 // others. The adjudicator's view is the same workspace with every rater's
 // answer beside the options and the disagreement named. A rater sees no
-// other rater's answer.
+// other rater's answer. After the first gold campaign: one's own answer is
+// opened again to correct it (`u` for the last, or from My answers), which
+// the engine keeps as a new answer superseding the earlier; and the next
+// item is read ahead while this one is read, so it shows at once.
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { Json } from "../ask/client";
@@ -17,6 +20,7 @@ import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import {
+  AMEND,
   answerWords,
   beatEvery,
   campaigns,
@@ -39,17 +43,21 @@ import {
   type HeaderDoc,
   type Hint,
   type Item,
+  type MyAnswer,
+  givenOfMine,
+  mineWords,
 } from "./client";
+import { amendRefusal, MyAnswers } from "./MyAnswers";
 import { AxisRows, blank, CompactRows, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
 import { BatchView, type BatchViewProps } from "./Batches";
 import type { AskedCandidate } from "../review/asked";
 import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, deriveValue, derivedWords, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type HeaderLine, type Order, type Pace, type Reading, type Suggestion } from "./reader";
-import { acceptBatch, batchesFor, claimIn, deriveAsked, deriveDoor, Deriver, headerDoorOf, headerFor, hintOf, R48, readingFor, valueOrderServed } from "./readerDoors";
+import { acceptBatch, batchesFor, claimIn, deriveAsked, deriveDoor, Deriver, headerDoorOf, headerFor, hintOf, nextOf, prefetchOn, R48, readingFor, valueOrderServed } from "./readerDoors";
 import { ComboSearch, DerivedLine, EvidenceDrawer, HeaderBlock, HeaderDoors, HeaderDrawer, headerLinesOf, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { combinationsOf, seedsOf, settle, takeCombo, vocabularyOf, type Combination, type Settled } from "./lookup";
 import { StackView } from "./StackView";
 import { warmStack } from "../viewer/prefetch";
-import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, hintsNow, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
+import { amendSeat, answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, hintsNow, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
 
 type Role = "rater" | "adjudicator";
 
@@ -80,7 +88,7 @@ function remember(key: string, v: string): void {
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; role: Role }) {
+export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: string; role: Role; query?: Record<string, string> }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [seat, setSeat] = useState<Seat>({ kind: "claiming" });
@@ -148,6 +156,15 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   orderNow.current = order;
   const answeredHere = useRef(new Set<number>());
   const hint = useRef<number[]>([]);
+  // the items the engine names as the next (record 50, after the first gold campaign), read ahead
+  const nextItems = useRef<{ item: number | null; stack: number }[]>([]);
+  // the last answer given here, which `u` opens again to correct
+  const last = useRef<MyAnswer | null>(null);
+  const [mineOpen, setMineOpen] = useState(false);
+  // only the items held back to be read one by one, and a sealed sample's (from the gallery's link)
+  const alone = query?.alone === "1" || query?.alone === "true";
+  const amendAt = query?.amend && /^\d+$/u.test(query.amend) ? Number(query.amend) : null;
+  const back = query?.back === "gallery" ? "gallery" : "rate";
 
   // the capabilities are read again every few seconds; the workspace follows them without starting over
   const capsNow = useRef(caps);
@@ -156,17 +173,22 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const claim = useCallback(
     (note: string | null = null) => {
       setSeat({ kind: "claiming" });
-      claimIn(id, role, orderNow.current)
+      claimIn(id, role, orderNow.current, alone)
         .then((c) => {
-          hint.current = hintOf(c);
+          hint.current = prefetchOn() ? hintOf(c) : [];
+          nextItems.current = prefetchOn() ? nextOf(c) : [];
           setSeat(seatOf(c, note));
         })
         .catch((e: unknown) => setSeat({ kind: "failed", why: refusedWords(e) }));
     },
-    [id, role],
+    [id, role, alone],
   );
 
-  // the campaign, then the first claim
+  // the campaign, then the first claim; or the answer a link opens to correct
+  const openAmend = useCallback(
+    (a: MyAnswer, items: Item[] | undefined, note: string | null) => setSeat(amendSeat(a, items?.find((i) => i.id === a.item) ?? null, note)),
+    [],
+  );
   useEffect(() => {
     let alive = true;
     campaigns
@@ -175,12 +197,23 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         if (!alive) return;
         setCampaign(c);
         setOpen(c.counts.items.open ?? 0);
-        if (rateRefusal(capsNow.current, c, role) === null) claim();
+        if (rateRefusal(capsNow.current, c, role) !== null) return;
+        if (amendAt === null) return claim();
+        campaigns.mine(id).then(
+          (m) => {
+            if (!alive) return;
+            const a = m.answers.find((x) => x.answer === amendAt);
+            if (!a) setSeat({ kind: "failed", why: `Answer ${amendAt} is not one of yours still standing: it may have been corrected already. Open My answers for the latest.` });
+            else openAmend(a, c.items, `Correcting your answer: ${mineWords(c.question, a.value)}.`);
+          },
+          (e: unknown) => alive && setSeat({ kind: "failed", why: refusedWords(e) }),
+        );
       })
       .catch((e: unknown) => alive && setFailed(refusedWords(e)));
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, role, claim]);
 
   // the pack's families and multi-valued axes, where the person may read the pack
@@ -203,6 +236,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   }, [countsServed, id]);
 
   const holding = seat.kind === "holding" ? seat : null;
+  const amending = holding?.amend ?? null;
   const assignmentId = holding?.assignment.id ?? null;
   const item = holding?.item ?? null;
   const currentItem = useRef<number | null>(null);
@@ -211,10 +245,12 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   // a new item starts from a blank answer; its review item's evidence where the person may read the queue; every answer for the adjudicator
   useEffect(() => {
     if (!q || assignmentId === null || !item) return;
-    const fresh = blank(q);
+    // a correction starts from the rater's own answer, never from a suggestion
+    const own = amending ? givenOfMine(q, amending.value) : null;
+    const fresh = own ?? blank(q);
     setG(fresh);
     setWhy("");
-    setUnsure(false);
+    setUnsure(amending?.unsure ?? false);
     setRefused(null);
     setEvidence(null);
     setPickable(null);
@@ -244,13 +280,24 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         setReading(r);
         setSuggestion(s);
         setSuggested(g0);
-        if (g0) setG((was) => (JSON.stringify(was) === JSON.stringify(fresh) ? g0 : was));
+        if (g0 && !own) setG((was) => (JSON.stringify(was) === JSON.stringify(fresh) ? g0 : was));
       });
-      // the next items: their pictures warmed and their readings asked for while this one is read
-      const items = campaign?.items ?? [];
-      const next = upcoming(item, items, answeredHere.current, orderNow.current, 2, hint.current);
-      prefetch.current?.want(next);
-      for (const n of items.filter((i) => i.stack_id !== null && next.includes(i.stack_id))) void readingFor(capsNow.current, id, q, n);
+      // the next items: their pictures warmed, their readings and headers asked for while this one is read
+      if (prefetchOn()) {
+        const items = campaign?.items ?? [];
+        const next = upcoming(item, items, answeredHere.current, orderNow.current, 2, hint.current);
+        prefetch.current?.want(next);
+        const ahead = new Map<number, Pick<Item, "id" | "stack_id" | "review_item_id" | "blind">>();
+        for (const n of items.filter((i) => i.stack_id !== null && next.includes(i.stack_id))) ahead.set(n.id, n);
+        // the engine's own word on what comes next, whether or not the campaign listed it
+        for (const n of nextItems.current) if (n.item !== null && n.item !== item.id && !ahead.has(n.item)) ahead.set(n.item, items.find((i) => i.id === n.item) ?? { id: n.item, stack_id: n.stack, review_item_id: null });
+        for (const n of ahead.values()) {
+          void readingFor(capsNow.current, id, q, n).then((r) => {
+            const path = headerDoorOf(capsNow.current, id, n.id, r);
+            if (path) headerFor(path).catch(() => undefined);
+          });
+        }
+      }
     }
     if (q.kind === "pick" && served(capsNow.current, CANDIDATES))
       campaigns.candidates(id, item.id).then(
@@ -290,7 +337,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   // the heartbeat: whether the lease still holds, and how long, from the engine
   const leaseSeconds = campaign?.lease_seconds ?? 3600;
   useEffect(() => {
-    if (assignmentId === null) return;
+    if (assignmentId === null || assignmentId < 0) return;
     const t = setInterval(() => {
       campaigns
         .renew(capsNow.current, id, assignmentId, role)
@@ -318,9 +365,27 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
     setBusy(true);
     const seconds = clock.current.stop(holding.item.id, Date.now());
     const changes = changesOf(q, baselineOf(q, suggestion), settled.given);
+    if (holding.amend) {
+      const was = holding.amend;
+      campaigns
+        .amend(id, was.answer, b.body)
+        .then((r) => {
+          const now = mineWords(q, b.body.value);
+          last.current = { ...was, answer: r.unchanged ? was.answer : r.answer, value: b.body.value ?? was.value, unsure: b.body.unsure === true, supersedes: r.unchanged ? was.supersedes : was.answer, via: r.unchanged ? was.via : "amend" };
+          setSaid(r.unchanged ? `${itemWords(holding.item)} kept as it was: ${now}.` : `Corrected ${itemWords(holding.item)}: ${mineWords(q, was.value)} is now ${now}; the earlier answer is kept.`);
+          // back where the correction was opened from: the gallery, the reader's own address, or the item held before it
+          if (back === "gallery") location.hash = href("campaigns", id, "gallery");
+          else if (amendAt !== null) location.hash = href("campaigns", id, "rate");
+          else claim();
+        })
+        .catch((e: unknown) => setRefused(refusedWords(e)))
+        .finally(() => setBusy(false));
+      return;
+    }
     campaigns
       .answer(id, holding.assignment.id, b.body)
       .then((r) => {
+        last.current = { answer: r.answer, item: holding.item.id, stack: holding.item.stack_id, position: holding.item.position, value: b.body.value ?? null, answered_at: new Date().toISOString(), via: "claim", unsure: b.body.unsure === true, supersedes: null, role, round: holding.item.round, thumb: null, sealed: holding.item.blind === true };
         setDone((d) => d + 1);
         setPace((p) => paced(p, seconds, changes));
         answeredHere.current.add(holding.item.id);
@@ -334,7 +399,23 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         setRefused(refusedWords(e));
       })
       .finally(() => setBusy(false));
-  }, [q, holding, busy, settled, why, unsure, id, claim, suggestion]);
+  }, [q, holding, busy, settled, why, unsure, id, claim, suggestion, back, role, amendAt]);
+
+  // `u`: the last answer given here opened again to correct; without one, My answers
+  const undo = useCallback(() => {
+    if (!campaign || busy) return;
+    const refusal = amendRefusal(capsNow.current, campaign, null);
+    if (refusal) {
+      setSaid(refusal);
+      return;
+    }
+    const a = last.current;
+    if (!a || holding?.amend?.answer === a.answer) {
+      setMineOpen(true);
+      return;
+    }
+    openAmend(a, campaign.items, `Correcting your last answer: ${mineWords(campaign.question, a.value)}.`);
+  }, [campaign, busy, holding, openAmend]);
 
   // the batches of like stacks (record 48 R1)
   const batchesOffered = served(caps, R48.batches) && (q?.kind === "axis" || q?.kind === "axes") && role === "rater";
@@ -397,6 +478,14 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
   const giveBack = useCallback(
     (then: "next" | "stop") => {
       if (!holding || busy) return;
+      // a correction left as it was: back to where it came from
+      if (holding.amend) {
+        setSaid(`${itemWords(holding.item)} left as it was.`);
+        if (then === "stop" || back === "gallery") location.hash = href("campaigns", id, back === "gallery" ? "gallery" : null);
+        else if (amendAt !== null) location.hash = href("campaigns", id, "rate");
+        else claim();
+        return;
+      }
       setBusy(true);
       campaigns
         .release(id, holding.assignment.id)
@@ -408,7 +497,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
         .catch((e: unknown) => setRefused(refusedWords(e)))
         .finally(() => setBusy(false));
     },
-    [holding, busy, id, claim],
+    [holding, busy, id, claim, back, amendAt],
   );
 
   // on the board, a key chooses an acquisition, named by its first stack
@@ -416,12 +505,12 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
 
   // the keys
   const offered = suggestion?.differ.length ? suggestion.offered : [];
-  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence, header: headerDoor !== null, openHeader });
-  keyed.current = { q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence, header: headerDoor !== null, openHeader };
+  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence, header: headerDoor !== null, openHeader, undo, mineOpen });
+  keyed.current = { q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence, header: headerDoor !== null, openHeader, undo, mineOpen };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
-      if (!k.q || e.altKey || e.metaKey) return;
+      if (!k.q || e.altKey || e.metaKey || k.mineOpen) return;
       const t = e.target as HTMLElement | null;
       const inField = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
       if (t?.closest?.("dialog, .drawer")) return;
@@ -453,6 +542,7 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       else if (act.kind === "cant_tell") setG((was) => givenCantTell(k.q!, was, act.row.axis));
       else if (act.kind === "unsure") setUnsure((x) => !x);
       else if (act.kind === "answer") k.answer();
+      else if (act.kind === "undo") k.undo();
       else if (act.kind === "skip") k.giveBack("next");
       else if (act.kind === "keys") setKeys((x) => !x);
       else if (act.kind === "choose") setG((was) => choose(k.q!, was, act.row, act.value));
@@ -507,6 +597,9 @@ export function Workspace({ caps, id, role }: { caps: Capabilities; id: string; 
       onStop={() => giveBack("stop")}
       onKeys={() => setKeys((x) => !x)}
       onAgain={() => claim()}
+      amending={amending}
+      onMine={campaign && served(caps, AMEND) ? () => setMineOpen(true) : undefined}
+      mine={mineOpen ? <MyAnswers caps={caps} campaign={campaign} values={rows.length === 1 ? rows[0].values : []} back="rate" onClose={() => setMineOpen(false)} /> : null}
       lines={reading?.lines ?? null}
       suggestion={suggestion}
       blind={reading?.blind === true || item?.blind === true}
@@ -637,6 +730,12 @@ export interface WorkspaceBodyProps {
   /** The rows compact or expanded, kept per person. */
   rowsView?: RowsView;
   onRowsView?: (v: RowsView) => void;
+  /** One's own answer being corrected (record 50, after the first gold campaign), in place of a claimed item. */
+  amending?: MyAnswer | null;
+  /** Open one's own answers, where the engine takes corrections. */
+  onMine?: () => void;
+  /** One's own answers while they are open. */
+  mine?: ReactNode;
 }
 
 /** The workspace as it draws from what it holds. */
@@ -753,6 +852,11 @@ function ReaderOne(p: Drawn) {
             Like stacks in batches <kbd>b</kbd>
           </button>
         )}
+        {p.onMine && !refusal && (
+          <button type="button" className="button quiet small" onClick={p.onMine} title="your answers, the latest first, to correct one">
+            My answers <kbd>u</kbd>
+          </button>
+        )}
         <span className="rate-count-line">
           <b>{p.open === null ? "?" : n(p.open)}</b> open · {p.pace ? <PaceCount pace={p.pace} /> : <span>{p.done > 0 ? `${n(p.done)} answered here` : "items"}</span>}
         </span>
@@ -760,6 +864,7 @@ function ReaderOne(p: Drawn) {
       {refusal && <p className="warn">{refusal}</p>}
       <SeatState {...p} />
       {!refusal && p.batch && <BatchView {...p.batch} />}
+      {p.mine}
       {holding && !p.batch && (
         <div className="rate-grid">
           <div className="rate-picture">
@@ -864,10 +969,17 @@ function ItemLine(p: WorkspaceBodyProps & { left: number | null; children?: Reac
           blind
         </span>
       )}
-      <span className={p.left !== null && p.left < 120 ? "tag caution" : "tag"} title={holding.assignment.lease_until ?? undefined}>
-        <Icon name="clock" />
-        {leaseWords(p.left)}
-      </span>
+      {holding.amend ? (
+        <span className="tag caution" title="a new answer that supersedes your earlier one; the earlier is kept">
+          <Icon name="pencil" />
+          correcting your answer
+        </span>
+      ) : (
+        <span className={p.left !== null && p.left < 120 ? "tag caution" : "tag"} title={holding.assignment.lease_until ?? undefined}>
+          <Icon name="clock" />
+          {leaseWords(p.left)}
+        </span>
+      )}
       {p.children}
     </div>
   );
@@ -898,11 +1010,17 @@ function Actions(p: WorkspaceBodyProps & { withWhy?: boolean }) {
   return (
     <div className="row actions">
       <button type="button" className="button" disabled={p.busy} onClick={p.onAnswer}>
-        Answer <kbd>Enter</kbd>
+        {p.amending ? "Correct" : "Answer"} <kbd>Enter</kbd>
       </button>
-      <button type="button" className="button secondary" disabled={p.busy} onClick={p.onSkip} title="Back to the pool for others; never to you again">
-        Give back <kbd>s</kbd>
-      </button>
+      {p.amending ? (
+        <button type="button" className="button secondary" disabled={p.busy} onClick={p.onSkip} title="Leave your answer as it was">
+          Leave as it was <kbd>s</kbd>
+        </button>
+      ) : (
+        <button type="button" className="button secondary" disabled={p.busy} onClick={p.onSkip} title="Back to the pool for others; never to you again">
+          Give back <kbd>s</kbd>
+        </button>
+      )}
       {unsureOf(q) && (
         <button type="button" className={p.unsure ? "opt on" : "opt"} aria-pressed={p.unsure ?? false} disabled={p.busy} onClick={p.onUnsure} title="Answered, and wants a second look">
           Unsure <kbd>{UNSURE_KEY}</kbd>
@@ -1029,6 +1147,7 @@ function KeyList({ rows, compact = false, combos = false, reader = false, candid
       {!compact && rows > 1 && pair("q to p", "a value on the second row")}
       {cantTell > 0 && pair(CANT_TELL_KEYS.slice(0, cantTell).split("").join(" "), "can't tell on the first row, the second, and on; again clears it")}
       {unsure && pair(UNSURE_KEY, "mark it unsure, for a second look")}
+      {pair("u", "your last answer opened again to correct it (where u is no value's key); without one, your answers")}
       {pair("Enter", "answer, then the next item")}
       {pair("s", "give it back, then the next")}
       {pair("Ctrl+Enter", "answer from a text field")}

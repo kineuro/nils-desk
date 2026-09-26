@@ -60,6 +60,10 @@ export interface GalleryPage {
   sealed: number;
   held_back: number;
   hold_back: number;
+  /** The items held back to be read alone that are still open to the caller (record 50, after the first gold campaign); none from an engine before it. */
+  held_back_open: number | null;
+  /** Every item read one by one here: held back and still open, and those of a sealed sample. */
+  alone: number | null;
   left: number;
   items: GalleryItem[];
 }
@@ -80,6 +84,8 @@ export function pageOf(raw: Json): GalleryPage {
     sealed: num(raw.sealed) ?? 0,
     held_back: num(raw.held_back) ?? 0,
     hold_back: num(raw.hold_back) ?? 0,
+    held_back_open: num(raw.held_back_open),
+    alone: num(raw.alone),
     left: num(raw.left) ?? items.length,
     items: items.flatMap((i): GalleryItem[] => {
       const item = num(i.item);
@@ -232,9 +238,10 @@ export type GalleryAct =
   | { kind: "reset" }
   | { kind: "accept" }
   | { kind: "order" }
+  | { kind: "mine" }
   | { kind: "none" };
 
-/** What a key does on the grid: a number sets the focused item's value, the arrows move, Backspace puts the suggestion back, Ctrl+Enter accepts the page, `o` changes the order. */
+/** What a key does on the grid: a number sets the focused item's value, the arrows move, Backspace puts the suggestion back, Ctrl+Enter accepts the page, `o` changes the order, `u` opens one's own answers to correct one. */
 export function keyAct(key: string, values: string[], opts: { ctrl?: boolean; columns?: number } = {}): GalleryAct {
   if (key === "Enter" && opts.ctrl) return { kind: "accept" };
   const v = valueOfKey(values, key);
@@ -253,6 +260,9 @@ export function keyAct(key: string, values: string[], opts: { ctrl?: boolean; co
       return { kind: "reset" };
     case "o":
       return { kind: "order" };
+    case "u":
+    case "U":
+      return { kind: "mine" };
     default:
       return { kind: "none" };
   }
@@ -292,9 +302,26 @@ export function pageWords(p: GalleryPage, shownCount: number): string {
   const rest = Math.max(0, p.left - shownCount);
   const parts = [`${shownCount} of ${p.left} to check`];
   if (rest > 0) parts.push(`${rest} after these`);
-  if (p.held_back > 0) parts.push(`${p.held_back} held back to read alone`);
-  if (p.sealed > 0) parts.push(`${p.sealed} sealed, read blind one by one`);
+  if (p.held_back_open === null && p.held_back > 0) parts.push(`${p.held_back} held back to read alone`);
+  if (p.held_back_open === null && p.sealed > 0) parts.push(`${p.sealed} sealed, read blind one by one`);
   return parts.join(" · ");
+}
+
+/**
+ * Why some items never come to the gallery, in a line (record 50, after the
+ * first gold campaign: "some of them i couldn't do in batch, why?"): the
+ * share the campaign holds back is read one by one so the engine can check
+ * how often an answer given in a batch is right, and a sealed sample's
+ * stacks are read blind. Null where nothing is held back.
+ */
+export function aloneWords(p: GalleryPage): string | null {
+  const held = p.held_back_open ?? p.held_back;
+  const sealed = p.sealed;
+  if (held + sealed === 0) return null;
+  const parts: string[] = [];
+  if (held > 0) parts.push(`${held} ${held === 1 ? "item is" : "items are"} held back to be read one by one: the campaign holds back ${Math.round(p.hold_back * 100)} % of what is accepted in batches, chosen at random, so the engine can check how often a batch answer is right`);
+  if (sealed > 0) parts.push(`${sealed} ${sealed === 1 ? "is" : "are"} of a sealed sample, read blind with nothing suggested`);
+  return `${parts.join("; ")}.`;
 }
 
 export interface Accepted {
