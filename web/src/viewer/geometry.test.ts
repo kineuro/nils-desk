@@ -48,7 +48,7 @@ describe("the stack's geometry", () => {
     expect(geometry({ ...base, frame: null }).regular).toBe(true);
   });
   it("puts a level's first pixel half a square in and each plane along the normal", () => {
-    const g = geometry({ ...base, orientation: [1, 0, 0, 0, 1, 0], origin: [0, 0, 0] });
+    const g = geometry({ ...base, spacing: [2, 0.5, 0.5], orientation: [1, 0, 0, 0, 1, 0], origin: [0, 0, 0] });
     expect(levelOrigin(g, [2, 0.5, 0.5], 0)).toEqual([0, 0, 0]);
     expect(levelOrigin(g, [2, 0.5, 0.5], 2)).toEqual([0.75, 0.75, 0]);
     expect(planePosition(g, [2, 0.5, 0.5], 0, 10)).toEqual([0, 0, 20]);

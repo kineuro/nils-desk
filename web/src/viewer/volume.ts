@@ -11,7 +11,7 @@
 
 import * as cs from "@cornerstonejs/core";
 import { doors, levelShape, levelSpacing, type Manifest } from "./doors";
-import { geometry, levelOrigin } from "./geometry";
+import { geometry, shiftInto, volumeGrid } from "./geometry";
 import { counters, decoder, storedWindow } from "./loader";
 import { SLAB, fillOrder, volumeLevel, VOLUME_BUDGET, type VolumePlan } from "./ring";
 
@@ -72,9 +72,12 @@ export function fillVolume(stack: number, m: Manifest, plan: VolumePlan, at: num
   scheme();
   const { level, stride, dims } = plan;
   const [nx, ny, depth] = dims;
-  const [nz] = levelShape(m, level);
-  const [dz, dy, dx] = levelSpacing(m, level);
+  const shape = levelShape(m, level);
+  const [nz, py, px] = shape;
   const g = geometry(m);
+  // square to the stack's rows, columns and normal; a sheared stack's planes each written shifted into it
+  const grid = volumeGrid(g, shape, levelSpacing(m, 0), level);
+  const [dx, dy, dz] = grid.spacing;
   const volumeId = `nilsvol:${stack}/${level}/${stride}`;
   const cached = cs.cache.getVolume(volumeId);
   const need = plan.bytes + 64 * 1024 * 1024;
@@ -86,8 +89,8 @@ export function fillVolume(stack: number, m: Manifest, plan: VolumePlan, at: num
       scalarData: scalarData!,
       dimensions: [nx, ny, depth],
       spacing: [dx, dy, dz * stride],
-      origin: levelOrigin(g, m.spacing, level),
-      direction: [...g.row, ...g.col, ...g.normal] as cs.Types.Mat3,
+      origin: grid.origin,
+      direction: [...grid.direction[0], ...grid.direction[1], ...grid.direction[2]] as cs.Types.Mat3,
       metadata: {
         BitsAllocated: 16,
         BitsStored: 16,
@@ -135,11 +138,14 @@ export function fillVolume(stack: number, m: Manifest, plan: VolumePlan, at: num
       if (z % stride !== 0) continue;
       const k = z / stride;
       jobs.push(
-        pool.decode(m.codec, r.planes[z - z0], nx, ny, m.tile).then(({ plane, ms }) => {
+        pool.decode(m.codec, r.planes[z - z0], px, py, m.tile).then(({ plane, ms }) => {
           if (closed) return;
           counters.planesDecoded += 1;
           counters.decodeMs += ms;
-          data!.set(plane, k * nx * ny);
+          if (g.shear) {
+            const [ox, oy] = grid.shift(z);
+            shiftInto(plane, px, py, data!, k * nx * ny, nx, ny, ox, oy);
+          } else data!.set(plane, k * nx * ny);
           texture.setUpdatedFrame(k);
           state.filled += 1;
           tell();
