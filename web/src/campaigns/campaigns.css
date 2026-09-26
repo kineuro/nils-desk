@@ -248,3 +248,41 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .g-by { display: flex; gap: 0.4rem; justify-content: space-between; font-size: 11px; color: var(--n-text-faint); min-width: 0; white-space: nowrap; overflow: hidden; }
 .g-by > span { overflow: hidden; text-overflow: ellipsis; }
 .g-was s { color: var(--n-text-faint); }
+
+/* One colour per value of an axis (record 50, after the first gold campaign):
+   the theme's --n-value-<slot> tokens, a shape beside each so colour alone
+   never tells two values apart, the number key kept. */
+[data-slot="1"] { --vc: var(--n-value-1); --vc-bg: var(--n-value-1-bg); }
+[data-slot="2"] { --vc: var(--n-value-2); --vc-bg: var(--n-value-2-bg); }
+[data-slot="3"] { --vc: var(--n-value-3); --vc-bg: var(--n-value-3-bg); }
+[data-slot="4"] { --vc: var(--n-value-4); --vc-bg: var(--n-value-4-bg); }
+[data-slot="5"] { --vc: var(--n-value-5); --vc-bg: var(--n-value-5-bg); }
+[data-slot="6"] { --vc: var(--n-value-6); --vc-bg: var(--n-value-6-bg); }
+[data-slot="7"] { --vc: var(--n-value-7); --vc-bg: var(--n-value-7-bg); }
+[data-slot="8"] { --vc: var(--n-value-8); --vc-bg: var(--n-value-8-bg); }
+[data-slot="9"] { --vc: var(--n-value-9); --vc-bg: var(--n-value-9-bg); }
+[data-slot="10"] { --vc: var(--n-value-10); --vc-bg: var(--n-value-10-bg); }
+.vmark { display: inline-block; min-width: 1em; margin-right: 0.25rem; color: var(--vc); font-size: 0.9em; line-height: 1; text-align: center; }
+.opt[data-slot] { border-left: 3px solid var(--vc); }
+.opt[data-slot].on { border-color: var(--vc); background: var(--vc-bg); color: var(--n-text); box-shadow: inset 0 0 0 1px var(--vc); }
+.g-key[data-slot] { padding: 0 0.3rem 0 0.2rem; border-left: 3px solid var(--vc); background: var(--vc-bg); border-radius: var(--n-radius); color: var(--n-text); }
+.g-cell[data-slot] .g-line { padding-left: 0.25rem; border-left: 4px solid var(--vc); background: var(--vc-bg); border-radius: var(--n-radius); }
+.value-tag[data-slot] { display: inline-flex; align-items: center; padding: 0 0.35rem; border-left: 3px solid var(--vc); background: var(--vc-bg); border-radius: var(--n-radius); color: var(--n-text); white-space: nowrap; }
+
+/* Held back to be read one by one (record 48 R1), said in the gallery with
+   why and a way to read them. */
+.g-alone { display: flex; align-items: baseline; gap: 0.5rem; margin: 0; }
+
+/* My answers (record 50, after the first gold campaign): the rater's own
+   answers, most recent first, filtered by value, each one opened to correct. */
+.mine-drawer { position: fixed; top: 3rem; right: 0.8rem; bottom: 0.8rem; z-index: 30; width: min(34rem, calc(100vw - 1.6rem)); display: flex; flex-direction: column; gap: 0.45rem; padding: 0.7rem 0.8rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); box-shadow: 0 0.5rem 1.5rem var(--n-scrim); }
+.mine-head { display: flex; align-items: baseline; gap: 0.6rem; }
+.mine-head h2 { font-size: var(--n-text-size-h2); margin: 0; }
+.mine-filter { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.mine-list { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 0; list-style: none; }
+.mine-row { display: grid; grid-template-columns: 4.5rem 1fr auto; gap: 0.5rem; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid var(--n-line); }
+.mine-row img { width: 4.5rem; height: 1.5rem; object-fit: contain; background: var(--n-bg-sunken); border-radius: var(--n-radius); }
+.mine-what { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; min-width: 0; font-size: 13px; }
+.mine-what .meta { font-size: 12px; }
+.axis-rows.compact .vmark { min-width: 0; margin-right: 0.15rem; font-size: 9px; }
+.axis-rows.compact .opt[data-slot] { border-left-width: 2px; }

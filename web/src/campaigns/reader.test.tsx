@@ -412,7 +412,7 @@ describe("the reader's parts", () => {
     expect(html).not.toContain("rule technique:MPRAGE");
     expect(renderToStaticMarkup(<WorkspaceBody {...props} evOpen />)).toContain("rule technique:MPRAGE");
     // the agreed values are drawn chosen on their rows
-    expect(html).toMatch(/class="opt on" aria-pressed="true"[^>]*>T1w/u);
+    expect(html).toMatch(/class="opt on" aria-pressed="true"[^>]*>(?:<kbd>[^<]*<\/kbd>)?(?:<span class="vmark"[^>]*>[^<]*<\/span>)?T1w/u);
     // the key list names the reader's keys
     expect(html).toContain("confirm the answer filled in");
     expect(html).toContain("<dt>z x</dt>");

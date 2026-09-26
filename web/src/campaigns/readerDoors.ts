@@ -34,18 +34,52 @@ export function valueOrderServed(caps: Capabilities): boolean {
   return served(caps, R48.line) || served(caps, R48.batches) || served(caps, R48.stats);
 }
 
-/** A claim, in value order where the engine offers it (record 48 R1: `order` value; an adjudicator's is always by position). */
-export function claimIn(c: number | string, role: "rater" | "adjudicator", order: Order): Promise<Claimed & { next?: unknown }> {
+/**
+ * A claim, in value order where the engine offers it (record 48 R1: `order`
+ * value; an adjudicator's is always by position). `alone` asks only for the
+ * items held back to be read one by one and those of a sealed sample
+ * (record 50, after the first gold campaign).
+ */
+export function claimIn(c: number | string, role: "rater" | "adjudicator", order: Order, alone = false): Promise<Claimed & { next?: unknown }> {
   const body: Json = { role };
   if (order === "value" && role === "rater") body.order = "value";
+  if (alone && role === "rater") body.alone = true;
   return door<Claimed & { next?: unknown }>("POST", `/api/campaigns/${id(c)}/claim`, body);
+}
+
+/** The items the engine says come next, where a claim names them: `{item, stack}`, or a list of those or of stacks. */
+export function nextOf(c: { next?: unknown }): { item: number | null; stack: number }[] {
+  const n = c.next;
+  const one = (x: unknown): { item: number | null; stack: number }[] => {
+    if (typeof x === "number") return [{ item: null, stack: x }];
+    if (!x || typeof x !== "object") return [];
+    const o = x as Json;
+    const stack = typeof o.stack === "number" ? o.stack : typeof o.stack_id === "number" ? o.stack_id : null;
+    const item = typeof o.item === "number" ? o.item : typeof o.item_id === "number" ? o.item_id : null;
+    return stack === null ? [] : [{ item, stack }];
+  };
+  return Array.isArray(n) ? n.flatMap(one) : one(n);
 }
 
 /** The stacks the engine says come next, where a claim names them. */
 export function hintOf(c: { next?: unknown }): number[] {
-  const n = c.next;
-  if (!Array.isArray(n)) return [];
-  return n.flatMap((x) => (typeof x === "number" ? [x] : x && typeof x === "object" && typeof (x as Json).stack_id === "number" ? [(x as Json).stack_id as number] : []));
+  return nextOf(c).map((x) => x.stack);
+}
+
+const PREFETCH_KEY = "nils.reader.prefetch";
+
+/**
+ * Whether the reader reads ahead (record 50, after the first gold campaign:
+ * "we can cache and make them ready"): the next item's evidence, header and
+ * pictures while this one is read. On unless a person turned it off on a
+ * slow link, `off` under nils.reader.prefetch.
+ */
+export function prefetchOn(): boolean {
+  try {
+    return localStorage.getItem(PREFETCH_KEY) !== "off";
+  } catch {
+    return true;
+  }
 }
 
 const lines = new Map<string, Promise<Reading | null>>();
@@ -118,9 +152,22 @@ export function headerDoorOf(caps: Capabilities, c: number | string, item: numbe
   return served(caps, HEADER) ? `/api/campaigns/${id(c)}/items/${item}/header` : null;
 }
 
-/** Read an item's whole header. */
+const headers = new Map<string, Promise<HeaderDoc>>();
+
+/** Read an item's whole header, once per item while the page lives, so the next item's can be read before it is shown. A refusal is not kept. */
 export function headerFor(path: string): Promise<HeaderDoc> {
-  return campaigns.header(path).then((d) => ({ ...d, fields: Array.isArray(d.fields) ? d.fields : [] }));
+  const have = headers.get(path);
+  if (have) return have;
+  const p = campaigns.header(path).then((d) => ({ ...d, fields: Array.isArray(d.fields) ? d.fields : [] }));
+  headers.set(path, p);
+  bound(headers);
+  p.catch(() => headers.delete(path));
+  return p;
+}
+
+/** Forget the headers read (a test). */
+export function forgetHeaders(): void {
+  headers.clear();
 }
 
 /** Whether to ask the derive door: the question names derived axes, or the engine lists the door. */
