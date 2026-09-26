@@ -7,7 +7,7 @@
 
 import type { PackDoc } from "../review/client";
 import type { BoardCandidate } from "../review/SessionBoard";
-import { answerBody, answeredAxes, answerWords, axisValues, CANDIDATE_KEYS, CANT_TELL, CANT_TELL_KEYS, cantTellOf, itemWords, jointOf, jointValue, keyValue, legalProblem, ROW_KEYS, stateWords, UNSURE_KEY, unsureOf, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Item, type Question } from "./client";
+import { answerBody, answeredAxes, answerWords, axisValues, CANDIDATE_KEYS, CANT_TELL, CANT_TELL_KEYS, cantTellOf, itemWords, jointOf, jointValue, hintsFor, keyValue, legalProblem, ROW_KEYS, stateWords, UNSURE_KEY, unsureOf, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Hint, type Item, type Question } from "./client";
 import { fold, hitWords, nameHit, vocabularyOf } from "./lookup";
 import { choose, type Marks, type Row } from "./renderers";
 
@@ -91,6 +91,12 @@ export function givenCantTell(q: Question, g: Given, axis: string): Given {
   if (!word) return g;
   const values = g.kind === "values" ? g.values : {};
   return { kind: "values", values: { ...values, [axis]: values[axis] === word ? "" : word } };
+}
+
+/** The pack's hints for the axes chosen so far (record 48): what is usual where they hold, never a refusal. */
+export function hintsNow(q: Question, g: Given): Hint[] {
+  if (q.kind !== "axes" || !q.constraints || g.kind !== "values") return [];
+  return hintsFor(q.constraints, jointOf(g.values, cantTellOf(q) ?? CANT_TELL));
 }
 
 /** Why the pack forbids the axes chosen so far, or null; an axis the rater cannot tell names nothing. */

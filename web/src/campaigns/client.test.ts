@@ -22,6 +22,7 @@ import {
   conditionWords,
   emptyDraft,
   formProblem,
+  hintsFor,
   holds,
   jointOf,
   kindsOffered,
@@ -195,6 +196,27 @@ describe("answering", () => {
     expect(answerBody(q, { kind: "values", values: { base: "T1w" } })).toEqual({ ok: false, needs: "a value for technique, or none" });
     expect(answerBody(q, { kind: "values", values: { base: "T1w", technique: "MPRAGE" } })).toEqual({ ok: true, body: { value: { base: "T1w", technique: "MPRAGE" } } });
     expect(answerBody(q, { kind: "values", values: { base: "T1w", technique: null } })).toEqual({ ok: true, body: { value: { base: "T1w", technique: null } } });
+  });
+
+  it("refuses what an exclusion between axes rules out, and hints without refusing (record 48)", () => {
+    const constraints: AxesConstraints = {
+      pack: "mri@0.6.0",
+      values: { base: ["T2w", "T2starw"], technique: ["TSE", "BOLD-EPI"], construct: ["SWI"] },
+      multi: ["construct"],
+      groups: {},
+      implications: [],
+      excludes: [{ id: "swi-construct-not-spin-echo", when: { axis: "construct", is: "SWI" }, axis: "technique", values: ["TSE"], why: "SWI needs gradient-echo phase" }],
+      hints: [{ id: "bold-usually-t2star", when: { axis: "technique", is: "BOLD-EPI" }, axis: "base", value: "T2starw", why: "gradient-echo BOLD is T2*-weighted" }],
+    };
+    expect(legalProblem(constraints, jointOf({ construct: ["SWI"], technique: "TSE" }))).toBe("the pack rules technique TSE out when construct is SWI: SWI needs gradient-echo phase");
+    expect(legalProblem(constraints, jointOf({ construct: ["SWI"], technique: "BOLD-EPI" }))).toBeNull();
+    // a hint holds where its condition does and the answer lacks its value, and never refuses
+    expect(hintsFor(constraints, jointOf({ technique: "BOLD-EPI" })).map((h) => h.id)).toEqual(["bold-usually-t2star"]);
+    expect(hintsFor(constraints, jointOf({ technique: "BOLD-EPI", base: "T2starw" }))).toEqual([]);
+    expect(legalProblem(constraints, jointOf({ technique: "BOLD-EPI", base: "T2w" }))).toBeNull();
+    expect(hintsFor(constraints, jointOf({ technique: "TSE" }))).toEqual([]);
+    // an older campaign carries neither
+    expect(hintsFor({ values: {}, multi: [], groups: {}, implications: [] }, jointOf({ technique: "BOLD-EPI" }))).toEqual([]);
   });
 
   it("holds an axes answer to the pack's legal combinations before it is sent", () => {

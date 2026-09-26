@@ -37,6 +37,7 @@ import {
   type Derived,
   type Given,
   type HeaderDoc,
+  type Hint,
   type Item,
 } from "./client";
 import { AxisRows, blank, CompactRows, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
@@ -48,7 +49,7 @@ import { ComboSearch, DerivedLine, EvidenceDrawer, HeaderBlock, HeaderDoors, Hea
 import { combinationsOf, seedsOf, settle, takeCombo, vocabularyOf, type Combination, type Settled } from "./lookup";
 import { StackView } from "./StackView";
 import { warmStack } from "../viewer/prefetch";
-import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
+import { answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, hintsNow, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
 
 type Role = "rater" | "adjudicator";
 
@@ -924,6 +925,21 @@ function Actions(p: WorkspaceBodyProps & { withWhy?: boolean }) {
   );
 }
 
+/** The pack's hints that hold for the answer so far (record 48): what is usual, with its reason; never a refusal. */
+function HintLines({ hints }: { hints: Hint[] }) {
+  if (hints.length === 0) return null;
+  return (
+    <>
+      {hints.map((h) => (
+        <p key={h.id} className="meta hint one-line" title={h.why}>
+          Usually {h.axis} {h.value}
+          {h.why ? `: ${h.why}` : ""}
+        </p>
+      ))}
+    </>
+  );
+}
+
 function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
   const q = p.campaign.question;
   const g = p.given;
@@ -946,6 +962,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
               onNone={(axis) => p.onGiven(givenNone(g, axis))}
             />
             {illegal(q, p.settled?.given ?? g) && <p className="warn one-line" title={illegal(q, p.settled?.given ?? g) ?? undefined}>The pack does not allow this: {illegal(q, p.settled?.given ?? g)}.</p>}
+            <HintLines hints={hintsNow(q, p.settled?.given ?? g)} />
           </>
         );
       return (
@@ -961,6 +978,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
             onNone={(axis) => p.onGiven(givenNone(g, axis))}
           />
           {illegal(q, g) && <p className="warn">The pack does not allow this: {illegal(q, g)}.</p>}
+          <HintLines hints={hintsNow(q, g)} />
         </>
       );
     case "pick":
