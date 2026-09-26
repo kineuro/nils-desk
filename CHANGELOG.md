@@ -4,6 +4,17 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.47] - 2026-09-26
+
+Released beside the engine's 1.0.0-alpha.47: the reader after the first gold campaign, with a colour and a shape per value, one's own answers listed and corrected, the items held back to be read one by one named, and the next item read ahead; and a sheared stack's three planes shown where its planes are. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
+### Added
+
+- Every value of an axis has a colour and a shape of its own beside its number key, in the gallery (the cells, the keys) and on the reader's rows, by its place among the axis's values. The ten colours are theme tokens (`--n-value-1` to `--n-value-10`) for both themes; the shape keeps two values apart without colour.
+- My answers, in the gallery and the reader (`u` in the gallery): one's own answers still standing, the latest first, filtered by value, each opened in the reader to correct it through the engine's amend door. `u` in the reader opens the last answer again. A correction starts from the rater's own answer, never a suggestion, holds no lease, and goes back to where it was opened from; a closed campaign's answers are listed without a way to correct them, and a sealed item stays blind.
+- The gallery says how many items are held back to be read one by one and why (the engine checks how often a batch answer is right; a sealed sample is read blind), with a link that claims only those.
+- The reader reads the claim's next item ahead: its evidence and its header, beside the pictures it already warmed, both kept once per item. `nils.reader.prefetch` off turns it off.
+
 ### Fixed
 
 - A sheared stack's three planes show it where its planes are. The viewer reads the manifest's `step` (the engine's mean step from one plane to the next, from the planes' positions) and, where the step has a part in the plane (a tilted gantry, a slab whose planes shift as they go), holds the volume in a grid square to the stack's rows, columns and normal, wider by the planes' drift, each plane written into it at its own shift, as dcm2niix places such a stack. Before, the planes were stacked one above the other along the normal, and a head acquired with a 20 degree shear leaned by up to 36 degrees on the sagittal. The stack view places each plane at its own position too. A manifest without `step` reads as before.
