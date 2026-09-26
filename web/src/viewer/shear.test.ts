@@ -56,6 +56,10 @@ describe("the step a manifest names", () => {
     expect(geometry(gantry(0.006)).shear).toBeNull();
     expect(geometry(gantry(0.007)).shear).not.toBeNull();
   });
+  it("is no shear when the planes are not parallel: they are not one volume", () => {
+    expect(geometry({ ...gantry(1.8), frame: { parallel: false, evenly_spaced: true } }).shear).toBeNull();
+    expect(geometry({ ...gantry(1.8), frame: { parallel: true, evenly_spaced: false } }).shear).not.toBeNull();
+  });
 });
 
 describe("the grid a sheared volume is held in", () => {

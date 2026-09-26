@@ -28,8 +28,8 @@ export interface Geometry {
   /**
    * A sheared stack's shift in its own plane from one plane to the next, mm
    * along the row and the column; null when the step is along the normal
-   * (the whole stack drifts less than a tenth of a pixel), as the engine
-   * reads it.
+   * (the whole stack drifts less than a tenth of a pixel) or the planes are
+   * not parallel, as the engine reads it.
    */
   shear: [number, number] | null;
 }
@@ -75,7 +75,9 @@ export function geometry(m: Manifest): Geometry {
   const stepIn = vec3(m.step);
   // a step that runs against the normal or along the plane is not the engine's: read as along the normal
   const step: Vec3 = stepIn && dot(stepIn, normal) > 1e-6 ? stepIn : [normal[0] * dz, normal[1] * dz, normal[2] * dz];
-  return { row, col, normal, origin, known: true, regular, step, shear: shearOf(row, col, step, m) };
+  // planes that are not parallel are not one volume, and not a shear
+  const parallel = !(m.frame && typeof m.frame === "object" && m.frame.parallel === false) && m.frame !== false;
+  return { row, col, normal, origin, known: true, regular, step, shear: parallel ? shearOf(row, col, step, m) : null };
 }
 
 /** The shift in the plane per plane, when the whole stack drifts a tenth of a pixel or more (the engine's rule). */
