@@ -36,4 +36,29 @@ describe("the first planes", () => {
     expect(asked.filter((u) => u.endsWith("/manifest"))).toEqual(["/api/instances/7/manifest"]);
     expect(asked.filter((u) => u.includes("/render/")).length).toBe(6);
   });
+
+  it("asks for no plane once aborted, and cancels the planes an abort catches in flight", async () => {
+    const asked: string[] = [];
+    const aborted: string[] = [];
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      asked.push(url);
+      if (url.endsWith("/manifest")) return Promise.resolve(new Response(JSON.stringify(m), { status: 200 }));
+      return new Promise((_, reject) => init?.signal?.addEventListener("abort", () => {
+        aborted.push(url);
+        reject(new DOMException("aborted", "AbortError"));
+      }));
+    });
+    vi.stubGlobal("Image", undefined);
+    const before = new AbortController();
+    before.abort();
+    expect(await warmStack(8, before.signal)).toBe(0);
+    expect(asked.filter((u) => u.includes("/render/"))).toEqual([]);
+    const during = new AbortController();
+    const warming = warmStack(9, during.signal);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(asked.filter((u) => u.includes("/instances/9/render/")).length).toBe(3);
+    during.abort();
+    expect(await warming).toBe(0);
+    expect(aborted.length).toBe(3);
+  });
 });

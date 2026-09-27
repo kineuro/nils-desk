@@ -21,6 +21,14 @@
 // In the reader (after the first gold campaign) the pictures take the keys
 // of keys.ts: Space or a double click enlarges one plane to the whole side
 // and gives the three back, the arrows page the stack or a plane.
+//
+// A reader moves from stack to stack many times an hour, so the next
+// stack's first picture must not wait on cornerstone. The page keeps one
+// rendering engine (one WebGL context) for every viewer it shows, and a
+// viewer that goes gives back its viewports rather than the context; the
+// three planes open on the server's planes (which the reader warmed ahead,
+// prefetch.ts) and the volume starts filling only once they are drawn; the
+// stack's own viewport is built when the stack view is first shown.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as cs from "@cornerstonejs/core";
@@ -41,9 +49,26 @@ import "./viewer.css";
 
 export { PLANES, type Plane } from "./prefetch";
 
+/** The one rendering engine the page's viewers share: its WebGL context outlives each stack. */
+export const ENGINE_ID = "nils-viewer";
+
 /** The ids a page watching the viewer (the bench) finds its viewports by. */
 export function viewerIds(stack: number): { engine: string; stack: string; planes: Record<Plane, string> } {
-  return { engine: `re-${stack}`, stack: `vp-${stack}`, planes: { axial: `vp-${stack}-axial`, coronal: `vp-${stack}-coronal`, sagittal: `vp-${stack}-sagittal` } };
+  return { engine: ENGINE_ID, stack: `vp-${stack}`, planes: { axial: `vp-${stack}-axial`, coronal: `vp-${stack}-coronal`, sagittal: `vp-${stack}-sagittal` } };
+}
+
+/** The shared engine, made at the first use; a destroyed one is made again. */
+function sharedEngine(): cs.RenderingEngine {
+  return (cs.getRenderingEngine(ENGINE_ID) as cs.RenderingEngine | undefined) ?? new cs.RenderingEngine(ENGINE_ID);
+}
+
+/** How long the volume waits for the server's planes before it starts anyway (one failed to load, say). */
+export const VOLUME_WAITS_MS = 1500;
+
+/** After the browser has painted what is on the page: the next frame, then a task. */
+function afterPaint(): Promise<void> {
+  if (typeof requestAnimationFrame === "undefined") return Promise.resolve();
+  return new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 }
 
 export type ViewerEvent =
@@ -154,6 +179,12 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   const [decodedOnce, setDecodedOnce] = useState(false);
   const [view, setView] = useState<"stack" | "planes">(initialView);
   const [planesOpened, setPlanesOpened] = useState(initialView === "planes");
+  const [stackOpened, setStackOpened] = useState(initialView === "stack");
+  // the server's planes drawn (or given up on): the volume waits for them, so the first picture is not held behind its work
+  const [painted, setPainted] = useState(0);
+  const [waited, setWaited] = useState(false);
+  const stackMounted = useRef(false);
+  const drawn = useRef(new Set<Plane>());
   const [volume, setVolume] = useState<VolumeState | null>(null);
   const [fallback, setFallback] = useState<string | null>(null);
   const [labels, setLabels] = useState<Partial<Record<Plane | "stack", EdgeLabels>>>({});
@@ -180,7 +211,12 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     let alive = true;
     setFailed(null);
     open(stack)
-      .then((m) => alive && setManifest(m))
+      .then((m) => {
+        if (!alive) return;
+        // the planes fill from the middle until the stack view names a plane
+        zRef.current = Math.floor(m.shape[0] / 2);
+        setManifest(m);
+      })
       .catch((e: unknown) => {
         if (!alive) return;
         if (e instanceof DoorError && (e.status === 403 || e.status === 401)) setGated(true);
@@ -207,7 +243,8 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
 
   // the stack viewport, once the manifest is here and the element is on the page
   const mount = useCallback(async () => {
-    if (!manifest || !el.current) return;
+    if (!manifest || !el.current || !stackOpened || stackMounted.current) return;
+    stackMounted.current = true;
     await initOnce();
     const width = el.current.clientWidth || 512;
     const level = ruleLevel ?? levelFor(width, manifest.shape[2], manifest.levels);
@@ -217,7 +254,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     zRef.current = z0;
     // the first picture: the server's render, replaced when the decoded plane lands
     setFirstUrl(doors.renderUrl(stack, Math.min(manifest.levels - 1, level + 1), z0, manifest.window.width, manifest.window.center));
-    const re = engine.current ?? new cs.RenderingEngine(ids.engine);
+    const re = engine.current ?? sharedEngine();
     engine.current = re;
     re.enableElement({ viewportId: ids.stack, type: cs.Enums.ViewportType.STACK, element: el.current });
     const vp = re.getViewport(ids.stack) as cs.StackViewport;
@@ -243,42 +280,71 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     vp.render();
     toolGroup(`tg-${stack}`).addViewport(ids.stack, re.id);
     setNumbers((n) => ({ ...n, level, z: z0 }));
-  }, [manifest, stack, ruleLevel, since, ids.engine, ids.stack, stamp, letter]);
+  }, [manifest, stack, ruleLevel, since, ids.stack, stackOpened, stamp, letter]);
 
-  useEffect(() => {
-    mount().catch((e: unknown) => setFailed(classify(e)));
-    return () => {
+  // a stack that goes gives back its viewports, its tools and its volume; the engine and its context stay for the next
+  useEffect(
+    () => () => {
       filling.current?.close();
       const vid = filling.current?.volumeId;
       filling.current = null;
+      stackMounted.current = false;
+      drawn.current = new Set();
+      setPainted(0);
+      setWaited(false);
       const re = engine.current;
       if (re) {
+        for (const id of [ids.stack, ...PLANES.map((p) => ids.planes[p])]) {
+          try {
+            if (re.getViewport(id)) re.disableElement(id);
+          } catch {
+            // the element is already gone
+          }
+        }
         try {
           tools.ToolGroupManager.destroyToolGroup(`tg-${stack}`);
           tools.ToolGroupManager.destroyToolGroup(`tg-${stack}-planes`);
           tools.SynchronizerManager.destroySynchronizer(`voi-${stack}`);
-          re.destroy();
         } catch {
-          // the elements are already gone
+          // already gone
         }
         engine.current = null;
       }
       if (vid) dropVolume(vid);
-    };
-  }, [mount, stack]);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stack],
+  );
+
+  useEffect(() => {
+    mount().catch((e: unknown) => setFailed(classify(e)));
+  }, [mount]);
+
+  // the volume waits for the server's planes, or for a while when one of them does not come
+  useEffect(() => {
+    if (!planesOpened || !manifest) return;
+    const t = setTimeout(() => setWaited(true), VOLUME_WAITS_MS);
+    return () => clearTimeout(t);
+  }, [planesOpened, manifest]);
+  const planesDrawn = painted >= PLANES.length || waited;
 
   // the three planes: the volume at the level the budget allows, filled from the current plane outwards
   const mountPlanes = useCallback(async () => {
     if (!manifest || !planesOpened || filling.current || fallback) return;
     const path = volumePath(manifest, budget);
+    if (!("why" in path) && !planesDrawn) return;
     if ("why" in path) {
       setFallback(path.why);
       tell.current?.({ kind: "fallback", why: path.why });
       return;
     }
     const { plan } = path;
+    // the server's planes are on the screen before the volume's work takes the thread
+    await afterPaint();
     await initOnce();
-    const re = engine.current ?? new cs.RenderingEngine(ids.engine);
+    // another call got here first, or the stack went while the frame was painted
+    if (filling.current || !planeEls.current.axial) return;
+    const re = engine.current ?? sharedEngine();
     engine.current = re;
     const planeIds = PLANES.map((p) => ids.planes[p]);
     const cams = planeCameras(geometry(manifest), cutRef.current);
@@ -317,7 +383,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     render();
     await f.ready;
     if (filling.current === f) report(f.filled, true);
-  }, [manifest, planesOpened, fallback, budget, stack, ids.engine, ids.planes, letter, stamp]);
+  }, [manifest, planesOpened, planesDrawn, fallback, budget, stack, ids.planes, letter, stamp]);
 
   useEffect(() => {
     mountPlanes().catch((e: unknown) => {
@@ -427,9 +493,14 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   const [nz, ny, nx] = manifest.shape;
   const g = geometry(manifest);
   // the same addresses the reader warms ahead (prefetch.ts), so a warmed plane is drawn from the cache
-  const serverPlane = (p: Plane, pos: number) => {
+  const serverPlane = (p: Plane, pos: number, onLoad?: () => void) => {
     const s = serverPlaneOf(stack, manifest, g, p, pos);
-    return <RenderPlane src={s.src} axes={s.axes} known={s.known} />;
+    return <RenderPlane src={s.src} axes={s.axes} known={s.known} onLoad={onLoad} />;
+  };
+  const firstDrawn = (p: Plane) => () => {
+    if (drawn.current.has(p)) return;
+    drawn.current.add(p);
+    setPainted(drawn.current.size);
   };
   const volumeDone = volume?.done ?? false;
   const oblique = isOblique(g);
@@ -449,6 +520,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
           className={view === "stack" ? "on" : ""}
           onClick={() => {
             setView("stack");
+            setStackOpened(true);
             onView?.("stack");
           }}
         >
@@ -507,7 +579,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
                 className="viewer-element"
                 data-plane={p}
               />
-              {!volumeDone && !touched[p] && <div className="viewer-first">{serverPlane(p, 0.5)}</div>}
+              {!volumeDone && !touched[p] && <div className="viewer-first">{serverPlane(p, 0.5, firstDrawn(p))}</div>}
               {(volumeDone || touched[p]) && <Letters labels={labels[p] ?? null} unknown={!g.known} />}
               <span className="viewer-plane-name">{p}</span>
               <GrowButton plane={p} big={big === p} onClick={() => setBig((b) => (b ? null : p))} />

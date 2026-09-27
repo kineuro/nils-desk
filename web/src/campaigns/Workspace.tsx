@@ -152,6 +152,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
   const batchShown = useRef<number | null>(null);
   const prefetch = useRef<Prefetcher | null>(null);
   prefetch.current ??= new Prefetcher(warmStack, 2);
+  // leaving the workspace stops the warming
+  useEffect(() => () => prefetch.current?.stop(), []);
   const orderNow = useRef(order);
   orderNow.current = order;
   const answeredHere = useRef(new Set<number>());
@@ -478,6 +480,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
   const giveBack = useCallback(
     (then: "next" | "stop") => {
       if (!holding || busy) return;
+      // what was being warmed for the items after this one is not wanted now; the next claim asks again
+      prefetch.current?.stop();
       // a correction left as it was: back to where it came from
       if (holding.amend) {
         setSaid(`${itemWords(holding.item)} left as it was.`);

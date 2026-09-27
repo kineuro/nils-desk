@@ -919,21 +919,24 @@ export function bound<K>(m: Set<K> | Map<K, unknown>, keep = KEEP): void {
 /**
  * Warms the next stacks' pictures a few at a time: each stack once, the
  * newest wish first, and a stack no longer wanted is dropped from the queue
- * before it starts. The warming itself is given (the viewer's manifest and
- * first planes), so the scheduling is tested alone.
+ * before it starts. It is bounded (at most `atOnce` warming, the queue no
+ * longer than the last wish) and it stops when the reader does: `stop`
+ * empties the queue and aborts what is warming, which is then not counted
+ * as warmed. The warming itself is given (the viewer's manifest and first
+ * planes), so the scheduling is tested alone.
  */
 export class Prefetcher {
-  private warm: (stack: number) => Promise<unknown>;
+  private warm: (stack: number, signal: AbortSignal) => Promise<unknown>;
   private at: number;
   private done = new Set<number>();
-  private running = new Set<number>();
+  private running = new Map<number, AbortController>();
   private queue: number[] = [];
   /** The stacks warmed, in order, the last `keep` of them; for the tests and the walk. */
   readonly warmed: number[] = [];
 
   private keep: number;
 
-  constructor(warm: (stack: number) => Promise<unknown>, atOnce = 2, keep = KEEP) {
+  constructor(warm: (stack: number, signal: AbortSignal) => Promise<unknown>, atOnce = 2, keep = KEEP) {
     this.warm = warm;
     this.at = atOnce;
     this.keep = keep;
@@ -950,13 +953,28 @@ export class Prefetcher {
     return this.done.has(stack) || this.running.has(stack);
   }
 
+  /** How many are warming now, and how many wait; for the tests. */
+  get busy(): { running: number; queued: number } {
+    return { running: this.running.size, queued: this.queue.length };
+  }
+
+  /** The reader stopped or gave the item back: nothing more starts, and what is warming is aborted. */
+  stop(): void {
+    this.queue = [];
+    for (const c of this.running.values()) c.abort();
+    this.running.clear();
+  }
+
   private pump(): void {
     while (this.running.size < this.at && this.queue.length > 0) {
       const s = this.queue.shift()!;
-      this.running.add(s);
-      this.warm(s)
+      const c = new AbortController();
+      this.running.set(s, c);
+      this.warm(s, c.signal)
         .catch(() => undefined)
         .finally(() => {
+          // stopped: not warmed, and whatever started since is not this one's to count
+          if (c.signal.aborted) return;
           this.running.delete(s);
           this.done.add(s);
           bound(this.done, this.keep);

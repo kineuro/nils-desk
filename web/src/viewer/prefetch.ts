@@ -37,22 +37,35 @@ export function firstPlanes(stack: number, m: Manifest): string[] {
   return PLANES.map((p) => serverPlane(stack, m, g, p, 0.5).src);
 }
 
-/** Load an image into the browser's cache; settles either way. */
-function load(src: string): Promise<void> {
-  if (typeof Image === "undefined") return fetch(src).then(() => undefined, () => undefined);
+/** Load an image into the browser's cache; settles either way, and at once when aborted. */
+function load(src: string, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  if (typeof Image === "undefined") return fetch(src, { signal }).then(() => undefined, () => undefined);
   return new Promise((resolve) => {
     const img = new Image();
+    const done = () => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    };
+    // an empty source cancels the request the image made
+    const abort = () => {
+      img.onload = img.onerror = null;
+      img.src = "";
+      resolve();
+    };
+    signal?.addEventListener("abort", abort, { once: true });
     img.decoding = "async";
-    img.onload = () => resolve();
-    img.onerror = () => resolve();
+    img.onload = done;
+    img.onerror = done;
     img.src = src;
   });
 }
 
-/** Warm one stack: its manifest, then its three first planes. */
-export async function warmStack(stack: number): Promise<number> {
+/** Warm one stack: its manifest, then its three first planes; an abort stops it between the two and cancels the planes. */
+export async function warmStack(stack: number, signal?: AbortSignal): Promise<number> {
   const m = await tileManifest(stack);
+  if (signal?.aborted) return 0;
   const planes = firstPlanes(stack, m);
-  await Promise.all(planes.map(load));
-  return planes.length;
+  await Promise.all(planes.map((src) => load(src, signal)));
+  return signal?.aborted ? 0 : planes.length;
 }
