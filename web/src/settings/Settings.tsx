@@ -24,7 +24,7 @@ import { PlacesPage } from "./PlacesPage";
 import { keptRunning, reapplyByHand } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
-import { checkedWords, contractWords, keptByWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
+import { checkedWords, contractWords, keptByWords, newerWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
 import { supervise, type Install } from "./supervise";
 
 interface PageProps {
@@ -127,6 +127,12 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
   }, []);
 
   const rows = partRows(caps, install, admissions, built);
+  const out = install ? newerWords(install) : null;
+  // the desk that drew this page may be replaced, so the page is drawn again by the one that runs now
+  const updated = () => {
+    setTimeout(() => location.reload(), 1500);
+    return "Updated. This page loads again in a moment.";
+  };
   const checked = checkedWords(checkedAt, now);
   const services = install?.services ?? [];
   const chosen = services.some((s) => s.part === part) ? part : ((services.find((s) => s.part === "engine")?.part ?? services[0]?.part ?? "engine") as RestartPart);
@@ -140,12 +146,12 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
     <div className="settings">
       <Head title="Parts" lede="Every part, its version and its health." />
 
-      {install?.release.newer && (
+      {install && out && (
         <section className="panel update" aria-label="a newer release">
           <div className="row update-head">
             <Icon name="update" size="lg" />
-            <h2>{install.release.newer} is out</h2>
-            {install.release.installed && <span className="meta">you run {install.release.installed}</span>}
+            <h2>{out}</h2>
+            {!install.release.parts && install.release.installed && <span className="meta">you run {install.release.installed}</span>}
           </div>
           <ul>
             {updateWords(install).map((w) => (
@@ -158,13 +164,7 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
                 type="button"
                 className="button"
                 disabled={update.working}
-                onClick={() =>
-                  update.start("updating one part at a time", supervise.updateAll, () => {
-                    // the desk that drew this page may be replaced, so the page is drawn again by the one that runs now
-                    setTimeout(() => location.reload(), 1500);
-                    return "Updated. This page loads again in a moment.";
-                  })
-                }
+                onClick={() => update.start("updating one part at a time", () => supervise.updateAll(), updated)}
               >
                 Update everything
               </button>
@@ -180,7 +180,7 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
       <section className="stack">
         <div className="section-head rule-top">
           <h2>Installed</h2>
-          {install?.release.error && !install.release.newer && <span className="meta">the newest release could not be read</span>}
+          {install?.release.error && !out && <span className="meta">the newest release could not be read</span>}
           {checked && <span className="meta">{checked}</span>}
         </div>
         <div className="table-wrap">
@@ -214,7 +214,25 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
                   <td>
                     <Health tone={r.health.tone} words={r.health.words} />
                   </td>
-                  {install && <td>{r.newer && (r.newer.tag ? <span className="tag brand">{r.newer.text}</span> : <span className="meta">{r.newer.text}</span>)}</td>}
+                  {install && (
+                    <td>
+                      {r.newer && (r.newer.tag ? <span className="tag brand">{r.newer.text}</span> : <span className="meta">{r.newer.text}</span>)}
+                      {supervised && r.update && (
+                        <button
+                          type="button"
+                          className="button secondary small"
+                          disabled={update.working}
+                          title={`nils update --part ${r.update}`}
+                          onClick={() => {
+                            const part = r.update ?? "";
+                            update.start(`updating ${partName(part)}`, () => supervise.updateAll(part), updated);
+                          }}
+                        >
+                          Update
+                        </button>
+                      )}
+                    </td>
+                  )}
                   <td className="go">
                     {r.page && (
                       <a href={href("settings", r.page)} aria-label={`${r.title} settings`}>

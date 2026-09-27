@@ -24,9 +24,41 @@ export interface Install {
   addresses: { part: string; address: string; reach: string }[];
   services: { part: string; unit: string; watcher: string; running: boolean }[];
   unfinished: boolean;
-  release: { installed: string | null; newest: string | null; newer: string | null; error: string | null; command: string };
+  release: Release;
   /** The card setup found and what the machine can serve; `cards` lists every card, where the supervisor names them all. */
   machine: { card: { name: string; memory_gb: number } | null; cards?: { name: string; memory_gb: number }[]; advice: string[] };
+}
+
+/**
+ * Each part beside its own newest release: the engine, the desk, the
+ * assistant and Kvasir release on their own. `newer` is the version the part
+ * may move to, `held` why a newer desk waits for the engine, `follows` a ref
+ * a lab named in place of its releases.
+ */
+export interface PartRelease {
+  part: string;
+  installed: string | null;
+  newest: string | null;
+  newer: string | null;
+  held: string | null;
+  follows: string | null;
+  error: string | null;
+  command: string;
+}
+
+/**
+ * The newest releases. `installed`, `newest` and `error` are the engine's;
+ * `newer` is the engine's newer version, or the first part behind named. An
+ * engine older than the list sends neither `parts` nor `behind`.
+ */
+export interface Release {
+  installed: string | null;
+  newest: string | null;
+  newer: string | null;
+  error: string | null;
+  command: string;
+  behind?: string[];
+  parts?: PartRelease[];
 }
 
 export interface Run {
@@ -81,7 +113,8 @@ export const supervise = {
   install: () => door<Install>("GET", `${BASE}/install`),
   restart: (part: "engine" | "desk" | "gateway" | "assistant" | "postgres" | "all") => door<Run>("POST", `${BASE}/restart`, { part }),
   reapply: (part: "engine" | "all") => door<Run>("POST", `${BASE}/reapply`, part === "engine" ? { part } : {}),
-  updateAll: () => door<Run>("POST", `${BASE}/update-all`, {}),
+  /** Every part, or one part alone against its own releases. */
+  updateAll: (part?: string) => door<Run>("POST", `${BASE}/update-all`, part ? { part } : {}),
   run: (id: string) => door<Run>("GET", `${BASE}/runs/${encodeURIComponent(id)}`),
   look: (path: string) => door<Look>("POST", `${BASE}/look`, { path }),
 };

@@ -37,6 +37,10 @@ enum Command {
         #[arg(long, value_name = "FILE", default_value = "nils-desk.toml")]
         config: std::path::PathBuf,
     },
+    /// The engine contracts this desk speaks and the lowest it starts
+    /// against, as JSON; a release publishes it as contracts.json, which
+    /// `nils update` reads before it installs this desk
+    Contracts,
     /// The people of the desk: its local users, and what each person holds
     #[command(subcommand)]
     User(UserCommand),
@@ -204,6 +208,10 @@ fn main() {
     let code = match cli.command {
         Command::Serve { config } => rt.block_on(serve(&config)),
         Command::Check { config } => rt.block_on(check(&config)),
+        Command::Contracts => {
+            println!("{}", contracts());
+            0
+        }
         Command::User(c) => answer(user(c)),
         Command::Group(c) => answer(group(c)),
         Command::Register(a) => rt.block_on(register(a)),
@@ -213,6 +221,17 @@ fn main() {
 
 fn load(path: &std::path::Path) -> Result<Shared, String> {
     nils_desk::start_at(path)
+}
+
+/// The engine contracts this desk speaks, and the floor below which it does
+/// not start.
+fn contracts() -> serde_json::Value {
+    serde_json::json!({
+        "openapi": OPENAPI,
+        "openapi_floor": nils_desk::OPENAPI_FLOOR,
+        "suite": SUITE,
+        "suite_floor": nils_desk::SUITE_FLOOR,
+    })
 }
 
 async fn check(path: &std::path::Path) -> i32 {

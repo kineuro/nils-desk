@@ -56,7 +56,9 @@ jobs:
           chmod +x bin/nils-desk-*
           got=$(bin/nils-desk-linux-x86_64 --version)
           [ "$got" = "nils-desk $v" ] || { echo "tag says $v, the binary says '$got': raise version in desk/Cargo.toml first"; exit 1; }
-          (cd bin && sha256sum nils-desk-* > SHA256SUMS && echo "$v" > VERSION && ls -la)
+          # the engine contracts this desk needs, which nils update reads before it installs it
+          bin/nils-desk-linux-x86_64 contracts > bin/contracts.json
+          (cd bin && sha256sum nils-desk-* contracts.json > SHA256SUMS && echo "$v" > VERSION && ls -la)
       - name: release notes
         run: |
           v=${GITHUB_REF_NAME#v}
@@ -73,6 +75,7 @@ jobs:
             bin/nils-desk-*
             bin/SHA256SUMS
             bin/VERSION
+            bin/contracts.json
 
   image:
     # The same binaries, in an image for the two Linux architectures, so that
