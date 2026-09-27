@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.50] - 2026-09-27
+
+Released alone, with no engine release: a person menu with Sign out and Sign in as someone else, OpenID Connect back-channel logout at `/desk/backchannel-logout`, and a desk session that ends when the provider's session ends, checked at each refresh of the provider's tokens. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
 ### Added
 
 - Sign out, from the person's menu at the top right (the name opens it; every item is reached by Tab and Escape closes it). The desk ends its own session and, where people sign in at an identity provider, sends the browser to the provider's end-session page (OpenID Connect RP-initiated logout, with the id token of the sign-in and the desk's front page as the way back), so the next sign-in asks who it is instead of signing the same person in again. `POST /desk/logout` answers `{"then": url}` in `oidc` mode; 204 as before otherwise.
