@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The desk releases independently of the engine, under its own version number, which need not match the engine's. Its image and binary carry the desk's own version, and an install takes the newest desk release whose `contracts.json` floor its engine meets, so a desk release needs no engine release beside it and an engine release no desk release.
+
 ## [1.0.0-alpha.52] - 2026-09-27
 
 Released with engine 1.0.0-alpha.52, whose supervisor lists each part beside its own newest release. Settings > Parts offers an update when any part is behind its own newest release, not only when the engine is, with an Update for each part beside Update everything, and says when a desk waits for an engine contract. `nils-desk contracts` prints the engine contracts the desk speaks, and a release publishes them as `contracts.json`. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and reads an older engine as before.
