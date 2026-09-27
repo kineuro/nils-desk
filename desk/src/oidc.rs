@@ -244,9 +244,9 @@ impl Client {
     /// A fresh access token when the held one is near its expiry, which is
     /// also when the desk asks the provider again whether the sign-in still
     /// stands: a refused refresh, an id token for another subject, or one
-    /// that no longer names the provider's session the person signed in
-    /// with (`sid`, which the provider drops once that session has ended)
-    /// is [`Refresh::Ended`], and the desk's session ends with it.
+    /// naming another provider session (`sid`) than the one the person
+    /// signed in with is [`Refresh::Ended`], and the desk's session ends
+    /// with it. An id token without `sid` keeps the session.
     pub async fn refresh(&self, tokens: &Value, subject: &str) -> Result<Option<Value>, Refresh> {
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         if tokens["expires_at"].as_i64().unwrap_or(0) - now > 60 {
@@ -292,11 +292,14 @@ impl Client {
                     "the provider answered for another person".into(),
                 ));
             }
-            if let Some(sid) = tokens["sid"].as_str()
-                && claims["sid"].as_str() != Some(sid)
+            // a present but different sid is another session at the provider;
+            // a missing one keeps the session, since the refusal and the
+            // back-channel logout cover a provider session that ended
+            if let (Some(held), Some(now)) = (tokens["sid"].as_str(), claims["sid"].as_str())
+                && held != now
             {
                 return Err(Refresh::Ended(
-                    "the provider's session this sign-in came from has ended".into(),
+                    "the provider answered for another of its sessions".into(),
                 ));
             }
         }

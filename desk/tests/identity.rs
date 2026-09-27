@@ -445,6 +445,8 @@ struct Provider {
     /// The provider's sessions that have ended: a refresh of a sign-in
     /// that came from one answers without its `sid`, as Authentik does.
     ended: Mutex<Vec<String>>,
+    /// A provider session whose refreshes answer as another session.
+    moved: Mutex<std::collections::HashMap<String, String>>,
     /// Each refresh token: the person it was issued for and their session.
     #[allow(clippy::type_complexity)]
     refreshes: Mutex<
@@ -487,6 +489,7 @@ async fn fake_provider() -> (String, Arc<Provider>) {
         prompts: Mutex::new(Vec::new()),
         sid: Mutex::new(Some("session-1".into())),
         ended: Mutex::new(Vec::new()),
+        moved: Mutex::new(std::collections::HashMap::new()),
         refreshes: Mutex::new(std::collections::HashMap::new()),
     });
     let iss = issuer.clone();
@@ -539,7 +542,9 @@ async fn fake_provider() -> (String, Arc<Provider>) {
                     let Some((person, sid)) = p.refreshes.lock().unwrap().get(&f["refresh_token"]).cloned() else {
                         return (StatusCode::BAD_REQUEST, axum::Json(json!({"error": "invalid_grant"}))).into_response();
                     };
-                    let sid = sid.filter(|s| !p.ended.lock().unwrap().contains(s));
+                    let sid = sid
+                        .filter(|s| !p.ended.lock().unwrap().contains(s))
+                        .map(|s| p.moved.lock().unwrap().get(&s).cloned().unwrap_or(s));
                     (person, sid)
                 } else {
                     (p.person.lock().unwrap().clone(), p.sid.lock().unwrap().clone())
@@ -1015,12 +1020,25 @@ async fn a_sign_in_the_provider_ends_ends_the_desk_session_too() {
     assert_eq!(logout(base.clone()).await, 200);
     assert!(!signed_in(anna.clone()).await, "ended by the provider");
 
-    // no back-channel: the provider's session ends, and the next refresh,
-    // which answers without that session, ends the desk's session
+    // a refresh whose id token names no session keeps the desk's session:
+    // the refusal and the back-channel cover a provider session that ended
     *provider.sid.lock().unwrap() = Some("session-2".into());
     let anna = sign_in(&client, &origin, &issuer).await;
     provider.ended.lock().unwrap().push("session-2".into());
-    assert!(!signed_in(anna.clone()).await, "ended at the refresh");
+    assert!(
+        signed_in(anna.clone()).await,
+        "no sid is not an ended session"
+    );
+
+    // a refresh answering for another of the provider's sessions ends it
+    *provider.sid.lock().unwrap() = Some("session-4".into());
+    let anna = sign_in(&client, &origin, &issuer).await;
+    provider
+        .moved
+        .lock()
+        .unwrap()
+        .insert("session-4".into(), "session-5".into());
+    assert!(!signed_in(anna.clone()).await, "another sid ends it");
     let r = client
         .get(format!("{origin}/api/jobs"))
         .header("cookie", &anna)
@@ -1028,6 +1046,12 @@ async fn a_sign_in_the_provider_ends_ends_the_desk_session_too() {
         .await
         .unwrap();
     assert_eq!(r.status(), 401);
+
+    // a refused refresh ends it
+    *provider.sid.lock().unwrap() = Some("session-6".into());
+    let anna = sign_in(&client, &origin, &issuer).await;
+    provider.refreshes.lock().unwrap().clear();
+    assert!(!signed_in(anna.clone()).await, "the refresh was refused");
 
     // while the provider's session stands, a refresh keeps the desk's
     let before = *provider.tokens_minted.lock().unwrap();

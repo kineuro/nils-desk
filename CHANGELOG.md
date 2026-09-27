@@ -13,7 +13,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Fixed
 
-- A desk session no longer outlives the provider's session it came from. Besides the back-channel above, each refresh of the provider's tokens (near their expiry, so every fifteen minutes at the usual lifetime) is checked: a refused refresh, an id token for another subject, or one that no longer names the provider's session the person signed in with (`sid`) ends the desk's session, and the shell shows the sign-in. The desk session's identity is fixed at sign-in and a sign-in in a browser that held a session ends the earlier one. The absolute bound of twelve hours stays.
+- A desk session no longer outlives the provider's session it came from. Besides the back-channel above, each refresh of the provider's tokens (near their expiry, so every fifteen minutes at the usual lifetime) is checked: a refused refresh, an id token for another subject, or one naming another provider session (`sid`) than the sign-in's ends the desk's session; an id token without `sid` keeps it, and the shell shows the sign-in. The desk session's identity is fixed at sign-in and a sign-in in a browser that held a session ends the earlier one. The absolute bound of twelve hours stays.
 
 ## [1.0.0-alpha.48] - 2026-09-27
 
