@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.51] - 2026-09-27
+
+Released alone, with no engine release: the reader's pictures take the window's height in the desk itself, and of several suggestions for an item the reader fills in the most confident and says who suggested it and how sure, "agreed" only where two voices or more agree. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
 ### Fixed
 
 - The reader's pictures take the window's height in the desk itself. The rating section is also a `.data` page, and in the desk's bundle the shell's rules come after the campaign pages', so `.data`'s grid won the tie with the reader's column: the pictures took the right panel's height, and a body part item's three planes stood small in the top left (alpha.49 at 2000 by 1154: the side 482 px high and the lead plane 392 px, now 1048 and 790 px, in Chromium and Firefox alike). A layout check now draws the desk's own shell and bundle order.
