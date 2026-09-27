@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- A whole answer taken from the reader's search keeps what its other values imply as implied, not as the rater's own choice, so a later choice can still move it. Taking "MP2RAGE, no construct, T1w" held T1w as chosen and greyed out INV2, whose second inversion the pack makes PDw; now INV2 stays open and the base follows it. A base chosen by hand still stands.
+
 ## [1.0.0-alpha.54] - 2026-09-27
 
 The Parts page shows the rule packs where the engine reads them beside the ones the engine's release carries, and offers an update where only the packs are behind. It reads the install door's `release.packs`, which engine 1.0.0-alpha.54 sends; an older engine sends none and the page shows no row. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.

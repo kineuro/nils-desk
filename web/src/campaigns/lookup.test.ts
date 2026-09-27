@@ -172,11 +172,43 @@ describe("the whole answer at once", () => {
 
   it("fills every row a registry combination names, none for an empty set; a shape's leaves the rest", () => {
     const g = takeCombo(QUESTION, given({ body_part: "spine" }), counted[1]);
-    expect(values(g)).toEqual({ provenance: "RawRecon", technique: "MPRAGE", modifier: null, construct: null, base: "T1w", body_part: "brain", post_contrast: "not_given" });
+    // MPRAGE implies T1w, so the base stays implied rather than chosen; the answer is the same
+    expect(values(g)).toEqual({ provenance: "RawRecon", technique: "MPRAGE", modifier: null, construct: null, base: "", body_part: "brain", post_contrast: "not_given" });
+    expect(values(settle(QUESTION, g, rows).given).base).toBe("T1w");
     const seed = seedsOf(QUESTION, rows).find((c) => c.values.technique === "MPRAGE")!;
-    expect(values(takeCombo(QUESTION, given({ body_part: "spine" }), seed))).toEqual({ body_part: "spine", technique: "MPRAGE", base: "T1w" });
+    expect(values(takeCombo(QUESTION, given({ body_part: "spine" }), seed))).toEqual({ body_part: "spine", technique: "MPRAGE", base: "" });
     // what no longer holds beside it is cleared
     const me = seedsOf(QUESTION, rows).find((c) => c.values.technique === "ME-GRE")!;
-    expect(values(takeCombo(QUESTION, given({ base: "T1w" }), me))).toEqual({ base: "T2starw", technique: "ME-GRE" });
+    expect(values(takeCombo(QUESTION, given({ base: "T1w" }), me))).toEqual({ base: "", technique: "ME-GRE" });
+    expect(values(settle(QUESTION, takeCombo(QUESTION, given({ base: "T1w" }), me), rows).given).base).toBe("T2starw");
+  });
+
+  it("leaves INV2 open after an MP2RAGE combination whose base the rules imply (Nima's read, 2026-09-27)", () => {
+    // read-r1's frozen implications, as mri@0.7.0 gave them
+    const mp: Question = {
+      ...QUESTION,
+      constraints: {
+        ...QUESTION.constraints!,
+        implications: [
+          { rule: "implied_technique/construct:mp2rage", when: { any: [{ axis: "construct", is: "INV1" }, { axis: "construct", is: "INV2" }] }, then: [{ axis: "technique", value: "MP2RAGE" }] },
+          { rule: "base/construct:inv2", when: { axis: "construct", is: "INV2" }, then: [{ axis: "base", value: "PDw" }] },
+          { rule: "base/technique:MP2RAGE", when: { all: [{ axis: "technique", is: "MP2RAGE" }, { not: { axis: "construct", is: "INV2" } }] }, then: [{ axis: "base", value: "T1w" }] },
+        ],
+      },
+    };
+    const mpRows = rows.map((r) => (r.axis === "construct" ? { ...r, values: [...new Set([...r.values, "INV1", "INV2"])] } : r.axis === "technique" ? { ...r, values: [...new Set([...r.values, "MP2RAGE"])] } : r));
+    const combo: Combination = { values: { provenance: "RawRecon", technique: "MP2RAGE", modifier: [], construct: [], base: "T1w", body_part: "brain", post_contrast: "not_given" }, count: 40 };
+    const g = takeCombo(mp, given({}), combo);
+    expect(values(g).base).toBe("");
+    const s = settle(mp, g, mpRows);
+    expect(values(s.given).base).toBe("T1w");
+    expect(s.excluded.construct?.INV2).toBeUndefined();
+    expect(s.excluded.construct?.INV1).toBeUndefined();
+    // INV2 taken: the base follows it to PDw, and the answer is legal
+    const inv2 = settle(mp, given({ ...values(g), construct: ["INV2"] }), mpRows);
+    expect(values(inv2.given).base).toBe("PDw");
+    expect(conflictOf(mp.constraints!, { provenance: ["RawRecon"], technique: ["MP2RAGE"], construct: ["INV2"], base: ["PDw"] })).toBeNull();
+    // a base the rater chose by hand still stands, and says why INV2 cannot join it
+    expect(settle(mp, given({ technique: "MP2RAGE", base: "T1w" }), mpRows).excluded.construct.INV2).toBe("construct is INV2 sets base PDw");
   });
 });
