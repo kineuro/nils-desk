@@ -59,6 +59,36 @@ export interface Release {
   command: string;
   behind?: string[];
   parts?: PartRelease[];
+  /** The rule packs where the engine reads them, beside the ones its release carries; an engine older than this, or one in a container, sends none. */
+  packs?: Packs;
+}
+
+/** One rule pack: its folder's name, the version its pack.yml states, and a digest of its files. */
+export interface Pack {
+  name: string;
+  version: string | null;
+  digest: string;
+}
+
+/**
+ * The rule packs in the directory the engine reads, beside the ones the
+ * engine's release carries (`release`, the one an update takes or the one
+ * installed). `stale` are the packs an update replaces, `edited` first-party
+ * packs changed on the machine, which an update keeps, and `own` the site's
+ * own, which it never touches. `error` alone where the release's could not be
+ * read.
+ */
+export interface Packs {
+  dir: string;
+  release: string;
+  installed?: Pack[];
+  bundled?: Pack[];
+  stale?: string[];
+  edited?: string[];
+  own?: string[];
+  behind?: boolean;
+  error?: string;
+  command: string;
 }
 
 export interface Run {

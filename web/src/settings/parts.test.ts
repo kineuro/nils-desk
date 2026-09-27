@@ -225,6 +225,26 @@ describe("each part beside its own newest release", () => {
     const both = install({ release: listed([own("engine", "1.0.0-alpha.48", "1.0.0-alpha.49", "1.0.0-alpha.49"), own("desk", "1.0.0-alpha.49", "1.0.0-alpha.52", "1.0.0-alpha.52", held)]) });
     expect(updateWords(both)).toContain("Desk 1.0.0-alpha.52 needs HTTP contract 8 (the engine speaks 7); it waits for an engine release that speaks it.");
   });
+  it("says the rule packs beside the engine's release, and offers the update where only they are behind", () => {
+    const mri = (version: string, digest: string) => ({ name: "mri", version, digest });
+    const clinical = { name: "clinical", version: null, digest: "c1" };
+    const packs = { dir: "/srv/nils/engine/packs", release: "1.0.0-alpha.53", installed: [clinical, mri("0.7.0", "m1")], bundled: [clinical, mri("0.8.0", "m2")], stale: ["mri"], edited: [], own: [], behind: true, command: "nils update --all" };
+    const release = { ...listed([own("engine", "1.0.0-alpha.53", "1.0.0-alpha.53", null), own("desk", "1.0.0-alpha.53", "1.0.0-alpha.53", null)]), newer: "packs of 1.0.0-alpha.53", behind: ["packs"], packs };
+    const i = install({ release });
+    const rows = partRows(caps(), i, null, []);
+    expect(rows.map((r) => r.id)).toEqual(["engine", "packs", "desk", "gateway", "postgres"]);
+    expect(rows[1]).toMatchObject({ title: "Rule packs", version: "clinical · mri 0.7.0", meta: "/srv/nils/engine/packs", health: { tone: "caution", words: "older than engine 1.0.0-alpha.53's" }, newer: { text: "mri 0.8.0", tag: true }, update: null });
+    expect(behindParts(i).map((p) => p.part)).toEqual(["packs"]);
+    expect(newerWords(i)).toBe("Rule packs mri 0.8.0 is out");
+    expect(updateWords(i)[0]).toBe("The rule packs move from mri 0.7.0 to mri 0.8.0, the ones engine 1.0.0-alpha.53 was released with; the ones before are kept beside them.");
+
+    // at the release's, with one changed on this machine and kept
+    const current = install({ release: { ...release, newer: null, behind: [], packs: { ...packs, installed: [clinical, mri("0.8.0", "m3")], stale: [], edited: ["mri"], behind: false } } });
+    expect(newerWords(current)).toBeNull();
+    expect(partRows(caps(), current, null, [])[1]).toMatchObject({ health: { tone: "caution", words: "mri changed on this machine, kept" }, newer: { text: "moves with the engine", tag: false } });
+    const read = install({ release: { ...release, newer: null, behind: [], packs: { dir: "/p", release: "1.0.0-alpha.53", error: "no packs.tar.gz", command: "nils update --all" } } });
+    expect(partRows(caps(), read, null, [])[1]).toMatchObject({ version: "none", newer: { text: "not checked", tag: false } });
+  });
   it("reads an engine older than the list as it always did", () => {
     expect(newerWords(install())).toBe("1.0.0-alpha.15 is out");
     expect(partRows(caps(), install(), null, [])[1]).toMatchObject({ newer: { text: "1.0.0-alpha.15", tag: true }, update: null });
