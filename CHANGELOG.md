@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.53] - 2026-09-27
+
+The desk releases under its own version number, and an install takes the newest desk release whose `contracts.json` floor its engine meets. The reader's panel and the gallery grow together with the screen, and a value's colour is its element's frame, a thin border and a bar on its left, with no shape beside it. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+
 ### Changed
 
 - The desk releases independently of the engine, under its own version number, which need not match the engine's. Its image and binary carry the desk's own version, and an install takes the newest desk release whose `contracts.json` floor its engine meets, so a desk release needs no engine release beside it and an engine release no desk release.
