@@ -109,6 +109,17 @@ export const CAMPAIGN = {
   ],
 } as unknown as Campaign;
 
+/**
+ * A one-axis campaign as the first body part gold campaign asked it (record
+ * 50): body part alone, six values. Its panel is short, so the pictures must
+ * take the side's height from the page, not from the panel.
+ */
+export const AXIS_CAMPAIGN = {
+  ...CAMPAIGN,
+  name: "bodypart-gold",
+  question: { kind: "axis", axis: "body_part", values: ["brain", "brain-neck", "neck", "spine", "chest", "other"], cant_tell: "cant_tell", unsure: true },
+} as unknown as Campaign;
+
 export function claimed(now = Date.now()): Claimed {
   return {
     assignment: { id: 77, campaign_id: CAMPAIGN_ID, item_id: ITEM_ID, principal: "rater@site", role: "rater", round: 1, state: "leased", created_at: new Date(now).toISOString(), leased_at: new Date(now).toISOString(), lease_until: new Date(now + 900_000).toISOString(), ended_at: null },
@@ -248,8 +259,8 @@ export interface Asked {
  * reader's tests. `derive` and `header` false answer 404, as an engine
  * before them; `why` false serves no text or physics.
  */
-export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; combos?: boolean; log?: Asked[] } = {}): typeof fetch {
-  const { derive = true, header = true, texts = true, seen = false, combos = true, log = [] } = opts;
+export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; combos?: boolean; axis?: boolean; log?: Asked[] } = {}): typeof fetch {
+  const { derive = true, header = true, texts = true, seen = false, combos = true, axis = false, log = [] } = opts;
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://desk.test");
@@ -258,7 +269,8 @@ export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: b
     const body = typeof init?.body === "string" ? (JSON.parse(init.body) as unknown) : null;
     log.push({ method, path, body });
     const c = `/api/campaigns/${CAMPAIGN_ID}`;
-    const campaign = seen ? { ...CAMPAIGN, items: (CAMPAIGN as unknown as { items: object[] }).items.map((i) => ({ ...i, blind: false })) } : CAMPAIGN;
+    const asked = axis ? AXIS_CAMPAIGN : CAMPAIGN;
+    const campaign = seen ? { ...asked, items: (asked as unknown as { items: object[] }).items.map((i) => ({ ...i, blind: false })) } : asked;
     if (method === "GET" && path === c) return json(200, campaign);
     if (method === "GET" && path === "/api/campaigns") return json(200, { count: 1, campaigns: [CAMPAIGN] });
     if (method === "POST" && path === `${c}/claim`) {

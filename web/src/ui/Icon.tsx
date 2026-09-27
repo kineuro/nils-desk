@@ -224,6 +224,22 @@ const PATHS = {
       <path d="M14 3.5v4h4" />
     </>
   ),
+  grow: (
+    <>
+      <path d="M14 4h6v6" />
+      <path d="M10 20H4v-6" />
+      <path d="m20 4-6.5 6.5" />
+      <path d="M4 20l6.5-6.5" />
+    </>
+  ),
+  shrink: (
+    <>
+      <path d="M20 10h-6V4" />
+      <path d="M4 14h6v6" />
+      <path d="m14 10 6.5-6.5" />
+      <path d="M10 14l-6.5 6.5" />
+    </>
+  ),
   x: (
     <>
       <path d="M6 6l12 12" />

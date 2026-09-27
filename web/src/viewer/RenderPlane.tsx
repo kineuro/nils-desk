@@ -58,6 +58,7 @@ export function RenderPlane({ src, axes, known, onLoad }: { src: string; axes: R
       ctx.translate(el.width / 2, el.height / 2);
       ctx.transform(a, b, c, d, 0, 0);
       ctx.drawImage(img, -W / 2, -H / 2, W, H);
+      upscaled(el);
       setFailed(false);
       onLoad?.();
     };
@@ -70,10 +71,25 @@ export function RenderPlane({ src, axes, known, onLoad }: { src: string; axes: R
     };
     // the key carries the source and the turn; the sizes follow the source
   }, [key]);
+  // drawn larger than it is (a big screen), the render keeps its pixels square rather than blurred
+  useEffect(() => {
+    const el = canvas.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const seen = new ResizeObserver(() => upscaled(el));
+    seen.observe(el);
+    return () => seen.disconnect();
+  }, []);
   return (
     <div className="viewer-render">
       <canvas ref={canvas} hidden={failed} />
       {!failed && <Letters labels={edgeLabels(turn.right, turn.down)} unknown={!known} />}
     </div>
   );
+}
+
+/** Mark a canvas drawn larger than its own pixels, which the viewer's rules then draw sharp (image-rendering: pixelated). */
+function upscaled(el: HTMLCanvasElement): void {
+  const scale = el.width > 0 && el.height > 0 ? Math.min(el.clientWidth / el.width, el.clientHeight / el.height) * (window.devicePixelRatio || 1) : 0;
+  if (scale > 1.01) el.setAttribute("data-up", "");
+  else el.removeAttribute("data-up");
 }

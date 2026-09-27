@@ -49,7 +49,7 @@ export function AxisRows({
   onCantTell?: (axis: string) => void;
 }) {
   return (
-    <div className="axis-rows">
+    <div className={rows.length === 1 ? "axis-rows single" : "axis-rows"}>
       {rows.map((r, n) => {
         const on = chosen[r.axis];
         const groups = groupOf(r);
