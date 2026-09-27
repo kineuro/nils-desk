@@ -12,11 +12,21 @@
 .viewer-plane-name { position: absolute; left: 0.4rem; bottom: 0.3rem; color: var(--n-text-on-brand); font-size: 11px; opacity: 0.7; pointer-events: none; }
 .viewer-plane-server .viewer-plane-name { bottom: 2rem; }
 .viewer-note { margin: 0; }
+/* one plane enlarged to the whole side (Space, a double click, the corner button), the other two away */
+.viewer-planes.enlarged { grid-template-columns: minmax(0, 1fr); }
+.viewer-planes.enlarged .viewer-plane:not(.big) { display: none; }
+.viewer-plane-grow { position: absolute; right: 0.3rem; bottom: 0.3rem; z-index: 2; display: grid; place-items: center; width: 1.6rem; height: 1.6rem; padding: 0; border: 0; border-radius: var(--n-radius); background: transparent; color: var(--n-text-on-brand); opacity: 0; cursor: pointer; }
+.viewer-plane-grow .i { width: 15px; height: 15px; }
+.viewer-plane:hover .viewer-plane-grow, .viewer-plane-grow:focus-visible, .viewer-plane-grow[aria-pressed="true"] { opacity: 0.75; }
+.viewer-plane-grow:hover { opacity: 1; }
+.viewer-plane-server .viewer-plane-grow { bottom: 2rem; }
 .viewer-first .viewer-render { position: absolute; inset: 0; }
 
 /* the server's render, drawn to its size in mm and centred */
 .viewer-render { position: relative; width: 100%; height: 100%; display: grid; place-items: center; overflow: hidden; }
-.viewer-render canvas { display: block; max-width: 100%; max-height: 100%; }
+/* the render fills its plane at its own proportions; drawn larger than it is, its pixels stay square and sharp (RenderPlane sets data-up) */
+.viewer-render canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
+.viewer-render canvas[data-up] { image-rendering: pixelated; }
 
 /* the letters at a picture's edges: where the patient's left, anterior and head are */
 .viewer-edge, .viewer-unknown { position: absolute; z-index: 1; color: var(--n-text-on-brand); font-family: var(--n-font-mono); font-size: 12px; font-weight: 500; line-height: 1; pointer-events: none; }

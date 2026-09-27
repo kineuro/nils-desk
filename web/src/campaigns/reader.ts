@@ -281,6 +281,8 @@ export function fileOf(raw: Json): Pick<Reading, "texts" | "physics" | "headerDo
 const TEXT_FIRST: [string, string][] = [
   ["series_description", "series"],
   ["protocol_name", "protocol"],
+  ["study_description", "study"],
+  ["body_part_examined", "body part"],
   ["sequence_name", "sequence"],
   ["scanning_sequence", "scanning"],
   ["image_type", "image type"],
@@ -697,6 +699,10 @@ export class Clock {
   /** The item is on screen; a second call keeps the first time. */
   start(item: number, at: number): void {
     if (!this.shown.has(item)) this.shown.set(item, at);
+  }
+  /** When the item was shown, without stopping its clock; null when it was never started. */
+  since(item: number): number | null {
+    return this.shown.get(item) ?? null;
   }
   /** Seconds since the item was shown, and forget it; null when it was never started. */
   stop(item: number, at: number): number | null {

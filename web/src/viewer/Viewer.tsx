@@ -17,12 +17,17 @@
 // the AC-PC line shows its sagittal and coronal with the head as the
 // operator aligned it rather than tilted by the planning angle. The
 // scanner's axes are one click away and kept (geometry.ts, planeCameras).
+//
+// In the reader (after the first gold campaign) the pictures take the keys
+// of keys.ts: Space or a double click enlarges one plane to the whole side
+// and gives the three back, the arrows page the stack or a plane.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as cs from "@cornerstonejs/core";
 import * as tools from "@cornerstonejs/tools";
 import { DoorError } from "../ask/client";
 import { classify, Failure, type Failed } from "../ui/Failure";
+import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { doors, levelShape, type Manifest } from "./doors";
 import { cameraLabels, geometry, planeCameras, type EdgeLabels, type Planes, type Vec3 } from "./geometry";
@@ -31,6 +36,7 @@ import { PLANES, serverPlane as serverPlaneOf, type Plane } from "./prefetch";
 import { Letters, RenderPlane } from "./RenderPlane";
 import { fps, levelFor } from "./ring";
 import { dropVolume, fillVolume, volumePath, type Filling } from "./volume";
+import { viewerKey } from "./keys";
 import "./viewer.css";
 
 export { PLANES, type Plane } from "./prefetch";
@@ -57,6 +63,8 @@ export interface ViewerProps {
   onEvent?: (e: ViewerEvent) => void;
   /** The view the person chose, for a page that keeps it for the next stack. */
   onView?: (view: "stack" | "planes") => void;
+  /** The pictures take their keys (keys.ts): the reader's page, where one viewer is the page's. */
+  keys?: boolean;
 }
 
 interface Numbers {
@@ -133,7 +141,7 @@ function toolGroup(id: string): tools.Types.IToolGroup {
   return group;
 }
 
-export function Viewer({ stack, level: ruleLevel = null, view: initialView = "stack", budget, onEvent, onView }: ViewerProps) {
+export function Viewer({ stack, level: ruleLevel = null, view: initialView = "stack", budget, onEvent, onView, keys = false }: ViewerProps) {
   const ids = viewerIds(stack);
   const el = useRef<HTMLDivElement | null>(null);
   const planeEls = useRef<Record<Plane, HTMLDivElement | null>>({ axial: null, coronal: null, sagittal: null });
@@ -155,6 +163,9 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   const cutRef = useRef(cut);
   cutRef.current = cut;
   const [numbersOpen, setNumbersOpen] = useState(false);
+  // one plane enlarged to the whole side, and the plane under the pointer, which Space and the arrows act on
+  const [big, setBig] = useState<Plane | null>(null);
+  const hovered = useRef<Plane | null>(null);
   const root = useRef<HTMLDivElement | null>(null);
   const stamps = useRef<number[]>([]);
   const engine = useRef<cs.RenderingEngine | null>(null);
@@ -319,10 +330,43 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     });
   }, [mountPlanes]);
 
-  // a hidden element has no size: tell cornerstone when a view comes back
+  // a hidden element has no size: tell cornerstone when a view comes back, or a plane grows or gives its room back
   useEffect(() => {
     engine.current?.resize(true, true);
-  }, [view]);
+  }, [view, big]);
+
+  // the pictures' keys (keys.ts), where the page gives them: Space enlarges, the arrows page
+  const keyed = useRef({ view, big, manifest, fallback, own: "axial" as Plane });
+  keyed.current = { view, big, manifest, fallback, own: PLANES.find((p) => p === manifest?.plane) ?? "axial" };
+  useEffect(() => {
+    if (!keys) return;
+    const onKey = (e: KeyboardEvent) => {
+      const k = keyed.current;
+      if (e.defaultPrevented || !k.manifest) return;
+      const act = viewerKey(e.key, { view: k.view, enlarged: k.big !== null, target: e.target as HTMLElement | null, modifier: e.altKey || e.metaKey || e.ctrlKey });
+      if (!act) return;
+      e.preventDefault();
+      if (act.kind === "enlarge") setBig(hovered.current ?? k.own);
+      else if (act.kind === "restore") setBig(null);
+      else if (k.view === "planes" && k.fallback) {
+        const p = k.big ?? hovered.current ?? k.own;
+        const along = Math.max(2, k.manifest.shape[0]);
+        setServerPos((s) => ({ ...s, [p]: Math.min(1, Math.max(0, s[p] + act.delta / (along - 1))) }));
+      } else {
+        const p = k.big ?? hovered.current ?? k.own;
+        const vp = engine.current?.getViewport(k.view === "stack" ? ids.stack : ids.planes[p]) as Parameters<typeof cs.utilities.scroll>[0] | undefined;
+        if (!vp) return;
+        if (k.view === "planes") setTouched((t) => (t[p] ? t : { ...t, [p]: true }));
+        try {
+          cs.utilities.scroll(vp, { delta: act.delta });
+        } catch {
+          // the viewport is being built or taken down; the next key finds it
+        }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [keys, ids.stack, ids.planes]);
 
   // the pictures grow with the window: cornerstone is told when the viewer's box changes
   useEffect(() => {
@@ -445,9 +489,17 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
         {decodedOnce && <Letters labels={labels.stack ?? null} unknown={!g.known} />}
       </div>
       {planesOpened && !fallback && (
-        <div className="viewer-planes" hidden={view !== "planes"}>
+        <div className={big ? "viewer-planes enlarged" : "viewer-planes"} hidden={view !== "planes"}>
           {PLANES.map((p) => (
-            <div key={p} className={p === own ? "viewer-plane own" : "viewer-plane"} onWheelCapture={() => setTouched((t) => (t[p] ? t : { ...t, [p]: true }))} onPointerDownCapture={() => setTouched((t) => (t[p] ? t : { ...t, [p]: true }))}>
+            <div
+              key={p}
+              className={planeClass(p, own, big)}
+              onWheelCapture={() => setTouched((t) => (t[p] ? t : { ...t, [p]: true }))}
+              onPointerDownCapture={() => setTouched((t) => (t[p] ? t : { ...t, [p]: true }))}
+              onPointerEnter={() => (hovered.current = p)}
+              onPointerLeave={() => hovered.current === p && (hovered.current = null)}
+              onDoubleClick={() => setBig((b) => (b ? null : p))}
+            >
               <div
                 ref={(node) => {
                   planeEls.current[p] = node;
@@ -458,6 +510,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
               {!volumeDone && !touched[p] && <div className="viewer-first">{serverPlane(p, 0.5)}</div>}
               {(volumeDone || touched[p]) && <Letters labels={labels[p] ?? null} unknown={!g.known} />}
               <span className="viewer-plane-name">{p}</span>
+              <GrowButton plane={p} big={big === p} onClick={() => setBig((b) => (b ? null : p))} />
             </div>
           ))}
         </div>
@@ -468,11 +521,12 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
         </p>
       )}
       {planesOpened && fallback && (
-        <div className="viewer-planes" hidden={view !== "planes"}>
+        <div className={big ? "viewer-planes enlarged" : "viewer-planes"} hidden={view !== "planes"}>
           {PLANES.map((p) => (
-            <div key={p} className={p === own ? "viewer-plane viewer-plane-server own" : "viewer-plane viewer-plane-server"}>
+            <div key={p} className={`${planeClass(p, own, big)} viewer-plane-server`} onPointerEnter={() => (hovered.current = p)} onPointerLeave={() => hovered.current === p && (hovered.current = null)} onDoubleClick={() => setBig((b) => (b ? null : p))}>
               {serverPlane(p, serverPos[p])}
               <span className="viewer-plane-name">{p}</span>
+              <GrowButton plane={p} big={big === p} onClick={() => setBig((b) => (b ? null : p))} />
               <input type="range" min={0} max={1} step={0.001} value={serverPos[p]} onChange={(e) => setServerPos((s) => ({ ...s, [p]: Number(e.target.value) }))} aria-label={`${p} position`} />
             </div>
           ))}
@@ -487,6 +541,20 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
         </p>
       )}
     </div>
+  );
+}
+
+/** A plane's classes: the one the stack was acquired in leads, and one may be enlarged to the whole side. */
+function planeClass(p: Plane, own: Plane, big: Plane | null): string {
+  return ["viewer-plane", p === own ? "own" : "", big === p ? "big" : ""].filter(Boolean).join(" ");
+}
+
+/** The corner button that enlarges a plane to the whole side and gives the three back (Space does the same). */
+function GrowButton({ plane, big, onClick }: { plane: Plane; big: boolean; onClick: () => void }) {
+  return (
+    <button type="button" className="viewer-plane-grow" aria-pressed={big} aria-label={big ? "the three planes" : `enlarge the ${plane} plane`} title={big ? "the three planes (Space or Esc)" : "enlarge (Space, or a double click)"} onClick={onClick} onDoubleClick={(e) => e.stopPropagation()}>
+      <Icon name={big ? "shrink" : "grow"} />
+    </button>
   );
 }
 

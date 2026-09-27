@@ -6,18 +6,19 @@
 // server's planes. A pick question's session draws its candidates as the
 // session board's tiles instead (review/SessionBoard.tsx). The reader keeps
 // the view a person chose (record 48, the second real read): each new stack
-// opens on it, told back through `onView`.
+// opens on it, told back through `onView`, and its pictures take their own
+// keys (viewer/keys.ts): Space enlarges a plane, the arrows page.
 
 import { lazy, Suspense } from "react";
 import { Wait } from "../ui/Wait";
 
 const Viewer = lazy(() => import("../viewer/Viewer").then((m) => ({ default: m.Viewer })));
 
-export function StackView({ stack, level = null, view = "stack", onView }: { stack: number; level?: number | null; view?: "stack" | "planes"; onView?: (v: "stack" | "planes") => void }) {
+export function StackView({ stack, level = null, view = "stack", onView, keys = false }: { stack: number; level?: number | null; view?: "stack" | "planes"; onView?: (v: "stack" | "planes") => void; keys?: boolean }) {
   return (
     <div className="stack-view">
       <Suspense fallback={<Wait phase="loading the viewer" since={Date.now()} size="panel" />}>
-        <Viewer key={stack} stack={stack} level={level} view={view} onView={onView} />
+        <Viewer key={stack} stack={stack} level={level} view={view} onView={onView} keys={keys} />
       </Suspense>
     </div>
   );

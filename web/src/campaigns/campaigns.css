@@ -91,7 +91,9 @@
    line and the answer right; the whole header, the evidence and the keys
    open over the panel. Nothing below the fold on a laptop. */
 .page:has(.reader-one) { display: flex; flex-direction: column; padding: 0.6rem 1.1rem 0.7rem; overflow: hidden; }
-.reader-one { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; min-height: 0; max-width: none; }
+/* the section is the page's height by itself as well, so the pictures never take their height from the
+   panel's content where :has() is not read (a browser before it drew the planes a fifth of the side) */
+.reader-one { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; height: 100%; min-height: 0; max-width: none; }
 .reader-head { display: flex; align-items: baseline; gap: 0.7rem; min-width: 0; white-space: nowrap; }
 .reader-head h1 { font-size: 1.25rem; line-height: 1.2; }
 .reader-head .said-slot { min-width: 0; overflow: hidden; }
@@ -100,7 +102,14 @@
 .reader-head .order-toggle .opt { min-height: 1.5rem; font-size: 12px; }
 .rate-count-line { font-size: var(--n-text-size-small); color: var(--n-text-faint); font-variant-numeric: tabular-nums; }
 .rate-count-line b { color: var(--n-text); }
-.reader-one .rate-grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(34rem, 26vw, 42rem); grid-template-rows: minmax(0, 1fr); gap: 1rem; align-items: stretch; }
+.on-this { font-variant-numeric: tabular-nums; }
+/* an answer taken: its words come in with a brief light, then stay quiet */
+@media (prefers-reduced-motion: no-preference) {
+  .reader-head .said { animation: said-in 1.6s ease-out; }
+}
+@keyframes said-in { from { background: var(--n-ok-bg); color: var(--n-ok-fg); } }
+.reader-head .said { padding: 0 0.3rem; border-radius: var(--n-radius); }
+.reader-one .rate-grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(34rem, 26vw, 44rem); grid-template-rows: minmax(0, 1fr); gap: 1rem; align-items: stretch; }
 .reader-one .rate-picture { min-height: 0; overflow: hidden; container-type: size; }
 .reader-one .rate-side { position: relative; display: flex; flex-direction: column; gap: 0.25rem; min-height: 0; overflow: auto; font-size: var(--n-text-size-small); }
 .reader-one .rate-side > * { flex: none; }
@@ -127,11 +136,32 @@
   .reader-one .viewer-planes { --unit: min(calc((100cqw - 2 * var(--gap)) / 3), calc(100cqh - 2.4rem)); grid-template-columns: repeat(3, var(--unit)); grid-template-rows: var(--unit); }
   .reader-one .viewer-plane.own { grid-row: auto; }
 }
+/* one plane enlarged (Space, a double click, its corner button): the largest square the side holds, the other two away */
+.reader-one .viewer-planes.enlarged { --unit: min(100cqw, calc(100cqh - 2.4rem)); grid-template-columns: var(--unit); grid-template-rows: var(--unit); }
+.reader-one .viewer-planes.enlarged .viewer-plane.big { grid-row: auto; grid-column: auto; }
 .reader-one .viewer-stage { width: min(100cqw, calc(100cqh - 2.4rem)); max-height: none; }
 .reader-one .viewer-foot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* a narrow screen (a phone, a window at half a laptop): the pictures over the panel and the page
+   scrolls; the pictures keep a side as wide as the screen, the three planes two by three units */
+@media (max-width: 860px) {
+  .page:has(.reader-one) { display: block; overflow: auto; }
+  .reader-one { height: auto; }
+  .reader-head { flex-wrap: wrap; white-space: normal; row-gap: 0.2rem; }
+  .reader-one .rate-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .reader-one .rate-picture { height: min(calc(100vw * 1.55), 88vh); }
+  .reader-one .rate-side { overflow: visible; }
+}
+
 /* the file's words: compact, monospace, a line each, whole on hover */
-.header-block { display: grid; gap: 0; padding: 0.25rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-family: var(--n-font-mono); font-size: 12px; line-height: 1.2; }
+.header-block { display: grid; gap: 0; padding: 0.25rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-family: var(--n-font-mono); font-size: 12.5px; line-height: 1.25; }
+/* beside a suggestion the block keeps the size it had, the candidates need the room */
+.header-block.brief { font-size: 12px; line-height: 1.2; }
+/* what the series, the protocol and the study were called and the body part the file names: read first, a step stronger */
+.hb-key .hb-v { color: var(--n-text); font-weight: 500; }
+.hb-line:not(.hb-key):not(.hb-facts-line) .hb-v { color: var(--n-text-dim); }
+.hb-fold { padding: 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.hb-fold:hover, .hb-fold:focus-visible { color: var(--n-brand-text); }
 .hb-line { display: grid; grid-template-columns: 6.2rem minmax(0, 1fr); gap: 0.5rem; min-width: 0; }
 .hb-k { color: var(--n-text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* the second real read: a long line wraps inside the block, nothing hides behind a hover; the other fields' lines keep to two */
@@ -184,8 +214,23 @@
 /* one line each: the derived axes, what will be sent, a refusal */
 .derived-line, .reader-one .pending, .reader-one .one-line { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .derived-line { font-size: 12px; color: var(--n-text-dim); }
-.reader-one .actions { gap: 0.4rem; }
+/* the answer stays in view when the panel scrolls: a band of the page's colour above it takes no room */
+.reader-one .actions { position: sticky; bottom: 0; z-index: 1; gap: 0.4rem; background: var(--n-bg-page); box-shadow: 0 -0.3rem 0 var(--n-bg-page); }
 .reader-one .actions .button { min-height: 1.9rem; }
+.act-main { display: inline-flex; gap: 0; }
+.act-main > :not(:last-child) { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.act-main > :not(:first-child) { margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.reader-one .act-answer { min-width: 7.5rem; justify-content: center; font-size: 14px; }
+.reader-one .act-unsure { min-height: 1.9rem; }
+/* one question, one row (a body part): its values large, a grid of labelled keys */
+.reader-one .axis-rows.single .axis-row { gap: 0.4rem; }
+.reader-one .axis-rows.single .axis-name { font-size: 13px; color: var(--n-text-dim); }
+.reader-one .axis-rows.single .axis-values { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.4rem; }
+.reader-one .axis-rows.single .axis-family { display: contents; }
+.reader-one .axis-rows.single .axis-family-name { grid-column: 1 / -1; }
+.reader-one .axis-rows.single .opt { min-height: 2.6rem; padding: 0 0.7rem; font-size: 15px; }
+.reader-one .axis-rows.single .opt kbd { margin-right: 0.55rem; font-size: 12px; }
+.reader-one .axis-rows.single .opt .vmark { margin-right: 0.4rem; }
 .reader-one .why-input { flex: 1 1 6rem; min-height: 1.9rem; }
 .reader-one .suggest { padding: 0.3rem 0.55rem; gap: 0.25rem; }
 .reader-one .suggest-words { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -2,14 +2,34 @@
 // The viewer's boxes without a stack: the view tabs, the three planes and the
 // numbers, with the real viewer's classes, so the layout check lays the
 // pictures out as the desk does: the plane the stack was acquired in (the
-// fixture's is sagittal) leads, and the numbers open on `i`.
+// fixture's is sagittal) leads, the numbers open on `i`, and Space or a
+// double click enlarges a plane to the whole side (viewer/keys.ts).
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { viewerKey } from "../../src/viewer/keys";
 import "../../src/viewer/viewer.css";
 
-export function Viewer({ view: initial = "stack", onView }: { stack: number; level?: number | null; view?: "stack" | "planes"; onView?: (v: "stack" | "planes") => void }) {
+type Plane = "axial" | "coronal" | "sagittal";
+
+export function Viewer({ view: initial = "stack", onView, keys = false }: { stack: number; level?: number | null; view?: "stack" | "planes"; onView?: (v: "stack" | "planes") => void; keys?: boolean }) {
   const [view, setView] = useState(initial);
   const [numbers, setNumbers] = useState(false);
+  const [big, setBig] = useState<Plane | null>(null);
+  const hovered = useRef<Plane | null>(null);
+  const keyed = useRef({ view, big });
+  keyed.current = { view, big };
+  useEffect(() => {
+    if (!keys) return;
+    const onKey = (e: KeyboardEvent) => {
+      const act = viewerKey(e.key, { view: keyed.current.view, enlarged: keyed.current.big !== null, target: e.target as HTMLElement | null, modifier: e.altKey || e.metaKey || e.ctrlKey });
+      if (!act || e.defaultPrevented) return;
+      e.preventDefault();
+      if (act.kind === "enlarge") setBig(hovered.current ?? "sagittal");
+      else if (act.kind === "restore") setBig(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [keys]);
   const choose = (v: "stack" | "planes") => {
     setView(v);
     onView?.(v);
@@ -28,11 +48,19 @@ export function Viewer({ view: initial = "stack", onView }: { stack: number; lev
         </button>
       </div>
       <div className="viewer-stage" hidden={view !== "stack"} />
-      <div className="viewer-planes" hidden={view !== "planes"}>
+      <div className={big ? "viewer-planes enlarged" : "viewer-planes"} hidden={view !== "planes"}>
         {(["axial", "coronal", "sagittal"] as const).map((p) => (
-          <div key={p} className={p === "sagittal" ? "viewer-plane own" : "viewer-plane"} data-plane={p}>
+          <div
+            key={p}
+            className={["viewer-plane", p === "sagittal" ? "own" : "", big === p ? "big" : ""].filter(Boolean).join(" ")}
+            data-plane={p}
+            onPointerEnter={() => (hovered.current = p)}
+            onPointerLeave={() => hovered.current === p && (hovered.current = null)}
+            onDoubleClick={() => setBig((b) => (b ? null : p))}
+          >
             <div className="viewer-element" />
             <span className="viewer-plane-name">{p}</span>
+            <button type="button" className="viewer-plane-grow" aria-pressed={big === p} aria-label={big === p ? "the three planes" : `enlarge the ${p} plane`} onClick={() => setBig((b) => (b ? null : p))} />
           </div>
         ))}
       </div>

@@ -5,7 +5,8 @@
 // The viewer is a stand-in with the real viewer's boxes, so the planes are
 // laid out as they are in the desk without a stack to load.
 // `?mode=` takes `plain` (an engine before record 48's new doors) or `seen`
-// (the item read in the open, with the suggestion and the evidence).
+// (the item read in the open, with the suggestion and the evidence) or `axis`
+// (a one-axis body part question, whose panel is short).
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -17,7 +18,7 @@ import { CAMPAIGN_ID, doorsOf, fakeEngine } from "./reader.fixture";
 
 const mode = new URLSearchParams(location.search).get("mode");
 const plain = mode === "plain";
-window.fetch = fakeEngine({ derive: !plain, header: !plain, texts: !plain, seen: mode === "seen" });
+window.fetch = fakeEngine({ derive: !plain, header: !plain, texts: !plain, seen: mode === "seen", axis: mode === "axis" });
 
 const caps = {
   engine: {

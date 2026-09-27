@@ -223,31 +223,79 @@ export function HeaderValues({ header }: { header: [string, string][] }) {
  * text or physics, the flat header values it sends stand in.
  */
 export function HeaderBlock({ lines, flat = [], brief = false }: { lines: HeaderLine[]; flat?: [string, string][]; brief?: boolean }) {
-  // brief beside a suggestion: the lines of the other fields give their room to the candidates, and stay one key away
-  const kept = brief ? lines.filter((l) => l.label !== "more") : lines;
-  const shown: HeaderLine[] = kept.length > 0 ? kept : flat.length > 0 ? [{ key: "flat", label: "header", value: flat.map(([k, v]) => `${k} ${v}`).join("  ") }] : [];
+  // the other fields' lines fold under their label, kept per browser (after the first gold campaign)
+  const [folded, setFolded] = useState(() => kept(MORE_KEY) === "folded");
+  const fold = () =>
+    setFolded((f) => {
+      keep(MORE_KEY, f ? "open" : "folded");
+      return !f;
+    });
+  // brief beside a suggestion: the lines of the other fields, the study's and the body part's give their room to the candidates, and stay one key away
+  const drawn = brief ? lines.filter((l) => l.label !== "more" && l.label !== "study" && l.label !== "body part") : lines;
+  const shown: HeaderLine[] = drawn.length > 0 ? drawn : flat.length > 0 ? [{ key: "flat", label: "header", value: flat.map(([k, v]) => `${k} ${v}`).join("  ") }] : [];
   if (shown.length === 0) return null;
+  const more = shown.filter((l) => l.label === "more");
+  const first = shown.findIndex((l) => l.label === "more");
   return (
     <div className={brief ? "header-block brief" : "header-block"} aria-label="the file's header">
-      {shown.map((l) => (
-        <div key={l.key} className={l.facts ? "hb-line hb-facts-line" : l.label === "more" ? "hb-line hb-more" : "hb-line"} title={`${l.label}: ${l.value}`}>
-          <span className="hb-k">{l.label}</span>
-          {l.facts ? (
-            <span className="hb-v hb-facts">
-              {l.facts.map(([k, v]) => (
-                <span key={`${k}${v}`} className="hb-fact">
-                  {k && <span className="hb-fact-k">{k}</span>}
-                  <b>{v}</b>
-                </span>
-              ))}
-            </span>
-          ) : (
-            <span className="hb-v">{l.value}</span>
-          )}
-        </div>
-      ))}
+      {shown.map((l, i) => {
+        if (l.label === "more" && folded) {
+          if (i !== first) return null;
+          return (
+            <div key="more-folded" className="hb-line hb-more folded">
+              <button type="button" className="hb-k hb-fold" aria-expanded={false} onClick={fold} title="the other fields' lines">
+                more ▸
+              </button>
+              <span className="hb-v meta">{more.length === 1 ? "a line" : `${more.length} lines`} folded</span>
+            </div>
+          );
+        }
+        const cls = ["hb-line", l.facts ? "hb-facts-line" : "", l.label === "more" ? "hb-more" : "", KEY_LINES.has(l.label) ? "hb-key" : ""].filter(Boolean).join(" ");
+        return (
+          <div key={l.key} className={cls} title={`${l.label}: ${l.value}`}>
+            {l.label === "more" && i === first ? (
+              <button type="button" className="hb-k hb-fold" aria-expanded onClick={fold} title="fold the other fields' lines">
+                more ▾
+              </button>
+            ) : (
+              <span className="hb-k">{l.label}</span>
+            )}
+            {l.facts ? (
+              <span className="hb-v hb-facts">
+                {l.facts.map(([k, v]) => (
+                  <span key={`${k}${v}`} className="hb-fact">
+                    {k && <span className="hb-fact-k">{k}</span>}
+                    <b>{v}</b>
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span className="hb-v">{l.value}</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
+}
+
+/** The lines a reader reads first, drawn a step stronger: what the series and the study were called, and the body part the file names. */
+const KEY_LINES = new Set(["series", "protocol", "study", "body part"]);
+
+const MORE_KEY = "nils.reader.more";
+function kept(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function keep(key: string, v: string): void {
+  try {
+    localStorage.setItem(key, v);
+  } catch {
+    // a private window keeps nothing; the block works the same
+  }
 }
 
 /** The doors beside the header block: `h` the whole header where the engine serves it, `H` how each axis was decided where it was. */
