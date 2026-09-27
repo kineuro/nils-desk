@@ -35,6 +35,7 @@ import { href, parse, type Route } from "./routes";
 import { assistantOffered, foot, initials, sections, usable } from "./sections";
 import { where } from "./settings/install";
 import { backupsKept } from "./settings/kept";
+import { newerWords } from "./settings/parts";
 import { Settings } from "./settings/Settings";
 import { supervise, type Install } from "./settings/supervise";
 import { Side } from "./Side";
@@ -185,10 +186,10 @@ export function App() {
           </span>
         )}
         <span className="grow" />
-        {install?.release.newer && (
-          <a className="update-note" href={href("settings", "parts")} title={`${install.release.newer} is out; to take it: ${install.release.command}`}>
+        {install && newerWords(install) && (
+          <a className="update-note" href={href("settings", "parts")} title={`${newerWords(install)}; to take it: ${install.release.command}`}>
             <Icon name="update" />
-            <span className="update-words">{install.release.newer} is out</span>
+            <span className="update-words">{newerWords(install)}</span>
           </a>
         )}
         <ThemeSwitch />

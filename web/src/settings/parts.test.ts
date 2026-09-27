@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
 import { SETS } from "../grants";
 import type { AdmissionRecord } from "./kvasir";
-import { checkedWords, contractWords, keptByWords, partRows, restartByHand, runtimeName, updateWords, uptimeWords } from "./parts";
-import type { Install } from "./supervise";
+import { behindParts, checkedWords, contractWords, keptByWords, newerWords, partRows, restartByHand, runtimeName, updateWords, uptimeWords } from "./parts";
+import type { Install, PartRelease, Release } from "./supervise";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
   return {
@@ -153,5 +153,80 @@ describe("the words", () => {
     const systemd = install({ runtime: "podman", service: "podman quadlets", services: [{ part: "engine", unit: "nils-engine", watcher: "systemd", running: true }, { part: "desk", unit: "nils-desk", watcher: "systemd", running: true }] });
     expect(restartByHand(systemd, "all")).toBe("systemctl --user restart nils-engine nils-desk");
     expect(restartByHand(install({ services: [] }), "engine")).toBe("nils setup");
+  });
+});
+
+const own = (part: string, installed: string, newest: string, newer: string | null, held: string | null = null): PartRelease => ({
+  part,
+  installed,
+  newest,
+  newer,
+  held,
+  follows: null,
+  error: null,
+  command: `nils update --part ${part}`,
+});
+
+/** A release as an engine that lists each part beside its own newest says it. */
+function listed(parts: PartRelease[]): Release {
+  const engine = parts.find((p) => p.part === "engine") ?? null;
+  const behind = parts.filter((p) => p.newer !== null && p.held === null);
+  return {
+    installed: engine?.installed ?? null,
+    newest: engine?.newest ?? null,
+    newer: engine?.newer ?? (behind[0] ? `${behind[0].part} ${behind[0].newer}` : null),
+    error: null,
+    command: "nils update --all",
+    behind: behind.map((p) => p.part),
+    parts,
+  };
+}
+
+describe("each part beside its own newest release", () => {
+  it("offers a desk released alone while the engine is at its newest, and the desk alone", () => {
+    const i = install({
+      release: listed([own("engine", "1.0.0-alpha.49", "1.0.0-alpha.49", null), own("desk", "1.0.0-alpha.49", "1.0.0-alpha.51", "1.0.0-alpha.51"), own("kvasir", "1.0.0-alpha.2", "1.0.0-alpha.2", null)]),
+    });
+    expect(newerWords(i)).toBe("Desk 1.0.0-alpha.51 is out");
+    expect(behindParts(i).map((p) => p.part)).toEqual(["desk"]);
+    const rows = partRows(caps(), i, null, []);
+    expect(rows[0]).toMatchObject({ id: "engine", newer: { text: "the newest", tag: false }, update: null });
+    expect(rows[1]).toMatchObject({ id: "desk", newer: { text: "1.0.0-alpha.51", tag: true }, update: "desk" });
+    expect(rows[2]).toMatchObject({ id: "gateway", newer: { text: "the newest", tag: false }, update: null });
+    expect(updateWords(i)).toEqual([
+      "The desk moves from 1.0.0-alpha.49 to 1.0.0-alpha.51.",
+      "Postgres stays at 17, and its data is not touched.",
+      "Every part starts again, in order, once it is replaced.",
+    ]);
+  });
+  it("offers nothing where every part is at its newest", () => {
+    const i = install({ release: listed([own("engine", "1.0.0-alpha.49", "1.0.0-alpha.49", null), own("desk", "1.0.0-alpha.51", "1.0.0-alpha.51", null)]) });
+    expect(newerWords(i)).toBeNull();
+    expect(updateWords(i)).toEqual([]);
+    expect(partRows(caps(), i, null, []).every((r) => r.update === null)).toBe(true);
+  });
+  it("counts several parts behind, a Node part built again, and a development build", () => {
+    const i = install({
+      release: listed([
+        own("engine", "1.0.0-alpha.49.dev.2", "1.0.0-alpha.49.dev.3", "1.0.0-alpha.49.dev.3"),
+        own("desk", "1.0.0-alpha.49.dev.2", "1.0.0-alpha.49.dev.2", null),
+        own("kvasir", "1.0.0-alpha.2", "1.0.0-alpha.3", "1.0.0-alpha.3"),
+      ]),
+    });
+    expect(newerWords(i)).toBe("2 updates are out");
+    expect(updateWords(i).slice(0, 2)).toEqual(["The engine moves from 1.0.0-alpha.49.dev.2 to 1.0.0-alpha.49.dev.3.", "Kvasir moves from 1.0.0-alpha.2 to 1.0.0-alpha.3, fetched and built again."]);
+    expect(partRows(caps({ kvasir: gateway() }), i, null, []).find((r) => r.id === "gateway")?.update).toBe("kvasir");
+  });
+  it("says a desk that waits for the engine's contracts, and does not offer it", () => {
+    const held = "desk 1.0.0-alpha.52 needs HTTP contract 8 (the engine speaks 7); it waits for an engine release that speaks it";
+    const i = install({ release: listed([own("engine", "1.0.0-alpha.49", "1.0.0-alpha.49", null), own("desk", "1.0.0-alpha.49", "1.0.0-alpha.52", "1.0.0-alpha.52", held)]) });
+    expect(newerWords(i)).toBeNull();
+    expect(partRows(caps(), i, null, [])[1]).toMatchObject({ newer: { text: "1.0.0-alpha.52 waits for the engine", tag: false }, update: null });
+    const both = install({ release: listed([own("engine", "1.0.0-alpha.48", "1.0.0-alpha.49", "1.0.0-alpha.49"), own("desk", "1.0.0-alpha.49", "1.0.0-alpha.52", "1.0.0-alpha.52", held)]) });
+    expect(updateWords(both)).toContain("Desk 1.0.0-alpha.52 needs HTTP contract 8 (the engine speaks 7); it waits for an engine release that speaks it.");
+  });
+  it("reads an engine older than the list as it always did", () => {
+    expect(newerWords(install())).toBe("1.0.0-alpha.15 is out");
+    expect(partRows(caps(), install(), null, [])[1]).toMatchObject({ newer: { text: "1.0.0-alpha.15", tag: true }, update: null });
   });
 });

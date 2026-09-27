@@ -384,3 +384,19 @@ fn the_command_line_keeps_groups_and_what_each_person_holds() {
     assert_eq!(store().access("ed", None).access, Access::everything());
     ok(&["user", "password", "ed"], Some("a new long password\n"));
 }
+
+/// `nils-desk contracts` names the contracts it speaks and the floor it starts
+/// against, which a release publishes as contracts.json for `nils update`.
+#[test]
+fn the_contracts_it_needs_are_said_as_json() {
+    let out = Command::new(env!("CARGO_BIN_EXE_nils-desk"))
+        .arg("contracts")
+        .output()
+        .expect("the binary runs");
+    assert!(out.status.success());
+    let doc: serde_json::Value = serde_json::from_slice(&out.stdout).expect("json");
+    assert_eq!(doc["openapi"], nils_desk::OPENAPI);
+    assert_eq!(doc["openapi_floor"], nils_desk::OPENAPI_FLOOR);
+    assert_eq!(doc["suite"], nils_desk::SUITE);
+    assert_eq!(doc["suite_floor"], nils_desk::SUITE_FLOOR);
+}

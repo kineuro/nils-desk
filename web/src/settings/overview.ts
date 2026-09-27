@@ -13,6 +13,7 @@ import { backupsTag, nextWords, registryRule, scheduleWords, sizeWords, type Bac
 import { gatewayHealth, shownBackends } from "./gateway";
 import { reachWords, type Users } from "./identity";
 import { keptRunning, where } from "./install";
+import { newerWords } from "./parts";
 import type { Backend } from "./kvasir";
 import { placeState, roleCounts } from "./places";
 import type { Install } from "./supervise";
@@ -60,7 +61,7 @@ export function partsCard(caps: Capabilities, install: Install | null): Card {
   if (caps.kvasir !== null || install?.parts["kvasir"]) parts.push({ name: "Kvasir", called: "Kvasir", answers: caps.kvasir !== null });
   if (caps.assistant !== null || install?.parts["assistant"]) parts.push({ name: "assistant", called: "the assistant", answers: caps.assistant !== null });
   const down = parts.filter((p) => !p.answers);
-  const newer = install?.release.newer ?? null;
+  const newer = install ? newerWords(install) : null;
   const state: Card["state"] =
     down.length === 1
       ? { tone: "blocked", words: `${down[0].called} does not answer` }
@@ -69,7 +70,7 @@ export function partsCard(caps: Capabilities, install: Install | null): Card {
         : warming
           ? { tone: "caution", words: "Kvasir is warming" }
           : newer
-            ? { tone: "brand", words: `${newer} is out` }
+            ? { tone: "brand", words: newer }
             : { tone: "ok", words: "all answer" };
   const facts = [`${count(parts.length, "part", "parts")}: ${parts.map((p) => p.name).join(", ")}`];
   if (install) facts.push(`${where(install)}, ${keptRunning(install) ? "kept running" : "started by hand"}`);

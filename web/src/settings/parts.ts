@@ -10,7 +10,7 @@ import type { Capabilities } from "../capabilities";
 import type { IconName } from "../ui/Icon";
 import { keptRunning } from "./install";
 import type { AdmissionRecord } from "./kvasir";
-import type { Install } from "./supervise";
+import type { Install, PartRelease } from "./supervise";
 
 export type Tone = "ok" | "caution" | "blocked";
 
@@ -26,6 +26,8 @@ export interface PartRow {
   runsAs: { text: string; mono: boolean } | null;
   health: { tone: Tone; words: string };
   newer: { text: string; tag: boolean } | null;
+  /** The part to update on its own, where it is behind its own newest release. */
+  update: string | null;
   /** The settings page that says more, where one is built. */
   page: string | null;
 }
@@ -99,12 +101,19 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
     if (answers) return { tone: "ok", words: running };
     return { tone: "blocked", words: unit(part)?.running === false ? "stopped" : "does not answer" };
   };
+  // an engine older than the list offered the engine's release for both
   const released = (): PartRow["newer"] => {
     if (!release) return null;
     if (release.newer) return { text: release.newer, tag: true };
     return { text: release.newest ? "the newest" : "not checked", tag: false };
   };
   const fromSource = (kind: string | undefined): PartRow["newer"] => (!release ? null : kind === "node" ? { text: "fetched with the update", tag: false } : released());
+  // each part beside its own newest release, where the supervisor says them
+  const own = (part: string, otherwise: () => PartRow["newer"]): Pick<PartRow, "newer" | "update"> => {
+    const r = release?.parts?.find((p) => p.part === part);
+    if (!r) return { newer: otherwise(), update: null };
+    return { newer: ownWords(r), update: behind(r) ? part : null };
+  };
 
   const rows: PartRow[] = [];
   const engine = caps.engine;
@@ -118,7 +127,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
     meta: engine ? contractWords(engine.contracts) || null : null,
     runsAs: runsAs("engine"),
     health: health("engine", engine !== null, uptime !== null ? uptimeWords(uptime) : "running"),
-    newer: released(),
+    ...own("engine", released),
     page: page("engine"),
   });
   rows.push({
@@ -131,7 +140,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
     runsAs: runsAs("desk"),
     // the desk answered for this page to be drawn
     health: { tone: "ok", words: "running" },
-    newer: released(),
+    ...own("desk", released),
     page: page("desk"),
   });
 
@@ -155,7 +164,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
           : gateway.health?.warming
             ? { tone: "caution", words: "warming" }
             : { tone: "ok", words: of > 0 ? `warm · ${busy} of ${of} streams busy` : "warm" },
-      newer: fromSource(kvasirPart?.kind),
+      ...own("kvasir", () => fromSource(kvasirPart?.kind)),
       page: page("gateway"),
     });
     const local = backends.find((b) => b.locality === "local");
@@ -177,6 +186,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
             ? { tone: "ok", words: `serving ${serving.join(", ")}` }
             : { tone: "caution", words: "no model admitted yet" },
         newer: { text: "yours to update", tag: false },
+        update: null,
         page: page("gateway"),
       });
     }
@@ -195,7 +205,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
       meta: [kindWords(assistantPart?.kind), stations > 0 ? count(stations, "station", "stations") : null].filter(Boolean).join(" · ") || null,
       runsAs: runsAs("assistant"),
       health: health("assistant", assistant !== null, "running"),
-      newer: fromSource(assistantPart?.kind),
+      ...own("assistant", () => fromSource(assistantPart?.kind)),
       page: page("assistant"),
     });
   }
@@ -215,6 +225,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
         runsAs: service ? { text: service.unit, mono: true } : { text: postgres ? "started by hand" : "outside NILS", mono: false },
         health: service ? (service.running ? { tone: "ok", words: "running" } : { tone: "blocked", words: "stopped" }) : kept,
         newer: postgres ? { text: `stays at ${postgres.version}`, tag: false } : { text: "yours to update", tag: false },
+        update: null,
         page: page("database"),
       });
     } else {
@@ -228,6 +239,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
         runsAs: { text: "inside the engine", mono: false },
         health: engine !== null ? { tone: "ok", words: "kept by the engine" } : { tone: "blocked", words: "not known" },
         newer: { text: "moves with the engine", tag: false },
+        update: null,
         page: page("database"),
       });
     }
@@ -235,16 +247,60 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
   return rows;
 }
 
-/** What taking the newer release changes, part by part, in the order the update does it. */
+/** Whether an update moves this part now: it is behind, and no other part holds it. */
+export function behind(r: PartRelease): boolean {
+  return r.newer !== null && r.held === null;
+}
+
+/** What the Newer column says of one part beside its own newest release. */
+function ownWords(r: PartRelease): PartRow["newer"] {
+  if (r.follows) return { text: `follows ${r.follows}`, tag: false };
+  if (r.newer && r.held) return { text: `${r.newer} waits for the engine`, tag: false };
+  if (r.newer) return { text: r.newer, tag: true };
+  if (r.error) return { text: "not checked", tag: false };
+  return { text: r.newest ? "the newest" : "not checked", tag: false };
+}
+
+/** The parts an update would move, each beside its own newest release; an engine older than the list offers its own release alone. */
+export function behindParts(install: Install): PartRelease[] {
+  const { release } = install;
+  if (release.parts) return release.parts.filter(behind);
+  if (!release.newer) return [];
+  return [{ part: "engine", installed: release.installed, newest: release.newest, newer: release.newer, held: null, follows: null, error: null, command: release.command }];
+}
+
+/** What is out, in a few words: one part by its name and version, several by their count. */
+export function newerWords(install: Install): string | null {
+  const parts = behindParts(install);
+  if (parts.length === 0) return null;
+  if (!install.release.parts) return `${parts[0].newer} is out`;
+  if (parts.length === 1) return `${partTitle(parts[0].part)} ${parts[0].newer} is out`;
+  return `${count(parts.length, "update", "updates")} are out`;
+}
+
+/** What taking the newer releases changes, part by part, in the order the update does it. */
 export function updateWords(install: Install): string[] {
-  const newer = install.release.newer;
-  if (!newer) return [];
-  const parts = install.parts;
-  const out = [`The engine and the desk move to ${newer} together.`];
-  const source = ["kvasir", "assistant"].filter((n) => parts[n]?.kind === "node").map(partName);
-  if (source.length === 2) out.push(`${cap(source[0])} and ${source[1]} fetch their newest source, and are built again where it moved.`);
-  if (source.length === 1) out.push(`${cap(source[0])} fetches its newest source, and is built again where it moved.`);
-  if (parts["postgres"]) out.push(`Postgres stays at ${parts["postgres"].version}, and its data is not touched.`);
+  const parts = behindParts(install);
+  if (parts.length === 0) return [];
+  const all = install.parts;
+  const out: string[] = [];
+  if (!install.release.parts) {
+    // an engine older than the list moved the engine and the desk together
+    out.push(`The engine and the desk move to ${parts[0].newer} together.`);
+    const source = ["kvasir", "assistant"].filter((n) => all[n]?.kind === "node").map(partName);
+    if (source.length === 2) out.push(`${cap(source[0])} and ${source[1]} fetch their newest source, and are built again where it moved.`);
+    if (source.length === 1) out.push(`${cap(source[0])} fetches its newest source, and is built again where it moved.`);
+  } else {
+    for (const p of parts) {
+      const from = p.installed ? ` from ${p.installed}` : "";
+      const built = all[p.part]?.kind === "node" ? ", fetched and built again" : "";
+      out.push(`${cap(partName(p.part))} moves${from} to ${p.newer}${built}.`);
+    }
+    for (const p of install.release.parts.filter((r) => r.newer !== null && r.held !== null)) {
+      out.push(`${cap(p.held ?? "")}.`);
+    }
+  }
+  if (all["postgres"]) out.push(`Postgres stays at ${all["postgres"].version}, and its data is not touched.`);
   out.push(keptRunning(install) ? "Every part starts again, in order, once it is replaced." : "This install runs no services, so start each part again yourself once it is replaced.");
   return out;
 }
