@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.54] - 2026-09-27
+
+The Parts page shows the rule packs where the engine reads them beside the ones the engine's release carries, and offers an update where only the packs are behind. It reads the install door's `release.packs`, which engine 1.0.0-alpha.54 sends; an older engine sends none and the page shows no row. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+
 ### Added
 
 - The Parts page shows the rule packs where the engine reads them beside the ones the engine's release carries, each by the version its `pack.yml` states: a row of their own, older than the engine's release, at it, or with a first-party pack changed on the machine and kept. Where only the packs are behind, the update is offered and says which packs move. Read from the install door's `release.packs`; an engine that sends none shows no row.
