@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- The Parts page shows the rule packs where the engine reads them beside the ones the engine's release carries, each by the version its `pack.yml` states: a row of their own, older than the engine's release, at it, or with a first-party pack changed on the machine and kept. Where only the packs are behind, the update is offered and says which packs move. Read from the install door's `release.packs`; an engine that sends none shows no row.
+
 ## [1.0.0-alpha.53] - 2026-09-27
 
 The desk releases under its own version number, and an install takes the newest desk release whose `contracts.json` floor its engine meets. The reader's panel and the gallery grow together with the screen, and a value's colour is its element's frame, a thin border and a bar on its left, with no shape beside it. The rater page draws the next item's planes at once, and stops warming items when one is given back. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.

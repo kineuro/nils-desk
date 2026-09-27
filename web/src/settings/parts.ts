@@ -10,7 +10,7 @@ import type { Capabilities } from "../capabilities";
 import type { IconName } from "../ui/Icon";
 import { keptRunning } from "./install";
 import type { AdmissionRecord } from "./kvasir";
-import type { Install, PartRelease } from "./supervise";
+import type { Install, Pack, PartRelease, Packs } from "./supervise";
 
 export type Tone = "ok" | "caution" | "blocked";
 
@@ -76,12 +76,12 @@ export function runtimeName(name: string): string {
 
 /** A part's name at the head of a row. */
 export function partTitle(part: string): string {
-  return ({ engine: "Engine", desk: "Desk", gateway: "Kvasir", kvasir: "Kvasir", assistant: "Assistant", postgres: "Postgres" } as Record<string, string>)[part] ?? part;
+  return ({ engine: "Engine", desk: "Desk", gateway: "Kvasir", kvasir: "Kvasir", assistant: "Assistant", postgres: "Postgres", packs: "Rule packs" } as Record<string, string>)[part] ?? part;
 }
 
 /** A part's name inside a sentence. */
 export function partName(part: string): string {
-  return ({ engine: "the engine", desk: "the desk", gateway: "Kvasir", kvasir: "Kvasir", assistant: "the assistant", postgres: "Postgres" } as Record<string, string>)[part] ?? part;
+  return ({ engine: "the engine", desk: "the desk", gateway: "Kvasir", kvasir: "Kvasir", assistant: "the assistant", postgres: "Postgres", packs: "the rule packs" } as Record<string, string>)[part] ?? part;
 }
 
 const SIGN_IN: Record<string, string> = { off: "no sign-in", local: "local sign-in", oidc: "single sign-on" };
@@ -130,6 +130,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
     ...own("engine", released),
     page: page("engine"),
   });
+  if (release?.packs) rows.push(packRow(release.packs));
   rows.push({
     id: "desk",
     title: "Desk",
@@ -247,6 +248,50 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
   return rows;
 }
 
+/** A pack as a person reads it: its name and the version it states, or its name alone. */
+export function packWords(p: Pack): string {
+  return p.version ? `${p.name} ${p.version}` : p.name;
+}
+
+/** The packs of a list named, in the list's order. */
+function packsNamed(list: Pack[] | undefined, names: string[] | undefined): string {
+  return (list ?? [])
+    .filter((p) => (names ?? []).includes(p.name))
+    .map(packWords)
+    .join(" · ");
+}
+
+/** The rule packs' row: what is where the engine reads them, beside the ones the engine's release carries. */
+export function packRow(packs: Packs): PartRow {
+  const installed = (packs.installed ?? []).map(packWords).join(" · ");
+  const edited = packs.edited ?? [];
+  const health: PartRow["health"] = packs.error
+    ? { tone: "caution", words: "the release's packs could not be read" }
+    : packs.behind
+      ? { tone: "caution", words: `older than engine ${packs.release}'s` }
+      : edited.length > 0
+        ? { tone: "caution", words: `${edited.join(", ")} changed on this machine, kept` }
+        : { tone: "ok", words: `engine ${packs.release}'s` };
+  const newer: PartRow["newer"] = packs.error
+    ? { text: "not checked", tag: false }
+    : packs.behind
+      ? { text: packsNamed(packs.bundled, packs.stale), tag: true }
+      : { text: "moves with the engine", tag: false };
+  return {
+    id: "packs",
+    title: "Rule packs",
+    icon: "layers",
+    version: installed || "none",
+    mono: installed !== "",
+    meta: packs.dir,
+    runsAs: { text: "read by the engine", mono: false },
+    health,
+    newer,
+    update: null,
+    page: null,
+  };
+}
+
 /** Whether an update moves this part now: it is behind, and no other part holds it. */
 export function behind(r: PartRelease): boolean {
   return r.newer !== null && r.held === null;
@@ -264,7 +309,15 @@ function ownWords(r: PartRelease): PartRow["newer"] {
 /** The parts an update would move, each beside its own newest release; an engine older than the list offers its own release alone. */
 export function behindParts(install: Install): PartRelease[] {
   const { release } = install;
-  if (release.parts) return release.parts.filter(behind);
+  if (release.parts) {
+    const out = release.parts.filter(behind);
+    // the rule packs go with the engine, and are behind on their own where an update left them
+    const packs = release.packs;
+    if (packs?.behind && !out.some((p) => p.part === "engine")) {
+      out.push({ part: "packs", installed: packsNamed(packs.installed, packs.stale) || null, newest: null, newer: packsNamed(packs.bundled, packs.stale), held: null, follows: null, error: null, command: packs.command });
+    }
+    return out;
+  }
   if (!release.newer) return [];
   return [{ part: "engine", installed: release.installed, newest: release.newest, newer: release.newer, held: null, follows: null, error: null, command: release.command }];
 }
@@ -292,6 +345,10 @@ export function updateWords(install: Install): string[] {
     if (source.length === 1) out.push(`${cap(source[0])} fetches its newest source, and is built again where it moved.`);
   } else {
     for (const p of parts) {
+      if (p.part === "packs") {
+        out.push(`The rule packs move${p.installed ? ` from ${p.installed}` : ""} to ${p.newer}, the ones engine ${install.release.packs?.release} was released with; the ones before are kept beside them.`);
+        continue;
+      }
       const from = p.installed ? ` from ${p.installed}` : "";
       const built = all[p.part]?.kind === "node" ? ", fetched and built again" : "";
       out.push(`${cap(partName(p.part))} moves${from} to ${p.newer}${built}.`);
