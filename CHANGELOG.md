@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.52] - 2026-09-27
+
+Released with engine 1.0.0-alpha.52, whose supervisor lists each part beside its own newest release. Settings > Parts offers an update when any part is behind its own newest release, not only when the engine is, with an Update for each part beside Update everything, and says when a desk waits for an engine contract. `nils-desk contracts` prints the engine contracts the desk speaks, and a release publishes them as `contracts.json`. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and reads an older engine as before.
+
 ### Fixed
 
 - Settings > Parts offers an update when any part is behind its own newest release, not only when the engine is: the engine, the desk, the assistant and Kvasir release on their own, and a desk released alone was never offered. Where the supervisor lists each part beside its own newest release, the Newer column says each part's own, with an Update button for each part that is behind beside Update everything; the heading, the top bar and the overview name the part, or count the updates. A desk that waits for an engine contract is said to wait and is not offered. An engine older than the list is read as before.
