@@ -59,11 +59,12 @@ describe("the reader on a big screen", () => {
     await act(async () => again.unmount());
   });
 
-  it("marks a one-row question's values to be drawn large", () => {
-    const one = renderToStaticMarkup(<AxisRows rows={[{ axis: "body_part", values: ["brain", "neck"], multi: false }]} chosen={{}} onChoose={() => undefined} />);
-    expect(one).toContain('class="axis-rows single"');
-    const two = renderToStaticMarkup(<AxisRows rows={[{ axis: "a", values: ["x"], multi: false }, { axis: "b", values: ["y"], multi: false }]} chosen={{}} onChoose={() => undefined} />);
-    expect(two).toContain('class="axis-rows"');
+  it("draws a one-row question's values as every other row, with no shape beside them", () => {
+    const one = renderToStaticMarkup(<AxisRows rows={[{ axis: "body_part", values: ["brain", "neck"], multi: false }]} chosen={{ body_part: "neck" }} onChoose={() => undefined} />);
+    expect(one).toContain('class="axis-rows"');
+    expect(one).not.toContain("single");
+    expect(one).not.toContain("vmark");
+    expect(one).toContain('class="opt on" aria-pressed="true" data-slot="2"><kbd>2</kbd>neck');
   });
 
   it("counts the time on an item from when it was shown, without stopping its clock", () => {

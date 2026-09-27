@@ -35,6 +35,7 @@ async function planes(page: Page) {
       own: Math.round(Math.min(own.width, own.height)),
       overlap: rects.some((a, i) => rects.some((b, j) => i < j && a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1)),
       panelW: panel.getBoundingClientRect().width,
+      zoom: (panel as HTMLElement & { currentCSSZoom?: number }).currentCSSZoom ?? 1,
       panel: { scroll: panel.scrollHeight, client: panel.clientHeight },
       doc: { scrollW: doc.scrollWidth, clientW: doc.clientWidth, scroll: doc.scrollHeight, client: doc.clientHeight },
     };
@@ -57,8 +58,10 @@ for (const vp of VIEWPORTS) {
       expect(m.block.w).toBeLessThanOrEqual(m.side.w + 0.5);
       // the plane the stack was acquired in is the large one
       expect(m.own).toBeGreaterThan(m.side.w / 2.2);
+      // 34rem on a laptop, grown by the reader's scale on a big screen (scale.pw.ts), never past half the window
       expect(m.panelW).toBeGreaterThanOrEqual(34 * 16 - 1);
-      expect(m.panelW).toBeLessThanOrEqual(42 * 16 + 1);
+      expect(m.panelW).toBeCloseTo(34 * 16 * m.zoom, 0);
+      expect(m.panelW).toBeLessThan(vp.width / 2);
       expect(m.panel.scroll).toBeLessThanOrEqual(m.panel.client);
       expect(m.doc.scrollW).toBeLessThanOrEqual(m.doc.clientW);
       expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);

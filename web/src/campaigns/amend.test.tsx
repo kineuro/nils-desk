@@ -16,7 +16,7 @@ import { Gallery } from "./Gallery";
 import { aloneWords, keyAct as galleryKey, pageOf } from "./gallery";
 import { amendHref, amendRefusal, whenWords } from "./MyAnswers";
 import { claimIn, forgetHeaders, forgetReadings, hintOf, nextOf, prefetchOn } from "./readerDoors";
-import { SHAPES, slotOf, valueTone } from "./values";
+import { slotOf, valueTone } from "./values";
 import { Workspace } from "./Workspace";
 import { amendSeat, keyAct } from "./workspace";
 
@@ -53,8 +53,6 @@ describe("a colour and a shape per value", () => {
     expect(slotOf(VALUES, null)).toBeNull();
     expect(valueTone(VALUES, "brain")).toEqual({ "data-slot": 3 });
     expect(valueTone(VALUES, null)).toEqual({});
-    // ten shapes, every one its own
-    expect(new Set(SHAPES).size).toBe(10);
   });
 });
 
