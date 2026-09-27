@@ -6,13 +6,15 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [1.0.0-alpha.53] - 2026-09-27
 
-The desk releases under its own version number, and an install takes the newest desk release whose `contracts.json` floor its engine meets. The reader's panel and the gallery grow together with the screen, and a value's colour is its element's frame, a thin border and a bar on its left, with no shape beside it. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+The desk releases under its own version number, and an install takes the newest desk release whose `contracts.json` floor its engine meets. The reader's panel and the gallery grow together with the screen, and a value's colour is its element's frame, a thin border and a bar on its left, with no shape beside it. The rater page draws the next item's planes at once, and stops warming items when one is given back. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
 
 ### Changed
 
 - The desk releases independently of the engine, under its own version number, which need not match the engine's. Its image and binary carry the desk's own version, and an install takes the newest desk release whose `contracts.json` floor its engine meets, so a desk release needs no engine release beside it and an engine release no desk release.
 - The reader's panel and the gallery grow with the screen, all together. On a laptop the reader is the compact panel it was before the large keys of a one-row question; on a big screen the panel, its keys, the file's words, the answer's bar and the head line grow by one factor, the smaller of the window's width over 1440 px and its height over 850 px, between 1 and 1.5, and the pictures take the rest. The gallery's cards, pictures and words grow by the same factor. At 2000 by 1230 a value's key is 38.9 px high with 18.1 px text (the large keys were 41.6 px with 15 px text, and the file's words stayed 12.5 px; now 17.4 px); at 1366 by 768 it is 28 px with 13 px text.
 - A value's colour is its element's frame: a thin border all round and a thick bar on its left in the value's colour, on the reader's keys, the gallery's legend, My answers and the gallery's cards, a card taking the colour of the value it shows now. The shape beside each value is gone; its name and its number key still tell it apart without colour.
+- The rater page draws the next item's three planes at once. The page's viewers share one rendering engine instead of making a WebGL context for each stack, the largest 3D texture is asked once per page, and the planes view opens on the server's planes before the volume is built; the stack viewport is built when the stack view is first shown. From Enter to all three planes drawn went from about 550 ms to about 80 ms for a prefetched item.
+- The prefetcher stops: giving an item back or leaving the workspace empties its queue and aborts what is warming, which is not counted as warmed. It warms two items at once at most, takes no lease and reveals nothing new of a blind item.
 
 ## [1.0.0-alpha.52] - 2026-09-27
 
