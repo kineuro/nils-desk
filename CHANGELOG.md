@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.55] - 2026-09-27
+
+A whole answer taken from the reader's search keeps what its other values imply as implied, so a later choice can still move it: after "MP2RAGE, no construct, T1w" INV2 is no longer greyed out. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+
 ### Fixed
 
 - A whole answer taken from the reader's search keeps what its other values imply as implied, not as the rater's own choice, so a later choice can still move it. Taking "MP2RAGE, no construct, T1w" held T1w as chosen and greyed out INV2, whose second inversion the pack makes PDw; now INV2 stays open and the base follows it. A base chosen by hand still stands.
