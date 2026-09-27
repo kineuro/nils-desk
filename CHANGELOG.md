@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.49] - 2026-09-27
+
+Released beside the engine's 1.0.0-alpha.49: the reader's pictures take the space of a big screen whatever the panel holds, Space enlarges a plane and the arrows page the stack, a one-row question's values are large keys, the file's header draws its key lines stronger, and the reader's head says how long the item has been on the screen. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
 ### Changed
 
 - The reader's pictures take the space of a big screen whatever the right panel holds: the side is the page's height by itself, so a short panel (a one-axis question such as a body part) no longer shrinks the three planes to a row of small squares in a browser that does not read `:has()`. The stack view and the planes fill the side between the sections and the panel; on a phone the pictures stand over the panel as wide as the screen. The panel may grow to 44rem on the widest screens.
