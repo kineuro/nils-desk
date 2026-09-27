@@ -14,7 +14,7 @@ nils-desk is pre-alpha and developed in the open, beside the engine. Issues, que
 - Commit messages say what changed and why, in prose, and cite the specification section or decision id when there is one.
 - Every source file starts with an SPDX header, `// SPDX-License-Identifier: AGPL-3.0-only`.
 - Work is grouped into waves, and a wave is tried on a real machine through a development channel rather than through a tag: a build of the integration branch, labelled `1.0.0-alpha.N.dev.M` and served on a loopback address, which an install takes as it takes a release. The full description is in the engine repository, `kineuro/nils/CONTRIBUTING.md`.
-- The desk releases in lockstep with the engine, at the same number, even in a wave where the desk itself did not change. A release closes one wave or several, so an alpha counts a wave rather than a fix.
+- The desk releases on its own, under its own version number, which need not match the engine's: a desk change releases the desk alone, and an engine release needs no desk release beside it. What engine a desk runs beside is decided by contracts, not by numbers: a release publishes `contracts.json` with the lowest engine contracts the desk starts against (`OPENAPI_FLOOR`, `SUITE_FLOOR`), and `nils setup` and `nils update` take the newest desk release whose floor the installed engine meets. Raise the floor only when the desk truly needs a newer engine. A release closes one wave or several, so an alpha counts a wave rather than a fix.
 - The desk is Rust with a React front end embedded into the binary. CI formats, lints, tests and builds the binary; the front end is built into it, so a release needs no Node at run time.
 
 ## Licensing your contribution
