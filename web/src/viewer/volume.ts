@@ -28,8 +28,20 @@ function scheme(): void {
   });
 }
 
-/** The largest 3D texture this browser's WebGL2 takes; 0 when it has no WebGL2. */
+let max3d: number | null = null;
+
+/**
+ * The largest 3D texture this browser's WebGL2 takes; 0 when it has no
+ * WebGL2. Asked once per page: making a WebGL context to ask and losing it
+ * again costs the thread tens of milliseconds, which the reader paid on
+ * every stack before its pictures were drawn.
+ */
 export function max3dTexture(): number {
+  max3d ??= askMax3d();
+  return max3d;
+}
+
+function askMax3d(): number {
   try {
     const gl = document.createElement("canvas").getContext("webgl2");
     if (!gl) return 0;

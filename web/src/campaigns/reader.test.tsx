@@ -280,6 +280,42 @@ describe("the pictures ready", () => {
     expect(p.has(5)).toBe(true);
     expect(p.has(3)).toBe(false);
   });
+
+  it("is bounded: never more than two warming, the queue no longer than the wish", () => {
+    const p = new Prefetcher(() => new Promise<void>(() => undefined), 2);
+    p.want([1, 2, 3, 4, 5]);
+    expect(p.busy).toEqual({ running: 2, queued: 3 });
+    // the next wish replaces the queue; what is warming stays within the bound
+    p.want([6]);
+    expect(p.busy).toEqual({ running: 2, queued: 1 });
+    p.stop();
+  });
+
+  it("stops when the reader stops or gives the item back: the queue emptied, the warming aborted and not counted", async () => {
+    const signals = new Map<number, AbortSignal>();
+    const started: number[] = [];
+    const p = new Prefetcher((s, signal) => {
+      started.push(s);
+      signals.set(s, signal);
+      return new Promise<void>((r) => signal.addEventListener("abort", () => r()));
+    }, 2);
+    p.want([1, 2, 3]);
+    expect(started).toEqual([1, 2]);
+    p.stop();
+    expect(signals.get(1)!.aborted).toBe(true);
+    expect(signals.get(2)!.aborted).toBe(true);
+    expect(p.busy).toEqual({ running: 0, queued: 0 });
+    await new Promise((r) => setTimeout(r, 0));
+    // 3 never started, and the aborted two were not warmed
+    expect(started).toEqual([1, 2]);
+    expect(p.warmed).toEqual([]);
+    expect(p.has(1)).toBe(false);
+    // the next claim asks again, and they are warmed then
+    p.want([1, 3]);
+    expect(started).toEqual([1, 2, 1, 3]);
+    expect(signals.get(1)!.aborted).toBe(false);
+    p.stop();
+  });
 });
 
 describe("batches of like stacks", () => {
