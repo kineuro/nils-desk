@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- The reader's pictures take the window's height in the desk itself. The rating section is also a `.data` page, and in the desk's bundle the shell's rules come after the campaign pages', so `.data`'s grid won the tie with the reader's column: the pictures took the right panel's height, and a body part item's three planes stood small in the top left (alpha.49 at 2000 by 1154: the side 482 px high and the lead plane 392 px, now 1048 and 790 px, in Chromium and Firefox alike). A layout check now draws the desk's own shell and bundle order.
+- Of several suggestions for an item, the reader fills in the most confident, not the latest imported, and the line above the rows says who suggested it and how sure, and what each other voice said (the other authors, and the rules and System 1 where the evidence names them); it says "agreed" only where two voices or more say the same and none differs, and "suggested" for one voice alone. The gallery shows the most confident suggestion first as well.
+
 ## [1.0.0-alpha.50] - 2026-09-27
 
 Released alone, with no engine release: a person menu with Sign out and Sign in as someone else, OpenID Connect back-channel logout at `/desk/backchannel-logout`, and a desk session that ends when the provider's session ends, checked at each refresh of the provider's tokens. The desk still speaks the engine's HTTP contract 7 and suite contract 3.

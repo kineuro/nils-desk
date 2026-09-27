@@ -153,38 +153,32 @@ test.describe("a pick clears the box and goes on", () => {
 // ---------------------------------------------------------------- one axis on a big screen
 
 // After the first gold campaign ("use the space of a big screen"): a body part
-// question's panel is short, and on a browser that does not read :has() the
-// pictures took their height from it, three planes a fifth of the side in a
-// row. The side is the page's height by itself now; the stack view and an
-// enlarged plane take the largest square it holds.
-
-const noHas = "main.page{display:block !important;padding:1.6rem 2rem 2rem !important;overflow:auto !important}";
+// question's panel is short, and the pictures must not take their height
+// from it. The stack view and an enlarged plane take the largest square the
+// side holds. shell.pw.ts checks the same in the desk's own shell and bundle.
 
 for (const vp of [{ width: 2000, height: 1150 }, { width: 1920, height: 1080 }]) {
-  for (const has of [true, false]) {
-    test(`a one-axis item at ${vp.width} by ${vp.height}${has ? "" : " without :has()"}: the planes fill the side, not the panel's height`, async ({ page }) => {
-      await page.setViewportSize(vp);
-      await page.goto("/?mode=axis");
-      await expect(page.locator('.axis-row[aria-label="body_part"] .opt')).toHaveCount(6);
-      if (!has) await page.addStyleTag({ content: noHas });
-      const m = await planes(page);
-      console.log(`${vp.width}x${vp.height}${has ? "" : " no :has"}: planes ${Math.round(m.block.w)} by ${Math.round(m.block.h)} in ${Math.round(m.side.w)} by ${Math.round(m.side.h)}, the large one ${m.own} px`);
-      // the side is the window's height less the bar and the head, whatever the panel holds
-      expect(m.side.h).toBeGreaterThan(vp.height - 160);
-      expect(Math.max(m.block.w / m.side.w, m.block.h / (m.side.h - 40))).toBeGreaterThan(0.95);
-      expect(m.own).toBeGreaterThan(m.side.w / 2.2);
-      expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
-      expect(m.doc.scrollW).toBeLessThanOrEqual(m.doc.clientW);
-      // the stack view: the largest square the side holds
-      await page.locator('.viewer-axes button[role="tab"]:has-text("the stack")').click();
-      const stage = await page.evaluate(() => {
-        const s = document.querySelector<HTMLElement>(".viewer-stage")!.getBoundingClientRect();
-        const side = document.querySelector<HTMLElement>(".rate-picture")!.getBoundingClientRect();
-        return { w: s.width, h: s.height, side: { w: side.width, h: side.height } };
-      });
-      expect(Math.min(stage.w, stage.h)).toBeGreaterThan(Math.min(stage.side.w, stage.side.h - 40) * 0.97);
+  test(`a one-axis item at ${vp.width} by ${vp.height}: the planes fill the side, not the panel's height`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/?mode=axis");
+    await expect(page.locator('.axis-row[aria-label="body_part"] .opt')).toHaveCount(6);
+    const m = await planes(page);
+    console.log(`${vp.width}x${vp.height}: planes ${Math.round(m.block.w)} by ${Math.round(m.block.h)} in ${Math.round(m.side.w)} by ${Math.round(m.side.h)}, the large one ${m.own} px`);
+    // the side is the window's height less the bar and the head, whatever the panel holds
+    expect(m.side.h).toBeGreaterThan(vp.height - 160);
+    expect(Math.max(m.block.w / m.side.w, m.block.h / (m.side.h - 40))).toBeGreaterThan(0.95);
+    expect(m.own).toBeGreaterThan(m.side.w / 2.2);
+    expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
+    expect(m.doc.scrollW).toBeLessThanOrEqual(m.doc.clientW);
+    // the stack view: the largest square the side holds
+    await page.locator('.viewer-axes button[role="tab"]:has-text("the stack")').click();
+    const stage = await page.evaluate(() => {
+      const s = document.querySelector<HTMLElement>(".viewer-stage")!.getBoundingClientRect();
+      const side = document.querySelector<HTMLElement>(".rate-picture")!.getBoundingClientRect();
+      return { w: s.width, h: s.height, side: { w: side.width, h: side.height } };
     });
-  }
+    expect(Math.min(stage.w, stage.h)).toBeGreaterThan(Math.min(stage.side.w, stage.side.h - 40) * 0.97);
+  });
 }
 
 test.describe("one plane enlarged", () => {
