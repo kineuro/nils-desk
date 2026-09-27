@@ -10,7 +10,7 @@ import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { cantTellKeyOf, formFields, keyOf, type FormSchema, type Given, type Item, type Question } from "./client";
 import type { ValueNames } from "./lookup";
-import { ValueMark, valueTone } from "./values";
+import { valueTone } from "./values";
 import { findKeyOf, findMatches, LONG_ROW, sameFound, type Found } from "./workspace";
 
 /** One row of values: an axis, its values in the pack's order, and the families they group under where the pack says. */
@@ -49,7 +49,7 @@ export function AxisRows({
   onCantTell?: (axis: string) => void;
 }) {
   return (
-    <div className={rows.length === 1 ? "axis-rows single" : "axis-rows"}>
+    <div className="axis-rows">
       {rows.map((r, n) => {
         const on = chosen[r.axis];
         const groups = groupOf(r);
@@ -70,7 +70,6 @@ export function AxisRows({
                     return (
                       <button key={value} type="button" className={picked ? "opt on" : "opt"} aria-pressed={picked} onClick={() => onChoose(r.axis, value)} title={who.length > 0 ? `given by ${who.join(", ")}` : undefined} {...valueTone(r.values, value)}>
                         {key && <kbd>{key}</kbd>}
-                        <ValueMark values={r.values} value={value} />
                         {value}
                         {who.length > 0 && <span className="said-by">{who.length}</span>}
                       </button>
@@ -287,7 +286,6 @@ export function CompactRows({
               }}
               title={title.length > 0 ? title.join(" · ") : undefined}
             >
-              <ValueMark values={r.values} value={value} />
               {value}
               {via && <span className="via">{via.split(" → ")[0]}</span>}
               {who.length > 0 && <span className="said-by">{who.length}</span>}

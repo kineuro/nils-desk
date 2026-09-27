@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The reader's panel and the gallery grow with the screen, all together. On a laptop the reader is the compact panel it was before the large keys of a one-row question; on a big screen the panel, its keys, the file's words, the answer's bar and the head line grow by one factor, the smaller of the window's width over 1440 px and its height over 850 px, between 1 and 1.5, and the pictures take the rest. The gallery's cards, pictures and words grow by the same factor. At 2000 by 1230 a value's key is 38.9 px high with 18.1 px text (the large keys were 41.6 px with 15 px text, and the file's words stayed 12.5 px; now 17.4 px); at 1366 by 768 it is 28 px with 13 px text.
+- A value's colour is its element's frame: a thin border all round and a thick bar on its left in the value's colour, on the reader's keys, the gallery's legend, My answers and the gallery's cards, a card taking the colour of the value it shows now. The shape beside each value is gone; its name and its number key still tell it apart without colour.
+
 ## [1.0.0-alpha.52] - 2026-09-27
 
 Released with engine 1.0.0-alpha.52, whose supervisor lists each part beside its own newest release. Settings > Parts offers an update when any part is behind its own newest release, not only when the engine is, with an Update for each part beside Update everything, and says when a desk waits for an engine contract. `nils-desk contracts` prints the engine contracts the desk speaks, and a release publishes them as `contracts.json`. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and reads an older engine as before.

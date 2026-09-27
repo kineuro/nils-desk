@@ -19,7 +19,7 @@ import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
 import { campaigns, refused as refusedWords, type Campaign } from "./client";
 import { MyAnswers } from "./MyAnswers";
-import { ValueMark, valueTone } from "./values";
+import { valueTone } from "./values";
 import {
   aloneWords,
   acceptBody,
@@ -262,7 +262,6 @@ export function GalleryBody(p: GalleryBodyProps) {
               return k ? (
                 <span key={v} className="g-key" {...valueTone(values, v)}>
                   <kbd>{k}</kbd>
-                  <ValueMark values={values} value={v} />
                   {v}
                 </span>
               ) : null;
@@ -335,7 +334,6 @@ function Cell({ item: i, value, changed: ch, focused, values, onChoose, onFocus 
         <img src={i.thumb} alt="" loading="eager" decoding="async" draggable={false} onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />
       </div>
       <div className="g-line">
-        <ValueMark values={values} value={value} />
         <select className="g-pick" value={value ?? ""} aria-label={`value of stack ${i.stack}`} onChange={(e) => {
             onChoose(i.item, e.target.value || null);
             // the keys act on the grid again once a value is picked

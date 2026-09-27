@@ -25,10 +25,11 @@ async function measure(page: Page) {
   });
 }
 
+// on a big screen the panel grows with the screen as well (scale.pw.ts), so the lead plane gives up a little of its side to it
 const SCREENS = [
-  { width: 2000, height: 1154, lead: 700 },
-  { width: 2000, height: 1230, lead: 700 },
-  { width: 1920, height: 1080, lead: 700 },
+  { width: 2000, height: 1154, lead: 640 },
+  { width: 2000, height: 1230, lead: 690 },
+  { width: 1920, height: 1080, lead: 600 },
   { width: 1440, height: 900, lead: 380 },
   { width: 1366, height: 768, lead: 330 },
 ];
