@@ -10,17 +10,19 @@ import { CandidateList } from "../review/CandidateList";
 import type { ReviewItem } from "../ops/client";
 import type { HeaderDoc } from "./client";
 import { comboWords, findCombos, hitWords, type Combination, type Vocabulary } from "./lookup";
-import { CANDIDATE_KEYS, headerLines, lineWords, paceWords, suggestionWords, type AxisLine, type HeaderLine, type Order, type Pace, type RaterStats as RaterStatsDoc, type Suggestion } from "./reader";
+import { CANDIDATE_KEYS, consensusOf, headerLines, lineWords, paceWords, suggestionWords, type AxisLine, type HeaderLine, type Order, type Pace, type RaterStats as RaterStatsDoc, type Suggestion } from "./reader";
 
 /** The suggestion as a line, and the legal candidates, each with its key, where the systems differ. */
 export function SuggestionBar({ s, chosen, onChoose, busy }: { s: Suggestion; chosen: AskedCandidate | null; onChoose: (c: AskedCandidate) => void; busy: boolean }) {
-  const agree = s.differ.length === 0;
+  // who suggested it (record 50): "agreed" only where two voices or more say it and none differs
+  const stand = s.by ? (s.differ.length > 0 ? "differ" : consensusOf(s)) : s.differ.length === 0 ? "agree" : "differ";
+  const tag = stand === "agree" ? ["tag ok", "agreed"] : stand === "differ" ? ["tag caution", "differ"] : ["tag", "suggested"];
   return (
-    <div className={agree ? "suggest agree" : "suggest differ"} role="status" aria-live="polite">
+    <div className={`suggest ${stand}`} role="status" aria-live="polite" title={suggestionWords(s)}>
       <p className="suggest-words">
-        <span className={agree ? "tag ok" : "tag caution"}>{agree ? "agreed" : "differ"}</span> {suggestionWords(s)}
+        <span className={tag[0]}>{tag[1]}</span> {suggestionWords(s)}
       </p>
-      {!agree && s.offered.length > 0 && <CandidateList asked={askedOf(s)} chosen={chosen} keys={CANDIDATE_KEYS} onChoose={onChoose} onNone={null} busy={busy} bare />}
+      {s.differ.length > 0 && s.offered.length > 0 && <CandidateList asked={askedOf(s)} chosen={chosen} keys={CANDIDATE_KEYS} onChoose={onChoose} onNone={null} busy={busy} bare />}
     </div>
   );
 }

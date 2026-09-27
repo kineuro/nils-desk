@@ -93,22 +93,41 @@ export function pageOf(raw: Json): GalleryPage {
       if (item === null || stack === null) return [];
       const conf = i.confidences && typeof i.confidences === "object" && !Array.isArray(i.confidences) ? (i.confidences as Record<string, unknown>) : null;
       const confidences = conf ? Object.fromEntries(Object.entries(conf).flatMap(([k, v]) => (num(v) === null ? [] : [[k, v as number]]))) : null;
-      return [
-        {
-          item,
-          stack,
-          position: num(i.position) ?? 0,
-          suggested: str(i.suggested),
-          by: str(i.by),
-          confidence: num(i.confidence),
-          confidences: confidences && Object.keys(confidences).length > 0 ? confidences : null,
-          others: Array.isArray(i.others) ? (i.others as Json[]).map((o) => ({ by: str(o.by) ?? "?", value: str(o.value), confidence: num(o.confidence) })) : [],
-          disagree: i.disagree === true,
-          thumb: str(i.thumb) ?? `/api/instances/${stack}/thumb`,
-        },
-      ];
+      const shown: GalleryItem = {
+        item,
+        stack,
+        position: num(i.position) ?? 0,
+        suggested: str(i.suggested),
+        by: str(i.by),
+        confidence: num(i.confidence),
+        confidences: confidences && Object.keys(confidences).length > 0 ? confidences : null,
+        others: Array.isArray(i.others) ? (i.others as Json[]).map((o) => ({ by: str(o.by) ?? "?", value: str(o.value), confidence: num(o.confidence) })) : [],
+        disagree: i.disagree === true,
+        thumb: str(i.thumb) ?? `/api/instances/${stack}/thumb`,
+      };
+      return [mostConfidentShown(shown)];
     }),
   };
+}
+
+/**
+ * The item with its most confident suggestion shown (after the first gold
+ * campaign): the engine names the latest imported first, and an author more
+ * sure among the others takes its place, the first going to the others. A
+ * suggestion that gave no confidence never displaces one that did; the
+ * per-class confidences are the first's and go with it.
+ */
+export function mostConfidentShown(i: GalleryItem): GalleryItem {
+  const sure = (c: number | null) => c ?? -1;
+  let best = -1;
+  i.others.forEach((o, n) => {
+    if (o.value !== null && sure(o.confidence) > sure(best < 0 ? i.confidence : i.others[best].confidence)) best = n;
+  });
+  if (best < 0 || (i.suggested !== null && sure(i.others[best].confidence) <= sure(i.confidence))) return i;
+  const o = i.others[best];
+  const others = [...i.others.slice(0, best), ...i.others.slice(best + 1)];
+  if (i.suggested !== null || i.by !== null) others.unshift({ by: i.by ?? "?", value: i.suggested, confidence: i.confidence });
+  return { ...i, suggested: o.value, by: o.by, confidence: o.confidence, confidences: null, others };
 }
 
 /** The one axis a question asks, where it asks one: a gallery is of such a question alone. */

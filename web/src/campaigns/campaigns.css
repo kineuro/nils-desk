@@ -91,9 +91,10 @@
    line and the answer right; the whole header, the evidence and the keys
    open over the panel. Nothing below the fold on a laptop. */
 .page:has(.reader-one) { display: flex; flex-direction: column; padding: 0.6rem 1.1rem 0.7rem; overflow: hidden; }
-/* the section is the page's height by itself as well, so the pictures never take their height from the
-   panel's content where :has() is not read (a browser before it drew the planes a fifth of the side) */
-.reader-one { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; height: 100%; min-height: 0; max-width: none; }
+/* two classes: the section is also a .data page, whose grid (shell.css, loaded after this file in the
+   desk's bundle) would win a tie, size the rows to their content and the pictures to the panel's height;
+   the section is the page's height by itself as well */
+.campaign-rate.reader-one { display: flex; flex-direction: column; gap: 0.4rem; flex: 1; height: 100%; min-height: 0; max-width: none; }
 .reader-head { display: flex; align-items: baseline; gap: 0.7rem; min-width: 0; white-space: nowrap; }
 .reader-head h1 { font-size: 1.25rem; line-height: 1.2; }
 .reader-head .said-slot { min-width: 0; overflow: hidden; }
@@ -146,7 +147,7 @@
    scrolls; the pictures keep a side as wide as the screen, the three planes two by three units */
 @media (max-width: 860px) {
   .page:has(.reader-one) { display: block; overflow: auto; }
-  .reader-one { height: auto; }
+  .campaign-rate.reader-one { height: auto; }
   .reader-head { flex-wrap: wrap; white-space: normal; row-gap: 0.2rem; }
   .reader-one .rate-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
   .reader-one .rate-picture { height: min(calc(100vw * 1.55), 88vh); }

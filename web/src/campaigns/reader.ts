@@ -51,6 +51,11 @@ export interface Reading {
   suggested: Record<string, AxisValue> | null;
   /** An axis question's suggestion, where the engine names it as one value. */
   suggestedOne?: string | null;
+  /** Who suggested what is filled in (record 50): an outside author (v0-model, a model id) or `rules`; how sure it was, where it said. */
+  suggestedBy?: string | null;
+  suggestedP?: number | null;
+  /** Every outside suggestion for the item (record 50 R3), each with its author and confidence. */
+  told?: Told[];
   /** The item's value to the model (record 48 "order by value"), where the engine says it. */
   value: number | null;
   /** The batch of like stacks the item belongs to, where the engine groups them. */
@@ -65,6 +70,49 @@ export interface Reading {
   physics?: Record<string, string | number | (string | number)[]>;
   /** The path of the whole-header door for this item, where the engine names it. */
   headerDoor?: string | null;
+}
+
+/** One outside suggestion for an item, as the evidence door lists it (record 50 R3). */
+export interface Told {
+  id: number | null;
+  by: string;
+  /** An axis question's value, or an axes question's values by axis. */
+  value: string | Record<string, AxisValue> | null;
+  confidence: number | null;
+}
+
+/**
+ * The suggestion a reader is handed among several (after the first gold
+ * campaign): the most confident, not the latest imported; a suggestion that
+ * gave no confidence comes after every one that did, and between equals the
+ * latest stands.
+ */
+export function mostConfident(told: Told[]): Told | null {
+  let best: Told | null = null;
+  for (const t of told) {
+    if (t.value === null) continue;
+    if (!best) {
+      best = t;
+      continue;
+    }
+    const a = t.confidence ?? -1;
+    const b = best.confidence ?? -1;
+    if (a > b || (a === b && (t.id ?? -1) > (best.id ?? -1))) best = t;
+  }
+  return best;
+}
+
+function toldOf(raw: unknown): Told[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.flatMap((x): Told[] => {
+    const t = x && typeof x === "object" && !Array.isArray(x) ? (x as Json) : {};
+    const by = typeof t.author === "string" && t.author !== "" ? t.author : typeof t.by === "string" && t.by !== "" ? t.by : null;
+    if (!by) return [];
+    const v = t.value;
+    const value = typeof v === "string" && v !== "" ? v : v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, AxisValue>) : null;
+    const confidence = typeof t.confidence === "number" && Number.isFinite(t.confidence) ? t.confidence : null;
+    return [{ id: typeof t.id === "number" ? t.id : null, by, value, confidence }];
+  });
 }
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -202,7 +250,12 @@ export function readingOf(raw: Json): Reading {
   const rawCandidates = Array.isArray(raw.candidates) ? raw.candidates : asked && Array.isArray(asked.candidates) ? asked.candidates : [];
   // a candidate names the axes System 1 asked about, which may be fewer than the stack's
   const candidates = rawCandidates.flatMap((c) => candidateOf(c, []) ?? []).sort((a, b) => b.p - a.p);
-  const s = raw.suggestion !== undefined ? raw.suggestion : raw.suggested;
+  // several suggestions from outside (record 50): the most confident is the one filled in, whichever came last
+  const told = raw.blind === true ? [] : toldOf(raw.suggestions);
+  const best = mostConfident(told);
+  const s = best ? best.value : raw.suggestion !== undefined ? raw.suggestion : raw.suggested;
+  const suggestedBy = best ? best.by : text(raw.suggested_by);
+  const suggestedP = best ? best.confidence : null;
   let suggested: Record<string, AxisValue> | null = null;
   let suggestedOne: string | null = null;
   if (typeof s === "string" && s !== "") suggestedOne = s;
@@ -228,6 +281,9 @@ export function readingOf(raw: Json): Reading {
     candidates,
     suggested,
     suggestedOne,
+    suggestedBy,
+    suggestedP,
+    told,
     value: num(raw.value) ?? (num(worth.confidence) !== null ? 1 - (worth.confidence as number) + (worth.disagree === true ? 1 : 0) : null),
     batch: text(raw.batch) ?? (num(raw.batch) !== null ? String(raw.batch) : null),
   };
@@ -527,6 +583,24 @@ export interface Suggestion {
   offered: AskedCandidate[];
   /** The first candidate's probability, where there is one. */
   p: number | null;
+  /**
+   * Who suggested what is filled in and how sure (record 50), and every
+   * voice on the answer beside it: the outside authors, the rules and
+   * System 1, each with what it said and whether that is what is filled in.
+   * Absent where the engine names no author.
+   */
+  by?: string | null;
+  confidence?: number | null;
+  voices?: Voice[];
+}
+
+/** One system's word on an item's answer, as the suggestion line says it. */
+export interface Voice {
+  by: string;
+  value: string;
+  confidence: number | null;
+  /** Says what is filled in. */
+  same: boolean;
 }
 
 /** The axes a question asks the rater: a derived axis (record 48) is the engine's to compute, never asked. */
@@ -599,7 +673,56 @@ export function suggestionOf(q: Question, r: Reading | null): Suggestion | null 
   const g = givenOf(q, { values });
   if (g && illegal(q, g)) return { values: {}, agreed: [], differ: axes, offered: fit.slice(0, CANDIDATE_KEYS.length), p: top?.p ?? null };
   if (agreed.length === 0 && differ.length === 0) return null;
-  return { values, agreed, differ, offered: differ.length > 0 ? fit.slice(0, CANDIDATE_KEYS.length) : [], p: top?.p ?? null };
+  const out: Suggestion = { values, agreed, differ, offered: differ.length > 0 ? fit.slice(0, CANDIDATE_KEYS.length) : [], p: top?.p ?? null };
+  if (r.suggestedBy) Object.assign(out, { by: r.suggestedBy, confidence: r.suggestedP ?? null, voices: voicesOf(q, r, values) });
+  return out;
+}
+
+/** An answer as one line of words: an axis's value, or the asked axes' values in order. */
+function answerWords(q: Question, v: string | Record<string, AxisValue>): string {
+  if (typeof v === "string") return v;
+  return askedAxes(q)
+    .filter((a) => a in v)
+    .map((a) => {
+      const x = v[a];
+      return x === null ? "none" : Array.isArray(x) ? (x.length > 0 ? [...x].sort().join("+") : "none") : x;
+    })
+    .join(" · ");
+}
+
+/**
+ * Every system's word on the answer (after the first gold campaign), so the
+ * line says truthfully who suggested what: each outside author, and the
+ * rules and System 1 where the evidence names them on a one-axis question.
+ */
+export function voicesOf(q: Question, r: Reading, values: Record<string, AxisValue>): Voice[] {
+  const axes = askedAxes(q);
+  const filled: string | Record<string, AxisValue> = q.kind === "axis" && axes.length === 1 && typeof values[axes[0]] === "string" ? (values[axes[0]] as string) : values;
+  const words = answerWords(q, filled);
+  const out: Voice[] = [];
+  for (const t of r.told ?? []) {
+    if (t.value === null) continue;
+    const w = answerWords(q, t.value);
+    out.push({ by: t.by, value: w, confidence: t.confidence, same: w === words });
+  }
+  if (axes.length === 1) {
+    const line = r.lines.find((l) => l.axis === axes[0]);
+    if (line && line.value !== null) {
+      const w = answerWords(q, typeof line.value === "string" ? line.value : { [axes[0]]: line.value });
+      out.push({ by: "rules", value: w, confidence: line.confidence, same: w === words });
+    }
+    if (line?.model && line.model.value !== null) out.push({ by: "System 1", value: line.model.value, confidence: line.model.p, same: line.model.value === words });
+  }
+  // where the engine's own rules suggested it and the evidence has no line, the rules are its one voice
+  if (r.suggestedBy === "rules" && !out.some((v) => v.by === "rules")) out.push({ by: "rules", value: words, confidence: null, same: true });
+  return out;
+}
+
+/** How the voices stand on what is filled in: two or more say it and none differs, one alone says it, or some differ. */
+export function consensusOf(s: Suggestion): "agree" | "one" | "differ" {
+  const v = s.voices ?? [];
+  if (v.some((x) => !x.same)) return "differ";
+  return v.filter((x) => x.same).length >= 2 ? "agree" : "one";
 }
 
 /** The given answer a suggestion fills in: an axis's value, or an axes answer with the agreed axes set (none for an empty set). */
@@ -668,6 +791,14 @@ export function complete(q: Question, g: Given): boolean {
 
 /** The suggestion in words, for the line above the rows. */
 export function suggestionWords(s: Suggestion): string {
+  // record 50: say who suggested it and how sure, and what every other voice said
+  if (s.by) {
+    const sure = (c: number | null | undefined) => (c !== null && c !== undefined ? ` ${Math.round(c * 100)} %` : "");
+    const others = (s.voices ?? []).filter((v) => v.by !== s.by);
+    const said = others.map((v) => `${v.by} ${v.same ? "says the same" : `says ${v.value}`}${sure(v.confidence)}`);
+    const choose = s.differ.length > 0 ? ` The rows differ on ${s.differ.join(", ")}: choose one below.` : " Enter confirms.";
+    return [`Suggested by ${s.by}${sure(s.confidence)}`, ...said].join("; ") + "." + choose;
+  }
   if (s.differ.length === 0) return `Rules and System 1 agree${s.p !== null ? ` · p ${s.p.toFixed(2)}` : ""}. Enter confirms.`;
   if (s.agreed.length === 0) return `They differ on ${s.differ.join(", ")}: choose one below.`;
   return `They agree on ${s.agreed.join(", ")} and differ on ${s.differ.join(", ")}: choose one below.`;
