@@ -362,6 +362,12 @@ export function comboWords(c: Combination, axes: string[]): string {
  * multi-valued axis's empty set as none), and an axis it leaves open keeps
  * what was chosen, unless that no longer holds beside it, when it is
  * cleared. A combination from the registry names every asked axis.
+ *
+ * A value of the combination that its other values imply stays implied
+ * rather than chosen, so it follows them as a row's implied value does. The
+ * answer is the same, but a later choice may still change it: a combination
+ * "MP2RAGE, no construct, T1w" taken whole would otherwise hold T1w as the
+ * rater's own and grey INV2 out, whose second inversion is PDw.
  */
 export function takeCombo(q: Question, g: Given, c: Combination): Given {
   const was: Values = g.kind === "values" ? g.values : {};
@@ -371,11 +377,26 @@ export function takeCombo(q: Question, g: Given, c: Combination): Given {
   const cons = q.constraints;
   if (cons) {
     const cant = cantTellOf(q) ?? CANT_TELL;
-    for (const a of answeredAxes(q)) {
+    const axes = answeredAxes(q);
+    for (const a of axes) {
       if (a in set || unset(values[a])) continue;
       const without = { ...values, [a]: "" };
       if (conflictOf(cons, jointOf(values, cant)) && !conflictOf(cons, jointOf(without, cant))) values[a] = "";
     }
+    // what the rest implies is left to them, one axis at a time, as long as the whole answer stays the same
+    const multi = cons.multi ?? [];
+    const whole = JSON.stringify(normal(implied(cons, values, axes, multi, cant).values));
+    for (const a of axes) {
+      if (!(a in set) || multi.includes(a)) continue;
+      const v = values[a];
+      if (typeof v !== "string" || v === "" || v === cant) continue;
+      const without = { ...values, [a]: "" };
+      const back = implied(cons, without, axes, multi, cant).values;
+      if (JSON.stringify(normal(back)) === whole) values[a] = "";
+    }
   }
   return { kind: "values", values };
 }
+
+/** An answer's values in one order, for comparing two. */
+const normal = (v: Values): [string, string | string[] | null][] => Object.keys(v).sort().map((k) => [k, v[k]]);
