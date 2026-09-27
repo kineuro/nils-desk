@@ -110,7 +110,14 @@
 }
 @keyframes said-in { from { background: var(--n-ok-bg); color: var(--n-ok-fg); } }
 .reader-head .said { padding: 0 0.3rem; border-radius: var(--n-radius); }
-.reader-one .rate-grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(34rem, 26vw, 44rem); grid-template-rows: minmax(0, 1fr); gap: 1rem; align-items: stretch; }
+/* the reader and the gallery grow with the screen (after the next read: "the elements should get bigger
+   based on available size"): one factor, 1 on a laptop and up to 1.5 on a big screen, the smaller of the
+   window's width over 1440 px and its height over 850 px (tan(atan2(a, b)) is a over b as a number). The
+   head line, the panel and the gallery are zoomed by it, so they keep a laptop's proportions and grow
+   together; the panel's column grows by it as well, and the pictures take the rest. */
+.reader-one, .gallery-page { --reader-scale: clamp(1, min(tan(atan2(100vw, 1440px)), tan(atan2(100vh, 850px))), 1.5); }
+.reader-one .reader-head, .reader-one .rate-side, .gallery-page > :not(.mine-drawer) { zoom: var(--reader-scale); }
+.reader-one .rate-grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) calc(34rem * var(--reader-scale)); grid-template-rows: minmax(0, 1fr); gap: 1rem; align-items: stretch; }
 .reader-one .rate-picture { min-height: 0; overflow: hidden; container-type: size; }
 .reader-one .rate-side { position: relative; display: flex; flex-direction: column; gap: 0.25rem; min-height: 0; overflow: auto; font-size: var(--n-text-size-small); }
 .reader-one .rate-side > * { flex: none; }
@@ -223,15 +230,6 @@
 .act-main > :not(:first-child) { margin-left: -1px; border-top-left-radius: 0; border-bottom-left-radius: 0; }
 .reader-one .act-answer { min-width: 7.5rem; justify-content: center; font-size: 14px; }
 .reader-one .act-unsure { min-height: 1.9rem; }
-/* one question, one row (a body part): its values large, a grid of labelled keys */
-.reader-one .axis-rows.single .axis-row { gap: 0.4rem; }
-.reader-one .axis-rows.single .axis-name { font-size: 13px; color: var(--n-text-dim); }
-.reader-one .axis-rows.single .axis-values { display: grid; grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr)); gap: 0.4rem; }
-.reader-one .axis-rows.single .axis-family { display: contents; }
-.reader-one .axis-rows.single .axis-family-name { grid-column: 1 / -1; }
-.reader-one .axis-rows.single .opt { min-height: 2.6rem; padding: 0 0.7rem; font-size: 15px; }
-.reader-one .axis-rows.single .opt kbd { margin-right: 0.55rem; font-size: 12px; }
-.reader-one .axis-rows.single .opt .vmark { margin-right: 0.4rem; }
 .reader-one .why-input { flex: 1 1 6rem; min-height: 1.9rem; }
 .reader-one .suggest { padding: 0.3rem 0.55rem; gap: 0.25rem; }
 .reader-one .suggest-words { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -296,8 +294,10 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .g-was s { color: var(--n-text-faint); }
 
 /* One colour per value of an axis (record 50, after the first gold campaign):
-   the theme's --n-value-<slot> tokens, a shape beside each so colour alone
-   never tells two values apart, the number key kept. */
+   the theme's --n-value-<slot> tokens. After the next read ("by colour code I
+   meant the border and the bar"): a value's element is framed in its colour,
+   thin all round and a thick bar on its left, no shape; its name and its
+   number key tell it apart without colour. */
 [data-slot="1"] { --vc: var(--n-value-1); --vc-bg: var(--n-value-1-bg); }
 [data-slot="2"] { --vc: var(--n-value-2); --vc-bg: var(--n-value-2-bg); }
 [data-slot="3"] { --vc: var(--n-value-3); --vc-bg: var(--n-value-3-bg); }
@@ -308,12 +308,13 @@ table.thin.header-table td:first-child { padding-left: 0; }
 [data-slot="8"] { --vc: var(--n-value-8); --vc-bg: var(--n-value-8-bg); }
 [data-slot="9"] { --vc: var(--n-value-9); --vc-bg: var(--n-value-9-bg); }
 [data-slot="10"] { --vc: var(--n-value-10); --vc-bg: var(--n-value-10-bg); }
-.vmark { display: inline-block; min-width: 1em; margin-right: 0.25rem; color: var(--vc); font-size: 0.9em; line-height: 1; text-align: center; }
-.opt[data-slot] { border-left: 3px solid var(--vc); }
-.opt[data-slot].on { border-color: var(--vc); background: var(--vc-bg); color: var(--n-text); box-shadow: inset 0 0 0 1px var(--vc); }
-.g-key[data-slot] { padding: 0 0.3rem 0 0.2rem; border-left: 3px solid var(--vc); background: var(--vc-bg); border-radius: var(--n-radius); color: var(--n-text); }
-.g-cell[data-slot] .g-line { padding-left: 0.25rem; border-left: 4px solid var(--vc); background: var(--vc-bg); border-radius: var(--n-radius); }
-.value-tag[data-slot] { display: inline-flex; align-items: center; padding: 0 0.35rem; border-left: 3px solid var(--vc); background: var(--vc-bg); border-radius: var(--n-radius); color: var(--n-text); white-space: nowrap; }
+.opt[data-slot] { border: 1px solid var(--vc); border-left: 3px solid var(--vc); }
+.opt[data-slot].on { background: var(--vc-bg); color: var(--n-text); box-shadow: inset 0 0 0 1px var(--vc); }
+.g-key[data-slot] { padding: 0 0.3rem 0 0.2rem; border: 1px solid var(--vc); border-left: 3px solid var(--vc); background: var(--vc-bg); border-radius: var(--n-radius); color: var(--n-text); }
+/* a gallery card takes the colour of the value it shows now, and changes with it */
+.g-cell[data-slot] { border: 1px solid var(--vc); border-left: 5px solid var(--vc); }
+.g-cell[data-slot] .g-line { padding-left: 0.25rem; background: var(--vc-bg); border-radius: var(--n-radius); }
+.value-tag[data-slot] { display: inline-flex; align-items: center; padding: 0 0.35rem; border: 1px solid var(--vc); border-left: 3px solid var(--vc); background: var(--vc-bg); border-radius: var(--n-radius); color: var(--n-text); white-space: nowrap; }
 
 /* Held back to be read one by one (record 48 R1), said in the gallery with
    why and a way to read them. */
@@ -330,5 +331,4 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .mine-row img { width: 4.5rem; height: 1.5rem; object-fit: contain; background: var(--n-bg-sunken); border-radius: var(--n-radius); }
 .mine-what { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; min-width: 0; font-size: 13px; }
 .mine-what .meta { font-size: 12px; }
-.axis-rows.compact .vmark { min-width: 0; margin-right: 0.15rem; font-size: 9px; }
 .axis-rows.compact .opt[data-slot] { border-left-width: 2px; }

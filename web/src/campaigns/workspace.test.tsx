@@ -164,7 +164,7 @@ describe("an axes question", () => {
       ["modifier", ["FLAIR", "FS"], true],
     ]);
     const html = draw({ campaign: c, rows, given: { kind: "values", values: { base: "T1w", modifier: null } } });
-    expect(html).toContain('<kbd>q</kbd><span class="vmark" data-slot="1" aria-hidden="true">●</span>FLAIR');
+    expect(html).toContain('<kbd>q</kbd>FLAIR');
     expect(html).toContain('<span class="meta"> · several</span>');
     expect(html).toContain('class="opt on" aria-pressed="true">none</button>');
     expect(html).not.toContain("The pack does not allow this");
@@ -187,9 +187,10 @@ describe("the rater's workspace", () => {
     expect(html).toContain("14 min left on the lease");
     expect(html).toContain("loading the viewer");
     expect(html).toContain('<span class="axis-name">base</span>');
-    // each value in its colour, with a shape of its own beside its key (record 50)
-    expect(html).toContain('data-slot="1"><kbd>1</kbd><span class="vmark" data-slot="1" aria-hidden="true">●</span>DWI');
-    expect(html).toContain('<kbd>9</kbd><span class="vmark" data-slot="9" aria-hidden="true">◐</span>T1w');
+    // each value in its colour, its key and its name beside it, no shape (record 50, after the next read)
+    expect(html).toContain('data-slot="1"><kbd>1</kbd>DWI');
+    expect(html).toContain('data-slot="9"><kbd>9</kbd>T1w');
+    expect(html).not.toContain("vmark");
     // past the tenth value there is no key, and no colour either
     expect(html).toContain('<button type="button" class="opt" aria-pressed="false">Unknown</button>');
     expect(html).toContain("Answer <kbd>Enter</kbd>");
@@ -202,7 +203,7 @@ describe("the rater's workspace", () => {
 
   it("marks the value given and says what the engine refused", () => {
     const html = draw({ campaign: open, given: { kind: "value", value: "T2w" }, refused: "Refused: the lease ran out." });
-    expect(html).toContain('class="opt on" aria-pressed="true" data-slot="7"><kbd>7</kbd><span class="vmark" data-slot="7" aria-hidden="true">⬟</span>T2w');
+    expect(html).toContain('class="opt on" aria-pressed="true" data-slot="7"><kbd>7</kbd>T2w');
     expect(html).toContain('title="Refused: the lease ran out.">Refused: the lease ran out.</p>');
   });
 

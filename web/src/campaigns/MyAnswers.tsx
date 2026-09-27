@@ -13,7 +13,7 @@ import { door as served } from "../deployment";
 import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
 import { AMEND, campaigns, mineWords, refused as refusedWords, singleValueOf, type Campaign, type Mine, type MyAnswer } from "./client";
-import { ValueMark, valueTone } from "./values";
+import { valueTone } from "./values";
 
 /** Where a correction opens: the reader, on that answer, and back to where it came from after. */
 export function amendHref(campaign: number | string, answer: number, back: "gallery" | "rate" = "rate"): string {
@@ -81,7 +81,6 @@ export function MyAnswers({ caps, campaign: c, values, back, onClose }: { caps: 
           </button>
           {counted.map(([v, n]) => (
             <button key={v} type="button" className={value === v ? "opt on" : "opt"} aria-pressed={value === v} onClick={() => setValue(v)} {...valueTone(values, v)}>
-              <ValueMark values={values} value={v} />
               {v} <b>{n}</b>
             </button>
           ))}
@@ -108,7 +107,6 @@ function MineRow({ a, c, values, refusal, back }: { a: MyAnswer; c: Campaign; va
       {a.thumb ? <img src={a.thumb} alt="" loading="lazy" decoding="async" /> : <span />}
       <span className="mine-what">
         <span className="value-tag" {...valueTone(values, v)}>
-          <ValueMark values={values} value={v} />
           {mineWords(c.question, a.value)}
         </span>
         <span className="meta">

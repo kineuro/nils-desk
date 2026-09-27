@@ -27,7 +27,10 @@ async function measure(page: Page) {
     const planes = [...document.querySelectorAll<HTMLElement>(".viewer-plane")].map((p) => p.getBoundingClientRect());
     // how tall the panel's content is, whatever the panel's own height
     const top = panel.getBoundingClientRect().top;
-    const used = Math.max(...[...panel.children].filter((c) => !c.classList.contains("drawer")).map((c) => c.getBoundingClientRect().bottom)) - top;
+    // in the panel's own pixels: on a big screen the panel is zoomed by the reader's scale (scale.pw.ts), a box's
+    // rectangle is drawn size and the panel's clientHeight its own
+    const zoom = (panel as HTMLElement & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
+    const used = (Math.max(...[...panel.children].filter((c) => !c.classList.contains("drawer")).map((c) => c.getBoundingClientRect().bottom)) - top) / zoom;
     return {
       used: Math.round(used),
       panel: { scroll: panel.scrollHeight, client: panel.clientHeight },
