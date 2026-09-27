@@ -437,6 +437,39 @@ struct Provider {
     /// The person the provider answers for: subject, name, roles, groups.
     person: Mutex<(String, String, Vec<String>, Vec<String>)>,
     tokens_minted: Mutex<u32>,
+    /// The `prompt` of each authorization request, in order.
+    prompts: Mutex<Vec<Option<String>>>,
+    /// The provider's own session in this browser, which the id tokens of
+    /// a code grant name as `sid`.
+    sid: Mutex<Option<String>>,
+    /// The provider's sessions that have ended: a refresh of a sign-in
+    /// that came from one answers without its `sid`, as Authentik does.
+    ended: Mutex<Vec<String>>,
+    /// A provider session whose refreshes answer as another session.
+    moved: Mutex<std::collections::HashMap<String, String>>,
+    /// Each refresh token: the person it was issued for and their session.
+    #[allow(clippy::type_complexity)]
+    refreshes: Mutex<
+        std::collections::HashMap<
+            String,
+            ((String, String, Vec<String>, Vec<String>), Option<String>),
+        >,
+    >,
+}
+
+impl Provider {
+    /// A token signed with the provider's key, for this client.
+    fn sign(&self, claims: &Value) -> String {
+        use ed25519_dalek::pkcs8::EncodePrivateKey;
+        let pem = self
+            .key
+            .to_pkcs8_pem(ed25519_dalek::pkcs8::spki::der::pem::LineEnding::LF)
+            .unwrap();
+        let enc = jsonwebtoken::EncodingKey::from_ed_pem(pem.as_bytes()).unwrap();
+        let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::EdDSA);
+        header.kid = Some("k1".into());
+        jsonwebtoken::encode(&header, claims, &enc).unwrap()
+    }
 }
 
 async fn fake_provider() -> (String, Arc<Provider>) {
@@ -453,6 +486,11 @@ async fn fake_provider() -> (String, Arc<Provider>) {
             vec!["staff".into()],
         )),
         tokens_minted: Mutex::new(0),
+        prompts: Mutex::new(Vec::new()),
+        sid: Mutex::new(Some("session-1".into())),
+        ended: Mutex::new(Vec::new()),
+        moved: Mutex::new(std::collections::HashMap::new()),
+        refreshes: Mutex::new(std::collections::HashMap::new()),
     });
     let iss = issuer.clone();
     let app = Router::new()
@@ -466,6 +504,7 @@ async fn fake_provider() -> (String, Arc<Provider>) {
                         "authorization_endpoint": format!("{iss}/authorize"),
                         "token_endpoint": format!("{iss}/token"),
                         "jwks_uri": format!("{iss}/jwks"),
+                        "end_session_endpoint": format!("{iss}/end-session/"),
                     }))
                 }
             }),
@@ -484,6 +523,7 @@ async fn fake_provider() -> (String, Arc<Provider>) {
                 assert_eq!(q["response_type"], "code");
                 assert_eq!(q["code_challenge_method"], "S256");
                 assert!(q["scope"].contains("openid"));
+                p.prompts.lock().unwrap().push(q.get("prompt").cloned());
                 let code = format!("code-{}", p.codes.lock().unwrap().len() + 1);
                 p.codes.lock().unwrap().push((code.clone(), q["code_challenge"].clone()));
                 Redirect::to(&format!("{}?code={code}&state={}", q["redirect_uri"], q["state"])).into_response()
@@ -493,11 +533,23 @@ async fn fake_provider() -> (String, Arc<Provider>) {
             "/token",
             post(|State(p): State<Arc<Provider>>, axum::Form(f): axum::Form<std::collections::HashMap<String, String>>| async move {
                 use base64::Engine as _;
-                use ed25519_dalek::pkcs8::EncodePrivateKey;
                 if f["client_secret"] != "the-client-secret" {
                     return (StatusCode::UNAUTHORIZED, axum::Json(json!({"error": "invalid_client"}))).into_response();
                 }
-                let (sub, name, roles, groups) = p.person.lock().unwrap().clone();
+                // a code grant answers for whoever the provider signs in now; a
+                // refresh for the person of the sign-in it came from
+                let (person, sid) = if f["grant_type"] == "refresh_token" {
+                    let Some((person, sid)) = p.refreshes.lock().unwrap().get(&f["refresh_token"]).cloned() else {
+                        return (StatusCode::BAD_REQUEST, axum::Json(json!({"error": "invalid_grant"}))).into_response();
+                    };
+                    let sid = sid
+                        .filter(|s| !p.ended.lock().unwrap().contains(s))
+                        .map(|s| p.moved.lock().unwrap().get(&s).cloned().unwrap_or(s));
+                    (person, sid)
+                } else {
+                    (p.person.lock().unwrap().clone(), p.sid.lock().unwrap().clone())
+                };
+                let (sub, name, roles, groups) = person.clone();
                 if f["grant_type"] == "authorization_code" {
                     let codes = p.codes.lock().unwrap();
                     let Some((_, challenge)) = codes.iter().find(|(c, _)| *c == f["code"]) else {
@@ -514,13 +566,18 @@ async fn fake_provider() -> (String, Arc<Provider>) {
                 *p.tokens_minted.lock().unwrap() += 1;
                 let n = *p.tokens_minted.lock().unwrap();
                 let now = time::OffsetDateTime::now_utc().unix_timestamp();
-                let pem = p.key.to_pkcs8_pem(ed25519_dalek::pkcs8::spki::der::pem::LineEnding::LF).unwrap();
-                let enc = jsonwebtoken::EncodingKey::from_ed_pem(pem.as_bytes()).unwrap();
-                let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::EdDSA);
-                header.kid = Some("k1".into());
                 let iss = p.issuer.lock().unwrap().clone();
-                let claims = json!({"iss": iss, "aud": "desk-client", "sub": sub, "name": name, "preferred_username": "anna", "email": "anna@example.org", "roles": roles, "groups": groups, "iat": now, "exp": now + 900});
-                let id_token = jsonwebtoken::encode(&header, &claims, &enc).unwrap();
+                let mut claims = json!({"iss": iss, "aud": "desk-client", "sub": sub, "name": name, "preferred_username": "anna", "email": "anna@example.org", "roles": roles, "groups": groups, "iat": now, "exp": now + 900});
+                if let Some(sid) = &sid {
+                    claims["sid"] = json!(sid);
+                }
+                let id_token = p.sign(&claims);
+                let kept_sid = if f["grant_type"] == "refresh_token" {
+                    p.refreshes.lock().unwrap()[&f["refresh_token"]].1.clone()
+                } else {
+                    sid
+                };
+                p.refreshes.lock().unwrap().insert(format!("refresh-{n}"), (person, kept_sid));
                 axum::Json(json!({"access_token": format!("access-{n}"), "refresh_token": format!("refresh-{n}"), "expires_in": if f["grant_type"] == "authorization_code" { 30 } else { 900 }, "id_token": id_token, "token_type": "Bearer"})).into_response()
             }),
         )
@@ -532,11 +589,18 @@ async fn fake_provider() -> (String, Arc<Provider>) {
 /// Through the provider and back: the desk's login redirect, the provider's
 /// redirect with a code, and the callback that makes the session.
 async fn sign_in(client: &reqwest::Client, origin: &str, issuer: &str) -> String {
-    let r = client
-        .get(format!("{origin}/desk/login"))
-        .send()
-        .await
-        .unwrap();
+    sign_in_at(client, origin, issuer, "/desk/login", None).await
+}
+
+/// The same through a given login path, from a browser holding `cookie`.
+async fn sign_in_at(
+    client: &reqwest::Client,
+    origin: &str,
+    issuer: &str,
+    path: &str,
+    cookie: Option<&str>,
+) -> String {
+    let r = client.get(format!("{origin}{path}")).send().await.unwrap();
     assert_eq!(r.status(), 303, "a redirect to the provider");
     let to = r
         .headers()
@@ -562,9 +626,152 @@ async fn sign_in(client: &reqwest::Client, origin: &str, issuer: &str) -> String
         back.starts_with(&format!("{origin}/desk/callback?")),
         "{back}"
     );
-    let r = client.get(&back).send().await.unwrap();
+    let mut get = client.get(&back);
+    if let Some(c) = cookie {
+        get = get.header("cookie", c);
+    }
+    let r = get.send().await.unwrap();
     assert_eq!(r.status(), 303, "{}", r.text().await.unwrap());
     cookie_of(&r)
+}
+
+/// The payload of a JWT, unverified: what a test reads of a token it saw.
+fn payload(jwt: &str) -> Value {
+    use base64::Engine as _;
+    let part = jwt.split('.').nth(1).unwrap();
+    serde_json::from_slice(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(part)
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_session_keeps_its_person_and_logout_ends_the_providers_session_too() {
+    let engine = fake_engine().await;
+    let (issuer, provider) = fake_provider().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"oidc\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n[oidc]\nissuer = \"{issuer}\"\nclient_id = \"desk-client\"\nclient_secret = \"the-client-secret\"\n"
+    );
+    let (origin, _shared, _) = desk(&text).await;
+    let client = client();
+    let host = issuer.trim_start_matches("http://");
+
+    // the login names a way to pick another account
+    let doc: Value = client
+        .get(format!("{origin}/desk/session"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(doc["login"]["choose"], "/desk/login?prompt=login", "{doc}");
+    let r = client
+        .get(format!("{origin}/desk/login?prompt=none"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 400, "only prompt=login is passed on");
+
+    // anna signs in; a plain login asks the provider for no prompt
+    let anna = sign_in(&client, &origin, &issuer).await;
+    assert_eq!(*provider.prompts.lock().unwrap(), vec![None]);
+
+    // the provider now signs someone else in in this browser (another site
+    // signed in as bo): anna's session is still anna's, before and after
+    // the provider's tokens are refreshed
+    *provider.person.lock().unwrap() = (
+        "subject-2".into(),
+        "Bo Berg".into(),
+        vec!["admin".into()],
+        vec!["admins".into()],
+    );
+    let minted_before = *provider.tokens_minted.lock().unwrap();
+    let call: Value = client
+        .get(format!("{origin}/api/jobs"))
+        .header("cookie", &anna)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(
+        *provider.tokens_minted.lock().unwrap(),
+        minted_before + 1,
+        "the provider's tokens were refreshed"
+    );
+    let claims = claims_of(&client, &origin, call["bearer"].as_str().unwrap()).await;
+    assert_eq!(claims["sub"], format!("subject-1@{host}"), "{claims}");
+    assert_eq!(claims["grants"], grants_of(&["reviewer", "assist"]));
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &anna).await;
+    assert_eq!(doc["person"]["subject"], "subject-1", "{doc}");
+    assert_eq!(doc["person"]["display_name"], "Anna Andersson");
+
+    // "sign in as someone else": the provider is asked to sign in afresh,
+    // and the browser's earlier session ends with the new one
+    let bo = sign_in_at(
+        &client,
+        &origin,
+        &issuer,
+        "/desk/login?prompt=login",
+        Some(&anna),
+    )
+    .await;
+    assert_eq!(
+        provider
+            .prompts
+            .lock()
+            .unwrap()
+            .last()
+            .cloned()
+            .flatten()
+            .as_deref(),
+        Some("login")
+    );
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &bo).await;
+    assert_eq!(doc["person"]["subject"], "subject-2", "{doc}");
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &anna).await;
+    assert_eq!(doc["desk"]["signed_in"], false, "one browser, one person");
+
+    // logout ends the desk's session and names the provider's end-session
+    // endpoint with the id token of this sign-in and the way back
+    let r = ours(client.post(format!("{origin}/desk/logout")), &origin)
+        .header("cookie", &bo)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let set = r.headers()["set-cookie"].to_str().unwrap().to_string();
+    assert!(set.contains("Max-Age=0"), "{set}");
+    let body: Value = r.json().await.unwrap();
+    let then = url::Url::parse(body["then"].as_str().unwrap()).unwrap();
+    assert_eq!(then.path(), "/end-session/", "{then}");
+    let q: std::collections::HashMap<String, String> = then.query_pairs().into_owned().collect();
+    assert_eq!(q["client_id"], "desk-client");
+    assert_eq!(q["post_logout_redirect_uri"], format!("{origin}/"));
+    let hint = payload(&q["id_token_hint"]);
+    assert_eq!(hint["sub"], "subject-2", "{hint}");
+    assert_eq!(hint["aud"], "desk-client");
+    let doc = get_json(&client, format!("{origin}/desk/capabilities"), &bo).await;
+    assert_eq!(doc["desk"]["signed_in"], false);
+
+    // a logout with no session still sends the browser to the provider,
+    // with no way back, which the provider takes only beside an id token
+    let r = ours(client.post(format!("{origin}/desk/logout")), &origin)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    let then = url::Url::parse(body["then"].as_str().unwrap()).unwrap();
+    let q: std::collections::HashMap<String, String> = then.query_pairs().into_owned().collect();
+    assert!(
+        !q.contains_key("id_token_hint") && !q.contains_key("post_logout_redirect_uri"),
+        "{then}"
+    );
 }
 
 #[tokio::test]
@@ -732,6 +939,129 @@ async fn oidc_mode_signs_in_at_the_provider_and_the_desk_signs_for_the_person_it
     assert_eq!(people[0].1, "Anna Bergström");
 }
 
+#[tokio::test]
+async fn a_sign_in_the_provider_ends_ends_the_desk_session_too() {
+    let engine = fake_engine().await;
+    let (issuer, provider) = fake_provider().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"oidc\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n[oidc]\nissuer = \"{issuer}\"\nclient_id = \"desk-client\"\nclient_secret = \"the-client-secret\"\n"
+    );
+    let (origin, _shared, _) = desk(&text).await;
+    let client = client();
+    let signed_in = |cookie: String| {
+        let client = client.clone();
+        let origin = origin.clone();
+        async move {
+            get_json(&client, format!("{origin}/desk/capabilities"), &cookie).await["desk"]["signed_in"]
+                .as_bool()
+                .unwrap()
+        }
+    };
+    let now = time::OffsetDateTime::now_utc().unix_timestamp();
+    let logout = |claims: Value| {
+        let client = client.clone();
+        let origin = origin.clone();
+        let token = provider.sign(&claims);
+        async move {
+            client
+                .post(format!("{origin}/desk/backchannel-logout"))
+                .form(&[("logout_token", token)])
+                .send()
+                .await
+                .unwrap()
+                .status()
+                .as_u16()
+        }
+    };
+    let event = json!({"http://schemas.openid.net/event/backchannel-logout": {}});
+    let base = json!({"iss": issuer, "aud": "desk-client", "iat": now, "exp": now + 900, "jti": "j1", "events": event, "sub": "subject-1", "sid": "session-1"});
+
+    // back-channel: the provider says its session-1 has ended
+    let anna = sign_in(&client, &origin, &issuer).await;
+    assert!(signed_in(anna.clone()).await);
+    let mut wrong = base.clone();
+    wrong["aud"] = json!("another-client");
+    assert_eq!(logout(wrong).await, 400, "for another client");
+    let mut wrong = base.clone();
+    wrong.as_object_mut().unwrap().remove("events");
+    assert_eq!(logout(wrong).await, 400, "no logout event");
+    let mut wrong = base.clone();
+    wrong["nonce"] = json!("n");
+    assert_eq!(logout(wrong).await, 400, "a logout token carries no nonce");
+    let forged = {
+        let other = ed25519_dalek::SigningKey::generate(&mut rand_core::OsRng);
+        use ed25519_dalek::pkcs8::EncodePrivateKey;
+        let pem = other
+            .to_pkcs8_pem(ed25519_dalek::pkcs8::spki::der::pem::LineEnding::LF)
+            .unwrap();
+        let enc = jsonwebtoken::EncodingKey::from_ed_pem(pem.as_bytes()).unwrap();
+        let mut header = jsonwebtoken::Header::new(jsonwebtoken::Algorithm::EdDSA);
+        header.kid = Some("k1".into());
+        jsonwebtoken::encode(&header, &base, &enc).unwrap()
+    };
+    let r = client
+        .post(format!("{origin}/desk/backchannel-logout"))
+        .form(&[("logout_token", forged)])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 400, "not signed by the provider");
+    assert!(
+        signed_in(anna.clone()).await,
+        "nothing above ended anna's session"
+    );
+    let mut other = base.clone();
+    other["sid"] = json!("session-9");
+    assert_eq!(logout(other).await, 200);
+    assert!(
+        signed_in(anna.clone()).await,
+        "another session at the provider"
+    );
+    assert_eq!(logout(base.clone()).await, 200);
+    assert!(!signed_in(anna.clone()).await, "ended by the provider");
+
+    // no back-channel: the provider's session ends, and the next refresh,
+    // which answers without that session, ends the desk's session
+    *provider.sid.lock().unwrap() = Some("session-2".into());
+    let anna = sign_in(&client, &origin, &issuer).await;
+    provider.ended.lock().unwrap().push("session-2".into());
+    assert!(!signed_in(anna.clone()).await, "ended at the refresh");
+
+    // a refresh answering for another of the provider's sessions ends it
+    *provider.sid.lock().unwrap() = Some("session-4".into());
+    let anna = sign_in(&client, &origin, &issuer).await;
+    provider
+        .moved
+        .lock()
+        .unwrap()
+        .insert("session-4".into(), "session-5".into());
+    assert!(!signed_in(anna.clone()).await, "another sid ends it");
+    let r = client
+        .get(format!("{origin}/api/jobs"))
+        .header("cookie", &anna)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 401);
+
+    // a refused refresh ends it
+    *provider.sid.lock().unwrap() = Some("session-6".into());
+    let anna = sign_in(&client, &origin, &issuer).await;
+    provider.refreshes.lock().unwrap().clear();
+    assert!(!signed_in(anna.clone()).await, "the refresh was refused");
+
+    // while the provider's session stands, a refresh keeps the desk's
+    let before = *provider.tokens_minted.lock().unwrap();
+    *provider.sid.lock().unwrap() = Some("session-3".into());
+    let anna = sign_in(&client, &origin, &issuer).await;
+    assert!(signed_in(anna.clone()).await);
+    assert_eq!(
+        *provider.tokens_minted.lock().unwrap(),
+        before + 2,
+        "the sign-in and one refresh"
+    );
+}
+
 /// A fake Authentik: the objects the registration creates, in memory.
 #[derive(Default)]
 struct Ak {
@@ -746,6 +1076,7 @@ async fn fake_authentik() -> (String, Arc<Ak>) {
         o.insert("/flows/instances/".into(), vec![
             json!({"pk": "f-auth", "slug": "default-provider-authorization-implicit-consent", "designation": "authorization"}),
             json!({"pk": "f-inv", "slug": "default-provider-invalidation-flow", "designation": "invalidation"}),
+            json!({"pk": "f-logout", "slug": "default-invalidation-flow", "designation": "invalidation"}),
         ]);
         o.insert(
             "/core/groups/".into(),
@@ -903,9 +1234,16 @@ async fn the_registration_creates_everything_once_and_a_second_run_changes_nothi
         let o = ak.objects.lock().unwrap();
         let p = &o["/providers/oauth2/"][0];
         assert_eq!(
-            p["redirect_uris"][0]["url"],
-            "https://desk.example.org/desk/callback"
+            p["redirect_uris"][0],
+            json!({"matching_mode": "strict", "url": "https://desk.example.org/desk/callback", "redirect_uri_type": "authorization"})
         );
+        // the way back after a logout, which the provider takes only when registered
+        assert_eq!(
+            p["redirect_uris"][1],
+            json!({"matching_mode": "strict", "url": "https://desk.example.org/", "redirect_uri_type": "logout"})
+        );
+        // the invalidation flow that ends the person's session at the provider
+        assert_eq!(p["invalidation_flow"], "f-logout", "{p}");
         assert_eq!(p["access_token_validity"], "minutes=15");
         assert_eq!(p["refresh_token_validity"], "days=30");
         assert_eq!(p["property_mappings"].as_array().unwrap().len(), 5);

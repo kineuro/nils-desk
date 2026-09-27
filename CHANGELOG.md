@@ -4,6 +4,17 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Sign out, from the person's menu at the top right (the name opens it; every item is reached by Tab and Escape closes it). The desk ends its own session and, where people sign in at an identity provider, sends the browser to the provider's end-session page (OpenID Connect RP-initiated logout, with the id token of the sign-in and the desk's front page as the way back), so the next sign-in asks who it is instead of signing the same person in again. `POST /desk/logout` answers `{"then": url}` in `oidc` mode; 204 as before otherwise.
+- Sign in as someone else, from the same menu and from the sign-in page: `GET /desk/login?prompt=login` asks the provider to sign in afresh, so a person can pick another account than the one the provider already signs in in this browser. `/desk/session` and the capabilities document name it as `login.choose`.
+- `POST /desk/backchannel-logout` (OpenID Connect Back-Channel Logout 1.0): the provider says a person's session there has ended, and the desk's sessions that came from it end too. The token is checked against the provider's keys, issuer and this client, and must carry the logout event and no nonce.
+- `nils-desk register` registers the desk's front page as the provider's post-logout redirect and picks the invalidation flow that ends the person's session at the provider.
+
+### Fixed
+
+- A desk session no longer outlives the provider's session it came from. Besides the back-channel above, each refresh of the provider's tokens (near their expiry, so every fifteen minutes at the usual lifetime) is checked: a refused refresh, an id token for another subject, or one that no longer names the provider's session the person signed in with (`sid`, missing or another) ends the desk's session, and the shell shows the sign-in. The desk session's identity is fixed at sign-in and a sign-in in a browser that held a session ends the earlier one. The absolute bound of twelve hours stays.
+
 ## [1.0.0-alpha.49] - 2026-09-27
 
 Released beside the engine's 1.0.0-alpha.49: the reader's pictures take the space of a big screen whatever the panel holds, Space enlarges a plane and the arrows page the stack, a one-row question's values are large keys, the file's header draws its key lines stronger, and the reader's head says how long the item has been on the screen. The desk still speaks the engine's HTTP contract 7 and suite contract 3.

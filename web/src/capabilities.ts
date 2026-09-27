@@ -58,7 +58,7 @@ export interface Capabilities {
     /** What the engine speaks against this desk: `major` stops the desk, and `direction` says which of the two is the older. */
     contract_mismatch: null | { found: Record<string, string>; speaks: Record<string, string>; major: boolean; direction: "ahead" | "behind" };
     /** How a person logs in, by mode: none in off mode. */
-    login: null | { kind: "password" | "redirect"; url: string };
+    login: null | { kind: "password" | "redirect"; url: string; /** Where people sign in at a provider: a login that asks the provider to sign in afresh, to pick another account. */ choose?: string };
     signed_in: boolean;
     /** The entitlement an export needs on this desk, when this person holds it; null otherwise. */
     export?: string | null;

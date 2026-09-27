@@ -147,6 +147,50 @@ pub fn holding(
     Ok(p)
 }
 
+/// The tokens a session holds, with the provider's refreshed first in
+/// `oidc` mode when near their expiry, which is when the desk asks the
+/// provider again whether the sign-in stands (every fifteen minutes at the
+/// provider's usual access token lifetime). A sign-in the provider has
+/// ended ends the desk's session here.
+pub async fn keep(desk: &Shared, s: &Session) -> Result<Value, String> {
+    let mut tokens = if s.tokens.is_object() {
+        s.tokens.clone()
+    } else {
+        json!({})
+    };
+    if let (Mode::Oidc, Some(client)) = (desk.config.mode, desk.oidc.as_ref()) {
+        match client.refresh(&tokens, &s.subject).await {
+            Ok(Some(mut fresh)) => {
+                fresh["minted"] = tokens["minted"].take();
+                tokens = fresh;
+                desk.store.set_tokens(&s.id, &tokens);
+            }
+            Ok(None) => {}
+            Err(crate::oidc::Refresh::Ended(why)) => {
+                desk.store.delete(&s.id);
+                return Err(format!("{why}; sign in again"));
+            }
+            Err(e) => return Err(e.message()),
+        }
+    }
+    Ok(tokens)
+}
+
+/// The session of a request after [`keep`] has asked the provider, where
+/// it is time to: what the shell's documents name, so a sign-in the
+/// provider ended shows as signed out.
+pub async fn resolve_kept(
+    desk: &Shared,
+    headers: &HeaderMap,
+) -> (Option<Session>, Option<HeaderValue>) {
+    if let (Some(id), Mode::Oidc) = (cookie(headers), desk.config.mode)
+        && let Some(s) = desk.store.get(&id)
+    {
+        let _ = keep(desk, &s).await;
+    }
+    resolve(desk, headers)
+}
+
 /// Nobody, for the shell to name: the login page in `local` mode, the
 /// provider in `oidc` mode.
 pub fn nobody() -> Person {
@@ -172,7 +216,7 @@ fn error(status: StatusCode, message: impl Into<String>) -> Response {
 
 /// `GET /desk/session`: who this is, and how one logs in.
 pub async fn door(State(desk): State<Shared>, headers: HeaderMap) -> Response {
-    let (session, set) = resolve(&desk, &headers);
+    let (session, set) = resolve_kept(&desk, &headers).await;
     let person = session.as_ref().map(|s| person(&desk, s));
     let mut r = axum::Json(json!({
         "person": person.map(|p| p.as_json()),
@@ -180,7 +224,7 @@ pub async fn door(State(desk): State<Shared>, headers: HeaderMap) -> Response {
         "login": match desk.config.mode {
             Mode::Off => Value::Null,
             Mode::Local => json!({"kind": "password", "url": "/desk/login", "nobody_yet": !desk.store.has_users()}),
-            Mode::Oidc => json!({"kind": "redirect", "url": "/desk/login"}),
+            Mode::Oidc => json!({"kind": "redirect", "url": "/desk/login", "choose": "/desk/login?prompt=login"}),
         },
     }))
     .into_response();
@@ -264,16 +308,28 @@ pub async fn cli_login(
     }
 }
 
-/// `GET /desk/login` in `oidc` mode: to the provider, with PKCE.
-pub async fn begin(State(desk): State<Shared>) -> Response {
+#[derive(serde::Deserialize)]
+pub struct Begin {
+    prompt: Option<String>,
+}
+
+/// `GET /desk/login` in `oidc` mode: to the provider, with PKCE. With
+/// `?prompt=login` the provider signs the person in afresh, so they can
+/// pick another account than the one it already knows in this browser.
+pub async fn begin(State(desk): State<Shared>, Query(q): Query<Begin>) -> Response {
     let Some(client) = &desk.oidc else {
         return error(
             StatusCode::NOT_FOUND,
             "this desk has no provider; see /desk/session for how to log in",
         );
     };
+    let choose = match q.prompt.as_deref() {
+        None => false,
+        Some("login") => true,
+        Some(_) => return error(StatusCode::BAD_REQUEST, "prompt takes only login"),
+    };
     let redirect = format!("{}/desk/callback", desk.config.origin.trim_end_matches('/'));
-    match client.begin(&redirect).await {
+    match client.begin(&redirect, choose).await {
         Ok((url, state, verifier)) => {
             desk.store.pending_put(&state, &verifier);
             Redirect::to(&url).into_response()
@@ -291,8 +347,15 @@ pub struct Callback {
 }
 
 /// `GET /desk/callback`: the code for a session, which keeps the provider's
-/// groups and legacy entitlements from this sign-in.
-pub async fn callback(State(desk): State<Shared>, Query(q): Query<Callback>) -> Response {
+/// groups and legacy entitlements from this sign-in. The person of a
+/// session is fixed at this moment and never read from the provider again;
+/// a sign-in in a browser that held a session ends that one, so one browser
+/// never holds two people.
+pub async fn callback(
+    State(desk): State<Shared>,
+    headers: HeaderMap,
+    Query(q): Query<Callback>,
+) -> Response {
     let Some(client) = &desk.oidc else {
         return error(StatusCode::NOT_FOUND, "this desk has no provider");
     };
@@ -323,6 +386,9 @@ pub async fn callback(State(desk): State<Shared>, Query(q): Query<Callback>) -> 
                 username: a.username,
             };
             desk.store.saw(&a.subject, &a.display, &claims);
+            if let Some(id) = cookie(&headers) {
+                desk.store.delete(&id);
+            }
             match desk
                 .store
                 .create(&a.subject, &a.display, &claims, &a.tokens, HOURS)
@@ -341,19 +407,68 @@ pub async fn callback(State(desk): State<Shared>, Query(q): Query<Callback>) -> 
     }
 }
 
-/// `POST /desk/logout`, from the desk's own origin.
+/// `POST /desk/logout`, from the desk's own origin: the desk's session
+/// ends, and in `oidc` mode the answer names where the browser goes next to
+/// end the person's session at the provider too (`then`), so the next
+/// sign-in asks who it is rather than signing the same person in again.
 pub async fn logout(State(desk): State<Shared>, headers: HeaderMap) -> Response {
     if let Err(why) = same_origin(&desk.config.origins(), &headers) {
         return error(StatusCode::FORBIDDEN, why);
     }
+    let mut id_token = None;
     if let Some(id) = cookie(&headers) {
+        id_token = desk
+            .store
+            .get(&id)
+            .and_then(|s| s.tokens["id_token"].as_str().map(str::to_string));
         desk.store.delete(&id);
     }
-    let mut r = StatusCode::NO_CONTENT.into_response();
+    let then = match &desk.oidc {
+        Some(client) => {
+            let back = format!("{}/", desk.config.origin.trim_end_matches('/'));
+            client.end_session(id_token.as_deref(), &back).await
+        }
+        None => None,
+    };
+    let mut r = match then {
+        Some(url) => axum::Json(json!({"then": url})).into_response(),
+        None => StatusCode::NO_CONTENT.into_response(),
+    };
     r.headers_mut().insert(
         header::SET_COOKIE,
         HeaderValue::from_static("nils_desk=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0"),
     );
+    r
+}
+
+#[derive(serde::Deserialize)]
+pub struct LogoutToken {
+    logout_token: Option<String>,
+}
+
+/// `POST /desk/backchannel-logout` in `oidc` mode (OpenID Connect
+/// Back-Channel Logout 1.0): the provider says a person's session there has
+/// ended, and the desk's sessions that came from it end too; those of the
+/// subject when the token names no session.
+pub async fn backchannel(
+    State(desk): State<Shared>,
+    axum::Form(f): axum::Form<LogoutToken>,
+) -> Response {
+    let Some(client) = &desk.oidc else {
+        return error(StatusCode::NOT_FOUND, "this desk has no provider");
+    };
+    let Some(token) = f.logout_token else {
+        return error(StatusCode::BAD_REQUEST, "logout_token");
+    };
+    let (sub, sid) = match client.logout_token(&token).await {
+        Ok(v) => v,
+        Err(e) => return error(StatusCode::BAD_REQUEST, e),
+    };
+    let ended = desk.store.end_sessions(sub.as_deref(), sid.as_deref());
+    tracing::info!(ended, "a back-channel logout from the provider");
+    let mut r = StatusCode::OK.into_response();
+    r.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     r
 }
 

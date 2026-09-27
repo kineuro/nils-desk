@@ -406,6 +406,37 @@ impl Store {
         );
     }
 
+    /// The sessions a provider's back-channel logout ends: those that came
+    /// from its session `sid` (of `sub`, when named too), or every session
+    /// of `sub` when it names no session. How many ended.
+    pub fn end_sessions(&self, sub: Option<&str>, sid: Option<&str>) -> usize {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let Ok(mut q) = conn.prepare("SELECT id, subject, tokens FROM session") else {
+            return 0;
+        };
+        let rows: Vec<(String, String, String)> = q
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .map(|it| it.flatten().collect())
+            .unwrap_or_default();
+        drop(q);
+        let mut ended = 0;
+        for (id, subject, tokens) in rows {
+            if sub.is_some_and(|s| s != subject) {
+                continue;
+            }
+            if let Some(sid) = sid {
+                let held: Value = serde_json::from_str(&tokens).unwrap_or(Value::Null);
+                if held["sid"].as_str() != Some(sid) {
+                    continue;
+                }
+            }
+            ended += conn
+                .execute("DELETE FROM session WHERE id = ?1", params![id])
+                .unwrap_or(0);
+        }
+        ended
+    }
+
     pub fn delete(&self, id: &str) {
         let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let _ = conn.execute("DELETE FROM session WHERE id = ?1", params![id]);

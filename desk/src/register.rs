@@ -242,7 +242,10 @@ pub async fn register(api: &Api, plan: &Plan) -> Result<Registered, String> {
         "default-provider-authorization-implicit-consent",
     )
     .await?;
-    let invalidation = flow(api, "invalidation", "default-provider-invalidation-flow").await?;
+    // the invalidation flow that ends the person's session at the provider,
+    // so the desk's logout does not leave them signed in there for the next
+    // sign-in to take up silently
+    let invalidation = flow(api, "invalidation", "default-invalidation-flow").await?;
     let provider_body = json!({
         "name": plan.name,
         "authorization_flow": authorization,
@@ -251,7 +254,11 @@ pub async fn register(api: &Api, plan: &Plan) -> Result<Registered, String> {
         // without these the provider allows no grant at all and the first
         // sign in fails as `invalid_request`, which says nothing about why
         "grant_types": ["authorization_code", "refresh_token"],
-        "redirect_uris": [{"matching_mode": "strict", "url": redirect}],
+        // the callback, and the desk's front page as the way back after a logout
+        "redirect_uris": [
+            {"matching_mode": "strict", "url": redirect, "redirect_uri_type": "authorization"},
+            {"matching_mode": "strict", "url": format!("{origin}/"), "redirect_uri_type": "logout"},
+        ],
         "signing_key": key_pk,
         "property_mappings": mapping_pks,
         "access_token_validity": "minutes=15",

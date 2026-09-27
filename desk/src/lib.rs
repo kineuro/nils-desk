@@ -133,6 +133,7 @@ pub fn router(desk: Shared) -> Router {
         .route("/desk/callback", get(session::callback))
         .route("/desk/cli-login", post(session::cli_login))
         .route("/desk/logout", post(session::logout))
+        .route("/desk/backchannel-logout", post(session::backchannel))
         .route(
             "/desk/users",
             get(identity::users_list).post(identity::users_add),

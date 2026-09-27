@@ -34,20 +34,9 @@ pub(crate) async fn bearer(
     let (s, _) = session::resolve(desk, headers);
     let s = s.ok_or("no session; log in at the desk")?;
     let issuer = desk.issuer.as_ref().ok_or("the desk is not an issuer")?;
-    let mut tokens = if s.tokens.is_object() {
-        s.tokens.clone()
-    } else {
-        json!({})
-    };
+    let mut tokens = session::keep(desk, &s).await?;
     let subject = match (desk.config.mode, desk.oidc.as_ref()) {
-        (Mode::Oidc, Some(client)) => {
-            if let Some(mut fresh) = client.refresh(&tokens).await? {
-                fresh["minted"] = tokens["minted"].take();
-                tokens = fresh;
-                desk.store.set_tokens(&s.id, &tokens);
-            }
-            crate::issuer::principal(&client.config.issuer, &s.subject)
-        }
+        (Mode::Oidc, Some(client)) => crate::issuer::principal(&client.config.issuer, &s.subject),
         (Mode::Oidc, None) => return Err("the desk has no provider".into()),
         _ => s.subject.clone(),
     };
