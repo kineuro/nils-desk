@@ -617,6 +617,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         if (cg) setG(cg);
       }}
       pace={pace}
+      shownAt={holding ? clock.current.since(holding.item.id) : null}
       order={valueOrderServed(caps) ? order : null}
       onOrder={chooseOrder}
       batchesOffered={batchesOffered}
@@ -701,6 +702,8 @@ export interface WorkspaceBodyProps {
   onEvidence?: () => void;
   onCandidate?: (c: AskedCandidate) => void;
   pace?: Pace;
+  /** When the item held was shown, for the time on it (after the first gold campaign). */
+  shownAt?: number | null;
   /** The claim order, where the engine offers value order; null hides the toggle. */
   order?: Order | null;
   onOrder?: (o: Order) => void;
@@ -859,6 +862,12 @@ function ReaderOne(p: Drawn) {
         )}
         <span className="rate-count-line">
           <b>{p.open === null ? "?" : n(p.open)}</b> open · {p.pace ? <PaceCount pace={p.pace} /> : <span>{p.done > 0 ? `${n(p.done)} answered here` : "items"}</span>}
+          {holding && p.shownAt != null && !p.batch && (
+            <span className="on-this" title="how long this item has been on the screen">
+              {" "}
+              · this one <b>{secondsWords(p.now - p.shownAt)}</b>
+            </span>
+          )}
         </span>
       </div>
       {refusal && <p className="warn">{refusal}</p>}
@@ -868,7 +877,7 @@ function ReaderOne(p: Drawn) {
       {holding && !p.batch && (
         <div className="rate-grid">
           <div className="rate-picture">
-            {holding.item.stack_id !== null ? <StackView stack={holding.item.stack_id} view={p.view ?? "planes"} onView={p.onView} /> : <p className="meta">{itemWords(holding.item)}: a session, answered from its stacks below.</p>}
+            {holding.item.stack_id !== null ? <StackView stack={holding.item.stack_id} view={p.view ?? "planes"} onView={p.onView} keys /> : <p className="meta">{itemWords(holding.item)}: a session, answered from its stacks below.</p>}
           </div>
           <div className="rate-side" data-reader-panel="">
             <ItemLine {...p}>
@@ -921,10 +930,17 @@ function RowsToggle({ view, onView }: { view: RowsView; onView: (v: RowsView) =>
   );
 }
 
+/** Seconds on an item as a reader counts them: 7 s, then 1:05. */
+export function secondsWords(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
 function Said({ said }: { said: string | null }) {
   if (!said) return null;
+  // keyed by its words, so each new confirmation comes in with a brief light (campaigns.css)
   return (
-    <p className="meta said" title={said}>
+    <p key={said} className="meta said" title={said}>
       <Icon name="check" />
       {said}
     </p>
@@ -1009,9 +1025,16 @@ function Actions(p: WorkspaceBodyProps & { withWhy?: boolean }) {
   const q = p.campaign.question;
   return (
     <div className="row actions">
-      <button type="button" className="button" disabled={p.busy} onClick={p.onAnswer}>
-        {p.amending ? "Correct" : "Answer"} <kbd>Enter</kbd>
-      </button>
+      <span className="act-main" role="group" aria-label="the answer">
+        <button type="button" className="button act-answer" disabled={p.busy} onClick={p.onAnswer}>
+          {p.amending ? "Correct" : "Answer"} <kbd>Enter</kbd>
+        </button>
+        {unsureOf(q) && (
+          <button type="button" className={p.unsure ? "opt on act-unsure" : "opt act-unsure"} aria-pressed={p.unsure ?? false} disabled={p.busy} onClick={p.onUnsure} title="Answered, and wants a second look">
+            Unsure <kbd>{UNSURE_KEY}</kbd>
+          </button>
+        )}
+      </span>
       {p.amending ? (
         <button type="button" className="button secondary" disabled={p.busy} onClick={p.onSkip} title="Leave your answer as it was">
           Leave as it was <kbd>s</kbd>
@@ -1019,11 +1042,6 @@ function Actions(p: WorkspaceBodyProps & { withWhy?: boolean }) {
       ) : (
         <button type="button" className="button secondary" disabled={p.busy} onClick={p.onSkip} title="Back to the pool for others; never to you again">
           Give back <kbd>s</kbd>
-        </button>
-      )}
-      {unsureOf(q) && (
-        <button type="button" className={p.unsure ? "opt on" : "opt"} aria-pressed={p.unsure ?? false} disabled={p.busy} onClick={p.onUnsure} title="Answered, and wants a second look">
-          Unsure <kbd>{UNSURE_KEY}</kbd>
         </button>
       )}
       {p.withWhy ? (
@@ -1135,6 +1153,8 @@ function KeyList({ rows, compact = false, combos = false, reader = false, candid
   return (
     <dl className="facts keys">
       {reader && pair("Enter", "confirm the answer filled in")}
+      {reader && pair("Space", "enlarge the plane under the pointer (else the lead one) to the whole side; Space again or Esc for the three; a double click or the corner button does the same")}
+      {reader && pair("↑ ↓", "page the stack, or the plane under the pointer, a plane at a time; Page Up and Page Down ten; the wheel too")}
       {candidates > 0 && pair(CANDIDATE_KEYS.slice(0, candidates).split("").join(" "), "choose a candidate")}
       {header && pair("h", "the whole header")}
       {reader && (evidence || !header) && pair(header ? "H" : "h", "how each axis was decided")}

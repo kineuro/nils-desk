@@ -15,6 +15,22 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 - A desk session no longer outlives the provider's session it came from. Besides the back-channel above, each refresh of the provider's tokens (near their expiry, so every fifteen minutes at the usual lifetime) is checked: a refused refresh, an id token for another subject, or one that no longer names the provider's session the person signed in with (`sid`, missing or another) ends the desk's session, and the shell shows the sign-in. The desk session's identity is fixed at sign-in and a sign-in in a browser that held a session ends the earlier one. The absolute bound of twelve hours stays.
 
+## [1.0.0-alpha.49] - 2026-09-27
+
+Released beside the engine's 1.0.0-alpha.49: the reader's pictures take the space of a big screen whatever the panel holds, Space enlarges a plane and the arrows page the stack, a one-row question's values are large keys, the file's header draws its key lines stronger, and the reader's head says how long the item has been on the screen. The desk still speaks the engine's HTTP contract 7 and suite contract 3.
+
+### Changed
+
+- The reader's pictures take the space of a big screen whatever the right panel holds: the side is the page's height by itself, so a short panel (a one-axis question such as a body part) no longer shrinks the three planes to a row of small squares in a browser that does not read `:has()`. The stack view and the planes fill the side between the sections and the panel; on a phone the pictures stand over the panel as wide as the screen. The panel may grow to 44rem on the widest screens.
+- The server's first picture of a plane fills its plane, its pixels kept square where it is drawn larger than it is.
+- A one-row question draws its values as large labelled keys; Answer and Unsure are one group, and the answer's bar stays in view when the panel scrolls.
+- The file's header draws the series, the protocol, the study and the body part it names as the key lines, a step stronger and a touch larger; the other fields' lines fold under their label and stay folded.
+- The reader's head says how long the item has been on the screen, and an answer's confirmation comes in with a brief light.
+
+### Added
+
+- The pictures' own keys in the reader: Space (or a double click, or the plane's corner button) enlarges the plane under the pointer to the whole side and gives the three back, Escape gives them back, and the arrows page the stack or a plane (Page Up and Page Down ten). None is an answer's key; the keys list (`?`) names them.
+
 ## [1.0.0-alpha.48] - 2026-09-27
 
 Released beside the engine's 1.0.0-alpha.48, with no change of its own. The desk still speaks the engine's HTTP contract 7 and suite contract 3.

@@ -150,6 +150,98 @@ test.describe("a pick clears the box and goes on", () => {
   });
 });
 
+// ---------------------------------------------------------------- one axis on a big screen
+
+// After the first gold campaign ("use the space of a big screen"): a body part
+// question's panel is short, and on a browser that does not read :has() the
+// pictures took their height from it, three planes a fifth of the side in a
+// row. The side is the page's height by itself now; the stack view and an
+// enlarged plane take the largest square it holds.
+
+const noHas = "main.page{display:block !important;padding:1.6rem 2rem 2rem !important;overflow:auto !important}";
+
+for (const vp of [{ width: 2000, height: 1150 }, { width: 1920, height: 1080 }]) {
+  for (const has of [true, false]) {
+    test(`a one-axis item at ${vp.width} by ${vp.height}${has ? "" : " without :has()"}: the planes fill the side, not the panel's height`, async ({ page }) => {
+      await page.setViewportSize(vp);
+      await page.goto("/?mode=axis");
+      await expect(page.locator('.axis-row[aria-label="body_part"] .opt')).toHaveCount(6);
+      if (!has) await page.addStyleTag({ content: noHas });
+      const m = await planes(page);
+      console.log(`${vp.width}x${vp.height}${has ? "" : " no :has"}: planes ${Math.round(m.block.w)} by ${Math.round(m.block.h)} in ${Math.round(m.side.w)} by ${Math.round(m.side.h)}, the large one ${m.own} px`);
+      // the side is the window's height less the bar and the head, whatever the panel holds
+      expect(m.side.h).toBeGreaterThan(vp.height - 160);
+      expect(Math.max(m.block.w / m.side.w, m.block.h / (m.side.h - 40))).toBeGreaterThan(0.95);
+      expect(m.own).toBeGreaterThan(m.side.w / 2.2);
+      expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
+      expect(m.doc.scrollW).toBeLessThanOrEqual(m.doc.clientW);
+      // the stack view: the largest square the side holds
+      await page.locator('.viewer-axes button[role="tab"]:has-text("the stack")').click();
+      const stage = await page.evaluate(() => {
+        const s = document.querySelector<HTMLElement>(".viewer-stage")!.getBoundingClientRect();
+        const side = document.querySelector<HTMLElement>(".rate-picture")!.getBoundingClientRect();
+        return { w: s.width, h: s.height, side: { w: side.width, h: side.height } };
+      });
+      expect(Math.min(stage.w, stage.h)).toBeGreaterThan(Math.min(stage.side.w, stage.side.h - 40) * 0.97);
+    });
+  }
+}
+
+test.describe("one plane enlarged", () => {
+  test.use({ viewport: { width: 2000, height: 1150 } });
+
+  test("Space enlarges the plane under the pointer to the whole side, Space or Escape gives the three back, a double click too", async ({ page }) => {
+    await page.goto("/?mode=axis");
+    await expect(page.locator(".viewer-plane.own")).toBeVisible();
+    const before = (await planes(page)).own;
+    await page.locator('.viewer-plane[data-plane="coronal"]').hover();
+    await page.keyboard.press(" ");
+    await expect(page.locator(".viewer-plane.big")).toHaveAttribute("data-plane", "coronal");
+    await expect(page.locator(".viewer-plane:visible")).toHaveCount(1);
+    const big = await page.evaluate(() => {
+      const r = document.querySelector<HTMLElement>(".viewer-plane.big")!.getBoundingClientRect();
+      const side = document.querySelector<HTMLElement>(".rate-picture")!.getBoundingClientRect();
+      return { w: r.width, h: r.height, side: { w: side.width, h: side.height }, bottom: r.bottom };
+    });
+    expect(big.w).toBeGreaterThan(before);
+    expect(Math.min(big.w, big.h)).toBeGreaterThan(Math.min(big.side.w, big.side.h - 40) * 0.97);
+    expect(big.bottom).toBeLessThanOrEqual(1150);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".viewer-plane:visible")).toHaveCount(3);
+    // a double click, and its corner button back
+    await page.locator('.viewer-plane[data-plane="axial"]').dblclick();
+    await expect(page.locator(".viewer-plane.big")).toHaveAttribute("data-plane", "axial");
+    await page.locator(".viewer-plane.big .viewer-plane-grow").click();
+    await expect(page.locator(".viewer-plane:visible")).toHaveCount(3);
+    // the answer's keys are the answer's still; with no plane under the pointer Space takes the lead one
+    await page.locator("body").click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press(" ");
+    await expect(page.locator(".viewer-plane.big")).toHaveAttribute("data-plane", "sagittal");
+    await page.keyboard.press("3");
+    await expect(page.locator(".pending")).toContainText("body_part neck");
+    await page.keyboard.press(" ");
+    await expect(page.locator(".viewer-plane:visible")).toHaveCount(3);
+  });
+});
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("the pictures over the panel, as wide as the screen, and nothing scrolls sideways", async ({ page }) => {
+    await page.goto("/?mode=axis");
+    await expect(page.locator('.axis-row[aria-label="body_part"] .opt')).toHaveCount(6);
+    const m = await planes(page);
+    const panelTop = await page.evaluate(() => document.querySelector<HTMLElement>("[data-reader-panel]")!.getBoundingClientRect().top);
+    expect(m.doc.scrollW).toBeLessThanOrEqual(m.doc.clientW);
+    expect(m.block.w).toBeGreaterThan(m.side.w * 0.95);
+    expect(m.own).toBeGreaterThan(m.side.w * 0.95);
+    expect(panelTop).toBeGreaterThanOrEqual(m.block.bottom);
+    // the answer is reached by scrolling the page
+    await page.locator(".act-answer").scrollIntoViewIfNeeded();
+    await expect(page.locator(".act-answer")).toBeInViewport();
+  });
+});
+
 // ---------------------------------------------------------------- the other pages
 
 const PAGES = ["home", "data", "campaigns", "review", "pipelines", "settings"];

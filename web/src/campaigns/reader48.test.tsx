@@ -96,11 +96,14 @@ describe("a blind item shows the file", () => {
 
   it("puts the key fields first, a sequence with its variant, the key facts each its own piece with the scanner, then the timing", () => {
     const lines = headerLines(readingOf(WHY_BLIND as unknown as Json).texts, readingOf(WHY_BLIND as unknown as Json).physics);
-    expect(lines.map((l) => l.label)).toEqual(["series", "protocol", "sequence", "scanning", "image type", "geometry", "timing", "more", "more"]);
-    expect(lines[2].value).toBe("*tfl3d1_16ns · SK\\SP\\MP");
-    expect(lines[3].value).toBe("GR\\IR · 3D · options IR\\PFP\\FS\\SAT1\\SAT2\\SAT3");
+    // the study and the body part the file names are key fields too (after the first gold campaign)
+    expect(lines.map((l) => l.label)).toEqual(["series", "protocol", "study", "body part", "sequence", "scanning", "image type", "geometry", "timing", "more", "more"]);
+    expect(lines[2].value).toBe("RESEARCH^NEURO MS PROTOCOL LONG FORM WITH CONTRAST ARM");
+    expect(lines[3].value).toBe("HEAD");
+    expect(lines[4].value).toBe("*tfl3d1_16ns · SK\\SP\\MP");
+    expect(lines[5].value).toBe("GR\\IR · 3D · options IR\\PFP\\FS\\SAT1\\SAT2\\SAT3");
     // the key facts (record 48, the second real read): slices, orientation, thickness, spacing, pixel spacing, matrix, field
-    expect(lines[5].facts).toEqual([
+    expect(lines[7].facts).toEqual([
       ["slices", "176"],
       ["", "sagittal"],
       ["thick", "1 mm"],
@@ -110,8 +113,8 @@ describe("a blind item shows the file", () => {
       ["", "3 T"],
       ["", "SIEMENS Prisma_fit"],
     ]);
-    expect(lines[6].value).toBe("TR 2300  TE 2.98  TI 900  flip 9  ETL 1  bw 240");
-    expect(lines[8].value).toBe("number of averages 1 · imaged nucleus 1H");
+    expect(lines[8].value).toBe("TR 2300  TE 2.98  TI 900  flip 9  ETL 1  bw 240");
+    expect(lines[10].value).toBe("number of averages 1 · imaged nucleus 1H");
     // the image's own matrix is said where it differs from the acquisition's
     expect(keyFacts({ rows: 512, columns: 512, acquisition_matrix: [0, 256, 256, 0] })).toEqual([
       ["matrix", "256×256"],
