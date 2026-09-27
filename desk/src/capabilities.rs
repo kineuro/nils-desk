@@ -302,7 +302,7 @@ pub async fn document(
                 crate::config::Mode::Off => Value::Null,
                 // nobody_yet: the desk keeps no one to sign in, so the login page says how to add the first person
                 crate::config::Mode::Local => json!({"kind": "password", "url": "/desk/login", "nobody_yet": !desk.store.has_users()}),
-                crate::config::Mode::Oidc => json!({"kind": "redirect", "url": "/desk/login"}),
+                crate::config::Mode::Oidc => json!({"kind": "redirect", "url": "/desk/login", "choose": "/desk/login?prompt=login"}),
             },
             "signed_in": !person.subject.is_empty(),
             // §7.4: whether this person may export, by the desk's setting
@@ -336,7 +336,7 @@ pub async fn document(
 }
 
 pub async fn door(State(desk): State<Shared>, headers: HeaderMap) -> Response {
-    let (session, set) = session::resolve(&desk, &headers);
+    let (session, set) = session::resolve_kept(&desk, &headers).await;
     let person = match &session {
         Some(s) => session::person(&desk, s),
         None => session::nobody(),

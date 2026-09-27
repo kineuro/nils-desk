@@ -41,6 +41,14 @@ code, .path { font-family: var(--n-font-mono); font-size: 0.92em; }
 /* the person's name opens their own page */
 a.person, a.person:hover { color: var(--n-text-dim); text-decoration: none; }
 a.person:hover, a.person[aria-current="page"] { color: var(--n-text); }
+/* the person's menu: their own page, signing in as someone else, signing out */
+.person-menu { position: relative; }
+button.person { background: none; border: 0; padding: 0.2rem 0.3rem; border-radius: var(--n-radius); cursor: pointer; font: inherit; font-size: var(--n-text-size-small); }
+button.person:hover, button.person[aria-expanded="true"] { color: var(--n-text); background: var(--n-bg-hover); }
+.person-pop { position: absolute; right: 0; top: calc(100% + 0.35rem); z-index: 5; min-width: 14rem; display: flex; flex-direction: column; gap: 2px; padding: 0.3rem; border: 1px solid var(--n-line); border-radius: calc(var(--n-radius) * 2); background: var(--n-bg-raised); box-shadow: 0 8px 24px var(--n-scrim); }
+.person-pop a, .person-pop button { display: flex; align-items: center; gap: 0.6rem; min-height: var(--n-control); padding: 0 0.6rem; border: 0; border-radius: var(--n-radius); background: none; color: var(--n-text-dim); font: inherit; font-size: var(--n-text-size-small); text-align: left; cursor: pointer; }
+.person-pop a:hover, .person-pop button:hover, .person-pop a:focus-visible, .person-pop button:focus-visible { background: var(--n-bg-hover); color: var(--n-text); text-decoration: none; }
+.person-pop .warn { margin: 0.3rem 0.6rem; }
 .banner { padding: var(--n-space-1) 1.2rem; font-size: var(--n-text-size-small); background: var(--n-caution-bg); color: var(--n-caution-fg); border-bottom: 1px solid var(--n-caution-line); }
 .body { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 0; }
 .body.with-side { grid-template-columns: 13.5rem minmax(0, 1fr); }

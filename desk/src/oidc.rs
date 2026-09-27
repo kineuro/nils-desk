@@ -27,6 +27,23 @@ pub struct Client {
     jwks: Mutex<Option<(Instant, JwkSet)>>,
 }
 
+/// Why a refresh gave no fresh token.
+#[derive(Debug)]
+pub enum Refresh {
+    /// The provider no longer signs this person in with this sign-in.
+    Ended(String),
+    /// The provider could not be asked; the sign-in may still stand.
+    Failed(String),
+}
+
+impl Refresh {
+    pub fn message(self) -> String {
+        match self {
+            Refresh::Ended(m) | Refresh::Failed(m) => m,
+        }
+    }
+}
+
 pub struct Authenticated {
     pub subject: String,
     pub display: String,
@@ -123,8 +140,14 @@ impl Client {
     }
 
     /// The authorization URL for a fresh state and verifier, which the
-    /// caller keeps until the callback.
-    pub async fn begin(&self, redirect: &str) -> Result<(String, String, String), String> {
+    /// caller keeps until the callback. `choose` asks the provider to sign
+    /// the person in afresh (`prompt=login`), whoever it signs in already,
+    /// so a person can pick another account.
+    pub async fn begin(
+        &self,
+        redirect: &str,
+        choose: bool,
+    ) -> Result<(String, String, String), String> {
         let d = self.discovery().await?;
         let endpoint = d["authorization_endpoint"]
             .as_str()
@@ -144,6 +167,9 @@ impl Client {
             .append_pair("state", &state)
             .append_pair("code_challenge", &challenge)
             .append_pair("code_challenge_method", "S256");
+        if choose {
+            u.query_pairs_mut().append_pair("prompt", "login");
+        }
         Ok((u.to_string(), state, verifier))
     }
 
@@ -206,12 +232,22 @@ impl Client {
                 "access": access,
                 "refresh": body["refresh_token"],
                 "expires_at": now + expires_in,
+                // kept for the logout, which names the person to the provider
+                "id_token": id_token,
+                // the provider's session the person signed in with, which a
+                // back-channel logout and each refresh are checked against
+                "sid": claims["sid"],
             }),
         })
     }
 
-    /// A fresh access token when the held one is near its expiry.
-    pub async fn refresh(&self, tokens: &Value) -> Result<Option<Value>, String> {
+    /// A fresh access token when the held one is near its expiry, which is
+    /// also when the desk asks the provider again whether the sign-in still
+    /// stands: a refused refresh, an id token for another subject, or one
+    /// that no longer names the provider's session the person signed in
+    /// with (`sid`, which the provider drops once that session has ended)
+    /// is [`Refresh::Ended`], and the desk's session ends with it.
+    pub async fn refresh(&self, tokens: &Value, subject: &str) -> Result<Option<Value>, Refresh> {
         let now = time::OffsetDateTime::now_utc().unix_timestamp();
         if tokens["expires_at"].as_i64().unwrap_or(0) - now > 60 {
             return Ok(None);
@@ -219,10 +255,10 @@ impl Client {
         let Some(refresh) = tokens["refresh"].as_str() else {
             return Ok(None);
         };
-        let d = self.discovery().await?;
+        let d = self.discovery().await.map_err(Refresh::Failed)?;
         let endpoint = d["token_endpoint"]
             .as_str()
-            .ok_or("no token_endpoint")?
+            .ok_or_else(|| Refresh::Failed("no token_endpoint".into()))?
             .to_string();
         let r = self
             .http
@@ -235,17 +271,86 @@ impl Client {
             ])
             .send()
             .await
-            .map_err(|e| e.to_string())?;
-        if !r.status().is_success() {
-            return Err(format!("the refresh was refused: {}", r.status()));
+            .map_err(|e| Refresh::Failed(e.to_string()))?;
+        if r.status().is_client_error() {
+            return Err(Refresh::Ended(format!(
+                "the provider refused the refresh: {}",
+                r.status()
+            )));
         }
-        let body: Value = r.json().await.map_err(|e| e.to_string())?;
+        if !r.status().is_success() {
+            return Err(Refresh::Failed(format!(
+                "the refresh was not answered: {}",
+                r.status()
+            )));
+        }
+        let body: Value = r.json().await.map_err(|e| Refresh::Failed(e.to_string()))?;
+        if let Some(id_token) = body["id_token"].as_str() {
+            let claims = self.verify(id_token).await.map_err(Refresh::Failed)?;
+            if claims["sub"].as_str() != Some(subject) {
+                return Err(Refresh::Ended(
+                    "the provider answered for another person".into(),
+                ));
+            }
+            if let Some(sid) = tokens["sid"].as_str()
+                && claims["sid"].as_str() != Some(sid)
+            {
+                return Err(Refresh::Ended(
+                    "the provider's session this sign-in came from has ended".into(),
+                ));
+            }
+        }
         let expires_in = body["expires_in"].as_i64().unwrap_or(900);
         Ok(Some(json!({
             "access": body["access_token"],
             "refresh": body["refresh_token"].as_str().unwrap_or(refresh),
             "expires_at": now + expires_in,
+            // the id token of the sign-in: a refresh never changes who the session is
+            "id_token": tokens["id_token"],
+            "sid": tokens["sid"],
         })))
+    }
+
+    /// A back-channel logout token (OpenID Connect Back-Channel Logout 1.0)
+    /// verified: signed by the provider for this client, carrying the
+    /// logout event and no nonce. The subject and the provider's session it
+    /// ends, at least one of them.
+    pub async fn logout_token(
+        &self,
+        token: &str,
+    ) -> Result<(Option<String>, Option<String>), String> {
+        let claims = self.verify(token).await?;
+        if !claims["events"]["http://schemas.openid.net/event/backchannel-logout"].is_object() {
+            return Err("the token carries no back-channel logout event".into());
+        }
+        if !claims["nonce"].is_null() {
+            return Err("a logout token carries no nonce".into());
+        }
+        let sub = claims["sub"].as_str().map(str::to_string);
+        let sid = claims["sid"].as_str().map(str::to_string);
+        if sub.is_none() && sid.is_none() {
+            return Err("the token names neither a subject nor a session".into());
+        }
+        Ok((sub, sid))
+    }
+
+    /// Where the browser goes to end the person's session at the provider
+    /// too (OpenID Connect RP-initiated logout), coming back to `back`;
+    /// none when the provider names no `end_session_endpoint`.
+    pub async fn end_session(&self, id_token: Option<&str>, back: &str) -> Option<String> {
+        let d = self.discovery().await.ok()?;
+        let endpoint = d["end_session_endpoint"].as_str()?;
+        let mut u = url::Url::parse(endpoint).ok()?;
+        {
+            let mut q = u.query_pairs_mut();
+            q.append_pair("client_id", &self.config.client_id);
+            // the provider takes a way back only beside the id token it issued
+            if let Some(t) = id_token {
+                q.append_pair("id_token_hint", t);
+                q.append_pair("post_logout_redirect_uri", back);
+            }
+        }
+        Some(u.to_string())
     }
 
     /// The id token against the provider's keys: the key by id, refetched

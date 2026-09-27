@@ -29,6 +29,7 @@ import { ready as readyToStart } from "./home/setup";
 import { Setup } from "./home/Setup";
 import { placesKept } from "./objects/kept";
 import { ProfilePage } from "./profile/ProfilePage";
+import { PersonMenu } from "./ui/PersonMenu";
 import { ReviewPage } from "./review/ReviewPage";
 import { href, parse, type Route } from "./routes";
 import { assistantOffered, foot, initials, sections, usable } from "./sections";
@@ -191,13 +192,16 @@ export function App() {
           </a>
         )}
         <ThemeSwitch />
-        {caps.desk.signed_in && who && (
+        {caps.desk.signed_in && who && caps.desk.mode === "off" && (
           <a className="person" href={href("profile")} title={`${who}: your profile`} aria-label={`${who}: your profile`} aria-current={onProfile ? "page" : undefined}>
             <span className="avatar" aria-hidden="true">
               {initials(who)}
             </span>
             <span className="person-name">{who}</span>
           </a>
+        )}
+        {caps.desk.signed_in && who && caps.desk.mode !== "off" && (
+          <PersonMenu who={who} initials={initials(who)} profile={href("profile")} current={onProfile} choose={caps.desk.login?.choose ?? null} />
         )}
       </header>
       {caps.engine?.registry.synthetic && (
@@ -222,7 +226,7 @@ export function App() {
         <main className="page">
           <PageBoundary route={`${route.section}/${route.page ?? ""}/${route.arg ?? ""}`}>
           {st.kind === "login" && (
-            <Login how={st.how} url={st.url} nobody={(caps.desk.login as { nobody_yet?: boolean } | null)?.nobody_yet === true} onDone={() => location.reload()} />
+            <Login how={st.how} url={st.url} choose={caps.desk.login?.choose ?? null} nobody={(caps.desk.login as { nobody_yet?: boolean } | null)?.nobody_yet === true} onDone={() => location.reload()} />
           )}
           {st.kind === "unbound" && (
             <section className="state">
@@ -282,7 +286,7 @@ export function App() {
   );
 }
 
-function Login({ how, url, nobody, onDone }: { how: "password" | "redirect"; url: string; nobody: boolean; onDone: () => void }) {
+export function Login({ how, url, choose, nobody, onDone }: { how: "password" | "redirect"; url: string; choose: string | null; nobody: boolean; onDone: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [why, setWhy] = useState<string | null>(null);
@@ -296,6 +300,11 @@ function Login({ how, url, nobody, onDone }: { how: "password" | "redirect"; url
             Continue
           </a>
         </p>
+        {choose && (
+          <p>
+            <a href={choose}>Sign in as someone else</a>
+          </p>
+        )}
       </section>
     );
   }
