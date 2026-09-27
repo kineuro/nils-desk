@@ -1020,15 +1020,12 @@ async fn a_sign_in_the_provider_ends_ends_the_desk_session_too() {
     assert_eq!(logout(base.clone()).await, 200);
     assert!(!signed_in(anna.clone()).await, "ended by the provider");
 
-    // a refresh whose id token names no session keeps the desk's session:
-    // the refusal and the back-channel cover a provider session that ended
+    // no back-channel: the provider's session ends, and the next refresh,
+    // which answers without that session, ends the desk's session
     *provider.sid.lock().unwrap() = Some("session-2".into());
     let anna = sign_in(&client, &origin, &issuer).await;
     provider.ended.lock().unwrap().push("session-2".into());
-    assert!(
-        signed_in(anna.clone()).await,
-        "no sid is not an ended session"
-    );
+    assert!(!signed_in(anna.clone()).await, "ended at the refresh");
 
     // a refresh answering for another of the provider's sessions ends it
     *provider.sid.lock().unwrap() = Some("session-4".into());
