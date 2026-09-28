@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.56] - 2026-09-28
+
+In the reader, only the chosen key is drawn in its value's colour; the keys not chosen are neutral again, and the same holds for the value filter in My answers. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer. The `basis` field engine 1.0.0-alpha.57 adds to the explain doors is additive: this desk reads those doors as before and does not show it yet.
+
 ### Changed
 
 - In the reader, only the chosen value's key is drawn in its colour: its frame, the thick bar on its left, a tinted fill and heavier words. The keys not chosen are neutral again, so the chosen one stands out while reading item by item. The same holds for the value filter in My answers. The gallery's cards and its legend keep their colours.
