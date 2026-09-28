@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.57] - 2026-09-29
+
+Making a campaign asks what its raters are shown beside each item, and the default is nothing: the reader and the gallery read such a campaign blind. It needs engine 1.0.0-alpha.59 for a campaign to say so; against an older engine, every campaign is read as showing the rules, as before. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+
 ### Changed
 
 - Making an axis or an axes campaign asks what the raters are shown beside each item: nothing (the default), the rules' answer, or imported suggestions. The campaign's page says which. With nothing, the reader shows no answer, fills nothing in, shows none of the rules' evidence and offers no batches, even where a door still sends the rules' lines, and the gallery suggests nothing and keeps the items' order. Suggestions are brought only into a campaign made to show them. An engine that does not say what a campaign suggests is read as showing the rules, as it did.
