@@ -12,7 +12,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import { HeaderBlock } from "./ReaderParts";
 import { Clock, headerLines } from "./reader";
-import { AxisRows } from "./renderers";
+import { AxisRows, CompactRows } from "./renderers";
 import { secondsWords } from "./Workspace";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -65,6 +65,24 @@ describe("the reader on a big screen", () => {
     expect(one).not.toContain("single");
     expect(one).not.toContain("vmark");
     expect(one).toContain('class="opt on" aria-pressed="true" data-slot="2"><kbd>2</kbd>neck');
+  });
+
+  it("colours only the chosen key, on the full rows and the compact ones; the others stay neutral", () => {
+    const rows = [
+      { axis: "body_part", values: ["brain", "neck", "spine"], multi: false },
+      { axis: "modifier", values: ["FatSat", "FLAIR", "IR"], multi: true },
+    ];
+    const coloured = (html: string) => [...html.matchAll(/<button[^>]*data-slot="(\d+)"[^>]*>(?:<kbd>[^<]*<\/kbd>)?([^<]*)/gu)].map((m) => [m[2], m[1]]);
+    const offered = (html: string) => [...html.matchAll(/<button[^>]*class="opt( on)?[^"]*"[^>]*>/gu)].map((m) => [m[0].includes("data-slot"), m[1] === " on"]);
+    const none = renderToStaticMarkup(<AxisRows rows={rows} chosen={{ body_part: null, modifier: [] }} onChoose={() => undefined} />);
+    expect(coloured(none)).toEqual([]);
+    const full = renderToStaticMarkup(<AxisRows rows={rows} chosen={{ body_part: "spine", modifier: ["FatSat", "IR"] }} onChoose={() => undefined} />);
+    expect(coloured(full)).toEqual([["spine", "3"], ["FatSat", "1"], ["IR", "3"]]);
+    // a key has its colour exactly when it is chosen
+    for (const [slot, on] of offered(full)) expect(slot).toBe(on);
+    const compact = renderToStaticMarkup(<CompactRows rows={rows} chosen={{ body_part: "neck", modifier: [] }} onChoose={() => undefined} />);
+    expect(coloured(compact)).toEqual([["neck", "2"]]);
+    for (const [slot, on] of offered(compact)) expect(slot).toBe(on);
   });
 
   it("counts the time on an item from when it was shown, without stopping its clock", () => {

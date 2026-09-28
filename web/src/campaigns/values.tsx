@@ -24,3 +24,14 @@ export function valueTone(values: string[], value: string | null | undefined): {
   const s = slotOf(values, value);
   return s === null ? {} : { "data-slot": s };
 }
+
+/**
+ * The attributes that colour a key the rater chooses by: its value's colour
+ * only while it is chosen (after reading item by item: "only the selected
+ * option should be in colour, not all; it becomes hard to see which is
+ * selected"). The keys not chosen stay neutral; the gallery's cards and its
+ * legend keep their colours, as they show values rather than offer them.
+ */
+export function chosenTone(values: string[], value: string, chosen: boolean): { "data-slot"?: number } {
+  return chosen ? valueTone(values, value) : {};
+}

@@ -10,7 +10,7 @@ import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { cantTellKeyOf, formFields, keyOf, type FormSchema, type Given, type Item, type Question } from "./client";
 import type { ValueNames } from "./lookup";
-import { valueTone } from "./values";
+import { chosenTone } from "./values";
 import { findKeyOf, findMatches, LONG_ROW, sameFound, type Found } from "./workspace";
 
 /** One row of values: an axis, its values in the pack's order, and the families they group under where the pack says. */
@@ -68,7 +68,7 @@ export function AxisRows({
                     const picked = Array.isArray(on) ? on.includes(value) : on === value;
                     const who = marks[r.axis]?.[value] ?? [];
                     return (
-                      <button key={value} type="button" className={picked ? "opt on" : "opt"} aria-pressed={picked} onClick={() => onChoose(r.axis, value)} title={who.length > 0 ? `given by ${who.join(", ")}` : undefined} {...valueTone(r.values, value)}>
+                      <button key={value} type="button" className={picked ? "opt on" : "opt"} aria-pressed={picked} onClick={() => onChoose(r.axis, value)} title={who.length > 0 ? `given by ${who.join(", ")}` : undefined} {...chosenTone(r.values, value, picked)}>
                         {key && <kbd>{key}</kbd>}
                         {value}
                         {who.length > 0 && <span className="said-by">{who.length}</span>}
@@ -272,7 +272,7 @@ export function CompactRows({
               aria-pressed={picked(value)}
               aria-disabled={held || (out !== null && !picked(value)) ? true : undefined}
               data-value={value}
-              {...valueTone(r.values, value)}
+              {...chosenTone(r.values, value, picked(value))}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 if (held) return;

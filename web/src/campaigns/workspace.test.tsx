@@ -187,9 +187,10 @@ describe("the rater's workspace", () => {
     expect(html).toContain("14 min left on the lease");
     expect(html).toContain("loading the viewer");
     expect(html).toContain('<span class="axis-name">base</span>');
-    // each value in its colour, its key and its name beside it, no shape (record 50, after the next read)
-    expect(html).toContain('data-slot="1"><kbd>1</kbd>DWI');
-    expect(html).toContain('data-slot="9"><kbd>9</kbd>T1w');
+    // each value its key and its name, no shape; none in colour while none is chosen (after reading item by item)
+    expect(html).toContain('<button type="button" class="opt" aria-pressed="false"><kbd>1</kbd>DWI');
+    expect(html).toContain('<button type="button" class="opt" aria-pressed="false"><kbd>9</kbd>T1w');
+    expect(html).not.toContain("data-slot");
     expect(html).not.toContain("vmark");
     // past the tenth value there is no key, and no colour either
     expect(html).toContain('<button type="button" class="opt" aria-pressed="false">Unknown</button>');
@@ -204,6 +205,8 @@ describe("the rater's workspace", () => {
   it("marks the value given and says what the engine refused", () => {
     const html = draw({ campaign: open, given: { kind: "value", value: "T2w" }, refused: "Refused: the lease ran out." });
     expect(html).toContain('class="opt on" aria-pressed="true" data-slot="7"><kbd>7</kbd>T2w');
+    // the chosen value alone is in colour
+    expect(html.match(/data-slot=/gu)?.length).toBe(1);
     expect(html).toContain('title="Refused: the lease ran out.">Refused: the lease ran out.</p>');
   });
 

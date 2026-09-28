@@ -4,8 +4,8 @@
 // elements should get bigger based on available size"). On a laptop the
 // panel is the compact one it was before the large keys; on a big screen
 // the panel, its keys, the file's words, the answer's bar and the head line
-// grow together, by one factor, and the pictures take the rest. The values
-// are coloured by a frame and a bar, no shape beside them. Measured in the
+// grow together, by one factor, and the pictures take the rest. The chosen
+// value alone is coloured by a frame and a bar, no shape beside it. Measured in the
 // desk's own shell (rater.html) and on the gallery's page, in chromium and,
 // with LAYOUT_FIREFOX=1, Firefox. SHOTS=<dir> keeps a screenshot of each.
 
@@ -90,7 +90,7 @@ test("a phone keeps the compact panel under the pictures, nothing sideways", asy
   expect(m.doc.scrollW).toBeLessThanOrEqual(m.doc.clientW);
 });
 
-test("the values carry no shape; each key is framed in its colour, thin all round and a bar on its left, legible in both themes", async ({ page }) => {
+test("the values carry no shape; only the chosen key is framed in its colour, the others stay neutral, legible in both themes", async ({ page }) => {
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.setViewportSize({ width: 1366, height: 768 });
@@ -98,32 +98,81 @@ test("the values carry no shape; each key is framed in its colour, thin all roun
     const m = await reader(page);
     expect(m.marks).toBe(0);
     expect(m.shapes).toBe(0);
-    await shot(page, `reader-colours-${scheme}`);
-    const keys = await page.evaluate(() => {
-      const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
-      const lum = (c: number[]) => {
-        const [r, g, b] = c.map((v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4));
-        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      };
-      const contrast = (a: string, b: string) => {
-        const [x, y] = [lum(rgb(a)), lum(rgb(b))].sort((p, q) => q - p);
-        return (x + 0.05) / (y + 0.05);
-      };
-      const page = getComputedStyle(document.body).backgroundColor;
-      return [...document.querySelectorAll<HTMLElement>('.axis-row[aria-label="body_part"] .opt[data-slot]')].map((el) => {
-        const s = getComputedStyle(el);
-        return { left: parseFloat(s.borderLeftWidth), top: parseFloat(s.borderTopWidth), same: s.borderTopColor === s.borderLeftColor && s.borderRightColor === s.borderLeftColor && s.borderBottomColor === s.borderLeftColor, contrast: contrast(s.borderLeftColor, page), text: contrast(s.color, s.backgroundColor === "rgba(0, 0, 0, 0)" ? page : s.backgroundColor) };
+    const keys = () =>
+      page.evaluate(() => {
+        const rgb = (c: string) => (c.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+        const lum = (c: number[]) => {
+          const [r, g, b] = c.map((v) => (v / 255 <= 0.04045 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4));
+          return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        };
+        const contrast = (a: string, b: string) => {
+          const [x, y] = [lum(rgb(a)), lum(rgb(b))].sort((p, q) => q - p);
+          return (x + 0.05) / (y + 0.05);
+        };
+        const page = getComputedStyle(document.body).backgroundColor;
+        // a key with no value colour: the neutral frame every key had before the colours
+        const plain = [...document.querySelectorAll<HTMLElement>(".opt:not([data-slot])")].find((el) => !el.classList.contains("on"));
+        const neutral = plain ? getComputedStyle(plain).borderTopColor : null;
+        return [...document.querySelectorAll<HTMLElement>('.axis-row[aria-label="body_part"] .opt')].map((el) => {
+          const s = getComputedStyle(el);
+          return {
+            name: el.textContent ?? "",
+            on: el.classList.contains("on"),
+            slot: el.hasAttribute("data-slot"),
+            left: parseFloat(s.borderLeftWidth),
+            top: parseFloat(s.borderTopWidth),
+            same: s.borderTopColor === s.borderLeftColor && s.borderRightColor === s.borderLeftColor && s.borderBottomColor === s.borderLeftColor,
+            neutral: s.borderLeftColor === neutral && s.borderTopColor === neutral,
+            weight: Number(s.fontWeight),
+            outline: s.outlineStyle !== "none" && parseFloat(s.outlineWidth) > 0 ? s.outlineColor : null,
+            frame: s.borderLeftColor,
+            contrast: contrast(s.borderLeftColor, page),
+            text: contrast(s.color, s.backgroundColor === "rgba(0, 0, 0, 0)" ? page : s.backgroundColor),
+          };
+        });
       });
-    });
-    expect(keys.length).toBe(6);
-    for (const k of keys) {
-      expect(k.same).toBe(true);
-      expect(k.left).toBeGreaterThan(k.top);
-      expect(k.top).toBeGreaterThanOrEqual(1);
-      // a frame is a mark of the interface: 3 to 1 against the page; the words 4.5 to 1
-      expect(k.contrast).toBeGreaterThanOrEqual(3);
-      expect(k.text).toBeGreaterThanOrEqual(4.5);
+    // nothing chosen yet: no key in colour
+    const before = await keys();
+    expect(before.length).toBe(6);
+    for (const k of before) {
+      expect(k.slot).toBe(false);
+      expect(k.neutral).toBe(true);
+      expect(k.left).toBe(k.top);
     }
+    // each value chosen in turn, by a click: that key alone takes its colour
+    const frames = new Set<string>();
+    for (let n = 0; n < 6; n++) {
+      await page.locator('.axis-row[aria-label="body_part"] .opt').nth(n).click();
+      const now = await keys();
+      const on = now.filter((k) => k.slot);
+      expect(on.length).toBe(1);
+      expect(on[0].on).toBe(true);
+      expect(on[0].name).toBe(now[n].name);
+      expect(on[0].same).toBe(true);
+      expect(on[0].left).toBeGreaterThan(on[0].top);
+      expect(on[0].top).toBeGreaterThanOrEqual(1);
+      expect(on[0].weight).toBeGreaterThanOrEqual(600);
+      // a frame is a mark of the interface: 3 to 1 against the page; the words 4.5 to 1
+      expect(on[0].contrast).toBeGreaterThanOrEqual(3);
+      expect(on[0].text).toBeGreaterThanOrEqual(4.5);
+      frames.add(on[0].frame);
+      for (const k of now.filter((x) => !x.slot)) {
+        expect(k.neutral).toBe(true);
+        expect(k.weight).toBeLessThan(600);
+      }
+      if (n === 1) await shot(page, `reader-chosen-${scheme}`);
+    }
+    // the values keep colours of their own
+    expect(frames.size).toBe(6);
+    // by the keyboard: the key moved to shows the focus ring, apart from the chosen key's frame
+    await page.locator('.axis-row[aria-label="body_part"] .opt').nth(0).focus();
+    await page.keyboard.press("Tab");
+    const focused = await keys();
+    const ring = focused.find((k) => k.outline !== null);
+    expect(ring).toBeDefined();
+    expect(ring!.slot).toBe(false);
+    expect(focused.filter((k) => k.slot).length).toBe(1);
+    await shot(page, `reader-focus-${scheme}`);
   }
 });
 

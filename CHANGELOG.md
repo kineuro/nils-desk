@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- In the reader, only the chosen value's key is drawn in its colour: its frame, the thick bar on its left, a tinted fill and heavier words. The keys not chosen are neutral again, so the chosen one stands out while reading item by item. The same holds for the value filter in My answers. The gallery's cards and its legend keep their colours.
+
+### Fixed
+
+- The chosen key took the brand's colour instead of its value's, because the shell's rule for a chosen key came later in the desk's cascade.
+
 ## [1.0.0-alpha.55] - 2026-09-27
 
 A whole answer taken from the reader's search keeps what its other values imply as implied, so a later choice can still move it: after "MP2RAGE, no construct, T1w" INV2 is no longer greyed out. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
