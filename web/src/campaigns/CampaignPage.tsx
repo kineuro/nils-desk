@@ -50,6 +50,8 @@ import { R48, statsFor } from "./readerDoors";
 import { RaterStats } from "./ReaderParts";
 import { galleryOffered } from "./gallery";
 import { Suggestions } from "./Suggestions";
+import { abServed, isAb } from "./ab";
+import { AbPanel } from "./AbReader";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -74,7 +76,7 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   const c = load.c;
   return (
     <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} stats={load.stats} said={said} missing={missing} onAct={setActing}>
-      <Suggestions caps={caps} campaign={c} />
+      {isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
       {acting === "close" && (
         <CloseDialog
           campaign={c}
@@ -124,6 +126,8 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
   const items = c.items ?? [];
   const shown = filter ? items.filter((i) => i.state === filter) : items;
   const rate = rateRefusal(caps, c) === null && (c.counts.items.open ?? 0) > 0;
+  // an A/B campaign (record 48) is settled on a page of its own, never in a gallery
+  const ab = isAb(c) && abServed(caps);
   const adjudicate = adjudicatorHas(caps, c);
   const close = closeRefusal(caps, c);
   const exp = exportRefusal(caps);
@@ -144,11 +148,11 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           </p>
         </div>
         {rate && (
-          <a className="button" href={href("campaigns", String(c.id), "rate")}>
-            Rate
+          <a className="button" href={href("campaigns", String(c.id), ab ? "settle" : "rate")} title={ab ? "each item's candidates as A and B, blind to who gave which" : undefined}>
+            {ab ? "Settle" : "Rate"}
           </a>
         )}
-        {rate && galleryOffered(caps, c.question) && (
+        {rate && !ab && galleryOffered(caps, c.question) && (
           <a className="button secondary" href={href("campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
             Gallery
           </a>

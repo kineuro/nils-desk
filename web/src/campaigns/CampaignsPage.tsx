@@ -5,6 +5,7 @@
 //   #campaigns/<id>             one campaign
 //   #campaigns/<id>/rate        the rating workspace (?alone=1 the items read one by one, ?amend=<answer> one's own answer to correct)
 //   #campaigns/<id>/adjudicate  the adjudicator's view
+//   #campaigns/<id>/settle      an A/B campaign's items settled blind (record 48, the reference read by judges)
 //   #campaigns/<id>/gallery     a hundred items of a one-axis campaign at once (record 50)
 //   #campaigns/label-sets[/<n>] the label sets, or one
 
@@ -34,12 +35,14 @@ import { LabelSetPage, LabelSetsPage } from "./LabelSets";
 import { MakeDialog } from "./MakeCampaign";
 import { Gallery } from "./Gallery";
 import { Workspace } from "./Workspace";
+import { AbReader } from "./AbReader";
 import "./campaigns.css";
 
 export function CampaignsPage({ caps, page, arg, query }: { caps: Capabilities; page: string | null; arg: string | null; query?: Record<string, string> }) {
   if (page === "label-sets") return arg && /^\d+$/u.test(arg) ? <LabelSetPage caps={caps} id={Number(arg)} /> : <LabelSetsPage caps={caps} />;
   if (page && /^\d+$/u.test(page)) {
     if (arg === "rate") return <Workspace key={`${page}/rate/${query?.amend ?? ""}/${query?.alone ?? ""}`} caps={caps} id={page} role="rater" query={query} />;
+    if (arg === "settle") return <AbReader key={`${page}/settle`} caps={caps} id={page} />;
     if (arg === "adjudicate") return <Workspace key={`${page}/adj`} caps={caps} id={page} role="adjudicator" />;
     if (arg === "gallery") return <Gallery key={`${page}/gallery`} caps={caps} id={page} />;
     return <CampaignPage caps={caps} id={page} missing={query?.missing && /^\d+$/u.test(query.missing) ? Number(query.missing) : null} />;

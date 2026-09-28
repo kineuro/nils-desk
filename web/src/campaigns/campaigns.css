@@ -337,3 +337,42 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .mine-what .meta { font-size: 12px; }
 .axis-rows.compact .opt.on[data-slot] { border-left-width: 3px; }
 .axis-rows.compact .opt.on.implied[data-slot] { border-style: dashed; border-left-style: solid; }
+
+/* The A/B view (record 48, the reference read by judges): one row per asked
+   axis. A split axis lists its candidates, each a line with its letter, its
+   value and the reason it cites, the chosen one framed in its value's colour
+   as the reader's chosen key is; an axis the voters agree on is one line,
+   filled in. The row the keys act on is lit on
+   its left; neither and can't tell sit at a row's end, the cause under it
+   once the person decided. The reader's zoom scales it with the screen. */
+.ab-rows { display: grid; gap: 0.15rem; }
+.ab-row { display: grid; grid-template-columns: 6.4rem minmax(0, 1fr); gap: 0.15rem 0.4rem; align-items: start; padding: 0.1rem 0.3rem 0.1rem 0.4rem; border: 1px solid transparent; border-left: 3px solid transparent; border-radius: var(--n-radius); }
+.ab-row.active { border-color: var(--n-line); border-left-color: var(--n-focus); background: var(--n-bg-raised); }
+.ab-row.split.open { border-left-color: var(--n-caution-icon); }
+.ab-row.split.open.active { border-left-color: var(--n-focus); }
+.ab-axis { display: flex; flex-direction: column; font-size: 12.5px; line-height: 1.4rem; overflow: hidden; white-space: nowrap; }
+.ab-state { font-size: 10.5px; line-height: 1.1; color: var(--n-text-faint); }
+.ab-state.open { color: var(--n-caution-fg); }
+.ab-cands { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.ab-row.agreed .ab-cands { flex-direction: row; flex-wrap: wrap; align-items: center; }
+.ab-cand.opt { display: grid; grid-template-columns: auto auto minmax(0, 1fr); align-items: baseline; gap: 0.35rem; min-height: 1.3rem; padding: 0.05rem 0.4rem; font-size: 12px; line-height: 1.25; text-align: left; justify-content: stretch; }
+.ab-row.agreed .ab-cand.opt { flex: 1 1 14rem; min-width: 0; }
+.ab-cand kbd { font-size: 10px; }
+.ab-v { white-space: nowrap; }
+.ab-reason { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; color: var(--n-text-dim); font-size: 11.5px; }
+.ab-row.agreed .ab-reason { display: block; white-space: nowrap; text-overflow: ellipsis; -webkit-line-clamp: none; }
+.ab-else { display: flex; gap: 0.2rem; flex-wrap: wrap; }
+.ab-else .opt { min-height: 1.2rem; padding: 0 0.35rem; font-size: 11.5px; }
+.ab-else .opt kbd { margin-right: 0.25rem; font-size: 10px; }
+.ab-none { font-size: 11.5px; }
+.ab-causes { grid-column: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem; }
+.ab-causes .meta { font-size: 11px; margin-right: 0.15rem; }
+.ab-causes .opt { min-height: 1.2rem; padding: 0 0.3rem; font-size: 11px; }
+.ab-causes .opt kbd { margin-right: 0.2rem; font-size: 9.5px; }
+.ab-free { grid-column: 2; display: grid; gap: 0.2rem; }
+.ab-free .input input { font-size: 12px; }
+.ab-found { display: flex; flex-wrap: wrap; gap: 0.15rem 0.2rem; }
+.ab-found .opt { min-height: 1.3rem; padding: 0 0.35rem; font-size: 11.5px; }
+.ab-found .opt.lit { outline: 2px solid var(--n-focus); outline-offset: 0; }
+.ab-panel { display: grid; gap: 0.4rem; margin-top: 0.6rem; }
+.ab-panel h2 { margin: 0; font-size: var(--n-text-size-h2); }
