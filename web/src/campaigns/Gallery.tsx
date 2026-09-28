@@ -17,7 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
-import { campaigns, refused as refusedWords, type Campaign } from "./client";
+import { campaigns, refused as refusedWords, suggestOf, type Campaign } from "./client";
 import { MyAnswers } from "./MyAnswers";
 import { valueTone } from "./values";
 import {
@@ -243,19 +243,22 @@ export function GalleryBody(p: GalleryBodyProps) {
           {p.failed}
         </p>
       )}
+      {s && p.campaign && suggestOf(p.campaign) === "none" && <p className="meta">This campaign shows no suggestion: give each item its value; the items stay in the order they were listed.</p>}
       {s && (
         <div className="gallery-bar">
-          <label className="g-order">
-            <span className="meta">Order</span>
-            <select value={s.order} onChange={(e) => p.onOrder(e.target.value as GalleryOrder)} aria-label="order">
-              {ORDERS.map((o) => (
-                <option key={o.order} value={o.order}>
-                  {o.words}
-                </option>
-              ))}
-            </select>
-            <kbd>o</kbd>
-          </label>
+          {!(p.campaign && suggestOf(p.campaign) === "none") && (
+            <label className="g-order">
+              <span className="meta">Order</span>
+              <select value={s.order} onChange={(e) => p.onOrder(e.target.value as GalleryOrder)} aria-label="order">
+                {ORDERS.map((o) => (
+                  <option key={o.order} value={o.order}>
+                    {o.words}
+                  </option>
+                ))}
+              </select>
+              <kbd>o</kbd>
+            </label>
+          )}
           <span className="g-keys meta" aria-label="keys">
             {values.map((v) => {
               const k = keyOfValue(values, v);

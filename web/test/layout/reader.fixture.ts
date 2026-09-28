@@ -259,8 +259,8 @@ export interface Asked {
  * reader's tests. `derive` and `header` false answer 404, as an engine
  * before them; `why` false serves no text or physics.
  */
-export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; combos?: boolean; axis?: boolean; log?: Asked[] } = {}): typeof fetch {
-  const { derive = true, header = true, texts = true, seen = false, combos = true, axis = false, log = [] } = opts;
+export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; combos?: boolean; axis?: boolean; suggest?: string; log?: Asked[] } = {}): typeof fetch {
+  const { derive = true, header = true, texts = true, seen = false, combos = true, axis = false, suggest, log = [] } = opts;
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://desk.test");
@@ -270,7 +270,9 @@ export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: b
     log.push({ method, path, body });
     const c = `/api/campaigns/${CAMPAIGN_ID}`;
     const asked = axis ? AXIS_CAMPAIGN : CAMPAIGN;
-    const campaign = seen ? { ...asked, items: (asked as unknown as { items: object[] }).items.map((i) => ({ ...i, blind: false })) } : asked;
+    const shown = seen ? { ...asked, items: (asked as unknown as { items: object[] }).items.map((i) => ({ ...i, blind: false })) } : asked;
+    // what the campaign says it shows beside each item, where the engine says it
+    const campaign = suggest ? { ...shown, suggest } : shown;
     if (method === "GET" && path === c) return json(200, campaign);
     if (method === "GET" && path === "/api/campaigns") return json(200, { count: 1, campaigns: [CAMPAIGN] });
     if (method === "POST" && path === `${c}/claim`) {
@@ -292,6 +294,7 @@ export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: b
       return json(200, older);
     }
     if (method === "GET" && path === `${c}/items/${ITEM_ID}/header`) return header ? json(200, HEADER_DOC) : json(404, { error: "no such door" });
+    if (method === "GET" && path === `${c}/batches`) return json(200, { open: 2, sealed: 0, unsuggested: 0, groups: [] });
     if (method === "GET" && path === `${c}/combinations`) return combos ? json(200, COMBOS) : json(404, { error: "no such door" });
     if (method === "POST" && path === `${c}/items/${ITEM_ID}/derive`) return derive ? json(200, { derived: deriveOf((body as { value?: Record<string, unknown> } | null)?.value ?? {}) }) : json(404, { error: "no such door" });
     return json(404, { error: `no door ${method} ${path}` });

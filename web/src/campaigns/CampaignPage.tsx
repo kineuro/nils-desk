@@ -36,6 +36,8 @@ import {
   sourceWords,
   STATES,
   stateWords,
+  suggestOf,
+  SUGGEST_WORDS,
   type Answer,
   type Campaign,
   type Closure,
@@ -147,7 +149,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           </a>
         )}
         {rate && galleryOffered(caps, c.question) && (
-          <a className="button secondary" href={href("campaigns", String(c.id), "gallery")} title="a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move">
+          <a className="button secondary" href={href("campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
             Gallery
           </a>
         )}
@@ -231,6 +233,14 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
             {c.adjudication.metric !== "exact" && c.adjudication.threshold !== null && c.adjudication.threshold !== undefined && ` below ${c.adjudication.threshold}`}
           </dd>
         </div>
+        {(c.question.kind === "axis" || c.question.kind === "axes") && (
+          <div className="facts-pair">
+            <dt>suggests</dt>
+            <dd>
+              {SUGGEST_WORDS[suggestOf(c)].words} · {SUGGEST_WORDS[suggestOf(c)].says}
+            </dd>
+          </div>
+        )}
         <div className="facts-pair">
           <dt>closes into</dt>
           <dd>{CLOSES_WORDS[c.closes_into] ?? c.closes_into}</dd>

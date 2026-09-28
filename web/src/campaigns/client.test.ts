@@ -33,7 +33,9 @@ import {
   progress,
   questionWords,
   rateRefusal,
+  showsRules,
   sourceWords,
+  suggestOf,
   type Answer,
   type AxesConstraints,
   type Campaign,
@@ -129,6 +131,7 @@ describe("making one", () => {
         adjudication: { when: "disagree", metric: "exact" },
         closes_into: "stage",
         lease_seconds: 3600,
+        suggest: "none",
       },
     });
     expect(makeBody(draft({ source: "handle", from: "12" })).ok && (makeBody(draft({ source: "handle", from: "12" })) as { body: { source: unknown } }).body.source).toEqual({ handle: 12 });
@@ -136,6 +139,22 @@ describe("making one", () => {
     expect(review.ok && review.body.source).toEqual({ review: { kind_prefix: "base:" } });
     const one = makeBody(draft({ source: "review", from: "base:vote" }));
     expect(one.ok && one.body.source).toEqual({ review: { kind: "base:vote" } });
+  });
+
+  it("says what the raters are shown, nothing unless chosen, for an axis or an axes question only", () => {
+    const body = (p: Partial<ReturnType<typeof emptyDraft>>) => {
+      const b = makeBody(draft(p));
+      return b.ok ? b.body : null;
+    };
+    expect(body({})?.suggest).toBe("none");
+    expect(body({ suggest: "rules" })?.suggest).toBe("rules");
+    expect(body({ kind: "axes", axes: ["base"], suggest: "imported" })?.suggest).toBe("imported");
+    expect(body({ kind: "pick", role: "main_t1" })).not.toHaveProperty("suggest");
+    // an engine that does not say showed the rules
+    expect(suggestOf({})).toBe("rules");
+    expect(suggestOf({ suggest: "none" })).toBe("none");
+    expect(showsRules({ suggest: "imported" })).toBe(false);
+    expect(showsRules({ suggest: "rules" })).toBe(true);
   });
 
   it("says what it still needs, in words", () => {

@@ -12,7 +12,7 @@ import { may } from "../grants";
 import { review, type PackDoc } from "../review/client";
 import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
-import { campaigns, CLOSES_WORDS, closesFor, emptyDraft, KIND_WORDS, kindsOffered, makeBody, makeRefusal, refused as refusedWords, type Draft, type DraftField, type Prefill, type SourceKind } from "./client";
+import { campaigns, CLOSES_WORDS, closesFor, emptyDraft, KIND_WORDS, kindsOffered, makeBody, makeRefusal, refused as refusedWords, SUGGEST_WORDS, type Draft, type DraftField, type Prefill, type SourceKind, type SuggestMode } from "./client";
 
 const SOURCES: { kind: SourceKind; words: string; placeholder: string; says: string }[] = [
   { kind: "selection", words: "A selection", placeholder: "name@version", says: "Frozen now: its stacks, or its sessions for a pick, become the items." },
@@ -150,6 +150,19 @@ export function MakeForm({ caps, draft: d, pack, onChange: set }: { caps: Capabi
             ))}
           </span>
           <span className="meta">One answer names every axis; the pack refuses a combination it does not allow.</span>
+        </fieldset>
+      )}
+      {(d.kind === "axis" || d.kind === "axes") && (
+        <fieldset className="field">
+          <legend className="label">Shown beside each item</legend>
+          <span className="chips">
+            {(["none", "rules", "imported"] as SuggestMode[]).map((m) => (
+              <button key={m} type="button" className={d.suggest === m ? "opt on" : "opt"} aria-pressed={d.suggest === m} onClick={() => set({ suggest: m })}>
+                {SUGGEST_WORDS[m].words}
+              </button>
+            ))}
+          </span>
+          <span className="meta">{SUGGEST_WORDS[d.suggest].says} Said once; the campaign keeps it.</span>
         </fieldset>
       )}
       {d.kind === "pick" && (
