@@ -130,7 +130,8 @@ export function AbReader({ caps, id }: { caps: Capabilities; id: string }) {
       },
       (e: unknown) => current.current === at && setSheetFailed(refusedWords(e)),
     );
-    readingFor(capsNow.current, id, q, item).then((r) => current.current === at && setReading(r));
+    // read blind whatever a door sends: the candidates are the only answers shown, and never as a system's
+    readingFor(capsNow.current, id, q, { ...item, blind: true }).then((r) => current.current === at && setReading(r));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
