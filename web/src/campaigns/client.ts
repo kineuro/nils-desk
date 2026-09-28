@@ -175,6 +175,8 @@ export interface Campaign {
   closed_at: string | null;
   closed_by: string | null;
   agreement: Agreement | null;
+  /** What the reader shows beside each item as the answer suggested, said when the campaign was made; absent from an engine before it, which showed the rules. */
+  suggest?: SuggestMode | string;
   counts: Counts;
   /** One campaign's read carries its items and assignments; the list leaves them out. */
   items?: Item[];
@@ -288,6 +290,8 @@ export interface MakeBody extends Json {
   adjudication: Json;
   closes_into: string;
   lease_seconds: number;
+  /** An axis or an axes question: none, rules or imported. */
+  suggest?: SuggestMode;
 }
 
 /** The body of an answer: a value for an axis, a pick and a free question, a form for a form, a file for a derivative. */
@@ -736,6 +740,26 @@ export function closedWords(r: Closed, into: string): string {
 
 export type SourceKind = "selection" | "handle" | "review";
 
+/** What a campaign shows its raters beside each item as the answer suggested. */
+export type SuggestMode = "none" | "rules" | "imported";
+
+/** Each way a campaign may suggest, in the words the desk says it with. */
+export const SUGGEST_WORDS: Record<SuggestMode, { words: string; says: string }> = {
+  none: { words: "nothing", says: "Raters read every item unled: no answer is shown or filled in, no evidence of the rules, no batches." },
+  rules: { words: "the rules' answer", says: "The engine's own answer is shown and filled in, with its evidence, and like stacks can be accepted in batches." },
+  imported: { words: "imported suggestions", says: "Only suggestions brought in from a file are shown, never the rules' answer, and there are no batches." },
+};
+
+/** What a campaign suggests; an engine that does not say showed the rules. */
+export function suggestOf(c: Pick<Campaign, "suggest">): SuggestMode {
+  return c.suggest === "none" || c.suggest === "imported" ? c.suggest : "rules";
+}
+
+/** Whether a campaign shows its raters the rules' answer, and so offers batches of like stacks. */
+export function showsRules(c: Pick<Campaign, "suggest">): boolean {
+  return suggestOf(c) === "rules";
+}
+
 export interface Draft {
   name: string;
   source: SourceKind;
@@ -761,6 +785,8 @@ export interface Draft {
   threshold: string;
   closesInto: string;
   leaseMinutes: number;
+  /** An axis or an axes question: what the raters are shown beside each item; nothing unless chosen. */
+  suggest: SuggestMode;
 }
 
 export interface DraftField {
@@ -794,6 +820,7 @@ export function emptyDraft(prefill: Partial<Prefill> = {}): Draft {
     threshold: "0.8",
     closesInto: "stage",
     leaseMinutes: 60,
+    suggest: "none",
   };
 }
 
@@ -889,6 +916,7 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
       adjudication: { when, metric, ...(metric !== "exact" || d.threshold.trim() !== "0.8" ? { threshold } : {}) },
       closes_into: closes,
       lease_seconds: Math.max(60, Math.round(d.leaseMinutes * 60)),
+      ...(d.kind === "axis" || d.kind === "axes" ? { suggest: d.suggest } : {}),
     },
   };
 }

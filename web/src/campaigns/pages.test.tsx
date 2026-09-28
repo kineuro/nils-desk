@@ -87,6 +87,13 @@ describe("one campaign", () => {
     expect(html).toContain("selection probe@1 · handle 5 · stacks");
   });
 
+  it("says what the raters are shown beside each item: what the campaign was made with, the rules for an engine that does not say", () => {
+    expect(draw()).toContain("<dt>suggests</dt><dd>the rules&#x27; answer · ");
+    const unled = draw(capsFor({ grants: ADMIN }), { ...open, suggest: "none" });
+    expect(unled).toContain("<dt>suggests</dt><dd>nothing · Raters read every item unled");
+    expect(draw(capsFor({ grants: ADMIN }), { ...open, suggest: "imported" })).toContain("<dt>suggests</dt><dd>imported suggestions · ");
+  });
+
   it("lists the items by state with their answers, and filters them", () => {
     const html = draw();
     expect(html).toContain("all <b>6</b>");
@@ -166,6 +173,15 @@ describe("making one", () => {
     expect(html).toContain('<option value="body_part">body_part</option>');
     expect(html).toContain("The open items of that kind, adopted as they are");
     expect(html).not.toContain("Several axes");
+  });
+
+  it("asks what the raters are shown, nothing unless chosen, for an axis question and not a form", () => {
+    const html = renderToStaticMarkup(<MakeForm caps={capsFor()} draft={emptyDraft()} pack={pack} onChange={none} />);
+    expect(html).toContain("Shown beside each item");
+    expect(html).toContain('class="opt on" aria-pressed="true">nothing</button>');
+    expect(html).toContain("Raters read every item unled");
+    const form = renderToStaticMarkup(<MakeForm caps={capsFor()} draft={{ ...emptyDraft(), kind: "form" }} pack={pack} onChange={none} />);
+    expect(form).not.toContain("Shown beside each item");
   });
 
   it("offers the axes question where the engine asks it, and a form's fields", () => {

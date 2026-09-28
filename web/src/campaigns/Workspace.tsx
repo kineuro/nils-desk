@@ -34,6 +34,8 @@ import {
   questionWords,
   rateRefusal,
   refused as refusedWords,
+  showsRules,
+  suggestOf,
   UNSURE_KEY,
   unsureOf,
   type Answer,
@@ -274,8 +276,10 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       });
     clock.current.start(item.id, Date.now());
     if (q.kind === "axis" || q.kind === "axes") {
+      // a campaign made to show nothing is read blind whole, whatever a door sends
+      const unled = campaign !== null && suggestOf(campaign) === "none";
       // the suggestion filled in, unless a key was pressed before it came
-      readingFor(capsNow.current, id, q, item).then((r) => {
+      readingFor(capsNow.current, id, q, unled ? { ...item, blind: true } : item).then((r) => {
         if (currentItem.current !== item.id) return;
         const s = suggestionOf(q, r);
         const g0 = givenOf(q, s);
@@ -294,7 +298,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         // the engine's own word on what comes next, whether or not the campaign listed it
         for (const n of nextItems.current) if (n.item !== null && n.item !== item.id && !ahead.has(n.item)) ahead.set(n.item, items.find((i) => i.id === n.item) ?? { id: n.item, stack_id: n.stack, review_item_id: null });
         for (const n of ahead.values()) {
-          void readingFor(capsNow.current, id, q, n).then((r) => {
+          void readingFor(capsNow.current, id, q, unled ? { ...n, blind: true } : n).then((r) => {
             const path = headerDoorOf(capsNow.current, id, n.id, r);
             if (path) headerFor(path).catch(() => undefined);
           });
@@ -420,7 +424,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
   }, [campaign, busy, holding, openAmend]);
 
   // the batches of like stacks (record 48 R1)
-  const batchesOffered = served(caps, R48.batches) && (q?.kind === "axis" || q?.kind === "axes") && role === "rater";
+  // only a campaign made to show the rules' answer has batches: a batch shows it
+  const batchesOffered = served(caps, R48.batches) && (q?.kind === "axis" || q?.kind === "axes") && role === "rater" && campaign !== null && showsRules(campaign);
   const openBatches = useCallback(() => {
     setMode("batch");
     setBatches(null);
@@ -985,7 +990,7 @@ function ItemLine(p: WorkspaceBodyProps & { left: number | null; children?: Reac
         {holding.item.round > 1 ? ` · round ${holding.item.round}` : ""}
       </span>
       {(holding.item.blind || p.blind) && (
-        <span className="tag gated" title="of a sealed sample: read without a suggestion, never in a batch">
+        <span className="tag gated" title={suggestOf(p.campaign) === "none" && !holding.item.blind ? "this campaign shows no suggestion: every item is read unled, never in a batch" : "of a sealed sample: read without a suggestion, never in a batch"}>
           blind
         </span>
       )}

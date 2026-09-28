@@ -10,7 +10,7 @@ import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
-import { refused as refusedWords, type Campaign } from "./client";
+import { refused as refusedWords, suggestOf, type Campaign } from "./client";
 import { gallery, R50, singleAxis } from "./gallery";
 
 interface Summary {
@@ -49,8 +49,10 @@ export function Suggestions({ caps, campaign: c }: { caps: Capabilities; campaig
   const [author, setAuthor] = useState("");
   const [said, setSaid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const reads = served(caps, R50.suggestions) && (c.question.kind === "axis" || c.question.kind === "axes");
-  const brings = served(caps, R50.suggest) && c.status === "open" && (c.owner === caps.person.subject || may(caps, "review:work"));
+  // a campaign made to show nothing, or the rules, takes no suggestion from outside
+  const mode = suggestOf(c);
+  const reads = served(caps, R50.suggestions) && (c.question.kind === "axis" || c.question.kind === "axes") && mode !== "none";
+  const brings = served(caps, R50.suggest) && c.status === "open" && (c.owner === caps.person.subject || may(caps, "review:work")) && (c.suggest === undefined || mode === "imported");
   useEffect(() => {
     if (reads) gallery.suggestions(c.id).then((r) => setSum(summaryOf(r)), () => setSum(null));
   }, [reads, c.id]);
@@ -77,7 +79,7 @@ export function Suggestions({ caps, campaign: c }: { caps: Capabilities; campaig
           {singleAxis(c.question) ? " Check them in the gallery." : ""}
         </p>
       ) : (
-        <p className="meta">None from outside yet: the reader suggests the engine's own.</p>
+        <p className="meta">{mode === "imported" ? "None brought in yet: until one is, an item shows no suggestion." : "None from outside: the reader suggests the engine's own."}</p>
       )}
       {brings && (
         <div className="row actions">
