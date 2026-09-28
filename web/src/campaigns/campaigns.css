@@ -308,8 +308,12 @@ table.thin.header-table td:first-child { padding-left: 0; }
 [data-slot="8"] { --vc: var(--n-value-8); --vc-bg: var(--n-value-8-bg); }
 [data-slot="9"] { --vc: var(--n-value-9); --vc-bg: var(--n-value-9-bg); }
 [data-slot="10"] { --vc: var(--n-value-10); --vc-bg: var(--n-value-10-bg); }
-.opt[data-slot] { border: 1px solid var(--vc); border-left: 3px solid var(--vc); }
-.opt[data-slot].on { background: var(--vc-bg); color: var(--n-text); box-shadow: inset 0 0 0 1px var(--vc); }
+/* a key offered to choose by is neutral until it is chosen, and the chosen one alone takes its value's
+   colour (after reading item by item: "only the selected option should be in colour, not all; it
+   becomes hard to see which is selected"): the frame and the bar, the tinted fill and heavier words.
+   The keyboard's focus stays the outline, apart from the frame. Drawn over the shell's .opt.on, which
+   comes later in the desk's cascade and would otherwise put the brand's colour on the chosen key. */
+.opt.on[data-slot] { border: 1px solid var(--vc); border-left: 4px solid var(--vc); background: var(--vc-bg); color: var(--n-text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--vc); }
 .g-key[data-slot] { padding: 0 0.3rem 0 0.2rem; border: 1px solid var(--vc); border-left: 3px solid var(--vc); background: var(--vc-bg); border-radius: var(--n-radius); color: var(--n-text); }
 /* a gallery card takes the colour of the value it shows now, and changes with it */
 .g-cell[data-slot] { border: 1px solid var(--vc); border-left: 5px solid var(--vc); }
@@ -331,4 +335,5 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .mine-row img { width: 4.5rem; height: 1.5rem; object-fit: contain; background: var(--n-bg-sunken); border-radius: var(--n-radius); }
 .mine-what { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; min-width: 0; font-size: 13px; }
 .mine-what .meta { font-size: 12px; }
-.axis-rows.compact .opt[data-slot] { border-left-width: 2px; }
+.axis-rows.compact .opt.on[data-slot] { border-left-width: 3px; }
+.axis-rows.compact .opt.on.implied[data-slot] { border-style: dashed; border-left-style: solid; }
