@@ -29,6 +29,7 @@ import {
   legalProblem,
   makeBody,
   makeHref,
+  picturesOnly,
   prefillOf,
   progress,
   questionWords,
@@ -155,6 +156,22 @@ describe("making one", () => {
     expect(suggestOf({ suggest: "none" })).toBe("none");
     expect(showsRules({ suggest: "imported" })).toBe(false);
     expect(showsRules({ suggest: "rules" })).toBe(true);
+  });
+
+  it("asks for the pictures alone only where it is chosen, of an axis or an axes question that suggests nothing", () => {
+    const body = (p: Partial<ReturnType<typeof emptyDraft>>) => {
+      const b = makeBody(draft(p));
+      return b.ok ? b.body : null;
+    };
+    expect(body({})).not.toHaveProperty("hide_header");
+    expect(body({ hideHeader: true })?.hide_header).toBe(true);
+    expect(body({ kind: "axes", axes: ["base"], hideHeader: true })?.hide_header).toBe(true);
+    expect(body({ suggest: "rules", hideHeader: true })).not.toHaveProperty("hide_header");
+    expect(body({ kind: "pick", role: "main_t1", hideHeader: true })).not.toHaveProperty("hide_header");
+    // an engine that does not say showed the header
+    expect(picturesOnly({})).toBe(false);
+    expect(picturesOnly(null)).toBe(false);
+    expect(picturesOnly({ hide_header: true })).toBe(true);
   });
 
   it("says what it still needs, in words", () => {

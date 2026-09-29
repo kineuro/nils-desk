@@ -163,6 +163,14 @@ export function MakeForm({ caps, draft: d, pack, onChange: set }: { caps: Capabi
             ))}
           </span>
           <span className="meta">{SUGGEST_WORDS[d.suggest].says} Said once; the campaign keeps it.</span>
+          {d.suggest === "none" && (
+            <label className="check">
+              <input type="checkbox" checked={d.hideHeader} onChange={(e) => set({ hideHeader: e.target.checked })} />
+              <span>
+                Pictures only <span className="meta">no series name, sequence or other header text beside them, as in pair mode</span>
+              </span>
+            </label>
+          )}
         </fieldset>
       )}
       {d.kind === "pick" && (

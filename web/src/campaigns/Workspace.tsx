@@ -31,6 +31,7 @@ import {
   itemWords,
   leaseLeft,
   leaseWords,
+  picturesOnly,
   questionWords,
   rateRefusal,
   refused as refusedWords,
@@ -311,7 +312,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         for (const n of nextItems.current) if (n.item !== null && n.item !== item.id && !ahead.has(n.item)) ahead.set(n.item, items.find((i) => i.id === n.item) ?? { id: n.item, stack_id: n.stack, review_item_id: null });
         for (const n of ahead.values()) {
           void readingFor(capsNow.current, id, q, unled ? { ...n, blind: true } : n).then((r) => {
-            const path = headerDoorOf(capsNow.current, id, n.id, r);
+            const path = picturesOnly(campaign) ? null : headerDoorOf(capsNow.current, id, n.id, r);
             if (path) headerFor(path).catch(() => undefined);
           });
         }
@@ -339,7 +340,9 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
   }, [q, settled]);
   useEffect(() => () => deriver.current?.stop(), []);
 
-  const headerDoor = item ? headerDoorOf(caps, id, item.id, reading) : null;
+  // a campaign made to show the pictures alone has no header door, whatever a reading says
+  const picturesAlone = picturesOnly(campaign);
+  const headerDoor = item && !picturesAlone ? headerDoorOf(caps, id, item.id, reading) : null;
   const openHeader = useCallback(() => {
     if (!headerDoor) return;
     setHeaderOpen(true);
@@ -624,8 +627,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       lines={reading?.lines ?? null}
       suggestion={suggestion}
       blind={reading?.blind === true || item?.blind === true}
-      header={reading?.header ?? null}
-      headerLines={headerLinesOf(reading)}
+      header={picturesAlone ? null : (reading?.header ?? null)}
+      headerLines={picturesAlone ? [] : headerLinesOf(reading)}
       headerWhole={headerDoor !== null}
       onHeader={openHeader}
       headerDrawer={headerOpen ? { doc: headerDoc, failed: headerFailed } : null}
@@ -1004,6 +1007,11 @@ function ItemLine(p: WorkspaceBodyProps & { left: number | null; children?: Reac
       {(holding.item.blind || p.blind) && (
         <span className="tag gated" title={suggestOf(p.campaign) === "none" && !holding.item.blind ? "this campaign shows no suggestion: every item is read unled, never in a batch" : "of a sealed sample: read without a suggestion, never in a batch"}>
           blind
+        </span>
+      )}
+      {picturesOnly(p.campaign) && (
+        <span className="tag gated" title="this campaign shows the pictures alone: no series name, sequence or other header text">
+          pictures only
         </span>
       )}
       {holding.amend ? (

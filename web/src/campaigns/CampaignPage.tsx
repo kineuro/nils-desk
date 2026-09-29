@@ -29,6 +29,7 @@ import {
   kappa,
   KIND_WORDS,
   pct,
+  picturesOnly,
   questionWords,
   rateRefusal,
   refused as refusedWords,
@@ -247,6 +248,12 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
             <dd>
               {SUGGEST_WORDS[suggestOf(c)].words} · {SUGGEST_WORDS[suggestOf(c)].says}
             </dd>
+          </div>
+        )}
+        {picturesOnly(c) && (
+          <div className="facts-pair">
+            <dt>shows</dt>
+            <dd>the pictures alone · no series name, sequence or other header text beside them</dd>
           </div>
         )}
         <div className="facts-pair">

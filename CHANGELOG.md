@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- A campaign may show its raters the pictures alone, for the post-contrast study's single reads, where the series name or the sequence could give the answer away. Making an axis or an axes campaign that suggests nothing offers "Pictures only"; the reader of such a campaign then draws no text of the file's header beside the pictures, offers no whole-header door (`h`) and never asks for one, and a tag says "pictures only". The campaign page says it too. It needs an engine that takes `hide_header` (after 1.0.0-alpha.60), which also stops serving the text; a campaign that does not ask it reads as before.
+
 ## [1.0.0-alpha.58] - 2026-09-29
 
 The A/B view settles a stack's split axes blind, by keys, for an A/B campaign, and pair mode reads two stacks of one session side by side for the post-contrast gold. Both need engine 1.0.0-alpha.60 for their doors; against an older engine nothing changes. A gallery's picture that fails is asked for again and then says it is not ready, a stack of planes at one place no longer opens black, and a stack of one plane opens on its own plane. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.

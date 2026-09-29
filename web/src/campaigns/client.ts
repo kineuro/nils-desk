@@ -177,6 +177,8 @@ export interface Campaign {
   agreement: Agreement | null;
   /** What the reader shows beside each item as the answer suggested, said when the campaign was made; absent from an engine before it, which showed the rules. */
   suggest?: SuggestMode | string;
+  /** The reader shows the pictures alone, no text of the file's header beside them, as pair mode does; absent from an engine before it, which showed the header. */
+  hide_header?: boolean;
   counts: Counts;
   /** One campaign's read carries its items and assignments; the list leaves them out. */
   items?: Item[];
@@ -292,6 +294,8 @@ export interface MakeBody extends Json {
   lease_seconds: number;
   /** An axis or an axes question: none, rules or imported. */
   suggest?: SuggestMode;
+  /** An axis or an axes question that suggests none: the pictures alone, no header text. */
+  hide_header?: boolean;
 }
 
 /** The body of an answer: a value for an axis, a pick and a free question, a form for a form, a file for a derivative. */
@@ -758,6 +762,11 @@ export function suggestOf(c: Pick<Campaign, "suggest">): SuggestMode {
   return c.suggest === "none" || c.suggest === "imported" ? c.suggest : "rules";
 }
 
+/** Whether a campaign shows its raters the pictures alone, with no text of the file's header beside them. */
+export function picturesOnly(c: Pick<Campaign, "hide_header"> | null | undefined): boolean {
+  return c?.hide_header === true;
+}
+
 /** Whether a campaign shows its raters the rules' answer, and so offers batches of like stacks. */
 export function showsRules(c: Pick<Campaign, "suggest">): boolean {
   return suggestOf(c) === "rules";
@@ -790,6 +799,8 @@ export interface Draft {
   leaseMinutes: number;
   /** An axis or an axes question: what the raters are shown beside each item; nothing unless chosen. */
   suggest: SuggestMode;
+  /** An axis or an axes question that suggests nothing: the pictures alone, with no text of the file's header; off unless chosen. */
+  hideHeader: boolean;
 }
 
 export interface DraftField {
@@ -824,6 +835,7 @@ export function emptyDraft(prefill: Partial<Prefill> = {}): Draft {
     closesInto: "stage",
     leaseMinutes: 60,
     suggest: "none",
+    hideHeader: false,
   };
 }
 
@@ -920,6 +932,7 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
       closes_into: closes,
       lease_seconds: Math.max(60, Math.round(d.leaseMinutes * 60)),
       ...(d.kind === "axis" || d.kind === "axes" ? { suggest: d.suggest } : {}),
+      ...((d.kind === "axis" || d.kind === "axes") && d.suggest === "none" && d.hideHeader ? { hide_header: true } : {}),
     },
   };
 }
