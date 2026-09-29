@@ -13,6 +13,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 - A gallery's picture, or one beside one's own answers, that fails is asked for again after a pause, twice, and then says "picture not ready" with a button to try again, where it was a blank cell until the page was reloaded.
 - A stack whose planes all sit at one place (a scout taken again in one session) opened its three planes black: its pyramid named no distance between the planes, and the viewer made a volume of no depth. Such planes are now one millimetre apart in the viewer; an engine that gives them the files' thickness (1.0.0-alpha.60 or later) is read as it says.
+- A stack of one plane opens on its own plane, and its "three planes" tab is off: two of its three planes were a line one pixel high, which read as a broken picture. The view a person chose is kept for the next stack.
 
 ## [1.0.0-alpha.57] - 2026-09-29
 

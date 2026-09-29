@@ -37,7 +37,7 @@ import { DoorError } from "../ask/client";
 import { classify, Failure, type Failed } from "../ui/Failure";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { doors, levelShape, type Manifest } from "./doors";
+import { cutsAcross, doors, levelShape, type Manifest } from "./doors";
 import { cameraLabels, geometry, planeCameras, type EdgeLabels, type Planes, type Vec3 } from "./geometry";
 import { close, counters, imageId, open, register, viewWindow } from "./loader";
 import { PLANES, serverPlane as serverPlaneOf, type Plane } from "./prefetch";
@@ -215,6 +215,12 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
         if (!alive) return;
         // the planes fill from the middle until the stack view names a plane
         zRef.current = Math.floor(m.shape[0] / 2);
+        // one plane has nothing to cut across: its own plane, and the view chosen kept for the next stack
+        if (!cutsAcross(m)) {
+          setView("stack");
+          setStackOpened(true);
+          setPlanesOpened(false);
+        }
         setManifest(m);
       })
       .catch((e: unknown) => {
@@ -531,6 +537,8 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
           role="tab"
           aria-selected={view === "planes"}
           className={view === "planes" ? "on" : ""}
+          disabled={!cutsAcross(manifest)}
+          title={cutsAcross(manifest) ? undefined : "one plane: nothing to cut across"}
           onClick={() => {
             setView("planes");
             setPlanesOpened(true);

@@ -4,7 +4,7 @@
 // said so, and the letters at a picture's edges right for axial, coronal,
 // sagittal and an oblique stack, on cornerstone's own cameras.
 import { describe, expect, it } from "vitest";
-import { levelSpacing, planeSpacing, type Manifest } from "./doors";
+import { cutsAcross, levelSpacing, planeSpacing, type Manifest } from "./doors";
 import { cameraLabels, conventional, edgeLabels, geometry, letters, levelOrigin, nearestAxis, planePosition, renderAxes, stackLabels, volumeGrid, type Vec3 } from "./geometry";
 
 const base: Manifest = { codec: "htj2k", tile: 256, levels: 4, shape: [96, 256, 256], spacing: [1, 1, 1], dtype: "uint16", window: { center: 500, width: 1000 } };
@@ -158,5 +158,15 @@ describe("a stack whose planes all sit at one place", () => {
     expect(planeSpacing({ spacing: [2.5, 1, 1] })).toBe(2.5);
     expect(planeSpacing({ spacing: [Number.NaN, 1, 1] })).toBe(1);
     expect(planeSpacing({ spacing: [-3, 1, 1] })).toBe(1);
+  });
+});
+
+describe("a stack of one plane", () => {
+  it("has nothing to cut across, and opens on its own plane", () => {
+    expect(cutsAcross({ shape: [1, 512, 512] })).toBe(false);
+    expect(cutsAcross({ shape: [2, 256, 256] })).toBe(true);
+    // across it, the server's planes are one pixel high: the line a rater saw
+    const one: Manifest = { ...base, shape: [1, 512, 512], spacing: [0.53, 0.53, 0.53], orientation: [0, 1, 0, 0, 0, -1], orientation_known: true };
+    expect(renderAxes(geometry(one), one.shape, levelSpacing(one, 0), "y").h).toBe(1);
   });
 });

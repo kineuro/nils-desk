@@ -99,6 +99,16 @@ export function levelSpacing(m: Manifest, level: number): [number, number, numbe
 }
 
 /**
+ * Whether the stack has planes to cut across: a stack of one plane (a
+ * single scout, one reformatted image) gives three planes of which two are
+ * a line one pixel high, which a rater read as a broken picture. Such a
+ * stack opens on its own plane, whatever view was chosen.
+ */
+export function cutsAcross(m: Pick<Manifest, "shape">): boolean {
+  return Array.isArray(m.shape) && m.shape[0] >= 2;
+}
+
+/**
  * The distance from one plane to the next along the stack, mm: the
  * manifest's, or one where it names none a volume can stand on. A stack
  * whose planes all sit at one place (a scout taken again in one session)
