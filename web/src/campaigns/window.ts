@@ -63,6 +63,8 @@ export function openingNorm(panels: { m: Manifest; ref: number }[]): Norm | null
   return upper > lower ? { lower, upper } : null;
 }
 
+const near = (a: number, b: number) => Math.abs(a - b) <= 1e-6 * Math.max(1, Math.abs(a), Math.abs(b));
+
 export type WindowMode = "shared" | "own";
 
 export interface SharedWindow {
@@ -147,7 +149,9 @@ export function useSharedWindow(panels: Record<string, { stack: number; manifest
       const p = panels[k];
       const r = refs[k];
       if (!p?.manifest || !r || r === "failed" || r.value === null) return;
-      setNorm(toNorm(range, r.value, p.manifest));
+      const next = toNorm(range, r.value, p.manifest);
+      // the viewer tells back the window it was just given as well: an echo within rounding changes nothing, so it cannot loop
+      setNorm((was) => (was && near(was.lower, next.lower) && near(was.upper, next.upper) ? was : next));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [mode, ready, refs, keyOf],

@@ -157,6 +157,36 @@ describe("the reference tissue and one window", () => {
     expect(referenceOf({ values: new Float32Array(64).fill(7), shape: [4, 4, 4], level: 0 }).value).toBeNull();
   });
 
+  it("keeps a post's reference near its pre's: enhancing vessels, plexus and sinuses barely move the head's central median", () => {
+    // a head whose middle is graded tissue (a smooth spread of brain values), as the coarsest level's averaging makes it
+    const shape: [number, number, number] = [24, 48, 48];
+    const [nz, ny, nx] = shape;
+    const pre = head(shape);
+    let k = 0;
+    for (let z = 2; z < nz - 2; z++)
+      for (let y = 4; y < ny - 4; y++)
+        for (let x = 4; x < nx - 4; x++) pre.values[(z * ny + y) * nx + x] = 250 + ((k++ * 37) % 200);
+    // the post: the same head with about 4 % of its voxels (thin lines through the middle, a rim at the back) three times as bright
+    const post: Sample = { ...pre, values: Float32Array.from(pre.values) };
+    let lit = 0;
+    let inHead = 0;
+    for (let z = 2; z < nz - 2; z++)
+      for (let y = 4; y < ny - 4; y++)
+        for (let x = 4; x < nx - 4; x++) {
+          inHead++;
+          if (x % 24 === 0 || y === ny - 5) {
+            post.values[(z * ny + y) * nx + x] *= 3;
+            lit++;
+          }
+        }
+    expect(lit / inHead).toBeGreaterThan(0.03);
+    const a = referenceOf(pre).value!;
+    const b = referenceOf(post).value!;
+    expect(Math.abs(b - a) / a).toBeLessThan(0.03);
+    // so under one window the post's lit voxels read about three times its reference, the pre's the same place about one
+    expect(post.values[(12 * ny + 20) * nx + 24] / b).toBeGreaterThan(2 * (pre.values[(12 * ny + 20) * nx + 24] / a));
+  });
+
   it("places the head in the patient", () => {
     const s = head([16, 32, 32]);
     const m = manifest(16, 2, 100, { spacing: [2, 1, 1], origin: [-16, -16, 100] });
