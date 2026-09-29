@@ -90,6 +90,16 @@ export interface ViewerProps {
   onView?: (view: "stack" | "planes") => void;
   /** The pictures take their keys (keys.ts): the reader's page, where one viewer is the page's. */
   keys?: boolean;
+  /**
+   * Pair mode (the post-contrast study): the plane the stack view shows, set
+   * by a page that keeps two viewers on one slice. A plane set so is not
+   * told back through `onSlice`, so two viewers never chase each other.
+   */
+  slice?: number | null;
+  /** The plane the person moved the stack view to (wheel, keys), for a page that keeps another viewer beside it. */
+  onSlice?: (z: number) => void;
+  /** The stack's manifest once it is read, for a page that matches two stacks' geometry. */
+  onManifest?: (m: Manifest) => void;
 }
 
 interface Numbers {
@@ -166,7 +176,7 @@ function toolGroup(id: string): tools.Types.IToolGroup {
   return group;
 }
 
-export function Viewer({ stack, level: ruleLevel = null, view: initialView = "stack", budget, onEvent, onView, keys = false }: ViewerProps) {
+export function Viewer({ stack, level: ruleLevel = null, view: initialView = "stack", budget, onEvent, onView, keys = false, slice = null, onSlice, onManifest }: ViewerProps) {
   const ids = viewerIds(stack);
   const el = useRef<HTMLDivElement | null>(null);
   const planeEls = useRef<Record<Plane, HTMLDivElement | null>>({ axial: null, coronal: null, sagittal: null });
@@ -205,6 +215,16 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   const zRef = useRef(0);
   const tell = useRef(onEvent);
   tell.current = onEvent;
+  const toldSlice = useRef(onSlice);
+  toldSlice.current = onSlice;
+  const toldManifest = useRef(onManifest);
+  toldManifest.current = onManifest;
+  // pair mode: the plane asked for, and whether the next new image is that ask's, not the person's
+  const asked = useRef<number | null>(slice);
+  asked.current = slice;
+  const following = useRef(false);
+  // the stack view built with its images, so a plane asked for before it was can be shown once it is
+  const [stackReady, setStackReady] = useState(false);
 
   // the manifest, or the reason there is none: a 403 is the gated case, the render path alone is tried
   useEffect(() => {
@@ -222,6 +242,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
           setPlanesOpened(false);
         }
         setManifest(m);
+        toldManifest.current?.(m);
       })
       .catch((e: unknown) => {
         if (!alive) return;
@@ -256,7 +277,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     const level = ruleLevel ?? levelFor(width, manifest.shape[2], manifest.levels);
     levelRef.current = level;
     const [nz] = levelShape(manifest, level);
-    const z0 = Math.floor(nz / 2);
+    const z0 = asked.current !== null ? Math.min(nz - 1, Math.max(0, asked.current)) : Math.floor(nz / 2);
     zRef.current = z0;
     // the first picture: the server's render, replaced when the decoded plane lands
     setFirstUrl(doors.renderUrl(stack, Math.min(manifest.levels - 1, level + 1), z0, manifest.window.width, manifest.window.center));
@@ -279,11 +300,14 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     });
     el.current.addEventListener(cs.Enums.Events.STACK_NEW_IMAGE, () => {
       zRef.current = vp.getCurrentImageIdIndex();
+      if (following.current) following.current = false;
+      else toldSlice.current?.(zRef.current);
     });
     el.current.addEventListener(cs.Enums.Events.CAMERA_MODIFIED, () => letter("stack", vp));
     await vp.setStack(imageIds, z0);
     vp.setProperties(viewWindow(manifest));
     vp.render();
+    setStackReady(true);
     toolGroup(`tg-${stack}`).addViewport(ids.stack, re.id);
     setNumbers((n) => ({ ...n, level, z: z0 }));
   }, [manifest, stack, ruleLevel, since, ids.stack, stackOpened, stamp, letter]);
@@ -295,6 +319,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
       const vid = filling.current?.volumeId;
       filling.current = null;
       stackMounted.current = false;
+      setStackReady(false);
       drawn.current = new Set();
       setPainted(0);
       setWaited(false);
@@ -325,6 +350,20 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   useEffect(() => {
     mount().catch((e: unknown) => setFailed(classify(e)));
   }, [mount]);
+
+  // pair mode: the plane the page asks for, where the stack view is built and shows another
+  useEffect(() => {
+    if (slice === null || !stackReady) return;
+    const vp = engine.current?.getViewport(ids.stack) as cs.StackViewport | undefined;
+    if (!vp || typeof vp.getCurrentImageIdIndex !== "function") return;
+    const n = vp.getImageIds().length;
+    const z = Math.min(n - 1, Math.max(0, slice));
+    if (z === vp.getCurrentImageIdIndex()) return;
+    following.current = true;
+    vp.setImageIdIndex(z).catch(() => {
+      following.current = false;
+    });
+  }, [slice, stackReady, ids.stack]);
 
   // the volume waits for the server's planes, or for a while when one of them does not come
   useEffect(() => {

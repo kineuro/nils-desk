@@ -59,6 +59,7 @@ import { ComboSearch, DerivedLine, EvidenceDrawer, HeaderBlock, HeaderDoors, Hea
 import { combinationsOf, seedsOf, settle, takeCombo, vocabularyOf, type Combination, type Settled } from "./lookup";
 import { StackView } from "./StackView";
 import { abServed, isAb } from "./ab";
+import { isPair, pairServed } from "./pair";
 import { warmStack } from "../viewer/prefetch";
 import { amendSeat, answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, hintsNow, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
 
@@ -203,6 +204,11 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         // an A/B campaign (record 48) is settled from its candidates, on a page of its own
         if (role === "rater" && isAb(c) && abServed(capsNow.current)) {
           location.hash = href("campaigns", String(c.id), "settle");
+          return;
+        }
+        // a pair campaign (the post-contrast study) is read two stacks at a time, on a page of its own
+        if (role === "rater" && isPair(c) && pairServed(capsNow.current)) {
+          location.hash = href("campaigns", String(c.id), "pairs");
           return;
         }
         setCampaign(c);
