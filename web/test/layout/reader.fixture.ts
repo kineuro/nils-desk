@@ -259,8 +259,8 @@ export interface Asked {
  * reader's tests. `derive` and `header` false answer 404, as an engine
  * before them; `why` false serves no text or physics.
  */
-export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; combos?: boolean; axis?: boolean; suggest?: string; log?: Asked[] } = {}): typeof fetch {
-  const { derive = true, header = true, texts = true, seen = false, combos = true, axis = false, suggest, log = [] } = opts;
+export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; combos?: boolean; axis?: boolean; suggest?: string; hideHeader?: boolean; log?: Asked[] } = {}): typeof fetch {
+  const { derive = true, header = true, texts = true, seen = false, combos = true, axis = false, suggest, hideHeader = false, log = [] } = opts;
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://desk.test");
@@ -272,7 +272,9 @@ export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: b
     const asked = axis ? AXIS_CAMPAIGN : CAMPAIGN;
     const shown = seen ? { ...asked, items: (asked as unknown as { items: object[] }).items.map((i) => ({ ...i, blind: false })) } : asked;
     // what the campaign says it shows beside each item, where the engine says it
-    const campaign = suggest ? { ...shown, suggest } : shown;
+    const said = suggest ? { ...shown, suggest } : shown;
+    // a campaign made to show the pictures alone; its doors here still send the header, which the reader must not draw
+    const campaign = hideHeader ? { ...said, hide_header: true } : said;
     if (method === "GET" && path === c) return json(200, campaign);
     if (method === "GET" && path === "/api/campaigns") return json(200, { count: 1, campaigns: [CAMPAIGN] });
     if (method === "POST" && path === `${c}/claim`) {
