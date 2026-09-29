@@ -541,6 +541,7 @@ export const KIND_WORDS: Record<string, string> = {
   form: "A form",
   derivative: "A file",
   free: "Free text",
+  pair: "Two stacks side by side",
 };
 
 /** The question in a few words. */
@@ -558,6 +559,8 @@ export function questionWords(q: Question): string {
       return `${q.derivative_kind ?? "a file"}${q.form ? " with a form" : ""}`;
     case "free":
       return "free text";
+    case "pair":
+      return `which is post · ${q.axis ?? "post_contrast"}`;
     default:
       return q.kind;
   }

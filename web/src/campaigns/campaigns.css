@@ -380,3 +380,31 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .ab-found .opt.lit { outline: 2px solid var(--n-focus); outline-offset: 0; }
 .ab-panel { display: grid; gap: 0.4rem; margin-top: 0.6rem; }
 .ab-panel h2 { margin: 0; font-size: var(--n-text-size-h2); }
+
+/* Pair mode (the post-contrast study): two stacks side by side, each the reader's own pictures filling
+   its half of the window, "left" and "right" their only names, and one bar under both with the five
+   answers and the actions. The side the arrows page is outlined. The bar grows with the screen as the
+   reader's panel does. On a narrow screen the two stand one over the other and the page scrolls. */
+.pair-reader .pair-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 0.5rem 0.8rem; }
+.pair-reader .pair-side { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.15rem; min-height: 0; padding: 0.2rem; border: 1px solid transparent; border-radius: var(--n-radius); container-type: normal; }
+.pair-reader .pair-side .stack-view { min-height: 0; container-type: size; overflow: hidden; }
+.pair-reader .pair-side.active { border-color: var(--n-line); }
+.pair-reader .pair-label { display: flex; gap: 0.5rem; align-items: baseline; font-size: var(--n-text-size-small); color: var(--n-text-dim); text-transform: uppercase; letter-spacing: 0.04em; zoom: var(--reader-scale); }
+.pair-reader .pair-says { text-transform: none; letter-spacing: 0; color: var(--n-text); font-weight: 600; }
+.pair-reader .pair-says.post { color: var(--n-focus); }
+.pair-reader .pair-bar { grid-column: 1 / span 2; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; zoom: var(--reader-scale); font-size: var(--n-text-size-small); }
+.pair-reader .pair-bar .rate-item { display: flex; align-items: center; gap: 0.4rem; }
+.pair-reader .pair-bar .actions { flex: 1 1 18rem; display: flex; flex-wrap: nowrap; align-items: center; gap: 0.4rem; min-width: 0; }
+.pair-reader .pair-bar .actions .warn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
+.pair-reader .pair-answers { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.pair-reader .pair-answer.opt { min-height: 1.6rem; padding: 0.05rem 0.55rem; font-size: 12.5px; }
+.pair-reader .pair-answer kbd { margin-right: 0.35rem; font-size: 10.5px; }
+.pair-reader .pair-sync { cursor: pointer; }
+.pair-reader .pair-sync.on { border-color: var(--n-focus); }
+.pair-reader .keys-drawer { position: absolute; right: 0; bottom: 100%; z-index: 5; }
+.pair-reader .pair-bar { position: relative; }
+@media (max-width: 860px) {
+  .pair-reader .pair-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .pair-reader .pair-side { height: min(calc(100vw * 1.2), 70vh); }
+  .pair-reader .pair-bar { grid-column: auto; }
+}
