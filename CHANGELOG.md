@@ -4,9 +4,13 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.59] - 2026-09-30
+
+A campaign may show its raters the pictures alone: making an axis or an axes campaign that suggests nothing offers "Pictures only", and its reader then shows no text of the file's header and no whole-header door. It needs engine 1.0.0-alpha.61 for the engine to keep the campaign's `hide_header` and stop serving the text; against an older engine nothing changes. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+
 ### Added
 
-- A campaign may show its raters the pictures alone, for the post-contrast study's single reads, where the series name or the sequence could give the answer away. Making an axis or an axes campaign that suggests nothing offers "Pictures only"; the reader of such a campaign then draws no text of the file's header beside the pictures, offers no whole-header door (`h`) and never asks for one, and a tag says "pictures only". The campaign page says it too. It needs an engine that takes `hide_header` (after 1.0.0-alpha.60), which also stops serving the text; a campaign that does not ask it reads as before.
+- A campaign may show its raters the pictures alone, for the post-contrast study's single reads, where the series name or the sequence could give the answer away. Making an axis or an axes campaign that suggests nothing offers "Pictures only"; the reader of such a campaign then draws no text of the file's header beside the pictures, offers no whole-header door (`h`) and never asks for one, and a tag says "pictures only". The campaign page says it too. It needs an engine that takes `hide_header` (1.0.0-alpha.61 or later), which also stops serving the text; a campaign that does not ask it reads as before.
 
 ## [1.0.0-alpha.58] - 2026-09-29
 
