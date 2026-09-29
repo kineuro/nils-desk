@@ -55,6 +55,8 @@ import { abServed, isAb } from "./ab";
 import { AbPanel } from "./AbReader";
 import { isPair, pairServed } from "./pair";
 import { PairPanel } from "./PairReader";
+import { anchoredServed, isAnchored } from "./anchored";
+import { AnchoredPanel } from "./AnchoredReader";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -79,7 +81,7 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   const c = load.c;
   return (
     <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} stats={load.stats} said={said} missing={missing} onAct={setActing}>
-      {isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
+      {isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : isAnchored(c) && anchoredServed(caps) ? <AnchoredPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
       {acting === "close" && (
         <CloseDialog
           campaign={c}
@@ -133,6 +135,8 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
   const ab = isAb(c) && abServed(caps);
   // a pair campaign (the post-contrast study) is read two stacks at a time, never in a gallery
   const pair = isPair(c) && pairServed(caps);
+  // an anchored campaign is read a candidate beside its two anchors, never in a gallery
+  const anchored = isAnchored(c) && anchoredServed(caps);
   const adjudicate = adjudicatorHas(caps, c);
   const close = closeRefusal(caps, c);
   const exp = exportRefusal(caps);
@@ -153,11 +157,11 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           </p>
         </div>
         {rate && (
-          <a className="button" href={href("campaigns", String(c.id), ab ? "settle" : pair ? "pairs" : "rate")} title={ab ? "each item's candidates as A and B, blind to who gave which" : pair ? "two stacks side by side, nothing else of them: which is post" : undefined}>
-            {ab ? "Settle" : pair ? "Read pairs" : "Rate"}
+          <a className="button" href={href("campaigns", String(c.id), ab ? "settle" : pair ? "pairs" : anchored ? "anchored" : "rate")} title={ab ? "each item's candidates as A and B, blind to who gave which" : pair ? "two stacks side by side, nothing else of them: which is post" : anchored ? "a candidate beside a reference pre and a reference post, nothing else of them: which does it look like" : undefined}>
+            {ab ? "Settle" : pair ? "Read pairs" : anchored ? "Read against anchors" : "Rate"}
           </a>
         )}
-        {rate && !ab && !pair && galleryOffered(caps, c.question) && (
+        {rate && !ab && !pair && !anchored && galleryOffered(caps, c.question) && (
           <a className="button secondary" href={href("campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
             Gallery
           </a>

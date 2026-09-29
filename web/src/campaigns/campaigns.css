@@ -408,3 +408,33 @@ table.thin.header-table td:first-child { padding-left: 0; }
   .pair-reader .pair-side { height: min(calc(100vw * 1.2), 70vh); }
   .pair-reader .pair-bar { grid-column: auto; }
 }
+
+/* Anchored reading (the post-contrast study): a candidate beside a reference pre and a reference post,
+   three panels in the order the engine's seed drew, each filling a third of the window; the bar under
+   all three with the window, the difference, the jumps and the three answers. The candidate's label
+   stands out from the references'. The difference is drawn over a reference's picture. */
+.anchored-reader .anchored-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr) auto; gap: 0.5rem 0.6rem; }
+.anchored-reader .anchored-panel.is-candidate .pair-label { color: var(--n-text); font-weight: 600; }
+.anchored-reader .pair-says { white-space: nowrap; }
+.anchored-reader .anchored-other { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.anchored-reader .anchored-stage { position: relative; min-height: 0; display: grid; }
+.anchored-reader .anchored-stage > .stack-view { min-height: 0; container-type: size; overflow: hidden; }
+.anchored-reader .anchored-bar { grid-column: 1 / span 3; }
+.anchored-reader .anchored-bar .rate-item { flex-wrap: wrap; }
+.difference { position: absolute; inset: 0; z-index: 2; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--n-bg-sunken); border-radius: var(--n-radius); }
+.difference-label { font-size: var(--n-text-size-small); color: var(--n-text-dim); padding: 0.1rem 0.3rem; }
+.difference-canvas { width: 100%; height: 100%; min-height: 0; object-fit: contain; image-rendering: auto; justify-self: center; align-self: center; max-width: 100%; max-height: 100%; }
+.difference-none { margin: 0.4rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.difference-wait { position: absolute; inset: auto 0 0 0; z-index: 2; background: var(--n-bg-raised); }
+.compare-window, .compare-regions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+.compare-toggle, .compare-reset, .compare-region { cursor: pointer; }
+.compare-toggle.on { border-color: var(--n-focus); }
+.compare-region kbd { margin-right: 0.25rem; font-size: 10px; }
+.compare-region:disabled { cursor: default; opacity: 0.55; }
+.compare-approx { font-size: var(--n-text-size-small); }
+.compare-jumped { font-size: var(--n-text-size-small); }
+@media (max-width: 860px) {
+  .anchored-reader .anchored-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .anchored-reader .anchored-panel { height: min(calc(100vw * 1.2), 70vh); }
+  .anchored-reader .anchored-bar { grid-column: auto; }
+}

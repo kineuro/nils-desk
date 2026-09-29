@@ -14,6 +14,7 @@ import { CAMPAIGN_ID, type Asked } from "../../test/layout/reader.fixture";
 import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { Manifest } from "../viewer/doors";
+import type { Reference } from "../viewer/reference";
 import type { ViewerProps } from "../viewer/Viewer";
 import { answerCounts, isPair, pairKey, pairSync, sheetOf, sidesOf, sliceMap, summaryOf } from "./pair";
 import { PairReader } from "./PairReader";
@@ -33,6 +34,19 @@ vi.mock("../viewer/Viewer", async () => {
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [p.stack]);
       return null;
+    },
+  };
+});
+
+// the reference tissue is read from the pyramid in the browser; here each stack's is given, or none
+const references = new Map<number, Reference>();
+vi.mock("../viewer/reference", async (orig) => {
+  const real = await orig<typeof import("../viewer/reference")>();
+  return {
+    ...real,
+    reference: (stack: number) => {
+      const r = references.get(stack);
+      return r ? Promise.resolve(r) : Promise.reject(new Error("no sample"));
     },
   };
 });
@@ -83,6 +97,8 @@ describe("the sheet, the keys and the answers", () => {
     expect(pairKey("4", o)).toEqual({ kind: "answer", answer: "both_post" });
     expect(pairKey("5", o)).toEqual({ kind: "answer", answer: "cant_tell" });
     expect(pairKey("6", o)).toBeNull();
+    expect(pairKey("w", o)).toEqual({ kind: "window" });
+    expect(pairKey("9", o)).toEqual({ kind: "region", region: 2 });
     expect(pairKey("Enter", o)).toEqual({ kind: "send" });
     expect(pairKey("l", o)).toEqual({ kind: "sync" });
     expect(pairKey("1", { inField: true })).toBeNull();
@@ -150,6 +166,7 @@ describe("the pair view drawn", () => {
     log = [];
     drawn.clear();
     manifests.clear();
+    references.clear();
     host = document.createElement("div");
     document.body.appendChild(host);
   });
@@ -234,6 +251,27 @@ describe("the pair view drawn", () => {
     await until(() => host.querySelector(".pair-sync")?.textContent === "each alone: the geometry differs");
     await act(async () => drawn.get(LEFT)!.onSlice!(30));
     expect(drawn.get(RIGHT)?.slice).toBeNull();
+  });
+
+  it("shows both under one window scaled to each one's reference, and each its own on w", async () => {
+    manifests.set(LEFT, { ...manifest(40, 3, 0), window: { center: 300, width: 600 } } as Manifest);
+    manifests.set(RIGHT, { ...manifest(40, 3, 0), window: { center: 600, width: 1200 } } as Manifest);
+    references.set(LEFT, { value: 200, threshold: 20, foreground: 0.4, extent: null });
+    references.set(RIGHT, { value: 400, threshold: 20, foreground: 0.4, extent: null });
+    vi.stubGlobal("fetch", pairEngine({ log }));
+    root = createRoot(host);
+    await act(async () => root.render(<PairReader caps={capsWith(pairDoorsOf())} id={String(CAMPAIGN_ID)} />));
+    await until(() => drawn.get(LEFT)?.voi);
+    // 0 to 3 references on both: a stack twice as bright overall gets a window twice as wide
+    expect(drawn.get(LEFT)?.voi).toEqual({ lower: 0, upper: 600 });
+    expect(drawn.get(RIGHT)?.voi).toEqual({ lower: 0, upper: 1200 });
+    await act(async () => drawn.get(RIGHT)!.onVoi!({ lower: 40, upper: 800 }));
+    expect(drawn.get(LEFT)?.voi).toEqual({ lower: 20, upper: 400 });
+    // no head found: no jumps
+    expect(host.querySelector<HTMLButtonElement>(".compare-region")?.disabled).toBe(true);
+    await press("w");
+    expect(drawn.get(LEFT)?.voi).toBeNull();
+    expect(drawn.get(RIGHT)?.voi).toBeNull();
   });
 
   it("the rating workspace sends a pair campaign to its own page", async () => {

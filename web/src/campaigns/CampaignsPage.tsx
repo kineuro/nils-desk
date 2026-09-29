@@ -7,6 +7,7 @@
 //   #campaigns/<id>/adjudicate  the adjudicator's view
 //   #campaigns/<id>/settle      an A/B campaign's items settled blind (record 48, the reference read by judges)
 //   #campaigns/<id>/pairs       a pair campaign read two stacks at a time (the post-contrast study, pair mode)
+//   #campaigns/<id>/anchored    an anchored campaign: a candidate read beside a reference pre and a reference post
 //   #campaigns/<id>/gallery     a hundred items of a one-axis campaign at once (record 50)
 //   #campaigns/label-sets[/<n>] the label sets, or one
 
@@ -38,6 +39,7 @@ import { Gallery } from "./Gallery";
 import { Workspace } from "./Workspace";
 import { AbReader } from "./AbReader";
 import { PairReader } from "./PairReader";
+import { AnchoredReader } from "./AnchoredReader";
 import "./campaigns.css";
 
 export function CampaignsPage({ caps, page, arg, query }: { caps: Capabilities; page: string | null; arg: string | null; query?: Record<string, string> }) {
@@ -46,6 +48,7 @@ export function CampaignsPage({ caps, page, arg, query }: { caps: Capabilities; 
     if (arg === "rate") return <Workspace key={`${page}/rate/${query?.amend ?? ""}/${query?.alone ?? ""}`} caps={caps} id={page} role="rater" query={query} />;
     if (arg === "settle") return <AbReader key={`${page}/settle`} caps={caps} id={page} />;
     if (arg === "pairs") return <PairReader key={`${page}/pairs`} caps={caps} id={page} />;
+    if (arg === "anchored") return <AnchoredReader key={`${page}/anchored`} caps={caps} id={page} />;
     if (arg === "adjudicate") return <Workspace key={`${page}/adj`} caps={caps} id={page} role="adjudicator" />;
     if (arg === "gallery") return <Gallery key={`${page}/gallery`} caps={caps} id={page} />;
     return <CampaignPage caps={caps} id={page} missing={query?.missing && /^\d+$/u.test(query.missing) ? Number(query.missing) : null} />;
