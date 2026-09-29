@@ -6,10 +6,13 @@
 // nothing else of either stack: no time, no series name, no header, no
 // value the rules gave, not even a stack's number. One key answers: 1 the
 // left is post, 2 the right is post, 3 both pre, 4 both post, 5 can't tell;
-// Enter sends it. Each side is the reader's own viewer with its own window;
-// where the two stacks' geometry matches, paging one pages the other to the
-// same place (`l` lets them go and brings them back). The arrows page the
-// side under the pointer.
+// Enter sends it. Both sides are scaled by their own reference tissue and
+// shown under one window by default, which a drag on either moves for both
+// (`w` gives each its own window again), so enhancement is not normalised
+// away; where the two stacks' geometry matches, paging one pages the other
+// to the same place (`l` lets them go and brings them back). 7 to 0 jump
+// to the ventricles, the sinuses and the sella, approximately. The arrows
+// page the side under the pointer.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -20,7 +23,10 @@ import type { Manifest } from "../viewer/doors";
 import { beatEvery, campaigns, leaseLeft, leaseWords, refused as refusedWords, type Campaign, type Item } from "./client";
 import { ANSWER_WORDS, answerCounts, PAIR_ANSWERS, pairDoors, pairKey, pairSync, sidesOf, SIDES, type PairAnswer, type PairSheet, type PairSummary, type Side } from "./pair";
 import { claimIn } from "./readerDoors";
+import { RegionJumps, WindowControl } from "./Compare";
+import { planeAt, regionPoint, REGIONS, type Region } from "./regions";
 import { StackView } from "./StackView";
+import { useReference, useSharedWindow } from "./window";
 import { beatSeat, seatOf, type Seat } from "./workspace";
 
 // the pair view keeps its own: the stack view is where the two are kept on one slice
@@ -164,6 +170,33 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
     });
   }, [sync, linked, manifests.left]);
   const seen = useCallback((side: Side, m: Manifest) => setManifests((x) => (x[side] === m ? x : { ...x, [side]: m })), []);
+
+  // one window across the two, scaled to each one's reference tissue
+  const shared = useSharedWindow({
+    left: sheet ? { stack: sheet.left, manifest: manifests.left } : undefined,
+    right: sheet ? { stack: sheet.right, manifest: manifests.right } : undefined,
+  });
+  const onVoi = useMemo(() => ({ left: (v: { lower: number; upper: number }) => shared.dragged("left", v), right: (v: { lower: number; upper: number }) => shared.dragged("right", v) }), [shared]);
+  // the jumps, each side from its own head's extent
+  const refs = { left: useReference(sheet?.left ?? null, manifests.left), right: useReference(sheet?.right ?? null, manifests.right) };
+  const [jumped, setJumped] = useState<string | null>(null);
+  useEffect(() => setJumped(null), [sheet]);
+  const jumpable = !!(refs.left?.extent && manifests.left);
+  const jump = useCallback(
+    (r: Region) => {
+      const next: Record<Side, number | null> = { left: null, right: null };
+      for (const side of SIDES) {
+        const m = manifests[side];
+        const e = refs[side]?.extent;
+        const at = m && e ? planeAt(m, regionPoint(r, e)) : null;
+        if (at) next[side] = at.z;
+      }
+      setSlices((s) => ({ left: next.left ?? s.left, right: next.right ?? s.right }));
+      setJumped(`${r.label}, approximately`);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [manifests, refs.left, refs.right],
+  );
   const onSlice = useMemo(() => ({ left: (z: number) => moved("left", z), right: (z: number) => moved("right", z) }), [moved]);
   const onManifest = useMemo(() => ({ left: (m: Manifest) => seen("left", m), right: (m: Manifest) => seen("right", m) }), [seen]);
 
@@ -205,8 +238,8 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
   );
 
   // the keys
-  const keyed = useRef({ send, giveBack });
-  keyed.current = { send, giveBack };
+  const keyed = useRef({ send, giveBack, shared, jump, jumpable });
+  keyed.current = { send, giveBack, shared, jump, jumpable };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.metaKey || e.defaultPrevented) return;
@@ -224,7 +257,10 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
       } else if (act.kind === "send") keyed.current.send();
       else if (act.kind === "skip") keyed.current.giveBack("next");
       else if (act.kind === "sync") setLinked((x) => !x);
-      else if (act.kind === "keys") setKeys((x) => !x);
+      else if (act.kind === "window") keyed.current.shared.setMode(keyed.current.shared.mode === "shared" ? "own" : "shared");
+      else if (act.kind === "region") {
+        if (keyed.current.jumpable) keyed.current.jump(REGIONS[act.region]);
+      } else if (act.kind === "keys") setKeys((x) => !x);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -282,7 +318,7 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
                   {side}
                   {chosen && <b className={`pair-says ${sidesOf(chosen)[side] === "post" ? "post" : ""}`}>{sideWords(sidesOf(chosen)[side])}</b>}
                 </span>
-                <StackView stack={side === "left" ? sheet.left : sheet.right} view={view} onView={chooseView} keys={active === side} slice={slices[side]} onSlice={onSlice[side]} onManifest={onManifest[side]} />
+                <StackView stack={side === "left" ? sheet.left : sheet.right} view={view} onView={chooseView} keys={active === side} slice={slices[side]} onSlice={onSlice[side]} onManifest={onManifest[side]} voi={shared.voiFor(side)} onVoi={onVoi[side]} />
               </div>
             ))}
           {sheet && (
@@ -296,6 +332,9 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
                 <button type="button" className={linked && sync ? "tag pair-sync on" : "tag pair-sync"} aria-pressed={linked} onClick={() => setLinked((x) => !x)} title="keep the two pictures on one slice where their geometry matches (l)">
                   {syncWords}
                 </button>
+                <WindowControl w={shared} />
+                <RegionJumps onJump={jump} disabled={!jumpable} why={jumpable ? null : "finding the head, or the stack names no place in the patient"} />
+                {jumped && <span className="meta compare-jumped">{jumped}</span>}
               </div>
               <div className="pair-answers" role="group" aria-label="the answer">
                 {PAIR_ANSWERS.map((a, i) => (
@@ -383,6 +422,8 @@ function PairKeyList() {
       {pair("Enter", "answer, then the next pair")}
       {pair("s", "give it back, then the next")}
       {pair("l", "keep the two pictures on one slice, or let each move alone")}
+      {pair("w", "one window for both, scaled to each stack's reference tissue, or each its own")}
+      {pair("7 8 9 0", "jump to the ventricles, the superior sagittal sinus, the transverse sinuses, the sella (approximate)")}
       {pair("↑ ↓, Page Up and Down", "page the side under the pointer; where they are kept on one slice, the other follows")}
       {pair("Space", "the three planes: enlarge one")}
     </dl>

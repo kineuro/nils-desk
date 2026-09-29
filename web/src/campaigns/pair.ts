@@ -105,13 +105,14 @@ export function answerCounts(s: Pick<PairSummary, "answers">): string {
 }
 
 /** What a key does in pair mode. */
-export type PairAct = { kind: "answer"; answer: PairAnswer } | { kind: "send" } | { kind: "skip" } | { kind: "keys" } | { kind: "sync" };
+export type PairAct = { kind: "answer"; answer: PairAnswer } | { kind: "send" } | { kind: "skip" } | { kind: "keys" } | { kind: "sync" } | { kind: "window" } | { kind: "region"; region: number };
 
 /**
  * A key's act: 1 to 5 choose an answer, Enter sends the chosen one, `s`
  * gives the pair back, `l` keeps the two pictures on one slice or lets them
- * go, `?` the keys. The arrows, Page Up and Down and Space are the
- * pictures'. Nothing from a text field.
+ * go, `w` one window for both or each its own, 7 to 0 the region jumps, `?`
+ * the keys. The arrows, Page Up and Down and Space are the pictures'.
+ * Nothing from a text field.
  */
 export function pairKey(key: string, o: { inField: boolean; ctrl?: boolean }): PairAct | null {
   if (o.inField) return null;
@@ -119,8 +120,11 @@ export function pairKey(key: string, o: { inField: boolean; ctrl?: boolean }): P
   if (key === "Enter") return { kind: "send" };
   if (key === "s") return { kind: "skip" };
   if (key === "l") return { kind: "sync" };
+  if (key === "w") return { kind: "window" };
   if (key === "?") return { kind: "keys" };
   if (/^[1-5]$/u.test(key)) return { kind: "answer", answer: PAIR_ANSWERS[Number(key) - 1] };
+  const region = ["7", "8", "9", "0"].indexOf(key);
+  if (region >= 0) return { kind: "region", region };
   return null;
 }
 

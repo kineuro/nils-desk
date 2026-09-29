@@ -100,6 +100,14 @@ export interface ViewerProps {
   onSlice?: (z: number) => void;
   /** The stack's manifest once it is read, for a page that matches two stacks' geometry. */
   onManifest?: (m: Manifest) => void;
+  /**
+   * The post-contrast study's comparisons: a window set by the page, in the
+   * stored values the planes hold, so several stacks show under one window;
+   * null keeps the stack's own (its manifest's).
+   */
+  voi?: { lower: number; upper: number } | null;
+  /** The window the person dragged the pictures to, in stored values, for a page that moves the others with it. */
+  onVoi?: (range: { lower: number; upper: number }) => void;
 }
 
 interface Numbers {
@@ -176,7 +184,7 @@ function toolGroup(id: string): tools.Types.IToolGroup {
   return group;
 }
 
-export function Viewer({ stack, level: ruleLevel = null, view: initialView = "stack", budget, onEvent, onView, keys = false, slice = null, onSlice, onManifest }: ViewerProps) {
+export function Viewer({ stack, level: ruleLevel = null, view: initialView = "stack", budget, onEvent, onView, keys = false, slice = null, onSlice, onManifest, voi = null, onVoi }: ViewerProps) {
   const ids = viewerIds(stack);
   const el = useRef<HTMLDivElement | null>(null);
   const planeEls = useRef<Record<Plane, HTMLDivElement | null>>({ axial: null, coronal: null, sagittal: null });
@@ -223,6 +231,12 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   const asked = useRef<number | null>(slice);
   asked.current = slice;
   const following = useRef(false);
+  // the window the page asks for, and whether a pointer is down on the pictures: a window change is told back only while one is, so the viewer's own setting never reads as the person's
+  const voiAsked = useRef(voi);
+  voiAsked.current = voi;
+  const toldVoi = useRef(onVoi);
+  toldVoi.current = onVoi;
+  const pressing = useRef(false);
   // the stack view built with its images, so a plane asked for before it was can be shown once it is
   const [stackReady, setStackReady] = useState(false);
 
@@ -304,8 +318,12 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
       else toldSlice.current?.(zRef.current);
     });
     el.current.addEventListener(cs.Enums.Events.CAMERA_MODIFIED, () => letter("stack", vp));
+    el.current.addEventListener(cs.Enums.Events.VOI_MODIFIED, ((e: CustomEvent<{ range?: { lower: number; upper: number } }>) => {
+      const r = e.detail?.range;
+      if (pressing.current && r) toldVoi.current?.({ lower: r.lower, upper: r.upper });
+    }) as EventListener);
     await vp.setStack(imageIds, z0);
-    vp.setProperties(viewWindow(manifest));
+    vp.setProperties(shownWindow(manifest, voiAsked.current));
     vp.render();
     setStackReady(true);
     toolGroup(`tg-${stack}`).addViewport(ids.stack, re.id);
@@ -365,6 +383,27 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     });
   }, [slice, stackReady, ids.stack]);
 
+  // the window the page asks for (or the stack's own again), on the stack view and the three planes
+  const voiKey = voi ? `${voi.lower}:${voi.upper}` : "own";
+  useEffect(() => {
+    const re = engine.current;
+    if (!re || !manifest) return;
+    const shown = shownWindow(manifest, voi);
+    const ids2 = [ids.stack, ...PLANES.map((p) => ids.planes[p])];
+    for (const id of ids2) {
+      const vp = re.getViewport(id) as (cs.StackViewport | cs.VolumeViewport) | undefined;
+      if (!vp) continue;
+      try {
+        // the planes share a synchroniser, which is told once per plane here; the person's drag is the only thing told back
+        vp.setProperties(shown);
+        vp.render();
+      } catch {
+        // the viewport is being built or taken down; it takes the window when it is built
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voiKey, manifest, stackReady, volume?.done]);
+
   // the volume waits for the server's planes, or for a while when one of them does not come
   useEffect(() => {
     if (!planesOpened || !manifest) return;
@@ -411,11 +450,15 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     filling.current = f;
     report(0, false);
     await cs.setVolumesForViewports(re, [{ volumeId: f.volumeId }], planeIds);
-    const shown = viewWindow(manifest);
+    const shown = shownWindow(manifest, voiAsked.current);
     for (const p of PLANES) {
       const vp = re.getViewport(ids.planes[p]) as cs.VolumeViewport;
       vp.setProperties(shown);
       const element = planeEls.current[p]!;
+      element.addEventListener(cs.Enums.Events.VOI_MODIFIED, ((e: CustomEvent<{ range?: { lower: number; upper: number } }>) => {
+        const r = e.detail?.range;
+        if (pressing.current && r) toldVoi.current?.({ lower: r.lower, upper: r.upper });
+      }) as EventListener);
       element.addEventListener(cs.Enums.Events.CAMERA_MODIFIED, () => letter(p, vp));
       element.addEventListener(cs.Enums.Events.IMAGE_RENDERED, stamp);
       letter(p, vp);
@@ -556,7 +599,14 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     setCut(c);
   };
   return (
-    <div className="viewer" ref={root}>
+    <div
+      className="viewer"
+      ref={root}
+      onPointerDownCapture={() => (pressing.current = true)}
+      onPointerUpCapture={() => (pressing.current = false)}
+      onPointerCancelCapture={() => (pressing.current = false)}
+      onPointerLeave={() => (pressing.current = false)}
+    >
       <div className="viewer-axes" role="tablist" aria-label="view">
         <button
           type="button"
@@ -661,6 +711,12 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
       )}
     </div>
   );
+}
+
+/** What a viewport is given: the page's window where it asks for one, else the stack's own; the grey inverted as the slope asks either way. */
+function shownWindow(m: Manifest, voi: { lower: number; upper: number } | null): { voiRange: { lower: number; upper: number }; invert: boolean } {
+  const own = viewWindow(m);
+  return voi && Number.isFinite(voi.lower) && Number.isFinite(voi.upper) && voi.upper > voi.lower ? { voiRange: { lower: voi.lower, upper: voi.upper }, invert: own.invert } : own;
 }
 
 /** A plane's classes: the one the stack was acquired in leads, and one may be enlarged to the whole side. */

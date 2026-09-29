@@ -61,6 +61,7 @@ import { combinationsOf, seedsOf, settle, takeCombo, vocabularyOf, type Combinat
 import { StackView } from "./StackView";
 import { abServed, isAb } from "./ab";
 import { isPair, pairServed } from "./pair";
+import { anchoredServed, isAnchored } from "./anchored";
 import { warmStack } from "../viewer/prefetch";
 import { amendSeat, answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, hintsNow, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
 
@@ -210,6 +211,11 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         // a pair campaign (the post-contrast study) is read two stacks at a time, on a page of its own
         if (role === "rater" && isPair(c) && pairServed(capsNow.current)) {
           location.hash = href("campaigns", String(c.id), "pairs");
+          return;
+        }
+        // an anchored campaign (the post-contrast study) is read beside its anchors, on a page of its own
+        if (role === "rater" && isAnchored(c) && anchoredServed(capsNow.current)) {
+          location.hash = href("campaigns", String(c.id), "anchored");
           return;
         }
         setCampaign(c);
