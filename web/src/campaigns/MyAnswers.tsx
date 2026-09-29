@@ -13,6 +13,7 @@ import { door as served } from "../deployment";
 import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
 import { AMEND, campaigns, mineWords, refused as refusedWords, singleValueOf, type Campaign, type Mine, type MyAnswer } from "./client";
+import { Thumb } from "./Thumb";
 import { valueTone } from "./values";
 
 /** Where a correction opens: the reader, on that answer, and back to where it came from after. */
@@ -104,7 +105,7 @@ function MineRow({ a, c, values, refusal, back }: { a: MyAnswer; c: Campaign; va
   const v = singleValueOf(c.question, a.value);
   return (
     <li className="mine-row" data-answer={a.answer}>
-      {a.thumb ? <img src={a.thumb} alt="" loading="lazy" decoding="async" /> : <span />}
+      {a.thumb ? <Thumb src={a.thumb} loading="lazy" /> : <span />}
       <span className="mine-what">
         <span className="value-tag" {...valueTone(values, v)}>
           {mineWords(c.question, a.value)}

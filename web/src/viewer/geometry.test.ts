@@ -4,8 +4,8 @@
 // said so, and the letters at a picture's edges right for axial, coronal,
 // sagittal and an oblique stack, on cornerstone's own cameras.
 import { describe, expect, it } from "vitest";
-import type { Manifest } from "./doors";
-import { cameraLabels, conventional, edgeLabels, geometry, letters, levelOrigin, nearestAxis, planePosition, renderAxes, stackLabels, type Vec3 } from "./geometry";
+import { cutsAcross, levelSpacing, planeSpacing, type Manifest } from "./doors";
+import { cameraLabels, conventional, edgeLabels, geometry, letters, levelOrigin, nearestAxis, planePosition, renderAxes, stackLabels, volumeGrid, type Vec3 } from "./geometry";
 
 const base: Manifest = { codec: "htj2k", tile: 256, levels: 4, shape: [96, 256, 256], spacing: [1, 1, 1], dtype: "uint16", window: { center: 500, width: 1000 } };
 
@@ -123,5 +123,50 @@ describe("the server's render, turned to read the radiological way", () => {
     const t = conventional(a.right, a.down);
     expect(t.m).toEqual([1, 0, 0, 1]);
     expect(edgeLabels(t.right, t.down).right).toBe("LP");
+  });
+});
+
+describe("a stack whose planes all sit at one place", () => {
+  // a coronal scout taken three times in one session, as a pyramid built
+  // before the engine gave such planes the files' thickness describes it:
+  // no distance between the planes, and a step of nothing
+  const scout: Manifest = {
+    ...base,
+    shape: [3, 256, 256],
+    spacing: [0, 1.171875, 1.171875],
+    orientation: [1, 0, 0, 0, 0, -1],
+    origin: [-150, 0, 150],
+    orientation_known: true,
+    frame: { parallel: true, evenly_spaced: false },
+    step: [0, 0, 0],
+    plane: "coronal",
+  };
+  it("is never a volume zero deep, whose three planes drew black", () => {
+    expect(planeSpacing(scout)).toBe(1);
+    expect(levelSpacing(scout, 2)[0]).toBe(1);
+    const g = geometry(scout);
+    expect(Math.hypot(...g.step)).toBeCloseTo(1);
+    expect(g.shear).toBeNull();
+    expect(g.regular).toBe(false);
+    const grid = volumeGrid(g, scout.shape, levelSpacing(scout, 0), 0);
+    expect(grid.spacing[2]).toBeGreaterThan(0);
+    // the server's planes across the stack have a height to draw at
+    expect(renderAxes(g, scout.shape, levelSpacing(scout, 0), "y").mmH).toBeGreaterThan(0);
+    expect(renderAxes(g, scout.shape, levelSpacing(scout, 0), "x").mmH).toBeGreaterThan(0);
+  });
+  it("keeps a spacing the engine measured", () => {
+    expect(planeSpacing({ spacing: [2.5, 1, 1] })).toBe(2.5);
+    expect(planeSpacing({ spacing: [Number.NaN, 1, 1] })).toBe(1);
+    expect(planeSpacing({ spacing: [-3, 1, 1] })).toBe(1);
+  });
+});
+
+describe("a stack of one plane", () => {
+  it("has nothing to cut across, and opens on its own plane", () => {
+    expect(cutsAcross({ shape: [1, 512, 512] })).toBe(false);
+    expect(cutsAcross({ shape: [2, 256, 256] })).toBe(true);
+    // across it, the server's planes are one pixel high: the line a rater saw
+    const one: Manifest = { ...base, shape: [1, 512, 512], spacing: [0.53, 0.53, 0.53], orientation: [0, 1, 0, 0, 0, -1], orientation_known: true };
+    expect(renderAxes(geometry(one), one.shape, levelSpacing(one, 0), "y").h).toBe(1);
   });
 });
