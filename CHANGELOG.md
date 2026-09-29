@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.58] - 2026-09-29
+
+The A/B view settles a stack's split axes blind, by keys, for an A/B campaign, and pair mode reads two stacks of one session side by side for the post-contrast gold. Both need engine 1.0.0-alpha.60 for their doors; against an older engine nothing changes. A gallery's picture that fails is asked for again and then says it is not ready, a stack of planes at one place no longer opens black, and a stack of one plane opens on its own plane. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+
 ### Added
 
 - The A/B view (record 48, the reference read by judges), for a campaign `nils campaign ab` made, at `#campaigns/<id>/settle`; the rating workspace sends such a campaign there. The engine makes such a campaign to suggest nothing, so the reader shows no answer beside it but the candidates. Each asked axis is a row: where the voters split, its candidates as A, B and C in the order the engine drew, each with the one reason it serves (the header facts it cites) and never who gave it; where they agree, the value filled in on one line. A letter takes the lit row's candidate and moves to the next row to settle, `n` is neither and opens a free choice found by any name a value goes by, `x` is can't tell, `j` `k` or Tab move between rows, Backspace undoes a row, Enter answers. Once an axis is decided, 1 to 5 give it a cause (rule bug, convention gap, header ambiguity, rater error, reader slip), sent after the answer. Body part always shows beside the pictures; a localizer asks its provenance and body part, the rest sent as not asked. The pictures, the file's header and the whole header on `h` show as in the reader, on one screen, growing with it; the chosen candidate is framed in its value's colour, as the reader's chosen key is. The head says how far the campaign is settled, the share of each choice on the split axes and the median seconds per decision.
