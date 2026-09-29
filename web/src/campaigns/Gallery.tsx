@@ -19,6 +19,7 @@ import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
 import { campaigns, refused as refusedWords, suggestOf, type Campaign } from "./client";
 import { MyAnswers } from "./MyAnswers";
+import { Thumb } from "./Thumb";
 import { valueTone } from "./values";
 import {
   aloneWords,
@@ -334,7 +335,7 @@ function Cell({ item: i, value, changed: ch, focused, values, onChoose, onFocus 
   return (
     <div className={cls} {...valueTone(values, value)} data-item={i.item} aria-current={focused ? "true" : undefined} aria-label={`stack ${i.stack}: ${value ?? "no value"}${ch ? `, corrected from ${i.suggested ?? "none"}` : ""}`} title={titleOf(i)} onClick={() => onFocus(i.item)}>
       <div className="g-pic">
-        <img src={i.thumb} alt="" loading="eager" decoding="async" draggable={false} onError={(e) => ((e.target as HTMLImageElement).style.visibility = "hidden")} />
+        <Thumb src={i.thumb} draggable={false} />
       </div>
       <div className="g-line">
         <select className="g-pick" value={value ?? ""} aria-label={`value of stack ${i.stack}`} onChange={(e) => {

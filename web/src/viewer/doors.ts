@@ -95,7 +95,19 @@ export function levelShape(m: Manifest, level: number): [number, number, number]
 
 export function levelSpacing(m: Manifest, level: number): [number, number, number] {
   const f = 2 ** level;
-  return [m.spacing[0], m.spacing[1] * f, m.spacing[2] * f];
+  return [planeSpacing(m), m.spacing[1] * f, m.spacing[2] * f];
+}
+
+/**
+ * The distance from one plane to the next along the stack, mm: the
+ * manifest's, or one where it names none a volume can stand on. A stack
+ * whose planes all sit at one place (a scout taken again in one session)
+ * measured zero in a pyramid built before the engine gave such planes the
+ * files' thickness, and a volume zero deep drew its three planes black.
+ */
+export function planeSpacing(m: Pick<Manifest, "spacing">): number {
+  const dz = Array.isArray(m.spacing) ? m.spacing[0] : undefined;
+  return typeof dz === "number" && Number.isFinite(dz) && dz > 0 ? dz : 1;
 }
 
 async function fail(r: Response): Promise<never> {

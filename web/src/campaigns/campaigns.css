@@ -333,6 +333,10 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .mine-list { flex: 1; min-height: 0; overflow: auto; margin: 0; padding: 0; list-style: none; }
 .mine-row { display: grid; grid-template-columns: 4.5rem 1fr auto; gap: 0.5rem; align-items: center; padding: 0.3rem 0; border-bottom: 1px solid var(--n-line); }
 .mine-row img { width: 4.5rem; height: 1.5rem; object-fit: contain; background: var(--n-bg-sunken); border-radius: var(--n-radius); }
+/* a picture the engine did not give, after its retries: said, not left blank (Thumb.tsx) */
+.thumb-missing { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem; width: 100%; height: 100%; min-height: 1.5rem; color: var(--n-text-faint); font-size: var(--n-text-size-small); text-align: center; background: var(--n-bg-sunken); border-radius: var(--n-radius); }
+.mine-row .thumb-missing { width: 4.5rem; height: 1.5rem; font-size: 10px; overflow: hidden; }
+.mine-row .thumb-missing .button { display: none; }
 .mine-what { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.5rem; min-width: 0; font-size: 13px; }
 .mine-what .meta { font-size: 12px; }
 .axis-rows.compact .opt.on[data-slot] { border-left-width: 3px; }

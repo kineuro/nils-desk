@@ -6,7 +6,7 @@
 // at a viewport's edges. A manifest from before the engine named them is
 // read as axial at the origin, and says so. Pure, so the gate can hold it.
 
-import type { Manifest } from "./doors";
+import { planeSpacing, type Manifest } from "./doors";
 
 export type Vec3 = [number, number, number];
 
@@ -65,7 +65,7 @@ export function geometry(m: Manifest): Geometry {
   const colIn = Array.isArray(o) && o.length === 6 ? vec3(o.slice(3, 6)) : null;
   const origin = vec3(m.origin) ?? [0, 0, 0];
   const regular = regularFrame(m.frame);
-  const dz = Array.isArray(m.spacing) && Number.isFinite(m.spacing[0]) ? m.spacing[0] : 1;
+  const dz = planeSpacing(m);
   if (m.orientation_known === false || !rowIn || !colIn || Math.abs(dot(norm(rowIn), norm(colIn))) > 0.01) {
     return { row: [1, 0, 0], col: [0, 1, 0], normal: [0, 0, 1], origin, known: false, regular, step: [0, 0, dz], shear: null };
   }
