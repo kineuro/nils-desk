@@ -95,3 +95,48 @@ test("on a phone: one picture over the other, the bar under them, nothing sidewa
   expect(m.right.top).toBeGreaterThanOrEqual(m.left.bottom - 1);
   expect(m.bar.top).toBeGreaterThanOrEqual(m.right.bottom - 1);
 });
+
+for (const vp of [
+  { width: 1366, height: 768 },
+  { width: 1920, height: 1080 },
+  { width: 390, height: 844 },
+]) {
+  test(`an answer opened again with b at ${vp.width} by ${vp.height}: the same two, the answer marked, one screen, and m lists by pair`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/pair.html");
+    await measure(page);
+    await page.keyboard.press("1");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".rate-item > b")).toHaveText("pair 14");
+    await page.keyboard.press("b");
+    await expect(page.locator(".rate-item > b")).toHaveText("pair 13");
+    await expect(page.locator(".pair-answer.yours")).toContainText("left is post");
+    await expect(page.locator(".act-answer")).toContainText("Correct");
+    const m = await measure(page);
+    await shot(page, `pair-correcting-${vp.width}x${vp.height}`);
+    expect(m.doc.scrollW).toBeLessThanOrEqual(m.doc.clientW);
+    if (vp.width > 1000) {
+      expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
+      expect(m.answer.bottom).toBeLessThanOrEqual(vp.height);
+      const out = await page.evaluate(() => {
+        const bar = document.querySelector(".pair-bar")!.getBoundingClientRect();
+        return [...document.querySelectorAll(".pair-bar button")].filter((b) => {
+          const r = b.getBoundingClientRect();
+          return r.right > bar.right + 1 || r.left < bar.left - 1;
+        }).length;
+      });
+      expect(out).toBe(0);
+    }
+    const text = await page.locator(".pair-reader").innerText();
+    for (const n of ["7311", "7302", "7355", "7349", "pair:12"]) expect(text).not.toContain(n);
+    await page.keyboard.press("m");
+    await expect(page.locator(".mine-drawer .mine-row")).toHaveCount(1);
+    await expect(page.locator(".mine-drawer .mine-row")).toContainText("pair 13");
+    await shot(page, `pair-mine-${vp.width}x${vp.height}`);
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("4");
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".said")).toContainText("Corrected pair 13: left is post is now both post");
+    await expect(page.locator(".rate-item > b")).toHaveText("pair 14");
+  });
+}
