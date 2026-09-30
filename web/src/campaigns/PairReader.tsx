@@ -12,7 +12,11 @@
 // away; where the two stacks' geometry matches, paging one pages the other
 // to the same place (`l` lets them go and brings them back). 7 to 0 jump
 // to the ventricles, the sinuses and the sella, approximately. The arrows
-// page the side under the pointer.
+// page the side under the pointer. `b` opens one's last answer again (and
+// again the one before), `m` lists one's answers by pair; an answer opened
+// shows the same two pictures with it marked, and another choice and Enter
+// correct it (the engine keeps the earlier answer). The pair leased stays
+// leased.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -20,7 +24,9 @@ import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import type { Manifest } from "../viewer/doors";
-import { beatEvery, campaigns, leaseLeft, leaseWords, refused as refusedWords, type Campaign, type Item } from "./client";
+import { beatEvery, campaigns, leaseLeft, leaseWords, refused as refusedWords, type Campaign, type Item, type MyAnswer } from "./client";
+import { answerOf, useCorrection } from "./correct";
+import { MyAnswers } from "./MyAnswers";
 import { ANSWER_WORDS, answerCounts, PAIR_ANSWERS, pairDoors, pairKey, pairSync, sidesOf, SIDES, type PairAnswer, type PairSheet, type PairSummary, type Side } from "./pair";
 import { claimIn } from "./readerDoors";
 import { RegionJumps, WindowControl } from "./Compare";
@@ -52,11 +58,12 @@ export const pairWords = (i: Pick<Item, "position">): string => `pair ${i.positi
 
 const sideWords = (s: "post" | "pre" | "?") => (s === "?" ? "can't tell" : s);
 
-export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
+export function PairReader({ caps, id, query }: { caps: Capabilities; id: string; query?: Record<string, string> }) {
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [seat, setSeat] = useState<Seat>({ kind: "claiming" });
-  const [sheet, setSheet] = useState<PairSheet | null>(null);
+  // the sheet with the item it is of: one of an item no longer on the screen is never drawn or answered against
+  const [loaded, setLoaded] = useState<{ key: string; sheet: PairSheet } | null>(null);
   const [sheetFailed, setSheetFailed] = useState<string | null>(null);
   const [chosen, setChosen] = useState<PairAnswer | null>(null);
   const [summary, setSummary] = useState<PairSummary | null>(null);
@@ -76,6 +83,9 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
   }, []);
   const capsNow = useRef(caps);
   capsNow.current = caps;
+  const amendAt = query?.amend && /^\d+$/u.test(query.amend) ? Number(query.amend) : null;
+  const correction = useCorrection({ caps, id, campaign, amendAt, busy, say: setSaid, words: pairWords });
+  const amending = correction.amending;
 
   const claim = useCallback(
     (note: string | null = null) => {
@@ -107,29 +117,33 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
   }, [id, claim, refreshSummary]);
 
   const holding = seat.kind === "holding" ? seat : null;
-  const item = holding?.item ?? null;
   const assignmentId = holding?.assignment.id ?? null;
-  const current = useRef<number | null>(null);
-  current.current = item?.id ?? null;
+  // the pair on the screen: one's own answer open to correct, else the pair leased
+  const shown: Pick<Item, "id" | "position"> | null = amending ? { id: amending.item, position: amending.position } : (holding?.item ?? null);
+  const shownKey = amending ? `amend:${amending.answer}` : assignmentId === null ? null : `lease:${assignmentId}`;
+  const was = amending ? answerOf(PAIR_ANSWERS, amending.value) : null;
+  const current = useRef<string | null>(null);
+  current.current = shownKey;
+  const sheet = loaded && loaded.key === shownKey ? loaded.sheet : null;
   const [shownAt, setShownAt] = useState<number | null>(null);
 
   // a new pair: its two stacks, the clock, both pictures on their middles
   useEffect(() => {
-    if (!item) return;
-    setSheet(null);
+    if (!shown || !shownKey) return;
+    setLoaded(null);
     setSheetFailed(null);
-    setChosen(null);
+    setChosen(was);
     setRefused(null);
     setManifests({});
     setSlices({ left: null, right: null });
     setShownAt(Date.now());
-    const at = item.id;
-    pairDoors.sheet(id, at).then(
-      (s) => current.current === at && setSheet(s),
+    const at = shownKey;
+    pairDoors.sheet(id, shown.id).then(
+      (s) => current.current === at && setLoaded({ key: at, sheet: s }),
       (e: unknown) => current.current === at && setSheetFailed(refusedWords(e)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assignmentId]);
+  }, [shownKey]);
 
   // the heartbeat keeps the lease; the clock ticks
   const leaseSeconds = campaign?.lease_seconds ?? 3600;
@@ -201,12 +215,28 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
   const onManifest = useMemo(() => ({ left: (m: Manifest) => seen("left", m), right: (m: Manifest) => seen("right", m) }), [seen]);
 
   const send = useCallback(() => {
-    if (!holding || !sheet || busy) return;
+    if (!sheet || busy || (!holding && !amending)) return;
     if (!chosen) {
       setRefused("Choose first: 1 the left is post, 2 the right is post, 3 both pre, 4 both post, 5 can't tell.");
       return;
     }
     setBusy(true);
+    if (amending) {
+      const a: MyAnswer = amending;
+      const answer = chosen;
+      campaigns
+        .amend(id, a.answer, { value: answer })
+        .then((r) => {
+          const before = answerOf(PAIR_ANSWERS, a.value);
+          setSaid(r.unchanged || before === answer ? `${pairWords(a)} kept as it was: ${ANSWER_WORDS[answer]}.` : `Corrected ${pairWords(a)}: ${before ? ANSWER_WORDS[before] : "the earlier answer"} is now ${ANSWER_WORDS[answer]}; the earlier answer is kept.`);
+          refreshSummary();
+          correction.done(a);
+        })
+        .catch((e: unknown) => setRefused(refusedWords(e)))
+        .finally(() => setBusy(false));
+      return;
+    }
+    if (!holding) return setBusy(false);
     const it = holding.item;
     const answer = chosen;
     campaigns
@@ -218,11 +248,21 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
       })
       .catch((e: unknown) => setRefused(refusedWords(e)))
       .finally(() => setBusy(false));
-  }, [holding, sheet, busy, chosen, id, claim, refreshSummary]);
+  }, [holding, amending, sheet, busy, chosen, id, claim, refreshSummary, correction]);
 
   const giveBack = useCallback(
     (then: "next" | "stop") => {
-      if (!holding || busy) return;
+      if (busy) return;
+      // a correction left as it was: back to the pair leased, which stays leased
+      if (amending) {
+        correction.leave();
+        if (then !== "stop") return;
+        // Stop gives the item leased back, as it does without a correction open
+        if (holding) campaigns.release(id, holding.assignment.id).catch(() => undefined);
+        location.hash = href("campaigns", id);
+        return;
+      }
+      if (!holding) return;
       setBusy(true);
       campaigns
         .release(id, holding.assignment.id)
@@ -234,12 +274,12 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
         .catch((e: unknown) => setRefused(refusedWords(e)))
         .finally(() => setBusy(false));
     },
-    [holding, busy, id, claim],
+    [holding, amending, busy, id, claim, correction],
   );
 
   // the keys
-  const keyed = useRef({ send, giveBack, shared, jump, jumpable });
-  keyed.current = { send, giveBack, shared, jump, jumpable };
+  const keyed = useRef({ send, giveBack, shared, jump, jumpable, correction });
+  keyed.current = { send, giveBack, shared, jump, jumpable, correction };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.metaKey || e.defaultPrevented) return;
@@ -260,7 +300,9 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
       else if (act.kind === "window") keyed.current.shared.setMode(keyed.current.shared.mode === "shared" ? "own" : "shared");
       else if (act.kind === "region") {
         if (keyed.current.jumpable) keyed.current.jump(REGIONS[act.region]);
-      } else if (act.kind === "keys") setKeys((x) => !x);
+      } else if (act.kind === "back") keyed.current.correction.back();
+      else if (act.kind === "mine") keyed.current.correction.setListOpen((x) => !x);
+      else if (act.kind === "keys") setKeys((x) => !x);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -298,7 +340,7 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
               <b>{open}</b> open
             </span>
           )}
-          {holding && shownAt !== null && (
+          {shown && shownAt !== null && (
             <span className="on-this" title="how long this pair has been on the screen">
               {" "}
               · this one <b>{secondsWords(now - shownAt)}</b>
@@ -306,9 +348,10 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
           )}
         </span>
       </div>
-      <SeatNote seat={seat} campaign={campaign} now={now} onAgain={() => claim()} />
-      {holding && (
-        <div className="pair-grid">
+      {!amending && <SeatNote seat={seat} campaign={campaign} now={now} onAgain={() => claim()} onMine={() => correction.setListOpen(true)} />}
+      {correction.listOpen && <MyAnswers caps={caps} campaign={campaign} values={[]} back="rate" onClose={() => correction.setListOpen(false)} onPick={correction.open} current={amending?.answer ?? null} />}
+      {shown && (
+        <div className={amending ? "pair-grid correcting" : "pair-grid"}>
           {sheetFailed && <p className="warn pair-bar">The pair could not be read: {sheetFailed}</p>}
           {!sheet && !sheetFailed && <Wait phase="reading the pair" since={shownAt ?? now} size="panel" />}
           {sheet &&
@@ -324,11 +367,19 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
           {sheet && (
             <div className="pair-bar" data-reader-panel="">
               <div className="rate-item">
-                <b>{pairWords(holding.item)}</b>
-                <span className={left !== null && left < 120 ? "tag caution" : "tag"} title={holding.assignment.lease_until ?? undefined}>
-                  <Icon name="clock" />
-                  {leaseWords(left)}
-                </span>
+                <b>{pairWords(shown)}</b>
+                {amending ? (
+                  <span className="tag caution correcting-tag" title="your answer to this pair, open to correct; the pair you were reading stays yours">
+                    correcting your answer
+                  </span>
+                ) : (
+                  holding && (
+                    <span className={left !== null && left < 120 ? "tag caution" : "tag"} title={holding.assignment.lease_until ?? undefined}>
+                      <Icon name="clock" />
+                      {leaseWords(left)}
+                    </span>
+                  )
+                )}
                 <button type="button" className={linked && sync ? "tag pair-sync on" : "tag pair-sync"} aria-pressed={linked} onClick={() => setLinked((x) => !x)} title="keep the two pictures on one slice where their geometry matches (l)">
                   {syncWords}
                 </button>
@@ -338,27 +389,40 @@ export function PairReader({ caps, id }: { caps: Capabilities; id: string }) {
               </div>
               <div className="pair-answers" role="group" aria-label="the answer">
                 {PAIR_ANSWERS.map((a, i) => (
-                  <button key={a} type="button" className={chosen === a ? "opt on pair-answer" : "opt pair-answer"} aria-pressed={chosen === a} disabled={busy} onClick={() => (setRefused(null), setChosen(a))}>
+                  <button key={a} type="button" className={["opt", "pair-answer", chosen === a ? "on" : "", was === a ? "yours" : ""].filter(Boolean).join(" ")} aria-pressed={chosen === a} disabled={busy} onClick={() => (setRefused(null), setChosen(a))}>
                     <kbd>{i + 1}</kbd>
                     {ANSWER_WORDS[a]}
+                    {was === a && <span className="was">your answer</span>}
                   </button>
                 ))}
               </div>
               <div className="row actions">
                 <span className="act-main" role="group" aria-label="send">
                   <button type="button" className="button act-answer" disabled={busy || !chosen} onClick={send}>
-                    Answer <kbd>Enter</kbd>
+                    {amending ? "Correct" : "Answer"} <kbd>Enter</kbd>
                   </button>
                 </span>
-                <button type="button" className="button secondary" disabled={busy} onClick={() => giveBack("next")} title="Back to the pool; never to you again">
-                  Give back <kbd>s</kbd>
-                </button>
+                {amending ? (
+                  <button type="button" className="button secondary" disabled={busy} onClick={() => giveBack("next")} title="Leave your answer as it was, and go back to the pair you were reading">
+                    Keep it <kbd>s</kbd>
+                  </button>
+                ) : (
+                  <button type="button" className="button secondary" disabled={busy} onClick={() => giveBack("next")} title="Back to the pool; never to you again">
+                    Give back <kbd>s</kbd>
+                  </button>
+                )}
                 <span className="grow" />
                 {refused && (
                   <p className="warn one-line" title={refused}>
                     {refused}
                   </p>
                 )}
+                <button type="button" className="button quiet mine-back" disabled={busy} onClick={correction.back} title="open your last answer again to correct it; again, the one before">
+                  Previous <kbd>b</kbd>
+                </button>
+                <button type="button" className="button quiet mine-open" aria-expanded={correction.listOpen} onClick={() => correction.setListOpen((x) => !x)} title="your answers here, by pair, to open one and correct it">
+                  My answers <kbd>m</kbd>
+                </button>
                 <button type="button" className="button quiet" disabled={busy} onClick={() => giveBack("stop")}>
                   Stop
                 </button>
@@ -384,7 +448,7 @@ const secondsWords = (ms: number) => {
   return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
 
-function SeatNote({ seat, campaign, now, onAgain }: { seat: Seat; campaign: Campaign; now: number; onAgain: () => void }) {
+function SeatNote({ seat, campaign, now, onAgain, onMine }: { seat: Seat; campaign: Campaign; now: number; onAgain: () => void; onMine: () => void }) {
   if (seat.kind === "claiming") return <Wait phase="claiming the next pair" since={now} size="panel" />;
   if (seat.kind === "failed") return <p className="warn">{seat.why}</p>;
   if (seat.kind !== "done") return null;
@@ -398,7 +462,12 @@ function SeatNote({ seat, campaign, now, onAgain }: { seat: Seat; campaign: Camp
           <a href={href("campaigns", String(campaign.id))}>Back to {campaign.name}</a> ·{" "}
           <button type="button" className="link-button" onClick={onAgain}>
             Look again
-          </button>
+          </button>{" "}
+          ·{" "}
+          <button type="button" className="link-button" onClick={onMine}>
+            My answers
+          </button>{" "}
+          <kbd>m</kbd>
         </p>
       </div>
     </div>
@@ -419,8 +488,10 @@ function PairKeyList() {
       {pair("3", "both pre")}
       {pair("4", "both post (a rerun after the contrast)")}
       {pair("5", "can't tell")}
-      {pair("Enter", "answer, then the next pair")}
-      {pair("s", "give it back, then the next")}
+      {pair("Enter", "answer, then the next pair; on an answer opened again, correct it")}
+      {pair("s", "give it back, then the next; on an answer opened again, leave it as it was")}
+      {pair("b", "open your last answer again to correct it; again, the one before")}
+      {pair("m", "your answers, by pair, to open one and correct it")}
       {pair("l", "keep the two pictures on one slice, or let each move alone")}
       {pair("w", "one window for both, scaled to each stack's reference tissue, or each its own")}
       {pair("7 8 9 0", "jump to the ventricles, the superior sagittal sinus, the transverse sinuses, the sella (approximate)")}

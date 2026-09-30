@@ -130,12 +130,15 @@ export type AnchoredAct =
   | { kind: "sync" }
   | { kind: "window" }
   | { kind: "difference" }
-  | { kind: "region"; region: number };
+  | { kind: "region"; region: number }
+  | { kind: "back" }
+  | { kind: "mine" };
 
 /**
  * A key's act: 1 to 3 choose an answer, Enter sends it, `s` gives the item
  * back, `l` ties the pictures to one slice or lets them go, `w` one window
- * for all or each its own, `d` the difference, 7 to 0 the region jumps, `?`
+ * for all or each its own, `d` the difference, 7 to 0 the region jumps, `b`
+ * back to one's last answer (again, the one before), `m` one's answers, `?`
  * the keys. The arrows, Page Up and Down and Space are the pictures'.
  */
 export function anchoredKey(key: string, o: { inField: boolean; ctrl?: boolean }): AnchoredAct | null {
@@ -146,6 +149,8 @@ export function anchoredKey(key: string, o: { inField: boolean; ctrl?: boolean }
   if (key === "l") return { kind: "sync" };
   if (key === "w") return { kind: "window" };
   if (key === "d") return { kind: "difference" };
+  if (key === "b") return { kind: "back" };
+  if (key === "m") return { kind: "mine" };
   if (key === "?") return { kind: "keys" };
   if (/^[1-3]$/u.test(key)) return { kind: "answer", answer: ANCHORED_ANSWERS[Number(key) - 1] };
   const region = ["7", "8", "9", "0"].indexOf(key);
