@@ -146,7 +146,7 @@ function MineRow({ a, c, values, refusal, back, onPick, current }: { a: MyAnswer
         </span>
         <span className="meta">
           {blind ? "" : `item ${a.position + 1} · ${whenWords(a.answered_at)}`}
-          {a.via === "batch" ? " · in a batch" : a.via === "amend" ? `${blind ? "" : " · "}corrected` : ""}
+          {a.via === "batch" ? `${blind ? "" : " · "}in a batch` : a.via === "amend" ? `${blind ? "" : " · "}corrected` : ""}
         </span>
         {a.unsure && <span className="tag caution">unsure</span>}
         {a.sealed && (

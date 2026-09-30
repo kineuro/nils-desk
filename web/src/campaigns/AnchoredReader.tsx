@@ -47,7 +47,8 @@ export function AnchoredReader({ caps, id, query }: { caps: Capabilities; id: st
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [seat, setSeat] = useState<Seat>({ kind: "claiming" });
-  const [sheet, setSheet] = useState<AnchoredSheet | null>(null);
+  // the sheet with the item it is of: one of an item no longer on the screen is never drawn or answered against
+  const [loaded, setLoaded] = useState<{ key: string; sheet: AnchoredSheet } | null>(null);
   const [sheetFailed, setSheetFailed] = useState<string | null>(null);
   const [chosen, setChosen] = useState<AnchoredAnswer | null>(null);
   const [summary, setSummary] = useState<AnchoredSummary | null>(null);
@@ -65,7 +66,7 @@ export function AnchoredReader({ caps, id, query }: { caps: Capabilities; id: st
   const capsNow = useRef(caps);
   capsNow.current = caps;
   const amendAt = query?.amend && /^\d+$/u.test(query.amend) ? Number(query.amend) : null;
-  const correction = useCorrection({ caps, id, campaign, amendAt, say: setSaid, words: anchoredWords });
+  const correction = useCorrection({ caps, id, campaign, amendAt, busy, say: setSaid, words: anchoredWords });
   const amending = correction.amending;
 
   const claim = useCallback(
@@ -105,11 +106,12 @@ export function AnchoredReader({ caps, id, query }: { caps: Capabilities; id: st
   const was = amending ? answerOf(ANCHORED_ANSWERS, amending.value) : null;
   const current = useRef<string | null>(null);
   current.current = shownKey;
+  const sheet = loaded && loaded.key === shownKey ? loaded.sheet : null;
   const [shownAt, setShownAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (!shown || !shownKey) return;
-    setSheet(null);
+    setLoaded(null);
     setSheetFailed(null);
     setChosen(was);
     setRefused(null);
@@ -119,7 +121,7 @@ export function AnchoredReader({ caps, id, query }: { caps: Capabilities; id: st
     setShownAt(Date.now());
     const at = shownKey;
     anchoredDoors.sheet(id, shown.id).then(
-      (s) => current.current === at && setSheet(s),
+      (s) => current.current === at && setLoaded({ key: at, sheet: s }),
       (e: unknown) => current.current === at && setSheetFailed(refusedWords(e)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -212,7 +214,7 @@ export function AnchoredReader({ caps, id, query }: { caps: Capabilities; id: st
           const before = answerOf(ANCHORED_ANSWERS, a.value);
           setSaid(r.unchanged || before === answer ? `${anchoredWords(a)} kept as it was: ${ANCHORED_WORDS[answer]}.` : `Corrected ${anchoredWords(a)}: ${before ? ANCHORED_WORDS[before] : "the earlier answer"} is now ${ANCHORED_WORDS[answer]}; the earlier answer is kept.`);
           refreshSummary();
-          correction.done();
+          correction.done(a);
         })
         .catch((e: unknown) => setRefused(refusedWords(e)))
         .finally(() => setBusy(false));
@@ -238,7 +240,10 @@ export function AnchoredReader({ caps, id, query }: { caps: Capabilities; id: st
       // a correction left as it was: back to the item leased, which stays leased
       if (amending) {
         correction.leave();
-        if (then === "stop") location.hash = href("campaigns", id);
+        if (then !== "stop") return;
+        // Stop gives the item leased back, as it does without a correction open
+        if (holding) campaigns.release(id, holding.assignment.id).catch(() => undefined);
+        location.hash = href("campaigns", id);
         return;
       }
       if (!holding) return;

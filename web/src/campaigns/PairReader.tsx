@@ -62,7 +62,8 @@ export function PairReader({ caps, id, query }: { caps: Capabilities; id: string
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [seat, setSeat] = useState<Seat>({ kind: "claiming" });
-  const [sheet, setSheet] = useState<PairSheet | null>(null);
+  // the sheet with the item it is of: one of an item no longer on the screen is never drawn or answered against
+  const [loaded, setLoaded] = useState<{ key: string; sheet: PairSheet } | null>(null);
   const [sheetFailed, setSheetFailed] = useState<string | null>(null);
   const [chosen, setChosen] = useState<PairAnswer | null>(null);
   const [summary, setSummary] = useState<PairSummary | null>(null);
@@ -83,7 +84,7 @@ export function PairReader({ caps, id, query }: { caps: Capabilities; id: string
   const capsNow = useRef(caps);
   capsNow.current = caps;
   const amendAt = query?.amend && /^\d+$/u.test(query.amend) ? Number(query.amend) : null;
-  const correction = useCorrection({ caps, id, campaign, amendAt, say: setSaid, words: pairWords });
+  const correction = useCorrection({ caps, id, campaign, amendAt, busy, say: setSaid, words: pairWords });
   const amending = correction.amending;
 
   const claim = useCallback(
@@ -123,12 +124,13 @@ export function PairReader({ caps, id, query }: { caps: Capabilities; id: string
   const was = amending ? answerOf(PAIR_ANSWERS, amending.value) : null;
   const current = useRef<string | null>(null);
   current.current = shownKey;
+  const sheet = loaded && loaded.key === shownKey ? loaded.sheet : null;
   const [shownAt, setShownAt] = useState<number | null>(null);
 
   // a new pair: its two stacks, the clock, both pictures on their middles
   useEffect(() => {
     if (!shown || !shownKey) return;
-    setSheet(null);
+    setLoaded(null);
     setSheetFailed(null);
     setChosen(was);
     setRefused(null);
@@ -137,7 +139,7 @@ export function PairReader({ caps, id, query }: { caps: Capabilities; id: string
     setShownAt(Date.now());
     const at = shownKey;
     pairDoors.sheet(id, shown.id).then(
-      (s) => current.current === at && setSheet(s),
+      (s) => current.current === at && setLoaded({ key: at, sheet: s }),
       (e: unknown) => current.current === at && setSheetFailed(refusedWords(e)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -228,7 +230,7 @@ export function PairReader({ caps, id, query }: { caps: Capabilities; id: string
           const before = answerOf(PAIR_ANSWERS, a.value);
           setSaid(r.unchanged || before === answer ? `${pairWords(a)} kept as it was: ${ANSWER_WORDS[answer]}.` : `Corrected ${pairWords(a)}: ${before ? ANSWER_WORDS[before] : "the earlier answer"} is now ${ANSWER_WORDS[answer]}; the earlier answer is kept.`);
           refreshSummary();
-          correction.done();
+          correction.done(a);
         })
         .catch((e: unknown) => setRefused(refusedWords(e)))
         .finally(() => setBusy(false));
@@ -254,7 +256,10 @@ export function PairReader({ caps, id, query }: { caps: Capabilities; id: string
       // a correction left as it was: back to the pair leased, which stays leased
       if (amending) {
         correction.leave();
-        if (then === "stop") location.hash = href("campaigns", id);
+        if (then !== "stop") return;
+        // Stop gives the item leased back, as it does without a correction open
+        if (holding) campaigns.release(id, holding.assignment.id).catch(() => undefined);
+        location.hash = href("campaigns", id);
         return;
       }
       if (!holding) return;

@@ -222,6 +222,24 @@ describe("in the reader", () => {
     expect(host.querySelector(".correcting-tag")).toBeNull();
   });
 
+  it("anchored: Stop on a correction keeps the answer and gives the item leased back", async () => {
+    vi.stubGlobal("fetch", anchoredEngine({ log, kept }));
+    root = createRoot(host);
+    await act(async () => root.render(<AnchoredReader caps={capsWith(anchoredDoorsOf())} id={String(CAMPAIGN_ID)} />));
+    await until(() => itemShown() === "item 13" && host.querySelector(".pair-answers"));
+    await press("2");
+    await press("Enter");
+    await until(() => itemShown() === "item 14" && host.querySelector(".pair-answers"));
+    await press("b");
+    await until(() => itemShown() === "item 13" && host.querySelector(".pair-answer.yours"));
+    const stop = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "Stop")!;
+    await act(async () => stop.click());
+    await until(() => log.some((a) => a.path.endsWith("/release")));
+    expect(log.find((a) => a.path.endsWith("/release"))?.path).toBe(`/api/campaigns/${CAMPAIGN_ID}/assignments/79/release`);
+    expect(log.some((a) => a.path.endsWith("/amend"))).toBe(false);
+    expect(location.hash).toBe(`#campaigns/${CAMPAIGN_ID}`);
+  });
+
   it("anchored: a link's answer opens in the reader, and the same answer again writes nothing new", async () => {
     vi.stubGlobal("fetch", anchoredEngine({ log, kept }));
     root = createRoot(host);
