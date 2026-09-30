@@ -15,11 +15,11 @@ import { Wait } from "../ui/Wait";
 import { askedOf, chooseBody, valueWords, type Asked, type AskedCandidate } from "./asked";
 import { askPeopleHref, asksPeople } from "./askPeople";
 import { CandidateList } from "./CandidateList";
-import { refusalWords, review, type PackDoc } from "./client";
+import { packRoles, refusalWords, review, type PackDoc } from "./client";
 import { modelGroups } from "./modelFamily";
 import { ModelFamily } from "./ModelFamily";
 import { PickDialog } from "./PickDialog";
-import { borderOf, borderWords, occasionWords, PICK_BORDER, type Border } from "./picks";
+import { borderOf, borderWords, occasionWords, PICK_BORDER, rolesOffered, type Border } from "./picks";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -87,11 +87,37 @@ export function BordersTable({ borders, onOpen }: { borders: Border[]; onOpen: (
   );
 }
 
-export function PicksFamily({ caps, onChanged }: { caps: Capabilities; onChanged: (words: string) => void }) {
+/** The roles as chips (record 51 R8): the served pack's, each with its open borders, and every role. */
+export function RoleChips({ roles, role, onRole }: { roles: { role: string; open: number }[]; role: string | null; onRole: (r: string | null) => void }) {
+  if (roles.length === 0) return null;
+  return (
+    <div className="chips" role="group" aria-label="Role">
+      <button type="button" className={role === null ? "opt on" : "opt"} aria-pressed={role === null} onClick={() => onRole(null)}>
+        every role
+      </button>
+      {roles.map((r) => (
+        <button key={r.role} type="button" className={role === r.role ? "opt on" : "opt"} aria-pressed={role === r.role} onClick={() => onRole(r.role)}>
+          {r.role}
+          <b>{n(r.open)}</b>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export function PicksFamily({ caps, packName = null, onChanged }: { caps: Capabilities; packName?: string | null; onChanged: (words: string) => void }) {
   const [load, again] = useRead(() => review.list({ kind: PICK_BORDER, limit: 500 }).then((r) => r.items));
   const [open, setOpen] = useState<ReviewItem | null>(null);
+  const [pack, setPack] = useState<PackDoc | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const readsPack = packName !== null && may(caps, "data:see");
+  useEffect(() => {
+    if (readsPack && packName) review.pack(packName).then(setPack, () => undefined);
+  }, [readsPack, packName]);
   const items = load.kind === "ready" ? load.value : [];
-  const borders = items.map(borderOf).filter((b): b is Border => b !== null && (b.status === "open" || b.answered !== null));
+  const all = items.map(borderOf).filter((b): b is Border => b !== null && (b.status === "open" || b.answered !== null));
+  const roles = rolesOffered(packRoles(pack), all);
+  const borders = role === null ? all : all.filter((b) => b.role === role);
   const waiting = borders.filter((b) => b.status === "open").length;
   return (
     <section className="stack roomy">
@@ -107,6 +133,7 @@ export function PicksFamily({ caps, onChanged }: { caps: Capabilities; onChanged
               </a>
             )}
           </div>
+          <RoleChips roles={roles} role={role} onRole={setRole} />
           <BordersTable borders={borders} onOpen={(b) => setOpen(items.find((i) => i.id === b.item) ?? null)} />
         </>
       )}

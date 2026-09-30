@@ -4,6 +4,22 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Review's queue filters by axis and by reason (no value, rules conflict, not confident, vote split, a decision disagrees, a model proposes, and a pick run's borders by their reasons), from the kinds the engine lists. The filter is kept in the page's address (`#review?axis=base&reason=conflict`), so a reload or a link keeps it, and one axis's kind is read whole from the engine. "Ask people about these" carries it to the campaign maker as a kind or a prefix.
+- A model that disagrees with a person's decision carries a badge, "a model disagrees with this person's decision", in the queue and in Look, with what the model proposes and how sure it is; Decide starts from the person's value, to confirm or change it. It reads the engine's `<axis>:decision` items whose evidence says `source: model`.
+- The Picks page names the six border reasons the pack gains (a retake, an unknown dimension, an odd number of slices, a twin before or after contrast, an EPIMix standing in, a plain stack close behind the Dixon) in words, and offers the served pack's roles as chips with their open borders. The campaign maker offers the pack's roles for a pick question, where the engine lists them.
+
+### Changed
+
+- The desk asks the engine's question of who rates a campaign: the maker, a person it names as a rater or an adjudicator, a person it assigned an item, or a holder of work on the Review page; a campaign that names its raters is claimed only by them. A campaign that names no raters is rated by reviewers, and the maker says so under the raters it names.
+- Keep on a pick border writes a person's pick of the run's stacks, and says so ("Keep the run's pick as yours"); where nothing was eligible it says no stack stands for the role here. A kept pick stands through later pick runs until withdrawn, with the engine that writes it.
+
+### Fixed
+
+- Accepting a batch of like stacks was refused ("hold_back is not the caller's to say"): the desk sent the share held back, which the engine keeps as the campaign's own. It now names only the items shown.
+- The campaign and reader walks were brought to the engine they test: the campaigns name their raters, and the batch walk makes its campaign with the rules' suggestion.
+
 ## [1.0.0-alpha.60] - 2026-09-30
 
 A rater corrects their own answers on the anchored and the pair pages while the campaign is open: `b` opens the last answer again and then the one before, `m` lists one's answers by item, and another choice and Enter correct the one opened, through the engine's amend door, which keeps the earlier answer. My answers opens an anchored or a pair answer on its own page. No engine change is needed. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.

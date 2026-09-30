@@ -99,6 +99,13 @@ export interface PackDoc {
   buckets: Record<string, string[]>;
   /** The word lists a site may amend at pack contract 5, by `axis.value`. */
   lists: string[];
+  /** The picks the pack declares and the roles each picks for (record 51); empty from an engine before it. */
+  picks: { name: string; roles: string[] }[];
+}
+
+/** The roles the pack's picks declare, each once, in the pack's order (record 51 R8): what a pick is asked for, never a list of the desk's own. */
+export function packRoles(pack: Pick<PackDoc, "picks"> | null): string[] {
+  return [...new Set((pack?.picks ?? []).flatMap((p) => p.roles))];
 }
 
 /** An overlay document as the try and the propose doors take it. */
@@ -231,6 +238,29 @@ export function unitsWords(units: number | null | undefined): string {
   return units === null || units === undefined ? "fewer than five" : n(units);
 }
 
+/** A model that disagrees with a person's decision (record 51 R5), as an `<axis>:decision` item with a model's evidence says it. */
+export interface Disagrees {
+  axis: string;
+  /** The person's decision in force, or null where they decided the axis has no value. */
+  decision: string | null;
+  value: string;
+  model: string;
+  confidence: number | null;
+}
+
+/** The badge's words, the same in the queue and in Look. */
+export const DISAGREES = "a model disagrees with this person's decision";
+
+/** Whether an item is a model disagreeing with a person's decision, and what each said; null for any other item, a rules disagreement among them. */
+export function modelDisagrees(item: Pick<ReviewItem, "kind" | "evidence">): Disagrees | null {
+  const k = kindOf(item.kind);
+  const ev = (item.evidence ?? {}) as Json;
+  if (!k.classifier || k.what !== "decision" || ev.source !== "model") return null;
+  const m = ev.model && typeof ev.model === "object" ? (ev.model as Json) : null;
+  const model = m ? [text(m.name), text(m.version)].filter(Boolean).join(" ") : (text(ev.model) ?? "");
+  return { axis: text(ev.axis) ?? k.area, decision: text(ev.decision), value: text(ev.value) ?? "", model: model || (num(ev.model_id) !== null ? `model ${num(ev.model_id)}` : "a model"), confidence: num(ev.confidence) };
+}
+
 export function itemWords(item: ReviewItem): string {
   const k = kindOf(item.kind);
   if (item.kind === "pipeline:qc" && isGrouped(item)) {
@@ -257,7 +287,10 @@ export function itemWords(item: ReviewItem): string {
     const value = text(ev.value) ?? text(ev.guess);
     if (k.what === "vote") return `${values.length > 1 ? values.join(" or ") : k.area}, the vote split${alike}`;
     if (k.what === "missing") return `no ${k.area} fits${alike}`;
+    if (k.what === "conflict" && value && text(ev.other)) return `${value} over ${text(ev.other)}: two rules on ${k.area} disagree${alike}`;
     if (k.what === "low_confidence") return `${value ? `${value}? ` : ""}the rules were not sure of ${k.area}${alike}`;
+    const d = modelDisagrees(item);
+    if (d) return `${d.model} proposes ${d.value}${d.confidence !== null ? ` at ${d.confidence.toFixed(2)}` : ""} where a person decided ${d.axis} ${d.decision === null ? "has no value" : `is ${d.decision}`}`;
     if (k.what === "decision") return `a decision on ${k.area} disagrees with the rules${alike}`;
     return `${k.area}: ${k.what}${alike}`;
   }
@@ -363,6 +396,9 @@ export function packDoc(raw: Json): PackDoc {
     }),
     buckets,
     lists,
+    picks: Array.isArray(raw.picks)
+      ? (raw.picks as Json[]).flatMap((p) => (p && typeof p === "object" && text(p.name) ? [{ name: text(p.name) as string, roles: Array.isArray(p.roles) ? p.roles.map(String) : [] }] : []))
+      : [],
   };
 }
 

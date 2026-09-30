@@ -184,6 +184,21 @@ describe("making one", () => {
     expect(form).not.toContain("Shown beside each item");
   });
 
+  // record 51 R4 and R8: the maker says who rates an unnamed campaign, and offers the served pack's roles
+  it("says an unnamed campaign is rated by reviewers, and offers a pick the pack's roles", () => {
+    const html = renderToStaticMarkup(<MakeForm caps={capsFor()} draft={emptyDraft()} pack={pack} onChange={none} />);
+    expect(html).toContain("No raters named, so only reviewers (work on the Review page) and you rate it");
+    expect(html).not.toContain("anyone with work");
+    const roles = packDoc({ pack: "mri", version: "0.16.0", axes: [], picks: [{ name: "main", roles: ["t1w", "flair", "t2w"] }] });
+    const pick = renderToStaticMarkup(<MakeForm caps={capsFor()} draft={{ ...emptyDraft(), kind: "pick", role: "t2w" }} pack={roles} onChange={none} />);
+    expect(pick).toContain('class="opt on" aria-pressed="true">t2w</button>');
+    expect(pick).toContain(">flair</button>");
+    expect(pick).toContain("The roles the pack&#x27;s picks declare.");
+    // an engine that serves no picks leaves the role to be typed
+    const typed = renderToStaticMarkup(<MakeForm caps={capsFor()} draft={{ ...emptyDraft(), kind: "pick" }} pack={pack} onChange={none} />);
+    expect(typed).toContain('placeholder="t1w"');
+  });
+
   it("offers the axes question where the engine asks it, and a form's fields", () => {
     const caps = capsFor({ engine: { campaigns: { question_kinds: ["axis", "axes"] } } });
     expect(renderToStaticMarkup(<MakeForm caps={caps} draft={emptyDraft()} pack={pack} onChange={none} />)).toContain("Several axes");

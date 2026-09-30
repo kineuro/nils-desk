@@ -5,7 +5,7 @@
 // accepted with their held back, and the parts as they draw.
 
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import askedItem from "../../test/fixtures/campaigns/reader_asked.json";
 import whyDoc from "../../test/fixtures/campaigns/reader_why.json";
 import claimed from "../../test/fixtures/campaigns/claim.json";
@@ -45,7 +45,7 @@ import {
   upcoming,
   type Reading,
 } from "./reader";
-import { hintOf, R48, valueOrderServed } from "./readerDoors";
+import { acceptBatch, hintOf, R48, valueOrderServed } from "./readerDoors";
 import { EvidenceLines, PaceCount, SuggestionBar } from "./ReaderParts";
 import { blank } from "./renderers";
 import { WorkspaceBody, type WorkspaceBodyProps } from "./Workspace";
@@ -589,5 +589,27 @@ describe("the review's findings", () => {
     expect(p.warmed).toEqual([3, 4, 5]);
     expect(p.has(1)).toBe(false);
     expect(p.has(5)).toBe(true);
+  });
+});
+
+// record 51: the reader walk found the batch accept refused, since the engine
+// keeps the share it holds back and the seed as the campaign's own
+describe("accepting a batch", () => {
+  it("names the items shown and never the share held back or the seed, which the engine refuses", async () => {
+    const sent: { path: string; body: unknown }[] = [];
+    const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      sent.push({ path: String(input), body: init?.body ? JSON.parse(String(init.body)) : null });
+      return new Response(JSON.stringify({ campaign: 7, batch: "a1", hold_back: 0.1, accepted: [{ item: 1, answer: 5, state: "agreed" }], held_back: [2], refused: [] }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    vi.stubGlobal("fetch", fetch);
+    try {
+      const batch = { key: "a1" } as Parameters<typeof acceptBatch>[1];
+      expect(await acceptBatch(7, batch, { items: null })).toEqual({ accepted: 1, held: [2], refused: 0 });
+      await acceptBatch(7, batch, { items: [1, 3] });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(sent.map((x) => x.path)).toEqual(["/api/campaigns/7/batches/a1/accept", "/api/campaigns/7/batches/a1/accept"]);
+    expect(sent.map((x) => x.body)).toEqual([{}, { items: [1, 3] }]);
   });
 });

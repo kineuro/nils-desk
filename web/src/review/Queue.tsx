@@ -3,7 +3,10 @@
 // top, the three kinds as cards, each a count, a phrase and the one act that
 // goes with it. Every row action stands: a row is decided, looked at in the
 // viewer with its evidence, or seen; held files are mapped on their dataset's
-// Pseudonymisation page and never decided here.
+// Pseudonymisation page and never decided here. The table filters by axis and
+// by reason (record 51, G4), in the page's address, and carries the filter to
+// the campaign maker; a model that disagrees with a person's decision carries
+// a badge (record 51 R5).
 
 import { lazy, Suspense, useMemo, useState } from "react";
 import type { Json } from "../ask/client";
@@ -14,8 +17,12 @@ import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { acts, batchOf, isGrouped, itemKey, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
+import { askPeopleHref, asksPeople } from "./askPeople";
+import { acts, batchOf, DISAGREES, isGrouped, itemKey, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, modelDisagrees, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
+import { filterChoices, filterKind, filterWords, NO_FILTER, passes, reasonWords, type QueueFilter } from "./filter";
+import { borderWords, PICK_BORDER } from "./picks";
 import { bulkPlan, kindOf, needsReading, sortByCost } from "./triage";
+import "./grown.css";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -73,6 +80,9 @@ export interface QueueProps {
   onDecide: (item: ReviewItem) => void;
   onExplain: (item: ReviewItem, stack: number) => void;
   onChanged: (words: string) => void;
+  /** The axis and reason the table is narrowed to, from the page's address (record 51, G4). */
+  filter?: QueueFilter;
+  onFilter?: (f: QueueFilter) => void;
 }
 
 /** The three cards on top, from the open items: what each kind counts and says. */
@@ -155,6 +165,7 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
                   <span className={`tag ${tag.tone}`}>{tag.words}</span>
                 </td>
                 <td>
+                  {modelDisagrees(i) && <span className="tag caution badge">{DISAGREES}</span>}
                   {itemWords(i)}
                   {i.status !== "open" && <span className="meta"> · {i.status}</span>}
                 </td>
@@ -211,7 +222,54 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
   );
 }
 
-export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run = null, onDecide, onExplain, onChanged }: QueueProps) {
+/** The queue's filter chips: every axis the engine lists questions on, every reason, and a pick border's reasons. */
+export function FilterChips({ choices, filter, onFilter }: { choices: ReturnType<typeof filterChoices>; filter: QueueFilter; onFilter: (f: QueueFilter) => void }) {
+  if (choices.axes.length === 0 && choices.reasons.length === 0) return null;
+  const border = filter.reason === PICK_BORDER;
+  return (
+    <div className="stack tight queue-filter">
+      {choices.axes.length > 0 && (
+        <div className="chips" role="group" aria-label="Axis">
+          <span className="label">Axis</span>
+          <button type="button" className={filter.axis === null ? "opt on" : "opt"} aria-pressed={filter.axis === null} onClick={() => onFilter({ ...filter, axis: null })}>
+            every axis
+          </button>
+          {choices.axes.map((a) => (
+            <button key={a} type="button" className={filter.axis === a ? "opt on" : "opt"} aria-pressed={filter.axis === a} onClick={() => onFilter({ axis: a, reason: border ? null : filter.reason, border: null })}>
+              {a}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="chips" role="group" aria-label="Reason">
+        <span className="label">Reason</span>
+        <button type="button" className={filter.reason === null ? "opt on" : "opt"} aria-pressed={filter.reason === null} onClick={() => onFilter({ ...filter, reason: null, border: null })}>
+          every reason
+        </button>
+        {choices.reasons.map((r) => (
+          <button key={r} type="button" className={filter.reason === r ? "opt on" : "opt"} aria-pressed={filter.reason === r} onClick={() => onFilter(r === PICK_BORDER ? { axis: null, reason: r, border: null } : { ...filter, reason: r, border: null })}>
+            {reasonWords(r)}
+          </button>
+        ))}
+      </div>
+      {border && choices.borders.length > 0 && (
+        <div className="chips" role="group" aria-label="Border">
+          <span className="label">Border</span>
+          <button type="button" className={filter.border === null ? "opt on" : "opt"} aria-pressed={filter.border === null} onClick={() => onFilter({ ...filter, border: null })}>
+            every border
+          </button>
+          {choices.borders.map((b) => (
+            <button key={b} type="button" className={filter.border === b ? "opt on" : "opt"} aria-pressed={filter.border === b} onClick={() => onFilter({ ...filter, border: b })}>
+              {borderWords({ borders: [b] })}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run = null, onDecide, onExplain, onChanged, filter = NO_FILTER, onFilter }: QueueProps) {
   const may = acts(caps).decide;
   const [family, setFamily] = useState<Family | null>(null);
   const [look, setLook] = useState<{ item: ReviewItem; stack: number } | null>(null);
@@ -221,7 +279,12 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
   const open = inBatch.filter((i) => i.status === "open");
   const chips: CohortChip[] = cohortChips(summary, items);
   const cards = needsOf(inBatch);
-  const shown = (family ? open.filter((i) => familyOf(i.kind) === family) : open).slice(0, all ? undefined : 50);
+  const choices = filterChoices(summary, items);
+  const filtered = open.filter((i) => passes(i, filter));
+  const shown = (family ? filtered.filter((i) => familyOf(i.kind) === family) : filtered).slice(0, all ? undefined : 50);
+  const narrowed = filterWords(filter);
+  const carried = filterKind(filter);
+  const ask = asksPeople(caps) && filtered.length > 0 && carried !== null ? askPeopleHref({ ...carried, cohort: cohort === "" ? null : cohort }) : null;
   const title = cohort === "" ? "The queue" : cohort === "none" ? "The queue of subjects in no cohort" : `The queue of ${cohort}`;
   return (
     <>
@@ -233,6 +296,7 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
           </button>
         ))}
       </div>
+      {onFilter && <FilterChips choices={choices} filter={filter} onFilter={onFilter} />}
       {batch !== null && (
         <p className="meta">
           The items of batch {batch}. <a href={href("review")}>The whole queue</a>
@@ -279,17 +343,26 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
       <section className="stack roomy">
         <div className="section-head rule-top">
           <h2>{title}</h2>
-          <span className="meta">the costliest first{family ? ` · ${family === "unsure" ? "the unsure stacks" : family === "identity" ? "the identity questions" : "the sessions that moved"}` : ""}</span>
+          <span className="meta">
+            the costliest first{narrowed ? ` · ${narrowed}, ${n(filtered.length)} open` : ""}
+            {family ? ` · ${family === "unsure" ? "the unsure stacks" : family === "identity" ? "the identity questions" : "the sessions that moved"}` : ""}
+          </span>
           {family && (
             <button type="button" className="button quiet small" onClick={() => setFamily(null)}>
-              All {n(open.length)}
+              All {n(filtered.length)}
             </button>
           )}
-          {!family && open.length > 50 && !all && (
+          {!family && filtered.length > 50 && !all && (
             <button type="button" className="button quiet small" onClick={() => setAll(true)}>
-              All {n(open.length)}
+              All {n(filtered.length)}
             </button>
           )}
+          {ask && (
+            <a className="button secondary small" href={ask}>
+              Ask people about these
+            </a>
+          )}
+          {asksPeople(caps) && narrowed && carried === null && <span className="meta">choose an axis to ask people about these</span>}
         </div>
         <QueueTable items={shown} may={may} onDecide={onDecide} onLook={(i, s) => setLook({ item: i, stack: s })} onSee={(i) => setFamily(familyOf(i.kind))} />
         <Says head="How the queue is shared out">
@@ -330,6 +403,11 @@ export function LookDialog({ item, stack, onClose, onExplain, onDecide }: { item
         </div>
       }
     >
+      {modelDisagrees(item) && (
+        <p>
+          <span className="tag caution badge">{DISAGREES}</span>
+        </p>
+      )}
       <p className="lede">{itemWords(item)}</p>
       <Suspense fallback={<Wait phase="loading the viewer" since={Date.now()} size="panel" />}>
         <Viewer stack={stack} level={level} />

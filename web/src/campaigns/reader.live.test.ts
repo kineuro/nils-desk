@@ -12,8 +12,9 @@
 //   READER_WALK_TOKENS=alice@node=<token>,carol@node=<token> \
 //   npx vitest run src/campaigns/reader.live.test.ts
 //
-// The first token rates (campaigns:work, review:see), the second makes the
-// campaigns (campaigns:work, query:work). It writes a selection and two
+// The first token rates (campaigns:work, review:see), named as each
+// campaign's rater, the second makes the campaigns (campaigns:work,
+// query:work). It writes a selection and two
 // campaigns into that registry, so it is run against a throwaway one.
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -21,7 +22,7 @@ import { door } from "../ask/client";
 import type { Capabilities, EngineCapabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { warmStack } from "../viewer/prefetch";
-import { campaigns, emptyDraft, makeBody, type Campaign, type Given } from "./client";
+import { campaigns, emptyDraft, makeBody, type Campaign, type Given, type SuggestMode } from "./client";
 import { acceptPlan, baselineOf, changesOf, complete, givenOf, givenOfCandidate, median, planWords, Prefetcher, suggestionOf, upcoming } from "./reader";
 import { acceptBatch, batchesFor, claimIn, forgetReadings, hintOf, R48, readingFor, statsFor, valueOrderServed } from "./readerDoors";
 import { bodyOf, given, keyAct, rowsOf, seatOf } from "./workspace";
@@ -68,8 +69,8 @@ describe.skipIf(!ENGINE || PEOPLE.length < 2)("the reader walked on a live engin
     globalThis.fetch = realFetch;
   });
 
-  async function make(name: string, raters = 1): Promise<Campaign> {
-    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${selection}@1` }), name, axis: "base", ratersPerItem: raters, closesInto: "none", leaseMinutes: 15 });
+  async function make(name: string, raters = 1, suggest?: SuggestMode): Promise<Campaign> {
+    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${selection}@1` }), name, axis: "base", ratersPerItem: raters, closesInto: "none", leaseMinutes: 15, raters: ALICE.who, ...(suggest ? { suggest } : {}) });
     expect(made.ok).toBe(true);
     if (!made.ok) throw new Error(made.needs);
     return as(CAROL, () => campaigns.make(made.body));
@@ -152,7 +153,8 @@ describe.skipIf(!ENGINE || PEOPLE.length < 2)("the reader walked on a live engin
       ctx.skip();
       return;
     }
-    const c = await make(`reader-batch-${STAMP}`);
+    // a batch groups like stacks by the rules' answer, so the campaign shows it (since alpha.59 one that suggests none forms no batch)
+    const c = await make(`reader-batch-${STAMP}`, 1, "rules");
     const t0 = performance.now();
     const batches = await as(ALICE, () => batchesFor(c.id, c.question, c.items ?? []));
     say(`batches: ${batches.length}, of ${batches.map((b) => `${b.count} (${b.words}: ${JSON.stringify(b.values)})`).join("; ")}`);

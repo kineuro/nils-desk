@@ -10,6 +10,7 @@ import openCampaign from "../../test/fixtures/campaigns/campaign_open.json";
 import formCampaign from "../../test/fixtures/campaigns/campaign_form.json";
 import closeAnswer from "../../test/fixtures/campaigns/close.json";
 import { parse } from "../routes";
+import type { Grant } from "../grants";
 import { ADMIN, capsFor, DOORS, RATER } from "./caps.fixture";
 import {
   agreementWords,
@@ -37,6 +38,7 @@ import {
   showsRules,
   sourceWords,
   suggestOf,
+  whoRatesWords,
   type Answer,
   type AxesConstraints,
   type Campaign,
@@ -92,13 +94,59 @@ describe("a campaign read from the engine", () => {
 });
 
 describe("who may do what", () => {
-  it("lets anyone with work rate a campaign that names no raters, and names the ones it does", () => {
+  it("lets a reviewer rate a campaign that names no raters, and names the ones it does", () => {
     expect(rateRefusal(capsFor({ grants: RATER, principal: "alice@walk" }), open)).toBeNull();
     expect(rateRefusal(capsFor({ grants: ["campaigns:see"], principal: "alice@walk" }), open)).toBe("Rating needs work on the Campaigns page.");
     expect(rateRefusal(capsFor({ grants: RATER, principal: "alice@walk" }), open, "adjudicator")).toBe("The campaign names its adjudicators, and you are not one.");
     expect(rateRefusal(capsFor({ grants: RATER, principal: "carol@walk" }), open, "adjudicator")).toBeNull();
     expect(rateRefusal(capsFor(), closed)).toBe("The campaign is closed.");
     expect(rateRefusal(capsFor({ doors: ["GET /api/campaigns"] }), open)).toBe("This engine has no door for claiming an item.");
+  });
+
+  // Record 51 R4: the desk asks the engine's question. Each expected answer is
+  // copied from the engine at 1.0.0-alpha.62 (kineuro/nils 11e1948):
+  //   engine/crates/nils/src/campaigns.rs:140-154   the claim door needs campaigns:work
+  //   engine/crates/nils/src/campaigns.rs:575-582   a campaign not the caller's `own` is "no campaign", unless `oversees`
+  //   engine/crates/nils/src/campaigns.rs:2313-2315 `oversees`: the caller holds review:work
+  //   engine/crates/nils/src/campaigns.rs:2321-2337 `own` and `rates_in`: the maker, a named rater or adjudicator, an assignment
+  //   engine/crates/nils-registry/src/campaign.rs:2979-2991 `claim_with`: open, and one of the named where the role names any
+  it("answers eight callers as the engine's own and oversees do", () => {
+    const W: Grant[] = ["campaigns:see", "campaigns:work"];
+    const REVIEWER: Grant[] = [...W, "review:see", "review:work"];
+    const unnamed: Campaign = { ...open, owner: "maya@walk", status: "open", rater_policy: { raters: [], adjudicators: [] }, assignments: [] };
+    const named: Campaign = { ...unnamed, rater_policy: { raters: ["alice@walk"], adjudicators: ["carol@walk"] } };
+    const assigned: Campaign = { ...unnamed, assignments: [{ ...open.assignments![0], principal: "dan@walk" }] };
+    const table: [string, Grant[], string, Campaign, "rater" | "adjudicator", string | null][] = [
+      // own: the maker (campaigns.rs:2323)
+      ["the maker", W, "maya@walk", unnamed, "rater", null],
+      // own: a named rater (rates_in, campaigns.rs:2336), and claim_with lets them in (campaign.rs:2986)
+      ["a named rater", W, "alice@walk", named, "rater", null],
+      // own: a named adjudicator (rates_in), claiming in the role that names them
+      ["a named adjudicator", W, "carol@walk", named, "adjudicator", null],
+      // own: an assignment in the campaign (campaigns.rs:2325-2328)
+      ["an assigned person", W, "dan@walk", assigned, "rater", null],
+      // oversees: review:work reads every campaign (campaigns.rs:2314), and none names its raters
+      ["a holder of review:work", REVIEWER, "erin@walk", unnamed, "rater", null],
+      // neither own nor oversees: the door answers "no campaign" (campaigns.rs:579-580)
+      ["campaigns:work alone, on a campaign that names no raters", W, "frank@walk", unnamed, "rater", "This campaign names no raters, so it is rated by reviewers."],
+      // claim_with refuses one the campaign does not name, whatever they hold (campaign.rs:2986-2990)
+      ["not named, on a campaign that names its raters", REVIEWER, "erin@walk", named, "rater", "The campaign names its raters, and you are not one."],
+      // claim_with: an open campaign only (campaign.rs:2979-2981)
+      ["anyone, on a closed campaign", REVIEWER, "alice@walk", { ...named, status: "closed" }, "rater", "The campaign is closed."],
+    ];
+    for (const [who, grants, principal, c, role, want] of table) expect([who, rateRefusal(capsFor({ grants, principal }), c, role)]).toEqual([who, want]);
+    // the claim door itself needs campaigns:work, even of a reviewer (campaigns.rs:140-154)
+    expect(rateRefusal(capsFor({ grants: ["campaigns:see", "review:work"], principal: "erin@walk" }), unnamed)).toBe("Rating needs work on the Campaigns page.");
+    // an unnamed campaign's adjudication is a reviewer's too, and its own's
+    expect(rateRefusal(capsFor({ grants: W, principal: "frank@walk" }), unnamed, "adjudicator")).toBe("This campaign names no adjudicators, so it is adjudicated by reviewers.");
+    expect(rateRefusal(capsFor({ grants: W, principal: "maya@walk" }), unnamed, "adjudicator")).toBeNull();
+    // a named adjudicator of a campaign that names no raters is its own, so rates it
+    expect(rateRefusal(capsFor({ grants: W, principal: "carol@walk" }), { ...unnamed, rater_policy: { raters: [], adjudicators: ["carol@walk"] } })).toBeNull();
+  });
+
+  it("says in the maker who will rate, as the engine decides it", () => {
+    expect(whoRatesWords({ raters: "", adjudicators: "" })).toBe("No raters named, so only reviewers (work on the Review page) and you rate it; adjudicated by reviewers and you.");
+    expect(whoRatesWords({ raters: "alice@walk, bob@walk", adjudicators: "carol@walk" })).toBe("Rated by alice@walk, bob@walk; adjudicated by carol@walk.");
   });
 
   it("asks Review work beside Campaigns work to close, since a close writes decisions", () => {
@@ -178,7 +226,7 @@ describe("making one", () => {
     expect(makeBody(draft({ name: "" }))).toEqual({ ok: false, needs: "a name" });
     expect(makeBody(draft({ from: "probe" }))).toEqual({ ok: false, needs: "a selection as name@version" });
     expect(makeBody(draft({ axis: "" }))).toEqual({ ok: false, needs: "the axis to ask" });
-    expect(makeBody(draft({ kind: "pick" }))).toEqual({ ok: false, needs: "the role to pick, such as main_t1" });
+    expect(makeBody(draft({ kind: "pick" }))).toEqual({ ok: false, needs: "the role to pick, such as t1w" });
     expect(makeBody(draft({ kind: "form", fields: [{ name: "motion", type: "enum", choices: "", required: true }] }))).toEqual({ ok: false, needs: "the choices of motion" });
     expect(makeBody(draft({ metric: "kappa", threshold: "2" }))).toEqual({ ok: false, needs: "a threshold between 0 and 1" });
   });

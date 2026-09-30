@@ -21,3 +21,9 @@
 
 .model-events { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
 .checks-edit { display: grid; gap: 0.35rem; }
+
+/* record 51: the queue's filters by axis and reason, and the badge on a model that disagrees with a person */
+.queue-filter { display: grid; gap: 0.35rem; }
+.queue-filter .chips { align-items: center; }
+.queue-filter .chips > .label { font-size: var(--n-text-size-small); font-weight: 500; color: var(--n-text-dim); min-width: 3.5rem; }
+.tag.badge { white-space: normal; margin-right: 0.4rem; }

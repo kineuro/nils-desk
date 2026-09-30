@@ -635,14 +635,48 @@ export function agreementWords(a: Agreement | null): string {
 
 // ---------------------------------------------------------------- who may do what
 
-/** Why the person may not rate here, or null when a claim is theirs to try. */
+/**
+ * Whether a campaign is the person's own, as the engine's `own` says it
+ * (record 48, `engine/crates/nils/src/campaigns.rs` `own` and `rates_in`):
+ * they made it, it names them as a rater or an adjudicator, or they hold an
+ * assignment in it. A campaign that names no raters is no one's but its maker's.
+ */
+export function ownCampaign(caps: Capabilities, c: Campaign): boolean {
+  const me = principalOf(caps);
+  return c.owner === me || c.rater_policy.raters.includes(me) || c.rater_policy.adjudicators.includes(me) || (c.assignments ?? []).some((a) => a.principal === me);
+}
+
+/**
+ * Why the person may not rate here, or null when a claim is theirs to try.
+ * It asks the engine's question (record 51 R4): the claim door needs
+ * `campaigns:work`; a campaign that is not the caller's own ([`ownCampaign`])
+ * is none at all unless they hold `review:work` (`oversees`); and a campaign
+ * that names its raters, or its adjudicators, is claimed in that role only by
+ * those it names, whoever else they are (`claim_with`). So a campaign that
+ * names no raters is rated by reviewers and by those it is already the own of.
+ */
 export function rateRefusal(caps: Capabilities, c: Campaign, role: "rater" | "adjudicator" = "rater"): string | null {
   if (c.status !== "open") return `The campaign is ${c.status}.`;
   if (!may(caps, "campaigns:work")) return "Rating needs work on the Campaigns page.";
   if (!served(caps, "POST /api/campaigns/{id}/claim")) return "This engine has no door for claiming an item.";
   const listed = role === "rater" ? c.rater_policy.raters : c.rater_policy.adjudicators;
-  if (listed.length > 0 && !listed.includes(principalOf(caps))) return `The campaign names its ${role}s, and you are not one.`;
-  return null;
+  if (listed.length > 0) return listed.includes(principalOf(caps)) ? null : `The campaign names its ${role}s, and you are not one.`;
+  if (may(caps, "review:work") || ownCampaign(caps, c)) return null;
+  return role === "rater" ? "This campaign names no raters, so it is rated by reviewers." : "This campaign names no adjudicators, so it is adjudicated by reviewers.";
+}
+
+/**
+ * Who will rate a campaign as drafted, as the engine decides it (record 51
+ * R4): the people it names, or, where it names none, those who hold
+ * `review:work` and its maker; everyone else reads it as no campaign.
+ */
+export function whoRatesWords(d: Pick<Draft, "raters" | "adjudicators">): string {
+  const names = (v: string) => v.split(/[\s,]+/u).filter((x) => x !== "");
+  const raters = names(d.raters);
+  const adjudicators = names(d.adjudicators);
+  const rate = raters.length > 0 ? `Rated by ${raters.join(", ")}` : "No raters named, so only reviewers (work on the Review page) and you rate it";
+  const adjudicate = adjudicators.length > 0 ? `adjudicated by ${adjudicators.join(", ")}` : "adjudicated by reviewers and you";
+  return `${rate}; ${adjudicate}.`;
 }
 
 /** Whether an adjudicator has anything here: the person may adjudicate and an item waits for one. */
@@ -897,7 +931,7 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
       question = { kind: "axes", axes: d.axes };
       break;
     case "pick":
-      if (!d.role.trim()) return { ok: false, needs: "the role to pick, such as main_t1" };
+      if (!d.role.trim()) return { ok: false, needs: "the role to pick, such as t1w" };
       question = { kind: "pick", role: d.role.trim() };
       break;
     case "form": {
