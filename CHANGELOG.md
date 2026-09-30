@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.60] - 2026-09-30
+
+A rater corrects their own answers on the anchored and the pair pages while the campaign is open: `b` opens the last answer again and then the one before, `m` lists one's answers by item, and another choice and Enter correct the one opened, through the engine's amend door, which keeps the earlier answer. My answers opens an anchored or a pair answer on its own page. No engine change is needed. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+
 ### Added
 
 - One's own answers are corrected on the anchored and the pair pages, while the campaign is open. `b` opens the last answer again, and again the one before it; `m` (or My answers) lists one's answers still standing, each by its place in the campaign ("item 13", "pair 13") and its words, never by a stack, a picture or a time. An answer opened shows the same blind view with that answer marked "your answer"; another choice and Enter correct it through the engine's amend door, which keeps the earlier answer and marks the new one as its correction, and `s` keeps it as it was. The item being read stays leased meanwhile, and the page comes back to it after. My answers elsewhere opens an anchored or a pair answer on its own page (`?amend=<answer>`) rather than the rating workspace. A closed campaign's answers stand as given. It uses the mine and amend doors My answers already reads, which an engine that serves the anchored doors serves too; against an engine without them the page says so and nothing changes.
