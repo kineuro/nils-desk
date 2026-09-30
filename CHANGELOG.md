@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.61] - 2026-09-30
+
+The desk follows engine 1.0.0-alpha.63. Review's queue filters by axis and by reason, kept in the page's address; a model that disagrees with a person's decision carries a badge and Decide starts from the person's value; Keep on a pick border writes the run's pick as the person's, and the Picks page names the six new border reasons and offers the served pack's roles. A campaign that names its raters is claimed only by them, and accepting a batch of like stacks works again. The disagreement items, the new border reasons, the pack's roles and Keep as a decision come from engine 1.0.0-alpha.63; against an older engine the queue shows none of them, the maker takes a role typed by name, and Keep closes the item as before without writing a pick. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+
 ### Added
 
 - Review's queue filters by axis and by reason (no value, rules conflict, not confident, vote split, a decision disagrees, a model proposes, and a pick run's borders by their reasons), from the kinds the engine lists. The filter is kept in the page's address (`#review?axis=base&reason=conflict`), so a reload or a link keeps it, and one axis's kind is read whole from the engine. "Ask people about these" carries it to the campaign maker as a kind or a prefix.
