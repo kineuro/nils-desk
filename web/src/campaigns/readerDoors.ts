@@ -15,7 +15,7 @@ import { may } from "../grants";
 import { review } from "../review/client";
 import { DoorError } from "../ask/client";
 import { campaigns, DERIVE, HEADER, type Claimed, type Derived, type HeaderDoc, type Item, type Question } from "./client";
-import { acceptedOf, askedAxes, batchesOf, blindReading, bound, derivedOf, HOLD_BACK, readingFromAsked, readingOf, statsOf, type Batch, type Order, type RaterStats, type Reading } from "./reader";
+import { acceptedOf, askedAxes, batchesOf, blindReading, bound, derivedOf, readingFromAsked, readingOf, statsOf, type Batch, type Order, type RaterStats, type Reading } from "./reader";
 
 /** The doors a record 48 engine adds, as its OpenAPI 7 names them. */
 export const R48 = {
@@ -127,12 +127,13 @@ export function batchesFor(c: number | string, q: Question, items: Pick<Item, "i
 
 /**
  * Accept a batch's suggestion in one move: the engine leases and answers
- * each item as its own, marked as given to a batch, and holds a tenth back
- * at random to be read alone. Where the person held some back, only the
- * others shown are named.
+ * each item as its own, marked as given to a batch, and holds back the
+ * campaign's share at random to be read alone. The share and the seed are
+ * the campaign's, and the engine refuses a body that says either, so none is
+ * sent. Where the person held some back, only the others shown are named.
  */
-export function acceptBatch(c: number | string, b: Batch, plan: { items: number[] | null }, holdBack = HOLD_BACK): Promise<{ accepted: number; held: number[]; refused: number }> {
-  const body: Json = { hold_back: holdBack, ...(plan.items ? { items: plan.items } : {}) };
+export function acceptBatch(c: number | string, b: Batch, plan: { items: number[] | null }): Promise<{ accepted: number; held: number[]; refused: number }> {
+  const body: Json = plan.items ? { items: plan.items } : {};
   return door<Json>("POST", `/api/campaigns/${id(c)}/batches/${encodeURIComponent(b.key)}/accept`, body).then(acceptedOf);
 }
 

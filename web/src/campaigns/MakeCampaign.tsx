@@ -9,10 +9,10 @@
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
-import { review, type PackDoc } from "../review/client";
+import { packRoles, review, type PackDoc } from "../review/client";
 import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
-import { campaigns, CLOSES_WORDS, closesFor, emptyDraft, KIND_WORDS, kindsOffered, makeBody, makeRefusal, refused as refusedWords, SUGGEST_WORDS, type Draft, type DraftField, type Prefill, type SourceKind, type SuggestMode } from "./client";
+import { campaigns, CLOSES_WORDS, closesFor, emptyDraft, KIND_WORDS, kindsOffered, makeBody, makeRefusal, refused as refusedWords, SUGGEST_WORDS, whoRatesWords, type Draft, type DraftField, type Prefill, type SourceKind, type SuggestMode } from "./client";
 
 const SOURCES: { kind: SourceKind; words: string; placeholder: string; says: string }[] = [
   { kind: "selection", words: "A selection", placeholder: "name@version", says: "Frozen now: its stacks, or its sessions for a pick, become the items." },
@@ -76,6 +76,7 @@ export function MakeDialog({ caps, prefill, taken, onClose }: { caps: Capabiliti
 export function MakeForm({ caps, draft: d, pack, onChange: set }: { caps: Capabilities; draft: Draft; pack: PackDoc | null; onChange: (p: Partial<Draft>) => void }) {
   const src = SOURCES.find((s) => s.kind === d.source) ?? SOURCES[0];
   const axes = pack?.axes.map((a) => a.axis) ?? [];
+  const roles = packRoles(pack);
   const closes = closesFor(d.kind);
   return (
     <div className="make-form">
@@ -173,13 +174,26 @@ export function MakeForm({ caps, draft: d, pack, onChange: set }: { caps: Capabi
           )}
         </fieldset>
       )}
-      {d.kind === "pick" && (
+      {d.kind === "pick" && roles.length > 0 && (
+        <fieldset className="field">
+          <legend className="label">Role</legend>
+          <span className="chips">
+            {roles.map((r) => (
+              <button key={r} type="button" className={d.role === r ? "opt on" : "opt"} aria-pressed={d.role === r} onClick={() => set({ role: r })}>
+                {r}
+              </button>
+            ))}
+          </span>
+          <span className="meta">The roles the pack&apos;s picks declare. Asked of sessions; a close writes a person&apos;s pick.</span>
+        </fieldset>
+      )}
+      {d.kind === "pick" && roles.length === 0 && (
         <label className="field">
           <span className="label">Role</span>
           <span className="input mono">
-            <input value={d.role} onChange={(e) => set({ role: e.target.value })} placeholder="main_t1" />
+            <input value={d.role} onChange={(e) => set({ role: e.target.value })} placeholder="t1w" />
           </span>
-          <span className="meta">Asked of sessions; a close writes a person&apos;s pick.</span>
+          <span className="meta">One the pack&apos;s picks declare. Asked of sessions; a close writes a person&apos;s pick.</span>
         </label>
       )}
       {d.kind === "derivative" && (
@@ -202,16 +216,17 @@ export function MakeForm({ caps, draft: d, pack, onChange: set }: { caps: Capabi
         <label className="field">
           <span className="label">Raters · optional</span>
           <span className="input mono">
-            <input value={d.raters} onChange={(e) => set({ raters: e.target.value })} placeholder="anyone with work" />
+            <input value={d.raters} onChange={(e) => set({ raters: e.target.value })} placeholder="reviewers, when none is named" />
           </span>
         </label>
         <label className="field">
           <span className="label">Adjudicators · optional</span>
           <span className="input mono">
-            <input value={d.adjudicators} onChange={(e) => set({ adjudicators: e.target.value })} placeholder="anyone with work" />
+            <input value={d.adjudicators} onChange={(e) => set({ adjudicators: e.target.value })} placeholder="reviewers, when none is named" />
           </span>
         </label>
       </div>
+      <p className="meta">{whoRatesWords(d)}</p>
       <details className="more-fields">
         <summary>Adjudication, close and lease</summary>
         <div className="more-body">

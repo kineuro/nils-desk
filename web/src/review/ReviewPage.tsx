@@ -12,10 +12,11 @@ import { ops, type ReviewItem } from "../ops/client";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { familyOf, review, type PackDoc, type ReviewSummary } from "./client";
+import { familyOf, modelDisagrees, review, type PackDoc, type ReviewSummary } from "./client";
 import { DecideDialog } from "./Decide";
 import { kindOf } from "./triage";
 import { ExplainDialog } from "./Explain";
+import { filterKind, queueFilterOf, queueHref } from "./filter";
 import { AskedFamily, PicksFamily, ProposalsFamily } from "./Families";
 import { IdentifiersPage } from "./Identifiers";
 import { LookDialog, QueuePage } from "./Queue";
@@ -68,6 +69,9 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
   const batch = query?.batch && /^\d+$/.test(query.batch) ? Number(query.batch) : null;
   const run = query?.run && /^\d+$/.test(query.run) ? Number(query.run) : null;
   const [cohort, setCohort] = useState<string>(query?.cohort ?? "");
+  // record 51, G4: the queue's axis and reason live in the address, so a reload or a link keeps them
+  const filter = queueFilterOf(query);
+  const kind = filterKind(filter)?.kind;
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [said, setSaid] = useState<string | null>(null);
   const [deciding, setDeciding] = useState<ReviewItem | null>(null);
@@ -89,12 +93,13 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
 
   const read = useCallback(() => {
     const cohortArg = filters && cohort !== "" ? cohort : undefined;
-    const items = filters ? review.list({ cohort: cohortArg, limit: 500 }) : ops.review(undefined, undefined, 500);
+    // one kind is asked of the engine, so the queue holds every item of it rather than the first 500 of all
+    const items = filters ? review.list({ cohort: cohortArg, kind, limit: 500 }) : ops.review(undefined, kind, 500);
     const summary = filters ? review.summary(cohortArg).catch(() => null) : Promise.resolve(null);
     Promise.all([items, summary])
       .then(([r, s]) => setLoad({ kind: "ready", items: r.items, summary: s }))
       .catch((e: Error) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: e.message })));
-  }, [filters, cohort]);
+  }, [filters, cohort, kind]);
 
   useEffect(() => {
     read();
@@ -102,6 +107,9 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
 
   const items = load.kind === "ready" ? load.items : [];
   const open = items.filter((i) => i.status === "open");
+  // the queue's count is the whole queue's, where the summary gives it, also while the table reads one kind
+  const summary = load.kind === "ready" ? load.summary : null;
+  const queued = summary ? Object.values(summary.by_kind).reduce((a, b) => a + b, 0) : open.length;
   const identity = open.filter((i) => familyOf(i.kind) === "identity").length;
   const changed = (words: string) => {
     setSaid(words);
@@ -122,7 +130,7 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
       <div className="chips pages">
         <a className={sub === "queue" ? "opt on" : "opt"} href={href("review")} aria-current={sub === "queue" ? "page" : undefined}>
           Queue
-          {load.kind === "ready" && <b>{n(open.length)}</b>}
+          {load.kind === "ready" && <b>{n(queued)}</b>}
         </a>
         <a className={sub === "rules" ? "opt on" : "opt"} href={href("review", "rules")} aria-current={sub === "rules" ? "page" : undefined}>
           Rules
@@ -156,6 +164,11 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
             setCohort(c);
             setSaid(null);
           }}
+          filter={filter}
+          onFilter={(f) => {
+            setSaid(null);
+            location.hash = queueHref(f, cohort);
+          }}
           batch={batch}
           run={run}
           onDecide={setDeciding}
@@ -165,10 +178,10 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
       )}
       {sub === "rules" && <RulesPage caps={caps} items={items} wordAt={wordAt} onWordClose={() => setWordAt(null)} onChanged={changed} />}
       {sub === "identifiers" && load.kind === "ready" && <IdentifiersPage caps={caps} items={items} onDecide={setDeciding} onChanged={changed} />}
-      {sub === "picks" && <PicksFamily caps={caps} onChanged={changed} />}
+      {sub === "picks" && <PicksFamily caps={caps} packName={packName} onChanged={changed} />}
       {sub === "proposals" && <ProposalsFamily caps={caps} onChanged={changed} />}
       {sub === "asked" && <AskedFamily caps={caps} packName={packName} onExplain={(item, stack) => setExplaining({ item, stack })} onChanged={changed} />}
-      {deciding && <DecideDialog item={deciding} pack={pack} onClose={() => setDeciding(null)} onDone={(w) => { setDeciding(null); changed(w); }} />}
+      {deciding && <DecideDialog item={deciding} pack={pack} guess={modelDisagrees(deciding)?.decision ?? null} onClose={() => setDeciding(null)} onDone={(w) => { setDeciding(null); changed(w); }} />}
       {explaining && (
         <ExplainDialog
           caps={caps}

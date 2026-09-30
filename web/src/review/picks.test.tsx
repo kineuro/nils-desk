@@ -12,7 +12,9 @@ import { capsWith } from "./caps.fixture";
 import { BORDER } from "./picks.fixture";
 import { familyOf, itemWords, kindTag } from "./client";
 import { PickDialog, pickActs } from "./PickDialog";
-import { answeredIndex, borderOf, borderWords, occasionWords, pickBody } from "./picks";
+import { BordersTable, PicksFamily, RoleChips } from "./Families";
+import { answeredIndex, answeredWords, borderOf, borderWords, keepWords, occasionWords, pickBody, rolesOffered } from "./picks";
+import { packDoc, packRoles } from "./client";
 import { PickQuestion, SessionBoard } from "./SessionBoard";
 
 const ANSWERED: ReviewItem = { ...BORDER, status: "accepted", decision: { pick_id: 97, stacks: [409], author_kind: "person", actor: "astrid", why: "sharper, no motion" } };
@@ -94,5 +96,60 @@ describe("the acts on a border", () => {
     const seen = renderToStaticMarkup(<PickDialog caps={capsWith(DOORS, ["review:see"])} item={BORDER} onClose={() => undefined} onDone={() => undefined} pictures={false} />);
     expect(seen).not.toContain(">Pick</button>");
     expect(seen).not.toContain('type="radio"');
+  });
+});
+
+// record 51 slice C: Keep is a decision (R1, R2), D's six reasons in words, the pack's roles
+describe("keep, the nine reasons and the pack's roles", () => {
+  const nothing: ReviewItem = { ...BORDER, evidence: { ...(BORDER.evidence as object), borders: ["nothing_eligible"], pick_id: null, considered: [] } };
+  it("says on Keep what it writes: the run's pick as the person's, or no stack for the role", () => {
+    const caps = capsWith(DOORS, [...WORK]);
+    const html = renderToStaticMarkup(<PickDialog caps={caps} item={BORDER} onClose={() => undefined} onDone={() => undefined} pictures={false} />);
+    expect(keepWords(borderOf(BORDER)!)).toBe("Keep the run's pick as yours");
+    expect(html).toContain(">Keep the run&#x27;s pick as yours</button>");
+    expect(html).toContain("Keeping the run&#x27;s pick makes it yours in the same way");
+    // nothing eligible: no run's pick, and keeping says no stack stands (R2)
+    const b = borderOf(nothing)!;
+    expect(b.runPick).toBeNull();
+    expect(pickActs(caps, b)).toEqual({ pick: false, keep: true, withdraw: false });
+    expect(keepWords(b)).toBe("Keep: no stack stands for this role here");
+    expect(renderToStaticMarkup(<PickDialog caps={caps} item={nothing} onClose={() => undefined} onDone={() => undefined} pictures={false} />)).toContain(">Keep: no stack stands for this role here</button>");
+    // a kept border reads as a person's pick, of the run's stacks or of none
+    expect(answeredWords({ pick: 98, stacks: [406], why: "kept the run's pick (too_close)" })).toBe("A person picked stacks 406: kept the run's pick (too_close).");
+    expect(answeredWords({ pick: 99, stacks: [], why: null })).toBe("A person said no stack stands for this role here.");
+  });
+  it("names each of v0's nine reasons in words", () => {
+    const all = ["too_close", "rare", "nothing_eligible", "retake", "unknown_dim", "slice_count_outlier", "pre_post_twin", "epimix_fallback", "dixon_vs_plain"];
+    const words = all.map((r) => borderWords({ borders: [r] }));
+    expect(words).toEqual([
+      "the two best too close",
+      "a winner rare here",
+      "nothing eligible",
+      "a retake: the winner is more than one stack",
+      "the winner's dimension unknown",
+      "an odd number of slices for its dimension",
+      "a twin before or after contrast close behind",
+      "an EPIMix stands in",
+      "a plain stack close behind the Dixon",
+    ]);
+    for (const w of words) expect(w).not.toContain("_");
+    const html = renderToStaticMarkup(<BordersTable borders={[borderOf({ ...BORDER, evidence: { ...(BORDER.evidence as object), borders: ["retake", "dixon_vs_plain"] } })!]} onOpen={() => undefined} />);
+    expect(html).toContain("a retake: the winner is more than one stack, a plain stack close behind the Dixon");
+  });
+  it("offers the served pack's roles, not a list of the desk's own", () => {
+    const pack = packDoc({ pack: "mri", version: "0.16.0", axes: [], picks: [{ name: "main", roles: ["t1w", "flair", "t2w"] }] });
+    expect(packRoles(pack)).toEqual(["t1w", "flair", "t2w"]);
+    expect(packRoles(packDoc({ pack: "mri", axes: [] }))).toEqual([]);
+    const borders = [borderOf(BORDER)!, borderOf({ ...BORDER, id: 5, ref: { ...(BORDER.ref as object), role: "t2w" } })!, borderOf({ ...BORDER, id: 6, ref: { ...(BORDER.ref as object), role: "dwi" } })!];
+    expect(rolesOffered(packRoles(pack), borders)).toEqual([
+      { role: "t1w", open: 1 },
+      { role: "flair", open: 0 },
+      { role: "t2w", open: 1 },
+      { role: "dwi", open: 1 },
+    ]);
+    const html = renderToStaticMarkup(<RoleChips roles={rolesOffered(packRoles(pack), borders)} role="t2w" onRole={() => undefined} />);
+    expect(html).toContain('aria-pressed="true">t2w<b>1</b></button>');
+    expect(html).toContain(">flair<b>0</b></button>");
+    expect(renderToStaticMarkup(<PicksFamily caps={capsWith(DOORS, [...WORK])} packName="mri" onChanged={() => undefined} />)).toContain("reading the picks");
   });
 });

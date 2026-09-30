@@ -10,15 +10,19 @@
 //   CAMPAIGN_WALK_TOKENS=alice@node=<token>,bob@node=<token>,carol@node=<token> \
 //   npm run walk:campaigns
 //
-// The first two tokens rate (campaigns:work), the third makes, adjudicates
-// and closes (campaigns:work, review:work, query:work at detail quasi). It
-// writes a selection, two campaigns, their decisions and two label sets into
-// that registry, so it is run against a throwaway one (nils synth).
+// The first two tokens rate (campaigns:work only), the third makes,
+// adjudicates and closes (campaigns:work, review:work, query:work at detail
+// quasi). Since record 48 the engine lets a rater without review:work into a
+// campaign only where it names them, so each campaign names the two as its
+// raters; the last test checks that the desk's rate rule and the engine's
+// claim agree on an unnamed campaign (record 51 R4). It writes a selection,
+// four campaigns, their decisions and two label sets into that registry, so
+// it is run against a throwaway one (nils synth).
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { door } from "../ask/client";
 import type { Capabilities, EngineCapabilities } from "../capabilities";
-import { answerWords, axesServed, campaigns, closure, emptyDraft, makeBody, type Answer, type Campaign, type Claimed, type Given } from "./client";
+import { answerWords, axesServed, campaigns, closure, emptyDraft, makeBody, rateRefusal, type Answer, type Campaign, type Claimed, type Given } from "./client";
 import { beatSeat, bodyOf, disagreementWords, findMatches, given, givenNone, illegal, keyAct, marksOf, rowsOf, seatOf, type Seat } from "./workspace";
 import { blank } from "./renderers";
 
@@ -33,6 +37,8 @@ const PEOPLE = (process.env.CAMPAIGN_WALK_TOKENS ?? "")
 const [ALICE, BOB, CAROL] = PEOPLE;
 const STAMP = Date.now().toString(36);
 const say = (line: string) => console.log(`walk: ${line}`);
+/** The two raters, named in each campaign the walk makes. */
+const RATERS = () => `${ALICE.who}, ${BOB.who}`;
 
 let acting = CAROL;
 const realFetch = globalThis.fetch;
@@ -83,7 +89,7 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("a campaign walked by three people
       door<{ version: number }>("PUT", `/api/ask/selections/${sel}`, { document: { ast_version: 1, sets: { every: { grain: "stack", where: [["<=", {}, ["field", {}, "id"], 4]] } }, out: { set: "every", level: "record" } } }),
     );
     // the make dialog's body
-    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${sel}@${saved.version}` }), name: `walk-base-${STAMP}`, axis: "base", adjudicators: CAROL.who, closesInto: "decision", leaseMinutes: 15 });
+    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${sel}@${saved.version}` }), name: `walk-base-${STAMP}`, axis: "base", raters: RATERS(), adjudicators: CAROL.who, closesInto: "decision", leaseMinutes: 15 });
     expect(made.ok).toBe(true);
     if (!made.ok) return;
     const c = await as(CAROL, () => campaigns.make(made.body));
@@ -152,7 +158,7 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("a campaign walked by three people
       return;
     }
     const sel = `walk-${STAMP}`;
-    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${sel}@1` }), name: `walk-axes-${STAMP}`, kind: "axes", axes: ["base", "technique", "modifier"], adjudicators: CAROL.who, closesInto: "decision" });
+    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${sel}@1` }), name: `walk-axes-${STAMP}`, kind: "axes", axes: ["base", "technique", "modifier"], raters: RATERS(), adjudicators: CAROL.who, closesInto: "decision" });
     expect(made.ok).toBe(true);
     if (!made.ok) return;
     const c = await as(CAROL, () => campaigns.make(made.body));
@@ -226,7 +232,7 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("a campaign walked by three people
 
   it("puts an item whose lease ran out back in the pool, and the heartbeat says so", { timeout: 60_000 }, async () => {
     const sel = `walk-${STAMP}`;
-    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${sel}@1` }), name: `walk-lease-${STAMP}`, axis: "base", ratersPerItem: 1 });
+    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${sel}@1` }), name: `walk-lease-${STAMP}`, axis: "base", ratersPerItem: 1, raters: RATERS() });
     expect(made.ok).toBe(true);
     if (!made.ok) return;
     // two seconds, shorter than the desk's form offers, so the walk need not wait a minute
@@ -254,5 +260,29 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("a campaign walked by three people
     say(`an answer on the ended lease: ${late}`);
     expect(late).not.toBeNull();
     for (const s of [bob, beat]) if (s.kind === "holding") await as(s === bob ? BOB : ALICE, () => campaigns.release(c.id, s.assignment.id));
+  });
+
+  it("agrees with the engine on who rates a campaign that names no raters (record 51 R4)", { timeout: 60_000 }, async () => {
+    const sel = `walk-${STAMP}`;
+    const made = makeBody({ ...emptyDraft({ source: "selection", from: `${sel}@1` }), name: `walk-unnamed-${STAMP}`, axis: "base", ratersPerItem: 1 });
+    expect(made.ok).toBe(true);
+    if (!made.ok) return;
+    const c = await as(CAROL, () => campaigns.make(made.body));
+    for (const person of [ALICE, CAROL]) {
+      const engine = await as(person, () => door<EngineCapabilities>("GET", "/api/capabilities"));
+      const theirs = { engine, kvasir: null, assistant: null, apps: [], person: { subject: person.who, display_name: "", grants: engine.grants ?? [], detail: engine.detail ?? "plain", groups: [] }, desk: {} } as unknown as Capabilities;
+      // the desk reads the campaign as the person would, where the engine lets them read it
+      const seen = await as(person, () => campaigns.one(c.id)).catch(() => c);
+      const desk = rateRefusal(theirs, seen);
+      const claimed = await as(person, () => campaigns.claim(c.id)).then(
+        (r) => r,
+        (e: Error) => e,
+      );
+      const refused = claimed instanceof Error;
+      say(`unnamed: ${person.who} (${(engine.grants ?? []).filter((g) => g.endsWith(":work")).join(", ")}): desk ${desk ?? "may rate"}; engine ${refused ? claimed.message : "claimed"}`);
+      expect(desk !== null).toBe(refused);
+      const seat = refused ? null : seatOf(claimed);
+      if (seat?.kind === "holding") await as(person, () => campaigns.release(c.id, seat.assignment.id));
+    }
   });
 });
