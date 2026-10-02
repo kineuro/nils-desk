@@ -4,6 +4,30 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.62] - 2026-10-02
+
+The comparison reader (pair mode and anchored reading) after a rater's first long session on it. Moving to the next item draws from memory: the page warms the next five items in the view the rater chose while the current one is read, with engine 1.0.0-alpha.72's `ahead` on the claim. The view (the stack, the three planes, or one plane alone) is kept for every item and the next visit, for every panel or one. A plane paged in the three planes stays where it was paged. The controls are grouped by what they do, every one shows its key, and nothing wraps from a laptop up. Against an engine before alpha.72 nothing is warmed ahead and the rest works the same. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
+
+### Added
+
+- The next items warmed: once the item on the screen is drawn, the reader reads ahead the next five items the claim names (manifests, the first pictures, the slabs of their opening planes and beside them, their reference tissue, and in the three planes their volumes' slabs, with the next item's volume filled), two reads at a time, called off when the rater jumps and paused while an answer and the next claim go out. The two items read last stay in memory for Previous.
+- The view as the rater's choice: the stack, the three planes, or the axial, coronal or sagittal plane alone (the stack itself where that is its own plane), kept per campaign and rater in this browser, for every panel (z, t, a, c, x, v to cycle) or for the panel under the pointer (Shift and the key, or the panel's own menu).
+- Send on key (u): an answer's key sends it and the next item comes, with no Enter. The last answer is said with Undo (b), which opens it again to correct.
+- `?` opens every key grouped by what it does: answer, view, compare, pictures.
+- A progress bar with what is read and left, and the item's clock, at the head of the page.
+
+### Changed
+
+- The page is three bands: where the campaign stands; the panels; then a quiet toolbar of the view and the comparison, apart from the answer keys, which are large, equal and on one line with Answer, Give back and Stop. The toolbar and the answers give room as they narrow and never wrap from 1280 pixels up, and grow with the screen.
+- The panels keep their place while the next item comes, dimmed, so nothing shifts.
+- Pair mode and anchored reading are one page told by a spec each.
+- The slabs a page reads are kept across stacks under one budget and read once; the viewer's decode pool grows to eight workers and decodes for later behind the pictures on the screen.
+
+### Fixed
+
+- In the three planes a plane paged with the wheel or the arrows jumped back to its middle: every render turned the planes to their cameras again. They are turned only when the cut changes.
+- The view chosen in the anchored reader went back to the stack on every item.
+
 ## [1.0.0-alpha.61] - 2026-09-30
 
 The desk follows engine 1.0.0-alpha.63. Review's queue filters by axis and by reason, kept in the page's address; a model that disagrees with a person's decision carries a badge and Decide starts from the person's value; Keep on a pick border writes the run's pick as the person's, and the Picks page names the six new border reasons and offers the served pack's roles. A campaign that names its raters is claimed only by them, and accepting a batch of like stacks works again. The disagreement items, the new border reasons, the pack's roles and Keep as a decision come from engine 1.0.0-alpha.63; against an older engine the queue shows none of them, the maker takes a role typed by name, and Keep closes the item as before without writing a pick. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
