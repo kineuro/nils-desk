@@ -488,7 +488,7 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .compare-refused .warn { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .compare-stop { flex: none; align-self: center; }
 /* the answers keep their words as the row narrows: the toggle's words go first, then some room around the keys */
-@container (max-width: 1200px) { .compare-auto > span { display: none; } }
+@container (max-width: 1150px) { .compare-auto > span { display: none; } }
 @container (max-width: 1100px) { .compare-reader .compare-answers .pair-answer.opt { gap: 0.35rem; padding: 0 0.45rem; } .compare-reader .compare-answer .act-answer { min-width: 7rem; } }
 .compare-reader .correcting-tag, .compare-reader .compare-lease { white-space: nowrap; }
 .compare-reader .compare-lease .i { width: 12px; height: 12px; }
