@@ -383,66 +383,140 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .ab-panel { display: grid; gap: 0.4rem; margin-top: 0.6rem; }
 .ab-panel h2 { margin: 0; font-size: var(--n-text-size-h2); }
 
-/* Pair mode (the post-contrast study): two stacks side by side, each the reader's own pictures filling
-   its half of the window, "left" and "right" their only names, and one bar under both with the five
-   answers and the actions. The side the arrows page is outlined. The bar grows with the screen as the
-   reader's panel does. On a narrow screen the two stand one over the other and the page scrolls. */
-.pair-reader .pair-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; gap: 0.5rem 0.8rem; }
-.pair-reader .pair-side { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.15rem; min-height: 0; padding: 0.2rem; border: 1px solid transparent; border-radius: var(--n-radius); container-type: normal; }
-.pair-reader .pair-side .stack-view { min-height: 0; container-type: size; overflow: hidden; }
-.pair-reader .pair-side.active { border-color: var(--n-line); }
-.pair-reader .pair-label { display: flex; gap: 0.5rem; align-items: baseline; font-size: var(--n-text-size-small); color: var(--n-text-dim); text-transform: uppercase; letter-spacing: 0.04em; zoom: var(--reader-scale); }
-.pair-reader .pair-says { text-transform: none; letter-spacing: 0; color: var(--n-text); font-weight: 600; }
-.pair-reader .pair-says.post { color: var(--n-focus); }
-.pair-reader .pair-bar { grid-column: 1 / span 2; display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.8rem; zoom: var(--reader-scale); font-size: var(--n-text-size-small); }
-.pair-reader .pair-bar .rate-item { display: flex; align-items: center; gap: 0.4rem; }
-.pair-reader .pair-bar .actions { flex: 1 1 18rem; display: flex; flex-wrap: nowrap; align-items: center; gap: 0.4rem; min-width: 0; }
-.pair-reader .pair-bar .actions .warn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0; }
-.pair-reader .pair-answers { display: flex; flex-wrap: wrap; gap: 0.25rem; }
-.pair-reader .pair-answer.opt { min-height: 1.6rem; padding: 0.05rem 0.55rem; font-size: 12.5px; }
-.pair-reader .pair-answer kbd { margin-right: 0.35rem; font-size: 10.5px; }
-.pair-reader .pair-sync { cursor: pointer; }
-.pair-reader .pair-sync.on { border-color: var(--n-focus); }
-.pair-reader .keys-drawer { position: absolute; right: 0; bottom: 100%; z-index: 5; }
-.pair-reader .pair-bar { position: relative; }
-@media (max-width: 860px) {
-  .pair-reader .pair-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
-  .pair-reader .pair-side { height: min(calc(100vw * 1.2), 70vh); }
-  .pair-reader .pair-bar { grid-column: auto; }
-}
+/* The comparison reader (the post-contrast study: pair mode and anchored reading, CompareReader.tsx),
+   three bands by what they do. On top where the campaign stands. In the middle the panels, two or
+   three side by side, each its stack in the view the rater chose, the panel the keys page outlined.
+   Under them a quiet toolbar of the view and the comparison, and apart from it the answer keys, large,
+   equal and on one line, the page's primary act. Every band grows with the screen as the reader's
+   panel does (--reader-scale) and nothing wraps from a laptop up; while the next item comes, the
+   panels keep their place, dimmed, so nothing shifts. On a narrow screen the panels stand one over
+   the other and the page scrolls. */
+.compare-reader { gap: 0.35rem; }
+.compare-reader .compare-head { align-items: center; }
+.compare-reader .said { display: inline-flex; align-items: center; gap: 0.3rem; max-width: 100%; }
+.compare-reader .said-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.compare-reader .said-undo { flex: none; font-size: var(--n-text-size-small); }
+.compare-reader .tool kbd, .compare-reader .compare-auto kbd, .compare-reader .said-undo kbd { text-transform: uppercase; }
+.compare-reader .said-undo kbd, .compare-reader .tool kbd, .compare-reader .compare-auto kbd { margin-left: 0.2rem; padding: 0 0.25rem; border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: 3px; background: var(--n-bg-raised); color: var(--n-text-faint); font-family: var(--n-font-mono); font-size: 10px; line-height: 1.3; }
+.compare-progress { display: inline-flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
+.compare-meter { position: relative; display: inline-block; width: 7rem; height: 0.35rem; overflow: hidden; border-radius: 999px; background: var(--n-bg-sunken); }
+.compare-meter > span { position: absolute; inset: 0 auto 0 0; background: var(--n-brand); border-radius: 999px; transition: width 0.3s ease-out; }
 
-/* Anchored reading (the post-contrast study): a candidate beside a reference pre and a reference post,
-   three panels in the order the engine's seed drew, each filling a third of the window; the bar under
-   all three with the window, the difference, the jumps and the three answers. The candidate's label
-   stands out from the references'. The difference is drawn over a reference's picture. */
-.anchored-reader .anchored-grid { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr) auto; gap: 0.5rem 0.6rem; }
-.anchored-reader .anchored-panel.is-candidate .pair-label { color: var(--n-text); font-weight: 600; }
-.anchored-reader .pair-says { white-space: nowrap; }
-.anchored-reader .anchored-other { text-transform: none; letter-spacing: 0; font-weight: 500; }
-.anchored-reader .anchored-stage { position: relative; min-height: 0; display: grid; }
-.anchored-reader .anchored-stage > .stack-view { min-height: 0; container-type: size; overflow: hidden; }
-.anchored-reader .anchored-bar { grid-column: 1 / span 3; }
-.anchored-reader .anchored-bar .rate-item { flex-wrap: wrap; }
+.compare-grid { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: 0.5rem 0.6rem; }
+.compare-reader[data-panels="2"] .compare-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 0.8rem; }
+.compare-panel { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 0.2rem; min-width: 0; min-height: 0; padding: 0.2rem; border: 1px solid transparent; border-radius: var(--n-radius); }
+.compare-panel.active { border-color: var(--n-line); box-shadow: inset 0 0 0 1px var(--n-line); }
+.compare-label { display: flex; align-items: center; gap: 0.5rem; min-width: 0; height: 1.55rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; zoom: var(--reader-scale); }
+.compare-label .compare-name { overflow: hidden; text-overflow: ellipsis; }
+.compare-panel.is-lead .compare-label { color: var(--n-text); font-weight: 600; }
+.compare-label .pair-says { padding: 0 0.4rem; border-left: 3px solid var(--n-brand-text); border-radius: 2px; text-transform: none; letter-spacing: 0; color: var(--n-text); font-weight: 600; }
+.compare-label .pair-says.post { border-left-color: var(--n-focus); color: var(--n-focus); }
+.compare-label .anchored-other { text-transform: none; letter-spacing: 0; font-weight: 500; }
+.panel-view { flex: none; display: inline-flex; align-items: center; }
+.panel-view select { height: 1.35rem; padding: 0 1.2rem 0 0.35rem; border: 1px solid transparent; border-radius: var(--n-radius); background-color: transparent; color: var(--n-text-faint); font: inherit; font-size: 11px; letter-spacing: 0; text-transform: none; cursor: pointer; }
+.panel-view select:hover, .compare-panel.active .panel-view select { border-color: var(--n-line); color: var(--n-text-dim); }
+.panel-view.own select { border-color: var(--n-brand-text); color: var(--n-text); font-weight: 600; }
+.panel-view select:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.compare-stage { position: relative; min-height: 0; display: grid; }
+.compare-stage > .stack-view { min-height: 0; container-type: size; overflow: hidden; transition: opacity 0.12s ease-out; }
+.compare-grid.waiting .compare-stage > .stack-view { opacity: 0.45; }
+.compare-wait { position: absolute; inset: 0; z-index: 3; display: grid; place-items: center; pointer-events: none; }
+.compare-spinner { width: 1.6rem; height: 1.6rem; border: 2px solid var(--n-line); border-top-color: var(--n-brand-text); border-radius: 50%; animation: turn 0.8s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .compare-spinner { animation-duration: 2.4s; } }
+.compare-reader .viewer.bare { grid-template-rows: minmax(0, 1fr); }
+.compare-reader .viewer.bare > .viewer-stage, .compare-reader .viewer.bare > .viewer-planes { align-self: center; justify-self: center; }
+.compare-reader .viewer.bare .viewer-stage, .compare-reader .viewer.bare .viewer-planes { grid-row: 1; }
+.compare-reader .viewer-axes-bare { position: absolute; top: 0.25rem; right: 0.3rem; z-index: 2; display: flex; gap: 0.25rem; font-size: 11px; }
+.compare-reader .viewer-axes-bare button { min-height: 1.3rem; padding: 0 0.4rem; font-size: 11px; }
+.compare-reader .viewer.bare .viewer-stage { width: min(100cqw, 100cqh); }
+.compare-reader .viewer.bare .viewer-planes { --unit: min(calc((100cqw - 2 * var(--gap)) / 3), calc((100cqh - var(--gap)) / 2)); }
+@container (aspect-ratio < 1) {
+  .compare-reader .viewer.bare .viewer-planes { --unit: min(calc((100cqw - var(--gap)) / 2), calc((100cqh - 2 * var(--gap)) / 3)); }
+}
+@container (aspect-ratio > 2.1) {
+  .compare-reader .viewer.bare .viewer-planes { --unit: min(calc((100cqw - 2 * var(--gap)) / 3), 100cqh); }
+}
+.compare-reader .viewer.bare .viewer-planes.enlarged { --unit: min(100cqw, 100cqh); }
+
+.compare-bar { position: relative; display: grid; gap: 0.35rem; min-width: 0; zoom: var(--reader-scale); font-size: var(--n-text-size-small); }
+.compare-tools { container-type: inline-size; display: flex; align-items: center; gap: 0.4rem; min-width: 0; height: 1.75rem; overflow: hidden; white-space: nowrap; }
+.compare-head .compare-item { flex: none; display: inline-flex; align-items: center; gap: 0.35rem; font-size: 1rem; }
+.compare-head .compare-item > b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.compare-group { flex: none; display: inline-flex; align-items: center; gap: 0.2rem; min-width: 0; }
+.compare-group + .compare-group { padding-left: 0.4rem; border-left: 1px solid var(--n-line); }
+.compare-jumped-slot { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tool { display: inline-flex; align-items: center; gap: 0.1rem; min-height: 1.6rem; padding: 0 0.35rem; border: 1px solid transparent; border-radius: var(--n-radius); background: transparent; color: var(--n-text-dim); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.tool:hover:not(:disabled) { background: var(--n-bg-hover); color: var(--n-text); }
+.tool.on { border-color: var(--n-brand-text); background: var(--n-brand-soft); color: var(--n-text); font-weight: 600; }
+.tool.on.mixed { font-weight: 500; border-style: dashed; }
+.tool:disabled { opacity: 0.5; cursor: default; }
+.tool .i { width: 13px; height: 13px; }
+.tool:focus-visible, .compare-answers .pair-answer:focus-visible, .compare-answer .button:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.compare-views { gap: 0; padding: 0.1rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); }
+.compare-group.compare-views + .compare-group { border-left: 0; }
+.compare-views .tool { min-height: 1.4rem; }
+.compare-approx { margin-right: 0.1rem; font-size: 13px; }
+.compare-region .tool-label { overflow: hidden; text-overflow: ellipsis; }
+.compare-mine { margin-left: auto; }
+/* the toolbar tells less as it narrows, and never wraps: the jumps keep their keys, then the views their letters */
+@container (max-width: 1320px) { .compare-region .tool-label { display: none; } }
+@container (max-width: 1240px) { .compare-reset .tool-label { display: none; } }
+@container (min-width: 1240.02px) { .compare-reset .i { display: none; } }
+@container (max-width: 1170px) { .compare-mine .tool-label, .compare-approx { display: none; } }
+@container (max-width: 1060px) { .compare-diff .tool-label { display: none; } }
+@container (max-width: 960px) { .compare-views .tool-label { display: none; } }
+
+.compare-answer { container-type: inline-size; display: flex; align-items: stretch; gap: 0.5rem; min-width: 0; flex-wrap: nowrap; }
+.compare-answers { flex: 1 1 auto; display: grid; grid-template-columns: repeat(var(--answers, 3), minmax(0, 1fr)); gap: 0.35rem; min-width: 0; }
+.compare-reader .compare-answers .pair-answer.opt { position: relative; justify-content: flex-start; gap: 0.5rem; min-width: 0; min-height: 2.5rem; padding: 0 0.75rem; border: 1px solid var(--n-neutral-line); background: var(--n-bg-raised); color: var(--n-text); font-size: 14.5px; font-weight: 500; white-space: nowrap; overflow: hidden; }
+.compare-reader .compare-answers .pair-answer.opt:hover:not(:disabled) { background: var(--n-bg-hover); }
+.compare-reader .compare-answers .pair-answer kbd { flex: none; display: inline-grid; place-items: center; min-width: 1.35rem; height: 1.35rem; padding: 0 0.2rem; border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: 4px; background: var(--n-bg-page); color: var(--n-text-dim); font-family: var(--n-font-mono); font-size: 11.5px; }
+.compare-reader .compare-answers .answer-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+/* only the chosen key in colour: its frame, a thick bar at its left, a tinted fill and a heavier weight */
+.compare-reader .compare-answers .pair-answer.opt.on { border-color: var(--n-brand-text); background: var(--n-brand-soft); box-shadow: inset 0.3rem 0 0 var(--n-brand-text); color: var(--n-text); font-weight: 700; }
+.compare-reader .compare-answers .pair-answer.opt.on kbd { border-color: var(--n-brand-text); color: var(--n-brand-text); }
+.compare-reader .compare-answers .pair-answer:disabled { cursor: default; }
+.compare-reader .compare-answers .pair-answer .was { flex: none; margin-left: auto; color: var(--n-text-faint); font-size: 11px; font-weight: 500; }
+.compare-reader .compare-answers .pair-answer.yours:not(.on) { border-style: dashed; }
+.compare-answer .act-main { flex: none; }
+.compare-reader .compare-answer .act-answer { min-width: 8.5rem; min-height: 2.5rem; font-size: 15px; }
+.compare-reader .compare-answer .act-answer kbd, .compare-reader .compare-giveback kbd { margin-left: 0.3rem; font-family: var(--n-font-mono); font-size: 10.5px; opacity: 0.8; }
+.compare-reader .compare-giveback { flex: none; min-height: 2.5rem; }
+.compare-auto { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; color: var(--n-text-dim); white-space: nowrap; cursor: pointer; }
+.compare-auto input { margin: 0; accent-color: var(--n-brand); }
+.compare-refused { min-width: 0; display: flex; align-items: center; }
+.compare-refused .warn { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-stop { flex: none; align-self: center; }
+/* the answers keep their words as the row narrows: the toggle's words go first, then some room around the keys */
+@container (max-width: 1200px) { .compare-auto > span { display: none; } }
+@container (max-width: 1100px) { .compare-reader .compare-answers .pair-answer.opt { gap: 0.35rem; padding: 0 0.45rem; } .compare-reader .compare-answer .act-answer { min-width: 7rem; } }
+.compare-reader .correcting-tag, .compare-reader .compare-lease { white-space: nowrap; }
+.compare-reader .compare-lease .i { width: 12px; height: 12px; }
+.compare-grid.correcting .compare-panel { border-color: var(--n-caution-fg); border-style: dashed; }
+.compare-reader .mine-drawer { left: auto; }
+
+/* every key, by what it does */
+.keys-overlay { width: min(56rem, calc(100vw - 2rem)); max-height: calc(100vh - 3rem); padding: 1rem 1.2rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); }
+.keys-overlay::backdrop { background: var(--n-scrim); }
+.keys-overlay-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; }
+.keys-overlay-head h2 { margin: 0; font-size: var(--n-text-size-h2); }
+.keys-overlay-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr)); gap: 0.8rem 1.4rem; }
+.keys-overlay-groups h3 { margin: 0 0 0.3rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+.keys-overlay dl.facts { gap: 0.2rem 0.8rem; font-size: var(--n-text-size-small); }
+.keys-overlay dt kbd { padding: 0 0.3rem; border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: 4px; background: var(--n-bg-page); font-family: var(--n-font-mono); font-size: 11px; white-space: nowrap; }
+
 .difference { position: absolute; inset: 0; z-index: 2; display: grid; grid-template-rows: auto minmax(0, 1fr); background: var(--n-bg-sunken); border-radius: var(--n-radius); }
 .difference-label { font-size: var(--n-text-size-small); color: var(--n-text-dim); padding: 0.1rem 0.3rem; }
 .difference-canvas { width: 100%; height: 100%; min-height: 0; object-fit: contain; image-rendering: auto; justify-self: center; align-self: center; max-width: 100%; max-height: 100%; }
 .difference-none { margin: 0.4rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
 .difference-wait { position: absolute; inset: auto 0 0 0; z-index: 2; background: var(--n-bg-raised); }
-.compare-window, .compare-regions { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
-.compare-toggle, .compare-reset, .compare-region { cursor: pointer; }
-.compare-toggle.on { border-color: var(--n-focus); }
-.compare-region kbd { margin-right: 0.25rem; font-size: 10px; }
-.compare-region:disabled { cursor: default; opacity: 0.55; }
-.compare-approx { font-size: var(--n-text-size-small); }
+.compare-window, .compare-regions { display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 0.15rem; min-width: 0; }
 .compare-jumped { font-size: var(--n-text-size-small); }
+
 @media (max-width: 860px) {
-  .anchored-reader .anchored-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
-  .anchored-reader .anchored-panel { height: min(calc(100vw * 1.2), 70vh); }
-  .anchored-reader .anchored-bar { grid-column: auto; }
+  .compare-grid, .compare-reader[data-panels="2"] .compare-grid { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .compare-panel { height: min(calc(100vw * 1.2), 70vh); }
+  .compare-tools { height: auto; flex-wrap: wrap; row-gap: 0.3rem; }
+  .compare-answer { flex-wrap: wrap; }
+  .compare-answers { flex-basis: 100%; }
 }
-/* one's own answer opened again to correct (b, m): the answer given marked, the choice free */
-.pair-reader .pair-answer .was { margin-left: 0.4rem; color: var(--n-text-faint); font-size: 10.5px; font-weight: 500; }
-.pair-reader .pair-answer.yours:not(.on) { border-style: dashed; }
-.pair-reader .correcting-tag { white-space: nowrap; }
-.pair-reader .mine-back, .pair-reader .mine-open { white-space: nowrap; }
-.pair-reader .mine-drawer { left: auto; }

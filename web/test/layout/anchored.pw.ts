@@ -95,7 +95,7 @@ test("one key and Enter answer; the page names the roles and no stack", async ({
   // one window is the default; w gives each its own
   await expect(page.locator(".compare-toggle").first()).toHaveAttribute("aria-pressed", "true");
   await page.keyboard.press("w");
-  await expect(page.locator(".compare-toggle").first()).toHaveText("each its own window");
+  await expect(page.locator(".compare-toggle .tool-label").first()).toHaveText("each its own window");
   await shot(page, "anchored-chosen-1366x768");
   await page.keyboard.press("Enter");
   await expect(page.locator(".said")).toContainText("like the post");
@@ -159,3 +159,88 @@ for (const vp of [
     await expect(page.locator(".rate-item > b")).toHaveText("item 14");
   });
 }
+
+// Nima's read of 2026-10-02: the controls by what they do, never cramped or wrapping from a laptop up;
+// the view chosen kept for every item and the next visit; the keys listed by what they do.
+for (const vp of [
+  { width: 1280, height: 720 },
+  { width: 1366, height: 768 },
+  { width: 1440, height: 900 },
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
+]) {
+  test(`the toolbar and the answers at ${vp.width} by ${vp.height}: each on one line, nothing pushed out`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/anchored.html");
+    await measure(page);
+    const m = await page.evaluate(() => {
+      const tools = document.querySelector(".compare-tools")!;
+      const row = document.querySelector(".compare-answer")!;
+      const out = (box: Element) => [...box.querySelectorAll("button, label")].filter((b) => b.getBoundingClientRect().right > box.getBoundingClientRect().right + 1 || b.getBoundingClientRect().height === 0 && getComputedStyle(b).display !== "none").length;
+      const tops = (sel: string) => new Set([...document.querySelectorAll(sel)].filter((e) => getComputedStyle(e).display !== "none").map((e) => Math.round(e.getBoundingClientRect().top + e.getBoundingClientRect().height / 2))).size;
+      const words = [...document.querySelectorAll(".compare-answers .answer-words")].filter((w) => w.scrollWidth > w.clientWidth + 1).length;
+      return { toolsOut: out(tools), rowOut: out(row), toolsScroll: tools.scrollWidth - tools.clientWidth, rowScroll: row.scrollWidth - row.clientWidth, toolLines: tops(".compare-tools > .compare-group"), rowLines: tops(".compare-answer > *"), words };
+    });
+    expect(m.toolsOut).toBe(0);
+    expect(m.rowOut).toBe(0);
+    expect(m.toolsScroll).toBeLessThanOrEqual(1);
+    expect(m.rowScroll).toBeLessThanOrEqual(1);
+    expect(m.toolLines).toBe(1);
+    expect(m.rowLines).toBe(1);
+    expect(m.words).toBe(0);
+    await shot(page, `anchored-bars-${vp.width}x${vp.height}`);
+  });
+}
+
+test("the view chosen stays for the next item and the next visit, for every panel or one", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/anchored.html");
+  await measure(page);
+  await expect(page.locator(".anchored-panel .viewer[data-view=stack]")).toHaveCount(3);
+  await page.keyboard.press("t");
+  await expect(page.locator(".anchored-panel .viewer[data-view=planes]")).toHaveCount(3);
+  await expect(page.locator('.compare-views [aria-checked="true"]')).toContainText("3 planes");
+  await page.keyboard.press("2");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".rate-item > b")).toHaveText("item 14");
+  await expect(page.locator(".anchored-panel .viewer[data-view=planes]")).toHaveCount(3);
+  // one panel alone, with Shift over it
+  await page.locator('[data-role="candidate"]').hover();
+  await page.keyboard.press("Shift+Z");
+  await expect(page.locator('[data-role="candidate"] .viewer')).toHaveAttribute("data-view", "stack");
+  await expect(page.locator('[data-role="candidate"] .panel-view select')).toHaveValue("stack");
+  await expect(page.locator(".anchored-panel .viewer[data-view=planes]")).toHaveCount(2);
+  // the next visit
+  await page.reload();
+  await measure(page);
+  await expect(page.locator('[data-role="candidate"] .viewer')).toHaveAttribute("data-view", "stack");
+  await expect(page.locator(".anchored-panel .viewer[data-view=planes]")).toHaveCount(2);
+  // every panel again
+  await page.keyboard.press("z");
+  await expect(page.locator(".anchored-panel .viewer[data-view=stack]")).toHaveCount(3);
+});
+
+test("? lists every key by what it does, and closes again", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto("/anchored.html");
+  await measure(page);
+  await page.keyboard.press("?");
+  const dialog = page.locator("dialog.keys-overlay");
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("h3")).toHaveText(["Answer", "View", "Compare", "Pictures"]);
+  await shot(page, "anchored-keys-1366x768");
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+});
+
+test("send on key: an answer's key sends it and the next item comes", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.goto("/anchored.html");
+  await measure(page);
+  await page.keyboard.press("u");
+  await expect(page.locator(".compare-auto input")).toBeChecked();
+  await page.keyboard.press("1");
+  await expect(page.locator(".rate-item > b")).toHaveText("item 14");
+  await expect(page.locator(".said")).toContainText("like the pre");
+  await expect(page.locator(".said-undo")).toBeVisible();
+});

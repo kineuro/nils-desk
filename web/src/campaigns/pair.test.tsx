@@ -229,7 +229,7 @@ describe("the pair view drawn", () => {
     root = createRoot(host);
     await act(async () => root.render(<PairReader caps={capsWith(pairDoorsOf())} id={String(CAMPAIGN_ID)} />));
     await until(() => host.querySelector(".pair-sync.on"));
-    expect(host.querySelector(".pair-sync")?.textContent).toBe("one slice");
+    expect(host.querySelector(".pair-sync .tool-label")?.textContent).toBe("one slice");
     // the right starts where the left's middle lies
     await until(() => drawn.get(RIGHT)?.slice === 30);
     await act(async () => drawn.get(LEFT)!.onSlice!(30));
@@ -237,7 +237,7 @@ describe("the pair view drawn", () => {
     await act(async () => drawn.get(RIGHT)!.onSlice!(10));
     expect(drawn.get(LEFT)?.slice).toBe(10);
     await press("l");
-    expect(host.querySelector(".pair-sync")?.textContent).toBe("each alone");
+    expect(host.querySelector(".pair-sync .tool-label")?.textContent).toBe("each alone");
     await act(async () => drawn.get(LEFT)!.onSlice!(3));
     expect(drawn.get(RIGHT)?.slice).toBe(10);
   });
@@ -248,7 +248,7 @@ describe("the pair view drawn", () => {
     vi.stubGlobal("fetch", pairEngine({ log }));
     root = createRoot(host);
     await act(async () => root.render(<PairReader caps={capsWith(pairDoorsOf())} id={String(CAMPAIGN_ID)} />));
-    await until(() => host.querySelector(".pair-sync")?.textContent === "each alone: the geometry differs");
+    await until(() => host.querySelector(".pair-sync .tool-label")?.textContent === "each alone: the geometry differs");
     await act(async () => drawn.get(LEFT)!.onSlice!(30));
     expect(drawn.get(RIGHT)?.slice).toBeNull();
   });
