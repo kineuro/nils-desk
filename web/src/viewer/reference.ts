@@ -13,10 +13,12 @@
 // The sample is the pyramid's coarsest level (a few kilobytes a plane),
 // fetched through the slab door and decoded by the viewer's worker pool, so
 // it works on every pyramid already built and costs one round trip per 32
-// planes. The same sample gives the head's extent in the patient, which
+// planes, asked all at once and kept with the page's slabs (slabs.ts). A
+// reader warming the items ahead reads theirs for later. The same sample gives the head's extent in the patient, which
 // the region jumps (campaigns/regions.ts) are estimated from.
 
-import { doors, levelShape, levelSpacing, type Manifest } from "./doors";
+import { levelShape, levelSpacing, type Manifest } from "./doors";
+import { slab as readSlab } from "./slabs";
 import { geometry, planePosition, type Vec3 } from "./geometry";
 import { decoder } from "./loader";
 
@@ -176,8 +178,8 @@ export function sampleLevel(m: Manifest): number {
   return Math.max(0, (m.levels ?? 1) - 1);
 }
 
-/** Read a stack's coarsest level whole through the slab door, decoded into the modality's values. */
-export async function sampleStack(stack: number, m: Manifest): Promise<Sample> {
+/** Read a stack's coarsest level whole through the slab door, decoded into the modality's values; `later` for an item ahead. */
+export async function sampleStack(stack: number, m: Manifest, later = false): Promise<Sample> {
   const level = sampleLevel(m);
   const [nz, ny, nx] = levelShape(m, level);
   const slab = Math.max(1, Math.min(m.slab ?? 32, 32));
@@ -185,25 +187,30 @@ export async function sampleStack(stack: number, m: Manifest): Promise<Sample> {
   const slope = m.slope !== undefined && m.slope !== 0 ? m.slope : 1;
   const intercept = m.intercept ?? 0;
   const pool = decoder();
-  for (let z0 = 0; z0 < nz; z0 += slab) {
+  const starts: number[] = [];
+  for (let z0 = 0; z0 < nz; z0 += slab) starts.push(z0);
+  const each = async (z0: number) => {
     const z1 = Math.min(nz, z0 + slab);
-    const r = await doors.slab(stack, level, z0, z1);
-    const planes = await Promise.all(r.planes.map((tiles) => pool.decode(m.codec, tiles, nx, ny, m.tile)));
+    const r = await readSlab(stack, level, z0, z1, { warm: later });
+    const planes = await Promise.all(r.planes.map((tiles) => pool.decode(m.codec, tiles, nx, ny, m.tile, later)));
     planes.forEach((p, i) => {
       const at = (z0 + i) * ny * nx;
       for (let j = 0; j < ny * nx; j++) values[at + j] = p.plane[j] * slope + intercept;
     });
-  }
+  };
+  // for later, one slab at a time, so the reads of the pictures on the screen never queue behind them
+  if (later) for (const z0 of starts) await each(z0);
+  else await Promise.all(starts.map(each));
   return { values, shape: [nz, ny, nx], level };
 }
 
 const cache = new Map<number, Promise<Reference>>();
 
-/** A stack's reference, read once per page. */
-export function reference(stack: number, m: Manifest): Promise<Reference> {
+/** A stack's reference, read once per page; `later` for an item ahead, whose planes wait behind the pictures on the screen. */
+export function reference(stack: number, m: Manifest, later = false): Promise<Reference> {
   const have = cache.get(stack);
   if (have) return have;
-  const p = sampleStack(stack, m).then((s) => {
+  const p = sampleStack(stack, m, later).then((s) => {
     const r = referenceOf(s);
     return { value: r.value, threshold: r.threshold, foreground: r.foreground, extent: r.value === null ? null : extentOf(s, m, r.threshold) };
   });

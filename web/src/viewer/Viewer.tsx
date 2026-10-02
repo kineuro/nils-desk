@@ -29,8 +29,18 @@
 // three planes open on the server's planes (which the reader warmed ahead,
 // prefetch.ts) and the volume starts filling only once they are drawn; the
 // stack's own viewport is built when the stack view is first shown.
+//
+// The reader's view is the rater's choice and stays chosen (2026-10-02): the
+// stack, the three planes, or one plane alone (axial, coronal or sagittal)
+// for every item. One plane is the stack's own viewport where it is the
+// plane the stack was acquired in, every plane of the stack at its own
+// resolution; otherwise it is that plane of the volume, enlarged. A page
+// that chooses for it (`bare`) shows no tabs of its own. Each plane keeps
+// its own place while it is paged: the planes are turned to their cameras
+// once, and again only when the cut changes, never on a render (a render
+// that turned them again sent every plane back to its middle).
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as cs from "@cornerstonejs/core";
 import * as tools from "@cornerstonejs/tools";
 import { DoorError } from "../ask/client";
@@ -43,11 +53,13 @@ import { close, counters, imageId, open, register, viewWindow } from "./loader";
 import { PLANES, serverPlane as serverPlaneOf, type Plane } from "./prefetch";
 import { Letters, RenderPlane } from "./RenderPlane";
 import { fps, levelFor } from "./ring";
-import { dropVolume, fillVolume, volumePath, type Filling } from "./volume";
+import { dropVolume, filledAhead, fillVolume, volumePath, type Filling } from "./volume";
 import { viewerKey } from "./keys";
+import { drawnAs, isOblique, type ViewMode } from "./view";
 import "./viewer.css";
 
 export { PLANES, type Plane } from "./prefetch";
+export { drawnAs, isOblique, isViewMode, VIEW_MODES, type ViewMode } from "./view";
 
 /** The one rendering engine the page's viewers share: its WebGL context outlives each stack. */
 export const ENGINE_ID = "nils-viewer";
@@ -80,8 +92,12 @@ export interface ViewerProps {
   stack: number;
   /** The level the rule read, when the item names one; else the level the viewport picks. */
   level?: number | null;
-  /** The view it opens on. */
-  view?: "stack" | "planes";
+  /** The view it shows: followed when it changes, so a page can keep one for every stack. */
+  view?: ViewMode;
+  /** The page chooses the view (the reader's toolbar): no tabs of the viewer's own. */
+  bare?: boolean;
+  /** What is on the screen as it changes: the first picture (the server's), then the full one (decoded, or the volume whole). */
+  onReady?: (ready: "first" | "full") => void;
   /** The planes' budget in bytes, 256 MB when absent; a stack over it has the server's planes. */
   budget?: number;
   /** What the viewer did, for a page that watches it. */
@@ -146,11 +162,6 @@ function rememberPlanes(p: Planes): void {
   }
 }
 
-/** Whether a stack lies off the scanner's axes: a row, a column or the normal more than about a degree from every axis. */
-export function isOblique(g: { row: Vec3; col: Vec3; normal: Vec3; known: boolean }): boolean {
-  return g.known && [g.row, g.col, g.normal].some((v) => Math.max(...v.map(Math.abs)) < 0.9998);
-}
-
 let inited: Promise<void> | null = null;
 function initOnce(): Promise<void> {
   if (!inited) {
@@ -184,8 +195,10 @@ function toolGroup(id: string): tools.Types.IToolGroup {
   return group;
 }
 
-export function Viewer({ stack, level: ruleLevel = null, view: initialView = "stack", budget, onEvent, onView, keys = false, slice = null, onSlice, onManifest, voi = null, onVoi }: ViewerProps) {
-  const ids = viewerIds(stack);
+export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", bare = false, onReady, budget, onEvent, onView, keys = false, slice = null, onSlice, onManifest, voi = null, onVoi }: ViewerProps) {
+  // one object per stack: an effect that names the ids must not run again on every render
+  const ids = useMemo(() => viewerIds(stack), [stack]);
+  const initial = drawnAs(mode, null);
   const el = useRef<HTMLDivElement | null>(null);
   const planeEls = useRef<Record<Plane, HTMLDivElement | null>>({ axial: null, coronal: null, sagittal: null });
   const [manifest, setManifest] = useState<Manifest | null>(null);
@@ -195,9 +208,12 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   const [numbers, setNumbers] = useState<Numbers>({ firstImageMs: null, fps: 0, bytes: 0, planes: 0, decodeMs: 0, level: 0, z: 0 });
   const [firstUrl, setFirstUrl] = useState<string | null>(null);
   const [decodedOnce, setDecodedOnce] = useState(false);
-  const [view, setView] = useState<"stack" | "planes">(initialView);
-  const [planesOpened, setPlanesOpened] = useState(initialView === "planes");
-  const [stackOpened, setStackOpened] = useState(initialView === "stack");
+  const [view, setView] = useState<"stack" | "planes">(initial.view);
+  // a view is opened (its viewport built) once the manifest says how the stack draws it
+  const [planesOpened, setPlanesOpened] = useState(false);
+  const [stackOpened, setStackOpened] = useState(false);
+  // the first picture drawn (the server's render), before the decoded plane or the volume
+  const [firstShown, setFirstShown] = useState(false);
   // the server's planes drawn (or given up on): the volume waits for them, so the first picture is not held behind its work
   const [painted, setPainted] = useState(0);
   const [waited, setWaited] = useState(false);
@@ -211,9 +227,11 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   const [cut, setCut] = useState<Planes>(planesRemembered);
   const cutRef = useRef(cut);
   cutRef.current = cut;
+  // the cut the planes' cameras were last turned to: they are turned again only when it changes
+  const turned = useRef<Planes | null>(null);
   const [numbersOpen, setNumbersOpen] = useState(false);
   // one plane enlarged to the whole side, and the plane under the pointer, which Space and the arrows act on
-  const [big, setBig] = useState<Plane | null>(null);
+  const [big, setBig] = useState<Plane | null>(initial.big);
   const hovered = useRef<Plane | null>(null);
   const root = useRef<HTMLDivElement | null>(null);
   const stamps = useRef<number[]>([]);
@@ -227,6 +245,9 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   toldSlice.current = onSlice;
   const toldManifest = useRef(onManifest);
   toldManifest.current = onManifest;
+  const toldReady = useRef(onReady);
+  toldReady.current = onReady;
+  const readyNow = useRef<"loading" | "first" | "full">("loading");
   // pair mode: the plane asked for, and whether the next new image is that ask's, not the person's
   const asked = useRef<number | null>(slice);
   asked.current = slice;
@@ -249,12 +270,6 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
         if (!alive) return;
         // the planes fill from the middle until the stack view names a plane
         zRef.current = Math.floor(m.shape[0] / 2);
-        // one plane has nothing to cut across: its own plane, and the view chosen kept for the next stack
-        if (!cutsAcross(m)) {
-          setView("stack");
-          setStackOpened(true);
-          setPlanesOpened(false);
-        }
         setManifest(m);
         toldManifest.current?.(m);
       })
@@ -268,6 +283,18 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
       close(stack);
     };
   }, [stack]);
+
+  // the view asked for, as this stack draws it: one plane may be the stack's own viewport or the volume's plane enlarged
+  const drawn0 = drawnAs(mode, manifest, cut);
+  const known = manifest !== null;
+  useEffect(() => {
+    if (!known) return;
+    setView(drawn0.view);
+    if (drawn0.view === "stack") setStackOpened(true);
+    else setPlanesOpened(true);
+    setBig(drawn0.big);
+  }, [known, drawn0.view, drawn0.big]);
+  const single = mode !== "stack" && mode !== "planes";
 
   const stamp = useCallback(() => {
     const now = performance.now();
@@ -336,6 +363,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
       filling.current?.close();
       const vid = filling.current?.volumeId;
       filling.current = null;
+      turned.current = null;
       stackMounted.current = false;
       setStackReady(false);
       drawn.current = new Set();
@@ -416,7 +444,8 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   const mountPlanes = useCallback(async () => {
     if (!manifest || !planesOpened || filling.current || fallback) return;
     const path = volumePath(manifest, budget);
-    if (!("why" in path) && !planesDrawn) return;
+    // a volume the reader filled ahead is drawn at once; otherwise the server's planes go first
+    if (!("why" in path) && !planesDrawn && !filledAhead(stack, path.plan)) return;
     if ("why" in path) {
       setFallback(path.why);
       tell.current?.({ kind: "fallback", why: path.why });
@@ -432,6 +461,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     engine.current = re;
     const planeIds = PLANES.map((p) => ids.planes[p]);
     const cams = planeCameras(geometry(manifest), cutRef.current);
+    turned.current = cutRef.current;
     for (const p of PLANES) {
       const element = planeEls.current[p];
       if (!element) throw new Error("the planes' elements are not on the page");
@@ -490,14 +520,15 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
   }, [view, big]);
 
   // the pictures' keys (keys.ts), where the page gives them: Space enlarges, the arrows page
-  const keyed = useRef({ view, big, manifest, fallback, own: "axial" as Plane });
-  keyed.current = { view, big, manifest, fallback, own: PLANES.find((p) => p === manifest?.plane) ?? "axial" };
+  const keyed = useRef({ view, big, manifest, fallback, own: "axial" as Plane, single });
+  keyed.current = { view, big, manifest, fallback, own: PLANES.find((p) => p === manifest?.plane) ?? "axial", single };
   useEffect(() => {
     if (!keys) return;
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
       if (e.defaultPrevented || !k.manifest) return;
-      const act = viewerKey(e.key, { view: k.view, enlarged: k.big !== null, target: e.target as HTMLElement | null, modifier: e.altKey || e.metaKey || e.ctrlKey });
+      // one plane alone stays alone: Space and Escape are the three planes' only
+      const act = viewerKey(e.key, { view: k.single ? "stack" : k.view, enlarged: k.big !== null, target: e.target as HTMLElement | null, modifier: e.altKey || e.metaKey || e.ctrlKey });
       if (!act) return;
       e.preventDefault();
       if (act.kind === "enlarge") setBig(hovered.current ?? k.own);
@@ -544,10 +575,13 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     };
   }, [manifest]);
 
-  // the planes cut the other way: each viewport turned to its new camera
+  // the planes cut the other way: each viewport turned to its new camera. Only
+  // a change of the cut turns them: turning a plane resets its camera to the
+  // volume's middle, so a turn on every render sent a paged plane back
   useEffect(() => {
     const re = engine.current;
-    if (!re || !manifest || !filling.current) return;
+    if (!re || !manifest || !filling.current || turned.current === cut) return;
+    turned.current = cut;
     const cams = planeCameras(geometry(manifest), cut);
     for (const p of PLANES) {
       const vp = re.getViewport(ids.planes[p]) as cs.VolumeViewport | undefined;
@@ -557,6 +591,14 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     }
     re.renderViewports(PLANES.map((p) => ids.planes[p]));
   }, [cut, manifest, ids.planes, letter]);
+
+  // what is on the screen, told to the page as it changes (the reader warms the next items once this one is drawn)
+  const fullNow = view === "stack" ? decodedOnce : fallback ? painted >= PLANES.length || waited : (volume?.done ?? false);
+  const shownNow = !manifest ? "loading" : fullNow ? "full" : (view === "stack" ? firstShown : painted > 0) ? "first" : "loading";
+  readyNow.current = shownNow;
+  useEffect(() => {
+    if (shownNow !== "loading") toldReady.current?.(shownNow);
+  }, [shownNow]);
 
   // the footer's numbers, once a second
   useEffect(() => {
@@ -598,16 +640,27 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
     rememberPlanes(c);
     setCut(c);
   };
+  // what is on the screen, for the page and its tests: nothing yet, the first picture, or the full one
+  const ready = readyNow.current;
+  const cutChoice = view === "planes" && oblique && !fallback;
+  const tags = !!(manifest.annotation?.burned_in || manifest.held) || !g.regular;
+  const toggleBig = (p: Plane) => {
+    if (!single) setBig((b) => (b ? null : p));
+  };
   return (
     <div
-      className="viewer"
+      className={bare ? "viewer bare" : "viewer"}
+      data-ready={ready}
+      data-view={view}
       ref={root}
       onPointerDownCapture={() => (pressing.current = true)}
       onPointerUpCapture={() => (pressing.current = false)}
       onPointerCancelCapture={() => (pressing.current = false)}
       onPointerLeave={() => (pressing.current = false)}
     >
-      <div className="viewer-axes" role="tablist" aria-label="view">
+      {(!bare || cutChoice || tags) && (
+      <div className={bare ? "viewer-axes viewer-axes-bare" : "viewer-axes"} role={bare ? "group" : "tablist"} aria-label="view">
+        {!bare && <>
         <button
           type="button"
           role="tab"
@@ -636,7 +689,8 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
         >
           three planes
         </button>
-        {view === "planes" && oblique && !fallback && (
+        </>}
+        {cutChoice && (
           <span className="viewer-cut" role="group" aria-label="how the planes are cut">
             <button type="button" className={cut === "acquisition" ? "on" : ""} aria-pressed={cut === "acquisition"} onClick={() => chooseCut("acquisition")} title="the stack's own planes: the head as the operator aligned it, no tilt">
               stack's planes
@@ -648,13 +702,16 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
         )}
         {(manifest.annotation?.burned_in || manifest.held) && <span className="tag caution">burned-in annotation held</span>}
         {!g.regular && <span className="tag caution">planes not evenly spaced</span>}
-        <button type="button" className={numbersOpen ? "viewer-numbers-toggle on" : "viewer-numbers-toggle"} aria-expanded={numbersOpen} aria-label="the viewer's numbers" title="the viewer's numbers: loading, frames, bytes" onClick={() => setNumbersOpen((o) => !o)}>
-          i
-        </button>
+        {!bare && (
+          <button type="button" className={numbersOpen ? "viewer-numbers-toggle on" : "viewer-numbers-toggle"} aria-expanded={numbersOpen} aria-label="the viewer's numbers" title="the viewer's numbers: loading, frames, bytes" onClick={() => setNumbersOpen((o) => !o)}>
+            i
+          </button>
+        )}
       </div>
+      )}
       <div className="viewer-stage" hidden={view !== "stack"}>
         <div ref={el} className="viewer-element" />
-        {firstUrl && !decodedOnce && <img className="viewer-first" src={firstUrl} alt="" />}
+        {firstUrl && !decodedOnce && <img className="viewer-first" src={firstUrl} alt="" onLoad={() => setFirstShown(true)} />}
         {decodedOnce && <Letters labels={labels.stack ?? null} unknown={!g.known} />}
       </div>
       {planesOpened && !fallback && (
@@ -667,7 +724,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
               onPointerDownCapture={() => setTouched((t) => (t[p] ? t : { ...t, [p]: true }))}
               onPointerEnter={() => (hovered.current = p)}
               onPointerLeave={() => hovered.current === p && (hovered.current = null)}
-              onDoubleClick={() => setBig((b) => (b ? null : p))}
+              onDoubleClick={() => toggleBig(p)}
             >
               <div
                 ref={(node) => {
@@ -679,7 +736,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
               {!volumeDone && !touched[p] && <div className="viewer-first">{serverPlane(p, 0.5, firstDrawn(p))}</div>}
               {(volumeDone || touched[p]) && <Letters labels={labels[p] ?? null} unknown={!g.known} />}
               <span className="viewer-plane-name">{p}</span>
-              <GrowButton plane={p} big={big === p} onClick={() => setBig((b) => (b ? null : p))} />
+              {!single && <GrowButton plane={p} big={big === p} onClick={() => toggleBig(p)} />}
             </div>
           ))}
         </div>
@@ -692,10 +749,10 @@ export function Viewer({ stack, level: ruleLevel = null, view: initialView = "st
       {planesOpened && fallback && (
         <div className={big ? "viewer-planes enlarged" : "viewer-planes"} hidden={view !== "planes"}>
           {PLANES.map((p) => (
-            <div key={p} className={`${planeClass(p, own, big)} viewer-plane-server`} onPointerEnter={() => (hovered.current = p)} onPointerLeave={() => hovered.current === p && (hovered.current = null)} onDoubleClick={() => setBig((b) => (b ? null : p))}>
+            <div key={p} className={`${planeClass(p, own, big)} viewer-plane-server`} onPointerEnter={() => (hovered.current = p)} onPointerLeave={() => hovered.current === p && (hovered.current = null)} onDoubleClick={() => toggleBig(p)}>
               {serverPlane(p, serverPos[p])}
               <span className="viewer-plane-name">{p}</span>
-              <GrowButton plane={p} big={big === p} onClick={() => setBig((b) => (b ? null : p))} />
+              {!single && <GrowButton plane={p} big={big === p} onClick={() => toggleBig(p)} />}
               <input type="range" min={0} max={1} step={0.001} value={serverPos[p]} onChange={(e) => setServerPos((s) => ({ ...s, [p]: Number(e.target.value) }))} aria-label={`${p} position`} />
             </div>
           ))}

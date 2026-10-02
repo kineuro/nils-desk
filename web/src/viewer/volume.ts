@@ -8,9 +8,17 @@
 // second (third...) plane, which the view says in a note and the footer
 // counts; the stack view keeps every plane (ruled 2026-09-24). What does not
 // fit is the server's render, never a partial volume passed off as whole.
+//
+// A reader in the three planes (2026-10-02) has the next item's volumes
+// filled while this item is read (`prefill`, for later: its reads and its
+// decoding wait behind the pictures on the screen), so the next item's
+// planes are whole when it is shown; the viewer that opens one takes the
+// filling over, done or not. Only the next item's are filled ahead, and
+// one no longer next is let go.
 
 import * as cs from "@cornerstonejs/core";
-import { doors, levelShape, levelSpacing, type Manifest } from "./doors";
+import { levelShape, levelSpacing, type Manifest } from "./doors";
+import { slab as readSlab } from "./slabs";
 import { geometry, shiftInto, volumeGrid } from "./geometry";
 import { counters, decoder, storedWindow } from "./loader";
 import { SLAB, fillOrder, volumeLevel, VOLUME_BUDGET, type VolumePlan } from "./ring";
@@ -80,8 +88,59 @@ export interface Filling {
  * first. `onPlanes` is called as planes land, at most once a frame, so the
  * viewports render the new planes.
  */
-export function fillVolume(stack: number, m: Manifest, plan: VolumePlan, at: number, onPlanes: (filled: number) => void, inflight = 3): Filling {
+/** A volume's id in cornerstone's cache: one per stack, level and stride. */
+export const volumeIdOf = (stack: number, plan: Pick<VolumePlan, "level" | "stride">): string => `nilsvol:${stack}/${plan.level}/${plan.stride}`;
+
+interface Prefill {
+  filling: Filling;
+  /** Whom to tell as planes land: the viewer that took it over. */
+  tell: Set<(filled: number) => void>;
+  /** Its reads and its decoding are for now from here on. */
+  now: { later: boolean };
+}
+const prefills = new Map<string, Prefill>();
+
+/**
+ * Fill a stack's volume ahead, for later: none when it is in the cache or
+ * being filled already. The viewer that opens the stack takes it over.
+ */
+export function prefill(stack: number, m: Manifest, plan: VolumePlan): Filling | null {
+  const id = volumeIdOf(stack, plan);
+  if (prefills.has(id) || cs.cache.getVolume(id)) return null;
+  const tell = new Set<(filled: number) => void>();
+  const now = { later: true };
+  const filling = fillVolume(stack, m, plan, Math.floor(levelShape(m, plan.level)[0] / 2 / plan.stride), (n) => tell.forEach((t) => t(n)), 2, now);
+  prefills.set(id, { filling, tell, now });
+  return filling;
+}
+
+/** Whether a stack's volume was filled ahead (or is being), so the viewer need not wait for the server's planes before it. */
+export function filledAhead(stack: number, plan: Pick<VolumePlan, "level" | "stride">): boolean {
+  const id = volumeIdOf(stack, plan);
+  return prefills.has(id) || !!cs.cache.getVolume(id);
+}
+
+/** Let go of the volumes filled ahead that are not for these stacks; a volume a viewer took over is the viewer's. */
+export function dropPrefills(keep: ReadonlySet<number>): void {
+  for (const [id, p] of prefills) {
+    const stack = Number(/^nilsvol:(\d+)\//u.exec(id)?.[1]);
+    if (keep.has(stack)) continue;
+    prefills.delete(id);
+    p.filling.close();
+    dropVolume(id);
+  }
+}
+
+export function fillVolume(stack: number, m: Manifest, plan: VolumePlan, at: number, onPlanes: (filled: number) => void, inflight = 3, priority: { later: boolean } = { later: false }): Filling {
   scheme();
+  // a volume filled ahead: taken over, its reads and decoding for now
+  const ahead = prefills.get(volumeIdOf(stack, plan));
+  if (ahead && !priority.later) {
+    prefills.delete(volumeIdOf(stack, plan));
+    ahead.now.later = false;
+    ahead.tell.add(onPlanes);
+    return ahead.filling;
+  }
   const { level, stride, dims } = plan;
   const [nx, ny, depth] = dims;
   const shape = levelShape(m, level);
@@ -142,7 +201,7 @@ export function fillVolume(stack: number, m: Manifest, plan: VolumePlan, at: num
   async function one(slab: number): Promise<void> {
     const z0 = slab * SLAB;
     const z1 = Math.min(nz, z0 + SLAB);
-    const r = await doors.slab(stack, level, z0, z1, abort.signal);
+    const r = await readSlab(stack, level, z0, z1, { signal: abort.signal, warm: priority.later });
     counters.bytes += r.bytes;
     counters.fetches += 1;
     const jobs: Promise<void>[] = [];
@@ -150,7 +209,7 @@ export function fillVolume(stack: number, m: Manifest, plan: VolumePlan, at: num
       if (z % stride !== 0) continue;
       const k = z / stride;
       jobs.push(
-        pool.decode(m.codec, r.planes[z - z0], px, py, m.tile).then(({ plane, ms }) => {
+        pool.decode(m.codec, r.planes[z - z0], px, py, m.tile, priority.later).then(({ plane, ms }) => {
           if (closed) return;
           counters.planesDecoded += 1;
           counters.decodeMs += ms;

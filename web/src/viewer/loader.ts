@@ -1,13 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The `nils:` image loader for cornerstone3D (Wave 5 section 8.2): an image
 // id per plane, `nils:{stack}/{level}/{z}`; the planes come from a ring of
-// slabs fetched ahead of the scroll and evicted behind, decoded in the
-// worker pool, so the whole stack is never resident. The loader also counts
-// the bytes moved and the decode time for the viewer's footer.
+// slabs fetched ahead of the scroll, decoded in the worker pool, the decoded
+// planes behind the ring let go, so the whole stack is never decoded at once.
+// The encoded slabs are the page's (slabs.ts), kept across stacks so an item
+// read ahead or read before draws from memory; the manifests too (tiles.ts).
+// The loader also counts the bytes moved and the decode time for the
+// viewer's footer.
 
 import * as cs from "@cornerstonejs/core";
 import { DecodePool } from "./decode";
-import { doors, levelShape, levelSpacing, storedValue, storedWindow, type Manifest } from "./doors";
+import { levelShape, levelSpacing, storedValue, storedWindow, type Manifest } from "./doors";
+import { slab as readSlab, type Slab } from "./slabs";
+import { tileManifest } from "./tiles";
 
 export { storedValue, storedWindow, viewWindow } from "./doors";
 import { dot, geometry, planePosition } from "./geometry";
@@ -22,8 +27,8 @@ export interface Counters {
 
 interface Stack {
   manifest: Manifest;
-  /** Resident slabs per level: slab index to the planes' tiles. */
-  slabs: Map<string, { tiles: Uint8Array[][]; bytes: number }>;
+  /** The slabs the ring holds decoded planes of, per level ("level:slab"), and those it has in hand. */
+  slabs: Map<string, Slab>;
   inflight: Map<string, Promise<void>>;
   previous: number | null;
 }
@@ -52,12 +57,12 @@ export function decoder(): DecodePool {
 }
 
 
-/** Open a stack: its manifest once, its metadata provider, the pool. */
+/** Open a stack: its manifest (once per page, tiles.ts), its metadata provider, the pool. */
 export async function open(stack: number): Promise<Manifest> {
   const have = stacks.get(stack);
   if (have) return have.manifest;
-  const manifest = await doors.manifest(stack);
-  stacks.set(stack, { manifest, slabs: new Map(), inflight: new Map(), previous: null });
+  const manifest = await tileManifest(stack);
+  if (!stacks.has(stack)) stacks.set(stack, { manifest, slabs: new Map(), inflight: new Map(), previous: null });
   decoder();
   return manifest;
 }
@@ -85,7 +90,7 @@ function key(level: number, slab: number): string {
   return `${level}:${slab}`;
 }
 
-/** Fetch one slab's planes as tiles (one round trip), evict what the ring no longer wants. */
+/** One slab's planes as tiles: from the page's memory, else one round trip. */
 async function fetchSlab(stack: number, s: Stack, level: number, slab: number): Promise<void> {
   const k = key(level, slab);
   if (s.slabs.has(k)) return;
@@ -94,12 +99,11 @@ async function fetchSlab(stack: number, s: Stack, level: number, slab: number): 
   const [nz] = levelShape(s.manifest, level);
   const z0 = slab * SLAB;
   const z1 = Math.min(nz, z0 + SLAB);
-  const p = doors
-    .slab(stack, level, z0, z1)
+  const p = readSlab(stack, level, z0, z1)
     .then((r) => {
       counters.bytes += r.bytes;
       counters.fetches += 1;
-      s.slabs.set(k, { tiles: r.planes, bytes: r.bytes });
+      s.slabs.set(k, r);
     })
     .finally(() => s.inflight.delete(k));
   s.inflight.set(k, p);
@@ -169,7 +173,7 @@ async function decodePlane(id: string, stack: number, s: Stack, level: number, z
   } else await ring(stack, s, level, z);
   const slab = s.slabs.get(key(level, slabOf(z)));
   if (!slab) throw new Error(`slab of plane ${z} was evicted before it was read`);
-  const tiles = slab.tiles[z - slabOf(z) * SLAB];
+  const tiles = slab.planes[z - slabOf(z) * SLAB];
   const { plane, ms } = await pool!.decode(m.codec, tiles, nx, ny, m.tile);
   counters.planesDecoded += 1;
   counters.decodeMs += ms;
