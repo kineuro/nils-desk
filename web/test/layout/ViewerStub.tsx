@@ -11,10 +11,15 @@ import "../../src/viewer/viewer.css";
 
 type Plane = "axial" | "coronal" | "sagittal";
 
-export function Viewer({ view: initial = "stack", onView, keys = false }: { stack: number; level?: number | null; view?: "stack" | "planes"; onView?: (v: "stack" | "planes") => void; keys?: boolean }) {
-  const [view, setView] = useState(initial);
+export function Viewer({ view: mode = "stack", onView, keys = false, bare = false, onReady }: { stack: number; level?: number | null; view?: "stack" | "planes" | Plane; onView?: (v: "stack" | "planes") => void; keys?: boolean; bare?: boolean; onReady?: (r: "first" | "full") => void }) {
+  // one plane alone is the stack's own (the fixture's is sagittal), else that plane of the three enlarged
+  const drawn = mode === "stack" || mode === "sagittal" ? "stack" : "planes";
+  const [view, setView] = useState<"stack" | "planes">(drawn);
+  useEffect(() => setView(drawn), [drawn]);
+  useEffect(() => onReady?.("full"), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [numbers, setNumbers] = useState(false);
   const [big, setBig] = useState<Plane | null>(null);
+  useEffect(() => setBig(mode === "axial" || mode === "coronal" ? mode : null), [mode]);
   const hovered = useRef<Plane | null>(null);
   const keyed = useRef({ view, big });
   keyed.current = { view, big };
@@ -35,8 +40,8 @@ export function Viewer({ view: initial = "stack", onView, keys = false }: { stac
     onView?.(v);
   };
   return (
-    <div className="viewer">
-      <div className="viewer-axes" role="tablist" aria-label="view">
+    <div className={bare ? "viewer bare" : "viewer"} data-ready="full" data-view={view}>
+      {!bare && <div className="viewer-axes" role="tablist" aria-label="view">
         <button type="button" role="tab" aria-selected={view === "stack"} className={view === "stack" ? "on" : ""} onClick={() => choose("stack")}>
           the stack
         </button>
@@ -46,7 +51,7 @@ export function Viewer({ view: initial = "stack", onView, keys = false }: { stac
         <button type="button" className={numbers ? "viewer-numbers-toggle on" : "viewer-numbers-toggle"} aria-expanded={numbers} aria-label="the viewer's numbers" onClick={() => setNumbers((n) => !n)}>
           i
         </button>
-      </div>
+      </div>}
       <div className="viewer-stage" hidden={view !== "stack"} />
       <div className={big ? "viewer-planes enlarged" : "viewer-planes"} hidden={view !== "planes"}>
         {(["axial", "coronal", "sagittal"] as const).map((p) => (

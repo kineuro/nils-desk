@@ -38,7 +38,7 @@ export function firstPlanes(stack: number, m: Manifest): string[] {
 }
 
 /** Load an image into the browser's cache; settles either way, and at once when aborted. */
-function load(src: string, signal?: AbortSignal): Promise<void> {
+export function load(src: string, signal?: AbortSignal): Promise<void> {
   if (signal?.aborted) return Promise.resolve();
   if (typeof Image === "undefined") return fetch(src, { signal }).then(() => undefined, () => undefined);
   return new Promise((resolve) => {

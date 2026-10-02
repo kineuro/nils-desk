@@ -354,7 +354,7 @@ describe("the anchored view drawn", () => {
     expect(drawn.get(POST)?.voi).toEqual({ lower: 60, upper: 900 });
     await press("w");
     expect(drawn.get(CAND)?.voi).toBeNull();
-    expect(host.querySelector(".compare-toggle")?.textContent).toBe("each its own window");
+    expect(host.querySelector(".compare-toggle .tool-label")?.textContent).toBe("each its own window");
     // a drag with each its own moves nothing else
     await act(async () => drawn.get(PRE)!.onVoi!({ lower: 1, upper: 2 }));
     expect(drawn.get(POST)?.voi).toBeNull();
