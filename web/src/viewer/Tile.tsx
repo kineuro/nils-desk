@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { doors, type Manifest } from "./doors";
 import type { Axis } from "./geometry";
+import { PictureWait } from "./PictureWait";
 import { planeAt, planesAlong, step, tileAbsence, tileLevel, tileManifest, TileSync } from "./tiles";
 import "./viewer.css";
 
@@ -91,6 +92,7 @@ export function Tile({ stack, axis = "z", sync = null, size = 128, caption, onOp
       <span className="tile-picture">
         {src && <img src={src} alt="" decoding="async" onLoad={() => onShown?.(stack)} onError={() => setAbsent("no picture")} hidden={absent !== null} />}
         {absent && <span className="tile-absent">{absent}</span>}
+        {!manifest && !absent && seen && <PictureWait stack={stack} small />}
       </span>
       <span className="tile-caption meta">
         {caption ?? `stack ${stack}`}

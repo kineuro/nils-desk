@@ -47,10 +47,12 @@ import { DoorError } from "../ask/client";
 import { classify, Failure, type Failed } from "../ui/Failure";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { NotBuilt, usePicture } from "./building";
 import { cutsAcross, doors, levelShape, type Manifest } from "./doors";
 import { cameraLabels, geometry, planeCameras, type EdgeLabels, type Planes, type Vec3 } from "./geometry";
 import { close, counters, imageId, open, register, viewWindow } from "./loader";
 import { PLANES, serverPlane as serverPlaneOf, type Plane } from "./prefetch";
+import { PictureFailed, PictureWait } from "./PictureWait";
 import { Letters, RenderPlane } from "./RenderPlane";
 import { fps, levelFor } from "./ring";
 import { dropVolume, filledAhead, fillVolume, volumePath, type Filling } from "./volume";
@@ -203,6 +205,9 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
   const planeEls = useRef<Record<Plane, HTMLDivElement | null>>({ axial: null, coronal: null, sagittal: null });
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [failed, setFailed] = useState<Failed | null>(null);
+  // the picture's build failed: said in its own words, never as an engine error
+  const [notBuilt, setNotBuilt] = useState<string | null>(null);
+  const building = usePicture(stack);
   const [gated, setGated] = useState(false);
   const [since] = useState(() => performance.now());
   const [numbers, setNumbers] = useState<Numbers>({ firstImageMs: null, fps: 0, bytes: 0, planes: 0, decodeMs: 0, level: 0, z: 0 });
@@ -265,6 +270,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
   useEffect(() => {
     let alive = true;
     setFailed(null);
+    setNotBuilt(null);
     open(stack)
       .then((m) => {
         if (!alive) return;
@@ -275,6 +281,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
       })
       .catch((e: unknown) => {
         if (!alive) return;
+        if (e instanceof NotBuilt) return setNotBuilt(e.reason);
         if (e instanceof DoorError && (e.status === 403 || e.status === 401)) setGated(true);
         setFailed(classify(e));
       });
@@ -618,8 +625,9 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
       </div>
     );
   }
+  if (notBuilt) return <PictureFailed reason={notBuilt} />;
   if (failed) return <Failure failed={failed} />;
-  if (!manifest) return <Wait phase="reading the stack's manifest" since={Date.now()} size="panel" />;
+  if (!manifest) return building ? <PictureWait stack={stack} /> : <Wait phase="reading the stack's manifest" since={Date.now()} size="panel" />;
   const [nz, ny, nx] = manifest.shape;
   const g = geometry(manifest);
   // the same addresses the reader warms ahead (prefetch.ts), so a warmed plane is drawn from the cache
