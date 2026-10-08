@@ -81,15 +81,28 @@ export interface Place {
   /** The paths the engine was started with that lie under this place, and the flag each came from. */
   bound?: { verb: string; path: string }[];
   retired_at: string | null;
-  /** A source place's dataset: how its files arrive, `undeclared` while nobody has said (Wave 7a). */
-  dataset?: { arrives?: string | null } | null;
-  /** What an active source's folder holds, from its own listing (Wave 7a). */
+  /** A source place's dataset (Wave 7a): what the place is, what its structure says, the root it was found under, and its settings. */
+  dataset?: {
+    kind?: "dataset" | "root" | "legacy";
+    state?: "identified" | "anonymised" | "both" | "unknown";
+    arrives?: string | null;
+    root?: string | null;
+    patient_id?: string | null;
+    subjects?: "map" | "generated" | null;
+    folder?: "subject-code" | "id-type" | null;
+  } | null;
+  /** What an active source's folder holds, from its own listing (Wave 7a); a root says how many datasets it holds. */
   layout?: Layout | null;
+  /** Why an active source is not read yet, in the engine's words; null when it is read. */
+  not_read?: string | null;
+  /** A root's datasets, by name. */
+  datasets?: string[];
 }
 
 export const objects = {
   depends: (kind: string, id: string | number) => door<Closure>("GET", `/api/depends/${kind}/${encodeURIComponent(String(id))}`),
-  places: (probe = false) => door<{ places: Place[]; enforced?: boolean }>("GET", `/api/places${probe ? "?probe=1" : ""}`),
+  /** The places; `probe` measures each again, `explore` makes each source's folder what it is again (Wave 7a): a root's new folders found as datasets. */
+  places: (probe = false, explore = false) => door<{ places: Place[]; enforced?: boolean }>("GET", `/api/places${probe ? "?probe=1" : explore ? "?explore=1" : ""}`),
   placeAdd: (body: { name: string; role: Place["role"]; path: string; guarantees: Record<string, unknown> }) => door<Place>("POST", "/api/places", body),
   placeSet: (id: number, body: { path?: string; guarantees?: Record<string, unknown>; retired?: boolean }) => door<Place>("PUT", `/api/places/${id}`, body),
   summary: (since?: string | null) => door<Summary>("GET", `/api/summary${since ? `?since=${encodeURIComponent(since)}` : ""}`),

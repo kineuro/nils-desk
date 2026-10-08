@@ -1173,7 +1173,7 @@ button.tail.link-button:disabled { color: var(--n-text-faint); cursor: default; 
 .tl li > span { display: grid; gap: 0.1rem; min-width: 0; }
 .tl .meta { display: block; overflow-wrap: anywhere; }
 .tl b { font-weight: 500; }
-/* Add a dataset and Bring in what is new */
+/* Add a source and Bring in what is new */
 .dataset-names { align-items: start; }
 .batch-name { max-width: 18rem; }
 .map-columns { display: grid; gap: 0.5rem; }
@@ -1502,6 +1502,9 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
 .preflight-missing li + li { margin-top: 0.15rem; }
 .run-page > .row.actions, .plan-page > .row.actions { align-items: center; gap: 0.5rem; }
 
-/* Wave 7a: an undeclared place, not read until someone says how its files arrive */
-.undeclared { flex-wrap: wrap; margin-top: 0.3rem; }
-.undeclared .tag { white-space: normal; }
+/* Wave 7a: a dataset not read yet, and the datasets a source holds */
+.not-read { flex-wrap: wrap; margin-top: 0.3rem; align-items: baseline; }
+.found-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.found-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; padding: 0.6rem 0.8rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); }
+.found-row .path { overflow-wrap: anywhere; }
+.finish { display: grid; gap: 1rem; }

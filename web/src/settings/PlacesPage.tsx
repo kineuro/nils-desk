@@ -3,10 +3,11 @@
 // folder NILS reads or keeps data in, with its role, what was declared of it,
 // what the engine measured and whether it stands up to its role. A place is
 // added in a dialog, its folder typed or chosen by clicking through this
-// machine's folders. A source is a dataset, and has no path of its own here
-// (Wave 7a, H2 round 1): choosing the source role leads to Add a dataset,
-// which asks how its files arrive before anything reads them, and an
-// undeclared source shows as not read, with the button into that dialog. An
+// machine's folders. A source has no path of its own here (Wave 7a, H2
+// round 1): choosing the source role leads to Add a source, which explores
+// the folder into its datasets and reads each by its structure, and a
+// dataset not read yet shows so, with the engine's reason and the button that
+// finishes it. A root lists the datasets it holds. An
 // opened place moves to another folder, has its guarantees changed, or is
 // retired. The engine checks every rule again at its doors. The places read
 // last are drawn at once, and read again when asked or after a change.
@@ -14,9 +15,10 @@
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
-import { AddDataset } from "../data/AddDataset";
-import { isUndeclared } from "../data/layout";
-import { Undeclared } from "../data/Undeclared";
+import { AddSource } from "../data/AddSource";
+import { FinishDialog } from "../data/FinishDataset";
+import { isRoot, notReadOf } from "../data/layout";
+import { NotRead } from "../data/NotRead";
 import { placeName } from "../home/look";
 import { objects, type Place } from "../objects/client";
 import { placesKept } from "../objects/kept";
@@ -48,8 +50,8 @@ import {
 import { placeStats } from "./stats";
 import { followRun, supervise, type Install } from "./supervise";
 
-/** The dialog open: a place added, a place changed, or a source as a dataset (added from a folder, or an undeclared one declared) in Add a dataset. */
-type Opened = { kind: "add" } | { kind: "change"; place: Place } | { kind: "dataset"; path: string } | { kind: "declare"; place: Place } | null;
+/** The dialog open: a place added, a place changed, a source added in Add a source, or a dataset finished. */
+type Opened = { kind: "add" } | { kind: "change"; place: Place } | { kind: "source"; path: string } | { kind: "finish"; place: Place } | null;
 
 function Tag({ tone, words }: { tone: Tone; words: string }) {
   return <span className={tone === "neutral" ? "tag" : `tag ${tone}`}>{words}</span>;
@@ -165,7 +167,8 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
                       <td>
                         <span className="path">{p.path}</span>
                         {note && <div className="meta">{note}</div>}
-                        {p.retired_at === null && isUndeclared(p) && <Undeclared name={p.name} onDeclare={mayDeclare ? () => setOpened({ kind: "declare", place: p }) : null} />}
+                        {p.retired_at === null && isRoot(p) && (p.datasets?.length ?? 0) > 0 && <div className="meta">holds {p.datasets!.join(", ")}</div>}
+                        {p.retired_at === null && notReadOf(p) !== null && <NotRead name={p.name} why={notReadOf(p)!} onFinish={mayDeclare ? () => setOpened({ kind: "finish", place: p }) : null} />}
                       </td>
                       <td className="meta">{guaranteeLine(p, places)}</td>
                       <td className="num">{freeWords(p)}</td>
@@ -196,24 +199,25 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
             >
               Measure again
             </button>
+            {mayDeclare && places.some((p) => p.role === "source" && p.retired_at === null) && (
+              <button
+                type="button"
+                className="button secondary small"
+                disabled={measure.working}
+                onClick={() => measure.act("exploring the sources again", () => placesKept.refresh(() => objects.places(false, true)).then(() => "Every source is explored again; new folders under a root are datasets now."))}
+              >
+                Explore the sources again
+              </button>
+            )}
             <Acted acting={measure.acting} />
           </div>
         </>
       )}
-      {opened?.kind === "add" && places !== null && <AddDialog caps={caps} install={install} places={places} onClose={() => setOpened(null)} onDone={done} onDataset={(path) => setOpened({ kind: "dataset", path })} />}
-      {opened?.kind === "dataset" && places !== null && (
-        <AddDataset caps={caps} install={install} places={places} initial={opened.path ? { path: opened.path, layout: null } : undefined} onClose={() => setOpened(null)} onDone={done} />
+      {opened?.kind === "add" && places !== null && <AddDialog caps={caps} install={install} places={places} onClose={() => setOpened(null)} onDone={done} onSource={(path) => setOpened({ kind: "source", path })} />}
+      {opened?.kind === "source" && places !== null && (
+        <AddSource caps={caps} install={install} places={places} initial={opened.path ? { path: opened.path } : undefined} onClose={() => setOpened(null)} onDone={done} />
       )}
-      {opened?.kind === "declare" && places !== null && (
-        <AddDataset
-          caps={caps}
-          install={install}
-          places={places}
-          declare={{ id: opened.place.id, name: opened.place.name, path: opened.place.path, layout: opened.place.layout ?? null }}
-          onClose={() => setOpened(null)}
-          onDone={done}
-        />
-      )}
+      {opened?.kind === "finish" && places !== null && <FinishDialog caps={caps} place={opened.place} layout={opened.place.layout ?? null} onClose={() => setOpened(null)} onDone={done} />}
       {opened?.kind === "change" && places !== null && <ChangeDialog caps={caps} install={install} place={opened.place} places={places} onClose={() => setOpened(null)} onDone={done} />}
     </div>
   );
@@ -221,8 +225,8 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
 
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
 
-function AddDialog(props: { caps: Capabilities; install: Install | null; places: Place[]; onClose: () => void; onDone: () => void; onDataset: (path: string) => void }) {
-  const { caps, install, places, onClose, onDone, onDataset } = props;
+function AddDialog(props: { caps: Capabilities; install: Install | null; places: Place[]; onClose: () => void; onDone: () => void; onSource: (path: string) => void }) {
+  const { caps, install, places, onClose, onDone, onSource } = props;
   const [d, setD] = useState<PlaceDraft>(EMPTY);
   const [named, setNamed] = useState(false);
   const [act, setAct] = useState<Act>({ kind: "idle" });
@@ -230,7 +234,7 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
   const name = named ? d.name : folder ? placeName(folder, places.map((p) => p.name)) : "";
   const draft = { ...d, path: folder, name };
   const refusal = draftRefusal(draft, places);
-  // a source is a dataset: it is added in Add a dataset, which asks how its files arrive, never here (Wave 7a)
+  // a source is added in Add a source, which explores it into its datasets, never here (Wave 7a)
   const source = d.role === "source";
   const supervised = install !== null && may(caps, "install:work");
   const working = act.kind === "working";
@@ -256,8 +260,8 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
 
   const foot = source ? (
     <div className="row actions">
-      <button type="button" className="button" disabled={folder !== "" && !folder.startsWith("/")} onClick={() => onDataset(folder)}>
-        Go on in Add a dataset
+      <button type="button" className="button" disabled={folder !== "" && !folder.startsWith("/")} onClick={() => onSource(folder)}>
+        Go on in Add a source
       </button>
       <button type="button" className="button secondary" onClick={onClose}>
         Cancel
@@ -311,7 +315,7 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
             browse={supervised}
             known={knownFolders(places, install?.dir ?? null)}
             onChange={(path) => setD({ ...d, path })}
-            onEnter={() => source && onDataset(folder)}
+            onEnter={() => source && onSource(folder)}
           />
         </div>
       </div>
@@ -319,8 +323,8 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
         <div className="note brand">
           <Icon name="info" />
           <div className="note-body">
-            <p className="note-lead">A source is a dataset</p>
-            <p className="note-detail">It is added in Add a dataset, which looks inside the folder, asks how its files arrive and moves nothing without your word. Nothing in it is read before that.</p>
+            <p className="note-lead">A source is added in Add a source</p>
+            <p className="note-detail">It explores the folder: each folder under it is a dataset, read by what it holds. Nothing is moved without your word, and nothing is read until each dataset is complete.</p>
           </div>
         </div>
       ) : (

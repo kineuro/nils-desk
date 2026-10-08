@@ -9,10 +9,11 @@ import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { AddDataset } from "../data/AddDataset";
-import { isUndeclared } from "../data/layout";
+import { AddSource } from "../data/AddSource";
+import { FinishDialog } from "../data/FinishDataset";
+import { isRoot, notReadOf } from "../data/layout";
+import { NotRead } from "../data/NotRead";
 import { newFolderRefusal } from "../data/picker";
-import { Undeclared } from "../data/Undeclared";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { objects, type Place } from "../objects/client";
@@ -232,17 +233,18 @@ function InstalledBody({ caps, install }: { caps: Capabilities; install: Install
 }
 
 /**
- * Bring in DICOM: the sources there are, and Add a dataset, the one way in
+ * Bring in DICOM: the sources there are, and Add a source, the one way in
  * (Wave 7a, H2 round 1), opened here since the Data section waits for setup.
- * It asks how the files arrive before anything reads them; an undeclared
- * source shows as not read, with the button that says how.
+ * NILS explores the source into its datasets and reads each by its
+ * structure; a dataset not read yet shows so, with the engine's reason and
+ * the button that finishes it.
  */
 export function SourcesBody(props: { caps: Capabilities; install: Install | null; places: Place[]; met: boolean; onDone: () => void }) {
   const { caps, install, places, met, onDone } = props;
-  const [open, setOpen] = useState<{ kind: "add" } | { kind: "declare"; place: Place } | null>(null);
+  const [open, setOpen] = useState<{ kind: "add" } | { kind: "finish"; place: Place } | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const sources = places.filter((p) => p.role === "source" && p.retired_at === null);
-  // a dataset is work on Data and on Places (record 25)
+  // a source is work on Data and on Places (record 25)
   const refusal = newFolderRefusal(caps);
   const done = (words: string) => {
     setOpen(null);
@@ -253,14 +255,18 @@ export function SourcesBody(props: { caps: Capabilities; install: Install | null
     <>
       {sources.length > 0 && (
         <ul className="source-list">
-          {sources.map((p) => (
-            <li key={p.id}>
-              <Icon name="folder" />
-              <b>{p.name}</b>
-              <span className="path">{p.path}</span>
-              {isUndeclared(p) && <Undeclared name={p.name} onDeclare={refusal === null ? () => setOpen({ kind: "declare", place: p }) : null} />}
-            </li>
-          ))}
+          {sources.map((p) => {
+            const why = notReadOf(p);
+            return (
+              <li key={p.id}>
+                <Icon name="folder" />
+                <b>{p.name}</b>
+                <span className="path">{p.path}</span>
+                {isRoot(p) && <span className="meta">a source of {p.datasets?.length ?? 0} {(p.datasets?.length ?? 0) === 1 ? "dataset" : "datasets"}</span>}
+                {why !== null && <NotRead name={p.name} why={why} onFinish={refusal === null ? () => setOpen({ kind: "finish", place: p }) : null} />}
+              </li>
+            );
+          })}
         </ul>
       )}
       {said && <p className="ok-words">{said}</p>}
@@ -268,7 +274,7 @@ export function SourcesBody(props: { caps: Capabilities; install: Install | null
         <div className="row actions">
           <button type="button" className={met ? "button secondary small" : "button"} onClick={() => setOpen({ kind: "add" })}>
             <Icon name="plus" />
-            {met ? "Add another dataset" : "Add a dataset"}
+            {met ? "Add another source" : "Add a source"}
           </button>
           <a className="button quiet small" href={href("settings", "places")}>
             The Places page
@@ -277,17 +283,8 @@ export function SourcesBody(props: { caps: Capabilities; install: Install | null
       ) : (
         <p className="meta">{refusal}</p>
       )}
-      {open?.kind === "add" && <AddDataset caps={caps} install={install} places={places} onClose={() => setOpen(null)} onDone={done} />}
-      {open?.kind === "declare" && (
-        <AddDataset
-          caps={caps}
-          install={install}
-          places={places}
-          declare={{ id: open.place.id, name: open.place.name, path: open.place.path, layout: open.place.layout ?? null }}
-          onClose={() => setOpen(null)}
-          onDone={done}
-        />
-      )}
+      {open?.kind === "add" && <AddSource caps={caps} install={install} places={places} onClose={() => setOpen(null)} onDone={done} />}
+      {open?.kind === "finish" && <FinishDialog caps={caps} place={open.place} layout={open.place.layout ?? null} onClose={() => setOpen(null)} onDone={done} />}
     </>
   );
 }

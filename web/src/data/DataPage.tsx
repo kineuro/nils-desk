@@ -22,12 +22,11 @@ import type { Install } from "../settings/supervise";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
-import { AddDataset } from "./AddDataset";
+import { AddSource } from "./AddSource";
 import { BringInNew } from "./BringInNew";
 import {
   arrivesOf,
   batchTail,
-  cohorts as cohortsDoor,
   countWords,
   datasetState,
   jobs as jobsDoor,
@@ -41,9 +40,10 @@ import {
   type Rates,
   type StageName,
 } from "./datasets";
-import { isUndeclared } from "./layout";
+import { FinishDialog } from "./FinishDataset";
+import { FINISH, isRoot, notReadOf, stateWords, stateOf } from "./layout";
 import { NowSection, useLiveJobs } from "./Now";
-import { Undeclared } from "./Undeclared";
+import { NotRead } from "./NotRead";
 import { fileWords, whenWords } from "./sources";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[]; rates: Rates | null };
@@ -82,9 +82,8 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   const [chosen, setChosen] = useState<string | null>(dataset ?? null);
   const [bringing, setBringing] = useState<Dataset | null>(null);
   const [adding, setAdding] = useState(false);
-  /** An undeclared dataset whose arrival is being said, in Add a dataset. */
-  const [declaring, setDeclaring] = useState<Dataset | null>(null);
-  const [cohorts, setCohorts] = useState<string[]>([]);
+  /** A dataset not read yet, being finished. */
+  const [finishing, setFinishing] = useState<Dataset | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const places = useKept(placesKept);
   const jobs = useLiveJobs(caps);
@@ -104,7 +103,6 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   useEffect(() => {
     read();
     if (served(caps, "GET /api/places")) void placesKept.ensure();
-    if (served(caps, "GET /api/cohorts")) cohortsDoor.list().then((r) => setCohorts(r.cohorts.map((c) => c.name)), () => setCohorts([]));
   }, [read, caps]);
 
   // the datasets are read again when a job ends, and every twenty seconds while one runs
@@ -120,10 +118,16 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
     return () => clearInterval(t);
   }, [reading, read]);
 
-  const list = load.kind === "ready" ? load.list : [];
+  // a root is a folder of datasets, never a dataset: its datasets are the cards
+  const list = load.kind === "ready" ? load.list.filter((d) => !isRoot(d)) : [];
+  const placeOf = (d: Dataset) => places.value?.places.find((p) => p.id === d.id) ?? null;
+  /** Why a dataset is not read yet: the places door's own words where it was read, else the same reasoning from the dataset. */
+  const whyOf = (d: Dataset): string | null => {
+    const p = placeOf(d);
+    return p && p.not_read !== undefined ? p.not_read : notReadOf(d);
+  };
   const rates = load.kind === "ready" ? load.rates : null;
   const current = list.find((s) => s.name === chosen) ?? list[0] ?? null;
-  const known = [...new Set([...cohorts, ...list.map((d) => d.cohort).filter((c): c is string => typeof c === "string" && c !== "")])];
 
   const readAgain = (b: Batch, d: Dataset) => {
     setSaid(null);
@@ -152,10 +156,10 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
         {works && (
           <button type="button" className="button secondary" onClick={() => setAdding(true)}>
             <Icon name="folder" />
-            Add a dataset
+            Add a source
           </button>
         )}
-        {works && current && !isUndeclared(current) && (
+        {works && current && whyOf(current) === null && (
           <button type="button" className="button" onClick={() => setBringing(current)}>
             <Icon name="play" />
             Bring in what is new
@@ -183,14 +187,15 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
               works={works}
               onPick={() => setChosen(d.name)}
               onBringIn={() => setBringing(d)}
-              onDeclare={works ? () => setDeclaring(d) : null}
+              notRead={whyOf(d)}
+              onFinish={works ? () => setFinishing(d) : null}
             />
           ))}
         </div>
       )}
       {said && <p className="meta">{said}</p>}
       <NowSection caps={caps} jobs={jobs} onSaid={setSaid} />
-      {current && <Batches dataset={current} works={works && !isUndeclared(current)} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
+      {current && <Batches dataset={current} works={works && whyOf(current) === null} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
       {modern && list.length > 0 && (
         <Says head="One person is one subject" icon="lock">
           Every identifier a person was seen under is filed on their one subject in the sealed store, so any of them arriving in any dataset lands on the same code. An identifier the store does not know
@@ -211,30 +216,25 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
           }}
         />
       )}
-      {declaring && (
-        <AddDataset
+      {finishing && (
+        <FinishDialog
           caps={caps}
-          install={install}
-          places={places.value?.places ?? []}
-          cohorts={known}
-          declare={{ id: declaring.id, name: declaring.name, path: declaring.path, layout: places.value?.places.find((p) => p.id === declaring.id)?.layout ?? null }}
-          onClose={() => setDeclaring(null)}
+          place={{ id: finishing.id, name: finishing.name, path: finishing.path, dataset: placeOf(finishing)?.dataset ?? { kind: finishing.kind, state: finishing.state, arrives: finishing.arrives, root: finishing.root, patient_id: finishing.patient_id, subjects: finishing.subjects, folder: finishing.folder }, not_read: whyOf(finishing) }}
+          layout={placeOf(finishing)?.layout ?? null}
+          onClose={() => setFinishing(null)}
           onDone={(words) => {
-            setDeclaring(null);
+            setFinishing(null);
             setSaid(words);
             void placesKept.refresh().catch(() => undefined);
-            onChanged();
-            jobs.refresh();
             read();
           }}
         />
       )}
       {adding && (
-        <AddDataset
+        <AddSource
           caps={caps}
           install={install}
           places={places.value?.places ?? []}
-          cohorts={known}
           onClose={() => setAdding(false)}
           onDone={(words) => {
             setAdding(false);
@@ -250,11 +250,11 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   );
 }
 
-function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onPick: () => void; onBringIn: () => void; onDeclare: (() => void) | null }) {
-  const { dataset: d, on, works, onPick, onBringIn, onDeclare } = props;
-  const state = datasetState(d);
-  const undeclared = isUndeclared(d);
-  const how = undeclared ? null : COMES_IN[arrivesOf(d)];
+function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; notRead: string | null; onPick: () => void; onBringIn: () => void; onFinish: (() => void) | null }) {
+  const { dataset: d, on, works, notRead, onPick, onBringIn, onFinish } = props;
+  const waiting = notRead !== null;
+  const state = waiting ? { words: "not read", tone: "caution" as const } : datasetState(d);
+  const how = waiting ? null : COMES_IN[arrivesOf(d)];
   const trees = d.trees ?? null;
   return (
     <div className={on ? "scard on" : "scard"} aria-current={on ? "true" : undefined} onClick={onPick}>
@@ -266,14 +266,14 @@ function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onP
         <span className={state.tone === "neutral" ? "tag" : `tag ${state.tone}`}>{state.words}</span>
         <span onClick={(e) => e.stopPropagation()}>
           <MoreMenu label={`More for ${d.name}`}>
-            {works && !undeclared && (
+            {works && !waiting && (
               <button type="button" onClick={onBringIn}>
                 Bring in what is new
               </button>
             )}
-            {onDeclare && undeclared && (
-              <button type="button" onClick={onDeclare}>
-                Say how its files arrive
+            {onFinish && waiting && (
+              <button type="button" onClick={onFinish}>
+                {FINISH}
               </button>
             )}
             <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>
@@ -281,7 +281,8 @@ function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onP
         </span>
       </div>
       <span className="where">{d.path}</span>
-      {undeclared && <Undeclared name={d.name} onDeclare={onDeclare} />}
+      {d.state && <span className="meta">{stateWords(stateOf(d), !waiting, d.kind === "legacy")}</span>}
+      {waiting && <NotRead name={d.name} why={notRead} onFinish={onFinish} />}
       <div className="row">
         {how && (
           <span className={`privacy ${how.tone}`}>

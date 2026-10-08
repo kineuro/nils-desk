@@ -475,8 +475,9 @@ describe("what a change to the dataset sends", () => {
 
   it("sends the dataset's own fields, and nothing of where the originals stand or of the tags", () => {
     const patch = changePatch(fields);
+    // how the files arrive is the structure's, never declared (Wave 7a)
+    expect(patch).not.toHaveProperty("arrives");
     expect(patch).toEqual({
-      arrives: "identified",
       unmapped: "hold",
       cohort: "nmosd",
       handling: { arrives: "identified", on_release: { uids: "remap", deface: false } },

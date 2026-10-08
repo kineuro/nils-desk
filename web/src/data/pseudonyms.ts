@@ -18,7 +18,7 @@ import { VERBS } from "../ops/verbs";
 import { identityActs } from "../review/client";
 import { kindOf } from "../review/triage";
 import type { Access } from "../settings/identity";
-import type { Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
+import type { Arrives, Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
 import { datesWord, type Handling } from "./sources";
 
 // A dataset is the sources door's row as the Data page types it; the same shape is read from here.
@@ -41,7 +41,8 @@ export type DatasetPatch = Partial<DatasetFields> & {
  * from the same dataset would each send the whole block and undo the other.
  */
 export interface DatasetChange {
-  arrives: NonNullable<DatasetFields["arrives"]>;
+  /** How the files arrive, as the structure says it (Wave 7a): kept for the handling, never sent as a declaration, which the engine refuses. */
+  arrives: Arrives;
   unmapped: NonNullable<DatasetFields["unmapped"]>;
   cohort: string;
   on_release: Handling["on_release"];
@@ -54,7 +55,6 @@ export interface DatasetChange {
  */
 export function changePatch(c: DatasetChange): DatasetPatch {
   return {
-    arrives: c.arrives,
     unmapped: c.unmapped,
     cohort: c.cohort.trim() || null,
     // the dates are not a choice (record 38 S3): a stored policy read off an older engine is never sent back, which the engine would refuse

@@ -79,8 +79,9 @@ import {
   type VaultAsk,
 } from "./pseudonyms";
 import { countWords } from "./datasets";
-import { isUndeclared, moveAskedOf, questionWords, type MoveAsked } from "./layout";
-import { Undeclared } from "./Undeclared";
+import { arrivesOf } from "./datasets";
+import { notReadOf, stateOf, stateWords } from "./layout";
+import { NotRead } from "./NotRead";
 import { PurgeDialog, VaultDialog } from "./Originals";
 import { policyKept } from "./policy";
 import { DATES_KEPT, datesWord, sources, whenWords, type Handling } from "./sources";
@@ -334,12 +335,13 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
           <div className="grow">
             <h1>Pseudonymisation of {dataset.name}</h1>
             <p className="lede">
-              {isUndeclared(dataset) ? "Undeclared" : `Arrives ${arrives === "identified" ? "identified" : arrives === "deidentified" ? "de-identified" : "coded"}`} · {heldFiles > 0 ? `${n(heldFiles)} files held` : "nothing held"}
+              {dataset.state ? stateWords(stateOf(dataset), notReadOf(dataset) === null, dataset.kind === "legacy") : `Arrives ${arrives === "identified" ? "identified" : arrives === "deidentified" ? "de-identified" : "coded"}`} · {heldFiles > 0 ? `${n(heldFiles)} files held` : "nothing held"}
             </p>
-            {isUndeclared(dataset) && (
-              <Undeclared
+            {notReadOf(dataset) !== null && (
+              <NotRead
                 name={dataset.name}
-                onDeclare={() => {
+                why={notReadOf(dataset)!}
+                onFinish={() => {
                   location.hash = href("data", "datasets", dataset.name);
                 }}
               />
@@ -351,7 +353,7 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
               Provide a map
             </button>
           )}
-          {changing === null && !isUndeclared(dataset) && (
+          {changing === null && notReadOf(dataset) === null && (
             <button type="button" className="button secondary" onClick={() => setOpened({ kind: "change" })}>
               <Icon name="pencil" />
               Change
@@ -1344,60 +1346,36 @@ export function ChangeDialog({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [arrives, setArrives] = useState<NonNullable<Dataset["arrives"]>>(dataset.arrives ?? (dataset.handling?.arrives === "deidentified" ? "deidentified" : "identified"));
+  // how the files arrive is read from the structure (Wave 7a): said here, never chosen
+  const arrives = arrivesOf(dataset);
   const [unmapped, setUnmapped] = useState<"hold" | "code">(dataset.unmapped ?? "hold");
   const [cohort, setCohort] = useState(dataset.cohort ?? "");
   // the dates are not among what is chosen or sent: a policy an older engine still answers is dropped here, so Now says what Save writes
   const [onRelease, setOnRelease] = useState<Handling["on_release"]>({ uids: dataset.handling?.on_release?.uids ?? "remap", deface: dataset.handling?.on_release?.deface ?? false });
   const [why, setWhy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  /** The engine's question, when the arrival chosen would move loose entries: answered by the person, never assumed. */
-  const [asked, setAsked] = useState<MoveAsked | null>(null);
   const release = (patch: Partial<Handling["on_release"]>) => setOnRelease((was) => ({ ...was, ...patch }));
-  const save = (confirmed = false) => {
+  const save = () => {
     setSaving(true);
     setWhy(null);
-    setAsked(null);
     // where the originals stand is not among the fields: only the act that moves or removes the files writes that word. Nor are the tag
     // lists, which the chooser owns: a form that sent them would undo what the chooser wrote since this one was opened
     const patch = changePatch({ arrives, unmapped, cohort, on_release: onRelease });
     datasets
-      .set(dataset.id, confirmed ? { ...patch, confirm_move: true } : patch)
+      .set(dataset.id, patch)
       .then(onSaved)
       .catch((e: unknown) => {
         setSaving(false);
-        // Wave 7a: a move no person confirmed is the engine's question, not a failure; nothing was written
-        const question = confirmed ? null : moveAskedOf(e);
-        if (question) setAsked(question);
-        else setWhy(messageOf(e));
+        setWhy(messageOf(e));
       });
   };
-  const question = asked ? questionWords(asked, arrives === "undeclared" ? "identified" : arrives) : null;
   const radio = (name: string, checked: boolean, onPick: () => void, words: string) => (
     <label className="choice">
       <input type="radio" name={name} checked={checked} disabled={saving} onChange={onPick} />
       {words}
     </label>
   );
-  const foot = asked && question ? (
-    <>
-      <div className="note caution" role="alertdialog" aria-label="Confirm the move">
-        <Icon name="folder" />
-        <div className="note-body">
-          <p className="note-lead">{question.lead}</p>
-          <p className="note-detail">{question.detail}</p>
-        </div>
-      </div>
-      <div className="row actions">
-        <button type="button" className="button quiet" onClick={() => setAsked(null)}>
-          Back
-        </button>
-        <button type="button" className="button" disabled={saving} onClick={() => save(true)}>
-          Move them and save
-        </button>
-      </div>
-    </>
-  ) : (
+  const foot = (
     <div className="row actions">
       <button type="button" className="button" disabled={saving} onClick={() => save()}>
         Save
@@ -1412,9 +1390,8 @@ export function ChangeDialog({
     <Dialog title={`How ${dataset.name} is pseudonymised`} icon="pencil" onClose={onClose} foot={foot}>
       <div className="field">
         <span className="label">What arrives</span>
-        {radio("arrives", arrives === "identified", () => setArrives("identified"), "Identified: pseudonymised into dcm-anon before anything reads it")}
-        {radio("arrives", arrives === "deidentified", () => setArrives("deidentified"), "De-identified: moved into dcm-anon as sent, its identifiers mapped when read")}
-        {radio("arrives", arrives === "coded", () => setArrives("coded"), "Coded: our codes already in PatientID, taken verbatim")}
+        <span>{dataset.state ? stateWords(stateOf(dataset), true, dataset.kind === "legacy") : arrivesWords(dataset)}</span>
+        <span className="meta">Read from the folder: derivatives/dcm-original is identified, derivatives/dcm-anon is already anonymised.</span>
       </div>
       <div className="field">
         <span className="label">An identifier the map does not know</span>

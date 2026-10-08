@@ -272,12 +272,13 @@ describe("a v0 cohort folder", () => {
         return { ok: true, status: 201, text: async () => JSON.stringify({ id: 4, name: "ms-2019", layout: { v0: { original_files: 3, raw_files: 3, renamed: true } } }) } as Response;
       }),
     );
-    const p = await places.add({ name: "ms-2019", role: "source", path: "/srv/imaging/ms-2019", guarantees: {}, arrives: "identified", identity: { id_type: "personal-number", from: [{ field: "PatientID" }] }, unmapped: "hold", cohort: "ms-2019" });
+    // a source is added by its folder alone: what it is, the engine reads from its structure (Wave 7a)
+    const p = await places.add({ name: "ms-2019", role: "source", path: "/srv/imaging/ms-2019", guarantees: {} });
     expect(p.layout?.v0?.renamed).toBe(true);
     expect(calls[0].method).toBe("POST");
-    expect(calls[0].body).toMatchObject({ arrives: "identified", unmapped: "hold", cohort: "ms-2019", identity: { id_type: "personal-number", from: [{ field: "PatientID" }] } });
-    await places.set(4, { cohort: null, move_into_anon: true });
-    expect(calls[1]).toEqual({ method: "PUT", path: "/api/places/4", body: { cohort: null, move_into_anon: true } });
+    expect(calls[0].body).toEqual({ name: "ms-2019", role: "source", path: "/srv/imaging/ms-2019", guarantees: {} });
+    await places.set(4, { move_into: "anon", confirm_move: true });
+    expect(calls[1]).toEqual({ method: "PUT", path: "/api/places/4", body: { move_into: "anon", confirm_move: true } });
   });
 });
 

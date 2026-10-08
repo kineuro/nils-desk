@@ -1,26 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Data page's dialogs as they open (record 26, D1): Add a dataset with
-// what arrives, who a file is about and the map, or as the v0 folder variant
-// when the look found one; Bring in what is new with its steps, its chain and
-// its estimate, or the digest alone on an engine that queues nothing after a
-// job; and the Datasets page as it opens, with the dataset the address names.
-// With them, the two things Add a dataset hands the engine: the folder it
-// declares on, which is the folder a person picked and never the pseudonymised
-// tree of a dataset declared on it already, and the map it files, whose types
-// the site has not got are made by the import itself.
+// The Data page's dialogs as they open (record 26, D1, and Wave 7a): Add a
+// source with the folder alone, browsed in the engine's picker or typed, and
+// refused on an engine that does not read structure; Bring in what is new
+// with its steps, its chain and its estimate, or the digest alone on an engine
+// that queues nothing after a job; and the Datasets page as it opens, with the
+// dataset the address names. With them, the folder a picker hands on, which
+// is the folder a person picked and never the pseudonymised tree of a dataset
+// declared on it already.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import answer from "../../test/fixtures/sources_record26.json";
 import type { Capabilities } from "../capabilities";
 import { GRANTS, SETS, type Grant } from "../grants";
-import { AddDataset, mapImport, typesToMake } from "./AddDataset";
+import { AddSource } from "./AddSource";
 import { BringInNew } from "./BringInNew";
 import type { FolderPage, IngestRoot } from "./browse";
 import { DataPage } from "./DataPage";
 import type { SourcesAnswer } from "./datasets";
 import { openChosen, rootChosen } from "./picker";
-import type { Guess } from "./pseudonyms";
 
 const sources = (answer as SourcesAnswer).sources;
 const [incoming, , exports] = sources;
@@ -46,97 +44,40 @@ const caps = (grants: readonly Grant[] = GRANTS, openapi = "5", doors = ["GET /a
 
 const none = () => undefined;
 
-describe("Add a dataset", () => {
-  it("asks how the files arrive with nothing chosen, and offers Add and Add and bring in only once a person says", () => {
-    const html = renderToStaticMarkup(<AddDataset caps={caps()} install={null} places={[]} cohorts={["exchange-ct"]} onClose={none} onDone={none} />);
-    expect(html).toContain("Add a dataset</h2>");
-    expect(html).toContain("How the files arrive");
-    expect(html).toContain("Identified, from the scanners");
-    expect(html).toContain("De-identified by someone else");
-    expect(html).toContain("Our own codes already in PatientID");
-    // Wave 7a: no arrival is chosen for the person, so nothing below it is asked yet and nothing can be added
-    expect(html).not.toMatch(/name="arrives" checked=""/);
-    expect(html).toContain("Choose one: nothing is read until you say how the files arrive.");
-    expect(html).not.toContain("Who a file is about");
-    expect(html).not.toContain("Its subjects join");
-    expect(html).toMatch(/<button type="button" class="button secondary" disabled="">Add<\/button>/);
-    expect(html).toMatch(/<button type="button" class="button" disabled="">Add and bring in<\/button>/);
-    expect(html).not.toContain("v0 cohort folder");
+describe("Add a source", () => {
+  it("on an engine before Wave 7a, says the engine must read structure first, and adds nothing", () => {
+    const html = renderToStaticMarkup(<AddSource caps={caps()} install={null} places={[]} onClose={none} onDone={none} />);
+    expect(html).toContain("Add a source</h2>");
+    expect(html).toContain("This engine does not explore a source by its structure.");
+    expect(html).toMatch(/<button type="button" class="button" disabled="">Add and explore<\/button>/);
+    // no choice of how the files arrive is offered anywhere
+    expect(html).not.toContain("How the files arrive");
+    expect(html).not.toContain('name="arrives"');
   });
 
-  it("shows the v0 folder variant when the look found one: dcm-raw renamed, v0's map filed, the originals kept", () => {
-    const html = renderToStaticMarkup(
-      <AddDataset caps={caps()} install={null} places={[]} cohorts={[]} initial={{ path: "/srv/imaging/ms-2019", layout: { v0: { original_files: 41806, raw_files: 41790, renamed: false } } }} onClose={none} onDone={none} />,
-    );
-    expect(html).toContain("This is a NILS v0 cohort folder");
-    expect(html).toContain("41,806 files as they came from the scanners");
-    expect(html).toContain("dcm-raw is renamed dcm-anon</b>");
-    expect(html).toContain("v0&#x27;s map is filed</b>");
-    expect(html).toContain("The originals stay</b>");
-    expect(html).toContain("Choose the file</button>");
-    expect(html).toContain("The 16 files v0 skipped are in dcm-original only");
-    expect(html).toContain("a cohort named after the dataset: ms-2019");
-    expect(html).not.toContain("What arrives");
-    expect(html).not.toContain(">Add</button>");
-    expect(html).toContain("Add and bring in</button>");
-  });
-
-  it("keeps to the folder and the old handling on an engine before record 26, in one line", () => {
-    const html = renderToStaticMarkup(<AddDataset caps={caps(GRANTS, "4", ["GET /api/sources", "GET /api/jobs", "POST /api/jobs"])} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
-    expect(html).toContain("This engine keeps none of these choices yet");
-    expect(html).not.toContain("Who a file is about");
-    expect(html).not.toContain("Upload a CSV");
-  });
-
-  it("browses the engine's own folders for anyone who may add a dataset, with no grant on the install", () => {
+  it("browses the engine's own folders for anyone who may add a source, with no grant on the install", () => {
     // work on Data and the folders door is all it takes: no install grant, and the supervisor is never asked
     const folders = ["GET /api/sources", "POST /api/jobs", "POST /api/ingest/folders", "POST /api/ingest/look", "GET /api/linkage/types", "POST /api/linkage/imports"];
-    const html = renderToStaticMarkup(<AddDataset caps={caps(["data:work", "data:see", "places:work"], "5", folders)} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
+    const html = renderToStaticMarkup(<AddSource caps={caps(["data:work", "data:see", "places:work"], "5", folders)} install={null} places={[]} onClose={none} onDone={none} />);
     expect(html).toContain('class="field pick-folder"');
     expect(html).toContain('aria-label="the folders above this one"');
     expect(html).toContain('aria-current="location">locations<');
     // and a folder outside the engine's locations is still typed, from the same place
     expect(html).toContain("A folder outside these");
-    expect(html).not.toContain('id="dataset-path"');
+    expect(html).not.toContain('id="source-path"');
     // without the folders door, or without work on Data, the path field stands where the picker would
-    const noDoor = renderToStaticMarkup(<AddDataset caps={caps()} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
-    expect(noDoor).toContain('id="dataset-path"');
+    const noDoor = renderToStaticMarkup(<AddSource caps={caps()} install={null} places={[]} onClose={none} onDone={none} />);
+    expect(noDoor).toContain('id="source-path"');
     expect(noDoor).not.toContain("A folder outside these");
-    const noWork = renderToStaticMarkup(<AddDataset caps={caps(["data:see", "places:work"], "5", folders)} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
-    expect(noWork).toContain('id="dataset-path"');
+    const noWork = renderToStaticMarkup(<AddSource caps={caps(["data:see", "places:work"], "5", folders)} install={null} places={[]} onClose={none} onDone={none} />);
+    expect(noWork).toContain('id="source-path"');
   });
 
   it("says which page's work adding a folder needs when a person lacks it", () => {
-    const html = renderToStaticMarkup(<AddDataset caps={caps(["data:work"])} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
+    const html = renderToStaticMarkup(<AddSource caps={caps(["data:work"])} install={null} places={[]} onClose={none} onDone={none} />);
     expect(html).toContain("needs work on the Data page and on the Places page; this account has no work on the Places page.");
-    const noData = renderToStaticMarkup(<AddDataset caps={caps(["places:work", "data:see"])} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
+    const noData = renderToStaticMarkup(<AddSource caps={caps(["places:work", "data:see"])} install={null} places={[]} onClose={none} onDone={none} />);
     expect(noData).toContain("this account has no work on the Data page.");
-  });
-
-  it("makes the types a map names that the site has not got, since an unknown type is a conflict and a map with one is never filed", () => {
-    const id = (id_type: string | null, new_type: string | null): Guess => ({ role: "identifier", id_type, new_type });
-    const code: Guess = { role: "code", id_type: null, new_type: null };
-    const known = [{ name: "personnummer", description: null }];
-    // the column that stands for the person names a type of its own, as every identifier column does
-    const naming = [
-      { header: "personnummer", guess: id("personnummer", null) },
-      { header: "canonical_pn", guess: { role: "canonical", id_type: null, new_type: "pn" } as Guess },
-      { header: "study id", guess: id(null, "study-id") },
-      { header: "code", guess: code },
-    ];
-    expect(typesToMake(naming, known)).toEqual(["pn", "study-id"]);
-    const body = mapImport(naming, [["199001019999", "199001019999", "S-01", "0001"]], known);
-    expect(body.make_types).toBe(true);
-    expect(body.columns).toEqual([
-      { header: "personnummer", role: "identifier", id_type: "personnummer" },
-      { header: "canonical_pn", role: "canonical", id_type: "pn" },
-      { header: "study id", role: "identifier", id_type: "study-id" },
-      { header: "code", role: "code" },
-    ]);
-    // a map that names only types the site has already is filed without making any
-    const settled = [{ header: "personnummer", guess: id("personnummer", null) }, { header: "code", guess: code }];
-    expect(typesToMake(settled, known)).toEqual([]);
-    expect(mapImport(settled, [], known).make_types).toBe(false);
   });
 });
 
@@ -225,7 +166,7 @@ describe("the Datasets page", () => {
   const page = (dataset: string | null = null) => renderToStaticMarkup(<DataPage caps={caps(SETS.operator.grants)} install={null} onChanged={none} dataset={dataset} />);
   it("opens on the datasets, reading them, whether or not the address names one", () => {
     expect(page()).toContain("<h1>Datasets</h1>");
-    expect(page()).toContain("Add a dataset</button>");
+    expect(page()).toContain("Add a source</button>");
     expect(page("incoming")).toContain("reading the datasets");
   });
 });

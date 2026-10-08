@@ -1,67 +1,110 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// One safe way in for data (Wave 7a, B2 and H2 round 1): a folder is never
-// read without the layout. The engine answers what a folder holds with every
-// declaration and every look, and a source place is undeclared until a person
-// says how its files arrive; nothing in an undeclared place is read. Where the
-// tree an arrival reads is missing and loose entries wait beside
-// `derivatives/`, a declaration is refused with the question, naming the
-// entries and the tree they would go into, and nothing moves until the person
-// confirms. These are the words and the reading of those answers; the dialog
-// that asks is Add a dataset.
+// One safe way in for data (Wave 7a, B2 and H2 round 1): NILS reads what a
+// dataset is from its structure, never from a choice. A source is a root
+// folder; each folder under it is a dataset. Under derivatives/, dcm-original
+// is identified data, dcm-anon (or v0's dcm-raw) is already anonymised, and
+// both is identified data with its anonymised copy. DICOM beside derivatives/,
+// or no tree at all, is unknown: a person says which tree those entries go
+// into, and they move only once the person confirms what the engine named.
+// An anonymised dataset is read only once it says what its PatientID holds
+// and how its subjects are found. These are the words and the reading of the
+// engine's answers; the dialogs are Add a source and Finish a dataset.
 
 import { DoorError } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import type { Arrives, Layout, LayoutDeclaration } from "./datasets";
+import type { Place } from "../objects/client";
+import type { DatasetState, Layout } from "./datasets";
 
-/** The arrival of a place nobody has declared: nothing in it is read. */
-export const UNDECLARED = "undeclared";
+/** The line every page shows a dataset with until it is read. */
+export const NOT_READ = "not read";
 
-/** What an undeclared place is, in the words every page shows it with. */
-export const NOT_READ = "not read until you say how its files arrive";
-
-/** The button every page offers on an undeclared place, into Add a dataset. */
-export const SAY_HOW = "Say how its files arrive";
+/** The button every page offers on a dataset that is not read yet. */
+export const FINISH = "Finish it";
 
 const n = (v: number) => v.toLocaleString("en-US");
-const entries = (k: number) => `${n(k)} loose ${k === 1 ? "entry" : "entries"}`;
+const entries = (k: number) => `${n(k)} ${k === 1 ? "entry" : "entries"}`;
 
 /** The places block of the engine's capabilities, as far as the dataset goes. */
-function datasetCaps(caps: Capabilities): { arrives?: unknown; patient_id?: unknown } | null {
+function datasetCaps(caps: Capabilities): Record<string, unknown> | null {
   const places = caps.engine?.["places"];
   if (!places || typeof places !== "object") return null;
   const dataset = (places as { dataset?: unknown }).dataset;
-  return dataset && typeof dataset === "object" ? (dataset as { arrives?: unknown; patient_id?: unknown }) : null;
+  return dataset && typeof dataset === "object" ? (dataset as Record<string, unknown>) : null;
 }
 
-/** Whether the engine never reads a folder without the layout: it knows an undeclared dataset, and asks before it moves. */
-export function asksFirst(caps: Capabilities): boolean {
-  const arrives = datasetCaps(caps)?.arrives;
-  return Array.isArray(arrives) && arrives.includes(UNDECLARED);
+/** Whether the engine reads a dataset from its structure, and explores a source into its datasets. */
+export function readsStructure(caps: Capabilities): boolean {
+  const states = datasetCaps(caps)?.["states"];
+  return Array.isArray(states) && states.includes("unknown");
 }
 
-/** Whether a dataset may declare what PatientID holds in its pseudonymised tree. */
-export function patientIdServed(caps: Capabilities): boolean {
-  return Array.isArray(datasetCaps(caps)?.patient_id);
-}
+/** A source place's dataset, from the places door (`dataset`) or the sources door (its fields at the top). */
+type Declared = { kind?: unknown; state?: unknown; arrives?: unknown; root?: unknown; patient_id?: unknown; subjects?: unknown; trees?: unknown };
 
-/** Whether a source place, or a dataset, is undeclared: by its own field, or by the dataset the places door carries. */
-export function isUndeclared(p: { arrives?: unknown; dataset?: unknown; role?: string }): boolean {
-  if (p.role !== undefined && p.role !== "source") return false;
-  if (p.arrives === UNDECLARED) return true;
+function declared(p: { dataset?: unknown } & Declared): Declared {
   const d = p.dataset;
-  return d !== null && typeof d === "object" && (d as { arrives?: unknown }).arrives === UNDECLARED;
+  return d && typeof d === "object" ? (d as Declared) : p;
 }
 
-/** The question a declaration was answered with: why, and what the folder holds. */
+/** Whether a source place is a root: a folder whose folders are datasets, read by their own names. */
+export function isRoot(p: { role?: string; dataset?: unknown } & Declared): boolean {
+  return (p.role === undefined || p.role === "source") && declared(p).kind === "root";
+}
+
+/**
+ * Why a dataset is not read yet, in words, or null where it is read: the
+ * engine's own reason where its door gives one (`not_read`), else the same
+ * reasoning from the dataset it declares. A root is never a dataset, and is
+ * not said to be unread.
+ */
+export function notReadOf(p: { role?: string; not_read?: unknown; dataset?: unknown } & Declared): string | null {
+  if (p.role !== undefined && p.role !== "source") return null;
+  if (isRoot(p)) return null;
+  if (typeof p.not_read === "string") return p.not_read;
+  if (p.not_read === null) return null;
+  const d = declared(p);
+  if (d.arrives === "undeclared" || d.state === "unknown") return "its structure is unknown: entries beside derivatives/, or no tree at all; say which tree they go into";
+  const anonymised = d.state === "anonymised" || (d.state === undefined && (d.arrives === "deidentified" || d.arrives === "coded"));
+  if (!anonymised) return null;
+  const missing: string[] = [];
+  if (d.patient_id === null || d.patient_id === undefined) missing.push("what PatientID holds");
+  if (d.subjects === null || d.subjects === undefined) missing.push("how its subjects are found");
+  return missing.length > 0 ? `it is anonymised and does not say ${missing.join(", nor ")}` : null;
+}
+
+/** What a dataset's structure says, in plain words, by whether it is read yet. */
+export function stateWords(state: DatasetState | undefined, read: boolean, legacy = false): string {
+  if (legacy) return read ? "anonymised: a tree named itself, read as it is" : "anonymised: a tree named itself; needs its PatientID and how subjects are found";
+  switch (state) {
+    case "identified":
+      return "identified: will be pseudonymised";
+    case "both":
+      return "both: identified, with its anonymised copy beside it";
+    case "anonymised":
+      return read ? "anonymised: read as it is" : "anonymised: needs its PatientID and how subjects are found";
+    case "unknown":
+      return "unknown: tell us where its loose entries go";
+    default:
+      return "not explored yet";
+  }
+}
+
+/** The state a place's dataset, or the layout found for it, says. */
+export function stateOf(p: { dataset?: unknown } & Declared, layout?: Layout | null): DatasetState | undefined {
+  const s = layout?.state ?? declared(p).state;
+  return s === "identified" || s === "anonymised" || s === "both" || s === "unknown" ? s : undefined;
+}
+
+/** The question a move was answered with: why, and what the folder holds. */
 export interface MoveAsked {
   why: string;
   layout: Layout;
 }
 
 /**
- * The engine's question, when a declaration was refused because it would move
- * loose entries no person confirmed: a 409 that names `confirm_move` and
- * carries the layout. Anything else is not a question, and null.
+ * The engine's question, when a move no person confirmed was refused: a 409
+ * that names `confirm_move` and carries the layout. Anything else is not a
+ * question, and null.
  */
 export function moveAskedOf(e: unknown): MoveAsked | null {
   if (!(e instanceof DoorError) || e.status !== 409) return null;
@@ -70,62 +113,47 @@ export function moveAskedOf(e: unknown): MoveAsked | null {
   return { why: typeof body.error === "string" ? body.error : "", layout: body.layout as Layout };
 }
 
-/** Whether a door's answer says the dataset is undeclared, which the engine says in its refusal of a digest or a bring-in. */
-export function undeclaredRefusal(e: unknown): boolean {
-  return e instanceof DoorError && e.status === 409 && typeof e.body.error === "string" && /undeclared/.test(e.body.error);
-}
-
-/** Whether a layout is one an engine that asks first answered: it says what each declaration would do. */
-export function speaksLayout(l: Layout | null | undefined): l is Layout & { declarations: Partial<Record<Arrives, LayoutDeclaration>> } {
-  return !!l && typeof l.declarations === "object" && l.declarations !== null;
-}
-
-/** What a folder holds, as facts: its two trees, a v0 folder's dcm-raw, and the loose entries beside them. */
+/** What a dataset's folder holds, as facts: its two trees, a v0 folder's dcm-raw, and what lies beside derivatives/. */
 export function foundFacts(l: Layout): { k: string; v: string }[] {
   const out = [
     { k: "derivatives/dcm-original", v: l.originals ? "there" : "not there" },
     { k: "derivatives/dcm-anon", v: l.anon ? "there" : l.raw ? "not there; dcm-raw becomes it" : "not there" },
   ];
   if (l.raw && !l.anon) out.push({ k: "derivatives/dcm-raw", v: "there, from v0" });
-  out.push({ k: "beside derivatives/", v: (l.loose ?? 0) === 0 ? "nothing" : entries(l.loose ?? 0) });
+  const dicom = l.loose_dicom?.length ?? 0;
+  const loose = l.loose ?? 0;
+  out.push({ k: "beside derivatives/", v: loose === 0 ? "nothing" : dicom > 0 ? `${entries(loose)}, ${n(dicom)} with DICOM` : `${entries(loose)}, none with DICOM` });
   return out;
 }
 
-/** The loose entries by name, the first hundred, and how many more there are. */
-export function looseNamed(l: Layout): { names: string[]; more: number } {
-  const names = l.loose_entries ?? [];
-  return { names, more: Math.max(0, (l.loose ?? names.length) - names.length) };
-}
-
-/** What one declaration of this folder would read and move, in words; null where the engine does not say. */
-export function declarationWords(l: Layout | null | undefined, arrives: Arrives | typeof UNDECLARED | null): { reads: string; move: string | null; stays: string | null } | null {
-  if (arrives === UNDECLARED) return { reads: "Nothing in it is read. It shows as not read until you say how its files arrive.", move: null, stays: null };
-  if (arrives === null || !speaksLayout(l)) return null;
-  const d = l.declarations[arrives];
-  if (!d) return null;
-  const reads = `Reads ${d.reads} only.`;
-  if (d.needed) return { reads, move: `Moves the ${entries(d.moves)} beside derivatives/ into ${d.into}, once you confirm.`, stays: null };
-  if (!d.tree_there) return { reads: `${reads} An empty ${d.into} is made.`, move: null, stays: null };
-  return { reads, move: null, stays: d.moves > 0 ? `The ${entries(d.moves)} beside derivatives/ ${d.moves === 1 ? "stays where it is" : "stay where they are"}, not read.` : null };
+/** The entries with DICOM by name, the first hundred, and how many more there are. */
+export function dicomNamed(l: Layout): { names: string[]; more: number } {
+  const names = l.loose_dicom ?? [];
+  const total = l.move_into?.entries ?? names.length;
+  return { names, more: Math.max(0, total - names.length) };
 }
 
 /** The question itself: which entries go where, said before anything moves. */
-export function questionWords(asked: MoveAsked, arrives: Arrives): { lead: string; detail: string; into: string; count: number } {
-  const d = asked.layout.declarations?.[arrives];
-  const into = d?.into ?? (arrives === "identified" ? "derivatives/dcm-original" : "derivatives/dcm-anon");
-  const count = d?.moves ?? asked.layout.loose ?? 0;
-  const how = arrives === "identified" ? "identified" : arrives === "deidentified" ? "de-identified" : "with our codes in PatientID";
+export function questionWords(asked: MoveAsked, into: "originals" | "anon"): { lead: string; detail: string; tree: string; count: number } {
+  const tree = asked.layout.move_into?.trees[into] ?? (into === "originals" ? "derivatives/dcm-original" : "derivatives/dcm-anon");
+  const count = asked.layout.move_into?.entries ?? asked.layout.loose_dicom?.length ?? 0;
+  const what = into === "originals" ? "identified data: the pseudonymiser reads it and writes the anonymised copy" : "already anonymised: the registry reads it";
   return {
-    lead: `Move ${entries(count)} into ${into}?`,
-    detail: `The folder holds no ${into}. Arriving ${how}, its files are read from there, so the entries beside derivatives/ go into it by a rename on the same disk: nothing is copied and nothing is read. Nothing was written yet.`,
-    into,
+    lead: `Move ${entries(count)} into ${tree}?`,
+    detail: `They become ${what}. Each goes by a rename on the same disk: nothing is copied and nothing is read. Nothing was written yet.`,
+    tree,
     count,
   };
 }
 
-/** The declaration of what PatientID holds, as the places door takes it. */
+/** The declaration of what PatientID holds, as the places door takes it; null until a type is named. */
 export function patientIdOf(choice: "subject-code" | "id-type", idType: string): string | null {
   if (choice === "subject-code") return "subject-code";
   const t = idType.trim();
   return t ? `id-type:${t}` : null;
+}
+
+/** The dataset places a root holds, by the root's name, from the places door. */
+export function datasetsOf(root: Place, places: Place[]): Place[] {
+  return places.filter((p) => p.role === "source" && p.retired_at === null && p.dataset?.root === root.name);
 }

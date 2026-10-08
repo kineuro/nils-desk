@@ -26,8 +26,16 @@ export type { ChainedJob, IdType as LinkageType, ImportReport };
 export type MapColumn = ImportColumn;
 
 export type Arrives = "identified" | "deidentified" | "coded";
-/** An arrival, or none yet (Wave 7a): a place nobody has declared is never read. */
+/** An arrival, or none yet (Wave 7a): the engine reads it from the structure, and a dataset whose structure says nothing is never read. */
 export type Arrival = Arrives | "undeclared";
+/** What a dataset's structure says (Wave 7a): only originals, only an anonymised tree, both, or anything else. */
+export type DatasetState = "identified" | "anonymised" | "both" | "unknown";
+/** What a source place is (Wave 7a): one dataset, a root whose folders are datasets, or a pseudonymised tree named itself. */
+export type SourceKind = "dataset" | "root" | "legacy";
+/** How an anonymised dataset's subjects are found: a map of subject codes to its ids, or codes the generator makes from them. */
+export type Subjects = "map" | "generated";
+/** What names the folder of each pseudonymised copy. */
+export type FolderNaming = "subject-code" | "id-type";
 export type Unmapped = "hold" | "code";
 export type OriginalsKept = "kept" | "vaulted" | "purged";
 
@@ -94,6 +102,13 @@ export interface Batch extends Digest {
 export interface Dataset extends Omit<Source, "digests"> {
   digests: Omit<Source["digests"], "recent"> & { recent: Batch[] };
   arrives?: Arrival;
+  /** Wave 7a: what the place is, what its structure says, and the root it was found under. */
+  kind?: SourceKind;
+  state?: DatasetState;
+  root?: string | null;
+  patient_id?: string | null;
+  subjects?: Subjects | null;
+  folder?: FolderNaming | null;
   trees?: Trees | null;
   identity?: IdentityRule | null;
   unmapped?: Unmapped;
@@ -137,55 +152,84 @@ export interface BatchStages {
   reviewed: { done: number; of: number; since: string | null } | null;
 }
 
-/** What one declaration of a folder would read, and what it would move there (Wave 7a): `needed` when the tree is missing and loose entries wait, so the move must be confirmed. */
-export interface LayoutDeclaration {
-  reads: string;
-  tree_there: boolean;
-  moves: number;
-  into: string;
-  needed: boolean;
+/** Where an unknown dataset's entries holding DICOM may go, in the engine's words for each tree. */
+export interface MoveInto {
+  choices: ("originals" | "anon")[];
+  trees: { originals: string; anon: string };
+  entries: number;
+  originals: string;
+  anon: string;
+}
+
+/** What a dataset's settings ask, as the engine says it for this folder (Wave 7a). */
+export interface LayoutSettings {
+  patient_id: { choices: string[]; required: boolean; default: string | null };
+  subjects: { choices: Subjects[]; required: boolean; map: string; generated: string } | null;
+  folder: { choices: FolderNaming[]; default: FolderNaming };
 }
 
 /**
- * What a look found in a folder: a v0 cohort folder's originals and the raw
- * tree v0 wrote. An engine that asks first (Wave 7a) says the rest too: which
- * trees are there, the loose entries beside them (the first hundred by name),
- * whether nothing is read until someone says how the files arrive, what each
- * declaration would read and move, and what a declaration just moved. The
- * places door's listing leaves a v0 folder's files uncounted.
+ * What the engine found in a folder (Wave 7a): which trees are there, the
+ * state the structure says and the tree the registry reads, the loose
+ * entries beside derivatives/ (the first hundred named) and those holding
+ * DICOM, whether a person must say where they go (`question`, with
+ * `move_into`), what the dataset's settings ask, and what a confirmed move or
+ * the rename of a v0 folder's dcm-raw did just now. A root says how many
+ * datasets it holds; a legacy place that it is a tree itself; an entry the
+ * exploration could not settle, why. The places door's listing leaves a v0
+ * folder's files uncounted.
  */
 export interface Layout {
-  v0: { original_files: number | null; raw_files: number | null; renamed: boolean; partial?: boolean } | null;
+  v0?: { original_files: number | null; raw_files: number | null; renamed: boolean; partial?: boolean } | null;
+  derivatives?: boolean;
   originals?: boolean;
   anon?: boolean;
   raw?: boolean;
+  state?: DatasetState;
+  reads?: string | null;
+  pseudonymises?: boolean;
   loose?: number;
   loose_entries?: string[];
+  loose_dicom?: string[];
   question?: boolean;
-  declarations?: Partial<Record<Arrives, LayoutDeclaration>>;
+  move_into?: MoveInto | null;
+  settings?: LayoutSettings;
   moved?: { into: string; entries: number } | null;
   renamed?: boolean;
+  root?: boolean;
+  datasets?: number;
+  legacy?: boolean;
+  error?: string;
 }
 
-/** The dataset fields the places door takes beside a place's own. */
+/** The dataset fields the places door takes beside a place's own (Wave 7a): never `arrives`, which the structure says. */
 export interface DatasetFields {
-  arrives: Arrival;
+  /** Where an unknown dataset's entries holding DICOM go; moved only with `confirm_move`. */
+  move_into?: "originals" | "anon";
+  /** The person's word for the move the engine named: sent only after they confirmed what was shown. */
+  confirm_move?: boolean;
+  /** What PatientID holds in the pseudonymised tree: `subject-code`, or `id-type:<name>`. */
+  patient_id?: string;
+  subjects?: Subjects;
+  folder?: FolderNaming;
   identity?: IdentityRule | null;
   unmapped?: Unmapped;
   cohort?: string | null;
   tags?: Tags | null;
-  move_into_anon?: boolean;
-  /** The person's word that the loose entries the engine named may move (Wave 7a): sent only after they confirmed what was shown. */
-  confirm_move?: boolean;
-  /** What the pseudonymiser writes into PatientID: `subject-code`, or `id-type:<name>` (Wave 7a). */
-  patient_id?: string;
 }
+
+/** The places door's answer to an added or changed source: the place, the layout found, and a root's datasets. */
+export type PlaceAnswer = Omit<Place, "datasets"> & { layout?: Layout | null; datasets?: FoundDataset[] };
+
+/** A dataset found under a root, as the places door answers an added root: the place with its layout, or a folder it could not settle. */
+export type FoundDataset = (Place & { layout: Layout; new?: boolean }) | { name: string; path: string; layout: Layout; new?: boolean; id?: undefined };
 
 export type ColumnRole = "identifier" | "canonical" | "code" | "ignore";
 
 export const places = {
-  add: (body: { name: string; role: "source"; path: string; guarantees: Record<string, unknown> } & Partial<DatasetFields>) => door<Place & { layout?: Layout | null }>("POST", "/api/places", body),
-  set: (id: number, body: Partial<DatasetFields> & { handling?: Source["handling"] }) => door<Place & { layout?: Layout | null }>("PUT", `/api/places/${id}`, body),
+  /** A source added: a root explored into its datasets, or one dataset settled by its structure. */
+  add: (body: { name: string; role: "source"; path: string; guarantees: Record<string, unknown> }) => door<PlaceAnswer>("POST", "/api/places", body),
+  set: (id: number, body: DatasetFields & { handling?: Source["handling"] }) => door<PlaceAnswer>("PUT", `/api/places/${id}`, body),
 };
 
 export const look = {
@@ -246,8 +290,8 @@ function reading(d: Dataset): boolean {
 
 /** What a dataset's card says first: reading, what is held, what waits, not read, not sorted, or up to date. */
 export function datasetState(d: Dataset): { words: string; tone: "brand" | "caution" | "ok" | "neutral" } {
-  // Wave 7a: a place nobody declared is never read, whatever it held before
-  if (d.arrives === "undeclared") return { words: "undeclared", tone: "caution" };
+  // Wave 7a: a dataset whose structure says nothing is never read, whatever it held before
+  if (d.arrives === "undeclared" || d.state === "unknown") return { words: "not read", tone: "caution" };
   if (reading(d)) return { words: "reading now", tone: "brand" };
   const held = d.held?.files ?? 0;
   if (held > 0) return { words: `${n(held)} held`, tone: "caution" };

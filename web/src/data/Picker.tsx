@@ -4,14 +4,14 @@
 // any depth, a page at a time and filtered by name, each on screen with what a
 // look inside it found, and the folders chosen from anywhere, each queued as a
 // digest of its own. A digest reads only under a declared source place, so a
-// folder no source place holds is added as a dataset first, in Add a dataset,
-// which asks how its files arrive (Wave 7a): the picker adds no place itself.
+// folder no source place holds is added first, in Add a source, which reads
+// each dataset by its structure (Wave 7a): the picker adds no place itself.
 // The engine lists nothing outside its locations.
 //
 // It chooses one folder as readily as many (record 27, R2b): with
 // `choose="one"` a row is picked rather than ticked, the folder picked is the
 // caller's to hold, and the list that queues a digest each is not drawn, since
-// Add a dataset declares the folder itself rather than digesting it.
+// Add a source explores the folder itself rather than digesting it.
 
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
@@ -389,7 +389,7 @@ export function IngestPicker(props: {
       )}
       {!one && unheld > 0 && (
         <p className="meta">
-          {adding === null ? "A digest reads only under a declared dataset: add each folder marked as a dataset first, or a folder they are inside, in Add a dataset." : `A digest reads only under a declared dataset, and a folder marked is under none. ${adding}`}
+          {adding === null ? "A digest reads only under a dataset that is read: add the folder they are in as a source first, in Add a source." : `A digest reads only under a dataset that is read, and a folder marked is under none. ${adding}`}
         </p>
       )}
       {(!one || outside) && (
