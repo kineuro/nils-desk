@@ -26,7 +26,10 @@ export interface RootFolders {
   root: string;
   root_id: number;
   path: string;
+  /** Folders on this page. */
   count: number;
+  /** Every folder the search matches, over all pages. */
+  matching?: number;
   folders: RootFolder[];
   next: string | null;
 }

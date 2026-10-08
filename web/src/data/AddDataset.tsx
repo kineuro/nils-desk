@@ -54,7 +54,7 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
     rootsDoor.folders(root.id, text.trim(), after).then(
       (r) => {
         if (asked.current !== mine) return;
-        setFound((was) => ({ kind: "found", folders: after && was.kind === "found" ? [...was.folders, ...r.folders] : r.folders, count: r.count, next: r.next }));
+        setFound((was) => ({ kind: "found", folders: after && was.kind === "found" ? [...was.folders, ...r.folders] : r.folders, count: r.matching ?? r.count, next: r.next }));
       },
       (e: unknown) => asked.current === mine && setFound({ kind: "failed", why: messageOf(e) }),
     );
