@@ -154,7 +154,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
     id: d.id,
     name: d.name,
     path: d.path,
-    dataset: placeOf(d)?.dataset ?? { kind: d.kind, state: d.state, arrives: d.arrives, root: d.root, patient_id: d.patient_id, subjects: d.subjects, folder: d.folder },
+    dataset: placeOf(d)?.dataset ?? { kind: d.kind, state: d.state, arrives: d.arrives, root: d.root, patient_id: d.patient_id, subjects: d.subjects, copy_folder: d.copy_folder },
     not_read: whyOf(d),
   });
   const layoutOf = (d: Dataset): Layout | null => placeOf(d)?.layout ?? null;

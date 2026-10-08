@@ -120,7 +120,7 @@ describe("the Places page", () => {
 
 describe("Setup's step", () => {
   it("is the root folders, one line each, and the folder field with one button", async () => {
-    const e = engine((c) => (c.method === "POST" && c.url === "/api/places" ? { status: 201, body: root } : undefined));
+    const e = engine((c) => (c.method === "POST" && c.url === "/api/places" ? { status: 201, body: { ...root, layout: { root: true, folders: 2, loose: 0 } } } : undefined));
     const onDone = vi.fn();
     act(() => root2.render(<SourcesBody caps={caps7a(DOORS)} install={null} places={[root, ward, registry]} met={true} onDone={onDone} />));
     expect([...host.querySelectorAll(".source-list li b")].map((b) => b.textContent)).toEqual(["incoming"]);

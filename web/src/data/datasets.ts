@@ -108,7 +108,7 @@ export interface Dataset extends Omit<Source, "digests"> {
   root?: string | null;
   patient_id?: string | null;
   subjects?: Subjects | null;
-  folder?: FolderNaming | null;
+  copy_folder?: FolderNaming | null;
   trees?: Trees | null;
   identity?: IdentityRule | null;
   unmapped?: Unmapped;
@@ -165,7 +165,7 @@ export interface MoveInto {
 export interface LayoutSettings {
   patient_id: { choices: string[]; required: boolean; default: string | null };
   subjects: { choices: Subjects[]; required: boolean; map: string; generated: string } | null;
-  folder: { choices: FolderNaming[]; default: FolderNaming };
+  copy_folder: { choices: FolderNaming[]; default: FolderNaming };
 }
 
 /**
@@ -197,6 +197,8 @@ export interface Layout {
   moved?: { into: string; entries: number } | null;
   renamed?: boolean;
   root?: boolean;
+  /** A root just added: how many folders are under it. */
+  folders?: number;
   datasets?: number;
   legacy?: boolean;
   error?: string;
@@ -211,7 +213,7 @@ export interface DatasetFields {
   /** What PatientID holds in the pseudonymised tree: `subject-code`, or `id-type:<name>`. */
   patient_id?: string;
   subjects?: Subjects;
-  folder?: FolderNaming;
+  copy_folder?: FolderNaming;
   identity?: IdentityRule | null;
   unmapped?: Unmapped;
   cohort?: string | null;

@@ -174,7 +174,7 @@ export function SetIdsDialog(props: { caps: Capabilities; place: Finishing; layo
   const [pidChoice, setPidChoice] = useState<"subject-code" | "id-type">(given?.startsWith("id-type:") ? "id-type" : "subject-code");
   const [pidType, setPidType] = useState(given?.startsWith("id-type:") ? given.slice("id-type:".length) : "");
   const [subjects, setSubjects] = useState<Subjects | null>(d.subjects ?? null);
-  const [folder, setFolder] = useState<FolderNaming>(d.folder ?? "subject-code");
+  const [folder, setFolder] = useState<FolderNaming>(d.copy_folder ?? "subject-code");
   const [types, setTypes] = useState<LinkageType[] | null>(null);
   const [act, setAct] = useState<Act>({ kind: "idle" });
   const working = act.kind === "working";
@@ -199,7 +199,7 @@ export function SetIdsDialog(props: { caps: Capabilities; place: Finishing; layo
   }, []);
 
   const save = () => {
-    const body: DatasetFields = { ...(patientId !== null ? { patient_id: patientId } : {}), ...(anonymised && subjects !== null ? { subjects } : {}), folder };
+    const body: DatasetFields = { ...(patientId !== null ? { patient_id: patientId } : {}), ...(anonymised && subjects !== null ? { subjects } : {}), copy_folder: folder };
     setAct({ kind: "working", phase: "saving", since: Date.now() });
     placesDoor
       .set(place.id, body)

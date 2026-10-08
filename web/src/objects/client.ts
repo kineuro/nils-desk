@@ -89,7 +89,7 @@ export interface Place {
     root?: string | null;
     patient_id?: string | null;
     subjects?: "map" | "generated" | null;
-    folder?: "subject-code" | "id-type" | null;
+    copy_folder?: "subject-code" | "id-type" | null;
   } | null;
   /** What an active source's folder holds, from its own listing (Wave 7a); a root says how many datasets it holds. */
   layout?: Layout | null;

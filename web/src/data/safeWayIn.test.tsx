@@ -97,10 +97,10 @@ describe("a dataset's one next step", () => {
 describe("the Data page", () => {
   const ROOT = { id: 1, name: "incoming", role: "source", path: "/srv/in", guarantees: {}, probed: null, probed_at: null, retired_at: null, dataset: { kind: "root", state: "unknown", root: null }, layout: { root: true, datasets: 2 }, not_read: null, datasets: ["ward-a", "ward-b"] };
   const FOLDERS = [
-    { name: "ward-a", path: "/srv/in/ward-a", added: true, dataset_id: 2, holds_dicom: "yes", has_derivatives: true },
-    { name: "ward-c", path: "/srv/in/ward-c", added: false, dataset_id: null, holds_dicom: "yes", has_derivatives: false },
-    { name: "notes", path: "/srv/in/notes", added: false, dataset_id: null, holds_dicom: "no", has_derivatives: false },
-    { name: "big", path: "/srv/in/big", added: false, dataset_id: null, holds_dicom: "unknown", has_derivatives: false },
+    { name: "ward-a", path: "/srv/in/ward-a", added: true, dataset_id: 2, dataset: "ward-a", holds_dicom: "yes", has_derivatives: true },
+    { name: "ward-c", path: "/srv/in/ward-c", added: false, dataset_id: null, dataset: null, holds_dicom: "yes", has_derivatives: false },
+    { name: "notes", path: "/srv/in/notes", added: false, dataset_id: null, dataset: null, holds_dicom: "no", has_derivatives: false },
+    { name: "big", path: "/srv/in/big", added: false, dataset_id: null, dataset: null, holds_dicom: "unknown", has_derivatives: false },
   ];
   const DOORS = ["GET /api/sources", "GET /api/places", "POST /api/places", "PUT /api/places/{id}", "POST /api/jobs", "POST /api/ingest/look", "GET /api/linkage/types"];
 
@@ -108,7 +108,7 @@ describe("the Data page", () => {
     let list = datasets;
     const e = engine((c, nth) => {
       if (c.url.startsWith("/api/sources")) return { status: 200, body: { count: list.length, window_days: 30, sources: list, rates: null } };
-      if (c.method === "GET" && c.url.startsWith("/api/places/1/folders")) return { status: 200, body: { folders: FOLDERS } };
+      if (c.method === "GET" && c.url.startsWith("/api/places/1/folders")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: FOLDERS.length, folders: FOLDERS } };
       if (c.method === "GET" && c.url.startsWith("/api/places")) return { status: 200, body: { places: [ROOT], enforced: true } };
       if (c.url === "/api/linkage/types") return { status: 200, body: TYPES };
       const r = route(c, nth);
@@ -124,7 +124,7 @@ describe("the Data page", () => {
   }
 
   it("lists a root's folders compactly, and makes a folder a dataset only when the person adds it", async () => {
-    const e = await page([identified], (c) => (c.method === "POST" && c.url === "/api/places" ? { status: 201, body: { ...WARD_C, layout: UNKNOWN } } : undefined));
+    const e = await page([identified], (c) => (c.method === "POST" && c.url === "/api/places" ? { status: 201, body: { ...WARD_C, layout: UNKNOWN, not_read: "its structure is unknown" } } : undefined));
     const rows = Object.fromEntries([...host.querySelectorAll(".root-folders tbody tr")].map((r) => [r.querySelector("b")?.textContent, [...r.querySelectorAll("td")].map((td) => td.textContent)]));
     expect(rows["ward-a"]).toEqual(["ward-a", "yes", "dataset"]);
     expect(rows["ward-c"]).toEqual(["ward-c", "yes", "Add as dataset"]);
@@ -220,7 +220,7 @@ describe("Set the IDs", () => {
     act(() => radio(host, "Made from the ID").click());
     act(() => button(host, "Save")!.click());
     await settle();
-    expect(e.of("PUT", "/api/places/3")[0].body).toEqual({ patient_id: "id-type:study-id", subjects: "generated", folder: "id-type" });
+    expect(e.of("PUT", "/api/places/3")[0].body).toEqual({ patient_id: "id-type:study-id", subjects: "generated", copy_folder: "id-type" });
     expect(onDone).toHaveBeenCalledWith("ward-b: IDs set.");
     // its words sit behind a "?", never as paragraphs
     expect(host.querySelectorAll(".hint").length).toBeGreaterThan(0);

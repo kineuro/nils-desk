@@ -17,7 +17,7 @@ export const ASKS_FIRST = {
   roles: ["source", "registry", "working", "export", "share", "exchange", "backup"],
   dataset: {
     grant: "data:work",
-    fields: ["arrives", "move_into", "identity", "unmapped", "patient_id", "subjects", "folder", "cohort", "tags", "confirm_move", "move_into_anon"],
+    fields: ["arrives", "move_into", "identity", "unmapped", "patient_id", "subjects", "copy_folder", "cohort", "tags", "confirm_move", "move_into_anon"],
     arrives: ["undeclared", "identified", "deidentified", "coded"],
     states: ["identified", "anonymised", "both", "unknown"],
     kinds: ["dataset", "root", "legacy"],
@@ -25,7 +25,7 @@ export const ASKS_FIRST = {
     trees: { originals: "derivatives/dcm-original", anon: "derivatives/dcm-anon" },
     patient_id: ["subject-code", "id-type:<name>"],
     subjects: ["map", "generated"],
-    folder: ["subject-code", "id-type"],
+    copy_folder: ["subject-code", "id-type"],
   },
 };
 
@@ -64,7 +64,7 @@ const SETTINGS = (anonymised: boolean) => ({
         generated: "the subject code generator makes each code from the id, as from a personnummer; every subject is a subject, never provisional",
       }
     : null,
-  folder: { choices: ["subject-code", "id-type"], default: "subject-code" },
+  copy_folder: { choices: ["subject-code", "id-type"], default: "subject-code" },
 });
 
 /** A dataset of loose DICOM beside derivatives/ and no tree: its structure says nothing, and a person says where its entries go. */
@@ -107,7 +107,7 @@ export const ASKED = {
   confirm: "confirm_move",
 };
 
-const at = (id: number, name: string, dataset: Record<string, unknown>) => ({ id, name, role: "source", path: `/srv/in/${name}`, guarantees: {}, probed: null, probed_at: null, retired_at: null, dataset: { kind: "dataset", root: "incoming", folder: "subject-code", ...dataset } });
+const at = (id: number, name: string, dataset: Record<string, unknown>) => ({ id, name, role: "source", path: `/srv/in/${name}`, guarantees: {}, probed: null, probed_at: null, retired_at: null, dataset: { kind: "dataset", root: "incoming", copy_folder: "subject-code", ...dataset } });
 
 export const WARD_A = at(2, "ward-a", { state: "identified", arrives: "identified", patient_id: "subject-code", subjects: null });
 export const WARD_B = at(3, "ward-b", { state: "anonymised", arrives: "deidentified", patient_id: null, subjects: null });
