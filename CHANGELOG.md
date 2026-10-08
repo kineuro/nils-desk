@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- The assistant panel reads reasoning a model wrote as a `<thinking>` tag apart from its answer, beside `<think>` and the other families' markers. The splitter (`web/src/assistant/reasoning.ts`) is now the module shared with Kvasir, its home: it is changed only there and copied here unchanged, and a test checks its stamp, so a copy edited in place fails.
+
 ## [1.0.0-alpha.62] - 2026-10-02
 
 The comparison reader (pair mode and anchored reading) after a rater's first long session on it. Moving to the next item draws from memory: the page warms the next five items in the view the rater chose while the current one is read, with engine 1.0.0-alpha.72's `ahead` on the claim. The view (the stack, the three planes, or one plane alone) is kept for every item and the next visit, for every panel or one. A plane paged in the three planes stays where it was paged. The controls are grouped by what they do, every one shows its key, and nothing wraps from a laptop up. Against an engine before alpha.72 nothing is warmed ahead and the rest works the same. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.
