@@ -25,6 +25,7 @@ import { BringInNew } from "./BringInNew";
 import { batchTail, jobs as jobsDoor, packFor, sources, STAGES, stripMarks, type Batch, type Dataset, type Layout, type Rates, type StageName } from "./datasets";
 import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
+import { mayPick, pickRun, pickWords } from "./pickRun";
 import { NowSection, useLiveJobs } from "./Now";
 import { fileWords, whenWords } from "./sources";
 import { nextStep, stepCommand, type StepId } from "./steps";
@@ -112,6 +113,18 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
       .catch((e: unknown) => setSaid(messageOf(e)));
   };
 
+  /** The pick run for one dataset's subjects, queued; its job is said. */
+  const pickScans = (d: Dataset) => {
+    setSaid(null);
+    pickRun.start({ dataset: d.name }).then(
+      (q) => {
+        setSaid(`${d.name}: ${pickWords(q)}`);
+        jobs.refresh();
+      },
+      (e: unknown) => setSaid(messageOf(e)),
+    );
+  };
+
   const readAgain = (b: Batch, d: Dataset) => {
     setSaid(null);
     jobsDoor
@@ -162,6 +175,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
               onPick={() => setChosen(d.name)}
               onStep={(id) => step(d, id)}
               onBringIn={() => setBringing(d)}
+              onPickScans={mayPick(caps) ? () => pickScans(d) : null}
             />
           ))}
         </div>
@@ -220,8 +234,8 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   );
 }
 
-function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean; works: boolean; onPick: () => void; onStep: (id: StepId) => void; onBringIn: () => void }) {
-  const { dataset: d, why, on, works, onPick, onStep, onBringIn } = props;
+function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean; works: boolean; onPick: () => void; onStep: (id: StepId) => void; onBringIn: () => void; onPickScans: (() => void) | null }) {
+  const { dataset: d, why, on, works, onPick, onStep, onBringIn, onPickScans } = props;
   const next = nextStep(d, why);
   const files = d.trees?.anon?.files ?? d.trees?.originals?.files ?? null;
   return (
@@ -249,6 +263,11 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean;
             {works && next.step !== "read" && why === null && d.digests.count > 0 && (
               <button type="button" onClick={() => onStep("read")}>
                 Read again
+              </button>
+            )}
+            {onPickScans && d.digests.count > 0 && (
+              <button type="button" onClick={onPickScans}>
+                Pick main scans
               </button>
             )}
             <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>

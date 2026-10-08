@@ -21,6 +21,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
+import { PickRun } from "./PickRun";
 import { chartLabels, cohorts, delta, ledeWords, membersBody, sessionsMeta, sessionsWords, stepChart, type CohortDetail, type Join } from "./cohorts";
 import { whenWords } from "./sources";
 
@@ -158,6 +159,7 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                   </button>
                 </>
               )}
+              {!c.retired_at && <PickRun caps={caps} of={{ cohort: c.name }} />}
               {acts.releasing === null && !c.retired_at && (
                 <a className="button" href={acts.release}>
                   <Icon name="release" />
