@@ -1516,3 +1516,9 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
 .root-form { display: grid; gap: 0.5rem; }
 .folder-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.2rem; max-height: 22rem; overflow-y: auto; }
 .folder-results li { display: flex; gap: 0.5rem; align-items: center; }
+
+/* Wave 7a: a picture built when first asked for */
+.picture-wait, .picture-failed { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; min-height: 6rem; width: 100%; color: var(--n-text-dim); font-size: var(--n-text-size-small); text-align: center; }
+.picture-wait progress { width: 8rem; }
+.picture-wait.small, .picture-failed.small { min-height: 0; font-size: 0.72rem; }
+.picture-wait.small progress { width: 4rem; }
