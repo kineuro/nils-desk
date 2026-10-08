@@ -79,6 +79,8 @@ import {
   type VaultAsk,
 } from "./pseudonyms";
 import { countWords } from "./datasets";
+import { isUndeclared, moveAskedOf, questionWords, type MoveAsked } from "./layout";
+import { Undeclared } from "./Undeclared";
 import { PurgeDialog, VaultDialog } from "./Originals";
 import { policyKept } from "./policy";
 import { DATES_KEPT, datesWord, sources, whenWords, type Handling } from "./sources";
@@ -216,7 +218,14 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
     linkage
       .codeHeld(name)
       .then((j) => {
-        setSaid({ words: `The held files get codes derived from their identifiers, as job ${j.job}; a later map merges them into the right person.`, failed: false });
+        // an engine of Wave 7a queues the run that codes them, and queues none when nothing new is held
+        setSaid({
+          words:
+            typeof j.job === "number"
+              ? `The held files get codes derived from their identifiers, as job ${j.job}; a later map merges them into the right person.`
+              : "Nothing new is held to code: the files held are coded already, or wait for a map.",
+          failed: false,
+        });
         read();
       })
       .catch((e: unknown) => setSaid({ words: messageOf(e), failed: true }));
@@ -325,8 +334,16 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
           <div className="grow">
             <h1>Pseudonymisation of {dataset.name}</h1>
             <p className="lede">
-              Arrives {arrives === "identified" ? "identified" : arrives === "deidentified" ? "de-identified" : "coded"} · {heldFiles > 0 ? `${n(heldFiles)} files held` : "nothing held"}
+              {isUndeclared(dataset) ? "Undeclared" : `Arrives ${arrives === "identified" ? "identified" : arrives === "deidentified" ? "de-identified" : "coded"}`} · {heldFiles > 0 ? `${n(heldFiles)} files held` : "nothing held"}
             </p>
+            {isUndeclared(dataset) && (
+              <Undeclared
+                name={dataset.name}
+                onDeclare={() => {
+                  location.hash = href("data", "datasets", dataset.name);
+                }}
+              />
+            )}
           </div>
           {maps && (
             <button type="button" className="button secondary" onClick={() => setOpened({ kind: "map" })}>
@@ -334,7 +351,7 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
               Provide a map
             </button>
           )}
-          {changing === null && (
+          {changing === null && !isUndeclared(dataset) && (
             <button type="button" className="button secondary" onClick={() => setOpened({ kind: "change" })}>
               <Icon name="pencil" />
               Change
@@ -1334,30 +1351,55 @@ export function ChangeDialog({
   const [onRelease, setOnRelease] = useState<Handling["on_release"]>({ uids: dataset.handling?.on_release?.uids ?? "remap", deface: dataset.handling?.on_release?.deface ?? false });
   const [why, setWhy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** The engine's question, when the arrival chosen would move loose entries: answered by the person, never assumed. */
+  const [asked, setAsked] = useState<MoveAsked | null>(null);
   const release = (patch: Partial<Handling["on_release"]>) => setOnRelease((was) => ({ ...was, ...patch }));
-  const save = () => {
+  const save = (confirmed = false) => {
     setSaving(true);
     setWhy(null);
+    setAsked(null);
     // where the originals stand is not among the fields: only the act that moves or removes the files writes that word. Nor are the tag
     // lists, which the chooser owns: a form that sent them would undo what the chooser wrote since this one was opened
     const patch = changePatch({ arrives, unmapped, cohort, on_release: onRelease });
     datasets
-      .set(dataset.id, patch)
+      .set(dataset.id, confirmed ? { ...patch, confirm_move: true } : patch)
       .then(onSaved)
       .catch((e: unknown) => {
         setSaving(false);
-        setWhy(messageOf(e));
+        // Wave 7a: a move no person confirmed is the engine's question, not a failure; nothing was written
+        const question = confirmed ? null : moveAskedOf(e);
+        if (question) setAsked(question);
+        else setWhy(messageOf(e));
       });
   };
+  const question = asked ? questionWords(asked, arrives === "undeclared" ? "identified" : arrives) : null;
   const radio = (name: string, checked: boolean, onPick: () => void, words: string) => (
     <label className="choice">
       <input type="radio" name={name} checked={checked} disabled={saving} onChange={onPick} />
       {words}
     </label>
   );
-  const foot = (
+  const foot = asked && question ? (
+    <>
+      <div className="note caution" role="alertdialog" aria-label="Confirm the move">
+        <Icon name="folder" />
+        <div className="note-body">
+          <p className="note-lead">{question.lead}</p>
+          <p className="note-detail">{question.detail}</p>
+        </div>
+      </div>
+      <div className="row actions">
+        <button type="button" className="button quiet" onClick={() => setAsked(null)}>
+          Back
+        </button>
+        <button type="button" className="button" disabled={saving} onClick={() => save(true)}>
+          Move them and save
+        </button>
+      </div>
+    </>
+  ) : (
     <div className="row actions">
-      <button type="button" className="button" disabled={saving} onClick={save}>
+      <button type="button" className="button" disabled={saving} onClick={() => save()}>
         Save
       </button>
       <button type="button" className="button secondary" onClick={onClose}>

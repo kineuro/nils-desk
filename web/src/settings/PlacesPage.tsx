@@ -3,31 +3,30 @@
 // folder NILS reads or keeps data in, with its role, what was declared of it,
 // what the engine measured and whether it stands up to its role. A place is
 // added in a dialog, its folder typed or chosen by clicking through this
-// machine's folders: a source is looked inside first, the engine is started
-// again to read it where a service keeps it running, and its folders are
-// digested. An opened place moves to another folder, has its guarantees
-// changed, or is retired. The engine checks every rule again at its doors.
-// The places read last are drawn at once, and read again when asked or
-// after a change.
+// machine's folders. A source is a dataset, and has no path of its own here
+// (Wave 7a, H2 round 1): choosing the source role leads to Add a dataset,
+// which asks how its files arrive before anything reads them, and an
+// undeclared source shows as not read, with the button into that dialog. An
+// opened place moves to another folder, has its guarantees changed, or is
+// retired. The engine checks every rule again at its doors. The places read
+// last are drawn at once, and read again when asked or after a change.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
-import { door as served } from "../deployment";
 import { may } from "../grants";
-import { FolderTable } from "../home/FolderTable";
-import { needsWork } from "../access";
-import { digests, placeName, rows as rowsOf, type FolderRow, type Pack } from "../home/look";
+import { AddDataset } from "../data/AddDataset";
+import { isUndeclared } from "../data/layout";
+import { Undeclared } from "../data/Undeclared";
+import { placeName } from "../home/look";
 import { objects, type Place } from "../objects/client";
 import { placesKept } from "../objects/kept";
-import { data } from "../ops/client";
-import { Command } from "../ui/Command";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { agoWords, useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
 import { plainPath } from "./folders";
-import { addFolderWords, keptRunning, reapplyByHand } from "./install";
+import { keptRunning } from "./install";
 import { fixedWords, knownFolders, movable, moveRefusal, moveWords } from "./move";
 import { PathField } from "./PathField";
 import {
@@ -42,7 +41,6 @@ import {
   pathNote,
   placeState,
   roleCounts,
-  wholeDigest,
   type PlaceDraft,
   type Role,
   type Tone,
@@ -50,7 +48,8 @@ import {
 import { placeStats } from "./stats";
 import { followRun, supervise, type Install } from "./supervise";
 
-type Opened = { kind: "add" } | { kind: "change"; place: Place } | null;
+/** The dialog open: a place added, a place changed, or a source as a dataset (added from a folder, or an undeclared one declared) in Add a dataset. */
+type Opened = { kind: "add" } | { kind: "change"; place: Place } | { kind: "dataset"; path: string } | { kind: "declare"; place: Place } | null;
 
 function Tag({ tone, words }: { tone: Tone; words: string }) {
   return <span className={tone === "neutral" ? "tag" : `tag ${tone}`}>{words}</span>;
@@ -62,20 +61,16 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
   const enforced = kept.value?.enforced ?? true;
   const [role, setRole] = useState<Role | null>(null);
   const [opened, setOpened] = useState<Opened>(null);
-  const [packs, setPacks] = useState<Pack[]>([]);
   const [since] = useState(() => Date.now());
   const [now, setNow] = useState(() => Date.now());
   const measure = useActing();
   const mayChange = may(caps, "places:work");
+  // saying how a source's files arrive is work on Data beside the place (record 26)
+  const mayDeclare = mayChange && may(caps, "data:work");
   const containers = install !== null && (install.runtime === "docker" || install.runtime === "podman");
 
   useEffect(() => {
     placesKept.ensure();
-    if (served(caps, "GET /api/packs"))
-      data
-        .packs()
-        .then((p) => setPacks(p.packs))
-        .catch(() => setPacks([]));
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once when the page opens; a change reads again
@@ -170,6 +165,7 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
                       <td>
                         <span className="path">{p.path}</span>
                         {note && <div className="meta">{note}</div>}
+                        {p.retired_at === null && isUndeclared(p) && <Undeclared name={p.name} onDeclare={mayDeclare ? () => setOpened({ kind: "declare", place: p }) : null} />}
                       </td>
                       <td className="meta">{guaranteeLine(p, places)}</td>
                       <td className="num">{freeWords(p)}</td>
@@ -204,57 +200,46 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
           </div>
         </>
       )}
-      {opened?.kind === "add" && places !== null && <AddDialog caps={caps} install={install} places={places} packs={packs} onClose={() => setOpened(null)} onDone={done} />}
+      {opened?.kind === "add" && places !== null && <AddDialog caps={caps} install={install} places={places} onClose={() => setOpened(null)} onDone={done} onDataset={(path) => setOpened({ kind: "dataset", path })} />}
+      {opened?.kind === "dataset" && places !== null && (
+        <AddDataset caps={caps} install={install} places={places} initial={opened.path ? { path: opened.path, layout: null } : undefined} onClose={() => setOpened(null)} onDone={done} />
+      )}
+      {opened?.kind === "declare" && places !== null && (
+        <AddDataset
+          caps={caps}
+          install={install}
+          places={places}
+          declare={{ id: opened.place.id, name: opened.place.name, path: opened.place.path, layout: opened.place.layout ?? null }}
+          onClose={() => setOpened(null)}
+          onDone={done}
+        />
+      )}
       {opened?.kind === "change" && places !== null && <ChangeDialog caps={caps} install={install} place={opened.place} places={places} onClose={() => setOpened(null)} onDone={done} />}
     </div>
   );
 }
 
-type Seen = { kind: "idle" } | { kind: "looking"; since: number } | { kind: "seen"; rows: FolderRow[]; partial: boolean } | { kind: "failed"; why: string };
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "done"; words: string } | { kind: "failed"; why: string };
 
-function AddDialog(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; onClose: () => void; onDone: () => void }) {
-  const { caps, install, places, packs, onClose, onDone } = props;
+function AddDialog(props: { caps: Capabilities; install: Install | null; places: Place[]; onClose: () => void; onDone: () => void; onDataset: (path: string) => void }) {
+  const { caps, install, places, onClose, onDone, onDataset } = props;
   const [d, setD] = useState<PlaceDraft>(EMPTY);
   const [named, setNamed] = useState(false);
-  const [seen, setSeen] = useState<Seen>({ kind: "idle" });
-  const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [act, setAct] = useState<Act>({ kind: "idle" });
   const folder = d.path.trim().replace(/\/+$/, "");
   const name = named ? d.name : folder ? placeName(folder, places.map((p) => p.name)) : "";
   const draft = { ...d, path: folder, name };
   const refusal = draftRefusal(draft, places);
+  // a source is a dataset: it is added in Add a dataset, which asks how its files arrive, never here (Wave 7a)
   const source = d.role === "source";
   const supervised = install !== null && may(caps, "install:work");
-  const restarts = source && supervised && install !== null && keptRunning(install);
-  // a place is work on Places, and digesting what it holds is work on Data (record 25)
-  const digesting = needsWork(caps, "Digesting the folder once it is added", [["data:work", "the Data page"]]);
   const working = act.kind === "working";
   const backups = places.filter((p) => p.role === "backup" && p.retired_at === null);
-  const chosen = seen.kind === "seen" ? seen.rows.filter((r) => r.dicom && ticked.has(r.name)) : [];
-  const words = source && install ? addFolderWords(install) : null;
-
-  const look = () => {
-    if (!folder.startsWith("/") || !supervised) return;
-    setSeen({ kind: "looking", since: Date.now() });
-    supervise
-      .look(folder)
-      .then((l) => {
-        if (!l.exists) return setSeen({ kind: "failed", why: "Nothing is there on this machine." });
-        if (!l.directory) return setSeen({ kind: "failed", why: "That is a file, not a folder." });
-        if (!l.readable) return setSeen({ kind: "failed", why: "The folder is there, and this account cannot read it." });
-        const rows = rowsOf(l, packs);
-        setTicked(new Set(rows.filter((r) => r.dicom).map((r) => r.name)));
-        setSeen({ kind: "seen", rows, partial: l.partial });
-      })
-      .catch((e: unknown) => setSeen({ kind: "failed", why: messageOf(e) }));
-  };
 
   const add = () => {
-    if (refusal) return;
-    const queue = !restarts || seen.kind !== "seen" || digesting !== null ? [] : d.each ? digests(name, chosen) : chosen.length > 0 ? [wholeDigest(name)] : [];
+    if (refusal || source) return;
     const say = (phase: string) => setAct({ kind: "working", phase, since: Date.now() });
-    addPlace({ name, role: d.role, path: folder, guarantees: guaranteesOf(draft), restart: restarts, digests: queue }, say)
+    addPlace({ name, role: d.role, path: folder, guarantees: guaranteesOf(draft), restart: false, digests: [] }, say)
       .then((words) => {
         setAct({ kind: "done", words });
         onDone();
@@ -269,24 +254,23 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
     </label>
   );
 
-  const foot = (
+  const foot = source ? (
+    <div className="row actions">
+      <button type="button" className="button" disabled={folder !== "" && !folder.startsWith("/")} onClick={() => onDataset(folder)}>
+        Go on in Add a dataset
+      </button>
+      <button type="button" className="button secondary" onClick={onClose}>
+        Cancel
+      </button>
+    </div>
+  ) : (
     <>
-      {words && install && (
-        <div className="note">
-          <Icon name="restart" />
-          <div className="note-body">
-            <p className="note-lead">{words.lead}</p>
-            <p className="note-detail">{words.detail}</p>
-            <Command text={reapplyByHand(install)} />
-          </div>
-        </div>
-      )}
       {act.kind === "working" && <Wait phase={act.phase} since={act.since} />}
       {act.kind === "failed" && <p className="warn">{act.why}</p>}
       {refusal && (folder || named) && <p className="warn">{refusal}</p>}
       <div className="row actions">
         <button type="button" className="button" disabled={refusal !== null || working} onClick={add}>
-          {restarts ? "Add and restart the engine" : "Add the place"}
+          Add the place
         </button>
         <button type="button" className="button secondary" onClick={onClose}>
           Cancel
@@ -322,104 +306,69 @@ function AddDialog(props: { caps: Capabilities; install: Install | null; places:
           <PathField
             id="place-path"
             value={d.path}
-            placeholder="/srv/imaging/2026-cohort"
+            placeholder={source ? "/srv/imaging/2026-cohort" : "/srv/nils/exports"}
             disabled={working}
             browse={supervised}
             known={knownFolders(places, install?.dir ?? null)}
-            onChange={(path) => {
-              setD({ ...d, path });
-              setSeen({ kind: "idle" });
-            }}
-            onEnter={() => source && look()}
-          />
-          {source && supervised && (
-            <button type="button" className="button secondary" disabled={!folder.startsWith("/") || seen.kind === "looking" || working} onClick={look}>
-              Look inside
-            </button>
-          )}
-        </div>
-        {source && <span className="meta">{supervised ? "NILS looks inside before anything changes." : "The supervisor on this host looks inside a folder for a person with work on the install."}</span>}
-      </div>
-      <div className="field">
-        <label className="label" htmlFor="place-name">
-          Name
-        </label>
-        <div className="input mono">
-          <input
-            id="place-name"
-            value={name}
-            spellCheck={false}
-            disabled={working}
-            onChange={(e) => {
-              setNamed(true);
-              setD({ ...d, name: e.target.value });
-            }}
+            onChange={(path) => setD({ ...d, path })}
+            onEnter={() => source && onDataset(folder)}
           />
         </div>
       </div>
-      {seen.kind === "looking" && <Wait phase="looking inside the folder" since={seen.since} />}
-      {seen.kind === "failed" && <p className="warn">{seen.why}</p>}
-      {seen.kind === "seen" && source && (
-        <>
-          {digesting === null ? (
-            <div className="field">
-              <span className="label">How to digest it</span>
-              <div className="choices" role="radiogroup">
-                <label className="choice">
-                  <input type="radio" name="digest-how" checked={d.each} disabled={working} onChange={() => setD({ ...d, each: true })} />A batch for each folder inside, each with its own rules
-                </label>
-                <label className="choice">
-                  <input type="radio" name="digest-how" checked={!d.each} disabled={working} onChange={() => setD({ ...d, each: false })} />
-                  One batch for the whole folder
-                </label>
-              </div>
-              {!restarts && <span className="meta">The digests are queued once the engine reads the folder, which it does once it starts again.</span>}
-            </div>
-          ) : (
-            <p className="meta">{digesting}</p>
-          )}
-          <FolderTable
-            rows={seen.rows}
-            ticked={ticked}
-            disabled={working}
-            ticks={d.each && digesting === null}
-            onToggle={(n) =>
-              setTicked((t) => {
-                const next = new Set(t);
-                if (next.has(n)) next.delete(n);
-                else next.add(n);
-                return next;
-              })
-            }
-          />
-          {seen.partial && <p className="meta">The look stopped before the end, so some folders are not listed.</p>}
-        </>
-      )}
-      {d.role === "registry" && (
-        <div className="field">
-          <label className="label" htmlFor="place-backup">
-            Its backup place
-          </label>
-          <div className="input">
-            <select id="place-backup" value={d.backup ?? ""} disabled={working} onChange={(e) => setD({ ...d, backup: e.target.value || null })}>
-              <option value="">Choose a backup place</option>
-              {backups.map((b) => (
-                <option key={b.id} value={b.name}>
-                  {b.name}, {b.path}
-                </option>
-              ))}
-            </select>
+      {source ? (
+        <div className="note brand">
+          <Icon name="info" />
+          <div className="note-body">
+            <p className="note-lead">A source is a dataset</p>
+            <p className="note-detail">It is added in Add a dataset, which looks inside the folder, asks how its files arrive and moves nothing without your word. Nothing in it is read before that.</p>
           </div>
         </div>
+      ) : (
+        <>
+          <div className="field">
+            <label className="label" htmlFor="place-name">
+              Name
+            </label>
+            <div className="input mono">
+              <input
+                id="place-name"
+                value={name}
+                spellCheck={false}
+                disabled={working}
+                onChange={(e) => {
+                  setNamed(true);
+                  setD({ ...d, name: e.target.value });
+                }}
+              />
+            </div>
+          </div>
+          {d.role === "registry" && (
+            <div className="field">
+              <label className="label" htmlFor="place-backup">
+                Its backup place
+              </label>
+              <div className="input">
+                <select id="place-backup" value={d.backup ?? ""} disabled={working} onChange={(e) => setD({ ...d, backup: e.target.value || null })}>
+                  <option value="">Choose a backup place</option>
+                  {backups.map((b) => (
+                    <option key={b.id} value={b.name}>
+                      {b.name}, {b.path}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+          <div className="field">
+            <span className="label">What this storage guarantees</span>
+            <div className="checks">
+              {check("snapshots", "Snapshots")}
+              {check("protected", "Protected")}
+              {check("fast", "Fast")}
+            </div>
+          </div>
+        </>
       )}
-      <div className="field">
-        <span className="label">What this storage guarantees</span>
-        <div className="checks">
-          {check("snapshots", "Snapshots")}
-          {check("protected", "Protected")}
-          {check("fast", "Fast")}
-        </div>
-      </div>
       {act.kind === "done" && <p className="ok-words">{act.words}</p>}
     </Dialog>
   );

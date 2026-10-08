@@ -3,9 +3,10 @@
 // work on Data: the locations to start from, the folders inside a folder at
 // any depth, a page at a time and filtered by name, each on screen with what a
 // look inside it found, and the folders chosen from anywhere, each queued as a
-// digest of its own. A digest reads only under a source place, so a folder no
-// source place holds is added as a source first, which asks for work on the
-// Places page too. The engine lists nothing outside its locations.
+// digest of its own. A digest reads only under a declared source place, so a
+// folder no source place holds is added as a dataset first, in Add a dataset,
+// which asks how its files arrive (Wave 7a): the picker adds no place itself.
+// The engine lists nothing outside its locations.
 //
 // It chooses one folder as readily as many (record 27, R2b): with
 // `choose="one"` a row is picked rather than ticked, the folder picked is the
@@ -14,9 +15,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type React from "react";
-import { placeName } from "../home/look";
-import { objects, type Place } from "../objects/client";
-import { placesKept } from "../objects/kept";
+import type { Place } from "../objects/client";
 import { ops } from "../ops/client";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
@@ -30,7 +29,6 @@ import {
   digestWords,
   folderNote,
   held,
-  heldBy,
   insideOf,
   listWords,
   lookNames,
@@ -61,7 +59,7 @@ export function IngestPicker(props: {
   onPick?: (folder: Chosen) => void;
 }) {
   // `adding`: why a folder may not be added as a source here, in words, or null when it may
-  const { places, onDone, outside, adding, picked = null, onPick } = props;
+  const { onDone, outside, adding, picked = null, onPick } = props;
   const one = props.choose === "one";
   // the folder open, or null for the locations
   const [at, setAt] = useState<string | null>(null);
@@ -206,20 +204,6 @@ export function IngestPicker(props: {
 
   const tick = (item: Chosen) => setChosen((c) => toggleChosen(c, item));
 
-  const addSource = (item: Chosen) => {
-    const name = placeName(item.path, places.map((p) => p.name));
-    setAct({ kind: "working", phase: `adding ${name} as a source`, since: Date.now() });
-    objects
-      .placeAdd({ name, role: "source", path: item.path, guarantees: { backup: null, snapshots: false, protected: false, fast: false } })
-      .then((p) => {
-        setChosen((c) => heldBy(c, item.at, { name: p.name, role: "source" }));
-        setAct({ kind: "done", words: `${p.name} is a source now, so the folders in it can be digested.` });
-        void placesKept.refresh().catch(() => undefined);
-        setReload((r) => r + 1);
-      })
-      .catch((e: unknown) => setAct({ kind: "failed", why: messageOf(e) }));
-  };
-
   const queue = async () => {
     const plan = digestPlan(chosen);
     const queued: { name: string; job: number }[] = [];
@@ -363,11 +347,6 @@ export function IngestPicker(props: {
         {current && (
           <div className="browser-foot picker-foot">
             <span className="path browser-path">{current.at}</span>
-            {!one && !held(current) && adding === null && (
-              <button type="button" className="button quiet small" disabled={working} onClick={() => addSource(current)}>
-                Add this folder as a source
-              </button>
-            )}
             {!one && !held(current) && adding !== null && !chosenAt.has(current.at) && <span className="meta">{adding}</span>}
             <button
               type="button"
@@ -399,11 +378,6 @@ export function IngestPicker(props: {
               <li key={c.at} className="chosen-item">
                 <span className="path chosen-at">{c.at}</span>
                 <span className={held(c) ? "meta chosen-note" : "meta chosen-note warn"}>{chosenNote(c, insideOf(chosen, c.at))}</span>
-                {!held(c) && adding === null && (
-                  <button type="button" className="button secondary small" disabled={working} onClick={() => addSource(c)}>
-                    Add as a source
-                  </button>
-                )}
                 <button type="button" className="icon-button" title="Leave it out" aria-label={`Leave out ${c.at}`} disabled={working} onClick={() => tick(c)}>
                   <Icon name="x" />
                 </button>
@@ -415,7 +389,7 @@ export function IngestPicker(props: {
       )}
       {!one && unheld > 0 && (
         <p className="meta">
-          {adding === null ? "A digest reads only under a source place: add each folder marked as a source first, or a folder they are inside." : `A digest reads only under a source place, and a folder marked is under none. ${adding}`}
+          {adding === null ? "A digest reads only under a declared dataset: add each folder marked as a dataset first, or a folder they are inside, in Add a dataset." : `A digest reads only under a declared dataset, and a folder marked is under none. ${adding}`}
         </p>
       )}
       {(!one || outside) && (

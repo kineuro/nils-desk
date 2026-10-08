@@ -41,7 +41,9 @@ import {
   type Rates,
   type StageName,
 } from "./datasets";
+import { isUndeclared } from "./layout";
 import { NowSection, useLiveJobs } from "./Now";
+import { Undeclared } from "./Undeclared";
 import { fileWords, whenWords } from "./sources";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[]; rates: Rates | null };
@@ -80,6 +82,8 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   const [chosen, setChosen] = useState<string | null>(dataset ?? null);
   const [bringing, setBringing] = useState<Dataset | null>(null);
   const [adding, setAdding] = useState(false);
+  /** An undeclared dataset whose arrival is being said, in Add a dataset. */
+  const [declaring, setDeclaring] = useState<Dataset | null>(null);
   const [cohorts, setCohorts] = useState<string[]>([]);
   const [said, setSaid] = useState<string | null>(null);
   const places = useKept(placesKept);
@@ -151,7 +155,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
             Add a dataset
           </button>
         )}
-        {works && current && (
+        {works && current && !isUndeclared(current) && (
           <button type="button" className="button" onClick={() => setBringing(current)}>
             <Icon name="play" />
             Bring in what is new
@@ -179,13 +183,14 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
               works={works}
               onPick={() => setChosen(d.name)}
               onBringIn={() => setBringing(d)}
+              onDeclare={works ? () => setDeclaring(d) : null}
             />
           ))}
         </div>
       )}
       {said && <p className="meta">{said}</p>}
       <NowSection caps={caps} jobs={jobs} onSaid={setSaid} />
-      {current && <Batches dataset={current} works={works} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
+      {current && <Batches dataset={current} works={works && !isUndeclared(current)} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
       {modern && list.length > 0 && (
         <Says head="One person is one subject" icon="lock">
           Every identifier a person was seen under is filed on their one subject in the sealed store, so any of them arriving in any dataset lands on the same code. An identifier the store does not know
@@ -201,6 +206,24 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
           onDone={(words) => {
             setBringing(null);
             setSaid(words);
+            jobs.refresh();
+            read();
+          }}
+        />
+      )}
+      {declaring && (
+        <AddDataset
+          caps={caps}
+          install={install}
+          places={places.value?.places ?? []}
+          cohorts={known}
+          declare={{ id: declaring.id, name: declaring.name, path: declaring.path, layout: places.value?.places.find((p) => p.id === declaring.id)?.layout ?? null }}
+          onClose={() => setDeclaring(null)}
+          onDone={(words) => {
+            setDeclaring(null);
+            setSaid(words);
+            void placesKept.refresh().catch(() => undefined);
+            onChanged();
             jobs.refresh();
             read();
           }}
@@ -227,10 +250,11 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   );
 }
 
-function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onPick: () => void; onBringIn: () => void }) {
-  const { dataset: d, on, works, onPick, onBringIn } = props;
+function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onPick: () => void; onBringIn: () => void; onDeclare: (() => void) | null }) {
+  const { dataset: d, on, works, onPick, onBringIn, onDeclare } = props;
   const state = datasetState(d);
-  const how = COMES_IN[arrivesOf(d)];
+  const undeclared = isUndeclared(d);
+  const how = undeclared ? null : COMES_IN[arrivesOf(d)];
   const trees = d.trees ?? null;
   return (
     <div className={on ? "scard on" : "scard"} aria-current={on ? "true" : undefined} onClick={onPick}>
@@ -242,9 +266,14 @@ function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onP
         <span className={state.tone === "neutral" ? "tag" : `tag ${state.tone}`}>{state.words}</span>
         <span onClick={(e) => e.stopPropagation()}>
           <MoreMenu label={`More for ${d.name}`}>
-            {works && (
+            {works && !undeclared && (
               <button type="button" onClick={onBringIn}>
                 Bring in what is new
+              </button>
+            )}
+            {onDeclare && undeclared && (
+              <button type="button" onClick={onDeclare}>
+                Say how its files arrive
               </button>
             )}
             <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>
@@ -252,11 +281,14 @@ function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onP
         </span>
       </div>
       <span className="where">{d.path}</span>
+      {undeclared && <Undeclared name={d.name} onDeclare={onDeclare} />}
       <div className="row">
-        <span className={`privacy ${how.tone}`}>
-          <Icon name={how.icon} />
-          {how.words}
-        </span>
+        {how && (
+          <span className={`privacy ${how.tone}`}>
+            <Icon name={how.icon} />
+            {how.words}
+          </span>
+        )}
         {d.cohort && (
           <span className="tag brand users">
             <Icon name="users" />
@@ -272,11 +304,13 @@ function DatasetCard(props: { dataset: Dataset; on: boolean; works: boolean; onP
               <span className="path">{leaf(trees.originals.path)}</span> {countWords(trees.originals.files)}
             </span>
           )}
-          <span>
-            {trees.originals && <Icon name="arrow" />}
-            <Icon name="shield" />
-            <span className="path">{leaf(trees.anon.path)}</span> {countWords(trees.anon.files)}
-          </span>
+          {trees.anon && (
+            <span>
+              {trees.originals && <Icon name="arrow" />}
+              <Icon name="shield" />
+              <span className="path">{leaf(trees.anon.path)}</span> {countWords(trees.anon.files)}
+            </span>
+          )}
         </div>
       )}
       <div className="nums">

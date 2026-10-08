@@ -4,6 +4,7 @@
 // desk: a missing door removes the band or the panel that reads it.
 
 import { door } from "../ask/client";
+import type { Layout } from "../data/datasets";
 
 export interface Summary {
   epoch: number;
@@ -80,6 +81,10 @@ export interface Place {
   /** The paths the engine was started with that lie under this place, and the flag each came from. */
   bound?: { verb: string; path: string }[];
   retired_at: string | null;
+  /** A source place's dataset: how its files arrive, `undeclared` while nobody has said (Wave 7a). */
+  dataset?: { arrives?: string | null } | null;
+  /** What an active source's folder holds, from its own listing (Wave 7a). */
+  layout?: Layout | null;
 }
 
 export const objects = {

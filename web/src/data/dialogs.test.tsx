@@ -47,20 +47,20 @@ const caps = (grants: readonly Grant[] = GRANTS, openapi = "5", doors = ["GET /a
 const none = () => undefined;
 
 describe("Add a dataset", () => {
-  it("asks what arrives, who a file is about, for the map and the cohort, and offers Add and Add and bring in", () => {
+  it("asks how the files arrive with nothing chosen, and offers Add and Add and bring in only once a person says", () => {
     const html = renderToStaticMarkup(<AddDataset caps={caps()} install={null} places={[]} cohorts={["exchange-ct"]} onClose={none} onDone={none} />);
     expect(html).toContain("Add a dataset</h2>");
+    expect(html).toContain("How the files arrive");
     expect(html).toContain("Identified, from the scanners");
     expect(html).toContain("De-identified by someone else");
     expect(html).toContain("Our own codes already in PatientID");
-    expect(html).toContain("Who a file is about");
-    expect(html).toContain("Probe the shapes</button>");
-    expect(html).toContain("Upload a CSV</button>");
-    expect(html).toContain("Hold files whose identifier the map does not know");
-    expect(html).toContain("Its subjects join");
-    expect(html).toContain("the cohort exchange-ct");
-    expect(html).toContain(">Add</button>");
-    expect(html).toContain("Add and bring in</button>");
+    // Wave 7a: no arrival is chosen for the person, so nothing below it is asked yet and nothing can be added
+    expect(html).not.toMatch(/name="arrives" checked=""/);
+    expect(html).toContain("Choose one: nothing is read until you say how the files arrive.");
+    expect(html).not.toContain("Who a file is about");
+    expect(html).not.toContain("Its subjects join");
+    expect(html).toMatch(/<button type="button" class="button secondary" disabled="">Add<\/button>/);
+    expect(html).toMatch(/<button type="button" class="button" disabled="">Add and bring in<\/button>/);
     expect(html).not.toContain("v0 cohort folder");
   });
 
@@ -109,11 +109,8 @@ describe("Add a dataset", () => {
   it("says which page's work adding a folder needs when a person lacks it", () => {
     const html = renderToStaticMarkup(<AddDataset caps={caps(["data:work"])} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
     expect(html).toContain("needs work on the Data page and on the Places page; this account has no work on the Places page.");
-    expect(html).toContain("Upload a CSV</button>");
     const noData = renderToStaticMarkup(<AddDataset caps={caps(["places:work", "data:see"])} install={null} places={[]} cohorts={[]} onClose={none} onDone={none} />);
     expect(noData).toContain("this account has no work on the Data page.");
-    expect(noData).toContain("Filing a map needs work on the Data page");
-    expect(noData).not.toContain("Upload a CSV");
   });
 
   it("makes the types a map names that the site has not got, since an unknown type is a conflict and a map with one is never filed", () => {

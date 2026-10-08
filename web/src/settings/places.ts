@@ -5,6 +5,7 @@
 // added, with a source started again in the engine and digested. The engine
 // checks every rule again at its doors; the page only says them first.
 
+import { isUndeclared } from "../data/layout";
 import { day } from "../home/tiles";
 import { objects, type Place } from "../objects/client";
 import { ops } from "../ops/client";
@@ -66,6 +67,8 @@ export function placeState(p: Place, places: Place[], containers: boolean): { to
   if (said(p, "snapshots") && probed["snapshots_seen"] === false) return { tone: "caution", words: "snapshots not seen" };
   switch (p.role) {
     case "source":
+      // Wave 7a: nothing in it is read until someone says how its files arrive
+      if (isUndeclared(p)) return { tone: "caution", words: "undeclared" };
       if (!said(p, "snapshots") && !said(p, "protected")) return { tone: "caution", words: "needs snapshots" };
       return { tone: "ok", words: containers ? "mounted read only" : "passes" };
     case "export":
@@ -90,6 +93,7 @@ export function placeState(p: Place, places: Place[], containers: boolean): { to
 export function pathNote(p: Place): string | null {
   if (p.retired_at !== null) return null;
   const verbs = (p.bound ?? []).map((b) => b.verb);
+  if (p.role === "source" && isUndeclared(p)) return null;
   if (p.role === "source") return verbs.some((v) => v.includes("ingest-root")) ? "the engine reads it" : "the engine reads it once it starts again";
   if (p.role === "backup" && verbs.some((v) => v.includes("backup-dir"))) return "the engine writes its backups here";
   if (p.role === "registry" && verbs.includes("registry")) return "the engine's registry";

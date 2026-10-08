@@ -26,6 +26,8 @@ export type { ChainedJob, IdType as LinkageType, ImportReport };
 export type MapColumn = ImportColumn;
 
 export type Arrives = "identified" | "deidentified" | "coded";
+/** An arrival, or none yet (Wave 7a): a place nobody has declared is never read. */
+export type Arrival = Arrives | "undeclared";
 export type Unmapped = "hold" | "code";
 export type OriginalsKept = "kept" | "vaulted" | "purged";
 
@@ -47,7 +49,8 @@ export interface IdentityRule {
 /** The counts are null on a place the engine has not probed since it was declared, or since the update that gave it trees. */
 export interface Trees {
   originals: { path: string; files: number | null; bytes: number | null } | null;
-  anon: { path: string; files: number | null; last_written: string | null };
+  /** Null on an undeclared dataset (Wave 7a), which has no tree and reads nothing. */
+  anon: { path: string; files: number | null; last_written: string | null } | null;
 }
 
 /** A tree's file count in words, or that the engine has not counted it yet. */
@@ -90,7 +93,7 @@ export interface Batch extends Digest {
 /** A source place as the sources door lists it at record 26; every new field is absent from an older engine. */
 export interface Dataset extends Omit<Source, "digests"> {
   digests: Omit<Source["digests"], "recent"> & { recent: Batch[] };
-  arrives?: Arrives;
+  arrives?: Arrival;
   trees?: Trees | null;
   identity?: IdentityRule | null;
   unmapped?: Unmapped;
@@ -134,19 +137,48 @@ export interface BatchStages {
   reviewed: { done: number; of: number; since: string | null } | null;
 }
 
-/** What a look found of a v0 cohort folder: the originals and the raw tree v0 wrote. */
+/** What one declaration of a folder would read, and what it would move there (Wave 7a): `needed` when the tree is missing and loose entries wait, so the move must be confirmed. */
+export interface LayoutDeclaration {
+  reads: string;
+  tree_there: boolean;
+  moves: number;
+  into: string;
+  needed: boolean;
+}
+
+/**
+ * What a look found in a folder: a v0 cohort folder's originals and the raw
+ * tree v0 wrote. An engine that asks first (Wave 7a) says the rest too: which
+ * trees are there, the loose entries beside them (the first hundred by name),
+ * whether nothing is read until someone says how the files arrive, what each
+ * declaration would read and move, and what a declaration just moved. The
+ * places door's listing leaves a v0 folder's files uncounted.
+ */
 export interface Layout {
-  v0: { original_files: number; raw_files: number; renamed: boolean } | null;
+  v0: { original_files: number | null; raw_files: number | null; renamed: boolean; partial?: boolean } | null;
+  originals?: boolean;
+  anon?: boolean;
+  raw?: boolean;
+  loose?: number;
+  loose_entries?: string[];
+  question?: boolean;
+  declarations?: Partial<Record<Arrives, LayoutDeclaration>>;
+  moved?: { into: string; entries: number } | null;
+  renamed?: boolean;
 }
 
 /** The dataset fields the places door takes beside a place's own. */
 export interface DatasetFields {
-  arrives: Arrives;
+  arrives: Arrival;
   identity?: IdentityRule | null;
   unmapped?: Unmapped;
   cohort?: string | null;
   tags?: Tags | null;
   move_into_anon?: boolean;
+  /** The person's word that the loose entries the engine named may move (Wave 7a): sent only after they confirmed what was shown. */
+  confirm_move?: boolean;
+  /** What the pseudonymiser writes into PatientID: `subject-code`, or `id-type:<name>` (Wave 7a). */
+  patient_id?: string;
 }
 
 export type ColumnRole = "identifier" | "canonical" | "code" | "ignore";
@@ -191,7 +223,8 @@ export function record26(caps: Capabilities, d?: Dataset | null): boolean {
 
 /** What arrives through a dataset, from its own field, or from the handling an older engine declared. */
 export function arrivesOf(d: Pick<Dataset, "arrives" | "handling">): Arrives {
-  return d.arrives ?? (d.handling.arrives === "deidentified" ? "deidentified" : "identified");
+  if (d.arrives && d.arrives !== "undeclared") return d.arrives;
+  return d.handling.arrives === "deidentified" ? "deidentified" : "identified";
 }
 
 /** The privacy line of a card: what arrives, in a few words, with its icon and tone. */
@@ -213,6 +246,8 @@ function reading(d: Dataset): boolean {
 
 /** What a dataset's card says first: reading, what is held, what waits, not read, not sorted, or up to date. */
 export function datasetState(d: Dataset): { words: string; tone: "brand" | "caution" | "ok" | "neutral" } {
+  // Wave 7a: a place nobody declared is never read, whatever it held before
+  if (d.arrives === "undeclared") return { words: "undeclared", tone: "caution" };
   if (reading(d)) return { words: "reading now", tone: "brand" };
   const held = d.held?.files ?? 0;
   if (held > 0) return { words: `${n(held)} held`, tone: "caution" };
@@ -236,6 +271,7 @@ export function treeLines(d: Dataset): TreeLine[] {
   const last = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
   if (d.trees.originals) out.push({ icon: "lock", path: last(d.trees.originals.path), words: `${countWords(d.trees.originals.files)} · locked` });
   const anon = d.trees.anon;
+  if (!anon) return out;
   const how = arrivesOf(d) === "identified" ? "the source" : arrivesOf(d) === "deidentified" ? "moved in, files as sent" : "codes taken verbatim";
   out.push({ icon: "shield", path: last(anon.path), words: `${countWords(anon.files)} · ${how}` });
   return out;
@@ -335,7 +371,7 @@ export function chainJobs(chain: Chain | null | undefined): number[] {
 
 /** How many files of the originals no pseudonymised copy stands for yet: new files and the held ones, when the trees are known. */
 export function newInOriginals(d: Dataset): number | null {
-  if (!d.trees?.originals || typeof d.trees.originals.files !== "number" || typeof d.trees.anon.files !== "number") return null;
+  if (!d.trees?.originals || typeof d.trees.originals.files !== "number" || typeof d.trees.anon?.files !== "number") return null;
   return Math.max(0, d.trees.originals.files - d.trees.anon.files);
 }
 
@@ -413,10 +449,13 @@ export function bringInName(dataset: string, now = new Date()): string {
 export function v0Words(layout: Layout | null | undefined): { lead: string; detail: string; skipped: number } | null {
   const v0 = layout?.v0;
   if (!v0) return null;
-  const skipped = Math.max(0, v0.original_files - v0.raw_files);
+  // the places door's listing leaves a v0 folder's files uncounted
+  const counted = typeof v0.original_files === "number" && typeof v0.raw_files === "number";
+  const skipped = counted ? Math.max(0, (v0.original_files ?? 0) - (v0.raw_files ?? 0)) : 0;
+  const files = (k: number | null) => (typeof k === "number" ? `${n(k)} files` : "the files");
   return {
     lead: "This is a NILS v0 cohort folder",
-    detail: `derivatives/dcm-original holds ${n(v0.original_files)} files as they came from the scanners, and derivatives/dcm-raw holds ${n(v0.raw_files)} files v0 pseudonymised, with v0's codes in PatientID.`,
+    detail: `derivatives/dcm-original holds ${files(v0.original_files)} as they came from the scanners, and derivatives/dcm-raw holds ${files(v0.raw_files)} v0 pseudonymised, with v0's codes in PatientID.`,
     skipped,
   };
 }

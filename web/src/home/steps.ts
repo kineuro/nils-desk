@@ -7,6 +7,7 @@ import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
+import { isUndeclared } from "../data/layout";
 import { keptRunning, where } from "../settings/install";
 import type { Install } from "../settings/supervise";
 import { day } from "./tiles";
@@ -94,15 +95,26 @@ function model(f: Facts): Step | null {
   return { id: "model", title, state: "attention", words: `Kvasir lists no model yet.${serve || " A model on another machine of yours, or a provider, can answer instead."}`, tags: [], halfway: false };
 }
 
-function dicom(f: Facts, containers: boolean): Step | null {
+function dicom(f: Facts): Step | null {
   if (f.places === null) return null;
   const title = "Bring in DICOM";
   const sources = f.places.filter((p) => p.role === "source" && p.retired_at === null);
   if (sources.length === 0) {
-    const kept = containers ? "It is mounted read only; nothing is ever written to it." : "It is read only; nothing is ever written to it.";
-    return { id: "dicom", title, state: "now", words: `Add each folder NILS reads. ${kept}`, tags: [], halfway: false };
+    return { id: "dicom", title, state: "now", words: "Add each folder of DICOM as a dataset. Nothing reads it before you say how its files arrive.", tags: [], halfway: false };
   }
   const names = sources.map((s) => s.name).join(", ");
+  // Wave 7a: a source nobody declared is never read, so it brings nothing in yet
+  const waiting = sources.filter((p) => isUndeclared(p));
+  if (waiting.length === sources.length) {
+    return {
+      id: "dicom",
+      title,
+      state: "now",
+      words: `${names} ${sources.length === 1 ? "is" : "are"} not read until you say how ${sources.length === 1 ? "its" : "their"} files arrive.`,
+      tags: [],
+      halfway: true,
+    };
+  }
   if (!f.batches) {
     return {
       id: "dicom",
@@ -196,8 +208,7 @@ function signin(f: Facts): Step {
 
 /** The steps, in the order the band shows them. */
 export function steps(f: Facts, now: number = Date.now()): Step[] {
-  const containers = f.install !== null && f.install.runtime !== "machine" && f.install.runtime !== "";
-  return [installed(f), model(f), dicom(f, containers), safe(f, now), signin(f)].filter((s): s is Step => s !== null);
+  return [installed(f), model(f), dicom(f), safe(f, now), signin(f)].filter((s): s is Step => s !== null);
 }
 
 /** The step the band opens on: begun before attention before not begun. */

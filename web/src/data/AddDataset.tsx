@@ -12,6 +12,16 @@
 // dcm-raw renamed, v0's map filed, the originals left. Adding a folder as a
 // dataset asks for work on the Data and the Places pages, and starts the
 // engine again where a service keeps it running.
+//
+// It is the one way in for data (Wave 7a, H2 round 1): Setup's DICOM step and
+// the Places page's source lead here, and an undeclared place is declared
+// here too. It always asks how the files arrive, with nothing chosen for the
+// person; it shows the trees and the loose entries the look found and what
+// each arrival would read and move; for identified data it asks what PatientID
+// holds once pseudonymised. A move is never asked for up front: the engine
+// answers a declaration that would move loose entries with the question, the
+// entries and the tree, and the dialog shows that question and sends the
+// confirmation only when the person gives it.
 
 import { useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -30,6 +40,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { ingest, type Look } from "./browse";
+import { asksFirst, declarationWords, foundFacts, looseNamed, moveAskedOf, patientIdOf, patientIdServed, questionWords, speaksLayout, UNDECLARED, type MoveAsked } from "./layout";
 import {
   bringInBody,
   bringInName,
@@ -40,10 +51,12 @@ import {
   linkage,
   locationOf,
   packFor,
+  cohorts as cohortsDoor,
   places as placesDoor,
   probeWords,
   record26,
   v0Words,
+  type Arrival,
   type Arrives,
   type BringIn,
   type ColumnRole,
@@ -107,6 +120,8 @@ export function mapImport(columns: { header: string; guess: Guess }[], rows: str
 export interface AddPlan {
   name: string;
   path: string;
+  /** The place declared, where the folder is a place already (an undeclared one): its fields are set on it, and nothing starts again. */
+  declare?: number | null;
   /** The dataset fields, or null for an engine before record 26. */
   fields: DatasetFields | null;
   /** Start the engine again, so it reads the new folder: only where a service keeps it running. */
@@ -154,28 +169,42 @@ function insideWords(l: Look): string {
  * answers the words of how it ended.
  */
 export async function addDataset(plan: AddPlan, phase: (words: string) => void): Promise<string> {
-  phase(`adding ${plan.name} as a dataset`);
-  const answer = await placesDoor.add({ name: plan.name, role: "source", path: plan.path, guarantees: { backup: null, snapshots: false, protected: false, fast: false }, ...(plan.fields ?? {}) });
-  const renamed = answer.layout?.v0?.renamed === true ? ", its dcm-raw renamed dcm-anon" : "";
-  if (plan.restart) {
+  const declaring = typeof plan.declare === "number";
+  phase(declaring ? `saying how the files of ${plan.name} arrive` : `adding ${plan.name} as a dataset`);
+  // a move no person confirmed is refused with the question and writes nothing; the caller shows it
+  const answer = declaring
+    ? await placesDoor.set(plan.declare as number, plan.fields ?? {})
+    : await placesDoor.add({ name: plan.name, role: "source", path: plan.path, guarantees: { backup: null, snapshots: false, protected: false, fast: false }, ...(plan.fields ?? {}) });
+  const moved = answer.layout?.moved ? `, ${answer.layout.moved.entries.toLocaleString("en-US")} loose ${answer.layout.moved.entries === 1 ? "entry" : "entries"} moved into ${answer.layout.moved.into}` : "";
+  const renamed = (answer.layout?.v0?.renamed === true || answer.layout?.renamed === true ? ", its dcm-raw renamed dcm-anon" : "") + moved;
+  if (plan.fields?.arrives === UNDECLARED) {
+    const later = plan.restart ? "" : "; the engine knows the folder once it starts again";
+    if (plan.restart) {
+      phase("starting the engine again with the folder");
+      const run = await supervise.reapply("engine");
+      await followRun(run.id, () => undefined);
+    }
+    return `${plan.name} is added and not read until you say how its files arrive${later}.`;
+  }
+  if (plan.restart && !declaring) {
     phase("starting the engine again with the folder");
     const run = await supervise.reapply("engine");
     const ended = await followRun(run.id, () => undefined);
     if (ended === null) throw new Error(`${plan.name} is a dataset${renamed}; the engine is still starting, so look again in a moment.`);
     if (ended.state !== "done") throw new Error(`${plan.name} is a dataset${renamed}, and the engine did not start again: ${ended.tail?.slice(-1)[0] ?? ended.state}`);
   }
-  const said: string[] = [`${plan.name} is a dataset${renamed}`];
+  const said: string[] = [declaring ? `${plan.name} is declared${renamed}` : `${plan.name} is a dataset${renamed}`];
   if (plan.map) {
     phase("filing the map");
     const r = await patiently(() => linkage.import({ place: plan.name, columns: plan.map!.columns, rows: plan.map!.rows, make_types: plan.map!.make_types, dry_run: false }));
     said.push("job" in r ? `the map is filed as job ${r.job}` : "the map is filed");
   }
   // a job names the folder by its place, which the engine learns when it starts again
-  if (plan.bringIn && plan.restart) {
+  if (plan.bringIn && (plan.restart || declaring)) {
     phase("queueing the bring-in");
     const j = await patiently(() => jobs.enqueue(plan.bringIn!.command, plan.bringIn!.name));
     said.push(`job ${j.job} brings in what is there as the thread ${plan.bringIn.name}`);
-  } else if (!plan.restart) {
+  } else if (!plan.restart && !declaring) {
     said.push(plan.bringIn ? "the engine reads it once it starts again, and Bring in what is new is offered from its card then" : "the engine reads it once it starts again");
   }
   return `${said.join("; ")}.`;
@@ -187,21 +216,33 @@ export function AddDataset(props: {
   caps: Capabilities;
   install: Install | null;
   places: Place[];
-  cohorts: string[];
+  /** The cohorts a dataset may feed; read here where the page opening the dialog has not read them. */
+  cohorts?: string[];
   /** A folder already looked at, with what the look found, for a dialog opened from it. */
   initial?: { path: string; layout: Layout | null };
+  /** A source place already there and undeclared: the dialog says how its files arrive, on that place. */
+  declare?: { id: number; name: string; path: string; layout: Layout | null };
   /** What a look finds in a folder before it is declared: what is inside it, and the layout it holds. */
   lookAt?: (folder: string) => Promise<Look>;
   onClose: () => void;
   onDone: (words: string) => void;
 }) {
-  const { caps, install, places, cohorts, onClose, onDone } = props;
-  const [path, setPath] = useState(props.initial?.path ?? "");
+  const { caps, install, places, onClose, onDone } = props;
+  const declaring = props.declare ?? null;
+  const start = declaring ? { path: declaring.path, layout: declaring.layout } : (props.initial ?? null);
+  const [path, setPath] = useState(start?.path ?? "");
   // the folder as the engine names it, @location/relative, when it was picked in the engine's own picker
   const [at, setAt] = useState<string | null>(null);
-  const [outside, setOutside] = useState(false);
+  // a folder named by the page that opened the dialog is typed, not picked
+  const [outside, setOutside] = useState(Boolean(props.initial?.path));
   const [typed, setTyped] = useState<string | null>(null);
-  const [arrives, setArrives] = useState<Arrives>("identified");
+  // how the files arrive is always asked: nothing is chosen for the person
+  const [arrives, setArrives] = useState<Arrival | null>(null);
+  const [pidChoice, setPidChoice] = useState<"subject-code" | "id-type">("subject-code");
+  const [pidType, setPidType] = useState("");
+  /** The engine's question, when a declaration would move loose entries: shown, and answered by the person. */
+  const [asked, setAsked] = useState<{ question: MoveAsked; arrives: Arrives; bringIn: boolean } | null>(null);
+  const [readCohorts, setReadCohorts] = useState<string[]>([]);
   const [fieldChoice, setFieldChoice] = useState<FieldChoice>("PatientID");
   const [otherField, setOtherField] = useState("");
   const [segment, setSegment] = useState(1);
@@ -212,7 +253,7 @@ export function AddDataset(props: {
   const [map, setMap] = useState<Map | null>(null);
   const [unmapped, setUnmapped] = useState<Unmapped>("hold");
   const [cohort, setCohort] = useState<string | null>(null);
-  const [layout, setLayout] = useState<Layout | null>(props.initial?.layout ?? null);
+  const [layout, setLayout] = useState<Layout | null>(start?.layout ?? null);
   const [found, setFound] = useState<Look | null>(null);
   /** Why the engine did not say what is in the folder, in its own words. */
   const [lookWhy, setLookWhy] = useState<string | null>(null);
@@ -224,8 +265,15 @@ export function AddDataset(props: {
   const folder = path.trim().replace(/\/+$/, "");
   const absolute = folder.startsWith("/");
   const taken = places.map((p) => p.name);
-  const name = typed ?? (folder ? placeName(folder, taken) : "");
+  const name = declaring ? declaring.name : (typed ?? (folder ? placeName(folder, taken) : ""));
+  const cohorts = props.cohorts ?? readCohorts;
   const modern = record26(caps);
+  // Wave 7a: the engine reads nothing undeclared, asks before it moves, and takes what PatientID holds
+  const asks = modern && asksFirst(caps);
+  const pidServed = asks && patientIdServed(caps);
+  const undeclared = arrives === UNDECLARED;
+  const declared: Arrives | null = arrives === null || arrives === UNDECLARED ? null : arrives;
+  const patientId = declared === "identified" && pidServed ? patientIdOf(pidChoice, pidType) : null;
   const supervised = install !== null && may(caps, "install:work");
   const restarts = supervised && install !== null && keptRunning(install);
   const adding = newFolderRefusal(caps);
@@ -234,7 +282,7 @@ export function AddDataset(props: {
   const lists = served(caps, "POST /api/ingest/folders") && may(caps, "data:work");
   // the same work looks inside a folder by its bare path, which only an engine of record 26 takes
   const looks = modern && served(caps, "POST /api/ingest/look") && may(caps, "data:work");
-  const picking = lists && !outside;
+  const picking = lists && !outside && !declaring;
   const typesServed = served(caps, "GET /api/linkage/types");
   const importsServed = modern && served(caps, "POST /api/linkage/imports") && may(caps, "data:work");
   const probes = modern && served(caps, "POST /api/ingest/probe") && may(caps, "data:work");
@@ -266,6 +314,20 @@ export function AddDataset(props: {
     setIdType(types?.[0]?.name ?? "");
   };
 
+  // the cohorts, where the page that opened the dialog has not read them
+  useEffect(() => {
+    if (props.cohorts !== undefined || !served(caps, "GET /api/cohorts")) return;
+    let alive = true;
+    cohortsDoor.list().then(
+      (r) => alive && setReadCohorts(r.cohorts.map((c) => c.name)),
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once
+  }, []);
+
   // the registry's identifier types, once
   useEffect(() => {
     if (!typesServed) return;
@@ -276,6 +338,7 @@ export function AddDataset(props: {
         if (!alive) return;
         setTypes(r.types);
         setIdType((t) => t || r.types[0]?.name || "");
+        setPidType((t) => t || writable(r.types)[0]?.name || "");
       })
       .catch(() => alive && setTypes([]));
     return () => {
@@ -285,7 +348,7 @@ export function AddDataset(props: {
 
   // once the folder settles, one look says what is inside it and whether it holds a v0 cohort layout
   useEffect(() => {
-    if (props.initial && folder === props.initial.path.trim().replace(/\/+$/, "")) return;
+    if (start && start.layout !== null && folder === start.path.trim().replace(/\/+$/, "")) return;
     setFound(null);
     setLayout(null);
     setLookWhy(null);
@@ -396,39 +459,62 @@ export function AddDataset(props: {
       .catch((e: unknown) => probing.current === mine && setProbe({ kind: "failed", why: messageOf(e) }));
   };
 
-  const add = (bringIn: boolean) => {
-    if (adding !== null || !absolute || !name) return;
-    const fields: DatasetFields | null = modern
-      ? {
-          arrives: v0 ? "identified" : arrives,
-          identity: identity ?? null,
-          unmapped: arrives === "coded" ? "code" : unmapped,
-          cohort: cohortOf(cohortChoice),
-          ...(arrives !== "identified" && !v0 ? { move_into_anon: true } : {}),
-        }
-      : null;
-    const chain = bringIn ? (modern ? bringInBody({ name, arrives: fields?.arrives, handling: { arrives: "identified", on_release: { uids: "remap", deface: false } } }, bringInName(name), packFor(caps)) : { command: ["digest", "--name", name, `@${name}`], name, then: [] }) : null;
+  const add = (bringIn: boolean, confirmed = false) => {
+    if (adding !== null || !absolute || !name || (arrives === null && !v0)) return;
+    const arrival: Arrival = v0 ? "identified" : (arrives as Arrival);
+    let fields: DatasetFields | null = null;
+    if (modern && arrival === UNDECLARED) fields = { arrives: UNDECLARED, cohort: cohortOf(cohortChoice) };
+    else if (modern)
+      fields = {
+        arrives: arrival,
+        identity: identity ?? null,
+        unmapped: arrival === "coded" ? "code" : unmapped,
+        cohort: cohortOf(cohortChoice),
+        ...(arrival === "identified" && pidServed && patientId !== null ? { patient_id: patientId } : {}),
+        // an engine that asks first moves loose entries only on the person's word, given to its question; one before it moved them for a dataset that does not arrive identified
+        ...(asks ? (confirmed ? { confirm_move: true } : {}) : arrival !== "identified" && !v0 ? { move_into_anon: true } : {}),
+      };
+    const chain =
+      bringIn && arrival !== UNDECLARED
+        ? modern
+          ? bringInBody({ name, arrives: arrival as Arrives, handling: { arrives: "identified", on_release: { uids: "remap", deface: false } } }, bringInName(name), packFor(caps))
+          : { command: ["digest", "--name", name, `@${name}`], name, then: [] }
+        : null;
     const plan: AddPlan = {
       name,
       path: folder,
+      declare: declaring?.id ?? null,
       fields,
-      restart: restarts,
+      restart: restarts && !declaring,
       map: map && map.report && map.report.conflicts.length === 0 && importsServed ? mapImport(map.columns, map.rows, types) : null,
       bringIn: chain,
     };
+    setAsked(null);
     const say = (phase: string) => setAct({ kind: "working", phase, since: Date.now() });
     addDataset(plan, say)
       .then((said) => {
         setAct({ kind: "done", words: said });
         onDone(said);
       })
-      .catch((e: unknown) => setAct({ kind: "failed", why: messageOf(e) }));
+      .catch((e: unknown) => {
+        // the question is not a failure: nothing was written, and it is the person's to answer
+        const question = asks && !confirmed && arrival !== UNDECLARED ? moveAskedOf(e) : null;
+        if (question) {
+          setLayout(question.layout);
+          setAsked({ question, arrives: arrival as Arrives, bringIn });
+          setAct({ kind: "idle" });
+          return;
+        }
+        setAct({ kind: "failed", why: messageOf(e) });
+      });
   };
 
   const folderSection = (
     <div className="field pick-folder">
       <span className="label">Folder</span>
-      {picking ? (
+      {declaring ? (
+        <Values cells={[{ k: "folder", v: declaring.path }]} />
+      ) : picking ? (
         <IngestPicker
           places={places}
           adding={adding}
@@ -604,9 +690,77 @@ export function AddDataset(props: {
     </div>
   );
 
-  const foot = (
+  // what the folder holds, as the look found it: the trees, a v0 folder's dcm-raw, and the loose entries by name
+  const loose = layout && speaksLayout(layout) ? looseNamed(layout) : null;
+  const foundSection =
+    layout && speaksLayout(layout) ? (
+      <div className="field">
+        <span className="label">What the folder holds</span>
+        <Values cells={foundFacts(layout)} />
+        {loose && loose.names.length > 0 && (
+          <details className="says">
+            <summary>The loose entries</summary>
+            <ul className="report">
+              {loose.names.map((e) => (
+                <li key={e} className="path">
+                  {e}
+                </li>
+              ))}
+              {loose.more > 0 && <li className="meta">and {loose.more.toLocaleString("en-US")} more</li>}
+            </ul>
+          </details>
+        )}
+        {layout.question === true && <span className="meta">Neither tree is there, so nothing in this folder is read until you say how its files arrive.</span>}
+      </div>
+    ) : null;
+  // what the arrival chosen would read and move, before anything is asked of the engine
+  const plainly = declarationWords(layout, arrives);
+  const question = asked ? questionWords(asked.question, asked.arrives) : null;
+  const ready = !working && absolute && name !== "" && (arrives !== null || v0 !== null) && (declared !== "identified" || !pidServed || patientId !== null);
+
+  const foot = asked && question ? (
     <>
-      {words && install && restarts && (
+      <div className="note caution" role="alertdialog" aria-label="Confirm the move">
+        <Icon name="folder" />
+        <div className="note-body">
+          <p className="note-lead">{question.lead}</p>
+          <p className="note-detail">{question.detail}</p>
+          {asked.question.layout.loose_entries && asked.question.layout.loose_entries.length > 0 && (
+            <ul className="report">
+              {looseNamed(asked.question.layout).names.map((e) => (
+                <li key={e} className="path">
+                  {e}
+                </li>
+              ))}
+              {looseNamed(asked.question.layout).more > 0 && <li className="meta">and {looseNamed(asked.question.layout).more.toLocaleString("en-US")} more</li>}
+            </ul>
+          )}
+        </div>
+      </div>
+      <div className="row actions">
+        <button type="button" className="button quiet" onClick={() => setAsked(null)}>
+          Back
+        </button>
+        {!declaring && (
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => {
+              setArrives(UNDECLARED);
+              setAsked(null);
+            }}
+          >
+            Leave it undeclared
+          </button>
+        )}
+        <button type="button" className="button" onClick={() => add(asked.bringIn, true)}>
+          Move them and {declaring ? "save" : asked.bringIn ? "add and bring in" : "add"}
+        </button>
+      </div>
+    </>
+  ) : (
+    <>
+      {words && install && restarts && !declaring && (
         <div className="note">
           <Icon name="restart" />
           <div className="note-body">
@@ -621,33 +775,37 @@ export function AddDataset(props: {
       {act.kind === "done" && <p className="ok-words">{act.words}</p>}
       {adding !== null && <p className="meta">{adding}</p>}
       <div className="row actions">
-        <span className="meta grow">{restarts ? "Adding a dataset restarts the engine, about 20 s." : supervised || !absolute ? "" : "The engine reads it once it starts again."}</span>
+        <span className="meta grow">{declaring ? "" : restarts ? "Adding a dataset restarts the engine, about 20 s." : supervised || !absolute ? "" : "The engine reads it once it starts again."}</span>
         <button type="button" className="button secondary" disabled={working} onClick={onClose}>
           Cancel
         </button>
         {!v0 && (
-          <button type="button" className="button secondary" disabled={adding !== null || !absolute || !name || working} onClick={() => add(false)}>
-            Add
+          <button type="button" className={undeclared ? "button" : "button secondary"} disabled={adding !== null || !ready} onClick={() => add(false)}>
+            {declaring ? "Save" : "Add"}
           </button>
         )}
-        <button type="button" className="button" disabled={adding !== null || !absolute || !name || working} onClick={() => add(true)}>
-          Add and bring in
-        </button>
+        {!undeclared && (
+          <button type="button" className="button" disabled={adding !== null || !ready} onClick={() => add(true)}>
+            {declaring ? "Save and bring in" : "Add and bring in"}
+          </button>
+        )}
       </div>
     </>
   );
 
   return (
-    <Dialog title="Add a dataset" icon="folder" onClose={onClose} foot={foot}>
+    <Dialog title={declaring ? `How the files of ${declaring.name} arrive` : "Add a dataset"} icon="folder" onClose={onClose} foot={foot}>
       {folderSection}
-      <div className="field">
-        <label className="label" htmlFor="dataset-name">
-          Name
-        </label>
-        <div className="input mono">
-          <input id="dataset-name" value={name} spellCheck={false} disabled={working} onChange={(e) => setTyped(e.target.value)} />
+      {!declaring && (
+        <div className="field">
+          <label className="label" htmlFor="dataset-name">
+            Name
+          </label>
+          <div className="input mono">
+            <input id="dataset-name" value={name} spellCheck={false} disabled={working} onChange={(e) => setTyped(e.target.value)} />
+          </div>
         </div>
-      </div>
+      )}
       {v0 ? (
         <>
           <div className="note brand">
@@ -693,9 +851,10 @@ export function AddDataset(props: {
         </>
       ) : modern ? (
         <>
+          {foundSection}
           <div className="field">
-            <span className="label">How the files come in</span>
-            <div className="choices" role="radiogroup">
+            <span className="label">How the files arrive</span>
+            <div className="choices" role="radiogroup" aria-label="How the files arrive">
               <label className="radio-row">
                 <input type="radio" name="arrives" checked={arrives === "identified"} disabled={working} onChange={() => setArrives("identified")} />
                 <span>
@@ -707,19 +866,62 @@ export function AddDataset(props: {
                 <input type="radio" name="arrives" checked={arrives === "deidentified"} disabled={working} onChange={() => setArrives("deidentified")} />
                 <span>
                   <b>De-identified by someone else</b>
-                  <span className="meta">Moved in as sent; the map gives it our codes.</span>
+                  <span className="meta">Read from dcm-anon as sent; the map gives it our codes.</span>
                 </span>
               </label>
               <label className="radio-row">
                 <input type="radio" name="arrives" checked={arrives === "coded"} disabled={working} onChange={() => setArrives("coded")} />
                 <span>
                   <b>Our own codes already in PatientID</b>
-                  <span className="meta">Moved in; the codes are taken as they are.</span>
+                  <span className="meta">Read from dcm-anon; the codes are taken as they are.</span>
                 </span>
               </label>
+              {asks && !declaring && (
+                <label className="radio-row">
+                  <input type="radio" name="arrives" checked={undeclared} disabled={working} onChange={() => setArrives(UNDECLARED)} />
+                  <span>
+                    <b>Not yet</b>
+                    <span className="meta">The folder is added and nothing in it is read until you say.</span>
+                  </span>
+                </label>
+              )}
             </div>
+            {arrives === null && <span className="meta">Choose one: nothing is read until you say how the files arrive.</span>}
+            {plainly && (
+              <ul className="report" aria-label="What this arrival reads and moves">
+                <li>{plainly.reads}</li>
+                {plainly.move && <li className="warn">{plainly.move}</li>}
+                {plainly.stays && <li className="meta">{plainly.stays}</li>}
+              </ul>
+            )}
           </div>
-          {arrives !== "coded" && (
+          {declared === "identified" && pidServed && (
+            <div className="field">
+              <span className="label">What PatientID holds once pseudonymised</span>
+              <div className="choices" role="radiogroup" aria-label="What PatientID holds once pseudonymised">
+                <label className="radio-row">
+                  <input type="radio" name="patient-id" checked={pidChoice === "subject-code"} disabled={working} onChange={() => setPidChoice("subject-code")} />
+                  <span>
+                    <b>The subject's code</b>
+                    <span className="meta">From the subject code generator, under this site's key.</span>
+                  </span>
+                </label>
+                <label className="radio-row">
+                  <input type="radio" name="patient-id" checked={pidChoice === "id-type"} disabled={working} onChange={() => setPidChoice("id-type")} />
+                  <span>
+                    <b>The subject's value of an ID type</b>
+                    <span className="meta">A file whose subject has no value of that type is held until a map gives one.</span>
+                  </span>
+                </label>
+              </div>
+              {pidChoice === "id-type" && (
+                <div className="field-row">
+                  <TypeSelect value={pidType} types={types ? writable(types) : null} disabled={working} label="The ID type PatientID holds" onChange={setPidType} />
+                </div>
+              )}
+            </div>
+          )}
+          {declared !== null && declared !== "coded" && (
             <div className="field">
               <span className="label">Who a file is about</span>
               <div className="field-row">
@@ -779,8 +981,8 @@ export function AddDataset(props: {
               </Says>
             </div>
           )}
-          {arrives !== "coded" && mapSection}
-          {cohortSection}
+          {declared !== null && declared !== "coded" && mapSection}
+          {arrives !== null && cohortSection}
         </>
       ) : (
         <>
@@ -802,6 +1004,15 @@ export function AddDataset(props: {
       )}
     </Dialog>
   );
+}
+
+/**
+ * The ID types a pseudonymised file's PatientID may hold: never a
+ * personnummer, which the engine refuses there, and not the subject code,
+ * which is the other choice.
+ */
+export function writable(types: LinkageType[]): LinkageType[] {
+  return types.filter((t) => t.name !== "personnummer" && t.name !== "subject-code");
 }
 
 /** The identifier's type: one of the registry's where the engine lists them, else typed. */

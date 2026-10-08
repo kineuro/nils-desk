@@ -97,7 +97,7 @@ describe("the band of a fresh docker install", () => {
     );
   });
   it("opens on bringing DICOM in", () => {
-    expect(by("dicom")).toMatchObject({ state: "now", words: "Add each folder NILS reads. It is mounted read only; nothing is ever written to it." });
+    expect(by("dicom")).toMatchObject({ state: "now", words: "Add each folder of DICOM as a dataset. Nothing reads it before you say how its files arrive." });
     expect(next(all)?.id).toBe("dicom");
     expect(headline(all)).toBe("NILS is installed. Next, give it something to read.");
   });

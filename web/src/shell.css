@@ -1501,3 +1501,7 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
 .preflight-missing { margin: 0.3rem 0 0; padding-left: 1.1rem; font-size: var(--n-text-size-small); color: var(--n-text); }
 .preflight-missing li + li { margin-top: 0.15rem; }
 .run-page > .row.actions, .plan-page > .row.actions { align-items: center; gap: 0.5rem; }
+
+/* Wave 7a: an undeclared place, not read until someone says how its files arrive */
+.undeclared { flex-wrap: wrap; margin-top: 0.3rem; }
+.undeclared .tag { white-space: normal; }

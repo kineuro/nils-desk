@@ -144,7 +144,8 @@ export const linkage = {
    */
   import: (body: { place?: string; columns: ImportColumn[]; rows: string[][]; dry_run: boolean; make_types?: boolean }) => door<ImportReport & { job?: number; state?: string }>("POST", "/api/linkage/imports", body),
   held: (place: string) => door<unknown>("GET", `/api/linkage/held?place=${encodeURIComponent(place)}`).then((r) => list<HeldRow>(r, "held")),
-  codeHeld: (place: string) => door<{ job: number; state: string }>("POST", "/api/linkage/held/code", { place }),
+  /** Wave 7a: the run that codes them is queued and named; `job` is null where nothing new was held. */
+  codeHeld: (place: string) => door<{ job: number | null; state: string; files?: number }>("POST", "/api/linkage/held/code", { place }),
   reveal: (place: string) => door<unknown>("POST", "/api/linkage/held/reveal", { place }).then((r) => list<Revealed>(r, "identifiers")),
 };
 
