@@ -7,10 +7,10 @@
 
 import { door } from "../ask/client";
 import type { Place } from "../objects/client";
-import { datasetState, newInOriginals, type Dataset, type PlaceAnswer } from "./datasets";
+import { datasetState, newInOriginals, type Dataset, type DatasetState, type Layout, type PlaceAnswer } from "./datasets";
 import { notReadOf } from "./layout";
 
-/** A folder under a root, as the engine lists it: whether it is a dataset yet, and whether it holds DICOM. */
+/** A folder under a root, as the engine lists it: whether it is a dataset yet. The list looks inside none of them. */
 export interface RootFolder {
   name: string;
   path: string;
@@ -18,26 +18,43 @@ export interface RootFolder {
   dataset_id: number | null;
   /** The dataset's name where the folder is one. */
   dataset: string | null;
-  holds_dicom: "yes" | "no" | "unknown";
   has_derivatives: boolean;
 }
 
-/** The folders door's answer: the root and its folders. */
+/** One page of a root's folders, found by part of a name: `next` asks for the page after it. */
 export interface RootFolders {
   root: string;
   root_id: number;
   path: string;
   count: number;
   folders: RootFolder[];
+  next: string | null;
 }
+
+/** One folder looked at: whether it holds DICOM, and what NILS would find in it. */
+export interface FolderLook {
+  name: string;
+  path: string;
+  added: boolean;
+  dataset_id: number | null;
+  holds_dicom: "yes" | "no" | "unknown";
+  has_derivatives: boolean;
+  layout: Layout | null;
+}
+
+/** A page of folders is fifty: a root may hold thousands. */
+export const PAGE = 50;
 
 const GUARANTEES = { backup: null, snapshots: false, protected: false, fast: false };
 
 export const roots = {
   /** A root folder added: only the root, nothing under it is a dataset yet. */
   add: (name: string, path: string) => door<PlaceAnswer>("POST", "/api/places", { name, role: "source", path, guarantees: GUARANTEES }),
-  /** The folders under a root. */
-  folders: (root: number) => door<RootFolders>("GET", `/api/places/${root}/folders`).then((r) => r.folders ?? []),
+  /** One page of the folders under a root whose name holds `q`. */
+  folders: (root: number, q = "", after: string | null = null) =>
+    door<RootFolders>("GET", `/api/places/${root}/folders?${new URLSearchParams({ q, limit: String(PAGE), ...(after ? { after } : {}) }).toString()}`),
+  /** One folder looked at, once. */
+  folder: (root: number, name: string) => door<FolderLook>("GET", `/api/places/${root}/folders/${encodeURIComponent(name)}`),
   /** One folder of a root made a dataset, named by the engine after the folder; its structure is read now. */
   addDataset: (root: string, folder: string) => door<PlaceAnswer & { not_read?: string | null }>("POST", "/api/places", { role: "source", root, folder }),
 };
@@ -47,8 +64,16 @@ export function rootsOf(places: Place[]): Place[] {
   return places.filter((p) => p.role === "source" && p.retired_at === null && p.dataset?.kind === "root");
 }
 
+/** The state word a folder's structure would give the dataset. */
+export function wouldBe(state: DatasetState | undefined): StateWord | null {
+  if (state === "unknown") return "Unknown";
+  if (state === "anonymised") return "Anonymised";
+  if (state === "identified" || state === "both") return "Identified";
+  return null;
+}
+
 /** A folder's DICOM, in three letters at most. */
-export function dicomWord(f: Pick<RootFolder, "holds_dicom">): string {
+export function dicomWord(f: Pick<FolderLook, "holds_dicom">): string {
   return f.holds_dicom === "yes" ? "yes" : f.holds_dicom === "no" ? "no" : "?";
 }
 

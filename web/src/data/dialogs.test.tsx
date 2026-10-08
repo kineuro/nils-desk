@@ -152,7 +152,7 @@ describe("the Datasets page", () => {
   const page = (dataset: string | null = null) => renderToStaticMarkup(<DataPage caps={caps(SETS.operator.grants)} install={null} onChanged={none} dataset={dataset} />);
   it("opens on the datasets, reading them, whether or not the address names one", () => {
     expect(page()).toContain("<h1>Datasets</h1>");
-    expect(page()).toContain("Add a root folder</button>");
+    expect(page()).toContain("Add a dataset</button>");
     expect(page("incoming")).toContain("reading the datasets");
   });
 });

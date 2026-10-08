@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Datasets page, as an app (Wave 7a, the tries of 2026-10-08): each root
-// folder with the folders under it, in a compact list, each with whether it
-// holds DICOM and "Add as dataset"; then a card for each dataset with its
-// name, one state word, its counts and the one button for its next step, the
-// rest in its menu. How to start is always on screen. Now lists what runs;
+// The Datasets page, as an app (Wave 7a, the tries of 2026-10-08): the
+// datasets only, a card each with its name, one state word, its counts and
+// the one button for its next step, the rest in its menu. No folder is listed:
+// "Add a dataset" opens a finder that searches a root's folders. How to start is always on screen. Now lists what runs;
 // the chosen dataset's reads follow. No paragraphs: an explanation sits behind
 // a "?". The section's other pages, the cohorts, a read and a dataset's
 // pseudonymisation, are mounted by the shell beside this one.
@@ -12,7 +11,6 @@ import { useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
-import type { Place } from "../objects/client";
 import { placesKept } from "../objects/kept";
 import { href, narrow } from "../routes";
 import { MoreMenu } from "../settings/cards";
@@ -22,14 +20,14 @@ import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
-import { AddRootDialog } from "./AddRoot";
+import { AddDataset } from "./AddDataset";
 import { BringInNew } from "./BringInNew";
 import { batchTail, jobs as jobsDoor, packFor, sources, STAGES, stripMarks, type Batch, type Dataset, type Layout, type Rates, type StageName } from "./datasets";
 import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
 import { NowSection, useLiveJobs } from "./Now";
 import { fileWords, whenWords } from "./sources";
-import { dicomWord, nextStep, roots as rootsDoor, rootsOf, stepCommand, type RootFolder, type StepId } from "./steps";
+import { nextStep, stepCommand, type StepId } from "./steps";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[]; rates: Rates | null };
 
@@ -51,7 +49,6 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   /** The dialog a dataset's step opens. */
   const [opened, setOpened] = useState<{ kind: "sort-files" | "set-ids"; dataset: Dataset } | null>(null);
   const [said, setSaid] = useState<string | null>(null);
-  const [folders, setFolders] = useState<Record<number, RootFolder[] | string>>({});
   const places = useKept(placesKept);
   const jobs = useLiveJobs(caps);
   const works = may(caps, "data:work");
@@ -66,24 +63,11 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
       .catch((e: Error) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: e.message })));
   }, []);
 
-  const rootList = rootsOf(places.value?.places ?? []);
-  const rootKey = rootList.map((r) => r.id).join(",");
-  const readFolders = useCallback(() => {
-    for (const r of rootsOf(placesKept.get().value?.places ?? [])) {
-      rootsDoor.folders(r.id).then(
-        (f) => setFolders((was) => ({ ...was, [r.id]: f })),
-        (e: unknown) => setFolders((was) => ({ ...was, [r.id]: messageOf(e) })),
-      );
-    }
-  }, []);
 
   useEffect(() => {
     read();
     if (served(caps, "GET /api/places")) void placesKept.ensure();
   }, [read, caps]);
-  useEffect(() => {
-    readFolders();
-  }, [rootKey, readFolders]);
 
   // the datasets are read again when a job ends, and every twenty seconds while one runs
   const openCount = (jobs.open ?? []).filter((j) => j.state !== "done" && j.state !== "failed" && j.state !== "cancelled").length;
@@ -110,7 +94,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   const current = list.find((s) => s.name === chosen) ?? list[0] ?? null;
   const changed = (words: string) => {
     setSaid(words);
-    void placesKept.refresh().then(readFolders, () => undefined);
+    void placesKept.refresh().catch(() => undefined);
     onChanged();
     jobs.refresh();
     read();
@@ -125,17 +109,6 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
     jobsDoor
       .enqueue(c.command, c.name, c.then)
       .then((j) => changed(`${d.name}: started (job ${j.job}).`))
-      .catch((e: unknown) => setSaid(messageOf(e)));
-  };
-
-  const addFolder = (root: Place, f: RootFolder) => {
-    setSaid(null);
-    rootsDoor
-      .addDataset(root.name, f.name)
-      .then((d) => {
-        setChosen(d.name);
-        changed(`${d.name} is a dataset.`);
-      })
       .catch((e: unknown) => setSaid(messageOf(e)));
   };
 
@@ -167,19 +140,16 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
           <h1>Datasets</h1>
         </div>
         {works && (
-          <button type="button" className={rootList.length === 0 ? "button" : "button secondary"} onClick={() => setAdding(true)}>
-            <Icon name="folder" />
-            Add a root folder
+          <button type="button" className="button" onClick={() => setAdding(true)}>
+            <Icon name="plus" />
+            Add a dataset
           </button>
         )}
       </div>
       {said && <p className="meta">{said}</p>}
-      {rootList.map((r) => (
-        <RootFolders key={r.id} root={r} folders={folders[r.id] ?? null} works={works} onAdd={(f) => addFolder(r, f)} />
-      ))}
       {load.kind === "loading" && <Wait phase="reading the datasets" since={load.since} size="panel" />}
       {load.kind === "failed" && <p className="warn">The datasets could not be read: {load.why}</p>}
-      {load.kind === "ready" && list.length === 0 && <p className="meta">{rootList.length === 0 ? "Add a root folder to start." : "Add a folder as a dataset to start."}</p>}
+      {load.kind === "ready" && list.length === 0 && <p className="meta">No dataset yet.</p>}
       {list.length > 0 && (
         <div className="sgrid">
           {list.map((d) => (
@@ -235,7 +205,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
         />
       )}
       {adding && (
-        <AddRootDialog
+        <AddDataset
           caps={caps}
           install={install}
           places={places.value?.places ?? []}
@@ -245,62 +215,6 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
             changed(words);
           }}
         />
-      )}
-    </section>
-  );
-}
-
-/** A root folder and the folders under it: each with whether it holds DICOM, and "Add as dataset". */
-function RootFolders({ root, folders, works, onAdd }: { root: Place; folders: RootFolder[] | string | null; works: boolean; onAdd: (f: RootFolder) => void }) {
-  return (
-    <section className="root-folders" aria-label={`the folders of ${root.name}`}>
-      <div className="section-head">
-        <h2>
-          <Icon name="folder" /> {root.name}
-        </h2>
-        <span className="meta path">{root.path}</span>
-      </div>
-      {folders === null && <Wait phase="listing the folders" since={Date.now()} />}
-      {typeof folders === "string" && <p className="warn">{folders}</p>}
-      {Array.isArray(folders) && folders.length === 0 && <p className="meta">No folders in it.</p>}
-      {Array.isArray(folders) && folders.length > 0 && (
-        <div className="table-wrap">
-          <table className="thin">
-            <thead>
-              <tr>
-                <th>Folder</th>
-                <th>
-                  DICOM
-                  <Hint text="Whether a quick look found DICOM files in it; ? where it could not tell." />
-                </th>
-                <th className="acts">
-                  <span className="sr-only">Add</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {folders.map((f) => (
-                <tr key={f.path}>
-                  <td>
-                    <b>{f.name}</b>
-                  </td>
-                  <td>{dicomWord(f)}</td>
-                  <td className="acts">
-                    {f.added ? (
-                      <span className="tag ok">dataset</span>
-                    ) : (
-                      works && (
-                        <button type="button" className="button secondary small" aria-label={`Add as dataset: ${f.name}`} onClick={() => onAdd(f)}>
-                          Add as dataset
-                        </button>
-                      )
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       )}
     </section>
   );

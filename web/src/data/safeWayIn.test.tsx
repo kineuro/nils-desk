@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
 // One safe way in for data, as an app (Wave 7a, the tries of 2026-10-08): the
-// Data page lists each root's folders, compactly, with whether each holds
-// DICOM and "Add as dataset"; a folder becomes a dataset only when the person
-// adds it; each dataset card shows one state word and one button for its next
+// Data page lists datasets only; "Add a dataset" is a finder that searches a
+// root's folders fifty at a time, looks inside the one picked once, and asks
+// before adding a folder with no DICOM; each dataset card shows one state word and one button for its next
 // step, so how to start is always on screen; "Sort the files" shows the
 // engine's 409 as the question it is and moves only once confirmed; "Set the
 // IDs" never offers the personnummer; no engine word is on the page; and a
@@ -96,20 +96,13 @@ describe("a dataset's one next step", () => {
 
 describe("the Data page", () => {
   const ROOT = { id: 1, name: "incoming", role: "source", path: "/srv/in", guarantees: {}, probed: null, probed_at: null, retired_at: null, dataset: { kind: "root", state: "unknown", root: null }, layout: { root: true, datasets: 2 }, not_read: null, datasets: ["ward-a", "ward-b"] };
-  const FOLDERS = [
-    { name: "ward-a", path: "/srv/in/ward-a", added: true, dataset_id: 2, dataset: "ward-a", holds_dicom: "yes", has_derivatives: true },
-    { name: "ward-c", path: "/srv/in/ward-c", added: false, dataset_id: null, dataset: null, holds_dicom: "yes", has_derivatives: false },
-    { name: "notes", path: "/srv/in/notes", added: false, dataset_id: null, dataset: null, holds_dicom: "no", has_derivatives: false },
-    { name: "big", path: "/srv/in/big", added: false, dataset_id: null, dataset: null, holds_dicom: "unknown", has_derivatives: false },
-  ];
   const DOORS = ["GET /api/sources", "GET /api/places", "POST /api/places", "PUT /api/places/{id}", "POST /api/jobs", "POST /api/ingest/look", "GET /api/linkage/types"];
 
   async function page(datasets: Dataset[], route: Parameters<typeof engine>[0] = () => undefined) {
     let list = datasets;
     const e = engine((c, nth) => {
       if (c.url.startsWith("/api/sources")) return { status: 200, body: { count: list.length, window_days: 30, sources: list, rates: null } };
-      if (c.method === "GET" && c.url.startsWith("/api/places/1/folders")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: FOLDERS.length, folders: FOLDERS } };
-      if (c.method === "GET" && c.url.startsWith("/api/places")) return { status: 200, body: { places: [ROOT], enforced: true } };
+      if (c.method === "GET" && /^\/api\/places(\?|$)/.test(c.url)) return { status: 200, body: { places: [ROOT], enforced: true } };
       if (c.url === "/api/linkage/types") return { status: 200, body: TYPES };
       const r = route(c, nth);
       if (r && c.method === "POST" && c.url === "/api/places") list = [...list, unknown];
@@ -123,21 +116,66 @@ describe("the Data page", () => {
     return e;
   }
 
-  it("lists a root's folders compactly, and makes a folder a dataset only when the person adds it", async () => {
-    const e = await page([identified], (c) => (c.method === "POST" && c.url === "/api/places" ? { status: 201, body: { ...WARD_C, layout: UNKNOWN, not_read: "its structure is unknown" } } : undefined));
-    const rows = Object.fromEntries([...host.querySelectorAll(".root-folders tbody tr")].map((r) => [r.querySelector("b")?.textContent, [...r.querySelectorAll("td")].map((td) => td.textContent)]));
-    expect(rows["ward-a"]).toEqual(["ward-a", "yes", "dataset"]);
-    expect(rows["ward-c"]).toEqual(["ward-c", "yes", "Add as dataset"]);
-    expect(rows["notes"]).toEqual(["notes", "no", "Add as dataset"]);
-    expect(rows["big"]).toEqual(["big", "?", "Add as dataset"]);
-    // nothing is a dataset until the person says so
+  it("lists no folder, and adds a dataset through the finder: search, fifty at a time, one look, one Add", async () => {
+    const page1 = Array.from({ length: 50 }, (_, i) => ({ name: `ward-${i}`, path: `/srv/in/ward-${i}`, added: i === 0, dataset_id: i === 0 ? 2 : null, dataset: i === 0 ? "ward-0" : null, has_derivatives: false }));
+    const e = await page([identified], (c) => {
+      if (c.method === "GET" && c.url.startsWith("/api/places/1/folders?")) {
+        const after = new URL(c.url, "http://x").searchParams.get("after");
+        return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 51, folders: after ? [{ name: "ward-c", path: "/srv/in/ward-c", added: false, dataset_id: null, dataset: null, has_derivatives: false }] : page1, next: after ? null : "ward-49" } };
+      }
+      if (c.method === "GET" && c.url === "/api/places/1/folders/ward-c") return { status: 200, body: { name: "ward-c", path: "/srv/in/ward-c", added: false, dataset_id: null, holds_dicom: "no", has_derivatives: false, layout: UNKNOWN } };
+      if (c.method === "POST" && c.url === "/api/places") return { status: 201, body: { ...WARD_C, layout: UNKNOWN, not_read: "its structure is unknown" } };
+      return undefined;
+    });
+    // the page lists datasets only, never a root's folders
+    expect(host.querySelector(".root-folders, .folder-results")).toBeNull();
+    expect(e.calls.some((c) => c.url.includes("/folders"))).toBe(false);
+    act(() => button(host, "Add a dataset")!.click());
+    // one root: no root to pick; nothing listed until asked
+    expect(host.querySelector("#dataset-root")).toBeNull();
+    expect(host.querySelector(".folder-results")).toBeNull();
+    act(() => button(host, "Browse")!.click());
+    await settle();
+    expect(new URL(e.calls.find((c) => c.url.includes("/folders?"))!.url, "http://x").searchParams.get("limit")).toBe("50");
+    expect(host.querySelectorAll(".folder-results li")).toHaveLength(50);
+    act(() => button(host, /^More/)!.click());
+    await settle();
+    expect(host.querySelectorAll(".folder-results li")).toHaveLength(51);
+    act(() => button(host, "ward-c")!.click());
+    await settle();
+    // one look: what NILS sees, and one Add
+    expect(host.textContent).toContain("DICOM");
+    expect(host.textContent).toContain("would be");
+    expect(host.textContent).toContain("No DICOM found here.");
     expect(e.of("POST", "/api/places")).toHaveLength(0);
-    act(() => button(host, "Add as dataset: ward-c")!.click());
+    act(() => button(host, "Add")!.click());
+    // no DICOM: it asks before it adds
+    expect(host.textContent).toContain("No DICOM found here. Add anyway?");
+    expect(e.of("POST", "/api/places")).toHaveLength(0);
+    act(() => button(host, "Add anyway")!.click());
     await settle(8);
     expect(e.of("POST", "/api/places")[0].body).toEqual({ role: "source", root: "incoming", folder: "ward-c" });
-    const card = [...host.querySelectorAll(".scard")].find((c) => c.textContent?.includes("ward-c"))!;
-    expect(card.querySelector(".tag")?.textContent).toBe("Unknown");
-    expect(button(card, "Sort the files: ward-c")).not.toBeNull();
+    expect(host.textContent).toContain("ward-c is a dataset.");
+  });
+
+  it("searches by part of a name as it is typed", async () => {
+    const e = await page([], (c) =>
+      c.method === "GET" && c.url.startsWith("/api/places/1/folders?") ? { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 1, folders: [{ name: "ms-2019", path: "/srv/in/ms-2019", added: false, dataset_id: null, dataset: null, has_derivatives: true }], next: null } } : undefined,
+    );
+    act(() => button(host, "Add a dataset")!.click());
+    const find = host.querySelector<HTMLInputElement>("#dataset-find")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(find, "ms-");
+      find.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 350));
+    });
+    await settle();
+    const asked = e.calls.filter((c) => c.url.includes("/folders?"));
+    expect(new URL(asked[0].url, "http://x").searchParams.get("q")).toBe("ms-");
+    expect(button(host, "ms-2019")).not.toBeNull();
+    expect(button(host, /^More/)).toBeNull();
   });
 
   it("shows each card's state word and one button, starts the next step from it, and carries no engine word", async () => {
