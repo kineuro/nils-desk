@@ -38,10 +38,10 @@ const query = { grant: "query:work" as Grant, page: "the Query page" };
 /** Every verb the door queues, by its verb or its two-word verb. */
 export const VERBS: Record<string, VerbWords> = {
   pseudonymize: { doing: "Pseudonymising", noun: "pseudonymisation", link: "of", named: true, icon: "shield", ...data, again: "Pseudonymise again" },
-  "bring-in": { doing: "Bringing in", noun: "bring-in", link: "of", named: true, icon: "play", ...data, again: "Bring in again" },
-  digest: { doing: "Digesting", noun: "digest", link: "of", named: true, icon: "play", ...data, again: "Read again" },
-  ingest: { doing: "Digesting", noun: "digest", link: "of", named: true, icon: "play", ...data, again: "Read again" },
-  fingerprint: { doing: "Fingerprinting", noun: "fingerprint", link: "of", named: true, icon: "branch", ...pipelines, again: "Sort again" },
+  "bring-in": { doing: "Doing all steps of", noun: "all steps", link: "of", named: true, icon: "play", ...data, again: "Do all steps again" },
+  digest: { doing: "Reading", noun: "read", link: "of", named: true, icon: "play", ...data, again: "Read again" },
+  ingest: { doing: "Reading", noun: "read", link: "of", named: true, icon: "play", ...data, again: "Read again" },
+  fingerprint: { doing: "Preparing to sort", noun: "preparation", link: "of", named: true, icon: "branch", ...pipelines, again: "Sort again" },
   classify: { doing: "Sorting", noun: "sort", link: "with", named: true, icon: "branch", ...pipelines, again: "Sort again" },
   pick: { doing: "Picking from", noun: "pick", link: "of", named: true, icon: "branch", ...pipelines, again: "Pick again" },
   session: { doing: "Building the sessions of", noun: "session build", link: "of", named: true, icon: "branch", ...pipelines, again: "Build again" },
@@ -93,13 +93,25 @@ export function commandOf(job: Pick<JobRow, "args">): string[] {
 }
 
 /**
+ * Whether a job row is a queue worker's own (the engine's `worker` and
+ * `pipeline-worker` kinds, or a `serve --worker` line): how jobs run, never
+ * a job a person started. A restart of the engine ends it, so its ending is
+ * no failure of anyone's work.
+ */
+export function isWorker(job: Pick<JobRow, "args" | "kind">): boolean {
+  if (job.kind === "worker" || job.kind === "pipeline-worker") return true;
+  const c = commandOf(job);
+  return c[0] === "serve" && c.includes("--worker");
+}
+
+/**
  * The verb, or the two-word verb of `ask`, `linkage` and `clinical`; `ingest
  * probe` is the probe; an act on a dataset's originals is named by the act its
  * line carries, wherever on the line it stands, and by the bare verb where the
  * line carries none; the queue's own worker is the worker.
  */
 export function verbOf(job: Pick<JobRow, "args" | "kind">): string {
-  if (job.kind === "worker") return "worker";
+  if (isWorker(job)) return "worker";
   const c = commandOf(job);
   const first = c[0] ?? job.kind;
   if ((first === "ask" || first === "linkage" || first === "clinical") && c[1]) return `${first} ${c[1]}`;

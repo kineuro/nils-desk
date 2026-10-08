@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// A dataset that is not read yet, as every page shows it (Wave 7a, H2 round
-// 1): plainly not read, with the engine's reason, and the one button that
-// finishes it. The button is there for a person who may finish it; anyone
-// else reads the line alone.
+// A dataset that is not read yet, as a page other than Data shows it (Wave
+// 7a): the word, the engine's reason behind a "?", and the way to the Data
+// page, where its card has the button for its next step.
 
-import { FINISH, NOT_READ } from "./layout";
+import { href } from "../routes";
+import { Hint } from "../ui/Hint";
+import { NOT_READ } from "./layout";
 
-export function NotRead({ name, why, onFinish }: { name: string; why: string; onFinish: (() => void) | null }) {
+export function NotRead({ name, why }: { name: string; why: string }) {
   return (
     <div className="row not-read" onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
       <span className="tag caution">{NOT_READ}</span>
-      <span className="meta grow">{why}</span>
-      {onFinish && (
-        <button type="button" className="button secondary small" aria-label={`${FINISH}: ${name}`} onClick={onFinish}>
-          {FINISH}
-        </button>
-      )}
+      <Hint text={why} />
+      <a className="button secondary small" aria-label={`Open ${name} in Data`} href={href("data", "datasets", name)}>
+        Open in Data
+      </a>
     </div>
   );
 }

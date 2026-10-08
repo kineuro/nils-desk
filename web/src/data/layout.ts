@@ -133,17 +133,11 @@ export function dicomNamed(l: Layout): { names: string[]; more: number } {
   return { names, more: Math.max(0, total - names.length) };
 }
 
-/** The question itself: which entries go where, said before anything moves. */
-export function questionWords(asked: MoveAsked, into: "originals" | "anon"): { lead: string; detail: string; tree: string; count: number } {
+/** The question itself: which entries go where, said before anything moves; the folder is named by its path beside it. */
+export function questionWords(asked: MoveAsked, into: "originals" | "anon"): { lead: string; tree: string; count: number } {
   const tree = asked.layout.move_into?.trees[into] ?? (into === "originals" ? "derivatives/dcm-original" : "derivatives/dcm-anon");
   const count = asked.layout.move_into?.entries ?? asked.layout.loose_dicom?.length ?? 0;
-  const what = into === "originals" ? "identified data: the pseudonymiser reads it and writes the anonymised copy" : "already anonymised: the registry reads it";
-  return {
-    lead: `Move ${entries(count)} into ${tree}?`,
-    detail: `They become ${what}. Each goes by a rename on the same disk: nothing is copied and nothing is read. Nothing was written yet.`,
-    tree,
-    count,
-  };
+  return { lead: `Move ${entries(count)} into the ${into === "originals" ? "identified" : "anonymised"} folder?`, tree, count };
 }
 
 /** The declaration of what PatientID holds, as the places door takes it; null until a type is named. */

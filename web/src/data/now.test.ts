@@ -33,13 +33,13 @@ describe("the job cards", () => {
     const cards = jobCards(open, [], caps(), now);
     expect(cards.map((c) => [c.kind, c.what])).toEqual([
       ["running", "Pseudonymising incoming"],
-      ["chain", "Then digest, then sort"],
-      ["running", "Digesting archive"],
+      ["chain", "Then read, then sort"],
+      ["running", "Reading archive"],
       ["chain", "Then sort"],
     ]);
     const [pseud, then, digest] = cards;
     // since a time today, as the browser's own clock draws it
-    expect(pseud.line).toMatch(/^job 120 · astrid · since \d\d:\d\d · then digest, then sort$/u);
+    expect(pseud.line).toMatch(/^job 120 · astrid · since \d\d:\d\d · then read, then sort$/u);
     expect(pseud.progress?.words).toBe("1,766 of 2,208 files · 24 a second · under a minute left · 4 held until mapped");
     expect(Math.round((pseud.progress?.fraction ?? 0) * 100)).toBe(80);
     expect(pseud.cancel).toEqual({ label: "Cancel", refusal: null });
@@ -52,7 +52,7 @@ describe("the job cards", () => {
     const reviewer = caps(SETS.reviewer.grants);
     const [pseud, , digest] = jobCards(open, [], reviewer, now);
     expect(pseud.cancel?.refusal).toBe("Cancelling a pseudonymisation needs work on the Data page.");
-    expect(digest.cancel?.refusal).toBe("Cancelling a digest needs work on the Data page.");
+    expect(digest.cancel?.refusal).toBe("Cancelling a read needs work on the Data page.");
     const sort: ChainedJob = { ...open[1], id: 130, kind: "classify", args: { argv: ["classify", "--pack", "mri"], principal: "astrid" }, then: null, chain: null };
     expect(cancelRefusal(caps(["data:work"]), sort)).toBe("Cancelling a sort needs work on the Pipelines page.");
     expect(cancelRefusal(caps(["pipelines:work"]), sort)).toBeNull();
@@ -63,7 +63,7 @@ describe("the job cards", () => {
   it("draw a failed job with its error and one next move", () => {
     const cards = jobCards([], failed, caps(), now);
     expect(cards).toHaveLength(1);
-    expect(cards[0]).toMatchObject({ kind: "failed", what: "Digest of exchange-ct stopped", cancel: null });
+    expect(cards[0]).toMatchObject({ kind: "failed", what: "Read of exchange-ct stopped", cancel: null });
     expect(cards[0].line).toBe("job 117 · 15 Aug · 0 files");
     expect(cards[0].failed).toEqual({ error: "no pack reads CT", next: { label: "Read again", command: ["digest", "@exchange-ct"], name: "exchange-ct" } });
   });
@@ -72,7 +72,7 @@ describe("the job cards", () => {
     const alone: ChainedJob = { ...open[0], chain: { before: null, after: null }, then: null };
     const worker: ChainedJob = { ...alone, id: 1, kind: "worker", args: { argv: ["worker"] } };
     const cards = jobCards([alone, worker], [], caps(), now);
-    expect(cards.map((c) => [c.kind, c.what])).toEqual([["queued", "Digesting incoming"]]);
+    expect(cards.map((c) => [c.kind, c.what])).toEqual([["queued", "Reading incoming"]]);
     expect(cards[0].line).toMatch(/^queued · job 122 · astrid · since \d\d:\d\d$/u);
     expect(doingWords({ ...alone, args: { argv: ["backup", "--dir", "/x"] } })).toBe("Backing up");
     expect(progressOf({ ...alone, progress: null }, now)).toBeNull();

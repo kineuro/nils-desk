@@ -13,7 +13,8 @@ import { describe, expect, it } from "vitest";
 import answer from "../../test/fixtures/sources_record26.json";
 import type { Capabilities } from "../capabilities";
 import { GRANTS, SETS, type Grant } from "../grants";
-import { AddSource } from "./AddSource";
+import { caps7a } from "../../test/safeWayIn";
+import { RootForm } from "./AddRoot";
 import { BringInNew } from "./BringInNew";
 import type { FolderPage, IngestRoot } from "./browse";
 import { DataPage } from "./DataPage";
@@ -44,40 +45,33 @@ const caps = (grants: readonly Grant[] = GRANTS, openapi = "5", doors = ["GET /a
 
 const none = () => undefined;
 
-describe("Add a source", () => {
-  it("on an engine before Wave 7a, says the engine must read structure first, and adds nothing", () => {
-    const html = renderToStaticMarkup(<AddSource caps={caps()} install={null} places={[]} onClose={none} onDone={none} />);
-    expect(html).toContain("Add a source</h2>");
-    expect(html).toContain("This engine does not explore a source by its structure.");
-    expect(html).toMatch(/<button type="button" class="button" disabled="">Add and explore<\/button>/);
-    // no choice of how the files arrive is offered anywhere
-    expect(html).not.toContain("How the files arrive");
-    expect(html).not.toContain('name="arrives"');
+describe("Add a root folder", () => {
+  it("is a folder field and one button: nothing about what is under it", () => {
+    const html = renderToStaticMarkup(<RootForm caps={caps7a(["GET /api/places", "POST /api/places"])} install={null} places={[]} onAdded={none} />);
+    expect(html).toContain('id="root-path"');
+    expect(html).toContain("The folder your dataset folders are in.");
+    expect(html).toMatch(/<button type="button" class="button" disabled="">Add<\/button>/);
+    expect(html).not.toContain('type="radio"');
+    expect(html).not.toMatch(/source|digest|dcm-anon/i);
   });
 
-  it("browses the engine's own folders for anyone who may add a source, with no grant on the install", () => {
-    // work on Data and the folders door is all it takes: no install grant, and the supervisor is never asked
+  it("on an engine that does not read structure, says to update it and adds nothing", () => {
+    const html = renderToStaticMarkup(<RootForm caps={caps()} install={null} places={[]} onAdded={none} />);
+    expect(html).toContain("Update the engine on the Parts page first.");
+    expect(html).not.toContain(">Add</button>");
+  });
+
+  it("browses the engine's own folders for anyone who may add one, with no grant on the install", () => {
     const folders = ["GET /api/sources", "POST /api/jobs", "POST /api/ingest/folders", "POST /api/ingest/look", "GET /api/linkage/types", "POST /api/linkage/imports"];
-    const html = renderToStaticMarkup(<AddSource caps={caps(["data:work", "data:see", "places:work"], "5", folders)} install={null} places={[]} onClose={none} onDone={none} />);
-    expect(html).toContain('class="field pick-folder"');
+    const html = renderToStaticMarkup(<RootForm caps={caps7a(folders, ["data:work", "data:see", "places:work"])} install={null} places={[]} onAdded={none} />);
     expect(html).toContain('aria-label="the folders above this one"');
-    expect(html).toContain('aria-current="location">locations<');
-    // and a folder outside the engine's locations is still typed, from the same place
-    expect(html).toContain("A folder outside these");
-    expect(html).not.toContain('id="source-path"');
-    // without the folders door, or without work on Data, the path field stands where the picker would
-    const noDoor = renderToStaticMarkup(<AddSource caps={caps()} install={null} places={[]} onClose={none} onDone={none} />);
-    expect(noDoor).toContain('id="source-path"');
-    expect(noDoor).not.toContain("A folder outside these");
-    const noWork = renderToStaticMarkup(<AddSource caps={caps(["data:see", "places:work"], "5", folders)} install={null} places={[]} onClose={none} onDone={none} />);
-    expect(noWork).toContain('id="source-path"');
+    expect(html).toContain("Type a folder");
+    expect(html).not.toContain('id="root-path"');
   });
 
   it("says which page's work adding a folder needs when a person lacks it", () => {
-    const html = renderToStaticMarkup(<AddSource caps={caps(["data:work"])} install={null} places={[]} onClose={none} onDone={none} />);
+    const html = renderToStaticMarkup(<RootForm caps={caps7a([], ["data:work"])} install={null} places={[]} onAdded={none} />);
     expect(html).toContain("needs work on the Data page and on the Places page; this account has no work on the Places page.");
-    const noData = renderToStaticMarkup(<AddSource caps={caps(["places:work", "data:see"])} install={null} places={[]} onClose={none} onDone={none} />);
-    expect(noData).toContain("this account has no work on the Data page.");
   });
 });
 
@@ -124,41 +118,33 @@ describe("the folder a dataset is declared on", () => {
   });
 });
 
-describe("Bring in what is new", () => {
-  it("lays out pseudonymise, digest and sort as one chain for an identified dataset, with the note about grants and the estimate", () => {
+describe("Do all steps", () => {
+  it("names the steps in one line for an identified dataset, with the new files and the estimate", () => {
     const html = renderToStaticMarkup(<BringInNew caps={caps()} dataset={incoming} rates={{ pseudonymize: { files_per_s: 1400, files: 4430 } }} onClose={none} onDone={none} />);
-    expect(html).toContain("Bring in what is new</h2>");
-    expect(html).toContain("<dt>new in the originals</dt>");
-    expect(html).toContain("2,212 files");
-    expect(html).toContain("4 held until mapped");
-    expect(html).toContain("Pseudonymise</b>");
-    expect(html).toContain("Digest</b>");
-    expect(html).toContain("Sort</b>");
-    expect(html).toContain("classify with mri 0.1.1");
-    expect(html).toContain("All three, as one thread</b>");
-    expect(html).toContain("Pseudonymise only</b>");
-    expect(html).toContain("sorting needs work on the Pipelines page");
+    expect(html).toContain("Do all steps: incoming</h2>");
+    expect(html).toContain("Pseudonymise → Read → Sort");
+    expect(html).toContain("2,212 new files");
     expect(html).toContain("About 2,212 files at 1,400 a second on this machine, measured over 4,430 files");
-    expect(html).toContain("Bring in</button>");
+    expect(html).toContain("Start</button>");
+    // no engine words and no paragraphs
+    expect(html).not.toMatch(/digest|batch|thread|dcm-anon/i);
   });
 
-  it("starts at the digest for a coded dataset, and omits the estimate where the engine measured no rate", () => {
+  it("starts at reading for a dataset already anonymised, and omits the estimate where the engine measured no rate", () => {
     const html = renderToStaticMarkup(<BringInNew caps={caps()} dataset={exports} rates={null} onClose={none} onDone={none} />);
-    expect(html).not.toContain("Pseudonymise</b>");
-    expect(html).toContain("Both, as one thread</b>");
-    expect(html).toContain("Digest only</b>");
+    expect(html).toContain("Read → Sort");
+    expect(html).not.toContain("Pseudonymise");
     expect(html).not.toContain("on this machine");
   });
 
-  it("says the chain stops after the digest for a person without work on Pipelines", () => {
+  it("stops after reading for a person without work on Pipelines", () => {
     const html = renderToStaticMarkup(<BringInNew caps={caps(["data:work", "data:see"])} dataset={incoming} rates={null} onClose={none} onDone={none} />);
-    expect(html).toContain("the chain stops after the digest");
+    expect(html).toContain("Pseudonymise → Read</p>");
   });
 
-  it("queues the digest alone on an engine that queues nothing after a job, and says so in one line", () => {
+  it("reads alone on an engine that queues nothing after a job", () => {
     const html = renderToStaticMarkup(<BringInNew caps={caps(GRANTS, "4")} dataset={{ ...incoming, trees: undefined }} rates={null} onClose={none} onDone={none} />);
-    expect(html).toContain("This engine queues one job at a time");
-    expect(html).not.toContain("All three, as one chain");
+    expect(html).toContain(">Read</p>");
   });
 });
 
@@ -166,7 +152,7 @@ describe("the Datasets page", () => {
   const page = (dataset: string | null = null) => renderToStaticMarkup(<DataPage caps={caps(SETS.operator.grants)} install={null} onChanged={none} dataset={dataset} />);
   it("opens on the datasets, reading them, whether or not the address names one", () => {
     expect(page()).toContain("<h1>Datasets</h1>");
-    expect(page()).toContain("Add a source</button>");
+    expect(page()).toContain("Add a root folder</button>");
     expect(page("incoming")).toContain("reading the datasets");
   });
 });

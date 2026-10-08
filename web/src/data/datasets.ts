@@ -461,7 +461,7 @@ export function chainWords(then: string[][] | null | undefined): string {
   if (!then || then.length === 0) return "";
   const names: string[] = [];
   for (const cmd of then) {
-    const verb = cmd[0] === "pseudonymize" ? "pseudonymise" : cmd[0] === "fingerprint" || cmd[0] === "classify" ? "sort" : cmd[0];
+    const verb = cmd[0] === "pseudonymize" ? "pseudonymise" : cmd[0] === "fingerprint" || cmd[0] === "classify" ? "sort" : cmd[0] === "digest" ? "read" : cmd[0];
     if (verb && names[names.length - 1] !== verb) names.push(verb);
   }
   return names.map((v) => `then ${v}`).join(", ");

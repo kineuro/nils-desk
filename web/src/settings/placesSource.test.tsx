@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
-// The source has no way in of its own (Wave 7a, H2 round 1): on the Places
-// page the source role leads to Add a source with the folder typed so far,
-// and adds no place itself; a root lists its datasets, and a dataset not read
-// yet shows so with the engine's reason and the button that finishes it.
-// Setup's DICOM step opens the same dialog, and shows a dataset not read the
-// same way.
+// A root folder is the only way in (Wave 7a, the tries of 2026-10-08): on
+// the Places page the source role leads to Add a root folder with the folder
+// typed so far, and adds no place itself; a root lists its datasets, and a
+// dataset not read yet shows so, its reason behind a "?", with the way to its
+// card on Data. Setup's step is the folder field and one button.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -65,10 +64,9 @@ const ward: Place = {
 const registry: Place = { id: 1, name: "registry", role: "registry", path: "/srv/nils/registry", guarantees: {}, probed: null, probed_at: null, retired_at: null, dataset: null };
 
 describe("the Places page", () => {
-  it("lists a root's datasets, shows a dataset not read with the engine's reason, and finishes it in its own dialog", async () => {
+  it("lists a root's datasets, and shows a dataset not read with its reason behind a ? and the way to Data", async () => {
     const e = engine((c) => {
       if (c.url.startsWith("/api/places") && c.method === "GET") return { status: 200, body: { places: [root, ward, registry], enforced: true } };
-      if (c.url === "/api/linkage/types") return { status: 200, body: { types: [] } };
       return undefined;
     });
     await act(async () => {
@@ -81,20 +79,14 @@ describe("the Places page", () => {
     expect(row("incoming").textContent).toContain("holds ward-a, ward-b");
     expect(row("incoming").textContent).not.toContain(NOT_READ);
     expect(row("ward-b").querySelector(".tag.caution")?.textContent).toBe(NOT_READ);
-    expect(row("ward-b").textContent).toContain("does not say what PatientID holds");
-    expect(row("ward-b").textContent).not.toContain("the engine reads it");
-    act(() => button(row("ward-b"), "Finish it: ward-b")!.click());
-    await settle();
-    expect(host.querySelector("dialog h2")?.textContent).toBe("Finish ward-b");
-    expect(host.textContent).toContain("How its subjects are found");
+    expect(row("ward-b").querySelector(".hint")?.getAttribute("title")).toContain("does not say what PatientID holds");
+    expect(row("ward-b").querySelector("a")?.getAttribute("href")).toBe("#data/datasets/ward-b");
     expect(e.of("POST", "/api/places")).toHaveLength(0);
   });
 
-  it("leads the source role to Add a source with the folder typed, and adds no source itself", async () => {
+  it("leads the source role to Add a root folder with the folder typed, and adds nothing itself", async () => {
     const e = engine((c) => {
       if (c.url.startsWith("/api/places") && c.method === "GET") return { status: 200, body: { places: [registry], enforced: true } };
-      if (c.url === "/api/linkage/types") return { status: 200, body: { types: [] } };
-      if (c.url === "/api/ingest/look") return { status: 200, body: { layout: ANONYMISED, exists: true, directory: true, readable: true, here: null, folders: [] } };
       return undefined;
     });
     await act(async () => {
@@ -103,23 +95,18 @@ describe("the Places page", () => {
     act(() => root2.render(<PlacesPage caps={caps7a(DOORS)} install={null} onChanged={() => undefined} />));
     await settle();
     act(() => button(host, "Add a place")!.click());
-    expect(host.querySelector("dialog h2")?.textContent).toBe("Add a source");
-    expect(host.textContent).toContain("A source is added in Add a source");
-    // no way to add the source here: the button goes on to the one dialog
+    expect(host.querySelector("dialog h2")?.textContent).toBe("Add a root folder");
     expect(button(host, "Add the place")).toBeNull();
-    expect(button(host, /restart the engine/)).toBeNull();
     const path = host.querySelector<HTMLInputElement>("#place-path")!;
     act(() => {
       const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      set.call(path, "/srv/in/ward-b");
+      set.call(path, "/srv/in");
       path.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    act(() => button(host, "Go on in Add a source")!.click());
+    act(() => button(host, "Go on in Add a root folder")!.click());
     await settle();
-    expect(host.querySelector("dialog h2")?.textContent).toBe("Add a source");
-    expect(host.querySelector<HTMLInputElement>("#source-path")?.value).toBe("/srv/in/ward-b");
+    expect(host.querySelector<HTMLInputElement>("#root-path")?.value).toBe("/srv/in");
     expect(e.of("POST", "/api/places")).toHaveLength(0);
-    // another role is still a place of its own
     act(() => button(host, "Cancel")!.click());
     act(() => button(host, "Add a place")!.click());
     const role = host.querySelector<HTMLSelectElement>("#place-role")!;
@@ -131,32 +118,28 @@ describe("the Places page", () => {
   });
 });
 
-describe("Setup's DICOM step", () => {
-  it("opens Add a source, the one way in, and shows a dataset not read with its reason", async () => {
-    engine((c) => (c.url === "/api/linkage/types" ? { status: 200, body: { types: [] } } : undefined));
-    act(() => root2.render(<SourcesBody caps={caps7a(DOORS)} install={null} places={[]} met={false} onDone={() => undefined} />));
-    expect(button(host, /Bring in|Digest|Add as a source|Add only|Add a dataset/)).toBeNull();
-    act(() => button(host, "Add a source")!.click());
+describe("Setup's step", () => {
+  it("is the root folders, one line each, and the folder field with one button", async () => {
+    const e = engine((c) => (c.method === "POST" && c.url === "/api/places" ? { status: 201, body: root } : undefined));
+    const onDone = vi.fn();
+    act(() => root2.render(<SourcesBody caps={caps7a(DOORS)} install={null} places={[root, ward, registry]} met={true} onDone={onDone} />));
+    expect([...host.querySelectorAll(".source-list li b")].map((b) => b.textContent)).toEqual(["incoming"]);
+    expect(host.querySelectorAll("p").length).toBe(0);
+    const path = host.querySelector<HTMLInputElement>("#root-path")!;
+    act(() => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(path, "/srv/more");
+      path.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button(host, "Add")!.click());
     await settle();
-    expect(host.querySelector("dialog h2")?.textContent).toBe("Add a source");
-    expect(host.textContent).toContain("NILS explores the folder");
-    expect(host.querySelector('input[name="arrives"]')).toBeNull();
-
-    act(() => root2.render(<SourcesBody caps={caps7a(DOORS)} install={null} places={[root, ward, registry]} met={true} onDone={() => undefined} />));
-    await settle();
-    const item = (name: string) => [...host.querySelectorAll(".source-list li")].find((l) => l.querySelector("b")?.textContent === name)!;
-    expect(item("incoming").textContent).toContain("a source of 2 datasets");
-    expect(item("ward-b").textContent).toContain(NOT_READ);
-    expect(button(host, "Add another source")).not.toBeNull();
-    act(() => button(item("ward-b"), "Finish it: ward-b")!.click());
-    await settle();
-    expect(host.querySelector("dialog h2")?.textContent).toBe("Finish ward-b");
+    expect(e.of("POST", "/api/places")[0].body).toEqual({ name: "more", role: "source", path: "/srv/more", guarantees: { backup: null, snapshots: false, protected: false, fast: false } });
+    expect(onDone).toHaveBeenCalled();
   });
 
-  it("says which work it needs, and offers no dialog, to a person who may not add a source", () => {
+  it("says which work it needs to a person who may not add a folder", () => {
     act(() => root2.render(<SourcesBody caps={caps7a(DOORS, ["places:work", "data:see"])} install={null} places={[ward]} met={true} onDone={() => undefined} />));
     expect(host.textContent).toContain("this account has no work on the Data page.");
     expect(button(host, /Add/)).toBeNull();
-    expect(button(host, /Finish it/)).toBeNull();
   });
 });

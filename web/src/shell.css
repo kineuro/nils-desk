@@ -1508,3 +1508,9 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
 .found-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; padding: 0.6rem 0.8rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); }
 .found-row .path { overflow-wrap: anywhere; }
 .finish { display: grid; gap: 1rem; }
+.hint { display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; margin-left: 0.3rem; border: 1px solid var(--n-neutral-line); border-radius: 50%; font-size: 0.7rem; color: var(--n-text-dim); cursor: help; vertical-align: middle; }
+.hint:focus-visible { outline: 2px solid var(--n-brand-line); outline-offset: 1px; }
+.root-folders { display: grid; gap: 0.4rem; }
+.root-folders .thin td { vertical-align: middle; }
+.scard .next { margin-top: 0.4rem; }
+.root-form { display: grid; gap: 0.5rem; }

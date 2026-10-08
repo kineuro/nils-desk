@@ -9,11 +9,8 @@ import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import { AddSource } from "../data/AddSource";
-import { FinishDialog } from "../data/FinishDataset";
-import { isRoot, notReadOf } from "../data/layout";
-import { NotRead } from "../data/NotRead";
-import { newFolderRefusal } from "../data/picker";
+import { RootForm } from "../data/AddRoot";
+import { rootsOf } from "../data/steps";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { objects, type Place } from "../objects/client";
@@ -29,9 +26,9 @@ import { backupsKept, usersKept } from "../settings/kept";
 import { kvasir } from "../settings/kvasir";
 import type { Install } from "../settings/supervise";
 import { Command } from "../ui/Command";
+import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
-import { CONCEPTS } from "./concepts";
 import { placeName, type Pack } from "./look";
 import { backupFolderRefusal, minimumMet, progressWords, setupSteps, type SetupId, type SetupStep } from "./setup";
 import type { Purpose } from "./steps";
@@ -135,11 +132,6 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
             </button>
           )}
         </div>
-        <p className="lede">
-          {done
-            ? "Every step the desk needs is done. What is left is worth doing when there is a moment."
-            : "A few steps make this install ready for real work. Each checks itself from what the parts report, and turns green once it holds."}
-        </p>
         {needed.length > 1 && !reading && (
           <div className="progress-row">
             <span className="progress" role="img" aria-label={progressWords(all)}>
@@ -163,7 +155,6 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
             ))}
           </ol>
         )}
-        <Concepts />
       </div>
     </div>
   );
@@ -232,59 +223,34 @@ function InstalledBody({ caps, install }: { caps: Capabilities; install: Install
   );
 }
 
-/**
- * Bring in DICOM: the sources there are, and Add a source, the one way in
- * (Wave 7a, H2 round 1), opened here since the Data section waits for setup.
- * NILS explores the source into its datasets and reads each by its
- * structure; a dataset not read yet shows so, with the engine's reason and
- * the button that finishes it.
- */
+/** Add a root folder: the folders where the datasets live, one line each, and the form that adds another. */
 export function SourcesBody(props: { caps: Capabilities; install: Install | null; places: Place[]; met: boolean; onDone: () => void }) {
-  const { caps, install, places, met, onDone } = props;
-  const [open, setOpen] = useState<{ kind: "add" } | { kind: "finish"; place: Place } | null>(null);
+  const { caps, install, places, onDone } = props;
   const [said, setSaid] = useState<string | null>(null);
-  const sources = places.filter((p) => p.role === "source" && p.retired_at === null);
-  // a source is work on Data and on Places (record 25)
-  const refusal = newFolderRefusal(caps);
-  const done = (words: string) => {
-    setOpen(null);
-    setSaid(words);
-    onDone();
-  };
+  const roots = rootsOf(places);
   return (
     <>
-      {sources.length > 0 && (
+      {roots.length > 0 && (
         <ul className="source-list">
-          {sources.map((p) => {
-            const why = notReadOf(p);
-            return (
-              <li key={p.id}>
-                <Icon name="folder" />
-                <b>{p.name}</b>
-                <span className="path">{p.path}</span>
-                {isRoot(p) && <span className="meta">a source of {p.datasets?.length ?? 0} {(p.datasets?.length ?? 0) === 1 ? "dataset" : "datasets"}</span>}
-                {why !== null && <NotRead name={p.name} why={why} onFinish={refusal === null ? () => setOpen({ kind: "finish", place: p }) : null} />}
-              </li>
-            );
-          })}
+          {roots.map((p) => (
+            <li key={p.id}>
+              <Icon name="folder" />
+              <b>{p.name}</b>
+              <span className="path">{p.path}</span>
+            </li>
+          ))}
         </ul>
       )}
       {said && <p className="ok-words">{said}</p>}
-      {refusal === null ? (
-        <div className="row actions">
-          <button type="button" className={met ? "button secondary small" : "button"} onClick={() => setOpen({ kind: "add" })}>
-            <Icon name="plus" />
-            {met ? "Add another source" : "Add a source"}
-          </button>
-          <a className="button quiet small" href={href("settings", "places")}>
-            The Places page
-          </a>
-        </div>
-      ) : (
-        <p className="meta">{refusal}</p>
-      )}
-      {open?.kind === "add" && <AddSource caps={caps} install={install} places={places} onClose={() => setOpen(null)} onDone={done} />}
-      {open?.kind === "finish" && <FinishDialog caps={caps} place={open.place} layout={open.place.layout ?? null} onClose={() => setOpen(null)} onDone={done} />}
+      <RootForm
+        caps={caps}
+        install={install}
+        places={places}
+        onAdded={(words) => {
+          setSaid(words);
+          onDone();
+        }}
+      />
     </>
   );
 }
@@ -358,13 +324,9 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
         )}
       </dl>
       {archives !== null && dir === null && (
-        <div className="note caution">
-          <Icon name="alert" />
-          <div className="note-body">
-            <p className="note-lead">The engine has no backup folder, so a backup from the desk is refused.</p>
-            <p className="note-detail">Running setup again gives the engine one.</p>
-            <Command text="nils setup" />
-          </div>
+        <div className="row">
+          <span className="warn">No backup folder yet.</span>
+          <Command text="nils setup" />
         </div>
       )}
       <div className="row actions">
@@ -387,11 +349,6 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
           The Database page
         </a>
       </div>
-      {!backup && dir && (
-        <p className="meta">
-          The engine writes its archives to <span className="path">{dir}</span>. Naming it the registry's backup place records that; storage other than the registry's is better, and setup moves it.
-        </p>
-      )}
       {refusal !== null && !backup && dir && <p className="meta">{refusal}</p>}
       <Acted acting={acting.acting} />
     </>
@@ -410,15 +367,10 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
 
   return (
     <>
-      <div className="mode-lines">
-        {MODES.map((m) => (
-          <div key={m.id} className={m.id === mode ? "mode-line on" : "mode-line"}>
-            <span className={m.id === mode ? "radio on" : "radio"} aria-hidden="true" />
-            <b>{m.title}</b>
-            <span className="meta">{m.words}</span>
-          </div>
-        ))}
-      </div>
+      <p>
+        <b>{MODES.find((m) => m.id === mode)?.title ?? mode}</b>
+        <Hint text={MODES.find((m) => m.id === mode)?.words ?? ""} />
+      </p>
       {mode === "local" && changes && (
         <div className="row actions">
           <button type="button" className="button secondary small" disabled={!users.value} onClick={() => setAdding(true)}>
@@ -431,8 +383,10 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
           </a>
         </div>
       )}
-      <p className="meta">How people sign in is chosen when NILS is set up, and changed by running setup again, which restarts the desk and the engine:</p>
-      <Command text="nils setup" />
+      <div className="row">
+        <span className="meta">Changed by:</span>
+        <Command text="nils setup" />
+      </div>
       {adding && users.value && (
         <AddPerson
           users={users.value.users}
@@ -453,58 +407,15 @@ function ModelBody({ caps }: { caps: Capabilities }) {
   const reaches = caps.kvasir !== null;
   return (
     <>
-      <p className="meta">
-        {reaches
-          ? "A model is added on the Kvasir page, where Kvasir tests it before holding it. Running setup again changes it too."
-          : "The assistant's model is chosen when NILS is set up, and running setup again changes it."}
-      </p>
+
       <div className="row actions">
         {reaches && (
           <a className="button small" href={href("settings", "gateway")}>
-            The Kvasir page
+            Language models
           </a>
         )}
         <Command text="nils setup" />
       </div>
     </>
-  );
-}
-
-/** What each word of NILS means, and how many of it an install has. */
-function Concepts() {
-  return (
-    <aside className="panel concepts" aria-label="what is what in NILS">
-      <h2>What is what</h2>
-      <ol className="flow">
-        <li>
-          <Icon name="folder" />
-          <b>Sources</b>
-          <span>your DICOM, read only</span>
-        </li>
-        <li>
-          <Icon name="data" />
-          <b>Registry</b>
-          <span>what NILS learned</span>
-        </li>
-        <li>
-          <Icon name="release" />
-          <b>Exports</b>
-          <span>answers, releases</span>
-        </li>
-      </ol>
-      <p className="meta">A digest reads a source into the registry. Questions, reviews and releases read the registry, and a backup copies it to its backup place.</p>
-      <dl className="concept-list">
-        {CONCEPTS.map((c) => (
-          <div key={c.term} className="concept">
-            <Icon name={c.icon} />
-            <dt>
-              {c.term}
-              <span className="count">{c.count}</span>
-            </dt>
-            <dd>{c.words}</dd>
-          </div>
-        ))}
-      </dl>
-    </aside>
   );
 }

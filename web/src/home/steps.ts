@@ -7,7 +7,7 @@ import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
-import { isRoot, notReadOf } from "../data/layout";
+import { isRoot } from "../data/layout";
 import { keptRunning, where } from "../settings/install";
 import type { Install } from "../settings/supervise";
 import { day } from "./tiles";
@@ -97,43 +97,11 @@ function model(f: Facts): Step | null {
 
 function dicom(f: Facts): Step | null {
   if (f.places === null) return null;
-  const title = "Bring in DICOM";
-  const sources = f.places.filter((p) => p.role === "source" && p.retired_at === null);
-  if (sources.length === 0) {
-    return { id: "dicom", title, state: "now", words: "Add the folder that holds your datasets as a source. NILS reads each by what its folder holds, and nothing before it is complete.", tags: [], halfway: false };
-  }
-  const names = sources.map((s) => s.name).join(", ");
-  // Wave 7a: a dataset not finished is never read, so a source whose every dataset waits brings nothing in yet
-  const datasets = sources.filter((p) => !isRoot(p));
-  const waiting = datasets.filter((p) => notReadOf(p) !== null);
-  if (waiting.length === datasets.length) {
-    return {
-      id: "dicom",
-      title,
-      state: "now",
-      words: datasets.length === 0 ? `${names} ${sources.length === 1 ? "holds" : "hold"} no dataset yet.` : `${waiting.map((p) => p.name).join(", ")} ${waiting.length === 1 ? "is" : "are"} not read until finished.`,
-      tags: [],
-      halfway: true,
-    };
-  }
-  if (!f.batches) {
-    return {
-      id: "dicom",
-      title,
-      state: "now",
-      words: `${names} ${sources.length === 1 ? "is a source" : "are sources"}, and nothing is digested yet.`,
-      tags: [],
-      halfway: true,
-    };
-  }
-  return {
-    id: "dicom",
-    title,
-    state: "done",
-    words: `${sources.length === 1 ? "One source" : `${sources.length} sources`}, ${f.batches === 1 ? "one batch" : `${f.batches} batches`} digested.`,
-    tags: [],
-    halfway: false,
-  };
+  const title = "Add a root folder";
+  // Wave 7a: a root is where the dataset folders live; its folders become datasets on the Data page
+  const roots = f.places.filter((p) => p.role === "source" && p.retired_at === null && (isRoot(p) || !p.dataset?.root));
+  if (roots.length === 0) return { id: "dicom", title, state: "now", words: "Where your dataset folders live.", tags: [], halfway: false };
+  return { id: "dicom", title, state: "done", words: roots.map((r) => r.name).join(", "), tags: [], halfway: false };
 }
 
 const WEEK = 7 * 24 * 3600 * 1000;

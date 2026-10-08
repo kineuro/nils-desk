@@ -11,7 +11,7 @@ import { needsWork } from "../access";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { IconName } from "../ui/Icon";
-import { cancelNeeds, commandOf, doingWords, endedWords, nextMove as nextOf, wordsOf } from "../ops/verbs";
+import { cancelNeeds, commandOf, doingWords, endedWords, isWorker, nextMove as nextOf, wordsOf } from "../ops/verbs";
 import { chainWords, type ChainedJob } from "./datasets";
 import { whenWords } from "./sources";
 
@@ -22,7 +22,7 @@ const n = (v: number) => v.toLocaleString("en-US");
 
 /** The jobs a person started, not the queue's own worker. */
 export function ofPeople(jobs: JobRow[]): JobRow[] {
-  return jobs.filter((j) => j.kind !== "worker");
+  return jobs.filter((j) => !isWorker(j));
 }
 
 const OPEN = new Set(["queued", "running", "cancelling"]);

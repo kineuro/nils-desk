@@ -338,13 +338,7 @@ export function PseudonymsPage({ caps, name, onChanged, onOpenTags }: { caps: Ca
               {dataset.state ? stateWords(stateOf(dataset), notReadOf(dataset) === null, dataset.kind === "legacy") : `Arrives ${arrives === "identified" ? "identified" : arrives === "deidentified" ? "de-identified" : "coded"}`} · {heldFiles > 0 ? `${n(heldFiles)} files held` : "nothing held"}
             </p>
             {notReadOf(dataset) !== null && (
-              <NotRead
-                name={dataset.name}
-                why={notReadOf(dataset)!}
-                onFinish={() => {
-                  location.hash = href("data", "datasets", dataset.name);
-                }}
-              />
+              <NotRead name={dataset.name} why={notReadOf(dataset)!} />
             )}
           </div>
           {maps && (

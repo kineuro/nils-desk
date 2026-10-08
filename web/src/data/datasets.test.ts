@@ -196,7 +196,7 @@ describe("bringing in what is new", () => {
     expect(bringInSteps(incoming, "mri", "0.1.1")[1].words).toContain("join the cohort incoming");
   });
   it("names the queued rest in a few words", () => {
-    expect(chainWords([["digest", "@incoming"], ["fingerprint"], ["classify", "--pack", "mri"]])).toBe("then digest, then sort");
+    expect(chainWords([["digest", "@incoming"], ["fingerprint"], ["classify", "--pack", "mri"]])).toBe("then read, then sort");
     expect(chainWords([["fingerprint"]])).toBe("then sort");
     expect(chainWords([])).toBe("");
   });

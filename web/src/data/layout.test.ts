@@ -41,8 +41,8 @@ describe("a dataset in words", () => {
     before.engine!["places"] = { ...ASKS_FIRST, dataset: { ...ASKS_FIRST.dataset, states: undefined } };
     expect(readsStructure(before)).toBe(false);
     const q = questionWords({ why: ASKED.error, layout: UNKNOWN }, "anon");
-    expect(q.lead).toBe("Move 2 entries into derivatives/dcm-anon?");
-    expect(q.detail).toContain("already anonymised: the registry reads it");
+    expect(q.lead).toBe("Move 2 entries into the anonymised folder?");
+    expect(q.tree).toBe("derivatives/dcm-anon");
     expect(patientIdOf("subject-code", "x")).toBe("subject-code");
     expect(patientIdOf("id-type", " study-id ")).toBe("id-type:study-id");
     expect(patientIdOf("id-type", "")).toBeNull();
