@@ -75,7 +75,14 @@ export async function pictureAnswer(r: Response, stack: number): Promise<void> {
   const job = typeof body.job === "number" ? body.job : null;
   if (r.status === 422) throw new NotBuilt(stack, typeof body.reason === "string" ? body.reason : "build_failed", job);
   const header = Number(r.headers.get("Retry-After"));
-  const retryAfter = typeof body.retry_after === "number" && body.retry_after > 0 ? body.retry_after : Number.isFinite(header) && header > 0 ? header : 2;
+  const retryAfter =
+    typeof body.retry_after_ms === "number" && body.retry_after_ms > 0
+      ? body.retry_after_ms / 1000
+      : typeof body.retry_after === "number" && body.retry_after > 0
+        ? body.retry_after
+        : Number.isFinite(header) && header > 0
+          ? header
+          : 2;
   throw new Preparing({ stack, job, state: typeof body.state === "string" ? body.state : "queued", fraction: fractionOf(body.progress), retryAfter });
 }
 
@@ -121,13 +128,24 @@ export function usePicture(stack: number): PictureState | null {
 const pause = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
 
 /**
+ * The pause before the n-th ask again (from 0) of a picture being built: a
+ * quarter of a second at first, half again longer each time, never longer
+ * than the engine asked. A small stack's build is done in well under a
+ * second, so its picture is not held two seconds behind it.
+ */
+export function retryPause(attempt: number, retryAfterSeconds: number): number {
+  const quick = 250 * 1.5 ** attempt;
+  return Math.round(Math.max(100, Math.min(retryAfterSeconds * 1000, quick)));
+}
+
+/**
  * Ask until the picture is there: each `Preparing` is kept as the stack's
  * state and asked again after its pause; a `NotBuilt` is kept and thrown.
  * A build that runs past `limitMs` is given up on as one that failed.
  */
 export async function untilBuilt<T>(stack: number, once: () => Promise<T>, wait: (ms: number) => Promise<void> = pause, limitMs = 2 * 60 * 60_000): Promise<T> {
   const until = Date.now() + limitMs;
-  for (;;) {
+  for (let attempt = 0; ; attempt++) {
     try {
       const got = await once();
       put(stack, null);
@@ -146,7 +164,7 @@ export async function untilBuilt<T>(stack: number, once: () => Promise<T>, wait:
         put(stack, { kind: "failed", reason: "build_failed" });
         throw new NotBuilt(stack, "build_failed", e.building.job);
       }
-      await wait(e.building.retryAfter * 1000);
+      await wait(retryPause(attempt, e.building.retryAfter));
     }
   }
 }

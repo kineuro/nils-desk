@@ -398,14 +398,14 @@ function marksOfStages(s: BatchStages): StripMark[] {
   ];
 }
 
-/** What a batch's row offers at its end: the held files to map, what to sort, a read again, or that it is sorted. */
-export function batchTail(b: Batch): { kind: "held" | "sort" | "again" | "sorted" | "reading"; words: string; count: number } {
-  if (b.state === "running") return { kind: "reading", words: "reading", count: 0 };
+/** What a batch's row offers at its end: the held files to map, the scans that need a look (as the card says it), a read again, or that it is sorted. */
+export function batchTail(b: Batch): { kind: "held" | "look" | "again" | "sorted" | "reading"; words: string; count: number } {
+  if (b.state === "running") return { kind: "reading", words: `reading · ${n(b.files.seen)} files so far`, count: 0 };
   const held = b.pseudonymised?.held ?? 0;
   if (held > 0) return { kind: "held", words: `${n(held)} held: map them`, count: held };
   if (b.state === "failed" || b.state === "cancelled") return { kind: "again", words: "Read again", count: 0 };
   const toSort = b.to_sort ?? 0;
-  if (toSort > 0) return { kind: "sort", words: `Sort ${n(toSort)}`, count: toSort };
+  if (toSort > 0) return { kind: "look", words: `${n(toSort)} need a look`, count: toSort };
   return { kind: "sorted", words: "sorted", count: 0 };
 }
 
@@ -463,6 +463,8 @@ export function chainWords(then: string[][] | null | undefined): string {
   if (!then || then.length === 0) return "";
   const names: string[] = [];
   for (const cmd of then) {
+    // the engine's own preparation of pictures is no step a person waits for
+    if (cmd[0] === "pyramid" || cmd[0] === "preview") continue;
     const verb = cmd[0] === "pseudonymize" ? "pseudonymise" : cmd[0] === "fingerprint" || cmd[0] === "classify" ? "sort" : cmd[0] === "digest" ? "read" : cmd[0];
     if (verb && names[names.length - 1] !== verb) names.push(verb);
   }

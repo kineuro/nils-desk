@@ -11,7 +11,7 @@ import { needsWork } from "../access";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { IconName } from "../ui/Icon";
-import { cancelNeeds, commandOf, doingWords, endedWords, isWorker, nextMove as nextOf, wordsOf } from "../ops/verbs";
+import { cancelNeeds, commandOf, doingWords, endedWords, isBackground, isWorker, nextMove as nextOf, wordsOf } from "../ops/verbs";
 import { chainWords, type ChainedJob } from "./datasets";
 import { whenWords } from "./sources";
 
@@ -20,9 +20,35 @@ export { cancelNeeds, doingWords, targetOf } from "../ops/verbs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-/** The jobs a person started, not the queue's own worker. */
+/** The jobs a person started: not the queue's own worker, nor the engine's preparation of pictures. */
 export function ofPeople(jobs: JobRow[]): JobRow[] {
-  return jobs.filter((j) => !isWorker(j));
+  return jobs.filter((j) => !isWorker(j) && !isBackground(j));
+}
+
+/** About how long a job has left, from its progress: "about 11 min", "under a minute"; null where it cannot be told. */
+export function leftWords(j: JobRow, now: number): string | null {
+  const p = j.progress;
+  if (!p || typeof p !== "object" || j.state === "queued") return null;
+  const done = num(p["written"]) ?? num(p["done"]) ?? num(p["seen"]) ?? num(p["files"]);
+  const of = num(p["of"]) ?? num(p["total"]) ?? num(p["expected"]);
+  const elapsed = num(p["elapsed_s"]) ?? age(j.started_at, now);
+  if (done === null || of === null || done <= 0 || elapsed <= 0 || of <= done) return null;
+  const left = (of - done) / (done / elapsed);
+  return left < 60 ? "under a minute" : left < 3600 ? `about ${Math.round(left / 60)} min` : `about ${(left / 3600).toFixed(1)} hours`;
+}
+
+/**
+ * The engine's own preparation of pictures as one quiet line, or null when
+ * none runs: what it prepares and about how long it has left. No job number,
+ * no person, no cancel: those stay on Pipelines.
+ */
+export function backgroundWords(jobs: JobRow[], now: number): string | null {
+  const open = jobs.filter((j) => isOpen(j) && isBackground(j)).sort((a, b) => (a.state === "running" ? 0 : 1) - (b.state === "running" ? 0 : 1) || a.id - b.id);
+  if (open.length === 0) return null;
+  const doing = [...new Set(open.map((j) => wordsOf(j).doing))];
+  const what = doing.length === 1 ? doing[0] : "Preparing pictures and 3D views";
+  const left = leftWords(open[0], now);
+  return left ? `${what} · ${left}` : what;
 }
 
 const OPEN = new Set(["queued", "running", "cancelling"]);
@@ -58,10 +84,8 @@ export function progressOf(j: JobRow, now: number): { fraction: number | null; w
   const parts: string[] = [];
   if (done !== null) parts.push(of !== null && of > 0 ? `${n(done)} of ${n(of)} files` : `${n(done)} files`);
   if (rate !== null && j.state !== "queued") parts.push(`${n(Math.round(rate))} a second`);
-  if (of !== null && of > 0 && done !== null && rate !== null && rate > 0 && of > done) {
-    const left = (of - done) / rate;
-    parts.push(left < 60 ? "under a minute left" : left < 3600 ? `about ${Math.round(left / 60)} min left` : `about ${(left / 3600).toFixed(1)} hours left`);
-  }
+  const left = leftWords(j, now);
+  if (left) parts.push(`${left} left`);
   if (held !== null && held > 0) parts.push(`${n(held)} held until mapped`);
   if (refused !== null && refused > 0) parts.push(`${n(refused)} refused`);
   if (parts.length === 0) return null;
@@ -109,16 +133,15 @@ export function jobCards(open: ChainedJob[], failed: ChainedJob[], caps: Capabil
     if (j.state === "queued" && before !== null && byId.has(before)) chained.set(before, [...(chained.get(before) ?? []), j]);
   }
   const out: JobCard[] = [];
-  const who = (j: JobRow) => (typeof j.args?.principal === "string" ? j.args.principal : null);
   for (const j of [...people].sort((a, b) => a.id - b.id)) {
     if (j.state === "queued" && j.chain?.before !== null && j.chain?.before !== undefined && byId.has(j.chain.before)) continue;
     const icon: IconName = wordsOf(j).icon;
     // what follows: the job's own list, else the queued rows that wait for it and what waits for them
     const queuedAfter = chained.get(j.id) ?? [];
     const then = j.then && j.then.length > 0 ? j.then : [...queuedAfter.map((q) => (commandOf(q).length > 0 ? commandOf(q) : [q.kind])), ...queuedAfter.flatMap((q) => q.then ?? [])];
-    const line = [`job ${j.id}`, who(j), sinceWords(j.started_at, at), chainWords(then)].filter(Boolean).join(" · ");
+    const line = [sinceWords(j.started_at, at), chainWords(then)].filter(Boolean).join(" · ");
     if (j.state === "queued") {
-      out.push({ key: `job ${j.id}`, id: j.id, kind: "queued", icon: "clock", tone: "neutral", what: doingWords(j), line: `queued · ${line}`, progress: null, cancel: { label: "Drop", refusal: cancelRefusal(caps, j) }, failed: null });
+      out.push({ key: `job ${j.id}`, id: j.id, kind: "queued", icon: "clock", tone: "neutral", what: doingWords(j), line: line ? `queued · ${line}` : "queued", progress: null, cancel: { label: "Drop", refusal: cancelRefusal(caps, j) }, failed: null });
       continue;
     }
     out.push({
@@ -133,8 +156,8 @@ export function jobCards(open: ChainedJob[], failed: ChainedJob[], caps: Capabil
       cancel: { label: "Cancel", refusal: cancelRefusal(caps, j) },
       failed: null,
     });
-    if (then.length > 0) {
-      const words = chainWords(then);
+    const words = chainWords(then);
+    if (words) {
       const what = words.charAt(0).toUpperCase() + words.slice(1);
       const queued = chained.get(j.id) ?? [];
       const drop = queued[0] ?? null;
@@ -145,7 +168,7 @@ export function jobCards(open: ChainedJob[], failed: ChainedJob[], caps: Capabil
         icon: "clock",
         tone: "neutral",
         what,
-        line: `waits for job ${j.id}`,
+        line: "waits for the one above",
         progress: null,
         cancel: drop ? { label: "Drop", refusal: cancelRefusal(caps, drop) } : null,
         failed: null,
@@ -154,7 +177,7 @@ export function jobCards(open: ChainedJob[], failed: ChainedJob[], caps: Capabil
   }
   for (const j of ofPeople(failed).filter((j) => j.state === "failed").sort((a, b) => b.id - a.id)) {
     const p = progressOf(j, now);
-    const line = [`job ${j.id}`, whenWords(j.finished_at ?? j.started_at, at), p?.words ?? null].filter(Boolean).join(" · ");
+    const line = [whenWords(j.finished_at ?? j.started_at, at), p?.words ?? null].filter(Boolean).join(" · ");
     out.push({
       key: `failed ${j.id}`,
       id: j.id,

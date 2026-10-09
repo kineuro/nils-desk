@@ -2,8 +2,9 @@
 // The Datasets page, as an app (Wave 7a, the tries of 2026-10-08): the
 // datasets only, a card each with its name, one state word, its counts and
 // the one button for its next step, the rest in its menu. No folder is listed:
-// "Add a dataset" opens a finder that searches a root's folders. How to start is always on screen. Now lists what runs;
-// the chosen dataset's scans and reads follow. No paragraphs: an explanation sits behind
+// "Add a dataset" opens a finder that searches a root's folders. How to start is always on screen. A sorted
+// dataset's card opens it on the whole page (DatasetView, #data/datasets/<name>); Now lists what runs; the
+// chosen dataset's reads follow. No paragraphs: an explanation sits behind
 // a "?". The section's other pages, the cohorts, a read and a dataset's
 // pseudonymisation, are mounted by the shell beside this one.
 
@@ -14,7 +15,6 @@ import { may } from "../grants";
 import { placesKept } from "../objects/kept";
 import { href, narrow } from "../routes";
 import { MoreMenu } from "../settings/cards";
-import { messageOf } from "../settings/common";
 import type { Install } from "../settings/supervise";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
@@ -25,12 +25,11 @@ import { BringInNew } from "./BringInNew";
 import { batchTail, jobs as jobsDoor, packFor, sources, STAGES, stripMarks, type Batch, type Dataset, type Layout, type Rates, type StageName } from "./datasets";
 import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
-import { mayPick, pickRun, pickWords } from "./pickRun";
 import { NowSection, useLiveJobs } from "./Now";
-import { Scans } from "./Scans";
 import { mayListScans } from "./scans";
-import { fileWords, whenWords } from "./sources";
-import { nextStep, stepCommand, type StepId } from "./steps";
+import { whenWords } from "./sources";
+import { plainError } from "./plain";
+import { certainty, certaintyWords, kindWords, nextStep, stepCommand, type StepId } from "./steps";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[]; rates: Rates | null };
 
@@ -51,7 +50,10 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   const [adding, setAdding] = useState(false);
   /** The dialog a dataset's step opens. */
   const [opened, setOpened] = useState<{ kind: "sort-files" | "set-ids"; dataset: Dataset } | null>(null);
-  const [said, setSaid] = useState<string | null>(null);
+  /** What the page last said: a done act's words, or a refusal as one plain line with the engine's words behind a "?". */
+  const [said, setSaid] = useState<{ words: string; detail?: string } | null>(null);
+  const say = (words: string) => setSaid({ words });
+  const failed = (e: unknown) => setSaid(plainError(e));
   const places = useKept(placesKept);
   const jobs = useLiveJobs(caps);
   const works = may(caps, "data:work");
@@ -96,7 +98,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   const rates = load.kind === "ready" ? load.rates : null;
   const current = list.find((s) => s.name === chosen) ?? list[0] ?? null;
   const changed = (words: string) => {
-    setSaid(words);
+    say(words);
     void placesKept.refresh().catch(() => undefined);
     onChanged();
     jobs.refresh();
@@ -111,31 +113,19 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
     setSaid(null);
     jobsDoor
       .enqueue(c.command, c.name, c.then)
-      .then((j) => changed(`${d.name}: started (job ${j.job}).`))
-      .catch((e: unknown) => setSaid(messageOf(e)));
-  };
-
-  /** The pick run for one dataset's subjects, queued; its job is said. */
-  const pickScans = (d: Dataset) => {
-    setSaid(null);
-    pickRun.start({ dataset: d.name }).then(
-      (q) => {
-        setSaid(`${d.name}: ${pickWords(q)}`);
-        jobs.refresh();
-      },
-      (e: unknown) => setSaid(messageOf(e)),
-    );
+      .then(() => changed(`${d.name}: started.`))
+      .catch(failed);
   };
 
   const readAgain = (b: Batch, d: Dataset) => {
     setSaid(null);
     jobsDoor
       .enqueue(["digest", "--name", b.name, `@${d.name}`], b.name)
-      .then((j) => {
-        setSaid(`${d.name} is read again (job ${j.job}).`);
+      .then(() => {
+        say(`${d.name} is read again.`);
         jobs.refresh();
       })
-      .catch((e: Error) => setSaid(e.message));
+      .catch(failed);
   };
 
   const finishing = (d: Dataset): Finishing => ({
@@ -161,9 +151,19 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
           </button>
         )}
       </div>
-      {said && <p className="meta">{said}</p>}
+      {said && (
+        <p className={said.detail === undefined ? "meta" : "warn"} role={said.detail === undefined ? undefined : "alert"}>
+          {said.words}
+          {said.detail !== undefined && <Hint text={said.detail} />}
+        </p>
+      )}
       {load.kind === "loading" && <Wait phase="reading the datasets" since={load.since} size="panel" />}
-      {load.kind === "failed" && <p className="warn">The datasets could not be read: {load.why}</p>}
+      {load.kind === "failed" && (
+        <p className="warn">
+          The datasets could not be read.
+          <Hint text={load.why} />
+        </p>
+      )}
       {load.kind === "ready" && list.length === 0 && <p className="meta">No dataset yet.</p>}
       {list.length > 0 && (
         <div className="sgrid">
@@ -174,16 +174,18 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
               why={whyOf(d)}
               on={current?.id === d.id}
               works={works}
-              onPick={() => setChosen(d.name)}
+              onPick={() => {
+                setChosen(d.name);
+                // a sorted dataset opens on the whole page
+                if (d.totals.stacks > 0 && mayListScans(caps)) location.hash = href("data", "datasets", d.name);
+              }}
               onStep={(id) => step(d, id)}
               onBringIn={() => setBringing(d)}
-              onPickScans={mayPick(caps) ? () => pickScans(d) : null}
             />
           ))}
         </div>
       )}
-      {current && (mayListScans(caps) || mayPick(caps)) && <Scans caps={caps} dataset={current} onSaid={setSaid} />}
-      <NowSection caps={caps} jobs={jobs} onSaid={setSaid} />
+      <NowSection caps={caps} jobs={jobs} onSaid={say} onFailed={failed} />
       {current && current.digests.count > 0 && <Batches dataset={current} works={works && whyOf(current) === null} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
       {bringing && (
         <BringInNew
@@ -237,9 +239,10 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   );
 }
 
-function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean; works: boolean; onPick: () => void; onStep: (id: StepId) => void; onBringIn: () => void; onPickScans: (() => void) | null }) {
-  const { dataset: d, why, on, works, onPick, onStep, onBringIn, onPickScans } = props;
+function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean; works: boolean; onPick: () => void; onStep: (id: StepId) => void; onBringIn: () => void }) {
+  const { dataset: d, why, on, works, onPick, onStep, onBringIn } = props;
   const next = nextStep(d, why);
+  const sure = certainty(d);
   const files = d.trees?.anon?.files ?? d.trees?.originals?.files ?? null;
   return (
     <div className={on ? "scard on" : "scard"} aria-current={on ? "true" : undefined} onClick={onPick}>
@@ -268,11 +271,6 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean;
                 Read again
               </button>
             )}
-            {onPickScans && d.digests.count > 0 && (
-              <button type="button" onClick={onPickScans}>
-                Pick main scans
-              </button>
-            )}
             <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>
           </MoreMenu>
         </span>
@@ -286,16 +284,29 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean;
           <b>{n(d.totals.subjects)}</b>
           <span>subjects</span>
         </div>
-        <div>
-          <b>{n(d.totals.stacks)}</b>
-          <span>scans</span>
-        </div>
+        {!sure && (
+          <div>
+            <b>{n(d.totals.stacks)}</b>
+            <span>scans</span>
+          </div>
+        )}
       </div>
+      {sure && (
+        <div className={sure.look > 0 ? "sure-line look" : "sure-line"} title={sure.look > 0 ? kindWords(sure.kinds) || undefined : undefined}>
+          {certaintyWords(sure)}
+        </div>
+      )}
       {works && (
         <div className="row next" onClick={(e) => e.stopPropagation()}>
-          <button type="button" className="button small" disabled={next.busy} aria-label={`${next.label}: ${d.name}`} onClick={() => onStep(next.step)}>
-            {next.label}
-          </button>
+          {next.step === "review" ? (
+            <a className="button small" href={narrow(href("review"), { dataset: d.name })} aria-label={`${next.label}: ${d.name}`}>
+              {next.label}
+            </a>
+          ) : (
+            <button type="button" className="button small" disabled={next.busy} aria-label={`${next.label}: ${d.name}`} onClick={() => onStep(next.step)}>
+              {next.label}
+            </button>
+          )}
           {why !== null && <Hint text={why} />}
         </div>
       )}
@@ -303,7 +314,7 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean;
   );
 }
 
-/** The chosen dataset's reads, newest first, each with its five marks. */
+/** The chosen dataset's reads, newest first, compact: its name, when, its five marks and what it needs; the counts are the card's. */
 function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; works: boolean; onBringIn: () => void; onAgain: (b: Batch) => void }) {
   const recent = d.digests.recent;
   const held = d.held?.files ?? 0;
@@ -330,8 +341,6 @@ function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; 
               <tr>
                 <th>Read</th>
                 <th>When</th>
-                <th>Files</th>
-                <th>Subjects</th>
                 <th className="strip-head">{STAGES.map((s) => STAGE_WORD[s]).join(" · ")}</th>
                 <th className="acts">
                   <span className="sr-only">Next</span>
@@ -350,8 +359,6 @@ function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; 
                       </a>
                     </td>
                     <td className="num">{whenWords(b.started_at)}</td>
-                    <td className="num">{b.state === "running" ? `${n(b.files.seen)} so far` : fileWords(b)}</td>
-                    <td className="num">{b.subjects_added === 0 ? "none new" : `${n(b.subjects_added)} new`}</td>
                     <td>
                       <div className="thread" role="img" aria-label={marks.map((m) => `${STAGE_WORD[m.name]}: ${m.words}`).join(", ")}>
                         {marks.map((m) => (
@@ -368,8 +375,8 @@ function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; 
                           <Icon name="chevron-right" />
                         </a>
                       )}
-                      {tail.kind === "sort" && (
-                        <a className="tail" href={narrow(href("review"), { batch: b.id })}>
+                      {tail.kind === "look" && (
+                        <a className="tail" href={narrow(href("review"), { dataset: d.name })}>
                           {tail.words}
                           <Icon name="chevron-right" />
                         </a>
@@ -381,7 +388,7 @@ function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; 
                         </button>
                       )}
                       {tail.kind === "again" && !works && <span className="tag">{b.state}</span>}
-                      {tail.kind === "reading" && <span className="tag brand">reading</span>}
+                      {tail.kind === "reading" && <span className="tag brand">{tail.words}</span>}
                       {tail.kind === "sorted" && (
                         <span className="tag ok">
                           <Icon name="check" />

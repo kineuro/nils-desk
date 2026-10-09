@@ -171,7 +171,7 @@ describe("the five marks of a batch", () => {
   });
   it("offer the held files, what to sort, a read again, or say it is sorted", () => {
     expect(batchTail(newest)).toEqual({ kind: "held", words: "4 held: map them", count: 4 });
-    expect(batchTail(earlier)).toEqual({ kind: "sort", words: "Sort 12", count: 12 });
+    expect(batchTail(earlier)).toEqual({ kind: "look", words: "12 need a look", count: 12 });
     expect(batchTail({ ...earlier, to_sort: 0 }).kind).toBe("sorted");
     expect(batchTail({ ...earlier, state: "failed", pseudonymised: null } as Batch).words).toBe("Read again");
     expect(batchTail({ ...earlier, state: "running" }).kind).toBe("reading");
@@ -198,6 +198,7 @@ describe("bringing in what is new", () => {
   it("names the queued rest in a few words", () => {
     expect(chainWords([["digest", "@incoming"], ["fingerprint"], ["classify", "--pack", "mri"]])).toBe("then read, then sort");
     expect(chainWords([["fingerprint"]])).toBe("then sort");
+    expect(chainWords([["classify", "--pack", "mri"], ["pyramid", "build", "--classified", "37"]])).toBe("then sort");
     expect(chainWords([])).toBe("");
   });
   it("posts the thread as one job named on the body too, and `then` only where something is queued after", async () => {

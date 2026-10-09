@@ -158,6 +158,42 @@ describe("the Data page", () => {
     expect(host.textContent).toContain("ward-c is a dataset.");
   });
 
+  it("asks an anonymised folder's IDs on the way in, one select each set to the subject code and made from the ID, and sends them with the Add", async () => {
+    const e = await page([], (c) => {
+      if (c.method === "GET" && c.url.startsWith("/api/places/1/folders?")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 1, folders: [{ name: "study-big", path: "/srv/in/study-big", added: false, dataset_id: null, dataset: null, has_derivatives: true }], next: null } };
+      if (c.method === "GET" && c.url === "/api/places/1/folders/study-big") return { status: 200, body: { name: "study-big", path: "/srv/in/study-big", added: false, dataset_id: null, holds_dicom: "yes", has_derivatives: true, layout: ANONYMISED } };
+      if (c.method === "POST" && c.url === "/api/places") return { status: 201, body: { ...WARD_B, name: "study-big", layout: ANONYMISED, not_read: null } };
+      return undefined;
+    });
+    act(() => button(host, "Add a dataset")!.click());
+    act(() => button(host, "Browse")!.click());
+    await settle();
+    act(() => button(host, "study-big")!.click());
+    await settle();
+    expect(host.textContent).not.toContain("No DICOM");
+    const pid = host.querySelector<HTMLSelectElement>("#dataset-patient-id")!;
+    const subjects = host.querySelector<HTMLSelectElement>("#dataset-subjects")!;
+    expect(pid.value).toBe("subject-code");
+    expect(subjects.value).toBe("generated");
+    // never the personnummer: it is no PatientID a file may hold
+    expect([...pid.options].map((o) => o.value)).toEqual(["subject-code", "id-type:study-id"]);
+    act(() => button(host, "Add")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/places")[0].body).toEqual({ role: "source", root: "incoming", folder: "study-big", patient_id: "subject-code", subjects: "generated" });
+    expect(host.textContent).toContain("study-big is a dataset.");
+  });
+
+  it("says a refused Read in one plain line, the engine's words behind a \"?\"", async () => {
+    const engineWords = "@ward-d is not a registered ingest location; those are data, data-test";
+    await page([toRead], (c) => (c.method === "POST" && c.url === "/api/jobs" ? { status: 400, body: { error: engineWords } } : undefined));
+    act(() => button(host.querySelector(".scard")!, /^Read/)!.click());
+    await settle();
+    const said = host.querySelector("section.data > p.warn")!;
+    expect(said.textContent).toContain("This dataset is not ready to read yet.");
+    expect(said.querySelector(".hint")?.getAttribute("title")).toBe(engineWords);
+    expect(host.querySelector("section.data")!.textContent).not.toContain("ingest location");
+  });
+
   it("searches by part of a name as it is typed", async () => {
     const e = await page([], (c) =>
       c.method === "GET" && c.url.startsWith("/api/places/1/folders?") ? { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 1, folders: [{ name: "ms-2019", path: "/srv/in/ms-2019", added: false, dataset_id: null, dataset: null, has_derivatives: true }], next: null } } : undefined,
@@ -176,6 +212,26 @@ describe("the Data page", () => {
     expect(new URL(asked[0].url, "http://x").searchParams.get("q")).toBe("ms-");
     expect(button(host, "ms-2019")).not.toBeNull();
     expect(button(host, /^More/)).toBeNull();
+  });
+
+  it("says how sure the sort is, and Review is the one next step where scans need a look; Pick main scans is not in Data (record 55 H2)", async () => {
+    const looked = ds("ward-g", 8, {
+      ...toRead,
+      id: 8,
+      name: "ward-g",
+      digests: { count: 1, first: null, last: null, recent: [{ ...readOnce, classified: 120, to_sort: 8 }] },
+      totals: { ...toRead.totals, stacks: 120, to_sort: 8, sure: 112, need_a_look: { "body_part:low_confidence": 5, "orientation:missing": 3 } },
+    } as Partial<Dataset>);
+    await page([looked]);
+    const card = host.querySelector(".scard")!;
+    expect(card.querySelector(".sure-line")?.textContent).toBe("120 scans · 112 sure · 8 need a look");
+    expect(card.querySelector(".sure-line")?.getAttribute("title")).toBe("body part, low confidence: 5; orientation, missing: 3");
+    const next = card.querySelector<HTMLAnchorElement>(".next a.button");
+    expect(next?.textContent).toBe("Review 8");
+    expect(next?.getAttribute("href")).toBe("#review?dataset=ward-g");
+    // the one next step: no second button beside it
+    expect(card.querySelectorAll(".next .button")).toHaveLength(1);
+    expect(card.textContent).not.toContain("Pick main scans");
   });
 
   it("shows each card's state word and one button, starts the next step from it, and carries no engine word", async () => {

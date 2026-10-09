@@ -33,7 +33,7 @@ export function BringInNew(props: { caps: Capabilities; dataset: Dataset; rates:
     const body = chains ? bringInBody(d, name, pack) : { command: ["digest", `@${d.name}`], name };
     jobs
       .enqueue(body.command, body.name)
-      .then((j) => onDone(`${d.name}: started (job ${j.job}).`))
+      .then(() => onDone(`${d.name}: started.`))
       .catch((e: Error) => {
         setQueueing(false);
         setWhy(e.message);

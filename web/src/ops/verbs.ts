@@ -27,6 +27,8 @@ export interface VerbWords {
   page: string;
   /** The next move once it stopped, the same command again; null for a verb that is not simply run again. */
   again: string | null;
+  /** Preparation the engine does on its own (pictures, 3D views): one quiet line on Data, never a card of work a person started. */
+  background?: boolean;
 }
 
 const data = { grant: "data:work" as Grant, page: "the Data page" };
@@ -46,7 +48,8 @@ export const VERBS: Record<string, VerbWords> = {
   pick: { doing: "Picking from", noun: "pick", link: "of", named: true, icon: "branch", ...pipelines, again: "Pick again" },
   session: { doing: "Building the sessions of", noun: "session build", link: "of", named: true, icon: "branch", ...pipelines, again: "Build again" },
   run: { doing: "Running", noun: "pipeline run", link: "of", named: true, icon: "branch", ...pipelines, again: "Run again" },
-  pyramid: { doing: "Building pyramids for", noun: "pyramid build", link: "for", named: true, icon: "layers", ...pipelines, again: "Build again" },
+  pyramid: { doing: "Preparing 3D views", noun: "3D view preparation", link: "for", named: false, icon: "layers", ...pipelines, again: "Prepare again", background: true },
+  preview: { doing: "Preparing pictures", noun: "picture preparation", link: "for", named: false, icon: "layers", ...pipelines, again: "Prepare again", background: true },
   release: { doing: "Releasing", noun: "release", link: "of", named: true, icon: "release", ...release, again: "Release again" },
   handover: { doing: "Handing over", noun: "handover", link: "of", named: true, icon: "release", ...release, again: "Hand over again" },
   "linkage import": { doing: "Filing the map for", noun: "map import", link: "for", named: true, icon: "key", ...data, again: "File again" },
@@ -123,6 +126,11 @@ export function verbOf(job: Pick<JobRow, "args" | "kind">): string {
   return first;
 }
 
+/** Whether a job is the engine's own preparation (pictures, 3D views), not work a person started. */
+export function isBackground(job: Pick<JobRow, "args" | "kind">): boolean {
+  return wordsOf(job).background === true;
+}
+
 /** The verb's words, from the table or the plainest for one it does not know. */
 export function wordsOf(job: Pick<JobRow, "args" | "kind">): VerbWords {
   return VERBS[verbOf(job)] ?? unknown(verbOf(job));
@@ -143,6 +151,8 @@ export function targetOf(job: Pick<JobRow, "args" | "kind" | "name">): string | 
   if (pack >= 0 && c[pack + 1]) return c[pack + 1];
   const w = wordsOf(job);
   if (!w.named || !job.name) return null;
+  // a name the engine made up from another job ("pictures after job 42") is no target a person knows
+  if (/\bjob \d+/u.test(job.name)) return null;
   const verb = verbOf(job);
   if (job.name === verb || verb.split(" ").includes(job.name) || job.name === w.noun) return null;
   return job.name;

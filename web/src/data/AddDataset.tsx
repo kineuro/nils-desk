@@ -4,18 +4,26 @@
 // when there is one), type part of a folder's name or browse, fifty at a
 // time; pick one folder, and NILS looks inside it once: whether it holds
 // DICOM, its two folders, and the state the dataset would get. One Add
-// button; a folder with no DICOM asks "Add anyway?" first. Without a root
-// yet, the root's own form stands here instead.
+// button; a folder with no DICOM asks "Add anyway?" first. Anonymised data
+// says its IDs on the way in (record 55): what PatientID holds and how
+// subjects are found, one select each, set to the subject code and made
+// from the ID, so it is read as soon as it is added. Without a root yet,
+// the root's own form stands here instead.
 
 import { useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import type { Place } from "../objects/client";
 import { messageOf } from "../settings/common";
 import type { Install } from "../settings/supervise";
+import { door as served } from "../deployment";
 import { Dialog } from "../ui/Dialog";
+import { Hint } from "../ui/Hint";
 import { Wait } from "../ui/Wait";
 import { RootForm } from "./AddRoot";
-import { dicomWord, roots as rootsDoor, rootsOf, wouldBe, type FolderLook, type RootFolder } from "./steps";
+import { linkage, type LinkageType, type Subjects } from "./datasets";
+import { writable } from "./FinishDataset";
+import { plainError } from "./plain";
+import { asksIds, dicomWord, roots as rootsDoor, rootsOf, wouldBe, type FolderLook, type RootFolder } from "./steps";
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "found"; folders: RootFolder[]; count: number; next: string | null } | { kind: "failed"; why: string };
 type Seen = { kind: "looking"; name: string } | { kind: "seen"; look: FolderLook } | { kind: "failed"; name: string; why: string };
@@ -34,6 +42,16 @@ function seenFacts(l: FolderLook): { k: string; v: string }[] {
   return out;
 }
 
+/** A refusal as one plain line, the engine's words behind a "?". */
+function Refused({ why }: { why: string }) {
+  return (
+    <p className="warn">
+      {plainError(why).words}
+      <Hint text={why} />
+    </p>
+  );
+}
+
 export function AddDataset(props: { caps: Capabilities; install: Install | null; places: Place[]; onClose: () => void; onDone: (words: string) => void }) {
   const { caps, install, places, onClose, onDone } = props;
   const all = rootsOf(places);
@@ -44,6 +62,10 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
   const [anyway, setAnyway] = useState(false);
   const [adding, setAdding] = useState<{ since: number } | null>(null);
   const [why, setWhy] = useState<string | null>(null);
+  /** What PatientID holds (`subject-code` or `id-type:<name>`) and how subjects are found, for anonymised data. */
+  const [patientId, setPatientId] = useState("subject-code");
+  const [subjects, setSubjects] = useState<Subjects>("generated");
+  const [types, setTypes] = useState<LinkageType[]>([]);
   const asked = useRef(0);
   const root = all.find((r) => r.id === rootId) ?? null;
 
@@ -68,6 +90,20 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the words typed are what search
   }, [q, rootId]);
 
+  // the ID types a PatientID may hold, beside the subject code, once
+  useEffect(() => {
+    if (!served(caps, "GET /api/linkage/types")) return;
+    let alive = true;
+    linkage
+      .types()
+      .then((r) => alive && setTypes(writable(r.types)))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once
+  }, []);
+
   const pick = (f: RootFolder) => {
     if (!root) return;
     setAnyway(false);
@@ -84,7 +120,8 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
     if (seen.look.holds_dicom === "no" && !anyway) return setAnyway(true);
     setAdding({ since: Date.now() });
     setWhy(null);
-    rootsDoor.addDataset(root.name, seen.look.name).then(
+    const ids = asksIds(seen.look) ? { patient_id: patientId, subjects } : {};
+    rootsDoor.addDataset(root.name, seen.look.name, ids).then(
       (d) => onDone(`${d.name} is a dataset.`),
       (e: unknown) => {
         setAdding(null);
@@ -121,7 +158,7 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
         <div className="field">
           <span className="label">{seen.kind === "seen" ? seen.look.name : seen.name}</span>
           {seen.kind === "looking" && <Wait phase="looking inside the folder" since={Date.now()} />}
-          {seen.kind === "failed" && <p className="warn">{seen.why}</p>}
+          {seen.kind === "failed" && <Refused why={seen.why} />}
           {look && (
             <>
               <span className="meta path">{look.path}</span>
@@ -133,12 +170,44 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
                   </div>
                 ))}
               </div>
+              {!look.added && asksIds(look) && (
+                <>
+                  <div className="field">
+                    <label className="label" htmlFor="dataset-patient-id">
+                      PatientID holds
+                      <Hint text="What the files' PatientID is: the subject code, or an ID such as a study number." />
+                    </label>
+                    <div className="input">
+                      <select id="dataset-patient-id" value={patientId} disabled={adding !== null} onChange={(e) => setPatientId(e.target.value)}>
+                        <option value="subject-code">Subject code</option>
+                        {types.map((t) => (
+                          <option key={t.name} value={`id-type:${t.name}`}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="field">
+                    <label className="label" htmlFor="dataset-subjects">
+                      Subjects
+                      <Hint text={look.layout?.settings?.subjects ? `Made from the ID: ${look.layout.settings.subjects.generated}. From a map: ${look.layout.settings.subjects.map}.` : "Made from the ID, or from a map of subject codes to the IDs."} />
+                    </label>
+                    <div className="input">
+                      <select id="dataset-subjects" value={subjects} disabled={adding !== null} onChange={(e) => setSubjects(e.target.value as Subjects)}>
+                        <option value="generated">Made from the ID</option>
+                        <option value="map">From a map</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
               {look.added && <p className="meta">Already a dataset.</p>}
               {!look.added && look.holds_dicom === "no" && <p className="warn">{anyway ? "No DICOM found here. Add anyway?" : "No DICOM found here."}</p>}
             </>
           )}
           {adding && <Wait phase="adding" since={adding.since} />}
-          {why && <p className="warn">{why}</p>}
+          {why && <Refused why={why} />}
         </div>
       ) : (
         <>
@@ -181,7 +250,7 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
             </button>
           </div>
           {found.kind === "looking" && <Wait phase="finding folders" since={Date.now()} />}
-          {found.kind === "failed" && <p className="warn">{found.why}</p>}
+          {found.kind === "failed" && <Refused why={found.why} />}
           {found.kind === "found" && found.folders.length === 0 && <p className="meta">No folder found.</p>}
           {found.kind === "found" && found.folders.length > 0 && (
             <ul className="folder-results" aria-label="Folders found">
