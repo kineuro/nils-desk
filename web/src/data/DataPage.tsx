@@ -269,10 +269,12 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean;
           <b>{n(d.totals.subjects)}</b>
           <span>subjects</span>
         </div>
-        <div>
-          <b>{n(d.totals.stacks)}</b>
-          <span>scans</span>
-        </div>
+        {!sure && (
+          <div>
+            <b>{n(d.totals.stacks)}</b>
+            <span>scans</span>
+          </div>
+        )}
       </div>
       {sure && (
         <div className={sure.look > 0 ? "sure-line look" : "sure-line"} title={sure.look > 0 ? kindWords(sure.kinds) || undefined : undefined}>
