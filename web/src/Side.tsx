@@ -11,7 +11,7 @@
 // side is a panel over the page, opened from the top bar, where a section's
 // row unfolds it without leaving the page, so one of its pages can be chosen.
 
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import type React from "react";
 import { href } from "./routes";
 import { pageAt, pageHref, sideLayout, type Section, type SidePage } from "./sections";
@@ -25,9 +25,10 @@ export function Side(props: { top: Section[]; foot: Section[]; section: string |
   const unfolded = picked !== null && picked.at === here ? picked.open : section;
   const { up, down } = sideLayout(top, foot, unfolded);
 
-  // the panel over the page opens on the section the address names
-  useEffect(() => {
-    if (open) setPicked(null);
+  // the panel over the page opens on the section the address names: a section
+  // picked in it is let go as it opens or closes, before anything is drawn
+  useLayoutEffect(() => {
+    setPicked(null);
   }, [open]);
 
   useEffect(() => {
