@@ -726,6 +726,11 @@ export function takeSearch(): boolean {
   return was;
 }
 
+/** Whether a key went to a dialog over the page, which takes its own keys: none of them moves the page. */
+export function inDialog(t: EventTarget | null): boolean {
+  return !!(t as HTMLElement | null)?.closest?.("dialog");
+}
+
 /** Whether the side is open over the page (the browser's sections, a narrow window's menu): its Esc closes it and goes nowhere. */
 export function sideOpen(): boolean {
   return typeof document !== "undefined" && document.querySelector(".side.open") !== null;

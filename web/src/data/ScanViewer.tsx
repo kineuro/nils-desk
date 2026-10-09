@@ -336,6 +336,8 @@ export function ScanViewer({ scans, at, onAt, onClose, store, bare = false }: { 
     const key = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      // a dialog over the page takes its own keys, Esc among them
+      if (t?.closest?.("dialog")) return;
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       if (e.key === "3") {
         e.preventDefault();

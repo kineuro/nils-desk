@@ -164,6 +164,23 @@ describe("the light viewer", () => {
     expect(at.at(-1)).toBe(-1);
   });
 
+  it("leaves the keys of a dialog over the page to the dialog: Esc, the arrows and 3 move nothing", async () => {
+    show(1);
+    await settle();
+    const dialog = document.createElement("dialog");
+    const button = document.createElement("button");
+    dialog.appendChild(button);
+    document.body.appendChild(dialog);
+    const drawnBefore = drawn.length;
+    for (const k of ["Escape", "ArrowUp", "ArrowRight", "3"]) act(() => button.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })));
+    expect(at).toEqual([]);
+    expect(drawn.length).toBe(drawnBefore);
+    expect(el.querySelector("[data-testid=three]")).toBeNull();
+    dialog.remove();
+    key("Escape");
+    expect(at).toEqual([-1]);
+  });
+
   it("draws the next scan's sharp middle frame in the frame after the key, read ahead and timed", async () => {
     show(1);
     await settle();

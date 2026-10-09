@@ -4,11 +4,13 @@
 // shows the browser, against a fake engine whose scans have real pictures
 // (grey JPEG planes drawn here), so dataset.pw.ts measures that the scan is
 // the hero, the chrome stays two slim lines and a quiet tree, and a phone's
-// width keeps one column with no sideways scroll.
+// width keeps one column with no sideways scroll; and that the line keeping
+// what the filter leaves sits under it within the tree's width.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "../../src/shell.css";
+import type { Capabilities } from "../../src/capabilities";
 import { Browser } from "../../src/data/DatasetView";
 import { parseView, viewHref } from "../../src/data/viewer";
 import { framesBody, previewBody } from "../../src/data/pictures.fixture";
@@ -59,10 +61,18 @@ for (let u = 0; u < 6; u++)
     });
 
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
-window.fetch = (async (input: RequestInfo | URL) => {
+window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const u = new URL(url, location.origin);
   if (u.pathname === "/api/datasets/ms-a/scans") return json({ dataset: "ms-a", total: rows.length, count: rows.length, scans: rows, next: null });
+  // keeping what the browser shows: the question counted before anything is kept
+  if (u.pathname === "/api/ask/diagnose") {
+    // the scans the words left, by their ids, else the dataset's
+    const where = (JSON.parse(String(init?.body ?? "{}")) as { document: { sets: { scans: { where: unknown[][] } } } }).document.sets.scans.where;
+    const ids = where.find((c) => c[0] === "in")?.[3] as number[] | undefined;
+    return json({ valid: true, issues: [], funnel: [{ set: "scans", grain: "stack", stage: "where", rows: ids?.length ?? rows.length, subjects: 6 }] });
+  }
+  if (u.pathname === "/api/cohorts") return json([]);
   if (u.pathname === "/api/picks/summary") return json({});
   const pv = /^\/api\/instances\/(\d+)\/preview$/.exec(u.pathname);
   if (pv) return json(previewBody(PLANES, { axial: await dataUrl(PLANES / 2, Number(pv[1])) }, { stack: Number(pv[1]), shape: [PLANES, SIZE, SIZE], frames: { count: PLANES, width: SIZE, height: SIZE, bytes: 1, url: "" } }));
@@ -79,6 +89,25 @@ window.fetch = (async (input: RequestInfo | URL) => {
 
 const scope = { kind: "dataset" as const, name: "ms-a" };
 const view = parseView({ mode: "browser" });
+/** A person who may keep what the browser shows, as a selection or a cohort. */
+const caps = {
+  engine: {
+    engine: { name: "nils", version: "1.0.0-alpha.80" },
+    contracts: { openapi: "7" },
+    doors: ["GET /api/datasets/{name}/scans", "POST /api/ask/diagnose", "POST /api/ask/documents", "POST /api/ask/run", "PUT /api/ask/selections/{name}", "POST /api/ask/handles/{id}/promote", "GET /api/cohorts"],
+    policy: [],
+    auth: "token",
+    principal: "astrid@site",
+    roles: [],
+    registry: { epoch: 4 },
+    packs: [],
+  },
+  kvasir: null,
+  assistant: null,
+  apps: [],
+  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work"], detail: "quasi", groups: [] },
+  desk: { version: "1.0.0", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
+} as unknown as Capabilities;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -88,7 +117,7 @@ createRoot(document.getElementById("root")!).render(
       </header>
       <div className="body browsing">
         <main className="page bare">
-          <Browser scope={scope} view={view} grid={false} onSections={() => undefined} go={(v) => location.replace(viewHref(scope, { ...view, ...v }))} />
+          <Browser caps={caps} scope={scope} view={view} grid={false} onSections={() => undefined} go={(v) => location.replace(viewHref(scope, { ...view, ...v }))} />
         </main>
       </div>
     </div>
