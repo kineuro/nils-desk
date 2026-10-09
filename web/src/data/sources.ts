@@ -63,7 +63,18 @@ export interface Source {
   handling_declared: boolean;
   roots: number;
   digests: { count: number; first: Pick<Digest, "id" | "name" | "state" | "started_at" | "finished_at"> | null; last: Pick<Digest, "id" | "name" | "state" | "started_at" | "finished_at"> | null; recent: Digest[] };
-  totals: { subjects: number; studies: number; sessions: number; stacks: number; refused_files: number; to_sort: number };
+  totals: {
+    subjects: number;
+    studies: number;
+    sessions: number;
+    stacks: number;
+    refused_files: number;
+    to_sort: number;
+    /** Record 55 H2: the scans the sort is sure of; an older engine leaves it out, and stacks minus to_sort stands in. */
+    sure?: number;
+    /** Record 55 H2: the open questions by kind, for the hover of "need a look". */
+    need_a_look?: Record<string, number>;
+  };
 }
 
 /** The one sources door: every source as a dataset at record 26, with the fields an older engine leaves out, and the rates where the engine measured them. */

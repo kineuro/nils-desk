@@ -178,6 +178,26 @@ describe("the Data page", () => {
     expect(button(host, /^More/)).toBeNull();
   });
 
+  it("says how sure the sort is, and Review is the one next step where scans need a look; Pick main scans is not in Data (record 55 H2)", async () => {
+    const looked = ds("ward-g", 8, {
+      ...toRead,
+      id: 8,
+      name: "ward-g",
+      digests: { count: 1, first: null, last: null, recent: [{ ...readOnce, classified: 120, to_sort: 8 }] },
+      totals: { ...toRead.totals, stacks: 120, to_sort: 8, sure: 112, need_a_look: { "body_part:low_confidence": 5, "orientation:missing": 3 } },
+    } as Partial<Dataset>);
+    await page([looked]);
+    const card = host.querySelector(".scard")!;
+    expect(card.querySelector(".sure-line")?.textContent).toBe("120 scans · 112 sure · 8 need a look");
+    expect(card.querySelector(".sure-line")?.getAttribute("title")).toBe("body part, low confidence: 5; orientation, missing: 3");
+    const next = card.querySelector<HTMLAnchorElement>(".next a.button");
+    expect(next?.textContent).toBe("Review 8");
+    expect(next?.getAttribute("href")).toBe("#review?dataset=ward-g");
+    // the one next step: no second button beside it
+    expect(card.querySelectorAll(".next .button")).toHaveLength(1);
+    expect(card.textContent).not.toContain("Pick main scans");
+  });
+
   it("shows each card's state word and one button, starts the next step from it, and carries no engine word", async () => {
     const e = await page([identified, noIds, unknown, toRead], (c) => (c.method === "POST" && c.url === "/api/jobs" ? { status: 202, body: { job: 41, state: "queued" } } : undefined));
     const cards = Object.fromEntries([...host.querySelectorAll(".scard")].map((c) => [c.querySelector(".scard-pick")?.textContent, c]));

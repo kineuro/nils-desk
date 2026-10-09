@@ -105,8 +105,8 @@ export function RoleChips({ roles, role, onRole }: { roles: { role: string; open
   );
 }
 
-export function PicksFamily({ caps, packName = null, onChanged }: { caps: Capabilities; packName?: string | null; onChanged: (words: string) => void }) {
-  const [load, again] = useRead(() => review.list({ kind: PICK_BORDER, limit: 500 }).then((r) => r.items));
+export function PicksFamily({ caps, packName = null, dataset, onChanged }: { caps: Capabilities; packName?: string | null; dataset?: string; onChanged: (words: string) => void }) {
+  const [load, again] = useRead(() => review.list({ kind: PICK_BORDER, dataset, limit: 500 }).then((r) => r.items));
   const [open, setOpen] = useState<ReviewItem | null>(null);
   const [pack, setPack] = useState<PackDoc | null>(null);
   const [role, setRole] = useState<string | null>(null);

@@ -25,12 +25,12 @@ import { BringInNew } from "./BringInNew";
 import { batchTail, jobs as jobsDoor, packFor, sources, STAGES, stripMarks, type Batch, type Dataset, type Layout, type Rates, type StageName } from "./datasets";
 import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
-import { mayPick, pickRun, pickWords } from "./pickRun";
 import { NowSection, useLiveJobs } from "./Now";
 import { Scans } from "./Scans";
+import { maySeePicks } from "./picks";
 import { mayListScans } from "./scans";
 import { fileWords, whenWords } from "./sources";
-import { nextStep, stepCommand, type StepId } from "./steps";
+import { certainty, certaintyWords, kindWords, nextStep, stepCommand, type StepId } from "./steps";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[]; rates: Rates | null };
 
@@ -115,18 +115,6 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
       .catch((e: unknown) => setSaid(messageOf(e)));
   };
 
-  /** The pick run for one dataset's subjects, queued; its job is said. */
-  const pickScans = (d: Dataset) => {
-    setSaid(null);
-    pickRun.start({ dataset: d.name }).then(
-      (q) => {
-        setSaid(`${d.name}: ${pickWords(q)}`);
-        jobs.refresh();
-      },
-      (e: unknown) => setSaid(messageOf(e)),
-    );
-  };
-
   const readAgain = (b: Batch, d: Dataset) => {
     setSaid(null);
     jobsDoor
@@ -177,12 +165,11 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
               onPick={() => setChosen(d.name)}
               onStep={(id) => step(d, id)}
               onBringIn={() => setBringing(d)}
-              onPickScans={mayPick(caps) ? () => pickScans(d) : null}
             />
           ))}
         </div>
       )}
-      {current && (mayListScans(caps) || mayPick(caps)) && <Scans caps={caps} dataset={current} onSaid={setSaid} />}
+      {current && (mayListScans(caps) || maySeePicks(caps)) && <Scans caps={caps} dataset={current} />}
       <NowSection caps={caps} jobs={jobs} onSaid={setSaid} />
       {current && current.digests.count > 0 && <Batches dataset={current} works={works && whyOf(current) === null} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
       {bringing && (
@@ -237,9 +224,10 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   );
 }
 
-function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean; works: boolean; onPick: () => void; onStep: (id: StepId) => void; onBringIn: () => void; onPickScans: (() => void) | null }) {
-  const { dataset: d, why, on, works, onPick, onStep, onBringIn, onPickScans } = props;
+function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean; works: boolean; onPick: () => void; onStep: (id: StepId) => void; onBringIn: () => void }) {
+  const { dataset: d, why, on, works, onPick, onStep, onBringIn } = props;
   const next = nextStep(d, why);
+  const sure = certainty(d);
   const files = d.trees?.anon?.files ?? d.trees?.originals?.files ?? null;
   return (
     <div className={on ? "scard on" : "scard"} aria-current={on ? "true" : undefined} onClick={onPick}>
@@ -268,11 +256,6 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean;
                 Read again
               </button>
             )}
-            {onPickScans && d.digests.count > 0 && (
-              <button type="button" onClick={onPickScans}>
-                Pick main scans
-              </button>
-            )}
             <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>
           </MoreMenu>
         </span>
@@ -291,11 +274,22 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean;
           <span>scans</span>
         </div>
       </div>
+      {sure && (
+        <div className={sure.look > 0 ? "sure-line look" : "sure-line"} title={sure.look > 0 ? kindWords(sure.kinds) || undefined : undefined}>
+          {certaintyWords(sure)}
+        </div>
+      )}
       {works && (
         <div className="row next" onClick={(e) => e.stopPropagation()}>
-          <button type="button" className="button small" disabled={next.busy} aria-label={`${next.label}: ${d.name}`} onClick={() => onStep(next.step)}>
-            {next.label}
-          </button>
+          {next.step === "review" ? (
+            <a className="button small" href={narrow(href("review"), { dataset: d.name })} aria-label={`${next.label}: ${d.name}`}>
+              {next.label}
+            </a>
+          ) : (
+            <button type="button" className="button small" disabled={next.busy} aria-label={`${next.label}: ${d.name}`} onClick={() => onStep(next.step)}>
+              {next.label}
+            </button>
+          )}
           {why !== null && <Hint text={why} />}
         </div>
       )}

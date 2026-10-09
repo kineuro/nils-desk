@@ -68,6 +68,8 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
   const sub = subOf(page);
   const batch = query?.batch && /^\d+$/.test(query.batch) ? Number(query.batch) : null;
   const run = query?.run && /^\d+$/.test(query.run) ? Number(query.run) : null;
+  // a dataset's card opens the queue on its own scans: #review?dataset=NAME
+  const dataset = query?.dataset && query.dataset !== "" ? query.dataset : undefined;
   const [cohort, setCohort] = useState<string>(query?.cohort ?? "");
   // record 51, G4: the queue's axis and reason live in the address, so a reload or a link keeps them
   const filter = queueFilterOf(query);
@@ -94,12 +96,12 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
   const read = useCallback(() => {
     const cohortArg = filters && cohort !== "" ? cohort : undefined;
     // one kind is asked of the engine, so the queue holds every item of it rather than the first 500 of all
-    const items = filters ? review.list({ cohort: cohortArg, kind, limit: 500 }) : ops.review(undefined, kind, 500);
-    const summary = filters ? review.summary(cohortArg).catch(() => null) : Promise.resolve(null);
+    const items = filters ? review.list({ cohort: cohortArg, dataset, kind, limit: 500 }) : ops.review(undefined, kind, 500, undefined, dataset);
+    const summary = filters ? review.summary(cohortArg, dataset).catch(() => null) : Promise.resolve(null);
     Promise.all([items, summary])
       .then(([r, s]) => setLoad({ kind: "ready", items: r.items, summary: s }))
       .catch((e: Error) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: e.message })));
-  }, [filters, cohort, kind]);
+  }, [filters, cohort, kind, dataset]);
 
   useEffect(() => {
     read();
@@ -124,6 +126,14 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
         <div className="grow">
           <span className="eyebrow">Review</span>
           <h1>{head.title}</h1>
+          {dataset && (
+            <span className="row review-dataset">
+              <span className="tag">{dataset}</span>
+              <a className="icon-button" href={href("review", sub === "queue" ? null : sub)} aria-label={`Every dataset, not only ${dataset}`}>
+                <Icon name="x" />
+              </a>
+            </span>
+          )}
           <p className="lede">{head.lede}</p>
         </div>
       </div>
@@ -178,7 +188,7 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
       )}
       {sub === "rules" && <RulesPage caps={caps} items={items} wordAt={wordAt} onWordClose={() => setWordAt(null)} onChanged={changed} />}
       {sub === "identifiers" && load.kind === "ready" && <IdentifiersPage caps={caps} items={items} onDecide={setDeciding} onChanged={changed} />}
-      {sub === "picks" && <PicksFamily caps={caps} packName={packName} onChanged={changed} />}
+      {sub === "picks" && <PicksFamily key={dataset ?? ""} caps={caps} packName={packName} dataset={dataset} onChanged={changed} />}
       {sub === "proposals" && <ProposalsFamily caps={caps} onChanged={changed} />}
       {sub === "asked" && <AskedFamily caps={caps} packName={packName} onExplain={(item, stack) => setExplaining({ item, stack })} onChanged={changed} />}
       {deciding && <DecideDialog item={deciding} pack={pack} guess={modelDisagrees(deciding)?.decision ?? null} onClose={() => setDeciding(null)} onDone={(w) => { setDeciding(null); changed(w); }} />}
