@@ -59,19 +59,36 @@ button.person:hover, button.person[aria-expanded="true"] { color: var(--n-text);
 .side-link.on, .side-link.on:hover { background: var(--n-brand); color: var(--n-text-on-brand); }
 .side-link.open { color: var(--n-text); font-weight: 500; }
 .side-chevron { display: grid; color: var(--n-text-faint); transition: transform 280ms ease; }
+.side-chevron .i { width: 14px; height: 14px; stroke-width: 2; }
 .side-group.on .side-chevron { transform: rotate(180deg); }
+/* every section but Home opens as Settings does (the 2026-10-09 design): the open
+   one keeps its place and takes the free height under its pages, so every section
+   after it sits at the foot, the first under a line. With none open the last of
+   the work takes it and Settings alone is at the foot; Settings, open, rises under
+   the last section. The sections are one list, so they slide rather than jump. */
+.side-group { position: relative; display: flex; flex-direction: column; flex: none; transition: flex-grow 320ms ease, margin-top 320ms ease; }
+.side-group.cut { flex-grow: 1; }
+.side-group::before { content: ""; position: absolute; top: -0.55rem; left: 0; right: 0; border-top: 1px solid var(--n-line); opacity: 0; pointer-events: none; transition: opacity 320ms ease; }
+.side-group:not(.down) + .side-group.down { margin-top: 1.3rem; }
+.side-group:not(.down) + .side-group.down::before { opacity: 1; }
 /* a section's pages unfold under it: the row grows from nothing to its height */
 .side-pages { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 280ms ease; }
 .side-group.on .side-pages { grid-template-rows: 1fr; }
 .side-pages > div { display: grid; gap: 1px; min-height: 0; overflow: hidden; }
+.side-pages > div > :first-child { margin-top: 2px; }
+.side-pages > div > :last-child { margin-bottom: 6px; }
 .side-pages a { min-height: 1.85rem; padding: 0 0.6rem 0 2.3rem; font-size: 14px; white-space: nowrap; }
-.side-pages a:first-child { margin-top: 2px; }
 .side-pages a.deep { padding-left: 3.2rem; font-size: 13.5px; }
+/* what starts something new is brand words behind a plus */
+.side-pages a.new { gap: 0.45rem; color: var(--n-brand-text); }
+.side-pages a.new .i { width: 13px; height: 13px; stroke-width: 2; }
 .side-pages a.on, .side-pages a.on:hover { background: var(--n-bg-selected); color: var(--n-brand-text); font-weight: 500; }
-/* Settings keeps to the foot, and rises under the last section once it opens */
-.side-gap { flex: 1 1 0; transition: flex-grow 320ms ease; }
-.side.risen .side-gap { flex-grow: 0; }
-.side-foot { display: grid; gap: 2px; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--n-line); }
+/* the recent conversations, under a small word: set in further on a thin guide
+   line, smaller and fainter than a page, the open one marked on the line */
+.side-label { margin: 0.5rem 0 2px 2.3rem; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n-text-faint); }
+.side-pages a.thread { display: block; min-height: 0; margin-left: 2.3rem; padding: 3px 0.6rem; border-left: 1px solid var(--n-line); border-radius: 0 var(--n-radius) var(--n-radius) 0; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: var(--n-text-faint); }
+.side-pages a.thread:hover { color: var(--n-text); }
+.side-pages a.thread.on, .side-pages a.thread.on:hover { border-left-color: var(--n-brand-text); background: var(--n-bg-selected); color: var(--n-brand-text); font-weight: 500; }
 .icon-button.menu-button { display: none; color: var(--n-text-dim); }
 .theme-switch { color: var(--n-text-faint); }
 .theme-switch:hover { color: var(--n-text); background: var(--n-bg-hover); }
@@ -1092,7 +1109,7 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 }
 @media (prefers-reduced-motion: reduce) {
   .wait-phase::after { animation: none; }
-  .side, .side.open, .side-gap, .side-pages, .side-chevron { transition: none; }
+  .side, .side.open, .side-group, .side-group::before, .side-pages, .side-chevron { transition: none; }
   .dialog[open], .dialog[open]::backdrop { animation: none; }
 }
 
