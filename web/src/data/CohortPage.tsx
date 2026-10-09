@@ -128,7 +128,7 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
           <Icon name="data" />
           <a href={href("data")}>Data</a>
           <span>/</span>
-          <a href={href("data", "cohorts")}>Cohorts</a>
+          <a href={narrow(href("data", "datasets"), { cohort: c?.name ?? "" })}>Datasets and cohorts</a>
           <span>/</span>
           <span>{c?.name ?? ""}</span>
         </div>
@@ -282,8 +282,8 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
             ) : (
               <dl className="facts">
                 {c.sources_holding.map((s) => (
-                  <div key={s.name} className="facts-pair">
-                    <dt>{s.name}</dt>
+                  <div key={s.name ?? s.place ?? "none"} className="facts-pair">
+                    <dt>{s.name ?? s.place ?? "no dataset"}</dt>
                     <dd>{holdingWords(s)}</dd>
                   </div>
                 ))}
@@ -379,7 +379,7 @@ function StepChartView({ chart, now }: { chart: NonNullable<ReturnType<typeof st
 }
 
 /** Add or take out members by hand: the codes, which way, and the reason recorded on every membership. */
-function MembersDialog({ cohort: c, onClose, onDone }: { cohort: CohortDetail; onClose: () => void; onDone: (words: string) => void }) {
+export function MembersDialog({ cohort: c, onClose, onDone }: { cohort: Pick<CohortDetail, "name">; onClose: () => void; onDone: (words: string) => void }) {
   const [way, setWay] = useState<"add" | "remove">("add");
   const [codes, setCodes] = useState("");
   const [why, setWhy] = useState("");
@@ -449,7 +449,8 @@ function MembersDialog({ cohort: c, onClose, onDone }: { cohort: CohortDetail; o
   );
 }
 
-function RenameDialog({ cohort: c, onClose }: { cohort: CohortDetail; onClose: () => void }) {
+/** Rename a cohort; where the page says what follows (`onRenamed`), it stays there, else the cohort's own page opens under its new name. */
+export function RenameDialog({ cohort: c, onClose, onRenamed }: { cohort: Pick<CohortDetail, "name">; onClose: () => void; onRenamed?: (name: string) => void }) {
   const [name, setName] = useState(c.name);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
@@ -461,7 +462,8 @@ function RenameDialog({ cohort: c, onClose }: { cohort: CohortDetail; onClose: (
     cohorts
       .set(c.name, { name: trimmed })
       .then(() => {
-        location.hash = href("data", "cohorts", trimmed);
+        if (onRenamed) onRenamed(trimmed);
+        else location.hash = href("data", "cohorts", trimmed);
         onClose();
       })
       .catch((e: Error) => {
@@ -497,7 +499,8 @@ function RenameDialog({ cohort: c, onClose }: { cohort: CohortDetail; onClose: (
   );
 }
 
-function RetireDialog({ cohort: c, onClose, onDone }: { cohort: CohortDetail; onClose: () => void; onDone: (words: string) => void }) {
+/** Retire a cohort, or bring a retired one back; where the page says what follows (`onRetired`), it stays there. */
+export function RetireDialog({ cohort: c, onClose, onDone, onRetired }: { cohort: Pick<CohortDetail, "name" | "retired_at">; onClose: () => void; onDone: (words: string) => void; onRetired?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const back = c.retired_at !== null;
@@ -508,8 +511,11 @@ function RetireDialog({ cohort: c, onClose, onDone }: { cohort: CohortDetail; on
       .set(c.name, { retired: !back })
       .then(() => {
         if (back) onDone(`${c.name} is back in the lists.`);
-        else {
-          location.hash = href("data", "cohorts");
+        else if (onRetired) {
+          onRetired();
+          onClose();
+        } else {
+          location.hash = href("data", "datasets");
           onClose();
         }
       })

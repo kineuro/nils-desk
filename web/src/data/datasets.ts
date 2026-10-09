@@ -245,6 +245,8 @@ export const jobs = {
   enqueue: (command: string[], name?: string, then?: string[][]) => ops.enqueue(command, name, then),
   open: () => ops.jobs(false, 200),
   recent: (limit = 50) => ops.jobs(true, limit),
+  /** Wave 7a (2026-10-09): one dataset's jobs alone, newest first, every state. */
+  ofDataset: (name: string, limit = 12) => door<{ count: number; jobs: ChainedJob[] }>("GET", `/api/jobs?dataset=${encodeURIComponent(name)}&all=1&limit=${limit}`),
   job: (id: number) => ops.job(id),
   cancel: (id: number) => ops.cancel(id),
   /** Candidate identity rules probed over a sample of a location, as a job; the result is shapes only. */

@@ -1,0 +1,193 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* Datasets and cohorts on one page (Wave 7a, the design of 2026-10-09): two
+ * bands of cards that look different, the chosen card's detail under them,
+ * and the relations between them. Every colour, face and size is a token of
+ * ui/theme.css; the light theme follows from the same tokens. */
+
+.dp { gap: 1.125rem; }
+.dp-band-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.2rem 0.625rem; margin-bottom: -0.375rem; }
+.dp-band-head + .dp-band-head { margin-top: 0; }
+.dp-band-head .meta { font-size: var(--n-text-size-small); }
+* + .dp-band-head { margin-top: 0.25rem; }
+
+/* ------------------------------------------------------------ the cards */
+.dp-grid { display: grid; gap: 0.75rem; }
+.dp-grid.datasets { grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.125rem), 1fr)); }
+.dp-grid.cohorts { grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr)); }
+.dp-card { display: flex; flex-direction: column; gap: 0.625rem; min-width: 0; padding: 0.75rem 0.875rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); cursor: pointer; transition: opacity 120ms ease, border-color 120ms ease; }
+.dp-card:hover { border-color: var(--n-brand-line); }
+.dp-card.on { border-color: var(--n-brand-text); background: var(--n-bg-selected); }
+.dp-card.rel { border-color: var(--n-brand-line); }
+.dp-card.dim { opacity: 0.55; }
+.dp-card.dim:hover, .dp-card.dim:focus-within { opacity: 0.85; }
+.dp-card-head { display: flex; align-items: center; gap: 0.5rem; min-width: 0; }
+.dp-card-head > .i { color: var(--n-text-faint); }
+.dp-card-head > .tag { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.dp-pick { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: var(--n-text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-pick:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 2px; border-radius: 2px; }
+.dp-nums { display: flex; flex-wrap: wrap; gap: 0.25rem 1.125rem; }
+.dp-nums > span { display: flex; flex-direction: column; min-width: 0; }
+.dp-nums b { font-family: var(--n-font-serif); font-weight: 400; font-size: 1.25rem; line-height: 1.3; font-variant-numeric: tabular-nums; }
+.dp-nums > span > span { font-size: 12px; color: var(--n-text-faint); }
+/* the six steps of where a dataset is */
+.dp-rail { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 3px; }
+.dp-rail > span { height: 5px; border-radius: 1px; background: var(--n-neutral-bg); }
+.dp-rail > span.done { background: var(--n-brand-hover); }
+.dp-rail > span.run { background: var(--n-brand-text); }
+.dp-line { font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
+.dp-feeds { font-size: 12px; color: var(--n-text-faint); overflow-wrap: anywhere; }
+.dp-rel { font-size: 12px; color: var(--n-text-faint); }
+.dp-rel.on { color: var(--n-brand-text); }
+.dp-foot { display: flex; align-items: center; gap: 0.5rem; margin-top: auto; }
+.dp-foot > .grow { min-width: 0; }
+.dp-view { display: inline-flex; flex: none; align-items: center; gap: 0.375rem; min-height: 1.625rem; padding: 0 0.625rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-text); font-size: var(--n-text-size-small); white-space: nowrap; }
+a.dp-view, a.dp-view:hover { color: var(--n-text); text-decoration: none; }
+a.dp-view:hover { background: var(--n-bg-hover); }
+.dp-view[aria-disabled="true"] { opacity: 0.45; cursor: default; }
+.dp-view .i { width: 13px; height: 13px; }
+/* a cohort's card */
+.dp-big { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 0.5rem; }
+.dp-big b { font-family: var(--n-font-serif); font-weight: 400; font-size: 1.75rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.dp-big span { font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.dp-parts { display: flex; height: 8px; gap: 2px; }
+.dp-parts > span { min-width: 3px; }
+.dp-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 0.625rem; font-size: 12px; color: var(--n-text-faint); }
+.dp-legend > span { display: inline-flex; align-items: center; gap: 0.3rem; }
+.dp-sw { display: inline-block; width: 8px; height: 8px; flex: none; }
+/* where a cohort's subjects come from: one colour a dataset, one for a query, a hand and an import */
+
+
+/* ------------------------------------------------------------ the chosen card's detail */
+.dp-detail { margin-top: 0.375rem; border: 1px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); min-width: 0; }
+.dp-detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 0.625rem; padding: 1rem 1.125rem 0.75rem; border-bottom: 1px solid var(--n-line); }
+.dp-detail-head > .i { color: var(--n-brand-text); }
+.dp-detail-name { font-family: var(--n-font-serif); font-size: 1.375rem; line-height: 1.25; overflow-wrap: anywhere; }
+.dp-detail-where { min-width: 0; font-family: var(--n-font-mono); font-size: 12px; color: var(--n-text-faint); overflow-wrap: anywhere; }
+.dp-detail-say { min-width: 0; font-size: var(--n-text-size-small); color: var(--n-text-faint); overflow-wrap: anywhere; }
+.dp-acts { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-left: auto; }
+.dp-acts .more-menu > summary { min-height: 1.9rem; padding: 0 0.4rem; }
+.dp .more-list > a, .dp .more-list > a:hover { padding: 0.4rem 0.55rem; border-radius: var(--n-radius); color: var(--n-text); font-size: var(--n-text-size-small); text-decoration: none; }
+.dp .more-list > a:hover { background: var(--n-bg-hover); }
+.dp-said { padding: 0.5rem 1.125rem 0; }
+.dp-sec { padding: 1rem 1.125rem 0.375rem; min-width: 0; }
+.dp-sec > .eyebrow, .dp-col > .eyebrow { display: block; margin: 0; }
+.dp-sec > .eyebrow { margin-bottom: 0.625rem; }
+.dp-gap { margin-top: 0.375rem !important; }
+
+/* where it is: a node a step, the line between them filled as far as it got */
+.dp-steps { display: grid; grid-template-columns: repeat(var(--steps, 6), minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
+.dp-step { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; padding-right: 0.625rem; }
+.dp-step-mark { display: flex; align-items: center; }
+.dp-step-mark .node { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 1px solid var(--n-neutral-line); background: var(--n-bg-page); }
+.dp-step.done .node { border-color: var(--n-brand-text); background: var(--n-brand-hover); }
+.dp-step.running .node, .dp-step.queued .node { border: 2px solid var(--n-brand-text); }
+.dp-step-mark .link { flex: 1; height: 2px; background: var(--n-line); }
+.dp-step.done .link { background: var(--n-brand-hover); }
+.dp-step-title { font-size: 14px; font-weight: 500; }
+.dp-step.off .dp-step-title, .dp-step.waiting .dp-step-title { color: var(--n-text-dim); }
+.dp-step-what { font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
+.dp-step-when { font-family: var(--n-font-mono); font-size: 12px; color: var(--n-text-faint); }
+.dp-step-when.now { color: var(--n-brand-text); }
+
+/* what it holds, its main scans, its log */
+.dp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.75rem), 1fr)); margin-top: 0.75rem; border-top: 1px solid var(--n-line); }
+.dp-col { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; padding: 1rem 1.125rem; border-right: 1px solid var(--n-line); }
+.dp-col:last-child { border-right: 0; }
+.dp-col-head { display: flex; align-items: center; gap: 0.5rem; }
+.dp-col-head .eyebrow { flex: 1; margin: 0; }
+.dp-col-head a { font-size: var(--n-text-size-small); }
+.dp-funnel { display: flex; flex-wrap: wrap; align-items: center; gap: 0.375rem; font-size: 14px; }
+.dp-funnel > span:not(.arrow) { padding: 2px 8px; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); font-variant-numeric: tabular-nums; }
+.dp-funnel .arrow { color: var(--n-text-faint); }
+.dp-sure { display: flex; height: 10px; gap: 2px; }
+.dp-sure > .ok, .dp-bar3 > .ok { background: var(--n-ok-line); }
+.dp-sure > .look, .dp-bar3 > .look { background: var(--n-caution-line); }
+.dp-sure > .none { background: var(--n-neutral-line); }
+.dp-bar3 > .none { background: var(--n-neutral-bg); }
+.dp-sure-words { display: flex; flex-wrap: wrap; gap: 0.25rem 0.875rem; font-size: var(--n-text-size-small); }
+.dp-sure-words .ok { color: var(--n-ok-fg); }
+.dp-sure-words .look { color: var(--n-caution-fg); }
+.dp-sure-words .none { color: var(--n-text-faint); }
+.dp-kinds { display: flex; flex-direction: column; gap: 5px; font-size: var(--n-text-size-small); }
+.dp-kind { display: grid; grid-template-columns: 4rem minmax(0, 1fr) 3.4rem; align-items: center; gap: 0.5rem; }
+.dp-kind.wide { grid-template-columns: 4rem minmax(0, 1fr) 4.4rem; }
+.dp-kind > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-kind .count { color: var(--n-text-faint); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dp-track { display: block; height: 7px; background: var(--n-bg-page); }
+.dp-track > i { display: block; height: 100%; background: var(--n-brand-hover); }
+.dp-role { display: flex; flex-direction: column; gap: 4px; }
+.dp-role-line { display: flex; align-items: baseline; gap: 0.5rem; font-size: 14px; }
+.dp-role-line > b { width: 3.25rem; flex: none; font-weight: 600; }
+.dp-role-line > .grow { min-width: 0; color: var(--n-text-dim); }
+.dp-role-line > a { font-size: var(--n-text-size-small); white-space: nowrap; }
+.dp-bar3 { display: flex; height: 7px; gap: 2px; }
+/* its log: the running job, then what ran before */
+.dp-log { display: flex; flex-direction: column; gap: 0.625rem; }
+.dp-running { display: flex; flex-direction: column; gap: 0.375rem; padding: 0.625rem 0.75rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.dp-running-head { display: flex; align-items: center; gap: 0.5rem; font-size: 14px; }
+.dp-running-head > .grow { min-width: 0; }
+.dp-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--n-brand-text); }
+.dp-progress { height: 6px; overflow: hidden; border-radius: var(--n-radius); background: var(--n-bg-page); }
+.dp-progress > i { display: block; height: 100%; background: var(--n-brand-hover); }
+.dp-running .meta { font-size: 12px; }
+.dp-log-row { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); gap: 0.625rem; font-size: var(--n-text-size-small); }
+.dp-log-row .at { font-family: var(--n-font-mono); color: var(--n-text-faint); white-space: nowrap; }
+.dp-log-row .what { color: var(--n-text); }
+.dp-log-row .how { color: var(--n-text-faint); }
+.dp-log-row.failed .what { color: var(--n-caution-fg); }
+/* a cohort: how it grew, where its subjects come from, its releases */
+.dp-grew { position: relative; height: 7rem; margin: 0; padding: 0; list-style: none; }
+.dp-grew::before { content: ""; position: absolute; left: 0; right: 0; top: 20px; height: 2px; background: var(--n-line); }
+.dp-ev { position: absolute; top: 12px; display: flex; flex-direction: column; gap: 2px; width: 10rem; max-width: 15%; min-width: 7.5rem; }
+.dp-ev.end { align-items: flex-end; text-align: right; }
+.dp-ev .mark { width: 16px; height: 16px; margin-bottom: 6px; border-radius: 50%; border: 1px solid var(--n-brand-text); background: var(--n-brand-hover); }
+.dp-ev.leave .mark { background: var(--n-bg-page); }
+.dp-ev.release .mark { border-radius: 0; border: 2px solid var(--n-brand-text); background: var(--n-bg-page); transform: rotate(45deg) scale(0.8); }
+.dp-ev .when { font-family: var(--n-font-mono); font-size: 12px; color: var(--n-text-faint); }
+.dp-ev .title { font-size: var(--n-text-size-small); font-weight: 500; }
+.dp-ev .what { font-size: 12px; color: var(--n-text-faint); overflow-wrap: anywhere; }
+.dp-src { display: flex; flex-direction: column; gap: 4px; }
+.dp-src-line { display: flex; align-items: center; gap: 0.5rem; font-size: 14px; }
+.dp-src-line > .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dp-src-line .dp-sw { width: 9px; height: 9px; }
+.dp-src-n { flex: none; min-width: 5.5rem; text-align: right; font-variant-numeric: tabular-nums; }
+.dp-release { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.625rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); font-size: var(--n-text-size-small); }
+.dp-release > .i { color: var(--n-text-faint); }
+.dp-release > .grow { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ------------------------------------------------------------ narrower windows */
+@media (max-width: 1100px) {
+  .dp-col { border-right: 0; border-bottom: 1px solid var(--n-line); }
+  .dp-col:last-child { border-bottom: 0; }
+  /* a rail of more than six steps, four to a row, the line ending with each row */
+  .dp-steps.many { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 0.875rem; }
+  .dp-steps.many .dp-step:nth-child(4n) .link { display: none; }
+}
+@media (max-width: 760px) {
+  /* the steps two to a row, without the line between them */
+  .dp-steps, .dp-steps.many { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 0.875rem; }
+  .dp-step-mark .link { display: none; }
+  /* how a cohort grew, one event a line */
+  .dp-grew { height: auto; display: flex; flex-direction: column; gap: 0.5rem; }
+  .dp-grew::before { display: none; }
+  .dp-ev, .dp-ev.end { position: static; width: auto; max-width: none; min-width: 0; display: grid; grid-template-columns: 16px 6rem minmax(0, 1fr); column-gap: 0.5rem; align-items: center; text-align: left; }
+  .dp-ev .mark { grid-row: span 2; margin-bottom: 0; }
+  .dp-ev .what { grid-column: 3; }
+  .dp-acts { margin-left: 0; }
+  .dp-detail-head, .dp-sec, .dp-col { padding-left: 0.875rem; padding-right: 0.875rem; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp-card { transition: none; }
+}
+
+/* ------------------------------------------------------------ the colours of where subjects come from, last so they win over a track's own fill */
+.dp-c1, .dp-track > i.dp-c1 { background: var(--n-value-1); }
+.dp-c2, .dp-track > i.dp-c2 { background: var(--n-value-2); }
+.dp-c3, .dp-track > i.dp-c3 { background: var(--n-value-3); }
+.dp-c4, .dp-track > i.dp-c4 { background: var(--n-value-4); }
+.dp-c5, .dp-track > i.dp-c5 { background: var(--n-value-5); }
+.dp-c6, .dp-track > i.dp-c6 { background: var(--n-value-6); }
+.dp-c7, .dp-track > i.dp-c7 { background: var(--n-value-7); }
+.dp-c8, .dp-track > i.dp-c8 { background: var(--n-value-8); }
+.dp-c9, .dp-track > i.dp-c9 { background: var(--n-value-9); }
+.dp-c10, .dp-track > i.dp-c10 { background: var(--n-value-10); }

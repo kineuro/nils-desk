@@ -23,6 +23,8 @@ export interface PickLine {
   tied: number;
   /** Open review items for this role: what the Review button counts. */
   review: number;
+  /** Wave 7a (2026-10-09): the subjects with a pick of this role on at least one occasion; null from an older engine. */
+  subjects: number | null;
 }
 
 type Json = Record<string, unknown>;
@@ -52,7 +54,7 @@ export function pickLinesOf(a: unknown): PickLine[] {
   return entries
     .map(([role, r]) => {
       const b = bordersOf(r.borders);
-      return { role, picked: count(r.picked), clear: count(r.clear), borders: b.total, reasons: b.reasons, tied: count(r.tied), review: count(r.review_items) };
+      return { role, picked: count(r.picked), clear: count(r.clear), borders: b.total, reasons: b.reasons, tied: count(r.tied), review: count(r.review_items), subjects: typeof r.subjects === "number" ? count(r.subjects) : null };
     })
     .filter((l) => l.picked + l.borders + l.tied + l.review > 0);
 }
@@ -68,6 +70,9 @@ export function pickLineWords(l: PickLine): string {
 
 export const picksSummary = {
   read: (dataset: string) => door<unknown>("GET", `/api/picks/summary?dataset=${encodeURIComponent(dataset)}`).then(pickLinesOf),
+  /** Wave 7a (2026-10-09): the main scans of a cohort's members, with how many of them the engine counted. */
+  cohort: (name: string) =>
+    door<{ subjects?: number } & Record<string, unknown>>("GET", `/api/picks/summary?cohort=${encodeURIComponent(name)}`).then((a) => ({ members: typeof a.subjects === "number" ? a.subjects : null, lines: pickLinesOf(a) })),
 };
 
 /** Whether the pick result is read here: Data reading, and the door served. */

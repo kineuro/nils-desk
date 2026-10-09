@@ -52,7 +52,7 @@ export const PLACEHOLDERS: Placeholder[] = [
     icon: "data",
     grant: "data:see",
     door: "GET /api/sources",
-    words: "The datasets, each pseudonymised before it is read, every batch followed through its stages, and the cohorts.",
+    words: "The datasets, where the files come from, and the cohorts, groups of subjects from any dataset, on one page.",
     built: true,
     pages: () => [page("datasets", "Datasets and cohorts")],
   },

@@ -12,7 +12,6 @@ import { chatsKept, importHere, sidePages } from "./assistant/chats";
 import type { Capabilities } from "./capabilities";
 import { BatchPage } from "./data/BatchPage";
 import { CohortPage } from "./data/CohortPage";
-import { CohortsPage } from "./data/CohortsPage";
 import { DataPage } from "./data/DataPage";
 import { browsing as viewsBrowser, Viewer } from "./data/Viewer";
 import { PseudonymsPage } from "./data/PseudonymsPage";
@@ -32,7 +31,7 @@ import { placesKept } from "./objects/kept";
 import { ProfilePage } from "./profile/ProfilePage";
 import { PersonMenu } from "./ui/PersonMenu";
 import { ReviewPage } from "./review/ReviewPage";
-import { href, parse, type Route } from "./routes";
+import { href, narrow, parse, type Route } from "./routes";
 import { assistantOffered, foot, initials, sections, usable } from "./sections";
 import { where } from "./settings/install";
 import { backupsKept } from "./settings/kept";
@@ -64,6 +63,11 @@ export function App() {
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
+
+  // the cohorts live on the page of the datasets (Wave 7a, 2026-10-09): their old list's address leads there
+  useEffect(() => {
+    if (route.section === "data" && route.page === "cohorts" && !route.arg) location.replace(narrow(href("data", "datasets"), route.query ?? {}));
+  }, [route]);
 
   useEffect(() => {
     let alive = true;
@@ -268,9 +272,8 @@ export function App() {
           {ready && active?.id === "data" && route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg) && <BatchPage caps={caps} id={Number(route.arg)} />}
           {ready && active?.id === "data" && route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation" && <PseudonymsPage caps={caps} name={route.arg} onChanged={changed} />}
           {ready && active?.id === "data" && route.page === "cohorts" && route.arg && viewed === null && <CohortPage caps={caps} name={route.arg} />}
-          {ready && active?.id === "data" && route.page === "cohorts" && !route.arg && <CohortsPage caps={caps} />}
-          {ready && active?.id === "data" && viewed === null && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || (route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation") || route.page === "cohorts") && (
-            <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} />
+          {ready && active?.id === "data" && viewed === null && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || (route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation") || (route.page === "cohorts" && route.arg)) && (
+            <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} query={route.query} />
           )}
           {viewed !== null && <Viewer key={`${viewed.kind}/${viewed.name}`} caps={caps} scope={viewed} query={route.query} onSections={() => setMenu((m) => !m)} />}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
