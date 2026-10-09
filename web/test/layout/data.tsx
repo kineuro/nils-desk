@@ -5,7 +5,9 @@
 // a cohort that grew, so data.pw.ts measures that the bands and the chosen
 // card's detail use the window's width, that how a cohort grew never draws
 // one event over another, and that a phone's width is one column with no
-// sideways scroll. Every name and number here is made up.
+// sideways scroll; and an identified dataset whose IDs need a code, so it
+// measures the pseudonymise step opened in place, its three boxes and its
+// IDs one row each. Every name and number here is made up.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -29,6 +31,12 @@ const DOORS = [
   "PUT /api/cohorts/{name}",
   "POST /api/cohorts/{name}/members",
   "POST /api/releases",
+  "PUT /api/places/{id}",
+  "GET /api/linkage/types",
+  "POST /api/linkage/imports",
+  "GET /api/linkage/held/ids",
+  "POST /api/linkage/held/code",
+  "POST /api/linkage/held/reveal",
 ];
 
 const caps = {
@@ -41,6 +49,8 @@ const caps = {
 };
 
 const NOW = Date.now();
+/** ?done draws the identified dataset pseudonymised, its step's summary beside its log. */
+const DONE = new URLSearchParams(location.search).has("done");
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString().replace(/\.\d+Z$/u, "Z");
 
 interface Spec {
@@ -69,7 +79,7 @@ function source(s: Spec, i: number) {
     s.state === "unknown"
       ? { originals: null, anon: null }
       : s.state === "identified"
-        ? { originals: { path: `/srv/data-test/${s.name}/derivatives/dcm-original`, files: s.files, bytes: 2_000_000 }, anon: { path: `/srv/data-test/${s.name}/derivatives/dcm-anon`, files: 0, last_written: null } }
+        ? { originals: { path: `/srv/data-test/${s.name}/derivatives/dcm-original`, files: s.files, bytes: 2_000_000 }, anon: { path: `/srv/data-test/${s.name}/derivatives/dcm-anon`, files: DONE ? s.files : 0, last_written: null } }
         : { originals: null, anon: { path: `/srv/data-test/${s.name}/derivatives/dcm-anon`, files: s.files, last_written: null } };
   return {
     id: i + 2,
@@ -83,7 +93,8 @@ function source(s: Spec, i: number) {
     arrives,
     ...ids,
     cohort: s.cohort,
-    held: { files: 0, identifiers: 0 },
+    held: s.state === "identified" && !DONE ? { files: s.files ?? 0, identifiers: HELD.length } : { files: 0, identifiers: 0 },
+    identity: s.state === "identified" ? { id_type: "study-id", from: [{ field: "PatientID" }] } : null,
     trees,
     dataset: { kind: "dataset", state: s.state, root: "data-test", arrives, ...ids, cohort: s.cohort },
     digests: read
@@ -98,7 +109,7 @@ const step = (name: string, state: string, counts: Record<string, unknown>, minu
 function summary(s: Spec) {
   const read = s.scans > 0;
   const steps = [step("found", s.state === "unknown" ? "waiting" : "done", { files: s.files, bytes: 9_500_000_000, tree: s.state === "identified" ? "originals" : "anon" }, s.state === "unknown" ? null : 72)];
-  if (s.state === "identified") steps.push(step("pseudonymised", "waiting", { files: 0, waiting: s.files, held: 0 }, null));
+  if (s.state === "identified") steps.push(DONE ? step("pseudonymised", "done", { files: s.files, waiting: 0, held: 0 }, 50, 12) : step("pseudonymised", "waiting", { files: 0, waiting: s.files, held: s.files }, null));
   steps.push(
     step("read", read ? "done" : "waiting", { files: read ? s.files : 0, refused: read ? 216 : 0, reads: read ? 1 : 0 }, read ? 69 : null, 4),
     step("sorted", read ? "done" : "waiting", { scans: s.scans, of: s.scans, look: s.look, unsorted: 0 }, read ? 66 : null, 6),
@@ -217,10 +228,21 @@ const JOBS = [
   { id: 4, kind: "digest", name: "study-big-1", state: "done", started_at: ago(70), heartbeat_at: null, finished_at: ago(69), progress: { batch_id: 3, ingested: 45179, changed: 0, subjects_created: 70 }, error: null, args: {}, result: null },
 ];
 
+/** The identified dataset's held IDs, one row each by shape; their files add up to its 213. */
+const HELD = [
+  { id: 1, shape: "AAA999999", files: 120 },
+  { id: 2, shape: "aAAA9999", files: 61 },
+  { id: 3, shape: "aAAA9999", files: 20 },
+  { id: 4, shape: "AAA9999", files: 12 },
+].map((h) => ({ ...h, id_type: "study-id", first_seen: ago(80), batch: 1, state: "held", code: null, also_in: [], waits_for: null }));
+
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
-window.fetch = ((input: RequestInfo | URL) => {
+window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);
   const path = url.pathname;
+  // a map rehearsed for the identified dataset: three of its four IDs get a code, one a subject study-big holds already
+  if (path === "/api/linkage/imports" && init?.method === "POST")
+    return json(200, { rows: 3, subjects: { named: 3, known: 1, new: 2 }, identifiers: { filed: 3, known: 0, new: 3, types_new: 0 }, held_released: 201, held_released_by: [], merges: [], conflicts: [], dry_run: true, written: false, held_ids: [1, 2, 3].map((id) => ({ id, code: `5a9f30c6e8b21d4${id}`, also_in: id === 1 ? ["study-big"] : [] })) });
   if (path === "/desk/capabilities") return json(200, caps);
   if (path === "/api/sources") return json(200, { count: SPECS.length, window_days: 30, sources: SPECS.map(source), rates: null });
   if (path === "/api/cohorts") return json(200, COHORTS);
@@ -230,6 +252,8 @@ window.fetch = ((input: RequestInfo | URL) => {
     const s = SPECS.find((x) => x.name === decodeURIComponent(sum[1]));
     return s ? json(200, summary(s)) : json(404, { error: "no such dataset" });
   }
+  if (path === "/api/linkage/held/ids") return json(200, DONE ? { place: "study-identified", files: 0, identifiers: 0, ids: [], subjects: { coded: 4, generated: 1 } } : { place: "study-identified", files: 213, identifiers: HELD.length, ids: HELD, subjects: { coded: 0, generated: 0 } });
+  if (path === "/api/linkage/types") return json(200, [{ name: "study-id", description: "the study's own number" }]);
   if (path === "/api/jobs") {
     const dataset = url.searchParams.get("dataset");
     if (dataset === "study-big") return json(200, { count: JOBS.length, jobs: JOBS });

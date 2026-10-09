@@ -30,10 +30,10 @@ export interface Placeholder {
 /** A page of the side, by the word its address names past the section. */
 const page = (id: string, title: string, more: Partial<SidePage> = {}): SidePage => ({ id, title, depth: 1, ...more });
 
-// Left out until their views are built: Data's Pseudonyms (a dataset's own
-// pseudonymisation page is the only one, opened from the dataset), Models'
-// Checks (a check is recorded on a model's own page), and Pipelines' Runs and
-// Plans (a run's and a plan's own pages are opened from the catalog).
+// Left out until their views are built: Models' Checks (a check is recorded
+// on a model's own page), and Pipelines' Runs and Plans (a run's and a plan's
+// own pages are opened from the catalog). Data's Pseudonyms holds what spans
+// datasets; a dataset's own pseudonymisation is a step of it, opened in place.
 export const PLACEHOLDERS: Placeholder[] = [
   {
     id: "query",
@@ -54,7 +54,7 @@ export const PLACEHOLDERS: Placeholder[] = [
     door: "GET /api/sources",
     words: "The datasets, where the files come from, and the cohorts, groups of subjects from any dataset, on one page.",
     built: true,
-    pages: () => [page("datasets", "Datasets and cohorts")],
+    pages: (caps) => [page("datasets", "Datasets and cohorts"), ...(door(caps, "GET /api/linkage/types") ? [page("pseudonyms", "Pseudonyms")] : [])],
   },
   {
     id: "review",

@@ -270,10 +270,10 @@ export function App() {
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
           {ready && active?.id === "data" && route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg) && <BatchPage caps={caps} id={Number(route.arg)} />}
-          {ready && active?.id === "data" && route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation" && <PseudonymsPage caps={caps} name={route.arg} onChanged={changed} />}
+          {ready && active?.id === "data" && route.page === "pseudonyms" && <PseudonymsPage caps={caps} onChanged={changed} />}
           {ready && active?.id === "data" && route.page === "cohorts" && route.arg && viewed === null && <CohortPage caps={caps} name={route.arg} />}
-          {ready && active?.id === "data" && viewed === null && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || (route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation") || (route.page === "cohorts" && route.arg)) && (
-            <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} query={route.query} />
+          {ready && active?.id === "data" && viewed === null && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || route.page === "pseudonyms" || (route.page === "cohorts" && route.arg)) && (
+            <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} step={route.page === "datasets" ? route.sub : null} query={route.query} />
           )}
           {viewed !== null && <Viewer key={`${viewed.kind}/${viewed.name}`} caps={caps} scope={viewed} query={route.query} onSections={() => setMenu((m) => !m)} />}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}

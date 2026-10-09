@@ -13,7 +13,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import answer from "../../test/fixtures/sources_record26.json";
-import { ANONYMISED, ASKED, UNKNOWN, WARD_B, WARD_C, button, caps7a, dialogs, engine, radio, settle } from "../../test/safeWayIn";
+import { ANONYMISED, ASKED, IDENTIFIED, UNKNOWN, WARD_A, WARD_B, WARD_C, button, caps7a, dialogs, engine, radio, settle } from "../../test/safeWayIn";
 import type { ChainedJob } from "../ask/client";
 import { DoorError } from "../ask/client";
 import { placesKept } from "../objects/kept";
@@ -183,6 +183,42 @@ describe("the Data page", () => {
     expect(host.textContent).toContain("study-big is a dataset.");
   });
 
+  it("asks an identified folder what its PatientID holds, a personnummer or an ID, and sends it as the rule its originals are read under", async () => {
+    const e = await page([], (c) => {
+      if (c.method === "GET" && c.url.startsWith("/api/places/1/folders?")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 2, folders: ["study-pn", "study-id"].map((name) => ({ name, path: `/srv/in/${name}`, added: false, dataset_id: null, dataset: null, has_derivatives: true })), next: null } };
+      const look = /^\/api\/places\/1\/folders\/(study-pn|study-id)$/.exec(c.url);
+      if (c.method === "GET" && look) return { status: 200, body: { name: look[1], path: `/srv/in/${look[1]}`, added: false, dataset_id: null, holds_dicom: "yes", has_derivatives: true, layout: IDENTIFIED } };
+      if (c.method === "POST" && c.url === "/api/places") return { status: 201, body: { ...WARD_A, name: c.body?.folder, layout: IDENTIFIED, not_read: null } };
+      return undefined;
+    });
+    act(() => button(host, "Add a dataset")!.click());
+    act(() => button(host, "Browse")!.click());
+    await settle();
+    act(() => button(host, "study-pn")!.click());
+    await settle();
+    // the one question, asked and never assumed: Add waits for it
+    expect(host.textContent).toContain("PatientID holds");
+    expect(button(host, "Add")!.disabled).toBe(true);
+    act(() => radio(host, "A personnummer").click());
+    expect(button(host, "Add")!.disabled).toBe(false);
+    act(() => button(host, "Add")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/places")[0].body).toEqual({ role: "source", root: "incoming", folder: "study-pn", identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+    // an ID of a type: its codes come from a map, on the dataset's pseudonymise step
+    act(() => button(host, "Add a dataset")!.click());
+    act(() => button(host, "Browse")!.click());
+    await settle();
+    act(() => button(host, "study-id")!.click());
+    await settle();
+    act(() => radio(host, "An ID").click());
+    const which = host.querySelector<HTMLSelectElement>('select[aria-label="Which ID"]')!;
+    // never the personnummer among the types: that is the other answer
+    expect([...which.options].map((o) => o.value)).toEqual(["study-id"]);
+    act(() => button(host, "Add")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/places")[1].body).toEqual({ role: "source", root: "incoming", folder: "study-id", identity: { id_type: "study-id", from: [{ field: "PatientID" }] } });
+  });
+
   it("says a refused Read in one plain line, the engine's words behind a \"?\"", async () => {
     const engineWords = "@ward-d is not a registered ingest location; those are data, data-test";
     await page([toRead], (c) => (c.method === "POST" && c.url === "/api/jobs" ? { status: 400, body: { error: engineWords } } : undefined));
@@ -246,14 +282,17 @@ describe("the Data page", () => {
       if (!card.classList.contains("on")) act(() => (card.querySelector(".dp-pick") as HTMLButtonElement).click());
       return [cards()[name].querySelector(".dp-card-head .tag")?.textContent, host.querySelector(".dp-detail .dp-acts .button:not(.secondary):not(.quiet)")?.textContent];
     };
-    expect(said("ward-a")).toEqual(["Identified", "Pseudonymise"]);
+    // identified: its pseudonymise step opens in place under the rail, and its one primary button is the step's own
+    expect(said("ward-a")).toEqual(["Identified", undefined]);
+    expect(host.querySelector(".dp-detail .ps-step .ps-actions .button")?.textContent).toBe("Find the IDs");
     expect(said("ward-b")).toEqual(["Anonymised", "Set the IDs"]);
     expect(said("ward-c")).toEqual(["Unknown", "Sort the files"]);
     expect(said("ward-d")).toEqual(["Ready", "Read"]);
     said("ward-a");
-    act(() => button(host.querySelector(".dp-detail .dp-acts")!, "Pseudonymise")!.click());
+    act(() => button(host.querySelector(".dp-detail .ps-step")!, "Find the IDs")!.click());
     await settle();
-    expect(e.of("POST", "/api/jobs")[0].body).toMatchObject({ command: ["pseudonymize", "@ward-a", "--name", expect.stringMatching(/^ward-a-\d{4}-\d\d-\d\d$/)] });
+    // the dataset's own thread: pseudonymise, then read and sort, the IDs with no code held and listed
+    expect(e.of("POST", "/api/jobs")[0].body).toMatchObject({ command: ["bring-in", "@ward-a", "--name", expect.stringMatching(/^ward-a-\d{4}-\d\d-\d\d$/), "--pack", "mri"] });
     const text = host.querySelector("section.data")!.textContent ?? "";
     expect(text).not.toMatch(/digest|\bsource\b|\bbatch|dcm-anon|de-identified|why two trees|one person is one subject|\bplace\b|arriv/i);
   });

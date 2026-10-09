@@ -5,7 +5,10 @@
 // running one marked; what it holds, the funnel of subjects, visits and
 // scans, how sure the sort is, the kinds of scan and its files; its main
 // scans per role with the way to Review; and its log, the running job with
-// its progress and Stop, then what ran before.
+// its progress and Stop, then what ran before. A dataset whose files arrive
+// identified has its pseudonymise step on the rail between Found and Read,
+// opened in place under the rail (the design of the same day): by itself
+// while it waits on a person, and from the rail or the address otherwise.
 
 import { useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
@@ -20,7 +23,10 @@ import { Icon } from "../ui/Icon";
 import { jobs as jobsDoor, packFor, type ChainedJob, type Dataset } from "./datasets";
 import { cancelRefusal } from "./now";
 import type { LiveJobs } from "./Now";
+import { DatasetSettings } from "./DatasetSettings";
 import { maySeePicks, picksSummary, type PickLine } from "./picks";
+import { opensItself, PseudonymisedSummary, PseudonymiseStep, StepDialogs, usePseudonymise, type Opened } from "./PseudonymiseStep";
+import { railWords } from "./pseudoStep";
 import { StepRail } from "./StepRail";
 import { nextStep, stepCommand, type StepId } from "./steps";
 import {
@@ -31,6 +37,7 @@ import {
   logLine,
   maySummarise,
   operationOf,
+  originalIdWords,
   railSteps,
   roleOrder,
   roleWord,
@@ -56,6 +63,12 @@ export interface DatasetDetailProps {
   summary: DatasetSummary | null;
   why: string | null;
   jobs: LiveJobs;
+  /** Every dataset of the page, which a vault of the originals stays out of. */
+  datasets?: readonly Dataset[];
+  /** The cohorts there are, for the cohort a dataset feeds. */
+  cohorts?: readonly string[];
+  /** The address opened the pseudonymise step: #data/datasets/<name>/pseudonymisation. */
+  openStep?: boolean;
   onStep: (id: StepId) => void;
   onChanged: (words: string) => void;
   onSaid: (words: string) => void;
@@ -84,7 +97,10 @@ export function datasetActions(caps: Capabilities, d: Dataset, why: string | nul
     view: d.totals.stacks > 0 && mayBrowse(caps, { kind: "dataset", name: d.name }) ? viewHref({ kind: "dataset", name: d.name }) : null,
     readAgain: readable && d.digests.count > 0,
     setIds: works && next.step !== "sort-files" && next.step !== "set-ids" && stateOf(d) !== "unknown" && d.arrives !== "undeclared",
-    pseudonymisation: Boolean(d.trees?.originals) || (d.held?.files ?? 0) > 0,
+    /** The cohort it feeds, among its settings: Data work and Places work, through its place. */
+    settings: works && may(caps, "places:work") && served(caps, "PUT /api/places/{id}"),
+    /** Its originals, kept, vaulted or purged by the rules of its pseudonymise step. */
+    originals: works && Boolean(d.trees?.originals) && served(caps, "PUT /api/places/{id}"),
     remove: may(caps, "places:work") && served(caps, "PUT /api/places/{id}"),
   };
 }
@@ -95,7 +111,18 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const [log, setLog] = useState<ChainedJob[] | null>(null);
   const [picks, setPicks] = useState<PickLine[] | null>(null);
   const [removing, setRemoving] = useState(false);
+  const [settings, setSettings] = useState(false);
   const acts = datasetActions(caps, d, why);
+  // the pseudonymise step: open by itself while it waits on a person or runs, or as the person or the address opened it
+  const pseudo = usePseudonymise(caps, d, s);
+  const view = pseudo.view;
+  const [stepOpen, setStepOpen] = useState<boolean | null>(props.openStep ? true : null);
+  useEffect(() => {
+    if (props.openStep) setStepOpen(true);
+  }, [props.openStep]);
+  const open = view !== null && (stepOpen ?? opensItself(view));
+  const [dialog, setDialog] = useState<Opened>(null);
+  const stepId = `pseudonymise-${d.id}`;
   const readsLog = may(caps, "pipelines:see") && served(caps, "GET /api/jobs") && maySummarise(caps);
   const runningNow = s?.steps.some((x) => x.state === "running" || x.state === "queued") ?? false;
   // what the summary last said of each step: the log and the picks are read again when it moves
@@ -147,9 +174,29 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const refusedBatch = s?.files.refused_batch ?? null;
   const refused = s?.files.refused ?? d.totals.refused_files;
   const ids = idsWords(d);
-  const where = [whereWords(d), stateWord(s?.state ?? stateOf(d)), ids].filter(Boolean).join(" · ");
+  // an identified dataset says what its files carry until they are pseudonymised, and then what the copy NILS reads holds
+  const where = (
+    view === null ? [whereWords(d), stateWord(s?.state ?? stateOf(d)), ids] : view.phase === "done" ? [whereWords(d), "pseudonymised", ids] : [whereWords(d), "the files carry names"]
+  )
+    .filter(Boolean)
+    .join(" · ");
 
-  const primary = acts.primary;
+  // while the step is open before it is done, its own button is the one primary action
+  const primary = open && view?.phase !== "done" && acts.primary?.step === "pseudonymise" ? null : acts.primary;
+  const said = view ? railWords(view) : null;
+  const stepping = (id: StepId) => {
+    if (id === "pseudonymise" && view !== null) return setStepOpen(true);
+    onStep(id);
+  };
+  const logCol = (
+    <div className="dp-col">
+      <div className="dp-col-head">
+        <h3 className="eyebrow">Its log</h3>
+        {may(caps, "pipelines:see") && <a href={href("pipelines")}>All on Pipelines</a>}
+      </div>
+      <Log caps={caps} dataset={d} summary={s} log={readsLog ? log : null} live={jobs} now={now} onSaid={onSaid} onFailed={onFailed} />
+    </div>
+  );
   return (
     <section className="dp-detail" aria-label={d.name}>
       <div className="dp-detail-head">
@@ -176,11 +223,11 @@ export function DatasetDetail(props: DatasetDetailProps) {
             </a>
           )}
           {primary && primary.href === null && (
-            <button type="button" className="button" disabled={primary.busy || primary.step === null} onClick={() => primary.step && onStep(primary.step)}>
+            <button type="button" className="button" disabled={primary.busy || primary.step === null} onClick={() => primary.step && stepping(primary.step)}>
               {primary.label}
             </button>
           )}
-          {(acts.readAgain || acts.setIds || acts.pseudonymisation || (refused > 0 && refusedBatch !== null) || acts.remove) && (
+          {(acts.readAgain || acts.setIds || acts.settings || acts.originals || (refused > 0 && refusedBatch !== null) || acts.remove) && (
             <MoreMenu label={`More for ${d.name}`}>
               {acts.readAgain && (
                 <button type="button" onClick={readAgain}>
@@ -192,7 +239,16 @@ export function DatasetDetail(props: DatasetDetailProps) {
                   The IDs
                 </button>
               )}
-              {acts.pseudonymisation && <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>}
+              {acts.settings && (
+                <button type="button" onClick={() => setSettings(true)}>
+                  Settings
+                </button>
+              )}
+              {acts.originals && (
+                <button type="button" onClick={() => setDialog({ kind: "rules" })}>
+                  The originals
+                </button>
+              )}
               {refused > 0 && refusedBatch !== null && <a href={href("data", "batch", String(refusedBatch))}>Refused files</a>}
               {acts.remove && (
                 <button type="button" onClick={() => setRemoving(true)}>
@@ -206,26 +262,67 @@ export function DatasetDetail(props: DatasetDetailProps) {
 
       <div className="dp-sec">
         <h3 className="eyebrow">Where it is</h3>
-        {s ? <StepRail steps={railSteps(s)} now={now} /> : maySummarise(caps) ? <p className="meta">Reading where it is.</p> : <StepRail steps={stepsOfSources(d)} now={now} />}
+        {s ? (
+          <StepRail
+            steps={railSteps(s)}
+            now={now}
+            says={said ? { pseudonymised: said } : undefined}
+            pick={view !== null && stepOf(s, "pseudonymised") !== null ? { step: "pseudonymised", open, controls: stepId, onPick: () => setStepOpen(!open) } : null}
+          />
+        ) : maySummarise(caps) ? (
+          <p className="meta">Reading where it is.</p>
+        ) : (
+          <StepRail steps={stepsOfSources(d)} now={now} />
+        )}
       </div>
 
-      <div className="dp-cols">
-        <div className="dp-col">
-          <h3 className="eyebrow">What it holds</h3>
-          <Holds dataset={d} summary={s} />
+      {open && view && view.phase !== "done" && (
+        <PseudonymiseStep
+          caps={caps}
+          dataset={d}
+          summary={s}
+          pseudo={pseudo}
+          onChanged={(words) => {
+            // what the person started stays in sight: the step's summary once it is done, the next steps running beside it
+            setStepOpen(true);
+            onChanged(words);
+          }}
+          onFailed={onFailed}
+          onOpen={setDialog}
+        />
+      )}
+      {open && view && view.phase === "done" ? (
+        <div className="dp-cols ps-cols">
+          <PseudonymisedSummary caps={caps} dataset={d} summary={s} pseudo={pseudo} onOpen={setDialog} />
+          {logCol}
         </div>
-        <div className="dp-col">
-          <h3 className="eyebrow">Main scans</h3>
-          <MainScans caps={caps} dataset={d.name} picks={picks} step={stepOf(s, "main_scans")} />
-        </div>
-        <div className="dp-col">
-          <div className="dp-col-head">
-            <h3 className="eyebrow">Its log</h3>
-            {may(caps, "pipelines:see") && <a href={href("pipelines")}>All on Pipelines</a>}
+      ) : open && view ? (
+        runningNow && <div className="dp-cols">{logCol}</div>
+      ) : (
+        <div className="dp-cols">
+          <div className="dp-col">
+            <h3 className="eyebrow">What it holds</h3>
+            <Holds dataset={d} summary={s} />
           </div>
-          <Log caps={caps} dataset={d} summary={s} log={readsLog ? log : null} live={jobs} now={now} onSaid={onSaid} onFailed={onFailed} />
+          <div className="dp-col">
+            <h3 className="eyebrow">Main scans</h3>
+            <MainScans caps={caps} dataset={d.name} picks={picks} step={stepOf(s, "main_scans")} />
+          </div>
+          {logCol}
         </div>
-      </div>
+      )}
+      <StepDialogs caps={caps} dataset={d} datasets={props.datasets ?? []} view={view} opened={dialog} setOpened={setDialog} onChanged={onChanged} />
+      {settings && (
+        <DatasetSettings
+          dataset={d}
+          cohorts={props.cohorts ?? []}
+          onClose={() => setSettings(false)}
+          onSaved={(words) => {
+            setSettings(false);
+            onChanged(words);
+          }}
+        />
+      )}
       {removing && (
         <RemoveDialog
           dataset={d}
@@ -447,7 +544,7 @@ function Log(props: {
       ? stepsLog(s, at)
       : [];
   const added: LogLine | null = s
-    ? { id: null, at: clock(s.added_at, at), what: "Added as a dataset", how: [stateWord(s.state), idsWords(d)].filter(Boolean).join(", "), failed: false, batch: null }
+    ? { id: null, at: clock(s.added_at, at), what: "Added as a dataset", how: [stateWord(s.state), originalIdWords(d) ?? idsWords(d)].filter(Boolean).join(", "), failed: false, batch: null }
     : null;
   const lines = [...over.slice(0, 8), ...(added && (!log || log.length < 10) ? [added] : [])];
 

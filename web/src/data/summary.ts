@@ -265,6 +265,8 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
   switch (s.step) {
     case "found":
       what = typeof s.files === "number" ? `${n(s.files)} ${s.files === 1 ? "file" : "files"}` : "not counted yet";
+      // an identified dataset's originals carry who each file is about
+      if (s.tree === "originals" && typeof s.files === "number") what += ", with names";
       break;
     case "pseudonymised":
       what = v("waiting") > 0 ? `${n(v("waiting"))} to do` : `${n(v("files"))} files`;
@@ -329,7 +331,10 @@ export function filesOf(d: Pick<Dataset, "trees">, s: DatasetSummary | null): nu
 export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): string {
   if (next.word === "Unknown") return "Loose files: choose where they go";
   if (next.step === "set-ids") return "Needs its IDs before it is read";
-  if (next.word === "Identified" && next.step === "pseudonymise") return "Waits to be pseudonymised";
+  if (next.word === "Identified" && next.step === "pseudonymise") {
+    const held = d.held?.identifiers ?? 0;
+    return held > 0 ? `${n(held)} ${held === 1 ? "ID needs" : "IDs need"} a code` : "Waits to be pseudonymised";
+  }
   const running = s?.steps.find((x) => x.state === "running");
   if (running) return `${TITLE[running.step]}: running now`;
   if (d.digests.count === 0) return "Not read yet";
@@ -352,6 +357,13 @@ export function idsWords(d: Pick<Dataset, "patient_id" | "subjects">): string | 
   const holds = pid === "subject-code" ? "PatientID holds the subject code" : pid.startsWith("id-type:") ? `PatientID holds the ${pid.slice("id-type:".length)}` : `PatientID holds ${pid}`;
   if (pid === "subject-code" || !d.subjects) return holds;
   return `${holds}, codes ${d.subjects === "map" ? "from a map" : "made from it"}`;
+}
+
+/** What an identified dataset's originals carry in PatientID, as the rule they are read under says it; nothing where no rule says. */
+export function originalIdWords(d: Pick<Dataset, "identity" | "trees">): string | null {
+  const t = d.trees?.originals ? d.identity?.id_type : undefined;
+  if (!t) return null;
+  return `PatientID holds a ${t}`;
 }
 
 /** What a dataset's structure says, wherever the door put it: at the top, or in its `dataset`. */

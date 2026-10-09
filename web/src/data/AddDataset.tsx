@@ -7,8 +7,11 @@
 // button; a folder with no DICOM asks "Add anyway?" first. Anonymised data
 // says its IDs on the way in (record 55): what PatientID holds and how
 // subjects are found, one select each, set to the subject code and made
-// from the ID, so it is read as soon as it is added. Without a root yet,
-// the root's own form stands here instead.
+// from the ID, so it is read as soon as it is added. Identified data asks the
+// one question that decides its pseudonymise step (the design of
+// 2026-10-09): what its PatientID holds, a personnummer, which the key codes
+// with no map, or an ID of a type, whose codes a map gives. Without a root
+// yet, the root's own form stands here instead.
 
 import { useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -20,10 +23,11 @@ import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Wait } from "../ui/Wait";
 import { RootForm } from "./AddRoot";
-import { linkage, type LinkageType, type Subjects } from "./datasets";
+import { linkage, type IdentityRule, type LinkageType, type Subjects } from "./datasets";
 import { writable } from "./FinishDataset";
 import { plainError } from "./plain";
-import { asksIds, dicomWord, roots as rootsDoor, rootsOf, wouldBe, type FolderLook, type RootFolder } from "./steps";
+import { typeName } from "./pseudonyms";
+import { asksIdentity, asksIds, dicomWord, roots as rootsDoor, rootsOf, wouldBe, type FolderLook, type RootFolder } from "./steps";
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "found"; folders: RootFolder[]; count: number; next: string | null } | { kind: "failed"; why: string };
 type Seen = { kind: "looking"; name: string } | { kind: "seen"; look: FolderLook } | { kind: "failed"; name: string; why: string };
@@ -66,6 +70,9 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
   const [patientId, setPatientId] = useState("subject-code");
   const [subjects, setSubjects] = useState<Subjects>("generated");
   const [types, setTypes] = useState<LinkageType[]>([]);
+  /** What an identified folder's PatientID holds: a personnummer, or an ID of a type; asked, never assumed. */
+  const [holds, setHolds] = useState<"personnummer" | "type" | null>(null);
+  const [holdsType, setHoldsType] = useState("");
   const asked = useRef(0);
   const root = all.find((r) => r.id === rootId) ?? null;
 
@@ -96,7 +103,11 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
     let alive = true;
     linkage
       .types()
-      .then((r) => alive && setTypes(writable(r.types)))
+      .then((r) => {
+        if (!alive) return;
+        setTypes(writable(r.types));
+        setHoldsType((t) => t || (writable(r.types)[0]?.name ?? ""));
+      })
       .catch(() => undefined);
     return () => {
       alive = false;
@@ -120,7 +131,7 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
     if (seen.look.holds_dicom === "no" && !anyway) return setAnyway(true);
     setAdding({ since: Date.now() });
     setWhy(null);
-    const ids = asksIds(seen.look) ? { patient_id: patientId, subjects } : {};
+    const ids = asksIds(seen.look) ? { patient_id: patientId, subjects } : asksIdentity(seen.look) && identity !== null ? { identity } : {};
     rootsDoor.addDataset(root.name, seen.look.name, ids).then(
       (d) => onDone(`${d.name} is a dataset.`),
       (e: unknown) => {
@@ -131,13 +142,17 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
   };
 
   const look = seen?.kind === "seen" ? seen.look : null;
+  // the rule the identified folder's originals are read under: PatientID, as what the person said it holds
+  const identity: IdentityRule | null =
+    holds === "personnummer" ? { id_type: "personnummer", from: [{ field: "PatientID" }] } : holds === "type" && typeName(holdsType) !== "" ? { id_type: typeName(holdsType), from: [{ field: "PatientID" }] } : null;
+  const unanswered = look !== null && !look.added && asksIdentity(look) && identity === null;
   const foot = look ? (
     <div className="row actions">
       <button type="button" className="button secondary" disabled={adding !== null} onClick={() => (anyway ? setAnyway(false) : setSeen(null))}>
         Back
       </button>
       {!look.added && (
-        <button type="button" className="button" disabled={adding !== null} onClick={add}>
+        <button type="button" className="button" disabled={adding !== null || unanswered} onClick={add}>
           {anyway ? "Add anyway" : "Add"}
         </button>
       )}
@@ -201,6 +216,49 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
                     </div>
                   </div>
                 </>
+              )}
+              {!look.added && asksIdentity(look) && (
+                <div className="field">
+                  <span className="label">
+                    PatientID holds
+                    <Hint text="What the files' PatientID is. A personnummer is coded by the key, with no map. An ID such as a study ID gets its code from a map, or a generated one." />
+                  </span>
+                  <div className="choices" role="radiogroup" aria-label="PatientID holds">
+                    <label className="radio-row">
+                      <input type="radio" name="dataset-holds" checked={holds === "personnummer"} disabled={adding !== null} onChange={() => setHolds("personnummer")} />
+                      <span>
+                        <b>A personnummer</b>
+                        <Hint text="Coded by the key: no map, no step to wait on." />
+                      </span>
+                    </label>
+                    <label className="radio-row">
+                      <input type="radio" name="dataset-holds" checked={holds === "type"} disabled={adding !== null} onChange={() => setHolds("type")} />
+                      <span>
+                        <b>An ID</b>
+                        <Hint text="Its codes come from a map of ID and subject code, given on the dataset's pseudonymise step." />
+                      </span>
+                    </label>
+                  </div>
+                  {holds === "type" && (
+                    <div className="field-row">
+                      {types.length > 0 ? (
+                        <div className="input">
+                          <select value={holdsType} aria-label="Which ID" disabled={adding !== null} onChange={(e) => setHoldsType(e.target.value)}>
+                            {types.map((t) => (
+                              <option key={t.name} value={t.name} title={t.description ?? undefined}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="input mono">
+                          <input value={holdsType} placeholder="study-id" aria-label="Which ID" spellCheck={false} disabled={adding !== null} onChange={(e) => setHoldsType(e.target.value)} />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
               {look.added && <p className="meta">Already a dataset.</p>}
               {!look.added && look.holds_dicom === "no" && <p className="warn">{anyway ? "No DICOM found here. Add anyway?" : "No DICOM found here."}</p>}
