@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import { type Chunk, empty, reduce } from "./parts";
-import { lastSteps, liveLine, stepLines, toolWords } from "./steps";
+import { lastSteps, liveLine, nothingYet, STARTING, stepLines, toolWords } from "./steps";
 
 const live = (...chunks: Chunk[]) => chunks.reduce(reduce, empty());
 
@@ -57,5 +57,23 @@ describe("the one live line", () => {
     expect(liveLine(s)).toBeNull();
     s = reduce(s, { type: "submission-settled", submissionId: "x", outcome: "completed" });
     expect(liveLine(s)).toBeNull();
+  });
+
+  it("says the model is starting once a turn has said nothing for a while, until its first step, reasoning or word (2026-10-09)", () => {
+    const asked = { type: "message-appended", message: { id: "u1", role: "user", parts: [{ type: "text", text: "find T1w" }] } };
+    // sent, and the person's words not back yet: what was answered before stays the last turn
+    const sent = { ...live({ type: "message-started", messageId: "a0" }, { type: "message-delta", messageId: "a0", kind: "text", delta: "Hello." }, { type: "message-completed", messageId: "a0" }, { type: "submission-settled", submissionId: "x", outcome: "completed" }), busy: true, settled: null };
+    expect(nothingYet(sent)).toBe(false);
+    expect(nothingYet({ ...empty(), busy: true })).toBe(true);
+    let s = reduce(sent, asked);
+    expect(nothingYet(s)).toBe(true);
+    s = reduce(s, { type: "message-started", messageId: "a1" });
+    expect(nothingYet(s)).toBe(true);
+    expect(liveLine(s)).toBe("Thinking");
+    expect(liveLine(s, true)).toBe(STARTING);
+    expect(liveLine(reduce(s, { type: "tool-input", messageId: "a1", toolCallId: "t1", toolName: "activate_skill", input: { name: "find-data" } }), true)).toBe("Finding the data");
+    expect(liveLine(reduce(s, { type: "message-delta", messageId: "a1", kind: "reasoning", delta: "The person wants T1w." }), true)).toBe("Thinking");
+    expect(liveLine(reduce(s, { type: "message-delta", messageId: "a1", kind: "text", delta: "There are 38." }), true)).toBeNull();
+    expect(liveLine(reduce(s, { type: "submission-settled", submissionId: "x", outcome: "failed" }), true)).toBeNull();
   });
 });

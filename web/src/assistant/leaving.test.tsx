@@ -3,7 +3,8 @@
 // Leaving the Assistant page never stops or hides a turn (2026-10-09): the
 // first message of a new conversation, the page left while the model starts,
 // and the conversation opened again by its address, which the side's list and
-// the browser's Back open too. The turn is followed to its answer.
+// the browser's Back open too. The turn is followed to its answer, and while
+// nothing has come back for five seconds its line says the model is starting.
 // Against a fake assistant whose stream answers when the test writes to it,
 // and whose long poll waits, as the runtime's does, until it is let go.
 
@@ -16,6 +17,7 @@ import { AssistantPage } from "./AssistantPage";
 import { chatsKept } from "./chats";
 import { INBOX } from "./onechat.fixture";
 import type { Chunk, History } from "./parts";
+import { STARTING } from "./steps";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -210,5 +212,50 @@ describe("a turn the person left", () => {
     expect(button(host, "Send")).not.toBeNull();
     expect(line()).toBeNull();
     expect(a.open()).toBe(0);
+  });
+});
+
+describe("a turn that has said nothing yet", () => {
+  /** Every promise the last act started, settled, after the clock moved on by `ms`. */
+  const tick = async (ms = 0) => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+    for (let i = 0; i < 10; i++)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+  };
+
+  it("says the model is starting after five seconds, until its first step, and again when the page is opened during the wait", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const a = fakeAssistant();
+    await ask("Which datasets have a FLAIR?", () => tick());
+    a.write(...BEGUN);
+    await tick();
+    expect(line()).toBe("Thinking");
+    await tick(4_000);
+    expect(line()).toBe("Thinking");
+    await tick(1_000);
+    expect(line()).toBe(STARTING);
+
+    // left and opened again while the model still says nothing: the same five seconds, then the same line
+    act(() => root.render(<p>Data</p>));
+    await tick();
+    a.keep([ASKED, { id: "a1", role: "assistant", display: "visible", submissionId: "sub_1", parts: [] }]);
+    act(() => root.render(<AssistantPage caps={caps()} conversation="c9" />));
+    await tick();
+    expect(line()).toBe("Thinking");
+    await tick(5_000);
+    expect(line()).toBe(STARTING);
+
+    // the first step: the line says what it does
+    a.write(...STEP.slice(0, 1));
+    await tick();
+    expect(line()).toBe("Finding the data");
+    a.write(...STEP.slice(1), ...ANSWERED);
+    await tick();
+    expect(line()).toBeNull();
+    expect(said()).toContain("Two of them have a FLAIR: ds-a and ds-b.");
   });
 });
