@@ -24,8 +24,8 @@ export const FAMILY_WORD: Record<Family, string> = {
   body: "Spine and neck",
 };
 const FAMILY_ORDER: Family[] = ["plain", "symri", "mix", "stage", "swi", "derived", "body"];
-/** The colour slot each family's chosen scan is framed in (the theme's value colours); the plain ones take the brand's. */
-export const FAMILY_SLOT: Record<Family, number | null> = { plain: null, symri: 1, mix: 3, stage: 4, swi: 2, derived: 5, body: 6 };
+/** The colour slot each family is outlined and framed in (the theme's value colours, as the redesign's canvas draws them: SyMRI violet, spine and neck green, derived blue, SWI teal); the plain ones take the brand's. */
+export const FAMILY_SLOT: Record<Family, number | null> = { plain: null, symri: 7, mix: 4, stage: 5, swi: 6, derived: 1, body: 3 };
 
 /** A scan's family, from what NILS says made it and where in the body it is. */
 export function familyOf(s: Pick<Scan, "axes">): Family {

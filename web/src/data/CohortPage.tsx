@@ -23,6 +23,7 @@ import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { PickRun } from "./PickRun";
 import { chartLabels, cohorts, delta, ledeWords, membersBody, sessionsMeta, sessionsWords, stepChart, type CohortDetail, type Join } from "./cohorts";
+import { mayBrowse, viewHref } from "./viewer";
 import { whenWords } from "./sources";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; cohort: CohortDetail };
@@ -158,6 +159,11 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                     {c.retired_at ? "Bring back" : "Retire"}
                   </button>
                 </>
+              )}
+              {mayBrowse(caps, { kind: "cohort", name: c.name }) && (
+                <a className="button secondary" href={viewHref({ kind: "cohort", name: c.name })}>
+                  View
+                </a>
               )}
               {!c.retired_at && <PickRun caps={caps} of={{ cohort: c.name }} />}
               {acts.releasing === null && !c.retired_at && (

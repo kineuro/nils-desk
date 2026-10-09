@@ -14,7 +14,7 @@ import { BatchPage } from "./data/BatchPage";
 import { CohortPage } from "./data/CohortPage";
 import { CohortsPage } from "./data/CohortsPage";
 import { DataPage } from "./data/DataPage";
-import { DatasetView } from "./data/DatasetView";
+import { browsing as viewsBrowser, Viewer } from "./data/Viewer";
 import { PseudonymsPage } from "./data/PseudonymsPage";
 import { ModelsPage } from "./models/ModelsPage";
 import { PipelinesPage } from "./ops/PipelinesPage";
@@ -165,7 +165,13 @@ export function App() {
   const onSetup = ready && setsUp && !left && (setupReady === false || landed);
   const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id && !p.built);
   const who = caps.person.display_name || caps.person.subject;
-  const body = ["body", sided ? "with-side" : null].filter(Boolean).join(" ");
+  // the dataset viewer (#data/datasets/NAME/view, #data/cohorts/NAME/view): the browser folds the side away
+  const viewed =
+    ready && active?.id === "data" && (route.page === "datasets" || route.page === "cohorts") && route.arg !== null && route.arg !== "" && route.sub === "view"
+      ? { kind: route.page === "datasets" ? ("dataset" as const) : ("cohort" as const), name: route.arg }
+      : null;
+  const browsing = viewed !== null && viewsBrowser(caps, viewed, route.query);
+  const body = ["body", sided ? "with-side" : null, browsing ? "browsing" : null].filter(Boolean).join(" ");
   const changed = () => setAsked((n) => n + 1);
 
   return (
@@ -225,7 +231,7 @@ export function App() {
       )}
       <div className={body}>
         {sided && <Side top={side} foot={kept} section={active?.id ?? null} page={route.page} open={menu} onClose={closeMenu} />}
-        <main className="page">
+        <main className={browsing ? "page bare" : "page"}>
           <PageBoundary route={`${route.section}/${route.page ?? ""}/${route.arg ?? ""}`}>
           {st.kind === "login" && (
             <Login how={st.how} url={st.url} choose={caps.desk.login?.choose ?? null} nobody={(caps.desk.login as { nobody_yet?: boolean } | null)?.nobody_yet === true} onDone={() => location.reload()} />
@@ -261,12 +267,12 @@ export function App() {
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
           {ready && active?.id === "data" && route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg) && <BatchPage caps={caps} id={Number(route.arg)} />}
           {ready && active?.id === "data" && route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation" && <PseudonymsPage caps={caps} name={route.arg} onChanged={changed} />}
-          {ready && active?.id === "data" && route.page === "cohorts" && route.arg && <CohortPage caps={caps} name={route.arg} />}
+          {ready && active?.id === "data" && route.page === "cohorts" && route.arg && viewed === null && <CohortPage caps={caps} name={route.arg} />}
           {ready && active?.id === "data" && route.page === "cohorts" && !route.arg && <CohortsPage caps={caps} />}
-          {ready && active?.id === "data" && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || (route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation") || route.page === "cohorts") && (
+          {ready && active?.id === "data" && viewed === null && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || (route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation") || route.page === "cohorts") && (
             <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} />
           )}
-          {ready && active?.id === "data" && route.page === "datasets" && route.arg !== null && route.arg !== "" && route.sub === null && <DatasetView key={route.arg} caps={caps} name={route.arg} />}
+          {viewed !== null && <Viewer key={`${viewed.kind}/${viewed.name}`} caps={caps} scope={viewed} query={route.query} onSections={() => setMenu((m) => !m)} />}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
           {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}

@@ -300,6 +300,8 @@ const PATHS = {
       <path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" />
     </>
   ),
+  // a visit, on the dataset viewer's cards
+  calendar: <path d="M4 6h16v14H4zM4 10h16M9 3v4M15 3v4" />,
 } satisfies Record<string, React.ReactNode>;
 
 export type IconName = keyof typeof PATHS;
