@@ -664,6 +664,7 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
   const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
   const model = assistantModel(caps);
   const pane = talk.pane;
+  const status = liveLine(pane, talk.slow);
   const settled = pane.settled && pane.settled.outcome !== "completed" ? pane.settled : null;
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -708,7 +709,7 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
                 said={pane.finals[t.id]}
               />
             ))}
-            {liveLine(pane) && <StatusLine words={liveLine(pane) ?? ""} />}
+            {status && <StatusLine words={status} />}
             {settled && <p className={settled.outcome === "aborted" ? "meta" : "warn"}>{settled.outcome === "aborted" ? "Stopped." : (settled.error ?? "The assistant did not finish this turn.")}</p>}
             {talk.why && <p className="warn">{talk.why}</p>}
           </div>

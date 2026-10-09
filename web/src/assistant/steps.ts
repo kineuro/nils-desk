@@ -3,7 +3,8 @@
 // from the tool's name alone (and a skill's name, which says what it is
 // doing). A tool's arguments and outputs never reach the page, since they can
 // carry rows and sampled values. While a turn runs, one live line says what
-// it is doing; once it has answered, the steps sit behind a small "?".
+// it is doing; once it has answered, the steps sit behind a small "?". A turn
+// that has said nothing for five seconds says the model is starting.
 
 import type { PaneState, Tool } from "./parts";
 
@@ -84,9 +85,25 @@ export function lastSteps(tools: Tool[], all = false): { lines: StepLine[]; more
   return { lines: lines.slice(-3), more: lines.length - 3 };
 }
 
-/** The one live line while a turn runs: what the running tool is doing, in its own log words when it gave some, else "Thinking". Null once the answer arrives or nothing runs. */
-export function liveLine(pane: PaneState): string | null {
+/** How long a turn may say nothing before its line says the model is starting. */
+export const STARTING_AFTER_MS = 5_000;
+
+/** The line while a turn has said nothing for a while: a model loaded from cold takes about a minute to its first word (2026-10-09). */
+export const STARTING = "The model is starting; this can take about a minute.";
+
+/** Whether a running turn has said nothing yet: no step, reasoning or word since the person's words. */
+export function nothingYet(pane: PaneState): boolean {
+  if (!pane.busy) return false;
+  const last = pane.turns[pane.turns.length - 1];
+  if (!last || last.role !== "assistant") return true;
+  // the answer before stays the last turn until the person's words come back on the stream, well within the wait
+  return !last.done && !last.text && !last.thinking && last.tools.length === 0;
+}
+
+/** The one live line while a turn runs: what the running tool is doing, in its own log words when it gave some, else "Thinking"; once the turn has said nothing for a while (`slow`), that the model is starting. Null once the answer arrives or nothing runs. */
+export function liveLine(pane: PaneState, slow = false): string | null {
   if (!pane.busy) return null;
+  if (slow && nothingYet(pane)) return STARTING;
   const turn = [...pane.turns].reverse().find((t) => t.role === "assistant");
   if (turn && !turn.done) {
     const running = [...turn.tools].reverse().find((t) => t.state === "running" && !HIDDEN.has(t.name));

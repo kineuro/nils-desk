@@ -11,11 +11,15 @@ import { type ChatContext, type ChatVersions, chats, chatsKept, type Rating } fr
 import { assistant, StaleProposal, type Delegation, type Plan } from "./client";
 import { after, positionOf, type Position } from "./events";
 import { type Change, type Chunk, empty, fromHistory, reduce, type PaneState, type Proposal, withStored } from "./parts";
+import { nothingYet, STARTING_AFTER_MS } from "./steps";
 
 const TOKEN_PUSH_MS = 5 * 60_000;
 /** The long poll's pause while a delegate still works, where the stream is not served as events. */
 const DELEGATION_POLL_MS = 4_000;
 const RECONNECT_MS = 1_000;
+
+/** The conversations this tab asked the model to name as they opened, so a name that does not come is not asked for on every open. */
+const namedOnOpen = new Set<string>();
 
 /** What a prompt carries beside its words: the page's typed context, and the lineage and the document it is about. */
 export interface Beside {
@@ -29,6 +33,8 @@ export interface Conversing {
   plans: Plan[];
   /** When the running turn started, for the wait's clock. */
   since: number;
+  /** The running turn has said nothing for five seconds: its live line says the model is starting. */
+  slow: boolean;
   why: string | null;
   /** How full the conversation's context is, as the assistant last said (the chat, slice 3). */
   context: ChatContext | null;
@@ -67,6 +73,15 @@ export function useConversation(station: string, conv: string | null): Conversin
   const queued = useRef<{ id: string; words: string; beside: Beside } | null>(null);
   // whether the assistant serves the stream as server-sent events; learned on the first try
   const streamed = useRef(true);
+  // a turn that has said nothing for five seconds says the model is starting, until its first step or word (2026-10-09)
+  const quiet = nothingYet(pane);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    if (!quiet) return;
+    const t = setTimeout(() => setSlow(true), STARTING_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [quiet]);
 
   // the reducer's state is kept in a ref as well, so the reading loop decides on what it just applied
   const apply = useCallback((f: (s: PaneState) => PaneState) => {
@@ -175,7 +190,7 @@ export function useConversation(station: string, conv: string | null): Conversin
         .history(station, conv)
         .then((h) => {
           if (!alive) return;
-          const s = h ? fromHistory(h) : empty();
+          const s = h ? fromHistory(h, empty(), Date.now()) : empty();
           apply(() => s);
           if (s.busy) {
             setSince(Date.now());
@@ -196,6 +211,14 @@ export function useConversation(station: string, conv: string | null): Conversin
               setContext(c.context ?? null);
               setVersions(c.versions ?? []);
               setRatings(c.ratings ?? []);
+              // a turn that settled while no page followed it left the conversation named by its first words: the model names it now, once (2026-10-09)
+              if (c.title_by === "words" && !s.busy && (h?.settlements ?? []).length > 0 && !namedOnOpen.has(conv)) {
+                namedOnOpen.add(conv);
+                chats
+                  .name(conv)
+                  .then(() => chatsKept.refresh())
+                  .catch(() => undefined);
+              }
             },
             () => undefined,
           );
@@ -305,5 +328,5 @@ export function useConversation(station: string, conv: string | null): Conversin
     );
   };
 
-  return { pane, plans, since, why, context, versions, ratings, reset, made, send, summarize, sendWhenOpen, stop, decide, confirm, decideChange, rate };
+  return { pane, plans, since, slow: quiet && slow, why, context, versions, ratings, reset, made, send, summarize, sendWhenOpen, stop, decide, confirm, decideChange, rate };
 }

@@ -390,7 +390,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   }, [typing === null]); // eslint-disable-line react-hooks/exhaustive-deps
   const mentionOffer = typing !== null && offered.length === 0 ? mentionables(typing, mentionable ?? []) : [];
   const ended = ending(pane.settled);
-  const status = liveLine(pane);
+  const status = liveLine(pane, talk.slow);
   const title = meta?.title ?? (conv || opened ? "A conversation" : "New conversation");
   const revise = () => input.current?.focus();
   /** A proposed version, or the card the conversation was opened on, as its query card: one line while the panel is open. */
