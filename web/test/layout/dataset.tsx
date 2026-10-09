@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The dataset view's layout check (Wave 7a, 2026-10-09): one dataset on the
-// whole page in the desk's shell against a fake engine whose scans have
-// real pictures (grey JPEG planes drawn here), so dataset.pw.ts measures that
-// the scan is the hero, the chrome stays two slim lines and a quiet tree,
-// and a phone's width keeps one column with no sideways scroll.
+// The dataset viewer's browser, its layout check (Wave 7a, 2026-10-09): one
+// dataset under the desk's top bar with the side folded away, as the shell
+// shows the browser, against a fake engine whose scans have real pictures
+// (grey JPEG planes drawn here), so dataset.pw.ts measures that the scan is
+// the hero, the chrome stays two slim lines and a quiet tree, and a phone's
+// width keeps one column with no sideways scroll.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "../../src/shell.css";
-import type { Capabilities } from "../../src/capabilities";
-import { DatasetView } from "../../src/data/DatasetView";
+import { Browser } from "../../src/data/DatasetView";
+import { parseView, viewHref } from "../../src/data/viewer";
 import { framesBody, previewBody } from "../../src/data/pictures.fixture";
 
 const PLANES = 24;
@@ -76,21 +77,18 @@ window.fetch = (async (input: RequestInfo | URL) => {
   return json({ error: `no door ${u.pathname}` }, 404);
 }) as typeof fetch;
 
-const caps = {
-  engine: { engine: { name: "nils", version: "1.0.0-alpha.80" }, contracts: { openapi: "7" }, doors: ["GET /api/datasets/{name}/scans", "GET /api/picks/summary", "GET /api/instances/{stack}/preview"], policy: [], auth: "token", principal: "astrid@site", roles: [], registry: { epoch: 4 }, packs: [] },
-  kvasir: null,
-  assistant: null,
-  apps: [],
-  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "query:see"], detail: "quasi", groups: [] },
-  desk: { version: "1.0.0", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
-} as unknown as Capabilities;
+const scope = { kind: "dataset" as const, name: "ms-a" };
+const view = parseView({ mode: "browser" });
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <div className="desk">
-      <div className="body">
-        <main className="page">
-          <DatasetView caps={caps} name="ms-a" />
+      <header className="top">
+        <span className="brandmark">NILS</span>
+      </header>
+      <div className="body browsing">
+        <main className="page bare">
+          <Browser scope={scope} view={view} grid={false} onSections={() => undefined} go={(v) => location.replace(viewHref(scope, { ...view, ...v }))} />
         </main>
       </div>
     </div>

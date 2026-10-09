@@ -1,46 +1,38 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
-// One dataset, the whole page: the scans door read page after page for the
-// tree, the first scan opened at once in the viewer with the tree's order
-// for next and previous, the arrows walking the tree and opening what they
-// land on, the names switched to BIDS's and back, a filter and the scans
-// that need a look, the facts strip in words with Review, the pick result,
-// and Esc back to Data.
+// The dataset viewer's browser: the tree read page after page and the scan
+// the address names opened at once (read first from its visit), next and
+// previous in the tree's order with the address following; the arrows
+// walking the tree and opening what they land on; the names switched to
+// BIDS's and back; a filter; what NILS says the scan is, in the bar below;
+// g and Esc back to the grid at the scan's visit; the side's button; and a
+// cohort's scans from the cohort's door.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Capabilities } from "../capabilities";
 import type { ScanRow } from "./scans";
 
 vi.mock("./ScanViewer", () => ({
   markOpen: () => undefined,
-  ScanViewer: ({ scans, at, onClose, bare }: { scans: { id: number; name: string }[]; at: number; onClose: () => void; bare?: boolean }) => (
+  ScanViewer: ({ scans, at, onClose, onAt, bare }: { scans: { id: number; name: string }[]; at: number; onClose: () => void; onAt: (i: number) => void; bare?: boolean }) => (
     <div data-testid="viewer" data-bare={bare ? "1" : "0"} data-stack={scans[at].id} data-name={scans[at].name} data-order={scans.map((s) => s.id).join(",")}>
       <button type="button" aria-label="Close the scan" onClick={onClose} />
+      <button type="button" aria-label="Next scan" onClick={() => onAt(at + 1)} />
     </div>
   ),
 }));
 
-const { DatasetView } = await import("./DatasetView");
+const { Browser } = await import("./DatasetView");
+const { forgetHeld, parseView, viewHref } = await import("./viewer");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-
-const DOORS = ["GET /api/datasets/{name}/scans", "GET /api/picks/summary"];
-const caps = (grants: string[] = ["data:see"], doors: string[] = DOORS) =>
-  ({
-    engine: { engine: { name: "nils", version: "1" }, contracts: {}, doors, policy: [], auth: "off", principal: "astrid", roles: [], registry: { epoch: 4 }, packs: [] },
-    kvasir: null,
-    assistant: null,
-    apps: [],
-    person: { subject: "astrid", display_name: "Astrid", grants, detail: "sensitive", groups: [] },
-    desk: { version: "1.0.0", mode: "off", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
-  }) as unknown as Capabilities;
 
 const row = (stack: number, subject: number, code: string, session: number, day: string, name: string, over: Partial<ScanRow> = {}): ScanRow => ({
   stack,
   subject: { id: subject, code },
   session: { id: session, label: day.replaceAll("-", "") },
+  study: session * 10,
   series_description: `desc ${stack}`,
   orientation: "AXIAL",
   images: 20,
@@ -52,6 +44,9 @@ const row = (stack: number, subject: number, code: string, session: number, day:
   axes: { base: "T1w", technique: "MPRAGE" },
   series_number: stack,
   questions: [],
+  te: 87,
+  tr: 3500,
+  fa: 160,
   ...over,
 });
 const PAGE1 = [
@@ -60,15 +55,15 @@ const PAGE1 = [
 ];
 const PAGE2 = [row(13, 2, "b2", 9, "2026-02-03", "Ax_DWI_2D_DWI-EPI_b1000", { datatype: "dwi", folder: "dwi", axes: { base: "DWI" } })];
 
-describe("a dataset on the whole page", () => {
+describe("the dataset viewer's browser", () => {
   let root: Root;
   let el: HTMLDivElement;
   let calls: string[];
-  let summary: unknown;
+  let sections: number;
   beforeEach(() => {
     calls = [];
-    summary = {};
-    location.hash = "#data/datasets/ms-a";
+    sections = 0;
+    forgetHeld();
     try {
       localStorage.clear();
     } catch {
@@ -79,10 +74,11 @@ describe("a dataset on the whole page", () => {
     root = createRoot(el);
     vi.stubGlobal("fetch", async (url: string) => {
       calls.push(url);
-      if (url === "/api/datasets/ms-a/scans?limit=200") return new Response(JSON.stringify({ total: 3, scans: PAGE1, next: 12 }));
-      if (url === "/api/datasets/ms-a/scans?limit=200&after=12") return new Response(JSON.stringify({ total: 3, scans: PAGE2, next: null }));
-      if (url === "/api/datasets/empty/scans?limit=200") return new Response(JSON.stringify({ total: 0, scans: [], next: null }));
-      if (url === "/api/picks/summary?dataset=ms-a") return new Response(JSON.stringify(summary));
+      const json = (v: unknown) => new Response(JSON.stringify(v));
+      if (url === "/api/datasets/ms-a/scans?limit=200") return json({ total: 3, scans: PAGE1, next: 12 });
+      if (url === "/api/datasets/ms-a/scans?limit=200&after=12") return json({ total: 3, scans: PAGE2, next: null });
+      if (url === "/api/datasets/ms-a/scans?session=9&limit=200") return json({ total: 1, scans: PAGE2, next: null });
+      if (url === "/api/cohorts/ms/scans?limit=200") return json({ total: 1, scans: PAGE2, next: null });
       return new Response("{}", { status: 404 });
     });
   });
@@ -92,9 +88,35 @@ describe("a dataset on the whole page", () => {
     vi.unstubAllGlobals();
   });
   const settle = async () => {
-    await act(async () => {
-      for (let i = 0; i < 10; i++) await Promise.resolve();
-    });
+    for (let k = 0; k < 3; k++)
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+  };
+  /** The browser at an address, drawn again as the address moves. */
+  const draw = async (hash: string, scope: { kind: "dataset" | "cohort"; name: string } = { kind: "dataset", name: "ms-a" }, grid = true) => {
+    location.hash = hash;
+    await settle();
+    const render = () => {
+      const view = parseView(Object.fromEntries(new URLSearchParams(location.hash.split("?")[1] ?? "")));
+      root.render(
+        <Browser
+          scope={scope}
+          view={view}
+          grid={grid}
+          onSections={() => (sections += 1)}
+          go={(v, replace) => {
+            const to = viewHref(scope, { ...view, ...v });
+            if (replace) location.replace(to);
+            else location.hash = to;
+          }}
+        />,
+      );
+    };
+    window.onhashchange = () => act(render);
+    act(render);
+    await settle();
   };
   const viewer = () => el.querySelector("[data-testid=viewer]");
   const rowLabels = () => [...el.querySelectorAll(".dview-row .dview-name")].map((r) => r.textContent);
@@ -103,62 +125,72 @@ describe("a dataset on the whole page", () => {
       (target as EventTarget).dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true }));
     });
 
-  it("reads every page for the tree and opens the first scan at once, bare, next and previous in the tree's order", async () => {
-    act(() => root.render(<DatasetView caps={caps()} name="ms-a" />));
-    await settle();
-    expect(calls.filter((c) => c.startsWith("/api/datasets/"))).toEqual(["/api/datasets/ms-a/scans?limit=200", "/api/datasets/ms-a/scans?limit=200&after=12"]);
+  it("reads every page for the tree and opens the first scan at once, bare, the address following, next in the tree's order", async () => {
+    await draw("#data/datasets/ms-a/view?mode=browser");
+    expect(calls).toEqual(["/api/datasets/ms-a/scans?limit=200", "/api/datasets/ms-a/scans?limit=200&after=12"]);
     expect(viewer()?.getAttribute("data-stack")).toBe("11");
     expect(viewer()?.getAttribute("data-bare")).toBe("1");
     expect(viewer()?.getAttribute("data-order")).toBe("11,12,13");
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s7&scan=11");
     // the first scan's branches are open, the other subject folded
     expect(rowLabels()).toEqual(["sub-a1", "ses-20260102", "anat", "Sag_T1w_3D_MPRAGE", "Ax_T2w_2D_FLAIR_TSE", "sub-b2"]);
-    // where it sits, as a BIDS path, and its name
-    expect([...el.querySelectorAll(".dview-where > *")].map((x) => x.textContent)).toEqual(["sub-a1", "ses-20260102", "anat", "Sag_T1w_3D_MPRAGE"]);
-    // the chosen scan alone is framed; the one that needs a look is marked apart
+    // where it sits: the datasets, the dataset, then its BIDS path and its name
+    expect([...el.querySelectorAll(".dview-where a")].map((a) => a.textContent)).toEqual(["Datasets", "ms-a"]);
+    expect(el.querySelector(".dview-path")?.textContent).toBe("sub-a1 / ses-20260102 / anat /");
+    expect(el.querySelector(".dview-where b")?.textContent).toBe("Sag_T1w_3D_MPRAGE");
+    // the chosen scan alone is marked; the one that needs a look apart
     const scans = [...el.querySelectorAll(".dview-row.scan")];
     expect(scans.map((s) => s.classList.contains("on"))).toEqual([true, false]);
     expect(scans.map((s) => s.classList.contains("look"))).toEqual([false, true]);
-    expect(scans[0].getAttribute("data-slot")).toBeNull();
     // counts on the branches, the ones to look at apart
     const sub = el.querySelector(".dview-row.subject");
     expect([...(sub?.querySelectorAll(".dview-n") ?? [])].map((x) => x.textContent)).toEqual(["1", "2"]);
-    expect(el.querySelector(".dview-looks")?.textContent).toBe("1 need a look");
-    expect(el.querySelector(".dview-count")?.textContent).toContain("3 scans");
+    // what NILS says it is, its timing and the keys
+    expect([...el.querySelectorAll(".dview-fact")].map((f) => f.textContent)).toEqual(["T1w", "MPRAGE", "axial"]);
+    expect(el.querySelector(".dview-timing")?.textContent).toBe("TE 87 TR 3500 FA 160 · 20 images");
+    expect(el.querySelector(".dview-keys")?.textContent).toBe("↑↓ images · ←→ scans · 3 three planes · g grid · Esc back");
+    // next: the tree's order, the address following without a step of history
+    act(() => el.querySelector<HTMLButtonElement>("[aria-label='Next scan']")!.click());
+    await settle();
+    expect(viewer()?.getAttribute("data-stack")).toBe("12");
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s7&scan=12");
+    expect(el.querySelector("a.dview-fact.look")?.getAttribute("href")).toBe("#review?dataset=ms-a");
+  });
+
+  it("opens the scan the address names at once, read first from its visit", async () => {
+    await draw("#data/datasets/ms-a/view?mode=browser&subject=2&visit=s9&scan=13");
+    expect(calls[0]).toBe("/api/datasets/ms-a/scans?session=9&limit=200");
+    expect(viewer()?.getAttribute("data-stack")).toBe("13");
+    expect(rowLabels()).toContain("Ax_DWI_2D_DWI-EPI_b1000");
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=browser&subject=2&visit=s9&scan=13");
   });
 
   it("walks the tree with the arrows, opening each scan it lands on, and folds and unfolds", async () => {
-    act(() => root.render(<DatasetView caps={caps()} name="ms-a" />));
-    await settle();
+    await draw("#data/datasets/ms-a/view?mode=browser");
     const tree = el.querySelector(".dview-tree")!;
     key(tree, "ArrowDown");
+    await settle();
     expect(viewer()?.getAttribute("data-stack")).toBe("12");
-    // the facts strip: what NILS says, the scanner's name, and the question with Review
-    expect(el.querySelector(".dview-values")?.textContent).toContain("T1w");
-    expect(el.querySelector(".dview-scanner")?.textContent).toBe("desc 12");
-    expect(el.querySelector(".dview-ask")?.textContent).toContain("Needs a look: body part, low confidence");
-    expect(el.querySelector(".dview-ask a")?.getAttribute("href")).toBe("#review?dataset=ms-a");
     key(tree, "ArrowDown");
     // onto the folded subject: nothing opens, the viewer stays
     expect(viewer()?.getAttribute("data-stack")).toBe("12");
     key(tree, "ArrowRight");
     expect(rowLabels()).toContain("ses-20260203");
-    key(tree, "ArrowRight");
-    key(tree, "ArrowRight");
-    key(tree, "ArrowRight");
-    key(tree, "ArrowRight");
+    for (let i = 0; i < 4; i++) key(tree, "ArrowRight");
     key(tree, "ArrowDown");
+    await settle();
     expect(viewer()?.getAttribute("data-stack")).toBe("13");
-    expect([...el.querySelectorAll(".dview-where > *")].map((x) => x.textContent)).toEqual(["sub-b2", "ses-20260203", "dwi", "Ax_DWI_2D_DWI-EPI_b1000"]);
-    // left goes to the parent, left again folds it
+    expect(el.querySelector(".dview-path")?.textContent).toBe("sub-b2 / ses-20260203 / dwi /");
+    // left goes to the parent, left again folds it, and a folded datatype says its count
     key(tree, "ArrowLeft");
     key(tree, "ArrowLeft");
     expect(rowLabels()).not.toContain("Ax_DWI_2D_DWI-EPI_b1000");
+    expect(rowLabels()).toContain("dwi · 1");
   });
 
-  it("switches the names to BIDS's and back, by the toggle and by n, and remembers", async () => {
-    act(() => root.render(<DatasetView caps={caps()} name="ms-a" />));
-    await settle();
-    const bids = [...el.querySelectorAll<HTMLButtonElement>(".dview-names button")].find((b) => b.textContent === "BIDS")!;
+  it("switches the names to BIDS's and back, by the switch and by n, and remembers", async () => {
+    await draw("#data/datasets/ms-a/view?mode=browser");
+    const bids = [...el.querySelectorAll<HTMLButtonElement>(".vw-switch.names button")].find((b) => b.textContent === "BIDS")!;
     act(() => bids.click());
     // a scan BIDS has no name for keeps NILS's
     expect(rowLabels()).toEqual(["sub-a1", "ses-20260102", "anat", "acq-11_T1w", "Ax_T2w_2D_FLAIR_TSE", "sub-b2"]);
@@ -168,52 +200,49 @@ describe("a dataset on the whole page", () => {
     expect(rowLabels()[3]).toBe("Sag_T1w_3D_MPRAGE");
   });
 
-  it("filters with every word and shows only the scans that need a look on a press", async () => {
-    act(() => root.render(<DatasetView caps={caps()} name="ms-a" />));
-    await settle();
+  it("filters with every word", async () => {
+    await draw("#data/datasets/ms-a/view?mode=browser");
     key(window, "/");
-    const box = el.querySelector<HTMLInputElement>(".dview-filter")!;
+    const box = el.querySelector<HTMLInputElement>(".dview-filter input")!;
     expect(document.activeElement).toBe(box);
     act(() => {
-      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      set.call(box, "dwi");
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(box, "dwi");
       box.dispatchEvent(new Event("input", { bubbles: true }));
     });
+    await settle();
     expect(rowLabels()).toEqual(["sub-b2", "ses-20260203", "dwi", "Ax_DWI_2D_DWI-EPI_b1000"]);
     expect(viewer()?.getAttribute("data-order")).toBe("13");
-    act(() => {
-      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
-      set.call(box, "");
-      box.dispatchEvent(new Event("input", { bubbles: true }));
-    });
-    act(() => el.querySelector<HTMLButtonElement>(".dview-looks")!.click());
-    expect(rowLabels()).toEqual(["sub-a1", "ses-20260102", "anat", "Ax_T2w_2D_FLAIR_TSE"]);
   });
 
-  it("says the pick result a line a role", async () => {
-    summary = { dataset: "ms-a", roles: { T1: { picked: 2, clear: 1, borders: { margin: 1 }, tied: 0, review_items: 1 } }, review_items: 1 };
-    act(() => root.render(<DatasetView caps={caps()} name="ms-a" />));
-    await settle();
-    expect(el.querySelector(".pick-line span")?.textContent).toBe("T1: 2 picked · 1 clear · 1 border");
-    expect(el.querySelector(".pick-line a")?.getAttribute("href")).toBe("#review/picks?dataset=ms-a");
-  });
-
-  it("goes back to Data on Esc, and from an empty dataset at once", async () => {
-    act(() => root.render(<DatasetView caps={caps()} name="ms-a" />));
-    await settle();
+  it("turns to the grid at the scan's visit, the cursor on it, by g and by Esc; the side's button opens the sections", async () => {
+    await draw("#data/datasets/ms-a/view?mode=browser");
+    key(window, "g");
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s7&scan=11");
+    await draw("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s7&scan=12");
     act(() => el.querySelector<HTMLButtonElement>("[aria-label='Close the scan']")!.click());
-    expect(location.hash).toBe("#data/datasets");
-    expect(el.querySelector(".dview-back")?.getAttribute("href")).toBe("#data/datasets");
-    act(() => root.render(<DatasetView caps={caps()} name="empty" />));
-    location.hash = "#data/datasets/empty";
-    await settle();
-    expect(location.hash).toBe("#data/datasets");
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s7&scan=12");
+    act(() => el.querySelector<HTMLButtonElement>(".dview-sections")!.click());
+    expect(sections).toBe(1);
+    // with the side open over the page, its Esc closes it and the browser stays
+    const side = document.createElement("nav");
+    side.className = "side open";
+    document.body.appendChild(side);
+    const at = location.hash;
+    act(() => el.querySelector<HTMLButtonElement>("[aria-label='Close the scan']")!.click());
+    expect(location.hash).toBe(at);
+    side.remove();
+    expect([...el.querySelectorAll(".vw-switch:not(.names) button")].map((b) => [b.textContent, b.getAttribute("aria-pressed")])).toEqual([
+      ["Grid", "false"],
+      ["Browser", "true"],
+    ]);
   });
 
-  it("is not drawn without Data reading or the scans door", async () => {
-    act(() => root.render(<DatasetView caps={caps(["query:see"])} name="ms-a" />));
-    await settle();
-    expect(el.querySelector(".dview")).toBeNull();
-    expect(calls).toEqual([]);
+  it("reads a cohort's scans from the cohort's door and has no grid where none is offered", async () => {
+    await draw("#data/cohorts/ms/view?mode=browser", { kind: "cohort", name: "ms" }, false);
+    expect(calls).toEqual(["/api/cohorts/ms/scans?limit=200"]);
+    expect(viewer()?.getAttribute("data-stack")).toBe("13");
+    expect([...el.querySelectorAll(".dview-where a")].map((a) => a.textContent)).toEqual(["Cohorts", "ms"]);
+    expect(el.querySelector(".vw-switch:not(.names)")).toBeNull();
+    expect(el.querySelector(".dview-keys")?.textContent).toBe("↑↓ images · ←→ scans · 3 three planes · Esc back");
   });
 });

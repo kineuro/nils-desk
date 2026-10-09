@@ -8,10 +8,10 @@
 // label as their shapes, so the tree groups by the subject's and the
 // session's ids, which it always answers.
 
-import { door } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
+import type { Family } from "./tree";
 
 /** One scan as the list draws it. */
 export interface Scan {
@@ -20,6 +20,8 @@ export interface Scan {
   subject: string;
   /** The session it belongs to, or null where the engine has none built. */
   session: number | null;
+  /** Its study's id, where the engine says it (since the viewer, 2026-10-09): a visit the engine keeps no session for is named by its studies. */
+  study?: number | null;
   label: string | null;
   day: string | null;
   /** What NILS calls it: its descriptive name, else the series description, else the scan's number. */
@@ -44,6 +46,15 @@ export interface Scan {
   partial: boolean;
   /** The kinds of review still open on it; empty when the sort is sure of it. */
   questions: string[];
+  /** The family it is grouped in on a visit's page (SyMRI, spine and neck, derived, SWI ...); the engine's, else worked out from the axes. */
+  family?: Family;
+  /** Echo, repetition and inversion time in ms and the flip angle in degrees, where the scanner wrote them. */
+  te?: number | null;
+  tr?: number | null;
+  ti?: number | null;
+  fa?: number | null;
+  /** The roles a main scan was picked for among them this one; empty where it is no main scan. */
+  main?: string[];
 }
 
 /** Whether the page's pictures were shown, and if not why; how many are still being made. */
@@ -71,6 +82,8 @@ export interface ScanRow {
   stack: number;
   subject: { id: number; code: string | null };
   session: { id: number; label: string | null } | null;
+  /** The study's id (the viewer, 2026-10-09). */
+  study?: number | null;
   series_description: string | null;
   orientation: string | null;
   images: number | null;
@@ -86,15 +99,15 @@ export interface ScanRow {
   picture?: { data: string; width: number; height: number; digest: string | null; held: boolean; partial?: boolean } | null;
   /** With `pictures=1`: the open review kinds; empty is sure. */
   questions?: string[] | null;
+  /** The viewer's additions (2026-10-09): its family, timing and the roles it is the main scan for; absent from an engine before them. */
+  family?: string | null;
+  te?: number | null;
+  tr?: number | null;
+  ti?: number | null;
+  fa?: number | null;
+  main?: string[] | null;
 }
 
-interface ScansAnswer {
-  total: number;
-  scans: ScanRow[];
-  next: number | null;
-  /** With `pictures=1`. */
-  pictures?: { shown?: boolean; why?: string | null; missing?: number; partial?: number; place?: string | null } | null;
-}
 
 export const SCANS_DOOR = "GET /api/datasets/{name}/scans";
 
@@ -122,6 +135,7 @@ export function scansOf(rows: ScanRow[]): Scan[] {
     subjectId: r.subject.id,
     subject: r.subject.code ?? `Subject ${r.subject.id}`,
     session: r.session?.id ?? null,
+    study: typeof r.study === "number" ? r.study : null,
     label: r.session?.label ?? null,
     day: r.day,
     name: nameOf(r),
@@ -136,30 +150,22 @@ export function scansOf(rows: ScanRow[]): Scan[] {
     picture: r.picture && typeof r.picture.data === "string" && r.picture.data !== "" ? r.picture.data : null,
     partial: r.picture?.partial === true,
     questions: Array.isArray(r.questions) ? r.questions.filter((q): q is string => typeof q === "string") : [],
+    family: typeof r.family === "string" && (FAMILIES as readonly string[]).includes(r.family) ? (r.family as Family) : undefined,
+    te: timing(r.te),
+    tr: timing(r.tr),
+    ti: timing(r.ti),
+    fa: timing(r.fa),
+    main: Array.isArray(r.main) ? r.main.filter((m): m is string => typeof m === "string") : [],
   }));
 }
+
+const FAMILIES = ["plain", "symri", "mix", "stage", "swi", "derived", "body"] as const;
+const timing = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /** A scan's open questions in words, for its picture's hover: "body_part:low_confidence" reads "body part, low confidence". */
 export function questionWords(s: Pick<Scan, "questions">): string {
   return s.questions.map((q) => q.replaceAll("_", " ").replace(":", ", ")).join("; ");
 }
-
-/** How many scans a page of the tree reads: the most the door gives. */
-export const TREE_PAGE = 200;
-
-export const scanDoors = {
-  /** A page of the dataset's scans without pictures, the most at a time, for the tree: names, places and questions. */
-  tree: (dataset: string, after: number | null = null): Promise<ScanPage> => {
-    const q = new URLSearchParams({ limit: String(TREE_PAGE) });
-    if (after !== null) q.set("after", String(after));
-    return door<ScansAnswer>("GET", `/api/datasets/${encodeURIComponent(dataset)}/scans?${q}`).then((a) => ({
-      total: a.total,
-      scans: scansOf(a.scans ?? []),
-      next: a.next ?? null,
-      pictures: null,
-    }));
-  },
-};
 
 /** Whether this person may list scans here: Data reading, and the scans door served. */
 export function mayListScans(caps: Capabilities): boolean {

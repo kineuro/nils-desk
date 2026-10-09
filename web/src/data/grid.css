@@ -1,0 +1,181 @@
+/* SPDX-License-Identifier: AGPL-3.0-only
+   The dataset viewer's grid (Wave 7a, the desk redesign of 2026-10-09): the
+   subjects as folders, one subject's visits, one visit's scans in folders by
+   datatype, and the bar every level shares. Drawn as the canvas draws it, in
+   the theme's tokens only. One canvas pixel is --p, which grows with the
+   window from the laptop's size, so the whole page scales together rather
+   than the pictures alone (proportional, not bigger buttons). Colour only
+   says a value: a family's outline, a card's value frame (its thick left bar
+   and a thin border), and the caution colour on what needs a look. */
+
+.vw {
+  --vw: clamp(14px, 0.42vw + 9px, 18px);
+  --p: calc(var(--vw) / 15);
+  display: flex;
+  flex-direction: column;
+  gap: calc(16 * var(--p));
+  min-width: 0;
+  font-size: var(--vw);
+}
+.vw .mono { font-family: var(--n-font-mono); }
+
+/* ------------------------------------------------------------ the bar: where, and Grid | Browser */
+.vw-head { display: flex; align-items: center; gap: calc(12 * var(--p)); flex-wrap: wrap; min-width: 0; }
+.vw-crumbs { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+.vw-crumbs a { color: var(--n-brand-text); }
+.vw-crumbs a:hover { color: var(--n-brand-hover); text-decoration: none; }
+.vw-crumbs .here { color: var(--n-text-dim); }
+.vw-crumbs .sep { margin: 0 0.35em; }
+
+.vw-switch { display: inline-flex; flex: none; overflow: hidden; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); font-size: calc(13 * var(--p)); }
+.vw-switch button { padding: calc(4 * var(--p)) calc(12 * var(--p)); border: 0; border-left: 1px solid var(--n-neutral-line); background: transparent; color: var(--n-text-dim); font: inherit; cursor: pointer; }
+.vw-switch button:first-child { border-left: 0; }
+.vw-switch button:hover { background: var(--n-bg-hover); }
+.vw-switch button[aria-pressed="true"] { background: var(--n-bg-selected); color: var(--n-brand-text); font-weight: 500; cursor: default; }
+.vw-switch button:focus-visible { outline: 2px solid var(--n-focus); outline-offset: -2px; }
+.vw-switch.names button { padding: calc(4 * var(--p)) calc(10 * var(--p)); }
+
+/* ------------------------------------------------------------ the title and what it counts */
+.vw-title { display: flex; align-items: baseline; gap: calc(14 * var(--p)); flex-wrap: wrap; min-width: 0; }
+.vw-title h1 { font-size: calc(24 * var(--p)); overflow-wrap: anywhere; }
+.vw-title h1.mono { font-family: var(--n-font-mono); font-weight: 500; font-size: calc(22 * var(--p)); }
+.vw-title .vw-sum { font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+.vw-title .vw-sum .look, .vw-foot .look { color: var(--n-caution-fg); }
+.vw-title .grow { min-width: 0; }
+.vw-title.center { align-items: center; }
+.vw-title .vw-near { display: inline-flex; gap: calc(14 * var(--p)); font-size: calc(13 * var(--p)); }
+
+/* ------------------------------------------------------------ the controls */
+.vw-controls { display: flex; align-items: center; gap: calc(10 * var(--p)); flex-wrap: wrap; font-size: calc(13 * var(--p)); }
+.vw-search { display: flex; align-items: center; gap: calc(8 * var(--p)); min-height: calc(32 * var(--p)); padding: 0 calc(10 * var(--p)); width: min(calc(300 * var(--p)), 100%); border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text-faint); }
+.vw-search:focus-within { outline: 2px solid var(--n-focus); outline-offset: -1px; }
+.vw-search input { flex: 1; min-width: 0; padding: 0; border: 0; outline: none; background: transparent; color: var(--n-text); font: inherit; font-size: calc(14 * var(--p)); }
+.vw-search input::placeholder { color: var(--n-text-faint); }
+.vw-search input::-webkit-search-cancel-button { display: none; }
+.vw-key { font-family: var(--n-font-mono); font-size: calc(12 * var(--p)); color: var(--n-text-faint); }
+.vw-label { color: var(--n-text-faint); }
+/* a label and its choice wrap as one */
+.vw-pick { display: inline-flex; align-items: center; gap: calc(8 * var(--p)); max-width: 100%; }
+.vw-pick .vw-select { min-width: 0; }
+.vw-select { min-height: calc(32 * var(--p)); padding: 0 calc(8 * var(--p)); border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; font-size: calc(14 * var(--p)); }
+.vw-select:focus-visible { outline: 2px solid var(--n-focus); outline-offset: -1px; }
+
+/* the filters: neutral until chosen, only the chosen one in colour; the one about looking in the caution colour */
+.vw-filters { display: flex; align-items: center; gap: calc(6 * var(--p)); flex-wrap: wrap; font-size: calc(13 * var(--p)); }
+.vw-filters .vw-label { margin-right: calc(4 * var(--p)); }
+.vw-filters .vw-label.apart { margin-left: calc(10 * var(--p)); }
+.vw-chip { min-height: calc(28 * var(--p)); padding: 0 calc(10 * var(--p)); border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-text-dim); font: inherit; cursor: pointer; }
+.vw-chip:hover { background: var(--n-bg-hover); }
+.vw-chip.caution { border-color: var(--n-caution-line); color: var(--n-caution-fg); }
+.vw-chip[aria-pressed="true"] { border-color: var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
+.vw-chip.caution[aria-pressed="true"] { border-color: var(--n-caution-icon); background: var(--n-caution-bg); color: var(--n-caution-fg); }
+.vw-chip:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.vw-clear { margin-left: auto; font-size: calc(13 * var(--p)); }
+
+/* ------------------------------------------------------------ cards */
+.vw-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(236 * var(--p))), 1fr)); gap: calc(12 * var(--p)); }
+.vw-cards.visits { grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(380 * var(--p))), 1fr)); }
+/* the cards of the ask before, while the new one is read */
+.vw-cards.stale { opacity: 0.55; transition: opacity 120ms ease 80ms; }
+.vw-card { position: relative; display: flex; flex-direction: column; gap: calc(6 * var(--p)); min-width: 0; padding: calc(12 * var(--p)); border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); text-decoration: none; }
+.vw-card:hover { border-color: var(--n-brand-line); color: var(--n-text); text-decoration: none; }
+.vw-card.at, .vw-card.at:hover { border-color: var(--n-brand-text); }
+.vw-card:focus { outline: none; }
+.vw-card:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.vw-card-top { display: flex; align-items: center; gap: calc(8 * var(--p)); min-width: 0; }
+.vw-card-top > .i { color: var(--n-text-faint); }
+.vw-card-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: calc(14 * var(--p)); font-weight: 500; }
+.vw-card-name.none { color: var(--n-text-faint); font-weight: 400; }
+.vw-card-meta { font-size: calc(13 * var(--p)); color: var(--n-text-dim); }
+.vw-card-facts { font-size: calc(12 * var(--p)); color: var(--n-text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vw-tag { display: inline-flex; align-items: center; flex: none; min-height: calc(20 * var(--p)); padding: 0 calc(6 * var(--p)); border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-neutral-bg); color: var(--n-neutral-fg); font-size: calc(12 * var(--p)); font-weight: 400; white-space: nowrap; }
+.vw-tag.look { border-color: var(--n-caution-line); background: var(--n-caution-bg); color: var(--n-caution-fg); font-weight: 500; }
+
+/* a visit's card, roomier */
+.vw-card.visit { gap: calc(10 * var(--p)); padding: calc(14 * var(--p)); }
+.vw-card.visit .vw-card-name { font-size: calc(15 * var(--p)); }
+.vw-visit-line { display: flex; flex-wrap: wrap; align-items: center; gap: calc(6 * var(--p)); font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+
+/* the visits in time: a thin line, a dot a visit, the one at the cursor filled */
+.vw-time { position: relative; height: calc(46 * var(--p)); margin: calc(4 * var(--p)) calc(8 * var(--p)) calc(6 * var(--p)); }
+.vw-time-line { position: absolute; left: 0; right: 0; top: calc(14 * var(--p)); height: 1px; background: var(--n-neutral-line); }
+.vw-dot { position: absolute; top: calc(8 * var(--p)); width: calc(13 * var(--p)); height: calc(13 * var(--p)); margin-left: calc(-6.5 * var(--p)); padding: 0; border: 1px solid var(--n-text-faint); border-radius: 50%; background: var(--n-neutral-line); cursor: pointer; }
+.vw-dot.at { border-color: var(--n-brand-text); background: var(--n-brand-text); }
+.vw-dot:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 2px; }
+.vw-time-day { position: absolute; top: calc(24 * var(--p)); font-family: var(--n-font-mono); font-size: calc(12 * var(--p)); color: var(--n-text-faint); white-space: nowrap; }
+.vw-time-day.first { left: 0; color: var(--n-text-dim); }
+.vw-time-day.last { right: 0; }
+
+/* ------------------------------------------------------------ one visit's scans: folders by datatype that fold */
+.vw-folder { border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.vw-folder-head { display: flex; align-items: center; gap: calc(10 * var(--p)); width: 100%; padding: calc(9 * var(--p)) calc(12 * var(--p)); border: 0; background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.vw-folder-head:focus-visible { outline: 2px solid var(--n-focus); outline-offset: -2px; }
+.vw-folder-head .i { color: var(--n-text-faint); }
+.vw-folder-head .vw-chev { display: grid; transition: transform 160ms ease; }
+.vw-folder-head[aria-expanded="false"] .vw-chev { transform: rotate(-90deg); }
+.vw-folder-name { font-size: calc(13 * var(--p)); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.vw-folder-head .vw-sum { margin-left: auto; font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+.vw-folder-body { display: flex; flex-direction: column; gap: calc(12 * var(--p)); padding: calc(4 * var(--p)) calc(12 * var(--p)) calc(14 * var(--p)); }
+
+/* a family together, outlined in its colour when the page is coloured by family; the plain scans have no box */
+.vw-family { padding: calc(10 * var(--p)); border: 1px solid var(--n-line); border-radius: var(--n-radius); }
+.vw-family[data-slot] { border-color: var(--vc); }
+.vw-family-name { margin-bottom: calc(8 * var(--p)); font-size: calc(12 * var(--p)); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n-text-faint); }
+.vw-family[data-slot] > .vw-family-name { color: var(--vc); }
+
+.vw-scans { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(172 * var(--p))), 1fr)); gap: calc(10 * var(--p)); }
+.vw-scan { gap: 0; padding: 0; overflow: hidden; }
+.vw-scan[data-slot] { border-color: var(--vc); box-shadow: inset 3px 0 0 var(--vc); }
+.vw-scan[data-slot] .vw-pic { margin-left: 3px; }
+.vw-scan.at[data-slot] { outline: 1px solid var(--n-brand-text); outline-offset: 1px; }
+.vw-pic { position: relative; display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; background: var(--n-image-bg); }
+.vw-pic img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.vw-pic .vw-blank { width: 100%; height: 100%; }
+.vw-pic .vw-blank.making { animation: vw-making 1.4s ease-in-out infinite alternate; background: var(--n-bg-sunken); }
+@keyframes vw-making { from { opacity: 0.35; } to { opacity: 0.7; } }
+.vw-pic .vw-tag { position: absolute; top: calc(6 * var(--p)); min-height: calc(19 * var(--p)); font-size: calc(11 * var(--p)); font-weight: 500; }
+.vw-pic .vw-tag.main { left: calc(6 * var(--p)); color: var(--n-text); }
+.vw-pic .vw-tag.look { right: calc(6 * var(--p)); }
+.vw-slices { position: absolute; right: calc(6 * var(--p)); bottom: calc(6 * var(--p)); padding: 0 calc(5 * var(--p)); border-radius: var(--n-radius); background: var(--n-bg-page); color: var(--n-text-dim); font-family: var(--n-font-mono); font-size: calc(11 * var(--p)); }
+.vw-scan-words { display: flex; flex-direction: column; gap: calc(2 * var(--p)); min-width: 0; padding: calc(7 * var(--p)) calc(9 * var(--p)) calc(9 * var(--p)); }
+.vw-scan-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: calc(12.5 * var(--p)); color: var(--n-text); }
+.vw-scan-params { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: calc(11 * var(--p)); color: var(--n-text-faint); }
+
+/* the legend of what the cards are coloured by: each value framed as its cards are */
+.vw-legend { display: flex; flex-wrap: wrap; gap: calc(6 * var(--p)); font-size: calc(12 * var(--p)); }
+.vw-legend span { padding: 0 calc(7 * var(--p)); border: 1px solid var(--vc); border-left-width: 3px; border-radius: var(--n-radius); background: var(--vc-bg); color: var(--n-text-dim); }
+
+/* ------------------------------------------------------------ the line under a level */
+.vw-foot { font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+.vw-none { padding: calc(8 * var(--p)) 0; color: var(--n-text-faint); font-size: calc(13 * var(--p)); }
+.vw-more { height: 1px; }
+
+/* the value colours, the theme's slots */
+.vw [data-slot="1"] { --vc: var(--n-value-1); --vc-bg: var(--n-value-1-bg); }
+.vw [data-slot="2"] { --vc: var(--n-value-2); --vc-bg: var(--n-value-2-bg); }
+.vw [data-slot="3"] { --vc: var(--n-value-3); --vc-bg: var(--n-value-3-bg); }
+.vw [data-slot="4"] { --vc: var(--n-value-4); --vc-bg: var(--n-value-4-bg); }
+.vw [data-slot="5"] { --vc: var(--n-value-5); --vc-bg: var(--n-value-5-bg); }
+.vw [data-slot="6"] { --vc: var(--n-value-6); --vc-bg: var(--n-value-6-bg); }
+.vw [data-slot="7"] { --vc: var(--n-value-7); --vc-bg: var(--n-value-7-bg); }
+.vw [data-slot="10"] { --vc: var(--n-value-10); --vc-bg: var(--n-value-10-bg); }
+
+/* ------------------------------------------------------------ the browser on the whole page: the side becomes a panel opened from the bar */
+.body.browsing, .body.browsing.with-side { grid-template-columns: minmax(0, 1fr); }
+.body.browsing .side { position: fixed; top: 0; bottom: 0; left: 0; z-index: 41; width: min(17rem, 86vw); padding-top: 1rem; transform: translateX(-101%); visibility: hidden; transition: transform 240ms ease, visibility 0s linear 240ms; }
+.body.browsing .side.open { transform: none; visibility: visible; transition: transform 240ms ease, visibility 0s; }
+.body.browsing .side-scrim { display: block; z-index: 40; }
+.page.bare { padding: 0; overflow: hidden; display: grid; }
+
+@media (max-width: 720px) {
+  .vw-title .vw-near { width: 100%; }
+  .vw-search { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vw-folder-head .vw-chev { transition: none; }
+  .vw-pic .vw-blank.making { animation: none; }
+  .body.browsing .side, .body.browsing .side.open { transition: none; }
+}
+
+/* a visit's folders sit in the page's column, the box only gathers the cards for the arrows */
+.vw-folders { display: contents; }

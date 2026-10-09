@@ -3,7 +3,7 @@
 // datasets only, a card each with its name, one state word, its counts and
 // the one button for its next step, the rest in its menu. No folder is listed:
 // "Add a dataset" opens a finder that searches a root's folders. How to start is always on screen. A sorted
-// dataset's card opens it on the whole page (DatasetView, #data/datasets/<name>); Now lists what runs; the
+// dataset's card opens it in the viewer (#data/datasets/<name>/view); Now lists what runs; the
 // chosen dataset's reads follow. No paragraphs: an explanation sits behind
 // a "?". The section's other pages, the cohorts, a read and a dataset's
 // pseudonymisation, are mounted by the shell beside this one.
@@ -27,6 +27,7 @@ import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
 import { NowSection, useLiveJobs } from "./Now";
 import { mayListScans } from "./scans";
+import { viewHref } from "./viewer";
 import { whenWords } from "./sources";
 import { plainError } from "./plain";
 import { certainty, certaintyWords, kindWords, nextStep, stepCommand, type StepId } from "./steps";
@@ -176,8 +177,8 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
               works={works}
               onPick={() => {
                 setChosen(d.name);
-                // a sorted dataset opens on the whole page
-                if (d.totals.stacks > 0 && mayListScans(caps)) location.hash = href("data", "datasets", d.name);
+                // a sorted dataset opens in the viewer
+                if (d.totals.stacks > 0 && mayListScans(caps)) location.hash = viewHref({ kind: "dataset", name: d.name });
               }}
               onStep={(id) => step(d, id)}
               onBringIn={() => setBringing(d)}
