@@ -59,6 +59,24 @@ describe("the one live line", () => {
     expect(liveLine(s)).toBeNull();
   });
 
+  it("says what a tool does while it runs after the step that called it ended, and what the next one does (2026-10-09)", () => {
+    let s = live(
+      { type: "message-appended", message: { id: "u1", role: "user", submissionId: "sub_1", parts: [{ type: "text", text: "find T1w" }] } },
+      { type: "message-started", messageId: "a1", submissionId: "sub_1" },
+      { type: "tool-input", messageId: "a1", toolCallId: "t1", toolName: "registry_search", input: { q: "T1w" } },
+      { type: "message-completed", messageId: "a1" },
+    );
+    expect(liveLine(s)).toBe("Looking in the registry");
+    s = reduce(s, { type: "data-part", messageId: "a1", name: "progress", data: { kind: "progress", call: "t1", text: "Reading 12 of 40 datasets" } });
+    expect(liveLine(s)).toBe("Reading 12 of 40 datasets");
+    s = reduce(s, { type: "tool-output", toolCallId: "t1", output: "rows" });
+    expect(liveLine(s)).toBe("Thinking");
+    s = reduce(s, { type: "message-started", messageId: "a1", submissionId: "sub_1" });
+    s = reduce(s, { type: "tool-input", messageId: "a1", toolCallId: "t2", toolName: "activate_skill", input: { name: "find-data" } });
+    s = reduce(s, { type: "message-completed", messageId: "a1" });
+    expect(liveLine(s)).toBe("Finding the data");
+  });
+
   it("says the model is starting once a turn has said nothing for a while, until its first step, reasoning or word (2026-10-09)", () => {
     const asked = { type: "message-appended", message: { id: "u1", role: "user", parts: [{ type: "text", text: "find T1w" }] } };
     // sent, and the person's words not back yet: what was answered before stays the last turn

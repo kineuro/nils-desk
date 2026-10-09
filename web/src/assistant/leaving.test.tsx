@@ -5,8 +5,8 @@
 // and the conversation opened again by its address, which the side's list and
 // the browser's Back open too. The turn is followed to its answer, and while
 // nothing has come back for five seconds its line says the model is starting.
-// Against a fake assistant whose stream answers when the test writes to it,
-// and whose long poll waits, as the runtime's does, until it is let go.
+// Against a fake assistant whose stream answers when the test writes to it
+// (stream.fixture.ts).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -15,9 +15,9 @@ import { button, caps7a, settle } from "../../test/safeWayIn";
 import type { Capabilities } from "../capabilities";
 import { AssistantPage } from "./AssistantPage";
 import { chatsKept } from "./chats";
-import { INBOX } from "./onechat.fixture";
-import type { Chunk, History } from "./parts";
+import type { Chunk } from "./parts";
 import { STARTING } from "./steps";
+import { fakeAssistant } from "./stream.fixture";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -43,20 +43,8 @@ const caps = (): Capabilities => ({
   assistant: { stations: [{ id: "nils" }] },
 });
 
-const CHAT = {
-  id: "c9",
-  station: "nils",
-  title: "Which datasets have a FLAIR?",
-  title_by: "words",
-  lineage: null,
-  document: null,
-  created_at: "2026-10-09T19:07:29Z",
-  updated_at: "2026-10-09T19:07:29Z",
-  pinned: false,
-  archived: false,
-  forked_from: null,
-  shared: false,
-};
+/** The conversation made on the page. */
+const CHAT = { id: "c9", station: "nils", title: "Which datasets have a FLAIR?", title_by: "words" } as const;
 
 /** The conversation as the runtime writes it, chunk by chunk: the person's words, then the answer's steps and words. */
 const ASKED = { id: "u1", role: "user", display: "visible", submissionId: "sub_1", parts: [{ type: "text", text: "Which datasets have a FLAIR?" }] };
@@ -74,71 +62,6 @@ const ANSWERED: Chunk[] = [
   { type: "message-completed", messageId: "a1" },
   { type: "submission-settled", submissionId: "sub_1", outcome: "completed" },
 ];
-
-/** The fake assistant, keeping every call: the stream grows when the test writes to it, and the history is what the test says the runtime keeps. */
-function fakeAssistant() {
-  const calls: { method: string; url: string }[] = [];
-  const stream: Chunk[] = [];
-  let history: History | null = null;
-  const waiting = new Set<() => void>();
-  const answer = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers });
-  const aborted = () => new DOMException("The page let it go", "AbortError");
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const method = init?.method ?? "GET";
-      const u = new URL(String(input), "http://desk");
-      calls.push({ method, url: String(input) });
-      const at = (path: string) => u.pathname === path;
-      if (at("/assistant/conversations")) return answer(method === "POST" ? CHAT : { conversations: [CHAT], next: null });
-      if (at("/assistant/conversations/c9")) return answer({ ...CHAT, proposals: [] });
-      if (at("/assistant/conversations/c9/title")) return answer({ ...CHAT, title_by: "model" });
-      if (at("/desk/assistant/conversations/c9/token")) return answer({});
-      if (at("/assistant/inbox")) return answer(INBOX);
-      if (at("/assistant/agents/nils/c9") && method === "POST") return answer({ submissionId: "sub_1" }, 202, { "Stream-Next-Offset": String(stream.length - 1) });
-      if (at("/assistant/agents/nils/c9") && u.searchParams.get("view") === "history") return history ? answer(history, 200, { "Stream-Next-Offset": history.offset ?? "-1" }) : answer({ error: "no stream" }, 404);
-      if (at("/assistant/agents/nils/c9") && u.searchParams.get("live") === "long-poll") {
-        const from = Number(u.searchParams.get("offset"));
-        // the long poll waits for what comes after its offset, or until the page lets it go
-        while (stream.length - 1 <= from) {
-          if (init?.signal?.aborted) throw aborted();
-          await new Promise<void>((wake, fail) => {
-            const woken = () => {
-              waiting.delete(woken);
-              wake();
-            };
-            waiting.add(woken);
-            init?.signal?.addEventListener(
-              "abort",
-              () => {
-                waiting.delete(woken);
-                fail(aborted());
-              },
-              { once: true },
-            );
-          });
-        }
-        return answer(stream.slice(from + 1), 200, { "Stream-Next-Offset": String(stream.length - 1) });
-      }
-      // the stream as server-sent events is not served here, so the page long-polls
-      return answer({ error: `no door ${method} ${u.pathname}` }, 404);
-    }),
-  );
-  return {
-    calls,
-    /** What the runtime writes next; every long poll waiting is answered. */
-    write(...chunks: Chunk[]) {
-      stream.push(...chunks);
-      for (const wake of [...waiting]) wake();
-    },
-    /** The history the runtime serves from now on, at the stream's offset. */
-    keep(messages: History["messages"], settlements: NonNullable<History["settlements"]> = []) {
-      history = { offset: String(stream.length - 1), messages, settlements };
-    },
-    /** How many long polls are open now. */
-    open: () => waiting.size,
-  };
-}
 
 /** The first message of a new conversation, typed and sent. */
 async function ask(words: string, flush: () => Promise<void>) {
@@ -158,7 +81,7 @@ const line = () => host.querySelector(".status-line")?.textContent?.trim() ?? nu
 
 describe("a turn the person left", () => {
   it("is followed to its answer when its conversation, made on the page moments before, is opened again by its address", async () => {
-    const a = fakeAssistant();
+    const a = fakeAssistant({ chat: CHAT });
     await ask("Which datasets have a FLAIR?", () => settle(10));
     expect(location.hash).toBe("#assistant/c9");
     a.write(...BEGUN);
@@ -198,7 +121,7 @@ describe("a turn the person left", () => {
   });
 
   it("shows the answer that settled while the person was away", async () => {
-    const a = fakeAssistant();
+    const a = fakeAssistant({ chat: CHAT });
     await ask("Which datasets have a FLAIR?", () => settle(10));
     a.write(...BEGUN);
     await settle(10);
@@ -229,7 +152,7 @@ describe("a turn that has said nothing yet", () => {
 
   it("says the model is starting after five seconds, until its first step, and again when the page is opened during the wait", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
-    const a = fakeAssistant();
+    const a = fakeAssistant({ chat: CHAT });
     await ask("Which datasets have a FLAIR?", () => tick());
     a.write(...BEGUN);
     await tick();

@@ -217,6 +217,59 @@ describe("a turn still running when its conversation is opened again (2026-10-09
   });
 });
 
+describe("an answer of several steps (2026-10-09)", () => {
+  const asked = { id: "u1", role: "user", display: "visible", submissionId: "sub_1", parts: [{ type: "text", text: "Which datasets have a FLAIR?" }] };
+  const settled: Chunk = { type: "submission-settled", submissionId: "sub_1", outcome: "completed" };
+
+  it("stays open while its later steps run, and is done when its turn settles", () => {
+    let s = (
+      [
+        { type: "message-appended", message: asked },
+        { type: "message-started", messageId: "a1", submissionId: "sub_1" },
+        { type: "tool-input", messageId: "a1", toolCallId: "t1", toolName: "registry_search", input: {} },
+        { type: "message-completed", messageId: "a1" },
+      ] as Chunk[]
+    ).reduce(reduce, empty());
+    // the step that called the tool ended; the tool still runs
+    expect(s.turns[1]).toMatchObject({ done: false, tools: [{ id: "t1", state: "running" }] });
+    s = (
+      [
+        { type: "tool-output", toolCallId: "t1", output: "rows" },
+        { type: "message-started", messageId: "a1", submissionId: "sub_1" },
+        { type: "message-delta", messageId: "a1", kind: "text", delta: "Two of them." },
+        { type: "message-completed", messageId: "a1" },
+      ] as Chunk[]
+    ).reduce(reduce, s);
+    expect(s.turns[1]).toMatchObject({ text: "Two of them.", done: false });
+    expect(reduce(s, settled).turns[1].done).toBe(true);
+  });
+
+  it("is open again at a later step where its turn is not tracked, and done at each step's end", () => {
+    let s = (
+      [
+        { type: "message-started", messageId: "a1" },
+        { type: "message-completed", messageId: "a1" },
+      ] as Chunk[]
+    ).reduce(reduce, empty());
+    expect(s.turns[0].done).toBe(true);
+    s = reduce(s, { type: "message-started", messageId: "a1" });
+    expect(s.turns[0].done).toBe(false);
+    expect(reduce(s, { type: "message-completed", messageId: "a1" }).turns[0].done).toBe(true);
+  });
+
+  it("read from a history while it runs, stays open through the steps that follow", () => {
+    const s = fromHistory({ offset: "4", messages: [asked, { id: "a1", role: "assistant", display: "visible", submissionId: "sub_1", parts: [] }], settlements: [] });
+    const next = (
+      [
+        { type: "tool-input", messageId: "a1", toolCallId: "t1", toolName: "registry_search", input: {} },
+        { type: "message-completed", messageId: "a1" },
+      ] as Chunk[]
+    ).reduce(reduce, s);
+    expect(next.turns[1].done).toBe(false);
+    expect(reduce(next, settled).turns[1].done).toBe(true);
+  });
+});
+
 describe("where the person asked to summarize (the chat, slice 11)", () => {
   // the runtime keeps a signal out of sight, with the tag it was sent with
   const mark = { id: "s1", role: "system", display: "diagnostic", purpose: "dispatch", signal: { tagName: "summarize" }, parts: [{ type: "text", text: "The person asked to summarize the conversation so far." }] };

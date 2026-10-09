@@ -114,7 +114,10 @@ export interface Turn {
   thinking?: string;
   /** An assistant's steps as they arrived, which its text and thinking are drawn from. */
   steps?: Step[];
+  /** An answer is done when its turn settles; one the runtime does not track, when a step ends. */
   done: boolean;
+  /** The submission an answer belongs to, where the runtime tracks its turn: its steps end without ending it (2026-10-09). */
+  submission?: string;
   tools: Tool[];
 }
 
@@ -303,14 +306,15 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
     }
     case "message-started": {
       const id = c.messageId as string;
-      // a later step of the same response starts the same message again: a new step; only a new turn clears the old choice
-      if (turn(state, id)) return { ...withTurn(state, id, (t) => ({ ...t, steps: [...stepsOf(t), { words: "", reasoning: "" }] })), busy: true };
+      // a later step of the same response starts the same message again: a new step, and the answer open again; only a new turn clears the old choice
+      if (turn(state, id)) return { ...withTurn(state, id, (t) => ({ ...t, done: false, steps: [...stepsOf(t), { words: "", reasoning: "" }] })), busy: true };
+      const submission = typeof c.submissionId === "string" ? { submission: c.submissionId } : {};
       return {
         ...state,
         busy: true,
         settled: null,
         choice: null,
-        turns: [...state.turns, { id, role: "assistant", text: "", thinking: "", steps: [{ words: "", reasoning: "" }], done: false, tools: [] }],
+        turns: [...state.turns, { id, role: "assistant", text: "", thinking: "", steps: [{ words: "", reasoning: "" }], done: false, ...submission, tools: [] }],
       };
     }
     case "message-delta": {
@@ -337,10 +341,12 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
     case "data-part":
       return acceptPart(state, String(c.messageId), c.data);
     case "message-completed":
-      return withTurn(state, c.messageId as string, (t) => ({ ...t, done: true }));
+      // a step of a tracked turn ends where it calls a tool, and the answer goes on: the turn's settlement ends it
+      return withTurn(state, c.messageId as string, (t) => (t.submission ? t : { ...t, done: true }));
     case "submission-settled": {
       const error = settledError(c.error);
-      return { ...state, busy: false, settled: { outcome: String(c.outcome), ...(error ? { error } : {}) } };
+      const turns = state.turns.map((t) => (t.role === "assistant" && !t.done ? { ...t, done: true } : t));
+      return { ...state, turns, busy: false, settled: { outcome: String(c.outcome), ...(error ? { error } : {}) } };
     }
     default:
       return state;
@@ -375,7 +381,7 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
     if (m.display && m.display !== "visible") continue;
     if (m.role !== "user" && m.role !== "assistant" && !(m.role === "system" && (m as { settlement?: unknown }).settlement)) continue;
     const open = m.role === "assistant" && m.submissionId !== undefined && running.has(m.submissionId);
-    let t: Turn = { id: m.id, role: m.role, text: "", done: !open, tools: [] };
+    let t: Turn = { id: m.id, role: m.role, text: "", done: !open, ...(m.role === "assistant" && m.submissionId ? { submission: m.submissionId } : {}), tools: [] };
     // an assistant's steps: words or reasoning that follow words or a tool call begin the next one (the chat, slice 9)
     const steps: Step[] = [];
     let step: Step = { words: "", reasoning: "" };
