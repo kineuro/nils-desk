@@ -22,7 +22,7 @@ const { ScanViewer, markOpen } = await import("./ScanViewer");
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const scan = (id: number, over: Partial<Scan> = {}): Scan => ({ id, subjectId: 1, subject: "sub-a", session: 1, label: null, day: "2026-01-02", name: `Scan ${id}`, description: null, bids: null, datatype: "anat", folder: "anat", axes: {}, series: null, orientation: "AX", images: 9, picture: `data:image/webp;base64,${id}`, partial: false, questions: [], ...over });
-const SCANS = [scan(1), scan(2, { questions: ["body_part:low_confidence"] }), scan(3), scan(4)];
+const SCANS = [scan(1), scan(2, { questions: ["base:missing"] }), scan(3), scan(4)];
 
 type Drawn = Bitmap & { stack: number; plane: number };
 
@@ -151,7 +151,7 @@ describe("the light viewer", () => {
     expect(asked).toEqual(expect.arrayContaining(["/api/instances/3/preview", "/api/instances/4/preview", "/api/instances/1/preview"]));
     // a scan the sort is not sure of carries the border and says why on hover
     expect(el.querySelector(".scan-view")?.classList.contains("look")).toBe(true);
-    expect(el.querySelector(".scan-view-name")?.getAttribute("title")).toBe("body part, low confidence");
+    expect(el.querySelector(".scan-view-name")?.getAttribute("title")).toBe("base, missing");
     key("ArrowRight");
     await settle();
     expect(at).toEqual([2]);

@@ -6,7 +6,7 @@
 // screen as the folds say; and the facts strip's values in words.
 
 import { describe, expect, it } from "vitest";
-import type { Scan } from "./scans";
+import { needsLook, type Scan } from "./scans";
 import { buildTree, factsOf, familyOf, filterTree, filterWords, matches, pathOf, rowsOf, sessionLabel, treeOrder } from "./tree";
 
 const scan = (id: number, over: Partial<Scan> = {}): Scan => ({
@@ -84,7 +84,7 @@ describe("a dataset as a tree", () => {
     expect(matches(named, filterWords("flair t2w"))).toBe(true);
     expect(matches(named, filterWords("sub-a1 ses-20260102"))).toBe(true);
     expect(matches(named, filterWords("dwi"))).toBe(false);
-    const looks = filterTree(tree, (s) => s.questions.length > 0);
+    const looks = filterTree(tree, needsLook);
     expect(treeOrder(looks).map((s) => s.id)).toEqual([3]);
     expect(looks[0].count).toBe(1);
     expect(looks[0].sessions).toHaveLength(1);

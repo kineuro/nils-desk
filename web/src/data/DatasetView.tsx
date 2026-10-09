@@ -19,7 +19,7 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { ModeSwitch, NamesSwitch, type Go } from "./Grid";
 import { markOpen, ScanViewer } from "./ScanViewer";
-import { questionWords, type Scan, type ScanPage } from "./scans";
+import { needsLook, questionWords, type Scan, type ScanPage } from "./scans";
 import "./datasetView.css";
 import { buildTree, factsOf, filterTree, filterWords, folderOf, matches, pathOf, rowsOf, sessionLabel, treeOrder, type Row } from "./tree";
 import {
@@ -364,7 +364,7 @@ export function Browser({ scope, view, go, onSections, grid }: { scope: Scope; v
   const facts = scan ? factsOf(scan).filter((f) => f.what !== "Images") : [];
   const timing = scan ? [paramsWords(scan), scan.images !== null ? `${n(scan.images)} ${scan.images === 1 ? "image" : "images"}` : ""].filter(Boolean).join(" · ") : "";
   const list0 = scopeList(scope);
-  const looks = scan ? scan.questions.length > 0 : false;
+  const looks = scan ? needsLook(scan) : false;
 
   return (
     <div className="dview" aria-label={scope.name}>
@@ -473,7 +473,7 @@ export function Browser({ scope, view, go, onSections, grid }: { scope: Scope; v
 
 function TreeRow({ row: r, names, cursor, chosen, onClick }: { row: Exclude<Row, { kind: "family" }>; names: Names; cursor: boolean; chosen: boolean; onClick: () => void }) {
   if (r.kind === "scan") {
-    const look = r.scan.questions.length > 0;
+    const look = needsLook(r.scan);
     return (
       <div
         role="treeitem"

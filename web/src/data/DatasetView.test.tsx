@@ -51,7 +51,7 @@ const row = (stack: number, subject: number, code: string, session: number, day:
 });
 const PAGE1 = [
   row(11, 1, "a1", 7, "2026-01-02", "Sag_T1w_3D_MPRAGE"),
-  row(12, 1, "a1", 7, "2026-01-02", "Ax_T2w_2D_FLAIR_TSE", { questions: ["body_part:low_confidence"], bids: null }),
+  row(12, 1, "a1", 7, "2026-01-02", "Ax_T2w_2D_FLAIR_TSE", { questions: ["base:missing"], bids: null }),
 ];
 const PAGE2 = [row(13, 2, "b2", 9, "2026-02-03", "Ax_DWI_2D_DWI-EPI_b1000", { datatype: "dwi", folder: "dwi", axes: { base: "DWI" } })];
 

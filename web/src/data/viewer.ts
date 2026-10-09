@@ -12,7 +12,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow, parse } from "../routes";
-import { SCANS_DOOR, scansOf, type PagePictures, type Scan, type ScanPage, type ScanRow } from "./scans";
+import { needsLook, SCANS_DOOR, scansOf, type PagePictures, type Scan, type ScanPage, type ScanRow } from "./scans";
 import { FAMILY_SLOT, FAMILY_WORD, familyOf, type Family } from "./tree";
 
 // ------------------------------------------------------------ where
@@ -577,7 +577,7 @@ export function foldersOf(scans: Scan[], compare: (a: Scan, b: Scan) => number):
       label: f.label,
       scans: mine.length,
       main: mine.filter((s) => (s.main ?? []).length > 0).length,
-      look: mine.filter((s) => s.questions.length > 0).length,
+      look: mine.filter(needsLook).length,
       groups,
     });
   }

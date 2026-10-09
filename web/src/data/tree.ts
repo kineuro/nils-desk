@@ -9,7 +9,7 @@
 // acquisitions before what the scanner made of them. Pure functions: the
 // view draws what these say.
 
-import type { Scan } from "./scans";
+import { needsLook, type Scan } from "./scans";
 
 /** The families a session's scans are grouped by, in their order; the plain scans have no word. */
 export type Family = "plain" | "symri" | "mix" | "stage" | "swi" | "derived" | "body";
@@ -99,7 +99,6 @@ export interface SubjectNode {
   look: number;
 }
 
-const needsLook = (s: Scan) => s.questions.length > 0;
 
 /** The session's folder name: its label where a session is built, else its day, else none. */
 export function sessionLabel(s: Pick<Scan, "label" | "day">): string {

@@ -40,7 +40,7 @@ async function dataUrl(z: number, stack: number): Promise<string> {
 
 const NAMES: [string, string | null, string, string, Record<string, string>, string[]][] = [
   ["Sag_T1w_3D_MPRAGE_ND", "acq-Sag+3D+MPRAGE_T1w", "anat", "anat", { base: "T1w", technique: "MPRAGE", construct: "ND", disposition: "acquisition" }, []],
-  ["Ax_T2w_2D_FLAIR_IR-TSE_ND", "acq-Ax+2D+FLAIR+IRTSE_T2w", "anat", "anat", { base: "T2w", technique: "IR-TSE", modifier: "FLAIR", disposition: "acquisition" }, ["body_part:low_confidence"]],
+  ["Ax_T2w_2D_FLAIR_IR-TSE_ND", "acq-Ax+2D+FLAIR+IRTSE_T2w", "anat", "anat", { base: "T2w", technique: "IR-TSE", modifier: "FLAIR", disposition: "acquisition" }, ["base:missing"]],
   ["Sag_T1w_3D_MPRAGE_ND_CE", "acq-Sag+3D+MPRAGE_ce-contrast_T1w", "anat", "anat", { base: "T1w", technique: "MPRAGE", post_contrast: "1", disposition: "acquisition" }, []],
   ["Ax_SWI_3D_GRE_MinIP", null, "anat", "anat", { base: "SWI", technique: "GRE", construct: "MinIP", provenance: "ProjectionDerived", disposition: "scanner_derived" }, []],
   ["Ax_T1w_2D_MDME_SyntheticT1w", "acq-Ax+2D+MDME_rec-SyMRI_T1w", "anat", "anat/SyMRI", { base: "T1w", technique: "MDME", provenance: "SyMRI", disposition: "scanner_derived" }, []],

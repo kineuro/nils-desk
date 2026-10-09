@@ -15,7 +15,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { StackView } from "../campaigns/StackView";
 import { Icon } from "../ui/Icon";
 import { pictures as sharedPictures, type Bitmap, type Pictures, type Preview } from "./pictures";
-import { questionWords, type Scan } from "./scans";
+import { needsLook, questionWords, type Scan } from "./scans";
 
 /** The mark an open sets, and the measures timed from it. */
 export const OPEN_MARK = "nils-scan-open";
@@ -363,7 +363,7 @@ export function ScanViewer({ scans, at, onAt, onClose, store, bare = false }: { 
   // the still: the grid's picture, else the preview's middle plane in the
   // scan's own plane, which the engine names axial whatever the scan's plane
   const still = scan.picture ?? preview?.middle.axial ?? null;
-  const look = scan.questions.length > 0;
+  const look = needsLook(scan);
 
   return (
     <div className={`scan-view${look && !bare ? " look" : ""}${bare ? " bare" : ""}`} data-stack={stack} data-first-ms={first ?? undefined}>

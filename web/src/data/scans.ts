@@ -44,7 +44,7 @@ export interface Scan {
   picture: string | null;
   /** The picture is a first one from the scan's one file while its preview is made: taken over when the whole one comes. */
   partial: boolean;
-  /** The kinds of review still open on it; empty when the sort is sure of it. */
+  /** The kinds of the sort's own questions waiting on it, the engine's one meaning of "need a look" (record 56): empty when the sort is sure of it, whatever a model, a pass or a pick still asks. */
   questions: string[];
   /** The family it is grouped in on a visit's page (SyMRI, spine and neck, derived, SWI ...); the engine's, else worked out from the axes. */
   family?: Family;
@@ -162,7 +162,16 @@ export function scansOf(rows: ScanRow[]): Scan[] {
 const FAMILIES = ["plain", "symri", "mix", "stage", "swi", "derived", "body"] as const;
 const timing = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
-/** A scan's open questions in words, for its picture's hover: "body_part:low_confidence" reads "body part, low confidence". */
+/**
+ * Whether a scan needs a look: a question of the sort's waits on it, as the
+ * engine gives `questions`. The same "need a look" the card, the summary and
+ * the Grid's counts say, so every mark on a scan reads it from here.
+ */
+export function needsLook(s: Pick<Scan, "questions">): boolean {
+  return s.questions.length > 0;
+}
+
+/** A scan's open questions in words, for its picture's hover: "base:missing" reads "base, missing". */
 export function questionWords(s: Pick<Scan, "questions">): string {
   return s.questions.map((q) => q.replaceAll("_", " ").replace(":", ", ")).join("; ");
 }

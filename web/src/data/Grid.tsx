@@ -17,7 +17,7 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { pictures as sharedPictures } from "./pictures";
 import { markOpen } from "./ScanViewer";
-import { questionWords, type Scan, type ScanPage } from "./scans";
+import { needsLook, questionWords, type Scan, type ScanPage } from "./scans";
 import { compareScans, FAMILY_SLOT, FAMILY_WORD, sessionLabel } from "./tree";
 import {
   colourOf,
@@ -993,7 +993,7 @@ function ScansLevel({ scope, view, go, subject, visit }: LevelProps & { subject:
 
   const name = visits?.subject.label ?? visits?.subject.code ?? `Subject ${subject}`;
   const title = here?.label ?? (scans[0] ? sessionLabel(scans[0]) : "Visit");
-  const look = scans.filter((s) => s.questions.length > 0).length;
+  const look = scans.filter(needsLook).length;
   const legend = colour === "contrast" || colour === "plane" ? legendOf(scans, colour) : [];
   const list0 = scopeList(scope);
   return (
@@ -1084,7 +1084,7 @@ function ScansLevel({ scope, view, go, subject, visit }: LevelProps & { subject:
                           const i = indexOf.get(s.id) ?? -1;
                           const value = colour === "contrast" || colour === "plane" ? colourOf(s, colour) : null;
                           const main = s.main ?? [];
-                          const looks = s.questions.length > 0;
+                          const looks = needsLook(s);
                           const shown = names === "bids" && s.bids ? s.bids : s.name;
                           return (
                             <a

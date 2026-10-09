@@ -116,7 +116,7 @@ const VISIT_SCANS = [
   row(11, "Sag_T1w_3D_MPRAGE", { main: ["t1w"], picture: { data: "data:image/jpeg;base64,AAAA", width: 256, height: 256, digest: null, held: false } }),
   row(12, "Ax_T1w_3D_MPRAGE_ce", { axes: { base: "T1w", post_contrast: "1" }, series_number: 12 }),
   row(13, "Ax_T2w_2D_MDME_Synthetic", { family: "symri", axes: { base: "T2w", provenance: "SyMRI" }, bids: null, te: null, tr: null, ti: null, fa: null }),
-  row(14, "SC_Sag_T2w_2D_STIR", { family: "body", axes: { base: "T2w", body_part: "spine" }, questions: ["body_part:low_confidence"], images: 13 }),
+  row(14, "SC_Sag_T2w_2D_STIR", { family: "body", axes: { base: "T2w", body_part: "spine" }, questions: ["base:missing"], images: 13 }),
   row(15, "Ax_DWI_2D_EPI_b1000", { datatype: "dwi", folder: "dwi", axes: { base: "DWI" } }),
   row(16, "Localizer", { datatype: "other", folder: "localizer", axes: { disposition: "scout" } }),
 ];
