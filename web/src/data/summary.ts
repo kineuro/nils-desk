@@ -22,7 +22,13 @@ export type StepName = "found" | "pseudonymised" | "read" | "sorted" | "body_par
 /** The operations of their own, each a step of a dataset and of a cohort with its own review (record 56, section 2): sorting asks nothing about either. */
 export type Operation = "body_part" | "post_contrast";
 export const OPERATIONS: Operation[] = ["body_part", "post_contrast"];
-export type StepState = "done" | "running" | "queued" | "waiting" | "off";
+export type StepState = "done" | "running" | "queued" | "waiting" | "off" | "failed";
+
+/** Why a run of body part or post-contrast would be refused now, as its door would answer: a reason to tell refusals apart by, and the engine's words. */
+export interface StepRefusal {
+  reason: string;
+  error: string;
+}
 
 /** One step of where a dataset is, as the summary door answers it: its state, the job that did it last and the counts the step has. */
 export interface SummaryStep {
@@ -52,6 +58,8 @@ export interface SummaryStep {
   served?: boolean;
   answered?: number;
   jobs?: number[];
+  /** Body part and post-contrast: why a run of it would be refused now, none where its door would start one. */
+  refusal?: StepRefusal | null;
 }
 
 /** What a dataset holds and where it is (`GET /api/datasets/{name}/summary`). */
@@ -212,8 +220,9 @@ export function runningOf(
   now: number,
 ): { done: number | null; of: number | null; fraction: number | null; left: string | null } {
   const p = progress ?? {};
-  const done = num(p["done"]) ?? num(p["written"]) ?? num(p["ingested"]) ?? num(p["seen"]) ?? num(p["files"]);
-  const of = num(p["total"]) ?? num(p["of"]) ?? num(p["expected"]);
+  // a model's run counts its units over, of all of them
+  const done = num(p["done"]) ?? num(p["written"]) ?? num(p["ingested"]) ?? num(p["seen"]) ?? num(p["files"]) ?? num(p["over"]);
+  const of = num(p["total"]) ?? num(p["of"]) ?? num(p["expected"]) ?? num(p["units"]);
   const elapsed = num(p["elapsed_s"]) ?? (started ? Math.max(0, (now - Date.parse(started)) / 1000) : null);
   let left: string | null = null;
   if (done !== null && of !== null && done > 0 && of > done && elapsed !== null && elapsed > 0) {
@@ -293,6 +302,7 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
         const r = runningOf(s.progress, s.started_at, now.getTime());
         what = r.done !== null && r.of !== null ? `${n(r.done)} of ${n(r.of)}` : "running";
       } else if (queued) what = "waits its turn";
+      else if (s.state === "failed") what = "failed";
       else if (s.state === "waiting") what = "not run yet";
       else what = v("answered") === 0 ? "none answered" : v("answered") >= v("of") ? `${n(v("answered"))} answered` : `${n(v("answered"))} of ${n(v("of"))} answered`;
       if (v("look") > 0) what += ` · ${n(v("look"))} to look at`;

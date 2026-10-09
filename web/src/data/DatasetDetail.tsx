@@ -9,6 +9,8 @@
 // identified has its pseudonymise step on the rail between Found and Read,
 // opened in place under the rail (the design of the same day): by itself
 // while it waits on a person, and from the rail or the address otherwise.
+// Body part and post-contrast are run from their steps on the rail (record
+// 56), and their running job joins the log.
 
 import { useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
@@ -28,6 +30,7 @@ import { maySeePicks, picksSummary, type PickLine } from "./picks";
 import { opensItself, PseudonymisedSummary, PseudonymiseStep, StepDialogs, usePseudonymise, type Opened } from "./PseudonymiseStep";
 import { railWords } from "./pseudoStep";
 import { StepRail } from "./StepRail";
+import { runOffers, startedWords, stepRuns } from "./stepRun";
 import { nextStep, stepCommand, type StepId } from "./steps";
 import {
   clock,
@@ -51,6 +54,7 @@ import {
   whereWords,
   type DatasetSummary,
   type LogLine,
+  type Operation,
   type SummaryStep,
 } from "./summary";
 import { mayBrowse, viewHref } from "./viewer";
@@ -112,6 +116,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const [picks, setPicks] = useState<PickLine[] | null>(null);
   const [removing, setRemoving] = useState(false);
   const [settings, setSettings] = useState(false);
+  /** A step's Run pressed, until the engine answers. */
+  const [pressed, setPressed] = useState(false);
   const acts = datasetActions(caps, d, why);
   // the pseudonymise step: open by itself while it waits on a person or runs, or as the person or the address opened it
   const pseudo = usePseudonymise(caps, d, s);
@@ -169,6 +175,15 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const readAgain = () => {
     const c = stepCommand(d, "read", packFor(caps));
     if (c) queue(c.command, c.name, `${d.name} is read again.`);
+  };
+  // body part or post-contrast over the dataset's scans: its model's run queued, or the engine's refusal said plainly
+  const runStep = (step: Operation) => {
+    setPressed(true);
+    stepRuns
+      .start("datasets", d.name, step)
+      .then(() => onChanged(startedWords(d.name, step)))
+      .catch(onFailed)
+      .finally(() => setPressed(false));
   };
 
   const refusedBatch = s?.files.refused_batch ?? null;
@@ -268,6 +283,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
             now={now}
             says={said ? { pseudonymised: said } : undefined}
             pick={view !== null && stepOf(s, "pseudonymised") !== null ? { step: "pseudonymised", open, controls: stepId, onPick: () => setStepOpen(!open) } : null}
+            run={runOffers(caps, "datasets", railSteps(s), pressed, runStep)}
           />
         ) : maySummarise(caps) ? (
           <p className="meta">Reading where it is.</p>

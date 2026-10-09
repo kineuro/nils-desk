@@ -6,20 +6,26 @@
 // post-contrast (operations of their own, record 56) and their main scans;
 // where its subjects come from, the datasets that feed it and the ones that
 // only hold some of them; what its subjects have, a main scan per role and
-// their clinical coverage; and its log and releases.
+// their clinical coverage; and its log and releases. Body part and
+// post-contrast are run over its members' scans from their steps.
 
 import { useEffect, useState } from "react";
+import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow } from "../routes";
 import { MoreMenu } from "../settings/cards";
+import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { cohortActs, MembersDialog, RenameDialog, RetireDialog } from "./CohortPage";
 import { cohorts, type Cohort, type CohortDetail as Detail, type CohortRelease } from "./cohorts";
+import { jobs as jobsDoor } from "./datasets";
 import { maySeePicks, picksSummary, PICKS_SUMMARY_DOOR, type PickLine } from "./picks";
+import { plainError, type Plain } from "./plain";
 import { StepRail } from "./StepRail";
-import { clock, cohortRail, fedWords, growth, joinTitle, roleOrder, roleWord, slotOf, type Holding } from "./summary";
+import { runOffers, startedWords, stepRuns } from "./stepRun";
+import { clock, cohortRail, doingTitle, fedWords, growth, joinTitle, OPERATIONS, roleOrder, roleWord, runningWords, slotOf, type Holding, type Operation, type SummaryStep } from "./summary";
 import { mayBrowse, viewHref } from "./viewer";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -54,6 +60,10 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
   const [picks, setPicks] = useState<{ members: number | null; lines: PickLine[] } | null>(null);
   const [open, setOpen] = useState<Act | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  /** A step's run refused, said plainly with the engine's words behind a "?". */
+  const [refused, setRefused] = useState<Plain | null>(null);
+  /** A step's Run pressed, until the engine answers. */
+  const [pressed, setPressed] = useState(false);
   const [asked, setAsked] = useState(0);
   // what the list said of it: the cohort's own door is read again when it moves
   const moved = `${row.name}:${row.subjects}:${row.stacks}:${row.waiting}:${row.releases}:${row.last_joined ?? ""}`;
@@ -79,6 +89,13 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
       alive = false;
     };
   }, [caps, row.name, moved, asked]);
+  // while a step of it waits or runs, its document is read again every few seconds
+  const busy = (doc?.steps ?? []).some((x) => x.state === "queued" || x.state === "running");
+  useEffect(() => {
+    if (!busy) return;
+    const t = setInterval(() => setAsked((x) => x + 1), 5_000);
+    return () => clearInterval(t);
+  }, [busy]);
 
   const c = { ...row, ...(doc ?? {}) } as Cohort & Partial<Detail>;
   const a = cohortActions(caps, row);
@@ -87,6 +104,21 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
   const releases: CohortRelease[] = Array.isArray(doc?.releases) ? doc.releases : [];
   const today = new Date();
   const rail = cohortRail(doc?.steps, picks?.lines ?? null);
+  // body part or post-contrast over its members' scans: its model's run queued, or the engine's refusal said plainly
+  const runStep = (step: Operation) => {
+    setPressed(true);
+    setRefused(null);
+    stepRuns
+      .start("cohorts", row.name, step)
+      .then(() => {
+        const words = startedWords(row.name, step);
+        setSaid(words);
+        setAsked((x) => x + 1);
+        onChanged(words);
+      })
+      .catch((e: unknown) => setRefused(plainError(e)))
+      .finally(() => setPressed(false));
+  };
 
   const secondary = [
     a.query && a.primary !== "query" ? (
@@ -163,7 +195,13 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
       {rail.length > 0 && (
         <div className="dp-sec">
           <h3 className="eyebrow">Where it is</h3>
-          <StepRail steps={rail} now={today.getTime()} />
+          <StepRail steps={rail} now={today.getTime()} run={runOffers(caps, "cohorts", rail, pressed, runStep)} />
+          {refused && (
+            <p className="warn" role="alert">
+              {refused.words}
+              <Hint text={refused.detail} />
+            </p>
+          )}
         </div>
       )}
 
@@ -208,6 +246,16 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
           <div className="dp-col-head">
             <h3 className="eyebrow">Its log</h3>
           </div>
+          <CohortRuns
+            caps={caps}
+            steps={doc?.steps ?? []}
+            now={today.getTime()}
+            onStopped={(words) => {
+              setSaid(words);
+              setAsked((x) => x + 1);
+            }}
+            onFailed={(e) => setRefused(plainError(e))}
+          />
           <CohortLog cohort={c} releases={releases} now={today} />
           {releases.length > 0 && (
             <>
@@ -314,6 +362,50 @@ function Clinical({ coverage, members, waiting }: { coverage: { kind: string; pr
       {shown.length > 0 && <>Clinical: {shown.map((k) => `${k.kind} for ${n(k.subjects)} of ${n(members)}`).join(", ")}</>}
       {shown.length > 0 && waiting > 0 && " · "}
       {waiting > 0 && <span className="warn">{n(waiting)} wait on Review</span>}
+    </div>
+  );
+}
+
+/** Body part or post-contrast running over a cohort's members' scans: what it does, how far it is, and Stop. */
+function CohortRuns(props: { caps: Capabilities; steps: SummaryStep[]; now: number; onStopped: (words: string) => void; onFailed: (e: unknown) => void }) {
+  const { caps, steps, now, onStopped, onFailed } = props;
+  const going = steps.filter((st) => (st.state === "running" || st.state === "queued") && st.job !== null && (OPERATIONS as string[]).includes(st.step));
+  if (going.length === 0) return null;
+  const stops = may(caps, "pipelines:work");
+  return (
+    <div className="dp-log">
+      {going.map((st) => {
+        const op = st.step as Operation;
+        const row: Pick<JobRow, "kind" | "state" | "started_at" | "progress"> = { kind: "pipeline", state: st.state === "queued" ? "queued" : "running", started_at: st.started_at ?? "", progress: st.progress };
+        const title = doingTitle(row, op);
+        const r = runningWords(row, now);
+        const stop = () => {
+          if (st.job === null) return;
+          jobsDoor
+            .cancel(st.job)
+            .then(() => onStopped(`${doingTitle({ kind: "pipeline", state: "running" }, op)}: ${st.state === "queued" ? "dropped" : "stopping"}.`))
+            .catch(onFailed);
+        };
+        return (
+          <div key={st.step} className="dp-running">
+            <div className="dp-running-head">
+              <span className="dp-dot" aria-hidden="true" />
+              <span className="grow">{title}</span>
+              {stops && (
+                <button type="button" className="button secondary small" onClick={stop}>
+                  {st.state === "queued" ? "Drop" : "Stop"}
+                </button>
+              )}
+            </div>
+            {r.fraction !== null && (
+              <div className="dp-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(r.fraction * 100)}>
+                <i style={{ width: `${Math.max(2, Math.round(r.fraction * 100))}%` }} />
+              </div>
+            )}
+            {r.words && <div className="meta">{r.words}</div>}
+          </div>
+        );
+      })}
     </div>
   );
 }

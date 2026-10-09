@@ -19,6 +19,7 @@ import type { Cohort, CohortDetail } from "./cohorts";
 import { DataPage, chosenOf, firstChoice } from "./DataPage";
 import type { Dataset } from "./datasets";
 import { makingRefusal, nameRefusal } from "./NewCohort";
+import { STEP_RUN_DOORS } from "./stepRun";
 import type { DatasetSummary, SummaryStep } from "./summary";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -88,6 +89,9 @@ const loose = ds("ward-c", 4, { arrives: "undeclared", patient_id: null, subject
 
 const step = (name: SummaryStep["step"], over: Partial<SummaryStep> = {}): SummaryStep => ({ step: name, state: "done", job: null, started_at: AT, finished_at: AT, progress: null, ...over });
 
+/** Why post-contrast's run is refused here, as the engine says it (record 56). */
+const NO_MODEL = { reason: "no_model", error: "no post-contrast model is installed" };
+
 function summaryOf(d: Dataset, running = false): DatasetSummary {
   const scans = d.totals.stacks;
   return {
@@ -115,7 +119,7 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
             step("read", { state: "waiting", reads: 0, files: 0, refused: 0 }),
             step("sorted", { state: "waiting", scans: 0, of: 0 }),
             step("body_part", { state: "waiting", served: true, answered: 0, look: 0, of: 0, jobs: [] }),
-            step("post_contrast", { state: "off", served: false, answered: 0, look: 0, of: 0, jobs: [] }),
+            step("post_contrast", { state: "off", served: false, answered: 0, look: 0, of: 0, jobs: [], refusal: NO_MODEL }),
             step("main_scans", { state: "waiting", picked: 0, borders: 0 }),
             step("pictures", { state: "waiting", made: 0, of: 0 }),
             step("views", { state: "waiting", made: 0, of: 0 }),
@@ -125,7 +129,7 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
             step("read", { job: 4, files: 120, refused: d.totals.refused_files, reads: 1 }),
             step("sorted", { job: 6, scans, of: scans, look: d.totals.to_sort, unsorted: 0 }),
             step("body_part", { job: 12, run: 2, served: true, answered: 36, look: 4, of: scans, jobs: [12] }),
-            step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: scans, jobs: [] }),
+            step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: scans, jobs: [], refusal: NO_MODEL }),
             step("main_scans", { job: 8, picked: 28, borders: 2 }),
             step("pictures", { job: 6, made: scans, of: scans, in_sort: true }),
             running ? step("views", { state: "running", job: 9, finished_at: null, progress: { done: 12, total: 40 }, made: 12, of: scans }) : step("views", { job: 9, made: scans, of: scans }),
@@ -191,7 +195,7 @@ const detail: CohortDetail = {
   steps: [
     step("sorted", { started_at: null, finished_at: null, scans: 52, of: 52, look: 3, unsorted: 0 }),
     step("body_part", { job: 12, run: 2, served: true, answered: 40, look: 2, of: 52, jobs: [12] }),
-    step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: 52, jobs: [] }),
+    step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: 52, jobs: [], refusal: NO_MODEL }),
   ],
 };
 
@@ -325,9 +329,10 @@ describe("datasets and cohorts on one page", () => {
       "40 made",
       "40 made",
     ]);
-    // record 56: body part and post-contrast are steps of their own; one not served says so, and no Run is offered, since no door runs one over a dataset
+    // record 56: body part and post-contrast are steps of their own; one not served says so, and an engine without the door to run them offers no Run
     expect(d.querySelector(".dp-step.off")?.getAttribute("title")).toBe("Neither the post-contrast label nor a post-contrast model is served here yet.");
     expect([...d.querySelectorAll(".dp-acts button, .dp-acts a")].map((b) => b.textContent).filter((t) => /run/i.test(t ?? ""))).toEqual([]);
+    expect(d.querySelector(".dp-step-run")).toBeNull();
     expect(d.querySelector(".dp-funnel")?.textContent).toBe("12 subjects→20 visits→40 scans");
     expect(d.querySelector(".dp-sure-words")?.textContent).toBe("32 sure8 need a look");
     expect([...d.querySelectorAll(".dp-kind > span:first-child")].map((s) => s.textContent)).toEqual(["T1w", "FLAIR"]);
@@ -337,6 +342,133 @@ describe("datasets and cohorts on one page", () => {
     expect(d.querySelector(".dp-role-line a")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
     const log = [...d.querySelectorAll(".dp-log-row")].map((r) => `${r.querySelector(".what")?.textContent} ${r.querySelector(".how")?.textContent}`);
     expect(log).toEqual(["Body part ", "Main scans picked for 12 subjects", "Read 120 files, 12 new subjects", "Added as a dataset anonymised, PatientID holds the subject code"]);
+  });
+
+  it("runs body part from its step on the rail, holds post-contrast's Run with the engine's reason, and says a refusal plainly (record 56)", async () => {
+    const door = "/api/datasets/study-big/steps/body_part/run";
+    const e = await page({
+      doors: [...DOORS, STEP_RUN_DOORS.datasets, STEP_RUN_DOORS.cohorts],
+      route: (c, nth) => {
+        if (c.method !== "POST" || c.url !== door) return undefined;
+        return nth === 1
+          ? { status: 202, body: { job: 21, state: "queued", step: "body_part", for: "dataset:study-big", scans: 40, handle: 7, command: ["run", "bodypart-infer-fusion@1", "--handle", "7"] } }
+          : { status: 409, body: { error: "body part runs already over these scans, as job 21", reason: "running", step: "body_part", disclosure: "safe" } };
+      },
+    });
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    const runs = () => [...d.querySelectorAll<HTMLElement>(".dp-step")].filter((x) => x.querySelector(".dp-step-run"));
+    expect(runs().map((x) => x.querySelector(".dp-step-title")?.textContent)).toEqual(["Body part", "Post-contrast"]);
+    const [bp, pc] = runs().map((x) => x.querySelector<HTMLButtonElement>(".dp-step-run button")!);
+    // body part ran before; post-contrast has no model, its reason behind the "?"
+    expect(bp.textContent).toBe("Run again");
+    expect(bp.disabled).toBe(false);
+    expect(pc.textContent).toBe("Run");
+    expect(pc.disabled).toBe(true);
+    expect(runs()[1].querySelector(".dp-step-run .hint")?.getAttribute("title")).toBe("no post-contrast model is installed");
+    expect(runs()[0].querySelector(".dp-step-run .hint")).toBeNull();
+    act(() => bp.click());
+    await settle();
+    expect(e.of("POST", door)).toHaveLength(1);
+    expect(e.of("POST", "/api/jobs")).toHaveLength(0);
+    expect(text()).toContain("study-big: body part queued.");
+    // pressed again while it is queued elsewhere: the engine refuses, said plainly with its words behind the "?"
+    act(() => runs()[0].querySelector<HTMLButtonElement>(".dp-step-run button")!.click());
+    await settle();
+    expect(e.of("POST", door)).toHaveLength(2);
+    const said = host.querySelector<HTMLElement>("section.dp > p.warn")!;
+    expect(said.textContent).toBe("Body part runs already.?");
+    expect(said.querySelector(".hint")?.getAttribute("title")).toBe("body part runs already over these scans, as job 21");
+  });
+
+  it("runs a cohort's body part over its members' scans from its rail (record 56)", async () => {
+    const door = "/api/cohorts/ms-followup/steps/body_part/run";
+    const e = await page({
+      doors: [...DOORS, STEP_RUN_DOORS.datasets, STEP_RUN_DOORS.cohorts],
+      route: (c) => (c.method === "POST" && c.url === door ? { status: 202, body: { job: 22, state: "queued", step: "body_part", for: "cohort:ms-followup", scans: 52, handle: 8, command: [] } } : undefined),
+    });
+    act(() => (card("ms-followup").querySelector(".dp-big") as HTMLElement).click());
+    await settle(8);
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    expect(d.getAttribute("aria-label")).toBe("ms-followup");
+    const offered = [...d.querySelectorAll<HTMLElement>(".dp-step")].filter((x) => x.querySelector(".dp-step-run"));
+    expect(offered.map((x) => x.querySelector(".dp-step-title")?.textContent)).toEqual(["Body part", "Post-contrast"]);
+    expect(offered[1].querySelector<HTMLButtonElement>(".dp-step-run button")!.disabled).toBe(true);
+    act(() => offered[0].querySelector<HTMLButtonElement>(".dp-step-run button")!.click());
+    await settle();
+    expect(e.of("POST", door)).toHaveLength(1);
+    expect(d.querySelector(".dp-said")?.textContent).toBe("ms-followup: body part queued.");
+  });
+
+  it("shows a cohort's running body part beside its log, with its progress and Stop (record 56)", async () => {
+    const e = await page({
+      doors: [...DOORS, STEP_RUN_DOORS.datasets, STEP_RUN_DOORS.cohorts],
+      route: (c) => {
+        if (c.method === "GET" && c.url === "/api/cohorts/ms-followup") {
+          const steps = detail.steps!.map((x) => (x.step === "body_part" ? { ...x, state: "running" as const, job: 22, started_at: new Date(Date.now() - 60_000).toISOString(), finished_at: null, progress: { done: 13, total: 52 } } : x));
+          return { status: 200, body: { ...detail, steps } };
+        }
+        if (c.method === "POST" && c.url === "/api/jobs/22/cancel") return { status: 200, body: { job: 22, state: "cancelling" } };
+        return undefined;
+      },
+    });
+    act(() => (card("ms-followup").querySelector(".dp-big") as HTMLElement).click());
+    await settle(8);
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    // no Run on a step that runs; post-contrast's still held
+    expect([...d.querySelectorAll(".dp-step-run button")].map((b) => b.textContent)).toEqual(["Run"]);
+    const box = d.querySelector<HTMLElement>(".dp-running")!;
+    expect(box.querySelector(".dp-running-head .grow")?.textContent).toBe("Finding the body part");
+    expect(box.querySelector(".dp-progress")?.getAttribute("aria-valuenow")).toBe("25");
+    expect(box.querySelector(".meta")?.textContent).toMatch(/^13 of 52 scans · /);
+    act(() => [...box.querySelectorAll("button")].find((b) => b.textContent === "Stop")!.click());
+    await settle();
+    expect(e.of("POST", "/api/jobs/22/cancel")).toHaveLength(1);
+    expect(d.querySelector(".dp-said")?.textContent).toBe("Finding the body part: stopping.");
+  });
+
+  it("shows a body-part run started from its step in the dataset's log, its progress in scans and Stop (record 56)", async () => {
+    const run = {
+      id: 21,
+      kind: "pipeline",
+      name: "bodypart-infer-fusion@1",
+      state: "running",
+      started_at: new Date(Date.now() - 60_000).toISOString(),
+      heartbeat_at: null,
+      finished_at: null,
+      progress: { run: 3, phase: "run", units: 40, over: 10, running: 30, queued: 0 },
+      error: null,
+      args: { queued: ["run", "bodypart-infer-fusion@1", "--handle", "7", "--model", "1", "--model", "2"], step: "body_part", for: "dataset:study-big", principal: "astrid" },
+      result: null,
+    };
+    const e = await page({
+      doors: [...DOORS, STEP_RUN_DOORS.datasets],
+      route: (c) => {
+        const url = new URL(c.url, "http://x");
+        if (c.method === "GET" && url.pathname === "/api/datasets/study-big/summary") {
+          const s = summaryOf(looked);
+          s.steps = s.steps.map((x) => (x.step === "body_part" ? { ...x, state: "running", job: 21, run: 3, finished_at: null, started_at: run.started_at, progress: { done: 10, total: 40 }, jobs: [21, 12] } : x));
+          return { status: 200, body: s };
+        }
+        if (c.method === "GET" && url.pathname === "/api/jobs" && url.searchParams.get("dataset") === "study-big") return { status: 200, body: { count: 4, jobs: [run, ...jobsOfBig.slice(1)] } };
+        if (c.method === "POST" && c.url === "/api/jobs/21/cancel") return { status: 200, body: { job: 21, state: "cancelling" } };
+        return undefined;
+      },
+    });
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    // the step runs: no Run on it, its count on the rail
+    const bp = [...d.querySelectorAll<HTMLElement>(".dp-step")].find((x) => x.querySelector(".dp-step-title")?.textContent === "Body part")!;
+    expect(bp.className).toContain("running");
+    expect(bp.querySelector(".dp-step-what")?.textContent).toBe("10 of 40 · 4 to look at");
+    expect(bp.querySelector(".dp-step-run")).toBeNull();
+    // its job in the log, by its operation, with its bar and Stop
+    const box = d.querySelector<HTMLElement>(".dp-running")!;
+    expect(box.querySelector(".dp-running-head .grow")?.textContent).toBe("Finding the body part");
+    expect(box.querySelector(".dp-progress")?.getAttribute("aria-valuenow")).toBe("25");
+    expect(box.querySelector(".meta")?.textContent).toMatch(/^10 of 40 scans · /);
+    act(() => [...box.querySelectorAll("button")].find((b) => b.textContent === "Stop")!.click());
+    await settle();
+    expect(e.of("POST", "/api/jobs/21/cancel")).toHaveLength(1);
+    expect(text()).toContain("Finding the body part: stopping.");
   });
 
   it("shows the running job of a dataset with its progress and Stop, which asks the engine to stop it", async () => {
