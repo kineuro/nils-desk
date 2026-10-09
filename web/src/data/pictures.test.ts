@@ -4,7 +4,7 @@
 // the LRU of decoded bitmaps, and the store that reads each thing once.
 
 import { describe, expect, it } from "vitest";
-import { BitmapLru, frameRanges, outwards, parseFrames, Pictures, previewOf, type Bitmap } from "./pictures";
+import { BitmapLru, frameRanges, nextRange, outwards, parseFrames, Pictures, previewOf, type Bitmap } from "./pictures";
 import { framesBody, previewBody } from "./pictures.fixture";
 
 describe("a preview, read", () => {
@@ -62,14 +62,30 @@ describe("a planes body", () => {
 });
 
 describe("the order of reading", () => {
-  it("reads the planes around the middle first, then the rest above and below", () => {
+  it("reads the planes around the middle first, then outwards a range at a time, the nearest first", () => {
     expect(frameRanges(160, 80)).toEqual([
       [72, 88],
-      [88, 160],
-      [0, 72],
+      [88, 136],
+      [24, 72],
+      [136, 160],
+      [0, 24],
     ]);
     expect(frameRanges(10, 5)).toEqual([[0, 10]]);
+    expect(frameRanges(13, 6)).toEqual([[0, 13]]);
     expect(frameRanges(0, 0)).toEqual([]);
+  });
+
+  it("takes the next range around the missing plane nearest the one shown, inside a window", () => {
+    const have = new Set([10, 11, 12, 13]);
+    const missing = (z: number) => !have.has(z);
+    // the plane shown is read: the nearest missing one above it, grown away from what is read
+    expect(nextRange(100, 12, missing, 8)).toEqual([14, 22]);
+    // the person scrolled far: the range is read around the new plane
+    expect(nextRange(100, 70, missing, 8)).toEqual([66, 74]);
+    // a window: only the planes inside it
+    expect(nextRange(100, 12, missing, 8, [8, 16])).toEqual([14, 16]);
+    expect(nextRange(100, 12, (z) => z < 10 || z > 13, 8, [10, 14])).toBeNull();
+    expect(nextRange(0, 0, missing, 8)).toBeNull();
   });
 
   it("decodes from the plane shown outwards", () => {
@@ -165,5 +181,155 @@ describe("the page's store of pictures", () => {
     expect(pics.hasFrame(7, gone)).toBe(true);
     expect(await pics.again(7, gone)).not.toBeNull();
     expect(pics.bitmap(7, gone)).toBeDefined();
+  });
+});
+
+describe("reading a scan's frames from the plane shown", () => {
+  // an engine whose answers wait until the test lets them go, and that sees an abort
+  const held = (planes = 448) => {
+    const asked: { url: string; signal?: AbortSignal | null; go: () => void }[] = [];
+    const fetcher = (url: string, init?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        const m = /planes\?from=(\d+)&to=(\d+)/.exec(url);
+        const go = () => {
+          if (url.endsWith("/preview")) return resolve(new Response(JSON.stringify(previewBody(planes, { axial: "data:a" }))));
+          const frames = [];
+          for (let z = Number(m![1]); z < Number(m![2]); z++) frames.push({ plane: z, bytes: new Uint8Array([z % 256]) });
+          resolve(new Response(framesBody(frames)));
+        };
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        asked.push({ url, signal: init?.signal, go });
+      });
+    return { asked, fetcher };
+  };
+  const decode = async () => bitmap(64, 64);
+  const tick = async (n = 10) => {
+    for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0));
+  };
+  const range = (url: string) => /from=(\d+)&to=(\d+)/.exec(url)!.slice(1).map(Number);
+
+  it("asks the planes around the one shown alone first, then follows the person's scroll", async () => {
+    const e = held();
+    const pics = new Pictures(e.fetcher, decode);
+    void pics.load(9, 448, 224);
+    // one small read around the plane shown, and nothing else until it lands
+    expect(e.asked.map((a) => range(a.url))).toEqual([[216, 232]]);
+    e.asked[0].go();
+    await tick();
+    expect(pics.bitmap(9, 224)).toBeDefined();
+    // then two at a time, nearest first
+    expect(e.asked.slice(1).map((a) => range(a.url))).toEqual([
+      [232, 280],
+      [168, 216],
+    ]);
+    // the person scrolls far down: the next read is around the new plane
+    pics.focus(9, 40);
+    e.asked[1].go();
+    await tick();
+    expect(range(e.asked[3].url)).toEqual([16, 64]);
+  });
+
+  it("reads a scan ahead only around its middle, decoded in idle time, so opening it draws at once", async () => {
+    const e = held(40);
+    let idles = 0;
+    const pics = new Pictures(e.fetcher, decode, undefined, undefined, { idle: async () => void idles++ });
+    const ahead = pics.ahead(5, 40, 20);
+    expect(e.asked.map((a) => range(a.url))).toEqual([[12, 28]]);
+    e.asked[0].go();
+    await ahead;
+    expect(e.asked).toHaveLength(1);
+    expect(pics.bitmap(5, 20)).toBeDefined();
+    expect(pics.bitmap(5, 11)).toBeUndefined();
+    expect(idles).toBe(16);
+    // opened, it reads the rest from the middle outwards, never again what it has
+    void pics.load(5, 40, 20);
+    expect(e.asked.slice(1).map((a) => range(a.url))).toEqual([
+      [28, 40],
+      [0, 12],
+    ]);
+  });
+
+  it("cancels the reads of a scan the person left, and lets its waiters go", async () => {
+    const e = held();
+    const pics = new Pictures(e.fetcher, decode);
+    let settled = false;
+    void pics.load(9, 448, 224).then(() => (settled = true));
+    pics.keep([10, 11]);
+    await tick();
+    expect(e.asked[0].signal?.aborted).toBe(true);
+    expect(settled).toBe(true);
+    expect(pics.reading(9)).toBe(0);
+    // opened again, it is read again
+    void pics.load(9, 448, 224);
+    expect(e.asked).toHaveLength(2);
+    expect(range(e.asked[1].url)).toEqual([216, 232]);
+  });
+});
+
+describe("a read that fails for a moment", () => {
+  const quick = { backoff: [1, 1, 1], pause: (ms: number) => new Promise<void>((r) => setTimeout(r, ms)) };
+  const decode = async () => bitmap(64, 64);
+  const body = (from: number, to: number) => {
+    const frames = [];
+    for (let z = from; z < to; z++) frames.push({ plane: z, bytes: new Uint8Array([z]) });
+    return framesBody(frames);
+  };
+
+  it("asks the preview again after a 503 and a dropped connection", async () => {
+    const answers: (() => Response)[] = [
+      () => new Response("busy", { status: 503, headers: { "Retry-After": "1" } }),
+      () => {
+        throw new TypeError("NetworkError when attempting to fetch resource.");
+      },
+      () => new Response(JSON.stringify(previewBody(13, { axial: "data:a" }))),
+    ];
+    let asked = 0;
+    const pics = new Pictures(async () => (asked++, answers.shift()!()), decode, undefined, undefined, quick);
+    const p = await pics.preview(4);
+    expect(p.planes).toBe(13);
+    expect(asked).toBe(3);
+    expect(pics.previewNow(4)?.planes).toBe(13);
+  });
+
+  it("asks the planes again after a 500, and again when an answer never comes", async () => {
+    let n = 0;
+    const fetcher = (url: string, init?: RequestInit) =>
+      new Promise<Response>((resolve, reject) => {
+        n++;
+        if (n === 1) return resolve(new Response("oops", { status: 500 }));
+        // the second never answers: the store gives up on it and asks again
+        if (n === 2) return init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        const m = /from=(\d+)&to=(\d+)/.exec(url)!;
+        resolve(new Response(body(Number(m[1]), Number(m[2]))));
+      });
+    const pics = new Pictures(fetcher, decode, undefined, undefined, { ...quick, stallMs: 20 });
+    await pics.load(4, 13, 6);
+    expect(n).toBe(3);
+    expect(pics.bitmap(4, 6)).toBeDefined();
+    expect(pics.hasFrame(4, 12)).toBe(true);
+  });
+
+  it("gives up after the last pause, and reads again when asked again", async () => {
+    let fail = true;
+    let n = 0;
+    const fetcher = async (url: string) => {
+      n++;
+      if (fail) return new Response("down", { status: 502 });
+      const m = /from=(\d+)&to=(\d+)/.exec(url)!;
+      return new Response(body(Number(m[1]), Number(m[2])));
+    };
+    const pics = new Pictures(fetcher, decode, undefined, undefined, quick);
+    await expect(pics.load(4, 13, 6)).rejects.toThrow(/502/);
+    expect(n).toBe(4);
+    fail = false;
+    await pics.load(4, 13, 6);
+    expect(pics.bitmap(4, 6)).toBeDefined();
+  });
+
+  it("does not ask again what is refused", async () => {
+    let n = 0;
+    const pics = new Pictures(async () => (n++, new Response("{}", { status: 403 })), decode, undefined, undefined, quick);
+    await expect(pics.preview(4)).rejects.toThrow(/403/);
+    expect(n).toBe(1);
   });
 });

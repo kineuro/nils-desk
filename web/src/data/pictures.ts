@@ -4,9 +4,12 @@
 // middle planes, and the planes door every plane of the stored axis at
 // display size as frames in one body. The browser draws them as plain images
 // (createImageBitmap on a canvas): no WASM, no cornerstone, no WebGL for
-// looking and scrolling. What was read and decoded is kept in memory, the
-// decoded bitmaps in an LRU by bytes, so going back is free and the next two
-// scans are warm before they are asked for.
+// looking and scrolling. Frames are read in ranges from the plane shown
+// outwards and the planes near it kept decoded, so neither the first sharp
+// frame nor scrolling near it waits for the whole stack. What was read and
+// decoded is kept in memory, the decoded bitmaps in an LRU by bytes, so going
+// back is free; the next two scans' middle frames are read and decoded ahead,
+// so the next scan is sharp in the frame after the key.
 
 /** The middle planes a preview holds, by the plane they lie in. */
 export type Plane = "axial" | "coronal" | "sagittal";
@@ -104,15 +107,51 @@ export function parseFrames(buf: ArrayBuffer): { frames: FrameEntry[]; data: Arr
   return { frames, data: buf, width, height };
 }
 
-/** The ranges a scan's frames are read in: the planes around `at` first, then the rest below and above. */
-export function frameRanges(planes: number, at: number, first = 16): [number, number][] {
-  if (planes <= 0) return [];
-  const a = Math.max(0, Math.min(planes - first, at - Math.floor(first / 2)));
-  const b = Math.min(planes, a + first);
-  const out: [number, number][] = [[a, b]];
-  if (b < planes) out.push([b, planes]);
-  if (a > 0) out.push([0, a]);
-  return out;
+/**
+ * The next range of planes to read: around the missing plane nearest `at`
+ * (the one above first on a tie), grown over the missing planes on both
+ * sides to at most `span`; null when none is missing. `inside` limits the
+ * search to a window of planes ([from, to), to exclusive).
+ */
+export function nextRange(planes: number, at: number, missing: (z: number) => boolean, span: number, inside: [number, number] = [0, planes]): [number, number] | null {
+  const lo = Math.max(0, inside[0]);
+  const hi = Math.min(planes, inside[1]);
+  if (hi <= lo || span <= 0) return null;
+  const c = Math.min(hi - 1, Math.max(lo, at));
+  let p = -1;
+  for (let d = 0; c + d < hi || c - d >= lo; d++) {
+    if (c + d < hi && missing(c + d)) {
+      p = c + d;
+      break;
+    }
+    if (d > 0 && c - d >= lo && missing(c - d)) {
+      p = c - d;
+      break;
+    }
+  }
+  if (p < 0) return null;
+  let a = p;
+  let b = p + 1;
+  while (b - a < span) {
+    const down = a > lo && missing(a - 1);
+    if (down) a--;
+    const up = b - a < span && b < hi && missing(b);
+    if (up) b++;
+    if (!up && !down) break;
+  }
+  return [a, b];
+}
+
+/** The ranges a whole scan is read in, from `at` outwards: `first` planes around it, then `span` at a time, the nearest first. */
+export function frameRanges(planes: number, at: number, first = 16, span = 48): [number, number][] {
+  const got = new Set<number>();
+  const out: [number, number][] = [];
+  for (;;) {
+    const r = nextRange(planes, at, (z) => !got.has(z), out.length === 0 ? first : span);
+    if (!r) return out;
+    for (let z = r[0]; z < r[1]; z++) got.add(z);
+    out.push(r);
+  }
 }
 
 /** The planes from `at` outwards, nearest first: the order they are decoded in. */
@@ -192,25 +231,121 @@ export interface Decoder {
 
 const decodeBlob: Decoder = (blob) => createImageBitmap(blob);
 
+/** A read given up on because the scan was left: not a failure. */
+export class Left extends Error {
+  constructor() {
+    super("the scan was left");
+  }
+}
+
+/** A door's answer worth asking again: the engine or the way to it was short of something for a moment. */
+const passing = (status: number) => status === 408 || status === 429 || status >= 500;
+
+/** How the store reads, decodes and waits; the defaults are the page's, tests make theirs small. */
+export interface PicturesOptions {
+  /** Planes read in the first request of a scan, around the plane shown. */
+  first: number;
+  /** Planes read in each later request. */
+  span: number;
+  /** Requests in flight for one scan once its first range is in. */
+  inflight: number;
+  /** Planes either side of the plane shown kept decoded. */
+  radius: number;
+  /** Planes either side of the middle a scan read ahead reads and decodes. */
+  ahead: number;
+  /** Decodes at once for the scan shown. */
+  lanes: number;
+  /** The pauses before each new ask of a read that failed for a moment; one more failure gives up. */
+  backoff: number[];
+  /** A read with no answer after this long is asked again. */
+  stallMs: number;
+  /** Waits for the browser to be idle (a read-ahead scan's decoding). */
+  idle: () => Promise<void>;
+  /** Waits a pause. */
+  pause: (ms: number) => Promise<void>;
+}
+
+const idleTime = (): Promise<void> =>
+  new Promise((done) => {
+    const w = globalThis as { requestIdleCallback?: (f: () => void, o?: { timeout: number }) => number };
+    if (typeof w.requestIdleCallback === "function") w.requestIdleCallback(() => done(), { timeout: 150 });
+    else setTimeout(done, 0);
+  });
+
+export const PICTURES_DEFAULTS: PicturesOptions = {
+  first: 16,
+  span: 48,
+  inflight: 2,
+  radius: 64,
+  ahead: 8,
+  lanes: 6,
+  backoff: [150, 400, 1000, 2500],
+  stallMs: 15_000,
+  idle: idleTime,
+  pause: (ms) => new Promise((done) => setTimeout(done, ms)),
+};
+
+/** One scan's frames: what is read, being read, decoded, and who waits for them. */
+interface Reel {
+  stack: number;
+  planes: number;
+  digest: string | null | undefined;
+  have: Map<number, Blob>;
+  /** Planes asked for and not answered yet. */
+  asking: Set<number>;
+  /** Planes asked for that the engine's answer left out: not asked again. */
+  absent: Set<number>;
+  focus: number;
+  /** Every plane read (the scan is shown); else only `around` either side of the focus (read ahead). */
+  all: boolean;
+  around: number;
+  /** Decoding waits for idle time (read ahead). */
+  idle: boolean;
+  reads: number;
+  abort: AbortController;
+  failed: unknown;
+  decoding: Set<number>;
+  /** Planes decoded since the focus last moved, so a budget smaller than the window never decodes in a circle. */
+  decoded: Set<number>;
+  /** Bytes one decoded plane takes. */
+  frameBytes: number;
+  waiters: { done: () => void; fail: (e: unknown) => void }[];
+}
+
 /**
  * The page's pictures: previews by stack (kept as promises, so two asks are
  * one read), the encoded frames of the scans read lately, and their decoded
  * bitmaps in an LRU. One per page; tests make their own with a fetch and a
  * decoder of their own.
+ *
+ * A scan's frames are read in ranges from the plane shown outwards, the
+ * first range small so the first sharp frame never waits for the stack, and
+ * re-aimed whenever the person scrolls; the planes near the one shown are
+ * kept decoded. A scan read ahead reads only the planes around its middle
+ * and decodes them in idle time, so its sharp middle frame is ready when it
+ * is opened. What fails for a moment (a 5xx, a dropped connection, a read
+ * with no answer) is asked again after a pause; reads for a scan the person
+ * left are cancelled.
  */
 export class Pictures {
   private previews = new Map<number, Promise<Preview>>();
-  private frames = new Map<number, Map<number, Blob>>();
-  private reading = new Map<number, Promise<void>>();
+  private known = new Map<number, Preview>();
+  private reels = new Map<number, Reel>();
   private listeners = new Set<(stack: number) => void>();
+  private peeking = new Set<string>();
+  /** Frames peeked before their scan had a reel, taken in when it has. */
+  private peeked = new Map<string, Blob>();
   readonly bitmaps: BitmapLru;
+  private o: PicturesOptions;
   constructor(
     private fetcher: Fetcher = (u, i) => fetch(u, i),
     private decode: Decoder = decodeBlob,
     budget = 320 * 1024 * 1024,
     private keepScans = 8,
+    options: Partial<PicturesOptions> = {},
   ) {
     this.bitmaps = new BitmapLru(budget);
+    this.o = { ...PICTURES_DEFAULTS, ...options };
   }
 
   /** Told whenever a frame of `stack` is decoded, so the viewer draws it. */
@@ -219,21 +354,70 @@ export class Pictures {
     return () => this.listeners.delete(f);
   }
 
-  /** A scan's preview, read once. */
+  /**
+   * One door asked until it answers: a failure that passes (a 5xx, 408,
+   * 429, a dropped connection, no answer within `stallMs`) is asked again
+   * after the next pause; anything else, or the last failure, is thrown. An
+   * abort from `signal` throws `Left` at once.
+   */
+  private async ask(url: string, signal?: AbortSignal): Promise<Response> {
+    for (let attempt = 0; ; attempt++) {
+      if (signal?.aborted) throw new Left();
+      const own = new AbortController();
+      const stop = () => own.abort();
+      signal?.addEventListener("abort", stop, { once: true });
+      let stalled = false;
+      const timer = setTimeout(() => {
+        stalled = true;
+        own.abort();
+      }, this.o.stallMs);
+      let why: unknown;
+      let wait: number | null = null;
+      try {
+        const r = await this.fetcher(url, { headers: HEADERS, signal: own.signal });
+        if (r.ok || !passing(r.status)) return r;
+        why = new Error(`${url.split("?")[0]} answered ${r.status}`);
+        const after = Number(r.headers.get("Retry-After"));
+        if (Number.isFinite(after) && after > 0) wait = Math.min(2000, after * 1000);
+      } catch (e) {
+        if (signal?.aborted) throw new Left();
+        why = stalled ? new Error(`${url.split("?")[0]} gave no answer`) : e;
+      } finally {
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", stop);
+      }
+      if (attempt >= this.o.backoff.length) throw why;
+      await this.o.pause(Math.min(wait ?? Infinity, this.o.backoff[attempt]));
+    }
+  }
+
+  /** A scan's preview, read once; one that failed is read again at the next ask. */
   preview(stack: number): Promise<Preview> {
     let p = this.previews.get(stack);
     if (!p) {
-      p = this.fetcher(previewUrl(stack), { headers: HEADERS })
+      p = this.ask(previewUrl(stack))
         .then((r) => {
           if (!r.ok) throw new Error(`the preview answered ${r.status}`);
           return r.json() as Promise<Json>;
         })
-        .then(previewOf);
-      p.catch(() => this.previews.delete(stack));
+        .then((j) => {
+          const v = previewOf(j);
+          this.known.set(stack, v);
+          if (this.known.size > 64) this.known.delete(this.known.keys().next().value as number);
+          return v;
+        });
+      p.catch(() => {
+        if (this.previews.get(stack) === p) this.previews.delete(stack);
+      });
       this.previews.set(stack, p);
       if (this.previews.size > 64) this.previews.delete(this.previews.keys().next().value as number);
     }
     return p;
+  }
+
+  /** A scan's preview where it was read already, at once; null where not (yet). */
+  previewNow(stack: number): Preview | null {
+    return this.known.get(stack) ?? null;
   }
 
   /** A plane's decoded bitmap, where it is in memory. */
@@ -243,69 +427,264 @@ export class Pictures {
 
   /** Whether a plane's encoded frame was read. */
   hasFrame(stack: number, plane: number): boolean {
-    return this.frames.get(stack)?.has(plane) ?? false;
+    return this.reels.get(stack)?.have.has(plane) ?? false;
   }
 
-  /**
-   * Every frame of a scan read (the planes around `at` first) and decoded
-   * from `at` outwards; a second ask while the first reads is the same read.
-   * A frame already decoded is not decoded again.
-   */
-  load(stack: number, planes: number, at: number, digest?: string | null): Promise<void> {
-    let r = this.reading.get(stack);
-    if (!r) {
-      r = this.readAll(stack, planes, at, digest).finally(() => this.reading.delete(stack));
-      this.reading.set(stack, r);
+  /** How many requests for a scan's frames are in flight (a test, the measures). */
+  reading(stack: number): number {
+    return this.reels.get(stack)?.reads ?? 0;
+  }
+
+  private reel(stack: number, planes: number, at: number, digest?: string | null): Reel {
+    let r = this.reels.get(stack);
+    if (r) {
+      this.reels.delete(stack);
+      if (r.planes !== planes || r.digest !== digest) {
+        r.planes = planes;
+        r.digest = digest;
+      }
+    } else {
+      const have = new Map<number, Blob>();
+      for (const [k, b] of this.peeked) {
+        const [s0, z] = k.split(":").map(Number);
+        if (s0 === stack) {
+          have.set(z, b);
+          this.peeked.delete(k);
+        }
+      }
+      r = { stack, planes, digest, have, asking: new Set(), absent: new Set(), focus: at, all: false, around: 0, idle: true, reads: 0, abort: new AbortController(), failed: null, decoding: new Set(), decoded: new Set(), frameBytes: 0, waiters: [] };
     }
+    this.reels.set(stack, r);
+    // the scans read longest ago let go of their frames (their decoded planes stay in the LRU)
+    for (const [k, old] of this.reels) {
+      if (this.reels.size <= this.keepScans) break;
+      if (k === stack) continue;
+      this.cancel(old);
+      this.reels.delete(k);
+    }
+    this.aim(r, at);
     return r;
   }
 
-  private async readAll(stack: number, planes: number, at: number, digest?: string | null): Promise<void> {
-    const have = this.frames.get(stack) ?? new Map<number, Blob>();
-    this.frames.delete(stack);
-    this.frames.set(stack, have);
-    while (this.frames.size > this.keepScans) this.frames.delete(this.frames.keys().next().value as number);
-    // the next range is read while the one before decodes
-    const decoding: Promise<void>[] = [];
-    for (const [from, to] of frameRanges(planes, at)) {
-      let missing = false;
-      for (let z = from; z < to; z++) if (!have.has(z)) missing = true;
-      if (!missing) continue;
-      const res = await this.fetcher(planesUrl(stack, from, to, digest), { headers: HEADERS });
-      if (!res.ok) throw new Error(`the planes answered ${res.status}`);
-      const { frames, data } = parseFrames(await res.arrayBuffer());
-      for (const f of frames) have.set(f.plane, new Blob([data.slice(f.offset, f.offset + f.length)], { type: f.mime }));
-      decoding.push(this.decodeAround(stack, have, at, frames.map((f) => f.plane)));
+  private aim(r: Reel, at: number): void {
+    const z = Math.max(0, Math.min(r.planes - 1, at));
+    if (z !== r.focus) {
+      r.focus = z;
+      r.decoded.clear();
     }
-    await Promise.all(decoding);
   }
 
-  /** The planes just read decoded, nearest `at` first, a few at a time. */
-  private async decodeAround(stack: number, have: Map<number, Blob>, at: number, these: number[]): Promise<void> {
-    const order = [...these].sort((a, b) => Math.abs(a - at) - Math.abs(b - at));
-    const lanes = 6;
-    let i = 0;
-    const lane = async () => {
-      while (i < order.length) {
-        const z = order[i++];
-        const key = `${stack}:${z}`;
-        if (this.bitmaps.has(key)) continue;
-        const blob = have.get(z);
-        if (!blob) continue;
-        try {
-          this.bitmaps.set(key, await this.decode(blob));
-          for (const f of this.listeners) f(stack);
-        } catch {
-          // a frame that does not decode is left out; its neighbours still draw
-        }
+  /**
+   * Every frame of a scan read, the planes around `at` first and then
+   * outwards, and the planes near `at` decoded, nearest first; resolves
+   * when that is done, or when the scan is left. A second ask while the
+   * first reads joins it; a scan whose reads failed is read again.
+   */
+  load(stack: number, planes: number, at: number, digest?: string | null): Promise<void> {
+    const r = this.reel(stack, planes, at, digest);
+    r.all = true;
+    r.idle = false;
+    r.failed = null;
+    return this.wait(r);
+  }
+
+  /**
+   * A scan read ahead: its frames `ahead` either side of `at` (its middle)
+   * read, and decoded in idle time, so its sharp frame is there when it is
+   * opened. Nothing more where it is read whole already.
+   */
+  ahead(stack: number, planes: number, at: number, digest?: string | null): Promise<void> {
+    const r = this.reel(stack, planes, at, digest);
+    if (!r.all) r.around = Math.max(r.around, this.o.ahead);
+    if (r.failed) r.failed = null;
+    return this.wait(r);
+  }
+
+  /**
+   * One plane read and decoded at once, before the preview says the scan's
+   * size: the middle the grid's count of images names, read beside the
+   * preview so the first sharp frame waits for one round trip, not two. A
+   * guess the engine refuses (a scan whose images are not its planes) is
+   * let go quietly; the preview's own middle follows.
+   */
+  async peek(stack: number, plane: number): Promise<void> {
+    if (plane < 0 || this.hasFrame(stack, plane) || this.bitmaps.has(`${stack}:${plane}`)) return;
+    const key = `${stack}:${plane}`;
+    if (this.peeking.has(key)) return;
+    this.peeking.add(key);
+    try {
+      const res = await this.fetcher(planesUrl(stack, plane, plane + 1), { headers: HEADERS });
+      if (!res.ok) return;
+      const { frames, data } = parseFrames(await res.arrayBuffer());
+      const f = frames.find((x) => x.plane === plane);
+      if (!f) return;
+      const blob = new Blob([data.slice(f.offset, f.offset + f.length)], { type: f.mime });
+      const r = this.reels.get(stack);
+      if (r) r.have.set(plane, blob);
+      else this.peeked.set(key, blob);
+      if (this.peeked.size > 16) this.peeked.delete(this.peeked.keys().next().value as string);
+      if (!this.bitmaps.has(key)) {
+        this.bitmaps.set(key, await this.decode(blob));
+        for (const l of this.listeners) l(stack);
       }
-    };
-    await Promise.all(Array.from({ length: lanes }, lane));
+    } catch {
+      // a guess that did not come is no failure: the preview's middle is read next
+    } finally {
+      this.peeking.delete(key);
+    }
+  }
+
+  /** The plane shown moved: reads and decoding turn to the planes around it. */
+  focus(stack: number, at: number): void {
+    const r = this.reels.get(stack);
+    if (!r) return;
+    this.aim(r, at);
+    this.pump(r);
+    this.decodeNext(r);
+  }
+
+  /** Cancel the reads of every scan but these (the one shown and the ones read ahead); what was read stays. */
+  keep(stacks: Iterable<number>): void {
+    const keep = new Set(stacks);
+    for (const [k, r] of this.reels) if (!keep.has(k)) this.cancel(r);
+  }
+
+  private cancel(r: Reel): void {
+    if (r.reads > 0 || r.asking.size > 0) {
+      r.abort.abort();
+      r.abort = new AbortController();
+      r.asking.clear();
+      r.reads = 0;
+    }
+    r.all = false;
+    r.around = 0;
+    // whoever waited is let go: a scan left is not a scan that failed
+    const w = r.waiters.splice(0);
+    for (const x of w) x.done();
+  }
+
+  private wait(r: Reel): Promise<void> {
+    const p = new Promise<void>((done, fail) => r.waiters.push({ done, fail }));
+    this.pump(r);
+    this.decodeNext(r);
+    this.settle(r);
+    return p;
+  }
+
+  /** The window of planes a reel reads: all, or `around` either side of its focus. */
+  private window(r: Reel): [number, number] {
+    return r.all ? [0, r.planes] : [r.focus - r.around, r.focus + r.around];
+  }
+
+  private missing(r: Reel): (z: number) => boolean {
+    return (z) => !r.have.has(z) && !r.asking.has(z) && !r.absent.has(z);
+  }
+
+  /** Start the next reads: one at first, so the first range is not shared, then up to `inflight`. */
+  private pump(r: Reel): void {
+    if (r.failed || r.planes <= 0 || (!r.all && r.around <= 0)) return;
+    const limit = r.have.size === 0 ? 1 : this.o.inflight;
+    while (r.reads < limit) {
+      const range = nextRange(r.planes, r.focus, this.missing(r), r.have.size === 0 && r.reads === 0 ? this.o.first : this.o.span, this.window(r));
+      if (!range) return;
+      void this.read(r, range[0], range[1]);
+    }
+  }
+
+  private async read(r: Reel, from: number, to: number): Promise<void> {
+    const signal = r.abort.signal;
+    for (let z = from; z < to; z++) r.asking.add(z);
+    r.reads++;
+    try {
+      const res = await this.ask(planesUrl(r.stack, from, to, r.digest), signal);
+      if (!res.ok) throw new Error(`the planes answered ${res.status}`);
+      const { frames, data, width, height } = parseFrames(await res.arrayBuffer());
+      if (signal.aborted) return;
+      if (width > 0 && height > 0) r.frameBytes = width * height * 4;
+      for (const f of frames) r.have.set(f.plane, new Blob([data.slice(f.offset, f.offset + f.length)], { type: f.mime }));
+      for (let z = from; z < to; z++) if (!r.have.has(z)) r.absent.add(z);
+    } catch (e) {
+      if (signal.aborted || e instanceof Left) return;
+      r.failed = e;
+    } finally {
+      if (!signal.aborted) {
+        for (let z = from; z < to; z++) r.asking.delete(z);
+        r.reads--;
+      }
+    }
+    if (signal.aborted) return;
+    this.decodeNext(r);
+    this.pump(r);
+    this.settle(r);
+  }
+
+  /** How far either side of the focus planes are kept decoded: the window, held to a quarter of the budget. */
+  private radius(r: Reel): number {
+    if (!r.all) return r.around;
+    const fit = r.frameBytes > 0 ? Math.floor(this.bitmaps.budget / r.frameBytes / 8) : this.o.radius;
+    return Math.max(2, Math.min(this.o.radius, fit));
+  }
+
+  /** The next plane to decode: read, not decoded, near the focus, nearest first. */
+  private nextDecode(r: Reel): number | null {
+    const rad = this.radius(r);
+    for (let d = 0; d <= rad; d++) {
+      for (const z of d === 0 ? [r.focus] : [r.focus + d, r.focus - d]) {
+        if (z < 0 || z >= r.planes || !r.have.has(z) || r.decoding.has(z) || r.decoded.has(z)) continue;
+        if (this.bitmaps.has(`${r.stack}:${z}`)) continue;
+        return z;
+      }
+    }
+    return null;
+  }
+
+  private decodeNext(r: Reel): void {
+    const lanes = r.idle ? 1 : this.o.lanes;
+    while (r.decoding.size < lanes) {
+      const z = this.nextDecode(r);
+      if (z === null) return;
+      r.decoding.add(z);
+      void this.decodeOne(r, z);
+    }
+  }
+
+  private async decodeOne(r: Reel, z: number): Promise<void> {
+    try {
+      if (r.idle) await this.o.idle();
+      const blob = r.have.get(z);
+      if (blob && !this.bitmaps.has(`${r.stack}:${z}`)) {
+        this.bitmaps.set(`${r.stack}:${z}`, await this.decode(blob));
+        for (const f of this.listeners) f(r.stack);
+      }
+    } catch {
+      // a frame that does not decode is left out; its neighbours still draw
+    } finally {
+      r.decoding.delete(z);
+      r.decoded.add(z);
+    }
+    this.decodeNext(r);
+    this.settle(r);
+  }
+
+  /** Tell the waiters once nothing is left to read or decode, or the reads failed. */
+  private settle(r: Reel): void {
+    if (r.waiters.length === 0) return;
+    if (r.failed) {
+      const w = r.waiters.splice(0);
+      for (const x of w) x.fail(r.failed);
+      return;
+    }
+    if (r.reads > 0 || r.decoding.size > 0) return;
+    const [lo, hi] = this.window(r);
+    if (nextRange(r.planes, r.focus, this.missing(r), 1, [lo, hi]) !== null) return;
+    if (this.nextDecode(r) !== null) return;
+    const w = r.waiters.splice(0);
+    for (const x of w) x.done();
   }
 
   /** A plane decoded again from its frame where the LRU let it go; null where the frame was never read. */
   async again(stack: number, plane: number): Promise<Bitmap | null> {
-    const blob = this.frames.get(stack)?.get(plane);
+    const blob = this.reels.get(stack)?.have.get(plane);
     if (!blob) return null;
     const b = await this.decode(blob);
     this.bitmaps.set(`${stack}:${plane}`, b);
