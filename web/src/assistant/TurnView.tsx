@@ -2,14 +2,17 @@
 // One turn of a conversation, as the Assistant page and a Query card's
 // discussion show it: what was said, its words drawn from their markdown, what
 // the assistant did behind a small "?", each change it proposes on the one
-// approval card, and a question on the one clarification card. A page that decides proposals somewhere else
-// passes no onDecide, and the turn only names them. On the Assistant page a
-// turn carries its actions too (the chat, slice 4): a person's message is
-// copied, edited, or switched to another way it was sent, and an answer is
-// copied, asked for again, or given a verdict.
+// approval card, and a question on the one clarification card. A page that
+// decides proposals somewhere else passes no onDecide, and the turn only names
+// them; the Assistant page draws each proposed version as its query card
+// instead (the redesign, 2026-10-09). On the Assistant page a turn carries its
+// actions too (the chat, slice 4): a person's message is copied, edited, or
+// switched to another way it was sent, and an answer is copied, asked for
+// again, or given a verdict.
 
 import { Fragment, useEffect, useRef, useState } from "react";
 import type React from "react";
+import type { ReactNode } from "react";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import type { Rating } from "./chats";
@@ -34,6 +37,8 @@ export interface TurnActions {
   /** Which of the ways this message was sent it is, and where the ways either side continue. */
   version: { index: number; count: number; prev: string | null; next: string | null } | null;
   onVersion: (conversation: string) => void;
+  /** An earlier answer: its actions come on hover, so the thread reads as words. */
+  quiet?: boolean;
 }
 
 export function TurnView(props: {
@@ -46,6 +51,10 @@ export function TurnView(props: {
   /** One chat: the other changes this turn proposed, and how the page decides them. */
   changes?: Change[];
   onChange?: (c: Change, verdict: "approved" | "declined") => void;
+  /** Change it, on a change: the person says what to change. */
+  onRevise?: () => void;
+  /** How the page draws a proposed version, in place of the approval card. */
+  queryCard?: (p: Proposal) => ReactNode;
   onChoose: (label: string) => void;
   /** Where an undecided proposal is decided, when it is not here. */
   decidedElsewhere?: string;
@@ -58,7 +67,7 @@ export function TurnView(props: {
   said?: string;
   memoryActions?: { state: (m: PaneMemory) => "saved" | "dismissed" | null; keep: (m: PaneMemory) => void; dismiss: (m: PaneMemory) => void };
 }) {
-  const { turn, open, onToggle, proposals, changes, onChange, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions, said } = props;
+  const { turn, open, onToggle, proposals, changes, onChange, onRevise, queryCard, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions, said } = props;
   if (turn.role === "user") return <Asked turn={turn} actions={actions} />;
   if (turn.role === "system") return <p className="meta">{turn.text}</p>;
   const steps = turn.done && turn.tools.length > 0 ? <StepsHelp tools={turn.tools} open={open} onToggle={onToggle} /> : null;
@@ -66,18 +75,22 @@ export function TurnView(props: {
     <div className="said">
       {turn.thinking && <Thinking text={turn.thinking} live={!turn.done && !turn.text} />}
       {turn.text ? <Markdown text={turn.text} streaming={!turn.done} /> : said && turn.done && proposals.length === 0 ? <Markdown text={said} /> : null}
-      {proposals.map((p) => (
-        <Fragment key={p.document}>
-          <ApprovalCardView card={cardOfProposal(p, decidedElsewhere)} onDecide={onDecide && !p.stale ? (v) => onDecide(p, v === "approved" ? "accepted" : "rejected") : undefined} />
-          {openQuery && (
-            <a className="button secondary small" href={openQuery(p.document)}>
-              Open in Query
-            </a>
-          )}
-        </Fragment>
-      ))}
+      {proposals.map((p) =>
+        queryCard ? (
+          <Fragment key={p.document}>{queryCard(p)}</Fragment>
+        ) : (
+          <Fragment key={p.document}>
+            <ApprovalCardView card={cardOfProposal(p, decidedElsewhere)} onDecide={onDecide && !p.stale ? (v) => onDecide(p, v === "approved" ? "accepted" : "rejected") : undefined} />
+            {openQuery && (
+              <a className="button secondary small" href={openQuery(p.document)}>
+                Open in Query
+              </a>
+            )}
+          </Fragment>
+        ),
+      )}
       {(changes ?? []).map((c) => (
-        <ApprovalCardView key={c.id} card={cardOfChange(c)} onDecide={onChange ? (v) => onChange(c, v) : undefined} />
+        <ApprovalCardView key={c.id} card={cardOfChange(c)} onDecide={onChange ? (v) => onChange(c, v) : undefined} onRevise={onChange ? onRevise : undefined} />
       ))}
       {(memories ?? []).map((mem) => {
         const here = memoryActions?.state(mem) ?? null;
@@ -218,7 +231,7 @@ function Answered({ turn, actions, steps }: { turn: Turn; actions: TurnActions; 
   const verdict = actions.rating?.verdict ?? null;
   return (
     <>
-      <div className="turn-actions">
+      <div className={actions.quiet ? "turn-actions quiet" : "turn-actions"}>
         {turn.text && <CopyButton text={turn.text} what="answer" />}
         <button type="button" className="icon-button" aria-label="Ask for this answer again" title="Ask again" disabled={actions.busy} onClick={actions.onRetry}>
           <Icon name="restart" />

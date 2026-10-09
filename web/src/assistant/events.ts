@@ -152,14 +152,22 @@ export interface ApprovalCard {
   /** Unique among the cards a turn shows. */
   key: string;
   change: ChangeKind;
+  /** What kind of change it is, over the card in small capitals: Plan, Sorting words, Identities. */
+  kind: string;
+  /** Its line: the agent's title, else what it will do. */
   title: string;
+  /** What it will do, under a title the agent gave; empty when the title says it. */
   sentence: string;
   lines: string[];
+  /** The lines are steps in order (a plan), numbered. */
+  numbered: boolean;
   state: "open" | "approved" | "declined" | "stale";
-  /** Why it cannot be decided here, when it is decided elsewhere (a query card above it). */
+  /** Why it cannot be decided here, when it is decided elsewhere. */
   elsewhere?: string;
   approve: string;
   decline: string;
+  /** What the card says once approved: approved, kept, recorded. */
+  done: string;
   /** Where the person goes on once it is approved, when approving only records it (an identity rule is changed on its dataset's page). */
   next?: { href: string; words: string };
 }
@@ -173,18 +181,37 @@ export const CHANGE_TITLES: Record<ChangeKind, string> = {
   identity_rule: "A new identity rule",
 };
 
+/** The kind of change in a word or two, over its card. */
+export const CHANGE_KINDS: Record<ChangeKind, string> = {
+  query_version: "Query",
+  job_plan: "Plan",
+  sorting_words: "Sorting words",
+  identity_merge: "Identities",
+  identity_rule: "Identity rule",
+};
+
+/** A card's line and what it will do: the title the agent gave over its sentence, or the sentence alone, or the kind's own title when it said nothing. */
+function said(title: string | null, sentence: string, change: ChangeKind): { title: string; sentence: string } {
+  const s = sentence.trim();
+  const t = title?.trim() ?? "";
+  if (t) return { title: t, sentence: s === t ? "" : s };
+  return s ? { title: s, sentence: "" } : { title: CHANGE_TITLES[change], sentence: "" };
+}
+
 /** A query version (today's move_proposal) on the approval card; decided here only where the page passes a decider, else where `elsewhere` says. */
 export function cardOfProposal(p: Proposal, elsewhere?: string): ApprovalCard {
   return {
     key: `q${p.document}`,
     change: "query_version",
-    title: CHANGE_TITLES.query_version,
-    sentence: p.sentence,
-    lines: p.stale ? ["The query moved on since; this version can no longer be taken."] : [],
+    kind: CHANGE_KINDS.query_version,
+    ...said(null, p.sentence, "query_version"),
+    lines: p.stale ? ["The query moved on since; this version can no longer be kept."] : [],
+    numbered: false,
     state: p.stale ? "stale" : p.decided === "accepted" ? "approved" : p.decided === "rejected" ? "declined" : "open",
     ...(elsewhere ? { elsewhere } : {}),
-    approve: "Accept",
-    decline: "Disregard",
+    approve: "Keep",
+    decline: "Not now",
+    done: "kept",
   };
 }
 
@@ -193,12 +220,14 @@ export function cardOfChange(c: Change): ApprovalCard {
   return {
     key: `c${c.id}`,
     change: c.change,
-    title: c.title ?? CHANGE_TITLES[c.change],
-    sentence: c.sentence,
+    kind: CHANGE_KINDS[c.change],
+    ...said(c.title, c.sentence, c.change),
     lines: c.lines,
+    numbered: c.change === "job_plan",
     state: c.decided ?? "open",
-    approve: c.change === "job_plan" ? "Confirm" : c.change === "identity_rule" ? "Approve" : "Accept",
-    decline: "Disregard",
+    approve: "Approve",
+    decline: "Not now",
+    done: c.change === "identity_rule" ? "recorded" : "approved",
     ...(c.change === "identity_rule" ? { next: ruleNext(c.lines) } : {}),
   };
 }
@@ -211,18 +240,20 @@ function ruleNext(lines: string[]): { href: string; words: string } {
     : { href: href("data", "datasets"), words: "Change it on the dataset's page, then digest it again" };
 }
 
-/** A job plan from the inbox (today's Confirm card) on the approval card: its steps as lines; declining means saying what to change. */
+/** A job plan from the inbox (today's Confirm card) on the approval card: its steps in order; approving confirms it. */
 export function cardOfPlan(p: Plan): ApprovalCard {
   const open = !p.confirmed_at;
   return {
     key: `p${p.id}`,
     change: "job_plan",
-    title: p.steps.length === 1 ? CHANGE_TITLES.job_plan : `${CHANGE_TITLES.job_plan}, in ${p.steps.length} steps`,
-    sentence: p.instruction,
+    kind: CHANGE_KINDS.job_plan,
+    ...said(null, p.instruction, "job_plan"),
     lines: p.steps.map((s) => (open ? s.words : `${s.words}: ${s.state}${s.reason ? `, ${s.reason}` : ""}`)),
+    numbered: true,
     state: open ? "open" : "approved",
-    approve: "Confirm",
-    decline: "Change it",
+    approve: "Approve",
+    decline: "Not now",
+    done: "approved",
   };
 }
 

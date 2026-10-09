@@ -82,13 +82,16 @@ describe("the one chat's parts", () => {
 });
 
 describe("the one approval card", () => {
-  it("carries a query version, a job plan and every other change alike", () => {
+  it("carries a query version, a job plan and every other change alike, as a plan that waits for the person", () => {
     const q = cardOfProposal({ document: 5, parent: 4, sentence: "Only women", turn: "a", decided: null }, "It stands on the card above.");
-    expect(q).toMatchObject({ change: "query_version", title: "A new version of the query", state: "open", approve: "Accept", decline: "Disregard", elsewhere: "It stands on the card above." });
+    expect(q).toMatchObject({ change: "query_version", kind: "Query", title: "Only women", sentence: "", state: "open", approve: "Keep", decline: "Not now", done: "kept", elsewhere: "It stands on the card above." });
     expect(cardOfProposal({ document: 5, parent: 4, sentence: "x", turn: "a", decided: null, stale: { moved_to: 7 } }).state).toBe("stale");
-    expect(cardOfChange({ id: "w", change: "sorting_words", title: null, sentence: "Add a word", lines: [], turn: "a", decided: "declined" })).toMatchObject({ title: "New sorting words", state: "declined" });
+    // the agent's sentence is the card's line where it gave no title, and its title stands over the sentence where it gave one
+    expect(cardOfChange({ id: "w", change: "sorting_words", title: null, sentence: "Add a word", lines: [], turn: "a", decided: "declined" })).toMatchObject({ kind: "Sorting words", title: "Add a word", sentence: "", state: "declined", approve: "Approve", decline: "Not now" });
+    expect(cardOfChange({ id: "j", change: "job_plan", title: "Sort tonight", sentence: "Read and sort", lines: ["Read", "Sort"], turn: "a", decided: null })).toMatchObject({ kind: "Plan", title: "Sort tonight", sentence: "Read and sort", numbered: true, done: "approved" });
+    expect(cardOfChange({ id: "e", change: "identity_merge", title: null, sentence: "", lines: [], turn: "a", decided: null }).title).toBe("Two identities as one person");
     const plan: Plan = { id: "p", instruction: "Digest what is new", state: "proposed", steps: [{ n: 1, rung: 2, verb: "digest", door: "d", words: "Digest source A", state: "waiting" }, { n: 2, rung: 3, verb: "x", door: "d", words: "Digest source B", state: "waiting" }] };
-    expect(cardOfPlan(plan)).toMatchObject({ change: "job_plan", title: "A plan to run, in 2 steps", sentence: "Digest what is new", lines: ["Digest source A", "Digest source B"], state: "open", approve: "Confirm", decline: "Change it" });
+    expect(cardOfPlan(plan)).toMatchObject({ change: "job_plan", kind: "Plan", title: "Digest what is new", lines: ["Digest source A", "Digest source B"], numbered: true, state: "open", approve: "Approve", decline: "Not now" });
     expect(cardOfPlan({ ...plan, confirmed_at: "now" }).state).toBe("approved");
   });
 });
