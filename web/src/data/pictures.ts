@@ -17,11 +17,19 @@ export interface Preview {
   shape: [number, number, number] | null;
   /** Millimetres between planes, rows and columns, in the shape's order. */
   spacing: [number, number, number] | null;
-  orientation: string | null;
+  /** The patient plane nearest the scan's own. */
+  plane: Plane | null;
   window: { center: number; width: number } | null;
   /** How many planes the frames door holds. */
   planes: number;
   digest: string | null;
+  /** The band at the top and bottom of each plane held (burned-in annotation below detail sensitive). */
+  held: boolean;
+  /**
+   * The middle planes by the engine's names, which are the scan's own:
+   * `axial` is the middle of the planes it was taken in, `coronal` and
+   * `sagittal` the two across them.
+   */
   middle: Partial<Record<Plane, string>>;
 }
 
@@ -37,67 +45,63 @@ type Json = Record<string, unknown>;
 
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const str = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
+const obj = (v: unknown): Json | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Json) : null);
 const triple = (v: unknown): [number, number, number] | null =>
   Array.isArray(v) && v.length === 3 && v.every((x) => typeof x === "number") ? (v as [number, number, number]) : null;
+const PLANES = ["axial", "coronal", "sagittal"] as const;
 
 /**
- * A preview as the door answers it. The header may stand at the top or under
- * `header`, and the three pictures at the top or under `middle` (or
- * `pictures`), so the desk reads either shape the engine settles on.
+ * A preview as the engine's preview door answers it: the header at the top,
+ * `middle` the three planes as `{width, height, bytes, data}` (data a JPEG
+ * data URL), and `frames` `{count, width, height, bytes, url}`.
  */
 export function previewOf(a: Json): Preview {
-  const h = (a.header && typeof a.header === "object" ? a.header : a) as Json;
-  const pics = (a.middle && typeof a.middle === "object" ? a.middle : a.pictures && typeof a.pictures === "object" ? a.pictures : a) as Json;
-  const w = h.window && typeof h.window === "object" ? (h.window as Json) : null;
-  const shape = triple(h.shape);
+  const w = obj(a.window);
+  const shape = triple(a.shape);
+  const m = obj(a.middle) ?? {};
   const middle: Partial<Record<Plane, string>> = {};
-  for (const p of ["axial", "coronal", "sagittal"] as const) {
-    const v = str(pics[p]);
+  for (const p of PLANES) {
+    const v = str(obj(m[p])?.data);
     if (v) middle[p] = v;
   }
+  const plane = str(a.plane);
   return {
     shape,
-    spacing: triple(h.spacing),
-    orientation: str(h.orientation),
+    spacing: triple(a.spacing),
+    plane: plane !== null && (PLANES as readonly string[]).includes(plane) ? (plane as Plane) : null,
     window: w && num(w.center) !== null && num(w.width) !== null ? { center: num(w.center)!, width: num(w.width)! } : null,
-    planes: num(h.planes) ?? shape?.[0] ?? 0,
-    digest: str(h.digest),
+    planes: num(obj(a.frames)?.count) ?? shape?.[0] ?? 0,
+    digest: str(a.digest),
+    held: a.held === true,
     middle,
   };
 }
 
-/** The plane a scan was taken in, from its orientation word: the one its frames scroll through. */
-export function planeOf(orientation: string | null | undefined): Plane {
-  const o = (orientation ?? "").toLowerCase();
-  if (o.startsWith("sag")) return "sagittal";
-  if (o.startsWith("cor")) return "coronal";
-  return "axial";
-}
-
 /**
- * A planes body read: a little-endian u32 length, that many bytes of JSON
- * index (`{frames: [{plane, offset, length, mime}]}` or the array alone, a
- * `mime` at the top for frames that name none), then the frames one after
- * another. Offsets count from the first byte after the index.
+ * A planes body (`application/x-nils-frames`) read: little-endian u32
+ * `from`, u32 count, u32 width, u32 height, then count + 1 u32 offsets
+ * counted from the start of the body, then the JPEGs back to back; frame i
+ * is plane `from + i`. A frame whose offsets fall outside the body is left
+ * out.
  */
-export function parseFrames(buf: ArrayBuffer): { frames: FrameEntry[]; data: ArrayBuffer } {
-  if (buf.byteLength < 4) throw new Error("the planes body is too short");
-  const len = new DataView(buf).getUint32(0, true);
-  if (4 + len > buf.byteLength) throw new Error("the planes body's index runs past its end");
-  const index = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, len))) as unknown;
-  const top = (Array.isArray(index) ? {} : (index as Json)) as Json;
-  const rows = (Array.isArray(index) ? index : Array.isArray(top.frames) ? top.frames : []) as Json[];
-  const mime = str(top.mime) ?? "image/webp";
-  const data = buf.slice(4 + len);
+export function parseFrames(buf: ArrayBuffer): { frames: FrameEntry[]; data: ArrayBuffer; width: number; height: number } {
+  if (buf.byteLength < 16) throw new Error("the planes body is too short");
+  const v = new DataView(buf);
+  const from = v.getUint32(0, true);
+  const count = v.getUint32(4, true);
+  const width = v.getUint32(8, true);
+  const height = v.getUint32(12, true);
+  const lead = 16 + 4 * (count + 1);
+  if (lead > buf.byteLength) throw new Error("the planes body's offsets run past its end");
+  const at = (i: number) => v.getUint32(16 + 4 * i, true);
   const frames: FrameEntry[] = [];
-  for (const r of rows) {
-    const plane = num(r.plane);
-    const offset = num(r.offset);
-    const length = num(r.length);
-    if (plane === null || offset === null || length === null || offset + length > data.byteLength) continue;
-    frames.push({ plane, offset, length, mime: str(r.mime) ?? mime });
+  for (let i = 0; i < count; i++) {
+    const a = at(i);
+    const b = at(i + 1);
+    if (a < lead || b < a || b > buf.byteLength) continue;
+    frames.push({ plane: from + i, offset: a, length: b - a, mime: "image/jpeg" });
   }
-  return { frames, data };
+  return { frames, data: buf, width, height };
 }
 
 /** The ranges a scan's frames are read in: the planes around `at` first, then the rest below and above. */
@@ -172,7 +176,9 @@ export class BitmapLru<B extends Bitmap = Bitmap> {
 }
 
 export const previewUrl = (stack: number) => `/api/instances/${stack}/preview`;
-export const planesUrl = (stack: number, from: number, to: number) => `/api/instances/${stack}/preview/planes?from=${from}&to=${to}`;
+/** A range of planes; naming the preview's digest (`v`) lets the browser keep the answer for good. */
+export const planesUrl = (stack: number, from: number, to: number, digest?: string | null) =>
+  `/api/instances/${stack}/preview/planes?from=${from}&to=${to}${digest ? `&v=${encodeURIComponent(digest)}` : ""}`;
 
 const HEADERS = { "X-Nils-Desk": "1" };
 
@@ -245,16 +251,16 @@ export class Pictures {
    * from `at` outwards; a second ask while the first reads is the same read.
    * A frame already decoded is not decoded again.
    */
-  load(stack: number, planes: number, at: number): Promise<void> {
+  load(stack: number, planes: number, at: number, digest?: string | null): Promise<void> {
     let r = this.reading.get(stack);
     if (!r) {
-      r = this.readAll(stack, planes, at).finally(() => this.reading.delete(stack));
+      r = this.readAll(stack, planes, at, digest).finally(() => this.reading.delete(stack));
       this.reading.set(stack, r);
     }
     return r;
   }
 
-  private async readAll(stack: number, planes: number, at: number): Promise<void> {
+  private async readAll(stack: number, planes: number, at: number, digest?: string | null): Promise<void> {
     const have = this.frames.get(stack) ?? new Map<number, Blob>();
     this.frames.delete(stack);
     this.frames.set(stack, have);
@@ -265,7 +271,7 @@ export class Pictures {
       let missing = false;
       for (let z = from; z < to; z++) if (!have.has(z)) missing = true;
       if (!missing) continue;
-      const res = await this.fetcher(planesUrl(stack, from, to), { headers: HEADERS });
+      const res = await this.fetcher(planesUrl(stack, from, to, digest), { headers: HEADERS });
       if (!res.ok) throw new Error(`the planes answered ${res.status}`);
       const { frames, data } = parseFrames(await res.arrayBuffer());
       for (const f of frames) have.set(f.plane, new Blob([data.slice(f.offset, f.offset + f.length)], { type: f.mime }));

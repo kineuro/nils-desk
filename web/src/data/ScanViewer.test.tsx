@@ -10,7 +10,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Pictures, type Bitmap } from "./pictures";
-import { framesBody } from "./pictures.fixture";
+import { framesBody, previewBody } from "./pictures.fixture";
 import type { Scan } from "./scans";
 
 vi.mock("../campaigns/StackView", () => ({
@@ -44,7 +44,7 @@ describe("the light viewer", () => {
     const fetcher = async (url: string) => {
       asked.push(url);
       const pv = /^\/api\/instances\/(\d+)\/preview$/.exec(url);
-      if (pv) return new Response(JSON.stringify({ shape: [9, 64, 64], spacing: [2, 1, 1], orientation: "AX", planes: 9, axial: `data:preview-${pv[1]}` }));
+      if (pv) return new Response(JSON.stringify(previewBody(9, { axial: `data:preview-${pv[1]}` }, { spacing: [2, 1, 1] })));
       const pl = /^\/api\/instances\/(\d+)\/preview\/planes\?from=(\d+)&to=(\d+)$/.exec(url);
       if (pl) {
         const frames = [];
@@ -63,6 +63,7 @@ describe("the light viewer", () => {
       () =>
         ({
           fillRect: () => undefined,
+          clearRect: () => undefined,
           drawImage: (b: Drawn) => drawn.push(b),
           set fillStyle(_: string) {},
           set imageSmoothingEnabled(_: boolean) {},

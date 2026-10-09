@@ -72,9 +72,13 @@ export interface Source {
     to_sort: number;
     /** Record 55 H2: the scans the sort is sure of; an older engine leaves it out, and stacks minus to_sort stands in. */
     sure?: number;
+    /** Record 55 H2: the stacks no sort has judged; stacks = sure + to_sort + unsorted. */
+    unsorted?: number;
     /** Record 55 H2: the open questions by kind, for the hover of "need a look". */
     need_a_look?: Record<string, number>;
   };
+  /** Record 55 H2: whether picking main scans follows a sort of this dataset. */
+  picks?: "after_sort" | "off";
 }
 
 /** The one sources door: every source as a dataset at record 26, with the fields an older engine leaves out, and the rates where the engine measured them. */

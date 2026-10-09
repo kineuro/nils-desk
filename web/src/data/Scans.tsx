@@ -81,6 +81,12 @@ export function Scans({ caps, dataset: d }: { caps: Capabilities; dataset: Datas
       {lists && load.kind === "loading" && <Wait phase="reading the scans" since={load.since} size="panel" />}
       {lists && load.kind === "failed" && <p className="warn">The scans could not be read: {load.why}</p>}
       {at && at.scans.length === 0 && <p className="meta">No scans yet</p>}
+      {at?.pictures && !at.pictures.shown && at.pictures.why && <p className="meta scan-pictures">No pictures: {at.pictures.why}</p>}
+      {at?.pictures?.shown && at.pictures.missing > 0 && (
+        <p className="meta scan-pictures">
+          {n(at.pictures.missing)} {at.pictures.missing === 1 ? "picture" : "pictures"} being made
+        </p>
+      )}
       {at && at.scans.length > 0 && (
         <div className={index >= 0 ? "scans open" : "scans"}>
           <div className="scan-grid">

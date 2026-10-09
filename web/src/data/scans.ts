@@ -29,12 +29,22 @@ export interface Scan {
   questions: string[];
 }
 
+/** Whether the page's pictures were shown, and if not why; how many are still being made. */
+export interface PagePictures {
+  shown: boolean;
+  why: string | null;
+  /** Scans on the page whose picture is not made yet (the engine makes them now). */
+  missing: number;
+}
+
 /** One page of a dataset's scans and the cursor of the next. */
 export interface ScanPage {
   total: number;
   scans: Scan[];
   /** The stack id the next page is read after, or null at the end. */
   next: number | null;
+  /** Null where the engine answered no pictures block. */
+  pictures: PagePictures | null;
 }
 
 /** One scan as the engine's scans door answers it. */
@@ -46,8 +56,8 @@ export interface ScanRow {
   orientation: string | null;
   images: number | null;
   day: string | null;
-  /** With `pictures=1`: the middle plane's picture, about 256 px, as a data URL. */
-  picture?: string | null;
+  /** With `pictures=1`: the middle plane's picture, about 256 px, its data a JPEG data URL; null where none is made yet. */
+  picture?: { data: string; width: number; height: number; digest: string | null; held: boolean } | null;
   /** With `pictures=1`: the open review kinds; empty is sure. */
   questions?: string[] | null;
 }
@@ -56,6 +66,8 @@ interface ScansAnswer {
   total: number;
   scans: ScanRow[];
   next: number | null;
+  /** With `pictures=1`. */
+  pictures?: { shown?: boolean; why?: string | null; missing?: number; place?: string | null } | null;
 }
 
 export const SCANS_DOOR = "GET /api/datasets/{name}/scans";
@@ -73,7 +85,7 @@ export function scansOf(rows: ScanRow[]): Scan[] {
     name: r.series_description || `Scan ${r.stack}`,
     orientation: r.orientation,
     images: r.images,
-    picture: typeof r.picture === "string" && r.picture !== "" ? r.picture : null,
+    picture: r.picture && typeof r.picture.data === "string" && r.picture.data !== "" ? r.picture.data : null,
     questions: Array.isArray(r.questions) ? r.questions.filter((q): q is string => typeof q === "string") : [],
   }));
 }
@@ -116,6 +128,16 @@ export function scanFacts(s: Scan): string {
   return parts.join(" · ");
 }
 
+/** The page's pictures block as the list reads it. */
+export function picturesOf(p: ScansAnswer["pictures"]): PagePictures | null {
+  if (!p || typeof p !== "object") return null;
+  return {
+    shown: p.shown === true,
+    why: typeof p.why === "string" && p.why !== "" ? p.why : null,
+    missing: typeof p.missing === "number" && p.missing > 0 ? p.missing : 0,
+  };
+}
+
 export const scanDoors = {
   /** A page of the dataset's scans with their pictures, after the stack the page before ended on: fifty pictures in one request. */
   page: (dataset: string, after: number | null = null): Promise<ScanPage> => {
@@ -125,6 +147,7 @@ export const scanDoors = {
       total: a.total,
       scans: scansOf(a.scans ?? []),
       next: a.next ?? null,
+      pictures: picturesOf(a.pictures),
     }));
   },
 };

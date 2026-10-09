@@ -42,7 +42,7 @@ const dataset = (stacks = 3) => ({ id: 3, name: "ms-a", cohort: null, totals: { 
 
 const row = (stack: number, subject: number, code: string, session: number | null, name: string, orientation: string, images: number, day: string, questions: string[] = []): ScanRow => ({
   stack,
-  picture: `data:image/webp;base64,${stack}`,
+  picture: { data: `data:image/jpeg;base64,${stack}`, width: 256, height: 256, digest: `d${stack}`, held: false },
   questions,
   subject: { id: subject, code },
   session: session === null ? null : { id: session, label: day.replaceAll("-", "") },
@@ -57,11 +57,13 @@ describe("the scans of a dataset, read", () => {
   it("reads the door's rows and groups them by subject, then session", () => {
     const scans = scansOf(ROWS);
     expect(scans.map((s) => s.id)).toEqual([11, 12, 13]);
-    expect(scans[0]).toEqual({ id: 11, subjectId: 1, subject: "sub-a", session: 7, label: "20260102", day: "2026-01-02", name: "T1 MPRAGE", orientation: "SAG", images: 176, picture: "data:image/webp;base64,11", questions: [] });
+    expect(scans[0]).toEqual({ id: 11, subjectId: 1, subject: "sub-a", session: 7, label: "20260102", day: "2026-01-02", name: "T1 MPRAGE", orientation: "SAG", images: 176, picture: "data:image/jpeg;base64,11", questions: [] });
     expect(scans[1].questions).toEqual(["body_part:low_confidence"]);
     // an older engine without pictures: none, and sure
     const { picture: _p, questions: _q, ...bare } = ROWS[0];
     expect(scansOf([bare as ScanRow])[0]).toMatchObject({ picture: null, questions: [] });
+    // a picture not made yet comes back null
+    expect(scansOf([{ ...ROWS[0], picture: null }])[0].picture).toBeNull();
     const g = groupScans(scans);
     expect(g.map((x) => x.subject)).toEqual(["sub-a", "sub-b"]);
     expect(g[0].sessions).toHaveLength(1);
@@ -95,7 +97,7 @@ describe("the scans of a dataset, on the page", () => {
     root = createRoot(el);
     vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
       calls.push({ method: init.method ?? "GET", url });
-      if (url === "/api/datasets/ms-a/scans?pictures=1&limit=50") return new Response(JSON.stringify({ total: 51, scans: ROWS.slice(0, 2), next: 12 }));
+      if (url === "/api/datasets/ms-a/scans?pictures=1&limit=50") return new Response(JSON.stringify({ total: 51, scans: ROWS.slice(0, 2), next: 12, pictures: { shown: true, why: null, missing: 1, place: "work" } }));
       if (url === "/api/datasets/ms-a/scans?pictures=1&limit=50&after=12") return new Response(JSON.stringify({ total: 51, scans: ROWS.slice(2), next: null }));
       if (url === "/api/picks/summary?dataset=ms-a") return new Response(JSON.stringify(summary));
       return new Response("{}", { status: 404 });
@@ -120,22 +122,27 @@ describe("the scans of a dataset, on the page", () => {
     expect(el.querySelector("h2")?.textContent).toBe("Scans of ms-a");
     expect([...el.querySelectorAll(".scan-subject > b")].map((b) => b.textContent)).toEqual(["sub-a"]);
     expect([...el.querySelectorAll(".scan-name")].map((b) => b.textContent)).toEqual(["T1 MPRAGE", "FLAIR"]);
-    expect([...el.querySelectorAll(".scan-tile img")].map((i) => i.getAttribute("src"))).toEqual(["data:image/webp;base64,11", "data:image/webp;base64,12"]);
+    expect([...el.querySelectorAll(".scan-tile img")].map((i) => i.getAttribute("src"))).toEqual(["data:image/jpeg;base64,11", "data:image/jpeg;base64,12"]);
     const tiles = [...el.querySelectorAll(".scan-tile")];
     expect(tiles.map((t) => t.classList.contains("look"))).toEqual([false, true]);
     expect(tiles[1].getAttribute("title")).toBe("ax · 40 images · body part, low confidence");
     expect(button("Pick main scans")).toBeNull();
     expect(el.textContent).toContain("1 / 2");
+    expect(el.querySelector(".scan-pictures")?.textContent).toBe("1 picture being made");
   });
 
   it("says the pick result in one line a role, with Review where borders wait", async () => {
-    summary = { roles: { T1: { picked: 112, clear: 104, borders: 8, tied: 0, review: 8 }, FLAIR: { picked: 40, clear: 40, borders: 0, tied: 0, review: 0 } } };
+    summary = {
+      dataset: "ms-a",
+      roles: { T1: { picked: 112, clear: 104, borders: { margin: 5, quality: 3 }, tied: 0, review_items: 6 }, FLAIR: { picked: 40, clear: 40, borders: {}, tied: 0, review_items: 0 } },
+      review_items: 6,
+    };
     act(() => root.render(<Scans caps={caps()} dataset={dataset()} />));
     await settle();
     const lines = [...el.querySelectorAll(".pick-line")];
     expect(lines.map((l) => l.querySelector("span")?.textContent)).toEqual(["T1: 112 picked · 104 clear · 8 borders", "FLAIR: 40 picked · 40 clear"]);
     const review = lines[0].querySelector("a");
-    expect(review?.textContent).toBe("Review 8");
+    expect(review?.textContent).toBe("Review 6");
     expect(review?.getAttribute("href")).toBe("#review/picks?dataset=ms-a");
     expect(lines[1].querySelector("a")).toBeNull();
   });

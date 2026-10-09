@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { StackView } from "../campaigns/StackView";
 import { Icon } from "../ui/Icon";
-import { pictures as sharedPictures, planeOf, type Bitmap, type Pictures, type Preview } from "./pictures";
+import { pictures as sharedPictures, type Bitmap, type Pictures, type Preview } from "./pictures";
 import { questionWords, type Scan } from "./scans";
 
 /** The mark a click on a scan sets, and the measure of its first picture. */
@@ -64,8 +64,8 @@ function draw(canvas: HTMLCanvasElement, b: Bitmap, aspect: number): boolean {
     dh = h;
     dw = h * aspect;
   }
-  ctx.fillStyle = "#000";
-  ctx.fillRect(0, 0, w, h);
+  // the canvas box's own background (the theme's image black) shows around the plane
+  ctx.clearRect(0, 0, w, h);
   ctx.imageSmoothingEnabled = true;
   ctx.drawImage(b as unknown as CanvasImageSource, (w - dw) / 2, (h - dh) / 2, dw, dh);
   return true;
@@ -111,7 +111,7 @@ export function ScanViewer({ scans, at, onAt, onClose, store }: { scans: Scan[];
         setPreview(p);
         const mid = Math.floor(p.planes / 2);
         setZ((was) => was ?? mid);
-        if (p.planes > 0) void pics.load(stack, p.planes, mid).catch(() => alive && setFailed(true));
+        if (p.planes > 0) void pics.load(stack, p.planes, mid, p.digest).catch(() => alive && setFailed(true));
       },
       () => alive && setFailed(true),
     );
@@ -225,8 +225,9 @@ export function ScanViewer({ scans, at, onAt, onClose, store }: { scans: Scan[];
     return () => window.removeEventListener("keydown", key);
   }, [turn, move, onClose, three]);
 
-  // the still: the grid's picture, else the preview's middle plane in the scan's own plane
-  const still = scan.picture ?? preview?.middle[planeOf(scan.orientation ?? preview?.orientation)] ?? null;
+  // the still: the grid's picture, else the preview's middle plane in the
+  // scan's own plane, which the engine names axial whatever the scan's plane
+  const still = scan.picture ?? preview?.middle.axial ?? null;
   const look = scan.questions.length > 0;
 
   return (

@@ -132,18 +132,22 @@ export function nextStep(d: Dataset, why: string | null = notReadOf(d)): NextSte
   return at("Ready", "read-new");
 }
 
-/** What the sort is sure of in a dataset: its scans, how many are sure, how many need a look and of what kinds. */
+/** What the sort is sure of in a dataset: its scans, how many are sure, how many need a look and of what kinds, and how many no sort judged. */
 export interface Certainty {
   scans: number;
   sure: number;
   look: number;
+  /** Scans no sort has judged yet: neither sure nor a question. */
+  unsorted: number;
   kinds: Record<string, number>;
 }
 
 /**
  * A sorted dataset's certainty, or null where nothing sorted it yet (no
- * scans, or no read of it classified anything). An engine without `sure`
- * counts the stacks minus those still to sort.
+ * scans, or no read of it classified anything). The engine's totals split
+ * the stacks as `sure + to_sort + unsorted`: what needs a look is `to_sort`,
+ * never the unsorted. An engine without `sure` counts the stacks minus those
+ * still to sort.
  */
 export function certainty(d: Pick<Dataset, "totals" | "digests">): Certainty | null {
   const t = d.totals;
@@ -151,7 +155,8 @@ export function certainty(d: Pick<Dataset, "totals" | "digests">): Certainty | n
   const recent = d.digests.recent;
   if (recent.length > 0 && recent.every((b) => (b.classified ?? 0) === 0)) return null;
   const sure = Math.max(0, Math.min(t.stacks, t.sure ?? t.stacks - t.to_sort));
-  return { scans: t.stacks, sure, look: t.stacks - sure, kinds: t.need_a_look ?? {} };
+  const unsorted = t.sure === undefined ? 0 : Math.max(0, Math.min(t.stacks - sure, t.unsorted ?? 0));
+  return { scans: t.stacks, sure, look: t.stacks - sure - unsorted, unsorted, kinds: t.need_a_look ?? {} };
 }
 
 /** A dataset's certainty in one line: "120 scans · 112 sure · 8 need a look". */
@@ -159,6 +164,7 @@ export function certaintyWords(c: Certainty): string {
   const n = (v: number) => v.toLocaleString("en-US");
   const parts = [`${n(c.scans)} ${c.scans === 1 ? "scan" : "scans"}`, `${n(c.sure)} sure`];
   if (c.look > 0) parts.push(`${n(c.look)} need a look`);
+  if (c.unsorted > 0) parts.push(`${n(c.unsorted)} not sorted`);
   return parts.join(" · ");
 }
 

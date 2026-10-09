@@ -4,53 +4,60 @@
 // the LRU of decoded bitmaps, and the store that reads each thing once.
 
 import { describe, expect, it } from "vitest";
-import { BitmapLru, frameRanges, outwards, parseFrames, Pictures, planeOf, previewOf, type Bitmap } from "./pictures";
-import { framesBody } from "./pictures.fixture";
+import { BitmapLru, frameRanges, outwards, parseFrames, Pictures, previewOf, type Bitmap } from "./pictures";
+import { framesBody, previewBody } from "./pictures.fixture";
 
 describe("a preview, read", () => {
-  it("takes the header at the top and the three pictures beside it", () => {
-    const p = previewOf({ shape: [160, 256, 256], spacing: [1.2, 1, 1], orientation: "SAG", window: { center: 300, width: 600 }, planes: 160, digest: "abc", axial: "data:a", coronal: "data:c", sagittal: "data:s" });
-    expect(p).toEqual({ shape: [160, 256, 256], spacing: [1.2, 1, 1], orientation: "SAG", window: { center: 300, width: 600 }, planes: 160, digest: "abc", middle: { axial: "data:a", coronal: "data:c", sagittal: "data:s" } });
+  it("takes the engine's header, its middle planes' data URLs and its frame count", () => {
+    const p = previewOf({
+      stack: 7,
+      digest: "abc",
+      shape: [160, 256, 256],
+      spacing: [1.2, 1, 1],
+      orientation: [1, 0, 0, 0, 1, 0],
+      plane: "sagittal",
+      window: { percentiles: [1, 99], center: 300, width: 600 },
+      held: false,
+      middle: { axial: { width: 256, height: 256, bytes: 9, data: "data:a" }, coronal: { width: 256, height: 192, bytes: 9, data: "data:c" }, sagittal: { width: 256, height: 192, bytes: 9, data: "data:s" } },
+      frames: { count: 160, width: 256, height: 256, bytes: 1000, url: "/api/instances/7/preview/planes?from=0&to=160&v=abc" },
+    });
+    expect(p).toEqual({ shape: [160, 256, 256], spacing: [1.2, 1, 1], plane: "sagittal", window: { center: 300, width: 600 }, planes: 160, digest: "abc", held: false, middle: { axial: "data:a", coronal: "data:c", sagittal: "data:s" } });
   });
 
-  it("takes them nested too, and counts the planes from the shape where it says none", () => {
-    const p = previewOf({ header: { shape: [40, 512, 512], spacing: null }, middle: { axial: "data:a" } });
-    expect(p.planes).toBe(40);
+  it("holds one middle plane for a single-plane scan, and counts the planes from the shape where frames say none", () => {
+    const p = previewOf({ shape: [1, 512, 512], held: true, middle: { axial: { data: "data:a" } } });
+    expect(p.planes).toBe(1);
     expect(p.middle).toEqual({ axial: "data:a" });
     expect(p.window).toBeNull();
-  });
-
-  it("knows the plane a scan was taken in from its orientation word", () => {
-    expect(planeOf("SAG")).toBe("sagittal");
-    expect(planeOf("cor")).toBe("coronal");
-    expect(planeOf("AX")).toBe("axial");
-    expect(planeOf(null)).toBe("axial");
+    expect(p.plane).toBeNull();
+    expect(p.held).toBe(true);
   });
 });
 
 describe("a planes body", () => {
-  it("is split into its frames by the index, each with its type", () => {
+  it("is split into its frames by the offsets, planes counted from its first", () => {
     const body = framesBody([
       { plane: 4, bytes: new Uint8Array([1, 2, 3]) },
-      { plane: 5, bytes: new Uint8Array([9, 9]), mime: "image/jpeg" },
+      { plane: 5, bytes: new Uint8Array([9, 9]) },
     ]);
-    const { frames, data } = parseFrames(body);
+    const lead = 16 + 4 * 3;
+    const { frames, data, width, height } = parseFrames(body);
+    expect([width, height]).toEqual([64, 64]);
     expect(frames).toEqual([
-      { plane: 4, offset: 0, length: 3, mime: "image/webp" },
-      { plane: 5, offset: 3, length: 2, mime: "image/jpeg" },
+      { plane: 4, offset: lead, length: 3, mime: "image/jpeg" },
+      { plane: 5, offset: lead + 3, length: 2, mime: "image/jpeg" },
     ]);
-    expect([...new Uint8Array(data.slice(3, 5))]).toEqual([9, 9]);
+    expect([...new Uint8Array(data.slice(lead + 3, lead + 5))]).toEqual([9, 9]);
   });
 
-  it("reads an index that is the list alone, and leaves out a frame past the end", () => {
-    const body = framesBody([{ plane: 0, bytes: new Uint8Array([7]) }], "array");
-    expect(parseFrames(body).frames).toEqual([{ plane: 0, offset: 0, length: 1, mime: "image/webp" }]);
-    const idx = new TextEncoder().encode(JSON.stringify([{ plane: 0, offset: 0, length: 99 }]));
-    const bad = new Uint8Array(4 + idx.length + 2);
-    new DataView(bad.buffer).setUint32(0, idx.length, true);
-    bad.set(idx, 4);
-    expect(parseFrames(bad.buffer).frames).toEqual([]);
+  it("leaves out a frame past the end, and refuses a body too short for its offsets", () => {
+    const body = new Uint8Array(framesBody([{ plane: 0, bytes: new Uint8Array([7]) }]));
+    new DataView(body.buffer).setUint32(20, 99, true);
+    expect(parseFrames(body.buffer).frames).toEqual([]);
     expect(() => parseFrames(new ArrayBuffer(2))).toThrow();
+    const short = new Uint8Array(16);
+    new DataView(short.buffer).setUint32(4, 5, true);
+    expect(() => parseFrames(short.buffer)).toThrow();
   });
 });
 
@@ -93,13 +100,13 @@ describe("the decoded pictures kept", () => {
 });
 
 describe("the page's store of pictures", () => {
-  const preview = { shape: [40, 64, 64], spacing: [1, 1, 1], orientation: "AX", planes: 40, axial: "data:a" };
+  const preview = previewBody(40, { axial: "data:a" });
   const engine = () => {
     const asked: string[] = [];
     const fetcher = async (url: string) => {
       asked.push(url);
       if (url === "/api/instances/7/preview") return new Response(JSON.stringify(preview));
-      const m = /^\/api\/instances\/7\/preview\/planes\?from=(\d+)&to=(\d+)$/.exec(url);
+      const m = /^\/api\/instances\/7\/preview\/planes\?from=(\d+)&to=(\d+)(?:&v=\w+)?$/.exec(url);
       if (m) {
         const frames = [];
         for (let z = Number(m[1]); z < Number(m[2]); z++) frames.push({ plane: z, bytes: new Uint8Array([z]) });
@@ -140,6 +147,13 @@ describe("the page's store of pictures", () => {
     // a second load reads nothing again
     await pics.load(7, 40, 3);
     expect(e.asked).toHaveLength(3);
+  });
+
+  it("names the preview's digest on the planes it reads, so the browser keeps them", async () => {
+    const e = engine();
+    const pics = new Pictures(e.fetcher, e.decode);
+    await pics.load(7, 40, 20, "d1g");
+    expect(e.asked[0]).toBe("/api/instances/7/preview/planes?from=12&to=28&v=d1g");
   });
 
   it("decodes a plane again from its frame once the LRU let it go", async () => {
