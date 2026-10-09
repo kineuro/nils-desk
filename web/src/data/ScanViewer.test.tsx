@@ -21,7 +21,7 @@ const { ScanViewer, markOpen } = await import("./ScanViewer");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const scan = (id: number, over: Partial<Scan> = {}): Scan => ({ id, subjectId: 1, subject: "sub-a", session: 1, label: null, day: "2026-01-02", name: `Scan ${id}`, orientation: "AX", images: 9, picture: `data:image/webp;base64,${id}`, partial: false, questions: [], ...over });
+const scan = (id: number, over: Partial<Scan> = {}): Scan => ({ id, subjectId: 1, subject: "sub-a", session: 1, label: null, day: "2026-01-02", name: `Scan ${id}`, description: null, bids: null, datatype: "anat", folder: "anat", axes: {}, series: null, orientation: "AX", images: 9, picture: `data:image/webp;base64,${id}`, partial: false, questions: [], ...over });
 const SCANS = [scan(1), scan(2, { questions: ["body_part:low_confidence"] }), scan(3), scan(4)];
 
 type Drawn = Bitmap & { stack: number; plane: number };
@@ -81,10 +81,11 @@ describe("the light viewer", () => {
       for (let i = 0; i < rounds; i++) await new Promise((r) => setTimeout(r, 0));
     });
   };
-  const show = (i: number, scans = SCANS) =>
+  const show = (i: number, scans = SCANS, bare = false) =>
     act(() =>
       root.render(
         <ScanViewer
+          bare={bare}
           scans={scans}
           at={i}
           store={store}
@@ -109,6 +110,17 @@ describe("the light viewer", () => {
     expect(ms).not.toBeNull();
     expect(Number(ms)).toBeGreaterThanOrEqual(0);
     expect(performance.getEntriesByName("nils-scan-first-picture:1", "measure")).toHaveLength(1);
+  });
+
+  it("draws the scan alone when bare: no head, the plane counter in the picture's corner, the keys as before", async () => {
+    show(0, SCANS, true);
+    await settle();
+    expect(el.querySelector(".scan-view-head")).toBeNull();
+    expect(el.querySelector(".scan-view")?.classList.contains("bare")).toBe(true);
+    expect(el.querySelector(".scan-canvas .scan-count")?.textContent).toBe("5 / 9");
+    key("ArrowUp");
+    expect(last()).toMatchObject({ stack: 1, plane: 5 });
+    expect(el.querySelector(".scan-canvas .scan-count")?.textContent).toBe("6 / 9");
   });
 
   it("draws the middle plane from the frames, then scrolls by key and wheel with no further read", async () => {

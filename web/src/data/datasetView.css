@@ -1,0 +1,94 @@
+/* SPDX-License-Identifier: AGPL-3.0-only
+   One dataset, the whole page (Wave 7a, the dataset view, 2026-10-09). The
+   scan fills the page; one slim line above, one below; a quiet tree beside.
+   Colour only on the chosen scan (its family's frame) and in orange on a
+   scan that needs a look, never both kinds on one mark. Sizes grow with the
+   window, the laptop size the reference (proportional, not bigger buttons). */
+
+.dview {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--n-bg-page);
+  color: var(--n-text);
+  font-size: clamp(13px, 0.55vw + 6px, 16px);
+}
+
+.dview-top {
+  display: flex;
+  align-items: center;
+  gap: 0.9em;
+  min-width: 0;
+  padding: 0.45em 0.9em;
+  border-bottom: 1px solid var(--n-line);
+}
+.dview-back { display: inline-flex; align-items: center; gap: 0.2em; color: var(--n-text); font-weight: 600; text-decoration: none; white-space: nowrap; }
+.dview-back:hover { color: var(--n-brand-text); }
+.dview-where { display: flex; align-items: baseline; gap: 0.35em; min-width: 0; overflow: hidden; white-space: nowrap; font-family: var(--n-font-mono); font-size: 0.9em; color: var(--n-text-dim); }
+.dview-where > span::after { content: "/"; margin-left: 0.35em; color: var(--n-text-faint); }
+.dview-where > b { overflow: hidden; text-overflow: ellipsis; color: var(--n-text); font-weight: 600; }
+.dview-count { display: inline-flex; align-items: baseline; gap: 0.6em; white-space: nowrap; }
+.dview-looks { padding: 0 0.3em; border: 1px solid transparent; border-radius: var(--n-radius); background: transparent; color: var(--n-caution-fg); font: inherit; cursor: pointer; }
+.dview-looks:hover { border-color: var(--n-caution-line); }
+.dview-looks.on { border-color: var(--n-caution-icon); background: var(--n-caution-bg); }
+.dview-names button { min-width: 3.4em; font-size: 0.85em; }
+
+.dview-body { display: grid; grid-template-columns: clamp(15rem, 21vw, 26rem) minmax(0, 1fr); min-height: 0; }
+
+.dview-side { display: flex; flex-direction: column; gap: 0.4em; min-height: 0; padding: 0.5em 0 0.5em 0.5em; border-right: 1px solid var(--n-line); }
+.dview-filter { margin-right: 0.5em; padding: 0.3em 0.5em; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; }
+.dview-filter:focus-visible { outline: 2px solid var(--n-focus); outline-offset: -1px; }
+.dview-picks { margin-right: 0.5em; font-size: 0.85em; }
+.dview-tree { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 0.3em; font-size: 0.92em; line-height: 1.55; }
+.dview-row { display: flex; align-items: center; gap: 0.3em; min-width: 0; padding-right: 0.4em; border: 1px solid transparent; border-radius: var(--n-radius); cursor: pointer; white-space: nowrap; }
+.dview-row:hover { background: var(--n-bg-hover); }
+.dview-row:focus { outline: none; }
+.dview-row:focus-visible { outline: 2px solid var(--n-focus); outline-offset: -2px; }
+.dview-row .dview-name { overflow: hidden; text-overflow: ellipsis; }
+.dview-row.subject, .dview-row.session { font-family: var(--n-font-mono); }
+.dview-row.subject { font-weight: 600; }
+.dview-row.type { color: var(--n-text-dim); font-size: 0.92em; letter-spacing: 0.02em; }
+.dview-fold { display: inline-flex; width: 1em; color: var(--n-text-faint); }
+.dview-fold .i { width: 0.9em; height: 0.9em; }
+.dview-n { min-width: 1.6em; text-align: right; font-size: 0.85em; color: var(--n-text-faint); }
+.dview-n.look { color: var(--n-caution-fg); }
+.dview-row.scan { padding-left: 0.5em; }
+.dview-row.scan.look .dview-name { color: var(--n-caution-fg); }
+/* the chosen scan alone is framed: its family's colour, else the brand's */
+.dview-row.scan.on { border-color: var(--n-brand); border-left: 3px solid var(--n-brand); background: var(--n-bg-selected); font-weight: 600; }
+.dview-row.scan.on[data-slot] { border-color: var(--vc); border-left-color: var(--vc); background: var(--vc-bg); }
+.dview-family { padding-top: 0.25em; font-size: 0.75em; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n-text-faint); }
+.dview-more { display: flex; gap: 0.6em; padding-right: 0.5em; font-size: 0.85em; }
+.dview-none { padding: 0.5em; }
+
+.dview-main { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.dview-stage { min-height: 0; display: grid; }
+.dview-stage .scan-view.bare { position: static; height: 100%; min-height: 0; grid-template-rows: minmax(0, 1fr); gap: 0; }
+.dview-stage .scan-view.bare .scan-canvas { height: 100%; min-height: 0; border: 0; border-radius: 0; }
+.dview-stage .scan-view.bare > :not(.scan-canvas) { min-height: 0; overflow: auto; }
+.scan-canvas .scan-count { position: absolute; z-index: 2; top: 0.5em; right: 0.7em; font-size: 0.85em; color: var(--n-text-faint); pointer-events: none; }
+
+.dview-facts { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3em 1.1em; min-width: 0; padding: 0.4em 0.9em; border-top: 1px solid var(--n-line); }
+.dview-values { display: inline-flex; flex-wrap: wrap; gap: 0.2em 0.75em; }
+.dview-values > span { white-space: nowrap; }
+.dview-scanner { font-family: var(--n-font-mono); font-size: 0.85em; }
+.dview-ask { display: inline-flex; align-items: baseline; gap: 0.6em; color: var(--n-caution-fg); }
+.dview-keys { text-align: right; font-size: 0.8em; color: var(--n-text-faint); }
+
+/* the chosen key's colours, the theme's value slots (as the reader's) */
+.dview [data-slot="1"] { --vc: var(--n-value-1); --vc-bg: var(--n-value-1-bg); }
+.dview [data-slot="2"] { --vc: var(--n-value-2); --vc-bg: var(--n-value-2-bg); }
+.dview [data-slot="3"] { --vc: var(--n-value-3); --vc-bg: var(--n-value-3-bg); }
+.dview [data-slot="4"] { --vc: var(--n-value-4); --vc-bg: var(--n-value-4-bg); }
+.dview [data-slot="5"] { --vc: var(--n-value-5); --vc-bg: var(--n-value-5-bg); }
+.dview [data-slot="6"] { --vc: var(--n-value-6); --vc-bg: var(--n-value-6-bg); }
+
+@media (max-width: 720px) {
+  .dview-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 38vh) minmax(0, 1fr); }
+  .dview-side { border-right: 0; border-bottom: 1px solid var(--n-line); padding: 0.4em 1rem; }
+  .dview-top { padding: 0.4em 1rem; flex-wrap: wrap; }
+  .dview-where { order: 3; flex-basis: 100%; }
+  .dview-keys { display: none; }
+}

@@ -2,8 +2,9 @@
 // The Datasets page, as an app (Wave 7a, the tries of 2026-10-08): the
 // datasets only, a card each with its name, one state word, its counts and
 // the one button for its next step, the rest in its menu. No folder is listed:
-// "Add a dataset" opens a finder that searches a root's folders. How to start is always on screen. Now lists what runs;
-// the chosen dataset's scans and reads follow. No paragraphs: an explanation sits behind
+// "Add a dataset" opens a finder that searches a root's folders. How to start is always on screen. A sorted
+// dataset's card opens it on the whole page (DatasetView, #data/datasets/<name>); Now lists what runs; the
+// chosen dataset's reads follow. No paragraphs: an explanation sits behind
 // a "?". The section's other pages, the cohorts, a read and a dataset's
 // pseudonymisation, are mounted by the shell beside this one.
 
@@ -25,8 +26,6 @@ import { batchTail, jobs as jobsDoor, packFor, sources, STAGES, stripMarks, type
 import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
 import { NowSection, useLiveJobs } from "./Now";
-import { Scans } from "./Scans";
-import { maySeePicks } from "./picks";
 import { mayListScans } from "./scans";
 import { whenWords } from "./sources";
 import { plainError } from "./plain";
@@ -175,14 +174,17 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
               why={whyOf(d)}
               on={current?.id === d.id}
               works={works}
-              onPick={() => setChosen(d.name)}
+              onPick={() => {
+                setChosen(d.name);
+                // a sorted dataset opens on the whole page
+                if (d.totals.stacks > 0 && mayListScans(caps)) location.hash = href("data", "datasets", d.name);
+              }}
               onStep={(id) => step(d, id)}
               onBringIn={() => setBringing(d)}
             />
           ))}
         </div>
       )}
-      {current && (mayListScans(caps) || maySeePicks(caps)) && <Scans caps={caps} dataset={current} />}
       <NowSection caps={caps} jobs={jobs} onSaid={say} onFailed={failed} />
       {current && current.digests.count > 0 && <Batches dataset={current} works={works && whyOf(current) === null} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
       {bringing && (

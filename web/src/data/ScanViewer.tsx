@@ -105,7 +105,12 @@ function middleOf(p: Preview | null): number | null {
   return p && p.planes > 0 ? Math.floor(p.planes / 2) : null;
 }
 
-export function ScanViewer({ scans, at, onAt, onClose, store }: { scans: Scan[]; at: number; onAt: (i: number) => void; onClose: () => void; store?: Pictures }) {
+/**
+ * The viewer. `bare` draws the scan alone, with no head of its own, for a
+ * page that says the scan's name and place around it (the dataset view):
+ * the plane counter sits in the picture's corner and the keys do the rest.
+ */
+export function ScanViewer({ scans, at, onAt, onClose, store, bare = false }: { scans: Scan[]; at: number; onAt: (i: number) => void; onClose: () => void; store?: Pictures; bare?: boolean }) {
   const pics = store ?? sharedPictures();
   const scan = scans[at];
   const stack = scan.id;
@@ -361,7 +366,8 @@ export function ScanViewer({ scans, at, onAt, onClose, store }: { scans: Scan[];
   const look = scan.questions.length > 0;
 
   return (
-    <div className={look ? "scan-view look" : "scan-view"} data-stack={stack} data-first-ms={first ?? undefined}>
+    <div className={`scan-view${look && !bare ? " look" : ""}${bare ? " bare" : ""}`} data-stack={stack} data-first-ms={first ?? undefined}>
+      {!bare && (
       <div className="row scan-view-head">
         <b className="grow scan-view-name" title={look ? questionWords(scan) : undefined}>
           {scan.name}
@@ -382,6 +388,7 @@ export function ScanViewer({ scans, at, onAt, onClose, store }: { scans: Scan[];
           <Icon name="x" />
         </button>
       </div>
+      )}
       {three ? (
         <StackView stack={stack} view="planes" keys />
       ) : (
@@ -389,6 +396,7 @@ export function ScanViewer({ scans, at, onAt, onClose, store }: { scans: Scan[];
           {still && !drawn && <img className="scan-still" src={still} alt="" decoding="sync" onLoad={stillShown} />}
           <canvas ref={canvas} className={drawn ? "on" : undefined} aria-label={`${scan.name}${z !== null && planes > 0 ? `, plane ${z + 1} of ${planes}` : ""}`} role="img" />
           {!still && !drawn && !failed && <span className="scan-wait meta">…</span>}
+          {bare && planes > 0 && z !== null && <span className="scan-count num">{`${z + 1} / ${planes}`}</span>}
           {(failed || framesFailed) && !drawn && (
             <span className="scan-wait">
               {!still && <span className="warn">No picture </span>}
