@@ -4,7 +4,7 @@
 // tiles land where they belong.
 import { describe, expect, it } from "vitest";
 import { unpackSlab, unpackTiles, type Manifest } from "./doors";
-import { direction, fillOrder, fps, levelFor, placeTile, plan, ringSlabs, slabOf, tileGrid, volumeLevel, VOLUME_BUDGET } from "./ring";
+import { coarsePlan, direction, fillOrder, fps, levelFor, placeTile, plan, ringSlabs, slabOf, tileGrid, volumeLevel, VOLUME_BUDGET } from "./ring";
 
 describe("the slab ring", () => {
   it("wants the current slab, two ahead and one behind, inside the stack", () => {
@@ -112,6 +112,17 @@ describe("the planes' level", () => {
     expect(p.bytes).toBeLessThanOrEqual(VOLUME_BUDGET);
     // a card that takes 4096 deep holds every plane, at level 3 within the budget (level 2 would be 327 MB)
     expect(volumeLevel(manifest([2500, 1024, 1024]), VOLUME_BUDGET, 4096)).toMatchObject({ level: 3, stride: 1 });
+  });
+  it("opens on the server planes' coarse level first, where the stack's own is finer", () => {
+    // a 352 x 512 x 512 stack is whole at level 0 within the budget; it opens on level 2 (a sixteenth of the bytes) and turns to level 0
+    const m = manifest([352, 512, 512], 4);
+    const fine = volumeLevel(m)!;
+    expect(fine.level).toBe(0);
+    expect(coarsePlan(m, fine)).toEqual({ level: 2, stride: 1, dims: [128, 128, 352], bytes: 352 * 128 * 128 * 2 });
+    // a pyramid of two levels opens on its coarsest
+    expect(coarsePlan(manifest([352, 512, 512], 2), fine)?.level).toBe(1);
+    // already that coarse: nothing first
+    expect(coarsePlan(manifest([2500, 1024, 1024]), volumeLevel(manifest([2500, 1024, 1024]), VOLUME_BUDGET, 2048)!)).toBeNull();
   });
   it("says none fits when even the coarsest level is over the budget", () => {
     expect(volumeLevel(manifest([2500, 1024, 1024]), 1024 * 1024)).toBeNull();

@@ -9,7 +9,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { forgetPictures, fractionOf, NotBuilt, pictureState, untilBuilt, pictureAnswer } from "./building";
+import { forgetPictures, fractionOf, NotBuilt, pictureState, untilBuilt, pictureAnswer, retryPause, Preparing } from "./building";
 import { doors } from "./doors";
 import { PictureWait } from "./PictureWait";
 import { tileAbsence } from "./tiles";
@@ -51,10 +51,22 @@ describe("the manifest while the picture is built", () => {
     );
     expect(m.stack).toBe(7);
     expect(asked).toHaveLength(3);
-    expect(waits).toEqual([2000, 2000]);
+    // quickly first, then longer, never past what the engine asked
+    expect(waits).toEqual([250, 375]);
     expect(seen).toEqual(["queued", 0.25]);
     // once there, nothing is waited for
     expect(pictureState(7)).toBeNull();
+  });
+
+  it("asks again quickly at first, half again longer each time, never past what the engine asked", async () => {
+    expect([0, 1, 2, 3, 4, 5, 6].map((n) => retryPause(n, 2))).toEqual([250, 375, 563, 844, 1266, 1898, 2000]);
+    // an engine that asks a quarter of a second is asked every quarter of a second
+    expect([0, 3, 9].map((n) => retryPause(n, 0.25))).toEqual([250, 250, 250]);
+    // its pause in milliseconds is read too
+    const r = new Response(JSON.stringify({ stack: 7, building: true, job: 1, state: "running", retry_after_ms: 250 }), { status: 202 });
+    const e = await pictureAnswer(r, 7).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(Preparing);
+    expect((e as Preparing).building.retryAfter).toBe(0.25);
   });
 
   it("is the doors' own manifest: a 202 never reads as a manifest", async () => {

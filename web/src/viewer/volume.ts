@@ -23,7 +23,7 @@ import { geometry, shiftInto, volumeGrid } from "./geometry";
 import { counters, decoder, storedWindow } from "./loader";
 import { SLAB, fillOrder, type VolumePlan } from "./ring";
 
-export { fillOrder, volumeLevel, VOLUME_BUDGET, type VolumePlan } from "./ring";
+export { coarsePlan, fillOrder, volumeLevel, VOLUME_BUDGET, type VolumePlan } from "./ring";
 export { max3dTexture, volumePath } from "./volumePlan";
 
 let schemed = false;
