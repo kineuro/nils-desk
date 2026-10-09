@@ -3,7 +3,7 @@
 // datasets only, a card each with its name, one state word, its counts and
 // the one button for its next step, the rest in its menu. No folder is listed:
 // "Add a dataset" opens a finder that searches a root's folders. How to start is always on screen. Now lists what runs;
-// the chosen dataset's reads follow. No paragraphs: an explanation sits behind
+// the chosen dataset's scans and reads follow. No paragraphs: an explanation sits behind
 // a "?". The section's other pages, the cohorts, a read and a dataset's
 // pseudonymisation, are mounted by the shell beside this one.
 
@@ -27,6 +27,8 @@ import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
 import { mayPick, pickRun, pickWords } from "./pickRun";
 import { NowSection, useLiveJobs } from "./Now";
+import { Scans } from "./Scans";
+import { mayListScans } from "./scans";
 import { fileWords, whenWords } from "./sources";
 import { nextStep, stepCommand, type StepId } from "./steps";
 
@@ -180,6 +182,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
           ))}
         </div>
       )}
+      {current && current.totals.stacks > 0 && (mayListScans(caps) || mayPick(caps)) && <Scans caps={caps} dataset={current} onSaid={setSaid} />}
       <NowSection caps={caps} jobs={jobs} onSaid={setSaid} />
       {current && current.digests.count > 0 && <Batches dataset={current} works={works && whyOf(current) === null} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
       {bringing && (

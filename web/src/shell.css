@@ -1097,6 +1097,24 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .scard-pick:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 2px; border-radius: 2px; }
 .scard .where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: 12.5px; color: var(--n-text-faint); }
 .scard > .row { flex-wrap: wrap; gap: 0.3rem 0.6rem; }
+/* a dataset's scans: the list, and the viewer beside it once a scan is opened */
+.scans { display: grid; gap: 0.9rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.scans.open { grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr); }
+@media (max-width: 900px) { .scans.open { grid-template-columns: minmax(0, 1fr); } }
+.scan-list { display: grid; gap: 0.7rem; min-width: 0; }
+.scans.open .scan-list { max-height: 75vh; overflow-y: auto; }
+.scan-subject { display: grid; gap: 0.3rem; min-width: 0; }
+.scan-subject > b { font-family: var(--n-font-mono); font-size: 13px; }
+.scan-session { display: grid; gap: 0.15rem; padding-left: 0.6rem; border-left: 1px solid var(--n-line); }
+.scan-session ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 1px; }
+.scan-row { display: flex; align-items: baseline; gap: 0.6rem; width: 100%; min-width: 0; padding: 0.25rem 0.5rem; border: 1px solid transparent; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.scan-row:hover { border-color: var(--n-line); }
+.scan-row.on { border-color: var(--n-brand-line); box-shadow: inset 3px 0 0 var(--n-brand); font-weight: 600; }
+.scan-row:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.scan-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-row .meta { flex: none; }
+.scan-pages { gap: 0.5rem; align-items: center; }
+.scan-view { display: grid; gap: 0.4rem; min-width: 0; }
 .scard .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
 .scard .nums b { display: block; font-family: var(--n-font-serif); font-weight: 400; font-size: 1.15rem; line-height: 1.2; }
 .scard .nums span { font-size: 12px; color: var(--n-text-faint); }

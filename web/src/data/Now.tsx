@@ -12,7 +12,7 @@ import { may } from "../grants";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { jobs as jobsDoor, type ChainedJob } from "./datasets";
-import { isOpen, jobCards, liveJobs, nowWords, type JobCard, type Live } from "./now";
+import { isOpen, jobCards, jobsWords, liveJobs, type JobCard, type Live } from "./now";
 
 export interface LiveJobs {
   /** The open jobs, null until the first read. */
@@ -89,7 +89,7 @@ export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: L
     jobsDoor
       .cancel(c.id)
       .then(() => {
-        onSaid(c.kind === "running" ? `Job ${c.id} stops at its next heartbeat; what is written stays written.` : `Job ${c.id} is dropped from the queue.`);
+        onSaid(c.kind === "running" ? `Job ${c.id} is stopping.` : `Job ${c.id} is dropped from the queue.`);
         jobs.refresh();
       })
       .catch((e: Error) => onSaid(e.message));
@@ -111,14 +111,13 @@ export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: L
     <section className="stack roomy" aria-label="the jobs now">
       <div className="section-head rule-top">
         <h2>Now</h2>
-        <span className="meta">{nowWords(jobs.live, count)}</span>
+        <span className="meta">{jobsWords(count)}</span>
         {may(caps, "pipelines:see") && (
           <a className="button quiet small" href={href("pipelines")}>
             All jobs on Pipelines
           </a>
         )}
       </div>
-      {cards.length === 0 && <p className="meta">Nothing runs now. Bring in what is new to start a batch.</p>}
       {cards.length > 0 && (
         <div className="jobs-now">
           {cards.map((c) => (
@@ -172,15 +171,6 @@ export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: L
           ))}
         </div>
       )}
-      <div className="now-line">
-        <span>
-          <Icon name="pulse" />
-          {jobs.live.kind === "stream" ? "Updated every second while a job runs" : jobs.live.kind === "polling" ? "Read every few seconds while this page is open" : "Waiting for the first read"}
-        </span>
-        <span>
-          <Icon name="clock" />A cancel stops at the next heartbeat; what is written stays written
-        </span>
-      </div>
     </section>
   );
 }

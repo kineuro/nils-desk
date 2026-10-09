@@ -172,8 +172,13 @@ export function jobCards(open: ChainedJob[], failed: ChainedJob[], caps: Capabil
 }
 
 /** What Now says beside its title: how it is fed, and how many jobs. */
+/** How many jobs run, in two words: the Data page's one line under Now. */
+export function jobsWords(count: number): string {
+  return count === 0 ? "nothing runs" : `${n(count)} ${count === 1 ? "job" : "jobs"}`;
+}
+
 export function nowWords(live: Live, count: number): string {
-  const jobs = count === 0 ? "nothing runs" : `${n(count)} ${count === 1 ? "job" : "jobs"}`;
+  const jobs = jobsWords(count);
   switch (live.kind) {
     case "stream":
       return `live from the engine · ${jobs}`;
