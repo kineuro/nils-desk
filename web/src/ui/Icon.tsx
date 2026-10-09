@@ -304,6 +304,14 @@ const PATHS = {
   ),
   // a visit, on the dataset viewer's cards
   calendar: <path d="M4 6h16v14H4zM4 10h16M9 3v4M15 3v4" />,
+  // the pseudonymise step: a map given to it, and the IDs shown once
+  upload: <path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" />,
+  eye: (
+    <>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
 } satisfies Record<string, React.ReactNode>;
 
 export type IconName = keyof typeof PATHS;

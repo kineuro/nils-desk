@@ -81,18 +81,25 @@ export function firstChoice(list: readonly Dataset[], why: (d: Dataset) => strin
   return c ? { kind: "cohort", name: c.name } : null;
 }
 
-/** The page; `dataset` is the one the address names (#data/datasets/<name>, or its viewer, /view), `query` what the address narrows to. */
+/**
+ * The page; `dataset` is the one the address names (#data/datasets/<name>, or
+ * its viewer, /view), `step` what the address opens of it (its pseudonymise
+ * step, #data/datasets/<name>/pseudonymisation, as the page that stood there
+ * before was named), `query` what the address narrows to.
+ */
 export function DataPage({
   caps,
   install,
   onChanged,
   dataset,
+  step: opening,
   query,
 }: {
   caps: Capabilities;
   install: Install | null;
   onChanged: () => void;
   dataset?: string | null;
+  step?: string | null;
   query?: Record<string, string>;
 }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
@@ -349,6 +356,9 @@ export function DataPage({
           summary={sums[chosenDataset.name] ?? null}
           why={whyOf(chosenDataset)}
           jobs={jobs}
+          datasets={list}
+          cohorts={allCohorts.map((c) => c.name)}
+          openStep={opening === "pseudonymisation" && dataset === chosenDataset.name}
           onStep={(id) => step(chosenDataset, id)}
           onChanged={changed}
           onSaid={say}
@@ -506,7 +516,7 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; summary: Dat
               <span key={i} className={s} />
             ))}
           </div>
-          <div className="dp-line" title={lookWords || undefined}>
+          <div className={next.step === "pseudonymise" && (d.held?.identifiers ?? 0) > 0 ? "dp-line look" : "dp-line"} title={lookWords || undefined}>
             {line}
           </div>
         </>

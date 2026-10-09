@@ -69,3 +69,79 @@ test("a phone's width is one column with no sideways scroll", async ({ page }) =
   expect(new Set(await tops(page.locator(".dp-step"))).size).toBe(4);
   await page.screenshot({ path: "test-results/data-phone.png", fullPage: true });
 });
+
+test("an identified dataset's pseudonymise step opens in place, its three boxes side by side", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/data.html#data/datasets?dataset=study-identified");
+  await expect(page.locator(".dp-detail")).toHaveAttribute("aria-label", "study-identified");
+  await expect(page.locator(".dp-detail .ps-step")).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
+  // the nine steps on one line, Pseudonymised between Found and Read, next and open
+  await expect(page.locator(".dp-step")).toHaveCount(9);
+  expect(new Set(await tops(page.locator(".dp-step"))).size).toBe(1);
+  await expect(page.locator(".dp-step-title").nth(1)).toHaveText("Pseudonymised");
+  await expect(page.locator(".dp-step.next .dp-step-pick")).toHaveAttribute("aria-expanded", "true");
+  // the three boxes on one line, the IDs' box between the originals and the copy
+  expect(new Set(await tops(page.locator(".ps-step .ps-box"))).size).toBe(1);
+  await expect(page.locator(".ps-step .ps-actions .button").first()).toHaveText("Give the 4 IDs a code");
+  await page.locator(".dp-detail").screenshot({ path: "test-results/data-pseudonymise.png" });
+  // giving the IDs a code, in place: one row each, the code's column and the way out on the row's own line
+  await page.locator(".ps-step .ps-actions .button").first().click();
+  await expect(page.locator(".ps-table .ps-row:not(.head)")).toHaveCount(4);
+  // each row one line: no cell wraps under another
+  for (const row of await page.locator(".ps-table .ps-row:not(.head)").all()) expect((await row.boundingBox())!.height).toBeLessThan(48);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
+  await page.locator(".dp-detail").screenshot({ path: "test-results/data-pseudonymise-codes.png" });
+});
+
+test("on a phone the step's boxes stack and its IDs fit, with no sideways scroll", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/data.html#data/datasets?dataset=study-identified");
+  await expect(page.locator(".dp-detail .ps-step")).toHaveCount(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  expect(new Set(await tops(page.locator(".ps-step .ps-box"))).size).toBe(3);
+  await page.locator(".ps-step .ps-actions .button").first().click();
+  await expect(page.locator(".ps-table .ps-row:not(.head)")).toHaveCount(4);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  const table = await page.locator(".ps-table").boundingBox();
+  expect(table!.x + table!.width).toBeLessThanOrEqual(390);
+  await page.locator(".dp-detail").screenshot({ path: "test-results/data-pseudonymise-phone.png" });
+});
+
+test("the rules open from Change and fit a phone, four choices and no paragraph", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/data.html#data/datasets?dataset=study-identified");
+  await page.locator(".ps-step .ps-change").click();
+  await expect(page.locator("dialog .ps-rule")).toHaveCount(4);
+  const dialog = await page.locator("dialog").boundingBox();
+  expect(dialog!.x).toBeGreaterThanOrEqual(0);
+  expect(dialog!.x + dialog!.width).toBeLessThanOrEqual(390);
+  await page.locator("dialog").screenshot({ path: "test-results/data-pseudonymise-rules.png" });
+});
+
+test("once pseudonymised, what every file got sits beside the dataset's log", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/data.html?done=1#data/datasets/study-identified/pseudonymisation");
+  await expect(page.locator(".dp-detail .ps-done")).toHaveCount(1);
+  expect(new Set(await tops(page.locator(".ps-cols > .dp-col"))).size).toBe(1);
+  expect(new Set(await tops(page.locator(".ps-done .ps-box"))).size).toBe(1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1440);
+  await page.locator(".dp-detail").screenshot({ path: "test-results/data-pseudonymised.png" });
+});
+
+test("a pasted map fills the IDs' rows, a code and where its subject is already beside it, on one line each", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/data.html#data/datasets?dataset=study-identified");
+  await page.locator(".ps-step .ps-actions .button").first().click();
+  await page.locator(".ps-drop").evaluate((zone) => {
+    const data = new DataTransfer();
+    data.setData("text/plain", "study ID,subject code\nABC123456,5a9f30c6e8b21d41\naBCD1234,5a9f30c6e8b21d42\naBCE1234,5a9f30c6e8b21d43\n");
+    zone.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
+  });
+  await expect(page.locator(".ps-code-value")).toHaveCount(3);
+  await expect(page.locator(".ps-drop")).toContainText("3 of 4 IDs matched");
+  for (const row of await page.locator(".ps-table .ps-row:not(.head)").all()) expect((await row.boundingBox())!.height).toBeLessThan(48);
+  await expect(page.locator(".ps-foot .button").last()).toHaveText("Pseudonymise and sort 201 files");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.locator(".dp-detail").screenshot({ path: "test-results/data-pseudonymise-matched-dark.png" });
+});

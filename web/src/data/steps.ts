@@ -59,8 +59,11 @@ export const roots = {
   /** One folder looked at, once. */
   folder: (root: number, name: string) => door<FolderLook>("GET", `/api/places/${root}/folders/${encodeURIComponent(name)}`),
   /** One folder of a root made a dataset, named by the engine after the folder; its structure is read now. */
-  /** A folder under a root added as a dataset; anonymised data says its IDs with it (`patient_id`, `subjects`), so it is read at once. */
-  addDataset: (root: string, folder: string, ids: Pick<DatasetFields, "patient_id" | "subjects"> = {}) =>
+  /**
+   * A folder under a root added as a dataset; anonymised data says its IDs with it (`patient_id`, `subjects`), so it is read at once,
+   * and identified data what its PatientID holds, as the rule its originals are read under (`identity`).
+   */
+  addDataset: (root: string, folder: string, ids: Pick<DatasetFields, "patient_id" | "subjects" | "identity"> = {}) =>
     door<PlaceAnswer & { not_read?: string | null }>("POST", "/api/places", { role: "source", root, folder, ...ids }),
 };
 
@@ -72,6 +75,11 @@ export function rootsOf(places: Place[]): Place[] {
 /** Whether a folder looked at would be anonymised data, which says what PatientID holds and how subjects are found before it is read. */
 export function asksIds(l: Pick<FolderLook, "layout">): boolean {
   return l.layout?.state === "anonymised";
+}
+
+/** Whether a folder looked at would be identified data, which says what its PatientID holds: a personnummer, or an ID of a type. */
+export function asksIdentity(l: Pick<FolderLook, "layout">): boolean {
+  return l.layout?.state === "identified" || l.layout?.state === "both";
 }
 
 /** The state word a folder's structure would give the dataset. */
