@@ -9,7 +9,7 @@ import { door, type Json } from "../ask/client";
 import { pastedList } from "../ask/start";
 import type { ReleaseRow } from "../ops/client";
 import { datesWord, whenWords, type Source } from "./sources";
-import type { Holding, Part } from "./summary";
+import type { Holding, Part, SummaryStep } from "./summary";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -123,6 +123,8 @@ export interface CohortDetail extends Omit<Cohort, "releases"> {
   releases: CohortRelease[];
   /** Wave 7a (2026-10-09): its members' clinical coverage, never a value; an older engine sends none. */
   clinical?: ClinicalCoverage[];
+  /** Wave 7a (2026-10-09, record 56): where its members' scans are, sorted, body part and post-contrast; an older engine sends none. */
+  steps?: SummaryStep[];
 }
 
 /** A cohort without its release count: what the list row and the cohort's own door share. */

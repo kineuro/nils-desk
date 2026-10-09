@@ -2,9 +2,11 @@
 // A chosen cohort, under the bands of the Data page (Wave 7a, the design of
 // 2026-10-09): its actions with the next step as the one primary button;
 // how it grew, the joins from which read of which dataset with its releases
-// marked on one line; where its subjects come from, the datasets that feed
-// it and the ones that only hold some of them; what its subjects have, a
-// main scan per role and their clinical coverage; and its log and releases.
+// marked on one line; where it is, its members' scans sorted, body part and
+// post-contrast (operations of their own, record 56) and their main scans;
+// where its subjects come from, the datasets that feed it and the ones that
+// only hold some of them; what its subjects have, a main scan per role and
+// their clinical coverage; and its log and releases.
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -16,7 +18,8 @@ import { Icon } from "../ui/Icon";
 import { cohortActs, MembersDialog, RenameDialog, RetireDialog } from "./CohortPage";
 import { cohorts, type Cohort, type CohortDetail as Detail, type CohortRelease } from "./cohorts";
 import { maySeePicks, picksSummary, PICKS_SUMMARY_DOOR, type PickLine } from "./picks";
-import { clock, fedWords, growth, joinTitle, roleOrder, roleWord, slotOf, type Holding } from "./summary";
+import { StepRail } from "./StepRail";
+import { clock, cohortRail, fedWords, growth, joinTitle, roleOrder, roleWord, slotOf, type Holding } from "./summary";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -82,6 +85,7 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
   const members = row.subjects;
   const releases: CohortRelease[] = Array.isArray(doc?.releases) ? doc.releases : [];
   const today = new Date();
+  const rail = cohortRail(doc?.steps, picks?.lines ?? null);
 
   const secondary = [
     a.query && a.primary !== "query" ? (
@@ -152,6 +156,13 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
         <h3 className="eyebrow">How it grew</h3>
         {doc ? <Grew joins={doc.joins} releases={releases} /> : <p className="meta">Reading how it grew.</p>}
       </div>
+
+      {rail.length > 0 && (
+        <div className="dp-sec">
+          <h3 className="eyebrow">Where it is</h3>
+          <StepRail steps={rail} now={today.getTime()} />
+        </div>
+      )}
 
       <div className="dp-cols">
         <div className="dp-col">

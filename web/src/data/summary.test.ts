@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Datasets and cohorts on one page (Wave 7a, 2026-10-09), its words and
 // shapes: a card's six steps from the summary or from the sources door
-// alone; each step of the detail's rail in three short lines; a card's line;
+// alone; each step of the detail's rail in three short lines, body part and
+// post-contrast among them as operations of their own; a card's line;
 // how a dataset and a cohort relate; how a cohort grew, spread so no two
 // events sit on each other; a job of the dataset as a line of its log; and
 // never an engine word or "people" on the surface.
@@ -15,6 +16,7 @@ import {
   cardLine,
   clock,
   cohortLine,
+  cohortRail,
   cohortRelation,
   datasetRelation,
   fedWords,
@@ -24,6 +26,8 @@ import {
   idsWords,
   joinTitle,
   logLine,
+  doingTitle,
+  operationOf,
   originWords,
   partLabel,
   railOf,
@@ -117,6 +121,8 @@ function summary(over: Partial<DatasetSummary> = {}): DatasetSummary {
       step("found", { finished_at: today("13:56"), files: 45395, bytes: 9.5e9, tree: "anon" }),
       step("read", { job: 4, started_at: today("13:57"), finished_at: today("13:57"), files: 45179, refused: 216, reads: 1 }),
       step("sorted", { job: 6, started_at: today("13:58"), finished_at: today("14:01"), scans: 1003, of: 1003, look: 203, unsorted: 0 }),
+      step("body_part", { job: 11, run: 3, started_at: today("14:10"), finished_at: today("14:20"), served: true, answered: 960, look: 30, of: 1003, jobs: [11, 10] }),
+      step("post_contrast", { state: "off", served: false, answered: 0, look: 0, of: 1003, jobs: [] }),
       step("main_scans", { job: 8, started_at: today("14:04"), finished_at: today("14:04"), picked: 97, borders: 76 }),
       step("pictures", { job: 6, started_at: today("13:58"), finished_at: today("14:05"), made: 991, of: 1003, in_sort: true }),
       step("views", { state: "running", job: 9, started_at: new Date(NOW.getTime() - 60_000).toISOString(), progress: { done: 57, total: 1001 }, made: 57, of: 1003 }),
@@ -146,15 +152,17 @@ describe("the detail's rail", () => {
   it("names each step, what it did and when, the running one in the brand's colour", () => {
     const s = summary();
     const words = railSteps(s).map((x) => stepWords(x, NOW));
-    expect(words.map((w) => w.title)).toEqual(["Found", "Read", "Sorted", "Main scans", "Pictures", "3D views"]);
+    expect(words.map((w) => w.title)).toEqual(["Found", "Read", "Sorted", "Body part", "Post-contrast", "Main scans", "Pictures", "3D views"]);
     expect(words[0]).toMatchObject({ what: "45,395 files", when: clock(today("13:56"), NOW) });
     expect(words[1].what).toBe("45,179 read · 216 refused");
     expect(words[2].what).toBe("1,003 scans · 203 to look at");
     expect(words[2].when).toBe(`${clock(today("14:01"), NOW)} · 3 min`);
-    expect(words[3].what).toBe("97 picked · 76 borders");
-    expect(words[4]).toMatchObject({ what: "991 of 1,003", when: `${clock(today("14:05"), NOW)} · in the sort` });
-    expect(words[5]).toMatchObject({ what: "57 of 1,001", now: true });
-    expect(words[5].when).toMatch(/^now · about \d+ min left$/);
+    expect(words[3]).toMatchObject({ what: "960 of 1,003 answered · 30 to look at", when: `${clock(today("14:20"), NOW)} · 10 min` });
+    expect(words[4]).toMatchObject({ what: "not available", when: "" });
+    expect(words[5].what).toBe("97 picked · 76 borders");
+    expect(words[6]).toMatchObject({ what: "991 of 1,003", when: `${clock(today("14:05"), NOW)} · in the sort` });
+    expect(words[7]).toMatchObject({ what: "57 of 1,001", now: true });
+    expect(words[7].when).toMatch(/^now · about \d+ min left$/);
   });
 
   it("pseudonymises only where the dataset has originals, and says a waiting step without a time", () => {
@@ -172,6 +180,70 @@ describe("the detail's rail", () => {
     expect(stepWords(step("sorted", { state: "waiting", scans: 0, of: 0 }), NOW).what).toBe("not yet");
     expect(stepWords(step("main_scans", { state: "off", picked: 0, borders: 0 }), NOW).what).toBe("off");
     expect(stepWords(step("views", { state: "off", made: 0, of: 3 }), NOW).what).toBe("no place for them");
+  });
+});
+
+describe("body part and post-contrast, steps of their own", () => {
+  it("say whether they are served, whether they ran, what the model answered and what waits on a person", () => {
+    const off = stepWords(step("body_part", { state: "off", served: false, answered: 0, look: 0, of: 3 }), NOW);
+    expect(off).toMatchObject({ title: "Body part", what: "not available", when: "" });
+    expect(off.hint).toBe("No body-part model is served here yet.");
+    expect(stepWords(step("post_contrast", { state: "off", served: false, answered: 0, look: 1, of: 3 }), NOW)).toMatchObject({
+      title: "Post-contrast",
+      what: "not available · 1 to look at",
+      hint: "Neither the post-contrast label nor a post-contrast model is served here yet.",
+    });
+    expect(stepWords(step("body_part", { state: "waiting", served: true, answered: 0, look: 0, of: 3 }), NOW)).toMatchObject({ what: "not run yet", when: "" });
+    const running = stepWords(
+      step("body_part", { state: "running", served: true, started_at: new Date(NOW.getTime() - 60_000).toISOString(), progress: { done: 1, total: 3 }, answered: 0, look: 0, of: 3 }),
+      NOW,
+    );
+    expect(running).toMatchObject({ what: "1 of 3", now: true });
+    expect(running.when).toMatch(/^now/);
+    expect(stepWords(step("body_part", { state: "queued", served: true, answered: 0, look: 0, of: 3 }), NOW)).toMatchObject({ what: "waits its turn", when: "next" });
+    expect(stepWords(step("body_part", { answered: 3, look: 0, of: 3 }), NOW).what).toBe("3 answered");
+    expect(stepWords(step("body_part", { answered: 0, look: 2, of: 3 }), NOW).what).toBe("none answered · 2 to look at");
+  });
+
+  it("sit after Sorted on a dataset's rail, while a card keeps its six steps", () => {
+    expect(railSteps(summary()).map((x) => x.step)).toEqual(["found", "read", "sorted", "body_part", "post_contrast", "main_scans", "pictures", "views"]);
+    expect(railOf(dataset(), summary())).toHaveLength(6);
+  });
+
+  it("make a cohort's rail with its sorted scans and the main scans of its members", () => {
+    const steps = [
+      step("sorted", { scans: 48, of: 50, look: 4, unsorted: 2, state: "waiting" }),
+      step("body_part", { answered: 40, look: 3, of: 50, served: true }),
+      step("post_contrast", { state: "off", served: false, answered: 0, look: 0, of: 50 }),
+    ];
+    const rail = cohortRail(steps, [
+      { picked: 41, borders: 2 },
+      { picked: 30, borders: 0 },
+    ]);
+    expect(rail.map((x) => [x.step, x.state])).toEqual([
+      ["sorted", "waiting"],
+      ["body_part", "done"],
+      ["post_contrast", "off"],
+      ["main_scans", "done"],
+    ]);
+    expect(rail.map((x) => stepWords(x, NOW).what)).toEqual(["48 scans · 4 to look at · 2 not sorted", "40 of 50 answered · 3 to look at", "not available", "71 picked · 2 borders"]);
+    // without the main scans' door, the three the cohort's document says; an older engine, none
+    expect(cohortRail(steps, null)).toHaveLength(3);
+    expect(cohortRail(undefined, [])).toEqual([]);
+  });
+
+  it("name a model's run in the log by its operation", () => {
+    const s = summary();
+    expect(operationOf(s, 11)).toBe("body_part");
+    expect(operationOf(s, 10)).toBe("body_part");
+    expect(operationOf(s, 4)).toBeNull();
+    const run = job({ kind: "pipeline", name: "bp-infer@1", progress: null });
+    expect(logLine(run, NOW, "body_part")).toMatchObject({ what: "Body part", how: "" });
+    expect(logLine({ ...run, state: "failed" }, NOW, "body_part")).toMatchObject({ what: "Body part failed", failed: true });
+    expect(logLine(run, NOW)).toMatchObject({ what: "Model run" });
+    expect(doingTitle({ kind: "pipeline", state: "running" }, "body_part")).toBe("Finding the body part");
+    expect(doingTitle({ kind: "pipeline", state: "running" }, "post_contrast")).toBe("Finding post-contrast scans");
+    expect(runningWords({ kind: "pipeline", state: "running", started_at: today("14:00"), progress: { done: 1, total: 3 } }, NOW.getTime()).words).toMatch(/^1 of 3 scans/);
   });
 });
 

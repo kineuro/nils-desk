@@ -8,7 +8,6 @@
 // its progress and Stop, then what ran before.
 
 import { useEffect, useState } from "react";
-import type React from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
@@ -23,6 +22,7 @@ import { cancelRefusal } from "./now";
 import type { LiveJobs } from "./Now";
 import { maySeePicks, picksSummary, type PickLine } from "./picks";
 import { mayListScans } from "./scans";
+import { StepRail } from "./StepRail";
 import { nextStep, stepCommand, type StepId } from "./steps";
 import {
   clock,
@@ -31,6 +31,7 @@ import {
   idsWords,
   logLine,
   maySummarise,
+  operationOf,
   railSteps,
   roleOrder,
   roleWord,
@@ -205,7 +206,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
 
       <div className="dp-sec">
         <h3 className="eyebrow">Where it is</h3>
-        {s ? <Steps steps={railSteps(s)} now={now} /> : maySummarise(caps) ? <p className="meta">Reading where it is.</p> : <Steps steps={stepsOfSources(d)} now={now} />}
+        {s ? <StepRail steps={railSteps(s)} now={now} /> : maySummarise(caps) ? <p className="meta">Reading where it is.</p> : <StepRail steps={stepsOfSources(d)} now={now} />}
       </div>
 
       <div className="dp-cols">
@@ -240,29 +241,6 @@ export function DatasetDetail(props: DatasetDetailProps) {
         />
       )}
     </section>
-  );
-}
-
-/** The rail of where a dataset is: a node a step, the line between them filled as far as it got. */
-function Steps({ steps, now }: { steps: SummaryStep[]; now: number }) {
-  const at = new Date(now);
-  return (
-    <ol className="dp-steps" style={{ "--steps": steps.length } as React.CSSProperties}>
-      {steps.map((st, i) => {
-        const w = stepWords(st, at);
-        return (
-          <li key={st.step} className={`dp-step ${st.state}`} aria-current={st.state === "running" ? "step" : undefined}>
-            <span className="dp-step-mark" aria-hidden="true">
-              <span className="node" />
-              {i < steps.length - 1 && <span className="link" />}
-            </span>
-            <span className="dp-step-title">{w.title}</span>
-            <span className="dp-step-what">{w.what}</span>
-            <span className={w.now ? "dp-step-when now" : "dp-step-when"}>{w.when || " "}</span>
-          </li>
-        );
-      })}
-    </ol>
   );
 }
 
@@ -395,6 +373,8 @@ function stepsLog(s: DatasetSummary, now: Date): LogLine[] {
     pseudonymised: "Pseudonymised",
     read: "Read",
     sorted: "Sorted",
+    body_part: "Body part",
+    post_contrast: "Post-contrast",
     main_scans: "Main scans picked",
     pictures: "Pictures made",
     views: "3D views made",
@@ -423,7 +403,7 @@ function Log(props: {
   // the running jobs: the log's open ones; the live stream's row wins, for its progress
   const open: Running[] = (log ? log.filter(isOpen) : []).map((j) => {
     const row = liveById.get(j.id) ?? j;
-    return { key: `job ${row.id}`, job: row, title: doingTitle(row), words: runningWords(row, now), stoppable: row.state !== "cancelling" };
+    return { key: `job ${row.id}`, job: row, title: doingTitle(row, operationOf(s, row.id)), words: runningWords(row, now), stoppable: row.state !== "cancelling" };
   });
   // and the steps the summary says run now that no open job of the log stands for: a sort's own run that
   // goes on making its pictures after its row says done, or every running step for a person who does not read the jobs
@@ -450,7 +430,7 @@ function Log(props: {
       return {
         key: `step ${st.step}`,
         job: over || st.job === null ? null : row,
-        title: st.step === "pictures" ? "Making pictures" : doingTitle(row),
+        title: st.step === "pictures" ? "Making pictures" : doingTitle(row, operationOf(s, st.job)),
         words: runningWords(row, now),
         stoppable: !over && st.job !== null,
       };
@@ -462,7 +442,7 @@ function Log(props: {
     ? log
         .filter((j) => !isOpen(j))
         .sort((a, b) => ended(b) - ended(a) || b.id - a.id)
-        .map((j) => logLine(j, at))
+        .map((j) => logLine(j, at, operationOf(s, j.id)))
     : s
       ? stepsLog(s, at)
       : [];
@@ -545,6 +525,9 @@ function kindOfStep(st: SummaryStep): string {
       return "classify";
     case "views":
       return "pyramid";
+    case "body_part":
+    case "post_contrast":
+      return "pipeline";
     default:
       return st.step;
   }

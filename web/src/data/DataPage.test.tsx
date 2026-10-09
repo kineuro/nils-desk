@@ -109,11 +109,22 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
     pictures_place: "working",
     steps:
       scans === 0
-        ? [step("found", { state: "waiting", files: null }), step("read", { state: "waiting", reads: 0, files: 0, refused: 0 }), step("sorted", { state: "waiting", scans: 0, of: 0 }), step("main_scans", { state: "waiting", picked: 0, borders: 0 }), step("pictures", { state: "waiting", made: 0, of: 0 }), step("views", { state: "waiting", made: 0, of: 0 })]
+        ? [
+            step("found", { state: "waiting", files: null }),
+            step("read", { state: "waiting", reads: 0, files: 0, refused: 0 }),
+            step("sorted", { state: "waiting", scans: 0, of: 0 }),
+            step("body_part", { state: "waiting", served: true, answered: 0, look: 0, of: 0, jobs: [] }),
+            step("post_contrast", { state: "off", served: false, answered: 0, look: 0, of: 0, jobs: [] }),
+            step("main_scans", { state: "waiting", picked: 0, borders: 0 }),
+            step("pictures", { state: "waiting", made: 0, of: 0 }),
+            step("views", { state: "waiting", made: 0, of: 0 }),
+          ]
         : [
             step("found", { files: 120, tree: "anon" }),
             step("read", { job: 4, files: 120, refused: d.totals.refused_files, reads: 1 }),
             step("sorted", { job: 6, scans, of: scans, look: d.totals.to_sort, unsorted: 0 }),
+            step("body_part", { job: 12, run: 2, served: true, answered: 36, look: 4, of: scans, jobs: [12] }),
+            step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: scans, jobs: [] }),
             step("main_scans", { job: 8, picked: 28, borders: 2 }),
             step("pictures", { job: 6, made: scans, of: scans, in_sort: true }),
             running ? step("views", { state: "running", job: 9, finished_at: null, progress: { done: 12, total: 40 }, made: 12, of: scans }) : step("views", { job: 9, made: scans, of: scans }),
@@ -176,10 +187,16 @@ const detail: CohortDetail = {
     { kind: "EDSS", primary: true, subjects: 10 },
     { kind: "Relapse", primary: false, subjects: 3 },
   ],
+  steps: [
+    step("sorted", { started_at: null, finished_at: null, scans: 52, of: 52, look: 3, unsorted: 0 }),
+    step("body_part", { job: 12, run: 2, served: true, answered: 40, look: 2, of: 52, jobs: [12] }),
+    step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: 52, jobs: [] }),
+  ],
 };
 
 const jobsOfBig = [
   { id: 9, kind: "pyramid", name: "pictures after job 6", state: "running", started_at: AT, heartbeat_at: null, finished_at: null, progress: { done: 12, total: 40 }, error: null, args: { queued: ["pyramid", "build", "--classified", "6"], principal: "anna" }, result: null },
+  { id: 12, kind: "pipeline", name: "bp-infer@1", state: "done", started_at: AT, heartbeat_at: null, finished_at: "2026-10-09T10:10:00Z", progress: null, error: null, args: {}, result: null },
   { id: 8, kind: "pick", name: "sort:6", state: "done", started_at: AT, heartbeat_at: null, finished_at: "2026-10-09T10:04:00Z", progress: null, error: null, args: {}, result: { subjects: 12 } },
   { id: 4, kind: "digest", name: "study-big-2026-10-09", state: "done", started_at: AT, heartbeat_at: null, finished_at: "2026-10-09T10:01:00Z", progress: { batch_id: 30, ingested: 120, changed: 0, subjects_created: 12 }, error: null, args: {}, result: null },
 ];
@@ -283,8 +300,20 @@ describe("datasets and cohorts on one page", () => {
   it("opens a dataset's detail: where it is, what it holds, its main scans and its log", async () => {
     await page();
     const d = host.querySelector<HTMLElement>(".dp-detail")!;
-    expect([...d.querySelectorAll(".dp-step-title")].map((s) => s.textContent)).toEqual(["Found", "Read", "Sorted", "Main scans", "Pictures", "3D views"]);
-    expect([...d.querySelectorAll(".dp-step-what")].map((s) => s.textContent)).toEqual(["120 files", "120 read · 1 refused", "40 scans · 8 to look at", "28 picked · 2 borders", "40 made", "40 made"]);
+    expect([...d.querySelectorAll(".dp-step-title")].map((s) => s.textContent)).toEqual(["Found", "Read", "Sorted", "Body part", "Post-contrast", "Main scans", "Pictures", "3D views"]);
+    expect([...d.querySelectorAll(".dp-step-what")].map((s) => s.textContent)).toEqual([
+      "120 files",
+      "120 read · 1 refused",
+      "40 scans · 8 to look at",
+      "36 of 40 answered · 4 to look at",
+      "not available",
+      "28 picked · 2 borders",
+      "40 made",
+      "40 made",
+    ]);
+    // record 56: body part and post-contrast are steps of their own; one not served says so, and no Run is offered, since no door runs one over a dataset
+    expect(d.querySelector(".dp-step.off")?.getAttribute("title")).toBe("Neither the post-contrast label nor a post-contrast model is served here yet.");
+    expect([...d.querySelectorAll(".dp-acts button, .dp-acts a")].map((b) => b.textContent).filter((t) => /run/i.test(t ?? ""))).toEqual([]);
     expect(d.querySelector(".dp-funnel")?.textContent).toBe("12 subjects→20 visits→40 scans");
     expect(d.querySelector(".dp-sure-words")?.textContent).toBe("32 sure8 need a look");
     expect([...d.querySelectorAll(".dp-kind > span:first-child")].map((s) => s.textContent)).toEqual(["T1w", "FLAIR"]);
@@ -293,7 +322,7 @@ describe("datasets and cohorts on one page", () => {
     expect(d.querySelector(".dp-role-line")?.textContent).toBe("T1w20 picked · 17 clear · 2 bordersReview 2");
     expect(d.querySelector(".dp-role-line a")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
     const log = [...d.querySelectorAll(".dp-log-row")].map((r) => `${r.querySelector(".what")?.textContent} ${r.querySelector(".how")?.textContent}`);
-    expect(log).toEqual(["Main scans picked for 12 subjects", "Read 120 files, 12 new subjects", "Added as a dataset anonymised, PatientID holds the subject code"]);
+    expect(log).toEqual(["Body part ", "Main scans picked for 12 subjects", "Read 120 files, 12 new subjects", "Added as a dataset anonymised, PatientID holds the subject code"]);
   });
 
   it("shows the running job of a dataset with its progress and Stop, which asks the engine to stop it", async () => {
@@ -338,6 +367,9 @@ describe("datasets and cohorts on one page", () => {
     expect(d.querySelector(".dp-ev.release")).not.toBeNull();
     // where its subjects come from: the dataset that feeds it, and the one that only holds some
     expect([...d.querySelectorAll(".dp-src-line")].map((l) => l.textContent)).toEqual(["study-bigfeeds it12 subjects", "ward-fholds some4 subjects"]);
+    // where it is: its members' scans sorted, body part and post-contrast, their main scans
+    expect([...d.querySelectorAll(".dp-step-title")].map((s) => s.textContent)).toEqual(["Sorted", "Body part", "Post-contrast", "Main scans"]);
+    expect([...d.querySelectorAll(".dp-step-what")].map((s) => s.textContent)).toEqual(["52 scans · 3 to look at", "40 of 52 answered · 2 to look at", "not available", "23 picked"]);
     // what its subjects have
     expect([...d.querySelectorAll(".dp-kind")].map((k) => k.textContent)).toEqual(["T1w11 of 16", "FLAIR9 of 16"]);
     expect(text()).toContain("Clinical: EDSS for 10 of 16, Relapse for 3 of 16");

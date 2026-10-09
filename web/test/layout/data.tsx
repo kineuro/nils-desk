@@ -101,6 +101,9 @@ function summary(s: Spec) {
   steps.push(
     step("read", read ? "done" : "waiting", { files: read ? s.files : 0, refused: read ? 216 : 0, reads: read ? 1 : 0 }, read ? 69 : null, 4),
     step("sorted", read ? "done" : "waiting", { scans: s.scans, of: s.scans, look: s.look, unsorted: 0 }, read ? 66 : null, 6),
+    // record 56: body part and post-contrast, steps of their own; a body-part model is served here, a post-contrast one is not
+    step("body_part", read ? "done" : "waiting", { run: read ? 2 : null, served: true, answered: read ? s.scans - 12 : 0, look: read ? 12 : 0, of: s.scans, jobs: read ? [11] : [] }, read ? 62 : null, read ? 11 : null),
+    step("post_contrast", "off", { run: null, served: false, answered: 0, look: 0, of: s.scans, jobs: [] }, null),
     step("main_scans", read ? "done" : "waiting", { picked: read ? 97 : 0, borders: read ? 76 : 0 }, read ? 64 : null, 8),
     step("pictures", read ? "done" : "waiting", { made: s.scans, of: s.scans, in_sort: true }, read ? 63 : null, 6),
   );
@@ -199,6 +202,11 @@ const DETAIL = {
     { id: 1, name: "ms-followup-r1", layout: "bids", subjects: 40, finished_at: "2026-09-20T10:00:00Z", handed_over: true },
   ],
   clinical: [{ kind: "EDSS", primary: true, subjects: 41 }],
+  steps: [
+    step("sorted", "done", { scans: 108, of: 108, look: 9, unsorted: 0 }, null),
+    step("body_part", "done", { run: 2, served: true, answered: 96, look: 12, of: 108, jobs: [11] }, 62, 11),
+    step("post_contrast", "off", { run: null, served: false, answered: 0, look: 0, of: 108, jobs: [] }, null),
+  ],
 };
 
 const JOBS = [

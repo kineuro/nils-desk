@@ -17,7 +17,11 @@ import type { NextStep } from "./steps";
 
 export const SUMMARY_DOOR = "GET /api/datasets/{name}/summary";
 
-export type StepName = "found" | "pseudonymised" | "read" | "sorted" | "main_scans" | "pictures" | "views";
+export type StepName = "found" | "pseudonymised" | "read" | "sorted" | "body_part" | "post_contrast" | "main_scans" | "pictures" | "views";
+
+/** The operations of their own, each a step of a dataset and of a cohort with its own review (record 56, section 2): sorting asks nothing about either. */
+export type Operation = "body_part" | "post_contrast";
+export const OPERATIONS: Operation[] = ["body_part", "post_contrast"];
 export type StepState = "done" | "running" | "queued" | "waiting" | "off";
 
 /** One step of where a dataset is, as the summary door answers it: its state, the job that did it last and the counts the step has. */
@@ -43,6 +47,11 @@ export interface SummaryStep {
   borders?: number;
   made?: number;
   in_sort?: boolean;
+  /** Body part and post-contrast: the run over the scans, whether a model is served for it, the scans its model answered, and the jobs of its runs over them. */
+  run?: number | null;
+  served?: boolean;
+  answered?: number;
+  jobs?: number[];
 }
 
 /** What a dataset holds and where it is (`GET /api/datasets/{name}/summary`). */
@@ -139,8 +148,35 @@ export function stepOf(s: DatasetSummary | null, name: StepName): SummaryStep | 
 
 /** The steps a detail shows, in order: the pseudonymisation only where the dataset has originals. */
 export function railSteps(s: DatasetSummary): SummaryStep[] {
-  const order: StepName[] = ["found", "pseudonymised", "read", "sorted", "main_scans", "pictures", "views"];
+  const order: StepName[] = ["found", "pseudonymised", "read", "sorted", "body_part", "post_contrast", "main_scans", "pictures", "views"];
   return order.map((name) => stepOf(s, name)).filter((x): x is SummaryStep => x !== null);
+}
+
+/**
+ * A cohort's rail: its members' scans sorted, body part and post-contrast as
+ * its document says them, then the main scans of its members as the picks
+ * summary counts them; nothing from an engine whose cohort has no steps.
+ */
+export function cohortRail(steps: SummaryStep[] | null | undefined, lines: { picked: number; borders: number }[] | null): SummaryStep[] {
+  if (!Array.isArray(steps) || steps.length === 0) return [];
+  const order: StepName[] = ["sorted", "body_part", "post_contrast"];
+  const out = order.map((name) => steps.find((x) => x.step === name) ?? null).filter((x): x is SummaryStep => x !== null);
+  if (lines) {
+    const picked = lines.reduce((a, l) => a + l.picked, 0);
+    const borders = lines.reduce((a, l) => a + l.borders, 0);
+    out.push({ step: "main_scans", state: picked > 0 || borders > 0 ? "done" : "waiting", job: null, started_at: null, finished_at: null, progress: null, picked, borders });
+  }
+  return out;
+}
+
+/** The operation whose run a job is, from the summary's steps: the run it names, or one of the jobs of its runs. */
+export function operationOf(s: Pick<DatasetSummary, "steps"> | null, job: number | null | undefined): Operation | null {
+  if (!s || job === null || job === undefined) return null;
+  for (const op of OPERATIONS) {
+    const st = s.steps.find((x) => x.step === op);
+    if (st && (st.job === job || (st.jobs ?? []).includes(job))) return op;
+  }
+  return null;
 }
 
 // ---------------------------------------------------------------- times
@@ -195,6 +231,8 @@ export interface StepWords {
   when: string;
   /** The step runs now: its "when" is said in the brand's colour. */
   now: boolean;
+  /** Why a step is not available, for the step's title. */
+  hint?: string;
 }
 
 const TITLE: Record<StepName, string> = {
@@ -202,6 +240,8 @@ const TITLE: Record<StepName, string> = {
   pseudonymised: "Pseudonymised",
   read: "Read",
   sorted: "Sorted",
+  body_part: "Body part",
+  post_contrast: "Post-contrast",
   main_scans: "Main scans",
   pictures: "Pictures",
   views: "3D views",
@@ -221,6 +261,7 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
   } else if (queued) when = "next";
   const v = (k: keyof SummaryStep) => (typeof s[k] === "number" ? (s[k] as number) : 0);
   let what = "";
+  let hint: string | undefined;
   switch (s.step) {
     case "found":
       what = typeof s.files === "number" ? `${n(s.files)} ${s.files === 1 ? "file" : "files"}` : "not counted yet";
@@ -238,6 +279,22 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
       if (v("look") > 0) what += ` · ${n(v("look"))} to look at`;
       if (v("unsorted") > 0) what += ` · ${n(v("unsorted"))} not sorted`;
       break;
+    case "body_part":
+    case "post_contrast":
+      if (s.state === "off") {
+        what = "not available";
+        hint =
+          s.step === "body_part"
+            ? "No body-part model is served here yet."
+            : "Neither the post-contrast label nor a post-contrast model is served here yet.";
+      } else if (running) {
+        const r = runningOf(s.progress, s.started_at, now.getTime());
+        what = r.done !== null && r.of !== null ? `${n(r.done)} of ${n(r.of)}` : "running";
+      } else if (queued) what = "waits its turn";
+      else if (s.state === "waiting") what = "not run yet";
+      else what = v("answered") === 0 ? "none answered" : v("answered") >= v("of") ? `${n(v("answered"))} answered` : `${n(v("answered"))} of ${n(v("of"))} answered`;
+      if (v("look") > 0) what += ` · ${n(v("look"))} to look at`;
+      break;
     case "main_scans":
       what = s.state === "off" ? "off" : v("picked") === 0 && v("borders") === 0 ? "none yet" : `${n(v("picked"))} picked`;
       if (s.state !== "off" && v("borders") > 0) what += ` · ${n(v("borders"))} borders`;
@@ -254,7 +311,7 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
   }
   // a step that waits has no time worth saying
   if (s.state === "waiting" || s.state === "off") when = "";
-  return { title, what, when, now: running };
+  return { title, what, when, now: running, ...(hint ? { hint } : {}) };
 }
 
 // ---------------------------------------------------------------- a card in words
@@ -505,8 +562,13 @@ const ns = (v: unknown, one: string, many: string) => {
   return `${n(k)} ${k === 1 ? one : many}`;
 };
 
-/** A finished job of the dataset in a person's words: "Read · 1,420 files, 12 new subjects". */
-export function logLine(j: JobRow, now = new Date()): LogLine {
+/** What a model's run is called, by its operation where the summary names it. */
+function runTitle(op: Operation | null | undefined): string {
+  return op === "body_part" ? "Body part" : op === "post_contrast" ? "Post-contrast" : "Model run";
+}
+
+/** A finished job of the dataset in a person's words: "Read · 1,420 files, 12 new subjects"; a model's run by its operation, where `op` names it. */
+export function logLine(j: JobRow, now = new Date(), op?: Operation | null): LogLine {
   const p = (j.progress ?? {}) as Record<string, unknown>;
   const r = (j.result ?? {}) as Record<string, unknown>;
   const failed = j.state === "failed";
@@ -547,13 +609,15 @@ export function logLine(j: JobRow, now = new Date()): LogLine {
       return { id: j.id, at, what: end("Pictures made", "Pictures"), how: "", failed, batch: null };
     case "originals":
       return { id: j.id, at, what: end("Originals", "Originals"), how: "", failed, batch: null };
+    case "pipeline":
+      return { id: j.id, at, what: end(runTitle(op), runTitle(op)), how: "", failed, batch: null };
     default:
       return { id: j.id, at, what: end(verb, verb), how: "", failed, batch: null };
   }
 }
 
-/** What a running job of a dataset is doing, in its log's box. */
-export function doingTitle(j: Pick<JobRow, "kind" | "state">): string {
+/** What a running job of a dataset is doing, in its log's box; a model's run by its operation, where `op` names it. */
+export function doingTitle(j: Pick<JobRow, "kind" | "state">, op?: Operation | null): string {
   const verb = (j.kind || "").toLowerCase();
   const doing: Record<string, string> = {
     digest: "Reading",
@@ -565,6 +629,7 @@ export function doingTitle(j: Pick<JobRow, "kind" | "state">): string {
     pyramid: "Preparing 3D views",
     preview: "Preparing pictures",
     originals: "Acting on the originals",
+    pipeline: op === "body_part" ? "Finding the body part" : op === "post_contrast" ? "Finding post-contrast scans" : "Running a model",
   };
   const w = doing[verb] ?? `Running ${verb}`;
   if (j.state === "queued") return `${w}: next`;
@@ -574,7 +639,7 @@ export function doingTitle(j: Pick<JobRow, "kind" | "state">): string {
 
 /** The unit a running job counts in. */
 export function unitOf(kind: string): string {
-  return kind === "pyramid" || kind === "preview" || kind === "classify" ? "scans" : "files";
+  return kind === "pyramid" || kind === "preview" || kind === "classify" || kind === "pipeline" ? "scans" : "files";
 }
 
 /** The words under a running job's bar: "57 of 1,001 scans · about 11 min left · in the background". */

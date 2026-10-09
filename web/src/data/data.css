@@ -159,10 +159,13 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 @media (max-width: 1100px) {
   .dp-col { border-right: 0; border-bottom: 1px solid var(--n-line); }
   .dp-col:last-child { border-bottom: 0; }
+  /* a rail of more than six steps, four to a row, the line ending with each row */
+  .dp-steps.many { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 0.875rem; }
+  .dp-steps.many .dp-step:nth-child(4n) .link { display: none; }
 }
 @media (max-width: 760px) {
   /* the steps two to a row, without the line between them */
-  .dp-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 0.875rem; }
+  .dp-steps, .dp-steps.many { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 0.875rem; }
   .dp-step-mark .link { display: none; }
   /* how a cohort grew, one event a line */
   .dp-grew { height: auto; display: flex; flex-direction: column; gap: 0.5rem; }
