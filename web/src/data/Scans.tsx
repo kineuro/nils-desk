@@ -5,7 +5,7 @@
 // light viewer, picture first. What picking main scans found is one line a
 // role above the grid; picking itself is a pipeline step, not a button here.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { href, narrow } from "../routes";
 import { messageOf } from "../settings/common";
@@ -14,7 +14,10 @@ import { Wait } from "../ui/Wait";
 import type { Dataset } from "./datasets";
 import { maySeePicks, pickLineWords, picksSummary, type PickLine } from "./picks";
 import { markOpen, ScanViewer } from "./ScanViewer";
-import { groupScans, mayListScans, questionWords, SCANS_PAGE, scanDoors, scanFacts, type ScanPage } from "./scans";
+import { fillPictures, groupScans, mayListScans, questionWords, SCANS_PAGE, scanDoors, scanFacts, type ScanPage } from "./scans";
+
+/** The pauses before the page is asked again while pictures are being made, in milliseconds. */
+export const PICTURE_POLL = [700, 1500, 2500, 4000, 6000, 8000, 10000];
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; at: ScanPage };
 
@@ -54,6 +57,43 @@ export function Scans({ caps, dataset: d }: { caps: Capabilities; dataset: Datas
   }, [lists, d.name]);
 
   const page = afters.length - 1;
+
+  // pictures still being made: the page asked again after short and then
+  // longer pauses for about half a minute, each picture that came filled in
+  // its place; turning back to a page reads it again
+  const latest = useRef(load);
+  latest.current = load;
+  const after = afters[page];
+  const missing = load.kind === "ready" && load.at.pictures?.shown ? load.at.pictures.missing : 0;
+  const waiting = missing > 0;
+  useEffect(() => {
+    if (!waiting || !lists) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const pauses = [...PICTURE_POLL];
+    const tick = () => {
+      const ms = pauses.shift();
+      if (ms === undefined) return;
+      timer = setTimeout(() => {
+        scanDoors.page(d.name, after).then(
+          (fresh) => {
+            if (!alive) return;
+            const was = latest.current;
+            if (was.kind !== "ready") return;
+            const at = fillPictures(was.at, fresh);
+            if (at !== was.at) setLoad({ kind: "ready", at });
+            if ((at.pictures?.missing ?? 0) > 0) tick();
+          },
+          () => alive && tick(),
+        );
+      }, ms);
+    };
+    tick();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [waiting, lists, d.name, after]);
   const turn = (to: number) => {
     if (load.kind !== "ready") return;
     if (to > page && load.at.next !== null) {
@@ -112,7 +152,7 @@ export function Scans({ caps, dataset: d }: { caps: Capabilities; dataset: Datas
                                 setOpen(sc.id);
                               }}
                             >
-                              {sc.picture ? <img src={sc.picture} alt="" loading="lazy" decoding="async" /> : <span className="scan-blank" />}
+                              {sc.picture ? <img src={sc.picture} alt="" loading="lazy" decoding="async" /> : <span className={waiting ? "scan-blank making" : "scan-blank"} title={waiting ? "Picture being made" : undefined} />}
                               <span className="scan-name">{sc.name}</span>
                             </button>
                           </li>

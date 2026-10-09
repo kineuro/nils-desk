@@ -138,6 +138,25 @@ export function picturesOf(p: ScansAnswer["pictures"]): PagePictures | null {
   };
 }
 
+/**
+ * The pictures a page read again brought, filled into the page shown: a
+ * scan with no picture takes the new one, nothing else moves; the page's
+ * pictures block is the new one. The same page back where nothing came.
+ */
+export function fillPictures(was: ScanPage, fresh: ScanPage): ScanPage {
+  const pics = new Map(fresh.scans.filter((s) => s.picture !== null).map((s) => [s.id, s.picture]));
+  let changed = false;
+  const scans = was.scans.map((s) => {
+    const p = s.picture === null ? pics.get(s.id) : undefined;
+    if (!p) return s;
+    changed = true;
+    return { ...s, picture: p };
+  });
+  const missing = fresh.pictures?.missing ?? 0;
+  if (!changed && (was.pictures?.missing ?? 0) === missing) return was;
+  return { ...was, scans, pictures: was.pictures ? { ...was.pictures, missing } : fresh.pictures };
+}
+
 export const scanDoors = {
   /** A page of the dataset's scans with their pictures, after the stack the page before ended on: fifty pictures in one request. */
   page: (dataset: string, after: number | null = null): Promise<ScanPage> => {

@@ -1554,3 +1554,7 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
 .picture-wait progress { width: 8rem; }
 .picture-wait.small, .picture-failed.small { min-height: 0; font-size: 0.72rem; }
 .picture-wait.small progress { width: 4rem; }
+.scan-tile .scan-blank.making { background: linear-gradient(100deg, var(--n-bg-sunken) 30%, var(--n-bg-hover) 50%, var(--n-bg-sunken) 70%) 0 0 / 300% 100%; animation: scan-making 1.4s linear infinite; }
+@keyframes scan-making { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .scan-tile .scan-blank.making { animation: none; } }
+.scan-canvas .scan-wait { z-index: 2; }

@@ -182,6 +182,44 @@ describe("the scans of a dataset, on the page", () => {
     expect(el.textContent).toContain("1 / 2");
   });
 
+  it("shows a light placeholder for a picture being made and fills it when it comes", async () => {
+    vi.useFakeTimers();
+    let made = false;
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      calls.push({ method: init.method ?? "GET", url });
+      if (url === "/api/datasets/ms-a/scans?pictures=1&limit=50") {
+        const rows = made ? ROWS.slice(0, 2) : [ROWS[0], { ...ROWS[1], picture: null }];
+        return new Response(JSON.stringify({ total: 2, scans: rows, next: null, pictures: { shown: true, why: null, missing: made ? 0 : 1, place: "work" } }));
+      }
+      return new Response("{}", { status: 404 });
+    });
+    act(() => root.render(<Scans caps={caps()} dataset={dataset()} />));
+    await settle();
+    act(() => [...el.querySelectorAll<HTMLButtonElement>(".scan-tile")][0].click());
+    const blank = el.querySelector(".scan-tile .scan-blank");
+    expect(blank?.classList.contains("making")).toBe(true);
+    expect(blank?.getAttribute("title")).toBe("Picture being made");
+    // not there at the first ask again: asked again after a longer pause
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+    expect(calls.filter((c) => c.url.startsWith("/api/datasets/"))).toHaveLength(2);
+    made = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect([...el.querySelectorAll(".scan-tile img")].map((i) => i.getAttribute("src"))).toEqual(["data:image/jpeg;base64,11", "data:image/jpeg;base64,12"]);
+    expect(el.querySelector(".scan-pictures")).toBeNull();
+    // the scan open stays open
+    expect(el.querySelector("[data-testid=viewer]")?.getAttribute("data-stack")).toBe("11");
+    // nothing more is asked once every picture is there
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(calls.filter((c) => c.url.startsWith("/api/datasets/"))).toHaveLength(3);
+    vi.useRealTimers();
+  });
+
   it("says No scans yet for a dataset nothing has sorted, and asks nothing", async () => {
     act(() => root.render(<Scans caps={caps()} dataset={dataset(0)} />));
     await settle();
