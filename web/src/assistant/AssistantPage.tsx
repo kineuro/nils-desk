@@ -45,7 +45,7 @@ import { SharedList, SharedPage } from "./SharedPages";
 import { Starters } from "./Starters";
 import { ApprovalCardView, PlanPanel, StatusLine } from "./Cards";
 import { agentFor, cardOfPlan, planShown } from "./events";
-import { liveLine, nothingYet, STARTING_AFTER_MS } from "./steps";
+import { liveLine } from "./steps";
 import { askedBefore, COMMANDS, commandOf, commandsFor, lastAsked } from "./thread";
 import { TurnView } from "./TurnView";
 import { QueryCard, type VersionState } from "./QueryCard";
@@ -183,16 +183,6 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
         : "Nothing was summarized: too little has been said since the conversation was last summarized.",
     );
   }, [talk.context, pane.busy]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // a turn that has said nothing for five seconds says the model is starting, until its first step or word (2026-10-09)
-  const quiet = nothingYet(pane);
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    setSlow(false);
-    if (!quiet) return;
-    const t = setTimeout(() => setSlow(true), STARTING_AFTER_MS);
-    return () => clearTimeout(t);
-  }, [quiet]);
 
   // the thread stays at its foot after each change while the person reads there
   useLayoutEffect(() => {
@@ -400,7 +390,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   }, [typing === null]); // eslint-disable-line react-hooks/exhaustive-deps
   const mentionOffer = typing !== null && offered.length === 0 ? mentionables(typing, mentionable ?? []) : [];
   const ended = ending(pane.settled);
-  const status = liveLine(pane, slow);
+  const status = liveLine(pane, talk.slow);
   const title = meta?.title ?? (conv || opened ? "A conversation" : "New conversation");
   const revise = () => input.current?.focus();
   /** A proposed version, or the card the conversation was opened on, as its query card: one line while the panel is open. */

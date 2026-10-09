@@ -11,6 +11,7 @@ import { type ChatContext, type ChatVersions, chats, chatsKept, type Rating } fr
 import { assistant, StaleProposal, type Delegation, type Plan } from "./client";
 import { after, positionOf, type Position } from "./events";
 import { type Change, type Chunk, empty, fromHistory, reduce, type PaneState, type Proposal, withStored } from "./parts";
+import { nothingYet, STARTING_AFTER_MS } from "./steps";
 
 const TOKEN_PUSH_MS = 5 * 60_000;
 /** The long poll's pause while a delegate still works, where the stream is not served as events. */
@@ -32,6 +33,8 @@ export interface Conversing {
   plans: Plan[];
   /** When the running turn started, for the wait's clock. */
   since: number;
+  /** The running turn has said nothing for five seconds: its live line says the model is starting. */
+  slow: boolean;
   why: string | null;
   /** How full the conversation's context is, as the assistant last said (the chat, slice 3). */
   context: ChatContext | null;
@@ -70,6 +73,15 @@ export function useConversation(station: string, conv: string | null): Conversin
   const queued = useRef<{ id: string; words: string; beside: Beside } | null>(null);
   // whether the assistant serves the stream as server-sent events; learned on the first try
   const streamed = useRef(true);
+  // a turn that has said nothing for five seconds says the model is starting, until its first step or word (2026-10-09)
+  const quiet = nothingYet(pane);
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    setSlow(false);
+    if (!quiet) return;
+    const t = setTimeout(() => setSlow(true), STARTING_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [quiet]);
 
   // the reducer's state is kept in a ref as well, so the reading loop decides on what it just applied
   const apply = useCallback((f: (s: PaneState) => PaneState) => {
@@ -316,5 +328,5 @@ export function useConversation(station: string, conv: string | null): Conversin
     );
   };
 
-  return { pane, plans, since, why, context, versions, ratings, reset, made, send, summarize, sendWhenOpen, stop, decide, confirm, decideChange, rate };
+  return { pane, plans, since, slow: quiet && slow, why, context, versions, ratings, reset, made, send, summarize, sendWhenOpen, stop, decide, confirm, decideChange, rate };
 }
