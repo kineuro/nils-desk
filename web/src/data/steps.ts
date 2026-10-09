@@ -7,7 +7,7 @@
 
 import { door } from "../ask/client";
 import type { Place } from "../objects/client";
-import { newInOriginals, type Dataset, type DatasetState, type Layout, type PlaceAnswer } from "./datasets";
+import { newInOriginals, type Dataset, type DatasetFields, type DatasetState, type Layout, type PlaceAnswer } from "./datasets";
 import { notReadOf } from "./layout";
 
 /** A folder under a root, as the engine lists it: whether it is a dataset yet. The list looks inside none of them. */
@@ -59,12 +59,19 @@ export const roots = {
   /** One folder looked at, once. */
   folder: (root: number, name: string) => door<FolderLook>("GET", `/api/places/${root}/folders/${encodeURIComponent(name)}`),
   /** One folder of a root made a dataset, named by the engine after the folder; its structure is read now. */
-  addDataset: (root: string, folder: string) => door<PlaceAnswer & { not_read?: string | null }>("POST", "/api/places", { role: "source", root, folder }),
+  /** A folder under a root added as a dataset; anonymised data says its IDs with it (`patient_id`, `subjects`), so it is read at once. */
+  addDataset: (root: string, folder: string, ids: Pick<DatasetFields, "patient_id" | "subjects"> = {}) =>
+    door<PlaceAnswer & { not_read?: string | null }>("POST", "/api/places", { role: "source", root, folder, ...ids }),
 };
 
 /** The roots among the places: the folders datasets live in. */
 export function rootsOf(places: Place[]): Place[] {
   return places.filter((p) => p.role === "source" && p.retired_at === null && p.dataset?.kind === "root");
+}
+
+/** Whether a folder looked at would be anonymised data, which says what PatientID holds and how subjects are found before it is read. */
+export function asksIds(l: Pick<FolderLook, "layout">): boolean {
+  return l.layout?.state === "anonymised";
 }
 
 /** The state word a folder's structure would give the dataset. */

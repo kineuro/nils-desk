@@ -14,7 +14,6 @@ import { may } from "../grants";
 import { placesKept } from "../objects/kept";
 import { href, narrow } from "../routes";
 import { MoreMenu } from "../settings/cards";
-import { messageOf } from "../settings/common";
 import type { Install } from "../settings/supervise";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
@@ -30,6 +29,7 @@ import { Scans } from "./Scans";
 import { maySeePicks } from "./picks";
 import { mayListScans } from "./scans";
 import { fileWords, whenWords } from "./sources";
+import { plainError } from "./plain";
 import { certainty, certaintyWords, kindWords, nextStep, stepCommand, type StepId } from "./steps";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[]; rates: Rates | null };
@@ -51,7 +51,10 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   const [adding, setAdding] = useState(false);
   /** The dialog a dataset's step opens. */
   const [opened, setOpened] = useState<{ kind: "sort-files" | "set-ids"; dataset: Dataset } | null>(null);
-  const [said, setSaid] = useState<string | null>(null);
+  /** What the page last said: a done act's words, or a refusal as one plain line with the engine's words behind a "?". */
+  const [said, setSaid] = useState<{ words: string; detail?: string } | null>(null);
+  const say = (words: string) => setSaid({ words });
+  const failed = (e: unknown) => setSaid(plainError(e));
   const places = useKept(placesKept);
   const jobs = useLiveJobs(caps);
   const works = may(caps, "data:work");
@@ -96,7 +99,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   const rates = load.kind === "ready" ? load.rates : null;
   const current = list.find((s) => s.name === chosen) ?? list[0] ?? null;
   const changed = (words: string) => {
-    setSaid(words);
+    say(words);
     void placesKept.refresh().catch(() => undefined);
     onChanged();
     jobs.refresh();
@@ -112,7 +115,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
     jobsDoor
       .enqueue(c.command, c.name, c.then)
       .then((j) => changed(`${d.name}: started (job ${j.job}).`))
-      .catch((e: unknown) => setSaid(messageOf(e)));
+      .catch(failed);
   };
 
   const readAgain = (b: Batch, d: Dataset) => {
@@ -120,10 +123,10 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
     jobsDoor
       .enqueue(["digest", "--name", b.name, `@${d.name}`], b.name)
       .then((j) => {
-        setSaid(`${d.name} is read again (job ${j.job}).`);
+        say(`${d.name} is read again (job ${j.job}).`);
         jobs.refresh();
       })
-      .catch((e: Error) => setSaid(e.message));
+      .catch(failed);
   };
 
   const finishing = (d: Dataset): Finishing => ({
@@ -149,9 +152,19 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
           </button>
         )}
       </div>
-      {said && <p className="meta">{said}</p>}
+      {said && (
+        <p className={said.detail === undefined ? "meta" : "warn"} role={said.detail === undefined ? undefined : "alert"}>
+          {said.words}
+          {said.detail !== undefined && <Hint text={said.detail} />}
+        </p>
+      )}
       {load.kind === "loading" && <Wait phase="reading the datasets" since={load.since} size="panel" />}
-      {load.kind === "failed" && <p className="warn">The datasets could not be read: {load.why}</p>}
+      {load.kind === "failed" && (
+        <p className="warn">
+          The datasets could not be read.
+          <Hint text={load.why} />
+        </p>
+      )}
       {load.kind === "ready" && list.length === 0 && <p className="meta">No dataset yet.</p>}
       {list.length > 0 && (
         <div className="sgrid">
@@ -170,7 +183,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
         </div>
       )}
       {current && (mayListScans(caps) || maySeePicks(caps)) && <Scans caps={caps} dataset={current} />}
-      <NowSection caps={caps} jobs={jobs} onSaid={setSaid} />
+      <NowSection caps={caps} jobs={jobs} onSaid={say} onFailed={failed} />
       {current && current.digests.count > 0 && <Batches dataset={current} works={works && whyOf(current) === null} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
       {bringing && (
         <BringInNew

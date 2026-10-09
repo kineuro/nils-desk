@@ -10,9 +10,11 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href } from "../routes";
+import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { jobs as jobsDoor, type ChainedJob } from "./datasets";
 import { isOpen, jobCards, jobsWords, liveJobs, type JobCard, type Live } from "./now";
+import { plainError } from "./plain";
 
 export interface LiveJobs {
   /** The open jobs, null until the first read. */
@@ -75,7 +77,7 @@ export function useLiveJobs(caps: Capabilities): LiveJobs {
   };
 }
 
-export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: LiveJobs; onSaid: (words: string) => void }) {
+export function NowSection({ caps, jobs, onSaid, onFailed }: { caps: Capabilities; jobs: LiveJobs; onSaid: (words: string) => void; onFailed?: (e: unknown) => void }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -92,7 +94,7 @@ export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: L
         onSaid(c.kind === "running" ? `Job ${c.id} is stopping.` : `Job ${c.id} is dropped from the queue.`);
         jobs.refresh();
       })
-      .catch((e: Error) => onSaid(e.message));
+      .catch((e: Error) => (onFailed ? onFailed(e) : onSaid(e.message)));
   };
   const again = (c: JobCard) => {
     const next = c.failed?.next;
@@ -104,7 +106,7 @@ export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: L
         onSaid(`Queued again as job ${j.job}.`);
         jobs.refresh();
       })
-      .catch((e: Error) => onSaid(e.message));
+      .catch((e: Error) => (onFailed ? onFailed(e) : onSaid(e.message)));
   };
 
   return (
@@ -164,7 +166,10 @@ export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: L
               {c.cancel?.refusal && <div className="how meta">{c.cancel.refusal}</div>}
               {c.failed && (
                 <div className="how">
-                  <span className="warn">{c.failed.error}</span>
+                  <span className="warn">
+                    {plainError(c.failed.error, "This job failed.").words}
+                    <Hint text={c.failed.error} />
+                  </span>
                 </div>
               )}
             </div>
