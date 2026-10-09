@@ -26,6 +26,11 @@ export function ApprovalCardView({ card, onDecide }: { card: ApprovalCard; onDec
           </ul>
         )}
         {card.state === "open" && !onDecide && card.elsewhere && <p className="meta">{card.elsewhere}</p>}
+        {card.state === "approved" && card.next && (
+          <p className="meta">
+            <a href={card.next.href}>{card.next.words}</a>
+          </p>
+        )}
       </div>
       {card.state === "open" && onDecide && (
         <div className="row">
@@ -38,7 +43,7 @@ export function ApprovalCardView({ card, onDecide }: { card: ApprovalCard; onDec
         </div>
       )}
       {(card.state === "approved" || card.state === "declined") && (
-        <span className={card.state === "approved" ? "tag ok" : "tag"}>{card.state === "approved" ? (card.approve === "Confirm" ? "confirmed" : "accepted") : "disregarded"}</span>
+        <span className={card.state === "approved" ? "tag ok" : "tag"}>{card.state === "approved" ? (card.approve === "Confirm" ? "confirmed" : card.approve === "Approve" ? "recorded" : "accepted") : "disregarded"}</span>
       )}
     </div>
   );

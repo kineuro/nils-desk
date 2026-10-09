@@ -45,7 +45,10 @@
 //       query_version (with ref.document) is decided as a move_proposal is
 //       today: POST /assistant/conversations/<id>/feedback. Every other kind:
 //       POST /assistant/changes/<id>/decide {"verdict": "approved" | "declined"},
-//       and the assistant applies it in application code.
+//       and the assistant applies it in application code. The assistant's
+//       analysis_plan arrives as job_plan and its overlay as sorting_words; an
+//       identity_rule is only recorded on approval, and the card then points to
+//       the dataset's page, where the rule is changed.
 //   {kind: "clarification", question: string,
 //    options: {label: string, count?: number | null}[]}
 //       From `ask_user`; the turn ends there. A click sends the label as the
@@ -58,6 +61,7 @@
 
 import type { Capabilities } from "../capabilities";
 import type { Plan } from "./client";
+import { href } from "../routes";
 import type { Change, Proposal } from "./parts";
 import { stationOf, stationsServed } from "./stations";
 
@@ -75,7 +79,7 @@ export interface PlanItem {
   status: PlanStatus;
 }
 
-export type ChangeKind = "query_version" | "job_plan" | "sorting_words" | "identity_merge";
+export type ChangeKind = "query_version" | "job_plan" | "sorting_words" | "identity_merge" | "identity_rule";
 
 export type OneChatPart =
   | { kind: "progress"; call: string | null; text: string }
@@ -92,7 +96,7 @@ export type OneChatPart =
   | { kind: "clarification"; question: string; options: { label: string; count: number | null }[] };
 
 const STATUSES: PlanStatus[] = ["pending", "running", "done", "failed", "skipped"];
-const CHANGES: ChangeKind[] = ["query_version", "job_plan", "sorting_words", "identity_merge"];
+const CHANGES: ChangeKind[] = ["query_version", "job_plan", "sorting_words", "identity_merge", "identity_rule"];
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
@@ -143,7 +147,7 @@ export function asOneChatPart(v: unknown): OneChatPart | null {
   }
 }
 
-/** The one approval card, whatever asked for it: a query version, a job plan, sorting words or an identity merge. */
+/** The one approval card, whatever asked for it: a query version, a job plan, sorting words, an identity merge or an identity rule. */
 export interface ApprovalCard {
   /** Unique among the cards a turn shows. */
   key: string;
@@ -156,6 +160,8 @@ export interface ApprovalCard {
   elsewhere?: string;
   approve: string;
   decline: string;
+  /** Where the person goes on once it is approved, when approving only records it (an identity rule is changed on its dataset's page). */
+  next?: { href: string; words: string };
 }
 
 /** What each kind of change is called on its card when the agent gave no title. */
@@ -164,6 +170,7 @@ export const CHANGE_TITLES: Record<ChangeKind, string> = {
   job_plan: "A plan to run",
   sorting_words: "New sorting words",
   identity_merge: "Two identities as one person",
+  identity_rule: "A new identity rule",
 };
 
 /** A query version (today's move_proposal) on the approval card; decided here only where the page passes a decider, else where `elsewhere` says. */
@@ -190,9 +197,18 @@ export function cardOfChange(c: Change): ApprovalCard {
     sentence: c.sentence,
     lines: c.lines,
     state: c.decided ?? "open",
-    approve: c.change === "job_plan" ? "Confirm" : "Accept",
+    approve: c.change === "job_plan" ? "Confirm" : c.change === "identity_rule" ? "Approve" : "Accept",
     decline: "Disregard",
+    ...(c.change === "identity_rule" ? { next: ruleNext(c.lines) } : {}),
   };
+}
+
+/** An identity rule is recorded on approval and changed on its dataset's page; the card's first line names the dataset. */
+function ruleNext(lines: string[]): { href: string; words: string } {
+  const name = lines.map((l) => /^dataset (.+?): /.exec(l)?.[1]).find((n) => n !== undefined);
+  return name
+    ? { href: href("data", "datasets", name), words: `Change it on ${name}'s page, then digest it again` }
+    : { href: href("data", "datasets"), words: "Change it on the dataset's page, then digest it again" };
 }
 
 /** A job plan from the inbox (today's Confirm card) on the approval card: its steps as lines; declining means saying what to change. */

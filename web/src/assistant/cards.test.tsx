@@ -60,6 +60,15 @@ describe("a turn in the one chat", () => {
     expect(html).not.toContain("<button");
   });
 
+  it("approves an identity rule as a record and points to the dataset's page", () => {
+    const open = renderToStaticMarkup(<ApprovalCardView card={cardOfChange({ id: "r", change: "identity_rule", title: null, sentence: "Tell people apart by PatientName", lines: ['dataset incoming: {"source":"PatientName"}'], turn: "a", decided: null })} onDecide={() => undefined} />);
+    expect(open).toContain("A new identity rule");
+    expect(open).toContain(">Approve<");
+    const done = renderToStaticMarkup(<ApprovalCardView card={cardOfChange({ id: "r", change: "identity_rule", title: null, sentence: "Tell people apart by PatientName", lines: ['dataset incoming: {"source":"PatientName"}'], turn: "a", decided: "approved" })} />);
+    expect(done).toContain("recorded");
+    expect(done).toContain('href="#data/datasets/incoming"');
+  });
+
   it("lists the plan with each item's state", () => {
     const html = renderToStaticMarkup(<PlanPanel items={[{ text: "Find the scans", status: "done" }, { text: "Count them", status: "running" }]} />);
     expect(html).toContain("plan-done");

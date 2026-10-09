@@ -42,6 +42,8 @@ describe("the one chat's parts", () => {
     });
     expect(asOneChatPart({ kind: "approval", id: "c2", change: "query_version", sentence: "x" })).toBeNull();
     expect(asOneChatPart({ kind: "approval", id: "c3", change: "drop_table", sentence: "x" })).toBeNull();
+    expect(asOneChatPart({ kind: "approval", id: "c4", change: "identity_rule", sentence: "By PatientName", lines: ["dataset incoming: {}"], ref: {} })?.kind).toBe("approval");
+    expect(asOneChatPart({ kind: "approval", id: "c5", change: "analysis_plan", sentence: "x" })).toBeNull();
     expect(asOneChatPart({ kind: "clarification", question: "Which cohort?", options: [{ label: "A", count: 3 }, { label: "B" }] })).toEqual({
       kind: "clarification",
       question: "Which cohort?",
