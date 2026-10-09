@@ -232,20 +232,20 @@ describe("a turn the runtime lost (2026-10-09)", () => {
     settlements: [{ submissionId: "sub_0", outcome: "completed" }],
   });
 
-  it("reads as over when it stored nothing for ten minutes and never settled, and says it did not finish", () => {
-    const s = fromHistory(history(11), empty(), now);
+  it("reads as over when it stored nothing for thirty minutes and never settled, and says it did not finish", () => {
+    const s = fromHistory(history(31), empty(), now);
     expect(s.busy).toBe(false);
     expect(s.turns[3]).toMatchObject({ id: "a1", done: true });
     expect(s.settled).toEqual({ outcome: "lost" });
   });
 
   it("is still running while what it stored last is younger, or when its messages carry no time", () => {
-    expect(fromHistory(history(9), empty(), now)).toMatchObject({ busy: true, settled: null });
+    expect(fromHistory(history(29), empty(), now)).toMatchObject({ busy: true, settled: null });
     expect(fromHistory(history(null), empty(), now)).toMatchObject({ busy: true, settled: null });
   });
 
   it("is never taken for lost on the stream, which brings it while the runtime works", () => {
-    const reset = reduce({ ...empty(), busy: true }, { type: "conversation-reset", snapshot: history(30) });
+    const reset = reduce({ ...empty(), busy: true }, { type: "conversation-reset", snapshot: history(45) });
     expect(reset).toMatchObject({ busy: true, settled: null });
   });
 });

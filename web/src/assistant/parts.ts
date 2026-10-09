@@ -370,11 +370,11 @@ export interface History {
 }
 
 /** How long a turn may store nothing before a page that opens its conversation takes it for lost. */
-export const LOST_AFTER_MS = 10 * 60_000;
+export const LOST_AFTER_MS = 30 * 60_000;
 
 /**
  * The pane from a history snapshot: what the live reducer would have built, minus what the store keeps only once per kind.
- * `now` is given where a page opens the conversation, which then takes a turn that stored nothing for ten minutes for lost.
+ * `now` is given where a page opens the conversation, which then takes a turn that stored nothing for thirty minutes for lost.
  */
 export function fromHistory(h: History, previous: PaneState = empty(), now?: number): PaneState {
   // a turn still running as the history is read is a submission with no settlement yet (2026-10-09): its answer stays open, and the page follows it
@@ -385,7 +385,7 @@ export function fromHistory(h: History, previous: PaneState = empty(), now?: num
     const at = Date.parse(m.timestamp ?? "");
     stored.set(m.submissionId, Math.max(stored.get(m.submissionId) ?? Number.NEGATIVE_INFINITY, Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at));
   }
-  // unless the runtime lost it: nothing stored for ten minutes, so a page never follows it forever; a turn of no known age runs, and the stream that brings a reset never takes one for lost
+  // unless the runtime lost it: nothing stored for thirty minutes (a long turn opened partway is not taken for lost), so a page never follows it forever; a turn of no known age runs, and the stream that brings a reset never takes one for lost
   const lost = (id: string) => {
     const at = stored.get(id) ?? Number.NEGATIVE_INFINITY;
     return now !== undefined && Number.isFinite(at) && now - at >= LOST_AFTER_MS;
