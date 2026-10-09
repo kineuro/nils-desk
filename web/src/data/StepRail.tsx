@@ -5,9 +5,11 @@
 // more than six steps (body part and post-contrast among them) folds to four
 // to a row on a narrower window. A step that waits on a person says so and is
 // marked next; the one a dataset opens in place (its pseudonymise step) is a
-// button that opens and closes it.
+// button that opens and closes it. Body part and post-contrast carry their Run
+// (record 56), held with its reason behind a "?" where the engine would refuse it.
 
 import type React from "react";
+import { Hint } from "../ui/Hint";
 import { stepWords, type StepName, type SummaryStep } from "./summary";
 
 /** What a step says instead of its counts while it waits on a person, and that it is next. */
@@ -22,7 +24,15 @@ export interface StepPick {
   onPick: () => void;
 }
 
-export function StepRail({ steps, now, says, pick }: { steps: SummaryStep[]; now: number; says?: StepSays; pick?: StepPick | null }) {
+/** A step's Run: its label, whether a press does nothing now and why, and what a press does. */
+export interface StepRunOffer {
+  label: string;
+  disabled: boolean;
+  why: string | null;
+  onRun: () => void;
+}
+
+export function StepRail({ steps, now, says, pick, run }: { steps: SummaryStep[]; now: number; says?: StepSays; pick?: StepPick | null; run?: Partial<Record<StepName, StepRunOffer>> }) {
   const at = new Date(now);
   return (
     <ol className={steps.length > 6 ? "dp-steps many" : "dp-steps"} style={{ "--steps": steps.length } as React.CSSProperties}>
@@ -31,6 +41,7 @@ export function StepRail({ steps, now, says, pick }: { steps: SummaryStep[]; now
         const said = says?.[st.step];
         const w = said ? { ...own, what: said.what, when: said.when } : own;
         const picked = pick?.step === st.step ? pick : null;
+        const offer = run?.[st.step];
         const cls = ["dp-step", st.state, said?.next ? "next" : null, picked?.open ? "open" : null].filter(Boolean).join(" ");
         return (
           <li key={st.step} className={cls} aria-current={st.state === "running" ? "step" : said?.next ? "step" : undefined} title={w.hint}>
@@ -47,6 +58,14 @@ export function StepRail({ steps, now, says, pick }: { steps: SummaryStep[]; now
             )}
             <span className="dp-step-what">{w.what}</span>
             <span className={w.now || said?.next ? "dp-step-when now" : "dp-step-when"}>{w.when || " "}</span>
+            {offer && (
+              <span className="dp-step-run">
+                <button type="button" className="button secondary small" disabled={offer.disabled} onClick={offer.onRun}>
+                  {offer.label}
+                </button>
+                {offer.why && <Hint text={offer.why} />}
+              </span>
+            )}
           </li>
         );
       })}

@@ -88,6 +88,10 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .dp-step-what { font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
 .dp-step-when { font-family: var(--n-font-mono); font-size: 12px; color: var(--n-text-faint); }
 .dp-step-when.now { color: var(--n-brand-text); }
+/* record 56: a step's Run, and the reason a run would be refused behind its "?" */
+.dp-step-run { display: flex; align-items: center; min-width: 0; margin-top: auto; }
+.dp-step.failed .node { border-color: var(--n-caution-fg); }
+.dp-step.failed .dp-step-what { color: var(--n-caution-fg); }
 
 /* what it holds, its main scans, its log */
 .dp-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18.75rem), 1fr)); margin-top: 0.75rem; border-top: 1px solid var(--n-line); }

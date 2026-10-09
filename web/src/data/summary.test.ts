@@ -203,6 +203,17 @@ describe("body part and post-contrast, steps of their own", () => {
     expect(stepWords(step("body_part", { state: "queued", served: true, answered: 0, look: 0, of: 3 }), NOW)).toMatchObject({ what: "waits its turn", when: "next" });
     expect(stepWords(step("body_part", { answered: 3, look: 0, of: 3 }), NOW).what).toBe("3 answered");
     expect(stepWords(step("body_part", { answered: 0, look: 2, of: 3 }), NOW).what).toBe("none answered · 2 to look at");
+    // 2026-10-10: a run started from its step that failed says so, and when
+    const failed = stepWords(step("body_part", { state: "failed", job: 14, finished_at: today("14:30"), answered: 0, look: 0, of: 3 }), NOW);
+    expect(failed).toMatchObject({ what: "failed", now: false });
+    expect(failed.when).toBe(new Date(today("14:30")).toTimeString().slice(0, 5));
+  });
+
+  it("count a model's run in its units over, of all of them", () => {
+    const started = new Date(NOW.getTime() - 60_000).toISOString();
+    const progress = { run: 3, phase: "run", units: 40, over: 10, running: 30, queued: 0 };
+    expect(runningWords({ kind: "pipeline", state: "running", started_at: started, progress }, NOW.getTime()).words).toMatch(/^10 of 40 scans · about \d+ min left$/);
+    expect(runningWords({ kind: "pipeline", state: "running", started_at: started, progress: { run: 3, phase: "materialise" } }, NOW.getTime()).words).toBe("");
   });
 
   it("sit after Sorted on a dataset's rail, while a card keeps its six steps", () => {

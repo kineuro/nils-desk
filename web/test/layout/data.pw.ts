@@ -4,7 +4,8 @@
 // its three columns side by side; a cohort chosen draws how it grew with no
 // event over another and its four steps on one line; a narrower window folds
 // the rail four to a row; a phone's width is one column of cards with no
-// sideways scroll. Screenshots go to test-results for a look.
+// sideways scroll; body part's and post-contrast's Run sit inside their steps.
+// Screenshots go to test-results for a look.
 
 import { expect, test, type Locator } from "@playwright/test";
 
@@ -47,6 +48,35 @@ test("a cohort chosen draws how it grew, no event over another", async ({ page }
   await expect(page.locator(".dp-grid.datasets .dp-card.rel")).toHaveCount(2);
   await expect(page.locator(".dp-grid.datasets .dp-card.dim")).toHaveCount(2);
   await page.screenshot({ path: "test-results/data-cohort.png", fullPage: true });
+});
+
+test("body part and post-contrast carry their Run inside their steps, post-contrast's held with its reason", async ({ page }) => {
+  for (const [width, rows] of [
+    [1440, 1],
+    [390, 4],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/data.html#data/datasets");
+    await expect(page.locator(".dp-detail")).toHaveAttribute("aria-label", "study-big");
+    const runs = page.locator(".dp-detail .dp-step-run");
+    await expect(runs).toHaveCount(2);
+    await expect(runs.nth(0).locator("button")).toHaveText("Run again");
+    await expect(runs.nth(0).locator("button")).toBeEnabled();
+    await expect(runs.nth(1).locator("button")).toHaveText("Run");
+    await expect(runs.nth(1).locator("button")).toBeDisabled();
+    await expect(runs.nth(1).locator(".hint")).toHaveAttribute("title", "no post-contrast model is installed");
+    // each Run on one line inside its step, the rail as it was
+    for (const i of [3, 4]) {
+      const cell = (await page.locator(".dp-detail .dp-step").nth(i).boundingBox())!;
+      const run = (await page.locator(".dp-detail .dp-step").nth(i).locator(".dp-step-run").boundingBox())!;
+      expect(run.x).toBeGreaterThanOrEqual(cell.x - 1);
+      expect(run.x + run.width).toBeLessThanOrEqual(cell.x + cell.width + 1);
+      expect(run.height).toBeLessThan(40);
+    }
+    expect(new Set(await tops(page.locator(".dp-detail .dp-step"))).size).toBe(rows);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.locator(".dp-detail .dp-steps").screenshot({ path: `test-results/data-step-run-${width}.png` });
+  }
 });
 
 test("a narrower window folds the eight steps four to a row", async ({ page }) => {
