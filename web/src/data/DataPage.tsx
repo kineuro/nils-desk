@@ -28,7 +28,7 @@ import { NowSection, useLiveJobs } from "./Now";
 import { Scans } from "./Scans";
 import { maySeePicks } from "./picks";
 import { mayListScans } from "./scans";
-import { fileWords, whenWords } from "./sources";
+import { whenWords } from "./sources";
 import { plainError } from "./plain";
 import { certainty, certaintyWords, kindWords, nextStep, stepCommand, type StepId } from "./steps";
 
@@ -114,7 +114,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
     setSaid(null);
     jobsDoor
       .enqueue(c.command, c.name, c.then)
-      .then((j) => changed(`${d.name}: started (job ${j.job}).`))
+      .then(() => changed(`${d.name}: started.`))
       .catch(failed);
   };
 
@@ -122,8 +122,8 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
     setSaid(null);
     jobsDoor
       .enqueue(["digest", "--name", b.name, `@${d.name}`], b.name)
-      .then((j) => {
-        say(`${d.name} is read again (job ${j.job}).`);
+      .then(() => {
+        say(`${d.name} is read again.`);
         jobs.refresh();
       })
       .catch(failed);
@@ -312,7 +312,7 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean;
   );
 }
 
-/** The chosen dataset's reads, newest first, each with its five marks. */
+/** The chosen dataset's reads, newest first, compact: its name, when, its five marks and what it needs; the counts are the card's. */
 function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; works: boolean; onBringIn: () => void; onAgain: (b: Batch) => void }) {
   const recent = d.digests.recent;
   const held = d.held?.files ?? 0;
@@ -339,8 +339,6 @@ function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; 
               <tr>
                 <th>Read</th>
                 <th>When</th>
-                <th>Files</th>
-                <th>Subjects</th>
                 <th className="strip-head">{STAGES.map((s) => STAGE_WORD[s]).join(" · ")}</th>
                 <th className="acts">
                   <span className="sr-only">Next</span>
@@ -359,8 +357,6 @@ function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; 
                       </a>
                     </td>
                     <td className="num">{whenWords(b.started_at)}</td>
-                    <td className="num">{b.state === "running" ? `${n(b.files.seen)} so far` : fileWords(b)}</td>
-                    <td className="num">{b.subjects_added === 0 ? "none new" : `${n(b.subjects_added)} new`}</td>
                     <td>
                       <div className="thread" role="img" aria-label={marks.map((m) => `${STAGE_WORD[m.name]}: ${m.words}`).join(", ")}>
                         {marks.map((m) => (
@@ -377,8 +373,8 @@ function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; 
                           <Icon name="chevron-right" />
                         </a>
                       )}
-                      {tail.kind === "sort" && (
-                        <a className="tail" href={narrow(href("review"), { batch: b.id })}>
+                      {tail.kind === "look" && (
+                        <a className="tail" href={narrow(href("review"), { dataset: d.name })}>
                           {tail.words}
                           <Icon name="chevron-right" />
                         </a>
@@ -390,7 +386,7 @@ function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; 
                         </button>
                       )}
                       {tail.kind === "again" && !works && <span className="tag">{b.state}</span>}
-                      {tail.kind === "reading" && <span className="tag brand">reading</span>}
+                      {tail.kind === "reading" && <span className="tag brand">{tail.words}</span>}
                       {tail.kind === "sorted" && (
                         <span className="tag ok">
                           <Icon name="check" />

@@ -10,7 +10,7 @@ import chain from "../../test/fixtures/jobs_chain.json";
 import type { Capabilities } from "../capabilities";
 import { GRANTS, SETS } from "../grants";
 import type { ChainedJob } from "./datasets";
-import { cancelRefusal, doingWords, jobCards, liveJobs, nowWords, progressOf, type EventSourceLike } from "./now";
+import { backgroundWords, cancelRefusal, doingWords, jobCards, liveJobs, nowWords, progressOf, type EventSourceLike } from "./now";
 
 const rows = (chain as { jobs: ChainedJob[] }).jobs;
 const open = rows.filter((j) => j.state !== "failed");
@@ -39,12 +39,12 @@ describe("the job cards", () => {
     ]);
     const [pseud, then, digest] = cards;
     // since a time today, as the browser's own clock draws it
-    expect(pseud.line).toMatch(/^job 120 · astrid · since \d\d:\d\d · then read, then sort$/u);
+    expect(pseud.line).toMatch(/^since \d\d:\d\d · then read, then sort$/u);
     expect(pseud.progress?.words).toBe("1,766 of 2,208 files · 24 a second · under a minute left · 4 held until mapped");
     expect(Math.round((pseud.progress?.fraction ?? 0) * 100)).toBe(80);
     expect(pseud.cancel).toEqual({ label: "Cancel", refusal: null });
     // the queued digest waits for job 120, so it is the chain's card, dropped by its own id
-    expect(then).toMatchObject({ kind: "chain", id: 122, line: "waits for job 120", cancel: { label: "Drop", refusal: null } });
+    expect(then).toMatchObject({ kind: "chain", id: 122, line: "waits for the one above", cancel: { label: "Drop", refusal: null } });
     expect(digest.progress).toEqual({ fraction: null, words: "11,420 files · 7 a second · 3 refused" });
   });
 
@@ -64,7 +64,7 @@ describe("the job cards", () => {
     const cards = jobCards([], failed, caps(), now);
     expect(cards).toHaveLength(1);
     expect(cards[0]).toMatchObject({ kind: "failed", what: "Read of exchange-ct stopped", cancel: null });
-    expect(cards[0].line).toBe("job 117 · 15 Aug · 0 files");
+    expect(cards[0].line).toBe("15 Aug · 0 files");
     expect(cards[0].failed).toEqual({ error: "no pack reads CT", next: { label: "Read again", command: ["digest", "@exchange-ct"], name: "exchange-ct" } });
   });
 
@@ -73,10 +73,27 @@ describe("the job cards", () => {
     const worker: ChainedJob = { ...alone, id: 1, kind: "worker", args: { argv: ["worker"] } };
     const cards = jobCards([alone, worker], [], caps(), now);
     expect(cards.map((c) => [c.kind, c.what])).toEqual([["queued", "Reading incoming"]]);
-    expect(cards[0].line).toMatch(/^queued · job 122 · astrid · since \d\d:\d\d$/u);
+    expect(cards[0].line).toMatch(/^queued · since \d\d:\d\d$/u);
     expect(doingWords({ ...alone, args: { argv: ["backup", "--dir", "/x"] } })).toBe("Backing up");
     expect(progressOf({ ...alone, progress: null }, now)).toBeNull();
     expect(progressOf({ ...alone, progress: { phase: "walking" } }, now)).toBeNull();
+  });
+
+  it("leave the engine's preparation of pictures out of the cards and say it as one quiet line", () => {
+    const base = open[0];
+    const started = new Date(now - 60_000).toISOString();
+    const pyramid: ChainedJob = { ...base, id: 39, kind: "pyramid", name: "classified by job 37", state: "running", started_at: started, args: { argv: ["pyramid", "build", "--classified", "37", "--place", "working"], principal: "admin@127.0.0.1:7200" }, progress: { written: 57, of: 1001, elapsed_s: 57 }, then: null, chain: null };
+    const after: ChainedJob = { ...pyramid, id: 43, name: "pictures after job 42", state: "queued", progress: null };
+    const preview: ChainedJob = { ...pyramid, id: 44, kind: "preview", name: "dataset record34", args: { principal: "admin" }, progress: null };
+    expect(jobCards([pyramid, after], [], caps(), now)).toEqual([]);
+    expect(jobCards([], [{ ...pyramid, state: "failed" }], caps(), now)).toEqual([]);
+    const words = backgroundWords([pyramid, after], now);
+    expect(words).toBe("Preparing 3D views · about 16 min");
+    expect(words).not.toMatch(/job|admin|pyramid/u);
+    expect(backgroundWords([after], now)).toBe("Preparing 3D views");
+    expect(backgroundWords([preview], now)).toBe("Preparing pictures");
+    expect(backgroundWords([pyramid, preview], now)).toBe("Preparing pictures and 3D views · about 16 min");
+    expect(backgroundWords(open, now)).toBeNull();
   });
 
   it("say how Now is fed", () => {

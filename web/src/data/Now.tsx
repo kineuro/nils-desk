@@ -13,7 +13,7 @@ import { href } from "../routes";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { jobs as jobsDoor, type ChainedJob } from "./datasets";
-import { isOpen, jobCards, jobsWords, liveJobs, type JobCard, type Live } from "./now";
+import { backgroundWords, isOpen, jobCards, jobsWords, liveJobs, type JobCard, type Live } from "./now";
 import { plainError } from "./plain";
 
 export interface LiveJobs {
@@ -86,12 +86,13 @@ export function NowSection({ caps, jobs, onSaid, onFailed }: { caps: Capabilitie
   if (!served(caps, "GET /api/jobs")) return null;
   const cards = jobCards(jobs.open ?? [], jobs.failed, caps, now);
   const count = cards.filter((c) => c.kind !== "failed").length;
+  const quiet = backgroundWords(jobs.open ?? [], now);
 
   const cancel = (c: JobCard) => {
     jobsDoor
       .cancel(c.id)
       .then(() => {
-        onSaid(c.kind === "running" ? `Job ${c.id} is stopping.` : `Job ${c.id} is dropped from the queue.`);
+        onSaid(c.kind === "running" ? `${c.what}: stopping.` : `${c.what}: dropped.`);
         jobs.refresh();
       })
       .catch((e: Error) => (onFailed ? onFailed(e) : onSaid(e.message)));
@@ -101,9 +102,9 @@ export function NowSection({ caps, jobs, onSaid, onFailed }: { caps: Capabilitie
     if (!next) return;
     jobsDoor
       .enqueue(next.command, next.name ?? undefined)
-      .then((j) => {
+      .then(() => {
         jobs.dismiss(c.id);
-        onSaid(`Queued again as job ${j.job}.`);
+        onSaid("Started again.");
         jobs.refresh();
       })
       .catch((e: Error) => (onFailed ? onFailed(e) : onSaid(e.message)));
@@ -113,13 +114,18 @@ export function NowSection({ caps, jobs, onSaid, onFailed }: { caps: Capabilitie
     <section className="stack roomy" aria-label="the jobs now">
       <div className="section-head rule-top">
         <h2>Now</h2>
-        <span className="meta">{jobsWords(count)}</span>
+        {(count > 0 || !quiet) && <span className="meta">{jobsWords(count)}</span>}
         {may(caps, "pipelines:see") && (
           <a className="button quiet small" href={href("pipelines")}>
             All jobs on Pipelines
           </a>
         )}
       </div>
+      {quiet && (
+        <p className="meta" aria-label="preparing in the background">
+          <Icon name="layers" /> {quiet}
+        </p>
+      )}
       {cards.length > 0 && (
         <div className="jobs-now">
           {cards.map((c) => (
