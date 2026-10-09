@@ -8,68 +8,76 @@ import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { StackView } from "../campaigns/StackView";
 import { messageOf } from "../settings/common";
-import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import type { Dataset } from "./datasets";
 import { PickRun } from "./PickRun";
-import { groupScans, mayListScans, scanDoors, scanFacts, type Scan, type ScanPage } from "./scans";
+import { groupScans, mayListScans, SCANS_PAGE, scanDoors, scanFacts, type Scan, type ScanPage } from "./scans";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; at: ScanPage };
 
 const n = (v: number) => v.toLocaleString("en-US");
 
 export function Scans({ caps, dataset: d, onSaid }: { caps: Capabilities; dataset: Dataset; onSaid?: (words: string) => void }) {
-  const lists = mayListScans(caps);
-  const cohort = lists ? (d.cohort ?? null) : null;
+  const sorted = d.totals.stacks > 0;
+  const lists = mayListScans(caps) && sorted;
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [open, setOpen] = useState<Scan | null>(null);
+  // the cursor each page read so far was read after; the first page's is null
+  const [afters, setAfters] = useState<(number | null)[]>([null]);
 
-  useEffect(() => {
-    setOpen(null);
-    if (!cohort) return;
-    let live = true;
+  const read = (after: number | null, done: () => void, live: () => boolean = () => true) => {
     setLoad({ kind: "loading", since: Date.now() });
-    scanDoors.first(cohort).then(
-      (at) => live && setLoad({ kind: "ready", at }),
-      (e: unknown) => live && setLoad({ kind: "failed", why: messageOf(e) }),
-    );
-    return () => {
-      live = false;
-    };
-  }, [cohort, d.name]);
-
-  const turn = (page: number) => {
-    if (load.kind !== "ready") return;
-    const { handle, total } = load.at;
-    setLoad({ kind: "loading", since: Date.now() });
-    scanDoors.page(handle, page, total).then(
-      (at) => setLoad({ kind: "ready", at }),
-      (e: unknown) => setLoad({ kind: "failed", why: messageOf(e) }),
+    scanDoors.page(d.name, after).then(
+      (at) => {
+        if (!live()) return;
+        done();
+        setLoad({ kind: "ready", at });
+      },
+      (e: unknown) => live() && setLoad({ kind: "failed", why: messageOf(e) }),
     );
   };
 
-  const at = load.kind === "ready" ? load.at : null;
+  useEffect(() => {
+    setOpen(null);
+    setAfters([null]);
+    if (!lists) return;
+    let live = true;
+    read(null, () => undefined, () => live);
+    return () => {
+      live = false;
+    };
+  }, [lists, d.name]);
+
+  const page = afters.length - 1;
+  const turn = (to: number) => {
+    if (load.kind !== "ready") return;
+    if (to > page && load.at.next !== null) {
+      const after = load.at.next;
+      read(after, () => setAfters((a) => [...a, after]));
+    } else if (to < page) {
+      read(afters[to], () => setAfters((a) => a.slice(0, to + 1)));
+    }
+  };
+
+  const at = lists && load.kind === "ready" ? load.at : null;
+  const pages = at ? Math.max(1, Math.ceil(at.total / SCANS_PAGE)) : 1;
   return (
     <section className="stack roomy" aria-label={`the scans of ${d.name}`}>
       <div className="section-head rule-top">
         <h2>Scans of {d.name}</h2>
-        {at && at.total !== null && <span className="meta">{n(at.total)}</span>}
-        <PickRun caps={caps} of={{ dataset: d.name }} onQueued={onSaid} />
+        {at && <span className="meta">{n(at.total)}</span>}
+        {sorted && <PickRun caps={caps} of={{ dataset: d.name }} onQueued={onSaid} />}
       </div>
-      {lists && !cohort && (
-        <p className="meta">
-          No scan list for this dataset yet <Hint text="Scans are listed through the cohort a dataset feeds, and this one feeds none." />
-        </p>
-      )}
-      {cohort && load.kind === "loading" && <Wait phase="reading the scans" since={load.since} size="panel" />}
-      {cohort && load.kind === "failed" && <p className="warn">The scans could not be read: {load.why}</p>}
-      {at && at.scans.length === 0 && <p className="meta">No scans yet.</p>}
+      {!sorted && <p className="meta">No scans yet</p>}
+      {lists && load.kind === "loading" && <Wait phase="reading the scans" since={load.since} size="panel" />}
+      {lists && load.kind === "failed" && <p className="warn">The scans could not be read: {load.why}</p>}
+      {at && at.scans.length === 0 && <p className="meta">No scans yet</p>}
       {at && at.scans.length > 0 && (
         <div className={open ? "scans open" : "scans"}>
           <div className="scan-list">
             {groupScans(at.scans).map((g) => (
-              <div key={g.subject} className="scan-subject">
+              <div key={g.key} className="scan-subject">
                 <b>{g.subject}</b>
                 {g.sessions.map((s) => (
                   <div key={s.key} className="scan-session">
@@ -88,15 +96,15 @@ export function Scans({ caps, dataset: d, onSaid }: { caps: Capabilities; datase
                 ))}
               </div>
             ))}
-            {at.pages > 1 && (
+            {pages > 1 && (
               <div className="row scan-pages">
-                <button type="button" className="button quiet small" disabled={at.page === 0} aria-label="Previous page" onClick={() => turn(at.page - 1)}>
+                <button type="button" className="button quiet small" disabled={page === 0} aria-label="Previous page" onClick={() => turn(page - 1)}>
                   <Icon name="chevron-left" />
                 </button>
                 <span className="meta num">
-                  {at.page + 1} / {at.pages}
+                  {page + 1} / {pages}
                 </span>
-                <button type="button" className="button quiet small" disabled={at.page + 1 >= at.pages} aria-label="Next page" onClick={() => turn(at.page + 1)}>
+                <button type="button" className="button quiet small" disabled={at.next === null} aria-label="Next page" onClick={() => turn(page + 1)}>
                   <Icon name="chevron-right" />
                 </button>
               </div>

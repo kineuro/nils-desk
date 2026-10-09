@@ -182,7 +182,7 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
           ))}
         </div>
       )}
-      {current && current.totals.stacks > 0 && (mayListScans(caps) || mayPick(caps)) && <Scans caps={caps} dataset={current} onSaid={setSaid} />}
+      {current && (mayListScans(caps) || mayPick(caps)) && <Scans caps={caps} dataset={current} onSaid={setSaid} />}
       <NowSection caps={caps} jobs={jobs} onSaid={setSaid} />
       {current && current.digests.count > 0 && <Batches dataset={current} works={works && whyOf(current) === null} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
       {bringing && (

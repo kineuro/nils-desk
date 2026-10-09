@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A dataset's scans (Wave 7a, the try of 2026-10-09: "where should I open a
-// scan?"): the stacks of the cohort the dataset feeds, asked of the engine's
-// ask door as one record set at stack grain and paged through its handle.
-// The engine has no door that lists a dataset's own stacks, so a dataset that
-// feeds no cohort has no list here.
+// scan?"): the engine's scans door lists the stacks a dataset's digests
+// created, a page at a time, read from the registry and never through a
+// cohort. Below detail quasi the engine answers the subject's code, the day
+// and a date label as their shapes, so the list groups by the subject's and
+// the session's ids, which it always answers.
 
 import { door } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -13,65 +14,58 @@ import { may } from "../grants";
 /** One scan as the list draws it. */
 export interface Scan {
   id: number;
+  subjectId: number;
   subject: string;
   /** The session it belongs to, or null where the engine has none built. */
   session: number | null;
+  label: string | null;
   day: string | null;
   name: string;
   orientation: string | null;
   images: number | null;
 }
 
-/** One page of a dataset's scans, with the handle the next pages are read from. */
+/** One page of a dataset's scans and the cursor of the next. */
 export interface ScanPage {
-  handle: number;
-  page: number;
-  pages: number;
-  total: number | null;
+  total: number;
   scans: Scan[];
+  /** The stack id the next page is read after, or null at the end. */
+  next: number | null;
 }
 
-export type Column = string | { name: string };
-
-const COLUMNS = ["subject.code", "session.id", "id", "text_series_description", "orientation", "n_instances", "day"];
-
-/** The ask for every stack of the cohort's current members, as one record set. */
-export function scanAsk(cohort: string): Record<string, unknown> {
-  return {
-    ast_version: 1,
-    params: { cohorts: { type: "list", value: [cohort] } },
-    sets: {
-      scope: { grain: "cohort", where: [["in", {}, ["field", {}, "name"], ["param", {}, "cohorts"]]] },
-      people: { grain: "subject", of: "scope" },
-      scans: { grain: "stack", of: "people" },
-    },
-    out: { set: "scans", level: "record", columns: COLUMNS.map((c) => ["field", {}, c]) },
-  };
+/** One scan as the engine's scans door answers it. */
+export interface ScanRow {
+  stack: number;
+  subject: { id: number; code: string | null };
+  session: { id: number; label: string | null } | null;
+  series_description: string | null;
+  orientation: string | null;
+  images: number | null;
+  day: string | null;
 }
 
-const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v) : null);
-const text = (v: unknown): string | null => (v === null || v === undefined || v === "" ? null : String(v));
+interface ScansAnswer {
+  total: number;
+  scans: ScanRow[];
+  next: number | null;
+}
 
-/** The rows of an answer as scans, read by column name; a row without a stack id is left out. */
-export function scansOf(columns: Column[], rows: unknown[][]): Scan[] {
-  const names = columns.map((c) => (typeof c === "string" ? c : c.name));
-  const at = (name: string) => names.indexOf(name);
-  const [key, id, subject, session, name, orientation, images, day] = ["_key", "id", "subject.code", "session.id", "text_series_description", "orientation", "n_instances", "day"].map(at);
-  const out: Scan[] = [];
-  for (const r of rows) {
-    const stack = num(id >= 0 ? r[id] : undefined) ?? num(key >= 0 ? r[key] : undefined);
-    if (stack === null) continue;
-    out.push({
-      id: stack,
-      subject: text(subject >= 0 ? r[subject] : null) ?? "?",
-      session: num(session >= 0 ? r[session] : null),
-      day: text(day >= 0 ? r[day] : null),
-      name: text(name >= 0 ? r[name] : null) ?? `Scan ${stack}`,
-      orientation: text(orientation >= 0 ? r[orientation] : null),
-      images: num(images >= 0 ? r[images] : null),
-    });
-  }
-  return out;
+export const SCANS_DOOR = "GET /api/datasets/{name}/scans";
+export const SCANS_PAGE = 50;
+
+/** The door's rows as the list's scans. */
+export function scansOf(rows: ScanRow[]): Scan[] {
+  return rows.map((r) => ({
+    id: r.stack,
+    subjectId: r.subject.id,
+    subject: r.subject.code ?? `Subject ${r.subject.id}`,
+    session: r.session?.id ?? null,
+    label: r.session?.label ?? null,
+    day: r.day,
+    name: r.series_description || `Scan ${r.stack}`,
+    orientation: r.orientation,
+    images: r.images,
+  }));
 }
 
 export interface SessionGroup {
@@ -80,6 +74,7 @@ export interface SessionGroup {
   scans: Scan[];
 }
 export interface SubjectGroup {
+  key: number;
   subject: string;
   sessions: SessionGroup[];
 }
@@ -88,8 +83,8 @@ export interface SubjectGroup {
 export function groupScans(scans: Scan[]): SubjectGroup[] {
   const subjects: SubjectGroup[] = [];
   for (const s of scans) {
-    let g = subjects.find((x) => x.subject === s.subject);
-    if (!g) subjects.push((g = { subject: s.subject, sessions: [] }));
+    let g = subjects.find((x) => x.key === s.subjectId);
+    if (!g) subjects.push((g = { key: s.subjectId, subject: s.subject, sessions: [] }));
     const key = s.session !== null ? `s${s.session}` : `d${s.day ?? ""}`;
     let ses = g.sessions.find((x) => x.key === key);
     if (!ses) g.sessions.push((ses = { key, day: s.day, scans: [] }));
@@ -106,36 +101,20 @@ export function scanFacts(s: Scan): string {
   return parts.join(" · ");
 }
 
-interface RunAnswer {
-  handle: number;
-  columns: Column[];
-  rows: unknown[][];
-  pages?: number;
-  row_count?: number;
-}
-
 export const scanDoors = {
-  /** The first page: the ask run, which the engine caches by content at this epoch. */
-  first: (cohort: string): Promise<ScanPage> =>
-    door<RunAnswer>("POST", "/api/ask/run", { document: scanAsk(cohort) }).then((a) => ({
-      handle: a.handle,
-      page: 0,
-      pages: Math.max(1, a.pages ?? 1),
-      total: a.row_count ?? null,
-      scans: scansOf(a.columns, a.rows),
-    })),
-  /** Another page of the same handle. */
-  page: (handle: number, page: number, total: number | null): Promise<ScanPage> =>
-    door<{ columns: Column[]; rows: unknown[][]; page: number; pages: number }>("GET", `/api/ask/handles/${handle}/rows?page=${page}`).then((a) => ({
-      handle,
-      page,
-      pages: Math.max(1, a.pages),
-      total,
-      scans: scansOf(a.columns, a.rows),
-    })),
+  /** A page of the dataset's scans, after the stack the page before ended on. */
+  page: (dataset: string, after: number | null = null): Promise<ScanPage> => {
+    const q = new URLSearchParams({ limit: String(SCANS_PAGE) });
+    if (after !== null) q.set("after", String(after));
+    return door<ScansAnswer>("GET", `/api/datasets/${encodeURIComponent(dataset)}/scans?${q}`).then((a) => ({
+      total: a.total,
+      scans: scansOf(a.scans ?? []),
+      next: a.next ?? null,
+    }));
+  },
 };
 
-/** Whether this person may list scans here: query work, and the ask doors served. */
+/** Whether this person may list scans here: Data reading, and the scans door served. */
 export function mayListScans(caps: Capabilities): boolean {
-  return may(caps, "query:work") && served(caps, "POST /api/ask/run") && served(caps, "GET /api/ask/handles/{id}/rows");
+  return may(caps, "data:see") && served(caps, SCANS_DOOR);
 }
