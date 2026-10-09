@@ -186,6 +186,8 @@ const PATHS = {
     </>
   ),
   play: <path d="M7.5 5.5v13l11-6.5z" />,
+  // four tiles: the viewer of a dataset or a cohort (Wave 7a, the Data page)
+  grid: <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />,
   lock: (
     <>
       <rect x="5" y="10.5" width="14" height="10" rx="1.5" />

@@ -9,6 +9,7 @@ import { door, type Json } from "../ask/client";
 import { pastedList } from "../ask/start";
 import type { ReleaseRow } from "../ops/client";
 import { datesWord, whenWords, type Source } from "./sources";
+import type { Holding, Part } from "./summary";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -17,6 +18,10 @@ export type Origin = "source" | "promotion" | "manual" | "import";
 
 /** What the origin names: the dataset, the card with its version, who did it by hand, or the file imported. */
 export interface ProvenanceDetail {
+  /** The engine's own fields: the dataset and batch that fed it, the handle promoted, who did it. */
+  dataset?: string | null;
+  batch?: number | null;
+  actor?: string | null;
   place?: string;
   card?: string;
   document?: number;
@@ -57,6 +62,10 @@ export interface Cohort {
   created_at: string;
   last_joined: string | null;
   retired_at: string | null;
+  /** Wave 7a (2026-10-09): what brought its members, a part each, most first; an older engine sends none. */
+  parts?: Part[];
+  /** Wave 7a (2026-10-09): the datasets holding scans of its members, with a dataset that feeds it; an older engine sends none. */
+  datasets?: Holding[];
 }
 
 /** One event of a cohort's membership log: who joined or left at once, what brought them, and what did it. */
@@ -71,13 +80,18 @@ export interface Join {
   batch?: number | null;
   handle?: number | null;
   actor?: string | null;
+  /** Wave 7a (2026-10-09): the dataset whose read it was, for a digest's join. */
+  dataset?: string | null;
+  reason?: string | null;
 }
 
 /** A dataset holding files of a cohort's subjects, whether it feeds the cohort or merely holds some of its people. */
 export interface SourceHolding {
-  name: string;
+  /** The engine answers the place by `place`; a name where it is read from elsewhere. */
+  place?: string | null;
+  name?: string;
   subjects: number;
-  feeds: boolean;
+  feeds?: boolean;
   arrives?: string;
   batches?: number;
 }
@@ -89,15 +103,26 @@ export interface CohortRelease {
   layout: string | null;
   subjects: number | null;
   started_at?: string | null;
-  handed_over?: string | null;
+  /** Wave 7a (2026-10-09): when it was made. */
+  finished_at?: string | null;
+  handed_over?: string | boolean | null;
   withdrawn_at?: string | null;
 }
 
-/** A cohort as its own door answers it: the list row, its membership log, the datasets holding its people and its releases. */
+/** A clinical kind and how many of a cohort's members have an event of it (Wave 7a, 2026-10-09). */
+export interface ClinicalCoverage {
+  kind: string;
+  primary: boolean;
+  subjects: number;
+}
+
+/** A cohort as its own door answers it: the list row, its membership log, the datasets holding its subjects and its releases. */
 export interface CohortDetail extends Omit<Cohort, "releases"> {
   joins: Join[];
   sources_holding: SourceHolding[];
   releases: CohortRelease[];
+  /** Wave 7a (2026-10-09): its members' clinical coverage, never a value; an older engine sends none. */
+  clinical?: ClinicalCoverage[];
 }
 
 /** A cohort without its release count: what the list row and the cohort's own door share. */
@@ -387,9 +412,11 @@ export function leavingWords(h: Source["handling"] | null): string {
 export function leavingLines(sources: readonly Source[], holding: readonly SourceHolding[] | null): LeavingLine[] {
   if (holding === null) return sources.map((s) => ({ dataset: s.name, words: leavingWords(s.handling), note: null }));
   return holding.map((h) => {
-    const s = sources.find((x) => x.name === h.name) ?? null;
+    // the engine names the dataset holding them by its place
+    const name = h.name ?? h.place ?? "no dataset";
+    const s = sources.find((x) => x.name === name) ?? null;
     return {
-      dataset: h.name,
+      dataset: name,
       words: leavingWords(s?.handling ?? null),
       note: h.feeds ? "the dataset's handling" : `${n(h.subjects)} ${h.subjects === 1 ? "subject has" : "subjects have"} files there too`,
     };

@@ -1,53 +1,107 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Datasets page, as an app (Wave 7a, the tries of 2026-10-08): the
-// datasets only, a card each with its name, one state word, its counts and
-// the one button for its next step, the rest in its menu. No folder is listed:
-// "Add a dataset" opens a finder that searches a root's folders. How to start is always on screen. A sorted
-// dataset's card opens it on the whole page (DatasetView, #data/datasets/<name>); Now lists what runs; the
-// chosen dataset's reads follow. No paragraphs: an explanation sits behind
-// a "?". The section's other pages, the cohorts, a read and a dataset's
-// pseudonymisation, are mounted by the shell beside this one.
+// Data: datasets and cohorts on one page (Wave 7a, the design Nima confirmed
+// on 2026-10-09). Two bands that look different: the datasets, where the
+// files come from, each a folder card with its state, its numbers, a bar of
+// six steps saying where it is, and how sure the sort is; and the cohorts,
+// groups of subjects from any dataset, each a card with its subjects, where
+// they come from and what waits. On a card the only button is View, which
+// opens the viewer. Choosing a card shows how things relate: a cohort lights
+// up the datasets that feed it, a dataset the cohorts it feeds, and the rest
+// dim; its detail opens under the bands with its actions, the next step the
+// one primary button. A card is chosen on arrival, the first that needs a
+// person, so the next step is always on screen.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { placesKept } from "../objects/kept";
 import { href, narrow } from "../routes";
-import { MoreMenu } from "../settings/cards";
 import type { Install } from "../settings/supervise";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { AddDataset } from "./AddDataset";
-import { BringInNew } from "./BringInNew";
-import { batchTail, jobs as jobsDoor, packFor, sources, STAGES, stripMarks, type Batch, type Dataset, type Layout, type Rates, type StageName } from "./datasets";
+import { CohortDetail } from "./CohortDetail";
+import { cohorts as cohortDoors, type Cohort } from "./cohorts";
+import { DatasetDetail } from "./DatasetDetail";
+import { jobs as jobsDoor, packFor, sources, type Dataset, type Layout } from "./datasets";
 import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
-import { NowSection, useLiveJobs } from "./Now";
-import { mayListScans } from "./scans";
-import { whenWords } from "./sources";
+import { NewCohortDialog, makingRefusal } from "./NewCohort";
+import { useLiveJobs } from "./Now";
 import { plainError } from "./plain";
-import { certainty, certaintyWords, kindWords, nextStep, stepCommand, type StepId } from "./steps";
+import { mayListScans } from "./scans";
+import { kindWords, nextStep, stepCommand, type StepId } from "./steps";
+import {
+  cardLine,
+  cohortLine,
+  cohortRelation,
+  datasetRelation,
+  feedsWords,
+  filesOf,
+  maySummarise,
+  originWords,
+  partLabel,
+  railOf,
+  slotOf,
+  summaries,
+  TONE,
+  type DatasetSummary,
+  type Part,
+  type Relation,
+} from "./summary";
+import "./data.css";
 
-type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[]; rates: Rates | null };
+type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[] };
+
+/** The card chosen on the page: a dataset or a cohort, by name. */
+export type Chosen = { kind: "dataset"; name: string } | { kind: "cohort"; name: string } | null;
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-/** The five marks of a read, in one letter each, under the words they stand for. */
-const STAGE_WORD: Record<StageName, string> = { pseudonymised: "Pseudonymised", walked: "Found", digested: "Read", classified: "Sorted", reviewed: "Checked" };
-const LETTER: Record<StageName, string> = { pseudonymised: "P", walked: "F", digested: "R", classified: "S", reviewed: "C" };
+/** What the address chooses: a cohort or a dataset named after the question mark, or the dataset the viewer has open. */
+export function chosenOf(dataset: string | null | undefined, query: Record<string, string> | undefined): Chosen {
+  if (query?.cohort) return { kind: "cohort", name: query.cohort };
+  if (query?.dataset) return { kind: "dataset", name: query.dataset };
+  if (dataset) return { kind: "dataset", name: dataset };
+  return null;
+}
 
-/** The one tone of each state word. */
-const TONE: Record<string, string> = { Unknown: "tag caution", Anonymised: "tag caution", Identified: "tag gated", Ready: "tag ok" };
+/** The card chosen on arrival: the first dataset that needs a person, else the first dataset, else the first cohort. */
+export function firstChoice(list: readonly Dataset[], why: (d: Dataset) => string | null, cohortList: readonly Cohort[]): Chosen {
+  const needs = list.find((d) => {
+    const s = nextStep(d, why(d));
+    return s.step !== "read-new" && s.step !== "running";
+  });
+  const d = needs ?? list[0];
+  if (d) return { kind: "dataset", name: d.name };
+  const c = cohortList[0];
+  return c ? { kind: "cohort", name: c.name } : null;
+}
 
-/** The Datasets page; `dataset` is the one the address names, #data/datasets/<name>, chosen on arrival. */
-export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabilities; install: Install | null; onChanged: () => void; dataset?: string | null }) {
+/** The page; `dataset` is the one the viewer has open (#data/datasets/<name>), `query` what the address narrows to. */
+export function DataPage({
+  caps,
+  install,
+  onChanged,
+  dataset,
+  query,
+}: {
+  caps: Capabilities;
+  install: Install | null;
+  onChanged: () => void;
+  dataset?: string | null;
+  query?: Record<string, string>;
+}) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
-  const [chosen, setChosen] = useState<string | null>(dataset ?? null);
-  const [bringing, setBringing] = useState<Dataset | null>(null);
+  const [cohortList, setCohortList] = useState<Cohort[] | null>(null);
+  const [sums, setSums] = useState<Record<string, DatasetSummary>>({});
+  const [chosen, setChosen] = useState<Chosen>(() => chosenOf(dataset, query));
+  const picked = useRef(chosen !== null);
   const [adding, setAdding] = useState(false);
+  const [making, setMaking] = useState(false);
   /** The dialog a dataset's step opens. */
   const [opened, setOpened] = useState<{ kind: "sort-files" | "set-ids"; dataset: Dataset } | null>(null);
   /** What the page last said: a done act's words, or a refusal as one plain line with the engine's words behind a "?". */
@@ -57,52 +111,124 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   const places = useKept(placesKept);
   const jobs = useLiveJobs(caps);
   const works = may(caps, "data:work");
+  const readsCohorts = may(caps, "data:see") && served(caps, "GET /api/cohorts");
+  const summarises = maySummarise(caps);
+
+  // the viewer's dataset, or what the address names, is the one chosen
   useEffect(() => {
-    if (dataset) setChosen(dataset);
-  }, [dataset]);
+    const c = chosenOf(dataset, query);
+    if (c) {
+      picked.current = true;
+      setChosen(c);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the address's own words
+  }, [dataset, query?.cohort, query?.dataset]);
 
   const read = useCallback(() => {
     sources
       .list()
-      .then((r) => setLoad({ kind: "ready", list: r.sources, rates: r.rates ?? null }))
+      .then((r) => setLoad({ kind: "ready", list: r.sources }))
       .catch((e: Error) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: e.message })));
   }, []);
-
+  const readCohorts = useCallback(() => {
+    if (!readsCohorts) return;
+    cohortDoors
+      .list()
+      .then((all) => setCohortList(all.filter((c) => !c.retired_at)))
+      .catch(() => setCohortList((was) => was ?? []));
+  }, [readsCohorts]);
 
   useEffect(() => {
     read();
+    readCohorts();
     if (served(caps, "GET /api/places")) void placesKept.ensure();
-  }, [read, caps]);
-
-  // the datasets are read again when a job ends, and every twenty seconds while one runs
-  const openCount = (jobs.open ?? []).filter((j) => j.state !== "done" && j.state !== "failed" && j.state !== "cancelled").length;
-  const reading = load.kind === "ready" && (openCount > 0 || load.list.some((s) => s.digests.recent.some((d) => d.state === "running")));
-  useEffect(() => {
-    if (load.kind === "ready") read();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- a change in the open jobs is what reads again
-  }, [openCount]);
-  useEffect(() => {
-    if (!reading) return;
-    const t = setInterval(read, 20_000);
-    return () => clearInterval(t);
-  }, [reading, read]);
+  }, [read, readCohorts, caps]);
 
   // a root is where folders live, never a dataset
   const list = load.kind === "ready" ? load.list.filter((d) => !isRoot(d)) : [];
+  const names = list.map((d) => d.name).join("\n");
+
+  // each dataset's summary, for the steps on its card and its detail
+  const readSums = useCallback(
+    (only?: string[]) => {
+      if (!summarises) return;
+      for (const name of only ?? names.split("\n").filter(Boolean)) {
+        summaries
+          .read(name)
+          .then((s) => setSums((was) => ({ ...was, [name]: s })))
+          .catch(() => undefined);
+      }
+    },
+    [summarises, names],
+  );
+  useEffect(() => {
+    readSums();
+  }, [readSums]);
+
+  // what runs: read again when a job ends, and every few seconds while one of a dataset runs
+  const openIds = (jobs.open ?? []).filter((j) => j.state !== "done" && j.state !== "failed" && j.state !== "cancelled").map((j) => j.id);
+  const openKey = openIds.join(",");
+  const running = Object.values(sums)
+    .filter((s) => s.steps.some((x) => x.state === "running" || x.state === "queued"))
+    .map((s) => s.dataset);
+  const runningKey = running.join("\n");
+  useEffect(() => {
+    if (load.kind !== "ready") return;
+    read();
+    readCohorts();
+    readSums();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- a change in the open jobs is what reads again
+  }, [openKey]);
+  useEffect(() => {
+    if (runningKey === "") return;
+    const t = setInterval(() => {
+      read();
+      readSums(runningKey.split("\n"));
+    }, 5_000);
+    return () => clearInterval(t);
+  }, [runningKey, read, readSums]);
+
   const placeOf = (d: Dataset) => places.value?.places.find((p) => p.id === d.id) ?? null;
   /** Why a dataset is not read yet: the places door's own words where it was read, else the same reasoning from the dataset. */
   const whyOf = (d: Dataset): string | null => {
     const p = placeOf(d);
     return p && p.not_read !== undefined ? p.not_read : notReadOf(d);
   };
-  const rates = load.kind === "ready" ? load.rates : null;
-  const current = list.find((s) => s.name === chosen) ?? list[0] ?? null;
+
+  // on arrival, the first card that needs a person is chosen; a person's own choice stands
+  const cohortsRead = !readsCohorts || cohortList !== null;
+  useEffect(() => {
+    if (picked.current || load.kind !== "ready" || !cohortsRead) return;
+    picked.current = true;
+    setChosen(firstChoice(list, whyOf, cohortList ?? []));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when both lists are read
+  }, [load.kind, cohortsRead]);
+
+  const choose = (c: Chosen) => {
+    picked.current = true;
+    // the chosen card again lets go of it
+    const next = c && chosen && c.kind === chosen.kind && c.name === chosen.name ? null : c;
+    setChosen(next);
+    setSaid(null);
+    // the address keeps the choice, without a page of history each
+    if (!dataset) {
+      const to = next ? narrow(href("data", "datasets"), { [next.kind]: next.name }) : href("data", "datasets");
+      try {
+        history.replaceState(null, "", to);
+      } catch {
+        // a page without history keeps its address
+      }
+    }
+  };
+
   const changed = (words: string) => {
     say(words);
     void placesKept.refresh().catch(() => undefined);
     onChanged();
     jobs.refresh();
     read();
+    readCohorts();
+    readSums();
   };
 
   /** A dataset's step: a dialog for what it still needs, else its job queued. */
@@ -117,17 +243,6 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
       .catch(failed);
   };
 
-  const readAgain = (b: Batch, d: Dataset) => {
-    setSaid(null);
-    jobsDoor
-      .enqueue(["digest", "--name", b.name, `@${d.name}`], b.name)
-      .then(() => {
-        say(`${d.name} is read again.`);
-        jobs.refresh();
-      })
-      .catch(failed);
-  };
-
   const finishing = (d: Dataset): Finishing => ({
     id: d.id,
     name: d.name,
@@ -137,13 +252,25 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
   });
   const layoutOf = (d: Dataset): Layout | null => placeOf(d)?.layout ?? null;
 
+  const allCohorts = cohortList ?? [];
+  const chosenDataset = chosen?.kind === "dataset" ? (list.find((d) => d.name === chosen.name) ?? null) : null;
+  const chosenCohort = chosen?.kind === "cohort" ? (allCohorts.find((c) => c.name === chosen.name) ?? null) : null;
+  const datasetNames = list.map((d) => d.name);
+  const making_ = makingRefusal(caps);
+  const viewDatasets = mayListScans(caps);
+
   return (
-    <section className="data">
+    <section className="data dp">
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">Data</span>
-          <h1>Datasets</h1>
+          <h1>Datasets and cohorts</h1>
         </div>
+        {making_ === null && (
+          <button type="button" className="button secondary" onClick={() => setMaking(true)}>
+            New cohort
+          </button>
+        )}
         {works && (
           <button type="button" className="button" onClick={() => setAdding(true)}>
             <Icon name="plus" />
@@ -157,6 +284,11 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
           {said.detail !== undefined && <Hint text={said.detail} />}
         </p>
       )}
+
+      <div className="dp-band-head">
+        <span className="eyebrow">Datasets</span>
+        <span className="meta">where the files come from</span>
+      </div>
       {load.kind === "loading" && <Wait phase="reading the datasets" since={load.since} size="panel" />}
       {load.kind === "failed" && (
         <p className="warn">
@@ -166,39 +298,83 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
       )}
       {load.kind === "ready" && list.length === 0 && <p className="meta">No dataset yet.</p>}
       {list.length > 0 && (
-        <div className="sgrid">
+        <div className="dp-grid datasets">
           {list.map((d) => (
             <DatasetCard
               key={d.id}
               dataset={d}
               why={whyOf(d)}
-              on={current?.id === d.id}
-              works={works}
-              onPick={() => {
-                setChosen(d.name);
-                // a sorted dataset opens on the whole page
-                if (d.totals.stacks > 0 && mayListScans(caps)) location.hash = href("data", "datasets", d.name);
-              }}
-              onStep={(id) => step(d, id)}
-              onBringIn={() => setBringing(d)}
+              summary={sums[d.name] ?? null}
+              on={chosenDataset?.id === d.id}
+              relation={chosenCohort ? datasetRelation(d.name, chosenCohort) : null}
+              feeds={feedsWords(d.name, d.cohort, allCohorts)}
+              view={viewDatasets && d.totals.stacks > 0 ? href("data", "datasets", d.name) : null}
+              onPick={() => choose({ kind: "dataset", name: d.name })}
             />
           ))}
         </div>
       )}
-      <NowSection caps={caps} jobs={jobs} onSaid={say} onFailed={failed} />
-      {current && current.digests.count > 0 && <Batches dataset={current} works={works && whyOf(current) === null} onBringIn={() => setBringing(current)} onAgain={(b) => readAgain(b, current)} />}
-      {bringing && (
-        <BringInNew
+
+      {readsCohorts && (
+        <>
+          <div className="dp-band-head">
+            <span className="eyebrow">Cohorts</span>
+            <span className="meta">groups of subjects, from any dataset</span>
+          </div>
+          {cohortList !== null && allCohorts.length === 0 && <p className="meta">No cohort yet.</p>}
+          {allCohorts.length > 0 && (
+            <div className="dp-grid cohorts">
+              {allCohorts.map((c) => (
+                <CohortCard
+                  key={c.name}
+                  cohort={c}
+                  datasets={datasetNames}
+                  on={chosenCohort?.name === c.name}
+                  relation={chosenDataset ? cohortRelation(chosenDataset.name, c) : null}
+                  onPick={() => choose({ kind: "cohort", name: c.name })}
+                />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {chosenDataset && (
+        <DatasetDetail
+          key={`dataset ${chosenDataset.id}`}
           caps={caps}
-          dataset={bringing}
-          rates={rates}
-          onClose={() => setBringing(null)}
-          onDone={(words) => {
-            setBringing(null);
+          dataset={chosenDataset}
+          summary={sums[chosenDataset.name] ?? null}
+          why={whyOf(chosenDataset)}
+          jobs={jobs}
+          onStep={(id) => step(chosenDataset, id)}
+          onChanged={changed}
+          onSaid={say}
+          onFailed={failed}
+          onRemoved={(words) => {
+            setChosen(null);
             changed(words);
           }}
         />
       )}
+      {chosenCohort && (
+        <CohortDetail
+          key={`cohort ${chosenCohort.name}`}
+          caps={caps}
+          cohort={chosenCohort}
+          datasets={datasetNames}
+          onChanged={changed}
+          onRenamed={(name) => {
+            setChosen({ kind: "cohort", name });
+            changed(`Renamed to ${name}.`);
+          }}
+          onRetired={(name) => {
+            setChosen(null);
+            changed(`${name} is retired.`);
+          }}
+        />
+      )}
+
       {opened?.kind === "sort-files" && (
         <SortFilesDialog
           caps={caps}
@@ -235,175 +411,163 @@ export function DataPage({ caps, install, onChanged, dataset }: { caps: Capabili
           }}
         />
       )}
+      {making && (
+        <NewCohortDialog
+          caps={caps}
+          taken={allCohorts.map((c) => c.name)}
+          onClose={() => setMaking(false)}
+          onMade={(name) => {
+            setMaking(false);
+            picked.current = true;
+            setChosen({ kind: "cohort", name });
+            changed(`${name} is made.`);
+          }}
+        />
+      )}
     </section>
   );
 }
 
-function DatasetCard(props: { dataset: Dataset; why: string | null; on: boolean; works: boolean; onPick: () => void; onStep: (id: StepId) => void; onBringIn: () => void }) {
-  const { dataset: d, why, on, works, onPick, onStep, onBringIn } = props;
-  const next = nextStep(d, why);
-  const sure = certainty(d);
-  const files = d.trees?.anon?.files ?? d.trees?.originals?.files ?? null;
+/** The View button of a card: the viewer of the dataset or the cohort, where there is something to view. */
+function ViewLink({ to, label }: { to: string | null; label: string }) {
+  if (to === null)
+    return (
+      <span className="dp-view" aria-disabled="true" title="Nothing to view yet">
+        <Icon name="grid" />
+        View
+      </span>
+    );
   return (
-    <div className={on ? "scard on" : "scard"} aria-current={on ? "true" : undefined} onClick={onPick}>
-      <div className="name">
+    <a className="dp-view" href={to} aria-label={label} onClick={(e) => e.stopPropagation()}>
+      <Icon name="grid" />
+      View
+    </a>
+  );
+}
+
+/** The six segments of where a dataset is, in words for a screen reader. */
+const SEGMENT_WORDS = ["found", "read", "sorted", "main scans", "pictures", "3D views"];
+
+function DatasetCard(props: { dataset: Dataset; why: string | null; summary: DatasetSummary | null; on: boolean; relation: Relation | null; feeds: string; view: string | null; onPick: () => void }) {
+  const { dataset: d, why, summary, on, relation, feeds, view, onPick } = props;
+  const next = nextStep(d, why);
+  const files = filesOf(d, summary);
+  const rail = railOf(d, summary);
+  const line = cardLine(d, next, summary);
+  // what the scans that need a look are asked, behind a hover
+  const lookWords = kindWords(summary?.look_kinds ?? d.totals.need_a_look ?? {});
+  const cls = ["dp-card", on ? "on" : relation ? (relation.related ? "rel" : "dim") : null].filter(Boolean).join(" ");
+  const said = rail.map((s, i) => `${SEGMENT_WORDS[i]} ${s === "done" ? "done" : s === "run" ? "running" : "not yet"}`).join(", ");
+  return (
+    <div className={cls} onClick={onPick} aria-current={on ? "true" : undefined}>
+      <div className="dp-card-head">
         <Icon name="folder" />
-        <button type="button" className="scard-pick grow" aria-pressed={on} onClick={onPick}>
+        <button
+          type="button"
+          className="dp-pick"
+          aria-pressed={on}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPick();
+          }}
+        >
           {d.name}
         </button>
         <span className={TONE[next.word]} title={why ?? undefined}>
           {next.word}
         </span>
-        <span onClick={(e) => e.stopPropagation()}>
-          <MoreMenu label={`More for ${d.name}`}>
-            {works && next.step !== "running" && why === null && (
-              <button type="button" onClick={onBringIn}>
-                Do all steps
-              </button>
-            )}
-            {works && next.step !== "sort-files" && d.state !== "unknown" && (
-              <button type="button" onClick={() => onStep("set-ids")}>
-                Set the IDs
-              </button>
-            )}
-            {works && next.step !== "read" && why === null && d.digests.count > 0 && (
-              <button type="button" onClick={() => onStep("read")}>
-                Read again
-              </button>
-            )}
-            <a href={href("data", "datasets", d.name, "pseudonymisation")}>Pseudonymisation</a>
-          </MoreMenu>
-        </span>
       </div>
-      <div className="nums">
-        <div>
+      <div className="dp-nums">
+        <span>
           <b>{files === null ? "?" : n(files)}</b>
           <span>files</span>
-        </div>
-        <div>
+        </span>
+        <span>
           <b>{n(d.totals.subjects)}</b>
           <span>subjects</span>
-        </div>
-        {!sure && (
-          <div>
-            <b>{n(d.totals.stacks)}</b>
-            <span>scans</span>
-          </div>
-        )}
+        </span>
+        <span>
+          <b>{n(d.totals.stacks)}</b>
+          <span>scans</span>
+        </span>
       </div>
-      {sure && (
-        <div className={sure.look > 0 ? "sure-line look" : "sure-line"} title={sure.look > 0 ? kindWords(sure.kinds) || undefined : undefined}>
-          {certaintyWords(sure)}
-        </div>
+      {relation ? (
+        <div className={relation.related ? "dp-rel on" : "dp-rel"}>{relation.words}</div>
+      ) : (
+        <>
+          <div className="dp-rail" role="img" aria-label={`Where it is: ${said}`}>
+            {rail.map((s, i) => (
+              <span key={i} className={s} />
+            ))}
+          </div>
+          <div className="dp-line" title={lookWords || undefined}>
+            {line}
+          </div>
+        </>
       )}
-      {works && (
-        <div className="row next" onClick={(e) => e.stopPropagation()}>
-          {next.step === "review" ? (
-            <a className="button small" href={narrow(href("review"), { dataset: d.name })} aria-label={`${next.label}: ${d.name}`}>
-              {next.label}
-            </a>
-          ) : (
-            <button type="button" className="button small" disabled={next.busy} aria-label={`${next.label}: ${d.name}`} onClick={() => onStep(next.step)}>
-              {next.label}
-            </button>
-          )}
-          {why !== null && <Hint text={why} />}
-        </div>
-      )}
+      <div className="dp-foot">
+        <span className={relation ? "dp-line grow" : "dp-feeds grow"}>{relation ? line : feeds}</span>
+        <ViewLink to={view} label={`View ${d.name}`} />
+      </div>
     </div>
   );
 }
 
-/** The chosen dataset's reads, newest first, compact: its name, when, its five marks and what it needs; the counts are the card's. */
-function Batches({ dataset: d, works, onBringIn, onAgain }: { dataset: Dataset; works: boolean; onBringIn: () => void; onAgain: (b: Batch) => void }) {
-  const recent = d.digests.recent;
-  const held = d.held?.files ?? 0;
+/** A cohort's parts, from the engine where it says them, else one part of all its members by how it came to be. */
+export function partsOf(c: Cohort): Part[] {
+  if (c.parts && c.parts.length > 0) return c.parts;
+  if (c.subjects === 0) return [];
+  const from: Part["from"] = c.from.kind === "source" ? "dataset" : c.from.kind === "promotion" ? "query" : c.from.kind === "manual" ? "hand" : "import";
+  return [{ from, dataset: from === "dataset" ? (c.feeds[0] ?? null) : null, subjects: c.subjects }];
+}
+
+function CohortCard({ cohort: c, datasets, on, relation, onPick }: { cohort: Cohort; datasets: string[]; on: boolean; relation: Relation | null; onPick: () => void }) {
+  const parts = partsOf(c);
+  const cls = ["dp-card", "dp-cohort", on ? "on" : relation ? (relation.related ? "rel" : "dim") : null].filter(Boolean).join(" ");
+  const more = ["subjects", c.sessions !== null ? `${n(c.sessions)} visits` : null, `${n(c.stacks)} scans`].filter(Boolean).join(" · ");
   return (
-    <section className="stack roomy" aria-label={`the reads of ${d.name}`}>
-      <div className="section-head rule-top">
-        <h2>Reads of {d.name}</h2>
-        <span className="meta">
-          {n(d.digests.count)} in all
-          {d.totals.refused_files > 0 ? ` · ${n(d.totals.refused_files)} files refused` : ""}
-          {held > 0 ? ` · ${n(held)} held until mapped` : ""}
-        </span>
-        {works && (
-          <button type="button" className="button secondary small" onClick={onBringIn}>
-            Do all steps
-          </button>
-        )}
+    <div className={cls} onClick={onPick} aria-current={on ? "true" : undefined}>
+      <div className="dp-card-head">
+        <Icon name="users" />
+        <button
+          type="button"
+          className="dp-pick"
+          aria-pressed={on}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPick();
+          }}
+        >
+          {c.name}
+        </button>
+        <span className="tag">{originWords(c)}</span>
       </div>
-      {recent.length === 0 && <p className="meta">Nothing has read this dataset yet.</p>}
-      {recent.length > 0 && (
-        <div className="table-wrap">
-          <table className="thin batches">
-            <thead>
-              <tr>
-                <th>Read</th>
-                <th>When</th>
-                <th className="strip-head">{STAGES.map((s) => STAGE_WORD[s]).join(" · ")}</th>
-                <th className="acts">
-                  <span className="sr-only">Next</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.map((b) => {
-                const marks = stripMarks(b);
-                const tail = batchTail(b);
-                return (
-                  <tr key={b.id}>
-                    <td>
-                      <a className="path batch-link" href={href("data", "batch", String(b.id))}>
-                        {b.name}
-                      </a>
-                    </td>
-                    <td className="num">{whenWords(b.started_at)}</td>
-                    <td>
-                      <div className="thread" role="img" aria-label={marks.map((m) => `${STAGE_WORD[m.name]}: ${m.words}`).join(", ")}>
-                        {marks.map((m) => (
-                          <span key={m.name} className={m.mark === "none" ? undefined : m.mark} title={`${STAGE_WORD[m.name]}: ${m.words}`}>
-                            {LETTER[m.name]}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="acts">
-                      {tail.kind === "held" && (
-                        <a className="tail" href={href("data", "datasets", d.name, "pseudonymisation")}>
-                          {tail.words}
-                          <Icon name="chevron-right" />
-                        </a>
-                      )}
-                      {tail.kind === "look" && (
-                        <a className="tail" href={narrow(href("review"), { dataset: d.name })}>
-                          {tail.words}
-                          <Icon name="chevron-right" />
-                        </a>
-                      )}
-                      {tail.kind === "again" && works && (
-                        <button type="button" className="link-button tail" onClick={() => onAgain(b)}>
-                          {tail.words}
-                          <Icon name="chevron-right" />
-                        </button>
-                      )}
-                      {tail.kind === "again" && !works && <span className="tag">{b.state}</span>}
-                      {tail.kind === "reading" && <span className="tag brand">{tail.words}</span>}
-                      {tail.kind === "sorted" && (
-                        <span className="tag ok">
-                          <Icon name="check" />
-                          sorted
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+      <div className="dp-big">
+        <b>{n(c.subjects)}</b>
+        <span>{more}</span>
+      </div>
+      {parts.length > 0 && (
+        <>
+          <div className="dp-parts" role="img" aria-label={`Where its subjects come from: ${parts.map((p) => `${partLabel(p)} ${p.subjects}`).join(", ")}`}>
+            {parts.map((p) => (
+              <span key={`${p.from} ${p.dataset ?? ""}`} className={`dp-c${slotOf(p, datasets)}`} style={{ flex: p.subjects }} />
+            ))}
+          </div>
+          <div className="dp-legend">
+            {parts.map((p) => (
+              <span key={`${p.from} ${p.dataset ?? ""}`}>
+                <i className={`dp-sw dp-c${slotOf(p, datasets)}`} />
+                {partLabel(p)} {n(p.subjects)}
+              </span>
+            ))}
+          </div>
+        </>
       )}
-      {d.digests.count > recent.length && <p className="meta">The {recent.length} newest of {d.digests.count}.</p>}
-    </section>
+      {relation && <div className={relation.related ? "dp-rel on" : "dp-rel"}>{relation.words}</div>}
+      <div className="dp-foot">
+        <span className="dp-line grow">{cohortLine(c)}</span>
+        <ViewLink to={href("data", "cohorts", c.name)} label={`View ${c.name}`} />
+      </div>
+    </div>
   );
 }

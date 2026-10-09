@@ -30,12 +30,10 @@ export const PLACEHOLDERS: Placeholder[] = [
     icon: "data",
     grant: "data:see",
     door: "GET /api/sources",
-    words: "The datasets, each pseudonymised before it is read, every batch followed through its stages, and the cohorts.",
+    words: "The datasets, where the files come from, and the cohorts, groups of subjects from any dataset, on one page.",
     built: true,
-    pages: [
-      { id: "datasets", title: "Datasets", depth: 1 },
-      { id: "cohorts", title: "Cohorts", depth: 1 },
-    ],
+    // Wave 7a (2026-10-09): datasets and cohorts on one page
+    pages: [{ id: "datasets", title: "Datasets and cohorts", depth: 1 }],
   },
   { id: "review", title: "Review", icon: "review", grant: "review:see", door: "GET /api/review", words: "What needs a person's judgement: a scan the rules could not place, a subject to confirm.", built: true },
   { id: "campaigns", title: "Campaigns", icon: "users", grant: "campaigns:see", door: "GET /api/campaigns", words: "One question asked of many items, rated by people, adjudicated, closed into decisions.", built: true },

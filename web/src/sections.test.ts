@@ -50,8 +50,8 @@ describe("the sections of an install that is set up", () => {
   const served = caps({ engine: { ...caps().engine!, doors } });
   it("join Home where the engine serves their doors and the person may open them", () => {
     expect(sections(served).map((s) => s.id)).toEqual(["home", "query", "data", "review", "release", "pipelines"]);
-    // Data unfolds its two pages in the side (record 26)
-    expect(sections(served).find((s) => s.id === "data")?.pages?.map((p) => p.id)).toEqual(["datasets", "cohorts"]);
+    // Data unfolds its page in the side: datasets and cohorts on one page (Wave 7a, 2026-10-09)
+    expect(sections(served).find((s) => s.id === "data")?.pages?.map((p) => [p.id, p.title])).toEqual([["datasets", "Datasets and cohorts"]]);
     const reader = { ...served, person: { ...served.person, grants: SETS.reader.grants, detail: "plain" as const, groups: ["Readers"] } };
     expect(sections(reader).map((s) => s.id)).toEqual(["home", "query", "data"]);
     const reviewing = { ...served, person: { ...served.person, grants: ["review:see" as const], detail: "plain" as const } };

@@ -40,7 +40,7 @@ describe("a cohort's page", () => {
   });
 
   it("names it, says how it came to be, and offers its acts", () => {
-    expect(html).toContain('<a href="#data/cohorts">Cohorts</a>');
+    expect(html).toContain('<a href="#data/datasets?cohort=north">Datasets and cohorts</a>');
     expect(html).toContain("<h1>north</h1>");
     expect(html).toContain("Fed by the dataset north-3t since 11 May. Owner astrid. Every subject a digest of that folder brings in joins here.");
     expect(html).toContain("Add or remove");

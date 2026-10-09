@@ -39,9 +39,9 @@ export function readsStructure(caps: Capabilities): boolean {
 }
 
 /** A source place's dataset, from the places door (`dataset`) or the sources door (its fields at the top). */
-type Declared = { kind?: unknown; state?: unknown; arrives?: unknown; root?: unknown; patient_id?: unknown; subjects?: unknown; trees?: unknown };
+export type Declared = { kind?: unknown; state?: unknown; arrives?: unknown; root?: unknown; patient_id?: unknown; subjects?: unknown; trees?: unknown };
 
-function declared(p: { dataset?: unknown } & Declared): Declared {
+export function declared(p: { dataset?: unknown } & Declared): Declared {
   const d = p.dataset;
   return d && typeof d === "object" ? (d as Declared) : p;
 }

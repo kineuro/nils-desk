@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
 // One safe way in for data, as an app (Wave 7a, the tries of 2026-10-08): the
-// Data page lists datasets only; "Add a dataset" is a finder that searches a
+// Data page lists datasets, never a root's folders; "Add a dataset" is a finder that searches a
 // root's folders fifty at a time, looks inside the one picked once, and asks
-// before adding a folder with no DICOM; each dataset card shows one state word and one button for its next
-// step, so how to start is always on screen; "Sort the files" shows the
+// before adding a folder with no DICOM; each dataset card shows one state word, and the chosen one's detail
+// one button for its next step, so how to start is always on screen; "Sort the files" shows the
 // engine's 409 as the question it is and moves only once confirmed; "Set the
 // IDs" never offers the personnummer; no engine word is on the page; and a
 // queue worker a restart ended is never a failure on Data.
@@ -186,7 +186,8 @@ describe("the Data page", () => {
   it("says a refused Read in one plain line, the engine's words behind a \"?\"", async () => {
     const engineWords = "@ward-d is not a registered ingest location; those are data, data-test";
     await page([toRead], (c) => (c.method === "POST" && c.url === "/api/jobs" ? { status: 400, body: { error: engineWords } } : undefined));
-    act(() => button(host.querySelector(".scard")!, /^Read/)!.click());
+    // the dataset that needs a person is chosen on arrival, its next step the primary button of its detail
+    act(() => button(host.querySelector(".dp-detail .dp-acts")!, /^Read/)!.click());
     await settle();
     const said = host.querySelector("section.data > p.warn")!;
     expect(said.textContent).toContain("This dataset is not ready to read yet.");
@@ -223,26 +224,34 @@ describe("the Data page", () => {
       totals: { ...toRead.totals, stacks: 120, to_sort: 8, sure: 112, need_a_look: { "body_part:low_confidence": 5, "orientation:missing": 3 } },
     } as Partial<Dataset>);
     await page([looked]);
-    const card = host.querySelector(".scard")!;
-    expect(card.querySelector(".sure-line")?.textContent).toBe("120 scans · 112 sure · 8 need a look");
-    expect(card.querySelector(".sure-line")?.getAttribute("title")).toBe("body part, low confidence: 5; orientation, missing: 3");
-    const next = card.querySelector<HTMLAnchorElement>(".next a.button");
+    const card = host.querySelector(".dp-card")!;
+    expect(card.querySelector(".dp-line")?.textContent).toBe("112 sure · 8 need a look");
+    expect(card.querySelector(".dp-line")?.getAttribute("title")).toBe("body part, low confidence: 5; orientation, missing: 3");
+    // on the card the only button is View; the next step is the primary button of its detail
+    const acts = host.querySelector(".dp-detail .dp-acts")!;
+    const next = acts.querySelector<HTMLAnchorElement>("a.button:not(.secondary)");
     expect(next?.textContent).toBe("Review 8");
     expect(next?.getAttribute("href")).toBe("#review?dataset=ward-g");
-    // the one next step: no second button beside it
-    expect(card.querySelectorAll(".next .button")).toHaveLength(1);
-    expect(card.textContent).not.toContain("Pick main scans");
+    // the one next step: no second primary button beside it
+    expect(acts.querySelectorAll(".button:not(.secondary):not(.quiet)")).toHaveLength(1);
+    expect(host.querySelector("section.data")!.textContent).not.toContain("Pick main scans");
   });
 
   it("shows each card's state word and one button, starts the next step from it, and carries no engine word", async () => {
     const e = await page([identified, noIds, unknown, toRead], (c) => (c.method === "POST" && c.url === "/api/jobs" ? { status: 202, body: { job: 41, state: "queued" } } : undefined));
-    const cards = Object.fromEntries([...host.querySelectorAll(".scard")].map((c) => [c.querySelector(".scard-pick")?.textContent, c]));
-    const said = (name: string) => [cards[name].querySelector(".name .tag")?.textContent, cards[name].querySelector(".next button")?.textContent];
+    const cards = () => Object.fromEntries([...host.querySelectorAll<HTMLElement>(".dp-card")].map((c) => [c.querySelector(".dp-pick")?.textContent, c]));
+    // a card says its state; chosen, its detail offers the next step as its one primary button
+    const said = (name: string) => {
+      const card = cards()[name];
+      if (!card.classList.contains("on")) act(() => (card.querySelector(".dp-pick") as HTMLButtonElement).click());
+      return [cards()[name].querySelector(".dp-card-head .tag")?.textContent, host.querySelector(".dp-detail .dp-acts .button:not(.secondary):not(.quiet)")?.textContent];
+    };
     expect(said("ward-a")).toEqual(["Identified", "Pseudonymise"]);
     expect(said("ward-b")).toEqual(["Anonymised", "Set the IDs"]);
     expect(said("ward-c")).toEqual(["Unknown", "Sort the files"]);
     expect(said("ward-d")).toEqual(["Ready", "Read"]);
-    act(() => button(cards["ward-a"], "Pseudonymise: ward-a")!.click());
+    said("ward-a");
+    act(() => button(host.querySelector(".dp-detail .dp-acts")!, "Pseudonymise")!.click());
     await settle();
     expect(e.of("POST", "/api/jobs")[0].body).toMatchObject({ command: ["pseudonymize", "@ward-a", "--name", expect.stringMatching(/^ward-a-\d{4}-\d\d-\d\d$/)] });
     const text = host.querySelector("section.data")!.textContent ?? "";
