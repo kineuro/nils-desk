@@ -1097,24 +1097,38 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .scard-pick:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 2px; border-radius: 2px; }
 .scard .where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: 12.5px; color: var(--n-text-faint); }
 .scard > .row { flex-wrap: wrap; gap: 0.3rem 0.6rem; }
-/* a dataset's scans: the list, and the viewer beside it once a scan is opened */
+/* a dataset's scans: their pictures by subject and session, and the light viewer beside them once one is opened */
 .scans { display: grid; gap: 0.9rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
-.scans.open { grid-template-columns: minmax(14rem, 22rem) minmax(0, 1fr); }
+.scans.open { grid-template-columns: minmax(16rem, 2fr) minmax(0, 3fr); }
 @media (max-width: 900px) { .scans.open { grid-template-columns: minmax(0, 1fr); } }
-.scan-list { display: grid; gap: 0.7rem; min-width: 0; }
-.scans.open .scan-list { max-height: 75vh; overflow-y: auto; }
-.scan-subject { display: grid; gap: 0.3rem; min-width: 0; }
+.scan-grid { display: grid; gap: 0.8rem; min-width: 0; }
+.scans.open .scan-grid { max-height: 82vh; overflow-y: auto; padding-right: 0.3rem; }
+.scan-subject { display: grid; gap: 0.35rem; min-width: 0; }
 .scan-subject > b { font-family: var(--n-font-mono); font-size: 13px; }
-.scan-session { display: grid; gap: 0.15rem; padding-left: 0.6rem; border-left: 1px solid var(--n-line); }
-.scan-session ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 1px; }
-.scan-row { display: flex; align-items: baseline; gap: 0.6rem; width: 100%; min-width: 0; padding: 0.25rem 0.5rem; border: 1px solid transparent; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
-.scan-row:hover { border-color: var(--n-line); }
-.scan-row.on { border-color: var(--n-brand-line); box-shadow: inset 3px 0 0 var(--n-brand); font-weight: 600; }
-.scan-row:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
-.scan-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scan-row .meta { flex: none; }
+.scan-session { display: grid; gap: 0.3rem; padding-left: 0.6rem; border-left: 1px solid var(--n-line); }
+.scan-session ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.45rem; grid-template-columns: repeat(auto-fill, minmax(clamp(6.5rem, 9vw, 11rem), 1fr)); }
+.scan-tile { display: grid; gap: 0.2rem; width: 100%; min-width: 0; padding: 3px; border: 1px solid transparent; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.scan-tile img, .scan-tile .scan-blank { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #000; border-radius: calc(var(--n-radius) - 2px); }
+.scan-tile:hover { border-color: var(--n-line-strong); }
+.scan-tile.look { border-color: var(--n-caution-icon); box-shadow: inset 4px 0 0 var(--n-caution-icon); padding-left: 7px; }
+.scan-tile.on { outline: 2px solid var(--n-brand); outline-offset: 1px; }
+.scan-tile:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.scan-tile .scan-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-tile.on .scan-name { font-weight: 600; }
 .scan-pages { gap: 0.5rem; align-items: center; }
-.scan-view { display: grid; gap: 0.4rem; min-width: 0; }
+.scan-view { display: grid; gap: 0.4rem; min-width: 0; position: sticky; top: 0.5rem; }
+.scan-view-head { gap: 0.3rem; align-items: center; }
+.scan-view-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-view.look .scan-canvas { box-shadow: inset 4px 0 0 var(--n-caution-icon); border-color: var(--n-caution-icon); }
+.scan-canvas { position: relative; width: 100%; height: min(78vh, 70vw); min-height: 16rem; background: #000; border: 1px solid var(--n-line); border-radius: var(--n-radius); overflow: hidden; overscroll-behavior: contain; }
+.scan-canvas canvas, .scan-canvas .scan-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.scan-canvas .scan-still { z-index: 1; image-rendering: auto; }
+.scan-canvas .scan-wait { position: absolute; inset: auto 0 0.5rem 0; text-align: center; }
+.sure-line { font-size: 12.5px; color: var(--n-text-dim); }
+.sure-line.look { color: var(--n-caution-fg); }
+.pick-lines { display: grid; gap: 0.3rem; }
+.pick-line { gap: 0.6rem; align-items: center; font-size: var(--n-text-size-small); }
+.review-dataset { gap: 0.2rem; align-items: center; }
 .scard .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
 .scard .nums b { display: block; font-family: var(--n-font-serif); font-weight: 400; font-size: 1.15rem; line-height: 1.2; }
 .scard .nums span { font-size: 12px; color: var(--n-text-faint); }

@@ -2,7 +2,7 @@
 // A dataset's scans (Wave 7a, the try of 2026-10-09: "where should I open a
 // scan?"): the engine's scans door lists the stacks a dataset's digests
 // created, a page at a time, read from the registry and never through a
-// cohort. Below detail quasi the engine answers the subject's code, the day
+// cohort, each with its picture and its open questions (record 55 H2). Below detail quasi the engine answers the subject's code, the day
 // and a date label as their shapes, so the list groups by the subject's and
 // the session's ids, which it always answers.
 
@@ -23,6 +23,10 @@ export interface Scan {
   name: string;
   orientation: string | null;
   images: number | null;
+  /** The middle plane as a small picture (a data URL), where the engine made one at sort time. */
+  picture: string | null;
+  /** The kinds of review still open on it; empty when the sort is sure of it. */
+  questions: string[];
 }
 
 /** One page of a dataset's scans and the cursor of the next. */
@@ -42,6 +46,10 @@ export interface ScanRow {
   orientation: string | null;
   images: number | null;
   day: string | null;
+  /** With `pictures=1`: the middle plane's picture, about 256 px, as a data URL. */
+  picture?: string | null;
+  /** With `pictures=1`: the open review kinds; empty is sure. */
+  questions?: string[] | null;
 }
 
 interface ScansAnswer {
@@ -65,6 +73,8 @@ export function scansOf(rows: ScanRow[]): Scan[] {
     name: r.series_description || `Scan ${r.stack}`,
     orientation: r.orientation,
     images: r.images,
+    picture: typeof r.picture === "string" && r.picture !== "" ? r.picture : null,
+    questions: Array.isArray(r.questions) ? r.questions.filter((q): q is string => typeof q === "string") : [],
   }));
 }
 
@@ -93,6 +103,11 @@ export function groupScans(scans: Scan[]): SubjectGroup[] {
   return subjects;
 }
 
+/** A scan's open questions in words, for its picture's hover: "body_part:low_confidence" reads "body part, low confidence". */
+export function questionWords(s: Pick<Scan, "questions">): string {
+  return s.questions.map((q) => q.replaceAll("_", " ").replace(":", ", ")).join("; ");
+}
+
 /** A scan's few facts in one line: its orientation and how many images. */
 export function scanFacts(s: Scan): string {
   const parts: string[] = [];
@@ -102,9 +117,9 @@ export function scanFacts(s: Scan): string {
 }
 
 export const scanDoors = {
-  /** A page of the dataset's scans, after the stack the page before ended on. */
+  /** A page of the dataset's scans with their pictures, after the stack the page before ended on: fifty pictures in one request. */
   page: (dataset: string, after: number | null = null): Promise<ScanPage> => {
-    const q = new URLSearchParams({ limit: String(SCANS_PAGE) });
+    const q = new URLSearchParams({ pictures: "1", limit: String(SCANS_PAGE) });
     if (after !== null) q.set("after", String(after));
     return door<ScansAnswer>("GET", `/api/datasets/${encodeURIComponent(dataset)}/scans?${q}`).then((a) => ({
       total: a.total,
