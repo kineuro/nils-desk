@@ -13,6 +13,6 @@ export default defineConfig({
   use: { baseURL: `http://127.0.0.1:${port}` },
   // Firefox measures the reader in the desk's shell as well where it is installed
   // (`npx playwright install firefox`, then LAYOUT_FIREFOX=1)
-  projects: [{ name: "chromium", use: { browserName: "chromium" } }, ...(process.env.LAYOUT_FIREFOX ? [{ name: "firefox", testMatch: /(shell|scale|ab|pair|anchored|dataset)\.pw\.ts/, use: { browserName: "firefox" as const } }] : [])],
+  projects: [{ name: "chromium", use: { browserName: "chromium" } }, ...(process.env.LAYOUT_FIREFOX ? [{ name: "firefox", testMatch: /(shell|scale|ab|pair|anchored|dataset|assistant)\.pw\.ts/, use: { browserName: "firefox" as const } }] : [])],
   webServer: { command: `npx vite --config vite.layout.config.ts --port ${port}`, url: `http://127.0.0.1:${port}/`, reuseExistingServer: false, timeout: 60_000 },
 });
