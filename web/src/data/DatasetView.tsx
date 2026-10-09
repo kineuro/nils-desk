@@ -11,13 +11,18 @@
 // images and left and right the scans; 3 shows three planes, / filters, n
 // switches the names, g turns to the grid at the same place and Esc goes
 // back up to it. The scan open is in the address, so back and forward work.
+// Under the filter, how many scans it leaves, and keeping them as a
+// selection or a cohort (Keep.tsx).
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { Capabilities } from "../capabilities";
 import { href, narrow } from "../routes";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { ModeSwitch, NamesSwitch, type Go } from "./Grid";
+import { KeepActions } from "./Keep";
+import { browserKept } from "./keep";
 import { markOpen, ScanViewer } from "./ScanViewer";
 import { needsLook, questionWords, type Scan, type ScanPage } from "./scans";
 import "./datasetView.css";
@@ -25,6 +30,7 @@ import { buildTree, factsOf, filterTree, filterWords, folderOf, matches, pathOf,
 import {
   goUp,
   heldValue,
+  inDialog,
   keep,
   kept,
   KEPT,
@@ -75,7 +81,7 @@ async function seedOf(scope: Scope, view: ViewState): Promise<Scan[]> {
   return (held ?? (await viewerDoors.visit(scope, visit, false))).scans;
 }
 
-export function Browser({ scope, view, go, onSections, grid }: { scope: Scope; view: ViewState; go: Go; onSections: () => void; grid: boolean }) {
+export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Capabilities; scope: Scope; view: ViewState; go: Go; onSections: () => void; grid: boolean }) {
   const [scans, setScans] = useState<Scan[]>([]);
   const [seed, setSeed] = useState<Scan[]>([]);
   const [total, setTotal] = useState<number | null>(null);
@@ -327,7 +333,7 @@ export function Browser({ scope, view, go, onSections, grid }: { scope: Scope; v
   const filterBox = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || inDialog(e.target)) return;
       const t = e.target as HTMLElement | null;
       const field = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
       if (field) {
@@ -396,6 +402,14 @@ export function Browser({ scope, view, go, onSections, grid }: { scope: Scope; v
               /
             </span>
           </label>
+          {caps && total !== null && total > 0 && (
+            <div className="dview-keep">
+              <span className="meta num" aria-label={`${filtering ? `${n(order.length)} of ${n(all.length)}` : n(total)} scans`}>
+                {filtering ? `${n(order.length)} of ${n(all.length)}` : n(total)}
+              </span>
+              <KeepActions caps={caps} ready={!failed && order.length > 0} kept={() => browserKept(scope, words, order, { read: all.length, total })} />
+            </div>
+          )}
           {failed && <p className="warn">The scans could not be read: {failed}</p>}
           {all.length === 0 && reading && <Wait phase="reading the scans" since={since} size="panel" />}
           {!reading && all.length === 0 && !failed && <p className="meta dview-none">No scans yet</p>}

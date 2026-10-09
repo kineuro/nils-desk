@@ -3,7 +3,8 @@
 // three levels in the desk's shell (the top bar, the side, the page) against
 // a fake engine, the address naming the level, so grid.pw.ts measures that
 // the cards fill rows on a laptop and that a phone's width keeps every level
-// in one column with no sideways scroll.
+// in one column with no sideways scroll; and that the actions keeping what a
+// level shows, and their dialog, fit both.
 
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -109,7 +110,7 @@ const rows = await Promise.all(
 
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 const scope = { kind: "dataset", name: "ms-a", id: 7 };
-window.fetch = (async (input: RequestInfo | URL) => {
+window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const u = new URL(url, location.origin);
   if (u.pathname === "/api/datasets/ms-a/subjects")
@@ -128,6 +129,13 @@ window.fetch = (async (input: RequestInfo | URL) => {
   if (/^\/api\/datasets\/ms-a\/subjects\/\d+\/visits$/.test(u.pathname))
     return json({ scope, detail: "quasi", name: "date", show: "code", subject: { id: 1, code: subjects[0].code, label: subjects[0].code }, totals: { visits: 3, scans: 27, look: 4, span: "909" }, matched: 3, visits });
   if (u.pathname === "/api/datasets/ms-a/scans") return json({ scope, total: rows.length, count: rows.length, scans: rows, next: null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
+  // keeping what a level shows: the question counted, kept, saved or run and promoted
+  if (u.pathname === "/api/ask/diagnose") {
+    const out = (JSON.parse(String(init?.body ?? "{}")) as { document: { out: { set: string } } }).document.out.set;
+    const count = out === "subjects" ? subjects.length : out === "visits" ? visits.length : rows.length;
+    return json({ valid: true, issues: [], funnel: [{ set: out, grain: "subject", stage: "where", rows: count, subjects: out === "subjects" ? count : 1 }] });
+  }
+  if (u.pathname === "/api/cohorts") return json([{ name: "ms-all", subjects: 120, retired_at: null }]);
   return json({ error: `no door ${u.pathname}` }, 404);
 }) as typeof fetch;
 
@@ -135,7 +143,17 @@ const caps = {
   engine: {
     engine: { name: "nils", version: "1.0.0-alpha.80" },
     contracts: { openapi: "7" },
-    doors: ["GET /api/datasets/{name}/scans", "GET /api/datasets/{name}/subjects", "GET /api/datasets/{name}/subjects/{subject}/visits"],
+    doors: [
+      "GET /api/datasets/{name}/scans",
+      "GET /api/datasets/{name}/subjects",
+      "GET /api/datasets/{name}/subjects/{subject}/visits",
+      "POST /api/ask/diagnose",
+      "POST /api/ask/documents",
+      "POST /api/ask/run",
+      "PUT /api/ask/selections/{name}",
+      "POST /api/ask/handles/{id}/promote",
+      "GET /api/cohorts",
+    ],
     policy: [],
     auth: "token",
     principal: "astrid@site",
@@ -146,7 +164,7 @@ const caps = {
   kvasir: null,
   assistant: null,
   apps: [],
-  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see"], detail: "quasi", groups: [] },
+  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work"], detail: "quasi", groups: [] },
   desk: { version: "1.0.0", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
 } as unknown as Capabilities;
 

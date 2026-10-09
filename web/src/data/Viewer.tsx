@@ -29,7 +29,7 @@ export function Viewer({ caps, scope, query, onSections }: { caps: Capabilities;
     if (replace) location.replace(to);
     else location.hash = to;
   };
-  if (!grid || view.mode === "browser") return <Browser scope={scope} view={view} go={go} onSections={onSections} grid={grid} />;
+  if (!grid || view.mode === "browser") return <Browser caps={caps} scope={scope} view={view} go={go} onSections={onSections} grid={grid} />;
   return <Grid caps={caps} scope={scope} view={view} go={go} />;
 }
 

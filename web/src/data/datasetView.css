@@ -41,6 +41,10 @@
 .dview-filter input::placeholder { color: var(--n-text-faint); }
 .dview-filter input::-webkit-search-cancel-button { display: none; }
 .dview-filter .vw-key { font-family: var(--n-font-mono); font-size: calc(12 * var(--p)); color: var(--n-text-faint); }
+/* how many the filter leaves, and keeping them */
+.dview-keep { display: flex; align-items: center; flex-wrap: wrap; gap: calc(2 * var(--p)) calc(6 * var(--p)); margin: calc(-2 * var(--p)) 0 calc(6 * var(--p)); padding: 0 calc(2 * var(--p)); font-size: calc(12.5 * var(--p)); }
+.dview-keep > .meta { color: var(--n-text-faint); }
+.dview-keep .vw-keep > .button { min-height: calc(26 * var(--p)); padding: 0 calc(6 * var(--p)); font-size: calc(12.5 * var(--p)); }
 .dview-tree { flex: 1; display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 
 .dview-row { display: flex; align-items: center; gap: calc(6 * var(--p)); min-width: 0; min-height: calc(26 * var(--p)); padding: 0 calc(8 * var(--p)); border-radius: var(--n-radius); color: var(--n-text-dim); cursor: pointer; white-space: nowrap; }

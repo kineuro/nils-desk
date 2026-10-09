@@ -7,14 +7,19 @@
 // folders by datatype that fold, each family together and outlined in its
 // colour. Keyboard first: the arrows move a cursor, Enter opens, Esc goes up
 // a level, / searches, g turns to the browser at the same place. Every
-// level's place is in the address, so back and forward work.
+// level's place is in the address, so back and forward work. Each level's
+// bar ends in Save as a selection and Make a cohort, over what it shows
+// (Keep.tsx).
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
+import { sees } from "../grants";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { KeepActions } from "./Keep";
+import { scansKept, subjectsKept, visitsKept } from "./keep";
 import { pictures as sharedPictures } from "./pictures";
 import { markOpen } from "./ScanViewer";
 import { needsLook, questionWords, type Scan, type ScanPage } from "./scans";
@@ -30,6 +35,7 @@ import {
   goUp,
   heldValue,
   hold,
+  inDialog,
   keep,
   kept,
   KEPT,
@@ -68,6 +74,7 @@ import {
   type SubjectsAsk,
   type SubjectsPage,
   type ViewState,
+  visitFilter,
   type Visit,
   type VisitsPage,
 } from "./viewer";
@@ -301,7 +308,7 @@ function useSubjects(scope: Scope, ask: SubjectsAsk, onRefused: () => void) {
   return { ...state, fresh: state.key === key, more };
 }
 
-function SubjectsLevel({ scope, view, go }: LevelProps) {
+function SubjectsLevel({ caps, scope, view, go }: LevelProps) {
   const [show, setShow] = useShow();
   const [order, setOrder] = useKept<Order>(KEPT.order, ORDERS, "look");
   const [naming, setNaming] = useKept<Naming>(KEPT.visits, NAMINGS, "date");
@@ -366,7 +373,7 @@ function SubjectsLevel({ scope, view, go }: LevelProps) {
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || inDialog(e.target)) return;
       if (typing(e.target)) {
         if (e.target !== search.current) return;
         if (e.key === "Escape") {
@@ -496,6 +503,7 @@ function SubjectsLevel({ scope, view, go }: LevelProps) {
             Clear
           </button>
         )}
+        <KeepActions caps={caps} ready={!!page && list.fresh && !list.failed && page.matched > 0} kept={() => subjectsKept(scope, { q: view.q, filter: view.filter }, { quasi: sees(caps, "quasi"), shown: page?.matched ?? null })} />
       </div>
       {list.failed && <p className="warn">The subjects could not be read: {list.failed}</p>}
       {!page && !list.failed && <Wait phase="reading the subjects" since={list.since} size="panel" />}
@@ -619,7 +627,7 @@ function useAround(scope: Scope, view: ViewState, subject: number): { before: nu
   return { before: i > 0 ? list[i - 1].id : null, after: i >= 0 && i < list.length - 1 ? list[i + 1].id : null };
 }
 
-function VisitsLevel({ scope, view, go, subject }: LevelProps & { subject: number }) {
+function VisitsLevel({ caps, scope, view, go, subject }: LevelProps & { subject: number }) {
   const [naming, setNaming] = useKept<Naming>(KEPT.visits, NAMINGS, "date");
   const [show] = useShow();
   const vfilterKey = view.vfilter.join(",");
@@ -654,7 +662,7 @@ function VisitsLevel({ scope, view, go, subject }: LevelProps & { subject: numbe
 
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey || typing(e.target) || inDialog(e.target)) return;
       if (e.key === "Escape") {
         e.preventDefault();
         goUp(up);
@@ -748,6 +756,7 @@ function VisitsLevel({ scope, view, go, subject }: LevelProps & { subject: numbe
         </span>
         <span className="vw-label apart">Only visits</span>
         <Chips offer={VISIT_FILTERS} on={view.vfilter} onToggle={(k) => go({ vfilter: toggled(view.vfilter, k) }, true)} />
+        <KeepActions caps={caps} ready={!!page && state.fresh && !state.failed && visits.length > 0} kept={() => visitsKept(scope, { id: subject, label: name }, view.vfilter, page?.visits ?? null, page?.matched ?? null)} />
       </div>
       {state.failed && <p className="warn">The visits could not be read: {state.failed}</p>}
       {!page && !state.failed && <Wait phase="reading the visits" since={state.since} size="panel" />}
@@ -834,7 +843,18 @@ function readAhead(s: Scan): void {
   );
 }
 
-function ScansLevel({ scope, view, go, subject, visit }: LevelProps & { subject: number; visit: string }) {
+/** The session a visit's key names, or null for a visit of studies no session holds. */
+const sessionOf = (key: string): number | null => (/^s\d+$/.test(key) ? Number(key.slice(1)) : null);
+
+/** The studies a visit is: its key's where it names them, else the visit's own and its scans'. */
+function studiesOf(key: string, here: Visit | null, scans: Scan[]): number[] {
+  const named = visitFilter(key)?.studies;
+  if (named) return named.split(",").map(Number);
+  const all = new Set<number>([...(here?.studies ?? []), ...scans.flatMap((s) => (typeof s.study === "number" ? [s.study] : []))]);
+  return [...all].sort((a, b) => a - b);
+}
+
+function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { subject: number; visit: string }) {
   const [names, setNames] = useKept<Names>(KEPT.names, NAMES, "nils");
   const [colour, setColour] = useKept<ColourBy>(KEPT.colour, COLOURS, "family");
   const [folded, setFolded] = useState<Set<string>>(() => new Set(["other"]));
@@ -954,7 +974,7 @@ function ScansLevel({ scope, view, go, subject, visit }: LevelProps & { subject:
 
   useEffect(() => {
     const keyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || typing(e.target)) return;
+      if (e.ctrlKey || e.metaKey || typing(e.target) || inDialog(e.target)) return;
       if (e.altKey) {
         if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && visits && at >= 0) {
           e.preventDefault();
@@ -1034,6 +1054,18 @@ function ScansLevel({ scope, view, go, subject, visit }: LevelProps & { subject:
           </select>
         </span>
         <NamesSwitch names={names} onNames={setNames} />
+        <KeepActions
+          caps={caps}
+          ready={!!page && !load.failed && scans.length > 0}
+          kept={() =>
+            scansKept(
+              scope,
+              { subject, subjectLabel: name, visit, label: title, number: here?.number ?? null, studies: studiesOf(visit, here, scans), session: sessionOf(visit) },
+              scans,
+              page?.total ?? null,
+            )
+          }
+        />
       </div>
       {legend.length > 0 && (
         <div className="vw-legend" aria-label={`Coloured by ${colour}`}>

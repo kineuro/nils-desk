@@ -70,7 +70,15 @@
 .vw-chip[aria-pressed="true"] { border-color: var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-fg); font-weight: 500; }
 .vw-chip.caution[aria-pressed="true"] { border-color: var(--n-caution-icon); background: var(--n-caution-bg); color: var(--n-caution-fg); }
 .vw-chip:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
-.vw-clear { margin-left: auto; font-size: calc(13 * var(--p)); }
+.vw-clear { margin-left: calc(4 * var(--p)); font-size: calc(13 * var(--p)); }
+
+/* what the filters show, kept: two quiet actions at the end of a level's bar, and the one line a done one leaves before them */
+.vw-keep { display: inline-flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: calc(4 * var(--p)) calc(6 * var(--p)); min-width: 0; margin-left: auto; }
+.vw-keep > .button { min-height: calc(28 * var(--p)); padding: 0 calc(8 * var(--p)); font-size: calc(13 * var(--p)); }
+.vw-said { font-size: calc(13 * var(--p)); overflow-wrap: anywhere; }
+/* the dialog reads as every dialog of the desk, not at the viewer's scale */
+.vw-keep .dialog { font-size: var(--n-text-size); }
+.keep-word .check-row { margin-top: 0.25rem; color: var(--n-text); }
 
 /* ------------------------------------------------------------ cards */
 .vw-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, calc(236 * var(--p))), 1fr)); gap: calc(12 * var(--p)); }

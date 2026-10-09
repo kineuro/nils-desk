@@ -45,3 +45,48 @@ test("a phone's width is one column with no sideways scroll", async ({ page }) =
   expect(main!.y).toBeGreaterThanOrEqual(side!.y + side!.height - 1);
   await page.screenshot({ path: "test-results/dataset-phone.png" });
 });
+
+for (const [device, width, height] of [
+  ["laptop", 1440, 900],
+  ["phone", 390, 844],
+] as const) {
+  test(`on a ${device} the filter's line keeps what it leaves, within the tree's width`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/dataset.html");
+    await expect(page.locator(".dview-row.scan.on")).toHaveCount(1);
+    const line = page.locator(".dview-keep");
+    await expect(line.locator(".meta")).toHaveText("72");
+    await page.locator(".dview-filter input").fill("flair");
+    await expect(line.locator(".meta")).toHaveText("9 of 72");
+    const side = (await page.locator(".dview-side").boundingBox())!;
+    for (const b of await line.locator(".vw-keep > button").all()) {
+      await expect(b).toBeVisible();
+      const box = (await b.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(side.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(side.x + side.width + 1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `test-results/dataset-keep-${device}.png` });
+    // the dialog says what the words left and fits the screen
+    await page.getByRole("button", { name: "Save as a selection" }).click();
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog.locator(".values")).toContainText("matching flair");
+    await expect(dialog.locator(".values")).toContainText("9 scans of 6 subjects");
+    await expect(dialog.locator(".note")).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Save" })).toBeInViewport();
+    // measured once it has risen or faded in
+    await dialog.evaluate((d) => Promise.all(d.getAnimations().map((a) => a.finished)));
+    const box = (await dialog.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
+    expect(box.y + box.height).toBeLessThanOrEqual(height + 1);
+    await page.screenshot({ path: `test-results/dataset-keep-dialog-${device}.png` });
+    // its keys are its own: Esc closes it, and the scan stays open where it was
+    const before = new URL(page.url()).hash;
+    await dialog.getByRole("button", { name: "Cancel" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    expect(new URL(page.url()).hash).toBe(before);
+    await expect(page.locator(".dview-row.scan.on .dview-name")).toHaveText("Ax_T2w_2D_FLAIR_IR-TSE_ND");
+  });
+}
