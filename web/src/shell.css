@@ -1108,7 +1108,7 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .scan-session { display: grid; gap: 0.3rem; padding-left: 0.6rem; border-left: 1px solid var(--n-line); }
 .scan-session ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.45rem; grid-template-columns: repeat(auto-fill, minmax(clamp(6.5rem, 9vw, 11rem), 1fr)); }
 .scan-tile { display: grid; gap: 0.2rem; width: 100%; min-width: 0; padding: 3px; border: 1px solid transparent; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
-.scan-tile img, .scan-tile .scan-blank { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: #000; border-radius: calc(var(--n-radius) - 2px); }
+.scan-tile img, .scan-tile .scan-blank { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--n-image-bg); border-radius: calc(var(--n-radius) - 2px); }
 .scan-tile:hover { border-color: var(--n-line-strong); }
 .scan-tile.look { border-color: var(--n-caution-icon); box-shadow: inset 4px 0 0 var(--n-caution-icon); padding-left: 7px; }
 .scan-tile.on { outline: 2px solid var(--n-brand); outline-offset: 1px; }
@@ -1120,7 +1120,7 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .scan-view-head { gap: 0.3rem; align-items: center; }
 .scan-view-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .scan-view.look .scan-canvas { box-shadow: inset 4px 0 0 var(--n-caution-icon); border-color: var(--n-caution-icon); }
-.scan-canvas { position: relative; width: 100%; height: min(78vh, 70vw); min-height: 16rem; background: #000; border: 1px solid var(--n-line); border-radius: var(--n-radius); overflow: hidden; overscroll-behavior: contain; }
+.scan-canvas { position: relative; width: 100%; height: min(78vh, 70vw); min-height: 16rem; background: var(--n-image-bg); border: 1px solid var(--n-line); border-radius: var(--n-radius); overflow: hidden; overscroll-behavior: contain; }
 .scan-canvas canvas, .scan-canvas .scan-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .scan-canvas .scan-still { z-index: 1; image-rendering: auto; }
 .scan-canvas .scan-wait { position: absolute; inset: auto 0 0.5rem 0; text-align: center; }
