@@ -61,7 +61,7 @@ export type Chosen = { kind: "dataset"; name: string } | { kind: "cohort"; name:
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-/** What the address chooses: a cohort or a dataset named after the question mark, or the dataset the viewer has open. */
+/** What the address chooses: a cohort or a dataset named after the question mark, or the dataset it names (#data/datasets/<name>, and its viewer's /view). */
 export function chosenOf(dataset: string | null | undefined, query: Record<string, string> | undefined): Chosen {
   if (query?.cohort) return { kind: "cohort", name: query.cohort };
   if (query?.dataset) return { kind: "dataset", name: query.dataset };
@@ -81,7 +81,7 @@ export function firstChoice(list: readonly Dataset[], why: (d: Dataset) => strin
   return c ? { kind: "cohort", name: c.name } : null;
 }
 
-/** The page; `dataset` is the one the viewer has open (#data/datasets/<name>), `query` what the address narrows to. */
+/** The page; `dataset` is the one the address names (#data/datasets/<name>, or its viewer, /view), `query` what the address narrows to. */
 export function DataPage({
   caps,
   install,
@@ -308,7 +308,7 @@ export function DataPage({
               on={chosenDataset?.id === d.id}
               relation={chosenCohort ? datasetRelation(d.name, chosenCohort) : null}
               feeds={feedsWords(d.name, d.cohort, allCohorts)}
-              view={viewDatasets && d.totals.stacks > 0 ? href("data", "datasets", d.name) : null}
+              view={viewDatasets && d.totals.stacks > 0 ? href("data", "datasets", d.name, "view") : null}
               onPick={() => choose({ kind: "dataset", name: d.name })}
             />
           ))}
@@ -566,7 +566,7 @@ function CohortCard({ cohort: c, datasets, on, relation, onPick }: { cohort: Coh
       {relation && <div className={relation.related ? "dp-rel on" : "dp-rel"}>{relation.words}</div>}
       <div className="dp-foot">
         <span className="dp-line grow">{cohortLine(c)}</span>
-        <ViewLink to={href("data", "cohorts", c.name)} label={`View ${c.name}`} />
+        <ViewLink to={href("data", "cohorts", c.name, "view")} label={`View ${c.name}`} />
       </div>
     </div>
   );

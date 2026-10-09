@@ -80,7 +80,7 @@ export function datasetActions(caps: Capabilities, d: Dataset, why: string | nul
     next,
     primary,
     readNew: readable && next.step !== "read-new" && d.digests.count > 0,
-    view: mayListScans(caps) && d.totals.stacks > 0 ? href("data", "datasets", d.name) : null,
+    view: mayListScans(caps) && d.totals.stacks > 0 ? href("data", "datasets", d.name, "view") : null,
     readAgain: readable && d.digests.count > 0,
     setIds: works && next.step !== "sort-files" && next.step !== "set-ids" && stateOf(d) !== "unknown" && d.arrives !== "undeclared",
     pseudonymisation: Boolean(d.trees?.originals) || (d.held?.files ?? 0) > 0,

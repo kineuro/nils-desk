@@ -269,7 +269,7 @@ export function App() {
           {ready && active?.id === "data" && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || (route.page === "datasets" && route.arg !== null && route.sub === "pseudonymisation") || (route.page === "cohorts" && route.arg)) && (
             <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} query={route.query} />
           )}
-          {ready && active?.id === "data" && route.page === "datasets" && route.arg !== null && route.arg !== "" && route.sub === null && <DatasetView key={route.arg} caps={caps} name={route.arg} />}
+          {ready && active?.id === "data" && route.page === "datasets" && route.arg !== null && route.arg !== "" && route.sub === "view" && <DatasetView key={route.arg} caps={caps} name={route.arg} />}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
           {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}

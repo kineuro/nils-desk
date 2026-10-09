@@ -233,10 +233,10 @@ describe("datasets and cohorts on one page", () => {
       expect([...c.querySelectorAll("button")].map((b) => b.className)).toEqual(["dp-pick"]);
       expect(c.querySelectorAll("a").length + c.querySelectorAll(".dp-view[aria-disabled]").length).toBe(1);
     }
-    expect(card("study-big").querySelector("a.dp-view")?.getAttribute("href")).toBe("#data/datasets/study-big");
+    expect(card("study-big").querySelector("a.dp-view")?.getAttribute("href")).toBe("#data/datasets/study-big/view");
     // nothing to view yet: View is there and says so
     expect(card("ward-c").querySelector(".dp-view")?.getAttribute("aria-disabled")).toBe("true");
-    expect(card("ms-followup").querySelector("a.dp-view")?.getAttribute("href")).toBe("#data/cohorts/ms-followup");
+    expect(card("ms-followup").querySelector("a.dp-view")?.getAttribute("href")).toBe("#data/cohorts/ms-followup/view");
     // the head: a new cohort beside adding a dataset, the dataset the primary one
     expect(host.querySelector(".data-head .button.secondary")?.textContent).toBe("New cohort");
     expect(host.querySelector(".data-head .button:not(.secondary)")?.textContent).toBe("Add a dataset");
