@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from "vitest";
-import { acceptPart, answersSummarize, asPart, empty, fromHistory, reduce, settledError, SUMMARIZE_ASKED, withStored, type Chunk } from "./parts";
+import { acceptPart, answersSummarize, asPart, empty, fromHistory, type History, reduce, settledError, SUMMARIZE_ASKED, withStored, type Chunk } from "./parts";
 
 describe("the closed union of parts (section 9.8)", () => {
   it("admits exactly the eight shapes and drops the rest", () => {
@@ -143,6 +143,77 @@ describe("a turn that settled without words", () => {
     expect(working.finals).toEqual({ a1: "It was titled Sessions per cohort." });
     const read = fromHistory({ messages: [{ id: "a1", role: "assistant", parts: [{ type: "data-status", data: { kind: "status", phase: "finish", text: "done" } }] }] });
     expect(read.finals).toEqual({ a1: "done" });
+  });
+});
+
+describe("a turn still running when its conversation is opened again (2026-10-09)", () => {
+  // the runtime's history while a turn runs: the person's words, a notice and the answer carry their submission, which has not settled
+  const before = [
+    { id: "u0", role: "user", display: "visible", submissionId: "sub_0", parts: [{ type: "text", text: "Stop that." }] },
+    { id: "a0", role: "assistant", display: "visible", submissionId: "sub_0", parts: [] },
+  ];
+  const asked = { id: "u1", role: "user", display: "visible", submissionId: "sub_1", parts: [{ type: "text", text: "Which datasets have a FLAIR?" }] };
+  const notice = { id: "s1", role: "system", display: "diagnostic", submissionId: "sub_1", parts: [{ type: "text", text: "The tools for this turn." }] };
+  const answer = (parts: History["messages"][number]["parts"]) => ({ id: "a1", role: "assistant", display: "visible", submissionId: "sub_1", parts });
+  const stopped = [{ submissionId: "sub_0", outcome: "aborted" }];
+
+  it("is running while the model has said nothing, its answer open and the turn before's ending not shown", () => {
+    const s = fromHistory({ offset: "4", messages: [...before, asked, notice, answer([])], settlements: stopped });
+    expect(s.busy).toBe(true);
+    expect(s.settled).toBeNull();
+    expect(s.offset).toBe("4");
+    expect(s.turns.map((t) => [t.id, t.done])).toEqual([
+      ["u0", true],
+      ["a0", true],
+      ["u1", true],
+      ["a1", false],
+    ]);
+  });
+
+  it("is running before its answer has begun", () => {
+    const s = fromHistory({ offset: "3", messages: [...before, asked, notice], settlements: stopped });
+    expect(s.busy).toBe(true);
+    expect(s.settled).toBeNull();
+  });
+
+  it("is running past its steps, and the words still to come begin a step of their own", () => {
+    const s = fromHistory({
+      offset: "27",
+      messages: [asked, answer([{ type: "text", text: "Let me look." }, { type: "dynamic-tool", toolCallId: "t1", toolName: "registry_search", state: "output-available" }])],
+      settlements: [],
+    });
+    expect(s.busy).toBe(true);
+    expect(s.turns[1]).toMatchObject({ text: "Let me look.", done: false, tools: [{ id: "t1", state: "done" }] });
+    const next = (
+      [
+        { type: "message-delta", messageId: "a1", kind: "text", delta: "Two of them: ds-a and ds-b." },
+        { type: "message-completed", messageId: "a1" },
+        { type: "submission-settled", submissionId: "sub_1", outcome: "completed" },
+      ] as Chunk[]
+    ).reduce(reduce, s);
+    expect(next.turns[1]).toMatchObject({ text: "Let me look.\n\nTwo of them: ds-a and ds-b.", done: true });
+    expect(next.busy).toBe(false);
+    expect(next.settled).toEqual({ outcome: "completed" });
+  });
+
+  it("is over once its submission settled", () => {
+    const s = fromHistory({ offset: "44", messages: [asked, answer([{ type: "text", text: "Two of them." }])], settlements: [...stopped, { submissionId: "sub_1", outcome: "completed" }] });
+    expect(s.busy).toBe(false);
+    expect(s.settled).toEqual({ outcome: "completed" });
+    expect(s.turns.every((t) => t.done)).toBe(true);
+  });
+
+  it("is still followed when the stream sends the conversation again in the middle of it", () => {
+    // a summary or a retried step resets the stream while the turn runs
+    const live = (
+      [
+        { type: "message-appended", message: asked },
+        { type: "message-started", messageId: "a1" },
+      ] as Chunk[]
+    ).reduce(reduce, fromHistory({ offset: "1", messages: before, settlements: stopped }));
+    const reset = reduce(live, { type: "conversation-reset", snapshot: { offset: "9", messages: [...before, asked, answer([])], settlements: stopped } });
+    expect(reset.busy).toBe(true);
+    expect(reset.settled).toBeNull();
   });
 });
 

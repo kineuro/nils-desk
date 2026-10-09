@@ -353,6 +353,8 @@ export interface History {
     id: string;
     role: string;
     display?: string;
+    /** The submission a message of a tracked turn belongs to: the person's words, the runtime's notices and the answer alike. */
+    submissionId?: string;
     parts: { type: string; text?: string; data?: unknown; toolCallId?: string; toolName?: string; state?: string; input?: unknown }[];
   }[];
   /** A failed turn's error as the runtime keeps it, an object of its own; settledError reads its words. */
@@ -361,6 +363,9 @@ export interface History {
 
 /** The pane from a history snapshot: what the live reducer would have built, minus what the store keeps only once per kind. */
 export function fromHistory(h: History, previous: PaneState = empty()): PaneState {
+  // a turn still running as the history is read is a submission with no settlement yet (2026-10-09): its answer stays open, and the page follows it
+  const ended = new Set((h.settlements ?? []).map((s) => s.submissionId));
+  const running = new Set(h.messages.flatMap((m) => (m.submissionId && !ended.has(m.submissionId) ? [m.submissionId] : [])));
   let state: PaneState = { ...empty(h.offset ?? previous.offset), proposals: previous.proposals.filter((p) => p.decided !== null) };
   for (const m of h.messages) {
     if (isSummarizeMark(m)) {
@@ -369,7 +374,8 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
     }
     if (m.display && m.display !== "visible") continue;
     if (m.role !== "user" && m.role !== "assistant" && !(m.role === "system" && (m as { settlement?: unknown }).settlement)) continue;
-    let t: Turn = { id: m.id, role: m.role, text: "", done: true, tools: [] };
+    const open = m.role === "assistant" && m.submissionId !== undefined && running.has(m.submissionId);
+    let t: Turn = { id: m.id, role: m.role, text: "", done: !open, tools: [] };
     // an assistant's steps: words or reasoning that follow words or a tool call begin the next one (the chat, slice 9)
     const steps: Step[] = [];
     let step: Step = { words: "", reasoning: "" };
@@ -389,7 +395,8 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
         called = true;
       }
     }
-    if (m.role === "assistant") t = drawn(t, [...steps, step]);
+    // an open answer whose last part is a tool call: the words still to come begin the next step, as they would live
+    if (m.role === "assistant") t = drawn(t, open && called ? [...steps, step, { words: "", reasoning: "" }] : [...steps, step]);
     state = { ...state, turns: [...state.turns, t] };
     for (const p of m.parts) if (p.type.startsWith("data-")) state = acceptPart(state, m.id, p.data);
   }
@@ -403,10 +410,11 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
     const before = previous.changes.find((x) => x.id === c.id);
     return before?.decided ? { ...c, decided: before.decided } : c;
   });
+  // a turn still running is followed, and the ending of the turn before it is not shown meanwhile
+  if (running.size > 0) return { ...state, busy: true, settled: null };
   const last = h.settlements?.[h.settlements.length - 1];
-  const open = state.turns.some((t) => t.role === "assistant" && !t.done);
   const error = settledError(last?.error);
-  return { ...state, busy: open, settled: last ? { outcome: last.outcome, ...(error ? { error } : {}) } : null };
+  return { ...state, busy: false, settled: last ? { outcome: last.outcome, ...(error ? { error } : {}) } : null };
 }
 
 /** The decisions the assistant keeps for a conversation's proposals (the chat, slice 2): a reload shows what was accepted or disregarded, and a proposal made for another version reads as stale. */
