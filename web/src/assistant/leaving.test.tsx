@@ -182,3 +182,39 @@ describe("a turn that has said nothing yet", () => {
     expect(said()).toContain("Two of them have a FLAIR: ds-a and ds-b.");
   });
 });
+
+describe("a conversation still named by its first words", () => {
+  const settledAway = (a: ReturnType<typeof fakeAssistant>) =>
+    a.keep([ASKED, { id: "a1", role: "assistant", display: "visible", submissionId: "sub_1", parts: [{ type: "text", text: "Two of them have a FLAIR: ds-a and ds-b." }] }], [{ submissionId: "sub_1", outcome: "completed" }]);
+
+  it("is named by the model when it opens and finds its first turn settled while the page was away", async () => {
+    const a = fakeAssistant({ chat: { id: "c11", station: "nils", title: "Which datasets have a FLAIR?", title_by: "words" }, named: "FLAIR in the datasets" });
+    settledAway(a);
+    act(() => root.render(<AssistantPage caps={caps()} conversation="c11" />));
+    await settle(16);
+    expect(a.of("POST", "/assistant/conversations/c11/title")).toHaveLength(1);
+    expect(host.querySelector(".one-chat-head h1")?.textContent).toBe("FLAIR in the datasets");
+  });
+
+  it("asks for the name once, not on every open, when the name does not come", async () => {
+    const a = fakeAssistant({ chat: { id: "c12", station: "nils", title: "Which datasets have a FLAIR?", title_by: "words" } });
+    settledAway(a);
+    act(() => root.render(<AssistantPage caps={caps()} conversation="c12" />));
+    await settle(16);
+    act(() => root.render(<p>Data</p>));
+    await settle(4);
+    act(() => root.render(<AssistantPage caps={caps()} conversation="c12" />));
+    await settle(16);
+    expect(a.of("POST", "/assistant/conversations/c12/title")).toHaveLength(1);
+    expect(host.querySelector(".one-chat-head h1")?.textContent).toBe("Which datasets have a FLAIR?");
+  });
+
+  it("is not asked for a name while its turn still runs", async () => {
+    const a = fakeAssistant({ chat: { id: "c13", station: "nils", title: "Which datasets have a FLAIR?", title_by: "words" }, named: "FLAIR in the datasets" });
+    a.write({ type: "message-appended", message: ASKED });
+    a.keep([ASKED]);
+    act(() => root.render(<AssistantPage caps={caps()} conversation="c13" />));
+    await settle(16);
+    expect(a.of("POST", "/assistant/conversations/c13/title")).toHaveLength(0);
+  });
+});

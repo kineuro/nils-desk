@@ -17,6 +17,9 @@ const TOKEN_PUSH_MS = 5 * 60_000;
 const DELEGATION_POLL_MS = 4_000;
 const RECONNECT_MS = 1_000;
 
+/** The conversations this tab asked the model to name as they opened, so a name that does not come is not asked for on every open. */
+const namedOnOpen = new Set<string>();
+
 /** What a prompt carries beside its words: the page's typed context, and the lineage and the document it is about. */
 export interface Beside {
   context?: PageContext;
@@ -196,6 +199,14 @@ export function useConversation(station: string, conv: string | null): Conversin
               setContext(c.context ?? null);
               setVersions(c.versions ?? []);
               setRatings(c.ratings ?? []);
+              // a turn that settled while no page followed it left the conversation named by its first words: the model names it now, once (2026-10-09)
+              if (c.title_by === "words" && !s.busy && (h?.settlements ?? []).length > 0 && !namedOnOpen.has(conv)) {
+                namedOnOpen.add(conv);
+                chats
+                  .name(conv)
+                  .then(() => chatsKept.refresh())
+                  .catch(() => undefined);
+              }
             },
             () => undefined,
           );
