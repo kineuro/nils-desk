@@ -10,7 +10,7 @@ import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { type Chat, chats, chatsKept, chatTitle, groupsOf, STATION_WORDS } from "./chats";
+import { type Chat, chats, chatsKept, chatTitle, groupsOf } from "./chats";
 import { exportName, saveText } from "./download";
 
 export function ChatHistory() {
@@ -101,7 +101,7 @@ export function ChatHistory() {
                   <a className="grow chat-row-link" href={href("assistant", c.id)}>
                     <span className="chat-row-title">{chatTitle(c)}</span>
                     <span className="meta">
-                      {STATION_WORDS[c.station] ?? c.station} · {whenWords(c.updated_at)}
+                      {whenWords(c.updated_at)}
                       {c.shared ? " · shared" : ""}
                     </span>
                   </a>

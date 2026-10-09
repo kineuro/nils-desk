@@ -908,6 +908,18 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .proposal-title { font-weight: 600; }
 .choice { display: grid; gap: 0.35rem; }
 .choice .button .meta { margin-left: 0.2rem; }
+/* one chat: the live line, the steps behind a "?", the plan panel and the cards */
+.status-line { margin: 0; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.steps-help { position: relative; display: inline-flex; }
+.turn-actions .icon-button.steps-q { font-weight: 600; font-size: 13px; }
+.steps-pop { position: absolute; z-index: 5; left: 0; top: 100%; display: grid; min-width: 15rem; max-width: min(24rem, calc(100vw - 2rem)); border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); box-shadow: 0 8px 24px var(--n-scrim); font-size: var(--n-text-size-small); }
+.steps-pop .steps-line:first-child { border-top: 0; }
+.steps-pop .link-button { padding: 0.4rem 0.7rem; border-top: 1px solid var(--n-line); text-align: left; }
+.approval-lines { margin: 0.3rem 0 0; padding-left: 1.1rem; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.plan-panel .line:first-child { border-top: 0; }
+.plan-panel .plan-done p { color: var(--n-text-dim); }
+.plan-panel .plan-running .i { color: var(--n-brand-icon); }
+.plan-panel .plan-failed .i { color: var(--n-caution-icon); }
 .talk-composer { position: sticky; bottom: 0; display: grid; gap: 0.4rem; padding: 0.6rem 0 0.2rem; background: var(--n-bg-page); }
 .talk-foot { gap: 0.6rem; flex-wrap: wrap; }
 .talk-head { flex-wrap: wrap; }
@@ -929,8 +941,6 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .context-meter.caution .context-track i { background: var(--n-caution-icon); }
 .context-meter.caution .meta { color: var(--n-caution-fg); }
 .compaction-note { margin: 0; padding: 0.4rem 0.7rem; border-left: 2px solid var(--n-line-strong); }
-.station-pick { gap: 0.35rem; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
-.station-pick select { padding: 0.1rem 0.3rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; }
 
 /* ------------------------------------------------------------ the Data page: sources and their digests */
 .data { display: grid; gap: 1.1rem; align-content: start; }

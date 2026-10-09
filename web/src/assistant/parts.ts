@@ -4,7 +4,9 @@
 // touch. A part of any other shape is dropped here and nowhere else. The
 // assistant never calls a desk function and never navigates the desk.
 
+import { asOneChatPart, type ChangeKind, type PlanItem } from "./events";
 import { splitReasoning } from "./reasoning";
+import { toolWords } from "./steps";
 
 export type Part =
   | { kind: "move_proposal"; document: number; parent: number | null; sentence: string }
@@ -80,6 +82,21 @@ export interface Tool {
   id: string;
   name: string;
   state: "running" | "done" | "failed";
+  /** What it is doing, in plain words (a skill by its name). */
+  words?: string;
+  /** The tool's own latest log line while it runs (one chat). */
+  log?: string;
+}
+
+/** A change the one agent proposed and the person approves or declines (one chat; a query version is a Proposal instead). */
+export interface Change {
+  id: string;
+  change: ChangeKind;
+  title: string | null;
+  sentence: string;
+  lines: string[];
+  turn: string;
+  decided: null | "approved" | "declined";
 }
 
 /** One step of an assistant's reply as it arrived: its words, and the reasoning its runtime separated. */
@@ -120,6 +137,9 @@ export interface PaneState {
   busy: boolean;
   proposals: Proposal[];
   choice: { question: string; options: { label: string; count: number | null }[]; turn: string } | null;
+  /** The one chat: the agent's plan, the whole list as it last said it, and the changes it proposed. */
+  plan: PlanItem[] | null;
+  changes: Change[];
   status: { phase: string; text: string } | null;
   handles: number[];
   aside: Extract<Part, { kind: "note" | "todo" | "lookup" | "funnel" }>[];
@@ -136,6 +156,8 @@ export const empty = (offset = "-1"): PaneState => ({
   busy: false,
   proposals: [],
   choice: null,
+  plan: null,
+  changes: [],
   status: null,
   handles: [],
   aside: [],
@@ -182,6 +204,30 @@ const stepsOf = (t: Turn): Step[] => t.steps ?? [{ words: t.text, reasoning: t.t
 
 /** What one part may touch: a proposal, the choice, the status line, a handle, or the aside. */
 export function acceptPart(state: PaneState, turnId: string, raw: unknown): PaneState {
+  const one = asOneChatPart(raw);
+  if (one) {
+    switch (one.kind) {
+      case "progress":
+        return withTurn(state, turnId, (t) => {
+          const at = one.call ? t.tools.findIndex((x) => x.id === one.call) : t.tools.map((x) => x.state).lastIndexOf("running");
+          if (at < 0) return t;
+          return { ...t, tools: t.tools.map((x, i) => (i === at ? { ...x, log: one.text } : x)) };
+        });
+      case "plan_update":
+        return { ...state, plan: one.items };
+      case "clarification":
+        return { ...state, choice: { question: one.question, options: one.options, turn: turnId } };
+      case "approval":
+        // a query version is decided as a move proposal is: on the query card, by its document
+        if (one.change === "query_version" && one.ref.document !== undefined) {
+          const document = one.ref.document;
+          if (state.proposals.some((x) => x.document === document)) return state;
+          return { ...state, proposals: [...state.proposals, { document, parent: one.ref.parent ?? null, sentence: one.sentence, turn: turnId, decided: null }] };
+        }
+        if (state.changes.some((x) => x.id === one.id)) return state;
+        return { ...state, changes: [...state.changes, { id: one.id, change: one.change, title: one.title, sentence: one.sentence, lines: one.lines, turn: turnId, decided: null }] };
+    }
+  }
   const p = asPart(raw);
   if (!p) return state;
   switch (p.kind) {
@@ -234,6 +280,12 @@ export function settledError(e: unknown): string | undefined {
   return isStr(message) && message.trim() ? message.trim() : undefined;
 }
 
+/** A tool call as a step: its name and its words; of its input only a skill's name is read (events.ts). */
+function toolCall(id: string, name: string, state: Tool["state"], input: unknown): Tool {
+  const skill = name === "activate_skill" ? (input as { name?: unknown } | null | undefined)?.name : undefined;
+  return { id, name, state, words: toolWords(name, isStr(skill) ? skill : null) };
+}
+
 /** The reducer over the live stream. Unknown chunk types are dropped. */
 export function reduce(state: PaneState, c: Chunk): PaneState {
   switch (c.type) {
@@ -275,7 +327,7 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
     case "tool-input":
       return withTurn(state, c.messageId as string, (t) => ({
         ...t,
-        tools: [...t.tools.filter((x) => x.id !== c.toolCallId), { id: String(c.toolCallId), name: String(c.toolName), state: "running" }],
+        tools: [...t.tools.filter((x) => x.id !== c.toolCallId), toolCall(String(c.toolCallId), String(c.toolName), "running", c.input)],
       }));
     case "tool-output":
     case "tool-output-error": {
@@ -301,7 +353,7 @@ export interface History {
     id: string;
     role: string;
     display?: string;
-    parts: { type: string; text?: string; data?: unknown; toolCallId?: string; toolName?: string; state?: string }[];
+    parts: { type: string; text?: string; data?: unknown; toolCallId?: string; toolName?: string; state?: string; input?: unknown }[];
   }[];
   /** A failed turn's error as the runtime keeps it, an object of its own; settledError reads its words. */
   settlements?: { submissionId: string; outcome: string; error?: unknown }[];
@@ -333,7 +385,7 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
         else step.reasoning += p.text ?? "";
       } else if (p.type === "text") t.text += p.text ?? "";
       else if (p.type === "dynamic-tool" && p.toolCallId) {
-        t.tools.push({ id: p.toolCallId, name: p.toolName ?? "", state: p.state === "output-error" ? "failed" : p.state === "output-available" ? "done" : "running" });
+        t.tools.push(toolCall(p.toolCallId, p.toolName ?? "", p.state === "output-error" ? "failed" : p.state === "output-available" ? "done" : "running", p.input));
         called = true;
       }
     }
@@ -345,6 +397,11 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
   state.proposals = state.proposals.map((p) => {
     const before = previous.proposals.find((x) => x.document === p.document);
     return before ? { ...p, decided: before.decided } : p;
+  });
+  // and decided changes too
+  state.changes = state.changes.map((c) => {
+    const before = previous.changes.find((x) => x.id === c.id);
+    return before?.decided ? { ...c, decided: before.decided } : c;
   });
   const last = h.settlements?.[h.settlements.length - 1];
   const open = state.turns.some((t) => t.role === "assistant" && !t.done);

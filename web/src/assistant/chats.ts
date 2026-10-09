@@ -11,15 +11,6 @@ import { type Conversation, conversations as keptHere } from "./client";
 
 const H = { "content-type": "application/json", "X-Nils-Desk": "1" };
 
-/** The stations a person talks to, by what they do. */
-export const STATION_WORDS: Record<string, string> = {
-  concierge: "Asks about the registry",
-  "ask-help": "Builds queries",
-  operator: "Plans work",
-  "keyword-tune": "Tunes the sorting words",
-  "identity-check": "Checks who a file is about",
-};
-
 /** How full a conversation's context is, as the assistant last saw it (the chat, slice 3). */
 export interface ChatContext {
   tokens: number | null;

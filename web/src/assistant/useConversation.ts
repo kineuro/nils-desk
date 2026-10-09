@@ -9,10 +9,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { PageContext } from "../ui/context";
 import { type ChatContext, type ChatVersions, chats, chatsKept, type Rating } from "./chats";
 import { assistant, StaleProposal, type Delegation, type Plan } from "./client";
-import { empty, fromHistory, reduce, type PaneState, type Proposal, withStored } from "./parts";
+import { after, positionOf, type Position } from "./events";
+import { type Change, type Chunk, empty, fromHistory, reduce, type PaneState, type Proposal, withStored } from "./parts";
 
 const TOKEN_PUSH_MS = 5 * 60_000;
+/** The long poll's pause while a delegate still works, where the stream is not served as events. */
 const DELEGATION_POLL_MS = 4_000;
+const RECONNECT_MS = 1_000;
 
 /** What a prompt carries beside its words: the page's typed context, and the lineage and the document it is about. */
 export interface Beside {
@@ -44,6 +47,8 @@ export interface Conversing {
   /** A proposal's verdict, with the document the person is on; true once the assistant recorded it. */
   decide: (p: Proposal, verdict: "accepted" | "rejected", current?: number) => Promise<boolean>;
   confirm: (p: Plan) => void;
+  /** One chat: a proposed change approved or declined; the assistant applies it. */
+  decideChange: (c: Change, verdict: "approved" | "declined") => void;
   /** The person's verdict on an answer, up or down with a reason; null takes it back. */
   rate: (message: string, verdict: "up" | "down" | null, reason?: string) => void;
 }
@@ -60,6 +65,8 @@ export function useConversation(station: string, conv: string | null): Conversin
   const [versions, setVersions] = useState<ChatVersions[]>([]);
   const [ratings, setRatings] = useState<Rating[]>([]);
   const queued = useRef<{ id: string; words: string; beside: Beside } | null>(null);
+  // whether the assistant serves the stream as server-sent events; learned on the first try
+  const streamed = useRef(true);
 
   // the reducer's state is kept in a ref as well, so the reading loop decides on what it just applied
   const apply = useCallback((f: (s: PaneState) => PaneState) => {
@@ -74,60 +81,88 @@ export function useConversation(station: string, conv: string | null): Conversin
       .catch(() => setPlans([]));
   }, []);
 
+  // what follows the stream once a turn settled: the plans, the list's order, the context and the name
+  const settledTurn = useCallback(
+    (id: string) => {
+      readPlans(id);
+      // the list orders by the last use, so a settled turn moves this conversation up
+      chatsKept.refresh().catch(() => undefined);
+      // and the turn filled the context a little more
+      chats.get(id).then(
+        (c) => {
+          setContext(c.context ?? null);
+          setVersions(c.versions ?? []);
+          setRatings(c.ratings ?? []);
+          // a conversation still named by its first words is named by the model once an answer settles (the chat, slice 10)
+          if (c.title_by === "words")
+            chats
+              .name(id)
+              .then(() => chatsKept.refresh())
+              .catch(() => undefined);
+        },
+        () => undefined,
+      );
+    },
+    [readPlans],
+  );
+
+  // one chat: the stream followed as server-sent events where the assistant serves them, by long poll where not
   const follow = useCallback(
     (id: string, from: string) => {
       reader.current?.abort();
       const ctl = new AbortController();
       reader.current = ctl;
       let offset = from;
+      let last: Position | null = null;
+      // the chunks of one read: those not seen before applied, then whether the turn is over
+      const take = async (chunks: Chunk[], next: string): Promise<"over" | "waiting" | "running"> => {
+        const fresh = chunks.filter((c) => {
+          const p = positionOf(c);
+          if (!p) return true;
+          if (!after(p, last)) return false;
+          last = p;
+          return true;
+        });
+        apply((s) => {
+          let out = s;
+          for (const c of fresh) out = reduce(out, c);
+          return { ...out, offset: next };
+        });
+        offset = next;
+        const s = current.current;
+        if (fresh.length === 0 || s.settled === null || s.busy) return "running";
+        // the concierge settles at once and is woken when its delegate settles (4c section 9.12)
+        if (station === "concierge") {
+          const tasks = await assistant.delegations(id).catch(() => [] as Delegation[]);
+          if (tasks.some((t) => t.state === "queued" || t.state === "running")) {
+            apply((x) => ({ ...x, busy: true }));
+            return "waiting";
+          }
+        }
+        settledTurn(id);
+        return "over";
+      };
       const loop = async () => {
         while (!ctl.signal.aborted) {
-          const { chunks, next } = await assistant.updates(station, id, offset, ctl.signal);
-          apply((s) => {
-            let out = s;
-            for (const c of chunks) out = reduce(out, c);
-            return { ...out, offset: next };
-          });
-          offset = next;
-          const s = current.current;
-          if (chunks.length > 0 && s.settled !== null && !s.busy) {
-            // the concierge settles at once and is woken when its delegate settles (4c section 9.12)
-            let pending = false;
-            if (station === "concierge") {
-              const tasks = await assistant.delegations(id).catch(() => [] as Delegation[]);
-              pending = tasks.some((t) => t.state === "queued" || t.state === "running");
-            }
-            if (!pending) {
-              readPlans(id);
-              // the list orders by the last use, so a settled turn moves this conversation up
-              chatsKept.refresh().catch(() => undefined);
-              // and the turn filled the context a little more
-              chats.get(id).then(
-                (c) => {
-                  setContext(c.context ?? null);
-                  setVersions(c.versions ?? []);
-                  setRatings(c.ratings ?? []);
-                  // a conversation still named by its first words is named by the model once an answer settles (the chat, slice 10)
-                  if (c.title_by === "words")
-                    chats
-                      .name(id)
-                      .then(() => chatsKept.refresh())
-                      .catch(() => undefined);
-                },
-                () => undefined,
-              );
-              return;
-            }
-            apply((x) => ({ ...x, busy: true }));
-            await new Promise((r) => setTimeout(r, DELEGATION_POLL_MS));
+          if (streamed.current) {
+            const how = await assistant.stream(station, id, offset, ctl.signal, async (chunks, next) => (await take(chunks, next)) === "over");
+            if (how === "stopped") return;
+            if (how === "unsupported") streamed.current = false;
+            // a stream the network closed is opened again from where it was
+            else await new Promise((r) => setTimeout(r, RECONNECT_MS));
+            continue;
           }
+          const { chunks, next } = await assistant.updates(station, id, offset, ctl.signal);
+          const state = await take(chunks, next);
+          if (state === "over") return;
+          if (state === "waiting") await new Promise((r) => setTimeout(r, DELEGATION_POLL_MS));
         }
       };
       loop().catch((e: Error) => {
         if (e.name !== "AbortError") setWhy(e.message);
       });
     },
-    [station, apply, readPlans],
+    [station, apply, settledTurn],
   );
 
   // opening a kept conversation: its history, the person's token, and a turn still running followed
@@ -232,6 +267,13 @@ export function useConversation(station: string, conv: string | null): Conversin
       .catch((e: Error) => setWhy(e.message));
   };
 
+  const decideChange = (c: Change, verdict: "approved" | "declined") => {
+    assistant
+      .decideChange(c.id, verdict)
+      .then(() => apply((s) => ({ ...s, changes: s.changes.map((x) => (x.id === c.id ? { ...x, decided: verdict } : x)) })))
+      .catch((e: Error) => setWhy(e.message));
+  };
+
   const sendWhenOpen = (id: string, words: string, beside: Beside = {}) => {
     queued.current = { id, words, beside };
   };
@@ -263,5 +305,5 @@ export function useConversation(station: string, conv: string | null): Conversin
     );
   };
 
-  return { pane, plans, since, why, context, versions, ratings, reset, made, send, summarize, sendWhenOpen, stop, decide, confirm, rate };
+  return { pane, plans, since, why, context, versions, ratings, reset, made, send, summarize, sendWhenOpen, stop, decide, confirm, decideChange, rate };
 }

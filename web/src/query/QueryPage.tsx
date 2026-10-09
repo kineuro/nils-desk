@@ -14,6 +14,8 @@ import type { Proposal } from "../assistant/parts";
 import { stationsServed } from "../assistant/stations";
 import { CompactionNote, ContextMeter } from "../assistant/ContextMeter";
 import { TurnView } from "../assistant/TurnView";
+import { StatusLine } from "../assistant/Cards";
+import { liveLine } from "../assistant/steps";
 import { useConversation, type Conversing } from "../assistant/useConversation";
 import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
 import { editor, setsOf } from "../ask/editor";
@@ -706,7 +708,7 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
                 said={pane.finals[t.id]}
               />
             ))}
-            {pane.busy && <Wait phase={pane.status?.text ?? "thinking"} since={talk.since || Date.now()} />}
+            {liveLine(pane) && <StatusLine words={liveLine(pane) ?? ""} />}
             {settled && <p className={settled.outcome === "aborted" ? "meta" : "warn"}>{settled.outcome === "aborted" ? "Stopped." : (settled.error ?? "The assistant did not finish this turn.")}</p>}
             {talk.why && <p className="warn">{talk.why}</p>}
           </div>

@@ -2,11 +2,11 @@
 // The Assistant's page (Wave 5 section 9, as a page of its own): one
 // conversation at a time, the person's conversations kept by the assistant and
 // listed under the Assistant in the side, and every one of them on the page of
-// all conversations (the chat, slice 2). It shows what was asked and answered, what the
-// assistant did as a folded list of steps, each new version it proposes to
-// accept or disregard, a choice answered with a click, and the plans it made,
-// which run only once confirmed. Another page may hand it a sentence to start
-// from. The conversation loop itself is useConversation, which a Query card's
+// all conversations (the chat, slice 2). One chat (2026-10-09): one input
+// and one agent, whatever the person wants; one live line while a turn works,
+// the steps behind a "?", the plan while several steps run, every change on
+// the one approval card and every question on the one clarification card.
+// Another page may hand it a sentence to start from. The conversation loop itself is useConversation, which a Query card's
 // discussion holds too, and the query a conversation is about floats over it
 // as its card. The thread (the chat, slice 4): answers in markdown; a message
 // edited, or an answer asked for again, continues as another version of the
@@ -21,11 +21,10 @@ import { href } from "../routes";
 import { assistantModel } from "../sections";
 import { admit } from "../ui/context";
 import { Icon } from "../ui/Icon";
-import { Wait } from "../ui/Wait";
 import { useKept } from "../ui/kept";
-import { type Chat, type ChatContext, chats, chatsKept, meterOf, STATION_WORDS, versionAt, renamedIn } from "./chats";
+import { type Chat, type ChatContext, chats, chatsKept, meterOf, versionAt, renamedIn } from "./chats";
 import { ChatActions, ChatHistory } from "./ChatHistory";
-import { takeSaid, titleOf, type Plan } from "./client";
+import { takeSaid, titleOf } from "./client";
 import { answersSummarize, type PaneState } from "./parts";
 import { CardInPlay, type InPlay } from "./CardInPlay";
 import { CompactionNote, ContextMeter } from "./ContextMeter";
@@ -36,17 +35,15 @@ import { MemoryPage } from "./MemoryPage";
 import { ShareDialog } from "./ShareDialog";
 import { SharedList, SharedPage } from "./SharedPages";
 import { Starters } from "./Starters";
-import { stationOf, stationsServed } from "./stations";
+import { ApprovalCardView, PlanPanel, StatusLine } from "./Cards";
+import { agentFor, cardOfPlan, planShown } from "./events";
+import { liveLine } from "./steps";
 import { askedBefore, COMMANDS, commandOf, commandsFor, lastAsked } from "./thread";
 import { TurnView } from "./TurnView";
 import { type Beside, useConversation } from "./useConversation";
 
-/** What the page says before anything is asked, by station. */
-function hint(station: string): string {
-  if (station === "operator") return "Say what should come in, and when. The assistant plans it, and nothing runs until you confirm.";
-  if (station === "ask-help") return "Say what you want to find. The assistant drafts it as a query, and each change it makes is a version you accept or disregard.";
-  return "Ask about what the registry holds, or say what you want to find.";
-}
+/** What the page says before anything is asked: one line, whatever the person wants. */
+const LEDE = "Ask about your data, or say what to do.";
 
 /** The sentence for a turn that ended some other way than answering. */
 function ending(settled: PaneState["settled"]): string | null {
@@ -73,8 +70,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   const list = useKept(chatsKept).value?.conversations ?? [];
   const known = opened ? (list.find((c) => c.id === opened) ?? null) : null;
   const handed = useRef(opened === null ? takeSaid() : null);
-  const served = stationsServed(caps).filter((s) => s in STATION_WORDS);
-  const [station, setStation] = useState(() => known?.station ?? handed.current?.station ?? stationOf(caps));
+  // one chat: a new conversation goes to the one agent; one kept from before keeps whom it talks to
+  const [station, setStation] = useState(() => known?.station ?? agentFor(caps));
   const [conv, setConv] = useState<string | null>(known?.id ?? null);
   const [meta, setMeta] = useState<Chat | null>(known);
   const [missing, setMissing] = useState(false);
@@ -114,6 +111,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     if (!opened) {
       setConv(null);
       setMeta(null);
+      setStation(agentFor(caps));
       return;
     }
     const open = (c: Chat) => {
@@ -221,7 +219,6 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
       setNote(
         [
           model ? `Model: ${model}` : null,
-          `Talking to: ${STATION_WORDS[station] ?? station}`,
           m ? `Context: ${m.words}, ${(talk.context?.tokens ?? 0).toLocaleString("en-US")} tokens` : "Context: not measured yet",
           n > 0 ? `Earlier turns summarized ${n === 1 ? "once" : `${n} times`}` : null,
         ]
@@ -337,6 +334,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   }, [typing === null]); // eslint-disable-line react-hooks/exhaustive-deps
   const mentionOffer = typing !== null && offered.length === 0 ? mentionables(typing, mentionable ?? []) : [];
   const ended = ending(pane.settled);
+  const status = liveLine(pane);
   const title = meta?.title ?? (conv || opened ? "A conversation" : "New conversation");
   return (
     <section className="talk-page">
@@ -383,10 +381,9 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
         <CompactionNote context={talk.context} />
         {!missing && pane.turns.length === 0 && !pane.busy && (
           <>
-            <p className="lede">{hint(station)}</p>
+            <p className="lede">{LEDE}</p>
             {!conv && (
               <Starters
-                station={station}
                 onPick={(words) => {
                   setText(words);
                   input.current?.focus();
@@ -402,6 +399,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             open={unfolded.has(t.id)}
             onToggle={() => toggle(t.id)}
             proposals={pane.proposals.filter((p) => p.turn === t.id)}
+            changes={pane.changes.filter((c) => c.turn === t.id)}
+            onChange={talk.decideChange}
             choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
             decidedElsewhere="It stands on the card above, to accept or disregard."
             onChoose={(label) => void send(label)}
@@ -445,9 +444,10 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             }
           />
         ))}
-        {pane.busy && <Wait phase={pane.status?.text ?? "thinking"} since={talk.since || Date.now()} />}
+        {planShown(pane.plan) && <PlanPanel items={pane.plan} />}
+        {status && <StatusLine words={status} />}
         {talk.plans.map((p) => (
-          <PlanCard key={p.id} plan={p} onConfirm={() => talk.confirm(p)} onChange={() => input.current?.focus()} />
+          <ApprovalCardView key={p.id} card={cardOfPlan(p)} onDecide={(v) => (v === "approved" ? talk.confirm(p) : input.current?.focus())} />
         ))}
         {ended && <p className={pane.settled?.outcome === "aborted" ? "meta" : "warn"}>{ended}</p>}
         {talk.why && <p className="warn">{talk.why}</p>}
@@ -497,7 +497,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             ref={input}
             value={text}
             rows={2}
-            placeholder={warming ? "The model is warming" : "Ask, or say what to do; / for commands, @ to name a card"}
+            placeholder={warming ? "The model is warming" : "Ask anything"}
             aria-label="Ask the assistant"
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
@@ -533,62 +533,9 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
           )}
         </div>
         <div className="row talk-foot">
-          {conv === null && served.length > 1 ? (
-            <label className="row station-pick">
-              <Icon name="assistant" />
-              <select value={station} aria-label="The station to talk to" onChange={(e) => setStation(e.target.value)}>
-                {served.map((s) => (
-                  <option key={s} value={s}>
-                    {STATION_WORDS[s]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : (
-            <span className="meta">{STATION_WORDS[station] ?? station}</span>
-          )}
           <ContextMeter context={talk.context} />
-          <span className="grow" />
-          <span className="meta">{station === "operator" ? "It plans jobs for you to confirm; nothing runs before that." : "It reads what you may read, and proposes; you decide."}</span>
         </div>
       </form>
     </section>
-  );
-}
-
-function PlanCard({ plan, onConfirm, onChange }: { plan: Plan; onConfirm: () => void; onChange: () => void }) {
-  const open = !plan.confirmed_at;
-  return (
-    <div className="plan">
-      <div className="plan-head">
-        <span className="plan-title">
-          A plan in {plan.steps.length} {plan.steps.length === 1 ? "step" : "steps"}
-        </span>
-        <span className="grow" />
-        <span className="meta">{open ? "nothing runs until you confirm" : plan.state}</span>
-      </div>
-      {plan.steps.map((s) => (
-        <div key={s.n} className="line">
-          <Icon name={s.rung === 3 ? "branch" : "play"} />
-          <div>
-            <p>{s.words}</p>
-            <p className="meta">
-              {s.state}
-              {s.reason ? `: ${s.reason}` : ""}
-            </p>
-          </div>
-        </div>
-      ))}
-      {open && (
-        <div className="plan-foot">
-          <button type="button" className="button small" onClick={onConfirm}>
-            Confirm the plan
-          </button>
-          <button type="button" className="button secondary small" onClick={onChange}>
-            Change it
-          </button>
-        </div>
-      )}
-    </div>
   );
 }

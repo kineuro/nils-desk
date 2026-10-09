@@ -56,7 +56,7 @@ describe("the reducer over the live stream", () => {
       ["u1", "user", "how many subjects", true],
       ["a1", "assistant", "Counting.", true],
     ]);
-    expect(s.turns[1].tools).toEqual([{ id: "t1", name: "nils_store", state: "done" }]);
+    expect(s.turns[1].tools).toEqual([{ id: "t1", name: "nils_store", state: "done", words: "Using store" }]);
     expect(s.proposals).toEqual([{ document: 7, parent: null, sentence: "the count of subjects", turn: "a1", decided: null }]);
     expect(s.choice?.options).toEqual([{ label: "a", count: 1 }]);
     expect(s.status?.phase).toBe("check");
