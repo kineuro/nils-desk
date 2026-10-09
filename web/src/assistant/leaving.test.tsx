@@ -218,3 +218,22 @@ describe("a conversation still named by its first words", () => {
     expect(a.of("POST", "/assistant/conversations/c13/title")).toHaveLength(0);
   });
 });
+
+describe("a turn the runtime lost", () => {
+  it("is not followed when its conversation opens: it stored nothing for ten minutes and never settled", async () => {
+    const a = fakeAssistant({ chat: { id: "c14", station: "nils", title: "FLAIR in the datasets", title_by: "model" } });
+    const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+    a.write({ type: "message-appended", message: ASKED }, { type: "message-started", messageId: "a1", submissionId: "sub_1" });
+    a.keep([
+      { ...ASKED, timestamp: ago(12) },
+      { id: "a1", role: "assistant", display: "visible", submissionId: "sub_1", timestamp: ago(11), parts: [] },
+    ]);
+    act(() => root.render(<AssistantPage caps={caps()} conversation="c14" />));
+    await settle(12);
+    expect(a.open()).toBe(0);
+    expect(button(host, "Stop")).toBeNull();
+    expect(button(host, "Ask for this answer again")).not.toBeNull();
+    expect(host.querySelector(".one-chat-thread .warn")?.textContent).toBe("The assistant did not finish this turn.");
+    expect(line()).toBeNull();
+  });
+});

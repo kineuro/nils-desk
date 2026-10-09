@@ -190,7 +190,7 @@ export function useConversation(station: string, conv: string | null): Conversin
         .history(station, conv)
         .then((h) => {
           if (!alive) return;
-          const s = h ? fromHistory(h) : empty();
+          const s = h ? fromHistory(h, empty(), Date.now()) : empty();
           apply(() => s);
           if (s.busy) {
             setSince(Date.now());

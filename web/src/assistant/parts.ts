@@ -361,17 +361,36 @@ export interface History {
     display?: string;
     /** The submission a message of a tracked turn belongs to: the person's words, the runtime's notices and the answer alike. */
     submissionId?: string;
+    /** When the runtime stored it: the person's words as they were applied, an answer as its first step began. */
+    timestamp?: string;
     parts: { type: string; text?: string; data?: unknown; toolCallId?: string; toolName?: string; state?: string; input?: unknown }[];
   }[];
   /** A failed turn's error as the runtime keeps it, an object of its own; settledError reads its words. */
   settlements?: { submissionId: string; outcome: string; error?: unknown }[];
 }
 
-/** The pane from a history snapshot: what the live reducer would have built, minus what the store keeps only once per kind. */
-export function fromHistory(h: History, previous: PaneState = empty()): PaneState {
+/** How long a turn may store nothing before a page that opens its conversation takes it for lost. */
+export const LOST_AFTER_MS = 10 * 60_000;
+
+/**
+ * The pane from a history snapshot: what the live reducer would have built, minus what the store keeps only once per kind.
+ * `now` is given where a page opens the conversation, which then takes a turn that stored nothing for ten minutes for lost.
+ */
+export function fromHistory(h: History, previous: PaneState = empty(), now?: number): PaneState {
   // a turn still running as the history is read is a submission with no settlement yet (2026-10-09): its answer stays open, and the page follows it
   const ended = new Set((h.settlements ?? []).map((s) => s.submissionId));
-  const running = new Set(h.messages.flatMap((m) => (m.submissionId && !ended.has(m.submissionId) ? [m.submissionId] : [])));
+  const stored = new Map<string, number>();
+  for (const m of h.messages) {
+    if (!m.submissionId || ended.has(m.submissionId)) continue;
+    const at = Date.parse(m.timestamp ?? "");
+    stored.set(m.submissionId, Math.max(stored.get(m.submissionId) ?? Number.NEGATIVE_INFINITY, Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at));
+  }
+  // unless the runtime lost it: nothing stored for ten minutes, so a page never follows it forever; a turn of no known age runs, and the stream that brings a reset never takes one for lost
+  const lost = (id: string) => {
+    const at = stored.get(id) ?? Number.NEGATIVE_INFINITY;
+    return now !== undefined && Number.isFinite(at) && now - at >= LOST_AFTER_MS;
+  };
+  const running = new Set([...stored.keys()].filter((id) => !lost(id)));
   let state: PaneState = { ...empty(h.offset ?? previous.offset), proposals: previous.proposals.filter((p) => p.decided !== null) };
   for (const m of h.messages) {
     if (isSummarizeMark(m)) {
@@ -418,6 +437,9 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
   });
   // a turn still running is followed, and the ending of the turn before it is not shown meanwhile
   if (running.size > 0) return { ...state, busy: true, settled: null };
+  // the last turn lost: it did not finish
+  const latest = [...h.messages].reverse().find((m) => m.submissionId !== undefined)?.submissionId;
+  if (latest !== undefined && stored.has(latest)) return { ...state, busy: false, settled: { outcome: "lost" } };
   const last = h.settlements?.[h.settlements.length - 1];
   const error = settledError(last?.error);
   return { ...state, busy: false, settled: last ? { outcome: last.outcome, ...(error ? { error } : {}) } : null };
