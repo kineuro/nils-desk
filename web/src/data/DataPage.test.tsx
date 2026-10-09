@@ -44,6 +44,7 @@ const DOORS = [
   "GET /api/cohorts/{name}",
   "GET /api/datasets/{name}/summary",
   "GET /api/datasets/{name}/scans",
+  "GET /api/cohorts/{name}/scans",
   "GET /api/jobs",
   "POST /api/jobs",
   "POST /api/jobs/{id}/cancel",
@@ -203,7 +204,7 @@ const jobsOfBig = [
 
 type Answer = { status: number; body?: unknown } | undefined;
 
-async function page(opts: { grants?: readonly Grant[]; list?: Dataset[]; query?: Record<string, string>; running?: boolean; route?: (c: Call, nth: number) => Answer } = {}) {
+async function page(opts: { grants?: readonly Grant[]; doors?: string[]; list?: Dataset[]; query?: Record<string, string>; running?: boolean; route?: (c: Call, nth: number) => Answer } = {}) {
   const list = opts.list ?? [done, looked, loose];
   const e = engine((c, nth) => {
     const routed = opts.route?.(c, nth);
@@ -229,7 +230,7 @@ async function page(opts: { grants?: readonly Grant[]; list?: Dataset[]; query?:
     if (c.method === "GET" && url.pathname === "/api/cohorts/ms-followup") return { status: 200, body: detail };
     return undefined;
   });
-  act(() => root.render(<DataPage caps={caps7a(DOORS, opts.grants ?? GRANTS)} install={null} onChanged={() => undefined} query={opts.query} />));
+  act(() => root.render(<DataPage caps={caps7a(opts.doors ?? DOORS, opts.grants ?? GRANTS)} install={null} onChanged={() => undefined} query={opts.query} />));
   await settle(10);
   return e;
 }
@@ -250,13 +251,26 @@ describe("datasets and cohorts on one page", () => {
       expect([...c.querySelectorAll("button")].map((b) => b.className)).toEqual(["dp-pick"]);
       expect(c.querySelectorAll("a").length + c.querySelectorAll(".dp-view[aria-disabled]").length).toBe(1);
     }
-    expect(card("study-big").querySelector("a.dp-view")?.getAttribute("href")).toBe("#data/datasets/study-big/view");
+    // View opens the viewer, the dataset's and the cohort's
+    expect(card("study-big").querySelector("a.dp-view")?.getAttribute("href")).toBe("#data/datasets/study-big/view?mode=grid");
     // nothing to view yet: View is there and says so
     expect(card("ward-c").querySelector(".dp-view")?.getAttribute("aria-disabled")).toBe("true");
-    expect(card("ms-followup").querySelector("a.dp-view")?.getAttribute("href")).toBe("#data/cohorts/ms-followup/view");
+    expect(card("ms-followup").querySelector("a.dp-view")?.getAttribute("href")).toBe("#data/cohorts/ms-followup/view?mode=grid");
     // the head: a new cohort beside adding a dataset, the dataset the primary one
     expect(host.querySelector(".data-head .button.secondary")?.textContent).toBe("New cohort");
     expect(host.querySelector(".data-head .button:not(.secondary)")?.textContent).toBe("Add a dataset");
+  });
+
+  it("offers View only where the viewer may be browsed", async () => {
+    // an engine that lists a dataset's scans and not a cohort's
+    await page({ doors: DOORS.filter((d) => d !== "GET /api/cohorts/{name}/scans") });
+    expect(card("study-big").querySelector("a.dp-view")?.getAttribute("href")).toBe("#data/datasets/study-big/view?mode=grid");
+    expect(card("ms-followup").querySelector(".dp-view")).toBeNull();
+    act(() => card("ms-followup").querySelector<HTMLElement>(".dp-pick")!.click());
+    await settle(4);
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    expect(d.getAttribute("aria-label")).toBe("ms-followup");
+    expect([...d.querySelectorAll(".dp-acts a")].map((a) => a.textContent)).not.toContain("View");
   });
 
   it("says each dataset's state, numbers, six steps and how sure the sort is", async () => {

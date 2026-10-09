@@ -32,7 +32,6 @@ import { isRoot, notReadOf } from "./layout";
 import { NewCohortDialog, makingRefusal } from "./NewCohort";
 import { useLiveJobs } from "./Now";
 import { plainError } from "./plain";
-import { mayListScans } from "./scans";
 import { kindWords, nextStep, stepCommand, type StepId } from "./steps";
 import {
   cardLine,
@@ -52,6 +51,7 @@ import {
   type Part,
   type Relation,
 } from "./summary";
+import { mayBrowse, viewHref, type Scope } from "./viewer";
 import "./data.css";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[] };
@@ -257,7 +257,8 @@ export function DataPage({
   const chosenCohort = chosen?.kind === "cohort" ? (allCohorts.find((c) => c.name === chosen.name) ?? null) : null;
   const datasetNames = list.map((d) => d.name);
   const making_ = makingRefusal(caps);
-  const viewDatasets = mayListScans(caps);
+  // View opens the viewer of the dataset or the cohort, offered where the person may browse it
+  const viewOf = (scope: Scope, something: boolean): View => (mayBrowse(caps, scope) ? (something ? viewHref(scope) : null) : false);
 
   return (
     <section className="data dp">
@@ -308,7 +309,7 @@ export function DataPage({
               on={chosenDataset?.id === d.id}
               relation={chosenCohort ? datasetRelation(d.name, chosenCohort) : null}
               feeds={feedsWords(d.name, d.cohort, allCohorts)}
-              view={viewDatasets && d.totals.stacks > 0 ? href("data", "datasets", d.name, "view") : null}
+              view={viewOf({ kind: "dataset", name: d.name }, d.totals.stacks > 0)}
               onPick={() => choose({ kind: "dataset", name: d.name })}
             />
           ))}
@@ -331,6 +332,7 @@ export function DataPage({
                   datasets={datasetNames}
                   on={chosenCohort?.name === c.name}
                   relation={chosenDataset ? cohortRelation(chosenDataset.name, c) : null}
+                  view={viewOf({ kind: "cohort", name: c.name }, true)}
                   onPick={() => choose({ kind: "cohort", name: c.name })}
                 />
               ))}
@@ -428,8 +430,12 @@ export function DataPage({
   );
 }
 
+/** A card's View: the viewer's address, null where there is nothing to view yet, false where the person may not browse it. */
+type View = string | null | false;
+
 /** The View button of a card: the viewer of the dataset or the cohort, where there is something to view. */
-function ViewLink({ to, label }: { to: string | null; label: string }) {
+function ViewLink({ to, label }: { to: View; label: string }) {
+  if (to === false) return null;
   if (to === null)
     return (
       <span className="dp-view" aria-disabled="true" title="Nothing to view yet">
@@ -448,7 +454,7 @@ function ViewLink({ to, label }: { to: string | null; label: string }) {
 /** The six segments of where a dataset is, in words for a screen reader. */
 const SEGMENT_WORDS = ["found", "read", "sorted", "main scans", "pictures", "3D views"];
 
-function DatasetCard(props: { dataset: Dataset; why: string | null; summary: DatasetSummary | null; on: boolean; relation: Relation | null; feeds: string; view: string | null; onPick: () => void }) {
+function DatasetCard(props: { dataset: Dataset; why: string | null; summary: DatasetSummary | null; on: boolean; relation: Relation | null; feeds: string; view: View; onPick: () => void }) {
   const { dataset: d, why, summary, on, relation, feeds, view, onPick } = props;
   const next = nextStep(d, why);
   const files = filesOf(d, summary);
@@ -521,7 +527,7 @@ export function partsOf(c: Cohort): Part[] {
   return [{ from, dataset: from === "dataset" ? (c.feeds[0] ?? null) : null, subjects: c.subjects }];
 }
 
-function CohortCard({ cohort: c, datasets, on, relation, onPick }: { cohort: Cohort; datasets: string[]; on: boolean; relation: Relation | null; onPick: () => void }) {
+function CohortCard({ cohort: c, datasets, on, relation, view, onPick }: { cohort: Cohort; datasets: string[]; on: boolean; relation: Relation | null; view: View; onPick: () => void }) {
   const parts = partsOf(c);
   const cls = ["dp-card", "dp-cohort", on ? "on" : relation ? (relation.related ? "rel" : "dim") : null].filter(Boolean).join(" ");
   const more = ["subjects", c.sessions !== null ? `${n(c.sessions)} visits` : null, `${n(c.stacks)} scans`].filter(Boolean).join(" · ");
@@ -566,7 +572,7 @@ function CohortCard({ cohort: c, datasets, on, relation, onPick }: { cohort: Coh
       {relation && <div className={relation.related ? "dp-rel on" : "dp-rel"}>{relation.words}</div>}
       <div className="dp-foot">
         <span className="dp-line grow">{cohortLine(c)}</span>
-        <ViewLink to={href("data", "cohorts", c.name, "view")} label={`View ${c.name}`} />
+        <ViewLink to={view} label={`View ${c.name}`} />
       </div>
     </div>
   );

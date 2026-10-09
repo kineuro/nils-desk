@@ -20,6 +20,7 @@ import { cohorts, type Cohort, type CohortDetail as Detail, type CohortRelease }
 import { maySeePicks, picksSummary, PICKS_SUMMARY_DOOR, type PickLine } from "./picks";
 import { StepRail } from "./StepRail";
 import { clock, cohortRail, fedWords, growth, joinTitle, roleOrder, roleWord, slotOf, type Holding } from "./summary";
+import { mayBrowse, viewHref } from "./viewer";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -42,8 +43,8 @@ export function cohortActions(caps: Capabilities, c: Pick<Cohort, "name" | "wait
   const review = c.waiting > 0 && may(caps, "review:see") ? narrow(href("review"), { cohort: c.name }) : null;
   const release = acts.releasing === null && !c.retired_at ? href("release", "new", c.name) : null;
   const query = may(caps, "query:see") && may(caps, "data:work") && !c.retired_at ? href("query") : null;
-  // the viewer over its members; until it reads cohorts, the cohort's own page answers the address
-  const view = href("data", "cohorts", c.name, "view");
+  // the viewer over its members, where the person may browse them
+  const view = mayBrowse(caps, { kind: "cohort", name: c.name }) ? viewHref({ kind: "cohort", name: c.name }) : null;
   const primary: "review" | "release" | "query" | null = review ? "review" : release && c.releases === 0 && c.subjects > 0 ? "release" : query ? "query" : release ? "release" : null;
   return { acts, review, release, query, view, primary };
 }
@@ -98,9 +99,11 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
         Release
       </a>
     ) : null,
-    <a key="view" className="button secondary" href={a.view}>
-      View
-    </a>,
+    a.view ? (
+      <a key="view" className="button secondary" href={a.view}>
+        View
+      </a>
+    ) : null,
   ];
   const primary =
     a.primary === "review" && a.review ? (

@@ -21,7 +21,6 @@ import { jobs as jobsDoor, packFor, type ChainedJob, type Dataset } from "./data
 import { cancelRefusal } from "./now";
 import type { LiveJobs } from "./Now";
 import { maySeePicks, picksSummary, type PickLine } from "./picks";
-import { mayListScans } from "./scans";
 import { StepRail } from "./StepRail";
 import { nextStep, stepCommand, type StepId } from "./steps";
 import {
@@ -47,6 +46,7 @@ import {
   type LogLine,
   type SummaryStep,
 } from "./summary";
+import { mayBrowse, viewHref } from "./viewer";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -81,7 +81,7 @@ export function datasetActions(caps: Capabilities, d: Dataset, why: string | nul
     next,
     primary,
     readNew: readable && next.step !== "read-new" && d.digests.count > 0,
-    view: mayListScans(caps) && d.totals.stacks > 0 ? href("data", "datasets", d.name, "view") : null,
+    view: d.totals.stacks > 0 && mayBrowse(caps, { kind: "dataset", name: d.name }) ? viewHref({ kind: "dataset", name: d.name }) : null,
     readAgain: readable && d.digests.count > 0,
     setIds: works && next.step !== "sort-files" && next.step !== "set-ids" && stateOf(d) !== "unknown" && d.arrives !== "undeclared",
     pseudonymisation: Boolean(d.trees?.originals) || (d.held?.files ?? 0) > 0,

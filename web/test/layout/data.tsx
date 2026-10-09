@@ -20,6 +20,7 @@ const DOORS = [
   "GET /api/cohorts/{name}",
   "GET /api/datasets/{name}/summary",
   "GET /api/datasets/{name}/scans",
+  "GET /api/cohorts/{name}/scans",
   "GET /api/jobs",
   "POST /api/jobs",
   "POST /api/jobs/{id}/cancel",
