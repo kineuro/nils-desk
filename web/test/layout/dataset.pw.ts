@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The dataset view in a real browser: the page is the dataset's, the scan
-// fills most of it, the chrome is two slim lines and a tree, the arrows walk
-// the tree and the picture follows, and a phone's width is one column with
-// no sideways scroll. Screenshots go to test-results for a look.
+// The dataset viewer's browser in a real browser: under the top bar the page
+// is the dataset's, the scan fills most of it, the chrome is two slim lines
+// and a tree, the arrows walk the tree and the picture follows, and a phone's
+// width is one column with no sideways scroll. Screenshots go to
+// test-results for a look.
 
 import { expect, test } from "@playwright/test";
 
@@ -12,10 +13,14 @@ test("the scan is the hero on a laptop screen", async ({ page }) => {
   await expect(page.locator(".dview-row.scan.on")).toHaveCount(1);
   await expect(page.locator(".scan-canvas canvas.on")).toHaveCount(1, { timeout: 10_000 });
   const view = await page.locator(".dview").boundingBox();
+  const bar = await page.locator(".top").boundingBox();
   const canvas = await page.locator(".scan-canvas").boundingBox();
   const top = await page.locator(".dview-top").boundingBox();
   const facts = await page.locator(".dview-facts").boundingBox();
-  expect(view).toMatchObject({ x: 0, y: 0, width: 1440, height: 900 });
+  // everything under the shell's top bar, the side folded away
+  expect(view).toMatchObject({ x: 0, width: 1440 });
+  expect(Math.abs(view!.y - bar!.height)).toBeLessThan(2);
+  expect(Math.abs(view!.y + view!.height - 900)).toBeLessThan(2);
   // the picture takes most of the page; the chrome above and below stays slim
   expect((canvas!.width * canvas!.height) / (1440 * 900)).toBeGreaterThan(0.6);
   expect(top!.height).toBeLessThan(56);
