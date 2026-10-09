@@ -34,6 +34,14 @@ export interface Preview {
    * `sagittal` the two across them.
    */
   middle: Partial<Record<Plane, string>>;
+  /**
+   * The first picture of a scan with no preview yet, decoded from its middle
+   * plane's one file (`partial: true`): only `middle.axial`, never cached;
+   * the whole preview is made after, and asked for again.
+   */
+  partial: boolean;
+  /** How long the engine says to wait before asking a partial preview again; null where it says nothing. */
+  retryMs: number | null;
 }
 
 /** One frame's place in a planes body. */
@@ -77,6 +85,8 @@ export function previewOf(a: Json): Preview {
     digest: str(a.digest),
     held: a.held === true,
     middle,
+    partial: a.partial === true,
+    retryMs: num(a.retry_after_ms),
   };
 }
 
@@ -259,6 +269,14 @@ export interface PicturesOptions {
   backoff: number[];
   /** A read with no answer after this long is asked again. */
   stallMs: number;
+  /** How many 503s with `retry_after_ms` (a range held while the preview is made) are waited out before they count as failures. */
+  holds: number;
+  /** Planes a request asks for while the scan's preview is partial: what the engine decodes in the request. */
+  partialSpan: number;
+  /** The pause before a partial preview is asked again where the engine names none. */
+  partialMs: number;
+  /** How many times a partial preview is asked again before the partial one is kept. */
+  partialTries: number;
   /** Waits for the browser to be idle (a read-ahead scan's decoding). */
   idle: () => Promise<void>;
   /** Waits a pause. */
@@ -281,6 +299,10 @@ export const PICTURES_DEFAULTS: PicturesOptions = {
   lanes: 6,
   backoff: [150, 400, 1000, 2500],
   stallMs: 15_000,
+  holds: 30,
+  partialSpan: 32,
+  partialMs: 500,
+  partialTries: 120,
   idle: idleTime,
   pause: (ms) => new Promise((done) => setTimeout(done, ms)),
 };
@@ -290,6 +312,8 @@ interface Reel {
   stack: number;
   planes: number;
   digest: string | null | undefined;
+  /** The preview was partial: ranges kept to what the engine decodes in the request, and never kept for good by the browser. */
+  partial: boolean;
   have: Map<number, Blob>;
   /** Planes asked for and not answered yet. */
   asking: Set<number>;
@@ -361,6 +385,7 @@ export class Pictures {
    * abort from `signal` throws `Left` at once.
    */
   private async ask(url: string, signal?: AbortSignal): Promise<Response> {
+    let holds = 0;
     for (let attempt = 0; ; attempt++) {
       if (signal?.aborted) throw new Left();
       const own = new AbortController();
@@ -373,18 +398,27 @@ export class Pictures {
       }, this.o.stallMs);
       let why: unknown;
       let wait: number | null = null;
+      let held: number | null = null;
       try {
         const r = await this.fetcher(url, { headers: HEADERS, signal: own.signal });
         if (r.ok || !passing(r.status)) return r;
         why = new Error(`${url.split("?")[0]} answered ${r.status}`);
         const after = Number(r.headers.get("Retry-After"));
         if (Number.isFinite(after) && after > 0) wait = Math.min(2000, after * 1000);
+        // a range held while the preview is made: asked again when the engine says, not counted as a failure
+        if (r.status === 503) held = num(((await r.json().catch(() => null)) as Json | null)?.retry_after_ms);
       } catch (e) {
         if (signal?.aborted) throw new Left();
         why = stalled ? new Error(`${url.split("?")[0]} gave no answer`) : e;
       } finally {
         clearTimeout(timer);
         signal?.removeEventListener("abort", stop);
+      }
+      if (held !== null && held >= 0 && holds < this.o.holds) {
+        holds++;
+        attempt--;
+        await this.o.pause(Math.min(5000, Math.max(50, held)));
+        continue;
       }
       if (attempt >= this.o.backoff.length) throw why;
       await this.o.pause(Math.min(wait ?? Infinity, this.o.backoff[attempt]));
@@ -402,6 +436,11 @@ export class Pictures {
         })
         .then((j) => {
           const v = previewOf(j);
+          // a partial preview is shown, never kept as the answer: the next ask reads the door again
+          if (v.partial) {
+            if (this.previews.get(stack) === p) this.previews.delete(stack);
+            if (this.known.get(stack)?.partial === false) return this.known.get(stack)!;
+          }
           this.known.set(stack, v);
           if (this.known.size > 64) this.known.delete(this.known.keys().next().value as number);
           return v;
@@ -413,6 +452,22 @@ export class Pictures {
       if (this.previews.size > 64) this.previews.delete(this.previews.keys().next().value as number);
     }
     return p;
+  }
+
+  /**
+   * A scan's whole preview: where the door answers a partial one, asked
+   * again after the engine's `retry_after_ms` (else `partialMs`) until it
+   * is whole; the last partial one where it never comes, or the scan was
+   * left (`signal`).
+   */
+  async whole(stack: number, signal?: AbortSignal): Promise<Preview> {
+    let v = await this.preview(stack);
+    for (let i = 0; v.partial && i < this.o.partialTries && !signal?.aborted; i++) {
+      await this.o.pause(Math.min(5000, Math.max(50, v.retryMs ?? this.o.partialMs)));
+      if (signal?.aborted) break;
+      v = await this.preview(stack);
+    }
+    return v;
   }
 
   /** A scan's preview where it was read already, at once; null where not (yet). */
@@ -435,14 +490,13 @@ export class Pictures {
     return this.reels.get(stack)?.reads ?? 0;
   }
 
-  private reel(stack: number, planes: number, at: number, digest?: string | null): Reel {
+  private reel(stack: number, planes: number, at: number, digest: string | null | undefined, partial: boolean): Reel {
     let r = this.reels.get(stack);
     if (r) {
       this.reels.delete(stack);
-      if (r.planes !== planes || r.digest !== digest) {
-        r.planes = planes;
-        r.digest = digest;
-      }
+      r.planes = planes;
+      r.digest = digest;
+      r.partial = partial;
     } else {
       const have = new Map<number, Blob>();
       for (const [k, b] of this.peeked) {
@@ -452,7 +506,7 @@ export class Pictures {
           this.peeked.delete(k);
         }
       }
-      r = { stack, planes, digest, have, asking: new Set(), absent: new Set(), focus: at, all: false, around: 0, idle: true, reads: 0, abort: new AbortController(), failed: null, decoding: new Set(), decoded: new Set(), frameBytes: 0, waiters: [] };
+      r = { stack, planes, digest, partial, have, asking: new Set(), absent: new Set(), focus: at, all: false, around: 0, idle: true, reads: 0, abort: new AbortController(), failed: null, decoding: new Set(), decoded: new Set(), frameBytes: 0, waiters: [] };
     }
     this.reels.set(stack, r);
     // the scans read longest ago let go of their frames (their decoded planes stay in the LRU)
@@ -480,8 +534,8 @@ export class Pictures {
    * when that is done, or when the scan is left. A second ask while the
    * first reads joins it; a scan whose reads failed is read again.
    */
-  load(stack: number, planes: number, at: number, digest?: string | null): Promise<void> {
-    const r = this.reel(stack, planes, at, digest);
+  load(stack: number, planes: number, at: number, digest?: string | null, partial = false): Promise<void> {
+    const r = this.reel(stack, planes, at, digest, partial);
     r.all = true;
     r.idle = false;
     r.failed = null;
@@ -493,8 +547,8 @@ export class Pictures {
    * read, and decoded in idle time, so its sharp frame is there when it is
    * opened. Nothing more where it is read whole already.
    */
-  ahead(stack: number, planes: number, at: number, digest?: string | null): Promise<void> {
-    const r = this.reel(stack, planes, at, digest);
+  ahead(stack: number, planes: number, at: number, digest?: string | null, partial = false): Promise<void> {
+    const r = this.reel(stack, planes, at, digest, partial);
     if (!r.all) r.around = Math.max(r.around, this.o.ahead);
     if (r.failed) r.failed = null;
     return this.wait(r);
@@ -585,7 +639,8 @@ export class Pictures {
     if (r.failed || r.planes <= 0 || (!r.all && r.around <= 0)) return;
     const limit = r.have.size === 0 ? 1 : this.o.inflight;
     while (r.reads < limit) {
-      const range = nextRange(r.planes, r.focus, this.missing(r), r.have.size === 0 && r.reads === 0 ? this.o.first : this.o.span, this.window(r));
+      const want = r.have.size === 0 && r.reads === 0 ? this.o.first : this.o.span;
+      const range = nextRange(r.planes, r.focus, this.missing(r), r.partial ? Math.min(want, this.o.partialSpan) : want, this.window(r));
       if (!range) return;
       void this.read(r, range[0], range[1]);
     }
@@ -596,7 +651,7 @@ export class Pictures {
     for (let z = from; z < to; z++) r.asking.add(z);
     r.reads++;
     try {
-      const res = await this.ask(planesUrl(r.stack, from, to, r.digest), signal);
+      const res = await this.ask(planesUrl(r.stack, from, to, r.partial ? null : r.digest), signal);
       if (!res.ok) throw new Error(`the planes answered ${res.status}`);
       const { frames, data, width, height } = parseFrames(await res.arrayBuffer());
       if (signal.aborted) return;

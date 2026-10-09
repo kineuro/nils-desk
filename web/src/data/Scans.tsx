@@ -14,7 +14,7 @@ import { Wait } from "../ui/Wait";
 import type { Dataset } from "./datasets";
 import { maySeePicks, pickLineWords, picksSummary, type PickLine } from "./picks";
 import { markOpen, ScanViewer } from "./ScanViewer";
-import { fillPictures, groupScans, mayListScans, questionWords, SCANS_PAGE, scanDoors, scanFacts, type ScanPage } from "./scans";
+import { fillPictures, groupScans, picturesToCome, mayListScans, questionWords, SCANS_PAGE, scanDoors, scanFacts, type ScanPage } from "./scans";
 
 /** The pauses before the page is asked again while pictures are being made, in milliseconds. */
 export const PICTURE_POLL = [700, 1500, 2500, 4000, 6000, 8000, 10000];
@@ -64,7 +64,8 @@ export function Scans({ caps, dataset: d }: { caps: Capabilities; dataset: Datas
   const latest = useRef(load);
   latest.current = load;
   const after = afters[page];
-  const missing = load.kind === "ready" && load.at.pictures?.shown ? load.at.pictures.missing : 0;
+  // a partial picture (a first one while its preview is made) is waited for like a missing one
+  const missing = load.kind === "ready" && load.at.pictures?.shown ? picturesToCome(load.at.pictures) : 0;
   const waiting = missing > 0;
   useEffect(() => {
     if (!waiting || !lists) return;
@@ -82,7 +83,7 @@ export function Scans({ caps, dataset: d }: { caps: Capabilities; dataset: Datas
             if (was.kind !== "ready") return;
             const at = fillPictures(was.at, fresh);
             if (at !== was.at) setLoad({ kind: "ready", at });
-            if ((at.pictures?.missing ?? 0) > 0) tick();
+            if (picturesToCome(at.pictures) > 0) tick();
           },
           () => alive && tick(),
         );
@@ -122,9 +123,9 @@ export function Scans({ caps, dataset: d }: { caps: Capabilities; dataset: Datas
       {lists && load.kind === "failed" && <p className="warn">The scans could not be read: {load.why}</p>}
       {at && at.scans.length === 0 && <p className="meta">No scans yet</p>}
       {at?.pictures && !at.pictures.shown && at.pictures.why && <p className="meta scan-pictures">No pictures: {at.pictures.why}</p>}
-      {at?.pictures?.shown && at.pictures.missing > 0 && (
+      {at?.pictures?.shown && missing > 0 && (
         <p className="meta scan-pictures">
-          {n(at.pictures.missing)} {at.pictures.missing === 1 ? "picture" : "pictures"} being made
+          {n(missing)} {missing === 1 ? "picture" : "pictures"} being made
         </p>
       )}
       {at && at.scans.length > 0 && (

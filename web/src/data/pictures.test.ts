@@ -21,7 +21,7 @@ describe("a preview, read", () => {
       middle: { axial: { width: 256, height: 256, bytes: 9, data: "data:a" }, coronal: { width: 256, height: 192, bytes: 9, data: "data:c" }, sagittal: { width: 256, height: 192, bytes: 9, data: "data:s" } },
       frames: { count: 160, width: 256, height: 256, bytes: 1000, url: "/api/instances/7/preview/planes?from=0&to=160&v=abc" },
     });
-    expect(p).toEqual({ shape: [160, 256, 256], spacing: [1.2, 1, 1], plane: "sagittal", window: { center: 300, width: 600 }, planes: 160, digest: "abc", held: false, middle: { axial: "data:a", coronal: "data:c", sagittal: "data:s" } });
+    expect(p).toEqual({ shape: [160, 256, 256], spacing: [1.2, 1, 1], plane: "sagittal", window: { center: 300, width: 600 }, planes: 160, digest: "abc", held: false, middle: { axial: "data:a", coronal: "data:c", sagittal: "data:s" }, partial: false, retryMs: null });
   });
 
   it("holds one middle plane for a single-plane scan, and counts the planes from the shape where frames say none", () => {
@@ -331,5 +331,92 @@ describe("a read that fails for a moment", () => {
     const pics = new Pictures(async () => (n++, new Response("{}", { status: 403 })), decode, undefined, undefined, quick);
     await expect(pics.preview(4)).rejects.toThrow(/403/);
     expect(n).toBe(1);
+  });
+});
+
+describe("a scan whose preview is still being made", () => {
+  const quick = { backoff: [1, 1, 1], pause: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 2))) };
+  const decode = async () => bitmap(64, 64);
+  const body = (from: number, to: number) => {
+    const frames = [];
+    for (let z = from; z < to; z++) frames.push({ plane: z, bytes: new Uint8Array([z]) });
+    return framesBody(frames);
+  };
+
+  it("shows the partial preview, never keeps it, and asks again after retry_after_ms until it is whole", async () => {
+    const asked: string[] = [];
+    const paused: number[] = [];
+    let partials = 2;
+    const fetcher = async (url: string) => {
+      asked.push(url);
+      if (partials > 0) {
+        partials--;
+        return new Response(JSON.stringify(previewBody(100, { axial: "data:a" }, { partial: true, digest: "d1", retry_after_ms: 300 })), { headers: { "Cache-Control": "no-store", "X-Nils-Partial": "1" } });
+      }
+      return new Response(JSON.stringify(previewBody(100, { axial: "data:a", coronal: "data:c", sagittal: "data:s" }, { digest: "d1" })));
+    };
+    const pics = new Pictures(fetcher, decode, undefined, undefined, { pause: async (ms) => void paused.push(ms) });
+    const first = await pics.preview(7);
+    expect(first.partial).toBe(true);
+    expect(first.middle).toEqual({ axial: "data:a" });
+    expect(first.retryMs).toBe(300);
+    expect(pics.previewNow(7)?.partial).toBe(true);
+    const whole = await pics.whole(7);
+    expect(whole.partial).toBe(false);
+    expect(whole.middle.coronal).toBe("data:c");
+    expect(paused).toEqual([300]);
+    expect(asked).toHaveLength(3);
+    // the whole one is kept: asked again, it is not read again
+    expect(await pics.preview(7)).toBe(whole);
+    expect(asked).toHaveLength(3);
+  });
+
+  it("waits half a second where the engine names no pause, and stops when the scan is left", async () => {
+    const paused: number[] = [];
+    const stop = new AbortController();
+    const fetcher = async () => new Response(JSON.stringify(previewBody(10, { axial: "data:a" }, { partial: true })));
+    const pics = new Pictures(fetcher, decode, undefined, undefined, {
+      pause: async (ms) => {
+        paused.push(ms);
+        if (paused.length === 2) stop.abort();
+      },
+    });
+    const v = await pics.whole(3, stop.signal);
+    expect(v.partial).toBe(true);
+    expect(paused).toEqual([500, 500]);
+  });
+
+  it("asks at most 32 planes a request, around the plane shown, and leaves the digest off", async () => {
+    const asked: string[] = [];
+    const fetcher = async (url: string) => {
+      asked.push(url);
+      const m = /from=(\d+)&to=(\d+)/.exec(url)!;
+      return new Response(body(Number(m[1]), Number(m[2])));
+    };
+    const pics = new Pictures(fetcher, decode, undefined, undefined, { ...quick, span: 48 });
+    await pics.load(5, 100, 50, "d1", true);
+    const ranges = asked.map((u) => /from=(\d+)&to=(\d+)/.exec(u)!.slice(1).map(Number));
+    expect(ranges[0]).toEqual([42, 58]);
+    expect(ranges.every(([a, b]) => b - a <= 32)).toBe(true);
+    expect(asked.every((u) => !u.includes("&v="))).toBe(true);
+    expect(pics.hasFrame(5, 0) && pics.hasFrame(5, 99)).toBe(true);
+  });
+
+  it("asks a range held by a 503 again after its retry_after_ms, not counted as a failure", async () => {
+    const paused: number[] = [];
+    let held = 6;
+    const fetcher = async (url: string) => {
+      if (held > 0) {
+        held--;
+        return new Response(JSON.stringify({ error: "the preview is being made", retry_after_ms: 750 }), { status: 503, headers: { "Content-Type": "application/json" } });
+      }
+      const m = /from=(\d+)&to=(\d+)/.exec(url)!;
+      return new Response(body(Number(m[1]), Number(m[2])));
+    };
+    const pics = new Pictures(fetcher, decode, undefined, undefined, { backoff: [1], pause: async (ms) => void paused.push(ms) });
+    await pics.load(6, 13, 6);
+    // six holds waited out though one failure would give up
+    expect(paused.slice(0, 6)).toEqual([750, 750, 750, 750, 750, 750]);
+    expect(pics.bitmap(6, 6)).toBeDefined();
   });
 });

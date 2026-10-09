@@ -174,27 +174,40 @@ export function ScanViewer({ scans, at, onAt, onClose, store }: { scans: Scan[];
 
   // its preview, then its frames from the middle outwards; a read that
   // failed for good is said, and asked again on "Try again"
+  // A partial preview (a scan whose preview is still being made) shows its
+  // still and its frames near the plane shown at once, and is asked again
+  // until it is whole.
   useEffect(() => {
     let alive = true;
+    const stop = new AbortController();
+    const take = (p: Preview) => {
+      if (!alive) return;
+      setPreview(p);
+      const mid = middleOf(p);
+      // the guess gives way to the scan's own middle where the person has not moved
+      const g = guess.current;
+      guess.current = null;
+      setZ((was) => (was === null || (was === g && !moved.current) ? mid : was));
+      if (p.planes > 0)
+        pics.load(stack, p.planes, live.current.z ?? mid ?? 0, p.digest, p.partial).then(
+          () => undefined,
+          () => alive && setFramesFailed(true),
+        );
+    };
     pics.preview(stack).then(
       (p) => {
-        if (!alive) return;
-        setPreview(p);
-        const mid = middleOf(p);
-        // the guess gives way to the scan's own middle where the person has not moved
-        const g = guess.current;
-        guess.current = null;
-        setZ((was) => (was === null || (was === g && !moved.current) ? mid : was));
-        if (p.planes > 0)
-          pics.load(stack, p.planes, live.current.z ?? mid ?? 0, p.digest).then(
+        take(p);
+        if (alive && p.partial)
+          pics.whole(stack, stop.signal).then(
+            (w) => alive && !w.partial && take(w),
             () => undefined,
-            () => alive && setFramesFailed(true),
           );
       },
       () => alive && setFailed(true),
     );
     return () => {
       alive = false;
+      stop.abort();
     };
   }, [stack, pics, again]);
 
@@ -213,7 +226,7 @@ export function ScanViewer({ scans, at, onAt, onClose, store }: { scans: Scan[];
       for (const n of next)
         pics.preview(n).then(
           (p) => {
-            if (alive && p.planes > 0) pics.ahead(n, p.planes, middleOf(p) ?? 0, p.digest).catch(() => undefined);
+            if (alive && p.planes > 0) pics.ahead(n, p.planes, middleOf(p) ?? 0, p.digest, p.partial).catch(() => undefined);
           },
           () => undefined,
         );

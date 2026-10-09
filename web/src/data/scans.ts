@@ -25,6 +25,8 @@ export interface Scan {
   images: number | null;
   /** The middle plane as a small picture (a data URL), where the engine made one at sort time. */
   picture: string | null;
+  /** The picture is a first one from the scan's one file while its preview is made: taken over when the whole one comes. */
+  partial: boolean;
   /** The kinds of review still open on it; empty when the sort is sure of it. */
   questions: string[];
 }
@@ -35,6 +37,8 @@ export interface PagePictures {
   why: string | null;
   /** Scans on the page whose picture is not made yet (the engine makes them now). */
   missing: number;
+  /** Scans on the page whose picture is a first one while their preview is made: waited for like the missing. */
+  partial: number;
 }
 
 /** One page of a dataset's scans and the cursor of the next. */
@@ -57,7 +61,7 @@ export interface ScanRow {
   images: number | null;
   day: string | null;
   /** With `pictures=1`: the middle plane's picture, about 256 px, its data a JPEG data URL; null where none is made yet. */
-  picture?: { data: string; width: number; height: number; digest: string | null; held: boolean } | null;
+  picture?: { data: string; width: number; height: number; digest: string | null; held: boolean; partial?: boolean } | null;
   /** With `pictures=1`: the open review kinds; empty is sure. */
   questions?: string[] | null;
 }
@@ -67,7 +71,7 @@ interface ScansAnswer {
   scans: ScanRow[];
   next: number | null;
   /** With `pictures=1`. */
-  pictures?: { shown?: boolean; why?: string | null; missing?: number; place?: string | null } | null;
+  pictures?: { shown?: boolean; why?: string | null; missing?: number; partial?: number; place?: string | null } | null;
 }
 
 export const SCANS_DOOR = "GET /api/datasets/{name}/scans";
@@ -86,6 +90,7 @@ export function scansOf(rows: ScanRow[]): Scan[] {
     orientation: r.orientation,
     images: r.images,
     picture: r.picture && typeof r.picture.data === "string" && r.picture.data !== "" ? r.picture.data : null,
+    partial: r.picture?.partial === true,
     questions: Array.isArray(r.questions) ? r.questions.filter((q): q is string => typeof q === "string") : [],
   }));
 }
@@ -135,26 +140,34 @@ export function picturesOf(p: ScansAnswer["pictures"]): PagePictures | null {
     shown: p.shown === true,
     why: typeof p.why === "string" && p.why !== "" ? p.why : null,
     missing: typeof p.missing === "number" && p.missing > 0 ? p.missing : 0,
+    partial: typeof p.partial === "number" && p.partial > 0 ? p.partial : 0,
   };
+}
+
+/** Pictures still to come on a page: the missing and the partial ones. */
+export function picturesToCome(p: PagePictures | null | undefined): number {
+  return p ? p.missing + p.partial : 0;
 }
 
 /**
  * The pictures a page read again brought, filled into the page shown: a
- * scan with no picture takes the new one, nothing else moves; the page's
- * pictures block is the new one. The same page back where nothing came.
+ * scan with no picture, or a partial one, takes the new one (a partial one
+ * only where it had none), nothing else moves; the page's counts are the
+ * new ones. The same page back where nothing came.
  */
 export function fillPictures(was: ScanPage, fresh: ScanPage): ScanPage {
-  const pics = new Map(fresh.scans.filter((s) => s.picture !== null).map((s) => [s.id, s.picture]));
+  const pics = new Map(fresh.scans.filter((s) => s.picture !== null).map((s) => [s.id, s]));
   let changed = false;
   const scans = was.scans.map((s) => {
-    const p = s.picture === null ? pics.get(s.id) : undefined;
-    if (!p) return s;
+    const f = s.picture === null || s.partial ? pics.get(s.id) : undefined;
+    if (!f || (f.partial && s.picture !== null)) return s;
     changed = true;
-    return { ...s, picture: p };
+    return { ...s, picture: f.picture, partial: f.partial };
   });
   const missing = fresh.pictures?.missing ?? 0;
-  if (!changed && (was.pictures?.missing ?? 0) === missing) return was;
-  return { ...was, scans, pictures: was.pictures ? { ...was.pictures, missing } : fresh.pictures };
+  const partial = fresh.pictures?.partial ?? 0;
+  if (!changed && (was.pictures?.missing ?? 0) === missing && (was.pictures?.partial ?? 0) === partial) return was;
+  return { ...was, scans, pictures: was.pictures ? { ...was.pictures, missing, partial } : fresh.pictures };
 }
 
 export const scanDoors = {

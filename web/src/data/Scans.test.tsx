@@ -57,7 +57,7 @@ describe("the scans of a dataset, read", () => {
   it("reads the door's rows and groups them by subject, then session", () => {
     const scans = scansOf(ROWS);
     expect(scans.map((s) => s.id)).toEqual([11, 12, 13]);
-    expect(scans[0]).toEqual({ id: 11, subjectId: 1, subject: "sub-a", session: 7, label: "20260102", day: "2026-01-02", name: "T1 MPRAGE", orientation: "SAG", images: 176, picture: "data:image/jpeg;base64,11", questions: [] });
+    expect(scans[0]).toEqual({ id: 11, subjectId: 1, subject: "sub-a", session: 7, label: "20260102", day: "2026-01-02", name: "T1 MPRAGE", orientation: "SAG", images: 176, picture: "data:image/jpeg;base64,11", partial: false, questions: [] });
     expect(scans[1].questions).toEqual(["body_part:low_confidence"]);
     // an older engine without pictures: none, and sure
     const { picture: _p, questions: _q, ...bare } = ROWS[0];
@@ -213,6 +213,38 @@ describe("the scans of a dataset, on the page", () => {
     // the scan open stays open
     expect(el.querySelector("[data-testid=viewer]")?.getAttribute("data-stack")).toBe("11");
     // nothing more is asked once every picture is there
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(calls.filter((c) => c.url.startsWith("/api/datasets/"))).toHaveLength(3);
+    vi.useRealTimers();
+  });
+
+  it("waits for a partial picture like a missing one, and takes the whole one when it comes", async () => {
+    vi.useFakeTimers();
+    let made = false;
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      calls.push({ method: init.method ?? "GET", url });
+      if (url === "/api/datasets/ms-a/scans?pictures=1&limit=50") {
+        const rows = made ? ROWS.slice(0, 2) : [ROWS[0], { ...ROWS[1], picture: { ...ROWS[1].picture!, data: "data:first", partial: true } }];
+        return new Response(JSON.stringify({ total: 2, scans: rows, next: null, pictures: { shown: true, why: null, missing: 0, partial: made ? 0 : 1, place: "work" } }));
+      }
+      return new Response("{}", { status: 404 });
+    });
+    act(() => root.render(<Scans caps={caps()} dataset={dataset()} />));
+    await settle();
+    expect([...el.querySelectorAll(".scan-tile img")].map((i) => i.getAttribute("src"))).toEqual(["data:image/jpeg;base64,11", "data:first"]);
+    expect(el.querySelector(".scan-pictures")?.textContent).toBe("1 picture being made");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(700);
+    });
+    expect(calls.filter((c) => c.url.startsWith("/api/datasets/"))).toHaveLength(2);
+    made = true;
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect([...el.querySelectorAll(".scan-tile img")].map((i) => i.getAttribute("src"))).toEqual(["data:image/jpeg;base64,11", "data:image/jpeg;base64,12"]);
+    expect(el.querySelector(".scan-pictures")).toBeNull();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30_000);
     });

@@ -21,7 +21,7 @@ const { ScanViewer, markOpen } = await import("./ScanViewer");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const scan = (id: number, over: Partial<Scan> = {}): Scan => ({ id, subjectId: 1, subject: "sub-a", session: 1, label: null, day: "2026-01-02", name: `Scan ${id}`, orientation: "AX", images: 9, picture: `data:image/webp;base64,${id}`, questions: [], ...over });
+const scan = (id: number, over: Partial<Scan> = {}): Scan => ({ id, subjectId: 1, subject: "sub-a", session: 1, label: null, day: "2026-01-02", name: `Scan ${id}`, orientation: "AX", images: 9, picture: `data:image/webp;base64,${id}`, partial: false, questions: [], ...over });
 const SCANS = [scan(1), scan(2, { questions: ["body_part:low_confidence"] }), scan(3), scan(4)];
 
 type Drawn = Bitmap & { stack: number; plane: number };
@@ -278,5 +278,46 @@ describe("the light viewer", () => {
     const still = el.querySelector(".scan-still")?.getAttribute("src");
     if (still) expect(still).toBe("data:preview-5");
     else expect(last()).toMatchObject({ stack: 5 });
+  });
+
+  it("shows a partial preview's still and near frames, then asks again until the preview is whole", async () => {
+    let partial = true;
+    const asks: string[] = [];
+    const fetcher = async (url: string) => {
+      asks.push(url);
+      if (url === "/api/instances/9/preview")
+        return new Response(JSON.stringify(previewBody(100, partial ? { axial: "data:first" } : { axial: "data:whole", coronal: "data:c", sagittal: "data:s" }, { partial, digest: "d9", retry_after_ms: 20 })));
+      const pl = /^\/api\/instances\/9\/preview\/planes\?from=(\d+)&to=(\d+)/.exec(url);
+      if (pl) {
+        const frames = [];
+        for (let z = Number(pl[1]); z < Number(pl[2]); z++) frames.push({ plane: z, bytes: new Uint8Array([9, z]) });
+        return new Response(framesBody(frames));
+      }
+      return new Response("{}", { status: 404 });
+    };
+    const decode = async (blob: Blob): Promise<Bitmap> => {
+      const [stack, plane] = new Uint8Array(await blob.arrayBuffer());
+      return { width: 64, height: 64, stack, plane } as Drawn;
+    };
+    store = new Pictures(fetcher, decode);
+    show(0, [scan(9, { picture: null, images: null })]);
+    await settle();
+    expect(last()).toMatchObject({ stack: 9, plane: 50 });
+    const planes = asks.filter((u) => u.includes("/planes?"));
+    expect(planes.length).toBeGreaterThan(0);
+    for (const u of planes) {
+      const [, a, b] = /from=(\d+)&to=(\d+)/.exec(u)!.map(Number);
+      expect(b - a).toBeLessThanOrEqual(32);
+      expect(u).not.toContain("&v=");
+    }
+    expect(store.previewNow(9)?.partial).toBe(true);
+    partial = false;
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+    });
+    await settle();
+    expect(store.previewNow(9)?.partial).toBe(false);
+    expect(store.previewNow(9)?.middle.coronal).toBe("data:c");
+    expect(asks.filter((u) => u === "/api/instances/9/preview").length).toBeGreaterThanOrEqual(2);
   });
 });
