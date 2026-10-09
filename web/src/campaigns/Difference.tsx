@@ -14,7 +14,6 @@
 import { useEffect, useRef, useState } from "react";
 import { doors, levelShape, levelSpacing, type Manifest } from "../viewer/doors";
 import { dot, geometry, planePosition } from "../viewer/geometry";
-import { decoder } from "../viewer/loader";
 import { sliceMap } from "./pair";
 
 /** How the anchor's pixels lie under the candidate's, or why they do not. */
@@ -101,6 +100,7 @@ export function diffPixels(c: ArrayLike<number>, a: ArrayLike<number>, nx: numbe
 async function planeOf(stack: number, m: Manifest, level: number, z: number): Promise<{ values: Float32Array; nx: number; ny: number }> {
   const [, ny, nx] = levelShape(m, level);
   const r = await doors.plane(stack, level, z);
+  const { decoder } = await import("../viewer/loader");
   const { plane } = await decoder().decode(m.codec, r.tiles, nx, ny, m.tile);
   const slope = m.slope !== undefined && m.slope !== 0 ? m.slope : 1;
   const intercept = m.intercept ?? 0;

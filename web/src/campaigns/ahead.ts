@@ -20,7 +20,7 @@ import { doors, levelShape, type Manifest } from "../viewer/doors";
 import { firstPlanes, load } from "../viewer/prefetch";
 import { reference } from "../viewer/reference";
 import { levelFor, SLAB, slabOf } from "../viewer/ring";
-import { dropPrefills, prefill, volumePath } from "../viewer/volume";
+import { volumePath } from "../viewer/volumePlan";
 import { calloff, pin, slab } from "../viewer/slabs";
 import { tileManifest } from "../viewer/tiles";
 import { needsVolume, type ViewMode } from "../viewer/view";
@@ -77,6 +77,10 @@ export interface WarmView {
 
 type Task = (signal: AbortSignal) => Promise<unknown>;
 
+/** The volume module, loaded on the first fill ahead: cornerstone stays out of the desk's first bundle. */
+let volumeLoaded: Promise<typeof import("../viewer/volume")> | null = null;
+const volumeModule = () => (volumeLoaded ??= import("../viewer/volume"));
+
 /** The work of warming one stack, in the order it pays: what the viewer draws first, then the rest. */
 async function stackTasks(stack: number, view: WarmView, signal: AbortSignal, next: boolean): Promise<Task[]> {
   const m = await tileManifest(stack);
@@ -114,7 +118,7 @@ async function stackTasks(stack: number, view: WarmView, signal: AbortSignal, ne
       const order = [at, ...Array.from({ length: n }, (_, d) => [at + d + 1, at - d - 1]).flat()].filter((s, i, a) => s >= 0 && s < n && a.indexOf(s) === i);
       for (const s of order) tasks.push(() => slab(stack, plan.level, s * SLAB, Math.min(pz, (s + 1) * SLAB), { warm: true }));
       // the next item's volume filled, from the slabs just read
-      if (next) tasks.push(() => prefill(stack, m, plan)?.ready ?? Promise.resolve());
+      if (next) tasks.push(() => volumeModule().then((v) => v.prefill(stack, m, plan)?.ready));
     }
   }
   return tasks;
@@ -143,7 +147,9 @@ export class Warmer {
     pin(wanted);
     calloff(wanted);
     // only the next item's volumes are filled ahead (and those on the screen kept)
-    dropPrefills(new Set([...keep.current, ...(ahead[0]?.stacks ?? [])]));
+    // the volume module (cornerstone) is loaded only once a fill asked for it; before that nothing was filled to drop
+    const keepFilled = new Set([...keep.current, ...(ahead[0]?.stacks ?? [])]);
+    void volumeLoaded?.then((v) => v.dropPrefills(keepFilled));
     const nextOnes = new Set(ahead[0]?.stacks ?? []);
     const viewKey = `${[...new Set(view.modes)].sort().join(",")}@${Math.round(view.px / 64)}`;
     // a stack warmed in this view is not warmed again, unless it is now next and its volume is filled ahead
