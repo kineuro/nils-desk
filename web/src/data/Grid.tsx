@@ -896,7 +896,10 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
   // pictures still being made: the page asked again after short and then longer pauses, each picture that came filled in
   const latest = useRef(page);
   latest.current = page;
-  const waiting = page?.pictures?.shown ? picturesToCome(page.pictures) > 0 : false;
+  const toCome = page?.pictures?.shown ? picturesToCome(page.pictures) > 0 : false;
+  // the page stops asking after its last pause: the cards still blank then stop saying their picture is being made
+  const [gaveUp, setGaveUp] = useState<string | null>(null);
+  const waiting = toCome && gaveUp !== key;
   useEffect(() => {
     if (!waiting) return;
     let alive = true;
@@ -904,7 +907,10 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
     const pauses = [...PICTURE_POLL];
     const tick = () => {
       const ms = pauses.shift();
-      if (ms === undefined) return;
+      if (ms === undefined) {
+        if (alive) setGaveUp(key);
+        return;
+      }
       timer = setTimeout(() => {
         visitAll(scope, visit).then(
           (fresh) => {

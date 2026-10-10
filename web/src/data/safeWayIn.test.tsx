@@ -183,6 +183,39 @@ describe("the Data page", () => {
     expect(host.textContent).toContain("study-big is a dataset.");
   });
 
+  it("shows the folder looked at last, whatever order the looks answer in", async () => {
+    await page([], (c) => {
+      if (c.method === "GET" && c.url.startsWith("/api/places/1/folders?")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 2, folders: ["study-slow", "study-quick"].map((name) => ({ name, path: `/srv/in/${name}`, added: false, dataset_id: null, dataset: null, has_derivatives: true })), next: null } };
+      const look = /^\/api\/places\/1\/folders\/(study-slow|study-quick)$/.exec(c.url);
+      if (c.method === "GET" && look) return { status: 200, body: { name: look[1], path: `/srv/in/${look[1]}`, added: false, dataset_id: null, holds_dicom: look[1] === "study-slow" ? "no" : "yes", has_derivatives: true, layout: ANONYMISED } };
+      return undefined;
+    });
+    // the slow folder's look answers only when the test says so
+    const answered = globalThis.fetch;
+    let late: (() => void) | null = null;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input) === "/api/places/1/folders/study-slow" ? new Promise<Response>((done) => (late = () => done(answered(input, init)))) : answered(input, init),
+    );
+    act(() => button(host, "Add a dataset")!.click());
+    act(() => button(host, "Browse")!.click());
+    await settle();
+    act(() => button(host, "study-slow")!.click());
+    await settle();
+    // while it is looked at, back to the folders and another one chosen
+    act(() => button(host, "Back")!.click());
+    await settle();
+    act(() => button(host, "study-quick")!.click());
+    await settle();
+    expect(host.textContent).not.toContain("No DICOM");
+    await act(async () => {
+      late!();
+    });
+    await settle();
+    // the slow folder's answer came last, and is let go
+    expect(host.textContent).not.toContain("No DICOM");
+    expect(host.querySelector("#dataset-patient-id")).not.toBeNull();
+  });
+
   it("asks an identified folder what its PatientID holds, a personnummer or an ID, and sends it as the rule its originals are read under", async () => {
     const e = await page([], (c) => {
       if (c.method === "GET" && c.url.startsWith("/api/places/1/folders?")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 2, folders: ["study-pn", "study-id"].map((name) => ({ name, path: `/srv/in/${name}`, added: false, dataset_id: null, dataset: null, has_derivatives: true })), next: null } };

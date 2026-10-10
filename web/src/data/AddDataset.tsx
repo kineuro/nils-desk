@@ -115,14 +115,17 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once
   }, []);
 
+  // the folder looked at last is the one shown: a look at another folder that answers late is let go
+  const looks = useRef(0);
   const pick = (f: RootFolder) => {
     if (!root) return;
     setAnyway(false);
     setWhy(null);
     setSeen({ kind: "looking", name: f.name });
+    const mine = ++looks.current;
     rootsDoor.folder(root.id, f.name).then(
-      (look) => setSeen({ kind: "seen", look }),
-      (e: unknown) => setSeen({ kind: "failed", name: f.name, why: messageOf(e) }),
+      (look) => mine === looks.current && setSeen({ kind: "seen", look }),
+      (e: unknown) => mine === looks.current && setSeen({ kind: "failed", name: f.name, why: messageOf(e) }),
     );
   };
 
@@ -156,6 +159,13 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
           {anyway ? "Add anyway" : "Add"}
         </button>
       )}
+    </div>
+  ) : seen ? (
+    // a folder still being looked at, or one that could not be: back to the folders
+    <div className="row actions">
+      <button type="button" className="button secondary" onClick={() => setSeen(null)}>
+        Back
+      </button>
     </div>
   ) : (
     <div className="row actions">

@@ -22,6 +22,7 @@ vi.mock("./ScanViewer", () => ({
 
 const { Viewer } = await import("./Viewer");
 const { forgetHeld } = await import("./viewer");
+const { PICTURE_POLL } = await import("./Grid");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -160,6 +161,7 @@ describe("the dataset viewer's grid", () => {
       }
       if (u.pathname === "/api/datasets/ms-a/scans") {
         if (q.get("session") === "34") return json({ total: VISIT_SCANS.length, scans: VISIT_SCANS, next: null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
+        if (q.get("session") === "60") return json({ total: 2, scans: [row(31, "Ax_T2w_2D", { session: { id: 60, label: "20200202" } }), row(32, "Ax_FLAIR_2D", { session: { id: 60, label: "20200202" } })], next: null, pictures: { shown: true, why: null, missing: 2, partial: 0 } });
         if (q.get("session") === "50") {
           // a visit of 250 scans, one image a stack: two pages
           const all = Array.from({ length: 250 }, (_, i) => row(1000 + i, `Sag_CSF_flow_frame_${i}`, { session: { id: 50, label: "20200101" }, images: 1 }));
@@ -361,6 +363,22 @@ describe("the dataset viewer's grid", () => {
     // the names by BIDS where a scan has one
     act(() => [...el.querySelectorAll<HTMLButtonElement>(".vw-switch.names button")].find((b) => b.textContent === "BIDS")!.click());
     expect(text(".vw-scan .vw-scan-name").slice(0, 3)).toEqual(["acq-11_T1w", "acq-12_T1w", "Ax_T2w_2D_MDME_Synthetic"]);
+  });
+
+  it("stops saying a picture is being made once it stops asking for it", async () => {
+    const was = [...PICTURE_POLL];
+    PICTURE_POLL.splice(0, PICTURE_POLL.length, 5, 5);
+    try {
+      await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s60");
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 60));
+      });
+      await settle();
+      expect(el.querySelectorAll(".vw-blank").length).toBe(2);
+      expect(el.querySelectorAll(".vw-blank.making").length).toBe(0);
+    } finally {
+      PICTURE_POLL.splice(0, PICTURE_POLL.length, ...was);
+    }
   });
 
   it("reads every page of a visit, not its first two hundred scans alone", async () => {

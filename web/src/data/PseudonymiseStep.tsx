@@ -351,18 +351,23 @@ function Codes(props: {
   const { setMatched } = pseudo;
   useEffect(() => () => setMatched([]), [setMatched]);
 
+  // the newest rehearsal's answer alone is shown: one asked before it that answers late is let go
+  const rehearsals = useRef(0);
   const rehearse = (all: GivenMap[]) => {
     const pairs = all.flatMap((m) => m.pairs);
     if (pairs.length === 0) return;
+    const mine = ++rehearsals.current;
     setRehearsal({ kind: "working", since: Date.now() });
     linkage
       .import(codesBody(d.name, idType, pairs, true))
       .then((raw) => {
+        if (mine !== rehearsals.current) return;
         const report = reportOf(raw);
         pseudo.setMatched(report.conflicts.length > 0 ? [] : matchedOf(raw));
         setRehearsal({ kind: "done", conflicts: report.conflicts });
       })
       .catch((e: unknown) => {
+        if (mine !== rehearsals.current) return;
         pseudo.setMatched([]);
         setRehearsal({ kind: "refused", plain: plainError(e, "The map could not be read.") });
       });
