@@ -46,13 +46,22 @@ export const assistant = {
   /**
    * The stream followed as server-sent events (one chat): each read cycle's
    * chunks handed over with the offset after them. "unsupported" when the
-   * assistant does not serve the stream this way, so the caller long-polls;
-   * "ended" when the connection closed and may be opened again from the last
-   * offset; "stopped" when the callback said it has what it needed.
+   * assistant answers but does not serve the stream this way, so the caller
+   * long-polls; "ended" when the connection closed and may be opened again
+   * from the last offset; "stopped" when the callback said it has what it
+   * needed. An answer that is no answer (a 401, a 502 while the assistant
+   * restarts) and a dropped connection throw, for the caller to open the
+   * stream again after a pause (review of 2026-10-10).
    */
   async stream(station: string, id: string, offset: string, signal: AbortSignal, on: (chunks: Chunk[], next: string) => Promise<boolean> | boolean): Promise<"unsupported" | "ended" | "stopped"> {
     const r = await fetch(`/assistant/agents/${station}/${encodeURIComponent(id)}?view=updates&offset=${encodeURIComponent(offset)}&live=sse`, { signal, headers: { accept: "text/event-stream" } });
-    if (!r.ok || !(r.headers.get("content-type") ?? "").includes("text/event-stream") || !r.body) {
+    // an assistant that does not serve the stream this way says so (400, 404, 405, 406, 501): the caller long-polls
+    if (!r.ok && [400, 404, 405, 406, 501].includes(r.status)) {
+      await r.body?.cancel().catch(() => undefined);
+      return "unsupported";
+    }
+    if (!r.ok) await fail(r);
+    if (!(r.headers.get("content-type") ?? "").includes("text/event-stream") || !r.body) {
       await r.body?.cancel().catch(() => undefined);
       return "unsupported";
     }

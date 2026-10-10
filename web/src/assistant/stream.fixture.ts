@@ -47,6 +47,10 @@ export function fakeAssistant(o: { chat: FakeChat; named?: string; engine?: (c: 
   const stream: Chunk[] = [];
   let history: History | null = null;
   const waiting = new Set<() => void>();
+  /** Long polls still to drop as a broken connection would, and posts held until the test lets them go. */
+  let dropping = 0;
+  let holding = false;
+  const held: (() => void)[] = [];
   const answer = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers });
   const aborted = () => new DOMException("The page let it go", "AbortError");
   const one = `/assistant/conversations/${chat.id}`;
@@ -67,9 +71,16 @@ export function fakeAssistant(o: { chat: FakeChat; named?: string; engine?: (c: 
       }
       if (at(`/desk/assistant/conversations/${chat.id}/token`)) return answer({});
       if (at("/assistant/inbox")) return answer(INBOX);
-      if (at(agent) && call.method === "POST") return answer({ submissionId: "sub_1" }, 202, { "Stream-Next-Offset": String(stream.length - 1) });
+      if (at(agent) && call.method === "POST") {
+        if (holding) await new Promise<void>((go) => held.push(go));
+        return answer({ submissionId: "sub_1" }, 202, { "Stream-Next-Offset": String(stream.length - 1) });
+      }
       if (at(agent) && u.searchParams.get("view") === "history") return history ? answer(history, 200, { "Stream-Next-Offset": history.offset ?? "-1" }) : answer({ error: "no stream" }, 404);
       if (at(agent) && u.searchParams.get("live") === "long-poll") {
+        if (dropping > 0) {
+          dropping -= 1;
+          throw new TypeError("Failed to fetch");
+        }
         const from = Number(u.searchParams.get("offset"));
         // the long poll waits for what comes after its offset, or until the page lets it go
         while (stream.length - 1 <= from) {
@@ -113,5 +124,18 @@ export function fakeAssistant(o: { chat: FakeChat; named?: string; engine?: (c: 
     },
     /** How many long polls are open now. */
     open: () => waiting.size,
+    /** The next `n` long polls fail as a dropped connection does. */
+    drop(n = 1) {
+      dropping += n;
+    },
+    /** Posts wait from now on until `release`. */
+    hold() {
+      holding = true;
+    },
+    /** Every held post answered, and posts answered at once again. */
+    release() {
+      holding = false;
+      for (const go of held.splice(0)) go();
+    },
   };
 }

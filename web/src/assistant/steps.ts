@@ -108,8 +108,9 @@ export function liveLine(pane: PaneState, slow = false): string | null {
   if (turn && !turn.done) {
     const running = [...turn.tools].reverse().find((t) => t.state === "running" && !HIDDEN.has(t.name));
     if (running) return running.log ?? running.words ?? toolWords(running.name);
-    // the answer is arriving: the line has done its work
-    if (turn.text) return null;
+    // the answer is arriving: the line has done its work, until a step after the words begins with nothing said yet
+    const step = turn.steps?.[turn.steps.length - 1];
+    if (step ? step.words !== "" : turn.text) return null;
   }
   return "Thinking";
 }

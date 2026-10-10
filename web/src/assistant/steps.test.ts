@@ -77,6 +77,23 @@ describe("the one live line", () => {
     expect(liveLine(s)).toBe("Finding the data");
   });
 
+  it("comes back while the model thinks before its next step, after an earlier step wrote words", () => {
+    let s = live(
+      { type: "message-appended", message: { id: "u1", role: "user", submissionId: "sub_1", parts: [{ type: "text", text: "find T1w" }] } },
+      { type: "message-started", messageId: "a1", submissionId: "sub_1" },
+      { type: "message-delta", messageId: "a1", kind: "text", delta: "First the datasets." },
+    );
+    expect(liveLine(s)).toBeNull();
+    s = reduce(s, { type: "tool-input", messageId: "a1", toolCallId: "t1", toolName: "registry_search", input: { q: "T1w" } });
+    s = reduce(s, { type: "tool-output", toolCallId: "t1", output: "rows" });
+    s = reduce(s, { type: "message-completed", messageId: "a1" });
+    // the next step has begun and said nothing yet: the turn is not answered
+    s = reduce(s, { type: "message-started", messageId: "a1", submissionId: "sub_1" });
+    expect(liveLine(s)).toBe("Thinking");
+    s = reduce(s, { type: "message-delta", messageId: "a1", kind: "text", delta: "There are 38." });
+    expect(liveLine(s)).toBeNull();
+  });
+
   it("says the model is starting once a turn has said nothing for a while, until its first step, reasoning or word (2026-10-09)", () => {
     const asked = { type: "message-appended", message: { id: "u1", role: "user", parts: [{ type: "text", text: "find T1w" }] } };
     // sent, and the person's words not back yet: what was answered before stays the last turn

@@ -17,6 +17,7 @@ import { AssistantPage } from "./AssistantPage";
 import { chatsKept } from "./chats";
 import type { Chunk } from "./parts";
 import { STARTING } from "./steps";
+import { PROBE_MS } from "./useConversation";
 import { fakeAssistant } from "./stream.fixture";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -138,6 +139,51 @@ describe("a turn the person left", () => {
   });
 });
 
+describe("a turn followed through a broken connection", () => {
+  it("opens the stream again when the connection drops, and the answer still arrives", async () => {
+    const a = fakeAssistant({ chat: CHAT });
+    await ask("Which datasets have a FLAIR?", () => settle(10));
+    a.write(...BEGUN);
+    await settle(10);
+    // the open long poll is answered, and the next one fails as a dropped connection does
+    a.drop();
+    a.write(...STEP);
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 2_500));
+    });
+    await settle(10);
+    expect(a.open()).toBe(1);
+    expect(button(host, "Stop")).not.toBeNull();
+    a.write(...ANSWERED);
+    await settle(12);
+    expect(said()).toContain("Two of them have a FLAIR: ds-a and ds-b.");
+    expect(button(host, "Stop")).toBeNull();
+    expect(host.querySelector(".one-chat-thread .warn")).toBeNull();
+  }, 15_000);
+
+  it("follows nothing for a page left while its question was being sent", async () => {
+    const a = fakeAssistant({ chat: { id: "c16", station: "nils", title: "FLAIR in the datasets", title_by: "model" } });
+    a.keep([{ ...ASKED, submissionId: "sub_0" }, { id: "a0", role: "assistant", display: "visible", submissionId: "sub_0", parts: [{ type: "text", text: "Before." }] }], [{ submissionId: "sub_0", outcome: "completed" }]);
+    act(() => root.render(<AssistantPage caps={caps()} conversation="c16" />));
+    await settle(12);
+    a.hold();
+    const box = host.querySelector<HTMLTextAreaElement>("textarea")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, "And the T1w?");
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button(host, "Send")!.click());
+    await settle(4);
+    // the page is left before the assistant answered the question
+    act(() => root.render(<p>Data</p>));
+    await settle(4);
+    a.release();
+    await settle(12);
+    expect(a.of("POST", "/assistant/agents/nils/c16")).toHaveLength(1);
+    expect(a.open()).toBe(0);
+  });
+});
+
 describe("a turn that has said nothing yet", () => {
   /** Every promise the last act started, settled, after the clock moved on by `ms`. */
   const tick = async (ms = 0) => {
@@ -220,20 +266,57 @@ describe("a conversation still named by its first words", () => {
 });
 
 describe("a turn the runtime lost", () => {
-  it("is not followed when its conversation opens: it stored nothing for thirty minutes and never settled", async () => {
+  /** Every promise the last act started, settled, after the clock moved on by `ms`. */
+  const tick = async (ms = 0) => {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+    for (let i = 0; i < 10; i++)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+  };
+  const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+
+  it("is followed when its conversation opens, and taken for lost only once the stream brought nothing of it for a while", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const a = fakeAssistant({ chat: { id: "c14", station: "nils", title: "FLAIR in the datasets", title_by: "model" } });
-    const ago = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
     a.write({ type: "message-appended", message: ASKED }, { type: "message-started", messageId: "a1", submissionId: "sub_1" });
     a.keep([
       { ...ASKED, timestamp: ago(32) },
       { id: "a1", role: "assistant", display: "visible", submissionId: "sub_1", timestamp: ago(31), parts: [] },
     ]);
     act(() => root.render(<AssistantPage caps={caps()} conversation="c14" />));
-    await settle(12);
+    await tick();
+    // its stamps are thirty minutes old, but a stamp is when the answer began: the stream is asked first
+    expect(a.open()).toBe(1);
+    expect(button(host, "Stop")).not.toBeNull();
+    await tick(PROBE_MS);
     expect(a.open()).toBe(0);
     expect(button(host, "Stop")).toBeNull();
     expect(button(host, "Ask for this answer again")).not.toBeNull();
     expect(host.querySelector(".one-chat-thread .warn")?.textContent).toBe("The assistant did not finish this turn.");
+    expect(line()).toBeNull();
+  });
+
+  it("is never taken for lost while its stream brings its steps, however long ago its answer began", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const a = fakeAssistant({ chat: { id: "c15", station: "nils", title: "FLAIR in the datasets", title_by: "model" } });
+    a.write({ type: "message-appended", message: ASKED }, { type: "message-started", messageId: "a1", submissionId: "sub_1" });
+    a.keep([
+      { ...ASKED, timestamp: ago(41) },
+      { id: "a1", role: "assistant", display: "visible", submissionId: "sub_1", timestamp: ago(40), parts: [] },
+    ]);
+    act(() => root.render(<AssistantPage caps={caps()} conversation="c15" />));
+    await tick();
+    // a step forty minutes into the turn
+    a.write(...STEP);
+    await tick(PROBE_MS * 2);
+    expect(button(host, "Stop")).not.toBeNull();
+    expect(host.querySelector(".one-chat-thread .warn")).toBeNull();
+    a.write(...ANSWERED);
+    await tick();
+    expect(said()).toContain("Two of them have a FLAIR: ds-a and ds-b.");
     expect(line()).toBeNull();
   });
 });

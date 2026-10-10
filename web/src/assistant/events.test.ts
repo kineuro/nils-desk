@@ -148,5 +148,14 @@ describe("the stream as server-sent events", () => {
   it("says when the assistant does not serve events, so the desk long-polls", async () => {
     vi.stubGlobal("fetch", () => Promise.resolve(new Response("[]", { headers: { "content-type": "application/json" } })));
     expect(await assistant.stream("concierge", "c1", "-1", new AbortController().signal, () => true)).toBe("unsupported");
+    vi.stubGlobal("fetch", () => Promise.resolve(new Response(JSON.stringify({ error: "no events here" }), { status: 404 })));
+    expect(await assistant.stream("concierge", "c1", "-1", new AbortController().signal, () => true)).toBe("unsupported");
+  });
+
+  it("throws on an answer that is no answer, so the page opens the stream again rather than long-polling for good", async () => {
+    for (const status of [401, 502]) {
+      vi.stubGlobal("fetch", () => Promise.resolve(new Response(JSON.stringify({ error: "not now" }), { status })));
+      await expect(assistant.stream("nils", "c1", "-1", new AbortController().signal, () => true)).rejects.toThrow("not now");
+    }
   });
 });
