@@ -29,6 +29,7 @@ import { DatasetSettings } from "./DatasetSettings";
 import { maySeePicks, picksSummary, type PickLine } from "./picks";
 import { opensItself, PseudonymisedSummary, PseudonymiseStep, StepDialogs, usePseudonymise, type Opened } from "./PseudonymiseStep";
 import { railWords } from "./pseudoStep";
+import { STOPPED_NEXT, useStopped } from "./stopped";
 import { StepRail } from "./StepRail";
 import { runOffers, startedWords, stepRuns } from "./stepRun";
 import { nextStep, stepCommand, type StepId } from "./steps";
@@ -128,6 +129,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
   /** The next step's button, or Read new files or Read again, pressed until the engine answers: one press, one job. */
   const [asking, setAsking] = useState(false);
   const acts = datasetActions(caps, d, why);
+  /** Where its chain stopped, in the failed job's own words (2026-10-10). */
+  const stopped = useStopped(caps, s);
   // the pseudonymise step: open by itself while it waits on a person or runs, or as the person or the address opened it
   const pseudo = usePseudonymise(caps, d, s);
   const view = pseudo.view;
@@ -257,7 +260,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
           )}
           {primary && primary.href === null && (
             <button type="button" className="button" disabled={primary.busy || primary.step === null || (busy && primary.step !== "pseudonymise")} onClick={() => primary.step && stepping(primary.step)}>
-              {chainRuns && !primary.busy && primary.step !== "pseudonymise" ? "Running" : primary.label}
+              {chainRuns && !primary.busy && primary.step !== "pseudonymise" ? "Running" : stopped && primary.step !== null ? "Try again" : primary.label}
             </button>
           )}
           {(acts.readAgain || acts.setIds || acts.settings || acts.originals || (refused > 0 && refusedBatch !== null) || acts.remove) && (
@@ -299,7 +302,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
           <StepRail
             steps={railSteps(s)}
             now={now}
-            says={said ? { pseudonymised: said } : undefined}
+            says={{ ...(said ? { pseudonymised: said } : {}), ...(stopped ? { [stopped.step]: { what: "stopped", when: "", next: true } } : {}) }}
             pick={view !== null && stepOf(s, "pseudonymised") !== null ? { step: "pseudonymised", open, controls: stepId, onPick: () => setStepOpen(!open) } : null}
             run={runOffers(caps, "datasets", railSteps(s), pressed, runStep)}
           />
@@ -313,6 +316,11 @@ export function DatasetDetail(props: DatasetDetailProps) {
         ) : (
           <StepRail steps={stepsOfSources(d)} now={now} />
         )}
+        {stopped && !(open && view && view.phase !== "done") && (
+          <p className="warn dp-stopped" role="status">
+            Stopped: {stopped.words} <span className="meta">{STOPPED_NEXT}</span>
+          </p>
+        )}
       </div>
 
       {open && view && view.phase !== "done" && (
@@ -321,6 +329,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
           dataset={d}
           summary={s}
           pseudo={pseudo}
+          stopped={stopped}
           onChanged={(words, running) => {
             // what the person started stays in sight: the step's summary once it is done, the next steps running beside it
             setStepOpen(true);

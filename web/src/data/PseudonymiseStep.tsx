@@ -44,6 +44,7 @@ import {
   type OriginalsLook,
   type PlaceRow,
   type PurgeAsk,
+  typeLabel,
   type VaultAsk,
 } from "./pseudonyms";
 import {
@@ -69,6 +70,7 @@ import {
 } from "./pseudoStep";
 import { RulesDialog } from "./RulesDialog";
 import { clock, stepOf, took, type DatasetSummary } from "./summary";
+import { STOPPED_NEXT, type Stopped } from "./stopped";
 import { TagsDialog } from "./Tags";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -175,7 +177,7 @@ function Boxes({ v, compact, codes, kept }: { v: StepView; compact: boolean; cod
       <div className={kept ? "ps-box" : "ps-box on"}>
         <span className="ps-box-label">
           <Icon name="key" />
-          {kept ? "Codes" : "IDs to codes"}
+          {kept ? "Subject codes" : "IDs to subject codes"}
         </span>
         <span className="ps-big">{mid.big}</span>
         <span className={mid.caution ? "ps-box-words warn" : "ps-box-words"}>{mid.words}</span>
@@ -205,10 +207,12 @@ export interface StepProps {
   onFailed: (e: unknown) => void;
   /** A dialog of the step's, which the dataset's detail holds. */
   onOpen: (o: Opened) => void;
+  /** Where the dataset's chain stopped, in its job's own words: said here, and the run is tried again (2026-10-10). */
+  stopped?: Stopped | null;
 }
 
 export function PseudonymiseStep(props: StepProps) {
-  const { caps, dataset: d, pseudo, onChanged, onFailed, onOpen } = props;
+  const { caps, dataset: d, pseudo, onChanged, onFailed, onOpen, stopped = null } = props;
   const v = pseudo.view;
   const [codes, setCodes] = useState(false);
   const alive = useRef(true);
@@ -222,7 +226,9 @@ export function PseudonymiseStep(props: StepProps) {
   const works = may(caps, "data:work");
   const generates = d.unmapped === "code";
   const open = codes && (v.phase === "codes" || v.phase === "ready");
-  const primary = works ? primaryOf(v, generates, open) : null;
+  const next = works ? primaryOf(v, generates, open) : null;
+  // a run that stopped is tried again by the same act, never shown as if nothing happened
+  const primary = next && stopped && next.act === "run" ? { ...next, label: "Try again" } : next;
   const chip = chipOf(v, open);
   const changes = works && may(caps, "places:work") && served(caps, "PUT /api/places/{id}");
 
@@ -234,7 +240,7 @@ export function PseudonymiseStep(props: StepProps) {
    * saying it is still giving the codes (review of 2026-10-10).
    */
   const run = async (map: { pairs: string[][] } | null) => {
-    pseudo.setActing({ phase: map ? "giving the codes" : "starting", since: Date.now() });
+    pseudo.setActing({ phase: map ? "giving the subject codes" : "starting", since: Date.now() });
     try {
       if (map) {
         const r = await linkage.import(codesBody(d.name, idTypeOf(d, v.rows), map.pairs, false));
@@ -254,7 +260,7 @@ export function PseudonymiseStep(props: StepProps) {
   };
 
   const generate = (chosen?: number[]) => {
-    pseudo.setActing({ phase: "giving generated codes", since: Date.now() });
+    pseudo.setActing({ phase: "giving generated subject codes", since: Date.now() });
     held
       .generate(d.name, chosen)
       .then(() => pseudo.reload())
@@ -283,6 +289,11 @@ export function PseudonymiseStep(props: StepProps) {
         )}
       </div>
       <Boxes v={v} compact={open} />
+      {stopped && !pseudo.acting && (
+        <p className="warn ps-stopped" role="status">
+          Stopped: {stopped.words} <span className="meta">{STOPPED_NEXT}</span>
+        </p>
+      )}
       {pseudo.acting && (
         <div className="ps-pad">
           <Wait phase={pseudo.acting.phase} since={pseudo.acting.since} />
@@ -301,9 +312,9 @@ export function PseudonymiseStep(props: StepProps) {
           {works && v.phase === "codes" && served(caps, "POST /api/linkage/held/code") && v.rows.length > 0 && (
             <>
               <button type="button" className="button secondary" disabled={pseudo.acting !== null} onClick={() => generate(v.rows.filter((r) => !r.coded && r.state === "held").map((r) => r.id))}>
-                Generate codes
+                Generate subject codes
               </button>
-              <Hint text="A code made from the ID itself. A map given later folds it into the right subject." />
+              <Hint text="A subject code made from the ID itself. A map given later folds it into the right subject." />
             </>
           )}
           {!works && <span className="meta">{needsWork(caps, "Pseudonymising", [["data:work", "the Data page"]])}</span>}
@@ -490,7 +501,7 @@ function Codes(props: {
             </span>
           )}
           <span className="grow" />
-          {maps.length > 0 && <span className="meta ps-again">Drop or paste another to add codes</span>}
+          {maps.length > 0 && <span className="meta ps-again">Drop or paste another to add subject codes</span>}
           <label className="button secondary small ps-file">
             Choose a file
             <input
@@ -508,7 +519,7 @@ function Codes(props: {
           </button>
         </div>
       ) : (
-        <p className="meta">{cleared ? "This engine takes no map here." : "Giving codes from a map reads the IDs; this account is not cleared to."}</p>
+        <p className="meta">{cleared ? "This engine takes no map here." : "Giving subject codes from a map reads the IDs; this account is not cleared to."}</p>
       )}
       {rehearsal.kind === "working" && <Wait phase="matching the map" since={rehearsal.since} />}
       {rehearsal.kind === "refused" && (
@@ -563,7 +574,7 @@ function Codes(props: {
         <span className="grow" />
         {generates && lacking.length > 0 && (
           <button type="button" className="button secondary" disabled={busy} onClick={() => onGenerate(lacking.map((r) => r.id))}>
-            {lacking.length === 1 ? "Generate a code for this one" : `Generate codes for these ${n(lacking.length)}`}
+            {lacking.length === 1 ? "Generate a subject code for this one" : `Generate subject codes for these ${n(lacking.length)}`}
           </button>
         )}
         {primary && (
@@ -582,12 +593,12 @@ function IdLine({ row: r, n: i, value, generates, onGenerate }: { row: IdRow; n:
   const lacking = !r.coded && r.state === "held";
   const code =
     r.state === "waits"
-      ? `${r.code ?? "its subject"} · waits for its ${r.waits_for ?? "ID"}`
+      ? `${r.code ?? "its subject"} · waits for its ${r.waits_for ? typeLabel(r.waits_for) : "ID"}`
       : r.code !== null
         ? r.code
         : r.state === "generated"
-          ? "a generated code, at the run"
-          : "no code yet";
+          ? "a generated subject code, at the run"
+          : "no subject code yet";
   return (
     <div className={lacking ? "ps-row lacking" : "ps-row"} role="row">
       <span role="cell" className="ps-n">
@@ -606,7 +617,7 @@ function IdLine({ row: r, n: i, value, generates, onGenerate }: { row: IdRow; n:
       <span role="cell" className="end">
         {lacking && generates && (
           <button type="button" className="button secondary small" onClick={onGenerate}>
-            Generate a code
+            Generate a subject code
           </button>
         )}
       </span>
@@ -698,7 +709,7 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
           <div className="ps-quiet-line">
             <span className="dot caution" aria-hidden="true" />
             <span>
-              {n(v.subjects.generated)} {v.subjects.generated === 1 ? "subject has a generated code; a map later folds it" : "subjects have generated codes; a map later folds them"} into the right subject
+              {n(v.subjects.generated)} {v.subjects.generated === 1 ? "subject has a generated subject code; a map later folds it" : "subjects have generated subject codes; a map later folds them"} into the right subject
             </span>
             {served(caps, "POST /api/linkage/imports") && <a href={href("data", "pseudonyms")}>Give a map</a>}
           </div>
