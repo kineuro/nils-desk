@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { ops, type ReviewItem } from "../ops/client";
-import { href } from "../routes";
+import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { familyOf, modelDisagrees, review, type PackDoc, type ReviewSummary } from "./client";
@@ -70,6 +70,8 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
   const run = query?.run && /^\d+$/.test(query.run) ? Number(query.run) : null;
   // a dataset's card opens the queue on its own scans: #review?dataset=NAME
   const dataset = query?.dataset && query.dataset !== "" ? query.dataset : undefined;
+  /** A page of Review, still narrowed to the dataset it was opened for. */
+  const pageHref = (page: string | null) => (dataset ? narrow(href("review", page), { dataset }) : href("review", page));
   const [cohort, setCohort] = useState<string>(query?.cohort ?? "");
   // record 51, G4: the queue's axis and reason live in the address, so a reload or a link keeps them
   const filter = queueFilterOf(query);
@@ -138,19 +140,19 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
         </div>
       </div>
       <div className="chips pages">
-        <a className={sub === "queue" ? "opt on" : "opt"} href={href("review")} aria-current={sub === "queue" ? "page" : undefined}>
+        <a className={sub === "queue" ? "opt on" : "opt"} href={pageHref(null)} aria-current={sub === "queue" ? "page" : undefined}>
           Queue
           {load.kind === "ready" && <b>{n(queued)}</b>}
         </a>
-        <a className={sub === "rules" ? "opt on" : "opt"} href={href("review", "rules")} aria-current={sub === "rules" ? "page" : undefined}>
+        <a className={sub === "rules" ? "opt on" : "opt"} href={pageHref("rules")} aria-current={sub === "rules" ? "page" : undefined}>
           Rules
         </a>
-        <a className={sub === "identifiers" ? "opt on" : "opt"} href={href("review", "identifiers")} aria-current={sub === "identifiers" ? "page" : undefined}>
+        <a className={sub === "identifiers" ? "opt on" : "opt"} href={pageHref("identifiers")} aria-current={sub === "identifiers" ? "page" : undefined}>
           Identifiers
           {load.kind === "ready" && identity > 0 && <b>{n(identity)}</b>}
         </a>
         {GROWN.filter((g) => sub === g.sub || grown[g.sub] > 0).map((g) => (
-          <a key={g.sub} className={sub === g.sub ? "opt on" : "opt"} href={href("review", g.sub)} aria-current={sub === g.sub ? "page" : undefined}>
+          <a key={g.sub} className={sub === g.sub ? "opt on" : "opt"} href={pageHref(g.sub)} aria-current={sub === g.sub ? "page" : undefined}>
             {g.title}
             {grown[g.sub] > 0 && <b>{n(grown[g.sub])}</b>}
           </a>
@@ -177,7 +179,7 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
           filter={filter}
           onFilter={(f) => {
             setSaid(null);
-            location.hash = queueHref(f, cohort);
+            location.hash = queueHref(f, cohort, dataset ?? "");
           }}
           batch={batch}
           run={run}

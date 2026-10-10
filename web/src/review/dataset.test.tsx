@@ -9,6 +9,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GRANTS, type Grant } from "../grants";
 import { capsWith } from "./caps.fixture";
+import { queueHref } from "./filter";
 import { ReviewPage } from "./ReviewPage";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -55,6 +56,15 @@ describe("Review narrowed to a dataset", () => {
     await settle();
     expect(urls.some((u) => u.startsWith("/api/review?") && u.includes("kind=pick.border") && u.includes("dataset=ms-a"))).toBe(true);
     expect(el.querySelector(".review-dataset a")?.getAttribute("href")).toBe("#review/picks");
+  });
+
+  it("keeps the dataset through a filter and through the page chips", async () => {
+    act(() => root.render(<ReviewPage caps={caps} page={null} query={{ dataset: "ms-a" }} />));
+    await settle();
+    const chips = [...el.querySelectorAll<HTMLAnchorElement>(".chips.pages a")].map((a) => a.getAttribute("href"));
+    expect(chips.length).toBeGreaterThan(1);
+    for (const c of chips) expect(c).toContain("dataset=ms-a");
+    expect(queueHref({ axis: "base", reason: null, border: null }, "", "ms-a")).toBe("#review?dataset=ms-a&axis=base");
   });
 
   it("asks for every dataset without one", async () => {
