@@ -324,6 +324,22 @@ describe("Sort the files", () => {
     expect(onDone).toHaveBeenCalledWith("ward-c: 2 moved.");
   });
 
+  it("names the entries only at the sensitive level, since a raw export's folder can be named after the patient", async () => {
+    engine((c) => (c.method === "PUT" && c.url === "/api/places/4" ? { status: 409, body: ASKED } : undefined));
+    const base = caps7a(["PUT /api/places/{id}"]);
+    const quasi = { ...base, person: { ...base.person, detail: "quasi" as const } };
+    act(() => root.render(<SortFilesDialog caps={quasi} place={place} layout={UNKNOWN} onClose={() => undefined} onDone={() => undefined} />));
+    expect(host.textContent).toContain("2 entries with DICOM. What are they?");
+    expect(host.textContent).not.toContain("Which entries");
+    act(() => radio(host, "Identified").click());
+    act(() => button(host, "Next")!.click());
+    await settle();
+    const asked = host.querySelector('[aria-label="Confirm the move"]')!;
+    expect(asked.textContent).toContain("Move 2 entries into the identified folder?");
+    expect(asked.querySelectorAll("li")).toHaveLength(0);
+    expect(host.textContent).not.toContain("sub-1");
+  });
+
   it("goes back from the question without a word to the engine", async () => {
     const e = engine((c) => (c.method === "PUT" ? { status: 409, body: ASKED } : undefined));
     act(() => root.render(<SortFilesDialog caps={caps7a([])} place={place} layout={UNKNOWN} onClose={() => undefined} onDone={() => undefined} />));

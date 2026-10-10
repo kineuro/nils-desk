@@ -12,6 +12,7 @@
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
+import { sees } from "../grants";
 import type { Place } from "../objects/client";
 import { messageOf } from "../settings/common";
 import { Dialog } from "../ui/Dialog";
@@ -34,10 +35,15 @@ export function writable(types: LinkageType[]): LinkageType[] {
   return types.filter((t) => t.name !== "personnummer" && t.name !== "subject-code");
 }
 
-/** The entries by name, the first hundred, and how many more. */
-function Entries({ layout }: { layout: Layout }) {
+/**
+ * The entries by name, the first hundred, and how many more, at the
+ * sensitive detail level only: a raw export often names its folders after
+ * the patient or by their personnummer (review of 2026-10-10). Below it the
+ * count the dialog says is all that is shown.
+ */
+function Entries({ caps, layout }: { caps: Capabilities; layout: Layout }) {
   const { names, more } = dicomNamed(layout);
-  if (names.length === 0) return null;
+  if (names.length === 0 || !sees(caps, "sensitive")) return null;
   return (
     <ul className="report">
       {names.map((e) => (
@@ -139,10 +145,12 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
           <p>
             {count.toLocaleString("en-US")} {count === 1 ? "entry" : "entries"} with DICOM. What are they?
           </p>
-          <details className="says">
-            <summary>Which entries</summary>
-            <Entries layout={layout} />
-          </details>
+          {sees(caps, "sensitive") && (
+            <details className="says">
+              <summary>Which entries</summary>
+              <Entries caps={caps} layout={layout} />
+            </details>
+          )}
           <div className="choices" role="radiogroup" aria-label="What the files are">
             <Choice name="into" checked={into === "originals"} disabled={working} onPick={() => setInto("originals")} label="Identified" hint={layout.move_into?.originals ?? "names in the files; NILS pseudonymises them"} />
             <Choice name="into" checked={into === "anon"} disabled={working} onPick={() => setInto("anon")} label="Already anonymised" hint={layout.move_into?.anon ?? "read as they are"} />
@@ -156,7 +164,7 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
             <p className="note-detail">
               <span className="path">{question.tree}</span> · nothing was written yet
             </p>
-            <Entries layout={asked.layout} />
+            <Entries caps={caps} layout={asked.layout} />
           </div>
         </div>
       )}
