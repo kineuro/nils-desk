@@ -506,10 +506,22 @@ export function outcomeWords(pseudonymise: RanJob | null, read: RanJob | null, r
   // a read keeps its counts as its progress, and a result only where one was written
   const counts = [read?.result, read?.progress].find((c) => typeof field(c, "ingested") === "number");
   const ingested = num(field(counts, "ingested"));
-  const known = num(field(counts, "duplicate"));
   const readHeld = num(field(counts, "held"));
-  if (ingested > 0) parts.push(`${files(ingested)} read`);
-  if (known > 0) parts.push(`${files(known)} already in the registry`);
+  if (ingested > 0) parts.push(`${n(ingested)} new ${ingested === 1 ? "file" : "files"}`);
+  // the duplicate policy (2026-10-10): a copy is of a scan another dataset
+  // read first, or one this dataset holds already; an engine from before
+  // counts both as duplicates
+  if (typeof field(counts, "known") === "number" || typeof field(counts, "twice") === "number") {
+    const other = num(field(counts, "known"));
+    const twice = num(field(counts, "twice"));
+    if (other > 0) parts.push(`${files(other)} already in another dataset`);
+    if (twice > 0) parts.push(`${files(twice)} twice in this dataset`);
+  } else {
+    const known = num(field(counts, "duplicate"));
+    if (known > 0) parts.push(`${files(known)} already in the registry`);
+  }
+  const same = num(field(counts, "same_instance"));
+  if (same > 0) parts.push(`${files(same)} held: their scan is filed under another subject or visit`);
   if (readHeld > 0) parts.push(`${files(readHeld)} held at the read`);
   if (refused > 0) parts.push(`${files(refused)} not images`);
   if (field(read?.result, "chain_ended")) parts.push("nothing new to sort");

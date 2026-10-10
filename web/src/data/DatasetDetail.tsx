@@ -350,7 +350,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
         <div className="dp-cols">
           <div className="dp-col">
             <h3 className="eyebrow">What it holds</h3>
-            <Holds dataset={d} summary={s} />
+            <Holds dataset={d} summary={s} reviews={may(caps, "review:see")} />
           </div>
           <div className="dp-col">
             <h3 className="eyebrow">Main scans</h3>
@@ -390,7 +390,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
 }
 
 /** What a dataset holds: the funnel, how sure the sort is, its kinds of scan and its files. */
-function Holds({ dataset: d, summary: s }: { dataset: Dataset; summary: DatasetSummary | null }) {
+function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; summary: DatasetSummary | null; reviews?: boolean }) {
   const subjects = s?.subjects ?? d.totals.subjects;
   const visits = s ? (s.sessions ?? s.studies) : d.totals.sessions || d.totals.studies;
   const scans = s?.scans ?? d.totals.stacks;
@@ -403,6 +403,12 @@ function Holds({ dataset: d, summary: s }: { dataset: Dataset; summary: DatasetS
   const bytes = s?.files.bytes ?? null;
   const refused = s?.files.refused ?? d.totals.refused_files;
   const batch = s?.files.refused_batch ?? null;
+  // the duplicate policy (2026-10-10): files gone from the folder, files a
+  // person let go out of the read, and the questions about scans filed
+  // already under another subject, visit or series, which Review lists
+  const gone = s?.files.gone ?? 0;
+  const leftOut = s?.files.left_out ?? 0;
+  const questions = s?.identity_questions ?? 0;
   const nothing = scans === 0 && subjects === 0;
   return (
     <>
@@ -466,7 +472,20 @@ function Holds({ dataset: d, summary: s }: { dataset: Dataset; summary: DatasetS
             {batch !== null ? <a href={href("data", "batch", String(batch))}>{n(refused)} refused, why</a> : `${n(refused)} refused`}
           </>
         )}
+        {gone > 0 && ` · ${n(gone)} gone from the folder`}
+        {leftOut > 0 && ` · ${n(leftOut)} left out of the read`}
       </div>
+      {questions > 0 && (
+        <div className="meta">
+          {reviews ? (
+            <a href={narrow(href("review", "identifiers"), { dataset: d.name })}>
+              {n(questions)} {questions === 1 ? "question" : "questions"}: a scan filed already elsewhere
+            </a>
+          ) : (
+            `${n(questions)} ${questions === 1 ? "question" : "questions"}: a scan filed already elsewhere`
+          )}
+        </div>
+      )}
     </>
   );
 }

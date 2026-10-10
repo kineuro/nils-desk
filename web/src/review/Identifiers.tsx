@@ -16,7 +16,7 @@ import type { ReviewItem } from "../ops/client";
 import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
-import { acts, datasetOf, familyOf, identityActs, itemWords, refusalWords, review } from "./client";
+import { acts, datasetOf, familyOf, identityActs, itemWords, refusalWords, review, sameSubject } from "./client";
 import { kindOf, sortByCost } from "./triage";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -32,6 +32,7 @@ const KINDS: { what: string; title: string; remedy: string }[] = [
   { what: "collision", title: "may be one person twice", remedy: "merge them, or decide they are two" },
   { what: "unmapped", title: "held until mapped", remedy: "map them on the dataset" },
   { what: "provisional", title: "coded without a map", remedy: "merge into the subject it stands for" },
+  { what: "same_instance", title: "the same scan filed twice", remedy: "merge the two subjects, or let it go" },
 ];
 
 /** The identity items by what they are: the three kinds record 26 names, and anything else the engine raised. */
@@ -47,6 +48,8 @@ export function IdentifiersPage({ caps, items, onDecide, onChanged }: Identifier
   const may = acts(caps);
   const merges = may.merge && served(caps, "POST /api/linkage/merge");
   const [merging, setMerging] = useState<ReviewItem | null>(null);
+  const [letting, setLetting] = useState<{ item: ReviewItem; keep: boolean } | null>(null);
+  const letsGo = may.decide && served(caps, "POST /api/review/{id}/let-go");
   const groups = byKind(items);
   const total = groups.reduce((s, g) => s + g.items.length, 0);
   return (
@@ -117,6 +120,16 @@ export function IdentifiersPage({ caps, items, onDecide, onChanged }: Identifier
                                   Merge
                                 </button>
                               )}
+                              {letsGo && identityActs(i).letGo && (
+                                <>
+                                  <button type="button" className="button secondary small" onClick={() => setLetting({ item: i, keep: true })}>
+                                    Keep as another copy
+                                  </button>
+                                  <button type="button" className="button secondary small" onClick={() => setLetting({ item: i, keep: false })}>
+                                    Leave out of the read
+                                  </button>
+                                </>
+                              )}
                               {may.decide && identityActs(i).decide && (
                                 <button type="button" className="button small" onClick={() => onDecide(i)}>
                                   Decide
@@ -135,10 +148,22 @@ export function IdentifiersPage({ caps, items, onDecide, onChanged }: Identifier
         })}
       <Says head="What settles each of them">
         A collision is merged, or decided to be two. Held files are mapped on the dataset&apos;s Pseudonymisation page, and the next bring-in writes them. Nothing is decided here. A subject coded without a
-        map is merged into the one it stands for, by a merge or by a map that names its identifier. The map and a merge read identifiers, so they need work on the Data page and records in full; the shapes
+        map is merged into the one it stands for, by a merge or by a map that names its identifier. The same scan filed twice is merged where two subject codes hold it, and let go where one subject
+        holds it under another visit or series: kept as another copy of it, or left out of the read. The map and a merge read identifiers, so they need work on the Data page and records in full; the shapes
         and counts here are open to anyone who may see this page, and an identifier itself never appears on it.
       </Says>
       {merging && <MergeDialog item={merging} onClose={() => setMerging(null)} onDone={(w) => { setMerging(null); onChanged(w); }} />}
+      {letting && (
+        <LetGoDialog
+          item={letting.item}
+          keep={letting.keep}
+          onClose={() => setLetting(null)}
+          onDone={(w) => {
+            setLetting(null);
+            onChanged(w);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -146,7 +171,10 @@ export function IdentifiersPage({ caps, items, onDecide, onChanged }: Identifier
 /** A merge: the alias re-pointed to the canonical subject, in one transaction, as a job. */
 export function MergeDialog({ item, onClose, onDone }: { item: ReviewItem; onClose: () => void; onDone: (words: string) => void }) {
   const ev = (item.evidence ?? {}) as Json;
-  const codes = Array.isArray(ev.codes) ? (ev.codes as unknown[]).filter((c): c is string => typeof c === "string") : [];
+  const ref = (item.ref ?? {}) as Json;
+  const codes = Array.isArray(ev.codes)
+    ? (ev.codes as unknown[]).filter((c): c is string => typeof c === "string")
+    : [ref.holder_code, ref.code].filter((c): c is string => typeof c === "string");
   const [canonical, setCanonical] = useState(codes[0] ?? "");
   const [alias, setAlias] = useState(codes[1] ?? "");
   const [why, setWhy] = useState("");
@@ -205,6 +233,64 @@ export function MergeDialog({ item, onClose, onDone }: { item: ReviewItem; onClo
       <Says head="What a merge moves">
         Every row of the alias, its studies, stacks, memberships, identities and decisions, moves to the subject that stays. The alias&apos;s code is filed on it as an identifier, and the alias is marked
         merged and leaves every list. The audit records it.
+      </Says>
+    </Dialog>
+  );
+}
+
+/**
+ * A let-go (the duplicate policy's defaults, 2026-10-10): the files an
+ * `identity.same_instance` item holds, of one subject under another visit or
+ * series, kept as another copy of their scan, which the next read files, or
+ * left out of the read, which no run reads again until a file changes.
+ */
+export function LetGoDialog({ item, keep, onClose, onDone }: { item: ReviewItem; keep: boolean; onClose: () => void; onDone: (words: string) => void }) {
+  const [why, setWhy] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  const one = sameSubject(item);
+  const go = () => {
+    setBusy(true);
+    setRefused(null);
+    review
+      .letGo(item.id, keep, why.trim())
+      .then((r) => {
+        const files = `${n(r.files)} ${r.files === 1 ? "file" : "files"}`;
+        onDone(keep ? `${files} kept as another copy; the next read files them.` : `${files} left out of the read.`);
+      })
+      .catch((e: unknown) => {
+        setBusy(false);
+        setRefused(refusalWords(e));
+      });
+  };
+  return (
+    <Dialog
+      title={keep ? "Keep as another copy" : "Leave out of the read"}
+      icon="folder"
+      onClose={onClose}
+      foot={
+        <div className="row actions">
+          <button type="button" className="button" disabled={busy || !one || why.trim() === ""} onClick={go}>
+            {keep ? "Keep them" : "Leave them out"}
+          </button>
+          <button type="button" className="button secondary" onClick={onClose}>
+            Cancel
+          </button>
+          {refused && <span className="warn">{refused}</span>}
+        </div>
+      }
+    >
+      <p className="lede">{itemWords(item)}</p>
+      <div className="field">
+        <span className="label">Why</span>
+        <span className="input">
+          <input value={why} placeholder={keep ? "what shows it is the same scan" : "why it stays out"} aria-label="Why" onChange={(e) => setWhy(e.target.value)} />
+        </span>
+      </div>
+      <Says head={keep ? "What keeping does" : "What leaving out does"}>
+        {keep
+          ? "The files become another copy of the scan the registry holds, in its visit and series, and the dataset counts it. The next read files them."
+          : "The files stay where they are and NILS does not read them, until one of them changes. Nothing is deleted."}
       </Says>
     </Dialog>
   );
