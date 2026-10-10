@@ -12,13 +12,17 @@ import {
   fillPictures,
   filterPhrase,
   foldersOf,
+  forgetHeld,
   kindsLine,
   legendOf,
   levelOfForTest,
   mainLine,
+  onSearch,
   paramsWords,
   parseView,
   scopeHome,
+  searchOf,
+  setSearch,
   short,
   showOptions,
   spanWords,
@@ -58,20 +62,43 @@ const scan = (id: number, over: Partial<Scan> = {}): Scan => ({
 
 describe("the viewer's address", () => {
   it("keeps the view and the place, and reads them back", () => {
-    const at = viewHref({ kind: "dataset", name: "study big" }, { subject: 12, visit: "s34", filter: ["look", "maker:GE"], q: "07" });
-    expect(at).toBe("#data/datasets/study%20big/view?mode=grid&subject=12&visit=s34&q=07&filter=look%2Cmaker%3AGE");
+    const at = viewHref({ kind: "dataset", name: "study big" }, { subject: 12, visit: "s34", filter: ["look", "maker:GE"] });
+    expect(at).toBe("#data/datasets/study%20big/view?mode=grid&subject=12&visit=s34&filter=look%2Cmaker%3AGE");
     const q = Object.fromEntries(new URLSearchParams(at.split("?")[1]));
-    expect(parseView(q)).toEqual({ mode: "grid", subject: 12, visit: "s34", scan: null, q: "07", filter: ["look", "maker:GE"], vfilter: [] });
+    expect(parseView(q)).toEqual({ mode: "grid", subject: 12, visit: "s34", scan: null, q: "", filter: ["look", "maker:GE"], vfilter: [] });
     expect(viewHref({ kind: "cohort", name: "ms" }, { mode: "browser", scan: 5 })).toBe("#data/cohorts/ms/view?mode=browser&scan=5");
     expect(scopeHome({ kind: "cohort", name: "ms" })).toBe("#data/cohorts/ms");
   });
 
   it("knows a level whichever scan its cursor is on, and however its address is written", () => {
     expect(levelOfForTest("#data/datasets/a/view?mode=grid&subject=1&visit=s3&scan=12")).toBe(levelOfForTest("#data/datasets/a/view?mode=grid&subject=1&visit=s3"));
-    expect(levelOfForTest("#data/datasets/a/view?mode=grid&scan=12&q=x")).toBe(levelOfForTest("#data/datasets/a/view?q=x&mode=grid"));
+    expect(levelOfForTest("#data/datasets/a/view?mode=grid&scan=12&filter=x")).toBe(levelOfForTest("#data/datasets/a/view?filter=x&mode=grid"));
     expect(levelOfForTest("#data/datasets/a/view")).toBe(levelOfForTest("#data/datasets/a/view?mode=grid"));
     expect(levelOfForTest("#data/datasets/a/view?mode=grid&subject=1")).not.toBe(levelOfForTest("#data/datasets/a/view?mode=grid"));
     expect(levelOfForTest("#data/datasets/a/view?mode=browser")).not.toBe(levelOfForTest("#data/datasets/a/view?mode=grid"));
+  });
+
+  it("never keeps the search: what is typed can be an identifier, so it is held in memory alone", () => {
+    const typed = "199001011234";
+    const ms = { kind: "dataset" as const, name: "ms-a" };
+    // the address neither writes a search nor reads one an older address carried
+    expect(viewHref(ms, { subject: 3, q: typed })).toBe("#data/datasets/ms-a/view?mode=grid&subject=3");
+    expect(parseView({ mode: "grid", q: typed }).q).toBe("");
+    // held per scope in memory, and heard by whoever listens
+    let heard = 0;
+    const stop = onSearch(() => (heard += 1));
+    setSearch(ms, typed);
+    setSearch(ms, typed);
+    expect(searchOf(ms)).toBe(typed);
+    expect(searchOf({ kind: "cohort", name: "ms-a" })).toBe("");
+    expect(heard).toBe(1);
+    setSearch(ms, "");
+    expect(searchOf(ms)).toBe("");
+    stop();
+    setSearch(ms, "x");
+    expect(heard).toBe(2);
+    forgetHeld();
+    expect(searchOf(ms)).toBe("");
   });
 
   it("reads nothing it does not know: a bad id or visit is no place", () => {

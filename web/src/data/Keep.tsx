@@ -10,7 +10,7 @@
 // through the same doors the Query page's dialogs use, and one line on the
 // bar says where it went.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { selectionName, selections } from "../query/selections";
@@ -51,28 +51,58 @@ function countWords(kind: KeepKind, kept: Kept, c: { rows: number; subjects: num
   return `${grainWords(kept.grain, c.rows)} of ${plural(c.subjects, "subject")}`;
 }
 
-/** The two actions on a level's bar, the line a done one leaves, and the dialog they open. */
-export function KeepActions({ caps, kept, ready }: { caps: Capabilities; kept: () => Kept; ready: boolean }) {
+/** The two actions on a level's bar, the line a done one leaves, and the dialog they open. The question can take a read first (a search's subjects), so `kept` may answer later. */
+export function KeepActions({ caps, kept, ready }: { caps: Capabilities; kept: () => Kept | Promise<Kept>; ready: boolean }) {
   const [open, setOpen] = useState<{ kind: KeepKind; kept: Kept } | null>(null);
   const [said, setSaid] = useState<Said | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  const alive = useRef(true);
+  useEffect(
+    () => () => {
+      alive.current = false;
+    },
+    [],
+  );
   const selects = maySelect(caps);
   const promotes = mayCohort(caps);
   if (!selects && !promotes) return null;
   const start = (kind: KeepKind) => {
     setSaid(null);
-    setOpen({ kind, kept: kept() });
+    setRefused(null);
+    let k: Kept | Promise<Kept>;
+    try {
+      k = kept();
+    } catch (e) {
+      setRefused(messageOf(e));
+      return;
+    }
+    if (!(k instanceof Promise)) {
+      setOpen({ kind, kept: k });
+      return;
+    }
+    setPreparing(true);
+    k.then(
+      (done) => alive.current && setOpen({ kind, kept: done }),
+      (e: unknown) => alive.current && setRefused(messageOf(e)),
+    ).finally(() => alive.current && setPreparing(false));
   };
   return (
     <span className="vw-keep" role="group" aria-label="Keep what is shown">
       {said && <SaidLine caps={caps} said={said} />}
+      {refused && (
+        <span className="vw-said warn" role="status">
+          {refused}
+        </span>
+      )}
       {selects && (
-        <button type="button" className="button quiet small" disabled={!ready} onClick={() => start("selection")}>
+        <button type="button" className="button quiet small" disabled={!ready || preparing} onClick={() => start("selection")}>
           <Icon name="file" />
           Save as a selection
         </button>
       )}
       {promotes && (
-        <button type="button" className="button quiet small" disabled={!ready} onClick={() => start("cohort")}>
+        <button type="button" className="button quiet small" disabled={!ready || preparing} onClick={() => start("cohort")}>
           <Icon name="users" />
           Make a cohort
         </button>

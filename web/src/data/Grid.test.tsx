@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
 // The dataset viewer's grid: the subjects as folders with no pictures, found
-// by search and filter toggles that the address keeps; one subject's visits
+// by a search held in memory and filter toggles that the address keeps; one subject's visits
 // with their kinds, main scans and a line in time, and the subjects around;
 // one visit's scans in folders by datatype that fold, each family outlined in
 // its colour, coloured by contrast on a choice; the keyboard (arrows, Enter,
@@ -212,7 +212,7 @@ describe("the dataset viewer's grid", () => {
     expect(el.querySelector(".vw-switch [aria-pressed='true']")?.textContent).toBe("Grid");
   });
 
-  it("asks again for a filter or a search, the address keeping them, and Clear lets them go", async () => {
+  it("asks again for a filter or a search, the address keeping the filter and never the search, and Clear lets them go", async () => {
     await open("#data/datasets/ms-a/view");
     const chip = [...el.querySelectorAll<HTMLButtonElement>(".vw-chip")].find((b) => b.textContent === "with scans to look at")!;
     act(() => chip.click());
@@ -237,7 +237,8 @@ describe("the dataset viewer's grid", () => {
       await new Promise((r) => setTimeout(r, 300));
     });
     await settle();
-    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&q=b2");
+    // the search is held in memory, never in the address: what is typed can be an identifier
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid");
     expect(asked("/api/datasets/ms-a/subjects").pop()).toBe("/api/datasets/ms-a/subjects?limit=60&order=look&show=code&q=b2");
     expect(text(".vw-card .vw-card-name")).toEqual(["sub-b2"]);
     // Esc in the search clears it first

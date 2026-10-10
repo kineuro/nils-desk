@@ -56,6 +56,8 @@ function Harness({ caps }: { caps: Capabilities }) {
   return <Viewer caps={caps} scope={{ kind: "dataset", name: route.arg }} query={route.query} onSections={() => undefined} />;
 }
 
+/** An identifier a person types into the subjects' search. */
+const TYPED_ID = "4711001234";
 const subject = (id: number, code: string, look = 0) => ({ id, code, label: code, visits: 2, scans: 6, look, regions: ["brain"], makers: ["GE"], main: ["t1w"] });
 const SUBJECTS = [subject(1, "sub-a1", 2), subject(2, "sub-b2"), subject(3, "sub-c3")];
 const subjectsPage = (list: unknown[]) => ({
@@ -101,6 +103,9 @@ function route(c: Call) {
   const json = (body: unknown, status = 200) => ({ status, body });
   if (u.pathname === "/api/datasets/ms-a/subjects") {
     const f = u.searchParams.get("filter") ?? "";
+    const text = u.searchParams.get("q");
+    // a full ID matches its subject, as the door does at the sensitive level
+    if (text) return json(subjectsPage(text === TYPED_ID ? [SUBJECTS[1]] : SUBJECTS.filter((s) => s.code.includes(text))));
     return json(subjectsPage(f.includes("look") ? SUBJECTS.filter((s) => s.look > 0) : SUBJECTS));
   }
   if (u.pathname === "/api/datasets/ms-a/subjects/1/visits") {
@@ -199,6 +204,41 @@ describe("keeping what the dataset viewer shows", () => {
     const said = el.querySelector(".vw-said")!;
     expect(said.textContent).toBe("Saved as ms-a-t1w-brain, version 2. Selections");
     expect(said.querySelector("a")?.getAttribute("href")).toBe("#query/selections");
+  });
+
+  it("keeps a search as the subjects it found, by id: what was typed goes into no address, history, storage or question", async () => {
+    found = { rows: 1, subjects: 1 };
+    await open("#data/datasets/ms-a/view");
+    const box = el.querySelector<HTMLInputElement>(".vw-search input")!;
+    typeInto(box, TYPED_ID);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 300));
+    });
+    await settle();
+    expect([...el.querySelectorAll(".vw-card .vw-card-name")].map((x) => x.textContent)).toEqual(["sub-b2"]);
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid");
+    // down to the subject and back up: the address never takes the search, and the page still holds it
+    act(() => el.querySelector<HTMLAnchorElement>(".vw-card")!.click());
+    await settle();
+    expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=2");
+    location.hash = "#data/datasets/ms-a/view?mode=grid";
+    await settle();
+    expect(el.querySelector<HTMLInputElement>(".vw-search input")!.value).toBe(TYPED_ID);
+    expect([...el.querySelectorAll(".vw-card .vw-card-name")].map((x) => x.textContent)).toEqual(["sub-b2"]);
+    // kept: the subjects found, by id
+    act(() => button(el, "Save as a selection")!.click());
+    await settle();
+    const document = asked("/api/ask/diagnose")[0].body!.document as { sets: Record<string, { where: unknown[] }> };
+    expect(document.sets.subjects.where).toContainEqual(["in", {}, ["field", {}, "id"], [2]]);
+    expect(values().filters).toBe("found by the search, 1 subject");
+    act(() => button(dialog()!, "Save")!.click());
+    await settle();
+    // the typed text went into no request body, no address and no storage
+    expect(e.calls.filter((c) => c.method !== "GET").map((c) => JSON.stringify(c.body)).join(" ")).not.toContain(TYPED_ID);
+    expect(asked("/api/ask/selections/", "PUT")).toHaveLength(1);
+    expect(location.hash).not.toContain(TYPED_ID);
+    expect(JSON.stringify({ ...localStorage })).not.toContain(TYPED_ID);
+    expect(JSON.stringify({ ...sessionStorage })).not.toContain(TYPED_ID);
   });
 
   it("names a filter no question asks, and leaves it out only on the person's word", async () => {

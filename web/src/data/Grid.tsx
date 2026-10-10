@@ -14,7 +14,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
-import { sees } from "../grants";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -67,6 +66,7 @@ import {
   toggled,
   VISIT_FILTERS,
   viewerDoors,
+  foundIds,
   viewHref,
   visitsKey,
   type ColourBy,
@@ -503,7 +503,16 @@ function SubjectsLevel({ caps, scope, view, go }: LevelProps) {
             Clear
           </button>
         )}
-        <KeepActions caps={caps} ready={!!page && list.fresh && !list.failed && page.matched > 0} kept={() => subjectsKept(scope, { q: view.q, filter: view.filter }, { quasi: sees(caps, "quasi"), shown: page?.matched ?? null })} />
+        <KeepActions
+          caps={caps}
+          ready={!!page && list.fresh && !list.failed && page.matched > 0}
+          kept={() =>
+            // a search is kept as the subjects it found, by id: what was typed can be an identifier, and is never kept
+            ask.q.trim() === ""
+              ? subjectsKept(scope, { found: null, filter: view.filter }, { shown: page?.matched ?? null })
+              : foundIds(scope, ask).then((found) => subjectsKept(scope, { found, filter: view.filter }, { shown: page?.matched ?? null }))
+          }
+        />
       </div>
       {list.failed && <p className="warn">The subjects could not be read: {list.failed}</p>}
       {!page && !list.failed && <Wait phase="reading the subjects" since={list.since} size="panel" />}

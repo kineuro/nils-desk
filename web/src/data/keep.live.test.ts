@@ -16,7 +16,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { ask, door } from "../ask/client";
 import { filterWords, matches } from "./tree";
 import { browserKept, countOf, keepDoors, scansKept, subjectsKept, unasked, visitsKept, type Kept } from "./keep";
-import { viewerDoors, type Scope, type SubjectsAsk } from "./viewer";
+import { foundIds, viewerDoors, type Scope, type SubjectsAsk } from "./viewer";
 import type { Scan } from "./scans";
 
 const ENGINE = process.env.KEEP_ENGINE ?? "";
@@ -79,7 +79,7 @@ describe.skipIf(!ENGINE)("the viewer's filters as questions, on a live engine", 
       const asks: string[][] = [[], ...offered.map((f) => [f]), roles, makers.slice(0, 2), ["visits2", ...roles.slice(0, 1), ...makers.slice(0, 1)]];
       for (const filter of asks) {
         const want = await doorSubjects(scope, filter);
-        const k = subjectsKept(scope, { q: "", filter }, { quasi: true, shown: want.length });
+        const k = subjectsKept(scope, { found: null, filter }, { shown: want.length });
         expect(unasked(k), `${scope.name} ${filter}`).toEqual([]);
         expect(await questionKeys(k), `${scope.kind} ${scope.name} [${filter.join(",")}]`).toEqual(want);
         compared += 1;
@@ -89,11 +89,12 @@ describe.skipIf(!ENGINE)("the viewer's filters as questions, on a live engine", 
       if (code) {
         const q = code.slice(-3);
         const want = await doorSubjects(scope, [], q);
-        expect(await questionKeys(subjectsKept(scope, { q, filter: [] }, { quasi: true, shown: want.length })), `${scope.name} q=${q}`).toEqual(want);
+        const found = await foundIds(scope, { q, show: "code", order: "look", filter: [] });
+        expect(await questionKeys(subjectsKept(scope, { found, filter: [] }, { shown: want.length })), `${scope.name} q=${q}`).toEqual(want);
         compared += 1;
       }
       // what no question asks is named, not written
-      expect(unasked(subjectsKept(scope, { q: "", filter: ["look"] }, { quasi: true, shown: null })).map((x) => x.key)).toEqual(["look"]);
+      expect(unasked(subjectsKept(scope, { found: null, filter: ["look"] }, { shown: null })).map((x) => x.key)).toEqual(["look"]);
     }
     say(`${compared} subject questions match the subjects door`);
     expect(compared).toBeGreaterThan(0);

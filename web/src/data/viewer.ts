@@ -34,7 +34,7 @@ export interface ViewState {
   visit: string | null;
   /** The scan the browser shows. */
   scan: number | null;
-  /** The subjects' search. */
+  /** The subjects' search, held in memory for the page (searchOf), never in the address. */
   q: string;
   /** The subjects' filters, as the subjects door spells them. */
   filter: string[];
@@ -44,12 +44,43 @@ export interface ViewState {
 
 export const EMPTY_VIEW: ViewState = { mode: "grid", subject: null, visit: null, scan: null, q: "", filter: [], vfilter: [] };
 
+/*
+ * The subjects' search is what a person typed, and what they type can be an
+ * identifier: the subjects door matches a full ID at the sensitive detail
+ * level. So it is held in this page's memory alone, per scope, and never
+ * goes into the address, the browser's history, a link passed on, browser
+ * storage or a kept question (review of 2026-10-10). Going down a level and
+ * back up keeps it; reloading the page forgets it.
+ */
+const searches = new Map<string, string>();
+const searchHeard = new Set<() => void>();
+
+/** The search held for a scope, "" where none is. */
+export function searchOf(scope: Scope): string {
+  return searches.get(`${scope.kind}:${scope.name}`) ?? "";
+}
+
+/** Holds a scope's search and tells whoever listens. */
+export function setSearch(scope: Scope, text: string): void {
+  const key = `${scope.kind}:${scope.name}`;
+  if ((searches.get(key) ?? "") === text) return;
+  if (text === "") searches.delete(key);
+  else searches.set(key, text);
+  for (const heard of [...searchHeard]) heard();
+}
+
+/** Listens for a change of any search; the returned function stops listening. */
+export function onSearch(heard: () => void): () => void {
+  searchHeard.add(heard);
+  return () => searchHeard.delete(heard);
+}
+
 const pageOf = (s: Scope) => (s.kind === "dataset" ? "datasets" : "cohorts");
 
 const id = (v: string | undefined): number | null => (v !== undefined && /^\d+$/.test(v) ? Number(v) : null);
 const list = (v: string | undefined): string[] => (v ? v.split(",").map((x) => x.trim()).filter(Boolean) : []);
 
-/** The view an address names: #data/datasets/NAME/view?mode=grid&subject=12&visit=s34. */
+/** The view an address names: #data/datasets/NAME/view?mode=grid&subject=12&visit=s34. A search an older address carried is not read: the search is held in memory (searchOf). */
 export function parseView(query: Record<string, string> | undefined): ViewState {
   const q = query ?? {};
   const visit = q.visit && /^(s\d+|t\d+(\.\d+)*)$/.test(q.visit) ? q.visit : null;
@@ -58,13 +89,13 @@ export function parseView(query: Record<string, string> | undefined): ViewState 
     subject: id(q.subject),
     visit,
     scan: id(q.scan),
-    q: q.q ?? "",
+    q: "",
     filter: list(q.filter),
     vfilter: list(q.vfilter),
   };
 }
 
-/** The address of a view of a scope. */
+/** The address of a view of a scope. The search is never part of it. */
 export function viewHref(scope: Scope, v: Partial<ViewState> = {}): string {
   const s = { ...EMPTY_VIEW, ...v };
   return narrow(href("data", pageOf(scope), scope.name, "view"), {
@@ -72,7 +103,6 @@ export function viewHref(scope: Scope, v: Partial<ViewState> = {}): string {
     subject: s.subject,
     visit: s.visit,
     scan: s.scan,
-    q: s.q,
     filter: s.filter.join(","),
     vfilter: s.vfilter.join(","),
   });
@@ -333,6 +363,26 @@ export const viewerDoors = {
     }));
   },
 };
+
+/** The most subjects a search is kept as; a search that finds more is narrowed first. */
+export const FOUND_MOST = 5000;
+
+/**
+ * Every subject a search and the filters find, by id, read a page at a time:
+ * what a selection or a cohort made from a search keeps, since the typed text
+ * itself is never kept. Refused past FOUND_MOST.
+ */
+export async function foundIds(scope: Scope, ask: SubjectsAsk): Promise<number[]> {
+  const ids: number[] = [];
+  let after: number | null = null;
+  for (;;) {
+    const page: SubjectsPage = await viewerDoors.subjects(scope, ask, after);
+    ids.push(...page.subjects.map((s) => s.id));
+    if (ids.length > FOUND_MOST) throw new Error(`The search finds more than ${n(FOUND_MOST)} subjects; narrow it before keeping them.`);
+    if (page.next === null || page.subjects.length === 0) return ids;
+    after = page.next;
+  }
+}
 
 // ------------------------------------------------------------ the words
 
@@ -677,6 +727,7 @@ export function hold(key: string, value: unknown): void {
 export function forgetHeld(): void {
   held.clear();
   last.clear();
+  searches.clear();
   downs = [];
   searchAsked = false;
 }
@@ -703,7 +754,7 @@ export const levelOfForTest = (hash: string) => levelOf(hash);
 function levelOf(hash: string): string {
   const r = parse(hash);
   const v = parseView(r.query);
-  return JSON.stringify([r.section, r.page, r.arg, r.sub, v.mode, v.subject, v.visit, v.q, v.filter, v.vfilter]);
+  return JSON.stringify([r.section, r.page, r.arg, r.sub, v.mode, v.subject, v.visit, v.filter, v.vfilter]);
 }
 
 /** The steps down a person took, the last on top, so each Esc goes back up one rather than adding a page to the history. */

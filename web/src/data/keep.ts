@@ -172,26 +172,26 @@ const n = (v: number) => v.toLocaleString("en-US");
 // ------------------------------------------------------------ the subjects
 
 const NO_LOOK = "No question asks whether a scan needs a look.";
-const NO_SEARCH = "The search reads codes as you are shown them, as shapes; a question reads the codes themselves.";
 
 /**
- * The subjects a scope's grid shows: the search and the filters as
- * clauses on the subjects and as `has` of the visits and the scans that
- * hold what a filter asks for. Two values of one kind are either, as the
- * subjects door reads them; kinds are all of them.
+ * The subjects a scope's grid shows: the filters as clauses on the subjects
+ * and as `has` of the visits and the scans that hold what a filter asks for,
+ * and a search as the subjects it found, by their ids (`found`, null where
+ * nothing was searched). What was typed is never written: it can be an
+ * identifier, and a kept question is stored and shown again (review of
+ * 2026-10-10). Two values of one kind are either, as the subjects door reads
+ * them; kinds are all of them.
  */
-export function subjectsKept(scope: Scope, view: { q: string; filter: string[] }, opts: { quasi: boolean; shown: number | null }): Kept {
+export function subjectsKept(scope: Scope, view: { found: number[] | null; filter: string[] }, opts: { shown: number | null }): Kept {
   const s = scopeOf(scope);
   const sets: Record<string, Json> = { ...s.sets };
   const where: Clause[] = [...s.where];
   const has: { set: string; min: number }[] = [];
   const narrowed: Narrowed[] = [];
   const tags: string[] = [scope.name];
-  const text = view.q.trim();
-  if (text !== "") {
-    const words = `found by the search ${text}`;
-    if (opts.quasi) where.push(contains(field("code"), text));
-    narrowed.push(opts.quasi ? { key: "q", words, asked: true } : { key: "q", words, asked: false, why: NO_SEARCH });
+  if (view.found !== null) {
+    where.push(among(field("id"), view.found));
+    narrowed.push({ key: "q", words: `found by the search, ${plural(view.found.length, "subject")}`, asked: true });
   }
   const kinds = byKind(view.filter);
   /** A stack set inside the scope with these clauses, counted from the subject. */

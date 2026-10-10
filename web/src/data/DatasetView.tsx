@@ -381,7 +381,7 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
         <nav className="dview-where" aria-label="Where">
           <a href={list0.href}>{list0.label}</a>
           <span className="sep">/</span>
-          <a href={grid ? viewHref(scope, { mode: "grid", q: view.q, filter: view.filter }) : scopeHome(scope)}>{scope.name}</a>
+          <a href={grid ? viewHref(scope, { mode: "grid", filter: view.filter }) : scopeHome(scope)}>{scope.name}</a>
           {scan && (
             <>
               <span className="sep">/</span>

@@ -20,7 +20,7 @@ const IN_MS = ["=", {}, ["field", {}, "dataset"], "ms-a"];
 
 describe("the subjects' question", () => {
   it("is the dataset's subjects, by the dataset field, with nothing else when nothing narrows them", () => {
-    const k = subjectsKept(MS, { q: "", filter: [] }, { quasi: true, shown: 25 });
+    const k = subjectsKept(MS, { found: null, filter: [] }, { shown: 25 });
     expect(k.grain).toBe("subject");
     expect(k.document).toEqual({
       ast_version: 1,
@@ -34,7 +34,7 @@ describe("the subjects' question", () => {
   });
 
   it("asks each filter as the subjects door reads it: visits as sessions, main scans as the pack's roles, regions and makers as scans", () => {
-    const k = subjectsKept(MS, { q: "", filter: ["visits2", "main:t1w", "region:brain", "maker:Siemens"] }, { quasi: true, shown: 4 });
+    const k = subjectsKept(MS, { found: null, filter: ["visits2", "main:t1w", "region:brain", "maker:Siemens"] }, { shown: 4 });
     const sets = k.document.sets as Record<string, unknown>;
     expect(sets.subjects).toEqual({
       grain: "subject",
@@ -61,7 +61,7 @@ describe("the subjects' question", () => {
   });
 
   it("reads two values of one kind as either: two roles are a union, two makers either clause", () => {
-    const k = subjectsKept(MS, { q: "", filter: ["main:t1w", "main:flair", "maker:GE", "maker:Philips"] }, { quasi: true, shown: null });
+    const k = subjectsKept(MS, { found: null, filter: ["main:t1w", "main:flair", "maker:GE", "maker:Philips"] }, { shown: null });
     const sets = k.document.sets as Record<string, Record<string, unknown>>;
     expect(sets.main_1).toEqual({ grain: "stack", from: "role:t1w", where: [IN_MS] });
     expect(sets.main_2).toEqual({ grain: "stack", from: "role:flair", where: [IN_MS] });
@@ -71,7 +71,7 @@ describe("the subjects' question", () => {
   });
 
   it("keeps a cohort's members by a cohort set the subjects are of, the scans of any dataset", () => {
-    const k = subjectsKept(COHORT, { q: "", filter: ["region:spine"] }, { quasi: true, shown: 8 });
+    const k = subjectsKept(COHORT, { found: null, filter: ["region:spine"] }, { shown: 8 });
     expect(k.document.sets).toEqual({
       scope: { grain: "cohort", where: [["=", {}, ["field", {}, "name"], "ms"]] },
       subjects: { grain: "subject", of: "scope", has: [{ set: "region", min: 1 }] },
@@ -80,19 +80,18 @@ describe("the subjects' question", () => {
     expect(k.document.name).toBe("Subjects of the cohort ms, with spine scans");
   });
 
-  it("asks the search as part of the code to a person shown codes, and names it to one shown their shapes", () => {
-    const quasi = subjectsKept(MS, { q: " b2 ", filter: [] }, { quasi: true, shown: 1 });
-    expect((quasi.document.sets as Record<string, { where: unknown[] }>).subjects.where).toEqual([IN_MS, ["contains", {}, ["field", {}, "code"], "b2"]]);
-    expect(unasked(quasi)).toEqual([]);
-    // the search text never names the selection
-    expect(quasi.name).toBe("ms-a");
-    const plain = subjectsKept(MS, { q: "a9", filter: [] }, { quasi: false, shown: 1 });
-    expect((plain.document.sets as Record<string, { where: unknown[] }>).subjects.where).toEqual([IN_MS]);
-    expect(unasked(plain).map((x) => x.key)).toEqual(["q"]);
+  it("keeps a search as the subjects it found, by id, and never what was typed", () => {
+    const k = subjectsKept(MS, { found: [4, 9], filter: [] }, { shown: 2 });
+    expect((k.document.sets as Record<string, { where: unknown[] }>).subjects.where).toEqual([IN_MS, ["in", {}, ["field", {}, "id"], [4, 9]]]);
+    expect(unasked(k)).toEqual([]);
+    expect(k.narrowed).toEqual([{ key: "q", words: "found by the search, 2 subjects", asked: true }]);
+    // the search names neither the selection nor the question
+    expect(k.name).toBe("ms-a");
+    expect(k.document.name).toBe("Subjects of ms-a");
   });
 
   it("names a filter no question asks, with why, and leaves it out of the document", () => {
-    const k = subjectsKept(MS, { q: "", filter: ["look", "main:t1w"] }, { quasi: true, shown: 3 });
+    const k = subjectsKept(MS, { found: null, filter: ["look", "main:t1w"] }, { shown: 3 });
     expect(unasked(k)).toEqual([{ key: "look", words: "with scans to look at", asked: false, why: "No question asks whether a scan needs a look." }]);
     expect(JSON.stringify(k.document)).not.toContain("look");
     expect((k.document.sets as Record<string, { has: unknown[] }>).subjects.has).toEqual([{ set: "main", min: 1 }]);
