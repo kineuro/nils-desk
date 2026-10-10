@@ -34,15 +34,29 @@ export interface BoardProps {
   /** Off in tests and where the pictures are not wanted. */
   pictures?: boolean;
   /** The words of a page that says scans and the rules (Main scans) in place of stacks and the run. */
-  words?: { one: string; many: string; chosen: string; why: string };
+  words?: { one: string; many: string; chosen: string; why: string; empty?: string };
 }
 
-const STACK_WORDS = { one: "stack", many: "stacks", chosen: "the run's pick", why: "what a reader of this pick has in place of the run's scores" };
+const STACK_WORDS = { one: "stack", many: "stacks", chosen: "the run's pick", why: "what a reader of this pick has in place of the run's scores", empty: "The run considered nothing here." };
 
 export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = true, words = STACK_WORDS }: BoardProps) {
   // one place along the stacks for every tile, so the bundles scroll together
   const [sync] = useState(() => new TileSync());
-  if (candidates.length === 0) return <p className="meta">The run considered nothing here.</p>;
+  const whyField = onWhy && (
+    <div className="field board-why">
+      <span className="label">Why</span>
+      <span className="input">
+        <input required value={why} placeholder={words.why} aria-label="Why" onChange={(e) => onWhy(e.target.value)} />
+      </span>
+    </div>
+  );
+  if (candidates.length === 0)
+    return (
+      <div className="board">
+        <p className="meta">{words.empty ?? STACK_WORDS.empty}</p>
+        {whyField}
+      </div>
+    );
   return (
     <div className="board">
       {candidates.map((c, i) => (
@@ -76,14 +90,7 @@ export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = 
           </span>
         </div>
       ))}
-      {onWhy && (
-        <div className="field board-why">
-          <span className="label">Why</span>
-          <span className="input">
-            <input required value={why} placeholder={words.why} aria-label="Why" onChange={(e) => onWhy(e.target.value)} />
-          </span>
-        </div>
-      )}
+      {whyField}
     </div>
   );
 }

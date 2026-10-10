@@ -147,7 +147,7 @@ function subjectsOf(r: string, page: number, order: string) {
       subject_id: s.id,
       subject: s.code,
       visits: s.visits.map((v, j) => ({
-        session: `${s.id}:${j}`,
+        session_id: s.id * 10 + j,
         visit: j + 1,
         column: COLUMNS[v.column],
         field: v.field,

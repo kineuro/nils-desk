@@ -503,6 +503,8 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
                 <ByVisitBox map={m.value} slot={slot} palette={palette} />
               </div>
               <GroupBox
+                columns={columns}
+                draft={dirty}
                 group={group}
                 onGroup={chooseGroup}
                 view={view}

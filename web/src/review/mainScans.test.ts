@@ -16,6 +16,7 @@ import {
   hasContrastKinds,
   isNewKind,
   keptBy,
+  kindChanges,
   kindsOrder,
   litOf,
   mainScans,
@@ -144,17 +145,17 @@ describe("the map doors", () => {
       total: 140,
       page: 1,
       per_page: 24,
-      subjects: [{ subject_id: 17, subject: "5a9f30c6e8b21d41", visits: [{ session: "17:2010-01-02", visit: 1, column: "Siemens Skyra · 3 T", field: "3 T", kind: "3D MPRAGE", stack: 123, by: "rules", changed: false, candidates: [{ stacks: [123], kind: "3D MPRAGE", score: 0.9 }, { stack: 124, kind: "3D MPRAGE" }] }, { visit: 2, kind: null, stack: null, by: null, changed: true }] }],
+      subjects: [{ subject_id: 17, subject: "5a9f30c6e8b21d41", visits: [{ session_id: 4021, visit: 1, column: "Siemens Skyra · 3 T", field: "3 T", kind: "3D MPRAGE", stack: 123, by: "rules", changed: false, candidates: [{ stacks: [123], kind: "3D MPRAGE", score: 0.9 }, { stack: 124, kind: "3D MPRAGE" }] }, { visit: 2, kind: null, stack: null, by: null, changed: true }] }],
     });
     const page = await mainScans.subjects({ kind: "cohort", name: "ms-followup" }, "t1w", "dataset", { by: "series", steps: ["2D SE", "3D MPRAGE"] }, "visits", 1, RULES);
     expect(seen[0]).toMatchObject({ method: "POST", url: "/api/picks/map/subjects", body: { scope: { cohort: "ms-followup" }, role: "t1w", columns: "dataset", group: { by: "series", steps: ["2D SE", "3D MPRAGE"] }, order: "visits", page: 1, per_page: 24, rules: RULES } });
     const [one, two] = page.subjects[0].visits;
-    expect(one).toMatchObject({ kind: "3D MPRAGE", stacks: [123], by: "rules", changed: false, pick: null });
+    expect(one).toMatchObject({ sessionId: 4021, kind: "3D MPRAGE", stacks: [123], by: "rules", redrawn: false, pick: null });
     expect(one.candidates).toEqual([
       { stacks: [123], kind: "3D MPRAGE", score: 0.9 },
       { stacks: [124], kind: "3D MPRAGE", score: null },
     ]);
-    expect(two).toMatchObject({ visit: 2, kind: null, stacks: [], changed: true, candidates: null });
+    expect(two).toMatchObject({ sessionId: null, visit: 2, kind: null, stacks: [], redrawn: true, candidates: null });
     expect(subjectsOf({}).per_page).toBe(24);
   });
   it("ask for every subject's strips, and light the group's subjects in them", async () => {
@@ -163,7 +164,8 @@ describe("the map doors", () => {
     expect(seen[0].body).toEqual({ scope: { dataset: "study-big" }, role: "t1w", columns: "scanner" });
     expect(strips.columns).toEqual(["Site A · 3 T", "Site B · 1.5 T"]);
     expect([...litOf(strips, { by: "breaks" })].sort()).toEqual([2, 4]);
-    expect([...litOf(strips, { by: "series", steps: ["2D SE", "3D MPRAGE"] })]).toEqual([4]);
+    // a visit with no pick is left out of a series, as the engine counts them
+    expect([...litOf(strips, { by: "series", steps: ["2D SE", "3D MPRAGE"] })].sort()).toEqual([2, 4]);
     expect([...litOf(strips, { by: "series", steps: ["3D MPRAGE"] })]).toEqual([1]);
     expect([...litOf(strips, { by: "cell", kind: "2D SE", column: "Site B · 1.5 T" })].sort()).toEqual([2, 3]);
     expect([...litOf(strips, { by: "cell", kind: null, column: "Site B · 1.5 T" })]).toEqual([2]);
@@ -171,10 +173,13 @@ describe("the map doors", () => {
   });
   it("write a person's pick of a visit and its withdrawal in the scope", async () => {
     const seen = answering(201, { id: 97, stacks: [124] });
-    await mainScans.pick({ kind: "cohort", name: "ms-followup" }, "t1w", [124], "  motion in series 9 ");
+    await mainScans.pick({ kind: "cohort", name: "ms-followup" }, "t1w", { subject_id: 17, session_id: 4021 }, [124], "  motion in series 9 ");
+    await mainScans.pick({ kind: "cohort", name: "ms-followup" }, "t1w", { subject_id: 17, session_id: 4021 }, [], "no usable T1w");
     await mainScans.withdraw({ kind: "dataset", name: "study-big" }, 97, " ");
-    expect(seen[0]).toMatchObject({ method: "POST", url: "/api/picks", body: { role: "t1w", stacks: [124], why: "motion in series 9", cohort: "ms-followup" } });
-    expect(seen[1]).toMatchObject({ method: "POST", url: "/api/picks/97/withdraw", body: { dataset: "study-big" } });
+    expect(seen[0]).toMatchObject({ method: "POST", url: "/api/picks", body: { role: "t1w", stacks: [124], why: "motion in series 9", subject_id: 17, session_id: 4021, cohort: "ms-followup" } });
+    // no scan for the visit: the visit named by its ids, never its date
+    expect(seen[1].body).toEqual({ role: "t1w", stacks: [], why: "no usable T1w", subject_id: 17, session_id: 4021, cohort: "ms-followup" });
+    expect(seen[2]).toMatchObject({ method: "POST", url: "/api/picks/97/withdraw", body: { dataset: "study-big" } });
   });
 });
 
@@ -244,7 +249,8 @@ describe("the five numbers", () => {
     expect(groupTitle({ by: "breaks" })).toBe("Subjects whose series breaks");
     expect(groupTitle({ by: "series", steps: ["2D SE", null] })).toBe("Subjects whose series is 2D SE then none");
     expect(groupTitle({ by: "cell", kind: null, column: "Site A · 3 T" })).toBe("Subjects with a visit at Site A · 3 T taking nothing");
-    expect(runOf(["a", "a", null, null, "a"])).toEqual(["a", null, "a"]);
+    expect(runOf(["a", "a", null, null, "a", "b"])).toEqual(["a", "b"]);
+    expect(kindChanges(["a", null, "a", "b", null, "b", "a"])).toEqual([false, false, false, true, false, false, true]);
   });
 });
 

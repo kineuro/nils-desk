@@ -145,6 +145,8 @@
 .ms-visit:hover .ms-kind { box-shadow: 0 0 0 1px var(--n-brand-line); }
 .ms-visit-head { min-height: calc(16 * var(--p)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--p)); color: var(--n-text-faint); }
 .ms-visit.changed .ms-visit-head { color: var(--n-caution-fg); font-weight: 600; }
+/* a visit the draft picks otherwise than the saved rules: the brand's outline on its kind */
+.ms-visit.redrawn .ms-kind { outline: 2px solid var(--n-brand-text); outline-offset: 1px; }
 .ms-visit.blank { cursor: default; }
 .ms-visit.blank .ms-kind { border-color: var(--n-line); }
 

@@ -15,7 +15,7 @@ import { refusalWords } from "./client";
 import { mainScans, roleWord, type MapSubject, type MapVisit, type Scope } from "./mainScans";
 import { SessionBoard, type BoardCandidate } from "./SessionBoard";
 
-const SCAN_WORDS = { one: "scan", many: "scans", chosen: "the rules' pick", why: "motion in series 9" };
+const SCAN_WORDS = { one: "scan", many: "scans", chosen: "the rules' pick", why: "motion in series 9", empty: "No scan of this role at this visit." };
 
 const sameScans = (a: readonly number[], b: readonly number[]) => a.length === b.length && [...a].sort((x, y) => x - y).every((s, i) => s === [...b].sort((x, y) => x - y)[i]);
 
@@ -57,6 +57,7 @@ export function VisitPick({ caps, scope, role, subject, visit, version, draft, s
   const [refused, setRefused] = useState<string | null>(null);
   const work = may(caps, "review:work");
   const mayPick = work && served(caps, "POST /api/picks") && candidates.length > 0;
+  const mayNone = work && served(caps, "POST /api/picks") && visit.sessionId !== null;
   const mayWithdraw = work && served(caps, "POST /api/picks/{id}/withdraw") && visit.by === "person" && visit.pick !== null;
   const where = `subject ${subject.subject}, visit ${visit.visit}`;
   const run = (act: Promise<unknown>, words: string) => {
@@ -70,11 +71,14 @@ export function VisitPick({ caps, scope, role, subject, visit, version, draft, s
       },
     );
   };
+  const at = { subject_id: subject.subject_id, session_id: visit.sessionId };
   const pick = () => {
     if (main === null) return;
     const scans = candidates[main].stacks;
-    run(mainScans.pick(scope, role, scans, why), `Picked ${scans.length === 1 ? "scan" : "scans"} ${scans.join(", ")} for ${where}. Later runs leave it standing.`);
+    run(mainScans.pick(scope, role, at, scans, why), `Picked ${scans.length === 1 ? "scan" : "scans"} ${scans.join(", ")} for ${where}. Later runs leave it standing.`);
   };
+  // "nothing stands for this role here", with a why, on the visit the engine names by its id
+  const none = () => run(mainScans.pick(scope, role, at, [], why), `No scan stands for ${where}, as you said. Later runs leave it standing.`);
   const withdraw = () => visit.pick !== null && run(mainScans.withdraw(scope, visit.pick, why), `Withdrew the pick for ${where}; the rules' pick applies again.`);
   return (
     <Dialog
@@ -85,7 +89,12 @@ export function VisitPick({ caps, scope, role, subject, visit, version, draft, s
         <div className="row actions">
           {mayPick && (
             <button type="button" className="button" disabled={busy || main === null || why.trim() === ""} onClick={pick}>
-              Keep my pick
+              Pick this one
+            </button>
+          )}
+          {mayNone && (
+            <button type="button" className="button quiet" disabled={busy || why.trim() === ""} onClick={none}>
+              No scan for this visit
             </button>
           )}
           {mayWithdraw && (
@@ -106,7 +115,7 @@ export function VisitPick({ caps, scope, role, subject, visit, version, draft, s
       </p>
       <p className="meta">{pickedWords(visit, version, draft)}</p>
       {visit.candidates === null && candidates.length > 0 && <p className="meta">Only the picked scan is named here.</p>}
-      <SessionBoard candidates={candidates} main={main} onMain={mayPick ? setMain : null} why={why} onWhy={mayPick || mayWithdraw ? setWhy : null} pictures={pictures} words={SCAN_WORDS} />
+      <SessionBoard candidates={candidates} main={main} onMain={mayPick ? setMain : null} why={why} onWhy={mayPick || mayNone || mayWithdraw ? setWhy : null} pictures={pictures} words={SCAN_WORDS} />
     </Dialog>
   );
 }

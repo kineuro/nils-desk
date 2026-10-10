@@ -87,8 +87,8 @@ export function mapAnswer(role: string, draft: boolean, over: Record<string, unk
   };
 }
 
-/** A page of the group's subjects: the first changes kind at its second visit, the second has a person's pick. */
-export function subjectsAnswer(total = 2) {
+/** A page of the group's subjects: the first changes kind at its second visit, the second has a person's pick; under a draft the first's first visit is picked otherwise. */
+export function subjectsAnswer(total = 2, draft = false) {
   return {
     total,
     page: 0,
@@ -98,14 +98,14 @@ export function subjectsAnswer(total = 2) {
         subject_id: 17,
         subject: "5a9f30c6e8b21d41",
         visits: [
-          { session: "17:2010-01-02", visit: 1, column: "GE Signa · 1.5 T", field: "1.5 T", kind: "2D SE", stack: 121, by: "rules", changed: false, candidates: [{ stacks: [121], kind: "2D SE", score: 0.81 }] },
-          { session: "17:2012-03-04", visit: 2, column: "Siemens Skyra · 3 T", field: "3 T", kind: "3D MPRAGE", stack: 123, by: "rules", changed: true, candidates: [{ stacks: [123], kind: "3D MPRAGE", score: 0.88 }, { stacks: [124], kind: "3D MPRAGE", score: 0.85 }] },
+          { session_id: 4021, visit: 1, column: "GE Signa · 1.5 T", field: "1.5 T", kind: "2D SE", stack: 121, by: "rules", changed: draft, candidates: [{ stacks: [121], kind: "2D SE", score: 0.81 }] },
+          { session_id: 4022, visit: 2, column: "Siemens Skyra · 3 T", field: "3 T", kind: "3D MPRAGE", stack: 123, by: "rules", changed: false, candidates: [{ stacks: [123], kind: "3D MPRAGE", score: 0.88 }, { stacks: [124], kind: "3D MPRAGE", score: 0.85 }] },
         ],
       },
       {
         subject_id: 18,
         subject: "5a9f30c6e8b21d42",
-        visits: [{ session: "18:2011-05-06", visit: 1, column: "Siemens Skyra · 3 T", field: "3 T", kind: "3D MPRAGE", stack: 131, by: "person", pick: 97, why: "motion in series 9", changed: false, candidates: [{ stacks: [130], kind: "3D MPRAGE", score: 0.9 }, { stacks: [131], kind: "3D MPRAGE", score: 0.7 }] }],
+        visits: [{ session_id: 4031, visit: 1, column: "Siemens Skyra · 3 T", field: "3 T", kind: "3D MPRAGE", stack: 131, by: "person", pick: 97, why: "motion in series 9", changed: false, candidates: [{ stacks: [130], kind: "3D MPRAGE", score: 0.9 }, { stacks: [131], kind: "3D MPRAGE", score: 0.7 }] }],
       },
     ],
   };
@@ -156,7 +156,7 @@ export function mainScansDoors(over: (c: FakeCall) => FakeAnswer = () => undefin
     if (c.method === "GET" && c.path === "/api/picks/rules") return { status: 200, body: rulesAnswer() };
     if (c.method === "GET" && c.path === "/api/picks/rules/text") return { status: 200, text: `# Main scans of ms-followup, version ${c.query.get("version")}\nroles:\n  t1w:\n    keep_alike: balanced\n` };
     if (c.method === "POST" && c.path === "/api/picks/map") return { status: 200, body: mapAnswer(String(c.body?.role), c.body?.rules !== undefined) };
-    if (c.method === "POST" && c.path === "/api/picks/map/subjects") return { status: 200, body: subjectsAnswer() };
+    if (c.method === "POST" && c.path === "/api/picks/map/subjects") return { status: 200, body: subjectsAnswer(2, c.body?.rules !== undefined) };
     if (c.method === "POST" && c.path === "/api/picks/map/strips") return { status: 200, body: STRIPS };
     if (c.method === "GET" && c.path === "/api/review/summary") return { status: 200, body: { by_kind: {}, cohorts: [], none: 0 } };
     if (c.method === "GET" && c.path === "/api/sources") return { status: 200, body: { count: 2, window_days: 30, sources: [{ id: 3, name: "study-big" }, { id: 4, name: "ward-c" }] } };

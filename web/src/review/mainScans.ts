@@ -409,8 +409,8 @@ export interface VisitCandidate {
 }
 
 export interface MapVisit {
-  /** The engine's key of the visit. */
-  session: string;
+  /** The engine's id of the visit, which a pick names; never its date. */
+  sessionId: number | null;
   visit: number;
   column: string | null;
   field: string | null;
@@ -419,8 +419,8 @@ export interface MapVisit {
   stacks: number[];
   /** Who picked: the rules or a person. */
   by: string | null;
-  /** The kind differs from the visit before. */
-  changed: boolean;
+  /** The draft picks this visit otherwise than the saved rules do. */
+  redrawn: boolean;
   /** The pick's own id, where the engine gives it, so a person's pick can be withdrawn. */
   pick: number | null;
   why: string | null;
@@ -446,14 +446,14 @@ function visitOf(raw: unknown, i: number): MapVisit {
   const stacks = ints(v.stacks);
   const one = num(v.stack);
   return {
-    session: text(v.session) ?? String(i),
+    sessionId: num(v.session_id),
     visit: count(v.visit) || i + 1,
     column: text(v.column),
     field: text(v.field),
     kind: kindOf(v.kind),
     stacks: stacks.length > 0 ? stacks : one !== null ? [one] : [],
     by: text(v.by),
-    changed: v.changed === true,
+    redrawn: v.changed === true,
     pick: num(v.pick) ?? num(v.pick_id),
     why: text(v.why),
     candidates: Array.isArray(v.candidates)
@@ -498,31 +498,42 @@ export function stripsOf(raw: unknown): Strips {
 /** A strip's kinds by visit, null where nothing is picked. */
 export const stripKinds = (strips: Pick<Strips, "kinds">, visits: readonly number[]): (string | null)[] => visits.map((i) => (i >= 0 && i < strips.kinds.length ? strips.kinds[i] : null));
 
-/** A subject's series: its kinds visit by visit, repeats folded. */
-export function runOf(kinds: readonly (string | null)[]): (string | null)[] {
-  const out: (string | null)[] = [];
-  for (const k of kinds) if (out.length === 0 || out[out.length - 1] !== k) out.push(k);
+/** A subject's series: its kinds visit by visit, repeats folded, a visit with no pick left out, as the engine counts series. */
+export function runOf(kinds: readonly (string | null)[]): string[] {
+  const out: string[] = [];
+  for (const k of kinds) if (k !== null && out[out.length - 1] !== k) out.push(k);
   return out;
+}
+
+/** Visit by visit, whether its kind differs from the last visit before it that has a pick. */
+export function kindChanges(kinds: readonly (string | null)[]): boolean[] {
+  let last: string | null = null;
+  return kinds.map((k) => {
+    if (k === null) return false;
+    const changed = last !== null && last !== k;
+    last = k;
+    return changed;
+  });
 }
 
 const sameSteps = (a: readonly (string | null)[], b: readonly (string | null)[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /**
- * The subjects of the strips a group lights. Breaks and series are read from
- * the strips as the door groups them; a cell is read from a strip's own
- * column, since a strip carries one column for its subject, not one a visit.
+ * The subjects of the strips a group lights, as the engine groups them:
+ * breaks are two kinds or more and series leave out the visits with no
+ * pick; a cell is read from a strip's own column (the one most of its
+ * visits are at), since a strip carries one column for its subject.
  */
 export function litOf(strips: Strips, g: Group): Set<number> {
   const out = new Set<number>();
   const columnAt = g.by === "cell" ? strips.columns.indexOf(g.column) : -1;
   for (const s of strips.subjects) {
     const kinds = stripKinds(strips, s.visits);
-    const run = runOf(kinds);
     const hit =
       g.by === "breaks"
-        ? kinds.length > 1 && run.length > 1
+        ? new Set(kinds.filter((k) => k !== null)).size >= 2
         : g.by === "series"
-          ? kinds.length > 1 && sameSteps(run, g.steps)
+          ? kinds.length > 1 && sameSteps(runOf(kinds), g.steps)
           : (columnAt < 0 || s.column === columnAt) && kinds.some((k) => k === g.kind);
     if (hit) out.add(s.subject_id);
   }
@@ -656,8 +667,9 @@ export const mainScans = {
     door<unknown>("POST", "/api/picks/map/subjects", { scope: scopeBody(s), role, columns, group, order, page, per_page: perPage, ...(rules ? { rules } : {}) }).then(subjectsOf),
   strips: (s: Scope, role: string, columns: Columns, rules: Rules | null) =>
     door<unknown>("POST", "/api/picks/map/strips", { scope: scopeBody(s), role, columns, ...(rules ? { rules } : {}) }).then(stripsOf),
-  /** A person's pick of one visit, in the scope: it stands through later runs of the scope's rules. */
-  pick: (s: Scope, role: string, stacks: number[], why: string) => door<{ id: number; stacks: number[] }>("POST", "/api/picks", { role, stacks, why: why.trim(), ...scopeBody(s) }),
+  /** A person's pick of one visit, in the scope: it stands through later runs of the scope's rules. No scans is "no scan for this visit". */
+  pick: (s: Scope, role: string, visit: { subject_id: number; session_id: number | null }, stacks: number[], why: string) =>
+    door<{ id: number; stacks: number[] }>("POST", "/api/picks", { role, stacks, why: why.trim(), subject_id: visit.subject_id, ...(visit.session_id !== null ? { session_id: visit.session_id } : {}), ...scopeBody(s) }),
   withdraw: (s: Scope, id: number, why?: string) => door<{ id: number }>("POST", `/api/picks/${id}/withdraw`, { ...scopeBody(s), ...(why && why.trim() ? { why: why.trim() } : {}) }),
 };
 

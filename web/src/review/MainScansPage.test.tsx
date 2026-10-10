@@ -156,11 +156,12 @@ describe("Main scans of a cohort", () => {
     await settle();
     expect(engine.of("POST", "/api/picks/map/strips")[0].body).toEqual({ scope: { cohort: "ms-followup" }, role: "t1w", columns: "scanner" });
     expect(text(".ms-strip-label")).toEqual(["Siemens Skyra · 3 T · 2 subjects", "GE Signa · 1.5 T · 1 subject"]);
-    // subject 19 has nothing at its third visit and 17 changes from 2D SE to 3D MPRAGE: both break, and both are lit
+    // 17 changes from 2D SE to 3D MPRAGE: it breaks and is lit; 19 has nothing at its third visit, which is no break, as the engine counts them
     const lit = [...host.querySelectorAll(".ms-strip.lit")];
-    expect(lit.map((s) => s.getAttribute("aria-label"))).toEqual(["3D MPRAGE, 3D MPRAGE, none", "2D SE, 3D MPRAGE"]);
-    expect(lit.map((s) => s.querySelectorAll("i.changed").length)).toEqual([1, 1]);
-    expect([...host.querySelectorAll(".ms-strip:not(.lit)")].map((s) => s.getAttribute("aria-label"))).toEqual(["3D MPRAGE"]);
+    expect(lit.map((s) => s.getAttribute("aria-label"))).toEqual(["2D SE, 3D MPRAGE"]);
+    expect(lit[0].querySelectorAll("i.changed")).toHaveLength(1);
+    expect([...host.querySelectorAll(".ms-strip:not(.lit)")].map((s) => s.getAttribute("aria-label"))).toEqual(["3D MPRAGE, 3D MPRAGE, none", "3D MPRAGE"]);
+    expect(host.querySelectorAll(".ms-strip i.changed")).toHaveLength(1);
   });
 
   it("opens a card's visit on its pick, and a person's pick there belongs to the cohort", async () => {
@@ -173,7 +174,7 @@ describe("Main scans of a cohort", () => {
     expect(d.querySelectorAll(".bundle")).toHaveLength(2);
     expect(d.querySelector(".bundle.on")?.textContent).toContain("the rules' pick");
     expect(d.querySelector(".bundle .value-tag")?.textContent).toBe("3D MPRAGE");
-    const keep = button(d, "Keep my pick")!;
+    const keep = button(d, "Pick this one")!;
     expect(keep.disabled).toBe(true);
     act(() => d.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1].click());
     const why = d.querySelector<HTMLInputElement>('input[aria-label="Why"]')!;
@@ -183,7 +184,7 @@ describe("Main scans of a cohort", () => {
     });
     act(() => keep.click());
     await settle();
-    expect(engine.of("POST", "/api/picks")[0].body).toEqual({ role: "t1w", stacks: [124], why: "motion in series 9", cohort: "ms-followup" });
+    expect(engine.of("POST", "/api/picks")[0].body).toEqual({ role: "t1w", stacks: [124], why: "motion in series 9", subject_id: 17, session_id: 4022, cohort: "ms-followup" });
     expect(host.querySelector("dialog")).toBeNull();
     expect(host.querySelector(".ms-said")?.textContent).toBe("Picked scan 124 for subject 5a9f30c6e8b21d41, visit 2. Later runs leave it standing.");
     // what the pick changed is read again
@@ -198,6 +199,37 @@ describe("Main scans of a cohort", () => {
     await settle();
     expect(host.querySelectorAll(".ms-visit")).toHaveLength(0);
     expect(host.querySelector(".ms-group")?.textContent).toContain("The subjects could not be read: not now");
+  });
+
+  it("says no scan stands for a visit, with a why, naming the visit by its ids", async () => {
+    const engine = await open({ cohort: "ms-followup" }, (c) => (c.method === "POST" && c.path === "/api/picks" ? { status: 201, body: { id: 100, stacks: [] } } : undefined));
+    act(() => button(host, "Subject 5a9f30c6e8b21d41, visit 1: 2D SE")!.click());
+    const d = host.querySelector("dialog")!;
+    expect(button(d, "No scan for this visit")!.disabled).toBe(true);
+    const why = d.querySelector<HTMLInputElement>('input[aria-label="Why"]')!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(why, "no usable T1w");
+      why.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button(d, "No scan for this visit")!.click());
+    await settle();
+    expect(engine.of("POST", "/api/picks")[0].body).toEqual({ role: "t1w", stacks: [], why: "no usable T1w", subject_id: 17, session_id: 4021, cohort: "ms-followup" });
+    expect(host.querySelector(".ms-said")?.textContent).toBe("No scan stands for subject 5a9f30c6e8b21d41, visit 1, as you said. Later runs leave it standing.");
+  });
+
+  it("marks a visit the head of a change of kind, and outlines one the draft picks otherwise", async () => {
+    await open({ cohort: "ms-followup" });
+    const [one, two] = [...host.querySelectorAll(".ms-card")[0].querySelectorAll(".ms-visit")];
+    expect([one.classList.contains("changed"), two.classList.contains("changed")]).toEqual([false, true]);
+    expect(host.querySelectorAll(".ms-visit.redrawn")).toHaveLength(0);
+    act(() => button(host.querySelector(".ms-keys")!, "Across the data")!.click());
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 350));
+    });
+    await settle();
+    const redrawn = [...host.querySelectorAll(".ms-visit.redrawn")];
+    expect(redrawn.map((v) => v.getAttribute("aria-label"))).toEqual(["Subject 5a9f30c6e8b21d41, visit 1: 2D SE, picked differently by your changed rules"]);
+    expect([...host.querySelectorAll(".ms-group-head .hint")].map((h) => h.getAttribute("title"))).toContain("An outlined visit: your changed rules pick it differently.");
   });
 
   it("withdraws a person's pick of a visit in the scope", async () => {

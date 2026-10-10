@@ -13,6 +13,7 @@ import { Wait } from "../ui/Wait";
 import {
   groupTitle,
   keptBy,
+  kindChanges,
   litOf,
   numbersOf,
   pct,
@@ -233,10 +234,16 @@ export function ByVisitBox({ map, slot, palette }: { map: MapAnswer; slot: Slot;
   );
 }
 
-const CARDS_HINT = "Visits as columns, 24 subjects a page. A visit in orange changed kind from the visit before. A visit opens its pick.";
-const STRIPS_HINT = "Every subject, by scanner, longest series first. The group you opened is lit. One cell a visit; an orange edge marks a change of kind.";
+const CARDS_HINT = "Visits as columns, 24 subjects a page. A visit head in the caution colour takes another kind than the visit with a pick before it. A visit opens its pick.";
+const stripsHint = (columns: Columns) =>
+  `Every subject, by the ${columns === "dataset" ? "dataset" : "scanner"} most of its visits are at, longest series first. The group you opened is lit. One cell a visit; an edge in the caution colour marks a change of kind.`;
+const REDRAWN_HINT = "An outlined visit: your changed rules pick it differently.";
 
 export interface GroupBoxProps {
+  /** The columns the map is drawn by, which the strips are grouped by too. */
+  columns: Columns;
+  /** A draft is shown, so a visit it picks otherwise is outlined. */
+  draft: boolean;
   group: Group;
   onGroup: (g: Group) => void;
   view: "cards" | "strips";
@@ -272,7 +279,8 @@ export function GroupBox(p: GroupBoxProps) {
           </button>
         )}
         {total !== null && <span className="ms-group-count">{plural(total, "subject", "subjects")}</span>}
-        <Hint text={cards ? CARDS_HINT : STRIPS_HINT} />
+        <Hint text={cards ? CARDS_HINT : stripsHint(p.columns)} />
+        {cards && p.draft && <Hint text={REDRAWN_HINT} />}
         <span className="grow" />
         <div className="chips" role="group" aria-label="View">
           {(
@@ -328,6 +336,7 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
     <div className="ms-cards">
       {subjects.subjects.map((s) => {
         const where = [...new Set(s.visits.map((v) => v.column).filter((c): c is string => c !== null))];
+        const changes = kindChanges(s.visits.map((v) => v.kind));
         return (
           <div key={s.subject_id} className="ms-card">
             <div className="ms-card-head">
@@ -345,7 +354,14 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
                     </span>
                   );
                 return (
-                  <button key={v.session} type="button" disabled={subjectsBusy} className={v.changed ? "ms-visit changed" : "ms-visit"} aria-label={`Subject ${s.subject}, visit ${v.visit}: ${v.kind ?? "none"}${v.changed ? ", a change" : ""}`} onClick={() => onVisit(s, v)}>
+                  <button
+                    key={v.sessionId ?? `visit-${v.visit}`}
+                    type="button"
+                    disabled={subjectsBusy}
+                    className={["ms-visit", changes[j] ? "changed" : "", v.redrawn ? "redrawn" : ""].filter(Boolean).join(" ")}
+                    aria-label={`Subject ${s.subject}, visit ${v.visit}: ${v.kind ?? "none"}${changes[j] ? ", a change" : ""}${v.redrawn ? ", picked differently by your changed rules" : ""}`}
+                    onClick={() => onVisit(s, v)}
+                  >
                     <span className="ms-visit-head">
                       V{v.visit}
                       {v.field ? ` · ${v.field}` : ""}
@@ -385,13 +401,14 @@ function StripsView({ strips, stripsWhy, slot, group }: GroupBoxProps) {
             <div className="ms-strip-list">
               {here.map(({ s, kinds }) => {
                 const words = kinds.map(stepWord).join(", ");
+                const changes = kindChanges(kinds);
                 return (
                   <span key={s.subject_id} className={lit.has(s.subject_id) ? "ms-strip lit" : "ms-strip"} role="img" aria-label={words} title={words}>
                     {Array.from({ length: slots }, (_, j) => {
                       if (j >= kinds.length) return <i key={j} className="blank" />;
                       const k = kinds[j];
                       const sl = slot(k);
-                      const cls = [k === null ? "none" : "", j > 0 && kinds[j - 1] !== k ? "changed" : ""].filter(Boolean).join(" ");
+                      const cls = [k === null ? "none" : "", changes[j] ? "changed" : ""].filter(Boolean).join(" ");
                       return <i key={j} className={cls || undefined} {...(sl !== null ? { "data-slot": sl } : {})} />;
                     })}
                   </span>
