@@ -127,7 +127,7 @@ function summaryOf(d: Dataset, pseudonymised: Partial<SummaryStep>): DatasetSumm
   };
 }
 
-type HeldRowState = { state: string; code: string | null; also_in: string[] };
+type HeldRowState = { state: string; code: string | null; also_in: string[]; id_type?: string; shape?: string };
 
 /** The engine's held IDs: one row each, by shape and never by value. */
 function heldIds(states: Record<number, HeldRowState> = {}, subjects = { coded: 0, generated: 0 }) {
@@ -396,6 +396,15 @@ describe("the pseudonymise step, in the dataset", () => {
     const after = [...host.querySelectorAll(".ps-table .ps-row:not(.head)")][7];
     expect(after.textContent).toContain("a generated subject code, at the run");
     expect(button(after, "Generate a subject code")).toBeNull();
+  });
+
+  it("says where an ID's shape is the study's UID, not an ID of PatientID's form", async () => {
+    // 2026-10-10: study UID shapes stood under "ID, as its shape" unexplained
+    await page(dataset(), {}, undefined, { held: heldIds({ 101: { state: "held", code: null, also_in: [], id_type: "study-instance-uid", shape: "9.99.999.9.9" } }) });
+    act(() => button(host, "Give the 8 IDs a subject code")!.click());
+    const rows = [...host.querySelectorAll(".ps-table .ps-row:not(.head)")];
+    expect(rows[1].querySelector(".ps-shape")?.textContent).toBe("9.99.999.9.9 no ID in PatientID's form: by study UID");
+    expect(rows[0].querySelector(".ps-shape-note")).toBeNull();
   });
 
   it("shows the IDs once, recorded, in their rows, and lets them go", async () => {

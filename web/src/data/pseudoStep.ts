@@ -23,6 +23,14 @@ const ids = (k: number) => `${n(k)} ${k === 1 ? "ID" : "IDs"}`;
 /** How a held ID stands: no code yet, a code a map gave, a code to be generated at the next run, or a subject waiting for a value of the type PatientID gets. */
 export type HeldState = "held" | "mapped" | "generated" | "waits";
 
+/** The id type a held ID is filed under when the file's PatientID had no ID of the rule's form, and the study's UID stood in. */
+export const FALLBACK_TYPE = "study-instance-uid";
+
+/** What a held ID's shape is, said where it is not an ID of PatientID's form (2026-10-10: study UID shapes stood under "ID, as its shape" unexplained). */
+export function shapeNote(r: Pick<HeldId, "id_type">): string | null {
+  return r.id_type === FALLBACK_TYPE ? "no ID in PatientID's form: by study UID" : null;
+}
+
 /** One held ID, by the row that stands for it and its shape: never its value. */
 export interface HeldId {
   id: number;

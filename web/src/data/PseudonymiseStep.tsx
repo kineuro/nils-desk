@@ -59,6 +59,7 @@ import {
   idTypeOf,
   matchedOf,
   outcomeWords,
+  shapeNote,
   primaryOf,
   rulesLine,
   stepView,
@@ -608,6 +609,7 @@ function IdLine({ row: r, n: i, value, generates, onGenerate }: { row: IdRow; n:
       </span>
       <span role="cell" className="ps-shape">
         {value ?? r.shape ?? "?"}
+        {shapeNote(r) && <span className="meta ps-shape-note"> {shapeNote(r)}</span>}
       </span>
       <span role="cell" className="num">
         {n(r.files)}
