@@ -76,15 +76,25 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
   const [asked, setAsked] = useState<MoveAsked | null>(null);
   const [act, setAct] = useState<Act>({ kind: "idle" });
   const working = act.kind === "working";
+  /** Why the folder could not be looked inside: said, never left as looking. */
+  const [lookWhy, setLookWhy] = useState<string | null>(null);
 
   // what the folder holds, where the page that opened the dialog has not got it
   useEffect(() => {
-    if (layout !== null || !served(caps, "POST /api/ingest/look")) return;
+    if (layout !== null) return;
+    if (!served(caps, "POST /api/ingest/look")) {
+      setLookWhy("This engine cannot look inside a folder from here.");
+      return;
+    }
     let alive = true;
     lookDoor
       .layout(place.path)
-      .then((l) => alive && setLayout(l.layout ?? null))
-      .catch(() => undefined);
+      .then((l) => {
+        if (!alive) return;
+        if (l.layout) setLayout(l.layout);
+        else setLookWhy("The engine said nothing of what the folder holds.");
+      })
+      .catch((e: unknown) => alive && setLookWhy(`The folder could not be looked inside: ${messageOf(e)}`));
     return () => {
       alive = false;
     };
@@ -138,7 +148,8 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
 
   return (
     <Dialog title={`Sort the files: ${place.name}`} icon="folder" onClose={onClose} foot={foot}>
-      {layout === null && <Wait phase="looking inside the folder" since={Date.now()} />}
+      {layout === null && lookWhy === null && <Wait phase="looking inside the folder" since={Date.now()} />}
+      {layout === null && lookWhy !== null && <p className="warn">{lookWhy}</p>}
       {layout !== null && count === 0 && <p className="meta">No DICOM here to sort.</p>}
       {layout !== null && count > 0 && !question && (
         <>

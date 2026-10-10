@@ -16,6 +16,7 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow } from "../routes";
 import { MoreMenu } from "../settings/cards";
+import { messageOf } from "../settings/common";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { cohortActs, MembersDialog, RenameDialog, RetireDialog } from "./CohortPage";
@@ -57,6 +58,8 @@ export function cohortActions(caps: Capabilities, c: Pick<Cohort, "name" | "wait
 
 export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed, onRetired }: CohortDetailProps) {
   const [doc, setDoc] = useState<Detail | null>(null);
+  /** Why the cohort's own door could not be read, where it could not: said, never left as reading. */
+  const [docWhy, setDocWhy] = useState<string | null>(null);
   const [picks, setPicks] = useState<{ members: number | null; lines: PickLine[] } | null>(null);
   const [open, setOpen] = useState<Act | null>(null);
   const [said, setSaid] = useState<string | null>(null);
@@ -72,8 +75,16 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
     let alive = true;
     cohorts
       .get(row.name)
-      .then((d) => alive && setDoc(d))
-      .catch(() => alive && setDoc(null));
+      .then((d) => {
+        if (!alive) return;
+        setDoc(d);
+        setDocWhy(null);
+      })
+      .catch((e: unknown) => {
+        if (!alive) return;
+        setDoc(null);
+        setDocWhy(messageOf(e));
+      });
     return () => {
       alive = false;
     };
@@ -189,7 +200,7 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
 
       <div className="dp-sec">
         <h3 className="eyebrow">How it grew</h3>
-        {doc ? <Grew joins={doc.joins} releases={releases} /> : <p className="meta">Reading how it grew.</p>}
+        {doc ? <Grew joins={doc.joins} releases={releases} /> : docWhy ? <p className="warn">How it grew could not be read: {docWhy}</p> : <p className="meta">Reading how it grew.</p>}
       </div>
 
       {rail.length > 0 && (

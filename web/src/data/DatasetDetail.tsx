@@ -65,6 +65,8 @@ export interface DatasetDetailProps {
   caps: Capabilities;
   dataset: Dataset;
   summary: DatasetSummary | null;
+  /** Why the summary could not be read, where it could not: the rail then stands on what the list knows. */
+  summaryWhy?: string | null;
   why: string | null;
   jobs: LiveJobs;
   /** Every dataset of the page, which a vault of the originals stays out of. */
@@ -301,8 +303,13 @@ export function DatasetDetail(props: DatasetDetailProps) {
             pick={view !== null && stepOf(s, "pseudonymised") !== null ? { step: "pseudonymised", open, controls: stepId, onPick: () => setStepOpen(!open) } : null}
             run={runOffers(caps, "datasets", railSteps(s), pressed, runStep)}
           />
-        ) : maySummarise(caps) ? (
+        ) : maySummarise(caps) && !props.summaryWhy ? (
           <p className="meta">Reading where it is.</p>
+        ) : props.summaryWhy ? (
+          <>
+            <StepRail steps={stepsOfSources(d)} now={now} />
+            <p className="warn">Where it is could not be read: {props.summaryWhy}</p>
+          </>
         ) : (
           <StepRail steps={stepsOfSources(d)} now={now} />
         )}

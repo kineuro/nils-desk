@@ -340,6 +340,18 @@ describe("Sort the files", () => {
     expect(host.textContent).not.toContain("sub-1");
   });
 
+  it("says why it cannot look inside the folder, never looking for good", async () => {
+    act(() => root.render(<SortFilesDialog caps={caps7a(["PUT /api/places/{id}"])} place={place} layout={null} onClose={() => undefined} onDone={() => undefined} />));
+    await settle();
+    expect(host.textContent).not.toContain("looking inside the folder");
+    expect(host.querySelector("p.warn")?.textContent).toBe("This engine cannot look inside a folder from here.");
+    act(() => root.render(<p />));
+    engine((c) => (c.method === "POST" && c.url === "/api/ingest/look" ? { status: 500, body: { error: "the folder is not there" } } : undefined));
+    act(() => root.render(<SortFilesDialog caps={caps7a(["PUT /api/places/{id}", "POST /api/ingest/look"])} place={place} layout={null} onClose={() => undefined} onDone={() => undefined} />));
+    await settle();
+    expect(host.querySelector("p.warn")?.textContent).toMatch(/^The folder could not be looked inside: /);
+  });
+
   it("goes back from the question without a word to the engine", async () => {
     const e = engine((c) => (c.method === "PUT" ? { status: 409, body: ASKED } : undefined));
     act(() => root.render(<SortFilesDialog caps={caps7a([])} place={place} layout={UNKNOWN} onClose={() => undefined} onDone={() => undefined} />));

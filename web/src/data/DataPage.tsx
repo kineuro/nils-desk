@@ -17,6 +17,7 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import { placesKept } from "../objects/kept";
 import { href, narrow } from "../routes";
+import { messageOf } from "../settings/common";
 import type { Install } from "../settings/supervise";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
@@ -75,6 +76,12 @@ export function runEnded(s: Pick<DatasetSummary, "steps">, since: number): boole
   return s.steps.some((x) => typeof x.finished_at === "string" && Date.parse(x.finished_at) >= since - 5_000);
 }
 
+/** A record without one of its keys. */
+function without<T>(r: Record<string, T>, key: string): Record<string, T> {
+  const { [key]: _gone, ...rest } = r;
+  return rest;
+}
+
 /** The card chosen on the page: a dataset or a cohort, by name. */
 export type Chosen = { kind: "dataset"; name: string } | { kind: "cohort"; name: string } | null;
 
@@ -123,7 +130,11 @@ export function DataPage({
 }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [cohortList, setCohortList] = useState<Cohort[] | null>(null);
+  /** Why the cohorts could not be read, where they could not. */
+  const [cohortsWhy, setCohortsWhy] = useState<string | null>(null);
   const [sums, setSums] = useState<Record<string, DatasetSummary>>({});
+  /** Why a dataset's summary could not be read, by its name. */
+  const [sumsWhy, setSumsWhy] = useState<Record<string, string>>({});
   const [chosen, setChosen] = useState<Chosen>(() => chosenOf(dataset, query));
   const picked = useRef(chosen !== null);
   const [adding, setAdding] = useState(false);
@@ -160,8 +171,15 @@ export function DataPage({
     if (!readsCohorts) return;
     cohortDoors
       .list()
-      .then((all) => setCohortList(all.filter((c) => !c.retired_at)))
-      .catch(() => setCohortList((was) => was ?? []));
+      .then((all) => {
+        setCohortList(all.filter((c) => !c.retired_at));
+        setCohortsWhy(null);
+      })
+      .catch((e: unknown) => {
+        // a list not read is said, never drawn as an empty one
+        setCohortList((was) => was ?? []);
+        setCohortsWhy(messageOf(e));
+      });
   }, [readsCohorts]);
 
   useEffect(() => {
@@ -174,15 +192,21 @@ export function DataPage({
   const list = load.kind === "ready" ? load.list.filter((d) => !isRoot(d)) : [];
   const names = list.map((d) => d.name).join("\n");
 
-  // each dataset's summary, for the steps on its card and its detail
+  // each dataset's summary, for the steps on its card and its detail; one that cannot be read is said so, and a dataset gone from the list takes its summary with it
   const readSums = useCallback(
     (only?: string[]) => {
       if (!summarises) return;
       for (const name of only ?? names.split("\n").filter(Boolean)) {
         summaries
           .read(name)
-          .then((s) => setSums((was) => ({ ...was, [name]: s })))
-          .catch(() => undefined);
+          .then((s) => {
+            setSums((was) => ({ ...was, [name]: s }));
+            setSumsWhy((was) => (name in was ? without(was, name) : was));
+          })
+          .catch((e: unknown) => {
+            setSums((was) => (name in was ? without(was, name) : was));
+            setSumsWhy((was) => ({ ...was, [name]: messageOf(e) }));
+          });
       }
     },
     [summarises, names],
@@ -190,12 +214,17 @@ export function DataPage({
   useEffect(() => {
     readSums();
   }, [readSums]);
+  useEffect(() => {
+    const listed = new Set(names.split("\n").filter(Boolean));
+    setSums((was) => (Object.keys(was).every((k) => listed.has(k)) ? was : Object.fromEntries(Object.entries(was).filter(([k]) => listed.has(k)))));
+    setSumsWhy((was) => (Object.keys(was).every((k) => listed.has(k)) ? was : Object.fromEntries(Object.entries(was).filter(([k]) => listed.has(k)))));
+  }, [names]);
 
   // what runs: read again when a job ends, and every few seconds while one of a dataset runs
   const openIds = (jobs.open ?? []).filter((j) => j.state !== "done" && j.state !== "failed" && j.state !== "cancelled").map((j) => j.id);
   const openKey = openIds.join(",");
   const running = Object.values(sums)
-    .filter((s) => s.steps.some((x) => x.state === "running" || x.state === "queued"))
+    .filter((s) => names.split("\n").includes(s.dataset) && s.steps.some((x) => x.state === "running" || x.state === "queued"))
     .map((s) => s.dataset);
   const runningKey = running.join("\n");
   useEffect(() => {
@@ -364,7 +393,8 @@ export function DataPage({
             <span className="eyebrow">Cohorts</span>
             <span className="meta">groups of subjects, from any dataset</span>
           </div>
-          {cohortList !== null && allCohorts.length === 0 && <p className="meta">No cohort yet.</p>}
+          {cohortsWhy !== null && <p className="warn">The cohorts could not be read: {cohortsWhy}</p>}
+          {cohortList !== null && allCohorts.length === 0 && cohortsWhy === null && <p className="meta">No cohort yet.</p>}
           {allCohorts.length > 0 && (
             <div className="dp-grid cohorts">
               {allCohorts.map((c) => (
@@ -389,6 +419,7 @@ export function DataPage({
           caps={caps}
           dataset={chosenDataset}
           summary={sums[chosenDataset.name] ?? null}
+          summaryWhy={sumsWhy[chosenDataset.name] ?? null}
           why={whyOf(chosenDataset)}
           jobs={jobs}
           datasets={list}

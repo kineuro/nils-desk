@@ -37,6 +37,7 @@ afterEach(() => {
   host.remove();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 const DOORS = [
@@ -507,6 +508,62 @@ describe("datasets and cohorts on one page", () => {
     // the summary says the read waits in the queue: the button says it runs, and waits for it
     expect(read().textContent).toBe("Running");
     expect(read().disabled).toBe(true);
+  });
+
+  it("says a list or a summary it could not read, never drawing it as empty or as still reading", async () => {
+    await page({
+      route: (c) => {
+        const url = new URL(c.url, "http://x");
+        if (c.method === "GET" && url.pathname === "/api/cohorts") return { status: 500, body: { error: "the registry is busy" } };
+        if (c.method === "GET" && url.pathname === "/api/datasets/study-big/summary") return { status: 500, body: { error: "the registry is busy" } };
+        return undefined;
+      },
+    });
+    expect(text()).toContain("The cohorts could not be read");
+    expect(text()).not.toContain("No cohort yet.");
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    expect(d.getAttribute("aria-label")).toBe("study-big");
+    expect(d.textContent).not.toContain("Reading where it is.");
+    expect(d.querySelector(".warn")?.textContent).toContain("Where it is could not be read");
+    expect(d.querySelectorAll(".dp-step").length).toBeGreaterThan(0);
+  });
+
+  it("says a cohort whose own door could not be read, never leaving it as reading", async () => {
+    await page({ query: { cohort: "ms-followup" }, route: (c) => (c.method === "GET" && c.url === "/api/cohorts/ms-followup" ? { status: 500, body: { error: "the registry is busy" } } : undefined) });
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    expect(d.textContent).not.toContain("Reading how it grew.");
+    expect(d.textContent).toContain("How it grew could not be read");
+  });
+
+  it("stops following a dataset that left the list while one of its steps ran", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    let gone = false;
+    const e = await page({
+      running: true,
+      route: (c) => {
+        const url = new URL(c.url, "http://x");
+        if (gone && c.method === "GET" && url.pathname === "/api/sources") return { status: 200, body: { count: 2, window_days: 30, sources: [done, loose], rates: null } };
+        if (gone && c.method === "GET" && url.pathname === "/api/datasets/study-big/summary") return { status: 404, body: { error: "no dataset study-big" } };
+        return undefined;
+      },
+    });
+    const reads = () => e.of("GET", "/api/datasets/study-big/summary").length;
+    gone = true;
+    // the next round reads the list without it
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
+    await settle(10);
+    expect(card("study-big")).toBeUndefined();
+    const after = reads();
+    // and no round reads its summary again
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        vi.advanceTimersByTime(5_000);
+      });
+      await settle(4);
+    }
+    expect(reads()).toBe(after);
   });
 
   it("shows the running job of a dataset with its progress and Stop, which asks the engine to stop it", async () => {
