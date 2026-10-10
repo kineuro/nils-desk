@@ -66,10 +66,11 @@
 .ms-choose .opt { text-decoration: none; }
 
 /* ------------------------------------------------------------ a kind: its colour as a frame, a left bar and the tint */
-.ms-kind { display: inline-block; justify-self: start; max-width: 100%; min-height: calc(22 * var(--p)); padding: 0 calc(6 * var(--p)); border: 1px dashed var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-text-faint); font-size: calc(13 * var(--p)); line-height: calc(20 * var(--p)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
-.ms-kind.plain { border: 1px solid var(--n-neutral-line); border-left: 3px solid var(--n-neutral-icon); background: var(--n-neutral-bg); color: var(--n-text); }
-.ms-kind[data-slot] { border: 1px solid var(--vc); border-left: 3px solid var(--vc); background: var(--vc-bg); color: var(--n-text); }
-.ms-kind.off { opacity: 0.45; text-decoration: line-through; }
+/* the desk's .value-tag draws a kind's frame, bar and tint; here it keeps one line, ends in an ellipsis and scales with the page */
+.ms .value-tag.ms-kind { display: inline-block; justify-self: start; max-width: 100%; min-height: calc(22 * var(--p)); padding: 0 calc(6 * var(--p)); border: 1px dashed var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-text-faint); font-size: calc(13 * var(--p)); line-height: calc(20 * var(--p)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.ms .value-tag.ms-kind.plain { border: 1px solid var(--n-neutral-line); border-left: 3px solid var(--n-neutral-icon); background: var(--n-neutral-bg); color: var(--n-text); }
+.ms .value-tag.ms-kind[data-slot] { border-style: solid; color: var(--n-text); }
+.ms .value-tag.ms-kind.off { opacity: 0.45; text-decoration: line-through; }
 
 /* ------------------------------------------------------------ the five numbers */
 /* each tile's label, value, line and mark share rows with the others', so the values sit on one line however a label wraps */
@@ -125,7 +126,7 @@
 .ms-band > i[data-slot] { background: var(--vc); }
 .ms-band > i.none { background: var(--n-neutral-line); }
 .ms-legend { display: flex; flex-wrap: wrap; gap: calc(8 * var(--p)); }
-.ms-legend .ms-kind { font-size: calc(12 * var(--p)); }
+.ms-legend .value-tag.ms-kind { font-size: calc(12 * var(--p)); }
 
 /* ------------------------------------------------------------ the group's subjects: cards, or every subject as a strip */
 .ms-group { gap: calc(12 * var(--p)); }
@@ -141,14 +142,14 @@
 .ms-card-head span { min-width: 0; max-width: calc(150 * var(--p)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--n-text-faint); }
 .ms-card-visits { display: flex; flex-wrap: wrap; gap: calc(4 * var(--p)); }
 .ms-visit { display: flex; flex-direction: column; gap: calc(3 * var(--p)); width: calc(100 * var(--p)); padding: 0; border: 0; border-radius: var(--n-radius); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.ms-visit .ms-kind { width: 100%; padding: 0 calc(5 * var(--p)); font-size: calc(11.5 * var(--p)); }
+.ms-visit .value-tag.ms-kind { width: 100%; padding: 0 calc(5 * var(--p)); font-size: calc(11.5 * var(--p)); }
 .ms-visit:hover .ms-kind { box-shadow: 0 0 0 1px var(--n-brand-line); }
 .ms-visit-head { min-height: calc(16 * var(--p)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--p)); color: var(--n-text-faint); }
 .ms-visit.changed .ms-visit-head { color: var(--n-caution-fg); font-weight: 600; }
 /* a visit the draft picks otherwise than the saved rules: the brand's outline on its kind */
 .ms-visit.redrawn .ms-kind { outline: 2px solid var(--n-brand-text); outline-offset: 1px; }
 .ms-visit.blank { cursor: default; }
-.ms-visit.blank .ms-kind { border-color: var(--n-line); }
+.ms-visit.blank .value-tag.ms-kind { border-color: var(--n-line); }
 
 .ms-strips { display: flex; flex-direction: column; gap: calc(14 * var(--p)); }
 .ms-strip-group { display: flex; flex-direction: column; gap: calc(6 * var(--p)); }

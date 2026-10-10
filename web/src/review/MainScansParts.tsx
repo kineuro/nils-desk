@@ -41,7 +41,7 @@ export type Slot = (kind: string | null) => number | null;
 /** A kind, framed in its colour; "none" for no pick, dashed; struck out where the rules leave it out. */
 export function KindTag({ kind, slot, off = false }: { kind: string | null; slot: Slot; off?: boolean }) {
   const s = kind === null ? null : slot(kind);
-  const cls = ["ms-kind", kind === null ? "none" : s === null ? "plain" : "", off ? "off" : ""].filter(Boolean).join(" ");
+  const cls = ["value-tag", "ms-kind", kind === null ? "none" : s === null ? "plain" : "", off ? "off" : ""].filter(Boolean).join(" ");
   return (
     <span className={cls} title={kind ?? "none"} {...(s !== null ? { "data-slot": s } : {})}>
       {kind ?? "none"}
@@ -234,9 +234,9 @@ export function ByVisitBox({ map, slot, palette }: { map: MapAnswer; slot: Slot;
   );
 }
 
-const CARDS_HINT = "Visits as columns, 24 subjects a page. A visit head in the caution colour takes another kind than the visit with a pick before it. A visit opens its pick.";
+const CARDS_HINT = "Visits as columns, 24 subjects a page. A visit whose head stands out takes another kind than the visit with a pick before it. A visit opens its pick.";
 const stripsHint = (columns: Columns) =>
-  `Every subject, by the ${columns === "dataset" ? "dataset" : "scanner"} most of its visits are at, longest series first. The group you opened is lit. One cell a visit; an edge in the caution colour marks a change of kind.`;
+  `Every subject, by the ${columns === "dataset" ? "dataset" : "scanner"} most of its visits are at, longest series first. The group you opened is lit. One cell a visit; a marked left edge is a change of kind.`;
 const REDRAWN_HINT = "An outlined visit: your changed rules pick it differently.";
 
 export interface GroupBoxProps {
@@ -350,7 +350,7 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
                   return (
                     <span key={`blank-${j}`} className="ms-visit blank" aria-hidden="true">
                       <span className="ms-visit-head" />
-                      <span className="ms-kind none" />
+                      <span className="value-tag ms-kind none" />
                     </span>
                   );
                 return (

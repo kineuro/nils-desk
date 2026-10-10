@@ -17,6 +17,7 @@ import { button, dialogs, settle } from "../../test/safeWayIn";
 import { GRANTS, type Grant } from "../grants";
 import { capsWith } from "./caps.fixture";
 import { fakeEngine, MAIN_SCANS_DOORS, mainScansDoors, subjectsAnswer, type FakeAnswer, type FakeCall } from "./mainScans.fixture";
+import { earlierHref } from "./MainScansPage";
 import { ReviewPage } from "./ReviewPage";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -119,6 +120,8 @@ describe("Main scans of a cohort", () => {
     // no pick is a dashed "none", in every part that shows one
     expect(host.querySelector(".ms-where .ms-kind.none")?.textContent).toBe("none");
     expect(host.querySelectorAll(".dot, .dp-sw")).toHaveLength(0);
+    // the desk's own value tag, not one drawn again
+    expect(kinds.every((k) => k.classList.contains("value-tag"))).toBe(true);
   });
 
   it("opens a cell's subjects and a series' subjects, and goes back to the ones whose series breaks", async () => {
@@ -255,6 +258,7 @@ describe("Main scans of a cohort", () => {
     const link = [...host.querySelectorAll<HTMLAnchorElement>("a.button.quiet")].find((a) => a.textContent?.includes("from earlier runs"));
     expect(link?.textContent).toBe("3 pick questions from earlier runs");
     expect(link?.getAttribute("href")).toBe("#review/picks?earlier=1&dataset=study-big");
+    expect(earlierHref({ kind: "cohort", name: "ms-followup" })).toBe("#review/picks?earlier=1&cohort=ms-followup");
     // nothing else of the old table is on the page
     expect(host.querySelector("table")).toBeNull();
   });
@@ -277,13 +281,19 @@ describe("Main scans of a cohort", () => {
     expect(button(host, "By dataset")).toBeNull();
   });
 
-  it("chooses another dataset or cohort from beside the title", async () => {
-    await open({ cohort: "ms-followup" });
+  it("chooses another dataset or cohort from beside the title, reading the lists only once it is opened", async () => {
+    const engine = await open({ cohort: "ms-followup" });
+    expect(engine.of("GET", "/api/sources")).toHaveLength(0);
+    expect(engine.of("GET", "/api/cohorts")).toHaveLength(0);
     act(() => button(host, "Another dataset or cohort")!.click());
     await settle();
     const pop = host.querySelector(".ms-pop")!;
     expect(pop.querySelector('a[aria-current="page"]')?.textContent).toBe("ms-followup");
     expect(pop.querySelector<HTMLAnchorElement>('a[href="#review/picks?dataset=study-big"]')).not.toBeNull();
+    act(() => button(host, "Another dataset or cohort")!.click());
+    act(() => button(host, "Another dataset or cohort")!.click());
+    await settle();
+    expect(engine.of("GET", "/api/sources")).toHaveLength(1);
   });
 
   it("says subjects, visits, scans, kinds and rules, never the engine's words", async () => {

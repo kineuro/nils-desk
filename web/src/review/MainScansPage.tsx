@@ -70,7 +70,7 @@ const loading = <T,>(since = Date.now()): Load<T> => ({ kind: "loading", since }
 
 /** The address of the old table of pick questions, narrowed to a dataset where the page is about one. */
 export function earlierHref(scope: Scope | null): string {
-  return narrow(href("review", "picks"), { earlier: 1, dataset: scope?.kind === "dataset" ? scope.name : undefined });
+  return narrow(href("review", "picks"), { earlier: 1, ...(scope ? { [scope.kind]: scope.name } : {}) });
 }
 
 /** How many pick questions of earlier runs are still open, for the scope where the engine narrows to it. */
@@ -155,9 +155,11 @@ interface Lists {
   cohorts: string[];
 }
 
-function useLists(caps: Capabilities): Lists | null {
+/** The datasets and cohorts, read once and only once they are wanted: with no scope, or the chooser opened. */
+function useLists(caps: Capabilities, wanted: boolean): Lists | null {
   const [lists, setLists] = useState<Lists | null>(null);
   useEffect(() => {
+    if (!wanted || lists !== null) return;
     let alive = true;
     const datasets = served(caps, "GET /api/sources") ? sources.list().then((r) => r.sources.map((s) => s.name), () => [] as string[]) : Promise.resolve([] as string[]);
     const cohorts = served(caps, "GET /api/cohorts") ? cohortsDoor.list().then((l) => l.filter((c) => !c.retired_at).map((c) => c.name), () => [] as string[]) : Promise.resolve([] as string[]);
@@ -165,7 +167,7 @@ function useLists(caps: Capabilities): Lists | null {
     return () => {
       alive = false;
     };
-  }, [caps]);
+  }, [caps, wanted]);
   return lists;
 }
 
@@ -198,9 +200,8 @@ function ScopeLists({ lists, current }: { lists: Lists; current: Scope | null })
 }
 
 /** The chevron beside the title: every dataset and cohort the person may see, the page's own marked. */
-function Chooser({ caps, scope }: { caps: Capabilities; scope: Scope }) {
+function Chooser({ scope, lists, onOpen }: { scope: Scope; lists: Lists | null; onOpen: () => void }) {
   const [open, setOpen] = useState(false);
-  const lists = useLists(caps);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open) return;
@@ -215,7 +216,10 @@ function Chooser({ caps, scope }: { caps: Capabilities; scope: Scope }) {
   }, [open]);
   return (
     <div className="ms-chooser" ref={box}>
-      <button type="button" className="icon-button" aria-label="Another dataset or cohort" title="Another dataset or cohort" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button type="button" className="icon-button" aria-label="Another dataset or cohort" title="Another dataset or cohort" aria-expanded={open} onClick={() => {
+          onOpen();
+          setOpen((o) => !o);
+        }}>
         <Icon name="chevron-down" />
       </button>
       {open && <div className="ms-pop">{lists === null ? <Wait phase="reading the datasets and cohorts" since={Date.now()} /> : <ScopeLists lists={lists} current={scope} />}</div>}
@@ -232,7 +236,8 @@ export function MainScansPage({ caps, query }: { caps: Capabilities; query?: Rec
   const name = named?.name ?? null;
   const scope = useMemo<Scope | null>(() => (kind && name ? { kind, name } : null), [kind, name]);
   const earlier = useEarlier(caps, scope);
-  const lists = useLists(caps);
+  const [wanted, setWanted] = useState(false);
+  const lists = useLists(caps, wanted || scope === null);
   const missing = mainScansMissing(caps);
   if (missing) {
     return (
@@ -275,10 +280,10 @@ export function MainScansPage({ caps, query }: { caps: Capabilities; query?: Rec
       </section>
     );
   }
-  return <ScopePage key={scopeKey(scope)} caps={caps} scope={scope} earlier={earlier} />;
+  return <ScopePage key={scopeKey(scope)} caps={caps} scope={scope} earlier={earlier} lists={lists} onLists={() => setWanted(true)} />;
 }
 
-function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope; earlier: number }) {
+function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilities; scope: Scope; earlier: number; lists: Lists | null; onLists: () => void }) {
   const [doc, setDoc] = useState<Load<RulesDoc>>(loading);
   const [draft, setDraftState] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -515,7 +520,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
             <span className="eyebrow">Main scans · {scope.kind}</span>
             <div className="ms-h1">
               <h1>{scope.name}</h1>
-              <Chooser caps={caps} scope={scope} />
+              <Chooser scope={scope} lists={lists} onOpen={onLists} />
             </div>
           </div>
         </div>
@@ -556,7 +561,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
               <span className="eyebrow">Main scans · {scope.kind}</span>
               <div className="ms-h1">
                 <h1>{title}</h1>
-                <Chooser caps={caps} scope={scope} />
+                <Chooser scope={scope} lists={lists} onOpen={onLists} />
               </div>
             </div>
             <EarlierLink open={earlier} scope={scope} />
