@@ -413,13 +413,13 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(text()).not.toContain("ABC123456");
   });
 
-  it("opens the rules from Change: four choices, Save sends what changed, a purge warns", async () => {
+  it("opens the rules from Change: its choices, Save sends what changed, a purge warns", async () => {
     const e = await page(dataset(), {}, (c) => (c.method === "PUT" && c.url === "/api/places/9" ? { status: 200, body: {} } : undefined));
     act(() => button(host.querySelector(".ps-step")!, "Change")!.click());
     await settle(4);
     const dialog = host.querySelector("dialog")!;
     expect(dialog.querySelector("h2")?.textContent).toBe("Rules for study-identified");
-    expect([...dialog.querySelectorAll(".ps-rule-label")].map((l) => l.textContent)).toEqual(["PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]);
+    expect([...dialog.querySelectorAll(".ps-rule-label")].map((l) => l.textContent)).toEqual(["PatientID holds", "PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]);
     expect(dialog.textContent).not.toContain("Feeds a cohort");
     expect(dialog.textContent).toContain("Standard, 96 removed");
     act(() => button(dialog, "Purged")!.click());
@@ -431,6 +431,20 @@ describe("the pseudonymise step, in the dataset", () => {
     });
     await settle(6);
     expect(e.of("PUT", "/api/places/9")[0].body).toEqual({ unmapped: "code" });
+  });
+
+  it("changes what the originals' PatientID holds in the rules, before anything is pseudonymised", async () => {
+    // 2026-10-10: a dataset added with the wrong kind of ID had no way back but removing it
+    const e = await page(dataset(), {}, (c) => (c.method === "PUT" && c.url === "/api/places/9" ? { status: 200, body: {} } : undefined));
+    act(() => button(host.querySelector(".ps-step")!, "Change")!.click());
+    await settle(4);
+    const dialog = host.querySelector("dialog")!;
+    act(() => button(dialog, "The same everywhere (personnummer, national ID)")!.click());
+    await act(async () => {
+      button(dialog, "Save")!.click();
+    });
+    await settle(6);
+    expect(e.of("PUT", "/api/places/9")[0].body).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
   });
 
   it("says where its run stopped, in the job's own words, and tries it again: a failure never looks like nothing happened", async () => {

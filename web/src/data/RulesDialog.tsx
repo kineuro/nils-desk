@@ -5,7 +5,9 @@
 // what an ID with no code does, its files wait or it gets a generated code;
 // the tags, the standard removal or the dataset's own, which the chooser
 // edits; and the originals once every file has its copy, kept, vaulted or
-// purged, the act itself behind Vaulted and Purged. Back to standard, Cancel
+// purged, the act itself behind Vaulted and Purged. Above them, where the
+// dataset's rule names it, what the originals' PatientID holds, which can be
+// changed until anything is pseudonymised (2026-10-10). Back to standard, Cancel
 // and Save. The cohort a dataset feeds is its settings', and the dates are a
 // release's.
 
@@ -20,10 +22,11 @@ import { writable } from "./FinishDataset";
 import { plainError, type Plain } from "./plain";
 import { tagCounts, NO_TAGS, type TagPolicy } from "./policy";
 import { datasets as placeDoor, purgeRefusal, typeLabel, type Dataset, type OriginalsActs, type OriginalsLook } from "./pseudonyms";
-import { rulesOf, rulesPatch, STANDARD, type Rules } from "./pseudoStep";
+import { holdsOf, holdsPatch, rulesOf, rulesPatch, STANDARD, type Holds, type Rules } from "./pseudoStep";
 
 /** What each choice is, behind its "?". */
 const HELP = {
+  holds: "What the originals' PatientID holds: an ID that is the same everywhere, which the key makes the subject code from with no map, or a hospital or study ID, whose subject code comes from a map or is generated.",
   pid: "What NILS writes into PatientID in the pseudonymised copy: the subject code, or the subject's hospital or study ID.",
   written: "Changed only before anything is pseudonymised.",
   unknown: "Its files wait until a map gives the ID a subject code. Or the ID gets a subject code made from itself, which a map given later folds into the right subject.",
@@ -62,6 +65,8 @@ export function RulesDialog(props: {
 }) {
   const { caps, dataset: d, policy, look, acts, written, onClose, onSaved, onTags, onVault, onPurge } = props;
   const [rules, setRules] = useState<Rules>(() => rulesOf(d));
+  /** What the originals' PatientID holds, where the dataset's rule names it (2026-10-10). */
+  const [holds, setHolds] = useState<Holds | null>(() => holdsOf(d));
   const [types, setTypes] = useState<LinkageType[]>([]);
   const [saving, setSaving] = useState(false);
   const [refused, setRefused] = useState<Plain | null>(null);
@@ -79,6 +84,7 @@ export function RulesDialog(props: {
         const w = writable(r.types);
         setTypes(w);
         setRules((was) => (was.pidType === "" && w[0] ? { ...was, pidType: w[0].name } : was));
+        setHolds((was) => (was && was.holds === "type" && was.type === "" && w[0] ? { ...was, type: w[0].name } : was));
       })
       .catch(() => undefined);
     return () => {
@@ -93,10 +99,11 @@ export function RulesDialog(props: {
   const vaultable = was.originals === "vault" || acts.vault;
   const purgeable = was.originals === "purge" || (acts.purge && purgeRefusal(look) === null);
   const pidLocked = written > 0;
-  const ready = !saving && !(rules.pid === "type" && rules.pidType.trim() === "");
+  const ready = !saving && !(rules.pid === "type" && rules.pidType.trim() === "") && !(holds?.holds === "type" && holds.type.trim() === "");
+  const wasHolds = holdsOf(d);
 
   const save = () => {
-    const patch = rulesPatch(d, rules);
+    const patch = { ...rulesPatch(d, rules), ...(holds ? holdsPatch(d, holds) : {}) };
     const then = () => {
       if (choosing && rules.tags === "choose") return onTags();
       if (rules.originals === "vault" && was.originals !== "vault") return onVault();
@@ -133,6 +140,39 @@ export function RulesDialog(props: {
   return (
     <Dialog title={`Rules for ${d.name}`} icon="shield" onClose={onClose} foot={foot}>
       <div className="ps-rules">
+        {holds && (
+          <div className="ps-rule">
+            <span className="ps-rule-label">PatientID holds</span>
+            <span className="ps-rule-choice">
+              <Options
+                label="PatientID holds"
+                value={holds.holds}
+                options={[
+                  ["same", "The same everywhere (personnummer, national ID)", pidLocked && wasHolds?.holds !== "same"],
+                  ["type", "A hospital or study ID", pidLocked && wasHolds?.holds !== "type"],
+                ]}
+                onPick={(h) => setHolds((was) => ({ holds: h, type: h === "type" ? was?.type || types[0]?.name || "" : "" }))}
+              />
+              {holds.holds === "type" && (
+                <label className="ps-which">
+                  which
+                  {types.length > 0 ? (
+                    <select value={holds.type} disabled={pidLocked} onChange={(e) => setHolds({ holds: "type", type: e.target.value })}>
+                      {types.map((t) => (
+                        <option key={t.name} value={t.name} title={t.description ?? undefined}>
+                          {typeLabel(t)}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input value={holds.type} placeholder="study-id" spellCheck={false} disabled={pidLocked} onChange={(e) => setHolds({ holds: "type", type: e.target.value })} />
+                  )}
+                </label>
+              )}
+            </span>
+            <Hint text={pidLocked ? `${HELP.holds} ${HELP.written}` : HELP.holds} />
+          </div>
+        )}
         <div className="ps-rule">
           <span className="ps-rule-label">PatientID gets</span>
           <span className="ps-rule-choice">

@@ -378,6 +378,35 @@ export function rulesPatch(d: Pick<Dataset, "patient_id" | "unmapped" | "tags" |
   return patch;
 }
 
+/** The kind of identifying ID the originals' PatientID holds: one the same everywhere, or a hospital or study ID of a type. */
+export interface Holds {
+  holds: "same" | "type";
+  /** The hospital or study ID's type; "" for one the same everywhere. */
+  type: string;
+}
+
+/** What an identified dataset's rule says its PatientID holds; null where it names no kind (2026-10-10). */
+export function holdsOf(d: Pick<Dataset, "identity">): Holds | null {
+  const t = d.identity?.id_type;
+  if (!t) return null;
+  return t === SAME_EVERYWHERE ? { holds: "same", type: "" } : { holds: "type", type: t };
+}
+
+/**
+ * What Save sends when the kind of ID changed (2026-10-10, found trying the
+ * desk: a dataset added with the wrong kind had no way back but removing
+ * it): the identity rule with the new type, where it reads the ID kept, and
+ * nothing when nothing changed or no type is named. The engine takes it only
+ * before anything is pseudonymised, as the dialog does.
+ */
+export function holdsPatch(d: Pick<Dataset, "identity">, h: Holds): DatasetPatch {
+  const was = holdsOf(d);
+  const type = h.holds === "same" ? SAME_EVERYWHERE : h.type.trim();
+  if (!was || !d.identity || type === "" || type === d.identity.id_type) return {};
+  const { code: _taken, ...kept } = d.identity;
+  return { identity: { ...kept, id_type: type } };
+}
+
 /** The rules as one line beside Change: "Standard rules", or what differs, briefly. */
 export function rulesLine(d: Pick<Dataset, "patient_id" | "unmapped" | "tags" | "originals_kept">): string {
   const r = rulesOf(d);
