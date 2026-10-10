@@ -428,7 +428,7 @@ describe("the pseudonymise step, in the dataset", () => {
     await settle(4);
     const dialog = host.querySelector("dialog")!;
     expect(dialog.querySelector("h2")?.textContent).toBe("Rules for study-identified");
-    expect([...dialog.querySelectorAll(".ps-rule-label")].map((l) => l.textContent)).toEqual(["PatientID holds", "PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]);
+    expect([...dialog.querySelectorAll(".ps-rule-label")].map((l) => l.textContent)).toEqual(["PatientID holds", "The pseudonymised copy's PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]);
     expect(dialog.textContent).not.toContain("Feeds a cohort");
     expect(dialog.textContent).toContain("Standard, 96 removed");
     act(() => button(dialog, "Purged")!.click());

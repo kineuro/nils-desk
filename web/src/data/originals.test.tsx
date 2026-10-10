@@ -209,7 +209,7 @@ describe("the rules", () => {
     const html = rules();
     expect(html).toContain("Rules for incoming</h2>");
     // what the originals' PatientID holds is asked too, since the fixture's rule names it (2026-10-10)
-    for (const label of ["PatientID holds", "PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]) expect(html).toContain(`>${label}</span>`);
+    for (const label of ["PatientID holds", "The pseudonymised copy's PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]) expect(html.replaceAll("&#x27;", "'")).toContain(`>${label}</span>`);
     expect(html.match(/class="hint"/g)?.length).toBe(5);
     expect(html).not.toContain("Feeds a cohort");
     expect(html).not.toContain("Dates");

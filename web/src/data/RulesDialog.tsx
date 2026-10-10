@@ -18,10 +18,10 @@ import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { linkage, type LinkageType } from "./datasets";
-import { writable } from "./FinishDataset";
+import { COPY_GETS, COPY_ID_WARNING, copyTypes, writable } from "./FinishDataset";
 import { plainError, type Plain } from "./plain";
 import { tagCounts, NO_TAGS, type TagPolicy } from "./policy";
-import { datasets as placeDoor, purgeRefusal, typeLabel, type Dataset, type OriginalsActs, type OriginalsLook } from "./pseudonyms";
+import { datasets as placeDoor, purgeRefusal, SAME_EVERYWHERE, typeLabel, type Dataset, type OriginalsActs, type OriginalsLook } from "./pseudonyms";
 import { holdsOf, holdsPatch, rulesOf, rulesPatch, STANDARD, type Holds, type Rules } from "./pseudoStep";
 
 /** What each choice is, behind its "?". */
@@ -67,7 +67,8 @@ export function RulesDialog(props: {
   const [rules, setRules] = useState<Rules>(() => rulesOf(d));
   /** What the originals' PatientID holds, where the dataset's rule names it (2026-10-10). */
   const [holds, setHolds] = useState<Holds | null>(() => holdsOf(d));
-  const [types, setTypes] = useState<LinkageType[]>([]);
+  /** Every ID type the registry has; what each question offers is drawn from it. */
+  const [allTypes, setAllTypes] = useState<LinkageType[]>([]);
   const [saving, setSaving] = useState(false);
   const [refused, setRefused] = useState<Plain | null>(null);
   /** Choose was pressed: the chooser opens once the rest is saved. */
@@ -81,10 +82,11 @@ export function RulesDialog(props: {
       .types()
       .then((r) => {
         if (!alive) return;
-        const w = writable(r.types);
-        setTypes(w);
+        const w = copyTypes(r.types, d.identity);
+        setAllTypes(r.types);
         setRules((was) => (was.pidType === "" && w[0] ? { ...was, pidType: w[0].name } : was));
-        setHolds((was) => (was && was.holds === "type" && was.type === "" && w[0] ? { ...was, type: w[0].name } : was));
+        const h = writable(r.types)[0];
+        setHolds((was) => (was && was.holds === "type" && was.type === "" && h ? { ...was, type: h.name } : was));
       })
       .catch(() => undefined);
     return () => {
@@ -101,6 +103,10 @@ export function RulesDialog(props: {
   const pidLocked = written > 0;
   const ready = !saving && !(rules.pid === "type" && rules.pidType.trim() === "") && !(holds?.holds === "type" && holds.type.trim() === "");
   const wasHolds = holdsOf(d);
+  /** What the originals may hold: a hospital or study ID of any type but the subject code's. */
+  const holdsTypes = writable(allTypes);
+  /** What the copy may get, given what the originals hold as now chosen. */
+  const types = copyTypes(allTypes, holds?.holds === "same" ? { id_type: SAME_EVERYWHERE } : holds ? { id_type: holds.type } : d.identity);
 
   const save = () => {
     const patch = { ...rulesPatch(d, rules), ...(holds ? holdsPatch(d, holds) : {}) };
@@ -151,14 +157,14 @@ export function RulesDialog(props: {
                   ["same", "The same everywhere (personnummer, national ID)", pidLocked && wasHolds?.holds !== "same"],
                   ["type", "A hospital or study ID", pidLocked && wasHolds?.holds !== "type"],
                 ]}
-                onPick={(h) => setHolds((was) => ({ holds: h, type: h === "type" ? was?.type || types[0]?.name || "" : "" }))}
+                onPick={(h) => setHolds((was) => ({ holds: h, type: h === "type" ? was?.type || holdsTypes[0]?.name || "" : "" }))}
               />
               {holds.holds === "type" && (
                 <label className="ps-which">
                   which
-                  {types.length > 0 ? (
+                  {holdsTypes.length > 0 ? (
                     <select value={holds.type} disabled={pidLocked} onChange={(e) => setHolds({ holds: "type", type: e.target.value })}>
-                      {types.map((t) => (
+                      {holdsTypes.map((t) => (
                         <option key={t.name} value={t.name} title={t.description ?? undefined}>
                           {typeLabel(t)}
                         </option>
@@ -174,10 +180,10 @@ export function RulesDialog(props: {
           </div>
         )}
         <div className="ps-rule">
-          <span className="ps-rule-label">PatientID gets</span>
+          <span className="ps-rule-label">{COPY_GETS}</span>
           <span className="ps-rule-choice">
             <Options
-              label="PatientID gets"
+              label={COPY_GETS}
               value={rules.pid}
               options={[
                 ["code", "The subject code", pidLocked && was.pid !== "code"],
@@ -204,6 +210,7 @@ export function RulesDialog(props: {
           </span>
           <Hint text={pidLocked ? `${HELP.pid} ${HELP.written}` : HELP.pid} />
         </div>
+        {rules.pid === "type" && was.pid !== "type" && <p className="warn ps-warn">{COPY_ID_WARNING}</p>}
         <div className="ps-rule">
           <span className="ps-rule-label">An ID with no subject code</span>
           <span className="ps-rule-choice">
