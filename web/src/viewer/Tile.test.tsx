@@ -6,6 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { DoorError } from "../ask/client";
+import { Preparing } from "./building";
 import type { Manifest } from "./doors";
 import { Tile } from "./Tile";
 import { forgetManifests, MANIFESTS_AT_ONCE, planeAt, planesAlong, step, tileAbsence, tileLevel, tileManifest, TileSync } from "./tiles";
@@ -36,6 +37,27 @@ describe("the tile", () => {
     await expect(tileManifest(7, refuse)).rejects.toBeInstanceOf(DoorError);
     await expect(tileManifest(7, refuse)).rejects.toBeInstanceOf(DoorError);
     expect(reads).toBe(2);
+  });
+  it("lets go of its slot while a stack's picture is built, so a grid of building stacks holds none of the rest", async () => {
+    forgetManifests();
+    const asks = new Map<number, number>();
+    // stacks 1 to 6 are being built, 7 is there
+    const read = (s: number) => () => {
+      asks.set(s, (asks.get(s) ?? 0) + 1);
+      return s === 7 ? Promise.resolve(m([24, 128, 128])) : Promise.reject(new Preparing({ stack: s, job: 1, state: "running", fraction: null, retryAfter: 0.2 }));
+    };
+    const gone = new AbortController();
+    const building = [1, 2, 3, 4, 5, 6].map((s) => tileManifest(s, read(s), gone.signal).catch((e: unknown) => e));
+    const t0 = Date.now();
+    await expect(tileManifest(7, read(7))).resolves.toMatchObject({ shape: [24, 128, 128] });
+    expect(Date.now() - t0).toBeLessThan(150);
+    // every tile that wanted the building stacks left: their asking stops
+    gone.abort();
+    expect((await building[0]) as DOMException).toMatchObject({ name: "AbortError" });
+    await new Promise((done) => setTimeout(done, 400));
+    const after = asks.get(1);
+    await new Promise((done) => setTimeout(done, 600));
+    expect(asks.get(1)).toBe(after);
   });
   it("names a plane from a position and moves one plane a step, inside the stack", () => {
     expect(planeAt(0.5, 24)).toBe(12);

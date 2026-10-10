@@ -66,6 +66,7 @@ import {
   toggled,
   VISIT_FILTERS,
   viewerDoors,
+  visitAll,
   foundIds,
   viewHref,
   visitsKey,
@@ -877,7 +878,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
     }
     let live = true;
     setLoad({ key, page: was, failed: null, since: Date.now() });
-    viewerDoors.visit(scope, visit).then(
+    visitAll(scope, visit).then(
       (page) => {
         if (!live) return;
         hold(key, page);
@@ -905,7 +906,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
       const ms = pauses.shift();
       if (ms === undefined) return;
       timer = setTimeout(() => {
-        viewerDoors.visit(scope, visit).then(
+        visitAll(scope, visit).then(
           (fresh) => {
             const was = latest.current;
             if (!alive || !was) return;
@@ -1089,6 +1090,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
       {!page && !load.failed && <Wait phase="reading the scans" since={load.since} size="panel" />}
       {page?.pictures && !page.pictures.shown && page.pictures.why && <p className="vw-none">No pictures: {page.pictures.why}</p>}
       {page && scans.length === 0 && <p className="vw-none">No scans.</p>}
+      {page && page.next !== null && <p className="vw-none">The first {scans.length.toLocaleString("en-US")} of {page.total.toLocaleString("en-US")} scans of this visit.</p>}
       <div ref={box} className="vw-folders">
         {folders.map((f) => {
           const isOpen = !folded.has(f.key);

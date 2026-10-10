@@ -138,33 +138,50 @@ export function retryPause(attempt: number, retryAfterSeconds: number): number {
   return Math.round(Math.max(100, Math.min(retryAfterSeconds * 1000, quick)));
 }
 
+/** How long a picture being built is waited for before it is given up on as one that failed. */
+export const BUILD_LIMIT_MS = 2 * 60 * 60_000;
+
+/**
+ * One ask of a picture door, its answer kept as the stack's state: what it
+ * answered, or the build to wait for. A `NotBuilt` is kept and thrown, and
+ * any other failure thrown as it is.
+ */
+export async function askOnce<T>(stack: number, once: () => Promise<T>): Promise<{ got: T } | { building: Building }> {
+  try {
+    const got = await once();
+    put(stack, null);
+    return { got };
+  } catch (e) {
+    if (e instanceof NotBuilt) {
+      put(stack, { kind: "failed", reason: e.reason });
+      throw e;
+    }
+    if (!(e instanceof Preparing)) {
+      put(stack, null);
+      throw e;
+    }
+    put(stack, { kind: "building", building: e.building });
+    return { building: e.building };
+  }
+}
+
+/** A build waited for past its limit, kept as one that failed. */
+export function givenUp(stack: number, job: number | null): NotBuilt {
+  put(stack, { kind: "failed", reason: "build_failed" });
+  return new NotBuilt(stack, "build_failed", job);
+}
+
 /**
  * Ask until the picture is there: each `Preparing` is kept as the stack's
  * state and asked again after its pause; a `NotBuilt` is kept and thrown.
  * A build that runs past `limitMs` is given up on as one that failed.
  */
-export async function untilBuilt<T>(stack: number, once: () => Promise<T>, wait: (ms: number) => Promise<void> = pause, limitMs = 2 * 60 * 60_000): Promise<T> {
+export async function untilBuilt<T>(stack: number, once: () => Promise<T>, wait: (ms: number) => Promise<void> = pause, limitMs = BUILD_LIMIT_MS): Promise<T> {
   const until = Date.now() + limitMs;
   for (let attempt = 0; ; attempt++) {
-    try {
-      const got = await once();
-      put(stack, null);
-      return got;
-    } catch (e) {
-      if (e instanceof NotBuilt) {
-        put(stack, { kind: "failed", reason: e.reason });
-        throw e;
-      }
-      if (!(e instanceof Preparing)) {
-        put(stack, null);
-        throw e;
-      }
-      put(stack, { kind: "building", building: e.building });
-      if (Date.now() >= until) {
-        put(stack, { kind: "failed", reason: "build_failed" });
-        throw new NotBuilt(stack, "build_failed", e.building.job);
-      }
-      await wait(retryPause(attempt, e.building.retryAfter));
-    }
+    const r = await askOnce(stack, once);
+    if ("got" in r) return r.got;
+    if (Date.now() >= until) throw givenUp(stack, r.building.job);
+    await wait(retryPause(attempt, r.building.retryAfter));
   }
 }

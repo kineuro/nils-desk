@@ -160,6 +160,14 @@ describe("the dataset viewer's grid", () => {
       }
       if (u.pathname === "/api/datasets/ms-a/scans") {
         if (q.get("session") === "34") return json({ total: VISIT_SCANS.length, scans: VISIT_SCANS, next: null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
+        if (q.get("session") === "50") {
+          // a visit of 250 scans, one image a stack: two pages
+          const all = Array.from({ length: 250 }, (_, i) => row(1000 + i, `Sag_CSF_flow_frame_${i}`, { session: { id: 50, label: "20200101" }, images: 1 }));
+          const after = Number(q.get("after") ?? 0);
+          const from = after === 0 ? 0 : all.findIndex((r) => r.stack === after) + 1;
+          const part = all.slice(from, from + 200);
+          return json({ total: 250, scans: part, next: from + 200 < 250 ? part[part.length - 1].stack : null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
+        }
         if (q.get("session") === "40") return json({ total: 1, scans: [SUBJECT2_SCAN], next: null });
         if (q.get("studies") === "7,8") return json({ total: 1, scans: [row(21, "Ax_T2w_2D_TSE", { session: null, study: 7 })], next: null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
         return json({ total: VISIT_SCANS.length + 1, scans: [...VISIT_SCANS, SUBJECT2_SCAN], next: null });
@@ -353,6 +361,13 @@ describe("the dataset viewer's grid", () => {
     // the names by BIDS where a scan has one
     act(() => [...el.querySelectorAll<HTMLButtonElement>(".vw-switch.names button")].find((b) => b.textContent === "BIDS")!.click());
     expect(text(".vw-scan .vw-scan-name").slice(0, 3)).toEqual(["acq-11_T1w", "acq-12_T1w", "Ax_T2w_2D_MDME_Synthetic"]);
+  });
+
+  it("reads every page of a visit, not its first two hundred scans alone", async () => {
+    await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s50");
+    expect(asked("/api/datasets/ms-a/scans")).toEqual(["/api/datasets/ms-a/scans?session=50&limit=200&pictures=1", "/api/datasets/ms-a/scans?session=50&limit=200&pictures=1&after=1199"]);
+    expect(el.querySelectorAll(".vw-card.vw-scan").length).toBe(250);
+    expect(el.textContent).not.toContain("The first");
   });
 
   it("opens the scan at the cursor in the browser on Enter, and moves between visits with Alt and the arrows", async () => {

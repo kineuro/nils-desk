@@ -146,15 +146,19 @@ export function unpackSlab(buf: ArrayBuffer): Uint8Array[][] {
   return unpackTiles(buf).map((plane) => unpackTiles(buf, plane.byteOffset, plane.byteOffset + plane.byteLength));
 }
 
+/** One ask of the manifest: a picture being built throws `Preparing` (202), one that could not be built `NotBuilt` (422). */
+async function manifestOnce(stack: number): Promise<Manifest> {
+  const r = await fetch(`/api/instances/${stack}/manifest`, { headers: H });
+  await pictureAnswer(r, stack);
+  if (!r.ok) await fail(r);
+  return (await r.json()) as Manifest;
+}
+
 export const doors = {
   /** The manifest, asked again while the engine builds the picture (202), until it is there or the build failed (422). */
-  manifest: (stack: number): Promise<Manifest> =>
-    untilBuilt(stack, async () => {
-      const r = await fetch(`/api/instances/${stack}/manifest`, { headers: H });
-      await pictureAnswer(r, stack);
-      if (!r.ok) await fail(r);
-      return (await r.json()) as Manifest;
-    }),
+  manifest: (stack: number): Promise<Manifest> => untilBuilt(stack, () => manifestOnce(stack)),
+  /** The manifest asked once; the tiles' own queue waits for a build between its asks (tiles.ts). */
+  manifestOnce,
   /** One plane's tiles in one round trip; the codec comes back in a header. */
   plane: async (stack: number, level: number, z: number, signal?: AbortSignal): Promise<{ tiles: Uint8Array[]; codec: string; bytes: number }> => {
     const r = await fetch(`/api/instances/${stack}/tiles/${level}/${z}`, { headers: H, signal });

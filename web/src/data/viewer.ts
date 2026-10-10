@@ -339,11 +339,12 @@ export const viewerDoors = {
     return door<Json>("GET", `${base(scope)}/subjects/${subject}/visits?${q}`).then(visitsOf);
   },
   /** One visit's scans with their pictures, the most a page holds. */
-  visit: (scope: Scope, key: string, pictures = true): Promise<ScanPage> => {
+  visit: (scope: Scope, key: string, pictures = true, after: number | null = null): Promise<ScanPage> => {
     const f = visitFilter(key);
     if (!f) return Promise.reject(new Error("no such visit"));
     const q = new URLSearchParams({ ...f, limit: "200" });
     if (pictures) q.set("pictures", "1");
+    if (after !== null) q.set("after", String(after));
     return door<ScansAnswer>("GET", `${base(scope)}/scans?${q}`).then((a) => ({
       total: a.total,
       scans: scansOf(a.scans ?? []),
@@ -363,6 +364,31 @@ export const viewerDoors = {
     }));
   },
 };
+
+/** The most scans a visit is read with; past it the page says how many it shows of how many. */
+export const VISIT_MOST = 2000;
+
+/**
+ * One visit's scans, every page of them up to VISIT_MOST: a visit whose
+ * series the scanner wrote one image a stack holds hundreds (review of
+ * 2026-10-10: a visit was read as its first page of 200 and shown as if that
+ * were all). `next` stays set where the page stopped short of the visit.
+ */
+export async function visitAll(scope: Scope, key: string, pictures = true): Promise<ScanPage> {
+  let page = await viewerDoors.visit(scope, key, pictures);
+  while (page.next !== null && page.scans.length < VISIT_MOST) {
+    const more = await viewerDoors.visit(scope, key, pictures, page.next);
+    if (more.scans.length === 0) break;
+    const sum = (k: "missing" | "partial") => (page.pictures?.[k] ?? 0) + (more.pictures?.[k] ?? 0);
+    page = {
+      total: page.total,
+      scans: [...page.scans, ...more.scans],
+      next: more.next,
+      pictures: page.pictures ? { ...page.pictures, missing: sum("missing"), partial: sum("partial") } : more.pictures,
+    };
+  }
+  return page;
+}
 
 /** The most subjects a search is kept as; a search that finds more is narrowed first. */
 export const FOUND_MOST = 5000;

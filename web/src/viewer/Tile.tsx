@@ -60,13 +60,12 @@ export function Tile({ stack, axis = "z", sync = null, size = 128, caption, onOp
 
   useEffect(() => {
     if (!seen) return;
-    let alive = true;
-    tileManifest(stack)
-      .then((m) => alive && setManifest(m))
-      .catch((e: unknown) => alive && setAbsent(tileAbsence(e)));
-    return () => {
-      alive = false;
-    };
+    // a tile that leaves the page lets go of its stack's manifest, so a picture still being built is not asked for on its behalf
+    const gone = new AbortController();
+    tileManifest(stack, undefined, gone.signal)
+      .then((m) => !gone.signal.aborted && setManifest(m))
+      .catch((e: unknown) => !gone.signal.aborted && setAbsent(tileAbsence(e)));
+    return () => gone.abort();
   }, [seen, stack]);
 
   const dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
