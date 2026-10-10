@@ -127,7 +127,7 @@ function summaryOf(d: Dataset, pseudonymised: Partial<SummaryStep>): DatasetSumm
   };
 }
 
-type HeldRowState = { state: string; code: string | null; also_in: string[] };
+type HeldRowState = { state: string; code: string | null; also_in: string[]; id_type?: string; shape?: string };
 
 /** The engine's held IDs: one row each, by shape and never by value. */
 function heldIds(states: Record<number, HeldRowState> = {}, subjects = { coded: 0, generated: 0 }) {
@@ -398,6 +398,15 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(button(after, "Generate a subject code")).toBeNull();
   });
 
+  it("says where an ID's shape is the study's UID, not an ID of PatientID's form", async () => {
+    // 2026-10-10: study UID shapes stood under "ID, as its shape" unexplained
+    await page(dataset(), {}, undefined, { held: heldIds({ 101: { state: "held", code: null, also_in: [], id_type: "study-instance-uid", shape: "9.99.999.9.9" } }) });
+    act(() => button(host, "Give the 8 IDs a subject code")!.click());
+    const rows = [...host.querySelectorAll(".ps-table .ps-row:not(.head)")];
+    expect(rows[1].querySelector(".ps-shape")?.textContent).toBe("9.99.999.9.9 no ID in PatientID's form: by study UID");
+    expect(rows[0].querySelector(".ps-shape-note")).toBeNull();
+  });
+
   it("shows the IDs once, recorded, in their rows, and lets them go", async () => {
     const e = await page(dataset(), {}, (c) =>
       c.method === "POST" && c.url === "/api/linkage/held/reveal" ? { status: 200, body: [{ shape: "AAA999999", id_type: "study-id", files: 3115, identifiers: [{ id: 100, value: "ABC123456", files: 3115 }] }] } : undefined,
@@ -413,13 +422,13 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(text()).not.toContain("ABC123456");
   });
 
-  it("opens the rules from Change: four choices, Save sends what changed, a purge warns", async () => {
+  it("opens the rules from Change: its choices, Save sends what changed, a purge warns", async () => {
     const e = await page(dataset(), {}, (c) => (c.method === "PUT" && c.url === "/api/places/9" ? { status: 200, body: {} } : undefined));
     act(() => button(host.querySelector(".ps-step")!, "Change")!.click());
     await settle(4);
     const dialog = host.querySelector("dialog")!;
     expect(dialog.querySelector("h2")?.textContent).toBe("Rules for study-identified");
-    expect([...dialog.querySelectorAll(".ps-rule-label")].map((l) => l.textContent)).toEqual(["PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]);
+    expect([...dialog.querySelectorAll(".ps-rule-label")].map((l) => l.textContent)).toEqual(["PatientID holds", "The pseudonymised copy's PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]);
     expect(dialog.textContent).not.toContain("Feeds a cohort");
     expect(dialog.textContent).toContain("Standard, 96 removed");
     act(() => button(dialog, "Purged")!.click());
@@ -433,6 +442,20 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(e.of("PUT", "/api/places/9")[0].body).toEqual({ unmapped: "code" });
   });
 
+  it("changes what the originals' PatientID holds in the rules, before anything is pseudonymised", async () => {
+    // 2026-10-10: a dataset added with the wrong kind of ID had no way back but removing it
+    const e = await page(dataset(), {}, (c) => (c.method === "PUT" && c.url === "/api/places/9" ? { status: 200, body: {} } : undefined));
+    act(() => button(host.querySelector(".ps-step")!, "Change")!.click());
+    await settle(4);
+    const dialog = host.querySelector("dialog")!;
+    act(() => button(dialog, "The same everywhere (personnummer, national ID)")!.click());
+    await act(async () => {
+      button(dialog, "Save")!.click();
+    });
+    await settle(6);
+    expect(e.of("PUT", "/api/places/9")[0].body).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+  });
+
   it("says where its run stopped, in the job's own words, and tries it again: a failure never looks like nothing happened", async () => {
     // 2026-10-10: a pseudonymise run that failed at once left the step as it was, its button the same
     const words = "no id type named study-id; nils linkage id-type list shows them, id-type add creates one";
@@ -444,6 +467,8 @@ describe("the pseudonymise step, in the dataset", () => {
     await settle(6);
     const panel = host.querySelector(".ps-step")!;
     expect(panel.querySelector(".ps-stopped")?.textContent).toBe(`Stopped: ${words} Change what it names, then try again.`);
+    // inside the panel, under its boxes, never at its edge (2026-10-10)
+    expect(panel.querySelector(".ps-pad > .ps-stopped")).not.toBeNull();
     // the steps line says it stopped
     const rail = host.querySelector(".dp-steps")!;
     expect([...rail.querySelectorAll(".dp-step")].find((li) => li.textContent?.startsWith("Pseudonymised"))?.textContent).toContain("stopped");

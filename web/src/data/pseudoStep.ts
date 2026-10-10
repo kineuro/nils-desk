@@ -23,6 +23,14 @@ const ids = (k: number) => `${n(k)} ${k === 1 ? "ID" : "IDs"}`;
 /** How a held ID stands: no code yet, a code a map gave, a code to be generated at the next run, or a subject waiting for a value of the type PatientID gets. */
 export type HeldState = "held" | "mapped" | "generated" | "waits";
 
+/** The id type a held ID is filed under when the file's PatientID had no ID of the rule's form, and the study's UID stood in. */
+export const FALLBACK_TYPE = "study-instance-uid";
+
+/** What a held ID's shape is, said where it is not an ID of PatientID's form (2026-10-10: study UID shapes stood under "ID, as its shape" unexplained). */
+export function shapeNote(r: Pick<HeldId, "id_type">): string | null {
+  return r.id_type === FALLBACK_TYPE ? "no ID in PatientID's form: by study UID" : null;
+}
+
 /** One held ID, by the row that stands for it and its shape: never its value. */
 export interface HeldId {
   id: number;
@@ -376,6 +384,35 @@ export function rulesPatch(d: Pick<Dataset, "patient_id" | "unmapped" | "tags" |
   if (r.unknown !== was.unknown) patch.unmapped = r.unknown === "generate" ? "code" : "hold";
   if (r.tags === "standard" && was.tags === "choose") patch.tags = { ...NO_TAGS };
   return patch;
+}
+
+/** The kind of identifying ID the originals' PatientID holds: one the same everywhere, or a hospital or study ID of a type. */
+export interface Holds {
+  holds: "same" | "type";
+  /** The hospital or study ID's type; "" for one the same everywhere. */
+  type: string;
+}
+
+/** What an identified dataset's rule says its PatientID holds; null where it names no kind (2026-10-10). */
+export function holdsOf(d: Pick<Dataset, "identity">): Holds | null {
+  const t = d.identity?.id_type;
+  if (!t) return null;
+  return t === SAME_EVERYWHERE ? { holds: "same", type: "" } : { holds: "type", type: t };
+}
+
+/**
+ * What Save sends when the kind of ID changed (2026-10-10, found trying the
+ * desk: a dataset added with the wrong kind had no way back but removing
+ * it): the identity rule with the new type, where it reads the ID kept, and
+ * nothing when nothing changed or no type is named. The engine takes it only
+ * before anything is pseudonymised, as the dialog does.
+ */
+export function holdsPatch(d: Pick<Dataset, "identity">, h: Holds): DatasetPatch {
+  const was = holdsOf(d);
+  const type = h.holds === "same" ? SAME_EVERYWHERE : h.type.trim();
+  if (!was || !d.identity || type === "" || type === d.identity.id_type) return {};
+  const { code: _taken, ...kept } = d.identity;
+  return { identity: { ...kept, id_type: type } };
 }
 
 /** The rules as one line beside Change: "Standard rules", or what differs, briefly. */

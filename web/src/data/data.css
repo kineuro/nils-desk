@@ -238,6 +238,10 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 
 .ps-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.625rem; padding: 0 1rem 1rem; }
 .ps-pad { padding: 0 1rem 0.75rem; }
+/* a run that stopped, inside the panel under its boxes: the caution colours by border, no mark of its own (2026-10-10) */
+.ps-stopped { margin: 0; padding: 0.5rem 0.75rem; border: 1px solid var(--n-caution-line); border-left: 3px solid var(--n-caution-fg); border-radius: var(--n-radius); background: var(--n-caution-bg); color: var(--n-caution-fg); font-size: var(--n-text-size-small); overflow-wrap: anywhere; }
+.ps-stopped .meta { color: var(--n-text-dim); }
+.dp-stopped { margin-top: 0.625rem; }
 
 /* giving the IDs a code: the map dropped or pasted, the IDs one row each, what still waits */
 .ps-codes { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; padding: 0 1rem 1rem; }

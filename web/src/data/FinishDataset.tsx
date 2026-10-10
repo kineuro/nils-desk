@@ -37,6 +37,18 @@ export function writable(types: LinkageType[]): LinkageType[] {
   return types.filter((t) => t.name !== SAME_EVERYWHERE && t.name !== "subject-code");
 }
 
+/** What the pseudonymised copy's PatientID is asked as, apart from what the originals hold (2026-10-10: the two read alike). */
+export const COPY_GETS = "The pseudonymised copy's PatientID gets";
+
+/** The plain warning behind giving the copy an ID instead of the subject code. */
+export const COPY_ID_WARNING = "The copy then carries this ID, which can lead to the person. Choose it only where a study needs it; the subject code is the safe choice.";
+
+/** The ID types the copy may get: PatientID as written is the identifying ID itself where the originals hold one the same everywhere, which the engine refuses. */
+export function copyTypes(types: LinkageType[], identity: { id_type?: string } | null | undefined): LinkageType[] {
+  const same = identity?.id_type === SAME_EVERYWHERE;
+  return writable(types).filter((t) => !(same && t.name === "patient-id"));
+}
+
 /**
  * The entries by name, the first hundred, and how many more, at the
  * sensitive detail level only: a raw export often names its folders after
@@ -191,6 +203,8 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
 export function SetIdsDialog(props: { caps: Capabilities; place: Finishing; layout: Layout | null; onClose: () => void; onDone: (words: string) => void }) {
   const { caps, place, layout, onClose, onDone } = props;
   const d = place.dataset ?? {};
+  /** What the originals' PatientID holds, where the place's dataset names it: an older desk type leaves it out. */
+  const identity = (place.dataset as { identity?: { id_type?: string } | null } | undefined)?.identity ?? null;
   const given = typeof d.patient_id === "string" ? d.patient_id : null;
   const [pidChoice, setPidChoice] = useState<"subject-code" | "id-type">(given?.startsWith("id-type:") ? "id-type" : "subject-code");
   const [pidType, setPidType] = useState(given?.startsWith("id-type:") ? given.slice("id-type:".length) : "");
@@ -210,7 +224,7 @@ export function SetIdsDialog(props: { caps: Capabilities; place: Finishing; layo
       .then((r) => {
         if (!alive) return;
         setTypes(r.types);
-        setPidType((t) => t || writable(r.types)[0]?.name || "");
+        setPidType((t) => t || (anonymised ? writable(r.types) : copyTypes(r.types, identity))[0]?.name || "");
       })
       .catch(() => alive && setTypes([]));
     return () => {
@@ -229,7 +243,7 @@ export function SetIdsDialog(props: { caps: Capabilities; place: Finishing; layo
   };
 
   const ready = !working && patientId !== null && (!anonymised || subjects !== null) && (folder !== "id-type" || pidChoice === "id-type");
-  const writableTypes = types ? writable(types) : null;
+  const writableTypes = types ? (anonymised ? writable(types) : copyTypes(types, identity)) : null;
   const foot = (
     <div className="row actions">
       <button type="button" className="button secondary" onClick={onClose}>
@@ -245,13 +259,14 @@ export function SetIdsDialog(props: { caps: Capabilities; place: Finishing; layo
     <Dialog title={`Set the IDs: ${place.name}`} icon="folder" onClose={onClose} foot={foot}>
       <div className="field">
         <span className="label">
-          PatientID holds
-          <Hint text={anonymised ? "What the files' PatientID is: the subject code, or a hospital or study ID." : "What NILS writes into PatientID when it pseudonymises."} />
+          {anonymised ? "PatientID holds" : COPY_GETS}
+          <Hint text={anonymised ? "What the files' PatientID is: the subject code, or a hospital or study ID." : "What NILS writes into PatientID in the pseudonymised copy. What the originals hold is the dataset's identifying ID, asked when it was added."} />
         </span>
-        <div className="choices" role="radiogroup" aria-label="PatientID holds">
+        <div className="choices" role="radiogroup" aria-label={anonymised ? "PatientID holds" : COPY_GETS}>
           <Choice name="pid" checked={pidChoice === "subject-code"} disabled={working} onPick={() => setPidChoice("subject-code")} label="Subject code" />
           <Choice name="pid" checked={pidChoice === "id-type"} disabled={working} onPick={() => setPidChoice("id-type")} label="A hospital or study ID" />
         </div>
+        {!anonymised && pidChoice === "id-type" && <p className="warn">{COPY_ID_WARNING}</p>}
         {pidChoice === "id-type" && (
           <div className="field-row">
             {writableTypes && writableTypes.length > 0 ? (

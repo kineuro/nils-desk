@@ -317,7 +317,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
           <StepRail steps={stepsOfSources(d)} now={now} />
         )}
         {stopped && !(open && view && view.phase !== "done") && (
-          <p className="warn dp-stopped" role="status">
+          <p className="ps-stopped dp-stopped" role="status">
             Stopped: {stopped.words} <span className="meta">{STOPPED_NEXT}</span>
           </p>
         )}

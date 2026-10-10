@@ -205,11 +205,12 @@ describe("the rules", () => {
       <RulesDialog caps={caps()} dataset={incoming} policy={null} look={look} acts={acts} written={0} onClose={none} onSaved={none} onTags={none} onVault={none} onPurge={none} {...over} />,
     );
 
-  it("asks four things, each with a question mark, and nothing a release or the dataset's settings decide", () => {
+  it("asks five things, each with a question mark, and nothing a release or the dataset's settings decide", () => {
     const html = rules();
     expect(html).toContain("Rules for incoming</h2>");
-    for (const label of ["PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]) expect(html).toContain(`>${label}</span>`);
-    expect(html.match(/class="hint"/g)?.length).toBe(4);
+    // what the originals' PatientID holds is asked too, since the fixture's rule names it (2026-10-10)
+    for (const label of ["PatientID holds", "The pseudonymised copy's PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]) expect(html.replaceAll("&#x27;", "'")).toContain(`>${label}</span>`);
+    expect(html.match(/class="hint"/g)?.length).toBe(5);
     expect(html).not.toContain("Feeds a cohort");
     expect(html).not.toContain("Dates");
     expect(html).not.toContain("UIDs");
@@ -238,6 +239,17 @@ describe("the rules", () => {
     expect(waiting).toContain('disabled="">Purged</button>');
     expect(waiting).toContain("4 files are held");
     expect(waiting).not.toContain('disabled="">Vaulted</button>');
+  });
+
+  it("asks what the originals' PatientID holds where the dataset's rule names it, and keeps it once anything is pseudonymised (2026-10-10)", () => {
+    const named = { ...incoming, identity: { id_type: "patient-id", from: [{ field: "PatientID" }] } };
+    const open = rules({ dataset: named });
+    expect(open).toContain(">PatientID holds</span>");
+    expect(open).not.toContain('disabled="">The same everywhere (personnummer, national ID)</button>');
+    const locked = rules({ dataset: named, written: 120 });
+    expect(locked).toContain('disabled="">The same everywhere (personnummer, national ID)</button>');
+    // a dataset whose rule names no kind is not asked
+    expect(rules({ dataset: { ...incoming, identity: null } })).not.toContain(">PatientID holds</span>");
   });
 
   it("keeps what PatientID gets once anything is pseudonymised, and says so behind its question mark", () => {

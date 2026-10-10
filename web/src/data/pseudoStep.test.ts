@@ -29,6 +29,8 @@ import {
   readsPersonnummer,
   revealedOf,
   rulesLine,
+  holdsOf,
+  holdsPatch,
   rulesOf,
   rulesPatch,
   STANDARD,
@@ -318,5 +320,26 @@ describe("what the last run did", () => {
     expect(outcomeWords(pseudonymise, { result: null, progress: { ingested: 6, duplicate: 0, held: 1 } }, 0)).toBe("6 files pseudonymised · 2 files held for a subject code · 1 new subject code · 6 files read · 1 file held at the read");
     expect(outcomeWords(null, null, 5)).toBeNull();
     expect(outcomeWords({ result: null }, { result: null, progress: null }, 0)).toBeNull();
+  });
+});
+
+describe("what the originals' PatientID holds (2026-10-10)", () => {
+  const rule = (id_type: string) => ({ identity: { id_type, from: [{ field: "PatientID" }], fallback: "StudyInstanceUID" } });
+
+  it("reads the kind from the dataset's rule, and none where no rule names one", () => {
+    expect(holdsOf(rule("personnummer"))).toEqual({ holds: "same", type: "" });
+    expect(holdsOf(rule("patient-id"))).toEqual({ holds: "type", type: "patient-id" });
+    expect(holdsOf({ identity: null })).toBeNull();
+    expect(holdsOf({})).toBeNull();
+  });
+
+  it("sends the rule with the new type and where it reads the ID kept, and nothing when nothing changed", () => {
+    expect(holdsPatch(rule("personnummer"), { holds: "type", type: "patient-id" })).toEqual({ identity: { id_type: "patient-id", from: [{ field: "PatientID" }], fallback: "StudyInstanceUID" } });
+    expect(holdsPatch(rule("patient-id"), { holds: "same", type: "" })).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }], fallback: "StudyInstanceUID" } });
+    expect(holdsPatch(rule("patient-id"), { holds: "type", type: "patient-id" })).toEqual({});
+    expect(holdsPatch(rule("patient-id"), { holds: "type", type: " " })).toEqual({});
+    expect(holdsPatch({}, { holds: "same", type: "" })).toEqual({});
+    // a subject code taken as written is no part of a rule for an identifying ID
+    expect(holdsPatch({ identity: { id_type: "study-id", code: "verbatim", from: [{ field: "PatientID" }] } }, { holds: "same", type: "" })).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
   });
 });

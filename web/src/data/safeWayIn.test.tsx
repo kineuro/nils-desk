@@ -448,6 +448,26 @@ describe("Set the IDs", () => {
   });
 });
 
+describe("the pseudonymised copy's PatientID (2026-10-10)", () => {
+  it("is asked apart from what the originals hold, the subject code first, an ID only behind a plain warning and never PatientID as written over an ID the same everywhere", async () => {
+    const types = { types: [{ name: "patient-id", description: "PatientID as written" }, ...TYPES.types] };
+    engine((c) => (c.url === "/api/linkage/types" ? { status: 200, body: types } : undefined));
+    const identified = { kind: "dataset", state: "identified", arrives: "identified", patient_id: "subject-code", identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } };
+    act(() =>
+      root.render(<SetIdsDialog caps={caps7a(["GET /api/linkage/types", "PUT /api/places/{id}"])} place={{ id: 6, name: "study-fresh", path: "/srv/in/study-fresh", dataset: identified as never }} layout={null} onClose={() => undefined} onDone={() => undefined} />),
+    );
+    await settle();
+    expect(host.textContent).toContain("The pseudonymised copy's PatientID gets");
+    expect(host.textContent).not.toContain("PatientID holds");
+    expect(radio(host, "Subject code").checked).toBe(true);
+    expect(host.querySelector(".warn")).toBeNull();
+    act(() => radio(host, "A hospital or study ID").click());
+    expect(host.querySelector(".warn")?.textContent).toContain("The copy then carries this ID");
+    const offered = [...host.querySelector<HTMLSelectElement>('select[aria-label="Which hospital or study ID"]')!.options].map((o) => o.value);
+    expect(offered).toEqual(["study-id"]);
+  });
+});
+
 describe("a restart's ended queue worker", () => {
   it("is never a failure on Data: Now leaves the worker rows out", () => {
     const at = "2026-10-08T10:00:00Z";

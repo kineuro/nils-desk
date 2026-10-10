@@ -59,6 +59,7 @@ import {
   idTypeOf,
   matchedOf,
   outcomeWords,
+  shapeNote,
   primaryOf,
   rulesLine,
   stepView,
@@ -290,9 +291,11 @@ export function PseudonymiseStep(props: StepProps) {
       </div>
       <Boxes v={v} compact={open} />
       {stopped && !pseudo.acting && (
-        <p className="warn ps-stopped" role="status">
-          Stopped: {stopped.words} <span className="meta">{STOPPED_NEXT}</span>
-        </p>
+        <div className="ps-pad">
+          <p className="ps-stopped" role="status">
+            Stopped: {stopped.words} <span className="meta">{STOPPED_NEXT}</span>
+          </p>
+        </div>
       )}
       {pseudo.acting && (
         <div className="ps-pad">
@@ -606,6 +609,7 @@ function IdLine({ row: r, n: i, value, generates, onGenerate }: { row: IdRow; n:
       </span>
       <span role="cell" className="ps-shape">
         {value ?? r.shape ?? "?"}
+        {shapeNote(r) && <span className="meta ps-shape-note"> {shapeNote(r)}</span>}
       </span>
       <span role="cell" className="num">
         {n(r.files)}
