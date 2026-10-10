@@ -313,9 +313,18 @@ describe("what the last run did", () => {
     expect(outcomeWords(pseudonymise, read, 0)).toBe("7,544 files pseudonymised already · nothing new to sort");
   });
 
+  it("tells copies of another dataset's scans from this dataset's own, and says what a scan filed elsewhere holds (the duplicate policy)", () => {
+    const read = { result: null, progress: { ingested: 12, duplicate: 9, known: 7, twice: 2, same_instance: 3, changed: 0, held: 0 } };
+    expect(outcomeWords(null, read, 4)).toBe(
+      "12 new files · 7 files already in another dataset · 2 files twice in this dataset · 3 files held: their scan is filed under another subject or visit · 4 files not images",
+    );
+    // a read that found none of them says none of them
+    expect(outcomeWords(null, { result: null, progress: { ingested: 5, duplicate: 0, known: 0, twice: 0, same_instance: 0 } }, 0)).toBe("5 new files");
+  });
+
   it("says what was read and what was held, and nothing where no job is known", () => {
     const pseudonymise = { result: { files: { written: 6, unchanged: 0, held: 2 }, subjects: { new: 1 } } };
-    expect(outcomeWords(pseudonymise, { result: null, progress: { ingested: 6, duplicate: 0, held: 1 } }, 0)).toBe("6 files pseudonymised · 2 files held for a subject code · 1 new subject code · 6 files read · 1 file held at the read");
+    expect(outcomeWords(pseudonymise, { result: null, progress: { ingested: 6, duplicate: 0, held: 1 } }, 0)).toBe("6 files pseudonymised · 2 files held for a subject code · 1 new subject code · 6 new files · 1 file held at the read");
     expect(outcomeWords(null, null, 5)).toBeNull();
     expect(outcomeWords({ result: null }, { result: null, progress: null }, 0)).toBeNull();
   });

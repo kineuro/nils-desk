@@ -154,7 +154,7 @@ describe("the detail's rail", () => {
     const words = railSteps(s).map((x) => stepWords(x, NOW));
     expect(words.map((w) => w.title)).toEqual(["Found", "Read", "Sorted", "Body part", "Post-contrast", "Main scans", "Pictures", "3D views"]);
     expect(words[0]).toMatchObject({ what: "45,395 files", when: clock(today("13:56"), NOW) });
-    expect(words[1].what).toBe("45,179 read · 216 refused");
+    expect(words[1].what).toBe("45,179 read · 216 not images");
     expect(words[2].what).toBe("1,003 scans · 203 to look at");
     expect(words[2].when).toBe(`${clock(today("14:01"), NOW)} · 3 min`);
     expect(words[3]).toMatchObject({ what: "960 of 1,003 answered · 30 to look at", when: `${clock(today("14:20"), NOW)} · 10 min` });
@@ -178,6 +178,14 @@ describe("the detail's rail", () => {
     expect(pseudo).toMatchObject({ what: "213 to do", when: "" });
     expect(read).toMatchObject({ what: "not yet", when: "" });
     expect(stepWords(step("sorted", { state: "waiting", scans: 0, of: 0 }), NOW).what).toBe("not yet");
+    // the duplicate policy (2026-10-10): the read's own words, the held ones in the line and the rest behind its hint
+    const copies = stepWords(step("read", { files: 7330, new: 0, known: 7328, twice: 2, same_instance: 3, left_out: 1, gone: 4, refused: 216, reads: 2 }), NOW);
+    expect(copies.what).toBe("7,330 read · 3 held · 216 not images");
+    expect(copies.hint).toBe(
+      "7,328 already in another dataset · 2 twice in this dataset · 3 held: the scan is filed under another subject, visit or series · 1 left out of the read by a person · 4 gone from the folder · 216 not images",
+    );
+    // an engine from before gives none of these words, and no hint
+    expect(stepWords(step("read", { files: 10, refused: 0, reads: 1 }), NOW).hint).toBeUndefined();
     expect(stepWords(step("main_scans", { state: "off", picked: 0, borders: 0 }), NOW).what).toBe("off");
     expect(stepWords(step("views", { state: "off", made: 0, of: 3 }), NOW).what).toBe("no place for them");
   });
@@ -269,7 +277,7 @@ describe("an engine without the summary door", () => {
       ["pictures", "waiting"],
       ["views", "waiting"],
     ]);
-    expect(steps.map((x) => stepWords(x, NOW).what).slice(0, 3)).toEqual(["45,395 files", "45,395 read · 216 refused", "1,003 scans · 203 to look at"]);
+    expect(steps.map((x) => stepWords(x, NOW).what).slice(0, 3)).toEqual(["45,395 files", "45,395 read · 216 not images", "1,003 scans · 203 to look at"]);
   });
 });
 

@@ -45,6 +45,13 @@ export interface SummaryStep {
   held?: number;
   refused?: number;
   reads?: number;
+  /** The read (the duplicate policy, 2026-10-10): the files read as their scan's own, the copies of a scan another dataset read first or this one holds already, the files held because their scan is filed under another subject, visit or series, those a person let go out of the read, and those gone from the folder. */
+  new?: number;
+  known?: number;
+  twice?: number;
+  same_instance?: number;
+  left_out?: number;
+  gone?: number;
   scans?: number;
   of?: number;
   look?: number;
@@ -80,7 +87,22 @@ export interface DatasetSummary {
   look_kinds: Record<string, number>;
   kinds: { kind: string; scans: number }[];
   body_regions: { region: string; scans: number }[];
-  files: { found: number | null; bytes: number | null; read: number; refused: number; refused_batch: number | null; held: number };
+  files: {
+    found: number | null;
+    bytes: number | null;
+    read: number;
+    refused: number;
+    refused_batch: number | null;
+    held: number;
+    new?: number;
+    known?: number;
+    twice?: number;
+    same_instance?: number;
+    left_out?: number;
+    gone?: number;
+  };
+  /** The open questions about the dataset's files filed already under another subject, visit or series, which its Review lists. */
+  identity_questions?: number;
   pictures_place: string | null;
   steps: SummaryStep[];
 }
@@ -283,7 +305,9 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
       break;
     case "read":
       what = s.state === "waiting" && v("reads") === 0 ? "not yet" : `${n(v("files"))} read`;
-      if (v("refused") > 0) what += ` · ${n(v("refused"))} refused`;
+      if (v("same_instance") > 0) what += ` · ${n(v("same_instance"))} held`;
+      if (v("refused") > 0) what += ` · ${n(v("refused"))} not images`;
+      hint = readWords(s) ?? undefined;
       break;
     case "sorted":
       what = v("of") === 0 ? (s.state === "waiting" ? "not yet" : "nothing to sort") : `${n(v("scans"))} scans`;
@@ -327,6 +351,29 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
 }
 
 // ---------------------------------------------------------------- a card in words
+
+/**
+ * What a dataset's reading found, in plain words, for the read step's hint
+ * (the duplicate policy, 2026-10-10): new, already in another dataset,
+ * twice in this dataset, held because the scan is filed under another
+ * subject, visit or series, let go out of the read by a person, gone from
+ * the folder, and not images. Null where the engine gives none of these.
+ */
+export function readWords(s: Pick<SummaryStep, "new" | "known" | "twice" | "same_instance" | "left_out" | "gone" | "refused">): string | null {
+  const parts: string[] = [];
+  const add = (v: number | undefined, words: string) => {
+    if (typeof v === "number" && v > 0) parts.push(`${n(v)} ${words}`);
+  };
+  if (typeof s.known !== "number" && typeof s.twice !== "number" && typeof s.same_instance !== "number") return null;
+  add(s.new, "new");
+  add(s.known, "already in another dataset");
+  add(s.twice, "twice in this dataset");
+  add(s.same_instance, "held: the scan is filed under another subject, visit or series");
+  add(s.left_out, "left out of the read by a person");
+  add(s.gone, "gone from the folder");
+  add(s.refused, "not images");
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
 
 /** How many files a dataset's card counts: the ones found in the tree NILS reads, or the originals of an identified dataset; null where none were counted. */
 export function filesOf(d: Pick<Dataset, "trees">, s: DatasetSummary | null): number | null {
