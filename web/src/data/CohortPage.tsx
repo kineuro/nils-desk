@@ -394,7 +394,7 @@ export function MembersDialog({ cohort: c, onClose, onDone }: { cohort: Pick<Coh
       .members(c.name, built.body)
       .then((r) => {
         const unknown = Array.isArray(r.unknown) ? (r.unknown as unknown[]).length : 0;
-        onDone(`${built.summary} in ${c.name}${unknown > 0 ? `; ${unknown} ${unknown === 1 ? "code" : "codes"} the registry does not know left out` : ""}.`);
+        onDone(`${built.summary} in ${c.name}${unknown > 0 ? `; ${unknown} ${unknown === 1 ? "subject code" : "subject codes"} the registry does not know left out` : ""}.`);
       })
       .catch((e: Error) => {
         setBusy(false);

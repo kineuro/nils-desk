@@ -47,6 +47,7 @@ import {
   type PlaceRow,
   type PurgeAsk,
   type VaultAsk,
+  typeLabel,
 } from "./pseudonyms";
 
 const types: IdType[] = [
@@ -106,7 +107,7 @@ describe("what a column looks like", () => {
     expect(mapRefusal([guesses[1]])).toBeNull();
     // two code columns, and an identifier column naming no type, are the engine's own refusals
     const code = guessRole("subject_code", lookAt("s", ["1"]), types);
-    expect(mapRefusal([guesses[0], code, code])).toBe("One column is the code; two are chosen.");
+    expect(mapRefusal([guesses[0], code, code])).toBe("One column is the subject code; two are chosen.");
     expect(mapRefusal([{ role: "identifier", id_type: null, new_type: null }])).toBe("Every identifier column names its type: pick one of the site's, or make a new one.");
     // several identifier columns of one type are several identifiers of one person, and are refused by nothing
     expect(mapRefusal([guesses[0], guesses[0], code])).toBeNull();
@@ -148,7 +149,7 @@ describe("what the map's file must be, and what its report says in every branch"
       conflicts: [],
     });
     expect(reportLines(empty).map((l) => l.words.includes("undefined"))).toEqual([false, false, false, false, false]);
-    expect(reportLines(reportOf(null))[0].words).toBe("0 named · 0 known · 0 new, with codes derived from their number");
+    expect(reportLines(reportOf(null))[0].words).toBe("0 named · 0 known · 0 new, with subject codes derived from their number");
     // what the engine does say is kept, the rows it read among it
     const said = reportOf({ rows: 12, subjects: { named: 12, known: 10, new: 2 }, identifiers: { filed: 12, known: 10, new: 2, types_new: ["site-id"] }, held_released: { released: 3, of: 4 }, conflicts: [{ row: 4, why: "on another subject" }] });
     expect(said.rows).toBe(12);
@@ -165,13 +166,13 @@ describe("the import's report", () => {
   it("says what it will do, line by line, and marks conflicts", () => {
     const lines = reportLines(report);
     expect(lines.map((l) => l.label)).toEqual(["subjects", "identifiers", "held files", "merges", "conflicts"]);
-    expect(lines[0].words).toBe("212 named · 209 known · 3 new, with codes derived from their number");
+    expect(lines[0].words).toBe("212 named · 209 known · 3 new, with subject codes derived from their number");
     expect(lines[1].words).toBe("1,296 filed · 1,240 already known · 56 new · 1 new type");
     expect(lines[2].words).toBe("4 of 4 released");
     // record 26: which type released them, and the type they were held under where it is another
     const byType = reportLines({ ...report, held_released_by: [{ type: "site-id", held_as: "personnummer", files: 3 }, { type: "personnummer", held_as: "personnummer", files: 1 }] });
-    expect(byType[2].words).toBe("4 of 4 released: 3 by site-id, held as personnummer · 1 by personnummer");
-    expect(lines[3].words).toBe("2: provisional subjects become their canonical ones · the old codes stay as identifiers");
+    expect(byType[2].words).toBe("4 of 4 released: 3 by site-id, held as ID that is the same everywhere · 1 by ID that is the same everywhere");
+    expect(lines[3].words).toBe("2: provisional subjects become their canonical ones · the old subject codes stay as identifiers");
     expect(lines[4].tone).toBe("ok");
     const refused = reportLines({ ...report, held_released: 0, merges: [], conflicts: [{ row: 12, why: "already on another subject" }] });
     expect(refused[2].words).toBe("none");
@@ -185,10 +186,10 @@ describe("the words of a dataset", () => {
   it("say how it arrives, where the codes come from, the rule and what leaves", () => {
     const d: Dataset = { ...base, arrives: "identified", identity: { id_type: "personnummer", from: [{ field: "PatientID" }] }, unmapped: "hold" };
     expect(arrivesWords(d)).toBe("identified; pseudonymised into dcm-anon before anything reads it");
-    expect(subjectsWords(d)).toBe("codes from the map and the key");
+    expect(subjectsWords(d)).toBe("subject codes from the map and the key");
     expect(identityWords(d)).toBe("PatientID, through the map");
     expect(identityWords({ ...d, unmapped: "code" })).toBe("PatientID, through the map or hashed");
-    expect(identityWords({ ...d, arrives: "coded", identity: { id_type: "subject-code", code: "verbatim", from: [{ path: { segment: 2 } }] } })).toBe("folder 2 of the path, taken verbatim as the code");
+    expect(identityWords({ ...d, arrives: "coded", identity: { id_type: "subject-code", code: "verbatim", from: [{ path: { segment: 2 } }] } })).toBe("folder 2 of the path, taken verbatim as the subject code");
     expect(arrivesWords({ ...base })).toBe("identified; pseudonymised into dcm-anon before anything reads it");
     expect(arrivesWords({ ...base, arrives: "deidentified" })).toBe("de-identified; moved into dcm-anon as sent, identifiers mapped when read");
     expect(leavingWords(d.handling.on_release)).toBe("dates kept · UIDs remapped · faces kept");
@@ -346,5 +347,15 @@ describe("acting on the originals of a dataset", () => {
     expect(confirmsName("Lake", "lake")).toBe(false);
     expect(confirmsName("", "lake")).toBe(false);
     expect(confirmsName("", "")).toBe(false);
+  });
+});
+
+describe("an ID type as a person reads it", () => {
+  it("is the engine's label, else the ID that is the same everywhere in words, else its name", () => {
+    expect(typeLabel({ name: "personnummer", label: "ID that is the same everywhere" })).toBe("ID that is the same everywhere");
+    expect(typeLabel({ name: "personnummer" })).toBe("ID that is the same everywhere");
+    expect(typeLabel("personnummer")).toBe("ID that is the same everywhere");
+    expect(typeLabel({ name: "study-id" })).toBe("study-id");
+    expect(typeLabel("study-id")).toBe("study-id");
   });
 });

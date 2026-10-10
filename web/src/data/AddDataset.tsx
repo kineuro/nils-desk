@@ -9,8 +9,9 @@
 // subjects are found, one select each, set to the subject code and made
 // from the ID, so it is read as soon as it is added. Identified data asks the
 // one question that decides its pseudonymise step (the design of
-// 2026-10-09): what its PatientID holds, a personnummer, which the key codes
-// with no map, or an ID of a type, whose codes a map gives. Without a root
+// 2026-10-09, its words of 2026-10-10): the kind of identifying ID its
+// PatientID holds, one that is the same everywhere, which the key codes with
+// no map, or a hospital or study ID, whose subject codes a map gives. Without a root
 // yet, the root's own form stands here instead.
 
 import { useEffect, useRef, useState } from "react";
@@ -26,7 +27,7 @@ import { RootForm } from "./AddRoot";
 import { linkage, type IdentityRule, type LinkageType, type Subjects } from "./datasets";
 import { writable } from "./FinishDataset";
 import { plainError } from "./plain";
-import { typeName } from "./pseudonyms";
+import { SAME_EVERYWHERE, typeLabel, typeName } from "./pseudonyms";
 import { asksIdentity, asksIds, dicomWord, roots as rootsDoor, rootsOf, wouldBe, type FolderLook, type RootFolder } from "./steps";
 
 type Found = { kind: "idle" } | { kind: "looking" } | { kind: "found"; folders: RootFolder[]; count: number; next: string | null } | { kind: "failed"; why: string };
@@ -70,8 +71,8 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
   const [patientId, setPatientId] = useState("subject-code");
   const [subjects, setSubjects] = useState<Subjects>("generated");
   const [types, setTypes] = useState<LinkageType[]>([]);
-  /** What an identified folder's PatientID holds: a personnummer, or an ID of a type; asked, never assumed. */
-  const [holds, setHolds] = useState<"personnummer" | "type" | null>(null);
+  /** The kind of identifying ID an identified folder's PatientID holds: one the same everywhere, or a hospital or study ID of a type; asked, never assumed. */
+  const [holds, setHolds] = useState<"same" | "type" | null>(null);
   const [holdsType, setHoldsType] = useState("");
   const asked = useRef(0);
   const root = all.find((r) => r.id === rootId) ?? null;
@@ -147,7 +148,7 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
   const look = seen?.kind === "seen" ? seen.look : null;
   // the rule the identified folder's originals are read under: PatientID, as what the person said it holds
   const identity: IdentityRule | null =
-    holds === "personnummer" ? { id_type: "personnummer", from: [{ field: "PatientID" }] } : holds === "type" && typeName(holdsType) !== "" ? { id_type: typeName(holdsType), from: [{ field: "PatientID" }] } : null;
+    holds === "same" ? { id_type: SAME_EVERYWHERE, from: [{ field: "PatientID" }] } : holds === "type" && typeName(holdsType) !== "" ? { id_type: typeName(holdsType), from: [{ field: "PatientID" }] } : null;
   const unanswered = look !== null && !look.added && asksIdentity(look) && identity === null;
   const foot = look ? (
     <div className="row actions">
@@ -200,14 +201,14 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
                   <div className="field">
                     <label className="label" htmlFor="dataset-patient-id">
                       PatientID holds
-                      <Hint text="What the files' PatientID is: the subject code, or an ID such as a study number." />
+                      <Hint text="What the files' PatientID is: the subject code, or a hospital or study ID." />
                     </label>
                     <div className="input">
                       <select id="dataset-patient-id" value={patientId} disabled={adding !== null} onChange={(e) => setPatientId(e.target.value)}>
                         <option value="subject-code">Subject code</option>
                         {types.map((t) => (
                           <option key={t.name} value={`id-type:${t.name}`}>
-                            {t.name}
+                            {typeLabel(t)}
                           </option>
                         ))}
                       </select>
@@ -229,23 +230,20 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
               )}
               {!look.added && asksIdentity(look) && (
                 <div className="field">
-                  <span className="label">
-                    PatientID holds
-                    <Hint text="What the files' PatientID is. A personnummer is coded by the key, with no map. An ID such as a study ID gets its code from a map, or a generated one." />
-                  </span>
-                  <div className="choices" role="radiogroup" aria-label="PatientID holds">
+                  <span className="label">PatientID holds an identifying ID</span>
+                  <p className="meta">personnummer, national ID, social security number, or a hospital's or study's own ID: anything that leads to a person. NILS never keeps it; it becomes a subject code.</p>
+                  <div className="choices" role="radiogroup" aria-label="Which kind">
+                    <span className="meta">Which kind</span>
                     <label className="radio-row">
-                      <input type="radio" name="dataset-holds" checked={holds === "personnummer"} disabled={adding !== null} onChange={() => setHolds("personnummer")} />
+                      <input type="radio" name="dataset-holds" checked={holds === "same"} disabled={adding !== null} onChange={() => setHolds("same")} />
                       <span>
-                        <b>A personnummer</b>
-                        <Hint text="Coded by the key: no map, no step to wait on." />
+                        <b>The same everywhere</b> (personnummer, national ID)
                       </span>
                     </label>
                     <label className="radio-row">
                       <input type="radio" name="dataset-holds" checked={holds === "type"} disabled={adding !== null} onChange={() => setHolds("type")} />
                       <span>
-                        <b>An ID</b>
-                        <Hint text="Its codes come from a map of ID and subject code, given on the dataset's pseudonymise step." />
+                        <b>A hospital or study ID</b>
                       </span>
                     </label>
                   </div>
@@ -253,17 +251,17 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
                     <div className="field-row">
                       {types.length > 0 ? (
                         <div className="input">
-                          <select value={holdsType} aria-label="Which ID" disabled={adding !== null} onChange={(e) => setHoldsType(e.target.value)}>
+                          <select value={holdsType} aria-label="Which hospital or study ID" disabled={adding !== null} onChange={(e) => setHoldsType(e.target.value)}>
                             {types.map((t) => (
                               <option key={t.name} value={t.name} title={t.description ?? undefined}>
-                                {t.name}
+                                {typeLabel(t)}
                               </option>
                             ))}
                           </select>
                         </div>
                       ) : (
                         <div className="input mono">
-                          <input value={holdsType} placeholder="study-id" aria-label="Which ID" spellCheck={false} disabled={adding !== null} onChange={(e) => setHoldsType(e.target.value)} />
+                          <input value={holdsType} placeholder="study-id" aria-label="Which hospital or study ID" spellCheck={false} disabled={adding !== null} onChange={(e) => setHoldsType(e.target.value)} />
                         </div>
                       )}
                     </div>

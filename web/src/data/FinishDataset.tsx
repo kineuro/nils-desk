@@ -5,7 +5,8 @@
 // asks whether they are identified or already anonymised; the engine answers
 // with the question, naming the entries and the folder, and they move only
 // once the person confirms. "Set the IDs": what PatientID holds (the subject
-// code, or an ID type, never a personnummer), how subjects are found (a map,
+// code, or a hospital or study ID, never an ID that is the same everywhere),
+// how subjects are found (a map,
 // or made from the ID), and what names each copy's folder. Explanations sit
 // behind a "?".
 
@@ -20,6 +21,7 @@ import { Hint } from "../ui/Hint";
 import { Wait } from "../ui/Wait";
 import { linkage, look as lookDoor, places as placesDoor, type DatasetFields, type FolderNaming, type Layout, type LinkageType, type PlaceAnswer, type Subjects } from "./datasets";
 import { dicomNamed, moveAskedOf, namesShown, patientIdOf, questionWords, stateOf, type MoveAsked } from "./layout";
+import { SAME_EVERYWHERE, typeLabel } from "./pseudonyms";
 
 /** A dataset place as the dialogs need it. */
 export type Finishing = Pick<Place, "id" | "name" | "path"> & { dataset?: Place["dataset"]; not_read?: string | null };
@@ -27,12 +29,12 @@ export type Finishing = Pick<Place, "id" | "name" | "path"> & { dataset?: Place[
 type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "failed"; why: string };
 
 /**
- * The ID types a pseudonymised file's PatientID may hold: never a
- * personnummer, which the engine refuses there, and not the subject code,
- * which is the other choice.
+ * The hospital or study IDs a pseudonymised file's PatientID may hold:
+ * never an ID that is the same everywhere, which the engine refuses there
+ * and NILS never keeps, and not the subject code, which is the other choice.
  */
 export function writable(types: LinkageType[]): LinkageType[] {
-  return types.filter((t) => t.name !== "personnummer" && t.name !== "subject-code");
+  return types.filter((t) => t.name !== SAME_EVERYWHERE && t.name !== "subject-code");
 }
 
 /**
@@ -244,27 +246,27 @@ export function SetIdsDialog(props: { caps: Capabilities; place: Finishing; layo
       <div className="field">
         <span className="label">
           PatientID holds
-          <Hint text={anonymised ? "What the files' PatientID is: the subject code, or an ID such as a study number." : "What NILS writes into PatientID when it pseudonymises."} />
+          <Hint text={anonymised ? "What the files' PatientID is: the subject code, or a hospital or study ID." : "What NILS writes into PatientID when it pseudonymises."} />
         </span>
         <div className="choices" role="radiogroup" aria-label="PatientID holds">
           <Choice name="pid" checked={pidChoice === "subject-code"} disabled={working} onPick={() => setPidChoice("subject-code")} label="Subject code" />
-          <Choice name="pid" checked={pidChoice === "id-type"} disabled={working} onPick={() => setPidChoice("id-type")} label="An ID" />
+          <Choice name="pid" checked={pidChoice === "id-type"} disabled={working} onPick={() => setPidChoice("id-type")} label="A hospital or study ID" />
         </div>
         {pidChoice === "id-type" && (
           <div className="field-row">
             {writableTypes && writableTypes.length > 0 ? (
               <div className="input">
-                <select value={pidType} aria-label="Which ID" disabled={working} onChange={(e) => setPidType(e.target.value)}>
+                <select value={pidType} aria-label="Which hospital or study ID" disabled={working} onChange={(e) => setPidType(e.target.value)}>
                   {writableTypes.map((t) => (
                     <option key={t.name} value={t.name} title={t.description ?? undefined}>
-                      {t.name}
+                      {typeLabel(t)}
                     </option>
                   ))}
                 </select>
               </div>
             ) : (
               <div className="input mono">
-                <input value={pidType} placeholder="study-id" aria-label="Which ID" spellCheck={false} disabled={working} onChange={(e) => setPidType(e.target.value)} />
+                <input value={pidType} placeholder="study-id" aria-label="Which hospital or study ID" spellCheck={false} disabled={working} onChange={(e) => setPidType(e.target.value)} />
               </div>
             )}
           </div>

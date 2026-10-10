@@ -40,7 +40,7 @@ export interface Said {
 
 /** Why the page and the question may count differently, behind the "?". */
 const DIFFERS =
-  "A question leaves out the scans the pack ruled out, reads a visit as a session NILS built, and finds subjects by their code alone, so it can count otherwise than the page.";
+  "A question leaves out the scans the pack ruled out, reads a visit as a session NILS built, and finds subjects by their subject code alone, so it can count otherwise than the page.";
 
 type Count = { kind: "counting"; since: number } | { kind: "counted"; rows: number; subjects: number } | { kind: "refused"; detail: string } | { kind: "failed"; detail: string };
 

@@ -19,14 +19,14 @@ import { linkage, type LinkageType } from "./datasets";
 import { writable } from "./FinishDataset";
 import { plainError, type Plain } from "./plain";
 import { tagCounts, NO_TAGS, type TagPolicy } from "./policy";
-import { datasets as placeDoor, purgeRefusal, type Dataset, type OriginalsActs, type OriginalsLook } from "./pseudonyms";
+import { datasets as placeDoor, purgeRefusal, typeLabel, type Dataset, type OriginalsActs, type OriginalsLook } from "./pseudonyms";
 import { rulesOf, rulesPatch, STANDARD, type Rules } from "./pseudoStep";
 
 /** What each choice is, behind its "?". */
 const HELP = {
-  pid: "What NILS writes into PatientID in the pseudonymised copy: the subject code, or the subject's value of an ID type such as a study ID.",
+  pid: "What NILS writes into PatientID in the pseudonymised copy: the subject code, or the subject's hospital or study ID.",
   written: "Changed only before anything is pseudonymised.",
-  unknown: "Its files wait until a map gives the ID a code. Or the ID gets a code made from itself, which a map given later folds into the right subject.",
+  unknown: "Its files wait until a map gives the ID a subject code. Or the ID gets a subject code made from itself, which a map given later folds into the right subject.",
   tags: "Standard removes what names the patient, the staff who did and read the scan, the trial and the institution. Choose keeps or removes tags of this dataset's own, in the list Save opens.",
   originals: "Kept: locked here. Vaulted: moved into a backup place and not read. Purged: deleted once each copy is proven.",
 };
@@ -141,7 +141,7 @@ export function RulesDialog(props: {
               value={rules.pid}
               options={[
                 ["code", "The subject code", pidLocked && was.pid !== "code"],
-                ["type", "An ID type", pidLocked && was.pid !== "type"],
+                ["type", "A hospital or study ID", pidLocked && was.pid !== "type"],
               ]}
               onPick={(pid) => set({ pid })}
             />
@@ -152,7 +152,7 @@ export function RulesDialog(props: {
                   <select value={rules.pidType} disabled={pidLocked} onChange={(e) => set({ pidType: e.target.value })}>
                     {types.map((t) => (
                       <option key={t.name} value={t.name} title={t.description ?? undefined}>
-                        {t.name}
+                        {typeLabel(t)}
                       </option>
                     ))}
                   </select>
@@ -165,14 +165,14 @@ export function RulesDialog(props: {
           <Hint text={pidLocked ? `${HELP.pid} ${HELP.written}` : HELP.pid} />
         </div>
         <div className="ps-rule">
-          <span className="ps-rule-label">An ID with no code</span>
+          <span className="ps-rule-label">An ID with no subject code</span>
           <span className="ps-rule-choice">
             <Options
-              label="An ID with no code"
+              label="An ID with no subject code"
               value={rules.unknown}
               options={[
                 ["wait", "Its files wait"],
-                ["generate", "It gets a generated code"],
+                ["generate", "It gets a generated subject code"],
               ]}
               onPick={(unknown) => set({ unknown })}
             />

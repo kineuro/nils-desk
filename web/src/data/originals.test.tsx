@@ -208,7 +208,7 @@ describe("the rules", () => {
   it("asks four things, each with a question mark, and nothing a release or the dataset's settings decide", () => {
     const html = rules();
     expect(html).toContain("Rules for incoming</h2>");
-    for (const label of ["PatientID gets", "An ID with no code", "Tags", "The originals, once done"]) expect(html).toContain(`>${label}</span>`);
+    for (const label of ["PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]) expect(html).toContain(`>${label}</span>`);
     expect(html.match(/class="hint"/g)?.length).toBe(4);
     expect(html).not.toContain("Feeds a cohort");
     expect(html).not.toContain("Dates");
@@ -242,7 +242,7 @@ describe("the rules", () => {
 
   it("keeps what PatientID gets once anything is pseudonymised, and says so behind its question mark", () => {
     const html = rules({ written: 120 });
-    expect(html).toContain('disabled="">An ID type</button>');
+    expect(html).toContain('disabled="">A hospital or study ID</button>');
     expect(html).toContain("Changed only before anything is pseudonymised.");
   });
 });

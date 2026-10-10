@@ -37,6 +37,7 @@ import {
   type Guess,
   type IdType,
   type ImportReport,
+  typeLabel,
 } from "./pseudonyms";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -116,7 +117,7 @@ export function PseudonymsPage({ caps, onChanged }: { caps: Capabilities; onChan
             <tbody>
               {types.map((t) => (
                 <tr key={t.name}>
-                  <td className="path">{t.name}</td>
+                  <td className="path">{typeLabel(t)}</td>
                   <td className="meta">{t.description ?? ""}</td>
                   <td className="num">{typeof t.identifiers === "number" ? n(t.identifiers) : ""}</td>
                   <td className="num">{typeof t.subjects === "number" ? n(t.subjects) : ""}</td>
@@ -209,8 +210,8 @@ interface Column {
 /** What a column can be, in the order the select offers them. The engine takes these four and no others. */
 const ROLES: { value: ColumnRole; words: string }[] = [
   { value: "identifier", words: "an identifier" },
-  { value: "canonical", words: "the number the code comes from" },
-  { value: "code", words: "the code itself" },
+  { value: "canonical", words: "the ID the subject code comes from" },
+  { value: "code", words: "the subject code itself" },
   { value: "ignore", words: "not read" },
 ];
 
@@ -503,7 +504,7 @@ export function MapColumns({
                       <select value={typeValue(c.guess)} disabled={working} onChange={(e) => onType(i, e.target.value)} aria-label={`The type of ${c.header}`}>
                         {types.map((t) => (
                           <option key={t.name} value={`type:${t.name}`}>
-                            of type {t.name}
+                            of type {typeLabel(t)}
                           </option>
                         ))}
                         <option value="new">a new type: {c.guess.new_type ?? (typeName(c.header) || "identifier")}</option>

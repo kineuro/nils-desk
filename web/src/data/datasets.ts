@@ -14,7 +14,7 @@ import type { Capabilities } from "../capabilities";
 import type { Place } from "../objects/client";
 import { ops } from "../ops/client";
 import { cohorts as cohortDoors } from "./cohorts";
-import type { IdType, ImportColumn, ImportReport } from "./pseudonyms";
+import { SAME_EVERYWHERE, type IdType, type ImportColumn, type ImportReport } from "./pseudonyms";
 import { digestMarks, fileWords, whenWords, type Digest, type Mark, type Source } from "./sources";
 
 // The doors more than one page reads are typed once and read from here: the sources door (with `sources`), the jobs
@@ -285,7 +285,7 @@ export function arrivesWords(arrives: Arrives): { words: string; tone: "gated" |
     case "deidentified":
       return { words: "arrives de-identified", tone: "ok", icon: "shield" };
     case "coded":
-      return { words: "our codes in PatientID", tone: "ok", icon: "shield" };
+      return { words: "our subject codes in PatientID", tone: "ok", icon: "shield" };
   }
 }
 
@@ -322,7 +322,7 @@ export function treeLines(d: Dataset): TreeLine[] {
   if (d.trees.originals) out.push({ icon: "lock", path: last(d.trees.originals.path), words: `${countWords(d.trees.originals.files)} · locked` });
   const anon = d.trees.anon;
   if (!anon) return out;
-  const how = arrivesOf(d) === "identified" ? "the source" : arrivesOf(d) === "deidentified" ? "moved in, files as sent" : "codes taken verbatim";
+  const how = arrivesOf(d) === "identified" ? "the source" : arrivesOf(d) === "deidentified" ? "moved in, files as sent" : "subject codes taken verbatim";
   out.push({ icon: "shield", path: last(anon.path), words: `${countWords(anon.files)} · ${how}` });
   return out;
 }
@@ -456,7 +456,7 @@ export function bringInBody(d: Pick<Dataset, "name" | "arrives" | "handling">, n
 export function bringInSteps(d: Pick<Dataset, "name" | "arrives" | "handling" | "cohort">, pack: string | null, packVersion?: string | null): { title: string; words: string }[] {
   const out: { title: string; words: string }[] = [];
   const cohort = d.cohort ? `; new subjects join the cohort ${d.cohort}` : "";
-  if (arrivesOf(d) === "identified") out.push({ title: "Pseudonymise", words: "The new files of the originals into dcm-anon: codes in, names and private tags out, dates and UIDs kept. A file whose identifier the map does not know is held." });
+  if (arrivesOf(d) === "identified") out.push({ title: "Pseudonymise", words: "The new files of the originals into dcm-anon: subject codes in, names and private tags out, dates and UIDs kept. A file whose identifier the map does not know is held." });
   out.push({ title: "Digest", words: `Read what is new in ${arrivesOf(d) === "identified" ? "dcm-anon" : "the dataset"} into the registry${cohort}.` });
   out.push({ title: "Sort", words: pack ? `Fingerprint, then classify with ${pack}${packVersion ? ` ${packVersion}` : ""}. What the rules cannot place goes to Review.` : "Fingerprint. No pack is loaded, so nothing is classified until one is." });
   return out;
@@ -580,7 +580,7 @@ export function columnsRefusal(columns: MapColumn[]): string | null {
   if (ids.length === 0) return "name at least one column as an identifier or as the canonical identifier";
   const untyped = ids.filter((c) => !c.id_type?.trim());
   if (untyped.length > 0) return `${untyped.map((c) => c.header).join(", ")}: an identifier column names its type`;
-  if (!columns.some((c) => c.role === "code" || c.role === "canonical")) return "name the column that stands for the person: the code, or the canonical identifier";
+  if (!columns.some((c) => c.role === "code" || c.role === "canonical")) return "name the column that stands for the person: the subject code, or the canonical identifier";
   return null;
 }
 
@@ -648,10 +648,10 @@ export function identityOf(from: { kind: "field"; field: string } | { kind: "pat
   return from.segment >= 1 ? { id_type: type, from: [{ path: { segment: Math.floor(from.segment) } }] } : null;
 }
 
-/** An identity rule in words: "PatientID as personnummer", "folder 3 of the path as study-id". */
+/** An identity rule in words: "PatientID as an ID that is the same everywhere", "folder 3 of the path as study-id". */
 export function identityWords(rule: IdentityRule | null | undefined): string | null {
   if (!rule || rule.from.length === 0) return null;
   const src = rule.from[0];
   const where = src.field ? src.field : src.path ? `folder ${src.path.segment} of the path` : "the file";
-  return `${where} as ${rule.id_type}`;
+  return rule.id_type === SAME_EVERYWHERE ? `${where} as an ID that is the same everywhere` : `${where} as ${rule.id_type}`;
 }

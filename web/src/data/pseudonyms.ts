@@ -32,10 +32,27 @@ export type DatasetPatch = Partial<DatasetFields> & {
 
 export interface IdType {
   name: string;
+  /** What a person reads, where the engine gives it (2026-10-10). */
+  label?: string;
   description: string | null;
   /** Counts, where the engine reports them. */
   identifiers?: number;
   subjects?: number;
+}
+
+/**
+ * The ID type of an identifying ID that is the same everywhere (a
+ * personnummer, a national ID): its internal name. The subject code
+ * generator codes it with the key and no map, and NILS never keeps it.
+ */
+export const SAME_EVERYWHERE = "personnummer";
+
+/** An ID type as a person reads it: the engine's label, else the same-everywhere type in words, else its name. */
+export function typeLabel(t: Pick<IdType, "name" | "label"> | string): string {
+  const name = typeof t === "string" ? t : t.name;
+  const label = typeof t === "string" ? undefined : t.label;
+  if (label) return label;
+  return name === SAME_EVERYWHERE ? "ID that is the same everywhere" : name;
 }
 
 export interface TypesDoc {
@@ -107,14 +124,14 @@ export function arrivesWords(d: Dataset): string {
   const a = d.arrives ?? (d.handling?.arrives === "deidentified" ? "deidentified" : "identified");
   if (a === "identified") return "identified; pseudonymised into dcm-anon before anything reads it";
   if (a === "deidentified") return "de-identified; moved into dcm-anon as sent, identifiers mapped when read";
-  return "coded; our codes already in PatientID, taken verbatim";
+  return "coded; our subject codes already in PatientID, taken verbatim";
 }
 
 /** Where the codes come from. */
 export function subjectsWords(d: Dataset): string {
-  if (d.identity?.code === "verbatim" || d.arrives === "coded") return "codes taken verbatim from the files";
-  if (d.unmapped === "code") return "codes from the map, or derived from the identifier under the key";
-  return "codes from the map and the key";
+  if (d.identity?.code === "verbatim" || d.arrives === "coded") return "subject codes taken verbatim from the files";
+  if (d.unmapped === "code") return "subject codes from the map, or derived from the identifier under the key";
+  return "subject codes from the map and the key";
 }
 
 /** The rule that says who a file is about: "PatientID, through the map". */
@@ -122,7 +139,7 @@ export function identityWords(d: Dataset): string {
   const rule = d.identity ?? null;
   const from = rule?.from?.[0];
   const source = !from ? "PatientID" : from.field ? from.field : from.path ? `folder ${from.path.segment} of the path` : "PatientID";
-  if (rule?.code === "verbatim" || d.arrives === "coded") return `${source}, taken verbatim as the code`;
+  if (rule?.code === "verbatim" || d.arrives === "coded") return `${source}, taken verbatim as the subject code`;
   if (d.unmapped === "code") return `${source}, through the map or hashed`;
   return `${source}, through the map`;
 }
@@ -522,7 +539,7 @@ export function mapRefusal(guesses: Guess[]): string | null {
   const code = guesses.filter((g) => g.role === "code").length;
   if (ids === 0 && canonical === 0) return "At least one column is an identifier, or the number that stands for the person.";
   if (canonical > 1) return "One column stands for the person; two are chosen.";
-  if (code > 1) return "One column is the code; two are chosen.";
+  if (code > 1) return "One column is the subject code; two are chosen.";
   if (guesses.some((g) => (g.role === "identifier" || g.role === "canonical") && g.id_type === null && g.new_type === null)) return "Every identifier column names its type: pick one of the site's, or make a new one.";
   return null;
 }
@@ -578,11 +595,11 @@ export function heldReleasedWords(r: ImportReport): string {
   return `${n(h.released)} of ${n(h.of)} released`;
 }
 
-/** Which type released them: "3 by study-id, held as personnummer · 1 by personnummer", the type they were held under named only where it is another. */
+/** Which type released them: "3 by study-id, held as ID that is the same everywhere · 1 by study-id", the type they were held under named only where it is another. */
 export function heldTypeWords(by: readonly HeldReleased[] | undefined): string {
   return (by ?? [])
     .filter((r) => r.files > 0)
-    .map((r) => `${n(r.files)} by ${r.type}${r.held_as && r.held_as !== r.type ? `, held as ${r.held_as}` : ""}`)
+    .map((r) => `${n(r.files)} by ${typeLabel(r.type)}${r.held_as && r.held_as !== r.type ? `, held as ${typeLabel(r.held_as)}` : ""}`)
     .join(" · ");
 }
 
@@ -595,10 +612,10 @@ export function reportLines(r: ImportReport): { label: string; words: string; to
   const typesNew = Array.isArray(i.types_new) ? i.types_new.length : i.types_new;
   const named = Array.isArray(i.types_new) && i.types_new.length > 0 ? ` (${i.types_new.join(", ")})` : "";
   return [
-    { label: "subjects", words: `${n(s.named)} named · ${n(s.known)} known · ${n(s.new)} new, with codes derived from their number` },
+    { label: "subjects", words: `${n(s.named)} named · ${n(s.known)} known · ${n(s.new)} new, with subject codes derived from their number` },
     { label: "identifiers", words: `${n(i.filed)} filed · ${n(i.known)} already known · ${n(i.new)} new${typesNew > 0 ? ` · ${n(typesNew)} new ${typesNew === 1 ? "type" : "types"}${named}` : ""}` },
     { label: "held files", words: [heldReleasedWords(r), heldTypeWords(r.held_released_by)].filter(Boolean).join(": ") },
-    { label: "merges", words: merges === 0 ? "none" : `${n(merges)}: ${merges === 1 ? "a provisional subject becomes its canonical one" : "provisional subjects become their canonical ones"} · the old codes stay as identifiers`, tone: merges > 0 ? "caution" : undefined },
+    { label: "merges", words: merges === 0 ? "none" : `${n(merges)}: ${merges === 1 ? "a provisional subject becomes its canonical one" : "provisional subjects become their canonical ones"} · the old subject codes stay as identifiers`, tone: merges > 0 ? "caution" : undefined },
     { label: "conflicts", words: conflicts === 0 ? "0 · an identifier already on another subject would be listed here first, and nothing written" : `${n(conflicts)}: nothing is written until they are resolved`, tone: conflicts > 0 ? "caution" : "ok" },
   ];
 }

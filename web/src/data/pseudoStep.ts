@@ -11,7 +11,7 @@
 
 import { door } from "../ask/client";
 import { NO_TAGS, sameTags, tagCounts, tagsOf, type TagPolicy } from "./policy";
-import { shapeOf, type Csv, type Dataset, type DatasetPatch } from "./pseudonyms";
+import { SAME_EVERYWHERE, shapeOf, type Csv, type Dataset, type DatasetPatch } from "./pseudonyms";
 import type { SummaryStep } from "./summary";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -124,7 +124,7 @@ export interface StepView {
   bytes: number | null;
   /** The files of the pseudonymised copy. */
   copy: number;
-  /** PatientID holds a personnummer, which the key codes: there is no mapping step. */
+  /** PatientID holds an identifying ID that is the same everywhere, which the key codes: there is no mapping step. */
   personnummer: boolean;
   rows: IdRow[];
   /** The held IDs that have, or get at the next run, a code. */
@@ -137,9 +137,9 @@ export interface StepView {
   subjects: HeldIds["subjects"];
 }
 
-/** Whether the dataset's originals are read as personnummer: their codes come from the key and no map. */
+/** Whether the dataset's originals are read as an ID that is the same everywhere: their subject codes come from the key and no map. */
 export function readsPersonnummer(d: Pick<Dataset, "identity">): boolean {
-  return d.identity?.id_type === "personnummer";
+  return d.identity?.id_type === SAME_EVERYWHERE;
 }
 
 /**
@@ -204,7 +204,7 @@ export type Act = "run" | "find" | "codes";
  */
 export function primaryOf(v: StepView, generates: boolean, open: boolean): { label: string; act: Act } | null {
   if (v.phase === "fresh") return v.personnummer || generates ? { label: `Pseudonymise and sort ${files(v.go)}`, act: "run" } : { label: "Find the IDs", act: "find" };
-  if (v.phase === "codes" && !open) return { label: `Give the ${v.without.ids === 1 ? "ID" : `${n(v.without.ids)} IDs`} a code`, act: "codes" };
+  if (v.phase === "codes" && !open) return { label: `Give the ${v.without.ids === 1 ? "ID" : `${n(v.without.ids)} IDs`} a subject code`, act: "codes" };
   if ((v.phase === "codes" || v.phase === "ready") && v.go > 0) return { label: `Pseudonymise and sort ${files(v.go)}`, act: "run" };
   return null;
 }
@@ -212,34 +212,34 @@ export function primaryOf(v: StepView, generates: boolean, open: boolean): { lab
 /** The step's chip: what waits on a person, or that it runs. */
 export function chipOf(v: StepView, open: boolean): { words: string; tone: "caution" | "ok" | "brand" } | null {
   if (v.phase === "running") return { words: "Running", tone: "brand" };
-  if (v.phase === "codes") return { words: open && v.coded > 0 ? `${ids(v.without.ids)} without a code` : `${ids(v.without.ids)} ${v.without.ids === 1 ? "needs" : "need"} a code`, tone: "caution" };
-  if (v.phase === "ready" && v.rows.length > 0) return { words: "Every ID has a code", tone: "ok" };
+  if (v.phase === "codes") return { words: open && v.coded > 0 ? `${ids(v.without.ids)} without a subject code` : `${ids(v.without.ids)} ${v.without.ids === 1 ? "needs" : "need"} a subject code`, tone: "caution" };
+  if (v.phase === "ready" && v.rows.length > 0) return { words: "Every ID has a subject code", tone: "ok" };
   return null;
 }
 
 /** The middle box: how many IDs there are and how many have a code. */
 export function idsBox(v: StepView): { big: string; words: string; caution: boolean } {
-  if (v.personnummer) return { big: n(v.subjects.coded), words: `${v.subjects.coded === 1 ? "subject" : "subjects"} · personnummer, coded by the key`, caution: false };
+  if (v.personnummer) return { big: n(v.subjects.coded), words: `${v.subjects.coded === 1 ? "subject" : "subjects"} · coded by the key from an ID that is the same everywhere`, caution: false };
   if (v.phase === "fresh") return { big: "?", words: "found at the first run", caution: false };
   const all = v.rows.length > 0 ? v.rows.length : v.without.ids;
   if (all === 0) return { big: "0", words: "none held", caution: false };
-  if (v.coded === 0) return { big: n(all), words: `${all === 1 ? "ID" : "IDs"} · none has a code yet`, caution: true };
-  if (v.coded === all) return { big: n(all), words: `${all === 1 ? "ID" : "IDs"} · every one has a code`, caution: false };
-  return { big: `${n(v.coded)} of ${n(all)}`, words: "have a code", caution: false };
+  if (v.coded === 0) return { big: n(all), words: `${all === 1 ? "ID" : "IDs"} · none has a subject code yet`, caution: true };
+  if (v.coded === all) return { big: n(all), words: `${all === 1 ? "ID" : "IDs"} · every one has a subject code`, caution: false };
+  return { big: `${n(v.coded)} of ${n(all)}`, words: "have a subject code", caution: false };
 }
 
 /** The pseudonymised step on the rail while it waits on a person: what it needs, and that it is next. */
 export function railWords(v: StepView): { what: string; when: string; next: boolean } | null {
   if (v.phase === "running" || v.phase === "done") return null;
   if (v.phase === "fresh") return { what: "not yet", when: "next step", next: true };
-  if (v.phase === "codes") return { what: v.coded > 0 ? `${n(v.coded)} of ${ids(v.rows.length)} have a code` : `${ids(v.without.ids)} ${v.without.ids === 1 ? "needs" : "need"} a code`, when: "next step", next: true };
+  if (v.phase === "codes") return { what: v.coded > 0 ? `${n(v.coded)} of ${ids(v.rows.length)} have a subject code` : `${ids(v.without.ids)} ${v.without.ids === 1 ? "needs" : "need"} a subject code`, when: "next step", next: true };
   return { what: `${files(v.go)} to go`, when: "next step", next: true };
 }
 
 /** The line under the IDs: the files still waiting for a code. */
 export function waitWords(v: StepView): string | null {
   if (v.without.ids === 0) return null;
-  return `${files(v.without.files)} of ${ids(v.without.ids)} wait for a code`;
+  return `${files(v.without.files)} of ${ids(v.without.ids)} wait for a subject code`;
 }
 
 /* ---------------------------------------------------------------- a map of ID and subject code, read here */
@@ -384,7 +384,7 @@ export function rulesLine(d: Pick<Dataset, "patient_id" | "unmapped" | "tags" | 
   if (isStandard(r)) return "Standard rules";
   const parts: string[] = [];
   if (r.pid === "type") parts.push(`PatientID gets the ${r.pidType}`);
-  if (r.unknown === "generate") parts.push("generated codes");
+  if (r.unknown === "generate") parts.push("generated subject codes");
   if (r.tags === "choose") parts.push("own tags");
   if (r.originals !== "keep") parts.push(r.originals === "vault" ? "originals vaulted" : "originals purged");
   return parts.join(" · ");
@@ -463,9 +463,9 @@ export function outcomeWords(pseudonymise: RanJob | null, read: RanJob | null, r
   if (written > 0) parts.push(`${files(written)} pseudonymised`);
   else if (unchanged > 0) parts.push(`${files(unchanged)} pseudonymised already`);
   const heldFiles = num(field(p, "held"));
-  if (heldFiles > 0) parts.push(`${files(heldFiles)} held for a code`);
+  if (heldFiles > 0) parts.push(`${files(heldFiles)} held for a subject code`);
   const made = num(field(field(pseudonymise?.result, "subjects"), "new"));
-  if (made > 0) parts.push(`${n(made)} new ${made === 1 ? "code" : "codes"}`);
+  if (made > 0) parts.push(`${n(made)} new ${made === 1 ? "subject code" : "subject codes"}`);
   // a read keeps its counts as its progress, and a result only where one was written
   const counts = [read?.result, read?.progress].find((c) => typeof field(c, "ingested") === "number");
   const ingested = num(field(counts, "ingested"));

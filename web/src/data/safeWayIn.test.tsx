@@ -175,7 +175,7 @@ describe("the Data page", () => {
     const subjects = host.querySelector<HTMLSelectElement>("#dataset-subjects")!;
     expect(pid.value).toBe("subject-code");
     expect(subjects.value).toBe("generated");
-    // never the personnummer: it is no PatientID a file may hold
+    // never the ID that is the same everywhere: it is no PatientID a file may hold
     expect([...pid.options].map((o) => o.value)).toEqual(["subject-code", "id-type:study-id"]);
     act(() => button(host, "Add")!.click());
     await settle(8);
@@ -216,7 +216,7 @@ describe("the Data page", () => {
     expect(host.querySelector("#dataset-patient-id")).not.toBeNull();
   });
 
-  it("asks an identified folder what its PatientID holds, a personnummer or an ID, and sends it as the rule its originals are read under", async () => {
+  it("asks an identified folder which kind of identifying ID its PatientID holds, the same everywhere or a hospital or study ID, and sends it as the rule its originals are read under", async () => {
     const e = await page([], (c) => {
       if (c.method === "GET" && c.url.startsWith("/api/places/1/folders?")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 2, folders: ["study-pn", "study-id"].map((name) => ({ name, path: `/srv/in/${name}`, added: false, dataset_id: null, dataset: null, has_derivatives: true })), next: null } };
       const look = /^\/api\/places\/1\/folders\/(study-pn|study-id)$/.exec(c.url);
@@ -229,23 +229,24 @@ describe("the Data page", () => {
     await settle();
     act(() => button(host, "study-pn")!.click());
     await settle();
-    // the one question, asked and never assumed: Add waits for it
-    expect(host.textContent).toContain("PatientID holds");
+    // the one question, asked and never assumed: Add waits for it; its one line says what an identifying ID is
+    expect(host.textContent).toContain("PatientID holds an identifying ID");
+    expect(host.textContent).toContain("NILS never keeps it; it becomes a subject code.");
     expect(button(host, "Add")!.disabled).toBe(true);
-    act(() => radio(host, "A personnummer").click());
+    act(() => radio(host, "The same everywhere").click());
     expect(button(host, "Add")!.disabled).toBe(false);
     act(() => button(host, "Add")!.click());
     await settle(8);
     expect(e.of("POST", "/api/places")[0].body).toEqual({ role: "source", root: "incoming", folder: "study-pn", identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
-    // an ID of a type: its codes come from a map, on the dataset's pseudonymise step
+    // a hospital or study ID: its subject codes come from a map, on the dataset's pseudonymise step
     act(() => button(host, "Add a dataset")!.click());
     act(() => button(host, "Browse")!.click());
     await settle();
     act(() => button(host, "study-id")!.click());
     await settle();
-    act(() => radio(host, "An ID").click());
-    const which = host.querySelector<HTMLSelectElement>('select[aria-label="Which ID"]')!;
-    // never the personnummer among the types: that is the other answer
+    act(() => radio(host, "A hospital or study ID").click());
+    const which = host.querySelector<HTMLSelectElement>('select[aria-label="Which hospital or study ID"]')!;
+    // never the ID that is the same everywhere among the types: that is the other answer
     expect([...which.options].map((o) => o.value)).toEqual(["study-id"]);
     act(() => button(host, "Add")!.click());
     await settle(8);
@@ -434,8 +435,8 @@ describe("Set the IDs", () => {
     await settle();
     expect(button(host, "Save")!.disabled).toBe(true);
     expect(radio(host, "The ID").disabled).toBe(true);
-    act(() => radio(host, "An ID").click());
-    expect([...host.querySelector<HTMLSelectElement>('select[aria-label="Which ID"]')!.options].map((o) => o.value)).toEqual(["study-id"]);
+    act(() => radio(host, "A hospital or study ID").click());
+    expect([...host.querySelector<HTMLSelectElement>('select[aria-label="Which hospital or study ID"]')!.options].map((o) => o.value)).toEqual(["study-id"]);
     act(() => radio(host, "The ID").click());
     act(() => radio(host, "Made from the ID").click());
     act(() => button(host, "Save")!.click());

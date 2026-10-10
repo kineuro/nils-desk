@@ -447,7 +447,7 @@ function SubjectsLevel({ caps, scope, view, go }: LevelProps) {
         <label className="vw-search">
           <Icon name="search" />
           <span className="sr-only">Search subjects</span>
-          <input ref={search} type="search" placeholder="A code or an ID" value={text} onChange={(e) => setText(e.target.value)} />
+          <input ref={search} type="search" placeholder="A subject code or an ID" value={text} onChange={(e) => setText(e.target.value)} />
           <span className="vw-key" aria-hidden="true">
             /
           </span>

@@ -376,7 +376,7 @@ export function chartLabels(chart: StepChart, now = new Date(), gap = 60): Chart
 export function membersBody(add: string, remove: string, why: string): { ok: true; body: MembersBody; summary: string } | { ok: false; why: string } {
   const adding = pastedList(add);
   const removing = pastedList(remove);
-  if (adding.length === 0 && removing.length === 0) return { ok: false, why: "codes to add or take out, one per line" };
+  if (adding.length === 0 && removing.length === 0) return { ok: false, why: "subject codes to add or take out, one per line" };
   const both = adding.filter((c) => removing.includes(c));
   if (both.length > 0) return { ok: false, why: `${both[0]} is both added and taken out` };
   if (!why.trim()) return { ok: false, why: "a reason; it is recorded on every membership" };
