@@ -67,9 +67,9 @@
 
 /* ------------------------------------------------------------ a kind: its colour as a frame, a left bar and the tint */
 /* the desk's .value-tag draws a kind's frame, bar and tint; here it keeps one line, ends in an ellipsis and scales with the page */
-.ms .value-tag.ms-kind { display: inline-block; justify-self: start; max-width: 100%; min-height: calc(22 * var(--p)); padding: 0 calc(6 * var(--p)); border: 1px dashed var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-text-faint); font-size: calc(13 * var(--p)); line-height: calc(20 * var(--p)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.ms .value-tag.ms-kind { display: inline-block; justify-self: start; max-width: 100%; min-height: calc(22 * var(--p)); padding: 0 calc(6 * var(--p)); border-radius: var(--n-radius); font-size: calc(13 * var(--p)); line-height: calc(20 * var(--p)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.ms .value-tag.ms-kind.none { border: 1px dashed var(--n-neutral-line); background: transparent; color: var(--n-text-faint); }
 .ms .value-tag.ms-kind.plain { border: 1px solid var(--n-neutral-line); border-left: 3px solid var(--n-neutral-icon); background: var(--n-neutral-bg); color: var(--n-text); }
-.ms .value-tag.ms-kind[data-slot] { border-style: solid; color: var(--n-text); }
 .ms .value-tag.ms-kind.off { opacity: 0.45; text-decoration: line-through; }
 
 /* ------------------------------------------------------------ the five numbers */

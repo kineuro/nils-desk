@@ -124,7 +124,7 @@ test("a card's visit opens its pick in the window, its candidates and a why", as
   const box = (await dialog.boundingBox())!;
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.y + box.height).toBeLessThanOrEqual(900);
-  await expect(dialog.getByRole("button", { name: "Keep my pick" })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Pick this one" })).toBeDisabled();
   await page.screenshot({ path: "test-results/mainscans-visit.png" });
 });
 
