@@ -63,6 +63,7 @@ import {
   primaryOf,
   rulesLine,
   stepView,
+  waitingLine,
   waitWords,
   type HeldIds,
   type IdRow,
@@ -231,6 +232,9 @@ export function PseudonymiseStep(props: StepProps) {
   // a run that stopped is tried again by the same act, never shown as if nothing happened
   const primary = next && stopped && next.act === "run" ? { ...next, label: "Try again" } : next;
   const chip = chipOf(v, open);
+  // files that wait for subject codes: one line says so, and generating them is the primary act
+  const waiting = works ? waitingLine(v) : null;
+  const generatesHere = works && v.phase === "codes" && served(caps, "POST /api/linkage/held/code");
   const changes = works && may(caps, "places:work") && served(caps, "PUT /api/places/{id}");
 
   /**
@@ -267,6 +271,23 @@ export function PseudonymiseStep(props: StepProps) {
       .then(() => pseudo.reload())
       .catch(onFailed)
       .finally(() => pseudo.setActing(null));
+  };
+
+  /**
+   * Every waiting ID given a subject code made from it, then the dataset's
+   * own thread run, so the files that waited go on in one press
+   * (2026-10-10: the person who asks to generate wants the run as well).
+   */
+  const generateAll = async () => {
+    pseudo.setActing({ phase: "giving generated subject codes", since: Date.now() });
+    try {
+      await held.generate(d.name);
+    } catch (e) {
+      pseudo.setActing(null);
+      onFailed(e);
+      return;
+    }
+    await run(null);
   };
 
   const act = (map: { pairs: string[][] } | null) => {
@@ -306,19 +327,28 @@ export function PseudonymiseStep(props: StepProps) {
         <Codes caps={caps} dataset={d} pseudo={pseudo} view={v} primary={primary} busy={pseudo.acting !== null} onRun={(map) => act(map)} onGenerate={generate} onFailed={onFailed} />
       ) : (
         <div className="ps-actions">
-          {primary && (
-            <button type="button" className="button" disabled={pseudo.acting !== null} onClick={() => act(null)}>
-              <Icon name={primary.act === "codes" ? "key" : "shield"} />
-              {primary.label}
-            </button>
-          )}
-          {works && v.phase === "codes" && served(caps, "POST /api/linkage/held/code") && v.rows.length > 0 && (
+          {waiting && <p className="ps-next">{waiting}</p>}
+          {generatesHere ? (
             <>
-              <button type="button" className="button secondary" disabled={pseudo.acting !== null} onClick={() => generate(v.rows.filter((r) => !r.coded && r.state === "held").map((r) => r.id))}>
+              {/* files wait for subject codes: generating them is the one next step, a map the other way */}
+              <button type="button" className="button" disabled={pseudo.acting !== null} onClick={() => void generateAll()}>
+                <Icon name="key" />
                 Generate subject codes
               </button>
-              <Hint text="A subject code made from the ID itself. A map given later folds it into the right subject." />
+              {primary && (
+                <button type="button" className="button secondary" disabled={pseudo.acting !== null} onClick={() => act(null)}>
+                  Give them from a map
+                </button>
+              )}
+              <Hint text={GENERATED_HINT} />
             </>
+          ) : (
+            primary && (
+              <button type="button" className="button" disabled={pseudo.acting !== null} onClick={() => act(null)}>
+                <Icon name={primary.act === "codes" ? "key" : "shield"} />
+                {primary.label}
+              </button>
+            )
           )}
           {!works && <span className="meta">{needsWork(caps, "Pseudonymising", [["data:work", "the Data page"]])}</span>}
         </div>
@@ -326,6 +356,9 @@ export function PseudonymiseStep(props: StepProps) {
     </section>
   );
 }
+
+/** What a generated subject code is, behind the "?" beside Generate (2026-10-10: final, no question after it). */
+const GENERATED_HINT = "A subject code made from the ID itself, final: the same ID gets the same subject code wherever it is read.";
 
 /* ---------------------------------------------------------------- give the IDs a code */
 

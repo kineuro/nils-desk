@@ -390,7 +390,7 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
   if (next.step === "set-ids") return "Needs its IDs before it is read";
   if (next.word === "Identified" && next.step === "pseudonymise") {
     const held = d.held?.identifiers ?? 0;
-    return held > 0 ? `${n(held)} ${held === 1 ? "ID needs" : "IDs need"} a code` : "Waits to be pseudonymised";
+    return held > 0 ? `${n(held)} ${held === 1 ? "ID needs" : "IDs need"} a subject code` : "Waits to be pseudonymised";
   }
   const running = s?.steps.find((x) => x.state === "running");
   if (running) return `${TITLE[running.step]}: running now`;

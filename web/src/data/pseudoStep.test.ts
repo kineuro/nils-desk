@@ -35,6 +35,7 @@ import {
   rulesPatch,
   STANDARD,
   stepView,
+  waitingLine,
   waitWords,
   type HeldIds,
 } from "./pseudoStep";
@@ -158,6 +159,10 @@ describe("where the step is", () => {
     expect(idsBox(some)).toEqual({ big: "6 of 8", words: "have a subject code", caution: false });
     expect(railWords(some)?.what).toBe("6 of 8 IDs have a subject code");
     expect(waitWords(some)).toBe("200 files of 2 IDs wait for a subject code");
+    // the waiting step's one line: the next step, and why (2026-10-10)
+    expect(waitingLine(codes)).toBe("Next: 8 IDs have no subject code yet, so their 7,544 files wait. Generate the subject codes from the IDs, or give them from a map.");
+    expect(waitingLine({ ...codes, without: { ids: 1, files: 1 } })).toBe("Next: One ID has no subject code yet, so its file waits. Generate the subject codes from the IDs, or give them from a map.");
+    expect(waitingLine({ ...codes, phase: "ready" })).toBeNull();
     const fresh = stepView({ ...d, held: { files: 0, identifiers: 0 } } as Dataset, step({ held: 0 }), { ...heldIds, files: 0, ids: [] }, [], false);
     expect(railWords(fresh)).toEqual({ what: "not yet", when: "next step", next: true });
     expect(idsBox(fresh).words).toBe("found at the first run");

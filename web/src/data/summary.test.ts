@@ -290,6 +290,11 @@ describe("a card's line", () => {
     expect(cardLine(loose, nextStep(loose), null)).toBe("Loose files: choose where they go");
     const fresh = dataset({ digests: { count: 0, first: null, last: null, recent: [] }, totals: { ...d.totals, stacks: 0, subjects: 0 } });
     expect(cardLine(fresh, nextStep(fresh), null)).toBe("Not read yet");
+    // an identified dataset whose IDs wait: a subject code, never a bare "code" (2026-10-10)
+    const waiting = dataset({ held: { files: 516, identifiers: 4 } } as never);
+    expect(cardLine(waiting, { word: "Identified", step: "pseudonymise", label: "Pseudonymise", busy: false }, null)).toBe("4 IDs need a subject code");
+    const one = dataset({ held: { files: 129, identifiers: 1 } } as never);
+    expect(cardLine(one, { word: "Identified", step: "pseudonymise", label: "Pseudonymise", busy: false }, null)).toBe("1 ID needs a subject code");
   });
 
   it("counts the files found, the originals of an identified dataset", () => {

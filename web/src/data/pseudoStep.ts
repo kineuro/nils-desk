@@ -217,6 +217,20 @@ export function primaryOf(v: StepView, generates: boolean, open: boolean): { lab
   return null;
 }
 
+/**
+ * The one plain line of a step whose files wait for subject codes: that this
+ * is the next step, and why (2026-10-10, Nima: the screen said nothing of
+ * it). Null in any other phase.
+ */
+export function waitingLine(v: StepView): string | null {
+  if (v.phase !== "codes") return null;
+  const ids = v.without.ids;
+  const files = v.without.files;
+  const whose = ids === 1 ? "One ID has" : `${n(ids)} IDs have`;
+  const wait = files > 0 ? `, so ${files === 1 ? "its file waits" : `their ${n(files)} files wait`}` : "";
+  return `Next: ${whose} no subject code yet${wait}. Generate the subject codes from the IDs, or give them from a map.`;
+}
+
 /** The step's chip: what waits on a person, or that it runs. */
 export function chipOf(v: StepView, open: boolean): { words: string; tone: "caution" | "ok" | "brand" } | null {
   if (v.phase === "running") return { words: "Running", tone: "brand" };

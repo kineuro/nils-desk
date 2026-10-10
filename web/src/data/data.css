@@ -237,6 +237,7 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .ps-arrow { display: grid; place-items: center; color: var(--n-text-faint); }
 
 .ps-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.625rem; padding: 0 1rem 1rem; }
+.ps-next { flex-basis: 100%; margin: 0; font-size: 14px; color: var(--n-text); }
 .ps-pad { padding: 0 1rem 0.75rem; }
 /* a run that stopped, inside the panel under its boxes: the caution colours by border, no mark of its own (2026-10-10) */
 .ps-stopped { margin: 0; padding: 0.5rem 0.75rem; border: 1px solid var(--n-caution-line); border-left: 3px solid var(--n-caution-fg); border-radius: var(--n-radius); background: var(--n-caution-bg); color: var(--n-caution-fg); font-size: var(--n-text-size-small); overflow-wrap: anywhere; }

@@ -197,8 +197,10 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(panel.textContent).toContain("files · 1.9 GB · locked");
     expect(panel.textContent).toContain("IDs · none has a subject code yet");
     expect(panel.textContent).toContain("files · what NILS reads");
-    expect(panel.querySelector(".ps-actions .button:not(.secondary)")?.textContent).toBe("Give the 8 IDs a subject code");
-    expect(button(panel, "Generate subject codes")).not.toBeNull();
+    // files that wait for subject codes: one line says it is the next step and why, and generating them is the one primary act
+    expect(panel.querySelector(".ps-next")?.textContent).toBe("Next: 8 IDs have no subject code yet, so their 7,544 files wait. Generate the subject codes from the IDs, or give them from a map.");
+    expect(panel.querySelector(".ps-actions .button:not(.secondary)")?.textContent).toBe("Generate subject codes");
+    expect(button(panel, "Give them from a map")?.classList.contains("secondary")).toBe(true);
     expect(panel.querySelector(".ps-rules-line")?.textContent).toBe("Standard rules");
     expect(button(panel, "Change")).not.toBeNull();
     // one primary button on screen: the head of the dataset leaves its own out
@@ -219,6 +221,20 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(detail.querySelector(".ps-step")).not.toBeNull();
   });
 
+  it("generates every waiting ID's subject code and runs the dataset's own thread in one press (2026-10-10)", async () => {
+    const e = await page(dataset(), {}, (c) => {
+      if (c.method === "POST" && c.url === "/api/linkage/held/code") return { status: 200, body: { files: 7544, state: "marked" } };
+      if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 61, state: "queued" } };
+      return undefined;
+    });
+    act(() => button(host, "Generate subject codes")!.click());
+    await settle(10);
+    // every held ID of the dataset, none chosen one by one, marked and not run by the door itself
+    expect(e.of("POST", "/api/linkage/held/code").map((c) => c.body)).toEqual([{ place: "study-identified", run: false }]);
+    // then the dataset's own thread: pseudonymise, read and sort
+    expect(e.of("POST", "/api/jobs")).toHaveLength(1);
+  });
+
   it("lists the IDs by their shape, fills them as a dropped map matches, and files it before it pseudonymises and sorts", async () => {
     const e = await page(dataset(), {}, (c) => {
       if (c.method === "POST" && c.url === "/api/linkage/imports") return c.body?.dry_run ? { status: 200, body: REHEARSED } : { status: 202, body: { job: 51, state: "queued", rows: 6 } };
@@ -226,7 +242,7 @@ describe("the pseudonymise step, in the dataset", () => {
       if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 52, state: "queued" } };
       return undefined;
     });
-    act(() => button(host, "Give the 8 IDs a subject code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const rows = () => [...host.querySelectorAll(".ps-table .ps-row:not(.head)")];
     expect(rows()).toHaveLength(8);
     expect(rows().map((r) => r.querySelector(".ps-shape")?.textContent)).toEqual(FILES.map((_, i) => SHAPE(i)));
@@ -281,7 +297,7 @@ describe("the pseudonymise step, in the dataset", () => {
       if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 52, state: "queued" } };
       return undefined;
     });
-    act(() => button(host, "Give the 8 IDs a subject code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const input = host.querySelector<HTMLInputElement>(".ps-file input")!;
     Object.defineProperty(input, "files", { value: [new File([MAP], "map.csv", { type: "text/csv" })], configurable: true });
     await act(async () => {
@@ -314,7 +330,7 @@ describe("the pseudonymise step, in the dataset", () => {
   it("draws two hundred IDs at a time, the most files first, where a dataset holds thousands", async () => {
     const many = { ...heldIds(), identifiers: 450, ids: Array.from({ length: 450 }, (_, i) => ({ id: 1000 + i, shape: "aAAA9999", id_type: "study-id", files: 450 - i, first_seen: AT, batch: 3, waits_for: null, state: "held" as const, code: null, also_in: [] })) };
     await page(dataset({ held: { files: ORIGINALS, identifiers: 450 } }), {}, () => undefined, { held: many });
-    act(() => button(host, "Give the 450 IDs a subject code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const rows = () => [...host.querySelectorAll(".ps-table .ps-row:not(.head)")].filter((r) => r.querySelector(".ps-shape"));
     expect(rows()).toHaveLength(200);
     expect(rows()[0].textContent).toContain("450");
@@ -328,7 +344,7 @@ describe("the pseudonymise step, in the dataset", () => {
 
   it("takes a map pasted while the box has the focus, wherever the browser aims the paste, and Paste unread says to press Ctrl+V there", async () => {
     const e = await page(dataset(), {}, (c) => (c.method === "POST" && c.url === "/api/linkage/imports" ? { status: 200, body: REHEARSED } : undefined));
-    act(() => button(host, "Give the 8 IDs a subject code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     // Ctrl+V as Firefox aims it: at the selection, here the body, not at the box that has the focus
     const pasted = () => {
       const ev = new Event("paste", { bubbles: true, cancelable: true });
@@ -359,7 +375,7 @@ describe("the pseudonymise step, in the dataset", () => {
 
   it("keeps the first row of a map with no header, and draws no ID of it", async () => {
     const e = await page(dataset(), {}, (c) => (c.method === "POST" && c.url === "/api/linkage/imports" ? { status: 200, body: REHEARSED } : undefined));
-    act(() => button(host, "Give the 8 IDs a subject code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const input = host.querySelector<HTMLInputElement>(".ps-file input")!;
     const bare = MAP.slice(MAP.indexOf("\n") + 1);
     Object.defineProperty(input, "files", { value: [new File([bare], "map.csv", { type: "text/csv" })], configurable: true });
@@ -385,7 +401,7 @@ describe("the pseudonymise step, in the dataset", () => {
       if (c.url.startsWith("/api/linkage/held/ids") && marked) return { status: 200, body: heldIds({ 107: { state: "generated", code: null, also_in: [] } }) };
       return undefined;
     });
-    act(() => button(host, "Give the 8 IDs a subject code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const last = [...host.querySelectorAll(".ps-table .ps-row:not(.head)")][7];
     await act(async () => {
       button(last, "Generate a subject code")!.click();
@@ -401,7 +417,7 @@ describe("the pseudonymise step, in the dataset", () => {
   it("says where an ID's shape is the study's UID, not an ID of PatientID's form", async () => {
     // 2026-10-10: study UID shapes stood under "ID, as its shape" unexplained
     await page(dataset(), {}, undefined, { held: heldIds({ 101: { state: "held", code: null, also_in: [], id_type: "study-instance-uid", shape: "9.99.999.9.9" } }) });
-    act(() => button(host, "Give the 8 IDs a subject code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const rows = [...host.querySelectorAll(".ps-table .ps-row:not(.head)")];
     expect(rows[1].querySelector(".ps-shape")?.textContent).toBe("9.99.999.9.9 no ID in PatientID's form: by study UID");
     expect(rows[0].querySelector(".ps-shape-note")).toBeNull();
@@ -411,7 +427,7 @@ describe("the pseudonymise step, in the dataset", () => {
     const e = await page(dataset(), {}, (c) =>
       c.method === "POST" && c.url === "/api/linkage/held/reveal" ? { status: 200, body: [{ shape: "AAA999999", id_type: "study-id", files: 3115, identifiers: [{ id: 100, value: "ABC123456", files: 3115 }] }] } : undefined,
     );
-    act(() => button(host, "Give the 8 IDs a subject code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     await act(async () => {
       button(host, "Show the IDs · recorded")!.click();
     });
