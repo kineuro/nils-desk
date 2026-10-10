@@ -4,12 +4,33 @@
 // its three columns side by side; a cohort chosen draws how it grew with no
 // event over another and its four steps on one line; a narrower window folds
 // the rail four to a row; a phone's width is one column of cards with no
-// sideways scroll; body part's and post-contrast's Run sit inside their steps.
-// Screenshots go to test-results for a look.
+// sideways scroll; body part's and post-contrast's Run sit inside their steps;
+// a map copied as a person copies it reaches the pseudonymise step by Ctrl+V
+// on the box or by Paste, in Firefox as in chromium. Screenshots go to
+// test-results for a look.
 
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
 const tops = async (l: Locator) => (await l.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)))) as number[];
+
+/** A map as a person copies it from a spreadsheet or an editor: from a page of its own, with the keys, onto the browser's clipboard. */
+async function copied(context: BrowserContext, page: Page) {
+  const editor = await context.newPage();
+  await editor.setContent("<textarea></textarea>");
+  const text = editor.locator("textarea");
+  await text.fill("study ID,subject code\nABC123456,5a9f30c6e8b21d41\naBCD1234,5a9f30c6e8b21d42\naBCE1234,5a9f30c6e8b21d43\n");
+  await text.press("ControlOrMeta+A");
+  await text.press("ControlOrMeta+C");
+  await editor.close();
+  await page.bringToFront();
+}
+
+/** The identified dataset's step, giving its IDs a code. */
+async function givingCodes(page: Page) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/data.html#data/datasets?dataset=study-identified");
+  await page.locator(".ps-step .ps-actions .button").first().click();
+}
 
 test("the bands and the chosen dataset use a laptop's width", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -159,19 +180,40 @@ test("once pseudonymised, what every file got sits beside the dataset's log", as
   await page.locator(".dp-detail").screenshot({ path: "test-results/data-pseudonymised.png" });
 });
 
-test("a pasted map fills the IDs' rows, a code and where its subject is already beside it, on one line each", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/data.html#data/datasets?dataset=study-identified");
-  await page.locator(".ps-step .ps-actions .button").first().click();
-  await page.locator(".ps-drop").evaluate((zone) => {
-    const data = new DataTransfer();
-    data.setData("text/plain", "study ID,subject code\nABC123456,5a9f30c6e8b21d41\naBCD1234,5a9f30c6e8b21d42\naBCE1234,5a9f30c6e8b21d43\n");
-    zone.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
-  });
+test("a pasted map fills the IDs' rows, a code and where its subject is already beside it, on one line each", async ({ page, context }) => {
+  await givingCodes(page);
+  await copied(context, page);
+  // Ctrl+V on the box focused as Tab or Paste leaves it, not clicked: Firefox aims a paste at the selection, then outside the box
+  await page.locator(".ps-drop").focus();
+  await page.keyboard.press("ControlOrMeta+V");
   await expect(page.locator(".ps-code-value")).toHaveCount(3);
   await expect(page.locator(".ps-drop")).toContainText("3 of 4 IDs matched");
   for (const row of await page.locator(".ps-table .ps-row:not(.head)").all()) expect((await row.boundingBox())!.height).toBeLessThan(48);
   await expect(page.locator(".ps-foot .button").last()).toHaveText("Pseudonymise and sort 201 files");
   await page.emulateMedia({ colorScheme: "dark" });
   await page.locator(".dp-detail").screenshot({ path: "test-results/data-pseudonymise-matched-dark.png" });
+});
+
+test("Paste the browser will not read says Ctrl+V on the box, and Ctrl+V there takes the map", async ({ page, context }) => {
+  await givingCodes(page);
+  await copied(context, page);
+  // the browser says no: chromium without the permission, Firefox when its own Paste prompt is turned down,
+  // which headless Firefox does not answer the same way twice, so a refusal stands in for both
+  await page.evaluate(() => Object.defineProperty(navigator.clipboard, "readText", { value: () => Promise.reject(new DOMException("No.", "NotAllowedError")) }));
+  await page.getByRole("button", { name: "Paste", exact: true }).click();
+  const words = page.locator(".ps-codes > p.warn");
+  await expect(words).toHaveText("Press Ctrl+V on the box to paste.");
+  await page.keyboard.press("ControlOrMeta+V");
+  await expect(page.locator(".ps-code-value")).toHaveCount(3);
+  await expect(words).toHaveCount(0);
+});
+
+test("Paste the browser lets read takes the map", async ({ page, context, browserName }) => {
+  test.skip(browserName !== "chromium", "Firefox asks with a Paste of its own, outside the page");
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await givingCodes(page);
+  await copied(context, page);
+  await page.getByRole("button", { name: "Paste", exact: true }).click();
+  await expect(page.locator(".ps-code-value")).toHaveCount(3);
+  await expect(page.locator(".ps-drop")).toContainText("pasted · 3 of 4 IDs matched");
 });

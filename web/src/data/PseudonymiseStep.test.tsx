@@ -5,7 +5,8 @@
 // opens in place under the rail where IDs need a code, never on a page of its
 // own, with the three boxes, one primary action and the rules as one line;
 // the IDs listed one row each by their shape, a dropped map rehearsed and the
-// rows filled as they match, a code generated for one, the IDs shown once
+// rows filled as they match, a pasted one taken while the box has the focus
+// wherever the browser aims the paste, a code generated for one, the IDs shown once
 // and recorded, and the button that says what it will do filing the map and
 // then starting the dataset's thread; the rules opened from Change with four
 // choices; the old address opening the dataset with the step open; and, once
@@ -268,6 +269,37 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(queued.command).toEqual(["bring-in", "@study-identified", "--name", expect.stringMatching(/^study-identified-\d{4}-\d\d-\d\d$/), "--pack", "mri"]);
     expect(e.calls.findIndex((c) => c.method === "POST" && c.url === "/api/jobs")).toBeGreaterThan(e.calls.findIndex((c) => c.url === "/api/jobs/51"));
     expect(text()).toContain("study-identified: pseudonymising, then reading and sorting.");
+  });
+
+  it("takes a map pasted while the box has the focus, wherever the browser aims the paste, and Paste unread says to press Ctrl+V there", async () => {
+    const e = await page(dataset(), {}, (c) => (c.method === "POST" && c.url === "/api/linkage/imports" ? { status: 200, body: REHEARSED } : undefined));
+    act(() => button(host, "Give the 8 IDs a code")!.click());
+    // Ctrl+V as Firefox aims it: at the selection, here the body, not at the box that has the focus
+    const pasted = () => {
+      const ev = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(ev, "clipboardData", { value: { getData: () => MAP } });
+      document.body.dispatchEvent(ev);
+      return ev;
+    };
+    // nothing is taken while the focus is elsewhere
+    await act(async () => void pasted());
+    expect(e.of("POST", "/api/linkage/imports")).toHaveLength(0);
+    // Paste, where the browser will not read the clipboard, says what to do and puts the focus on the box
+    act(() => button(host, "Paste")!.click());
+    expect(host.querySelector(".ps-codes > p.warn")?.textContent).toBe("Press Ctrl+V on the box to paste.");
+    expect(document.activeElement).toBe(host.querySelector(".ps-drop"));
+    let ev: Event | null = null;
+    await act(async () => {
+      ev = pasted();
+    });
+    await settle(8);
+    expect(ev!.defaultPrevented).toBe(true);
+    const rehearsal = e.of("POST", "/api/linkage/imports")[0].body!;
+    expect(rehearsal).toMatchObject({ place: "study-identified", dry_run: true });
+    expect(rehearsal.rows as string[][]).toHaveLength(6);
+    expect(text()).toContain("pasted");
+    expect(text()).toContain("6 of 8 IDs matched");
+    expect(host.querySelector(".ps-codes > p.warn")).toBeNull();
   });
 
   it("gives one ID a generated code, marked for the next run and nothing queued", async () => {

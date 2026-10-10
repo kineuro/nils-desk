@@ -354,7 +354,9 @@ function Codes(props: {
       });
   };
 
+  const took = useRef(0);
   const take = (name: string, textOf: string) => {
+    took.current += 1;
     setRefused(null);
     const csv = parseCsv(textOf);
     const cols = codeColumnsOf(csv, shapes);
@@ -370,19 +372,37 @@ function Codes(props: {
     if (!f) return;
     f.text().then((t) => take(f.name, t), onFailed);
   };
+  // Ctrl+V on the box: aimed at it, or while it or a button in it has the
+  // focus. The document hears it, not the box: Firefox aims a paste at the
+  // selection rather than the focus, so a box reached by Tab, or focused by
+  // Paste below, never would.
+  const taking = useRef(take);
+  useEffect(() => {
+    taking.current = take;
+  });
+  useEffect(() => {
+    const pasted = (e: ClipboardEvent) => {
+      const box = zone.current;
+      if (!box || !(box.contains(e.target as Node | null) || box.contains(document.activeElement))) return;
+      const t = e.clipboardData?.getData("text") ?? "";
+      if (t.trim() === "") return;
+      e.preventDefault();
+      taking.current("pasted", t);
+    };
+    document.addEventListener("paste", pasted);
+    return () => document.removeEventListener("paste", pasted);
+  }, []);
+  // the browser's own reading of the clipboard, which Firefox asks about first; refused, Ctrl+V on the box
   const paste = () => {
-    const read = navigator.clipboard?.readText;
-    if (!read) {
+    const at = took.current;
+    const instead = () => {
+      // a Ctrl+V while the browser asked has given the map already
+      if (took.current !== at) return;
       zone.current?.focus();
-      return setRefused("Press Ctrl+V on the box to paste.");
-    }
-    navigator.clipboard.readText().then(
-      (t) => take("pasted", t),
-      () => {
-        zone.current?.focus();
-        setRefused("Press Ctrl+V on the box to paste.");
-      },
-    );
+      setRefused("Press Ctrl+V on the box to paste.");
+    };
+    if (!navigator.clipboard?.readText) return instead();
+    navigator.clipboard.readText().then((t) => take("pasted", t), instead);
   };
   const reveal = () => {
     if (shown) return setShown(null);
@@ -417,13 +437,6 @@ function Codes(props: {
             e.preventDefault();
             setOver(false);
             fromFile(e.dataTransfer.files?.[0]);
-          }}
-          onPaste={(e) => {
-            const t = e.clipboardData.getData("text");
-            if (t.trim() !== "") {
-              e.preventDefault();
-              take("pasted", t);
-            }
           }}
         >
           <Icon name="upload" size="lg" />
