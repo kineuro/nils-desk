@@ -13,7 +13,6 @@ import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
-import { ops } from "../ops/client";
 import { messageOf } from "../settings/common";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
@@ -33,9 +32,7 @@ import {
   moveKind,
   moveTie,
   pctWords,
-  refusalWords,
   roleWord,
-  saveRefusal,
   tieWords,
   toggleKind,
   versionsWords,
@@ -45,56 +42,63 @@ import {
   type MapAnswer,
   type Rules,
   type RulesDoc,
-  type Saved,
   type Scope,
 } from "./mainScans";
 import { KindTag, type Slot } from "./MainScansParts";
 
+export type Status = { tone: "ok" | "warn"; words: string } | { tone: "busy"; words: string; since: number };
+
 export interface RulesPanelProps {
   caps: Capabilities;
   scope: Scope;
+  /** The scope's own name, as the engine answered it. */
+  title: string;
   doc: RulesDoc;
   /** The draft where there is one, else the saved rules. */
   working: Rules;
   dirty: boolean;
   role: string;
   roles: string[];
+  /** The roles whose rules the draft changes: a save writes every role. */
+  changedRoles: string[];
   onRole: (role: string) => void;
-  /** The current role's map, with the draft as it settled; null while it is first read. */
+  /** The current role's map, with the draft as it settled; null while it is first read or could not be. */
   map: MapAnswer | null;
-  /** A newer draft is being asked about. */
+  /** Since when the map is first read, and why it could not be. */
+  mapSince: number | null;
+  mapFailed: string | null;
+  /** A newer draft is being asked about, or its answer has not come. */
   mapBusy: boolean;
+  /** Why the map of the latest changes could not be read, while the one shown is older. */
+  mapStale: string | null;
   slot: Slot;
   onChange: (next: Rules) => void;
   onRevert: () => void;
   onClose: () => void;
-  /** The rules read again; resolves to the fresh document. */
-  reload: () => Promise<RulesDoc | null>;
-  /** The picks read again, once a save's run has ended. */
-  onRun: () => void;
+  /** A save of the draft with its why; true when it was saved. The page follows its run. */
+  onSave: (reason: string) => Promise<boolean>;
+  saving: boolean;
+  /** The map's answer is the draft's own, so the effect shown is what saving does. */
+  effectReady: boolean;
+  /** The one line about the last save, or the draft moved onto a newer version. */
+  status: Status | null;
 }
-
-type Status = { tone: "ok" | "warn"; words: string } | { tone: "busy"; words: string; since: number };
 
 /** The slice thickness the slider draws: 1 to 6 mm, its top end any. */
 const MM_ANY = 6;
 
 export function RulesPanel(p: RulesPanelProps) {
-  const { caps, scope, doc, working, dirty, role, map } = p;
+  const { caps, scope, doc, working, dirty, role, map, saving } = p;
   const [reason, setReason] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<Status | null>(null);
-  const [following, setFollowing] = useState<{ version: number; job: number; since: number } | null>(null);
   const [advanced, setAdvanced] = useState(false);
   const [textOpen, setTextOpen] = useState(false);
   const [yaml, setYaml] = useState<{ version: number; text: string | null; why: string | null } | null>(null);
   const version = doc.current.version;
   const rr = working.roles[role];
   const saved = doc.current.rules.roles[role];
+  // only the kinds the scope holds, from the map; the rest keep their places, hidden
   const held = map ? map.kinds.map((k) => k.key) : [];
-  const full = rr ? kindsOrder(rr, held) : [];
-  // the kinds the data holds, in the rules' order, once the map says which they are
-  const shown = map ? full.filter((k) => held.includes(k)) : full;
+  const shown = rr && map ? kindsOrder(rr, held).filter((k) => held.includes(k)) : [];
   const allowed = (k: string) => map?.kinds.find((x) => x.key === k)?.allowed !== false;
   const used = (k: string) => !rr?.not_used.includes(k);
   const ranked = shown.filter(used);
@@ -102,6 +106,7 @@ export function RulesPanel(p: RulesPanelProps) {
   const maySave = may(caps, "pipelines:work") && served(caps, RULES_SAVE_DOOR);
   const readsText = served(caps, RULES_TEXT_DOOR);
   const change = (fn: (r: Rules) => void) => p.onChange(edited(working, fn));
+  const canSave = dirty && p.effectReady && !saving && reason.trim() !== "";
 
   // the rules as text, of the version saved now
   useEffect(() => {
@@ -116,83 +121,9 @@ export function RulesPanel(p: RulesPanelProps) {
     };
   }, [textOpen, readsText, scope, version]);
 
-  // a save's pick run, followed until it ends; then the page reads its picks again
-  useEffect(() => {
-    if (!following) return;
-    let alive = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const { version: v, job, since } = following;
-    const tick = () => {
-      ops.job(job).then(
-        (row) => {
-          if (!alive) return;
-          if (row.state === "done") {
-            setStatus({ tone: "ok", words: `Version ${v} saved; its picks are written.` });
-            setFollowing(null);
-            p.onRun();
-          } else if (row.state === "failed" || row.state === "cancelled") {
-            setStatus({ tone: "warn", words: `Version ${v} saved; its pick run ${row.state === "failed" ? "stopped" : "was cancelled"}${row.error ? `: ${row.error}` : "."}` });
-            setFollowing(null);
-            p.onRun();
-          } else {
-            setStatus({ tone: "busy", words: `Version ${v} saved; picking with it (job ${job}, ${row.state})`, since });
-            timer = setTimeout(tick, 2000);
-          }
-        },
-        () => {
-          if (alive) timer = setTimeout(tick, 4000);
-        },
-      );
-    };
-    tick();
-    return () => {
-      alive = false;
-      clearTimeout(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the run is followed once a save; the page's callback may change meanwhile
-  }, [following]);
-
-  const follow = (s: Saved) => {
-    const v = s.version || version + 1;
-    if (s.job === null) {
-      setStatus({ tone: "ok", words: `Version ${v} saved.` });
-      p.onRun();
-      return;
-    }
-    if (!(may(caps, "pipelines:see") && served(caps, "GET /api/jobs/{id}"))) {
-      setStatus({ tone: "ok", words: `Version ${v} saved; its pick run is queued (job ${s.job}).` });
-      p.onRun();
-      return;
-    }
-    const since = Date.now();
-    setStatus({ tone: "busy", words: `Version ${v} saved; picking with it (job ${s.job})`, since });
-    setFollowing({ version: v, job: s.job, since });
-  };
-
   const save = async () => {
-    if (!dirty || reason.trim() === "" || saving) return;
-    setSaving(true);
-    setStatus(null);
-    try {
-      const s = await mainScans.save(scope, working, reason, version);
-      setReason("");
-      await p.reload();
-      p.onRevert();
-      follow(s);
-    } catch (e) {
-      const r = saveRefusal(e);
-      if (r.kind === "stale") {
-        // someone saved first: the rules are read again, and this draft, made on the older version, is let go
-        const fresh = await p.reload();
-        p.onRevert();
-        const c = fresh?.current;
-        setStatus({ tone: "warn", words: c ? `${c.author ?? "Someone"} saved version ${c.version} first. The rules now show it; your changes were not saved.` : "Someone saved first; your changes were not saved." });
-      } else {
-        setStatus({ tone: "warn", words: refusalWords(r) });
-      }
-    } finally {
-      setSaving(false);
-    }
+    if (!canSave) return;
+    if (await p.onSave(reason)) setReason("");
   };
 
   const effect = dirty ? (map?.effect ?? null) : null;
@@ -208,16 +139,17 @@ export function RulesPanel(p: RulesPanelProps) {
             {!doc.current.saved ? ", the pack's defaults" : ""}
             {dirty ? ", changed" : ""}
           </span>
-          <h2>Main scans of {scope.name}</h2>
+          <h2>Main scans of {p.title}</h2>
         </div>
         <button type="button" className="icon-button" aria-label="Close the rules" onClick={p.onClose}>
           <Icon name="x" />
         </button>
       </div>
 
-      <div className="ms-effect" aria-busy={p.mapBusy} aria-label="What saving changes">
+      <div className={p.mapStale ? "ms-effect stale" : "ms-effect"} aria-busy={p.mapBusy} aria-label="What saving changes">
         <span className="eyebrow">{dirty ? `If saved · ${roleWord(role)}` : `Saved · ${roleWord(role)}`}</span>
         <span className="ms-effect-line">{!dirty ? "No change yet" : effect ? effectWords(effect) : "Reading what it changes"}</span>
+        {p.mapStale && <span className="warn ms-status">The effect of your latest changes could not be read: {p.mapStale}</span>}
         {rows.length > 0 && (
           <div className="ms-effect-rows">
             {rows.map((r) => (
@@ -232,11 +164,12 @@ export function RulesPanel(p: RulesPanelProps) {
         )}
       </div>
 
-      <div className="ms-rules-body">
-        <div className="chips" role="group" aria-label="Role">
+      <fieldset className="ms-rules-body" disabled={saving}>
+        <div className="chips" role="group" aria-label="Role of the rules">
           {p.roles.map((r) => (
             <button key={r} type="button" className={r === role ? "opt on" : "opt"} aria-pressed={r === role} onClick={() => p.onRole(r)}>
               {roleWord(r)}
+              {p.changedRoles.includes(r) && <span className="ms-key-changed"> · changed</span>}
             </button>
           ))}
         </div>
@@ -256,7 +189,9 @@ export function RulesPanel(p: RulesPanelProps) {
 
             <div className="ms-rules-sec">
               <span className="eyebrow">Kinds, in the order they are taken</span>
-              {shown.length === 0 && <p className="ms-none">No kind of this role here.</p>}
+              {!map && p.mapFailed && <p className="warn">The kinds could not be read: {p.mapFailed}</p>}
+              {!map && !p.mapFailed && <Wait phase="reading the kinds" since={p.mapSince ?? Date.now()} />}
+              {map && shown.length === 0 && <p className="ms-none">No kind of this role here.</p>}
               {shown.map((k, i) => {
                 const on = used(k);
                 return (
@@ -266,9 +201,10 @@ export function RulesPanel(p: RulesPanelProps) {
                       <KindTag kind={k} slot={p.slot} off={!on || !allowed(k)} />
                       {isNewKind(saved, k) && <span className="tag caution">new</span>}
                     </span>
-                    <button type="button" className={on ? "opt on" : "opt"} aria-pressed={on} aria-label={`${k}: ${on ? "used" : "not used"}`} onClick={() => p.onChange(toggleKind(working, role, held, k))}>
-                      {on ? "Used" : "Not used"}
-                    </button>
+                    <label className="ms-use">
+                      <input type="checkbox" checked={on} aria-label={`Use ${k}`} onChange={() => p.onChange(toggleKind(working, role, k))} />
+                      Used
+                    </label>
                     <button type="button" className="icon-button" aria-label={`Move ${k} up`} disabled={i === 0} onClick={() => p.onChange(moveKind(working, role, held, k, -1, shown))}>
                       <Icon name="chevron-up" />
                     </button>
@@ -282,7 +218,7 @@ export function RulesPanel(p: RulesPanelProps) {
 
             <div className="ms-rules-sec">
               <span className="eyebrow">Allowed</span>
-              {hasContrastKinds(full) && (
+              {hasContrastKinds(held) && (
                 <Keys<Contrast>
                   name="Contrast"
                   value={rr.contrast}
@@ -387,7 +323,7 @@ export function RulesPanel(p: RulesPanelProps) {
 
         {readsText && (
           <div className="ms-rules-sec">
-            <button type="button" className="button quiet ms-text-toggle" aria-pressed={textOpen} onClick={() => setTextOpen((t) => !t)}>
+            <button type="button" className="button quiet ms-text-toggle" aria-expanded={textOpen} onClick={() => setTextOpen((t) => !t)}>
               <Icon name="code" />
               {textOpen ? "Hide the text" : "As text"}
             </button>
@@ -399,20 +335,20 @@ export function RulesPanel(p: RulesPanelProps) {
             )}
           </div>
         )}
-      </div>
+      </fieldset>
 
       <div className="ms-rules-foot">
         {maySave ? (
           <label className="ms-reason">
             Why this version
-            <input type="text" value={reason} placeholder="the lesion study wants 3D T1 only" onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} />
+            <input type="text" value={reason} disabled={saving} placeholder="the lesion study wants 3D T1 only" onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void save()} />
           </label>
         ) : (
           <span className="ms-none">Saving a version needs work on Pipelines.</span>
         )}
         <div className="row ms-acts">
           {maySave && (
-            <button type="button" className="button" disabled={!dirty || reason.trim() === "" || saving} onClick={() => void save()}>
+            <button type="button" className="button" disabled={!canSave} onClick={() => void save()}>
               Save as version {version + 1}
             </button>
           )}
@@ -420,17 +356,21 @@ export function RulesPanel(p: RulesPanelProps) {
             Back to version {version}
           </button>
         </div>
-        {status &&
-          (status.tone === "busy" ? (
-            <Wait phase={status.words} since={status.since} />
-          ) : (
-            <p className={status.tone === "warn" ? "warn ms-status" : "ms-status"} role="status">
-              {status.words}
-            </p>
-          ))}
+        <StatusLine status={p.status} />
         <span className="ms-versions">{versionsWords(doc.versions)}</span>
       </div>
     </aside>
+  );
+}
+
+/** The one line about a save and its pick run, or a draft moved onto a newer version. */
+export function StatusLine({ status }: { status: Status | null }) {
+  if (!status) return null;
+  if (status.tone === "busy") return <Wait phase={status.words} since={status.since} />;
+  return (
+    <p className={status.tone === "warn" ? "warn ms-status" : "ms-status"} role="status">
+      {status.words}
+    </p>
   );
 }
 

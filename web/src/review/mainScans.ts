@@ -239,14 +239,11 @@ export function moveKind(rules: Rules, role: string, held: readonly string[], ki
   });
 }
 
-/** One kind switched off or on again; it keeps its place in the order. */
-export function toggleKind(rules: Rules, role: string, held: readonly string[], kind: string): Rules {
-  const rr = rules.roles[role];
-  if (!rr) return rules;
-  const full = kindsOrder(rr, held);
+/** One kind switched off or on again: only not_used changes, so it keeps its place and off then on again is the rules it came from. */
+export function toggleKind(rules: Rules, role: string, kind: string): Rules {
+  if (!rules.roles[role]) return rules;
   return edited(rules, (r) => {
     const x = r.roles[role];
-    x.kinds_in_order = full;
     x.not_used = x.not_used.includes(kind) ? x.not_used.filter((k) => k !== kind) : [...x.not_used, kind];
   });
 }
@@ -282,8 +279,16 @@ export interface CurrentRules extends RulesVersion {
   rules: Rules;
 }
 
+/** The scope as the engine answered it: its kind, its id and its own name. */
+export interface ScopeOf {
+  kind: ScopeKind;
+  id: number | null;
+  name: string;
+}
+
 /** `GET /api/picks/rules`: the rules in force for the scope and the versions saved. */
 export interface RulesDoc {
+  scope: ScopeOf | null;
   pack: { name: string; version: string } | null;
   current: CurrentRules;
   versions: RulesVersion[];
@@ -303,7 +308,9 @@ export function rulesDocOf(raw: unknown): RulesDoc {
   const versions = (Array.isArray(a.versions) ? a.versions : []).map(versionOf);
   if (!versions.some((v) => v.version === current.version)) versions.push({ version: current.version, reason: current.reason, author: current.author, at: current.at });
   versions.sort((x, y) => y.version - x.version);
-  return { pack: text(pack.name) ? { name: text(pack.name) as string, version: text(pack.version) ?? "" } : null, current, versions };
+  const sc = obj(a.scope);
+  const scope: ScopeOf | null = sc.kind === "cohort" || sc.kind === "dataset" ? { kind: sc.kind, id: num(sc.id), name: text(sc.name) ?? "" } : null;
+  return { scope, pack: text(pack.name) ? { name: text(pack.name) as string, version: text(pack.version) ?? "" } : null, current, versions };
 }
 
 /** The versions in one line, newest first, as the panel's foot says them. */

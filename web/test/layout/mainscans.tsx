@@ -167,7 +167,7 @@ function stripsOf(r: string) {
 }
 
 const RULES_DOC = {
-  scope: { cohort: "ms-followup" },
+  scope: { kind: "cohort", id: 7, name: "ms-followup" },
   pack: { name: "mri", version: "1.1.0" },
   current: { version: 2, saved: true, reason: "3D first for the lesion study", author: "astrid", at: "2026-10-10T09:00:00Z", digest: "d2", rules: RULES },
   versions: [

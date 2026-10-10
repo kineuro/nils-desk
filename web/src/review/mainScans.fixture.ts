@@ -37,7 +37,7 @@ export function rulesAnswer(version = 2, rules: Rules = RULES, author = "astrid"
   const versions: { version: number; reason: string; author: string | null; at: string | null }[] = [{ version: 1, reason: "the pack's defaults", author: null, at: null }];
   for (let v = 2; v <= version; v++) versions.push({ version: v, reason: v === version ? "3D first for the lesion study" : `version ${v}`, author, at: "2026-10-10T09:00:00Z" });
   return {
-    scope: { cohort: "ms-followup" },
+    scope: { kind: "cohort", id: 7, name: "ms-followup" },
     pack: { name: "mri", version: "1.1.0" },
     current: { version, saved: version > 1, reason: version > 1 ? "3D first for the lesion study" : "the pack's defaults", author: version > 1 ? author : null, at: version > 1 ? "2026-10-10T09:00:00Z" : null, digest: `d${version}`, rules },
     versions,

@@ -179,12 +179,19 @@
 .ms-effect-row .after { font-weight: 600; color: var(--n-text-dim); }
 .ms-effect-row .after.up { color: var(--n-ok-fg); }
 .ms-effect-row .after.down { color: var(--n-caution-fg); }
-.ms-rules-body { display: flex; flex-direction: column; gap: calc(18 * var(--p)); padding: calc(14 * var(--p)) calc(18 * var(--p)); }
+/* a fieldset, so nothing in it is changed while a save is under way */
+.ms-rules-body { display: flex; flex-direction: column; gap: calc(18 * var(--p)); min-width: 0; margin: 0; padding: calc(14 * var(--p)) calc(18 * var(--p)); border: 0; }
+.ms-rules-body:disabled { opacity: 0.7; }
+.ms-effect.stale .ms-effect-rows { opacity: 0.5; }
+/* a role whose rules the draft changes says so beside its name */
+.ms-key-changed { margin-left: calc(2 * var(--p)); font-weight: 400; color: var(--n-text-faint); }
+/* whether a kind is used: a quiet switch on every row, not a coloured key */
+.ms-use { display: inline-flex; align-items: center; gap: calc(6 * var(--p)); font-size: calc(13 * var(--p)); color: var(--n-text-dim); cursor: pointer; }
+.ms-use input { width: calc(15 * var(--p)); height: calc(15 * var(--p)); margin: 0; accent-color: var(--n-text-dim); }
 .ms-rules-sec { display: flex; flex-direction: column; gap: calc(8 * var(--p)); }
 .ms-wide-keys { display: flex; flex-direction: column; gap: calc(4 * var(--p)); }
 .ms-wide-keys .opt { width: 100%; }
 .ms-order-row { display: grid; grid-template-columns: calc(18 * var(--p)) minmax(0, 1fr) calc(88 * var(--p)) calc(30 * var(--p)) calc(30 * var(--p)); gap: calc(6 * var(--p)); align-items: center; }
-.ms-order-row .opt { justify-content: center; }
 .ms-order-name { display: flex; align-items: center; gap: calc(6 * var(--p)); min-width: 0; }
 .ms-order-name .ms-kind { flex: 0 1 auto; min-width: 0; }
 .ms-rank { font-size: calc(13 * var(--p)); color: var(--n-text-faint); text-align: right; font-variant-numeric: tabular-nums; }

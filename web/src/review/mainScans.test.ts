@@ -199,10 +199,10 @@ describe("a draft", () => {
     expect(moveKind(RULES, "t1w", held, "2D SE", 1).roles.t1w.kinds_in_order).toEqual(["3D MPRAGE", "3D MPRAGE +C", "3D SPGR", "2D SE"]);
   });
   it("switches a kind off and on again in its place, and is the saved rules again when it is", () => {
-    const off = toggleKind(RULES, "t1w", [], "3D MPRAGE +C");
+    const off = toggleKind(RULES, "t1w", "3D MPRAGE +C");
     expect(off.roles.t1w).toMatchObject({ kinds_in_order: ["3D MPRAGE", "3D MPRAGE +C", "2D SE"], not_used: ["3D MPRAGE +C"] });
     expect(sameRules(off, RULES)).toBe(false);
-    expect(sameRules(toggleKind(off, "t1w", [], "3D MPRAGE +C"), RULES)).toBe(true);
+    expect(sameRules(toggleKind(off, "t1w", "3D MPRAGE +C"), RULES)).toBe(true);
   });
   it("moves a tie key, and compares by what it says whatever the order of its keys", () => {
     expect(moveTie(RULES, "earlier_series", -1).same_kind_in_one_visit.near_tie_goes_to.slice(-2)).toEqual(["earlier_series", "later_full_repeat"]);

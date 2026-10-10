@@ -37,8 +37,10 @@ import {
   paletteOf,
   roleWord,
   rolesOf,
+  refusalWords,
   rulesOf,
   sameRules,
+  saveRefusal,
   scopeKey,
   scopeOf,
   type Columns,
@@ -50,11 +52,12 @@ import {
   type Rules,
   type RulesDoc,
   type Scope,
+  type ScopeOf,
   type Strips,
   type SubjectsPage,
 } from "./mainScans";
 import { ByVisitBox, GroupBox, KindsBox, Numbers, SeriesBox, WhereBox, type Slot } from "./MainScansParts";
-import { RulesPanel } from "./RulesPanel";
+import { RulesPanel, StatusLine, type Status } from "./RulesPanel";
 import { PICK_BORDER } from "./picks";
 import { VisitPick } from "./VisitPick";
 import "./mainScans.css";
@@ -114,7 +117,8 @@ function useSettled<T>(value: T, ms: number): T {
 
 // ------------------------------------------------------------------ the draft, kept in the browser
 
-const draftKey = (s: Scope) => `nils.mainScans.draft.${scopeKey(s)}`;
+/** A draft is kept by the scope the engine answered: its kind and id, so a renamed cohort keeps its draft. */
+const draftKey = (s: ScopeOf) => `nils.mainScans.draft.${s.kind}:${s.id ?? s.name}`;
 
 interface Draft {
   /** The version it was made from: a draft of an older version is let go. */
@@ -122,7 +126,7 @@ interface Draft {
   rules: Rules;
 }
 
-function keptDraft(s: Scope): Draft | null {
+function keptDraft(s: ScopeOf): Draft | null {
   try {
     const raw = sessionStorage.getItem(draftKey(s));
     if (!raw) return null;
@@ -133,7 +137,8 @@ function keptDraft(s: Scope): Draft | null {
   }
 }
 
-function keepDraft(s: Scope, d: Draft | null) {
+function keepDraft(s: ScopeOf | null, d: Draft | null) {
+  if (!s) return;
   try {
     if (d) sessionStorage.setItem(draftKey(s), JSON.stringify(d));
     else sessionStorage.removeItem(draftKey(s));
@@ -260,7 +265,10 @@ export function MainScansPage({ caps, query }: { caps: Capabilities; query?: Rec
 
 function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope; earlier: number }) {
   const [doc, setDoc] = useState<Load<RulesDoc>>(loading);
-  const [draft, setDraftState] = useState<Draft | null>(() => keptDraft(scope));
+  const [draft, setDraftState] = useState<Draft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<Status | null>(null);
+  const [following, setFollowing] = useState<{ version: number; job: number; since: number } | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [columns, setColumns] = useState<Columns>("scanner");
   const [group, setGroup] = useState<Group>({ by: "breaks" });
@@ -280,6 +288,8 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
     () =>
       mainScans.rules(scope).then(
         (value) => {
+          // a draft kept in this tab from before comes back with the rules it was made on
+          setDraftState((d) => d ?? (value.scope ? keptDraft(value.scope) : null));
           setDoc({ kind: "ready", value, busy: false, why: null });
           return value;
         },
@@ -295,32 +305,112 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
   }, [readRules]);
 
   const current = doc.kind === "ready" ? doc.value.current : null;
+  const replied = doc.kind === "ready" ? doc.value.scope : null;
   const version = current?.version ?? null;
   const roles = current ? rolesOf(current.rules) : [];
   const shownRole = role !== null && roles.includes(role) ? role : (roles[0] ?? null);
-  // a draft holds while it was made from the version saved now; one made from an older version is let go
+  // a draft holds while it was made on the version saved now
   const live = draft !== null && current !== null && draft.base === current.version ? draft : null;
   const working = live?.rules ?? current?.rules ?? null;
   const dirty = live !== null;
-  // a draft kept from before is asked with from the first map, while the rules it was made from are read
-  const asking = draft !== null && (current === null || draft.base === current.version) ? draft.rules : null;
+  const asking = live?.rules ?? null;
   const settled = useSettled(asking, 300);
   const settledKey = settled ? canonical(settled) : "";
-  // a change not yet asked of the map door: what the map shows is the draft before it
-  const pending = (live ? canonical(live.rules) : "") !== settledKey;
+  // a change not yet asked of the map door: nothing is asked until the draft settles
+  const pending = (asking ? canonical(asking) : "") !== settledKey;
+  const changedRoles = live && current ? roles.filter((r) => canonical(live.rules.roles[r] ?? null) !== canonical(current.rules.roles[r] ?? null)) : [];
 
+  // a draft made on an older version is never let go silently: it moves onto the version saved now, and says so
   useEffect(() => {
-    if (draft !== null && current !== null && draft.base !== current.version) {
+    if (draft === null || current === null || draft.base === current.version) return;
+    const from = draft.base;
+    const by = current.author ? ` by ${current.author}` : "";
+    if (sameRules(draft.rules, current.rules)) {
       setDraftState(null);
-      keepDraft(scope, null);
+      keepDraft(replied, null);
+      setStatus({ tone: "ok", words: `Your changes were made on version ${from}; version ${current.version}, saved${by}, says the same.` });
+      return;
     }
-  }, [draft, current, scope]);
+    const d = { base: current.version, rules: draft.rules };
+    setDraftState(d);
+    keepDraft(replied, d);
+    setStatus({ tone: "warn", words: `Your changes were made on version ${from}; version ${current.version} is saved now${by}. The effect shows them against it.` });
+  }, [draft, current, replied]);
 
   const setDraft = (next: Rules | null) => {
     if (!current) return;
     const d = next === null || sameRules(next, current.rules) ? null : { base: current.version, rules: next };
     setDraftState(d);
-    keepDraft(scope, d);
+    keepDraft(replied, d);
+  };
+
+  // a save's pick run, followed until it ends, however the panel is opened or closed; then the page reads its picks again
+  useEffect(() => {
+    if (!following) return;
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const { version: v, job, since } = following;
+    const tick = () => {
+      ops.job(job).then(
+        (row) => {
+          if (!alive) return;
+          if (row.state === "done" || row.state === "failed" || row.state === "cancelled") {
+            setStatus(
+              row.state === "done"
+                ? { tone: "ok", words: `Version ${v} saved; its picks are written.` }
+                : { tone: "warn", words: `Version ${v} saved; its pick run ${row.state === "failed" ? "stopped" : "was cancelled"}${row.error ? `: ${row.error}` : "."}` },
+            );
+            setFollowing(null);
+            setReload((x) => x + 1);
+          } else {
+            setStatus({ tone: "busy", words: `Version ${v} saved; picking with it (job ${job}, ${row.state})`, since });
+            timer = setTimeout(tick, 2000);
+          }
+        },
+        () => {
+          if (alive) timer = setTimeout(tick, 4000);
+        },
+      );
+    };
+    tick();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [following]);
+
+  const save = async (reason: string): Promise<boolean> => {
+    if (!live || !current || saving) return false;
+    setSaving(true);
+    setStatus(null);
+    try {
+      const done = await mainScans.save(scope, live.rules, reason, current.version);
+      // the draft is what was saved: let it go before the new version is read, so it is not moved onto it
+      setDraftState(null);
+      keepDraft(replied, null);
+      await readRules();
+      const v = done.version || current.version + 1;
+      if (done.job === null) {
+        setStatus({ tone: "ok", words: `Version ${v} saved.` });
+        setReload((x) => x + 1);
+      } else if (!(may(caps, "pipelines:see") && served(caps, "GET /api/jobs/{id}"))) {
+        setStatus({ tone: "ok", words: `Version ${v} saved; its pick run is queued (job ${done.job}).` });
+        setReload((x) => x + 1);
+      } else {
+        const since = Date.now();
+        setStatus({ tone: "busy", words: `Version ${v} saved; picking with it (job ${done.job})`, since });
+        setFollowing({ version: v, job: done.job, since });
+      }
+      return true;
+    } catch (e) {
+      const r = saveRefusal(e);
+      // someone saved first: the rules are read again, and the draft moves onto their version, said in one line
+      if (r.kind === "stale") await readRules();
+      else setStatus({ tone: "warn", words: refusalWords(r) });
+      return false;
+    } finally {
+      setSaving(false);
+    }
   };
 
   const grow = useCallback(
@@ -338,7 +428,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
   // the map of the role, with the draft once it settles
   const mapAt = `${shownRole}|${columns}`;
   useEffect(() => {
-    if (shownRole === null || version === null) return;
+    if (shownRole === null || version === null || pending) return;
     let alive = true;
     const at = `${shownRole}|${columns}`;
     setMap((m) => (m.at === at && m.load.kind === "ready" ? { at, load: { ...m.load, busy: true } } : { at, load: loading() }));
@@ -354,13 +444,13 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says, not by the object holding it
-  }, [scope, shownRole, columns, settledKey, reload, version, grow]);
+  }, [scope, shownRole, columns, settledKey, pending, reload, version, grow]);
 
   // the group's subjects, a page at a time
   // a page is shown only for the role, columns, group, order and page it was asked for; a draft's answer replaces the last one in place
   const subjectsAt = `${shownRole}|${columns}|${canonical(group)}|${order}|${page}`;
   useEffect(() => {
-    if (shownRole === null || version === null || !served(caps, MAP_SUBJECTS_DOOR) || view !== "cards") return;
+    if (shownRole === null || version === null || pending || !served(caps, MAP_SUBJECTS_DOOR) || view !== "cards") return;
     let alive = true;
     const at = `${shownRole}|${columns}|${canonical(group)}|${order}|${page}`;
     setSubjects((s) => (s.at === at && s.load.kind === "ready" ? { at, load: { ...s.load, busy: true } } : { at, load: loading() }));
@@ -379,11 +469,11 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says
-  }, [caps, scope, shownRole, columns, group, order, page, settledKey, reload, version, view, grow]);
+  }, [caps, scope, shownRole, columns, group, order, page, settledKey, pending, reload, version, view, grow]);
 
   // every subject's strips, while they are shown
   useEffect(() => {
-    if (shownRole === null || version === null || view !== "strips" || !served(caps, MAP_STRIPS_DOOR)) return;
+    if (shownRole === null || version === null || pending || view !== "strips" || !served(caps, MAP_STRIPS_DOOR)) return;
     let alive = true;
     const at = `${shownRole}|${columns}`;
     setStrips((s) => (s.at === at && s.load.kind === "ready" ? { at, load: { ...s.load, busy: true } } : { at, load: loading() }));
@@ -399,7 +489,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says
-  }, [caps, scope, shownRole, columns, settledKey, reload, version, view, grow]);
+  }, [caps, scope, shownRole, columns, settledKey, pending, reload, version, view, grow]);
 
   if (doc.kind === "loading") return <Wait phase="reading the rules" since={doc.since} size="panel" />;
   if (doc.kind === "failed")
@@ -419,6 +509,8 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
     );
 
   const rulesDoc = doc.value;
+  // the scope's own name as the engine answered it
+  const title = rulesDoc.scope?.name || scope.name;
   const rr = shownRole !== null && working ? working.roles[shownRole] : undefined;
   const palette = shownRole !== null ? (palettes[shownRole] ?? []) : [];
   const slot: Slot = (k) => (k === null ? null : slotOf(palette, k));
@@ -448,7 +540,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
             <div className="ms-title">
               <span className="eyebrow">Main scans · {scope.kind}</span>
               <div className="ms-h1">
-                <h1>{scope.name}</h1>
+                <h1>{title}</h1>
                 <Chooser caps={caps} scope={scope} />
               </div>
             </div>
@@ -465,6 +557,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
               {roles.map((r) => (
                 <button key={r} type="button" className={r === shownRole ? "opt on" : "opt"} aria-pressed={r === shownRole} onClick={() => chooseRole(r)}>
                   {roleWord(r)}
+                  {changedRoles.includes(r) && <span className="ms-key-changed"> · changed</span>}
                 </button>
               ))}
             </div>
@@ -472,7 +565,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
               <div className="chips" role="group" aria-label="Keep alike">
                 <span className="ms-label">Keep alike</span>
                 {KEEP_ALIKE.map((k) => (
-                  <button key={k.key} type="button" className={keep === k.key ? "opt on" : "opt"} aria-pressed={keep === k.key} onClick={() => change(edited(working, (x) => void (x.roles[shownRole].keep_alike = k.key)))}>
+                  <button key={k.key} type="button" disabled={saving} className={keep === k.key ? "opt on" : "opt"} aria-pressed={keep === k.key} onClick={() => change(edited(working, (x) => void (x.roles[shownRole].keep_alike = k.key)))}>
                     {k.words}
                   </button>
                 ))}
@@ -480,6 +573,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
             )}
           </div>
           <p className="ms-line">{KEEP_ALIKE.find((k) => k.key === keep)?.line}</p>
+          {!rulesOpen && <StatusLine status={status} />}
           {said && (
             <p className="meta ms-said" role="status">
               <Icon name="check" />
@@ -540,13 +634,20 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
             roles={roles}
             onRole={chooseRole}
             map={mapValue}
+            mapSince={m.kind === "loading" ? m.since : null}
+            mapFailed={m.kind === "failed" ? m.why : null}
             mapBusy={pending || (m.kind === "ready" && m.busy)}
+            mapStale={dirty && m.kind === "ready" ? m.why : null}
+            effectReady={!pending && m.kind === "ready" && !m.busy && m.why === null}
+            changedRoles={changedRoles}
+            title={title}
             slot={slot}
             onChange={change}
             onRevert={() => setDraft(null)}
             onClose={() => setRulesOpen(false)}
-            reload={readRules}
-            onRun={() => setReload((x) => x + 1)}
+            onSave={save}
+            saving={saving}
+            status={status}
           />
         )}
       </div>

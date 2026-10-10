@@ -68,6 +68,7 @@ function set(input: HTMLInputElement, value: string) {
 }
 
 const reason = () => panel().querySelector<HTMLInputElement>(".ms-reason input")!;
+const use = (kind: string) => panel().querySelector<HTMLInputElement>(`input[aria-label="Use ${kind}"]`)!;
 
 describe("the Rules panel", () => {
   it("opens beside the page with the effect first, the saved version's, and nothing changed", async () => {
@@ -110,6 +111,10 @@ describe("the Rules panel", () => {
     root = createRoot(host);
     const again = await open();
     expect(host.querySelector(".ms-rules-toggle")?.textContent).toBe("Rules · version 2 · changed");
+    // kept by the scope the engine answered, its kind and id
+    expect(Object.keys(sessionStorage)).toEqual(["nils.mainScans.draft.cohort:7"]);
+    await settled();
+    expect(again.of("POST", "/api/picks/map")).toHaveLength(1);
     expect((again.of("POST", "/api/picks/map")[0].body?.rules as typeof RULES).roles.t1w.keep_alike).toBe("across_the_data");
   });
 
@@ -117,7 +122,7 @@ describe("the Rules panel", () => {
     const engine = await open();
     press("Within each subject");
     press("Across the data");
-    press("3D MPRAGE +C: used");
+    act(() => use("3D MPRAGE +C").click());
     await settled();
     const asked = drafts(engine);
     expect(asked).toHaveLength(1);
@@ -139,11 +144,13 @@ describe("the Rules panel", () => {
       ["3", "2D SE", ""],
       ["4", "3D SPGR", "new"],
     ]);
-    press("3D MPRAGE +C: used");
+    act(() => use("3D MPRAGE +C").click());
     const off = rows()[1];
     expect(off.querySelector(".ms-rank")?.textContent).toBe("");
     expect(off.querySelector(".ms-kind")?.classList.contains("off")).toBe(true);
-    expect(button(off, "Not used")?.getAttribute("aria-pressed")).toBe("false");
+    expect(use("3D MPRAGE +C").checked).toBe(false);
+    // the switches are quiet: no row's is a coloured key
+    expect(panel().querySelectorAll(".ms-order-row .opt")).toHaveLength(0);
     expect(rows()[2].querySelector(".ms-rank")?.textContent).toBe("2");
     press("Move 3D SPGR up");
     expect(rows().map((r) => r.querySelector(".ms-kind")?.textContent)).toEqual(["3D MPRAGE", "3D MPRAGE +C", "3D SPGR", "2D SE"]);
@@ -167,7 +174,7 @@ describe("the Rules panel", () => {
     set(mm, "6");
     expect(panel().querySelector(".ms-range .val")?.textContent).toBe("any");
     // FLAIR has no contrast kind
-    press("FLAIR", panel().querySelector('[role="group"][aria-label="Role"]')!);
+    press("FLAIR", panel().querySelector('[role="group"][aria-label="Role of the rules"]')!);
     await settle();
     expect(group("Contrast")).toBeNull();
     expect(host.querySelector('.ms-keys [role="group"][aria-label="Role"] [aria-pressed="true"]')?.textContent).toBe("FLAIR");
@@ -201,6 +208,7 @@ describe("the Rules panel", () => {
   it("shows the saved version as text from the text door", async () => {
     const engine = await open();
     press("As text");
+    expect(button(panel(), "Hide the text")?.getAttribute("aria-expanded")).toBe("true");
     await settle();
     expect(engine.of("GET", "/api/picks/rules/text")[0].query.toString()).toBe("cohort=ms-followup&version=2");
     expect(panel().querySelector(".ms-yaml")?.textContent).toContain("# Main scans of ms-followup, version 2");
@@ -225,6 +233,10 @@ describe("saving the rules", () => {
     press("Across the data");
     expect(button(panel(), "Save as version 3")!.disabled).toBe(true);
     set(reason(), "  the lesion study wants 3D T1 only ");
+    // not before the effect of the draft is read
+    expect(button(panel(), "Save as version 3")!.disabled).toBe(true);
+    await settled();
+    expect(button(panel(), "Save as version 3")!.disabled).toBe(false);
     press("Save as version 3");
     await settle();
     const save = engine.of("POST", "/api/picks/rules")[0];
@@ -243,7 +255,7 @@ describe("saving the rules", () => {
     expect(sessionStorage.length).toBe(0);
   });
 
-  it("says in one line that someone saved first, reads the rules again and lets the draft go", async () => {
+  it("says in one line that someone saved first, reads the rules again and moves the draft onto their version", async () => {
     let refused = false;
     const engine = await open((c) => {
       if (c.method === "POST" && c.path === "/api/picks/rules") {
@@ -255,12 +267,16 @@ describe("saving the rules", () => {
     });
     press("Across the data");
     set(reason(), "3D only");
+    await settled();
     press("Save as version 3");
     await settle();
     expect(engine.of("GET", "/api/picks/rules")).toHaveLength(2);
-    expect(panel().querySelector(".ms-status")?.textContent).toBe("bertil saved version 3 first. The rules now show it; your changes were not saved.");
-    expect(host.querySelector(".ms-rules-toggle")?.textContent).toBe("Rules · version 3");
-    expect(button(panel(), "Save as version 4")!.disabled).toBe(true);
+    expect(panel().querySelector(".ms-status")?.textContent).toBe("Your changes were made on version 2; version 3 is saved now by bertil. The effect shows them against it.");
+    // the draft is kept, now against version 3, and its effect asked again
+    expect(host.querySelector(".ms-rules-toggle")?.textContent).toBe("Rules · version 3 · changed");
+    await settled();
+    expect((drafts(engine).at(-1)?.body?.rules as typeof RULES).roles.t1w.keep_alike).toBe("across_the_data");
+    expect(button(panel(), "Save as version 4")!.disabled).toBe(false);
   });
 
   it("names a refused field, and says when the why is missing", async () => {
@@ -268,6 +284,7 @@ describe("saving the rules", () => {
     await open((c) => (c.method === "POST" && c.path === "/api/picks/rules" ? answer : undefined));
     press("Across the data");
     set(reason(), "thin slices");
+    await settled();
     press("Save as version 3");
     await settle();
     expect(panel().querySelector(".ms-status")?.textContent).toBe("Not saved: roles.t1w.slice_thickness_at_most_mm: from 0.5 to 10 mm.");
@@ -277,6 +294,46 @@ describe("saving the rules", () => {
     await settle();
     expect(panel().querySelector(".ms-status")?.textContent).toBe("Not saved: say why this version.");
     expect(reason().value).toBe("thin slices");
+  });
+
+  it("marks the roles a draft changes, since a save writes every role", async () => {
+    await open();
+    press("FLAIR", panel().querySelector('[role="group"][aria-label="Role of the rules"]')!);
+    await settle();
+    press("Across the data");
+    const keys = (label: string) => [...host.querySelectorAll(`[role="group"][aria-label="${label}"] .opt`)].map((b) => b.textContent);
+    expect(keys("Role")).toEqual(["T1w", "FLAIR · changed", "T2w"]);
+    expect(keys("Role of the rules")).toEqual(["T1w", "FLAIR · changed", "T2w"]);
+  });
+
+  it("holds the save while the effect of the latest changes could not be read, and says so", async () => {
+    let fail = false;
+    await open((c) => (fail && c.path === "/api/picks/map" ? { status: 500, body: { error: "the map is busy" } } : undefined));
+    press("Across the data");
+    set(reason(), "3D only");
+    await settled();
+    expect(button(panel(), "Save as version 3")!.disabled).toBe(false);
+    fail = true;
+    press("Within each subject");
+    await settled();
+    expect(panel().querySelector(".ms-effect")?.classList.contains("stale")).toBe(true);
+    expect(panel().textContent).toContain("The effect of your latest changes could not be read: the map is busy");
+    expect(button(panel(), "Save as version 3")!.disabled).toBe(true);
+  });
+
+  it("follows a save's pick run on the page when the panel is closed", async () => {
+    await open((c) => {
+      if (c.method === "POST" && c.path === "/api/picks/rules") return { status: 201, body: { version: 3, job: 41 } };
+      if (c.method === "GET" && c.path === "/api/jobs/41") return { status: 200, body: { id: 41, kind: "pick", name: null, state: "running", started_at: "2026-10-10T10:00:00Z", heartbeat_at: null, finished_at: null, progress: null, error: null, args: {}, result: null } };
+      return undefined;
+    });
+    press("Across the data");
+    set(reason(), "3D only");
+    await settled();
+    press("Save as version 3");
+    await settle();
+    press("Close the rules");
+    expect(host.querySelector(".ms-main .wait-phase")?.textContent).toBe("Version 3 saved; picking with it (job 41, running)");
   });
 
   it("offers no save to a person who may not start a pick run", async () => {

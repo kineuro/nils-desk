@@ -84,7 +84,8 @@ describe("Main scans of a cohort", () => {
     expect(engine.of("POST", "/api/picks/map/subjects")[0].body).toEqual({ scope: { cohort: "ms-followup" }, role: "t1w", columns: "scanner", group: { by: "breaks" }, order: "changes", page: 0, per_page: 24 });
     expect(host.querySelector(".ms-head .eyebrow")?.textContent).toBe("Main scans · cohort");
     expect(host.querySelector(".ms-head h1")?.textContent).toBe("ms-followup");
-    expect(pressed("Role")).toEqual(["T1w", "T1w"]);
+    expect(pressed("Role")).toEqual(["T1w"]);
+    expect(pressed("Role of the rules")).toEqual(["T1w"]);
     expect(text('.ms-keys [role="group"][aria-label="Role"] .opt')).toEqual(["T1w", "FLAIR", "T2w"]);
     expect(pressed("Keep alike")).toEqual(["Balanced: the data first, then each subject", "Balanced: the data first, then each subject"]);
     expect(host.querySelector(".ms-line")?.textContent).toBe("The data's order first; a subject keeps one kind where one covers all its visits.");
