@@ -7,6 +7,7 @@ import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
+import { isRoot } from "../data/layout";
 import { keptRunning, where } from "../settings/install";
 import type { Install } from "../settings/supervise";
 import { day } from "./tiles";
@@ -94,33 +95,13 @@ function model(f: Facts): Step | null {
   return { id: "model", title, state: "attention", words: `Kvasir lists no model yet.${serve || " A model on another machine of yours, or a provider, can answer instead."}`, tags: [], halfway: false };
 }
 
-function dicom(f: Facts, containers: boolean): Step | null {
+function dicom(f: Facts): Step | null {
   if (f.places === null) return null;
-  const title = "Bring in DICOM";
-  const sources = f.places.filter((p) => p.role === "source" && p.retired_at === null);
-  if (sources.length === 0) {
-    const kept = containers ? "It is mounted read only; nothing is ever written to it." : "It is read only; nothing is ever written to it.";
-    return { id: "dicom", title, state: "now", words: `Add each folder NILS reads. ${kept}`, tags: [], halfway: false };
-  }
-  const names = sources.map((s) => s.name).join(", ");
-  if (!f.batches) {
-    return {
-      id: "dicom",
-      title,
-      state: "now",
-      words: `${names} ${sources.length === 1 ? "is a source" : "are sources"}, and nothing is digested yet.`,
-      tags: [],
-      halfway: true,
-    };
-  }
-  return {
-    id: "dicom",
-    title,
-    state: "done",
-    words: `${sources.length === 1 ? "One source" : `${sources.length} sources`}, ${f.batches === 1 ? "one batch" : `${f.batches} batches`} digested.`,
-    tags: [],
-    halfway: false,
-  };
+  const title = "Add a root folder";
+  // Wave 7a: a root is where the dataset folders live; its folders become datasets on the Data page
+  const roots = f.places.filter((p) => p.role === "source" && p.retired_at === null && (isRoot(p) || !p.dataset?.root));
+  if (roots.length === 0) return { id: "dicom", title, state: "now", words: "Where your dataset folders live.", tags: [], halfway: false };
+  return { id: "dicom", title, state: "done", words: roots.map((r) => r.name).join(", "), tags: [], halfway: false };
 }
 
 const WEEK = 7 * 24 * 3600 * 1000;
@@ -196,8 +177,7 @@ function signin(f: Facts): Step {
 
 /** The steps, in the order the band shows them. */
 export function steps(f: Facts, now: number = Date.now()): Step[] {
-  const containers = f.install !== null && f.install.runtime !== "machine" && f.install.runtime !== "";
-  return [installed(f), model(f), dicom(f, containers), safe(f, now), signin(f)].filter((s): s is Step => s !== null);
+  return [installed(f), model(f), dicom(f), safe(f, now), signin(f)].filter((s): s is Step => s !== null);
 }
 
 /** The step the band opens on: begun before attention before not begun. */

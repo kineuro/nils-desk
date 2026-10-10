@@ -1,0 +1,187 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* The Assistant (the redesign Nima confirmed on 2026-10-09): messages first, in
+ * one column of about 800px; the person's words in raised boxes on the right
+ * and the answers as plain text; one quiet card per query answer; a panel
+ * beside the chat to work a query in; the cards that wait for the person. Every
+ * colour, face and size comes from ui/theme.css. In the bundle this file comes
+ * before shell.css, so a rule that changes one of the shell's classes is
+ * scoped under one of this file's own, and wins by being more specific. */
+
+/* ------------------------------------------------------------ the page: the thread scrolls between the head and the input */
+/* below 861px the shell lets the whole page scroll; the Assistant keeps the window's height there too, so its input stays at the foot */
+.desk:has(.one-chat) { height: 100vh; height: 100dvh; min-height: 0; }
+.desk:has(.one-chat) .body { grid-template-rows: minmax(0, 1fr); align-content: stretch; }
+.page:has(> .one-chat) { position: relative; padding: 0; overflow: hidden; }
+.one-chat { position: absolute; inset: 0; display: flex; min-height: 0; container-type: inline-size; }
+.one-chat-main { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.one-chat-head, .one-chat-composer { width: calc(100% - 64px); max-width: 800px; margin: 0 auto; }
+.one-chat-head { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 26px 0 10px; }
+.one-chat-head h1 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.one-chat-rename { flex: 1; flex-wrap: wrap; gap: 8px; }
+.one-chat-rename .input { flex: 1; min-width: min(100%, 12rem); }
+.one-chat-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 32px; }
+.one-chat-thread { display: flex; flex-direction: column; gap: 22px; max-width: 800px; margin: 0 auto; padding: 18px 0 8px; }
+.one-chat-composer { display: grid; gap: 7px; padding: 16px 0 18px; }
+.one-chat-composer .composer-input { gap: 8px; padding: 8px 4px 8px 12px; }
+.one-chat-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 1.2rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.one-chat-promise { margin-left: auto; }
+.one-chat-foot .context-meter { gap: 7px; }
+.one-chat-foot .context-track { width: 72px; }
+.one-chat-foot .context-track i { background: var(--n-brand-hover); }
+
+/* the person's words in a raised box on the right, copy and edit beside it on hover; the answers as plain text */
+.one-chat .said { position: relative; gap: 12px; }
+.one-chat .said.you { align-self: flex-end; max-width: 80%; padding: 9px 14px; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.one-chat .said-you { display: flex; flex-direction: row-reverse; align-items: flex-end; gap: 4px; max-width: 80%; }
+.one-chat .said-you .said.you { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+.one-chat .said-you > .turn-actions { flex: none; flex-wrap: nowrap; }
+/* an earlier answer's copy, again and verdict come on hover, under it, taking no line of their own; the latest keeps them in sight */
+.one-chat .said > .turn-actions.quiet { position: absolute; top: 100%; left: 0; z-index: 2; margin-top: 0; opacity: 0; transition: opacity 120ms ease; }
+.one-chat .said:hover > .turn-actions.quiet, .one-chat .said:focus-within > .turn-actions.quiet, .one-chat .said > .turn-actions.quiet:has([aria-expanded="true"]) { opacity: 1; }
+@media (hover: none) {
+  .one-chat .said > .turn-actions.quiet { position: static; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .one-chat .said > .turn-actions.quiet { transition: none; }
+}
+
+/* one quiet line while a turn works */
+.status-line { display: flex; align-items: center; gap: 8px; }
+.one-chat .status-line { color: var(--n-text-faint); font-size: var(--n-text-size-small); }
+.status-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--n-brand-text); }
+@media (prefers-reduced-motion: no-preference) {
+  .status-dot { animation: status-dot 1.6s ease-in-out infinite; }
+}
+@keyframes status-dot { 50% { opacity: 0.35; } }
+
+/* ------------------------------------------------------------ the one menu in the head */
+.chat-menu { position: relative; }
+.chat-menu-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 6; display: grid; gap: 1px; min-width: 11rem; padding: 4px; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); box-shadow: 0 8px 24px var(--n-scrim); }
+.chat-menu-pop button { display: flex; align-items: center; min-height: var(--n-control); padding: 0 10px; border: 0; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.chat-menu-pop button:hover, .chat-menu-pop button:focus-visible { background: var(--n-bg-hover); }
+.chat-menu-pop button.danger { color: var(--n-blocked-fg); }
+
+/* ------------------------------------------------------------ a query answer in the thread */
+.qcard { border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.qcard-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px 8px; }
+.qcard-head > .i { color: var(--n-brand-icon); }
+.qcard-title { flex: 1; min-width: min(100%, 10rem); font-weight: 500; overflow-wrap: anywhere; }
+.qcard-head .button .i { width: 13px; height: 13px; }
+.qcard-why { padding: 0 12px 8px; }
+.qcard-funnel { padding: 2px 12px 10px; }
+.qcard-funnel:empty { display: none; }
+.qcard-bars { padding: 8px 12px 12px; border-top: 1px solid var(--n-line); }
+/* while the panel is open, a query answer is one line that opens its version there */
+.qcard-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 12px; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.qcard-row > .i { color: var(--n-brand-icon); }
+.qcard-row:hover { border-color: var(--n-brand-line); }
+.qcard-row.on { border-color: var(--n-brand-line); background: var(--n-brand-soft); }
+.qcard-row-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qcard-row-tag { color: var(--n-text-faint); font-size: 12px; white-space: nowrap; }
+.qcard-row.on .qcard-row-tag { color: var(--n-brand-text); }
+
+/* the funnel: subjects, visits, scans */
+.qfunnel { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.qfunnel > .i { width: 14px; height: 14px; stroke-width: 2; color: var(--n-text-faint); }
+.qstep { display: inline-flex; align-items: baseline; gap: 6px; padding: 4px 9px; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; }
+.qstep b { font-weight: 600; }
+.qstep.on { border-color: var(--n-brand-line); background: var(--n-brand-soft); }
+.qstep-hint { color: var(--n-text-faint); font-size: 12px; }
+.qfunnel.qsteps .qstep { padding: 4px 10px; background: var(--n-bg-raised); cursor: pointer; }
+.qfunnel.qsteps .qstep.on { background: var(--n-brand-soft); }
+.qfunnel.qsteps .qstep:not(.on):not(:disabled):hover { background: var(--n-bg-hover); }
+.qfunnel.qsteps .qstep:disabled { cursor: default; }
+
+/* bars: a label, the bar, the count, the subjects behind it; a row of a chart in the panel narrows the question */
+.qbars { display: grid; grid-template-columns: minmax(0, 110px) minmax(0, 1fr) max-content max-content; gap: 6px 10px; font-size: var(--n-text-size-small); }
+.qbars.three { grid-template-columns: minmax(0, 110px) minmax(0, 1fr) max-content; }
+.qbar { display: grid; grid-column: 1 / -1; grid-template-columns: subgrid; align-items: center; min-width: 0; padding: 0; border: 0; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; }
+button.qbar { cursor: pointer; }
+button.qbar:hover .qbar-label, button.qbar:focus-visible .qbar-label { color: var(--n-brand-text); text-decoration: underline; text-underline-offset: 3px; }
+.qbar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qbar-track { height: 8px; overflow: hidden; background: var(--n-bg-sunken); }
+.qbar-track i { display: block; height: 100%; background: var(--n-brand-hover); }
+.qbar-n { text-align: right; }
+.qbar-subjects { color: var(--n-text-faint); text-align: right; }
+
+/* ------------------------------------------------------------ the panel beside the chat */
+.one-chat.with-panel .one-chat-main { flex: 0 1 460px; max-width: 460px; border-right: 1px solid var(--n-line); }
+.one-chat.with-panel .one-chat-head, .one-chat.with-panel .one-chat-composer { width: calc(100% - 48px); }
+.one-chat.with-panel .one-chat-head h1 { font-size: 1.25rem; }
+.one-chat.with-panel .one-chat-scroll { padding: 0 24px; }
+.one-chat.with-panel .one-chat-thread { gap: 18px; padding-top: 12px; }
+.one-chat.with-panel .said.you, .one-chat.with-panel .said-you { max-width: 85%; }
+.qpanel { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--n-bg-sunken); }
+.qpanel-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 22px 26px 14px; border-bottom: 1px solid var(--n-line); }
+.qpanel-name { flex: 1; min-width: min(100%, 220px); display: grid; }
+.qpanel .qpanel-title { font-size: 1.375rem; line-height: 1.3; overflow-wrap: anywhere; }
+.qpanel .qpanel-quiet { width: 30px; height: 30px; color: var(--n-text-faint); }
+.qpanel .qpanel-quiet:hover { color: var(--n-text); text-decoration: none; }
+.qversions { display: inline-flex; flex-wrap: wrap; gap: 6px; }
+.qversion { display: inline-flex; align-items: center; min-height: 22px; padding: 0 7px; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-neutral-bg); color: var(--n-neutral-fg); font: inherit; font-size: 12px; cursor: pointer; }
+.qversion:hover { color: var(--n-text); }
+.qversion.on { border-color: var(--n-brand-line); background: var(--n-brand-soft); color: var(--n-brand-text); font-weight: 500; }
+.qpanel-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; padding: 18px 26px 26px; }
+.qpanel-body > p { margin: 0; }
+.qconds { display: flex; flex-wrap: wrap; gap: 6px; font-size: var(--n-text-size-small); }
+.qcond { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 9px; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.qcond:has(> button) { padding-right: 4px; }
+.qconds .qcond .icon-button { width: 20px; height: 20px; color: var(--n-text-faint); }
+.qconds .qcond .icon-button:hover { color: var(--n-text); background: var(--n-bg-hover); }
+.qcond .i, .qcond-add .i { width: 12px; height: 12px; }
+.qcond-add { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 3px 9px; border: 1px dashed var(--n-neutral-line); border-radius: var(--n-radius); background: transparent; color: var(--n-brand-text); font: inherit; cursor: pointer; }
+.qcond-add:hover { border-color: var(--n-brand-line); background: var(--n-brand-soft); }
+.qtabs { display: flex; align-self: flex-start; max-width: 100%; overflow-x: auto; border: 1px solid var(--n-line); border-radius: var(--n-radius); font-size: 14px; scrollbar-width: none; }
+.qtabs button { flex: none; padding: 6px 13px; border: 0; border-left: 1px solid var(--n-line); background: transparent; color: var(--n-text-dim); font: inherit; white-space: nowrap; cursor: pointer; }
+.qtabs button:first-child { border-left: 0; }
+.qtabs button:hover { color: var(--n-text); }
+.qtabs button.on { background: var(--n-brand-soft); color: var(--n-brand-text); font-weight: 500; }
+.qtabs button:focus-visible { outline-offset: -2px; }
+.qchart { display: grid; gap: 10px; }
+.qchart-field { max-width: 20rem; }
+.qpanel .qbars { grid-template-columns: minmax(0, 170px) minmax(0, 1fr) max-content max-content; gap: 2px 12px; font-size: 14px; }
+.qpanel .qbars.three { grid-template-columns: minmax(0, 170px) minmax(0, 1fr) max-content; }
+.qpanel .qbar { padding: 3px 0; }
+.qpanel .qbar-track { height: 10px; background: var(--n-bg-page); }
+.qpair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 16px 24px; }
+.qpair h3 { margin: 0 0 6px; color: var(--n-text-dim); font-size: var(--n-text-size-small); font-weight: 600; }
+.qpictures { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.qpicture { display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; border-radius: var(--n-radius); background: var(--n-image-bg); }
+.qpicture img { width: 100%; height: 100%; object-fit: contain; }
+.qpictures-none { flex-wrap: wrap; }
+.qpanel .qpanel-hint { font-size: var(--n-text-size-small); }
+
+/* ------------------------------------------------------------ a change that waits for the person, and a question */
+.approval-card { border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.approval-body { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; }
+.approval-kind { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.approval-title { font-weight: 500; overflow-wrap: anywhere; }
+.approval-sentence { color: var(--n-text-dim); font-size: 14px; }
+.approval-card .approval-lines { margin: 0; padding-left: 20px; color: var(--n-text-dim); font-size: 14px; overflow-wrap: anywhere; }
+.approval-foot { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 14px; border-top: 1px solid var(--n-line); }
+.approval-foot .button { padding: 0 14px; }
+.approval-foot .button.secondary { padding: 0 11px; }
+.approval-foot .button.quiet { padding: 0 8px; }
+.ask-choice { display: grid; gap: 10px; }
+.ask-options { display: flex; flex-wrap: wrap; gap: 8px; }
+.ask-option { display: inline-flex; align-items: center; gap: 6px; min-height: var(--n-control); padding: 0 11px; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; cursor: pointer; }
+.ask-option:hover { border-color: var(--n-brand-line); background: var(--n-bg-hover); }
+.ask-option .num { color: var(--n-text-faint); }
+
+/* ------------------------------------------------------------ narrower: the panel takes the page, and the gutters close in */
+@container (max-width: 860px) {
+  .one-chat.with-panel .one-chat-main { display: none; }
+}
+@container (max-width: 560px) {
+  .one-chat-head, .one-chat-composer, .one-chat.with-panel .one-chat-head, .one-chat.with-panel .one-chat-composer { width: calc(100% - 32px); }
+  .one-chat-head { padding-top: 16px; }
+  .one-chat-head .tag { display: none; }
+  .one-chat-scroll, .one-chat.with-panel .one-chat-scroll { padding: 0 16px; }
+  .one-chat-thread { padding-top: 10px; }
+  .one-chat-promise { margin-left: 0; }
+  .one-chat .said.you, .one-chat .said-you { max-width: 92%; }
+  .qpanel-head { padding: 16px 16px 12px; }
+  .qpanel-body { padding: 14px 16px 20px; }
+  .qbars, .qpanel .qbars { grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr) max-content; }
+  .qbar .qbar-subjects { display: none; }
+}

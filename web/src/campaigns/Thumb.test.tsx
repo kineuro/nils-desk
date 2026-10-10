@@ -39,12 +39,20 @@ describe("the picture", () => {
     el.remove();
     vi.useRealTimers();
   });
-  const fail = () => act(() => el.querySelector("img")!.dispatchEvent(new Event("error")));
+  // the door asked why: a plain failure, a picture being built, or one that could not be
+  const plain = (async () => new Response(null, { status: 500 })) as unknown as typeof fetch;
+  const fail = async () => {
+    await act(async () => {
+      el.querySelector("img")!.dispatchEvent(new Event("error"));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
 
-  it("is asked for again after a failure, and shows when it comes", () => {
-    act(() => root.render(<Thumb src="/api/instances/7/thumb" />));
+  it("is asked for again after a failure, and shows when it comes", async () => {
+    act(() => root.render(<Thumb src="/api/instances/7/thumb" ask={plain} />));
     expect(el.querySelector("img")!.getAttribute("src")).toBe("/api/instances/7/thumb");
-    fail();
+    await fail();
     // no broken picture while it waits
     expect(el.querySelector("img")).toBeNull();
     expect(el.querySelector(".thumb-waiting")).not.toBeNull();
@@ -54,17 +62,37 @@ describe("the picture", () => {
     expect(el.querySelector(".thumb-missing")).toBeNull();
   });
 
-  it("says it is not ready after its retries, and a button asks once more", () => {
-    act(() => root.render(<Thumb src="/api/instances/8/thumb" />));
-    fail();
+  it("says it is not ready after its retries, and a button asks once more", async () => {
+    act(() => root.render(<Thumb src="/api/instances/8/thumb" ask={plain} />));
+    await fail();
     act(() => vi.advanceTimersByTime(THUMB_RETRIES[0]));
-    fail();
+    await fail();
     act(() => vi.advanceTimersByTime(THUMB_RETRIES[1]));
-    fail();
+    await fail();
     const missing = el.querySelector(".thumb-missing")!;
     expect(missing.textContent).toContain("picture not ready");
     expect(missing.getAttribute("aria-label")).toBe("picture not ready");
     act(() => (missing.querySelector("button") as HTMLButtonElement).click());
     expect(el.querySelector("img")!.getAttribute("src")).toBe("/api/instances/8/thumb?retry=3");
+  });
+
+  it("says Preparing the picture while the engine builds it, asks again when it says, however often, and never shows a grey box", async () => {
+    const building = (async () => new Response(JSON.stringify({ stack: 9, building: true, job: 4, state: "running", retry_after: 3 }), { status: 202, headers: { "Retry-After": "3" } })) as unknown as typeof fetch;
+    act(() => root.render(<Thumb src="/api/instances/9/thumb" ask={building} />));
+    for (let i = 0; i < 4; i++) {
+      await fail();
+      expect(el.querySelector(".picture-wait")?.textContent).toContain("Preparing the picture");
+      expect(el.querySelector(".thumb-missing")).toBeNull();
+      act(() => vi.advanceTimersByTime(3000));
+      expect(el.querySelector("img")!.getAttribute("src")).toBe(`/api/instances/9/thumb?retry=${i + 1}`);
+    }
+  });
+
+  it("says a picture could not be built, with the reason in words, and offers no command", async () => {
+    const failedBuild = (async () => new Response(JSON.stringify({ error: "x", stack: 9, building: false, job: 4, reason: "compressed" }), { status: 422 })) as unknown as typeof fetch;
+    act(() => root.render(<Thumb src="/api/instances/9/thumb" ask={failedBuild} />));
+    await fail();
+    expect(el.textContent).toBe("This picture could not be built: a compression it cannot read");
+    expect(el.textContent).not.toMatch(/pyramid|nils /);
   });
 });

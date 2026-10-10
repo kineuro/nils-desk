@@ -1,22 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // One turn of a conversation, as the Assistant page and a Query card's
-// discussion show it: what was said, what the assistant did as a folded list
-// of steps, its words drawn from their markdown, each version it proposes, and
-// a choice answered with a click. A page that decides proposals somewhere else
-// passes no onDecide, and the turn only names them. On the Assistant page a
-// turn carries its actions too (the chat, slice 4): a person's message is
-// copied, edited, or switched to another way it was sent, and an answer is
-// copied, asked for again, or given a verdict.
+// discussion show it: what was said, its words drawn from their markdown, what
+// the assistant did behind a small "?", each change it proposes on the one
+// approval card, and a question on the one clarification card. A page that
+// decides proposals somewhere else passes no onDecide, and the turn only names
+// them; the Assistant page draws each proposed version as its query card
+// instead (the redesign, 2026-10-09). On the Assistant page a turn carries its
+// actions too (the chat, slice 4): a person's message is copied, edited, or
+// switched to another way it was sent, and an answer is copied, asked for
+// again, or given a verdict.
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import type React from "react";
+import type { ReactNode } from "react";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import type { Rating } from "./chats";
 import { useCopy } from "../ui/clipboard";
 import { Markdown } from "./Markdown";
 import { plainMentions, saidWithMentions } from "./mentions";
-import type { PaneMemory, Proposal, Turn } from "./parts";
-import { foldedSteps, stepLines } from "./steps";
+import type { Change, PaneMemory, Proposal, Turn } from "./parts";
+import { ApprovalCardView, ClarificationCardView, StepsHelp } from "./Cards";
+import { cardOfChange, cardOfProposal } from "./events";
 import { MISSES } from "./thread";
 
 export interface TurnActions {
@@ -32,6 +37,8 @@ export interface TurnActions {
   /** Which of the ways this message was sent it is, and where the ways either side continue. */
   version: { index: number; count: number; prev: string | null; next: string | null } | null;
   onVersion: (conversation: string) => void;
+  /** An earlier answer: its actions come on hover, so the thread reads as words. */
+  quiet?: boolean;
 }
 
 export function TurnView(props: {
@@ -41,6 +48,13 @@ export function TurnView(props: {
   proposals: Proposal[];
   choice: { question: string; options: { label: string; count: number | null }[] } | null;
   onDecide?: (p: Proposal, verdict: "accepted" | "rejected") => void;
+  /** One chat: the other changes this turn proposed, and how the page decides them. */
+  changes?: Change[];
+  onChange?: (c: Change, verdict: "approved" | "declined") => void;
+  /** Change it, on a change: the person says what to change. */
+  onRevise?: () => void;
+  /** How the page draws a proposed version, in place of the approval card. */
+  queryCard?: (p: Proposal) => ReactNode;
   onChoose: (label: string) => void;
   /** Where an undecided proposal is decided, when it is not here. */
   decidedElsewhere?: string;
@@ -53,58 +67,30 @@ export function TurnView(props: {
   said?: string;
   memoryActions?: { state: (m: PaneMemory) => "saved" | "dismissed" | null; keep: (m: PaneMemory) => void; dismiss: (m: PaneMemory) => void };
 }) {
-  const { turn, open, onToggle, proposals, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions, said } = props;
+  const { turn, open, onToggle, proposals, changes, onChange, onRevise, queryCard, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions, said } = props;
   if (turn.role === "user") return <Asked turn={turn} actions={actions} />;
   if (turn.role === "system") return <p className="meta">{turn.text}</p>;
-  const folded = foldedSteps(turn.tools);
+  const steps = turn.done && turn.tools.length > 0 ? <StepsHelp tools={turn.tools} open={open} onToggle={onToggle} /> : null;
   return (
     <div className="said">
       {turn.thinking && <Thinking text={turn.thinking} live={!turn.done && !turn.text} />}
-      {folded && (
-        <div className="steps">
-          <button type="button" className="steps-line" aria-expanded={open} onClick={onToggle}>
-            <Icon name={turn.tools.some((t) => t.state === "failed") ? "alert" : "check"} />
-            <span className="grow">{folded.last}</span>
-            {folded.earlier > 0 && <span className="meta">{open ? "fold" : `${folded.earlier} earlier ${folded.earlier === 1 ? "step" : "steps"}`}</span>}
-          </button>
-          {open &&
-            stepLines(turn.tools)
-              .slice(0, -1)
-              .map((s) => (
-                <p key={s.id} className={`steps-line quiet ${s.state}`}>
-                  <Icon name={s.state === "failed" ? "alert" : "check"} />
-                  {s.words}
-                </p>
-              ))}
-        </div>
-      )}
       {turn.text ? <Markdown text={turn.text} streaming={!turn.done} /> : said && turn.done && proposals.length === 0 ? <Markdown text={said} /> : null}
-      {proposals.map((p) => (
-        <div key={p.document} className="proposal">
-          <Icon name="ask" />
-          <div className="grow">
-            <p className="proposal-title">A new version of the query</p>
-            <p>{p.sentence}</p>
-            {p.stale && <p className="meta">The query moved on since; this version can no longer be taken.</p>}
-            {!onDecide && p.decided === null && !p.stale && decidedElsewhere && <p className="meta">{decidedElsewhere}</p>}
-          </div>
-          {openQuery && (
-            <a className="button secondary small" href={openQuery(p.document)}>
-              Open in Query
-            </a>
-          )}
-          {onDecide && p.decided === null && !p.stale && (
-            <div className="row">
-              <button type="button" className="button small" onClick={() => onDecide(p, "accepted")}>
-                Accept
-              </button>
-              <button type="button" className="button secondary small" onClick={() => onDecide(p, "rejected")}>
-                Disregard
-              </button>
-            </div>
-          )}
-          {p.decided !== null && <span className={p.decided === "accepted" ? "tag ok" : "tag"}>{p.decided === "accepted" ? "accepted" : "disregarded"}</span>}
-        </div>
+      {proposals.map((p) =>
+        queryCard ? (
+          <Fragment key={p.document}>{queryCard(p)}</Fragment>
+        ) : (
+          <Fragment key={p.document}>
+            <ApprovalCardView card={cardOfProposal(p, decidedElsewhere)} onDecide={onDecide && !p.stale ? (v) => onDecide(p, v === "approved" ? "accepted" : "rejected") : undefined} />
+            {openQuery && (
+              <a className="button secondary small" href={openQuery(p.document)}>
+                Open in Query
+              </a>
+            )}
+          </Fragment>
+        ),
+      )}
+      {(changes ?? []).map((c) => (
+        <ApprovalCardView key={c.id} card={cardOfChange(c)} onDecide={onChange ? (v) => onChange(c, v) : undefined} onRevise={onChange ? onRevise : undefined} />
       ))}
       {(memories ?? []).map((mem) => {
         const here = memoryActions?.state(mem) ?? null;
@@ -139,20 +125,8 @@ export function TurnView(props: {
           </div>
         );
       })}
-      {choice && (
-        <div className="choice">
-          <p className="meta">{choice.question}</p>
-          <div className="chips">
-            {choice.options.map((o) => (
-              <button key={o.label} type="button" className="button secondary small" onClick={() => onChoose(o.label)}>
-                {o.label}
-                {o.count !== null && <span className="meta num">{o.count.toLocaleString()}</span>}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {actions && turn.done && <Answered turn={turn} actions={actions} />}
+      {choice && <ClarificationCardView card={choice} onChoose={onChoose} />}
+      {actions && turn.done ? <Answered turn={turn} actions={actions} steps={steps} /> : steps && <div className="turn-actions">{steps}</div>}
     </div>
   );
 }
@@ -252,12 +226,12 @@ function Asked({ turn, actions }: { turn: Turn; actions?: TurnActions }) {
 }
 
 /** An answer's actions: copy it, ask for it again, and say whether it was good or missed. */
-function Answered({ turn, actions }: { turn: Turn; actions: TurnActions }) {
+function Answered({ turn, actions, steps }: { turn: Turn; actions: TurnActions; steps: React.ReactNode }) {
   const [missing, setMissing] = useState(false);
   const verdict = actions.rating?.verdict ?? null;
   return (
     <>
-      <div className="turn-actions">
+      <div className={actions.quiet ? "turn-actions quiet" : "turn-actions"}>
         {turn.text && <CopyButton text={turn.text} what="answer" />}
         <button type="button" className="icon-button" aria-label="Ask for this answer again" title="Ask again" disabled={actions.busy} onClick={actions.onRetry}>
           <Icon name="restart" />
@@ -289,6 +263,7 @@ function Answered({ turn, actions }: { turn: Turn; actions: TurnActions }) {
           <Icon name="thumb-down" />
         </button>
         {verdict === "down" && actions.rating?.reason && <span className="meta">{actions.rating.reason}</span>}
+        {steps}
       </div>
       {missing && (
         <Miss

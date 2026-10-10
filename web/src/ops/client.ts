@@ -137,7 +137,7 @@ export const ops = {
   enqueue: (command: string[], name?: string, then?: string[][]) =>
     door<{ job: number; state: string }>("POST", "/api/jobs", { command, ...(name ? { name } : {}), ...(then && then.length > 0 ? { then } : {}) }),
   /** Record 26: `cohort` narrows the queue to the subjects with an open membership there, on an engine that serves the filter. */
-  review: (status?: string, kind?: string, limit = 50, cohort?: string) => door<{ count: number; items: ReviewItem[] }>("GET", `/api/review${q({ status, kind, limit, cohort })}`),
+  review: (status?: string, kind?: string, limit = 50, cohort?: string, dataset?: string) => door<{ count: number; items: ReviewItem[] }>("GET", `/api/review${q({ status, kind, limit, cohort, dataset })}`),
   reviewItem: (id: number) => door<ReviewItem>("GET", `/api/review/${id}`),
   reviewApply: (id: number, body: Json) => door<Json>("POST", `/api/review/${id}/apply`, body),
   reviewAccept: (id: number, why?: string) => door<Json>("POST", `/api/review/${id}/accept`, why ? { why } : {}),

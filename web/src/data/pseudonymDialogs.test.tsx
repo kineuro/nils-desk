@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The three dialogs of the Pseudonymisation page as they open (record 27, R3
-// and R4): the tag chooser with all hundred, what becomes of each and what
-// this dataset keeps; the map's columns with a role and a type written out as
-// options rather than looped into a fragment; and the held files with their
-// banner, their shapes and the three ways out, the reveal refused in words
-// that name no grant. The datasets, numbers and names here are made up.
+// The dialogs of pseudonymisation as they open (record 27, R3 and R4): the
+// tag chooser with all hundred, what becomes of each and what this dataset
+// keeps; and the map's columns with a role and a type written out as options
+// rather than looped into a fragment, for a dataset or, on Pseudonyms, for
+// every dataset at once. The held files are the pseudonymise step's now
+// (PseudonymiseStep.test.tsx). The datasets, numbers and names here are made
+// up.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -14,8 +15,8 @@ import type { Capabilities } from "../capabilities";
 import { GRANTS, type Detail, type Grant } from "../grants";
 import type { Dataset, SourcesAnswer } from "./datasets";
 import type { TagPolicy } from "./policy";
-import { HeldDialog, MapColumns, MapDialog } from "./PseudonymsPage";
-import { guessRole, lookAt, type HeldRow, type IdType } from "./pseudonyms";
+import { MapColumns, MapDialog } from "./PseudonymsPage";
+import { guessRole, lookAt, type IdType } from "./pseudonyms";
 import { TagsDialog } from "./Tags";
 
 const DOORS = [
@@ -165,38 +166,10 @@ describe("provide a map", () => {
     expect(reader).toContain("Filing a map means reading identifiers, and you are not cleared to");
     expect(reader).not.toContain("sensitive");
   });
-});
 
-describe("held until mapped", () => {
-  const rows: HeldRow[] = [
-    { shape: "999999999999", files: 980, first_seen: "2026-09-01T08:00:00Z", batch: "incoming-2026-09-01" },
-    { shape: "AAA9999", files: 260, first_seen: "2026-09-04T08:00:00Z", batch: "incoming-2026-09-04" },
-  ];
-  it("says how many wait and what that means, lists the shapes with their files, and offers three ways out", () => {
-    const html = renderToStaticMarkup(<HeldDialog caps={caps()} dataset={dataset} rows={rows} onClose={none} onMap={none} onCode={none} />);
-    expect(html).toContain("1,240 files, 18 identifiers the map does not know");
-    expect(html).toContain("They reach neither");
-    expect(html).toContain("999999999999");
-    expect(html).toContain("12 digits");
-    expect(html).toContain("980");
-    expect(html).toContain("A shape, never a value: every digit shows as 9 and every letter as A.");
-    expect(html).toContain("Provide a map</b>");
-    expect(html).toContain("Code them anyway</b>");
-    expect(html).toContain("Reveal them to me</b>");
-    expect(html).toContain("The identifiers themselves, shown once");
-  });
-
-  it("refuses the reveal to someone not cleared to see identifiers, in plain words", () => {
-    const html = renderToStaticMarkup(<HeldDialog caps={caps(GRANTS, "quasi")} dataset={dataset} rows={rows} onClose={none} onMap={none} onCode={none} />);
-    expect(html).toContain("Only someone cleared to see identifiers may ask for this, and you are not.");
-    expect(html).not.toContain("sensitive");
-    expect(html).not.toContain("data:work");
-    expect(html).toContain('<input type="radio" disabled="" name="held-way"/>');
-  });
-
-  it("offers only the ways this engine serves", () => {
-    const html = renderToStaticMarkup(<HeldDialog caps={caps(GRANTS, "sensitive", ["GET /api/linkage/held"])} dataset={dataset} rows={rows} onClose={none} onMap={none} onCode={none} />);
-    expect(html).toContain("radio-row off");
-    expect(html).toContain("Provide a map</b>");
+  it("is given for every dataset at once on Pseudonyms, naming none", () => {
+    const html = renderToStaticMarkup(<MapDialog caps={caps()} types={types} onClose={none} onFiled={none} />);
+    expect(html).toContain("Give a map</h2>");
+    expect(html).not.toContain("incoming");
   });
 });

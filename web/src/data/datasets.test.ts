@@ -115,9 +115,9 @@ describe("a dataset's card", () => {
     expect(newInOriginals(incoming)).toBe(2212);
     expect(newInOriginals(exchange)).toBeNull();
     // a place the engine has not probed since the update that gave it trees counts nothing yet
-    const unprobed = { ...exchange, trees: { originals: null, anon: { path: exchange.trees!.anon.path, files: null, last_written: null } } };
+    const unprobed = { ...exchange, trees: { originals: null, anon: { path: exchange.trees!.anon!.path, files: null, last_written: null } } };
     expect(treeLines(unprobed)).toEqual([{ icon: "shield", path: "dcm-anon", words: "not counted yet · moved in, files as sent" }]);
-    expect(newInOriginals({ ...incoming, trees: { ...incoming.trees!, anon: { ...incoming.trees!.anon, files: null } } })).toBeNull();
+    expect(newInOriginals({ ...incoming, trees: { ...incoming.trees!, anon: { ...incoming.trees!.anon!, files: null } } })).toBeNull();
   });
 
   it("ends with its newest batch: what was pseudonymised, the new subjects, what is held", () => {
@@ -171,7 +171,7 @@ describe("the five marks of a batch", () => {
   });
   it("offer the held files, what to sort, a read again, or say it is sorted", () => {
     expect(batchTail(newest)).toEqual({ kind: "held", words: "4 held: map them", count: 4 });
-    expect(batchTail(earlier)).toEqual({ kind: "sort", words: "Sort 12", count: 12 });
+    expect(batchTail(earlier)).toEqual({ kind: "look", words: "12 need a look", count: 12 });
     expect(batchTail({ ...earlier, to_sort: 0 }).kind).toBe("sorted");
     expect(batchTail({ ...earlier, state: "failed", pseudonymised: null } as Batch).words).toBe("Read again");
     expect(batchTail({ ...earlier, state: "running" }).kind).toBe("reading");
@@ -196,8 +196,9 @@ describe("bringing in what is new", () => {
     expect(bringInSteps(incoming, "mri", "0.1.1")[1].words).toContain("join the cohort incoming");
   });
   it("names the queued rest in a few words", () => {
-    expect(chainWords([["digest", "@incoming"], ["fingerprint"], ["classify", "--pack", "mri"]])).toBe("then digest, then sort");
+    expect(chainWords([["digest", "@incoming"], ["fingerprint"], ["classify", "--pack", "mri"]])).toBe("then read, then sort");
     expect(chainWords([["fingerprint"]])).toBe("then sort");
+    expect(chainWords([["classify", "--pack", "mri"], ["pyramid", "build", "--classified", "37"]])).toBe("then sort");
     expect(chainWords([])).toBe("");
   });
   it("posts the thread as one job named on the body too, and `then` only where something is queued after", async () => {
@@ -272,12 +273,13 @@ describe("a v0 cohort folder", () => {
         return { ok: true, status: 201, text: async () => JSON.stringify({ id: 4, name: "ms-2019", layout: { v0: { original_files: 3, raw_files: 3, renamed: true } } }) } as Response;
       }),
     );
-    const p = await places.add({ name: "ms-2019", role: "source", path: "/srv/imaging/ms-2019", guarantees: {}, arrives: "identified", identity: { id_type: "personal-number", from: [{ field: "PatientID" }] }, unmapped: "hold", cohort: "ms-2019" });
+    // a source is added by its folder alone: what it is, the engine reads from its structure (Wave 7a)
+    const p = await places.add({ name: "ms-2019", role: "source", path: "/srv/imaging/ms-2019", guarantees: {} });
     expect(p.layout?.v0?.renamed).toBe(true);
     expect(calls[0].method).toBe("POST");
-    expect(calls[0].body).toMatchObject({ arrives: "identified", unmapped: "hold", cohort: "ms-2019", identity: { id_type: "personal-number", from: [{ field: "PatientID" }] } });
-    await places.set(4, { cohort: null, move_into_anon: true });
-    expect(calls[1]).toEqual({ method: "PUT", path: "/api/places/4", body: { cohort: null, move_into_anon: true } });
+    expect(calls[0].body).toEqual({ name: "ms-2019", role: "source", path: "/srv/imaging/ms-2019", guarantees: {} });
+    await places.set(4, { move_into: "anon", confirm_move: true });
+    expect(calls[1]).toEqual({ method: "PUT", path: "/api/places/4", body: { move_into: "anon", confirm_move: true } });
   });
 });
 

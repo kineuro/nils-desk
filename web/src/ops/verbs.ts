@@ -27,6 +27,8 @@ export interface VerbWords {
   page: string;
   /** The next move once it stopped, the same command again; null for a verb that is not simply run again. */
   again: string | null;
+  /** Preparation the engine does on its own (pictures, 3D views): one quiet line on Data, never a card of work a person started. */
+  background?: boolean;
 }
 
 const data = { grant: "data:work" as Grant, page: "the Data page" };
@@ -38,15 +40,16 @@ const query = { grant: "query:work" as Grant, page: "the Query page" };
 /** Every verb the door queues, by its verb or its two-word verb. */
 export const VERBS: Record<string, VerbWords> = {
   pseudonymize: { doing: "Pseudonymising", noun: "pseudonymisation", link: "of", named: true, icon: "shield", ...data, again: "Pseudonymise again" },
-  "bring-in": { doing: "Bringing in", noun: "bring-in", link: "of", named: true, icon: "play", ...data, again: "Bring in again" },
-  digest: { doing: "Digesting", noun: "digest", link: "of", named: true, icon: "play", ...data, again: "Read again" },
-  ingest: { doing: "Digesting", noun: "digest", link: "of", named: true, icon: "play", ...data, again: "Read again" },
-  fingerprint: { doing: "Fingerprinting", noun: "fingerprint", link: "of", named: true, icon: "branch", ...pipelines, again: "Sort again" },
+  "bring-in": { doing: "Doing all steps of", noun: "all steps", link: "of", named: true, icon: "play", ...data, again: "Do all steps again" },
+  digest: { doing: "Reading", noun: "read", link: "of", named: true, icon: "play", ...data, again: "Read again" },
+  ingest: { doing: "Reading", noun: "read", link: "of", named: true, icon: "play", ...data, again: "Read again" },
+  fingerprint: { doing: "Preparing to sort", noun: "preparation", link: "of", named: true, icon: "branch", ...pipelines, again: "Sort again" },
   classify: { doing: "Sorting", noun: "sort", link: "with", named: true, icon: "branch", ...pipelines, again: "Sort again" },
   pick: { doing: "Picking from", noun: "pick", link: "of", named: true, icon: "branch", ...pipelines, again: "Pick again" },
   session: { doing: "Building the sessions of", noun: "session build", link: "of", named: true, icon: "branch", ...pipelines, again: "Build again" },
   run: { doing: "Running", noun: "pipeline run", link: "of", named: true, icon: "branch", ...pipelines, again: "Run again" },
-  pyramid: { doing: "Building pyramids for", noun: "pyramid build", link: "for", named: true, icon: "layers", ...pipelines, again: "Build again" },
+  pyramid: { doing: "Preparing 3D views", noun: "3D view preparation", link: "for", named: false, icon: "layers", ...pipelines, again: "Prepare again", background: true },
+  preview: { doing: "Preparing pictures", noun: "picture preparation", link: "for", named: false, icon: "layers", ...pipelines, again: "Prepare again", background: true },
   release: { doing: "Releasing", noun: "release", link: "of", named: true, icon: "release", ...release, again: "Release again" },
   handover: { doing: "Handing over", noun: "handover", link: "of", named: true, icon: "release", ...release, again: "Hand over again" },
   "linkage import": { doing: "Filing the map for", noun: "map import", link: "for", named: true, icon: "key", ...data, again: "File again" },
@@ -93,13 +96,25 @@ export function commandOf(job: Pick<JobRow, "args">): string[] {
 }
 
 /**
+ * Whether a job row is a queue worker's own (the engine's `worker` and
+ * `pipeline-worker` kinds, or a `serve --worker` line): how jobs run, never
+ * a job a person started. A restart of the engine ends it, so its ending is
+ * no failure of anyone's work.
+ */
+export function isWorker(job: Pick<JobRow, "args" | "kind">): boolean {
+  if (job.kind === "worker" || job.kind === "pipeline-worker") return true;
+  const c = commandOf(job);
+  return c[0] === "serve" && c.includes("--worker");
+}
+
+/**
  * The verb, or the two-word verb of `ask`, `linkage` and `clinical`; `ingest
  * probe` is the probe; an act on a dataset's originals is named by the act its
  * line carries, wherever on the line it stands, and by the bare verb where the
  * line carries none; the queue's own worker is the worker.
  */
 export function verbOf(job: Pick<JobRow, "args" | "kind">): string {
-  if (job.kind === "worker") return "worker";
+  if (isWorker(job)) return "worker";
   const c = commandOf(job);
   const first = c[0] ?? job.kind;
   if ((first === "ask" || first === "linkage" || first === "clinical") && c[1]) return `${first} ${c[1]}`;
@@ -109,6 +124,11 @@ export function verbOf(job: Pick<JobRow, "args" | "kind">): string {
   }
   if (first === "ingest" && c[1] === "probe") return "probe";
   return first;
+}
+
+/** Whether a job is the engine's own preparation (pictures, 3D views), not work a person started. */
+export function isBackground(job: Pick<JobRow, "args" | "kind">): boolean {
+  return wordsOf(job).background === true;
 }
 
 /** The verb's words, from the table or the plainest for one it does not know. */
@@ -131,6 +151,8 @@ export function targetOf(job: Pick<JobRow, "args" | "kind" | "name">): string | 
   if (pack >= 0 && c[pack + 1]) return c[pack + 1];
   const w = wordsOf(job);
   if (!w.named || !job.name) return null;
+  // a name the engine made up from another job ("pictures after job 42") is no target a person knows
+  if (/\bjob \d+/u.test(job.name)) return null;
   const verb = verbOf(job);
   if (job.name === verb || verb.split(" ").includes(job.name) || job.name === w.noun) return null;
   return job.name;

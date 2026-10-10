@@ -25,7 +25,7 @@ import { PlanPage, plansOffered } from "./PlanPage";
 import { RunPage } from "./RunPage";
 import { runActs } from "./runs";
 import { cardOf, countByFilter, FILTERS, filterJobs, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
-import { wordsOf } from "./verbs";
+import { isWorker, wordsOf } from "./verbs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -163,9 +163,11 @@ function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
   };
 
   const nowJobs = (live.open ?? all?.filter((j) => j.state === "running" || j.state === "queued" || j.state === "cancelling") ?? []).filter((j) => !dismissed.has(j.id));
-  const recentFailed = (all ?? []).filter((j) => (j.state === "failed" || j.state === "cancelled") && !dismissed.has(j.id) && Date.parse(j.finished_at ?? j.started_at) > now - 7 * 86_400_000).slice(0, 5);
-  const shown = filterJobs(all ?? [], filter).filter((j) => !dismissed.has(j.id));
-  const counts = countByFilter(all ?? []);
+  // a queue worker's own row ends when the engine restarts: never a failure of anyone's work, so it waits folded under All jobs
+  const recentFailed = (all ?? []).filter((j) => !isWorker(j) && (j.state === "failed" || j.state === "cancelled") && !dismissed.has(j.id) && Date.parse(j.finished_at ?? j.started_at) > now - 7 * 86_400_000).slice(0, 5);
+  const shown = filterJobs(all ?? [], filter).filter((j) => !dismissed.has(j.id) && !isWorker(j));
+  const workers = (all ?? []).filter((j) => isWorker(j) && j.state !== "running");
+  const counts = countByFilter((all ?? []).filter((j) => !isWorker(j)));
 
   return (
     <section className="pipelines">
@@ -208,6 +210,14 @@ function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
       </div>
       {all !== null && shown.length === 0 && <p className="meta">No job {filter === "all" ? "yet" : filter}.</p>}
       {shown.length > 0 && <div className="jobs-now">{shown.map(card)}</div>}
+      {workers.length > 0 && (
+        <details className="says workers">
+          <summary>
+            {n(workers.length)} queue {workers.length === 1 ? "worker" : "workers"} ended by a restart
+          </summary>
+          <div className="jobs-now">{workers.map(card)}</div>
+        </details>
+      )}
       <div className="note gated">
         <Icon name="lock" />
         <div className="note-body">

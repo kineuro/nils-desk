@@ -44,6 +44,11 @@ describe("the verb in words", () => {
     }
     expect(doingWords(job(["something-new", "@a"]))).toBe("Running something-new on a");
   });
+  it("names the engine's preparation of pictures plainly, never by a name made from another job", () => {
+    expect(doingWords(job(["pyramid", "build", "--classified", "37", "--place", "working"], "classified by job 37"))).toBe("Preparing 3D views");
+    expect(doingWords({ args: {}, kind: "preview", name: "dataset record34" })).toBe("Preparing pictures");
+    expect(targetOf(job(["run", "x"], "pictures after job 42"))).toBeNull();
+  });
   it("names a map's job by the map and its dataset, and a merge's by the merge, never by a name that repeats the verb", () => {
     const map = job(["/home/lab/nils", "--registry", "/r", "linkage", "import", "/x/map.csv", "--column", "a=identifier:personnummer", "--place", "north", "--consume"], "north");
     expect(verbOf(map)).toBe("linkage import");

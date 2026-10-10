@@ -4,6 +4,7 @@
 // proposals go back as feedback, and the desk pushes the person's token
 // itself, since a browser never holds one.
 
+import { parseSse } from "./events";
 import type { Chunk, History } from "./parts";
 import type { PageContext } from "../ui/context";
 
@@ -41,6 +42,54 @@ export const assistant = {
     if (!r.ok) await fail(r);
     const chunks = (await r.json()) as Chunk[];
     return { chunks: chunks.filter((c) => c.type !== "stream-checkpoint"), next: r.headers.get("Stream-Next-Offset") ?? offset };
+  },
+  /**
+   * The stream followed as server-sent events (one chat): each read cycle's
+   * chunks handed over with the offset after them. "unsupported" when the
+   * assistant answers but does not serve the stream this way, so the caller
+   * long-polls; "ended" when the connection closed and may be opened again
+   * from the last offset; "stopped" when the callback said it has what it
+   * needed. An answer that is no answer (a 401, a 502 while the assistant
+   * restarts) and a dropped connection throw, for the caller to open the
+   * stream again after a pause (review of 2026-10-10).
+   */
+  async stream(station: string, id: string, offset: string, signal: AbortSignal, on: (chunks: Chunk[], next: string) => Promise<boolean> | boolean): Promise<"unsupported" | "ended" | "stopped"> {
+    const r = await fetch(`/assistant/agents/${station}/${encodeURIComponent(id)}?view=updates&offset=${encodeURIComponent(offset)}&live=sse`, { signal, headers: { accept: "text/event-stream" } });
+    // an assistant that does not serve the stream this way says so (400, 404, 405, 406, 501): the caller long-polls
+    if (!r.ok && [400, 404, 405, 406, 501].includes(r.status)) {
+      await r.body?.cancel().catch(() => undefined);
+      return "unsupported";
+    }
+    if (!r.ok) await fail(r);
+    if (!(r.headers.get("content-type") ?? "").includes("text/event-stream") || !r.body) {
+      await r.body?.cancel().catch(() => undefined);
+      return "unsupported";
+    }
+    const reader = r.body.getReader();
+    const text = new TextDecoder();
+    let buffer = "";
+    let pending: Chunk[] = [];
+    try {
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) return "ended";
+        const { events, rest } = parseSse(buffer + text.decode(value, { stream: true }));
+        buffer = rest;
+        for (const e of events) {
+          if (e.event === "data") {
+            const chunks = JSON.parse(e.data) as Chunk[];
+            pending.push(...chunks.filter((c) => c.type !== "stream-checkpoint"));
+          } else if (e.event === "control") {
+            const next = (JSON.parse(e.data) as { streamNextOffset?: string }).streamNextOffset ?? offset;
+            const batch = pending;
+            pending = [];
+            if (await on(batch, next)) return "stopped";
+          }
+        }
+      }
+    } finally {
+      reader.cancel().catch(() => undefined);
+    }
   },
   /** The conversation so far; null when it has not started. */
   async history(station: string, id: string): Promise<History | null> {
@@ -87,6 +136,11 @@ export const assistant = {
   /** A rung-three proposal decided by the person, after the desk's own closure panel performed or declined the act. */
   decideProposal: async (plan: string, n: number, verdict: "accepted" | "rejected"): Promise<void> => {
     const r = await fetch(`/assistant/plans/${encodeURIComponent(plan)}/proposals/${n}/decide`, { method: "POST", headers: H, body: JSON.stringify({ verdict }) });
+    if (!r.ok) await fail(r);
+  },
+  /** One chat: a change the agent proposed (sorting words, an identity merge, a job plan), approved or declined; the assistant applies it, never the model. */
+  decideChange: async (id: string, verdict: "approved" | "declined"): Promise<void> => {
+    const r = await fetch(`/assistant/changes/${encodeURIComponent(id)}/decide`, { method: "POST", headers: H, body: JSON.stringify({ verdict }) });
     if (!r.ok) await fail(r);
   },
   /** Section 9.1: standing grants, per person and per verb, revocable. */

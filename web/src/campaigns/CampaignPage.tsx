@@ -219,7 +219,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
             <p className="note-lead">
               {n(missing)} of its stacks {missing === 1 ? "has" : "have"} no picture yet.
             </p>
-            <p className="note-detail">Raters see the stack once its pyramid is built: a job on Pipelines, pyramid build --handle {c.handle_id ?? "<handle>"}.</p>
+            <p className="note-detail">Each is prepared when it is first opened.</p>
           </div>
         </div>
       )}

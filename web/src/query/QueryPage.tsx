@@ -14,6 +14,8 @@ import type { Proposal } from "../assistant/parts";
 import { stationsServed } from "../assistant/stations";
 import { CompactionNote, ContextMeter } from "../assistant/ContextMeter";
 import { TurnView } from "../assistant/TurnView";
+import { StatusLine } from "../assistant/Cards";
+import { liveLine } from "../assistant/steps";
 import { useConversation, type Conversing } from "../assistant/useConversation";
 import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
 import { editor, setsOf } from "../ask/editor";
@@ -31,14 +33,48 @@ import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
+import { SaveSelection } from "./SaveSelection";
+import { Selections } from "./Selections";
+import { mayList, maySave } from "./selections";
 import { ProfilePanel, StepEditor } from "./CardParts";
 import { cardTitle, changeWords, clauseText, fieldChoices, keepingRefusal, stepCounts, versionsOf, type ChartTab, type Version } from "./cards";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
 export function QueryPage({ caps, open }: { caps: Capabilities; open: string | null }) {
+  if (open === "selections" && mayList(caps)) return <SelectionsPage caps={caps} />;
   const id = open !== null && /^\d+$/.test(open) ? Number(open) : null;
   return id === null ? <Cards caps={caps} /> : <Card caps={caps} id={id} />;
+}
+
+/** Cards and Selections, the section's two lists. */
+function QueryChips({ caps, on }: { caps: Capabilities; on: "cards" | "selections" }) {
+  if (!mayList(caps)) return null;
+  return (
+    <div className="chips" role="group" aria-label="the query lists">
+      <a className={on === "cards" ? "tag brand" : "tag"} aria-current={on === "cards" ? "page" : undefined} href={href("query")}>
+        Cards
+      </a>
+      <a className={on === "selections" ? "tag brand" : "tag"} aria-current={on === "selections" ? "page" : undefined} href={href("query", "selections")}>
+        Selections
+      </a>
+    </div>
+  );
+}
+
+function SelectionsPage({ caps }: { caps: Capabilities }) {
+  return (
+    <section className="query">
+      <div className="data-head">
+        <div className="grow">
+          <span className="eyebrow">Query</span>
+          <h1>Selections</h1>
+        </div>
+      </div>
+      <QueryChips caps={caps} on="selections" />
+      <Selections />
+    </section>
+  );
 }
 
 function Cards({ caps }: { caps: Capabilities }) {
@@ -58,13 +94,13 @@ function Cards({ caps }: { caps: Capabilities }) {
         <div className="grow">
           <span className="eyebrow">Query</span>
           <h1>Cards</h1>
-          <p className="lede">Every query you keep is a card. Open one to change it step by step; each change is a version you can go back to.</p>
         </div>
         <button type="button" className="button" onClick={() => setStarting(true)}>
           <Icon name="plus" />
           New query
         </button>
       </div>
+      <QueryChips caps={caps} on="cards" />
       {rows === null && !why && <Wait phase="reading the cards" since={since} size="panel" />}
       {why && <p className="warn">The cards could not be read: {why}</p>}
       {rows !== null && rows.length === 0 && <p className="lede">No query yet. Start one from everyone or from a cohort.</p>}
@@ -192,6 +228,8 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const [answered, setAnswered] = useState<{ count: number; truncated: boolean; handle: number; grain: string } | null>(null);
   // record 26: a complete answer becomes a cohort, the subjects of its rows at any grain
   const [promoting, setPromoting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [savedAs, setSavedAs] = useState<string | null>(null);
   const promotable = served(caps, "POST /api/ask/handles/{id}/promote") && may(caps, "data:work");
   const [since] = useState(() => Date.now());
   const [profile, setProfile] = useState<{ set: string; field: string; value: Profile } | null>(null);
@@ -569,20 +607,39 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               <span className="timeline-body">
                 <b>The answer</b>
                 <span className="meta">{answered ? `${answered.truncated ? "at least " : ""}${n(answered.count)} rows` : "not run in this view"}</span>
-                {answered && !answered.truncated && promotable && (
+                {((answered && !answered.truncated && promotable) || maySave(caps)) && (
                   <span className="row actions">
-                    <button type="button" className="button secondary small" disabled={busy !== null} onClick={() => setPromoting(true)}>
-                      <Icon name="users" />
-                      Make a cohort
-                    </button>
+                    {answered && !answered.truncated && promotable && (
+                      <button type="button" className="button secondary small" disabled={busy !== null} onClick={() => setPromoting(true)}>
+                        <Icon name="users" />
+                        Make a cohort
+                      </button>
+                    )}
+                    {maySave(caps) && (
+                      <button type="button" className="button secondary small" disabled={busy !== null} onClick={() => setSaving(true)}>
+                        Save as a selection
+                      </button>
+                    )}
                   </span>
                 )}
+                {savedAs && <span className="ok-words">{savedAs}</span>}
               </span>
             </div>
           </section>
           {keeping === null && !lists && <p className="meta">Starting from a list of identifiers asks to see sex and age in records.</p>}
         </aside>
       </div>
+      {saving && (
+        <SaveSelection
+          documentId={id}
+          title={cardTitle((doc.ask as Json).name as string | undefined, answer)}
+          onClose={() => setSaving(false)}
+          onSaved={(words) => {
+            setSaving(false);
+            setSavedAs(words);
+          }}
+        />
+      )}
       {promoting && answered && (
         <PromoteDialog
           caps={caps}
@@ -607,6 +664,7 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
   const warming = (caps.kvasir?.["health"] as { warming?: boolean } | undefined)?.warming === true;
   const model = assistantModel(caps);
   const pane = talk.pane;
+  const status = liveLine(pane, talk.slow);
   const settled = pane.settled && pane.settled.outcome !== "completed" ? pane.settled : null;
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -651,7 +709,7 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
                 said={pane.finals[t.id]}
               />
             ))}
-            {pane.busy && <Wait phase={pane.status?.text ?? "thinking"} since={talk.since || Date.now()} />}
+            {status && <StatusLine words={status} />}
             {settled && <p className={settled.outcome === "aborted" ? "meta" : "warn"}>{settled.outcome === "aborted" ? "Stopped." : (settled.error ?? "The assistant did not finish this turn.")}</p>}
             {talk.why && <p className="warn">{talk.why}</p>}
           </div>

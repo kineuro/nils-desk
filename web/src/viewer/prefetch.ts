@@ -63,8 +63,11 @@ export function load(src: string, signal?: AbortSignal): Promise<void> {
 
 /** Warm one stack: its manifest, then its three first planes; an abort stops it between the two and cancels the planes. */
 export async function warmStack(stack: number, signal?: AbortSignal): Promise<number> {
-  const m = await tileManifest(stack);
-  if (signal?.aborted) return 0;
+  const m = await tileManifest(stack, undefined, signal).catch((e: unknown) => {
+    if (signal?.aborted) return null;
+    throw e;
+  });
+  if (m === null || signal?.aborted) return 0;
   const planes = firstPlanes(stack, m);
   await Promise.all(planes.map((src) => load(src, signal)));
   return signal?.aborted ? 0 : planes.length;

@@ -85,6 +85,33 @@ export interface VolumePlan {
   bytes: number;
 }
 
+/** The volume of one level, whatever the budget; null where its planes do not fit the card. */
+export function planAt(m: Manifest, level: number, max3d = 2048): VolumePlan | null {
+  if (level < 0 || level >= m.levels) return null;
+  const g = geometry(m);
+  const shape = levelShape(m, level);
+  const [nx, ny] = volumeGrid(g, shape, levelSpacing(m, 0), level).size;
+  if (ny > max3d || nx > max3d) return null;
+  const stride = Math.max(1, Math.ceil(shape[0] / max3d));
+  const depth = Math.ceil(shape[0] / stride);
+  return { level, stride, dims: [nx, ny, depth], bytes: depth * ny * nx * 2 };
+}
+
+/** The level the three planes open on before their own: the server planes' (level 2, or the coarsest there is). */
+export const COARSE_LEVEL = 2;
+
+/**
+ * The coarse volume the three planes open on while their own fills: at
+ * `COARSE_LEVEL` (or the coarsest level), where that is coarser than the
+ * plan's; null where the plan is that coarse already. Its slabs are a
+ * sixteenth of level 0's, so the planes are whole in a tenth of the time.
+ */
+export function coarsePlan(m: Manifest, fine: VolumePlan, max3d = 2048): VolumePlan | null {
+  const level = Math.min(m.levels - 1, COARSE_LEVEL);
+  if (level <= fine.level) return null;
+  return planAt(m, level, max3d);
+}
+
 /** The level rule: the finest level whose planes fit the card and whose volume fits the budget; null when none does. */
 export function volumeLevel(m: Manifest, budget = VOLUME_BUDGET, max3d = 2048): VolumePlan | null {
   const g = geometry(m);

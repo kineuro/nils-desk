@@ -136,8 +136,9 @@ export interface Closure {
 
 export const review = {
   /** The queue, through the one door the operations client types; `cohort` narrows it at record 26. */
-  list: (f: { status?: string; kind?: string; cohort?: string; limit?: number }) => ops.review(f.status, f.kind, f.limit ?? 200, f.cohort),
-  summary: (cohort?: string) => door<ReviewSummary>("GET", `/api/review/summary${q({ cohort })}`),
+  list: (f: { status?: string; kind?: string; cohort?: string; dataset?: string; limit?: number }) => ops.review(f.status, f.kind, f.limit ?? 200, f.cohort, f.dataset),
+  /** `dataset` narrows both to one dataset's scans (record 55 H2, the card's Review button). */
+  summary: (cohort?: string, dataset?: string) => door<ReviewSummary>("GET", `/api/review/summary${q({ cohort, dataset })}`),
   explain: (stack: number) => door<Explain>("GET", `/api/explain/${stack}`),
   pack: (name: string) => door<Json>("GET", `/api/packs/${encodeURIComponent(name)}`).then(packDoc),
   try: (overlay: OverlayDoc, scope: string, sample?: number) => door<TryResult>("POST", "/api/classify/try", sample ? { overlay, scope, sample } : { overlay, scope }),

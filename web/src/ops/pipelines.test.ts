@@ -45,17 +45,17 @@ describe("a job's card", () => {
   });
   it("draws a queued job in a chain as waiting for the job before it, with what follows", () => {
     const c = cardOf(job(122, ["digest", "@lake/dcm-anon"], "queued", { chain: { before: 120, after: 123 }, then: [["fingerprint"], ["classify", "--pack", "mri"]] }), now);
-    expect(c.title).toBe("Then digesting lake");
+    expect(c.title).toBe("Then reading lake");
     expect(c.tone).toBe("queued");
     expect(c.icon).toBe("clock");
     expect(c.waits).toBe(120);
-    expect(c.then).toEqual(["then fingerprint", "then sort with mri"]);
+    expect(c.then).toEqual(["then preparation", "then sort with mri"]);
     expect(c.meta).toBe("job 122 · astrid");
     expect(thenWords(["session", "--scheme", "x"])).toBe("then session build");
   });
   it("says what stopped a failed job and offers the same command again", () => {
     const c = cardOf(job(117, ["digest", "@ct-lab", "--restart"], "failed", { error: "No pack reads CT. Add a pack that does, then read again." }), now);
-    expect(c.title).toBe("Digest of ct-lab stopped");
+    expect(c.title).toBe("Read of ct-lab stopped");
     expect(c.tone).toBe("failed");
     expect(c.icon).toBe("alert");
     expect(c.error).toBe("No pack reads CT. Add a pack that does, then read again.");

@@ -1,24 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A dataset's pseudonymisation: what its source row says about who each
 // file is about, the two trees, what the pseudonymised tree keeps and what
-// leaves; the linkage doors behind the map, the held files and the types;
-// and the pure parts of the pages: a CSV read in the browser, its columns
-// guessed, the import's report, the held files grouped by shape, and the
-// words each fact takes. Identifiers never pass through here except in the
-// rows of a map a person chose, posted once to the import door.
+// leaves; the linkage doors behind the map and the types; the acts on the
+// originals; and the pure parts of the map's dialog: a CSV read in the
+// browser, its columns guessed, and the import's report in words. The step
+// of a dataset, its held IDs among it, is pseudoStep.ts. Identifiers never
+// pass through here except in the rows of a map a person chose, posted once
+// to the import door.
 
 import { needsWork } from "../access";
-import { door, type JobRow } from "../ask/client";
+import { door } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
-import type { Detail } from "../grants";
 import type { Place } from "../objects/client";
-import type { ReviewItem } from "../ops/client";
-import { VERBS } from "../ops/verbs";
-import { identityActs } from "../review/client";
-import { kindOf } from "../review/triage";
-import type { Access } from "../settings/identity";
-import type { Dataset, DatasetFields, IdentityRule, OriginalsKept } from "./datasets";
+import type { Dataset, DatasetFields, OriginalsKept } from "./datasets";
 import { datesWord, type Handling } from "./sources";
 
 // A dataset is the sources door's row as the Data page types it; the same shape is read from here.
@@ -34,33 +29,6 @@ export type { Arrives, Dataset, IdentityRule, IdentitySource, Trees } from "./da
 export type DatasetPatch = Partial<DatasetFields> & {
   handling?: Handling;
 };
-
-/**
- * What a person may change about a dataset on the Pseudonymisation page. The
- * tag lists are not among them: the chooser edits those, and two forms seeded
- * from the same dataset would each send the whole block and undo the other.
- */
-export interface DatasetChange {
-  arrives: NonNullable<DatasetFields["arrives"]>;
-  unmapped: NonNullable<DatasetFields["unmapped"]>;
-  cohort: string;
-  on_release: Handling["on_release"];
-}
-
-/**
- * What the Change form sends: its own fields, nothing of the originals and
- * nothing of the tags, which the place keeps as they stand where the body
- * names none.
- */
-export function changePatch(c: DatasetChange): DatasetPatch {
-  return {
-    arrives: c.arrives,
-    unmapped: c.unmapped,
-    cohort: c.cohort.trim() || null,
-    // the dates are not a choice (record 38 S3): a stored policy read off an older engine is never sent back, which the engine would refuse
-    handling: { arrives: c.arrives === "identified" ? "identified" : "deidentified", on_release: { uids: c.on_release.uids, deface: c.on_release.deface } },
-  };
-}
 
 export interface IdType {
   name: string;
@@ -115,23 +83,6 @@ export interface ImportReport {
   conflicts: { row: number; why: string }[];
 }
 
-/* a held row of the pseudonymiser's table, as the held door lists it */
-export interface HeldRow {
-  shape: string;
-  files: number;
-  first_seen: string | null;
-  batch: string | number | null;
-}
-
-export interface Revealed {
-  identifier: string;
-  shape?: string;
-  files?: number;
-  batch?: string | number | null;
-}
-
-const list = <T>(v: unknown, key: string): T[] => (Array.isArray(v) ? (v as T[]) : Array.isArray((v as Record<string, unknown>)?.[key]) ? ((v as Record<string, unknown>)[key] as T[]) : []);
-
 export const linkage = {
   types: () => door<TypesDoc | IdType[]>("GET", "/api/linkage/types").then((r) => (Array.isArray(r) ? { types: r } : r)),
   addType: (name: string, description: string) => door<IdType>("POST", "/api/linkage/types", { name, description }),
@@ -143,9 +94,6 @@ export const linkage = {
    * reading it.
    */
   import: (body: { place?: string; columns: ImportColumn[]; rows: string[][]; dry_run: boolean; make_types?: boolean }) => door<ImportReport & { job?: number; state?: string }>("POST", "/api/linkage/imports", body),
-  held: (place: string) => door<unknown>("GET", `/api/linkage/held?place=${encodeURIComponent(place)}`).then((r) => list<HeldRow>(r, "held")),
-  codeHeld: (place: string) => door<{ job: number; state: string }>("POST", "/api/linkage/held/code", { place }),
-  reveal: (place: string) => door<unknown>("POST", "/api/linkage/held/reveal", { place }).then((r) => list<Revealed>(r, "identifiers")),
 };
 
 export const datasets = {
@@ -259,47 +207,6 @@ export function originalsWords(kept: OriginalsKept | undefined, into?: string | 
 export function vaultedInto(d: Dataset): string | null {
   const named = (d as Dataset & { originals_vault?: unknown }).originals_vault;
   return typeof named === "string" && named.trim() !== "" ? named.trim() : null;
-}
-
-/** How an act on the originals ended: done, stopped by a person, or failed. */
-export type ActEnd = "done" | "stopped" | "failed";
-
-/**
- * Whether the job row says the act was stopped rather than broken: the state
- * the engine records for a cancel, and what an engine that still calls a stop
- * a failure leaves behind, its own result or its own first word.
- */
-export function actStopped(row: Pick<JobRow, "state" | "error" | "result">): boolean {
-  if (row.state === "cancelled") return true;
-  if (row.state !== "failed") return false;
-  const result = (row.result ?? null) as Record<string, unknown> | null;
-  if (result?.cancelled === true) return true;
-  return /^\s*stopped\b/iu.test(row.error ?? "");
-}
-
-const ACT_NOUN = { vault: VERBS["originals vault"].noun, purge: VERBS["originals purge"].noun } as const;
-
-/**
- * What the card says when an act on the originals ended. A stop is not a
- * failure: what was moved or removed stays that way, the rest are where they
- * were, and asking for the act again goes on from there, which is the move
- * the card offers beside these words. A failure is said in the engine's own.
- */
-export function actEnded(did: "vault" | "purge", row: Pick<JobRow, "state" | "error" | "result">, into: string | null): { end: ActEnd; words: string } {
-  const place = into !== null && into.trim() !== "" ? into.trim() : null;
-  if (row.state === "done") {
-    return { end: "done", words: did === "vault" ? `The originals are vaulted${place ? ` into ${place}` : ""}.` : "The originals are purged; the pseudonymised tree is all that is left." };
-  }
-  const noun = ACT_NOUN[did];
-  if (actStopped(row)) {
-    const words =
-      did === "vault"
-        ? `The ${noun} of the originals stopped: what was moved is ${place ? `in ${place}` : "at the place it was going to"}, the rest are still here, and Vault it again goes on from there.`
-        : `The ${noun} of the originals stopped: what was removed is gone, the rest are still here, and Purge it again goes on from there.`;
-    return { end: "stopped", words };
-  }
-  const why = (row.error ?? "").trim().replace(/\.+$/u, "");
-  return { end: "failed", words: `The ${noun} of the originals failed: ${why !== "" ? why : "the engine recorded no reason"}.` };
 }
 
 /** What the act would move: the files and what they weigh. */
@@ -694,140 +601,4 @@ export function reportLines(r: ImportReport): { label: string; words: string; to
     { label: "merges", words: merges === 0 ? "none" : `${n(merges)}: ${merges === 1 ? "a provisional subject becomes its canonical one" : "provisional subjects become their canonical ones"} · the old codes stay as identifiers`, tone: merges > 0 ? "caution" : undefined },
     { label: "conflicts", words: conflicts === 0 ? "0 · an identifier already on another subject would be listed here first, and nothing written" : `${n(conflicts)}: nothing is written until they are resolved`, tone: conflicts > 0 ? "caution" : "ok" },
   ];
-}
-
-/* ---------------------------------------------------------------- held until mapped */
-
-export interface HeldGroup {
-  shape: string;
-  files: number;
-  identifiers: number;
-  batches: string[];
-  since: string | null;
-}
-
-/** The held files by shape, most files first, with the batches and the earliest sighting of each. */
-export function heldGroups(rows: HeldRow[]): HeldGroup[] {
-  const by = new Map<string, HeldGroup>();
-  for (const r of rows) {
-    const g = by.get(r.shape) ?? { shape: r.shape, files: 0, identifiers: 0, batches: [], since: null };
-    g.files += r.files;
-    g.identifiers += 1;
-    const b = r.batch === null || r.batch === undefined ? null : String(r.batch);
-    if (b !== null && !g.batches.includes(b)) g.batches.push(b);
-    if (r.first_seen && (g.since === null || r.first_seen < g.since)) g.since = r.first_seen;
-    by.set(r.shape, g);
-  }
-  return [...by.values()].sort((a, b) => b.files - a.files);
-}
-
-/** A group's line: "12 digits, not in the map", then "AAA999, a second shape". */
-export function heldLine(g: HeldGroup, index: number): string {
-  return index === 0 ? `${shapeWords(g.shape)}, not in the map` : `${shapeWords(g.shape)}, ${index === 1 ? "a second shape" : "another shape"}`;
-}
-
-/** What of a dataset waits on Review, one line a kind: held files to map here, subjects that may be one person twice, subjects coded without a map. */
-export interface WaitingLine {
-  kind: "held" | "twice" | "provisional";
-  words: string;
-}
-
-/**
- * The dataset's identity questions named for what they are, the held files
- * first since they are mapped on this page. `heldFiles` is the dataset's own
- * count when the sources door gives one; the items' counts stand in for it.
- */
-export function waitingLines(items: ReviewItem[], heldFiles: number | null): WaitingLine[] {
-  const open = items.filter((i) => i.status === "open");
-  const held = open.filter((i) => kindOf(i.kind).what === "unmapped");
-  const twice = open.filter((i) => identityActs(i).decide);
-  const provisional = open.filter((i) => kindOf(i.kind).what === "provisional");
-  const out: WaitingLine[] = [];
-  if (held.length > 0) {
-    const counted = held.reduce((s, i) => s + (typeof (i.evidence as Record<string, unknown> | null)?.files === "number" ? ((i.evidence as Record<string, unknown>).files as number) : 0), 0);
-    const files = heldFiles !== null && heldFiles > 0 ? heldFiles : counted;
-    out.push({ kind: "held", words: files > 0 ? `${n(files)} ${files === 1 ? "file" : "files"} held until mapped: map them` : "files held until mapped: map them" });
-  }
-  if (twice.length > 0) out.push({ kind: "twice", words: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"} may be one person twice` });
-  if (provisional.length > 0) out.push({ kind: "provisional", words: `${n(provisional.length)} ${provisional.length === 1 ? "subject" : "subjects"} coded without a map: merge them` });
-  return out;
-}
-
-/* ---------------------------------------------------------------- the identity-check station's run */
-
-export interface SawCard {
-  title: string;
-  meta: string | null;
-  shapes: { shape: string; files: number }[];
-  facts: [string, string][];
-}
-
-const str = (v: unknown): string | null => (typeof v === "string" ? v : typeof v === "number" ? String(v) : null);
-
-function sourceWords(v: unknown): string | null {
-  if (typeof v === "string") return v;
-  if (Array.isArray(v)) return v.map(sourceWords).filter(Boolean).join(", then ") || null;
-  if (v && typeof v === "object") {
-    const o = v as { field?: unknown; path?: { segment?: unknown }; sources?: unknown; from?: unknown; id_type?: unknown };
-    if (typeof o.field === "string") return o.field;
-    if (o.path && typeof o.path.segment === "number") return `folder ${o.path.segment} of the path`;
-    if (o.sources !== undefined) return sourceWords(o.sources);
-    if (o.from !== undefined) return sourceWords(o.from);
-    if (typeof o.id_type === "string") return o.id_type;
-  }
-  return null;
-}
-
-/** What the station saw per rule, as cards: the shapes with their counts, the people, the files with no value. Shapes only; the station carries no value. */
-export function sawOf(result: Record<string, unknown>): SawCard[] {
-  const saw = Array.isArray(result.saw) ? (result.saw as Record<string, unknown>[]) : [];
-  return saw.map((x, i) => {
-    const source = sourceWords(x.rule) ?? sourceWords(x.source) ?? sourceWords(x.sources) ?? `rule ${i + 1}`;
-    const shapes: { shape: string; files: number }[] = [];
-    const raw = x.shapes;
-    if (Array.isArray(raw)) {
-      for (const s of raw as Record<string, unknown>[]) {
-        const shape = str(s.shape);
-        const files = typeof s.files === "number" ? s.files : typeof s.count === "number" ? s.count : null;
-        if (shape !== null && files !== null) shapes.push({ shape, files });
-      }
-    } else if (raw && typeof raw === "object") {
-      for (const [shape, files] of Object.entries(raw as Record<string, unknown>)) if (typeof files === "number") shapes.push({ shape, files });
-    }
-    shapes.sort((a, b) => b.files - a.files);
-    const facts: [string, string][] = [];
-    const people = x.subjects ?? x.people;
-    if (typeof people === "number") facts.push(["people", `${n(people)} under this rule`]);
-    const empty = x.empty ?? x.files_with_no_value ?? x.no_value;
-    if (typeof empty === "number") facts.push(["files with no value", n(empty)]);
-    if (typeof x.studies === "number") facts.push(["studies", n(x.studies)]);
-    if (typeof x.constant === "boolean") facts.push(["one identity per file", x.constant ? "yes" : "no"]);
-    if (typeof x.path_is_direct_identifier === "boolean") facts.push(["is the path an identifier?", x.path_is_direct_identifier ? "yes: a person's number in a folder name" : "no: a study code, not a person's number"]);
-    const title = i === 0 ? `Now: ${source}` : `Candidate: ${source}`;
-    const meta = typeof x.code === "string" ? `code ${x.code}` : i === 0 && saw.length > 1 ? "the rule in use" : null;
-    return { title, meta, shapes, facts };
-  });
-}
-
-/** The rule the station proposed, when it did: from the proposals list, else the result. */
-export function proposedRule(verdict: { result: Record<string, unknown>; proposals: { kind: string; ref: Record<string, unknown>; sentence?: string }[] }): IdentityRule | null {
-  const fromList = verdict.proposals.find((p) => p.kind === "identity_rule")?.ref?.rule;
-  const rule = (fromList ?? verdict.result.proposed ?? null) as IdentityRule | null;
-  return rule && typeof rule === "object" && typeof rule.id_type === "string" && Array.isArray(rule.from) ? rule : null;
-}
-
-/** A rule as a person reads it: "Read the code from folder 2 of the path, verbatim." */
-export function ruleWords(rule: IdentityRule): string {
-  const sources = rule.from.map((s) => (s.field ? s.field : s.path ? `folder ${s.path.segment} of the path` : "?"));
-  const read = sources.length > 1 ? `${sources[0]}, then ${sources.slice(1).join(", then ")}` : sources[0] ?? "PatientID";
-  return rule.code === "verbatim" ? `Read the code from ${read}, verbatim.` : `Read the ${rule.id_type} from ${read}, through the map.`;
-}
-
-/* ---------------------------------------------------------------- who sees what */
-
-/** How many people see records at each detail, from the desk's people door. */
-export function detailCounts(access: Access | null): Record<Detail, number> {
-  const out: Record<Detail, number> = { plain: 0, quasi: 0, sensitive: 0 };
-  for (const p of access?.people ?? []) out[p.access.detail] += 1;
-  return out;
 }

@@ -9,6 +9,8 @@ import { useCallback, useEffect, useState } from "react";
 import type React from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
+import { RootForm } from "../data/AddRoot";
+import { rootsOf } from "../data/steps";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { objects, type Place } from "../objects/client";
@@ -24,10 +26,9 @@ import { backupsKept, usersKept } from "../settings/kept";
 import { kvasir } from "../settings/kvasir";
 import type { Install } from "../settings/supervise";
 import { Command } from "../ui/Command";
+import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
-import { BringInForm } from "./BringIn";
-import { CONCEPTS } from "./concepts";
 import { placeName, type Pack } from "./look";
 import { backupFolderRefusal, minimumMet, progressWords, setupSteps, type SetupId, type SetupStep } from "./setup";
 import type { Purpose } from "./steps";
@@ -108,7 +109,7 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
       case "installed":
         return <InstalledBody caps={caps} install={install} />;
       case "sources":
-        return <SourcesBody caps={caps} install={install} places={known} packs={extra.packs} met={s.met} onDone={changed} />;
+        return <SourcesBody caps={caps} install={install} places={known} met={s.met} onDone={changed} />;
       case "backups":
         return <BackupsBody caps={caps} install={install} places={known} archives={archives.value} status={extra.status} onDone={changed} />;
       case "signin":
@@ -131,11 +132,6 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
             </button>
           )}
         </div>
-        <p className="lede">
-          {done
-            ? "Every step the desk needs is done. What is left is worth doing when there is a moment."
-            : "A few steps make this install ready for real work. Each checks itself from what the parts report, and turns green once it holds."}
-        </p>
         {needed.length > 1 && !reading && (
           <div className="progress-row">
             <span className="progress" role="img" aria-label={progressWords(all)}>
@@ -159,7 +155,6 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
             ))}
           </ol>
         )}
-        <Concepts />
       </div>
     </div>
   );
@@ -228,15 +223,16 @@ function InstalledBody({ caps, install }: { caps: Capabilities; install: Install
   );
 }
 
-function SourcesBody(props: { caps: Capabilities; install: Install | null; places: Place[]; packs: Pack[]; met: boolean; onDone: () => void }) {
-  const { caps, install, places, packs, met, onDone } = props;
-  const [adding, setAdding] = useState(!met);
-  const sources = places.filter((p) => p.role === "source" && p.retired_at === null);
+/** Add a root folder: the folders where the datasets live, one line each, and the form that adds another. */
+export function SourcesBody(props: { caps: Capabilities; install: Install | null; places: Place[]; met: boolean; onDone: () => void }) {
+  const { caps, install, places, onDone } = props;
+  const [said, setSaid] = useState<string | null>(null);
+  const roots = rootsOf(places);
   return (
     <>
-      {sources.length > 0 && (
+      {roots.length > 0 && (
         <ul className="source-list">
-          {sources.map((p) => (
+          {roots.map((p) => (
             <li key={p.id}>
               <Icon name="folder" />
               <b>{p.name}</b>
@@ -245,19 +241,16 @@ function SourcesBody(props: { caps: Capabilities; install: Install | null; place
           ))}
         </ul>
       )}
-      {adding ? (
-        <BringInForm caps={caps} install={install} places={places} packs={packs} onDone={onDone} />
-      ) : (
-        <div className="row actions">
-          <button type="button" className="button secondary small" onClick={() => setAdding(true)}>
-            <Icon name="plus" />
-            Add another folder
-          </button>
-          <a className="button quiet small" href={href("settings", "places")}>
-            The Places page
-          </a>
-        </div>
-      )}
+      {said && <p className="ok-words">{said}</p>}
+      <RootForm
+        caps={caps}
+        install={install}
+        places={places}
+        onAdded={(words) => {
+          setSaid(words);
+          onDone();
+        }}
+      />
     </>
   );
 }
@@ -331,13 +324,9 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
         )}
       </dl>
       {archives !== null && dir === null && (
-        <div className="note caution">
-          <Icon name="alert" />
-          <div className="note-body">
-            <p className="note-lead">The engine has no backup folder, so a backup from the desk is refused.</p>
-            <p className="note-detail">Running setup again gives the engine one.</p>
-            <Command text="nils setup" />
-          </div>
+        <div className="row">
+          <span className="warn">No backup folder yet.</span>
+          <Command text="nils setup" />
         </div>
       )}
       <div className="row actions">
@@ -360,11 +349,6 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
           The Database page
         </a>
       </div>
-      {!backup && dir && (
-        <p className="meta">
-          The engine writes its archives to <span className="path">{dir}</span>. Naming it the registry's backup place records that; storage other than the registry's is better, and setup moves it.
-        </p>
-      )}
       {refusal !== null && !backup && dir && <p className="meta">{refusal}</p>}
       <Acted acting={acting.acting} />
     </>
@@ -383,15 +367,10 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
 
   return (
     <>
-      <div className="mode-lines">
-        {MODES.map((m) => (
-          <div key={m.id} className={m.id === mode ? "mode-line on" : "mode-line"}>
-            <span className={m.id === mode ? "radio on" : "radio"} aria-hidden="true" />
-            <b>{m.title}</b>
-            <span className="meta">{m.words}</span>
-          </div>
-        ))}
-      </div>
+      <p>
+        <b>{MODES.find((m) => m.id === mode)?.title ?? mode}</b>
+        <Hint text={MODES.find((m) => m.id === mode)?.words ?? ""} />
+      </p>
       {mode === "local" && changes && (
         <div className="row actions">
           <button type="button" className="button secondary small" disabled={!users.value} onClick={() => setAdding(true)}>
@@ -404,8 +383,10 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
           </a>
         </div>
       )}
-      <p className="meta">How people sign in is chosen when NILS is set up, and changed by running setup again, which restarts the desk and the engine:</p>
-      <Command text="nils setup" />
+      <div className="row">
+        <span className="meta">Changed by:</span>
+        <Command text="nils setup" />
+      </div>
       {adding && users.value && (
         <AddPerson
           users={users.value.users}
@@ -426,58 +407,15 @@ function ModelBody({ caps }: { caps: Capabilities }) {
   const reaches = caps.kvasir !== null;
   return (
     <>
-      <p className="meta">
-        {reaches
-          ? "A model is added on the Kvasir page, where Kvasir tests it before holding it. Running setup again changes it too."
-          : "The assistant's model is chosen when NILS is set up, and running setup again changes it."}
-      </p>
+
       <div className="row actions">
         {reaches && (
           <a className="button small" href={href("settings", "gateway")}>
-            The Kvasir page
+            Language models
           </a>
         )}
         <Command text="nils setup" />
       </div>
     </>
-  );
-}
-
-/** What each word of NILS means, and how many of it an install has. */
-function Concepts() {
-  return (
-    <aside className="panel concepts" aria-label="what is what in NILS">
-      <h2>What is what</h2>
-      <ol className="flow">
-        <li>
-          <Icon name="folder" />
-          <b>Sources</b>
-          <span>your DICOM, read only</span>
-        </li>
-        <li>
-          <Icon name="data" />
-          <b>Registry</b>
-          <span>what NILS learned</span>
-        </li>
-        <li>
-          <Icon name="release" />
-          <b>Exports</b>
-          <span>answers, releases</span>
-        </li>
-      </ol>
-      <p className="meta">A digest reads a source into the registry. Questions, reviews and releases read the registry, and a backup copies it to its backup place.</p>
-      <dl className="concept-list">
-        {CONCEPTS.map((c) => (
-          <div key={c.term} className="concept">
-            <Icon name={c.icon} />
-            <dt>
-              {c.term}
-              <span className="count">{c.count}</span>
-            </dt>
-            <dd>{c.words}</dd>
-          </div>
-        ))}
-      </dl>
-    </aside>
   );
 }

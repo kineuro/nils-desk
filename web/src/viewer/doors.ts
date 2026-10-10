@@ -4,6 +4,7 @@
 // response, a slab of planes, and the server's render of one plane. This is
 // the one file that knows the wire; the loader speaks in planes.
 
+import { pictureAnswer, untilBuilt } from "./building";
 import { DoorError } from "../ask/client";
 
 export interface Manifest {
@@ -145,15 +146,23 @@ export function unpackSlab(buf: ArrayBuffer): Uint8Array[][] {
   return unpackTiles(buf).map((plane) => unpackTiles(buf, plane.byteOffset, plane.byteOffset + plane.byteLength));
 }
 
+/** One ask of the manifest: a picture being built throws `Preparing` (202), one that could not be built `NotBuilt` (422). */
+async function manifestOnce(stack: number): Promise<Manifest> {
+  const r = await fetch(`/api/instances/${stack}/manifest`, { headers: H });
+  await pictureAnswer(r, stack);
+  if (!r.ok) await fail(r);
+  return (await r.json()) as Manifest;
+}
+
 export const doors = {
-  manifest: async (stack: number): Promise<Manifest> => {
-    const r = await fetch(`/api/instances/${stack}/manifest`, { headers: H });
-    if (!r.ok) await fail(r);
-    return (await r.json()) as Manifest;
-  },
+  /** The manifest, asked again while the engine builds the picture (202), until it is there or the build failed (422). */
+  manifest: (stack: number): Promise<Manifest> => untilBuilt(stack, () => manifestOnce(stack)),
+  /** The manifest asked once; the tiles' own queue waits for a build between its asks (tiles.ts). */
+  manifestOnce,
   /** One plane's tiles in one round trip; the codec comes back in a header. */
   plane: async (stack: number, level: number, z: number, signal?: AbortSignal): Promise<{ tiles: Uint8Array[]; codec: string; bytes: number }> => {
     const r = await fetch(`/api/instances/${stack}/tiles/${level}/${z}`, { headers: H, signal });
+    await pictureAnswer(r, stack);
     if (!r.ok) await fail(r);
     const buf = await r.arrayBuffer();
     return { tiles: unpackTiles(buf), codec: r.headers.get("X-Nils-Codec") ?? "", bytes: buf.byteLength };
@@ -161,6 +170,7 @@ export const doors = {
   /** Up to 32 planes (z1 exclusive), each plane's tiles in row-major order of its grid. */
   slab: async (stack: number, level: number, z0: number, z1: number, signal?: AbortSignal): Promise<{ planes: Uint8Array[][]; codec: string; bytes: number }> => {
     const r = await fetch(`/api/instances/${stack}/slab/${level}/${z0}-${z1}`, { headers: H, signal });
+    await pictureAnswer(r, stack);
     if (!r.ok) await fail(r);
     const buf = await r.arrayBuffer();
     return { planes: unpackSlab(buf), codec: r.headers.get("X-Nils-Codec") ?? "", bytes: buf.byteLength };

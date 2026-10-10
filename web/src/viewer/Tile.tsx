@@ -6,8 +6,10 @@
 // change matrix's grid. It puts nothing in the browser but a small JPEG.
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { usePicture } from "./building";
 import { doors, type Manifest } from "./doors";
 import type { Axis } from "./geometry";
+import { PictureWait } from "./PictureWait";
 import { planeAt, planesAlong, step, tileAbsence, tileLevel, tileManifest, TileSync } from "./tiles";
 import "./viewer.css";
 
@@ -59,15 +61,16 @@ export function Tile({ stack, axis = "z", sync = null, size = 128, caption, onOp
 
   useEffect(() => {
     if (!seen) return;
-    let alive = true;
-    tileManifest(stack)
-      .then((m) => alive && setManifest(m))
-      .catch((e: unknown) => alive && setAbsent(tileAbsence(e)));
-    return () => {
-      alive = false;
-    };
+    // a tile that leaves the page lets go of its stack's manifest, so a picture still being built is not asked for on its behalf
+    const gone = new AbortController();
+    tileManifest(stack, undefined, gone.signal)
+      .then((m) => !gone.signal.aborted && setManifest(m))
+      .catch((e: unknown) => !gone.signal.aborted && setAbsent(tileAbsence(e)));
+    return () => gone.abort();
   }, [seen, stack]);
 
+  // only a picture the engine builds, or could not build, says so; one merely being read says nothing
+  const building = usePicture(stack);
   const dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
   const level = manifest ? tileLevel(manifest, size * dpr) : 0;
   const planes = manifest ? planesAlong(manifest, level, axis) : 1;
@@ -91,6 +94,7 @@ export function Tile({ stack, axis = "z", sync = null, size = 128, caption, onOp
       <span className="tile-picture">
         {src && <img src={src} alt="" decoding="async" onLoad={() => onShown?.(stack)} onError={() => setAbsent("no picture")} hidden={absent !== null} />}
         {absent && <span className="tile-absent">{absent}</span>}
+        {!manifest && !absent && seen && building !== null && <PictureWait stack={stack} small />}
       </span>
       <span className="tile-caption meta">
         {caption ?? `stack ${stack}`}

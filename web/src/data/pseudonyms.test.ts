@@ -1,30 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Pseudonymisation page's pure parts: a CSV read in the browser, each
-// column's shape and its guessed meaning, the import's columns and its
-// report in words, the held files grouped by shape, how many people see
-// records at each detail, what the identity-check station saw, and the
-// words each fact takes. The numbers and names here are made up.
+// Pseudonymisation's pure parts: a CSV read in the browser, each column's
+// shape and its guessed meaning, the import's columns and its report in
+// words, the acts on the originals, and the words each fact takes. The
+// numbers and names here are made up.
 
 import { describe, expect, it } from "vitest";
-import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
-import type { ReviewItem } from "../ops/client";
-import type { Access } from "../settings/identity";
 import {
-  actEnded,
-  actStopped,
   arrivesWords,
   bytesWords,
-  changePatch,
   confirmsName,
   csvRefusal,
   MAX_MAP_ROWS,
   reportOf,
-  detailCounts,
   guessRole,
-  heldGroups,
-  heldLine,
-  waitingLines,
   identityWords,
   importColumns,
   leavingWords,
@@ -36,15 +25,12 @@ import {
   originalsActs,
   originalsWords,
   parseCsv,
-  proposedRule,
   purgeAsked,
   purgeReady,
   purgeRefusal,
   purgeRefused,
   reportLines,
   roleNamed,
-  ruleWords,
-  sawOf,
   shapeOf,
   shapeWords,
   subjectsWords,
@@ -55,7 +41,6 @@ import {
   vaultReady,
   vaultRefused,
   type Dataset,
-  type DatasetChange,
   type IdType,
   type ImportReport,
   type OriginalsLook,
@@ -195,63 +180,6 @@ describe("the import's report", () => {
   });
 });
 
-describe("the held files", () => {
-  it("are grouped by shape, most files first, with their batches and the earliest sighting", () => {
-    const groups = heldGroups([
-      { shape: "AAA999", files: 1, first_seen: "2026-09-15T10:00:00Z", batch: "lake-2026-09-15" },
-      { shape: "999999999999", files: 2, first_seen: "2026-09-15T09:00:00Z", batch: "lake-2026-09-15" },
-      { shape: "999999999999", files: 1, first_seen: "2026-09-14T09:00:00Z", batch: "lake-2026-09-14" },
-    ]);
-    expect(groups).toEqual([
-      { shape: "999999999999", files: 3, identifiers: 2, batches: ["lake-2026-09-15", "lake-2026-09-14"], since: "2026-09-14T09:00:00Z" },
-      { shape: "AAA999", files: 1, identifiers: 1, batches: ["lake-2026-09-15"], since: "2026-09-15T10:00:00Z" },
-    ]);
-    expect(heldLine(groups[0], 0)).toBe("12 digits, not in the map");
-    expect(heldLine(groups[1], 1)).toBe("AAA999, a second shape");
-    expect(heldGroups([])).toEqual([]);
-  });
-});
-
-describe("who sees what", () => {
-  it("counts the people at each detail from the desk's people door", () => {
-    const person = (subject: string, detail: "plain" | "quasi" | "sensitive") => ({ subject, display: "", groups: [], followed: [], grants: [], detail: null, access: { grants: [], detail }, last_seen_at: null, sessions_open: 0 });
-    const access: Access = { mode: "local", sessions_open: 0, people: [person("a", "plain"), person("b", "quasi"), person("c", "quasi"), person("d", "sensitive")] };
-    expect(detailCounts(access)).toEqual({ plain: 1, quasi: 2, sensitive: 1 });
-    expect(detailCounts(null)).toEqual({ plain: 0, quasi: 0, sensitive: 0 });
-  });
-});
-
-describe("the identity-check station's run", () => {
-  it("draws what it saw per rule as shapes with counts, never a value, and reads the proposal", () => {
-    const result = {
-      saw: [
-        { rule: { id_type: "patient-id", sources: ["PatientID"] }, shapes: { "9999999999": 18402, AAA999: 18 }, subjects: 214, empty: 0 },
-        { source: "path segment 2", code: "verbatim", shapes: [{ shape: "AAA-999", files: 18420 }], subjects: 212, path_is_direct_identifier: false },
-      ],
-      sentence: "PatientID carries one shape on 18,402 files and a second on 18.",
-      proposed: { id_type: "subject-code", code: "verbatim" as const, from: [{ path: { segment: 2 } }] },
-    };
-    const cards = sawOf(result);
-    expect(cards.map((c) => c.title)).toEqual(["Now: PatientID", "Candidate: path segment 2"]);
-    expect(cards[0].shapes).toEqual([
-      { shape: "9999999999", files: 18402 },
-      { shape: "AAA999", files: 18 },
-    ]);
-    expect(cards[0].facts).toEqual([
-      ["people", "214 under this rule"],
-      ["files with no value", "0"],
-    ]);
-    expect(cards[1].meta).toBe("code verbatim");
-    expect(cards[1].facts[1]).toEqual(["is the path an identifier?", "no: a study code, not a person's number"]);
-    const verdict = { station: "identity-check", terminal: "settled", result, checks: [], proposals: [] };
-    expect(proposedRule(verdict)).toEqual(result.proposed);
-    expect(ruleWords(result.proposed)).toBe("Read the code from folder 2 of the path, verbatim.");
-    expect(ruleWords({ id_type: "personnummer", from: [{ field: "PatientID" }, { path: { segment: 1 } }] })).toBe("Read the personnummer from PatientID, then folder 1 of the path, through the map.");
-    expect(proposedRule({ ...verdict, result: {}, proposals: [{ kind: "identity_rule", ref: { rule: result.proposed }, sentence: "" }] })).toEqual(result.proposed);
-    expect(proposedRule({ ...verdict, result: {} })).toBeNull();
-  });
-});
-
 describe("the words of a dataset", () => {
   const base = { id: 1, name: "lake", path: "/scans/lake", guarantees: {}, probed: null, handling: { arrives: "identified" as const, on_release: { uids: "remap" as const, deface: false } }, handling_declared: true, roots: 1, digests: { count: 0, first: null, last: null, recent: [] }, totals: { subjects: 0, studies: 0, sessions: 0, stacks: 0, refused_files: 0, to_sort: 0 } };
   it("say how it arrives, where the codes come from, the rule and what leaves", () => {
@@ -269,25 +197,6 @@ describe("the words of a dataset", () => {
     expect(leavingWords({ dates: "year", uids: "remap", deface: true })).toBe("dates cut to the year · UIDs remapped · faces removed");
     expect(bytesWords(2.4e12)).toBe("2.4 TB");
     expect(bytesWords(5e8)).toBe("500 MB");
-  });
-});
-
-describe("what waits on Review, on the Pseudonymisation page", () => {
-  const item = (id: number, kind: string, evidence: Record<string, unknown> = {}, status = "open"): ReviewItem => ({ id, kind, scope: "subject", status, created_at: "2026-09-16T05:00:00Z", evidence });
-  it("names each identity question for what it is, the held files first, and the dataset's own count over the items'", () => {
-    const items = [item(1, "identity.unmapped", { files: 160, shape: "AA9999" }), item(2, "identity.collision", { sessions: 2 }), item(3, "identity.provisional"), item(4, "identity.unmapped", { files: 20 }, "superseded")];
-    expect(waitingLines(items, 160)).toEqual([
-      { kind: "held", words: "160 files held until mapped: map them" },
-      { kind: "twice", words: "1 subject may be one person twice" },
-      { kind: "provisional", words: "1 subject coded without a map: merge them" },
-    ]);
-    // the items' counts stand in where the sources door counts nothing
-    expect(waitingLines(items, null)[0].words).toBe("160 files held until mapped: map them");
-    expect(waitingLines([item(1, "identity.unmapped", { files: 1 })], 0)[0].words).toBe("1 file held until mapped: map them");
-    // a held item is never "one person twice"
-    expect(waitingLines([item(1, "identity.unmapped", { files: 160 })], 160).map((w) => w.kind)).toEqual(["held"]);
-    expect(waitingLines([item(2, "identity.collision"), item(5, "linkage.conflict")], 0)).toEqual([{ kind: "twice", words: "2 subjects may be one person twice" }]);
-    expect(waitingLines([], 0)).toEqual([]);
   });
 });
 
@@ -398,11 +307,6 @@ describe("acting on the originals of a dataset", () => {
     expect(vaultChoices(places, orchard, null, [d, orchard]).map((p) => p.name)).toEqual(["cold-store"]);
   });
 
-  const row = (state: JobRow["state"], over: { error?: string; result?: Record<string, unknown> } = {}): Parameters<typeof actEnded>[1] => ({
-    state,
-    error: over.error ?? null,
-    result: (over.result ?? null) as JobRow["result"],
-  });
 
   it("keeps what a dialog was told outside the dialog, so drawing it again loses no answer", () => {
     expect(vaultReady(NOTHING_ASKED)).toBe(false);
@@ -436,61 +340,11 @@ describe("acting on the originals of a dataset", () => {
     expect(purgeRefused({ ...NOTHING_TYPED, typed: "lake", sending: true }, "409: a release is still running")).toEqual({ typed: "lake", why: "", sending: false, refusal: "409: a release is still running" });
   });
 
-  it("says how an act ended, a stop in its own words and never as a failure", () => {
-    expect(actEnded("vault", row("done"), "cold-store")).toEqual({ end: "done", words: "The originals are vaulted into cold-store." });
-    expect(actEnded("vault", row("done"), null).words).toBe("The originals are vaulted.");
-    expect(actEnded("purge", row("done"), null).words).toBe("The originals are purged; the pseudonymised tree is all that is left.");
-    const stopped = actEnded("vault", row("cancelled", { error: "stopped: what was done stays done; run it again to go on" }), "cold-store");
-    expect(stopped).toEqual({ end: "stopped", words: "The vaulting of the originals stopped: what was moved is in cold-store, the rest are still here, and Vault it again goes on from there." });
-    expect(actEnded("purge", row("cancelled"), null).words).toBe("The purge of the originals stopped: what was removed is gone, the rest are still here, and Purge it again goes on from there.");
-    // an engine that still records a stop as a failure is read the same way, by its own result or by its own first word
-    expect(actEnded("vault", row("failed", { result: { cancelled: true } }), "cold-store").end).toBe("stopped");
-    expect(actEnded("vault", row("failed", { error: "stopped: what was done stays done" }), null).end).toBe("stopped");
-    expect(actStopped(row("running"))).toBe(false);
-    expect(actStopped(row("failed", { error: "a file of that name is already there" }))).toBe(false);
-    // a failure is the engine's own words, with one full stop at the end of them
-    expect(actEnded("vault", row("failed", { error: "a file of that name is already at the destination." }), "cold-store")).toEqual({
-      end: "failed",
-      words: "The vaulting of the originals failed: a file of that name is already at the destination.",
-    });
-    expect(actEnded("purge", row("failed"), null).words).toBe("The purge of the originals failed: the engine recorded no reason.");
-  });
-
   it("takes the dataset's own name as the purge's confirmation", () => {
     expect(confirmsName("lake", "lake")).toBe(true);
     expect(confirmsName(" lake ", "lake")).toBe(true);
     expect(confirmsName("Lake", "lake")).toBe(false);
     expect(confirmsName("", "lake")).toBe(false);
     expect(confirmsName("", "")).toBe(false);
-  });
-});
-
-describe("what a change to the dataset sends", () => {
-  const fields: DatasetChange = {
-    arrives: "identified",
-    unmapped: "hold",
-    cohort: "  nmosd  ",
-    on_release: { uids: "remap", deface: false },
-  };
-
-  it("sends the dataset's own fields, and nothing of where the originals stand or of the tags", () => {
-    const patch = changePatch(fields);
-    expect(patch).toEqual({
-      arrives: "identified",
-      unmapped: "hold",
-      cohort: "nmosd",
-      handling: { arrives: "identified", on_release: { uids: "remap", deface: false } },
-    });
-    // the dates are not a choice: a policy read off an older engine is never sent back, which the engine would refuse
-    expect(changePatch({ ...fields, on_release: { dates: "shift", uids: "remap", deface: true } }).handling?.on_release).toEqual({ uids: "remap", deface: true });
-    // the two the act alone may write are not among the keys: a form cannot declare the originals purged while they are on disk
-    expect(Object.keys(patch)).not.toContain("originals_kept");
-    expect(Object.keys(patch)).not.toContain("originals_vault");
-    // nor are the tag lists, which the chooser owns: a body that names none leaves them as they stand, so saving this form after the
-    // chooser cannot undo what the chooser wrote
-    expect(Object.keys(patch)).not.toContain("tags");
-    // a cohort taken away is sent as none, and a coded dataset is handled as de-identified
-    expect(changePatch({ ...fields, cohort: "   " }).cohort).toBeNull();
-    expect(changePatch({ ...fields, arrives: "coded" }).handling?.arrives).toBe("deidentified");
   });
 });
