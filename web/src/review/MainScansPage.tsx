@@ -62,7 +62,7 @@ import "./mainScans.css";
 const n = (v: number) => v.toLocaleString("en-US");
 
 type Load<T> = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; value: T; busy: boolean; why: string | null };
-const loading = <T,>(): Load<T> => ({ kind: "loading", since: Date.now() });
+const loading = <T,>(since = Date.now()): Load<T> => ({ kind: "loading", since });
 
 /** The address of the old table of pick questions, narrowed to a dataset where the page is about one. */
 export function earlierHref(scope: Scope | null): string {
@@ -273,7 +273,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
   const [subjects, setSubjects] = useState<{ at: string; load: Load<SubjectsPage> }>({ at: "", load: loading() });
   const [strips, setStrips] = useState<{ at: string; load: Load<Strips> }>({ at: "", load: loading() });
   const [palettes, setPalettes] = useState<Record<string, string[]>>({});
-  const [visit, setVisit] = useState<{ subject: MapSubject; visit: MapVisit } | null>(null);
+  const [visit, setVisit] = useState<{ role: string; subject: MapSubject; visit: MapVisit } | null>(null);
   const [said, setSaid] = useState<string | null>(null);
 
   const readRules = useCallback(
@@ -357,13 +357,14 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
   }, [scope, shownRole, columns, settledKey, reload, version, grow]);
 
   // the group's subjects, a page at a time
-  const subjectsAt = `${shownRole}|${canonical(group)}|${order}|${page}`;
+  // a page is shown only for the role, columns, group, order and page it was asked for; a draft's answer replaces the last one in place
+  const subjectsAt = `${shownRole}|${columns}|${canonical(group)}|${order}|${page}`;
   useEffect(() => {
     if (shownRole === null || version === null || !served(caps, MAP_SUBJECTS_DOOR) || view !== "cards") return;
     let alive = true;
-    const at = `${shownRole}|${canonical(group)}|${order}|${page}`;
-    setSubjects((s) => (s.load.kind === "ready" ? { at: s.at, load: { ...s.load, busy: true } } : { at, load: loading() }));
-    mainScans.subjects(scope, shownRole, group, order, page, settled).then(
+    const at = `${shownRole}|${columns}|${canonical(group)}|${order}|${page}`;
+    setSubjects((s) => (s.at === at && s.load.kind === "ready" ? { at, load: { ...s.load, busy: true } } : { at, load: loading() }));
+    mainScans.subjects(scope, shownRole, columns, group, order, page, settled).then(
       (value) => {
         if (!alive) return;
         setSubjects({ at, load: { kind: "ready", value, busy: false, why: null } });
@@ -378,15 +379,15 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says
-  }, [caps, scope, shownRole, group, order, page, settledKey, reload, version, view, grow]);
+  }, [caps, scope, shownRole, columns, group, order, page, settledKey, reload, version, view, grow]);
 
   // every subject's strips, while they are shown
   useEffect(() => {
     if (shownRole === null || version === null || view !== "strips" || !served(caps, MAP_STRIPS_DOOR)) return;
     let alive = true;
-    const at = shownRole;
+    const at = `${shownRole}|${columns}`;
     setStrips((s) => (s.at === at && s.load.kind === "ready" ? { at, load: { ...s.load, busy: true } } : { at, load: loading() }));
-    mainScans.strips(scope, shownRole, settled).then(
+    mainScans.strips(scope, shownRole, columns, settled).then(
       (value) => {
         if (!alive) return;
         setStrips({ at, load: { kind: "ready", value, busy: false, why: null } });
@@ -398,7 +399,7 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says
-  }, [caps, scope, shownRole, settledKey, reload, version, view, grow]);
+  }, [caps, scope, shownRole, columns, settledKey, reload, version, view, grow]);
 
   if (doc.kind === "loading") return <Wait phase="reading the rules" since={doc.since} size="panel" />;
   if (doc.kind === "failed")
@@ -423,8 +424,9 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
   const slot: Slot = (k) => (k === null ? null : slotOf(palette, k));
   const m = map.at === mapAt ? map.load : loading<MapAnswer>();
   const mapValue = m.kind === "ready" ? m.value : null;
-  const s = subjects.at === subjectsAt || subjects.load.kind === "ready" ? subjects.load : loading<SubjectsPage>();
-  const st = strips.at === shownRole ? strips.load : loading<Strips>();
+  // never a page of another role, columns or group: until its own answer comes, the cards wait
+  const s = subjects.at === subjectsAt ? subjects.load : loading<SubjectsPage>(subjects.load.kind === "loading" ? subjects.load.since : Date.now());
+  const st = strips.at === `${shownRole}|${columns}` ? strips.load : loading<Strips>();
   const change = (next: Rules) => setDraft(next);
   const chooseRole = (r: string) => {
     setRole(r);
@@ -513,11 +515,13 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
                 page={page}
                 onPage={setPage}
                 subjects={s.kind === "ready" ? s.value : null}
+                subjectsSince={s.kind === "loading" ? s.since : null}
+                subjectsBusy={s.kind === "ready" && s.busy}
                 subjectsWhy={s.kind === "failed" ? s.why : served(caps, MAP_SUBJECTS_DOOR) ? null : "this engine does not list them yet"}
                 strips={st.kind === "ready" ? st.value : null}
                 stripsWhy={st.kind === "failed" ? st.why : served(caps, MAP_STRIPS_DOOR) ? null : "this engine does not list them yet"}
                 slot={slot}
-                onVisit={(subject, v) => setVisit({ subject, visit: v })}
+                onVisit={(subject, v) => shownRole && setVisit({ role: shownRole, subject, visit: v })}
               />
             </div>
           )}
@@ -545,11 +549,11 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
         )}
       </div>
 
-      {visit && shownRole && (
+      {visit && (
         <VisitPick
           caps={caps}
           scope={scope}
-          role={shownRole}
+          role={visit.role}
           subject={visit.subject}
           visit={visit.visit}
           version={mapValue?.rules_version ?? rulesDoc.current.version}

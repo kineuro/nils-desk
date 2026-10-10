@@ -9,6 +9,7 @@
 import { Fragment, type CSSProperties } from "react";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
+import { Wait } from "../ui/Wait";
 import {
   groupTitle,
   keptBy,
@@ -245,6 +246,10 @@ export interface GroupBoxProps {
   page: number;
   onPage: (p: number) => void;
   subjects: SubjectsPage | null;
+  /** While the group's own page is first read; the cards wait and no visit of another page is offered. */
+  subjectsSince?: number | null;
+  /** A newer answer for the same page is being read: its visits are not opened meanwhile. */
+  subjectsBusy?: boolean;
   subjectsWhy: string | null;
   strips: Strips | null;
   stripsWhy: string | null;
@@ -314,9 +319,9 @@ export function GroupBox(p: GroupBoxProps) {
   );
 }
 
-function Cards({ subjects, subjectsWhy, slot, onVisit }: GroupBoxProps) {
+function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slot, onVisit }: GroupBoxProps) {
   if (subjectsWhy) return <p className="warn">The subjects could not be read: {subjectsWhy}</p>;
-  if (!subjects) return <p className="ms-none">Reading the subjects.</p>;
+  if (!subjects) return <Wait phase="reading the subjects" since={subjectsSince ?? Date.now()} size="panel" />;
   if (subjects.subjects.length === 0) return <p className="ms-none">No subject in this group.</p>;
   const slots = Math.max(1, ...subjects.subjects.map((s) => s.visits.length));
   return (
@@ -340,7 +345,7 @@ function Cards({ subjects, subjectsWhy, slot, onVisit }: GroupBoxProps) {
                     </span>
                   );
                 return (
-                  <button key={v.session} type="button" className={v.changed ? "ms-visit changed" : "ms-visit"} aria-label={`Subject ${s.subject}, visit ${v.visit}: ${v.kind ?? "none"}${v.changed ? ", a change" : ""}`} onClick={() => onVisit(s, v)}>
+                  <button key={v.session} type="button" disabled={subjectsBusy} className={v.changed ? "ms-visit changed" : "ms-visit"} aria-label={`Subject ${s.subject}, visit ${v.visit}: ${v.kind ?? "none"}${v.changed ? ", a change" : ""}`} onClick={() => onVisit(s, v)}>
                     <span className="ms-visit-head">
                       V{v.visit}
                       {v.field ? ` · ${v.field}` : ""}

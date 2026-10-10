@@ -81,7 +81,7 @@ describe("Main scans of a cohort", () => {
     expect(engine.of("POST", "/api/picks/map/subjects")).toHaveLength(1);
     expect(engine.of("GET", "/api/picks/rules")[0].query.get("cohort")).toBe("ms-followup");
     expect(engine.of("POST", "/api/picks/map")[0].body).toEqual({ scope: { cohort: "ms-followup" }, role: "t1w", columns: "scanner" });
-    expect(engine.of("POST", "/api/picks/map/subjects")[0].body).toEqual({ scope: { cohort: "ms-followup" }, role: "t1w", group: { by: "breaks" }, order: "changes", page: 0, per_page: 24 });
+    expect(engine.of("POST", "/api/picks/map/subjects")[0].body).toEqual({ scope: { cohort: "ms-followup" }, role: "t1w", columns: "scanner", group: { by: "breaks" }, order: "changes", page: 0, per_page: 24 });
     expect(host.querySelector(".ms-head .eyebrow")?.textContent).toBe("Main scans · cohort");
     expect(host.querySelector(".ms-head h1")?.textContent).toBe("ms-followup");
     expect(pressed("Role")).toEqual(["T1w", "T1w"]);
@@ -154,7 +154,7 @@ describe("Main scans of a cohort", () => {
     const engine = await open({ cohort: "ms-followup" });
     act(() => button(host, "All subjects")!.click());
     await settle();
-    expect(engine.of("POST", "/api/picks/map/strips")[0].body).toEqual({ scope: { cohort: "ms-followup" }, role: "t1w" });
+    expect(engine.of("POST", "/api/picks/map/strips")[0].body).toEqual({ scope: { cohort: "ms-followup" }, role: "t1w", columns: "scanner" });
     expect(text(".ms-strip-label")).toEqual(["Siemens Skyra · 3 T · 2 subjects", "GE Signa · 1.5 T · 1 subject"]);
     // subject 19 has nothing at its third visit and 17 changes from 2D SE to 3D MPRAGE: both break, and both are lit
     const lit = [...host.querySelectorAll(".ms-strip.lit")];
@@ -190,6 +190,16 @@ describe("Main scans of a cohort", () => {
     expect(engine.of("POST", "/api/picks/map").length).toBeGreaterThan(1);
   });
 
+  it("never offers a visit of another role's page: the cards wait for the role's own", async () => {
+    await open({ cohort: "ms-followup" }, (c) => (c.path === "/api/picks/map/subjects" && c.body?.role === "flair" ? { status: 500, body: { error: "not now" } } : undefined));
+    expect(host.querySelectorAll(".ms-card")).toHaveLength(2);
+    act(() => button(host.querySelector(".ms-keys")!, "FLAIR")!.click());
+    expect(host.querySelectorAll(".ms-card")).toHaveLength(0);
+    await settle();
+    expect(host.querySelectorAll(".ms-visit")).toHaveLength(0);
+    expect(host.querySelector(".ms-group")?.textContent).toContain("The subjects could not be read: not now");
+  });
+
   it("withdraws a person's pick of a visit in the scope", async () => {
     const engine = await open({ cohort: "ms-followup" }, (c) => (c.path === "/api/picks/97/withdraw" ? { status: 200, body: { id: 97, restored: [80] } } : undefined));
     act(() => button(host, "Subject 5a9f30c6e8b21d42, visit 1: 3D MPRAGE")!.click());
@@ -210,11 +220,18 @@ describe("Main scans of a cohort", () => {
     expect(host.querySelector("table")).toBeNull();
   });
 
-  it("offers columns by dataset for a cohort only", async () => {
+  it("offers columns by dataset for a cohort only, and asks a cell's subjects and the strips by the same columns", async () => {
     const engine = await open({ cohort: "ms-followup" });
     act(() => button(host, "By dataset")!.click());
     await settle();
     expect(engine.of("POST", "/api/picks/map").at(-1)?.body?.columns).toBe("dataset");
+    expect(engine.of("POST", "/api/picks/map/subjects").at(-1)?.body?.columns).toBe("dataset");
+    act(() => button(host, "300 visits at Siemens Skyra · 3 T take 3D MPRAGE")!.click());
+    await settle();
+    expect(engine.of("POST", "/api/picks/map/subjects").at(-1)?.body).toMatchObject({ columns: "dataset", group: { by: "cell", kind: "3D MPRAGE", column: "Siemens Skyra · 3 T" } });
+    act(() => button(host, "All subjects")!.click());
+    await settle();
+    expect(engine.of("POST", "/api/picks/map/strips").at(-1)?.body?.columns).toBe("dataset");
     act(() => root.unmount());
     root = createRoot(host);
     await open({ dataset: "study-big" });

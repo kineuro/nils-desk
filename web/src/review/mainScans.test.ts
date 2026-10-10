@@ -146,8 +146,8 @@ describe("the map doors", () => {
       per_page: 24,
       subjects: [{ subject_id: 17, subject: "5a9f30c6e8b21d41", visits: [{ session: "17:2010-01-02", visit: 1, column: "Siemens Skyra · 3 T", field: "3 T", kind: "3D MPRAGE", stack: 123, by: "rules", changed: false, candidates: [{ stacks: [123], kind: "3D MPRAGE", score: 0.9 }, { stack: 124, kind: "3D MPRAGE" }] }, { visit: 2, kind: null, stack: null, by: null, changed: true }] }],
     });
-    const page = await mainScans.subjects({ kind: "cohort", name: "ms-followup" }, "t1w", { by: "series", steps: ["2D SE", "3D MPRAGE"] }, "visits", 1, RULES);
-    expect(seen[0]).toMatchObject({ method: "POST", url: "/api/picks/map/subjects", body: { scope: { cohort: "ms-followup" }, role: "t1w", group: { by: "series", steps: ["2D SE", "3D MPRAGE"] }, order: "visits", page: 1, per_page: 24, rules: RULES } });
+    const page = await mainScans.subjects({ kind: "cohort", name: "ms-followup" }, "t1w", "dataset", { by: "series", steps: ["2D SE", "3D MPRAGE"] }, "visits", 1, RULES);
+    expect(seen[0]).toMatchObject({ method: "POST", url: "/api/picks/map/subjects", body: { scope: { cohort: "ms-followup" }, role: "t1w", columns: "dataset", group: { by: "series", steps: ["2D SE", "3D MPRAGE"] }, order: "visits", page: 1, per_page: 24, rules: RULES } });
     const [one, two] = page.subjects[0].visits;
     expect(one).toMatchObject({ kind: "3D MPRAGE", stacks: [123], by: "rules", changed: false, pick: null });
     expect(one.candidates).toEqual([
@@ -159,8 +159,8 @@ describe("the map doors", () => {
   });
   it("ask for every subject's strips, and light the group's subjects in them", async () => {
     const seen = answering(200, { kinds: ["3D MPRAGE", "2D SE"], columns: [{ key: "Site A · 3 T" }, "Site B · 1.5 T"], subjects: [{ subject_id: 1, column: 0, visits: [0, 0] }, { subject_id: 2, column: 1, visits: [1, 0, -1] }, { subject_id: 3, column: 1, visits: [1] }, { subject_id: 4, column: 0, visits: [1, 1, 0] }] });
-    const strips = await mainScans.strips({ kind: "dataset", name: "study-big" }, "t1w", null);
-    expect(seen[0].body).toEqual({ scope: { dataset: "study-big" }, role: "t1w" });
+    const strips = await mainScans.strips({ kind: "dataset", name: "study-big" }, "t1w", "scanner", null);
+    expect(seen[0].body).toEqual({ scope: { dataset: "study-big" }, role: "t1w", columns: "scanner" });
     expect(strips.columns).toEqual(["Site A · 3 T", "Site B · 1.5 T"]);
     expect([...litOf(strips, { by: "breaks" })].sort()).toEqual([2, 4]);
     expect([...litOf(strips, { by: "series", steps: ["2D SE", "3D MPRAGE"] })]).toEqual([4]);

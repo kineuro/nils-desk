@@ -651,9 +651,11 @@ export const mainScans = {
     door<unknown>("POST", `/api/picks/rules?${scopeParam(s)}`, { rules, reason: reason.trim(), based_on: basedOn }).then((a): Saved => ({ version: count(obj(a).version), job: num(obj(a).job) })),
   map: (s: Scope, role: string, columns: Columns, rules: Rules | null) =>
     door<unknown>("POST", "/api/picks/map", { scope: scopeBody(s), role, columns, ...(rules ? { rules } : {}) }).then(mapOf),
-  subjects: (s: Scope, role: string, group: Group, order: Order, page: number, rules: Rules | null, perPage = PER_PAGE) =>
-    door<unknown>("POST", "/api/picks/map/subjects", { scope: scopeBody(s), role, group, order, page, per_page: perPage, ...(rules ? { rules } : {}) }).then(subjectsOf),
-  strips: (s: Scope, role: string, rules: Rules | null) => door<unknown>("POST", "/api/picks/map/strips", { scope: scopeBody(s), role, ...(rules ? { rules } : {}) }).then(stripsOf),
+  /** A cell names its column in the columns asked by, so the subjects and the strips are asked by the same ones as the map. */
+  subjects: (s: Scope, role: string, columns: Columns, group: Group, order: Order, page: number, rules: Rules | null, perPage = PER_PAGE) =>
+    door<unknown>("POST", "/api/picks/map/subjects", { scope: scopeBody(s), role, columns, group, order, page, per_page: perPage, ...(rules ? { rules } : {}) }).then(subjectsOf),
+  strips: (s: Scope, role: string, columns: Columns, rules: Rules | null) =>
+    door<unknown>("POST", "/api/picks/map/strips", { scope: scopeBody(s), role, columns, ...(rules ? { rules } : {}) }).then(stripsOf),
   /** A person's pick of one visit, in the scope: it stands through later runs of the scope's rules. */
   pick: (s: Scope, role: string, stacks: number[], why: string) => door<{ id: number; stacks: number[] }>("POST", "/api/picks", { role, stacks, why: why.trim(), ...scopeBody(s) }),
   withdraw: (s: Scope, id: number, why?: string) => door<{ id: number }>("POST", `/api/picks/${id}/withdraw`, { ...scopeBody(s), ...(why && why.trim() ? { why: why.trim() } : {}) }),
