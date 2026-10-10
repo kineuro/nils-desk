@@ -518,11 +518,11 @@ function MainScans({ caps, dataset, picks, step }: { caps: Capabilities; dataset
         );
       })}
       <div className="meta">
-        Picked after every sort by the rules in the pack
+        Picked after every sort by its own rules, or the pack&apos;s
         {reviews && (
           <>
             {" · "}
-            <a href={href("review", "rules")}>the rules</a>
+            <a href={narrow(href("review", "picks"), { dataset })}>Main scans and rules</a>
           </>
         )}
       </div>

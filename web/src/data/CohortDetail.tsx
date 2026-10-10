@@ -250,7 +250,7 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
               <b>{n(row.stacks)}</b> scans
             </span>
           </div>
-          <Have members={picks?.members ?? members} lines={picks?.lines ?? null} />
+          <Have members={picks?.members ?? members} lines={picks?.lines ?? null} rules={may(caps, "review:see") ? narrow(href("review", "picks"), { cohort: row.name }) : null} />
           <Clinical coverage={doc?.clinical ?? []} members={members} waiting={row.waiting} />
         </div>
         <div className="dp-col">
@@ -337,10 +337,21 @@ function Grew({ joins, releases }: { joins: Detail["joins"]; releases: CohortRel
   );
 }
 
-/** How many members have a main scan of each role. */
-function Have({ members, lines }: { members: number; lines: PickLine[] | null }) {
+/** How many members have a main scan of each role, and the way to the cohort's main scans and their rules. */
+function Have({ members, lines, rules }: { members: number; lines: PickLine[] | null; rules: string | null }) {
   const roles = [...(lines ?? [])].filter((l) => l.subjects !== null || l.picked > 0).sort((a, b) => roleOrder(a.role, b.role));
-  if (roles.length === 0) return <p className="meta">No main scans picked yet.</p>;
+  const link = rules && (
+    <div className="meta">
+      <a href={rules}>Main scans and rules</a>
+    </div>
+  );
+  if (roles.length === 0)
+    return (
+      <>
+        <p className="meta">No main scans picked yet.</p>
+        {link}
+      </>
+    );
   return (
     <>
       <div className="dp-line">Subjects with a main scan of each kind</div>
@@ -360,6 +371,7 @@ function Have({ members, lines }: { members: number; lines: PickLine[] | null })
           );
         })}
       </div>
+      {link}
     </>
   );
 }
