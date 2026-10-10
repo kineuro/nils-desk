@@ -127,6 +127,10 @@ const PATHS = {
   ),
   "chevron-right": <path d="m9 6 6 6-6 6" />,
   "chevron-down": <path d="m6 9 6 6 6-6" />,
+  "chevron-up": <path d="m6 15 6-6 6 6" />,
+  // a dataset's or cohort's own rules (Main scans), and the rules as text
+  sliders: <path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4" />,
+  code: <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />,
   arrow: (
     <>
       <path d="M5 12h14" />

@@ -4,6 +4,7 @@
 // saved over the pack's defaults, and one role's map, a page of subjects and
 // the strips. Every name and number here is made up.
 
+import { vi } from "vitest";
 import { rulesOf, type Metrics, type Rules } from "./mainScans";
 
 export const RULES: Rules = rulesOf({
@@ -119,3 +120,63 @@ export const STRIPS = {
     { subject_id: 19, column: 0, visits: [0, 0, -1] },
   ],
 };
+
+export interface FakeCall {
+  method: string;
+  /** The path, without its query. */
+  path: string;
+  query: URLSearchParams;
+  body: Record<string, unknown> | null;
+}
+
+/** An answer: a JSON body, or text as the rules' text door answers. */
+export type FakeAnswer = { status: number; body?: unknown; text?: string } | undefined;
+
+/** A fetch that answers by door and keeps every call it was asked. */
+export function fakeEngine(answer: (c: FakeCall) => FakeAnswer) {
+  const calls: FakeCall[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://desk.test");
+      const call: FakeCall = { method: init?.method ?? "GET", path: url.pathname, query: url.searchParams, body: typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : null };
+      calls.push(call);
+      const a = answer(call) ?? { status: 404, body: { error: `no door ${call.method} ${call.path}` } };
+      return new Response(a.text !== undefined ? a.text : a.body === undefined ? null : JSON.stringify(a.body), { status: a.status });
+    }),
+  );
+  return { calls, of: (method: string, path: string) => calls.filter((c) => c.method === method && c.path === path) };
+}
+
+/** The engine of a cohort with version 2 saved: the doors of section 5 and the lists the chooser reads. */
+export function mainScansDoors(over: (c: FakeCall) => FakeAnswer = () => undefined) {
+  return (c: FakeCall): FakeAnswer => {
+    const mine = over(c);
+    if (mine) return mine;
+    if (c.method === "GET" && c.path === "/api/picks/rules") return { status: 200, body: rulesAnswer() };
+    if (c.method === "GET" && c.path === "/api/picks/rules/text") return { status: 200, text: `# Main scans of ms-followup, version ${c.query.get("version")}\nroles:\n  t1w:\n    keep_alike: balanced\n` };
+    if (c.method === "POST" && c.path === "/api/picks/map") return { status: 200, body: mapAnswer(String(c.body?.role), c.body?.rules !== undefined) };
+    if (c.method === "POST" && c.path === "/api/picks/map/subjects") return { status: 200, body: subjectsAnswer() };
+    if (c.method === "POST" && c.path === "/api/picks/map/strips") return { status: 200, body: STRIPS };
+    if (c.method === "GET" && c.path === "/api/review/summary") return { status: 200, body: { by_kind: {}, cohorts: [], none: 0 } };
+    if (c.method === "GET" && c.path === "/api/sources") return { status: 200, body: { count: 2, window_days: 30, sources: [{ id: 3, name: "study-big" }, { id: 4, name: "ward-c" }] } };
+    if (c.method === "GET" && c.path === "/api/cohorts") return { status: 200, body: [{ name: "ms-followup", retired_at: null }, { name: "old-trial", retired_at: "2026-01-01T00:00:00Z" }] };
+    return undefined;
+  };
+}
+
+/** The doors a desk serves Main scans with. */
+export const MAIN_SCANS_DOORS = [
+  "GET /api/picks/rules",
+  "GET /api/picks/rules/text",
+  "POST /api/picks/rules",
+  "POST /api/picks/map",
+  "POST /api/picks/map/subjects",
+  "POST /api/picks/map/strips",
+  "POST /api/picks",
+  "POST /api/picks/{id}/withdraw",
+  "GET /api/review/summary",
+  "GET /api/sources",
+  "GET /api/cohorts",
+  "GET /api/jobs/{id}",
+];

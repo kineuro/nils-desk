@@ -16,6 +16,9 @@ export interface BoardCandidate {
   score: number | null;
   /** The run's own pick. */
   chosen: boolean;
+  /** What the candidate is, framed in its value's colour where it has one (Main scans: the kind). */
+  label?: string | null;
+  slot?: number | null;
 }
 
 const score = (v: number | null) => (v === null ? "no score" : `score ${v.toFixed(2)}`);
@@ -30,9 +33,13 @@ export interface BoardProps {
   onWhy: ((why: string) => void) | null;
   /** Off in tests and where the pictures are not wanted. */
   pictures?: boolean;
+  /** The words of a page that says scans and the rules (Main scans) in place of stacks and the run. */
+  words?: { one: string; many: string; chosen: string; why: string };
 }
 
-export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = true }: BoardProps) {
+const STACK_WORDS = { one: "stack", many: "stacks", chosen: "the run's pick", why: "what a reader of this pick has in place of the run's scores" };
+
+export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = true, words = STACK_WORDS }: BoardProps) {
   // one place along the stacks for every tile, so the bundles scroll together
   const [sync] = useState(() => new TileSync());
   if (candidates.length === 0) return <p className="meta">The run considered nothing here.</p>;
@@ -49,18 +56,23 @@ export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = 
             ) : (
               main === i && <span className="tag brand">main</span>
             )}
+            {c.label && (
+              <span className="value-tag" {...(c.slot ? { "data-slot": c.slot } : {})}>
+                {c.label}
+              </span>
+            )}
             <span className="meta num">{score(c.score)}</span>
-            {c.chosen && <span className="tag">the run&apos;s pick</span>}
+            {c.chosen && <span className="tag">{words.chosen}</span>}
           </div>
           {pictures && (
             <div className="bundle-tiles">
               {c.stacks.map((s) => (
-                <Tile key={s} stack={s} sync={sync} size={128} />
+                <Tile key={s} stack={s} sync={sync} size={128} caption={`${words.one} ${s}`} />
               ))}
             </div>
           )}
           <span className="meta">
-            {c.stacks.length === 1 ? "stack" : "stacks"} {c.stacks.join(", ")}
+            {c.stacks.length === 1 ? words.one : words.many} {c.stacks.join(", ")}
           </span>
         </div>
       ))}
@@ -68,7 +80,7 @@ export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = 
         <div className="field board-why">
           <span className="label">Why</span>
           <span className="input">
-            <input required value={why} placeholder="what a reader of this pick has in place of the run's scores" aria-label="Why" onChange={(e) => onWhy(e.target.value)} />
+            <input required value={why} placeholder={words.why} aria-label="Why" onChange={(e) => onWhy(e.target.value)} />
           </span>
         </div>
       )}

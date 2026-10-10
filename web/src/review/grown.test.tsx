@@ -31,7 +31,8 @@ describe("the grown families on the queue", () => {
   });
   it("open their page from a row, and offer no Decide there", () => {
     const html = renderToStaticMarkup(<QueueTable items={[BORDER, MODEL, ASKED_ITEM]} may onDecide={() => undefined} onLook={() => undefined} onSee={() => undefined} />);
-    expect(html).toContain('href="#review/picks"');
+    // the questions of earlier pick runs keep their table at ?earlier=1; #review/picks is Main scans
+    expect(html).toContain('href="#review/picks?earlier=1"');
     expect(html).toContain('href="#review/proposals"');
     expect(html).toContain('href="#review/asked"');
     expect(html).not.toContain(">Decide</button>");
