@@ -13,7 +13,7 @@ import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
 import { ops, type ReviewItem } from "../ops/client";
-import { href } from "../routes";
+import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
@@ -194,7 +194,7 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
                       </a>
                     )}
                     {family !== null && PAGED.includes(family) && (
-                      <a className="button secondary small" href={href("review", family)}>
+                      <a className="button secondary small" href={family === "picks" ? narrow(href("review", "picks"), { earlier: 1 }) : href("review", family)}>
                         Open
                       </a>
                     )}

@@ -39,6 +39,11 @@ describe("a cohort's page", () => {
     expect(draw(caps(["data:see", "data:work"], [...DOORS, "POST /api/picks/run"]))).not.toContain("Pick main scans");
   });
 
+  it("leads to its main scans and their rules where the person sees Review (record 55, decision 6)", () => {
+    expect(draw(caps([...GRANTS]))).toContain('<a class="button quiet" href="#review/picks?cohort=north">Main scans</a>');
+    expect(draw(caps(["data:see", "data:work"]))).not.toContain(">Main scans</a>");
+  });
+
   it("names it, says how it came to be, and offers its acts", () => {
     expect(html).toContain('<a href="#data/datasets?cohort=north">Datasets and cohorts</a>');
     expect(html).toContain("<h1>north</h1>");

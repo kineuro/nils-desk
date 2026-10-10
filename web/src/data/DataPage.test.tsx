@@ -356,6 +356,8 @@ describe("datasets and cohorts on one page", () => {
     expect(questions?.getAttribute("href")).toBe("#review/identifiers?dataset=study-big");
     expect(d.querySelector(".dp-role-line")?.textContent).toBe("T1w20 picked · 17 clear · 2 bordersReview 2");
     expect(d.querySelector(".dp-role-line a")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
+    // its own main scans and their rules (record 55, decision 6)
+    expect([...d.querySelectorAll("a")].find((a) => a.textContent === "Main scans and rules")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
     const log = [...d.querySelectorAll(".dp-log-row")].map((r) => `${r.querySelector(".what")?.textContent} ${r.querySelector(".how")?.textContent}`);
     expect(log).toEqual(["Body part ", "Main scans picked for 12 subjects", "Read 120 files, 12 new subjects", "Added as a dataset anonymised, PatientID holds the subject code"]);
   });
@@ -628,6 +630,7 @@ describe("datasets and cohorts on one page", () => {
     expect([...d.querySelectorAll(".dp-step-what")].map((s) => s.textContent)).toEqual(["52 scans · 3 to look at", "40 of 52 answered · 2 to look at", "not available", "23 picked"]);
     // what its subjects have
     expect([...d.querySelectorAll(".dp-kind")].map((k) => k.textContent)).toEqual(["T1w11 of 16", "FLAIR9 of 16"]);
+    expect([...d.querySelectorAll("a")].find((a) => a.textContent === "Main scans and rules")?.getAttribute("href")).toBe("#review/picks?cohort=ms-followup");
     expect(text()).toContain("Clinical: EDSS for 10 of 16, Relapse for 3 of 16");
     expect(text()).toContain("3 wait on Review");
     // its log and its releases

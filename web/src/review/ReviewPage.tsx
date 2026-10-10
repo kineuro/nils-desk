@@ -19,6 +19,7 @@ import { ExplainDialog } from "./Explain";
 import { filterKind, queueFilterOf, queueHref } from "./filter";
 import { AskedFamily, PicksFamily, ProposalsFamily } from "./Families";
 import { IdentifiersPage } from "./Identifiers";
+import { MainScansPage } from "./MainScansPage";
 import { LookDialog, QueuePage } from "./Queue";
 import { RulesPage, type WordAt } from "./Rules";
 
@@ -64,14 +65,25 @@ const HEAD: Record<ReviewSub, { title: string; lede: string }> = {
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; items: ReviewItem[]; summary: ReviewSummary | null };
 
-export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: string | null; query?: Record<string, string> }) {
+/** The address of a page of Review: the old table of pick questions is #review/picks?earlier=1, since #review/picks is Main scans (record 55, decision 6). */
+export function reviewHref(page: string | null, dataset?: string): string {
+  return narrow(href("review", page), { earlier: page === "picks" ? 1 : undefined, dataset });
+}
+
+export function ReviewPage(props: { caps: Capabilities; page: string | null; query?: Record<string, string> }) {
+  // Main scans has a page of its own; the pick questions of earlier runs keep their table under Review's head
+  if (subOf(props.page) === "picks" && !props.query?.earlier) return <MainScansPage caps={props.caps} query={props.query} />;
+  return <ReviewPages {...props} />;
+}
+
+function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string | null; query?: Record<string, string> }) {
   const sub = subOf(page);
   const batch = query?.batch && /^\d+$/.test(query.batch) ? Number(query.batch) : null;
   const run = query?.run && /^\d+$/.test(query.run) ? Number(query.run) : null;
   // a dataset's card opens the queue on its own scans: #review?dataset=NAME
   const dataset = query?.dataset && query.dataset !== "" ? query.dataset : undefined;
   /** A page of Review, still narrowed to the dataset it was opened for. */
-  const pageHref = (page: string | null) => (dataset ? narrow(href("review", page), { dataset }) : href("review", page));
+  const pageHref = (page: string | null) => reviewHref(page, dataset);
   const [cohort, setCohort] = useState<string>(query?.cohort ?? "");
   // record 51, G4: the queue's axis and reason live in the address, so a reload or a link keeps them
   const filter = queueFilterOf(query);
@@ -131,7 +143,7 @@ export function ReviewPage({ caps, page, query }: { caps: Capabilities; page: st
           {dataset && (
             <span className="row review-dataset">
               <span className="tag">{dataset}</span>
-              <a className="icon-button" href={href("review", sub === "queue" ? null : sub)} aria-label={`Every dataset, not only ${dataset}`}>
+              <a className="icon-button" href={reviewHref(sub === "queue" ? null : sub)} aria-label={`Every dataset, not only ${dataset}`}>
                 <Icon name="x" />
               </a>
             </span>
