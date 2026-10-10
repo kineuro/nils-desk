@@ -75,6 +75,10 @@ describe("Main scans without a dataset or cohort", () => {
 describe("Main scans of a cohort", () => {
   it("reads its rules, the map of its first role and the subjects whose series breaks", async () => {
     const engine = await open({ cohort: "ms-followup" });
+    // each read once, however often the page draws
+    expect(engine.of("GET", "/api/picks/rules")).toHaveLength(1);
+    expect(engine.of("POST", "/api/picks/map")).toHaveLength(1);
+    expect(engine.of("POST", "/api/picks/map/subjects")).toHaveLength(1);
     expect(engine.of("GET", "/api/picks/rules")[0].query.get("cohort")).toBe("ms-followup");
     expect(engine.of("POST", "/api/picks/map")[0].body).toEqual({ scope: { cohort: "ms-followup" }, role: "t1w", columns: "scanner" });
     expect(engine.of("POST", "/api/picks/map/subjects")[0].body).toEqual({ scope: { cohort: "ms-followup" }, role: "t1w", group: { by: "breaks" }, order: "changes", page: 0, per_page: 24 });

@@ -11,7 +11,7 @@
 // While the engine still reports pick questions of earlier runs, one quiet
 // link leads to the old table.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { slotOf } from "../campaigns/values";
 import { cohorts as cohortsDoor } from "../data/cohorts";
@@ -220,7 +220,11 @@ function Chooser({ caps, scope }: { caps: Capabilities; scope: Scope }) {
 // ------------------------------------------------------------------ the page
 
 export function MainScansPage({ caps, query }: { caps: Capabilities; query?: Record<string, string> }) {
-  const scope = scopeOf(query);
+  // one scope object while the address names the same one, so what is read for it is read once
+  const named = scopeOf(query);
+  const kind = named?.kind ?? null;
+  const name = named?.name ?? null;
+  const scope = useMemo<Scope | null>(() => (kind && name ? { kind, name } : null), [kind, name]);
   const earlier = useEarlier(caps, scope);
   const lists = useLists(caps);
   if (!served(caps, RULES_DOOR) || !served(caps, MAP_DOOR)) {
@@ -298,7 +302,9 @@ function ScopePage({ caps, scope, earlier }: { caps: Capabilities; scope: Scope;
   const live = draft !== null && current !== null && draft.base === current.version ? draft : null;
   const working = live?.rules ?? current?.rules ?? null;
   const dirty = live !== null;
-  const settled = useSettled(live?.rules ?? null, 300);
+  // a draft kept from before is asked with from the first map, while the rules it was made from are read
+  const asking = draft !== null && (current === null || draft.base === current.version) ? draft.rules : null;
+  const settled = useSettled(asking, 300);
   const settledKey = settled ? canonical(settled) : "";
   // a change not yet asked of the map door: what the map shows is the draft before it
   const pending = (live ? canonical(live.rules) : "") !== settledKey;
