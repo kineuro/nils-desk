@@ -99,10 +99,22 @@ export interface Place {
   datasets?: string[];
 }
 
+/** What exploring the sources did: the roots looked at, the datasets read again, and each source it could not explore with the engine's words. */
+export interface Explored {
+  roots: { place: number; name: string }[];
+  datasets: { place: number; name: string; state: unknown }[];
+  errors: { place: number; name: string; error: string }[];
+}
+
 export const objects = {
   depends: (kind: string, id: string | number) => door<Closure>("GET", `/api/depends/${kind}/${encodeURIComponent(String(id))}`),
-  /** The places; `probe` measures each again, `explore` makes each source's folder what it is again (Wave 7a): a root's new folders found as datasets. */
-  places: (probe = false, explore = false) => door<{ places: Place[]; enforced?: boolean }>("GET", `/api/places${probe ? "?probe=1" : explore ? "?explore=1" : ""}`),
+  /** The places; `probe` measures each again. */
+  places: (probe = false) => door<{ places: Place[]; enforced?: boolean }>("GET", `/api/places${probe ? "?probe=1" : ""}`),
+  /**
+   * Each source's folder made what it is again (Wave 7a): a root's new folders found as datasets. It writes, so it is a
+   * POST that needs Places and Data work, and it says what it could not do (2026-10-10).
+   */
+  explore: () => door<Explored>("POST", "/api/places/explore"),
   placeAdd: (body: { name: string; role: Place["role"]; path: string; guarantees: Record<string, unknown> }) => door<Place>("POST", "/api/places", body),
   placeSet: (id: number, body: { path?: string; guarantees?: Record<string, unknown>; retired?: boolean }) => door<Place>("PUT", `/api/places/${id}`, body),
   summary: (since?: string | null) => door<Summary>("GET", `/api/summary${since ? `?since=${encodeURIComponent(since)}` : ""}`),

@@ -13,6 +13,7 @@ import { ANONYMISED, button, caps7a, dialogs, engine, settle } from "../../test/
 import { NOT_READ } from "../data/layout";
 import { SourcesBody } from "../home/Setup";
 import type { Place } from "../objects/client";
+import { GRANTS } from "../grants";
 import { placesKept } from "../objects/kept";
 import { PlacesPage } from "./PlacesPage";
 
@@ -115,6 +116,43 @@ describe("the Places page", () => {
       role.dispatchEvent(new Event("change", { bubbles: true }));
     });
     expect(button(host, "Add the place")).not.toBeNull();
+  });
+});
+
+describe("exploring the sources again (2026-10-10)", () => {
+  const listed = (c: { url: string; method: string }) => (c.url.startsWith("/api/places") && c.method === "GET" ? { status: 200, body: { places: [root, ward, registry], enforced: true } } : undefined);
+
+  it("is the POST that needs Places and Data work, never a read, and says plainly what it could not do", async () => {
+    const e = engine((c) => {
+      if (c.method === "POST" && c.url === "/api/places/explore")
+        return { status: 200, body: { roots: [{ place: 2, name: "incoming" }], datasets: [{ place: 3, name: "ward-b", state: "anonymised" }], errors: [{ place: 2, name: "incoming", error: "the folder cannot be read" }] } };
+      return listed(c);
+    });
+    await act(async () => {
+      await placesKept.refresh();
+    });
+    act(() => root2.render(<PlacesPage caps={caps7a([...DOORS, "POST /api/places/explore"])} install={null} onChanged={() => undefined} />));
+    await settle();
+    act(() => button(host, "Explore the sources again")!.click());
+    await settle();
+    expect(e.of("POST", "/api/places/explore")).toHaveLength(1);
+    expect(e.calls.some((c) => c.url.includes("explore=1"))).toBe(false);
+    // the places are read again after it, and what it could not do is said as a failure
+    expect(e.calls.filter((c) => c.method === "GET" && c.url === "/api/places").length).toBeGreaterThanOrEqual(2);
+    expect(host.querySelector(".warn")?.textContent).toContain("One source could not be explored: incoming: the folder cannot be read.");
+  });
+
+  it("is not offered without Data work, nor by an engine that has no such door", async () => {
+    engine(listed);
+    await act(async () => {
+      await placesKept.refresh();
+    });
+    act(() => root2.render(<PlacesPage caps={caps7a([...DOORS, "POST /api/places/explore"], GRANTS.filter((g) => g !== "data:work"))} install={null} onChanged={() => undefined} />));
+    await settle();
+    expect(button(host, "Explore the sources again")).toBeNull();
+    act(() => root2.render(<PlacesPage caps={caps7a(DOORS)} install={null} onChanged={() => undefined} />));
+    await settle();
+    expect(button(host, "Explore the sources again")).toBeNull();
   });
 });
 
