@@ -97,7 +97,7 @@ describe("the band of a fresh docker install", () => {
     );
   });
   it("opens on bringing DICOM in", () => {
-    expect(by("dicom")).toMatchObject({ state: "now", words: "Add each folder NILS reads. It is mounted read only; nothing is ever written to it." });
+    expect(by("dicom")).toMatchObject({ state: "now", words: "Where your dataset folders live." });
     expect(next(all)?.id).toBe("dicom");
     expect(headline(all)).toBe("NILS is installed. Next, give it something to read.");
   });
@@ -115,11 +115,11 @@ describe("the band of a fresh docker install", () => {
 });
 
 describe("the band as the install moves on", () => {
-  it("is halfway once a source is named and nothing is digested", () => {
+  it("is done once a root folder is named: its folders become datasets on the Data page", () => {
     const f = { ...fresh, places: [...fresh.places!, place("incoming", "source", "/srv/imaging/incoming", "/srv")] };
     const all = steps(f);
-    expect(all.find((s) => s.id === "dicom")).toMatchObject({ state: "now", halfway: true });
-    expect(lede(all)).toBe("Five steps make this install ready for real work. One is done, and one is halfway.");
+    expect(all.find((s) => s.id === "dicom")).toMatchObject({ state: "done", words: "incoming" });
+    expect(lede(all)).toBe("Five steps make this install ready for real work. Two are done.");
   });
   it("is done when every step is, and then has no headline", () => {
     const backup: JobRow = { id: 9, kind: "backup", name: null, state: "done", started_at: "", heartbeat_at: null, finished_at: "2026-09-13T02:00:00Z", progress: null, error: null, args: {}, result: null };

@@ -10,9 +10,11 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href } from "../routes";
+import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { jobs as jobsDoor, type ChainedJob } from "./datasets";
-import { isOpen, jobCards, liveJobs, nowWords, type JobCard, type Live } from "./now";
+import { backgroundWords, isOpen, jobCards, jobsWords, liveJobs, type JobCard, type Live } from "./now";
+import { plainError } from "./plain";
 
 export interface LiveJobs {
   /** The open jobs, null until the first read. */
@@ -75,7 +77,7 @@ export function useLiveJobs(caps: Capabilities): LiveJobs {
   };
 }
 
-export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: LiveJobs; onSaid: (words: string) => void }) {
+export function NowSection({ caps, jobs, onSaid, onFailed }: { caps: Capabilities; jobs: LiveJobs; onSaid: (words: string) => void; onFailed?: (e: unknown) => void }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -84,41 +86,46 @@ export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: L
   if (!served(caps, "GET /api/jobs")) return null;
   const cards = jobCards(jobs.open ?? [], jobs.failed, caps, now);
   const count = cards.filter((c) => c.kind !== "failed").length;
+  const quiet = backgroundWords(jobs.open ?? [], now);
 
   const cancel = (c: JobCard) => {
     jobsDoor
       .cancel(c.id)
       .then(() => {
-        onSaid(c.kind === "running" ? `Job ${c.id} stops at its next heartbeat; what is written stays written.` : `Job ${c.id} is dropped from the queue.`);
+        onSaid(c.kind === "running" ? `${c.what}: stopping.` : `${c.what}: dropped.`);
         jobs.refresh();
       })
-      .catch((e: Error) => onSaid(e.message));
+      .catch((e: Error) => (onFailed ? onFailed(e) : onSaid(e.message)));
   };
   const again = (c: JobCard) => {
     const next = c.failed?.next;
     if (!next) return;
     jobsDoor
       .enqueue(next.command, next.name ?? undefined)
-      .then((j) => {
+      .then(() => {
         jobs.dismiss(c.id);
-        onSaid(`Queued again as job ${j.job}.`);
+        onSaid("Started again.");
         jobs.refresh();
       })
-      .catch((e: Error) => onSaid(e.message));
+      .catch((e: Error) => (onFailed ? onFailed(e) : onSaid(e.message)));
   };
 
   return (
     <section className="stack roomy" aria-label="the jobs now">
       <div className="section-head rule-top">
         <h2>Now</h2>
-        <span className="meta">{nowWords(jobs.live, count)}</span>
+        {(count > 0 || !quiet) && <span className="meta">{jobsWords(count)}</span>}
         {may(caps, "pipelines:see") && (
           <a className="button quiet small" href={href("pipelines")}>
             All jobs on Pipelines
           </a>
         )}
       </div>
-      {cards.length === 0 && <p className="meta">Nothing runs now. Bring in what is new to start a batch.</p>}
+      {quiet && (
+        <p className="meta" aria-label="preparing in the background">
+          <Icon name="layers" /> {quiet}
+        </p>
+      )}
       {cards.length > 0 && (
         <div className="jobs-now">
           {cards.map((c) => (
@@ -165,22 +172,16 @@ export function NowSection({ caps, jobs, onSaid }: { caps: Capabilities; jobs: L
               {c.cancel?.refusal && <div className="how meta">{c.cancel.refusal}</div>}
               {c.failed && (
                 <div className="how">
-                  <span className="warn">{c.failed.error}</span>
+                  <span className="warn">
+                    {plainError(c.failed.error, "This job failed.").words}
+                    <Hint text={c.failed.error} />
+                  </span>
                 </div>
               )}
             </div>
           ))}
         </div>
       )}
-      <div className="now-line">
-        <span>
-          <Icon name="pulse" />
-          {jobs.live.kind === "stream" ? "Updated every second while a job runs" : jobs.live.kind === "polling" ? "Read every few seconds while this page is open" : "Waiting for the first read"}
-        </span>
-        <span>
-          <Icon name="clock" />A cancel stops at the next heartbeat; what is written stays written
-        </span>
-      </div>
     </section>
   );
 }

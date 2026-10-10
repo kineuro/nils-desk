@@ -4,7 +4,9 @@
 // touch. A part of any other shape is dropped here and nowhere else. The
 // assistant never calls a desk function and never navigates the desk.
 
+import { asOneChatPart, type ChangeKind, type PlanItem } from "./events";
 import { splitReasoning } from "./reasoning";
+import { toolWords } from "./steps";
 
 export type Part =
   | { kind: "move_proposal"; document: number; parent: number | null; sentence: string }
@@ -80,6 +82,21 @@ export interface Tool {
   id: string;
   name: string;
   state: "running" | "done" | "failed";
+  /** What it is doing, in plain words (a skill by its name). */
+  words?: string;
+  /** The tool's own latest log line while it runs (one chat). */
+  log?: string;
+}
+
+/** A change the one agent proposed and the person approves or declines (one chat; a query version is a Proposal instead). */
+export interface Change {
+  id: string;
+  change: ChangeKind;
+  title: string | null;
+  sentence: string;
+  lines: string[];
+  turn: string;
+  decided: null | "approved" | "declined";
 }
 
 /** One step of an assistant's reply as it arrived: its words, and the reasoning its runtime separated. */
@@ -97,7 +114,10 @@ export interface Turn {
   thinking?: string;
   /** An assistant's steps as they arrived, which its text and thinking are drawn from. */
   steps?: Step[];
+  /** An answer is done when its turn settles; one the runtime does not track, when a step ends. */
   done: boolean;
+  /** The submission an answer belongs to, where the runtime tracks its turn: its steps end without ending it (2026-10-09). */
+  submission?: string;
   tools: Tool[];
 }
 
@@ -120,6 +140,9 @@ export interface PaneState {
   busy: boolean;
   proposals: Proposal[];
   choice: { question: string; options: { label: string; count: number | null }[]; turn: string } | null;
+  /** The one chat: the agent's plan, the whole list as it last said it, and the changes it proposed. */
+  plan: PlanItem[] | null;
+  changes: Change[];
   status: { phase: string; text: string } | null;
   handles: number[];
   aside: Extract<Part, { kind: "note" | "todo" | "lookup" | "funnel" }>[];
@@ -136,6 +159,8 @@ export const empty = (offset = "-1"): PaneState => ({
   busy: false,
   proposals: [],
   choice: null,
+  plan: null,
+  changes: [],
   status: null,
   handles: [],
   aside: [],
@@ -182,6 +207,30 @@ const stepsOf = (t: Turn): Step[] => t.steps ?? [{ words: t.text, reasoning: t.t
 
 /** What one part may touch: a proposal, the choice, the status line, a handle, or the aside. */
 export function acceptPart(state: PaneState, turnId: string, raw: unknown): PaneState {
+  const one = asOneChatPart(raw);
+  if (one) {
+    switch (one.kind) {
+      case "progress":
+        return withTurn(state, turnId, (t) => {
+          const at = one.call ? t.tools.findIndex((x) => x.id === one.call) : t.tools.map((x) => x.state).lastIndexOf("running");
+          if (at < 0) return t;
+          return { ...t, tools: t.tools.map((x, i) => (i === at ? { ...x, log: one.text } : x)) };
+        });
+      case "plan_update":
+        return { ...state, plan: one.items };
+      case "clarification":
+        return { ...state, choice: { question: one.question, options: one.options, turn: turnId } };
+      case "approval":
+        // a query version is decided as a move proposal is: on the query card, by its document
+        if (one.change === "query_version" && one.ref.document !== undefined) {
+          const document = one.ref.document;
+          if (state.proposals.some((x) => x.document === document)) return state;
+          return { ...state, proposals: [...state.proposals, { document, parent: one.ref.parent ?? null, sentence: one.sentence, turn: turnId, decided: null }] };
+        }
+        if (state.changes.some((x) => x.id === one.id)) return state;
+        return { ...state, changes: [...state.changes, { id: one.id, change: one.change, title: one.title, sentence: one.sentence, lines: one.lines, turn: turnId, decided: null }] };
+    }
+  }
   const p = asPart(raw);
   if (!p) return state;
   switch (p.kind) {
@@ -234,6 +283,12 @@ export function settledError(e: unknown): string | undefined {
   return isStr(message) && message.trim() ? message.trim() : undefined;
 }
 
+/** A tool call as a step: its name and its words; of its input only a skill's name is read (events.ts). */
+function toolCall(id: string, name: string, state: Tool["state"], input: unknown): Tool {
+  const skill = name === "activate_skill" ? (input as { name?: unknown } | null | undefined)?.name : undefined;
+  return { id, name, state, words: toolWords(name, isStr(skill) ? skill : null) };
+}
+
 /** The reducer over the live stream. Unknown chunk types are dropped. */
 export function reduce(state: PaneState, c: Chunk): PaneState {
   switch (c.type) {
@@ -251,14 +306,15 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
     }
     case "message-started": {
       const id = c.messageId as string;
-      // a later step of the same response starts the same message again: a new step; only a new turn clears the old choice
-      if (turn(state, id)) return { ...withTurn(state, id, (t) => ({ ...t, steps: [...stepsOf(t), { words: "", reasoning: "" }] })), busy: true };
+      // a later step of the same response starts the same message again: a new step, and the answer open again; only a new turn clears the old choice
+      if (turn(state, id)) return { ...withTurn(state, id, (t) => ({ ...t, done: false, steps: [...stepsOf(t), { words: "", reasoning: "" }] })), busy: true };
+      const submission = typeof c.submissionId === "string" ? { submission: c.submissionId } : {};
       return {
         ...state,
         busy: true,
         settled: null,
         choice: null,
-        turns: [...state.turns, { id, role: "assistant", text: "", thinking: "", steps: [{ words: "", reasoning: "" }], done: false, tools: [] }],
+        turns: [...state.turns, { id, role: "assistant", text: "", thinking: "", steps: [{ words: "", reasoning: "" }], done: false, ...submission, tools: [] }],
       };
     }
     case "message-delta": {
@@ -275,7 +331,7 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
     case "tool-input":
       return withTurn(state, c.messageId as string, (t) => ({
         ...t,
-        tools: [...t.tools.filter((x) => x.id !== c.toolCallId), { id: String(c.toolCallId), name: String(c.toolName), state: "running" }],
+        tools: [...t.tools.filter((x) => x.id !== c.toolCallId), toolCall(String(c.toolCallId), String(c.toolName), "running", c.input)],
       }));
     case "tool-output":
     case "tool-output-error": {
@@ -285,10 +341,12 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
     case "data-part":
       return acceptPart(state, String(c.messageId), c.data);
     case "message-completed":
-      return withTurn(state, c.messageId as string, (t) => ({ ...t, done: true }));
+      // a step of a tracked turn ends where it calls a tool, and the answer goes on: the turn's settlement ends it
+      return withTurn(state, c.messageId as string, (t) => (t.submission ? t : { ...t, done: true }));
     case "submission-settled": {
       const error = settledError(c.error);
-      return { ...state, busy: false, settled: { outcome: String(c.outcome), ...(error ? { error } : {}) } };
+      const turns = state.turns.map((t) => (t.role === "assistant" && !t.done ? { ...t, done: true } : t));
+      return { ...state, turns, busy: false, settled: { outcome: String(c.outcome), ...(error ? { error } : {}) } };
     }
     default:
       return state;
@@ -301,14 +359,38 @@ export interface History {
     id: string;
     role: string;
     display?: string;
-    parts: { type: string; text?: string; data?: unknown; toolCallId?: string; toolName?: string; state?: string }[];
+    /** The submission a message of a tracked turn belongs to: the person's words, the runtime's notices and the answer alike. */
+    submissionId?: string;
+    /** When the runtime stored it: the person's words as they were applied, an answer as its first step began. */
+    timestamp?: string;
+    parts: { type: string; text?: string; data?: unknown; toolCallId?: string; toolName?: string; state?: string; input?: unknown }[];
   }[];
   /** A failed turn's error as the runtime keeps it, an object of its own; settledError reads its words. */
   settlements?: { submissionId: string; outcome: string; error?: unknown }[];
 }
 
-/** The pane from a history snapshot: what the live reducer would have built, minus what the store keeps only once per kind. */
-export function fromHistory(h: History, previous: PaneState = empty()): PaneState {
+/** How long a turn may store nothing before a page that opens its conversation takes it for lost. */
+export const LOST_AFTER_MS = 30 * 60_000;
+
+/**
+ * The pane from a history snapshot: what the live reducer would have built, minus what the store keeps only once per kind.
+ * `now` is given where a page opens the conversation, which then takes a turn that stored nothing for thirty minutes for lost.
+ */
+export function fromHistory(h: History, previous: PaneState = empty(), now?: number): PaneState {
+  // a turn still running as the history is read is a submission with no settlement yet (2026-10-09): its answer stays open, and the page follows it
+  const ended = new Set((h.settlements ?? []).map((s) => s.submissionId));
+  const stored = new Map<string, number>();
+  for (const m of h.messages) {
+    if (!m.submissionId || ended.has(m.submissionId)) continue;
+    const at = Date.parse(m.timestamp ?? "");
+    stored.set(m.submissionId, Math.max(stored.get(m.submissionId) ?? Number.NEGATIVE_INFINITY, Number.isNaN(at) ? Number.NEGATIVE_INFINITY : at));
+  }
+  // unless the runtime lost it: nothing stored for thirty minutes (a long turn opened partway is not taken for lost), so a page never follows it forever; a turn of no known age runs, and the stream that brings a reset never takes one for lost
+  const lost = (id: string) => {
+    const at = stored.get(id) ?? Number.NEGATIVE_INFINITY;
+    return now !== undefined && Number.isFinite(at) && now - at >= LOST_AFTER_MS;
+  };
+  const running = new Set([...stored.keys()].filter((id) => !lost(id)));
   let state: PaneState = { ...empty(h.offset ?? previous.offset), proposals: previous.proposals.filter((p) => p.decided !== null) };
   for (const m of h.messages) {
     if (isSummarizeMark(m)) {
@@ -317,7 +399,8 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
     }
     if (m.display && m.display !== "visible") continue;
     if (m.role !== "user" && m.role !== "assistant" && !(m.role === "system" && (m as { settlement?: unknown }).settlement)) continue;
-    let t: Turn = { id: m.id, role: m.role, text: "", done: true, tools: [] };
+    const open = m.role === "assistant" && m.submissionId !== undefined && running.has(m.submissionId);
+    let t: Turn = { id: m.id, role: m.role, text: "", done: !open, ...(m.role === "assistant" && m.submissionId ? { submission: m.submissionId } : {}), tools: [] };
     // an assistant's steps: words or reasoning that follow words or a tool call begin the next one (the chat, slice 9)
     const steps: Step[] = [];
     let step: Step = { words: "", reasoning: "" };
@@ -333,11 +416,12 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
         else step.reasoning += p.text ?? "";
       } else if (p.type === "text") t.text += p.text ?? "";
       else if (p.type === "dynamic-tool" && p.toolCallId) {
-        t.tools.push({ id: p.toolCallId, name: p.toolName ?? "", state: p.state === "output-error" ? "failed" : p.state === "output-available" ? "done" : "running" });
+        t.tools.push(toolCall(p.toolCallId, p.toolName ?? "", p.state === "output-error" ? "failed" : p.state === "output-available" ? "done" : "running", p.input));
         called = true;
       }
     }
-    if (m.role === "assistant") t = drawn(t, [...steps, step]);
+    // an open answer whose last part is a tool call: the words still to come begin the next step, as they would live
+    if (m.role === "assistant") t = drawn(t, open && called ? [...steps, step, { words: "", reasoning: "" }] : [...steps, step]);
     state = { ...state, turns: [...state.turns, t] };
     for (const p of m.parts) if (p.type.startsWith("data-")) state = acceptPart(state, m.id, p.data);
   }
@@ -346,10 +430,19 @@ export function fromHistory(h: History, previous: PaneState = empty()): PaneStat
     const before = previous.proposals.find((x) => x.document === p.document);
     return before ? { ...p, decided: before.decided } : p;
   });
+  // and decided changes too
+  state.changes = state.changes.map((c) => {
+    const before = previous.changes.find((x) => x.id === c.id);
+    return before?.decided ? { ...c, decided: before.decided } : c;
+  });
+  // a turn still running is followed, and the ending of the turn before it is not shown meanwhile
+  if (running.size > 0) return { ...state, busy: true, settled: null };
+  // the last turn lost: it did not finish
+  const latest = [...h.messages].reverse().find((m) => m.submissionId !== undefined)?.submissionId;
+  if (latest !== undefined && stored.has(latest)) return { ...state, busy: false, settled: { outcome: "lost" } };
   const last = h.settlements?.[h.settlements.length - 1];
-  const open = state.turns.some((t) => t.role === "assistant" && !t.done);
   const error = settledError(last?.error);
-  return { ...state, busy: open, settled: last ? { outcome: last.outcome, ...(error ? { error } : {}) } : null };
+  return { ...state, busy: false, settled: last ? { outcome: last.outcome, ...(error ? { error } : {}) } : null };
 }
 
 /** The decisions the assistant keeps for a conversation's proposals (the chat, slice 2): a reload shows what was accepted or disregarded, and a proposal made for another version reads as stale. */

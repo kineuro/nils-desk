@@ -41,7 +41,7 @@ export function setupSteps(f: Facts, now: number = Date.now()): SetupStep[] {
   const dicom = said("dicom");
   if (dicom) {
     const met = live.some((p) => p.role === "source");
-    out.push({ id: "sources", title: "Bring in DICOM", required: true, met, tone: met ? "ok" : "neutral", words: dicom.words, tags: dicom.tags });
+    out.push({ id: "sources", title: "Add a root folder", required: true, met, tone: met ? "ok" : "neutral", words: dicom.words, tags: dicom.tags });
   }
 
   const safe = said("safe");

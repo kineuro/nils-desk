@@ -20,7 +20,6 @@
 import { levelShape, levelSpacing, type Manifest } from "./doors";
 import { slab as readSlab } from "./slabs";
 import { geometry, planePosition, type Vec3 } from "./geometry";
-import { decoder } from "./loader";
 
 /** A stack sampled at one level, in the modality's values, [z][y][x] in one array. */
 export interface Sample {
@@ -186,6 +185,8 @@ export async function sampleStack(stack: number, m: Manifest, later = false): Pr
   const values = new Float32Array(nz * ny * nx);
   const slope = m.slope !== undefined && m.slope !== 0 ? m.slope : 1;
   const intercept = m.intercept ?? 0;
+  // the decoder (and cornerstone with it) is loaded on the first sample, out of the desk's first bundle
+  const { decoder } = await import("./loader");
   const pool = decoder();
   const starts: number[] = [];
   for (let z0 = 0; z0 < nz; z0 += slab) starts.push(z0);

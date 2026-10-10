@@ -59,19 +59,36 @@ button.person:hover, button.person[aria-expanded="true"] { color: var(--n-text);
 .side-link.on, .side-link.on:hover { background: var(--n-brand); color: var(--n-text-on-brand); }
 .side-link.open { color: var(--n-text); font-weight: 500; }
 .side-chevron { display: grid; color: var(--n-text-faint); transition: transform 280ms ease; }
+.side-chevron .i { width: 14px; height: 14px; stroke-width: 2; }
 .side-group.on .side-chevron { transform: rotate(180deg); }
+/* every section but Home opens as Settings does (the 2026-10-09 design): the open
+   one keeps its place and takes the free height under its pages, so every section
+   after it sits at the foot, the first under a line. With none open the last of
+   the work takes it and Settings alone is at the foot; Settings, open, rises under
+   the last section. The sections are one list, so they slide rather than jump. */
+.side-group { position: relative; display: flex; flex-direction: column; flex: none; transition: flex-grow 320ms ease, margin-top 320ms ease; }
+.side-group.cut { flex-grow: 1; }
+.side-group::before { content: ""; position: absolute; top: -0.55rem; left: 0; right: 0; border-top: 1px solid var(--n-line); opacity: 0; pointer-events: none; transition: opacity 320ms ease; }
+.side-group:not(.down) + .side-group.down { margin-top: 1.3rem; }
+.side-group:not(.down) + .side-group.down::before { opacity: 1; }
 /* a section's pages unfold under it: the row grows from nothing to its height */
 .side-pages { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 280ms ease; }
 .side-group.on .side-pages { grid-template-rows: 1fr; }
 .side-pages > div { display: grid; gap: 1px; min-height: 0; overflow: hidden; }
+.side-pages > div > :first-child { margin-top: 2px; }
+.side-pages > div > :last-child { margin-bottom: 6px; }
 .side-pages a { min-height: 1.85rem; padding: 0 0.6rem 0 2.3rem; font-size: 14px; white-space: nowrap; }
-.side-pages a:first-child { margin-top: 2px; }
 .side-pages a.deep { padding-left: 3.2rem; font-size: 13.5px; }
+/* what starts something new is brand words behind a plus */
+.side-pages a.new { gap: 0.45rem; color: var(--n-brand-text); }
+.side-pages a.new .i { width: 13px; height: 13px; stroke-width: 2; }
 .side-pages a.on, .side-pages a.on:hover { background: var(--n-bg-selected); color: var(--n-brand-text); font-weight: 500; }
-/* Settings keeps to the foot, and rises under the last section once it opens */
-.side-gap { flex: 1 1 0; transition: flex-grow 320ms ease; }
-.side.risen .side-gap { flex-grow: 0; }
-.side-foot { display: grid; gap: 2px; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--n-line); }
+/* the recent conversations, under a small word: set in further on a thin guide
+   line, smaller and fainter than a page, the open one marked on the line */
+.side-label { margin: 0.5rem 0 2px 2.3rem; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n-text-faint); }
+.side-pages a.thread { display: block; min-height: 0; margin-left: 2.3rem; padding: 3px 0.6rem; border-left: 1px solid var(--n-line); border-radius: 0 var(--n-radius) var(--n-radius) 0; overflow: hidden; text-overflow: ellipsis; font-size: 13px; color: var(--n-text-faint); }
+.side-pages a.thread:hover { color: var(--n-text); }
+.side-pages a.thread.on, .side-pages a.thread.on:hover { border-left-color: var(--n-brand-text); background: var(--n-bg-selected); color: var(--n-brand-text); font-weight: 500; }
 .icon-button.menu-button { display: none; color: var(--n-text-dim); }
 .theme-switch { color: var(--n-text-faint); }
 .theme-switch:hover { color: var(--n-text); background: var(--n-bg-hover); }
@@ -908,6 +925,18 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .proposal-title { font-weight: 600; }
 .choice { display: grid; gap: 0.35rem; }
 .choice .button .meta { margin-left: 0.2rem; }
+/* one chat: the live line, the steps behind a "?", the plan panel and the cards */
+.status-line { margin: 0; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.steps-help { position: relative; display: inline-flex; }
+.turn-actions .icon-button.steps-q { font-weight: 600; font-size: 13px; }
+.steps-pop { position: absolute; z-index: 5; left: 0; top: 100%; display: grid; min-width: 15rem; max-width: min(24rem, calc(100vw - 2rem)); border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); box-shadow: 0 8px 24px var(--n-scrim); font-size: var(--n-text-size-small); }
+.steps-pop .steps-line:first-child { border-top: 0; }
+.steps-pop .link-button { padding: 0.4rem 0.7rem; border-top: 1px solid var(--n-line); text-align: left; }
+.approval-lines { margin: 0.3rem 0 0; padding-left: 1.1rem; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.plan-panel .line:first-child { border-top: 0; }
+.plan-panel .plan-done p { color: var(--n-text-dim); }
+.plan-panel .plan-running .i { color: var(--n-brand-icon); }
+.plan-panel .plan-failed .i { color: var(--n-caution-icon); }
 .talk-composer { position: sticky; bottom: 0; display: grid; gap: 0.4rem; padding: 0.6rem 0 0.2rem; background: var(--n-bg-page); }
 .talk-foot { gap: 0.6rem; flex-wrap: wrap; }
 .talk-head { flex-wrap: wrap; }
@@ -929,8 +958,6 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .context-meter.caution .context-track i { background: var(--n-caution-icon); }
 .context-meter.caution .meta { color: var(--n-caution-fg); }
 .compaction-note { margin: 0; padding: 0.4rem 0.7rem; border-left: 2px solid var(--n-line-strong); }
-.station-pick { gap: 0.35rem; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
-.station-pick select { padding: 0.1rem 0.3rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; }
 
 /* ------------------------------------------------------------ the Data page: sources and their digests */
 .data { display: grid; gap: 1.1rem; align-content: start; }
@@ -1082,7 +1109,7 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 }
 @media (prefers-reduced-motion: reduce) {
   .wait-phase::after { animation: none; }
-  .side, .side.open, .side-gap, .side-pages, .side-chevron { transition: none; }
+  .side, .side.open, .side-group, .side-group::before, .side-pages, .side-chevron { transition: none; }
   .dialog[open], .dialog[open]::backdrop { animation: none; }
 }
 
@@ -1097,6 +1124,38 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .scard-pick:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 2px; border-radius: 2px; }
 .scard .where { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: 12.5px; color: var(--n-text-faint); }
 .scard > .row { flex-wrap: wrap; gap: 0.3rem 0.6rem; }
+/* a dataset's scans: their pictures by subject and session, and the light viewer beside them once one is opened */
+.scans { display: grid; gap: 0.9rem; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.scans.open { grid-template-columns: minmax(16rem, 2fr) minmax(0, 3fr); }
+@media (max-width: 900px) { .scans.open { grid-template-columns: minmax(0, 1fr); } }
+.scan-grid { display: grid; gap: 0.8rem; min-width: 0; }
+.scans.open .scan-grid { max-height: 82vh; overflow-y: auto; padding-right: 0.3rem; }
+.scan-subject { display: grid; gap: 0.35rem; min-width: 0; }
+.scan-subject > b { font-family: var(--n-font-mono); font-size: 13px; }
+.scan-session { display: grid; gap: 0.3rem; padding-left: 0.6rem; border-left: 1px solid var(--n-line); }
+.scan-session ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.45rem; grid-template-columns: repeat(auto-fill, minmax(clamp(6.5rem, 9vw, 11rem), 1fr)); }
+.scan-tile { display: grid; gap: 0.2rem; width: 100%; min-width: 0; padding: 3px; border: 1px solid transparent; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.scan-tile img, .scan-tile .scan-blank { display: block; width: 100%; aspect-ratio: 1; object-fit: contain; background: var(--n-image-bg); border-radius: calc(var(--n-radius) - 2px); }
+.scan-tile:hover { border-color: var(--n-line-strong); }
+.scan-tile.look { border-color: var(--n-caution-icon); box-shadow: inset 4px 0 0 var(--n-caution-icon); padding-left: 7px; }
+.scan-tile.on { outline: 2px solid var(--n-brand); outline-offset: 1px; }
+.scan-tile:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.scan-tile .scan-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-tile.on .scan-name { font-weight: 600; }
+.scan-pages { gap: 0.5rem; align-items: center; }
+.scan-view { display: grid; gap: 0.4rem; min-width: 0; position: sticky; top: 0.5rem; }
+.scan-view-head { gap: 0.3rem; align-items: center; }
+.scan-view-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-view.look .scan-canvas { box-shadow: inset 4px 0 0 var(--n-caution-icon); border-color: var(--n-caution-icon); }
+.scan-canvas { position: relative; width: 100%; height: min(78vh, 70vw); min-height: 16rem; background: var(--n-image-bg); border: 1px solid var(--n-line); border-radius: var(--n-radius); overflow: hidden; overscroll-behavior: contain; }
+.scan-canvas canvas, .scan-canvas .scan-still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.scan-canvas .scan-still { z-index: 1; image-rendering: auto; }
+.scan-canvas .scan-wait { position: absolute; inset: auto 0 0.5rem 0; text-align: center; }
+.sure-line { font-size: 12.5px; color: var(--n-text-dim); }
+.sure-line.look { color: var(--n-caution-fg); }
+.pick-lines { display: grid; gap: 0.3rem; }
+.pick-line { gap: 0.6rem; align-items: center; font-size: var(--n-text-size-small); }
+.review-dataset { gap: 0.2rem; align-items: center; }
 .scard .nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.4rem; }
 .scard .nums b { display: block; font-family: var(--n-font-serif); font-weight: 400; font-size: 1.15rem; line-height: 1.2; }
 .scard .nums span { font-size: 12px; color: var(--n-text-faint); }
@@ -1173,7 +1232,7 @@ button.tail.link-button:disabled { color: var(--n-text-faint); cursor: default; 
 .tl li > span { display: grid; gap: 0.1rem; min-width: 0; }
 .tl .meta { display: block; overflow-wrap: anywhere; }
 .tl b { font-weight: 500; }
-/* Add a dataset and Bring in what is new */
+/* Add a source and Bring in what is new */
 .dataset-names { align-items: start; }
 .batch-name { max-width: 18rem; }
 .map-columns { display: grid; gap: 0.5rem; }
@@ -1501,3 +1560,28 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
 .preflight-missing { margin: 0.3rem 0 0; padding-left: 1.1rem; font-size: var(--n-text-size-small); color: var(--n-text); }
 .preflight-missing li + li { margin-top: 0.15rem; }
 .run-page > .row.actions, .plan-page > .row.actions { align-items: center; gap: 0.5rem; }
+
+/* Wave 7a: a dataset not read yet, and the datasets a source holds */
+.not-read { flex-wrap: wrap; margin-top: 0.3rem; align-items: baseline; }
+.found-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.found-row { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; padding: 0.6rem 0.8rem; border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); }
+.found-row .path { overflow-wrap: anywhere; }
+.finish { display: grid; gap: 1rem; }
+.hint { display: inline-grid; place-items: center; width: 1.1rem; height: 1.1rem; margin-left: 0.3rem; border: 1px solid var(--n-neutral-line); border-radius: 50%; font-size: 0.7rem; color: var(--n-text-dim); cursor: help; vertical-align: middle; }
+.hint:focus-visible { outline: 2px solid var(--n-brand-line); outline-offset: 1px; }
+.root-folders { display: grid; gap: 0.4rem; }
+.root-folders .thin td { vertical-align: middle; }
+.scard .next { margin-top: 0.4rem; }
+.root-form { display: grid; gap: 0.5rem; }
+.folder-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.2rem; max-height: 22rem; overflow-y: auto; }
+.folder-results li { display: flex; gap: 0.5rem; align-items: center; }
+
+/* Wave 7a: a picture built when first asked for */
+.picture-wait, .picture-failed { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.4rem; min-height: 6rem; width: 100%; color: var(--n-text-dim); font-size: var(--n-text-size-small); text-align: center; }
+.picture-wait progress { width: 8rem; }
+.picture-wait.small, .picture-failed.small { min-height: 0; font-size: 0.72rem; }
+.picture-wait.small progress { width: 4rem; }
+.scan-tile .scan-blank.making { background: linear-gradient(100deg, var(--n-bg-sunken) 30%, var(--n-bg-hover) 50%, var(--n-bg-sunken) 70%) 0 0 / 300% 100%; animation: scan-making 1.4s linear infinite; }
+@keyframes scan-making { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .scan-tile .scan-blank.making { animation: none; } }
+.scan-canvas .scan-wait { z-index: 2; }

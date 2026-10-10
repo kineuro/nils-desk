@@ -3,21 +3,35 @@
 // capabilities document and the person's grants (record 25). Until the install
 // is set up, a person who may see it finds its first page and Settings in the
 // side; once it is, the sections being built back join them, each where the
-// engine serves its door.
+// engine serves its door. Every section but Home has pages in the side, and the
+// side opens one section at a time (the 2026-10-09 design).
 
 import type { Capabilities } from "./capabilities";
 import { door, state } from "./deployment";
 import { may } from "./grants";
 import { PLACEHOLDERS } from "./home/placeholders";
+import { href } from "./routes";
 import { settingsPages } from "./settings/pages";
 import type { IconName } from "./ui/Icon";
 
 /** A page of a section, unfolded under it in the side while the section is open. */
 export interface SidePage {
+  /** The word an address names past the section (#review/picks), which marks the page while it is open. */
   id: string;
   title: string;
   /** 2 sets it in under the page before it. */
   depth: 1 | 2;
+  /** The address it opens, where that is not the section's own with the page's word: Questions opens #review itself. */
+  to?: string;
+  /** Other words an address may name that mark the page: a run's own page marks the catalog it is opened from. */
+  also?: readonly string[];
+  /**
+   * How it is drawn: a page; "new", brand words behind a plus, which starts
+   * something; "label", the small word over the recent conversations; "thread",
+   * a recent conversation, set in further on a thin guide line, smaller and
+   * fainter than a page.
+   */
+  kind?: "page" | "new" | "label" | "thread";
 }
 
 export interface Section {
@@ -25,6 +39,12 @@ export interface Section {
   title: string;
   icon: IconName;
   pages?: SidePage[];
+  /**
+   * What an address naming none of its pages marks: the first page, which such
+   * an address opens, or none where the word is something of the section's own
+   * that the side lists only some of, a conversation.
+   */
+  rest?: "first" | "none";
 }
 
 /** Whether the desk can be worked in: ready, or ready with the model backend still warming, which only the assistant waits for. */
@@ -37,7 +57,8 @@ export function usable(caps: Capabilities): boolean {
  * The sections down the side, in order, for this document and person. `ready`
  * says whether the install is set up: false keeps a person who may see the
  * install on its first page, named for it, and null holds the rest back while
- * it is not known yet.
+ * it is not known yet. `conversations` are the recent ones, listed under the
+ * Assistant.
  */
 export function sections(caps: Capabilities, ready: boolean | null = true, conversations: SidePage[] = []): Section[] {
   if (!usable(caps)) return [];
@@ -45,10 +66,22 @@ export function sections(caps: Capabilities, ready: boolean | null = true, conve
   // Home is everyone's who holds a grant
   if (caps.person.grants.length > 0) out.push({ id: "home", title: ready === false ? "Get started" : "Home", icon: "home" });
   // the assistant helps set an install up as well, so it does not wait for it
-  if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: [{ id: "new", title: "New conversation", depth: 1 }, ...conversations, { id: "all", title: "All conversations", depth: 1 }, { id: "shared", title: "Shared", depth: 1 }, { id: "memory", title: "Memory", depth: 1 }] });
+  if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: assistantPages(conversations), rest: "none" });
   if (ready !== true) return out;
-  for (const p of PLACEHOLDERS) if (may(caps, p.grant) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon, ...(p.pages ? { pages: p.pages } : {}) });
+  for (const p of PLACEHOLDERS) if (may(caps, p.grant) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon, ...(p.pages ? { pages: p.pages(caps) } : {}) });
   return out;
+}
+
+/** The Assistant's pages: a new conversation, the lists, then the recent conversations under a small word, drawn as threads rather than pages. */
+export function assistantPages(conversations: SidePage[]): SidePage[] {
+  const lists: SidePage[] = [
+    { id: "new", title: "New conversation", depth: 1, kind: "new" },
+    { id: "all", title: "All conversations", depth: 1 },
+    { id: "shared", title: "Shared", depth: 1 },
+    { id: "memory", title: "Memory", depth: 1 },
+  ];
+  if (conversations.length === 0) return lists;
+  return [...lists, { id: "recent", title: "Recent", depth: 1, kind: "label" }, ...conversations.map((c): SidePage => ({ id: c.id, title: c.title, depth: 1, kind: "thread" }))];
 }
 
 /** Whether the Assistant has its page: the assistant answered and the person holds assistant:use. While the model warms the page is there and waits. */
@@ -61,6 +94,35 @@ export function foot(caps: Capabilities): Section[] {
   const pages = usable(caps) ? settingsPages(caps) : [];
   if (pages.length === 0) return [];
   return [{ id: "settings", title: "Settings", icon: "settings", pages: pages.map((p) => ({ id: p.id, title: p.title, depth: p.sub ? 2 : 1 })) }];
+}
+
+/** The address a page of the side opens. */
+export function pageHref(section: Section, page: SidePage): string {
+  return page.to ?? href(section.id, page.id);
+}
+
+/** The page of a section an address marks: the one it names, or the one it opens when it names none of them. A label is never marked. */
+export function pageAt(section: Section, page: string | null): SidePage | null {
+  const pages = (section.pages ?? []).filter((p) => p.kind !== "label");
+  const named = page === null ? undefined : pages.find((p) => p.id === page || (p.also ?? []).includes(page));
+  if (named) return named;
+  if (page !== null && section.rest === "none") return null;
+  return pages[0] ?? null;
+}
+
+/**
+ * The side while one section is open, as the sections above the free height
+ * and the ones at the foot under it. The open section keeps its place with its
+ * pages under it, and every section after it goes down to the foot, where
+ * Settings sits, to make the room. With none open, or Home, which has no
+ * pages, only the foot's own sections are down there; Settings, open, rises
+ * under the last section and the foot is empty.
+ */
+export function sideLayout(top: Section[], foot: Section[], open: string | null): { up: Section[]; down: Section[] } {
+  const all = [...top, ...foot];
+  const at = all.findIndex((s) => s.id === open && (s.pages ?? []).length > 0);
+  const cut = at >= 0 ? at + 1 : top.length;
+  return { up: all.slice(0, cut), down: all.slice(cut) };
 }
 
 /** The model the gateway lists first, and whether its prompts stay on this machine. */

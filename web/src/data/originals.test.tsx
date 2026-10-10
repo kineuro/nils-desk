@@ -3,10 +3,11 @@
 // moves, the places the engine takes for it and what it leaves untouched;
 // Purge it with what the engine answered the act would reach, the reason,
 // the dataset's name typed out, and the engine's own words where it says it
-// is not ready; and Change, which declares nothing of where the originals
-// stand and sends a person to the act that decides it. What a dialog was
-// told is the page's, so drawing it again keeps every answer. The numbers
-// and names here are made up.
+// is not ready; and the rules of the pseudonymise step, whose originals row
+// declares nothing of where they stand and offers the act that decides it
+// only where the engine would take it. What a dialog was told is the page's,
+// so drawing it again keeps every answer. The numbers and names here are made
+// up.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -15,7 +16,7 @@ import type { Capabilities } from "../capabilities";
 import { GRANTS, type Detail, type Grant } from "../grants";
 import type { SourcesAnswer } from "./datasets";
 import { PurgeBody, VaultBody, VaultDialog } from "./Originals";
-import { ChangeDialog } from "./PseudonymsPage";
+import { RulesDialog } from "./RulesDialog";
 import { NOTHING_ASKED, NOTHING_TYPED, vaultAsked, type OriginalsActs, type OriginalsLook, type PlaceRow, type PurgeAsk, type VaultAsk } from "./pseudonyms";
 
 // every dataset of the answer, as the page holds it: the dialog offers no place inside any of them
@@ -197,63 +198,51 @@ describe("Purge it", () => {
   });
 });
 
-describe("Change", () => {
+describe("the rules", () => {
   const acts: OriginalsActs = { vault: true, purge: true, refusal: null };
-  const change = (over: Partial<Parameters<typeof ChangeDialog>[0]> = {}) =>
-    renderToStaticMarkup(<ChangeDialog dataset={incoming} acts={acts} onAct={none} onTags={none} onClose={none} onSaved={none} {...over} />);
+  const rules = (over: Partial<Parameters<typeof RulesDialog>[0]> = {}) =>
+    renderToStaticMarkup(
+      <RulesDialog caps={caps()} dataset={incoming} policy={null} look={look} acts={acts} written={0} onClose={none} onSaved={none} onTags={none} onVault={none} onPurge={none} {...over} />,
+    );
 
-  it("declares nothing of where the originals stand, and puts the act that decides it one click away", () => {
-    const html = change();
-    expect(html).toContain(">The originals</span>");
-    expect(html).toContain("kept here");
-    expect(html).toContain("They are vaulted into another place or purged");
-    expect(html).toContain("never say purged while the files are still on disk");
-    expect(html).toContain(">Vault it</button>");
-    expect(html).toContain(">Purge it</button>");
-    // the three choices are gone: this form cannot set the word the card reads
-    expect(html).not.toContain('name="originals"');
-    expect(html).not.toContain("Kept: read by the pseudonymiser only");
-    expect(html).not.toContain("Purged: the pseudonymised tree is all that is left");
+  it("asks four things, each with a question mark, and nothing a release or the dataset's settings decide", () => {
+    const html = rules();
+    expect(html).toContain("Rules for incoming</h2>");
+    for (const label of ["PatientID gets", "An ID with no code", "Tags", "The originals, once done"]) expect(html).toContain(`>${label}</span>`);
+    expect(html.match(/class="hint"/g)?.length).toBe(4);
+    expect(html).not.toContain("Feeds a cohort");
+    expect(html).not.toContain("Dates");
+    expect(html).not.toContain("UIDs");
+    expect(html).not.toContain("<p>");
+    expect(html).toContain(">Back to standard</button>");
+    expect(html).toContain(">Cancel</button>");
+    expect(html).toContain(">Save</button>");
   });
 
-  it("keeps every other field it sends", () => {
-    const html = change();
-    expect(html).toContain("What arrives</span>");
-    expect(html).toContain("An identifier the map does not know</span>");
-    expect(html).toContain("Feeds a cohort");
-    expect(html).toContain("Dates, when it leaves</span>");
-    expect(html).toContain("UIDs, when it leaves</span>");
-    expect(html).toContain("Faces removed before it leaves");
+  it("reads where the dataset stands, the standard ones pressed", () => {
+    const html = rules();
+    expect(html).toContain('aria-pressed="true">The subject code</button>');
+    expect(html).toContain('aria-pressed="true">Its files wait</button>');
+    expect(html).toContain('aria-pressed="true">Standard</button>');
+    expect(html).toContain('aria-pressed="true">Kept</button>');
+    // the purge warns only once it is chosen
+    expect(html).not.toContain("It cannot be undone");
   });
 
-  it("offers no date choice: the dates are kept, and months since baseline stand in where a date must not show in a path", () => {
-    const html = change();
-    expect(html).not.toContain('name="dates"');
-    expect(html).not.toContain("Shifted");
-    expect(html).not.toContain("Cut to the year");
-    expect(html).toContain("Kept as recorded");
-    expect(html).toContain("label the sessions by months since baseline (M00, M06)");
-    // a date policy an older engine still answers is never carried into what Save writes
-    const old = change({ dataset: { ...incoming, handling: { arrives: "identified", on_release: { dates: "shift", uids: "remap", deface: false } } } });
-    expect(old).toContain("dates kept · UIDs remapped · faces kept");
+  it("declares nothing of where the originals stand, and offers an act only where the engine would take it", () => {
+    const shut = rules({ acts: { vault: false, purge: false, refusal: null } });
+    expect(shut).toContain('disabled="">Vaulted</button>');
+    expect(shut).toContain('disabled="">Purged</button>');
+    // the engine says it would not purge yet: Purged waits, and the question mark says why
+    const waiting = rules({ look: { ...look, ready: false, why: "4 files are held" } });
+    expect(waiting).toContain('disabled="">Purged</button>');
+    expect(waiting).toContain("4 files are held");
+    expect(waiting).not.toContain('disabled="">Vaulted</button>');
   });
 
-  it("leaves the tag lists to the chooser, and holds none of its own", () => {
-    const html = change();
-    // both surfaces wrote the same three lists, each seeded at its own opening, so saving one after the other put the other's back
-    expect(html).toContain(">Choose tags</button>");
-    expect(html).toContain("where all hundred are listed with what becomes of each");
-    expect(html).not.toContain('id="dataset-remove"');
-    expect(html).not.toContain('id="dataset-keep"');
-    expect(html).not.toContain("Keep sex, weight and size");
-    // and the boxes that invited a keyword the engine never took are gone with them
-    expect(html).not.toContain("StudyDescription");
-    expect(html).not.toContain("one tag keyword a line");
-  });
-
-  it("says why the acts are not offered where a person may not ask for them", () => {
-    const html = change({ acts: { vault: false, purge: false, refusal: "Vaulting or purging the originals needs work on the Data page." } });
-    expect(html).toContain("Vaulting or purging the originals needs work on the Data page.");
-    expect(html).not.toContain(">Vault it</button>");
+  it("keeps what PatientID gets once anything is pseudonymised, and says so behind its question mark", () => {
+    const html = rules({ written: 120 });
+    expect(html).toContain('disabled="">An ID type</button>');
+    expect(html).toContain("Changed only before anything is pseudonymised.");
   });
 });

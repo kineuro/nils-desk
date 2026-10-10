@@ -3,7 +3,8 @@
 // cornerstone3D's stack viewport over the `nils:` loader, the level whose
 // plane fits the viewport, the server's render as the first picture until the
 // decoded plane lands; and the three planes, a cornerstone3D volume filled
-// from the slab door at the level the budget allows (volume.ts), each plane
+// from the slab door at the level the budget allows (volume.ts), opened on
+// a coarse level first and turned to that level once it is whole, each plane
 // lettered from the stack's orientation in its manifest. When the volume
 // path is not taken (no WebGL2, over the budget, a failure) the planes are
 // the server's render, and below detail quasi the render is all there is.
@@ -47,13 +48,15 @@ import { DoorError } from "../ask/client";
 import { classify, Failure, type Failed } from "../ui/Failure";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { NotBuilt, usePicture } from "./building";
 import { cutsAcross, doors, levelShape, type Manifest } from "./doors";
 import { cameraLabels, geometry, planeCameras, type EdgeLabels, type Planes, type Vec3 } from "./geometry";
 import { close, counters, imageId, open, register, viewWindow } from "./loader";
 import { PLANES, serverPlane as serverPlaneOf, type Plane } from "./prefetch";
+import { PictureFailed, PictureWait } from "./PictureWait";
 import { Letters, RenderPlane } from "./RenderPlane";
-import { fps, levelFor } from "./ring";
-import { dropVolume, filledAhead, fillVolume, volumePath, type Filling } from "./volume";
+import { coarsePlan, fps, levelFor, type VolumePlan } from "./ring";
+import { dropVolume, filledAhead, fillVolume, max3dTexture, volumePath, type Filling } from "./volume";
 import { viewerKey } from "./keys";
 import { drawnAs, isOblique, type ViewMode } from "./view";
 import "./viewer.css";
@@ -203,6 +206,9 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
   const planeEls = useRef<Record<Plane, HTMLDivElement | null>>({ axial: null, coronal: null, sagittal: null });
   const [manifest, setManifest] = useState<Manifest | null>(null);
   const [failed, setFailed] = useState<Failed | null>(null);
+  // the picture's build failed: said in its own words, never as an engine error
+  const [notBuilt, setNotBuilt] = useState<string | null>(null);
+  const building = usePicture(stack);
   const [gated, setGated] = useState(false);
   const [since] = useState(() => performance.now());
   const [numbers, setNumbers] = useState<Numbers>({ firstImageMs: null, fps: 0, bytes: 0, planes: 0, decodeMs: 0, level: 0, z: 0 });
@@ -237,6 +243,8 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
   const stamps = useRef<number[]>([]);
   const engine = useRef<cs.RenderingEngine | null>(null);
   const filling = useRef<Filling | null>(null);
+  // the stack's own volume filling behind the coarse one the planes opened on
+  const refining = useRef<Filling | null>(null);
   const levelRef = useRef(0);
   const zRef = useRef(0);
   const tell = useRef(onEvent);
@@ -265,6 +273,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
   useEffect(() => {
     let alive = true;
     setFailed(null);
+    setNotBuilt(null);
     open(stack)
       .then((m) => {
         if (!alive) return;
@@ -275,6 +284,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
       })
       .catch((e: unknown) => {
         if (!alive) return;
+        if (e instanceof NotBuilt) return setNotBuilt(e.reason);
         if (e instanceof DoorError && (e.status === 403 || e.status === 401)) setGated(true);
         setFailed(classify(e));
       });
@@ -363,6 +373,10 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
       filling.current?.close();
       const vid = filling.current?.volumeId;
       filling.current = null;
+      refining.current?.close();
+      const rid = refining.current?.volumeId;
+      refining.current = null;
+      if (rid) dropVolume(rid);
       turned.current = null;
       stackMounted.current = false;
       setStackReady(false);
@@ -452,6 +466,10 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
       return;
     }
     const { plan } = path;
+    // the planes open on a coarse volume (whole in a tenth of the time) and
+    // turn to the stack's own once it is filled, unless that was filled ahead
+    const coarse = filledAhead(stack, plan) ? null : coarsePlan(manifest, plan, max3dTexture());
+    const opening = coarse ?? plan;
     // the server's planes are on the screen before the volume's work takes the thread
     await afterPaint();
     await initOnce();
@@ -468,17 +486,17 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
       re.enableElement({ viewportId: ids.planes[p], type: cs.Enums.ViewportType.ORTHOGRAPHIC, element, defaultOptions: { orientation: cams[p] as cs.Types.OrientationVectors } });
     }
     const render = () => re.renderViewports(planeIds);
-    const report = (filled: number, done: boolean) => {
-      const s = { level: plan.level, stride: plan.stride, bytes: plan.bytes, filled, depth: plan.dims[2], done };
+    const report = (at: VolumePlan, filled: number, done: boolean) => {
+      const s = { level: at.level, stride: at.stride, bytes: at.bytes, filled, depth: at.dims[2], done };
       setVolume(s);
       tell.current?.({ kind: "volume", ...s });
     };
-    const f = fillVolume(stack, manifest, plan, Math.floor(zRef.current / plan.stride), (filled) => {
+    const f = fillVolume(stack, manifest, opening, Math.floor(zRef.current / opening.stride), (filled) => {
       render();
-      report(filled, filling.current?.done ?? false);
+      report(opening, filled, filling.current?.done ?? false);
     });
     filling.current = f;
-    report(0, false);
+    report(opening, 0, false);
     await cs.setVolumesForViewports(re, [{ volumeId: f.volumeId }], planeIds);
     const shown = shownWindow(manifest, voiAsked.current);
     for (const p of PLANES) {
@@ -500,7 +518,32 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
     for (const id of planeIds) sync.add({ renderingEngineId: re.id, viewportId: id });
     render();
     await f.ready;
-    if (filling.current === f) report(f.filled, true);
+    if (filling.current !== f) return;
+    report(opening, f.filled, true);
+    if (!coarse) return;
+    // the stack's own volume, filled behind the coarse one and put in its
+    // place where the person left the planes: the cameras and the window kept
+    const fine = fillVolume(stack, manifest, plan, Math.floor(zRef.current / plan.stride), () => undefined);
+    refining.current = fine;
+    await fine.ready;
+    if (filling.current !== f || refining.current !== fine || !fine.done) return;
+    const kept = PLANES.map((p) => {
+      const vp = re.getViewport(ids.planes[p]) as cs.VolumeViewport | undefined;
+      return vp ? { vp, camera: vp.getCamera(), props: vp.getProperties() } : null;
+    });
+    await cs.setVolumesForViewports(re, [{ volumeId: fine.volumeId }], planeIds);
+    if (filling.current !== f) return;
+    for (const k of kept) {
+      if (!k) continue;
+      k.vp.setCamera(k.camera);
+      if (k.props) k.vp.setProperties(k.props);
+    }
+    filling.current = fine;
+    refining.current = null;
+    f.close();
+    dropVolume(f.volumeId);
+    render();
+    report(plan, fine.filled, true);
   }, [manifest, planesOpened, planesDrawn, fallback, budget, stack, ids.planes, letter, stamp]);
 
   useEffect(() => {
@@ -618,8 +661,9 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
       </div>
     );
   }
+  if (notBuilt) return <PictureFailed reason={notBuilt} />;
   if (failed) return <Failure failed={failed} />;
-  if (!manifest) return <Wait phase="reading the stack's manifest" since={Date.now()} size="panel" />;
+  if (!manifest) return building ? <PictureWait stack={stack} /> : <Wait phase="reading the stack's manifest" since={Date.now()} size="panel" />;
   const [nz, ny, nx] = manifest.shape;
   const g = geometry(manifest);
   // the same addresses the reader warms ahead (prefetch.ts), so a warmed plane is drawn from the cache

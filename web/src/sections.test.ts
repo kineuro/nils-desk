@@ -9,7 +9,7 @@ import { GRANTS, SETS } from "./grants";
 import { tilesOffered } from "./home/tiles";
 import { PLACEHOLDERS } from "./home/placeholders";
 import { href, parse } from "./routes";
-import { assistantModel, assistantOffered, foot, initials, sections } from "./sections";
+import { assistantModel, assistantOffered, foot, initials, pageAt, pageHref, sections, sideLayout, type Section } from "./sections";
 import { ICON_NAMES } from "./ui/Icon";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
@@ -50,8 +50,8 @@ describe("the sections of an install that is set up", () => {
   const served = caps({ engine: { ...caps().engine!, doors } });
   it("join Home where the engine serves their doors and the person may open them", () => {
     expect(sections(served).map((s) => s.id)).toEqual(["home", "query", "data", "review", "release", "pipelines"]);
-    // Data unfolds its two pages in the side (record 26)
-    expect(sections(served).find((s) => s.id === "data")?.pages?.map((p) => p.id)).toEqual(["datasets", "cohorts"]);
+    // Data unfolds its one page, the datasets and the cohorts together (the 2026-10-09 design)
+    expect(sections(served).find((s) => s.id === "data")?.pages?.map((p) => [p.id, p.title])).toEqual([["datasets", "Datasets and cohorts"]]);
     const reader = { ...served, person: { ...served.person, grants: SETS.reader.grants, detail: "plain" as const, groups: ["Readers"] } };
     expect(sections(reader).map((s) => s.id)).toEqual(["home", "query", "data"]);
     const reviewing = { ...served, person: { ...served.person, grants: ["review:see" as const], detail: "plain" as const } };
@@ -112,7 +112,16 @@ describe("the Assistant", () => {
     expect(foot(onlyAssist)).toEqual([]);
     const side = sections(withAssistant, true, [{ id: "c-1", title: "T1w after contrast", depth: 1 }]);
     expect(side.map((s) => s.id)).toEqual(["home", "assistant"]);
-    expect(side[1].pages?.map((p) => p.id)).toEqual(["new", "c-1", "all", "shared", "memory"]);
+    // the lists first, then the recent conversations under a small word, drawn as threads rather than pages
+    expect(side[1].pages?.map((p) => [p.id, p.kind ?? "page"])).toEqual([
+      ["new", "new"],
+      ["all", "page"],
+      ["shared", "page"],
+      ["memory", "page"],
+      ["recent", "label"],
+      ["c-1", "thread"],
+    ]);
+    expect(sections(withAssistant)[1].pages?.map((p) => p.id)).toEqual(["new", "all", "shared", "memory"]);
     // it helps set an install up, so it is there before the rest of the desk
     expect(sections(withAssistant, false).map((s) => s.id)).toEqual(["home", "assistant"]);
   });
@@ -120,6 +129,153 @@ describe("the Assistant", () => {
     expect(assistantModel(caps())).toBeNull();
     expect(assistantModel(caps({ kvasir: { models: [{ id: "qwen38-27b", locality: "local" }] } }))).toBe("qwen38-27b · this machine");
     expect(assistantModel(caps({ kvasir: { models: [{ id: "MiniMax-M2", locality: "remote" }] } }))).toBe("MiniMax-M2 · provider");
+  });
+});
+
+// the side as the 2026-10-09 design lists it: every section but Home has pages,
+// each opening the view that serves it, and one section is open at a time
+const EVERY = [
+  "GET /api/capabilities",
+  "POST /api/ask/run",
+  "GET /api/ask/selections",
+  "GET /api/sources",
+  "GET /api/review",
+  "GET /api/campaigns",
+  "GET /api/label-sets",
+  "GET /api/models",
+  "POST /api/releases",
+  "GET /api/jobs",
+  "GET /api/pipelines",
+];
+const everything = caps({ engine: { ...caps().engine!, doors: EVERY }, assistant: { stations: [{ id: "concierge" }] } });
+const listed = (side: Section[], id: string) => {
+  const s = side.find((x) => x.id === id)!;
+  return (s.pages ?? []).map((p) => [p.title, pageHref(s, p)]);
+};
+
+describe("the side's pages", () => {
+  it("are listed per section, each opening the view that serves it", () => {
+    const side = sections(everything);
+    expect(side.map((s) => s.id)).toEqual(["home", "assistant", "query", "data", "review", "campaigns", "models", "release", "pipelines"]);
+    // Home has none
+    expect(side[0].pages).toBeUndefined();
+    expect(listed(side, "assistant")).toEqual([
+      ["New conversation", "#assistant/new"],
+      ["All conversations", "#assistant/all"],
+      ["Shared", "#assistant/shared"],
+      ["Memory", "#assistant/memory"],
+    ]);
+    expect(listed(side, "query")).toEqual([
+      ["Cards", "#query"],
+      ["Selections", "#query/selections"],
+    ]);
+    expect(listed(side, "data")).toEqual([["Datasets and cohorts", "#data/datasets"]]);
+    expect(listed(side, "review")).toEqual([
+      ["Questions", "#review"],
+      ["Main scans", "#review/picks"],
+      ["Subjects", "#review/identifiers"],
+      ["Rules", "#review/rules"],
+    ]);
+    expect(listed(side, "campaigns")).toEqual([
+      ["Campaigns", "#campaigns"],
+      ["Label sets", "#campaigns/label-sets"],
+    ]);
+    expect(listed(side, "models")).toEqual([["By task", "#models"]]);
+    expect(listed(side, "release")).toEqual([
+      ["Releases", "#release"],
+      ["New release", "#release/new"],
+    ]);
+    expect(listed(side, "pipelines")).toEqual([
+      ["Running now", "#pipelines"],
+      ["Catalog", "#pipelines/catalog"],
+    ]);
+    // Settings keeps its pages as they were
+    expect(listed(foot(everything), "settings").map(([title]) => title)).toEqual(["Overview", "Parts", "Engine", "Desk", "Assistant", "Identity", "Setup"]);
+  });
+  it("show a page only where the engine serves what it reads and the grants allow it", () => {
+    const older = { ...everything, engine: { ...everything.engine!, doors: EVERY.filter((d) => !["GET /api/ask/selections", "GET /api/label-sets", "GET /api/pipelines"].includes(d)) } };
+    const side = sections(older);
+    expect(listed(side, "query").map(([title]) => title)).toEqual(["Cards"]);
+    expect(listed(side, "campaigns").map(([title]) => title)).toEqual(["Campaigns"]);
+    expect(listed(side, "pipelines").map(([title]) => title)).toEqual(["Running now"]);
+    // New release is offered only where a release may be made, as the page offers its button
+    const seeing = { ...everything, person: { ...everything.person, grants: ["release:see" as const, "review:see" as const], detail: "plain" as const } };
+    expect(sections(seeing).map((s) => s.id)).toEqual(["home", "review", "release"]);
+    expect(listed(sections(seeing), "release").map(([title]) => title)).toEqual(["Releases"]);
+    expect(listed(sections(seeing), "review").map(([title]) => title)).toEqual(["Questions", "Main scans", "Subjects", "Rules"]);
+  });
+});
+
+describe("the page an address marks", () => {
+  const side = [...sections(everything, true, [{ id: "c-1", title: "T1w after contrast", depth: 1 }]), ...foot(everything)];
+  const mark = (hash: string) => {
+    const r = parse(hash);
+    return pageAt(side.find((s) => s.id === r.section)!, r.page)?.title ?? null;
+  };
+  it("is the page it names, or the one it opens when it names none of them", () => {
+    expect(mark("#review")).toBe("Questions");
+    expect(mark("#review/picks")).toBe("Main scans");
+    expect(mark("#review/identifiers")).toBe("Subjects");
+    expect(mark("#review/rules")).toBe("Rules");
+    // what models proposed and what System 1 asks wait in the queue's questions too
+    expect(mark("#review/proposals")).toBe("Questions");
+    expect(mark("#query")).toBe("Cards");
+    expect(mark("#query/12")).toBe("Cards");
+    expect(mark("#query/selections")).toBe("Selections");
+    expect(mark("#data")).toBe("Datasets and cohorts");
+    expect(mark("#data/cohorts/spring")).toBe("Datasets and cohorts");
+    expect(mark("#data/datasets/incoming/pseudonymisation")).toBe("Datasets and cohorts");
+    expect(mark("#campaigns/7/rate")).toBe("Campaigns");
+    expect(mark("#campaigns/label-sets/4")).toBe("Label sets");
+    expect(mark("#models/model/3")).toBe("By task");
+    expect(mark("#release/new/spring")).toBe("New release");
+    expect(mark("#pipelines")).toBe("Running now");
+    // a run's and a plan's own pages are opened from the catalog
+    expect(mark("#pipelines/runs/3")).toBe("Catalog");
+    expect(mark("#pipelines/plan/p-1")).toBe("Catalog");
+    expect(mark("#settings")).toBe("Overview");
+    expect(mark("#settings/identity")).toBe("Identity");
+  });
+  it("is a recent conversation on its line, never the new one for a conversation the side does not list, and never the small word over them", () => {
+    expect(mark("#assistant")).toBe("New conversation");
+    expect(mark("#assistant/new")).toBe("New conversation");
+    expect(mark("#assistant/all")).toBe("All conversations");
+    expect(mark("#assistant/c-1")).toBe("T1w after contrast");
+    expect(mark("#assistant/c-9")).toBeNull();
+    expect(mark("#assistant/recent")).toBeNull();
+  });
+});
+
+describe("the foot of the side", () => {
+  const side = sections(everything);
+  const kept = foot(everything);
+  const split = (open: string | null) => {
+    const l = sideLayout(side, kept, open);
+    return [l.up.map((s) => s.id), l.down.map((s) => s.id)];
+  };
+  const work = ["home", "assistant", "query", "data", "review", "campaigns", "models", "release", "pipelines"];
+  it("holds Settings alone while no section is open, Home, which has no pages, included", () => {
+    expect(split(null)).toEqual([work, ["settings"]]);
+    expect(split("home")).toEqual([work, ["settings"]]);
+    expect(split("nowhere")).toEqual([work, ["settings"]]);
+  });
+  it("takes every section after the open one, which keeps its place with its pages under it", () => {
+    expect(split("review")).toEqual([
+      ["home", "assistant", "query", "data", "review"],
+      ["campaigns", "models", "release", "pipelines", "settings"],
+    ]);
+    expect(split("assistant")).toEqual([
+      ["home", "assistant"],
+      ["query", "data", "review", "campaigns", "models", "release", "pipelines", "settings"],
+    ]);
+    expect(split("pipelines")).toEqual([work, ["settings"]]);
+  });
+  it("is empty while Settings is open, risen under the last section", () => {
+    expect(split("settings")).toEqual([[...work, "settings"], []]);
+  });
+  it("holds nothing where there is no Settings until a section opens", () => {
+    expect(sideLayout(side, [], null).down).toEqual([]);
+    expect(sideLayout(side, [], "data").down.map((s) => s.id)).toEqual(["review", "campaigns", "models", "release", "pipelines"]);
   });
 });
 

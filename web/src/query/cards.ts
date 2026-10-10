@@ -151,6 +151,8 @@ export function valueWords(v: ProfileValue["value"], as: ValueAs = "plain"): str
 
 export interface Bar {
   label: string;
+  /** The value as the engine counted it, for a bar that narrows the question to it (the Assistant's panel). */
+  value: ProfileValue["value"];
   count: number;
   subjects: number;
   /** The bar's length against the longest, from 0 to 1. */
@@ -161,7 +163,7 @@ export interface Bar {
 export function barsOf(values: ProfileValue[], as: ValueAs = "plain"): Bar[] {
   const ordered = as === "decade" ? [...values].sort((a, b) => (a.value === null ? 1 : b.value === null ? -1 : Number(a.value) - Number(b.value))) : values;
   const widest = Math.max(1, ...ordered.map((v) => v.count));
-  return ordered.map((v) => ({ label: valueWords(v.value, as), count: v.count, subjects: v.subjects, share: v.count / widest }));
+  return ordered.map((v) => ({ label: valueWords(v.value, as), value: v.value, count: v.count, subjects: v.subjects, share: v.count / widest }));
 }
 
 export type Chart = { kind: "bars"; bars: Bar[] } | { kind: "words"; words: string } | { kind: "none" };

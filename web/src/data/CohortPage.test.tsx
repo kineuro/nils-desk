@@ -33,8 +33,14 @@ const draw = (c: Capabilities, cohort: CohortDetail | null = north, why: string 
 describe("a cohort's page", () => {
   const html = draw(caps());
 
+  it("offers Pick main scans where the engine runs picks and the person has work on Pipelines (Wave 7a)", () => {
+    expect(draw(caps([...GRANTS], [...DOORS, "POST /api/picks/run"]))).toContain("Pick main scans</button>");
+    expect(html).not.toContain("Pick main scans");
+    expect(draw(caps(["data:see", "data:work"], [...DOORS, "POST /api/picks/run"]))).not.toContain("Pick main scans");
+  });
+
   it("names it, says how it came to be, and offers its acts", () => {
-    expect(html).toContain('<a href="#data/cohorts">Cohorts</a>');
+    expect(html).toContain('<a href="#data/datasets?cohort=north">Datasets and cohorts</a>');
     expect(html).toContain("<h1>north</h1>");
     expect(html).toContain("Fed by the dataset north-3t since 11 May. Owner astrid. Every subject a digest of that folder brings in joins here.");
     expect(html).toContain("Add or remove");

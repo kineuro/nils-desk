@@ -186,6 +186,8 @@ const PATHS = {
     </>
   ),
   play: <path d="M7.5 5.5v13l11-6.5z" />,
+  // four tiles: the viewer of a dataset or a cohort (Wave 7a, the Data page)
+  grid: <path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" />,
   lock: (
     <>
       <rect x="5" y="10.5" width="14" height="10" rx="1.5" />
@@ -298,6 +300,16 @@ const PATHS = {
     <>
       <circle cx="12" cy="12" r="8.5" />
       <path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" />
+    </>
+  ),
+  // a visit, on the dataset viewer's cards
+  calendar: <path d="M4 6h16v14H4zM4 10h16M9 3v4M15 3v4" />,
+  // the pseudonymise step: a map given to it, and the IDs shown once
+  upload: <path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" />,
+  eye: (
+    <>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="3" />
     </>
   ),
 } satisfies Record<string, React.ReactNode>;

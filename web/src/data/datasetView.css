@@ -1,0 +1,99 @@
+/* SPDX-License-Identifier: AGPL-3.0-only
+   The dataset viewer's browser (Wave 7a, the desk redesign of 2026-10-09):
+   the tree and one scan filling the page under the top bar, the side folded
+   behind one button. One slim bar above, one below, a quiet tree beside.
+   Colour only on the chosen scan (the brand's) and in orange on a scan that
+   needs a look. One canvas pixel is --p, which grows with the window, so the
+   whole page scales together (proportional, not bigger buttons). */
+
+.dview {
+  --vw: clamp(14px, 0.42vw + 9px, 18px);
+  --p: calc(var(--vw) / 15);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  background: var(--n-bg-page);
+  color: var(--n-text);
+  font-size: var(--vw);
+}
+
+/* ------------------------------------------------------------ the slim bar */
+.dview-top { display: flex; align-items: center; gap: calc(12 * var(--p)); flex-wrap: wrap; min-width: 0; min-height: calc(44 * var(--p)); padding: 0 calc(16 * var(--p)); border-bottom: 1px solid var(--n-line); }
+.dview-sections { display: grid; place-items: center; flex: none; width: calc(30 * var(--p)); height: calc(30 * var(--p)); padding: 0; border: 0; border-radius: var(--n-radius); background: transparent; color: var(--n-text-faint); cursor: pointer; }
+.dview-sections:hover { background: var(--n-bg-hover); color: var(--n-text); }
+.dview-sections:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.dview-where { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+.dview-where a { color: var(--n-brand-text); }
+.dview-where a:hover { color: var(--n-brand-hover); text-decoration: none; }
+.dview-where .sep { margin: 0 0.35em; }
+.dview-path { margin-right: 0.35em; font-family: var(--n-font-mono); }
+.dview-where > b { font-family: var(--n-font-mono); font-weight: 400; color: var(--n-text); }
+
+.dview-body { display: flex; min-height: 0; min-width: 0; }
+
+/* ------------------------------------------------------------ the tree */
+.dview-side { display: flex; flex-direction: column; gap: 1px; flex: 0 0 calc(300 * var(--p)); min-height: 0; min-width: 0; padding: calc(12 * var(--p)) calc(10 * var(--p)); border-right: 1px solid var(--n-line); font-size: calc(13.5 * var(--p)); }
+.dview-filter { display: flex; align-items: center; gap: calc(8 * var(--p)); min-height: calc(32 * var(--p)); margin-bottom: calc(8 * var(--p)); padding: 0 calc(10 * var(--p)); border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.dview-filter:focus-within { outline: 2px solid var(--n-focus); outline-offset: -1px; }
+.dview-filter input { flex: 1; min-width: 0; padding: 0; border: 0; outline: none; background: transparent; color: var(--n-text); font: inherit; }
+.dview-filter input::placeholder { color: var(--n-text-faint); }
+.dview-filter input::-webkit-search-cancel-button { display: none; }
+.dview-filter .vw-key { font-family: var(--n-font-mono); font-size: calc(12 * var(--p)); color: var(--n-text-faint); }
+/* how many the filter leaves, and keeping them */
+.dview-keep { display: flex; align-items: center; flex-wrap: wrap; gap: calc(2 * var(--p)) calc(6 * var(--p)); margin: calc(-2 * var(--p)) 0 calc(6 * var(--p)); padding: 0 calc(2 * var(--p)); font-size: calc(12.5 * var(--p)); }
+.dview-keep > .meta { color: var(--n-text-faint); }
+.dview-keep .vw-keep > .button { min-height: calc(26 * var(--p)); padding: 0 calc(6 * var(--p)); font-size: calc(12.5 * var(--p)); }
+.dview-tree { flex: 1; display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+
+.dview-row { display: flex; align-items: center; gap: calc(6 * var(--p)); min-width: 0; min-height: calc(26 * var(--p)); padding: 0 calc(8 * var(--p)); border-radius: var(--n-radius); color: var(--n-text-dim); cursor: pointer; white-space: nowrap; }
+.dview-row:hover { background: var(--n-bg-hover); }
+.dview-row:focus { outline: none; }
+.dview-row:focus-visible { outline: 2px solid var(--n-focus); outline-offset: -2px; }
+.dview-row .dview-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.dview-row[data-depth="1"] { padding-left: calc(20 * var(--p)); }
+.dview-row[data-depth="2"] { padding-left: calc(32 * var(--p)); }
+.dview-row[data-depth="3"] { padding-left: calc(44 * var(--p)); }
+.dview-row.subject { min-height: calc(28 * var(--p)); font-family: var(--n-font-mono); font-weight: 500; color: var(--n-text); }
+.dview-row.session { font-family: var(--n-font-mono); }
+.dview-row.type { min-height: calc(24 * var(--p)); font-size: calc(12 * var(--p)); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n-text-faint); }
+.dview-folded { letter-spacing: 0; }
+.dview-row.scan { font-family: var(--n-font-mono); font-size: calc(12.5 * var(--p)); }
+.dview-row.scan.look { color: var(--n-caution-fg); }
+/* the chosen scan alone is marked, in the brand's colour */
+.dview-row.scan.on, .dview-row.scan.on:hover { background: var(--n-bg-selected); color: var(--n-brand-text); font-weight: 500; }
+.dview-n { flex: none; font-family: var(--n-font-sans); font-size: calc(12 * var(--p)); font-weight: 400; color: var(--n-text-faint); }
+.dview-n.look { color: var(--n-caution-fg); }
+.dview-family { padding: calc(4 * var(--p)) calc(8 * var(--p)) 0 calc(44 * var(--p)); font-size: calc(11 * var(--p)); letter-spacing: 0.06em; text-transform: uppercase; color: var(--n-text-faint); }
+.dview-more { display: flex; gap: 0.6em; padding-top: calc(6 * var(--p)); font-size: calc(12 * var(--p)); }
+.dview-none { padding: 0.5em; }
+
+/* ------------------------------------------------------------ the scan, filling the rest */
+.dview-main { flex: 1; display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.dview-stage { min-height: 0; display: grid; background: var(--n-image-bg); }
+.dview-stage .scan-view.bare { position: static; height: 100%; min-height: 0; grid-template-rows: minmax(0, 1fr); gap: 0; }
+.dview-stage .scan-view.bare .scan-canvas { height: 100%; min-height: 0; border: 0; border-radius: 0; }
+.dview-stage .scan-view.bare > :not(.scan-canvas) { min-height: 0; overflow: auto; }
+.scan-canvas .scan-count { position: absolute; z-index: 2; top: calc(10 * var(--p, 1px)); right: calc(12 * var(--p, 1px)); font-family: var(--n-font-mono); font-size: calc(12 * var(--p, 1px)); color: var(--n-text-faint); pointer-events: none; }
+
+/* ------------------------------------------------------------ what NILS says it is */
+.dview-facts { display: flex; flex-wrap: wrap; align-items: center; gap: calc(8 * var(--p)); min-width: 0; min-height: calc(48 * var(--p)); padding: calc(6 * var(--p)) calc(16 * var(--p)); border-top: 1px solid var(--n-line); }
+.dview-fact { display: inline-flex; align-items: center; min-height: calc(22 * var(--p)); padding: 0 calc(7 * var(--p)); border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-neutral-bg); color: var(--n-neutral-fg); font-size: calc(12 * var(--p)); font-weight: 500; white-space: nowrap; }
+a.dview-fact.look { border-color: var(--n-caution-line); background: var(--n-caution-bg); color: var(--n-caution-fg); }
+a.dview-fact.look:hover { border-color: var(--n-caution-icon); text-decoration: none; }
+.dview-timing { font-family: var(--n-font-mono); font-size: calc(12 * var(--p)); color: var(--n-text-faint); white-space: nowrap; }
+.dview-keys { font-size: calc(12 * var(--p)); color: var(--n-text-faint); white-space: nowrap; }
+
+@media (max-width: 860px) {
+  .page.bare { height: calc(100dvh - 3rem); }
+  /* the top bar's own button opens the sections on a narrow window */
+  .dview-sections { display: none; }
+}
+@media (max-width: 720px) {
+  .dview-body { flex-direction: column; }
+  .dview-side { flex: 0 0 38vh; border-right: 0; border-bottom: 1px solid var(--n-line); padding: calc(8 * var(--p)) 1rem; }
+  .dview-top { padding: calc(6 * var(--p)) 1rem; }
+  .dview-where { order: 3; flex: 1 1 100%; }
+  .dview-keys { display: none; }
+}

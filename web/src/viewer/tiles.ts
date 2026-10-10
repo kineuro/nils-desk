@@ -6,6 +6,7 @@
 // however many planes are asked, so a grid of 200 stacks is 200 rows.
 
 import { DoorError } from "../ask/client";
+import { NotBuilt, reasonWords } from "./building";
 import { doors, levelShape, type Manifest } from "./doors";
 import { levelFor } from "./ring";
 import type { Axis } from "./geometry";
@@ -76,6 +77,7 @@ export function tileLevel(m: Manifest, px: number): number {
 
 /** What a tile says when it has no picture: the engine's refusal in the fewest words. */
 export function tileAbsence(e: unknown): string {
+  if (e instanceof NotBuilt) return `could not be built: ${reasonWords(e.reason)}`;
   if (e instanceof DoorError) {
     if (e.status === 404) return "no picture yet";
     if (e.status === 401 || e.status === 403) return "not open to you";

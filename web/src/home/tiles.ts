@@ -10,6 +10,7 @@ import type { Capabilities } from "../capabilities";
 import { door } from "../deployment";
 import { may, type Grant } from "../grants";
 import type { Summary } from "../objects/client";
+import { isWorker } from "../ops/verbs";
 
 export type TileId = "holds" | "needs" | "running" | "since";
 
@@ -59,7 +60,7 @@ export function needsTile(open: number): Tile {
 
 export function runningTile(jobs: JobRow[]): Tile {
   // the queue's own worker is how jobs run, not a job anyone started
-  const work = jobs.filter((j) => j.kind !== "worker");
+  const work = jobs.filter((j) => !isWorker(j));
   const running = work.filter((j) => j.state === "running" || j.state === "cancelling").length;
   const queued = work.filter((j) => j.state === "queued").length;
   const words = [running > 0 ? `${count(running)} running` : null, queued > 0 ? `${count(queued)} queued` : null].filter(Boolean);

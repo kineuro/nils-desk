@@ -150,7 +150,9 @@ describe("one campaign", () => {
     expect(html).toContain("By axis: base 100% · technique 50%");
     expect(html).toContain("base T1w · technique MPRAGE<span class=\"meta\"> · decisions 11, 12</span>");
     expect(html).toContain("4 of its stacks have no picture yet.");
-    expect(html).toContain("pyramid build --handle 5");
+    // prepared on first opening: no command to copy (Wave 7a)
+    expect(html).toContain("Each is prepared when it is first opened.");
+    expect(html).not.toContain("pyramid build");
   });
 
   it("shows what a close will write before it writes it", () => {
