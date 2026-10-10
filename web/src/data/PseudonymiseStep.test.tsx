@@ -10,8 +10,9 @@
 // of its IDs drawn, a code generated for one, the IDs shown once and recorded,
 // and the button that says what it will do filing the map and then starting
 // the dataset's thread; the rules opened from Change with four choices; the
-// old address opening the dataset with the step open; and, once done, what
-// every file got. Every ID, code and name here is made up.
+// old address opening the dataset with the step open; once done, what every
+// file got and what the last run did; and the page's words about a run that
+// go once it is over. Every ID, code and name here is made up.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -412,6 +413,67 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(host.querySelector(".ps-cols")!.textContent).toContain("Its log");
     // done, the step is not opened by itself: the address opened it
     expect(host.querySelector(".dp-step-pick")?.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("says once done what the last run did: the files written, the codes made, what the registry held already and what is not an image", async () => {
+    // 2026-10-10: a run on a test install wrote every file, and its read found the scans in the registry already, from another dataset
+    const done = dataset({ held: { files: 0, identifiers: 0 }, trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1_900_000_000 }, anon: { path: "/srv/x/derivatives/dcm-anon", files: ORIGINALS, last_written: AT } } });
+    const summary = summaryOf(done, { state: "done", files: ORIGINALS, waiting: 0, held: 0, job: 127, started_at: "2026-10-10T09:50:43Z", finished_at: "2026-10-10T09:50:47Z" });
+    summary.steps = summary.steps.map((x) => (x.step === "read" ? { ...x, state: "done", job: 128, files: 7328, refused: 216, reads: 1 } : x));
+    const job = (id: number, kind: string, result: unknown, progress: unknown = null) => ({ status: 200, body: { id, kind, name: "study-identified-2026-10-10", state: "done", started_at: AT, heartbeat_at: null, finished_at: AT, progress, error: null, args: {}, result } });
+    await page(
+      done,
+      {},
+      (c) => {
+        if (c.url === "/api/datasets/study-identified/summary") return { status: 200, body: summary };
+        if (c.method === "GET" && c.url === "/api/jobs/127") return job(127, "pseudonymize", { files: { seen: ORIGINALS, written: ORIGINALS, unchanged: 0, held: 0 }, subjects: { new: 8 } });
+        if (c.method === "GET" && c.url === "/api/jobs/128") return job(128, "digest", null, { ingested: 0, duplicate: 7328, changed: 0, held: 0, gone: 0, stacks_created: 0 });
+        return undefined;
+      },
+      { step: "pseudonymisation", held: { ...heldIds({}, { coded: 8, generated: 8 }), files: 0, identifiers: 0, ids: [] } },
+    );
+    const line = host.querySelector(".ps-done .ps-outcome");
+    expect(line?.textContent).toBe("Last run7,544 files pseudonymised · 8 new codes · 7,328 files already in the registry · 216 files not images");
+    // the button that started it is gone: there is nothing left to pseudonymise
+    expect(button(host, "Pseudonymise and sort 7,544 files")).toBeNull();
+  });
+
+  it("says on the page that the run started while it goes, and lets the words go once it is over", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      let phase: "before" | "running" | "over" = "before";
+      const d = dataset({ held: { files: 0, identifiers: 0 }, identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+      await page(
+        d,
+        { held: 0 },
+        (c) => {
+          if (c.method === "POST" && c.url === "/api/jobs") {
+            phase = "running";
+            return { status: 202, body: { job: 60, state: "queued" } };
+          }
+          if (c.url === "/api/datasets/study-identified/summary" && phase !== "before")
+            return { status: 200, body: summaryOf(d, phase === "running" ? { state: "running", job: 60, held: 0 } : { state: "done", job: 60, files: ORIGINALS, waiting: 0, held: 0, finished_at: new Date().toISOString() }) };
+          return undefined;
+        },
+        { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } },
+      );
+      await act(async () => {
+        button(host.querySelector(".ps-step")!, "Pseudonymise and sort 7,544 files")!.click();
+      });
+      await settle(8);
+      expect(text()).toContain("study-identified: pseudonymising, then reading and sorting.");
+      expect(host.querySelector(".ps-step .tag")?.textContent).toBe("Running");
+      // the run ends: the page reads the dataset again while it ran, and the words go with the run
+      phase = "over";
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      await settle(8);
+      expect(text()).not.toContain("pseudonymising, then reading and sorting.");
+      expect(host.querySelector(".ps-done")).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stays closed on a done dataset unless asked, and offers the dataset's settings and its originals in its menu", async () => {

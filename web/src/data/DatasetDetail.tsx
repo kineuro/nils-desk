@@ -74,7 +74,8 @@ export interface DatasetDetailProps {
   /** The address opened the pseudonymise step: #data/datasets/<name>/pseudonymisation. */
   openStep?: boolean;
   onStep: (id: StepId) => void;
-  onChanged: (words: string) => void;
+  /** Words for the page; with a dataset's name, they speak of its run and stand only while it goes. */
+  onChanged: (words: string, running?: string) => void;
   onSaid: (words: string) => void;
   onFailed: (e: unknown) => void;
   onRemoved: (words: string) => void;
@@ -298,10 +299,10 @@ export function DatasetDetail(props: DatasetDetailProps) {
           dataset={d}
           summary={s}
           pseudo={pseudo}
-          onChanged={(words) => {
+          onChanged={(words, running) => {
             // what the person started stays in sight: the step's summary once it is done, the next steps running beside it
             setStepOpen(true);
-            onChanged(words);
+            onChanged(words, running);
           }}
           onFailed={onFailed}
           onOpen={setDialog}

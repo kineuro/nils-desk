@@ -436,6 +436,49 @@ export function everyFile(policy: TagPolicy | null, d: Pick<Dataset, "patient_id
   return out;
 }
 
+/* ---------------------------------------------------------------- what the last run did */
+
+/** A job as the outcome reads it: the counts it kept as its result or its progress. */
+export interface RanJob {
+  result: unknown;
+  progress?: unknown;
+}
+
+const field = (o: unknown, k: string): unknown => (o !== null && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined);
+
+/**
+ * What the dataset's last run did, in one line, from the counts the engine
+ * already keeps (2026-10-10, after a run that showed nothing): the files the
+ * pseudonymise step wrote, found done already, or held; the codes it made;
+ * what its read found new, found in the registry already, or held; the files
+ * the read refused, which are not images; and, where the read left the sort
+ * out, that there was nothing new to sort. Null where neither job is known.
+ */
+export function outcomeWords(pseudonymise: RanJob | null, read: RanJob | null, refused: number): string | null {
+  if (!pseudonymise && !read) return null;
+  const parts: string[] = [];
+  const p = field(pseudonymise?.result, "files");
+  const written = num(field(p, "written"));
+  const unchanged = num(field(p, "unchanged"));
+  if (written > 0) parts.push(`${files(written)} pseudonymised`);
+  else if (unchanged > 0) parts.push(`${files(unchanged)} pseudonymised already`);
+  const heldFiles = num(field(p, "held"));
+  if (heldFiles > 0) parts.push(`${files(heldFiles)} held for a code`);
+  const made = num(field(field(pseudonymise?.result, "subjects"), "new"));
+  if (made > 0) parts.push(`${n(made)} new ${made === 1 ? "code" : "codes"}`);
+  // a read keeps its counts as its progress, and a result only where one was written
+  const counts = [read?.result, read?.progress].find((c) => typeof field(c, "ingested") === "number");
+  const ingested = num(field(counts, "ingested"));
+  const known = num(field(counts, "duplicate"));
+  const readHeld = num(field(counts, "held"));
+  if (ingested > 0) parts.push(`${files(ingested)} read`);
+  if (known > 0) parts.push(`${files(known)} already in the registry`);
+  if (readHeld > 0) parts.push(`${files(readHeld)} held at the read`);
+  if (refused > 0) parts.push(`${files(refused)} not images`);
+  if (field(read?.result, "chain_ended")) parts.push("nothing new to sort");
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 /** Where the codes came from, for the done step's middle box. */
 export function codesWords(subjects: HeldIds["subjects"] | null, personnummer: boolean): string {
   if (personnummer) return "coded by the key";

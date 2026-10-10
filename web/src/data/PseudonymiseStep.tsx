@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { needsWork } from "../access";
+import type { ChainedJob } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may, sees } from "../grants";
@@ -56,6 +57,7 @@ import {
   idsBox,
   idTypeOf,
   matchedOf,
+  outcomeWords,
   primaryOf,
   rulesLine,
   stepView,
@@ -197,7 +199,8 @@ export interface StepProps {
   dataset: Dataset;
   summary: DatasetSummary | null;
   pseudo: Pseudonymise;
-  onChanged: (words: string) => void;
+  /** Words for the page; with a dataset's name, they speak of its run and stand only while it goes. */
+  onChanged: (words: string, running?: string) => void;
   onFailed: (e: unknown) => void;
   /** A dialog of the step's, which the dataset's detail holds. */
   onOpen: (o: Opened) => void;
@@ -236,7 +239,7 @@ export function PseudonymiseStep(props: StepProps) {
       await jobs.enqueue(body.command, body.name);
       pseudo.setMatched([]);
       setCodes(false);
-      onChanged(`${d.name}: pseudonymising, then reading and sorting.`);
+      onChanged(`${d.name}: pseudonymising, then reading and sorting.`, d.name);
     } catch (e) {
       onFailed(e);
     } finally {
@@ -587,6 +590,22 @@ function IdLine({ row: r, n: i, value, generates, onGenerate }: { row: IdRow; n:
 
 /* ---------------------------------------------------------------- pseudonymised */
 
+/** The jobs of the last run, its pseudonymise step and its read, as the jobs door answers them; read again when either changes. */
+function useRan(caps: Capabilities, pseudonymise: number | null, read: number | null): { pseudonymise: ChainedJob | null; read: ChainedJob | null } | null {
+  const [ran, setRan] = useState<{ pseudonymise: ChainedJob | null; read: ChainedJob | null } | null>(null);
+  const reads = may(caps, "pipelines:see") && served(caps, "GET /api/jobs");
+  useEffect(() => {
+    if (!reads || (pseudonymise === null && read === null)) return setRan(null);
+    let alive = true;
+    const one = (id: number | null) => (id === null ? Promise.resolve(null) : ops.job(id).catch(() => null));
+    void Promise.all([one(pseudonymise), one(read)]).then(([p, r]) => alive && setRan({ pseudonymise: p, read: r }));
+    return () => {
+      alive = false;
+    };
+  }, [reads, pseudonymise, read]);
+  return ran;
+}
+
 /** The step once every file has its copy: what every file got, where the codes came from, and the originals. */
 export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Dataset; summary: DatasetSummary | null; pseudo: Pseudonymise; onOpen: (o: Opened) => void }) {
   const { caps, dataset: d, summary: s, pseudo, onOpen } = props;
@@ -594,9 +613,12 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
   useEffect(() => {
     if (served(caps, "GET /api/pseudonymize/tags")) void policyKept.ensure();
   }, [caps]);
+  const step = stepOf(s, "pseudonymised");
+  const readStep = stepOf(s, "read");
+  const ran = useRan(caps, step?.job ?? null, readStep?.job ?? null);
   const v = pseudo.view;
   if (v === null) return null;
-  const step = stepOf(s, "pseudonymised");
+  const outcome = ran ? outcomeWords(ran.pseudonymise, ran.read, readStep?.refused ?? 0) : null;
   const at = new Date();
   const when = [clock(step?.finished_at, at), took(step?.started_at, step?.finished_at)].filter(Boolean).join(" · ");
   const subjects = v.subjects.coded;
@@ -619,6 +641,12 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
         <span className="grow" />
         {when && <span className="ps-when">{when}</span>}
       </div>
+      {outcome && (
+        <p className="ps-outcome">
+          <span className="k">Last run</span>
+          <span>{outcome}</span>
+        </p>
+      )}
       <Boxes v={v} compact codes={{ big: n(subjects), words: codesWords(v.subjects, v.personnummer), caution: false }} kept={keptWords} />
       <div className="ps-every">
         <h4 className="eyebrow">In every file</h4>

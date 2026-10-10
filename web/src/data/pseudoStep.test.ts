@@ -23,6 +23,7 @@ import {
   idTypeOf,
   isStandard,
   matchedOf,
+  outcomeWords,
   primaryOf,
   railWords,
   readsPersonnummer,
@@ -295,5 +296,27 @@ describe("what every file got", () => {
     expect(codesWords({ coded: 8, generated: 0 }, false)).toBe("8 from a map");
     expect(codesWords({ coded: 8, generated: 0 }, true)).toBe("coded by the key");
     expect(codesWords(null, false)).toBe("none yet");
+  });
+});
+
+describe("what the last run did", () => {
+  it("says in one line what was written, the codes made, what the read found in the registry already and what is not an image", () => {
+    // a run of 2026-10-10 on a test install, whose scans another dataset held already
+    const pseudonymise = { result: { files: { seen: 7544, written: 7544, unchanged: 0, held: 0 }, subjects: { new: 8 } } };
+    const read = { result: null, progress: { ingested: 0, duplicate: 7328, changed: 0, held: 0, gone: 0 } };
+    expect(outcomeWords(pseudonymise, read, 216)).toBe("7,544 files pseudonymised · 8 new codes · 7,328 files already in the registry · 216 files not images");
+  });
+
+  it("says a run that found everything done already, and a read that left the sort out", () => {
+    const pseudonymise = { result: { files: { seen: 7544, written: 0, unchanged: 7544, held: 0 }, subjects: { new: 0 } } };
+    const read = { result: { chain_ended: { why: "nothing new", skipped: [["fingerprint"]] } }, progress: { ingested: 0, duplicate: 0, changed: 0, held: 0 } };
+    expect(outcomeWords(pseudonymise, read, 0)).toBe("7,544 files pseudonymised already · nothing new to sort");
+  });
+
+  it("says what was read and what was held, and nothing where no job is known", () => {
+    const pseudonymise = { result: { files: { written: 6, unchanged: 0, held: 2 }, subjects: { new: 1 } } };
+    expect(outcomeWords(pseudonymise, { result: null, progress: { ingested: 6, duplicate: 0, held: 1 } }, 0)).toBe("6 files pseudonymised · 2 files held for a code · 1 new code · 6 files read · 1 file held at the read");
+    expect(outcomeWords(null, null, 5)).toBeNull();
+    expect(outcomeWords({ result: null }, { result: null, progress: null }, 0)).toBeNull();
   });
 });

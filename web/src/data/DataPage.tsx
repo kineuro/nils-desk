@@ -56,6 +56,25 @@ import "./data.css";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Dataset[] };
 
+/** Words about a dataset's run: which dataset, when they were said, and whether its run was seen going since. */
+interface Until {
+  dataset: string;
+  since: number;
+  seen: boolean;
+}
+
+/** What the page says: words, a refusal's detail behind a "?", and the run the words stand for while it goes. */
+interface Said {
+  words: string;
+  detail?: string;
+  until?: Until;
+}
+
+/** Whether a step of the dataset finished after the words about its run were said, give or take the clocks of two machines. */
+export function runEnded(s: Pick<DatasetSummary, "steps">, since: number): boolean {
+  return s.steps.some((x) => typeof x.finished_at === "string" && Date.parse(x.finished_at) >= since - 5_000);
+}
+
 /** The card chosen on the page: a dataset or a cohort, by name. */
 export type Chosen = { kind: "dataset"; name: string } | { kind: "cohort"; name: string } | null;
 
@@ -111,8 +130,8 @@ export function DataPage({
   const [making, setMaking] = useState(false);
   /** The dialog a dataset's step opens. */
   const [opened, setOpened] = useState<{ kind: "sort-files" | "set-ids"; dataset: Dataset } | null>(null);
-  /** What the page last said: a done act's words, or a refusal as one plain line with the engine's words behind a "?". */
-  const [said, setSaid] = useState<{ words: string; detail?: string } | null>(null);
+  /** What the page last said: a done act's words, or a refusal as one plain line with the engine's words behind a "?"; words about a dataset's run stand only while it goes. */
+  const [said, setSaid] = useState<Said | null>(null);
   const say = (words: string) => setSaid({ words });
   const failed = (e: unknown) => setSaid(plainError(e));
   const places = useKept(placesKept);
@@ -195,6 +214,19 @@ export function DataPage({
     return () => clearInterval(t);
   }, [runningKey, read, readSums]);
 
+  // words about a dataset's run go once it is over: seen running and now not, or a step of it finished since the words were said
+  useEffect(() => {
+    const until = said?.until;
+    if (!until) return;
+    const s = sums[until.dataset];
+    if (!s) return;
+    if (s.steps.some((x) => x.state === "running" || x.state === "queued")) {
+      if (!until.seen) setSaid((was) => (was?.until === until ? { ...was, until: { ...until, seen: true } } : was));
+      return;
+    }
+    if (until.seen || runEnded(s, until.since)) setSaid((was) => (was?.until === until ? null : was));
+  }, [said, sums]);
+
   const placeOf = (d: Dataset) => places.value?.places.find((p) => p.id === d.id) ?? null;
   /** Why a dataset is not read yet: the places door's own words where it was read, else the same reasoning from the dataset. */
   const whyOf = (d: Dataset): string | null => {
@@ -228,8 +260,8 @@ export function DataPage({
     }
   };
 
-  const changed = (words: string) => {
-    say(words);
+  const changed = (words: string, running?: string) => {
+    setSaid(running ? { words, until: { dataset: running, since: Date.now(), seen: false } } : { words });
     void placesKept.refresh().catch(() => undefined);
     onChanged();
     jobs.refresh();

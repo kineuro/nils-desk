@@ -276,6 +276,8 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .ps-every-line { display: grid; grid-template-columns: 6rem minmax(0, 1fr); gap: 0.75rem; font-size: 14px; }
 .ps-every-line .k { color: var(--n-text-faint); }
 .ps-every-line .link-button { font-size: var(--n-text-size-small); }
+.ps-outcome { display: grid; grid-template-columns: 6rem minmax(0, 1fr); gap: 0.75rem; margin: 0; font-size: 14px; }
+.ps-outcome .k { color: var(--n-text-faint); }
 .ps-quiet { display: flex; flex-direction: column; gap: 0.375rem; padding-top: 0.75rem; border-top: 1px solid var(--n-line); font-size: var(--n-text-size-small); color: var(--n-text-dim); }
 .ps-quiet-line { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
 .ps-quiet-line .dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--n-neutral-line); }
