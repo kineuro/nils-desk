@@ -225,9 +225,14 @@ export class BitmapLru<B extends Bitmap = Bitmap> {
 }
 
 export const previewUrl = (stack: number) => `/api/instances/${stack}/preview`;
-/** A range of planes; naming the preview's digest (`v`) lets the browser keep the answer for good. */
-export const planesUrl = (stack: number, from: number, to: number, digest?: string | null) =>
-  `/api/instances/${stack}/preview/planes?from=${from}&to=${to}${digest ? `&v=${encodeURIComponent(digest)}` : ""}`;
+/**
+ * A range of planes; naming the preview's digest (`v`) and the held state it
+ * was served (`held`) lets the browser keep the answer for good. The held and
+ * the whole picture of one stack share a digest, so the engine keeps an
+ * answer for good only where the address names both (2026-10-10).
+ */
+export const planesUrl = (stack: number, from: number, to: number, digest?: string | null, held = false) =>
+  `/api/instances/${stack}/preview/planes?from=${from}&to=${to}${digest ? `&v=${encodeURIComponent(digest)}&held=${held ? 1 : 0}` : ""}`;
 
 const HEADERS = { "X-Nils-Desk": "1" };
 
@@ -314,6 +319,8 @@ interface Reel {
   digest: string | null | undefined;
   /** The preview was partial: ranges kept to what the engine decodes in the request, and never kept for good by the browser. */
   partial: boolean;
+  /** The preview was served with its band held: named on the planes' address beside the digest. */
+  held: boolean;
   have: Map<number, Blob>;
   /** Planes asked for and not answered yet. */
   asking: Set<number>;
@@ -490,13 +497,14 @@ export class Pictures {
     return this.reels.get(stack)?.reads ?? 0;
   }
 
-  private reel(stack: number, planes: number, at: number, digest: string | null | undefined, partial: boolean): Reel {
+  private reel(stack: number, planes: number, at: number, digest: string | null | undefined, partial: boolean, held: boolean): Reel {
     let r = this.reels.get(stack);
     if (r) {
       this.reels.delete(stack);
       r.planes = planes;
       r.digest = digest;
       r.partial = partial;
+      r.held = held;
     } else {
       const have = new Map<number, Blob>();
       for (const [k, b] of this.peeked) {
@@ -506,7 +514,7 @@ export class Pictures {
           this.peeked.delete(k);
         }
       }
-      r = { stack, planes, digest, partial, have, asking: new Set(), absent: new Set(), focus: at, all: false, around: 0, idle: true, reads: 0, abort: new AbortController(), failed: null, decoding: new Set(), decoded: new Set(), frameBytes: 0, waiters: [] };
+      r = { stack, planes, digest, partial, held, have, asking: new Set(), absent: new Set(), focus: at, all: false, around: 0, idle: true, reads: 0, abort: new AbortController(), failed: null, decoding: new Set(), decoded: new Set(), frameBytes: 0, waiters: [] };
     }
     this.reels.set(stack, r);
     // the scans read longest ago let go of their frames (their decoded planes stay in the LRU)
@@ -534,8 +542,8 @@ export class Pictures {
    * when that is done, or when the scan is left. A second ask while the
    * first reads joins it; a scan whose reads failed is read again.
    */
-  load(stack: number, planes: number, at: number, digest?: string | null, partial = false): Promise<void> {
-    const r = this.reel(stack, planes, at, digest, partial);
+  load(stack: number, planes: number, at: number, digest?: string | null, partial = false, held = false): Promise<void> {
+    const r = this.reel(stack, planes, at, digest, partial, held);
     r.all = true;
     r.idle = false;
     r.failed = null;
@@ -547,8 +555,8 @@ export class Pictures {
    * read, and decoded in idle time, so its sharp frame is there when it is
    * opened. Nothing more where it is read whole already.
    */
-  ahead(stack: number, planes: number, at: number, digest?: string | null, partial = false): Promise<void> {
-    const r = this.reel(stack, planes, at, digest, partial);
+  ahead(stack: number, planes: number, at: number, digest?: string | null, partial = false, held = false): Promise<void> {
+    const r = this.reel(stack, planes, at, digest, partial, held);
     if (!r.all) r.around = Math.max(r.around, this.o.ahead);
     if (r.failed) r.failed = null;
     return this.wait(r);
@@ -651,7 +659,7 @@ export class Pictures {
     for (let z = from; z < to; z++) r.asking.add(z);
     r.reads++;
     try {
-      const res = await this.ask(planesUrl(r.stack, from, to, r.partial ? null : r.digest), signal);
+      const res = await this.ask(planesUrl(r.stack, from, to, r.partial ? null : r.digest, r.held), signal);
       if (!res.ok) throw new Error(`the planes answered ${res.status}`);
       const { frames, data, width, height } = parseFrames(await res.arrayBuffer());
       if (signal.aborted) return;

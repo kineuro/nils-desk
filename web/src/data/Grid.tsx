@@ -847,7 +847,7 @@ function readAhead(s: Scan): void {
   const pics = sharedPictures();
   pics.preview(s.id).then(
     (p) => {
-      if (p.planes > 0) pics.ahead(s.id, p.planes, Math.floor(p.planes / 2), p.digest, p.partial).catch(() => undefined);
+      if (p.planes > 0) pics.ahead(s.id, p.planes, Math.floor(p.planes / 2), p.digest, p.partial, p.held).catch(() => undefined);
     },
     () => undefined,
   );
