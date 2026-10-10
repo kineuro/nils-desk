@@ -73,6 +73,12 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
   const [types, setTypes] = useState<LinkageType[]>([]);
   /** The kind of identifying ID an identified folder's PatientID holds: one the same everywhere, or a hospital or study ID of a type; asked, never assumed. */
   const [holds, setHolds] = useState<"same" | "type" | null>(null);
+  /**
+   * What becomes of a hospital or study ID no map names yet, asked when the
+   * dataset is added so its first run does not stop for it (2026-10-10):
+   * its subject code made from the ID, final, or its files waiting for a map.
+   */
+  const [noCode, setNoCode] = useState<"code" | "hold">("code");
   const [holdsType, setHoldsType] = useState("");
   const asked = useRef(0);
   const root = all.find((r) => r.id === rootId) ?? null;
@@ -135,7 +141,11 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
     if (seen.look.holds_dicom === "no" && !anyway) return setAnyway(true);
     setAdding({ since: Date.now() });
     setWhy(null);
-    const ids = asksIds(seen.look) ? { patient_id: patientId, subjects } : asksIdentity(seen.look) && identity !== null ? { identity } : {};
+    const ids = asksIds(seen.look)
+      ? { patient_id: patientId, subjects }
+      : asksIdentity(seen.look) && identity !== null
+        ? { identity, ...(holds === "type" ? { unmapped: noCode } : {}) }
+        : {};
     rootsDoor.addDataset(root.name, seen.look.name, ids).then(
       (d) => onDone(`${d.name} is a dataset.`),
       (e: unknown) => {
@@ -264,6 +274,23 @@ export function AddDataset(props: { caps: Capabilities; install: Install | null;
                           <input value={holdsType} placeholder="study-id" aria-label="Which hospital or study ID" spellCheck={false} disabled={adding !== null} onChange={(e) => setHoldsType(e.target.value)} />
                         </div>
                       )}
+                    </div>
+                  )}
+                  {holds === "type" && (
+                    <div className="choices" role="radiogroup" aria-label="An ID with no subject code">
+                      <span className="meta">An ID with no subject code</span>
+                      <label className="radio-row">
+                        <input type="radio" name="dataset-no-code" checked={noCode === "code"} disabled={adding !== null} onChange={() => setNoCode("code")} />
+                        <span>
+                          <b>Generate its subject code from the ID</b> <span className="meta">recommended</span>
+                        </span>
+                      </label>
+                      <label className="radio-row">
+                        <input type="radio" name="dataset-no-code" checked={noCode === "hold"} disabled={adding !== null} onChange={() => setNoCode("hold")} />
+                        <span>
+                          <b>Wait for a map</b>
+                        </span>
+                      </label>
                     </div>
                   )}
                 </div>

@@ -248,9 +248,33 @@ describe("the Data page", () => {
     const which = host.querySelector<HTMLSelectElement>('select[aria-label="Which hospital or study ID"]')!;
     // never the ID that is the same everywhere among the types: that is the other answer
     expect([...which.options].map((o) => o.value)).toEqual(["study-id"]);
+    // and what becomes of an ID no map names is asked here too, its subject code made from the ID by default (2026-10-10)
+    expect(radio(host, "Generate its subject code from the ID").checked).toBe(true);
     act(() => button(host, "Add")!.click());
     await settle(8);
-    expect(e.of("POST", "/api/places")[1].body).toEqual({ role: "source", root: "incoming", folder: "study-id", identity: { id_type: "study-id", from: [{ field: "PatientID" }] } });
+    expect(e.of("POST", "/api/places")[1].body).toEqual({ role: "source", root: "incoming", folder: "study-id", identity: { id_type: "study-id", from: [{ field: "PatientID" }] }, unmapped: "code" });
+  });
+
+  it("lets a hospital or study ID's files wait for a map instead, when the person says so at Add", async () => {
+    const e = await page([], (c) => {
+      if (c.method === "GET" && c.url.startsWith("/api/places/1/folders?")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 1, folders: [{ name: "study-id", path: "/srv/in/study-id", added: false, dataset_id: null, dataset: null, has_derivatives: true }], next: null } };
+      if (c.method === "GET" && c.url === "/api/places/1/folders/study-id") return { status: 200, body: { name: "study-id", path: "/srv/in/study-id", added: false, dataset_id: null, holds_dicom: "yes", has_derivatives: true, layout: IDENTIFIED } };
+      if (c.method === "POST" && c.url === "/api/places") return { status: 201, body: { ...WARD_A, name: c.body?.folder, layout: IDENTIFIED, not_read: null } };
+      return undefined;
+    });
+    act(() => button(host, "Add a dataset")!.click());
+    act(() => button(host, "Browse")!.click());
+    await settle();
+    act(() => button(host, "study-id")!.click());
+    await settle();
+    // the choice belongs to a hospital or study ID: an ID the same everywhere is coded by the key whatever is chosen
+    act(() => radio(host, "The same everywhere").click());
+    expect(host.querySelector('[aria-label="An ID with no subject code"]')).toBeNull();
+    act(() => radio(host, "A hospital or study ID").click());
+    act(() => radio(host, "Wait for a map").click());
+    act(() => button(host, "Add")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/places")[0].body).toEqual({ role: "source", root: "incoming", folder: "study-id", identity: { id_type: "study-id", from: [{ field: "PatientID" }] }, unmapped: "hold" });
   });
 
   it("says a refused Read in one plain line, the engine's words behind a \"?\"", async () => {
