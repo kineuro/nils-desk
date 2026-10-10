@@ -44,7 +44,8 @@
 
 /* ------------------------------------------------------------ the head, the keys and the line under them */
 .ms-layout { display: flex; flex-wrap: wrap; gap: calc(20 * var(--p)); align-items: flex-start; min-width: 0; }
-.ms-main { flex: 1 1 calc(720 * var(--p)); min-width: 0; display: flex; flex-direction: column; gap: calc(18 * var(--p)); }
+/* the page and its panel side by side from a laptop's width up (the side and the page's margins take about 280 px of 1440) */
+.ms-main { flex: 1 1 calc(640 * var(--p)); min-width: 0; display: flex; flex-direction: column; gap: calc(18 * var(--p)); }
 .ms-head { display: flex; align-items: flex-end; gap: calc(12 * var(--p)); flex-wrap: wrap; }
 .ms-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .ms-h1 { display: flex; align-items: center; gap: calc(6 * var(--p)); min-width: 0; }
@@ -71,8 +72,9 @@
 .ms-kind.off { opacity: 0.45; text-decoration: line-through; }
 
 /* ------------------------------------------------------------ the five numbers */
-.ms-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(160 * var(--p)), 1fr)); gap: calc(12 * var(--p)); }
-.ms-number { display: flex; flex-direction: column; gap: calc(2 * var(--p)); min-width: 0; padding: calc(12 * var(--p)) calc(14 * var(--p)); border: 1px solid var(--n-line); border-left: 3px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+/* each tile's label, value, line and mark share rows with the others', so the values sit on one line however a label wraps */
+.ms-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(124 * var(--p)), 1fr)); gap: 0 calc(12 * var(--p)); margin-bottom: calc(-12 * var(--p)); }
+.ms-number { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: calc(2 * var(--p)); align-items: start; min-width: 0; margin-bottom: calc(12 * var(--p)); padding: calc(12 * var(--p)) calc(14 * var(--p)); border: 1px solid var(--n-line); border-left: 3px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
 .ms-number.kept { border-left-color: var(--n-brand-text); }
 .ms-number.given { border-left-color: var(--n-caution-fg); }
 .ms-value { font-family: var(--n-font-serif); font-size: calc(28 * var(--p)); line-height: 1.2; font-variant-numeric: tabular-nums; }
@@ -138,8 +140,8 @@
 .ms-card-head b { font-family: var(--n-font-mono); font-weight: 500; }
 .ms-card-head span { min-width: 0; max-width: calc(150 * var(--p)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--n-text-faint); }
 .ms-card-visits { display: flex; flex-wrap: wrap; gap: calc(4 * var(--p)); }
-.ms-visit { display: flex; flex-direction: column; gap: calc(3 * var(--p)); width: calc(84 * var(--p)); padding: 0; border: 0; border-radius: var(--n-radius); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.ms-visit .ms-kind { width: 100%; font-size: calc(12 * var(--p)); }
+.ms-visit { display: flex; flex-direction: column; gap: calc(3 * var(--p)); width: calc(100 * var(--p)); padding: 0; border: 0; border-radius: var(--n-radius); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ms-visit .ms-kind { width: 100%; padding: 0 calc(5 * var(--p)); font-size: calc(11.5 * var(--p)); }
 .ms-visit:hover .ms-kind { box-shadow: 0 0 0 1px var(--n-brand-line); }
 .ms-visit-head { min-height: calc(16 * var(--p)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--p)); color: var(--n-text-faint); }
 .ms-visit.changed .ms-visit-head { color: var(--n-caution-fg); font-weight: 600; }
@@ -159,7 +161,8 @@
 .ms-strip > i.changed { box-shadow: inset 2px 0 0 var(--n-caution-fg); }
 
 /* ------------------------------------------------------------ the Rules panel beside the page */
-.ms-rules { flex: 0 1 calc(440 * var(--p)); min-width: 0; position: sticky; top: calc(16 * var(--p)); display: flex; flex-direction: column; max-height: calc(100dvh - 6rem); overflow: auto; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+/* sticky from the page's own padding, so it starts level with the page and stays in view as the page scrolls */
+.ms-rules { flex: 0 1 calc(440 * var(--p)); min-width: 0; position: sticky; top: 0; display: flex; flex-direction: column; max-height: calc(100dvh - 6rem); overflow: auto; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); }
 .ms-rules-head { display: flex; align-items: center; gap: calc(10 * var(--p)); padding: calc(14 * var(--p)) calc(18 * var(--p)); border-bottom: 1px solid var(--n-line); }
 .ms-rules-head .grow { min-width: 0; display: flex; flex-direction: column; }
 .ms-rules-head h2 { font-size: calc(20 * var(--p)); overflow-wrap: anywhere; }
