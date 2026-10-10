@@ -78,8 +78,8 @@ export type Opened = { kind: "rules" } | { kind: "tags" } | { kind: "vault"; ask
 interface GivenMap {
   name: string;
   pairs: string[][];
-  /** The two headers as the file has them, ID first. */
-  heads: [string, string];
+  /** The two headers as the file has them, ID first; null where it has none, its first row a row of the map. */
+  heads: [string, string] | null;
 }
 
 /** What the engine's rehearsal of the maps answered. */
@@ -363,7 +363,7 @@ function Codes(props: {
     if ("refusal" in cols) return setRefused(cols.refusal);
     const pairs = codePairs(csv, cols);
     if (pairs.length === 0) return setRefused("No row has both an ID and a subject code.");
-    const next = [...maps, { name, pairs, heads: [csv.header[cols.id], csv.header[cols.code]] as [string, string] }];
+    const next = [...maps, { name, pairs, heads: cols.headerless ? null : ([csv.header[cols.id], csv.header[cols.code]] as [string, string]) }];
     setMaps(next);
     rehearse(next);
   };
@@ -418,7 +418,8 @@ function Codes(props: {
   const lacking = v.rows.filter((r) => !r.coded && r.state === "held");
   const waiting = waitWords(v);
   const mapToFile = matched > 0 && maps.length > 0 ? { pairs: maps.flatMap((m) => m.pairs) } : null;
-  const heads = maps.length > 0 ? `${maps[0].heads[0]}, ${maps[0].heads[1]}` : "";
+  // a map with no header shows none of its first row, which holds an ID
+  const heads = maps.length === 0 ? "" : maps[0].heads ? `${maps[0].heads[0]}, ${maps[0].heads[1]}` : "no header row";
 
   return (
     <div className="ps-codes">

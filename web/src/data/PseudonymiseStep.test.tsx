@@ -6,11 +6,12 @@
 // own, with the three boxes, one primary action and the rules as one line;
 // the IDs listed one row each by their shape, a dropped map rehearsed and the
 // rows filled as they match, a pasted one taken while the box has the focus
-// wherever the browser aims the paste, a code generated for one, the IDs shown once
-// and recorded, and the button that says what it will do filing the map and
-// then starting the dataset's thread; the rules opened from Change with four
-// choices; the old address opening the dataset with the step open; and, once
-// done, what every file got. Every ID, code and name here is made up.
+// wherever the browser aims the paste, one with no header kept whole with none
+// of its IDs drawn, a code generated for one, the IDs shown once and recorded,
+// and the button that says what it will do filing the map and then starting
+// the dataset's thread; the rules opened from Change with four choices; the
+// old address opening the dataset with the step open; and, once done, what
+// every file got. Every ID, code and name here is made up.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -300,6 +301,24 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(text()).toContain("pasted");
     expect(text()).toContain("6 of 8 IDs matched");
     expect(host.querySelector(".ps-codes > p.warn")).toBeNull();
+  });
+
+  it("keeps the first row of a map with no header, and draws no ID of it", async () => {
+    const e = await page(dataset(), {}, (c) => (c.method === "POST" && c.url === "/api/linkage/imports" ? { status: 200, body: REHEARSED } : undefined));
+    act(() => button(host, "Give the 8 IDs a code")!.click());
+    const input = host.querySelector<HTMLInputElement>(".ps-file input")!;
+    const bare = MAP.slice(MAP.indexOf("\n") + 1);
+    Object.defineProperty(input, "files", { value: [new File([bare], "map.csv", { type: "text/csv" })], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(8);
+    const rows = e.of("POST", "/api/linkage/imports")[0].body!.rows as string[][];
+    expect(rows).toHaveLength(6);
+    expect(rows[0]).toEqual(["ABC123456", "3e1b77c0a9d2f400"]);
+    expect(text()).toContain("6 of 8 IDs matched");
+    expect(text()).toContain("no header row · 7,344 files can go now");
+    for (const value of ["ABC123456", "aBCD1234"]) expect(text()).not.toContain(value);
   });
 
   it("gives one ID a generated code, marked for the next run and nothing queued", async () => {

@@ -244,42 +244,66 @@ export function waitWords(v: StepView): string | null {
 
 /* ---------------------------------------------------------------- a map of ID and subject code, read here */
 
-/** The two columns a map of codes is read by, by their place in the file. */
+/** The two columns a map of codes is read by, by their place in the file, and whether it has no header, its first row a row of the map. */
 export interface CodeColumns {
   id: number;
   code: number;
+  headerless: boolean;
 }
 
 const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 const CODE_HEADERS = new Set(["code", "subjectcode", "subject", "subjectid", "pseudonym", "nilscode", "kod"]);
+const codeHeader = (h: string) => CODE_HEADERS.has(h) || (h.endsWith("code") && h !== "postcode");
+const idHeader = (h: string) => /^id|id$|patient|study|site|identifier/.test(h);
 
 /** How many of a column's values have one of the held shapes. */
 function shapeHits(values: string[], shapes: ReadonlySet<string>): number {
   return values.filter((v) => v.trim() !== "" && shapes.has(shapeOf(v))).length;
 }
 
+/** A value's length and the kinds of character in it: an ID or a code is like the values under it, a header's name is not. */
+const kindOf = (v: string) => `${v.length}:${[/[0-9]/, /[A-Z]/, /[a-z]/, /[^0-9A-Za-z]/].map((k) => (k.test(v) ? 1 : 0)).join("")}`;
+
+/**
+ * Whether a map has no header, its first row a row of it: no cell of that row
+ * names an ID or a code, and one of its cells has a held shape, or both of its
+ * two cells are like a value under them, an ID and a code. Anything else is a
+ * header, as a header always was.
+ */
+function headerlessOf(csv: Csv, known: ReadonlySet<string>): boolean {
+  const first = csv.header;
+  const held = (v: string) => v !== "" && known.has(shapeOf(v));
+  if (first.some((c) => c !== "" && !held(c) && (codeHeader(plain(c)) || idHeader(plain(c))))) return false;
+  if (first.some(held)) return true;
+  return first.length === 2 && first.every((c, i) => c !== "" && csv.rows.some((r) => kindOf(r[i] ?? "") === kindOf(c)));
+}
+
 /**
  * Which column is the ID and which the subject code: the code by its header,
  * the ID by the held shapes its values have, else by its header, else the
- * other of two. A file with neither is refused in words before a row is posted.
+ * other of two. A file with no header is read from its first row. A file with
+ * neither is refused in words before a row is posted.
  */
 export function codeColumnsOf(csv: Csv, shapes: readonly string[]): CodeColumns | { refusal: string } {
-  const heads = csv.header.map(plain);
-  const values = (i: number) => csv.rows.map((r) => r[i] ?? "");
   const known = new Set(shapes.filter(Boolean));
-  let code = heads.findIndex((h) => CODE_HEADERS.has(h) || (h.endsWith("code") && h !== "postcode"));
+  const headerless = headerlessOf(csv, known);
+  const heads = headerless ? csv.header.map(() => "") : csv.header.map(plain);
+  const rows = headerless ? [csv.header, ...csv.rows] : csv.rows;
+  const values = (i: number) => rows.map((r) => r[i] ?? "");
+  let code = heads.findIndex(codeHeader);
   const hits = heads.map((_, i) => (i === code ? -1 : shapeHits(values(i), known)));
   let id = hits.some((h) => h > 0) ? hits.indexOf(Math.max(...hits)) : -1;
-  if (id < 0) id = heads.findIndex((h, i) => i !== code && /^id|id$|patient|study|site|identifier/.test(h));
+  if (id < 0) id = heads.findIndex((h, i) => i !== code && idHeader(h));
   if (code < 0 && heads.length === 2 && id >= 0) code = 1 - id;
   if (id < 0 && heads.length === 2 && code >= 0) id = 1 - code;
   if (id < 0 || code < 0 || id === code) return { refusal: "A map here is two columns: the ID and its subject code." };
-  return { id, code };
+  return { id, code, headerless };
 }
 
-/** The rows of a map as the pair the rehearsal reads, each with an ID and a code. */
+/** The rows of a map as the pair the rehearsal reads, each with an ID and a code; a file with no header gives its first row too. */
 export function codePairs(csv: Csv, c: CodeColumns): string[][] {
-  return csv.rows.map((r) => [(r[c.id] ?? "").trim(), (r[c.code] ?? "").trim()]).filter(([i, k]) => i !== "" && k !== "");
+  const rows = c.headerless ? [csv.header, ...csv.rows] : csv.rows;
+  return rows.map((r) => [(r[c.id] ?? "").trim(), (r[c.code] ?? "").trim()]).filter(([i, k]) => i !== "" && k !== "");
 }
 
 /** The import's body for the pairs: the ID filed under the type the dataset reads it as, the code taken as given. */

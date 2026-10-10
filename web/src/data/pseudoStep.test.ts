@@ -3,9 +3,9 @@
 // the held IDs and a rehearsal's codes as the engine answers them, where the
 // step is and its one next action in words that say exactly what it will do,
 // the rail's words while it waits on a person, a map of ID and subject code
-// read into its two columns, the four rules and what Save sends, and what
-// every file got. Every ID, code and name here is made up, and no value of an
-// ID ever passes through: rows carry shapes.
+// read into its two columns, with its header or without one, the four rules
+// and what Save sends, and what every file got. Every ID, code and name here
+// is made up, and no value of an ID ever passes through: rows carry shapes.
 
 import { describe, expect, it } from "vitest";
 import servedPolicy from "../../test/fixtures/pseudonymize_tags.json";
@@ -167,20 +167,72 @@ describe("a map of ID and subject code, read here", () => {
   const shapes = ["AAA999999", "aAAA9999"];
   it("finds the code by its header and the ID by the shapes its values have", () => {
     const csv = parseCsv("study,subject_code,note\nABC123456,code0aaaaaaaa,x\naBCD1234,code1aaaaaaaa,\n");
-    expect(codeColumnsOf(csv, shapes)).toEqual({ id: 0, code: 1 });
-    expect(codePairs(csv, { id: 0, code: 1 })).toEqual([
+    expect(codeColumnsOf(csv, shapes)).toEqual({ id: 0, code: 1, headerless: false });
+    expect(codePairs(csv, { id: 0, code: 1, headerless: false })).toEqual([
       ["ABC123456", "code0aaaaaaaa"],
       ["aBCD1234", "code1aaaaaaaa"],
     ]);
     // the ID by its header where no value has a held shape, the other of two by elimination
-    expect(codeColumnsOf(parseCsv("code;PatientID\nc1;X-1\n"), shapes)).toEqual({ id: 1, code: 0 });
-    expect(codeColumnsOf(parseCsv("first,second\nABC123456,c1\n"), shapes)).toEqual({ id: 0, code: 1 });
+    expect(codeColumnsOf(parseCsv("code;PatientID\nc1;X-1\n"), shapes)).toEqual({ id: 1, code: 0, headerless: false });
+    expect(codeColumnsOf(parseCsv("first,second\nABC123456,c1\n"), shapes)).toEqual({ id: 0, code: 1, headerless: false });
+  });
+
+  it("reads a map with no header from its first row: two columns pasted, the ID first", () => {
+    // a spreadsheet's two columns copied without their header: tab between them
+    const pasted = parseCsv("ABC123456\t5a9f30c6e8b21d41\naBCD1234\t5a9f30c6e8b21d42\naBCE1234\t5a9f30c6e8b21d43\n");
+    const cols = codeColumnsOf(pasted, shapes);
+    expect(cols).toEqual({ id: 0, code: 1, headerless: true });
+    expect(codePairs(pasted, { id: 0, code: 1, headerless: true })).toEqual([
+      ["ABC123456", "5a9f30c6e8b21d41"],
+      ["aBCD1234", "5a9f30c6e8b21d42"],
+      ["aBCE1234", "5a9f30c6e8b21d43"],
+    ]);
+  });
+
+  it("reads a file with no header and the ID second, its first row kept", () => {
+    const file = parseCsv("5a9f30c6e8b21d41,ABC123456\n5a9f30c6e8b21d42,aBCD1234\n");
+    expect(codeColumnsOf(file, shapes)).toEqual({ id: 1, code: 0, headerless: true });
+    expect(codePairs(file, { id: 1, code: 0, headerless: true })).toEqual([
+      ["ABC123456", "5a9f30c6e8b21d41"],
+      ["aBCD1234", "5a9f30c6e8b21d42"],
+    ]);
+  });
+
+  it("reads a first row that is an ID and a code like the rows under it as a row, though its ID is not held here", () => {
+    const file = parseCsv("QX-40017,5a9f30c6e8b21d40\nABC123456,5a9f30c6e8b21d41\nQX-40018,5a9f30c6e8b21d42\n");
+    expect(codeColumnsOf(file, shapes)).toEqual({ id: 0, code: 1, headerless: true });
+    expect(codePairs(file, { id: 0, code: 1, headerless: true })).toHaveLength(3);
+  });
+
+  it("reads a map of one row and no header", () => {
+    for (const text of ["ABC123456,5a9f30c6e8b21d41", "ABC123456,5a9f30c6e8b21d41\n", "5a9f30c6e8b21d41;aBCD1234\r\n"]) {
+      const one = parseCsv(text);
+      const cols = codeColumnsOf(one, shapes);
+      expect(cols).toMatchObject({ headerless: true });
+      expect(codePairs(one, cols as { id: number; code: number; headerless: boolean })).toHaveLength(1);
+    }
+    expect(codePairs(parseCsv("ABC123456,5a9f30c6e8b21d41"), { id: 0, code: 1, headerless: true })).toEqual([["ABC123456", "5a9f30c6e8b21d41"]]);
+  });
+
+  it("keeps a real header a header, its names never read as a row", () => {
+    const rows = "\nABC123456,5a9f30c6e8b21d41\naBCD1234,5a9f30c6e8b21d42\n";
+    for (const header of ["study ID,subject code", "ID,Code", "PatientID;Pseudonym", "Löpnummer,Kod", "first,second", "Column1,Column2", "0,1"]) {
+      const csv = parseCsv(`${header}${header.includes(";") ? rows.replaceAll(",", ";") : rows}`);
+      const cols = codeColumnsOf(csv, shapes);
+      expect(cols, header).toEqual({ id: 0, code: 1, headerless: false });
+      expect(codePairs(csv, cols as { id: number; code: number; headerless: boolean }), header).toEqual([
+        ["ABC123456", "5a9f30c6e8b21d41"],
+        ["aBCD1234", "5a9f30c6e8b21d42"],
+      ]);
+    }
+    // a header and no row under it gives nothing
+    expect(codePairs(parseCsv("study ID,subject code\n"), { id: 0, code: 1, headerless: false })).toEqual([]);
   });
 
   it("refuses in words a file that is not two columns of ID and code, before a row is posted", () => {
     expect(codeColumnsOf(parseCsv("a,b,c\n1,2,3\n"), shapes)).toEqual({ refusal: "A map here is two columns: the ID and its subject code." });
     // a row with no code gives nothing
-    expect(codePairs(parseCsv("id,code\nABC123456,\n,c2\n"), { id: 0, code: 1 })).toEqual([]);
+    expect(codePairs(parseCsv("id,code\nABC123456,\n,c2\n"), { id: 0, code: 1, headerless: false })).toEqual([]);
   });
 
   it("is rehearsed and filed as two columns, the ID under the type the dataset reads it as", () => {
