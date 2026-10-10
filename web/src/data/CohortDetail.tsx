@@ -15,6 +15,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow } from "../routes";
+import { mayMainScans } from "../review/mainScans";
 import { MoreMenu } from "../settings/cards";
 import { messageOf } from "../settings/common";
 import { Hint } from "../ui/Hint";
@@ -250,7 +251,7 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
               <b>{n(row.stacks)}</b> scans
             </span>
           </div>
-          <Have members={picks?.members ?? members} lines={picks?.lines ?? null} rules={may(caps, "review:see") ? narrow(href("review", "picks"), { cohort: row.name }) : null} />
+          <Have members={picks?.members ?? members} lines={picks?.lines ?? null} rules={mayMainScans(caps) ? narrow(href("review", "picks"), { cohort: row.name }) : null} />
           <Clinical coverage={doc?.clinical ?? []} members={members} waiting={row.waiting} />
         </div>
         <div className="dp-col">

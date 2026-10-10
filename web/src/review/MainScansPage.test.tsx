@@ -66,6 +66,12 @@ describe("Main scans without a dataset or cohort", () => {
     expect(host.textContent).not.toContain("from earlier runs");
   });
 
+  it("says in one line what is missing to a person who sees neither Data nor Pipelines, and reads nothing", async () => {
+    const engine = await open({ cohort: "ms-followup" }, undefined, capsWith(MAIN_SCANS_DOORS, ["review:see", "review:work"]));
+    expect(host.textContent).toContain("Main scans are read with seeing Data or Pipelines, which this account does not hold.");
+    expect(engine.of("GET", "/api/picks/rules")).toHaveLength(0);
+  });
+
   it("says so on an engine that does not serve the map yet", async () => {
     await open({ cohort: "ms-followup" }, undefined, capsWith(["GET /api/review/summary"], [...GRANTS] as Grant[]));
     expect(host.textContent).toContain("This engine does not draw a dataset's or cohort's main scans yet.");

@@ -10,6 +10,8 @@
 // says visits and scans.
 
 import { door, DoorError, type Json } from "../ask/client";
+import type { Capabilities } from "../capabilities";
+import { may } from "../grants";
 
 // ---------------------------------------------------------------- the scope
 
@@ -701,3 +703,13 @@ export function refusalWords(r: SaveRefusal): string {
   if (r.kind === "other") return `Not saved: ${r.words}`;
   return "Someone saved first.";
 }
+
+/** What a person lacks to read a scope's main scans, in one line; null when nothing. The rules and map doors are read with Data or Pipelines seeing, as the picks summary is; the page sits under Review. */
+export function mainScansMissing(caps: Capabilities): string | null {
+  if (!may(caps, "data:see") && !may(caps, "pipelines:see")) return "Main scans are read with seeing Data or Pipelines, which this account does not hold.";
+  if (!may(caps, "review:see")) return "Main scans sit under Review, which this account does not see.";
+  return null;
+}
+
+/** Whether a link to a scope's main scans leads somewhere this person may read. */
+export const mayMainScans = (caps: Capabilities): boolean => mainScansMissing(caps) === null;

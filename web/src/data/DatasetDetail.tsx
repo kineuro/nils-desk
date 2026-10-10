@@ -18,6 +18,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow } from "../routes";
+import { mayMainScans } from "../review/mainScans";
 import { MoreMenu } from "../settings/cards";
 import { sizeWords } from "../settings/database";
 import { Dialog } from "../ui/Dialog";
@@ -519,7 +520,7 @@ function MainScans({ caps, dataset, picks, step }: { caps: Capabilities; dataset
       })}
       <div className="meta">
         Picked after every sort by its own rules, or the pack&apos;s
-        {reviews && (
+        {mayMainScans(caps) && (
           <>
             {" · "}
             <a href={narrow(href("review", "picks"), { dataset })}>Main scans and rules</a>

@@ -28,6 +28,7 @@ import { review } from "./client";
 import {
   KEEP_ALIKE,
   MAP_DOOR,
+  mainScansMissing,
   MAP_STRIPS_DOOR,
   MAP_SUBJECTS_DOOR,
   RULES_DOOR,
@@ -232,6 +233,20 @@ export function MainScansPage({ caps, query }: { caps: Capabilities; query?: Rec
   const scope = useMemo<Scope | null>(() => (kind && name ? { kind, name } : null), [kind, name]);
   const earlier = useEarlier(caps, scope);
   const lists = useLists(caps);
+  const missing = mainScansMissing(caps);
+  if (missing) {
+    return (
+      <section className="ms">
+        <div className="ms-head">
+          <div className="ms-title">
+            <span className="eyebrow">Main scans</span>
+            <h1>Which scan stands for each role</h1>
+          </div>
+        </div>
+        <Empty what={missing} />
+      </section>
+    );
+  }
   if (!served(caps, RULES_DOOR) || !served(caps, MAP_DOOR)) {
     return (
       <section className="ms">
