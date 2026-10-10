@@ -12,7 +12,7 @@
 // dataset's own thread, pseudonymise, read and sort. Once every file has its
 // copy, what every file got and the next steps running beside it.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
 import { needsWork } from "../access";
 import type { ChainedJob } from "../ask/client";
@@ -121,8 +121,10 @@ export function usePseudonymise(caps: Capabilities, d: Dataset, s: DatasetSummar
     reload();
   }, [reload, moved]);
   const running = acting !== null || step?.state === "running" || step?.state === "queued";
+  // worked out again only when what it reads changes, not on the detail's every second
+  const view = useMemo(() => (has ? stepView(d, step, lists ? heldIds : null, matched, running) : null), [has, d, step, lists, heldIds, matched, running]);
   return {
-    view: has ? stepView(d, step, lists ? heldIds : null, matched, running) : null,
+    view,
     held: heldIds,
     matched,
     setMatched,
@@ -138,10 +140,9 @@ export function opensItself(v: StepView | null): boolean {
 }
 
 /** A job of the engine's, waited for until it ends; a failure or a stop is said in its own words. */
-async function ended(job: number, alive: () => boolean): Promise<void> {
+async function ended(job: number): Promise<void> {
   for (;;) {
     await new Promise((done) => setTimeout(done, 1000));
-    if (!alive()) return;
     const row = await ops.job(job);
     if (row.state === "done") return;
     if (row.state === "failed" || row.state === "cancelled") throw new Error(row.error ?? "The map was not filed.");
@@ -225,25 +226,30 @@ export function PseudonymiseStep(props: StepProps) {
   const chip = chipOf(v, open);
   const changes = works && may(caps, "places:work") && served(caps, "PUT /api/places/{id}");
 
-  /** The dataset's own thread, after the map is filed where one was given: pseudonymise, read and sort. */
+  /**
+   * The dataset's own thread, after the map is filed where one was given:
+   * pseudonymise, read and sort. The act is the dataset's, held by its
+   * detail, not the step's: closing the step from the rail while the map
+   * files neither strands the filed map without its run nor leaves the step
+   * saying it is still giving the codes (review of 2026-10-10).
+   */
   const run = async (map: { pairs: string[][] } | null) => {
     pseudo.setActing({ phase: map ? "giving the codes" : "starting", since: Date.now() });
     try {
       if (map) {
         const r = await linkage.import(codesBody(d.name, idTypeOf(d, v.rows), map.pairs, false));
-        if (typeof r.job === "number") await ended(r.job, () => alive.current);
-        if (!alive.current) return;
+        if (typeof r.job === "number") await ended(r.job);
         pseudo.setActing({ phase: "starting", since: Date.now() });
       }
       const body = bringInBody(d, bringInName(d.name), packFor(caps));
       await jobs.enqueue(body.command, body.name);
       pseudo.setMatched([]);
-      setCodes(false);
+      if (alive.current) setCodes(false);
       onChanged(`${d.name}: pseudonymising, then reading and sorting.`, d.name);
     } catch (e) {
       onFailed(e);
     } finally {
-      if (alive.current) pseudo.setActing(null);
+      pseudo.setActing(null);
     }
   };
 
@@ -253,7 +259,7 @@ export function PseudonymiseStep(props: StepProps) {
       .generate(d.name, chosen)
       .then(() => pseudo.reload())
       .catch(onFailed)
-      .finally(() => alive.current && pseudo.setActing(null));
+      .finally(() => pseudo.setActing(null));
   };
 
   const act = (map: { pairs: string[][] } | null) => {
@@ -309,6 +315,9 @@ export function PseudonymiseStep(props: StepProps) {
 
 /* ---------------------------------------------------------------- give the IDs a code */
 
+/** The IDs the table draws at once, and adds on each Show more. */
+const ROWS_AT_ONCE = 200;
+
 function Codes(props: {
   caps: Capabilities;
   dataset: Dataset;
@@ -326,6 +335,8 @@ function Codes(props: {
   const [refused, setRefused] = useState<string | null>(null);
   const [over, setOver] = useState(false);
   const [shown, setShown] = useState<Map<number, string> | null>(null);
+  /** How many IDs the table draws: a dataset can hold thousands, so a page of them at a time, the most files first. */
+  const [atOnce, setAtOnce] = useState(ROWS_AT_ONCE);
   const [revealing, setRevealing] = useState(false);
   const zone = useRef<HTMLDivElement>(null);
   const cleared = sees(caps, "sensitive");
@@ -520,9 +531,19 @@ function Codes(props: {
             )}
           </span>
         </div>
-        {v.rows.map((r, i) => (
+        {v.rows.slice(0, atOnce).map((r, i) => (
           <IdLine key={r.id} row={r} n={i + 1} value={shown?.get(r.id) ?? null} generates={generates && !busy} onGenerate={() => onGenerate([r.id])} />
         ))}
+        {v.rows.length > atOnce && (
+          <div className="ps-row" role="row">
+            <span role="cell" className="meta ps-none">
+              {n(atOnce)} of {n(v.rows.length)} IDs, the most files first{" "}
+              <button type="button" className="link-button" onClick={() => setAtOnce((was) => was + ROWS_AT_ONCE)}>
+                Show {n(Math.min(ROWS_AT_ONCE, v.rows.length - atOnce))} more
+              </button>
+            </span>
+          </div>
+        )}
         {v.rows.length === 0 && (
           <div className="ps-row" role="row">
             <span role="cell" className="meta ps-none">

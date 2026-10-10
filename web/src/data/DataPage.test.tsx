@@ -471,6 +471,44 @@ describe("datasets and cohorts on one page", () => {
     expect(text()).toContain("Finding the body part: stopping.");
   });
 
+  it("holds a step's button until the engine answers, and while the dataset's chain runs: one press, one job", async () => {
+    const unread = ds("ward-r", 8, { digests: { count: 0, first: null, last: null, recent: [] }, totals: { subjects: 0, studies: 0, sessions: 0, stacks: 0, refused_files: 0, to_sort: 0 } });
+    let answer: (() => void) | null = null;
+    let queued = false;
+    const e = await page({
+      list: [unread],
+      route: (c) => {
+        const url = new URL(c.url, "http://x");
+        if (c.method === "POST" && url.pathname === "/api/jobs") return { status: 202, body: { job: 70, state: "queued" } };
+        if (c.method === "GET" && url.pathname === "/api/datasets/ward-r/summary" && queued) {
+          const sum = summaryOf(unread);
+          return { status: 200, body: { ...sum, steps: sum.steps.map((x) => (x.step === "read" ? { ...x, state: "queued" } : x)) } };
+        }
+        return undefined;
+      },
+    });
+    // the engine answers the queueing only when the test says so
+    const answered = globalThis.fetch;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === "POST" && String(input) === "/api/jobs" ? new Promise<Response>((done) => (answer = () => done(answered(input, init)))) : answered(input, init),
+    );
+    const read = () => [...host.querySelectorAll<HTMLButtonElement>(".dp-detail .dp-acts button.button")].find((b) => !b.classList.contains("secondary"))!;
+    expect(read().textContent).toBe("Read");
+    act(() => read().click());
+    await settle();
+    expect(read().disabled).toBe(true);
+    act(() => read().click());
+    queued = true;
+    await act(async () => {
+      answer!();
+    });
+    await settle(10);
+    expect(e.of("POST", "/api/jobs")).toHaveLength(1);
+    // the summary says the read waits in the queue: the button says it runs, and waits for it
+    expect(read().textContent).toBe("Running");
+    expect(read().disabled).toBe(true);
+  });
+
   it("shows the running job of a dataset with its progress and Stop, which asks the engine to stop it", async () => {
     const e = await page({ running: true, route: (c) => (c.method === "POST" && c.url === "/api/jobs/9/cancel" ? { status: 200, body: { job: 9, state: "cancelling" } } : undefined) });
     const d = host.querySelector<HTMLElement>(".dp-detail")!;

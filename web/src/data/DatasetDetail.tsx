@@ -73,7 +73,8 @@ export interface DatasetDetailProps {
   cohorts?: readonly string[];
   /** The address opened the pseudonymise step: #data/datasets/<name>/pseudonymisation. */
   openStep?: boolean;
-  onStep: (id: StepId) => void;
+  /** A step pressed; where it queues a job, the promise ends when the engine answered. */
+  onStep: (id: StepId) => void | Promise<void>;
   /** Words for the page; with a dataset's name, they speak of its run and stand only while it goes. */
   onChanged: (words: string, running?: string) => void;
   onSaid: (words: string) => void;
@@ -110,6 +111,9 @@ export function datasetActions(caps: Capabilities, d: Dataset, why: string | nul
   };
 }
 
+/** The steps of a dataset's own chain, each queued again by a press of its button. */
+const CHAIN = new Set<string>(["pseudonymised", "read", "sorted", "main_scans"]);
+
 export function DatasetDetail(props: DatasetDetailProps) {
   const { caps, dataset: d, summary: s, why, jobs, onStep, onChanged, onSaid, onFailed, onRemoved } = props;
   const [now, setNow] = useState(() => Date.now());
@@ -119,6 +123,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const [settings, setSettings] = useState(false);
   /** A step's Run pressed, until the engine answers. */
   const [pressed, setPressed] = useState(false);
+  /** The next step's button, or Read new files or Read again, pressed until the engine answers: one press, one job. */
+  const [asking, setAsking] = useState(false);
   const acts = datasetActions(caps, d, why);
   // the pseudonymise step: open by itself while it waits on a person or runs, or as the person or the address opened it
   const pseudo = usePseudonymise(caps, d, s);
@@ -164,10 +170,12 @@ export function DatasetDetail(props: DatasetDetailProps) {
   }, [caps, d.name, moved]);
 
   const queue = (command: string[], name: string, words: string) => {
+    setAsking(true);
     jobsDoor
       .enqueue(command, name)
       .then(() => onChanged(words))
-      .catch(onFailed);
+      .catch(onFailed)
+      .finally(() => setAsking(false));
   };
   const readNew = () => {
     const c = stepCommand(d, "read-new", packFor(caps));
@@ -202,8 +210,15 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const said = view ? railWords(view) : null;
   const stepping = (id: StepId) => {
     if (id === "pseudonymise" && view !== null) return setStepOpen(true);
-    onStep(id);
+    const asked = onStep(id);
+    if (!asked) return;
+    setAsking(true);
+    void asked.finally(() => setAsking(false));
   };
+  // a job of the dataset's chain is queued or runs (pseudonymise, read, sort, main scans): a press would queue it again, so its buttons wait;
+  // the pictures, the 3D views and a model's run go on beside it and hold nothing
+  const chainRuns = s?.steps.some((x) => CHAIN.has(x.step) && (x.state === "running" || x.state === "queued")) ?? false;
+  const busy = asking || chainRuns;
   const logCol = (
     <div className="dp-col">
       <div className="dp-col-head">
@@ -224,7 +239,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
         <span className="dp-detail-where">{where}</span>
         <span className="dp-acts">
           {acts.readNew && (
-            <button type="button" className="button secondary" onClick={readNew}>
+            <button type="button" className="button secondary" disabled={busy} onClick={readNew}>
               Read new files
             </button>
           )}
@@ -239,14 +254,14 @@ export function DatasetDetail(props: DatasetDetailProps) {
             </a>
           )}
           {primary && primary.href === null && (
-            <button type="button" className="button" disabled={primary.busy || primary.step === null} onClick={() => primary.step && stepping(primary.step)}>
-              {primary.label}
+            <button type="button" className="button" disabled={primary.busy || primary.step === null || (busy && primary.step !== "pseudonymise")} onClick={() => primary.step && stepping(primary.step)}>
+              {chainRuns && !primary.busy && primary.step !== "pseudonymise" ? "Running" : primary.label}
             </button>
           )}
           {(acts.readAgain || acts.setIds || acts.settings || acts.originals || (refused > 0 && refusedBatch !== null) || acts.remove) && (
             <MoreMenu label={`More for ${d.name}`}>
               {acts.readAgain && (
-                <button type="button" onClick={readAgain}>
+                <button type="button" disabled={busy} onClick={readAgain}>
                   Read again
                 </button>
               )}

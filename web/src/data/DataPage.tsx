@@ -270,13 +270,16 @@ export function DataPage({
     readSums();
   };
 
-  /** A dataset's step: a dialog for what it still needs, else its job queued. */
-  const step = (d: Dataset, id: StepId) => {
-    if (id === "sort-files" || id === "set-ids") return setOpened({ kind: id, dataset: d });
+  /** A dataset's step: a dialog for what it still needs, else its job queued; the promise ends once the engine answered. */
+  const step = (d: Dataset, id: StepId): Promise<void> | undefined => {
+    if (id === "sort-files" || id === "set-ids") {
+      setOpened({ kind: id, dataset: d });
+      return undefined;
+    }
     const c = stepCommand(d, id, packFor(caps));
-    if (!c) return;
+    if (!c) return undefined;
     setSaid(null);
-    jobsDoor
+    return jobsDoor
       .enqueue(c.command, c.name, c.then)
       .then(() => changed(`${d.name}: started.`))
       .catch(failed);

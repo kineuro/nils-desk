@@ -273,6 +273,59 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(text()).toContain("study-identified: pseudonymising, then reading and sorting.");
   });
 
+  it("finishes what it started when the step is closed from the rail while the map files: the run is queued and the step stops saying it acts", async () => {
+    let filed = false;
+    const e = await page(dataset(), {}, (c) => {
+      if (c.method === "POST" && c.url === "/api/linkage/imports") return c.body?.dry_run ? { status: 200, body: REHEARSED } : { status: 202, body: { job: 51, state: "queued", rows: 6 } };
+      if (c.method === "GET" && c.url === "/api/jobs/51") return { status: 200, body: { id: 51, kind: "linkage", name: "study-identified", state: filed ? "done" : "running", started_at: AT, heartbeat_at: null, finished_at: filed ? AT : null, progress: null, error: null, args: {}, result: null } };
+      if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 52, state: "queued" } };
+      return undefined;
+    });
+    act(() => button(host, "Give the 8 IDs a code")!.click());
+    const input = host.querySelector<HTMLInputElement>(".ps-file input")!;
+    Object.defineProperty(input, "files", { value: [new File([MAP], "map.csv", { type: "text/csv" })], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(8);
+    await act(async () => {
+      button(host, "Pseudonymise and sort 7,344 files")!.click();
+    });
+    await settle(4);
+    expect(e.of("POST", "/api/linkage/imports")).toHaveLength(2);
+    // closed from the rail while the map files
+    act(() => host.querySelector<HTMLButtonElement>(".dp-step-pick")!.click());
+    expect(host.querySelector(".ps-step")).toBeNull();
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 1200));
+    });
+    expect(e.of("POST", "/api/jobs")).toHaveLength(0);
+    filed = true;
+    await act(async () => {
+      await new Promise((done) => setTimeout(done, 1200));
+    });
+    await settle(8);
+    // the map's run is queued all the same, and nothing says the codes are still being given
+    expect(e.of("POST", "/api/jobs")).toHaveLength(1);
+    expect(text()).not.toContain("giving the codes");
+    expect(text()).toContain("study-identified: pseudonymising, then reading and sorting.");
+  }, 20_000);
+
+  it("draws two hundred IDs at a time, the most files first, where a dataset holds thousands", async () => {
+    const many = { ...heldIds(), identifiers: 450, ids: Array.from({ length: 450 }, (_, i) => ({ id: 1000 + i, shape: "aAAA9999", id_type: "study-id", files: 450 - i, first_seen: AT, batch: 3, waits_for: null, state: "held" as const, code: null, also_in: [] })) };
+    await page(dataset({ held: { files: ORIGINALS, identifiers: 450 } }), {}, () => undefined, { held: many });
+    act(() => button(host, "Give the 450 IDs a code")!.click());
+    const rows = () => [...host.querySelectorAll(".ps-table .ps-row:not(.head)")].filter((r) => r.querySelector(".ps-shape"));
+    expect(rows()).toHaveLength(200);
+    expect(rows()[0].textContent).toContain("450");
+    expect(host.querySelector(".ps-table")?.textContent).toContain("200 of 450 IDs, the most files first");
+    act(() => button(host, "Show 200 more")!.click());
+    expect(rows()).toHaveLength(400);
+    act(() => button(host, "Show 50 more")!.click());
+    expect(rows()).toHaveLength(450);
+    expect(host.querySelector(".ps-table")?.textContent).not.toContain("more");
+  });
+
   it("takes a map pasted while the box has the focus, wherever the browser aims the paste, and Paste unread says to press Ctrl+V there", async () => {
     const e = await page(dataset(), {}, (c) => (c.method === "POST" && c.url === "/api/linkage/imports" ? { status: 200, body: REHEARSED } : undefined));
     act(() => button(host, "Give the 8 IDs a code")!.click());
