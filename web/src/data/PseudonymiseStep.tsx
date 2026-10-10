@@ -290,9 +290,11 @@ export function PseudonymiseStep(props: StepProps) {
       </div>
       <Boxes v={v} compact={open} />
       {stopped && !pseudo.acting && (
-        <p className="warn ps-stopped" role="status">
-          Stopped: {stopped.words} <span className="meta">{STOPPED_NEXT}</span>
-        </p>
+        <div className="ps-pad">
+          <p className="ps-stopped" role="status">
+            Stopped: {stopped.words} <span className="meta">{STOPPED_NEXT}</span>
+          </p>
+        </div>
       )}
       {pseudo.acting && (
         <div className="ps-pad">

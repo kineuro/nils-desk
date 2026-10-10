@@ -444,6 +444,8 @@ describe("the pseudonymise step, in the dataset", () => {
     await settle(6);
     const panel = host.querySelector(".ps-step")!;
     expect(panel.querySelector(".ps-stopped")?.textContent).toBe(`Stopped: ${words} Change what it names, then try again.`);
+    // inside the panel, under its boxes, never at its edge (2026-10-10)
+    expect(panel.querySelector(".ps-pad > .ps-stopped")).not.toBeNull();
     // the steps line says it stopped
     const rail = host.querySelector(".dp-steps")!;
     expect([...rail.querySelectorAll(".dp-step")].find((li) => li.textContent?.startsWith("Pseudonymised"))?.textContent).toContain("stopped");
