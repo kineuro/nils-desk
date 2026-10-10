@@ -373,6 +373,23 @@ describe("Sort the files", () => {
     expect(host.textContent).not.toContain("sub-1");
   });
 
+  it("shows the engine's shapes as nothing to read, even at the sensitive level, and moves by the tree alone (2026-10-10)", async () => {
+    // an engine that shapes the names for a person without Data work says so
+    const shaped = { ...UNKNOWN, loose_dicom: ["Aaa-0000", "Aaa-0001"], entry_names: "shapes" as const };
+    const e = engine((c) => (c.method === "PUT" && c.url === "/api/places/4" ? { status: 409, body: { ...ASKED, layout: { ...ASKED.layout, loose_dicom: ["Aaa-0000", "Aaa-0001"], entry_names: "shapes" } } } : undefined));
+    act(() => root.render(<SortFilesDialog caps={caps7a(["PUT /api/places/{id}"])} place={place} layout={shaped} onClose={() => undefined} onDone={() => undefined} />));
+    expect(host.textContent).toContain("2 entries with DICOM. What are they?");
+    expect(host.textContent).not.toContain("Which entries");
+    act(() => radio(host, "Identified").click());
+    act(() => button(host, "Next")!.click());
+    await settle();
+    const asked = host.querySelector('[aria-label="Confirm the move"]')!;
+    expect(asked.querySelectorAll("li")).toHaveLength(0);
+    expect(host.textContent).not.toContain("Aaa-0000");
+    // what is sent names the tree, never an entry
+    expect(e.of("PUT", "/api/places/4")[0].body).toEqual({ move_into: "originals" });
+  });
+
   it("says why it cannot look inside the folder, never looking for good", async () => {
     act(() => root.render(<SortFilesDialog caps={caps7a(["PUT /api/places/{id}"])} place={place} layout={null} onClose={() => undefined} onDone={() => undefined} />));
     await settle();

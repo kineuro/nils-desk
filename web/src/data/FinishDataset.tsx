@@ -19,7 +19,7 @@ import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Wait } from "../ui/Wait";
 import { linkage, look as lookDoor, places as placesDoor, type DatasetFields, type FolderNaming, type Layout, type LinkageType, type PlaceAnswer, type Subjects } from "./datasets";
-import { dicomNamed, moveAskedOf, patientIdOf, questionWords, stateOf, type MoveAsked } from "./layout";
+import { dicomNamed, moveAskedOf, namesShown, patientIdOf, questionWords, stateOf, type MoveAsked } from "./layout";
 
 /** A dataset place as the dialogs need it. */
 export type Finishing = Pick<Place, "id" | "name" | "path"> & { dataset?: Place["dataset"]; not_read?: string | null };
@@ -43,7 +43,7 @@ export function writable(types: LinkageType[]): LinkageType[] {
  */
 function Entries({ caps, layout }: { caps: Capabilities; layout: Layout }) {
   const { names, more } = dicomNamed(layout);
-  if (names.length === 0 || !sees(caps, "sensitive")) return null;
+  if (names.length === 0 || !namesShown(layout, sees(caps, "sensitive"))) return null;
   return (
     <ul className="report">
       {names.map((e) => (
@@ -156,7 +156,7 @@ export function SortFilesDialog(props: { caps: Capabilities; place: Finishing; l
           <p>
             {count.toLocaleString("en-US")} {count === 1 ? "entry" : "entries"} with DICOM. What are they?
           </p>
-          {sees(caps, "sensitive") && (
+          {namesShown(layout, sees(caps, "sensitive")) && (
             <details className="says">
               <summary>Which entries</summary>
               <Entries caps={caps} layout={layout} />

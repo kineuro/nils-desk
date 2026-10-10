@@ -191,6 +191,8 @@ export interface Layout {
   loose?: number;
   loose_entries?: string[];
   loose_dicom?: string[];
+  /** What the loose entries above are (2026-10-10): their names, for Data work at the sensitive level, or their shapes, for anyone else; an older engine does not say. */
+  entry_names?: "names" | "shapes";
   question?: boolean;
   move_into?: MoveInto | null;
   settings?: LayoutSettings;
