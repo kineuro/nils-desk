@@ -551,6 +551,11 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .check-part-row:focus-visible { outline: 2px solid var(--n-focus); outline-offset: -1px; }
 .check-n { font-variant-numeric: tabular-nums; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .check-n.unseen { color: var(--n-text-faint); font-weight: 500; }
+/* a structure by its whole name: wrapped at its hyphens (anywhere when it has none), its volume beside it, its flags under it */
+.check-part-row.named { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.35rem; row-gap: 0.1rem; padding-block: 0.2rem; }
+.check-part-row.named .check-n { flex: 1 1 6rem; min-width: 0; overflow: visible; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+.check-part-row.named .check-ml { flex: none; margin-left: auto; }
+.check-part-row.named .check-flag { max-width: 100%; }
 .check-ml { font-variant-numeric: tabular-nums; color: var(--n-text-dim); white-space: nowrap; }
 .check-flag { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
 .check-vote { padding: 0 0.25rem; font-size: 11px; }

@@ -326,6 +326,14 @@ describe("the check reader drawn", () => {
     expect(log.some((a) => a.path.endsWith("/stats"))).toBe(true);
   });
 
+  it("lists structures by their whole names, so two of one side read apart (T33)", async () => {
+    await open({ set: "structures" });
+    const rows = [...host.querySelectorAll(".check-part-row")];
+    expect(rows.map((r) => r.querySelector(".check-n")?.textContent)).toEqual(["Brain-Stem", "Left-Hippocampus", "Right-Hippocampus", "Left-Lateral-Ventricle", "Right-Lateral-Ventricle", "Left-Cerebral-White-Matter", "Right-Cerebral-White-Matter", "CSF"]);
+    expect(rows.every((r) => r.classList.contains("named"))).toBe(true);
+    expect(host.querySelector(".check-part")?.textContent).toBe("Whole result · 8 structures");
+  });
+
   it("n opens a lesion on every panel, a reason flags it, Backspace clears it, Enter sends flagged", async () => {
     await open();
     await press("n");

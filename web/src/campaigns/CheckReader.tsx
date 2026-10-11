@@ -439,10 +439,12 @@ export function useCheckItem(ctx: ItemCtx<Verdict>): ItemPage<Verdict> {
             const p = byLabel.get(label)!;
             const r = flagged.get(label);
             const votes = cs.answers.filter((a) => a.form.parts.some((x) => x.label === label));
+            // a structure by its whole name, wrapped, so two of one side read apart
+            const named = cs.set.kind === "labels" && !!p.name;
             return (
               <li key={label}>
-                <button type="button" className={["check-part-row", focus === label ? "on" : "", grain === "part" && label !== own ? "context" : ""].filter(Boolean).join(" ")} aria-pressed={focus === label} onClick={() => open(label)} title={p.name ?? undefined}>
-                  <span className={seen.has(label) || focus === label ? "check-n" : "check-n unseen"}>{cs.set.kind === "labels" && p.name ? p.name : i + 1}</span>
+                <button type="button" className={["check-part-row", named ? "named" : "", focus === label ? "on" : "", grain === "part" && label !== own ? "context" : ""].filter(Boolean).join(" ")} aria-pressed={focus === label} onClick={() => open(label)} title={p.name ?? undefined}>
+                  <span className={seen.has(label) || focus === label ? "check-n" : "check-n unseen"}>{named ? p.name : i + 1}</span>
                   <span className="check-ml">{mlWords(p.volumeMm3)}</span>
                   {r && (
                     <span className="value-tag check-flag" data-slot={slotOf(reasonIds, r) ?? undefined}>

@@ -5,7 +5,8 @@
 // proportional to the screen, the made-on scan first and framed, the
 // lesions listed beside them, the bar with the mask's tools and the answer
 // keys under all of them, nothing scrolls on a big screen; on a phone of
-// 420 px one panel over the next and nothing sideways. New check fits the
+// 420 px one panel over the next and nothing sideways. A check of
+// structures lists each by its whole name, none cut. New check fits the
 // same two screens. Chromium, and Firefox with LAYOUT_FIREFOX=1. SHOTS=<dir>
 // keeps a screenshot of each.
 
@@ -163,6 +164,36 @@ test("the keys read a result: n opens a lesion, a reason flags it in its colour,
   await expect(page.locator("dialog.keys-overlay h3")).toHaveText(["Answer", "Parts", "Mask", "View", "Pictures"]);
   await shot(page, "check-keys-1920x1080");
 });
+
+for (const vp of [
+  { width: 1366, height: 768 },
+  { width: 1920, height: 1080 },
+  { width: 420, height: 900 },
+]) {
+  test(`a check of structures at ${vp.width} by ${vp.height}: each by its whole name, none cut, nothing sideways`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/check.html?panels=3&set=structures");
+    await expect(page.locator(".check-reader .compare-panel .viewer")).toHaveCount(3);
+    // accept, reject and the five reasons for structures
+    await expect(page.locator(".check-answers .pair-answer")).toHaveCount(7);
+    await expect(page.locator(".check-part-row.named")).toHaveCount(8);
+    await shot(page, `check-structures-${vp.width}x${vp.height}`);
+    const m = await page.evaluate(() => {
+      const names = [...document.querySelectorAll(".check-part-row.named .check-n")];
+      const doc = document.documentElement;
+      return {
+        names: names.map((e) => e.textContent),
+        cut: names.filter((e) => e.scrollWidth > e.clientWidth + 1 || e.getBoundingClientRect().right > e.closest(".check-part-row")!.getBoundingClientRect().right + 1).map((e) => e.textContent),
+        scroll: doc.scrollHeight - doc.clientHeight,
+        scrollW: doc.scrollWidth - doc.clientWidth,
+      };
+    });
+    expect(m.names).toContain("Left-Cerebral-White-Matter");
+    expect(m.cut).toEqual([]);
+    expect(m.scrollW).toBeLessThanOrEqual(0);
+    if (vp.width > 420) expect(m.scroll).toBeLessThanOrEqual(0);
+  });
+}
 
 for (const vp of [
   { width: 1366, height: 768 },

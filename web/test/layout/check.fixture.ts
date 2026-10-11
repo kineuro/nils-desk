@@ -127,7 +127,7 @@ export function checkCampaign(o: CheckOpts = {}): Campaign {
   });
   return {
     id: CAMPAIGN_ID,
-    name: "SAMSEG lesions, run 77",
+    name: o.set === "structures" ? "SAMSEG structures, run 77" : "SAMSEG lesions, run 77",
     owner: "rater@site",
     status: o.status ?? "open",
     question: { kind: "check", part_set: set.key, grain: o.grain ?? "result", reasons: set.reasons } as never,
