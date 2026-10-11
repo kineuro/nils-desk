@@ -93,6 +93,9 @@ const step = (name: SummaryStep["step"], over: Partial<SummaryStep> = {}): Summa
 /** Why post-contrast's run is refused here, as the engine says it (record 56). */
 const NO_MODEL = { reason: "no_model", error: "no post-contrast model is installed" };
 
+/** The files a dataset's read set aside: three, a screen capture twice and a PDF, for the one the detail opens on. */
+const aside = (d: Dataset) => (d.name === "study-big" ? 3 : 0);
+
 function summaryOf(d: Dataset, running = false): DatasetSummary {
   const scans = d.totals.stacks;
   return {
@@ -115,8 +118,11 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
       found: d.trees?.anon?.files ?? null,
       bytes: 5_000_000,
       read: 120,
-      refused: d.totals.refused_files,
+      // record 56 (2026-10-11): what the read set aside by policy is counted among the refused, by kind, and asks nobody anything
+      refused: d.totals.refused_files + aside(d),
       refused_batch: d.totals.refused_files > 0 ? 30 : null,
+      set_aside: aside(d),
+      set_aside_kinds: aside(d) > 0 ? [{ kind: "screen_capture", words: "screen captures", count: 2 }, { kind: "pdf", words: "PDFs", count: 1 }] : [],
       held: 0,
       // the duplicate policy (2026-10-10): files gone from the folder, and the questions about scans filed already elsewhere
       gone: d.name === "study-big" ? 3 : 0,
@@ -138,7 +144,7 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
           ]
         : [
             step("found", { files: 120, tree: "anon" }),
-            step("read", { job: 4, files: 120, refused: d.totals.refused_files, reads: 1 }),
+            step("read", { job: 4, files: 120, refused: d.totals.refused_files + aside(d), set_aside: aside(d), reads: 1 }),
             step("sorted", { job: 6, scans, of: scans, look: d.totals.to_sort, unsorted: 0 }),
             step("body_part", { job: 12, run: 2, served: true, answered: 36, look: 4, of: scans, jobs: [12] }),
             step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: scans, jobs: [], refusal: NO_MODEL }),
@@ -333,7 +339,7 @@ describe("datasets and cohorts on one page", () => {
     expect([...d.querySelectorAll(".dp-step-title")].map((s) => s.textContent)).toEqual(["Found", "Read", "Sorted", "Body part", "Post-contrast", "Main scans", "Pictures", "3D views"]);
     expect([...d.querySelectorAll(".dp-step-what")].map((s) => s.textContent)).toEqual([
       "120 files",
-      "120 read · 1 not images",
+      "120 read · 3 set aside · 1 refused",
       "40 scans · 8 to look at",
       "36 of 40 answered · 4 to look at",
       "not available",
@@ -354,6 +360,15 @@ describe("datasets and cohorts on one page", () => {
     expect([...d.querySelectorAll(".dp-kind > span:first-child")].map((s) => s.textContent)).toEqual(["T1w", "FLAIR"]);
     const refused = [...d.querySelectorAll("a")].find((a) => a.textContent === "1 refused, why");
     expect(refused?.getAttribute("href")).toBe("#data/batch/30");
+    // record 56: the files set aside are not scans; "why" says their kinds, and nothing asks about them
+    const meta = () => [...d.querySelectorAll(".meta")].map((m) => m.textContent ?? "");
+    expect(meta().some((t) => t.includes(" · 3 set aside, why · 1 refused, why"))).toBe(true);
+    expect(meta().some((t) => t.startsWith("Not scans"))).toBe(false);
+    const why = [...d.querySelectorAll<HTMLButtonElement>("button.link-button")].find((b) => b.textContent === "why")!;
+    expect(why.getAttribute("aria-expanded")).toBe("false");
+    act(() => why.click());
+    expect(why.getAttribute("aria-expanded")).toBe("true");
+    expect(meta()).toContain("Not scans: screen captures 2 · PDFs 1");
     // the duplicate policy (2026-10-10): the files gone from its folder, and its questions about scans filed already elsewhere, which its Review lists
     expect([...d.querySelectorAll(".meta")].some((m) => m.textContent?.includes("3 gone from the folder"))).toBe(true);
     const questions = [...d.querySelectorAll("a")].find((a) => a.textContent === "2 questions: a scan filed already elsewhere");

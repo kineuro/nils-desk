@@ -46,9 +46,11 @@ import {
   operationOf,
   originalIdWords,
   railSteps,
+  refusedOnly,
   roleOrder,
   roleWord,
   runningWords,
+  setAsideWords,
   stateOf,
   stateWord,
   stepOf,
@@ -213,7 +215,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
   };
 
   const refusedBatch = s?.files.refused_batch ?? null;
-  const refused = s?.files.refused ?? d.totals.refused_files;
+  // record 56: the files set aside by policy are not scans and ask nobody anything; only the rest has a page to look at
+  const refused = refusedOnly({ refused: s?.files.refused ?? d.totals.refused_files, set_aside: s?.files.set_aside });
   const ids = idsWords(d);
   // an identified dataset says what its files carry until they are pseudonymised, and then what the copy NILS reads holds
   const where = (
@@ -417,7 +420,11 @@ function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; 
   const most = Math.max(1, ...kinds.map((k) => k.scans));
   const files = filesOf(d, s);
   const bytes = s?.files.bytes ?? null;
-  const refused = s?.files.refused ?? d.totals.refused_files;
+  // record 56 (2026-10-11): the files set aside by policy are counted, with their kinds behind "why"; the rest were refused and keep their page
+  const setAside = s?.files.set_aside ?? 0;
+  const asideKinds = setAsideWords(s?.files.set_aside_kinds);
+  const [why, setWhy] = useState(false);
+  const refused = refusedOnly({ refused: s?.files.refused ?? d.totals.refused_files, set_aside: setAside });
   const batch = s?.files.refused_batch ?? null;
   // the duplicate policy (2026-10-10): files gone from the folder, files a
   // person let go out of the read, and the questions about scans filed
@@ -482,6 +489,19 @@ function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; 
       <div className="meta">
         {files === null ? "files not counted yet" : `${n(files)} ${files === 1 ? "file" : "files"}`}
         {bytes !== null && bytes > 0 ? ` · ${sizeWords(bytes)}` : ""}
+        {setAside > 0 && (
+          <>
+            {` · ${n(setAside)} set aside`}
+            {asideKinds && (
+              <>
+                {", "}
+                <button type="button" className="link-button" aria-expanded={why} onClick={() => setWhy(!why)}>
+                  why
+                </button>
+              </>
+            )}
+          </>
+        )}
         {refused > 0 && (
           <>
             {" · "}
@@ -491,6 +511,7 @@ function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; 
         {gone > 0 && ` · ${n(gone)} gone from the folder`}
         {leftOut > 0 && ` · ${n(leftOut)} left out of the read`}
       </div>
+      {why && asideKinds && <div className="meta">Not scans: {asideKinds}</div>}
       {questions > 0 && (
         <div className="meta">
           {reviews ? (

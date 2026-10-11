@@ -692,7 +692,7 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
   const ran = useRan(caps, step?.job ?? null, readStep?.job ?? null);
   const v = pseudo.view;
   if (v === null) return null;
-  const outcome = ran ? outcomeWords(ran.pseudonymise, ran.read, readStep?.refused ?? 0) : null;
+  const outcome = ran ? outcomeWords(ran.pseudonymise, ran.read, readStep?.refused ?? 0, readStep?.set_aside ?? 0) : null;
   const at = new Date();
   const when = [clock(step?.finished_at, at), took(step?.started_at, step?.finished_at)].filter(Boolean).join(" · ");
   const subjects = v.subjects.coded;

@@ -502,10 +502,11 @@ const field = (o: unknown, k: string): unknown => (o !== null && typeof o === "o
  * already keeps (2026-10-10, after a run that showed nothing): the files the
  * pseudonymise step wrote, found done already, or held; the codes it made;
  * what its read found new, found in the registry already, or held; the files
- * the read refused, which are not images; and, where the read left the sort
- * out, that there was nothing new to sort. Null where neither job is known.
+ * the read set aside, which are not scans (record 56), and the others it
+ * refused; and, where the read left the sort out, that there was nothing new
+ * to sort. Null where neither job is known.
  */
-export function outcomeWords(pseudonymise: RanJob | null, read: RanJob | null, refused: number): string | null {
+export function outcomeWords(pseudonymise: RanJob | null, read: RanJob | null, refused: number, setAside = 0): string | null {
   if (!pseudonymise && !read) return null;
   const parts: string[] = [];
   const p = field(pseudonymise?.result, "files");
@@ -537,7 +538,9 @@ export function outcomeWords(pseudonymise: RanJob | null, read: RanJob | null, r
   const same = num(field(counts, "same_instance"));
   if (same > 0) parts.push(`${files(same)} held: their scan is filed under another subject or visit`);
   if (readHeld > 0) parts.push(`${files(readHeld)} held at the read`);
-  if (refused > 0) parts.push(`${files(refused)} not images`);
+  if (setAside > 0) parts.push(`${files(setAside)} set aside: not scans`);
+  const rest = Math.max(0, refused - setAside);
+  if (rest > 0) parts.push(`${files(rest)} refused`);
   if (field(read?.result, "chain_ended")) parts.push("nothing new to sort");
   return parts.length > 0 ? parts.join(" · ") : null;
 }

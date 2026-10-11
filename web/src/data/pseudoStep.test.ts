@@ -311,7 +311,9 @@ describe("what the last run did", () => {
     // a run of 2026-10-10 on a test install, whose scans another dataset held already
     const pseudonymise = { result: { files: { seen: 7544, written: 7544, unchanged: 0, held: 0 }, subjects: { new: 8 } } };
     const read = { result: null, progress: { ingested: 0, duplicate: 7328, changed: 0, held: 0, gone: 0 } };
-    expect(outcomeWords(pseudonymise, read, 216)).toBe("7,544 files pseudonymised · 8 new subject codes · 7,328 files already in the registry · 216 files not images");
+    expect(outcomeWords(pseudonymise, read, 216, 216)).toBe("7,544 files pseudonymised · 8 new subject codes · 7,328 files already in the registry · 216 files set aside: not scans");
+    // record 56: what was set aside is not scans; the rest the read refused
+    expect(outcomeWords(null, read, 217, 216)).toBe("7,328 files already in the registry · 216 files set aside: not scans · 1 file refused");
   });
 
   it("says a run that found everything done already, and a read that left the sort out", () => {
@@ -323,7 +325,7 @@ describe("what the last run did", () => {
   it("tells copies of another dataset's scans from this dataset's own, and says what a scan filed elsewhere holds (the duplicate policy)", () => {
     const read = { result: null, progress: { ingested: 12, duplicate: 9, known: 7, twice: 2, same_instance: 3, changed: 0, held: 0 } };
     expect(outcomeWords(null, read, 4)).toBe(
-      "12 new files · 7 files already in another dataset · 2 files twice in this dataset · 3 files held: their scan is filed under another subject or visit · 4 files not images",
+      "12 new files · 7 files already in another dataset · 2 files twice in this dataset · 3 files held: their scan is filed under another subject or visit · 4 files refused",
     );
     // a read that found none of them says none of them
     expect(outcomeWords(null, { result: null, progress: { ingested: 5, duplicate: 0, known: 0, twice: 0, same_instance: 0 } }, 0)).toBe("5 new files");
