@@ -27,7 +27,6 @@ import {
   joinTitle,
   logLine,
   doingTitle,
-  noScansWords,
   operationOf,
   originWords,
   partLabel,
@@ -37,6 +36,7 @@ import {
   roleOrder,
   roleWord,
   runningWords,
+  setAsideOfWords,
   setAsideWords,
   slotOf,
   stateOf,
@@ -304,9 +304,12 @@ describe("the files a read set aside (record 56)", () => {
     expect(setAsideWords(undefined)).toBeNull();
   });
 
-  it("leave a subject with no scans, still the dataset's, said in a few words (2026-10-11)", () => {
-    expect(noScansWords(1)).toBe("1 subject with no scans");
-    expect(noScansWords(1204)).toBe("1,204 subjects with no scans");
+  it("say whose they are where no stack of theirs is in the dataset, of the files and in a few words (2026-10-12)", () => {
+    expect(setAsideOfWords(183, { subjects: 1, files: 183 })).toBe("all from 1 subject with no scans");
+    expect(setAsideOfWords(1216, { subjects: 2, files: 1204 })).toBe("1,204 from 2 subjects with no scans");
+    expect(setAsideOfWords(3, { subjects: 0, files: 0 })).toBeNull();
+    // an engine from before says nothing of them
+    expect(setAsideOfWords(3, undefined)).toBeNull();
   });
 });
 

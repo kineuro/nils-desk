@@ -105,8 +105,6 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
     state: d.name === "ward-c" ? "unknown" : "anonymised",
     added_at: AT,
     subjects: d.totals.subjects,
-    // Nima, 2026-10-11: a subject whose every file the read set aside is still the dataset's, one with no scans
-    no_scans: d.name === "study-big" ? 1 : 0,
     sessions: d.totals.sessions,
     studies: d.totals.studies,
     scans,
@@ -125,6 +123,8 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
       refused_batch: d.totals.refused_files > 0 ? 30 : null,
       set_aside: aside(d),
       set_aside_kinds: aside(d) > 0 ? [{ kind: "screen_capture", words: "screen captures", count: 2 }, { kind: "pdf", words: "PDFs", count: 1 }] : [],
+      // Nima, 2026-10-12: two of the three are of a subject with no stack in the dataset, which it does not count
+      set_aside_no_scans: aside(d) > 0 ? { subjects: 1, files: 2 } : { subjects: 0, files: 0 },
       held: 0,
       // the duplicate policy (2026-10-10): files gone from the folder, and the questions about scans filed already elsewhere
       gone: d.name === "study-big" ? 3 : 0,
@@ -364,8 +364,8 @@ describe("datasets and cohorts on one page", () => {
     expect(refused?.getAttribute("href")).toBe("#data/batch/30");
     // record 56: the files set aside are not scans; "why" says their kinds, and nothing asks about them
     const meta = () => [...d.querySelectorAll(".meta")].map((m) => m.textContent ?? "");
-    // a subject whose every file was set aside is counted among the subjects, said beside them
-    expect(meta().some((t) => t.includes(" · 3 set aside, why · 1 subject with no scans · 1 refused, why"))).toBe(true);
+    // whose the set-aside files are, where they are of a subject with no stack here, said of the files; the subjects stay the stacks'
+    expect(meta().some((t) => t.includes(" · 3 set aside, 2 from 1 subject with no scans, why · 1 refused, why"))).toBe(true);
     expect(meta().some((t) => t.startsWith("Not scans"))).toBe(false);
     const why = [...d.querySelectorAll<HTMLButtonElement>("button.link-button")].find((b) => b.textContent === "why")!;
     expect(why.getAttribute("aria-expanded")).toBe("false");

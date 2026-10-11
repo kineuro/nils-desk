@@ -65,8 +65,6 @@ export interface Source {
   digests: { count: number; first: Pick<Digest, "id" | "name" | "state" | "started_at" | "finished_at"> | null; last: Pick<Digest, "id" | "name" | "state" | "started_at" | "finished_at"> | null; recent: Digest[] };
   totals: {
     subjects: number;
-    /** Nima, 2026-10-11: of the subjects, those with no scan at all, every file of them set aside by the read; an engine from before says nothing. */
-    no_scans?: number;
     studies: number;
     sessions: number;
     stacks: number;

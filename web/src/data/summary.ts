@@ -86,10 +86,8 @@ export interface DatasetSummary {
   detail: string;
   state: string;
   added_at: string;
-  /** Its subjects: those with a scan its tree holds a file of, and since 2026-10-11 those it was pseudonymised for with no scan at all. */
+  /** The subjects counted in it: those with a stack its folder holds a file of (Nima, 2026-10-12: a dataset holds stacks, never subjects). */
   subjects: number;
-  /** Nima, 2026-10-11: of the subjects, those with no scan at all, every file of them set aside by the read; an engine from before says nothing. */
-  no_scans?: number;
   /** The visits, out of the session cache; null where nobody has built it. */
   sessions: number | null;
   studies: number;
@@ -109,6 +107,8 @@ export interface DatasetSummary {
     /** Record 56 (2026-10-11): the files set aside by policy, not scans, and by kind in plain words; an engine from before says neither. */
     set_aside?: number;
     set_aside_kinds?: SetAsideKind[];
+    /** Nima, 2026-10-12: the subjects with no stack in the dataset its set-aside files are of, and how many of those files are theirs; an engine from before says nothing. */
+    set_aside_no_scans?: { subjects: number; files: number };
     held: number;
     new?: number;
     known?: number;
@@ -202,9 +202,15 @@ export function setAsideWords(kinds: SetAsideKind[] | undefined): string | null 
   return shown.length > 0 ? shown.map((k) => `${k.words} ${n(k.count)}`).join(" · ") : null;
 }
 
-/** Nima, 2026-10-11: the subjects whose every file the read set aside, still the dataset's, in one terse phrase: "1 subject with no scans". */
-export function noScansWords(subjects: number): string {
-  return `${n(subjects)} ${subjects === 1 ? "subject" : "subjects"} with no scans`;
+/**
+ * Nima, 2026-10-12: whose the set-aside files are, where they are of subjects with no stack in the dataset, as a fact about the files and
+ * never a count of its subjects: "all from 1 subject with no scans", or "40 from 2 subjects with no scans" where others' files are among
+ * them. Null where they are of none, or the engine does not say.
+ */
+export function setAsideOfWords(setAside: number, of: { subjects: number; files: number } | undefined): string | null {
+  if (!of || of.subjects <= 0 || of.files <= 0) return null;
+  const who = `${n(of.subjects)} ${of.subjects === 1 ? "subject" : "subjects"} with no scans`;
+  return `${of.files >= setAside ? "all" : n(of.files)} from ${who}`;
 }
 
 /** A dataset's step by name, where the summary has it. */

@@ -54,7 +54,7 @@ const caps = {
 };
 
 const NOW = Date.now();
-/** ?read draws the identified dataset pseudonymised and read: sixteen subjects, one of them with no scans, every file of it set aside (2026-10-11). */
+/** ?read draws the identified dataset pseudonymised and read: fifteen subjects with its stacks, and its set-aside files those of one more with no stack in it (2026-10-12). */
 const READ = new URLSearchParams(location.search).has("read");
 /** ?done draws the identified dataset pseudonymised, its step's summary beside its log. */
 const DONE = READ || new URLSearchParams(location.search).has("done");
@@ -75,12 +75,12 @@ const SPECS: Spec[] = [
   { name: "study-big", state: "anonymised", files: 45395, subjects: 70, scans: 1003, sure: 800, look: 203, cohort: "ms-followup" },
   { name: "record34", state: "unknown", files: null, subjects: 0, scans: 0, sure: 0, look: 0, cohort: null },
   READ
-    ? { name: "study-identified", state: "identified", files: 7544, subjects: 16, scans: 40, sure: 40, look: 0, cohort: null }
+    ? { name: "study-identified", state: "identified", files: 7544, subjects: 15, scans: 40, sure: 40, look: 0, cohort: null }
     : { name: "study-identified", state: "identified", files: 213, subjects: 0, scans: 0, sure: 0, look: 0, cohort: null },
   { name: "study-anon", state: "anonymised", files: 120, subjects: 10, scans: 10, sure: 10, look: 0, cohort: "ms-followup" },
 ];
 
-/** The subjects whose every file the read set aside, none of them a scan: one, of the identified dataset read. */
+/** The subjects with no stack in a dataset its set-aside files are of: one, every set-aside file of the identified dataset read. */
 const noScans = (s: Spec) => (READ && s.name === "study-identified" ? 1 : 0);
 const setAside = (s: Spec) => (READ && s.name === "study-identified" ? 183 : 0);
 
@@ -113,7 +113,7 @@ function source(s: Spec, i: number) {
     digests: read
       ? { count: 1, first: null, last: null, recent: [{ id: i + 1, name: `${s.name}-1`, state: "done", started_at: ago(70), finished_at: ago(69), job_id: 4, files: { seen: s.files, new: s.files, changed: 0, unchanged: 0, refused: 0 }, subjects_added: s.subjects, stacks_added: s.scans, classified: s.scans, to_sort: s.look }] }
       : { count: 0, first: null, last: null, recent: [] },
-    totals: { subjects: s.subjects, no_scans: noScans(s), studies: s.subjects, sessions: s.subjects, stacks: s.scans, refused_files: read ? 216 : 0, to_sort: s.look, sure: s.sure, unsorted: 0, need_a_look: s.look > 0 ? { "base:conflict": s.look } : {} },
+    totals: { subjects: s.subjects, studies: s.subjects, sessions: s.subjects, stacks: s.scans, refused_files: read ? 216 : 0, to_sort: s.look, sure: s.sure, unsorted: 0, need_a_look: s.look > 0 ? { "base:conflict": s.look } : {} },
   };
 }
 
@@ -144,7 +144,6 @@ function summary(s: Spec) {
     state: s.state,
     added_at: ago(72),
     subjects: s.subjects,
-    no_scans: noScans(s),
     sessions: Math.round(s.subjects * 1.6),
     studies: Math.round(s.subjects * 1.6),
     scans: s.scans,
@@ -170,6 +169,7 @@ function summary(s: Spec) {
       refused: read ? 216 + setAside(s) : 0,
       refused_batch: read ? 3 : null,
       set_aside: setAside(s),
+      set_aside_no_scans: { subjects: noScans(s), files: noScans(s) > 0 ? setAside(s) : 0 },
       set_aside_kinds: setAside(s) > 0 ? [{ kind: "presentation_state", words: "presentation states", count: 176 }, { kind: "structured_report", words: "reports", count: 7 }] : [],
       held: 0,
     },
