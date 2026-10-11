@@ -27,6 +27,7 @@ import {
   joinTitle,
   logLine,
   doingTitle,
+  noScansWords,
   operationOf,
   originWords,
   partLabel,
@@ -301,6 +302,11 @@ describe("the files a read set aside (record 56)", () => {
     ).toBe("screen captures 176 · presentation states 15 · PDFs 2");
     expect(setAsideWords([])).toBeNull();
     expect(setAsideWords(undefined)).toBeNull();
+  });
+
+  it("leave a subject with no scans, still the dataset's, said in a few words (2026-10-11)", () => {
+    expect(noScansWords(1)).toBe("1 subject with no scans");
+    expect(noScansWords(1204)).toBe("1,204 subjects with no scans");
   });
 });
 

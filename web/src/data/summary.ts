@@ -86,7 +86,10 @@ export interface DatasetSummary {
   detail: string;
   state: string;
   added_at: string;
+  /** Its subjects: those with a scan its tree holds a file of, and since 2026-10-11 those it was pseudonymised for with no scan at all. */
   subjects: number;
+  /** Nima, 2026-10-11: of the subjects, those with no scan at all, every file of them set aside by the read; an engine from before says nothing. */
+  no_scans?: number;
   /** The visits, out of the session cache; null where nobody has built it. */
   sessions: number | null;
   studies: number;
@@ -197,6 +200,11 @@ export function refusedOnly(s: { refused?: number; set_aside?: number }): number
 export function setAsideWords(kinds: SetAsideKind[] | undefined): string | null {
   const shown = (kinds ?? []).filter((k) => k.count > 0);
   return shown.length > 0 ? shown.map((k) => `${k.words} ${n(k.count)}`).join(" · ") : null;
+}
+
+/** Nima, 2026-10-11: the subjects whose every file the read set aside, still the dataset's, in one terse phrase: "1 subject with no scans". */
+export function noScansWords(subjects: number): string {
+  return `${n(subjects)} ${subjects === 1 ? "subject" : "subjects"} with no scans`;
 }
 
 /** A dataset's step by name, where the summary has it. */
