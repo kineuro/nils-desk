@@ -100,6 +100,10 @@ export interface Derivative {
   sha256: string;
   media_type?: string | null;
   path?: string | null;
+  /** A mask's status as a check left it: accepted, rejected, flagged, or none (record 55 H3). */
+  check?: string | null;
+  /** How a mask is tied to its scan: same, world or none (record 55 H3). */
+  grid_link?: string | null;
 }
 
 export const runs = {

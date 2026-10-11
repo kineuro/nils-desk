@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The theme's twin tables carry the same keys, and the mark renders at 16 and
-// at 256 (Wave 5 slice B1).
-import { readFileSync } from "node:fs";
+// at 256 (Wave 5 slice B1). A result's mask (record 55 H3, job type 3) is
+// drawn in the theme's own colours, the same in both themes since it lies on
+// the image's black, and the viewer names no colour of its own.
+import { readdirSync, readFileSync } from "node:fs";
 import { Resvg } from "@resvg/resvg-js";
 import { describe, expect, it } from "vitest";
 
@@ -43,6 +45,29 @@ describe("theme", () => {
     }
     for (const k of dark) expect(light.has(k), `dark adds ${k}`).toBe(true);
     for (const k of forced) expect(light.has(k), `forced dark adds ${k}`).toBe(true);
+  });
+
+  it("the mask's colours are in every table, the same in each, since a mask lies on the image's black", () => {
+    const values = (b: string) => Object.fromEntries([...b.matchAll(/(--n-[a-z0-9-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+    const tables = [block("\n:root {"), block(':root:not([data-theme="light"])'), block(':root[data-theme="dark"]')].map(values);
+    for (const k of ["--n-mask-part", "--n-mask-focus", "--n-mask-flagged"]) {
+      expect(tables[0][k], k).toMatch(/^#[0-9A-F]{6}$/);
+      for (const t of tables) expect(t[k], k).toBe(tables[0][k]);
+    }
+    // three colours, told apart
+    expect(new Set(["--n-mask-part", "--n-mask-focus", "--n-mask-flagged"].map((k) => tables[0][k])).size).toBe(3);
+    // a flagged part is the caution colour, as the theme draws it on a dark ground (the build spec, section 4)
+    expect(tables[0]["--n-mask-flagged"]).toBe(tables[1]["--n-caution-fg"]);
+  });
+
+  it("the viewer names no colour of its own: its rules and its code speak in the theme's tokens", () => {
+    const dir = new URL("../viewer/", import.meta.url);
+    const files = readdirSync(dir).filter((f) => /\.(css|ts|tsx)$/.test(f) && !/\.test\./.test(f));
+    expect(files).toContain("mask.ts");
+    for (const f of files) {
+      const text = readFileSync(new URL(f, dir), "utf8");
+      expect(text.match(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d|hsla?\(\s*\d/g), f).toBeNull();
+    }
   });
 
   it("the two dark tables agree", () => {

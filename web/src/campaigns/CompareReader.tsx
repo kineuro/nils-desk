@@ -18,6 +18,16 @@
 // warmed while this one is read (ahead.ts), so moving on draws from memory;
 // the panels keep their place while the next item comes, so nothing
 // shifts.
+//
+// A check (job type 3, record 55 H3, CheckReader.tsx) is the third spec:
+// its item adds to the page through `useItem`, a hook the page calls once,
+// which says what each panel draws over its picture (the result's mask, the
+// linked point, the part in focus), the part strip in the top band, the
+// parts list beside the panels, its own tools and answer keys, the keys of
+// its own (taken before the comparison's, which they never meet), and the
+// answer it sends. The panels then lie in a grid by their count, a point in
+// the patient links them instead of one slice, and the window, the
+// difference and the jumps are left out.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
@@ -25,10 +35,12 @@ import type { Capabilities } from "../capabilities";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { Hint } from "../ui/Hint";
 import type { Manifest } from "../viewer/doors";
+import type { ViewerProps } from "../viewer/Viewer";
 import type { ViewMode } from "../viewer/view";
 import { aheadOf, Warmer, type Ahead } from "./ahead";
-import { beatEvery, campaigns, leaseLeft, leaseWords, refused as refusedWords, type Campaign, type Item, type MyAnswer } from "./client";
+import { beatEvery, campaigns, leaseLeft, leaseWords, refused as refusedWords, type AnswerBody, type Campaign, type Item, type MyAnswer } from "./client";
 import { compareKey, hubFollow, hubLinks, keyGroups, loadPrefs, nextView, prefsKey, READER_VIEWS, savePrefs, tiedCount, viewLabel, viewOf, withAll, withPanel, DEFAULT_PREFS, type ReaderPrefs } from "./compare";
 import { RegionJumps, WindowControl } from "./Compare";
 import { answerOf, useCorrection } from "./correct";
@@ -50,12 +62,71 @@ export interface ComparePanel {
   lead: boolean;
   /** A flag beside the label (an anchor of another session). */
   flag?: { words: string; title: string };
+  /** A class of its own (a check's made-on scan, framed). */
+  tone?: string;
+  /** One short explanation beside the label, behind a "?". */
+  hint?: string;
 }
 
 export interface CompareSheet {
   item: number;
   /** In the order the engine's seed drew them, left to right. */
   panels: ComparePanel[];
+  /** What a spec's own item reads beside the panels (a check's result and parts). */
+  extra?: unknown;
+}
+
+/** What an item of a spec's own made of the rater's keys: the answer to send, or what it still needs. */
+export type Built<A extends string> = { ok: true; value: A; body: AnswerBody; words: string } | { ok: false; needs: string };
+
+/** What the page tells a spec's own item. */
+export interface ItemCtx<A extends string> {
+  campaign: Campaign | null;
+  sheet: CompareSheet | null;
+  /** The sheet is of the item asked for. */
+  fresh: boolean;
+  /** Names the item on the screen apart from the next, and an answer opened again apart from the item leased. */
+  shownKey: string | null;
+  amending: boolean;
+  busy: boolean;
+  /** The panels linked (l). */
+  linked: boolean;
+  setLinked: (f: (x: boolean) => boolean) => void;
+  manifests: Partial<Record<string, Manifest>>;
+  /** An answer's key sends it (u). */
+  auto: boolean;
+  /** Send what the item built now. */
+  send: (b: Built<A>) => void;
+  /** Say why nothing was sent, in the answer row; null clears it. */
+  refuse: (words: string | null) => void;
+}
+
+/** What a spec's own item adds to the page (CheckReader.tsx). */
+export interface ItemPage<A extends string> {
+  /** The panels as shown: the sheet's, and any shown for this item alone. */
+  panels?: (p: ComparePanel[]) => ComparePanel[];
+  /** What a panel's viewer draws over its picture. */
+  view?: (p: ComparePanel) => Partial<Pick<ViewerProps, "mask" | "point" | "onPoint" | "focus" | "onSlice">>;
+  /** After the item's words in the top band. */
+  strip?: React.ReactNode;
+  /** Beside the panels. */
+  side?: React.ReactNode;
+  /** The toolbar's own groups, after the views. */
+  tools?: React.ReactNode;
+  /** The answer keys, in place of one key per answer. */
+  answers?: React.ReactNode;
+  /** How many answer keys 1 to 9 there are. */
+  answerCount?: number;
+  /** A key of the item's own, before the comparison's: true where it took it. */
+  key?: (e: KeyboardEvent, inField: boolean) => boolean;
+  /** An answer's key, 1 to 9. */
+  answer?: (index: number) => void;
+  /** The answer Enter sends. */
+  build?: () => Built<A>;
+  /** What the send key says before it is pressed: "Send · flagged". */
+  sendWords?: string;
+  /** The keys, by what they do, for the overlay. */
+  keyGroups?: { title: string; keys: [string, string][] }[];
 }
 
 export interface CompareSummary {
@@ -68,7 +139,7 @@ export interface CompareSummary {
 
 export interface CompareSpec<A extends string> {
   /** The page's address and the key the rater's choices are kept under. */
-  kind: "pairs" | "anchored";
+  kind: "pairs" | "anchored" | "check";
   title: string;
   /** What an item is called: "item", "pair". */
   noun: string;
@@ -88,7 +159,27 @@ export interface CompareSpec<A extends string> {
   difference: boolean;
   /** A view kept before this page kept one per campaign, as the first choice. */
   legacyView?: () => ViewMode | null;
+  /** The item's own part of the page, a hook called once per page (a check). */
+  useItem?: (ctx: ItemCtx<A>) => ItemPage<A>;
+  /** The panels kept on one slice through the lead (true by default); a check links a point instead. */
+  slices?: boolean;
+  /** One window across the panels (true by default); a check keeps each scan's own. */
+  window?: boolean;
+  /** The region jumps (true by default). */
+  jumps?: boolean;
+  /** An answer's key sends it until the rater says otherwise (a check). */
+  auto?: boolean;
+  /** The grid the panels lie in by their count; one row when absent. */
+  grid?: (n: number) => { rows: number; cols: number };
+  /** The panels laid out before the first item is read. */
+  placeholders?: number;
+  /** The items ahead with what the claim does not name of them (a check's layers). */
+  ahead?: (campaign: string, ahead: Ahead[]) => Promise<Ahead[]>;
+  /** Who claims: a rater (the default), or an adjudicator settling what raters disagreed on. */
+  role?: "rater" | "adjudicator";
 }
+
+const NO_PAGE: ItemPage<never> = {};
 
 type Loaded = { key: string; sheet: CompareSheet; item: Pick<Item, "id" | "position"> };
 
@@ -116,7 +207,7 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
   const [ready, setReady] = useState<Record<string, "first" | "full">>({});
   const principal = caps.person?.subject ?? caps.engine?.principal ?? "someone";
   const storeKey = prefsKey(spec.kind, id, principal);
-  const [prefs, setPrefsState] = useState<ReaderPrefs>(() => loadPrefs(storeKey, { ...DEFAULT_PREFS, all: spec.legacyView?.() ?? DEFAULT_PREFS.all }));
+  const [prefs, setPrefsState] = useState<ReaderPrefs>(() => loadPrefs(storeKey, { ...DEFAULT_PREFS, all: spec.legacyView?.() ?? DEFAULT_PREFS.all, auto: spec.auto ?? DEFAULT_PREFS.auto }));
   const setPrefs = useCallback(
     (f: (p: ReaderPrefs) => ReaderPrefs) =>
       setPrefsState((p) => {
@@ -136,14 +227,17 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
   const claim = useCallback(
     (note: string | null = null) => {
       setSeat({ kind: "claiming" });
-      claimIn(id, "rater", "position")
+      claimIn(id, spec.role ?? "rater", "position")
         .then((c) => {
-          setAhead(aheadOf(c));
+          const next = aheadOf(c);
+          setAhead(next);
+          // what the claim does not name of the items ahead (a check's layers), read beside it
+          if (spec.ahead) spec.ahead(id, next).then((more) => setAhead((was) => (was === next ? more : was)), () => undefined);
           setSeat(seatOf(c, note));
         })
         .catch((e: unknown) => setSeat({ kind: "failed", why: refusedWords(e) }));
     },
-    [id],
+    [id, spec],
   );
   const refreshSummary = useCallback(() => {
     spec.summary(id).then(setSummary, () => undefined);
@@ -214,19 +308,19 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
     if (assignmentId === null) return;
     const t = setInterval(() => {
       campaigns
-        .renew(capsNow.current, id, assignmentId, "rater")
+        .renew(capsNow.current, id, assignmentId, spec.role ?? "rater")
         .then((c) => setSeat((s) => beatSeat(s, c)))
         .catch(() => undefined);
     }, beatEvery(leaseSeconds));
     return () => clearInterval(t);
-  }, [id, assignmentId, leaseSeconds]);
+  }, [id, assignmentId, leaseSeconds, spec.role]);
 
   const panelOf = useCallback((k: string) => sheet?.panels.find((p) => p.key === k) ?? null, [sheet]);
   const lead = sheet?.panels.find((p) => p.lead)?.key ?? spec.panelKeys[0];
 
   // one window across the panels
   const windowPanels: Record<string, { stack: number; manifest?: Manifest } | undefined> = {};
-  for (const k of spec.panelKeys) {
+  if (spec.window !== false) for (const k of spec.panelKeys) {
     const p = panelOf(k);
     windowPanels[k] = p ? { stack: p.stack, manifest: manifests[k] } : undefined;
   }
@@ -255,7 +349,7 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
   const refs: Record<string, ReturnType<typeof useReference>> = {};
   for (const k of spec.panelKeys) {
     // eslint-disable-next-line react-hooks/rules-of-hooks
-    refs[k] = useReference(panelOf(k)?.stack ?? null, manifests[k]);
+    refs[k] = useReference(spec.window === false && spec.jumps === false ? null : (panelOf(k)?.stack ?? null), manifests[k]);
   }
   const jumpable = !!(refs[lead]?.extent && manifests[lead]);
   const jumpWhy = !manifests[lead] ? "the pictures are being read" : !refs[lead] ? "finding the head" : "the stack names no place in the patient, or no head was found";
@@ -306,24 +400,52 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aheadKey, modesKey, loaded?.key, fresh, allDrawn, settled]);
 
+  // the item's own part of the page (a check): called once per page, the spec never changes under it
+  const sendRef = useRef<(given?: A, built?: Built<A>) => void>(() => undefined);
+  const ctx: ItemCtx<A> = {
+    campaign,
+    sheet,
+    fresh,
+    shownKey: fresh ? (loaded?.key ?? null) : null,
+    amending: !!amending,
+    busy,
+    linked,
+    setLinked,
+    manifests,
+    auto: prefs.auto,
+    send: (b) => sendRef.current(undefined, b),
+    refuse: setRefused,
+  };
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const page: ItemPage<A> = spec.useItem ? spec.useItem(ctx) : (NO_PAGE as ItemPage<A>);
+  const pageRef = useRef(page);
+  pageRef.current = page;
+
   const send = useCallback(
-    (given?: A) => {
-      const answer = given ?? chosen;
+    (given?: A, built?: Built<A>) => {
       if (!sheet || !fresh || busy || (!holding && !amending)) return;
+      const b = built ?? (pageRef.current.build ? pageRef.current.build() : null);
+      if (b && !b.ok) {
+        setRefused(b.needs);
+        return;
+      }
+      const answer = b ? b.value : (given ?? chosen);
       if (!answer) {
         setRefused(`Choose first: ${spec.answers.map((a, i) => `${i + 1} ${spec.answerWords[a]}`).join(", ")}.`);
         return;
       }
+      const body: AnswerBody = b ? b.body : { value: answer };
+      const words = b ? b.words : spec.answerWords[answer];
       setBusy(true);
       // the answer, the claim and the next item go first: the warming waits until it is drawn
       warmer.current?.pause([...sheet.panels.map((p) => p.stack), ...(aheadNow.current[0]?.stacks ?? [])]);
       if (amending) {
         const a: MyAnswer = amending;
         campaigns
-          .amend(id, a.answer, { value: answer })
+          .amend(id, a.answer, body)
           .then((r) => {
             const before = answerOf(spec.answers, a.value);
-            say(r.unchanged || before === answer ? `${spec.words(a)} kept as it was: ${spec.answerWords[answer]}.` : `Corrected ${spec.words(a)}: ${before ? spec.answerWords[before] : "the earlier answer"} is now ${spec.answerWords[answer]}; the earlier answer is kept.`);
+            say(r.unchanged || (before === answer && !b) ? `${spec.words(a)} kept as it was: ${words}.` : `Corrected ${spec.words(a)}: ${before ? spec.answerWords[before] : "the earlier answer"} is now ${words}; the earlier answer is kept.`);
             refreshSummary();
             correction.done(a);
           })
@@ -334,9 +456,9 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
       if (!holding) return setBusy(false);
       const it = holding.item;
       campaigns
-        .answer(id, holding.assignment.id, { value: answer })
+        .answer(id, holding.assignment.id, body)
         .then(() => {
-          say(`Read ${spec.words(it)}: ${spec.answerWords[answer]}.`, true);
+          say(`Read ${spec.words(it)}: ${words}.`, true);
           refreshSummary();
           claim();
         })
@@ -345,6 +467,7 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
     },
     [holding, amending, sheet, fresh, busy, chosen, id, claim, refreshSummary, correction, spec, say],
   );
+  sendRef.current = send;
 
   const giveBack = useCallback(
     (then: "next" | "stop") => {
@@ -381,8 +504,8 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
   }, [setPrefs]);
 
   // the keys
-  const keyed = useRef({ send, giveBack, shared, jump, jumpable, correction, chosen, prefs, active, fresh });
-  keyed.current = { send, giveBack, shared, jump, jumpable, correction, chosen, prefs, active, fresh };
+  const keyed = useRef({ send, giveBack, shared, jump, jumpable, correction, chosen, prefs, active, fresh, page });
+  keyed.current = { send, giveBack, shared, jump, jumpable, correction, chosen, prefs, active, fresh, page };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey || e.metaKey || e.defaultPrevented) return;
@@ -391,11 +514,21 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
       const inField = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
       // Enter on a button or a link is that element's
       if (e.key === "Enter" && !inField && t && (t.tagName === "BUTTON" || t.tagName === "A")) return;
-      const act = compareKey(e.key, { inField, ctrl: e.ctrlKey, shift: e.shiftKey, answers: spec.answers.length, difference: spec.difference });
-      if (!act) return;
-      e.preventDefault();
       const k = keyed.current;
-      if (act.kind === "answer") {
+      // the item's own keys first (a check's), which no key of the comparison's meets
+      if (k.page.key?.(e, inField)) {
+        e.preventDefault();
+        return;
+      }
+      const act = compareKey(e.key, { inField, ctrl: e.ctrlKey, shift: e.shiftKey, answers: k.page.answerCount ?? spec.answers.length, difference: spec.difference });
+      if (!act) return;
+      // a check keeps each scan's own window and has no jumps
+      if ((act.kind === "window" && spec.window === false) || (act.kind === "region" && spec.jumps === false)) return;
+      e.preventDefault();
+      if (act.kind === "answer" && k.page.answer) {
+        setRefused(null);
+        k.page.answer(act.index);
+      } else if (act.kind === "answer") {
         const a = spec.answers[act.index];
         setRefused(null);
         setChosen(a);
@@ -431,8 +564,90 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
   const left = holding ? leaseLeft(holding.assignment, Date.now()) : null;
   const done = !amending && (seat.kind === "done" || seat.kind === "failed") && !fresh;
   const mixed = Object.keys(prefs.panels).length > 0;
+  // the panels as shown: the sheet's (and any the item shows for itself), else as many waiting as the page lays out
+  const placeholderKeys = spec.panelKeys.slice(0, spec.placeholders ?? spec.panelKeys.length);
+  const shownPanels: ComparePanel[] = sheet ? (page.panels ? page.panels(sheet.panels) : sheet.panels) : placeholderKeys.map((k) => ({ key: k, stack: -1, label: "", lead: false }));
+  const count = shownPanels.length;
+  const laid = spec.grid ? spec.grid(count) : null;
+  const slicesKept = spec.slices !== false;
+  const gridEl = (
+    <div
+      ref={grid}
+      className={["compare-grid", amending ? "correcting" : "", waiting ? "waiting" : ""].filter(Boolean).join(" ")}
+      aria-busy={waiting || !sheet}
+      data-rows={laid?.rows}
+      data-cols={laid?.cols}
+      style={laid ? ({ "--cols": laid.cols, "--rows": laid.rows } as React.CSSProperties) : undefined}
+    >
+      {shownPanels.map((p) => {
+        const mode = viewOf(prefs, p.key);
+        const own = prefs.panels[p.key] !== undefined;
+        const anchorRef = refs[p.key]?.value ?? null;
+        const showDiff = spec.difference && difference && sheet && !p.lead && leadPanel && manifests[lead] && manifests[p.key] && leadRef && anchorRef;
+        const s = chosen && sheet ? spec.says(chosen, p.key) : null;
+        const drawn = sheet && p.stack >= 0 ? (page.view?.(p) ?? {}) : {};
+        return (
+          <div
+            key={p.key}
+            className={["rate-picture", "pair-side", "anchored-panel", "compare-panel", active === p.key ? "active" : "", p.lead ? "is-candidate is-lead" : "is-reference", ready[p.key] === "full" ? "drawn" : "", p.tone ?? ""].filter(Boolean).join(" ")}
+            data-role={p.key}
+            data-side={p.key}
+            onPointerEnter={() => setActive(p.key)}
+            onFocusCapture={() => setActive(p.key)}
+          >
+            <div className="pair-label compare-label">
+              <span className="compare-name">{sheet ? p.label : " "}</span>
+              {p.hint && <Hint text={p.hint} />}
+              {p.flag && (
+                <b className="tag caution anchored-other" title={p.flag.title}>
+                  {p.flag.words}
+                </b>
+              )}
+              {s && <b className={s.post ? "pair-says post" : "pair-says"}>{s.words}</b>}
+              <span className="grow" />
+              <PanelView mode={mode} own={own} panel={spec.panelWord(p.key)} onChoose={(m) => chooseView(m, p.key)} />
+            </div>
+            <div className="anchored-stage compare-stage">
+              {sheet && p.stack >= 0 && (
+                <StackView
+                  stack={p.stack}
+                  view={mode}
+                  bare
+                  keys={active === p.key}
+                  onReady={onReady[p.key]}
+                  slice={slicesKept ? (slices[p.key] ?? null) : null}
+                  onSlice={slicesKept ? onSlice[p.key] : drawn.onSlice}
+                  onManifest={onManifest[p.key]}
+                  voi={spec.window === false ? null : shared.voiFor(p.key)}
+                  onVoi={spec.window === false ? undefined : onVoi[p.key]}
+                  mask={drawn.mask}
+                  point={drawn.point}
+                  onPoint={drawn.onPoint}
+                  focus={drawn.focus}
+                />
+              )}
+              {showDiff && (
+                <Difference
+                  cand={{ stack: leadPanel!.stack, manifest: manifests[lead]!, ref: leadRef! }}
+                  anchor={{ stack: p.stack, manifest: manifests[p.key]!, ref: anchorRef! }}
+                  z={slices[lead] ?? Math.floor(manifests[lead]!.shape[0] / 2)}
+                  label={`${spec.panelWord(lead)} − ${spec.panelWord(p.key)}`}
+                />
+              )}
+              {spec.difference && difference && sheet && !p.lead && !showDiff && <p className="difference-none difference-wait">The difference waits for both pictures and their references.</p>}
+              {(!sheet || waiting) && (
+                <div className="compare-wait" aria-hidden="true">
+                  <span className="compare-spinner" />
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
   return (
-    <section className={`data campaign-rate reader-one pair-reader compare-reader ${spec.kind === "anchored" ? "anchored-reader" : "pairs-reader"}`} data-panels={spec.panelKeys.length}>
+    <section className={`data campaign-rate reader-one pair-reader compare-reader ${spec.kind === "anchored" ? "anchored-reader" : spec.kind === "check" ? "check-reader" : "pairs-reader"}`} data-panels={spec.grid ? count : spec.panelKeys.length}>
       <header className="reader-head compare-head">
         <span className="eyebrow">
           <a href={href("campaigns")}>Campaigns</a> · <a href={href("campaigns", String(campaign.id))}>{campaign.name}</a>
@@ -454,6 +669,7 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
             )
           )}
         </span>
+        {page.strip}
         <span className="grow said-slot" aria-live="polite">
           {said && (
             <span key={said.n} className="meta said" title={said.words}>
@@ -474,54 +690,14 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
         <SeatNote seat={seat} campaign={campaign} onAgain={() => claim()} onMine={() => correction.setListOpen(true)} />
       ) : (
         <>
-          <div ref={grid} className={["compare-grid", amending ? "correcting" : "", waiting ? "waiting" : ""].filter(Boolean).join(" ")} aria-busy={waiting || !sheet}>
-            {(sheet?.panels ?? spec.panelKeys.map((k) => ({ key: k, stack: -1, label: "", lead: false }) as ComparePanel)).map((p) => {
-              const mode = viewOf(prefs, p.key);
-              const own = prefs.panels[p.key] !== undefined;
-              const anchorRef = refs[p.key]?.value ?? null;
-              const showDiff = spec.difference && difference && sheet && !p.lead && leadPanel && manifests[lead] && manifests[p.key] && leadRef && anchorRef;
-              const s = chosen && sheet ? spec.says(chosen, p.key) : null;
-              return (
-                <div
-                  key={p.key}
-                  className={["rate-picture", "pair-side", "anchored-panel", "compare-panel", active === p.key ? "active" : "", p.lead ? "is-candidate is-lead" : "is-reference", ready[p.key] === "full" ? "drawn" : ""].filter(Boolean).join(" ")}
-                  data-role={p.key}
-                  data-side={p.key}
-                  onPointerEnter={() => setActive(p.key)}
-                  onFocusCapture={() => setActive(p.key)}
-                >
-                  <div className="pair-label compare-label">
-                    <span className="compare-name">{sheet ? p.label : " "}</span>
-                    {p.flag && (
-                      <b className="tag caution anchored-other" title={p.flag.title}>
-                        {p.flag.words}
-                      </b>
-                    )}
-                    {s && <b className={s.post ? "pair-says post" : "pair-says"}>{s.words}</b>}
-                    <span className="grow" />
-                    <PanelView mode={mode} own={own} panel={spec.panelWord(p.key)} onChoose={(m) => chooseView(m, p.key)} />
-                  </div>
-                  <div className="anchored-stage compare-stage">
-                    {sheet && p.stack >= 0 && <StackView stack={p.stack} view={mode} bare keys={active === p.key} onReady={onReady[p.key]} slice={slices[p.key] ?? null} onSlice={onSlice[p.key]} onManifest={onManifest[p.key]} voi={shared.voiFor(p.key)} onVoi={onVoi[p.key]} />}
-                    {showDiff && (
-                      <Difference
-                        cand={{ stack: leadPanel!.stack, manifest: manifests[lead]!, ref: leadRef! }}
-                        anchor={{ stack: p.stack, manifest: manifests[p.key]!, ref: anchorRef! }}
-                        z={slices[lead] ?? Math.floor(manifests[lead]!.shape[0] / 2)}
-                        label={`${spec.panelWord(lead)} − ${spec.panelWord(p.key)}`}
-                      />
-                    )}
-                    {spec.difference && difference && sheet && !p.lead && !showDiff && <p className="difference-none difference-wait">The difference waits for both pictures and their references.</p>}
-                    {(!sheet || waiting) && (
-                      <div className="compare-wait" aria-hidden="true">
-                        <span className="compare-spinner" />
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          {page.side ? (
+            <div className="compare-body">
+              {gridEl}
+              {page.side}
+            </div>
+          ) : (
+            gridEl
+          )}
           <div className="pair-bar anchored-bar compare-bar" data-reader-panel="">
             <div className="compare-tools" role="toolbar" aria-label="the view and the comparison">
               <span className="compare-group compare-views" role="radiogroup" aria-label="the view of every panel">
@@ -532,22 +708,29 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
                   </button>
                 ))}
               </span>
-              <span className="compare-group">
-                <button type="button" className={linked && tied > 0 ? "tool pair-sync on" : "tool pair-sync"} aria-pressed={linked} onClick={() => setLinked((x) => !x)} title={syncTitle}>
-                  <span className="tool-label">{syncWords}</span>
-                  <kbd>l</kbd>
-                </button>
-                <WindowControl w={shared} />
-                {spec.difference && (
-                  <button type="button" className={difference ? "tool compare-diff on" : "tool compare-diff"} aria-pressed={difference} onClick={() => setDifference((x) => !x)} title="the candidate minus each reference on the reference's panel, each scaled by its reference tissue; mid grey is none, brighter is the candidate brighter (d)">
-                    <span className="tool-label">difference</span>
-                    <kbd>d</kbd>
-                  </button>
-                )}
-              </span>
-              <span className="compare-group compare-jumps">
-                <RegionJumps onJump={jump} disabled={!jumpable} why={jumpable ? null : jumpWhy} />
-              </span>
+              {(slicesKept || spec.window !== false || spec.difference) && (
+                <span className="compare-group">
+                  {slicesKept && (
+                    <button type="button" className={linked && tied > 0 ? "tool pair-sync on" : "tool pair-sync"} aria-pressed={linked} onClick={() => setLinked((x) => !x)} title={syncTitle}>
+                      <span className="tool-label">{syncWords}</span>
+                      <kbd>l</kbd>
+                    </button>
+                  )}
+                  {spec.window !== false && <WindowControl w={shared} />}
+                  {spec.difference && (
+                    <button type="button" className={difference ? "tool compare-diff on" : "tool compare-diff"} aria-pressed={difference} onClick={() => setDifference((x) => !x)} title="the candidate minus each reference on the reference's panel, each scaled by its reference tissue; mid grey is none, brighter is the candidate brighter (d)">
+                      <span className="tool-label">difference</span>
+                      <kbd>d</kbd>
+                    </button>
+                  )}
+                </span>
+              )}
+              {page.tools}
+              {spec.jumps !== false && (
+                <span className="compare-group compare-jumps">
+                  <RegionJumps onJump={jump} disabled={!jumpable} why={jumpable ? null : jumpWhy} />
+                </span>
+              )}
               <span className="grow compare-jumped-slot">{jumped && <span className="meta compare-jumped">{jumped}</span>}</span>
               <span className="compare-group compare-mine">
                 <button type="button" className="tool mine-back" disabled={busy} onClick={correction.back} title="open your last answer again to correct it; again, the one before (b)">
@@ -564,18 +747,20 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
               </span>
             </div>
             <div className="compare-answer">
-              <div className="pair-answers compare-answers" role="group" aria-label="the answer" style={{ "--answers": spec.answers.length } as React.CSSProperties}>
-                {spec.answers.map((a, i) => (
-                  <button key={a} type="button" className={["opt", "pair-answer", chosen === a ? "on" : "", was === a ? "yours" : ""].filter(Boolean).join(" ")} aria-pressed={chosen === a} disabled={busy || !fresh} onClick={() => (setRefused(null), setChosen(a), prefs.auto && send(a))} title={spec.answerHelp[a]}>
-                    <kbd>{i + 1}</kbd>
-                    <span className="answer-words">{spec.answerWords[a]}</span>
-                    {was === a && <span className="was">yours</span>}
-                  </button>
-                ))}
-              </div>
+              {page.answers ?? (
+                <div className="pair-answers compare-answers" role="group" aria-label="the answer" style={{ "--answers": spec.answers.length } as React.CSSProperties}>
+                  {spec.answers.map((a, i) => (
+                    <button key={a} type="button" className={["opt", "pair-answer", chosen === a ? "on" : "", was === a ? "yours" : ""].filter(Boolean).join(" ")} aria-pressed={chosen === a} disabled={busy || !fresh} onClick={() => (setRefused(null), setChosen(a), prefs.auto && send(a))} title={spec.answerHelp[a]}>
+                      <kbd>{i + 1}</kbd>
+                      <span className="answer-words">{spec.answerWords[a]}</span>
+                      {was === a && <span className="was">yours</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
               <span className="act-main compare-send" role="group" aria-label="send">
-                <button type="button" className="button act-answer" disabled={busy || !chosen || !fresh} onClick={() => send()}>
-                  {amending ? "Correct" : "Answer"} <kbd>Enter</kbd>
+                <button type="button" className="button act-answer" disabled={busy || !fresh || (!page.build && !chosen)} onClick={() => send()}>
+                  {page.sendWords ?? (amending ? "Correct" : "Answer")} <kbd>Enter</kbd>
                 </button>
               </span>
               <button type="button" className="button secondary compare-giveback" disabled={busy} onClick={() => giveBack("next")} title={amending ? `Leave your answer as it was, and go back to the ${spec.noun} you were reading` : "Back to the pool; never to you again"}>
@@ -600,7 +785,7 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
           </div>
         </>
       )}
-      {keys && <KeysOverlay groups={keyGroups({ answers: spec.answers.map((a, i) => ({ key: String(i + 1), words: spec.answerHelp[a] })), noun: spec.noun, difference: spec.difference })} onClose={() => setKeys(false)} />}
+      {keys && <KeysOverlay groups={page.keyGroups ?? keyGroups({ answers: spec.answers.map((a, i) => ({ key: String(i + 1), words: spec.answerHelp[a] })), noun: spec.noun, difference: spec.difference })} onClose={() => setKeys(false)} />}
     </section>
   );
 }

@@ -10,7 +10,10 @@
 // the one window, and for the three planes, or a plane that is not the
 // stack's own, the whole volume's slabs, and for the next item its volume
 // filled (viewer/volume.ts, `prefill`), so its planes are whole at once.
-// Two reads at a time, so the
+// A stack that shows a result's mask (job type 3) has its layer warmed
+// with it: the layer's manifest, the same slabs of the layer as of the
+// picture, and for the next item its labelmap volume filled
+// (viewer/mask.ts, `prefillLabels`). Two reads at a time, so the
 // pictures on the screen never wait behind them. A jump (another item, a
 // correction) calls off what is no longer ahead. The two items read last
 // stay in memory with the one on the screen (viewer/slabs.ts).
@@ -19,9 +22,10 @@ import type { Json } from "../ask/client";
 import { doors, levelShape, type Manifest } from "../viewer/doors";
 import { firstPlanes, load } from "../viewer/prefetch";
 import { reference } from "../viewer/reference";
+import { layerManifest, type LayerRef } from "../viewer/layer";
 import { levelFor, SLAB, slabOf } from "../viewer/ring";
 import { volumePath } from "../viewer/volumePlan";
-import { calloff, pin, slab } from "../viewer/slabs";
+import { calloff, layerSlab, pin, slab } from "../viewer/slabs";
 import { tileManifest } from "../viewer/tiles";
 import { needsVolume, type ViewMode } from "../viewer/view";
 
@@ -29,6 +33,8 @@ import { needsVolume, type ViewMode } from "../viewer/view";
 export interface Ahead {
   item: number | null;
   stacks: number[];
+  /** A result's layer drawn over a stack of the item, by stack (a check's panels). */
+  layers?: Partial<Record<number, LayerRef>>;
 }
 
 /** How many items ahead are warmed. */
@@ -47,7 +53,8 @@ export function aheadOf(c: { ahead?: unknown; next?: unknown }): Ahead[] {
       if (!x || typeof x !== "object" || Array.isArray(x)) continue;
       const o = x as Json;
       const stacks = Array.isArray(o.stacks) ? (o.stacks as unknown[]).map(num).filter((s): s is number => s !== null) : num(o.stack) !== null ? [num(o.stack)!] : [];
-      if (stacks.length > 0) out.push({ item: num(o.item), stacks });
+      const layers = layersOf(o.layers);
+      if (stacks.length > 0) out.push(layers ? { item: num(o.item), stacks, layers } : { item: num(o.item), stacks });
     }
     return out.slice(0, AHEAD);
   }
@@ -58,6 +65,22 @@ export function aheadOf(c: { ahead?: unknown; next?: unknown }): Ahead[] {
     if (s !== null) return [{ item: num(o.item) ?? num(o.item_id), stacks: [s] }];
   }
   return [];
+}
+
+/** The layers an entry names ([{stack, derivative, set}]), read defensively; none when it names none. */
+function layersOf(v: unknown): Ahead["layers"] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: Partial<Record<number, LayerRef>> = {};
+  let any = false;
+  for (const x of v) {
+    if (!x || typeof x !== "object") continue;
+    const o = x as Json;
+    if (typeof o.stack === "number" && typeof o.derivative === "number" && typeof o.set === "string" && o.set) {
+      out[o.stack] = { derivative: o.derivative, set: o.set };
+      any = true;
+    }
+  }
+  return any ? out : undefined;
 }
 
 /** The slab a plane is in, as the viewer asks for it: [z0, z1). */
@@ -80,9 +103,12 @@ type Task = (signal: AbortSignal) => Promise<unknown>;
 /** The volume module, loaded on the first fill ahead: cornerstone stays out of the desk's first bundle. */
 let volumeLoaded: Promise<typeof import("../viewer/volume")> | null = null;
 const volumeModule = () => (volumeLoaded ??= import("../viewer/volume"));
+/** The mask's module and the decoder, loaded on the first labels filled ahead. */
+let maskLoaded: Promise<[typeof import("../viewer/mask"), typeof import("../viewer/loader")]> | null = null;
+const maskModule = () => (maskLoaded ??= Promise.all([import("../viewer/mask"), import("../viewer/loader")]));
 
 /** The work of warming one stack, in the order it pays: what the viewer draws first, then the rest. */
-async function stackTasks(stack: number, view: WarmView, signal: AbortSignal, next: boolean): Promise<Task[]> {
+async function stackTasks(stack: number, view: WarmView, signal: AbortSignal, next: boolean, layer: LayerRef | null = null): Promise<Task[]> {
   const m = await tileManifest(stack);
   if (signal.aborted) return [];
   const [nz] = m.shape;
@@ -95,12 +121,16 @@ async function stackTasks(stack: number, view: WarmView, signal: AbortSignal, ne
     // the first picture the stack view draws: the server's render one level up, then the slab of its plane
     tasks.push((sig) => load(doors.renderUrl(stack, Math.min(m.levels - 1, level + 1), mid, m.window.width, m.window.center), sig));
     const [z0, z1] = slabRange(m, level, mid);
+    // a mask's layer: its manifest asked once and kept (and its build started where it is not built)
+    if (layer) tasks.push(() => (void layerManifest(stack, layer).catch(() => undefined), Promise.resolve()));
     tasks.push(() => slab(stack, level, z0, z1, { warm: true }));
+    if (layer) tasks.push(() => layerSlab(stack, layer, level, z0, z1, { warm: true }));
     // the slabs either side, where a linked panel or the first turn of the wheel goes
     for (const z of [z0 - 1, z1]) {
       if (z < 0 || z >= nz) continue;
       const [a, b] = slabRange(m, level, z);
       tasks.push(() => slab(stack, level, a, b, { warm: true }));
+      if (layer) tasks.push(() => layerSlab(stack, layer, level, a, b, { warm: true }));
     }
   }
   // the one window's reference tissue: the coarsest level, a few small slabs
@@ -116,9 +146,13 @@ async function stackTasks(stack: number, view: WarmView, signal: AbortSignal, ne
       const n = Math.ceil(pz / SLAB);
       const at = slabOf(Math.floor(pz / 2));
       const order = [at, ...Array.from({ length: n }, (_, d) => [at + d + 1, at - d - 1]).flat()].filter((s, i, a) => s >= 0 && s < n && a.indexOf(s) === i);
-      for (const s of order) tasks.push(() => slab(stack, plan.level, s * SLAB, Math.min(pz, (s + 1) * SLAB), { warm: true }));
-      // the next item's volume filled, from the slabs just read
+      for (const s of order) {
+        tasks.push(() => slab(stack, plan.level, s * SLAB, Math.min(pz, (s + 1) * SLAB), { warm: true }));
+        if (layer) tasks.push(() => layerSlab(stack, layer, plan.level, s * SLAB, Math.min(pz, (s + 1) * SLAB), { warm: true }));
+      }
+      // the next item's volume filled, from the slabs just read, and its labels with it
       if (next) tasks.push(() => volumeModule().then((v) => v.prefill(stack, m, plan)?.ready));
+      if (next && layer) tasks.push(() => Promise.all([layerManifest(stack, layer), maskModule()]).then(([lm, [mk, loader]]) => mk.prefillLabels(stack, layer, m, lm, plan, loader.decoder()).ready));
     }
   }
   return tasks;
@@ -150,17 +184,21 @@ export class Warmer {
     // the volume module (cornerstone) is loaded only once a fill asked for it; before that nothing was filled to drop
     const keepFilled = new Set([...keep.current, ...(ahead[0]?.stacks ?? [])]);
     void volumeLoaded?.then((v) => v.dropPrefills(keepFilled));
+    void maskLoaded?.then(([mk]) => mk.dropLabelPrefills(keepFilled));
     const nextOnes = new Set(ahead[0]?.stacks ?? []);
     const viewKey = `${[...new Set(view.modes)].sort().join(",")}@${Math.round(view.px / 64)}`;
-    // a stack warmed in this view is not warmed again, unless it is now next and its volume is filled ahead
-    const doneKey = (s: number) => `${s}:${viewKey}:${nextOnes.has(s) ? 1 : 0}`;
+    // the layer of each stack ahead that shows a mask
+    const layerOf = new Map<number, LayerRef>();
+    for (const a of ahead) for (const s of a.stacks) if (a.layers?.[s] && !layerOf.has(s)) layerOf.set(s, a.layers[s]!);
+    // a stack warmed in this view (and with this layer) is not warmed again, unless it is now next and its volume is filled ahead
+    const doneKey = (s: number) => `${s}:${viewKey}:${nextOnes.has(s) ? 1 : 0}:${layerOf.has(s) ? `${layerOf.get(s)!.derivative}/${layerOf.get(s)!.set}` : ""}`;
     const queue = ahead.flatMap((a) => a.stacks).filter((s, i, all) => all.indexOf(s) === i && !this.done.has(doneKey(s)));
     const live = () => gen === this.gen && !ctl.signal.aborted;
     const lane = async () => {
       while (live() && queue.length > 0) {
         const stack = queue.shift()!;
         try {
-          const tasks = await stackTasks(stack, view, ctl.signal, nextOnes.has(stack));
+          const tasks = await stackTasks(stack, view, ctl.signal, nextOnes.has(stack), layerOf.get(stack) ?? null);
           for (const t of tasks) {
             if (!live()) return;
             this.stats.tasks += 1;

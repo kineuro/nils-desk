@@ -20,7 +20,7 @@ const SOURCES: { kind: SourceKind; words: string; placeholder: string; says: str
   { kind: "review", words: "Review items", placeholder: "base:vote, or base: for every base item", says: "The open items of that kind, adopted as they are; one open campaign asks each." },
 ];
 
-export function MakeDialog({ caps, prefill, taken, onClose }: { caps: Capabilities; prefill: Prefill; taken: readonly string[]; onClose: () => void }) {
+export function MakeDialog({ caps, prefill, taken, onClose, onCheck }: { caps: Capabilities; prefill: Prefill; taken: readonly string[]; onClose: () => void; onCheck?: () => void }) {
   const [d, setD] = useState<Draft>(() => emptyDraft(prefill));
   const [pack, setPack] = useState<PackDoc | null>(null);
   const [busy, setBusy] = useState(false);
@@ -66,14 +66,14 @@ export function MakeDialog({ caps, prefill, taken, onClose }: { caps: Capabiliti
         </div>
       }
     >
-      <MakeForm caps={caps} draft={d} pack={pack} onChange={set} />
+      <MakeForm caps={caps} draft={d} pack={pack} onChange={set} onCheck={onCheck} />
       {why && <p className="warn">{why}</p>}
     </Dialog>
   );
 }
 
 /** The form of the make dialog, drawn from the draft. */
-export function MakeForm({ caps, draft: d, pack, onChange: set }: { caps: Capabilities; draft: Draft; pack: PackDoc | null; onChange: (p: Partial<Draft>) => void }) {
+export function MakeForm({ caps, draft: d, pack, onChange: set, onCheck }: { caps: Capabilities; draft: Draft; pack: PackDoc | null; onChange: (p: Partial<Draft>) => void; onCheck?: () => void }) {
   const src = SOURCES.find((s) => s.kind === d.source) ?? SOURCES[0];
   const axes = pack?.axes.map((a) => a.axis) ?? [];
   const roles = packRoles(pack);
@@ -109,6 +109,11 @@ export function MakeForm({ caps, draft: d, pack, onChange: set }: { caps: Capabi
               {KIND_WORDS[k] ?? k}
             </button>
           ))}
+          {onCheck && (
+            <button type="button" className="opt" aria-pressed={false} onClick={onCheck} title="is a pipeline's result right: its masks read one at a time">
+              {KIND_WORDS.check}
+            </button>
+          )}
         </span>
       </fieldset>
       {d.kind === "axis" && (

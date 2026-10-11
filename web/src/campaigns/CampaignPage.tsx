@@ -57,6 +57,8 @@ import { isPair, pairServed } from "./pair";
 import { PairPanel } from "./PairReader";
 import { anchoredServed, isAnchored } from "./anchored";
 import { AnchoredPanel } from "./AnchoredReader";
+import { checkServed, isCheck } from "./check";
+import { CheckPanel, checkActs } from "./CheckPanel";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -81,7 +83,7 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   const c = load.c;
   return (
     <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} stats={load.stats} said={said} missing={missing} onAct={setActing}>
-      {isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : isAnchored(c) && anchoredServed(caps) ? <AnchoredPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
+      {isCheck(c) && checkServed(caps) ? null : isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : isAnchored(c) && anchoredServed(caps) ? <AnchoredPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
       {acting === "close" && (
         <CloseDialog
           campaign={c}
@@ -142,6 +144,8 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
   const exp = exportRefusal(caps);
   const a = c.agreement;
   const blind = !seesAnswers(caps, c);
+  // a check (job type 3) has one next action: go on checking while results are open, close and write the checks once none is
+  const check = isCheck(c) && checkServed(caps) ? checkActs(caps, c) : null;
   const byItem = new Map<number, Answer[]>();
   for (const x of answers ?? []) byItem.set(x.item_id, [...(byItem.get(x.item_id) ?? []), x]);
   return (
@@ -156,24 +160,30 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
             {KIND_WORDS[c.question.kind] ?? c.question.kind}: {questionWords(c.question)} <span className={c.status === "open" ? "tag ok" : "tag"}>{c.status}</span>
           </p>
         </div>
-        {rate && (
+        {check?.head}
+        {rate && !check && (
           <a className="button" href={href("campaigns", String(c.id), ab ? "settle" : pair ? "pairs" : anchored ? "anchored" : "rate")} title={ab ? "each item's candidates as A and B, blind to who gave which" : pair ? "two stacks side by side, nothing else of them: which is post" : anchored ? "a candidate beside a reference pre and a reference post, nothing else of them: which does it look like" : undefined}>
             {ab ? "Settle" : pair ? "Read pairs" : anchored ? "Read against anchors" : "Rate"}
           </a>
         )}
-        {rate && !ab && !pair && !anchored && galleryOffered(caps, c.question) && (
+        {rate && !ab && !pair && !anchored && !check && galleryOffered(caps, c.question) && (
           <a className="button secondary" href={href("campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
             Gallery
           </a>
         )}
         {adjudicate && (
-          <a className="button" href={href("campaigns", String(c.id), "adjudicate")}>
+          <a className="button" href={check ? `${href("campaigns", String(c.id), "check")}?as=adjudicator` : href("campaigns", String(c.id), "adjudicate")}>
             Adjudicate
           </a>
         )}
-        {c.status !== "closed" && close === null && (
-          <button type="button" className="button secondary" onClick={() => onAct("close")}>
+        {c.status !== "closed" && close === null && !check?.closes && (
+          <button type="button" className={check ? "button quiet" : "button secondary"} onClick={() => onAct("close")}>
             Close
+          </button>
+        )}
+        {check?.closes && c.status !== "closed" && close === null && (
+          <button type="button" className="button" onClick={() => onAct("close")}>
+            Close and write the checks
           </button>
         )}
         {exp === null && (
@@ -199,6 +209,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
         ]}
       />
       <StateBar counts={c.counts} />
+      {check && <CheckPanel caps={caps} campaign={c} />}
       {a?.per_axis && Object.keys(a.per_axis).length > 0 && (
         <p className="meta">
           By axis:{" "}
@@ -331,10 +342,12 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
       {shown.length > ROWS && <p className="meta">The first {n(ROWS)} of {n(shown.length)} are listed.</p>}
       {answers === null && <p className="meta">The answers could not be read at this detail.</p>}
       {blind && <p className="meta">Raters rate blind: each answer shows here once the campaign closes, and to its adjudicators before.</p>}
-      <Says head="What closing does">
-        Every agreed or adjudicated item becomes one decision through Review, {c.closes_into === "stage" ? "staged until a person commits it" : "in force"}; an item a model or an agent settled is staged
-        whatever the campaign says. Items without an outcome stay open in the queue. Leases still out end. Every answer stays, and the agreement is kept.
-      </Says>
+      {check ? null : (
+        <Says head="What closing does">
+          Every agreed or adjudicated item becomes one decision through Review, {c.closes_into === "stage" ? "staged until a person commits it" : "in force"}; an item a model or an agent settled is staged
+          whatever the campaign says. Items without an outcome stay open in the queue. Leases still out end. Every answer stays, and the agreement is kept.
+        </Says>
+      )}
       {children}
     </section>
   );
