@@ -1608,6 +1608,89 @@ async fn the_people_door_says_who_holds_a_grant_to_a_person_holding_it() {
     );
 }
 
+/// Anyone who may make a check sees the names of the people who may read it,
+/// and nothing more (ruled on 2026-10-12): a maker of checks (work on
+/// Campaigns and Pipelines) who does not hold `assistant:use` asks who holds
+/// `campaigns:work` and reads each person's subject, display and `holds`;
+/// the same person is refused the list without `holding` and with `holding`
+/// naming another grant, and one who may make no check is refused it all.
+#[tokio::test]
+async fn a_check_maker_without_the_assistant_lists_who_may_read_a_check_and_nothing_more() {
+    let engine = fake_engine().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    let own = |grants: &[&str]| Given {
+        grants: grants.iter().map(|g| g.to_string()).collect(),
+        ..Default::default()
+    };
+    for (name, password, display, given) in [
+        (
+            "anna",
+            "correct horse battery",
+            "Anna",
+            entitled(&["admin", "assist"]),
+        ),
+        ("bo", "another long password", "Bo", entitled(&["reader"])),
+        (
+            "dee",
+            "a fourth long password",
+            "Dee",
+            own(&["campaigns:see", "campaigns:work", "pipelines:see"]),
+        ),
+        (
+            "eve",
+            "a fifth long password",
+            "Eve",
+            own(&["campaigns:see", "campaigns:work"]),
+        ),
+    ] {
+        nils_desk::users::add(&shared.store, name, password, Some(display), &given).unwrap();
+    }
+    let client = client();
+    let dee = login(&client, &origin, "dee", "a fourth long password").await;
+    let eve = login(&client, &origin, "eve", "a fifth long password").await;
+    let raters = format!("{origin}/desk/people?holding=campaigns:work");
+    let r = client
+        .get(&raters)
+        .header("cookie", &dee)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(
+        body,
+        json!({"people": [
+            {"subject": "anna", "display": "Anna", "holds": true},
+            {"subject": "bo", "display": "Bo", "holds": false},
+            {"subject": "eve", "display": "Eve", "holds": true}
+        ]})
+    );
+    for refused in [
+        "/desk/people",
+        "/desk/people?holding=pipelines:see",
+        "/desk/people?holding=campaigns:see",
+    ] {
+        let r = client
+            .get(format!("{origin}{refused}"))
+            .header("cookie", &dee)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 403, "{refused}");
+    }
+    // work on Campaigns without Pipelines makes no check: the door stays shut
+    let r = client
+        .get(&raters)
+        .header("cookie", &eve)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+}
+
 /// A fake Kvasir whose catalog answers only a bearer, as Kvasir does wherever
 /// people sign in, and the bearers it saw.
 async fn fake_kvasir() -> (String, Arc<Mutex<Vec<String>>>) {

@@ -441,18 +441,31 @@ pub async fn users_entitlements(
 /// `?holding=<grant>` on the people door: say of each person whether what
 /// their groups and their own grants add up to holds that grant, for a person
 /// choosing who does work that needs it (a check's raters need
-/// `campaigns:work`, or their claim is refused). Asked only by a person who
-/// holds the grant themselves.
+/// `campaigns:work`, or their claim is refused). Asked by a person who holds
+/// the grant themselves, or for a check's raters by one who may make a check.
 #[derive(Debug, Default, serde::Deserialize)]
 pub struct PeopleQuery {
     holding: Option<String>,
 }
+
+/// What a check's raters need: their claims are refused without it.
+const RATES_A_CHECK: &str = "campaigns:work";
+
+/// What making a check takes, as the engine's make door asks it: work on
+/// Campaigns, and Pipelines beside it for a question of kind `check` (a 403
+/// without either); the desk's New check refuses without either as well.
+const MAKES_A_CHECK: [&str; 2] = ["campaigns:work", "pipelines:see"];
 
 /// The people a person may name when sharing a conversation: everyone the desk
 /// keeps in `local` mode, and everyone who has signed in at least once in
 /// `oidc` mode, by subject and display name, never the person asking. A person
 /// holding `assistant:use` asks; a desk nobody signs in to has one person and
 /// lists nobody. With `holding`, each person adds `holds` (see [`PeopleQuery`]).
+///
+/// Anyone who may make a check sees the names of the people who may read it,
+/// and nothing more (ruled on 2026-10-12): `?holding=campaigns:work` answers
+/// them without `assistant:use`, each person by subject, display and `holds`.
+/// Every other use of the door still needs `assistant:use`.
 pub async fn people_list(
     State(desk): State<Shared>,
     Query(q): Query<PeopleQuery>,
@@ -465,12 +478,23 @@ pub async fn people_list(
                 "a desk nobody signs in to has one person",
             )));
         }
-        let me = session::holding(
-            &desk,
-            &headers,
-            "assistant:use",
-            "listing the people on the desk",
-        )?;
+        let (session, _) = session::resolve(&desk, &headers);
+        let Some(session) = session else {
+            return Err(Box::new(error(
+                StatusCode::UNAUTHORIZED,
+                "no session; log in at the desk",
+            )));
+        };
+        let me = session::person(&desk, &session);
+        // a check's maker names its raters: who may read it, by name, and nothing more
+        let raters = q.holding.as_deref() == Some(RATES_A_CHECK)
+            && MAKES_A_CHECK.iter().all(|g| me.holds(g));
+        if !raters && !me.holds_name("assistant:use") {
+            return Err(Box::new(error(
+                StatusCode::FORBIDDEN,
+                "listing the people on the desk needs assistant:use",
+            )));
+        }
         let mut people = std::collections::BTreeMap::<String, String>::new();
         if desk.config.mode == Mode::Local {
             for u in desk.store.users() {
@@ -487,7 +511,7 @@ pub async fn people_list(
             Some(g) if !grants::is_grant(g) => {
                 return Err(bad(format!("holding: {g} is no grant")));
             }
-            Some(g) if !me.holds(g) => {
+            Some(g) if !raters && !me.holds(g) => {
                 return Err(Box::new(error(
                     StatusCode::FORBIDDEN,
                     format!("asking who holds {g} needs {g}"),
