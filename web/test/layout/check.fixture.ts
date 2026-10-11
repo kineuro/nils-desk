@@ -265,6 +265,8 @@ export function checkEngine(o: CheckOpts = {}): typeof fetch {
   const campaign = checkCampaign(o);
   const items = (campaign as unknown as { items: { id: number; position: number }[] }).items;
   let next = 800;
+  /** The check New check made, which the page it lands on reads. */
+  let made: Record<string, unknown> | null = null;
   /** The item the caller holds a lease on, from the claim until it is answered or given back. */
   let leased: number | null = null;
   const standing = () => kept.filter((k) => k.superseded_by === null).sort((a, b) => b.answer - a.answer);
@@ -323,7 +325,7 @@ export function checkEngine(o: CheckOpts = {}): typeof fetch {
       const mine = standing().find((k) => k.item === item);
       return json(200, checkSheet(item, o, mine ? { answer: mine.answer, value: mine.value, form: mine.form, why: mine.why, seconds: 4.2, round: 1 } : null));
     }
-    if (method === "GET" && path === `${c}/stats`) return json(200, { campaign: CAMPAIGN_ID, all: { answers: 38, median_seconds: 6.4, verdicts: { accepted: 30, rejected: 1, flagged: 7 }, reasons: { under: 3, not_lesion: 4, missed: 2 } }, raters: [ownRow(), ...(o.others ? [{ principal: "other@site", answers: o.others, median_seconds: 5.2, verdicts: { accepted: o.others }, reasons: {} }] : [])] });
+    if (method === "GET" && (path === `${c}/stats` || (made && path === `/api/campaigns/${made.id}/stats`))) return json(200, { campaign: CAMPAIGN_ID, all: { answers: 38, median_seconds: 6.4, verdicts: { accepted: 30, rejected: 1, flagged: 7 }, reasons: { under: 3, not_lesion: 4, missed: 2 } }, raters: [ownRow(), ...(o.others ? [{ principal: "other@site", answers: o.others, median_seconds: 5.2, verdicts: { accepted: o.others }, reasons: {} }] : [])] });
     if (method === "GET" && path === `${c}/answers`) {
       const list = o.read ? checkAnswers(o) : [];
       return json(200, { campaign: CAMPAIGN_ID, count: list.length, answers: list, blind: false });
@@ -339,7 +341,11 @@ export function checkEngine(o: CheckOpts = {}): typeof fetch {
       if (Array.isArray(q.reasons) && q.reasons.length === 0) return json(400, { error: "question.reasons: one to 7 reasons, the keys 3 to 9; 0 given" });
       return json(200, checkPreview(body ?? {}));
     }
-    if (method === "POST" && path === "/api/campaigns") return json(201, { ...campaign, id: 52, name: body?.name, raters_per_item: body?.raters_per_item ?? 1, rater_policy: { raters: Array.isArray(body?.raters) ? body.raters : [], adjudicators: [] }, pictures: { stacks: 900, have: 880, missing: 20, place: "working", job: 41 }, layers: { pairs: 1000, missing: 40, have: 960, job: 41 } });
+    if (method === "GET" && made && path === `/api/campaigns/${made.id}`) return json(200, made);
+    if (method === "POST" && path === "/api/campaigns") {
+      made = { ...campaign, id: 52, name: body?.name, raters_per_item: body?.raters_per_item ?? 1, rater_policy: { raters: Array.isArray(body?.raters) ? body.raters : [], adjudicators: [] } };
+      return json(201, { ...made, pictures: { stacks: 900, have: 880, missing: 20, place: "working", job: 41 }, layers: { pairs: 1000, missing: 40, have: 960, job: 41 } });
+    }
     if (method === "GET" && path === `/api/pipeline-runs/${RUN_ID}`) return json(200, RUN);
     if (method === "GET" && path === "/api/pipeline-runs") return json(200, { runs: [RUN, { ...RUN, id: 76, status: "done", derivatives: [], pipeline: "mriqc", pipeline_id: 3 }] });
     if (method === "GET" && path === "/api/pipelines") return json(200, { pipelines: [SAMSEG], capability: null });

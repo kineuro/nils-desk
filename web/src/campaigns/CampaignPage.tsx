@@ -403,7 +403,7 @@ function ItemRow({ item: i, answers, blind, words = answerWords, check = false }
           : blind
             ? `${answers.length} ${answers.length === 1 ? "answer" : "answers"}`
             : answers.map((a) => (
-              <span key={a.id} className="answer-chip" title={a.why ?? undefined}>
+              <span key={a.id} className={check ? "answer-chip is-check" : "answer-chip"} title={a.why ?? undefined}>
                 {a.principal.split("@")[0]}
                 {a.role === "adjudicator" ? " (adj.)" : ""} {words(a)}
                 {a.unsure ? " · unsure" : ""}

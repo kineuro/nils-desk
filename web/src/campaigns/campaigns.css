@@ -13,6 +13,8 @@
 .campaign > .state-bar { margin: 0.2rem 0 0.4rem; }
 
 .campaign-items .answer-chip { display: inline-block; margin-right: 0.6rem; white-space: nowrap; }
+/* a check's answer is a sentence: each rater's on its own line, wrapped, so the outcome keeps its width */
+.campaign-items .answer-chip.is-check { display: block; margin: 0 0 0.15rem; white-space: normal; }
 .closure { display: grid; gap: 0.4rem; }
 .closure p { margin: 0; }
 .make-form { display: grid; gap: 0.8rem; }
