@@ -1550,6 +1550,64 @@ async fn the_people_on_the_desk_are_listed_for_a_person_holding_the_assistant() 
     assert_eq!(r.status(), 404);
 }
 
+/// New check's Who row: a person holding a grant asks which of the people on
+/// the desk hold it as well, each with `holds` from what their groups and own
+/// grants add up to; a person without the grant is refused, a name that is
+/// no grant is a bad request, and without the query the list is as it was.
+#[tokio::test]
+async fn the_people_door_says_who_holds_a_grant_to_a_person_holding_it() {
+    let engine = fake_engine().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    for (name, password, display, entitlements) in [
+        ("anna", "correct horse battery", "Anna", ["admin", "assist"]),
+        ("bo", "another long password", "Bo", ["admin", "admin"]),
+        ("cy", "a third long password", "Cy", ["reader", "assist"]),
+    ] {
+        nils_desk::users::add(
+            &shared.store,
+            name,
+            password,
+            Some(display),
+            &entitled(&entitlements),
+        )
+        .unwrap();
+    }
+    let client = client();
+    let anna = login(&client, &origin, "anna", "correct horse battery").await;
+    let cy = login(&client, &origin, "cy", "a third long password").await;
+    let asked = format!("{origin}/desk/people?holding=campaigns:work");
+    let body = get_json(&client, asked.clone(), &anna).await;
+    assert_eq!(
+        body["people"],
+        json!([
+            {"subject": "bo", "display": "Bo", "holds": true},
+            {"subject": "cy", "display": "Cy", "holds": false}
+        ])
+    );
+    let r = client
+        .get(&asked)
+        .header("cookie", &cy)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = client
+        .get(format!("{origin}/desk/people?holding=campaigns:everything"))
+        .header("cookie", &anna)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 400);
+    let body = get_json(&client, format!("{origin}/desk/people"), &cy).await;
+    assert_eq!(
+        body["people"],
+        json!([{"subject": "anna", "display": "Anna"}, {"subject": "bo", "display": "Bo"}])
+    );
+}
+
 /// A fake Kvasir whose catalog answers only a bearer, as Kvasir does wherever
 /// people sign in, and the bearers it saw.
 async fn fake_kvasir() -> (String, Arc<Mutex<Vec<String>>>) {

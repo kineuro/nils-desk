@@ -349,7 +349,13 @@ export function checkEngine(o: CheckOpts = {}): typeof fetch {
       const wanted = url.searchParams.get("check") === "unchecked" ? rows.filter((r) => r.check === null) : rows;
       return json(200, { derivatives: wanted, capability: null });
     }
-    if (method === "GET" && path === "/desk/people") return json(200, { people: [{ subject: "adithya", display: "Adithya" }] });
+    if (method === "GET" && path === "/desk/people") {
+      const people = [
+        { subject: "adithya", display: "Adithya", holds: true },
+        { subject: "bo", display: "Bo", holds: false },
+      ];
+      return json(200, { people: url.searchParams.get("holding") === "campaigns:work" ? people : people.map(({ subject, display }) => ({ subject, display })) });
+    }
     if (method === "GET" && path.startsWith("/api/packs/")) return json(200, { pack: "mri", version: "0.13.0", contract: 6, axes: [], picks: [{ roles: ["t1w", "flair", "t2w", "swi"] }] });
     return json(404, { error: `no door ${method} ${path}` });
   };

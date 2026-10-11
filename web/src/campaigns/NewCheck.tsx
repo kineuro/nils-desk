@@ -7,7 +7,9 @@
 // are keys in chips, only the chosen one in colour: which results, the part
 // set looked at, one item per result or per lesion, the scans beside the
 // one the result was made on, the answers (the preset reasons for the set's
-// kind, which the person may change), and who reads. The foot says what
+// kind, which the person may change), and who reads: the people who hold
+// work on Campaigns, which a rater's claim needs, the others named as
+// lacking it. The foot says what
 // the engine would make (the preview door, asked again a moment after each
 // change) and what it leaves out, each in a tag with its why on hover.
 // Making it opens the check reader at once for one of its raters; a maker
@@ -55,6 +57,22 @@ export function principalFor(caps: Capabilities, subject: string): string {
   const mine = caps.person.subject;
   if (me !== mine && me.startsWith(`${mine}@`)) return `${subject}${me.slice(mine.length)}`;
   return subject;
+}
+
+/** What a rater's claim needs of the desk: work on Campaigns. */
+const RATER_NEEDS = "campaigns:work";
+
+/** A person on the desk who may be named to read, and whether they hold what a rater needs (null where the desk does not say). */
+export interface Reader {
+  principal: string;
+  display: string;
+  holds: boolean | null;
+}
+
+/** The people offered to read, never the maker (who is "Me"), and those left out for lacking work on Campaigns. */
+export function readersOf(people: readonly Reader[], me: string): { offered: Reader[]; lacking: Reader[] } {
+  const others = people.filter((p) => p.principal !== me);
+  return { offered: others.filter((p) => p.holds !== false), lacking: others.filter((p) => p.holds === false) };
 }
 
 export function NewCheck({ caps, run = null, onClose }: { caps: Capabilities; run?: RunChoice | null; onClose: () => void }) {
@@ -157,7 +175,7 @@ function CheckForm({ caps, run, onClose, onBack }: { caps: Capabilities; run: Ru
   const [previewWhy, setPreviewWhy] = useState<string | null>(null);
   const [counts, setCounts] = useState<Counts | null>(null);
   const [pack, setPack] = useState<PackDoc | null>(null);
-  const [people, setPeople] = useState<{ principal: string; display: string }[]>([]);
+  const [people, setPeople] = useState<Reader[]>([]);
   const [busy, setBusy] = useState(false);
   const [why, setWhy] = useState<string | null>(null);
   const [adding, setAdding] = useState<"reason" | "role" | null>(null);
@@ -166,14 +184,14 @@ function CheckForm({ caps, run, onClose, onBack }: { caps: Capabilities; run: Ru
   const set = (p: Partial<CheckDraft>) => setD((x) => ({ ...x, ...p }));
   const out = run.outputs.find((o) => o.id === d.output) ?? run.outputs[0];
 
-  // the pack's roles for "+ scan", and the people who may read
+  // the pack's roles for "+ scan", and the people who may read: a rater's claim needs work on Campaigns
   useEffect(() => {
     const name = caps.engine?.packs[0]?.name;
     if (name) review.pack(name).then(setPack, () => undefined);
     if (caps.desk?.mode !== "off")
-      fetch("/desk/people")
-        .then((r) => (r.ok ? (r.json() as Promise<{ people?: { subject: string; display: string }[] }>) : { people: [] }))
-        .then((r) => setPeople((r.people ?? []).map((p) => ({ principal: principalFor(caps, p.subject), display: p.display || p.subject }))))
+      fetch(`/desk/people?holding=${RATER_NEEDS}`)
+        .then((r) => (r.ok ? (r.json() as Promise<{ people?: { subject: string; display: string; holds?: boolean }[] }>) : { people: [] }))
+        .then((r) => setPeople((r.people ?? []).map((p) => ({ principal: principalFor(caps, p.subject), display: p.display || p.subject, holds: typeof p.holds === "boolean" ? p.holds : null }))))
         .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -264,6 +282,7 @@ function CheckForm({ caps, run, onClose, onBack }: { caps: Capabilities; run: Ru
     { k: "sample", words: "A sample", count: null },
   ];
   const sets = run.outputs.flatMap((o) => o.sets.map((s) => ({ o, s })));
+  const readers = readersOf(people, me);
   const perPart = d.setKind === "components";
   const tags = shown ? leftOutTags(shown) : [];
   return (
@@ -416,7 +435,7 @@ function CheckForm({ caps, run, onClose, onBack }: { caps: Capabilities; run: Ru
 
         <span className="check-row-label">Who</span>
         <span className="chips" role="group" aria-label="who">
-          {[{ principal: me, display: "Me" }, ...people.filter((p) => p.principal !== me)].map((p) => {
+          {[{ principal: me, display: "Me" }, ...readers.offered].map((p) => {
             const on = d.raters.includes(p.principal);
             return (
               <button key={p.principal} type="button" className={on ? "opt on" : "opt"} aria-pressed={on} onClick={() => set({ raters: on ? d.raters.filter((x) => x !== p.principal) : [...d.raters, p.principal], perItem: !on || d.raters.length > 2 ? d.perItem : 1 })}>
@@ -424,6 +443,11 @@ function CheckForm({ caps, run, onClose, onBack }: { caps: Capabilities; run: Ru
               </button>
             );
           })}
+          {readers.lacking.length > 0 && (
+            <span className="meta check-lacking" title={`${readers.lacking.map((p) => p.display).join(", ")}: a claim needs work on Campaigns, which an admin gives on the Identity page`}>
+              {readers.lacking.length <= 3 ? readers.lacking.map((p) => p.display).join(", ") : `${n(readers.lacking.length)} more`} without work on Campaigns
+            </span>
+          )}
           <span className="check-each">
             each read by
             {([1, 2] as const).map((k) => (
