@@ -43,7 +43,10 @@ export interface SummaryStep {
   tree?: "anon" | "originals";
   waiting?: number;
   held?: number;
+  /** The read: the files it refused, those set aside among them included. */
   refused?: number;
+  /** The read (record 56, 2026-10-11): the files it set aside by policy, which are not scans and ask nobody anything. */
+  set_aside?: number;
   reads?: number;
   /** The read (the duplicate policy, 2026-10-10): the files read as their scan's own, the copies of a scan another dataset read first or this one holds already, the files held because their scan is filed under another subject, visit or series, those a person let go out of the read, and those gone from the folder. */
   new?: number;
@@ -67,6 +70,13 @@ export interface SummaryStep {
   jobs?: number[];
   /** Body part and post-contrast: why a run of it would be refused now, none where its door would start one. */
   refusal?: StepRefusal | null;
+}
+
+/** One kind of file the read set aside, not a scan: a stable key, its plural in plain words, and how many. */
+export interface SetAsideKind {
+  kind: string;
+  words: string;
+  count: number;
 }
 
 /** What a dataset holds and where it is (`GET /api/datasets/{name}/summary`). */
@@ -93,6 +103,9 @@ export interface DatasetSummary {
     read: number;
     refused: number;
     refused_batch: number | null;
+    /** Record 56 (2026-10-11): the files set aside by policy, not scans, and by kind in plain words; an engine from before says neither. */
+    set_aside?: number;
+    set_aside_kinds?: SetAsideKind[];
     held: number;
     new?: number;
     known?: number;
@@ -169,6 +182,21 @@ export function stepsOfSources(d: Dataset): SummaryStep[] {
     { step: "pictures", state: "waiting", ...none, made: 0, of: d.totals.stacks },
     { step: "views", state: "waiting", ...none, made: 0, of: d.totals.stacks },
   ];
+}
+
+/**
+ * The files a read refused that a person may look at: the refused ones less
+ * those set aside by policy (record 56, 2026-10-11), which are not scans and
+ * ask nobody anything. An engine from before sets none aside.
+ */
+export function refusedOnly(s: { refused?: number; set_aside?: number }): number {
+  return Math.max(0, (s.refused ?? 0) - (s.set_aside ?? 0));
+}
+
+/** The kinds of file the read set aside, most first, in one terse line: "screen captures 176 · presentation states 15". */
+export function setAsideWords(kinds: SetAsideKind[] | undefined): string | null {
+  const shown = (kinds ?? []).filter((k) => k.count > 0);
+  return shown.length > 0 ? shown.map((k) => `${k.words} ${n(k.count)}`).join(" · ") : null;
 }
 
 /** A dataset's step by name, where the summary has it. */
@@ -306,7 +334,8 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
     case "read":
       what = s.state === "waiting" && v("reads") === 0 ? "not yet" : `${n(v("files"))} read`;
       if (v("same_instance") > 0) what += ` · ${n(v("same_instance"))} held`;
-      if (v("refused") > 0) what += ` · ${n(v("refused"))} not images`;
+      if (v("set_aside") > 0) what += ` · ${n(v("set_aside"))} set aside`;
+      if (refusedOnly(s) > 0) what += ` · ${n(refusedOnly(s))} refused`;
       hint = readWords(s) ?? undefined;
       break;
     case "sorted":
@@ -357,9 +386,10 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
  * (the duplicate policy, 2026-10-10): new, already in another dataset,
  * twice in this dataset, held because the scan is filed under another
  * subject, visit or series, let go out of the read by a person, gone from
- * the folder, and not images. Null where the engine gives none of these.
+ * the folder, set aside as not scans, and refused. Null where the engine
+ * gives none of these.
  */
-export function readWords(s: Pick<SummaryStep, "new" | "known" | "twice" | "same_instance" | "left_out" | "gone" | "refused">): string | null {
+export function readWords(s: Pick<SummaryStep, "new" | "known" | "twice" | "same_instance" | "left_out" | "gone" | "refused" | "set_aside">): string | null {
   const parts: string[] = [];
   const add = (v: number | undefined, words: string) => {
     if (typeof v === "number" && v > 0) parts.push(`${n(v)} ${words}`);
@@ -371,7 +401,8 @@ export function readWords(s: Pick<SummaryStep, "new" | "known" | "twice" | "same
   add(s.same_instance, "held: the scan is filed under another subject, visit or series");
   add(s.left_out, "left out of the read by a person");
   add(s.gone, "gone from the folder");
-  add(s.refused, "not images");
+  add(s.set_aside, "set aside: not scans");
+  add(refusedOnly(s), "refused");
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
