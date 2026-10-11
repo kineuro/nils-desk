@@ -6,7 +6,7 @@
 // the rail four to a row; a phone's width is one column of cards with no
 // sideways scroll; body part's, post-contrast's and main scans' Run sit inside their steps,
 // main scans' Run, Rules and "?" on one line at 1280, 1440 and 1920 pixels also where an
-// identified dataset has nine steps, which says its subject with no scans;
+// identified dataset has nine steps, which says whose its set-aside files are;
 // a map copied as a person copies it reaches the pseudonymise step by Ctrl+V
 // on the box or by Paste, in Firefox as in chromium. Screenshots go to
 // test-results for a look.
@@ -127,7 +127,7 @@ test("body part, post-contrast and main scans carry their Run inside their steps
   }
 });
 
-test("an identified dataset read keeps main scans' Run, Rules and \"?\" on one line, and says its subject with no scans", async ({ page }) => {
+test("an identified dataset read keeps main scans' Run, Rules and \"?\" on one line, and says whose its set-aside files are", async ({ page }) => {
   // five widths, each a page of its own
   test.setTimeout(120_000);
   for (const [width, rows] of [
@@ -149,8 +149,9 @@ test("an identified dataset read keeps main scans' Run, Rules and \"?\" on one l
     const run = (await ms.locator(".dp-step-run").boundingBox())!;
     expect(run.x + run.width).toBeLessThanOrEqual(cell.x + cell.width + 1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
-    // a subject whose every file the read set aside is the dataset's still, said beside the files set aside
-    await expect(page.locator(".dp-detail .meta").filter({ hasText: "set aside" }).first()).toContainText("183 set aside, why · 1 subject with no scans · 216 refused, why");
+    // the files set aside are of a subject with no stack in it, which it does not count among its subjects: said of the files
+    await expect(page.locator(".dp-detail .dp-funnel")).toContainText("15 subjects");
+    await expect(page.locator(".dp-detail .meta").filter({ hasText: "set aside" }).first()).toContainText("183 set aside, all from 1 subject with no scans, why · 216 refused, why");
     await page.locator(".dp-detail").screenshot({ path: `test-results/data-no-scans-${width}.png` });
   }
 });
