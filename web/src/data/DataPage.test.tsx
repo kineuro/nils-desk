@@ -105,6 +105,8 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
     state: d.name === "ward-c" ? "unknown" : "anonymised",
     added_at: AT,
     subjects: d.totals.subjects,
+    // Nima, 2026-10-11: a subject whose every file the read set aside is still the dataset's, one with no scans
+    no_scans: d.name === "study-big" ? 1 : 0,
     sessions: d.totals.sessions,
     studies: d.totals.studies,
     scans,
@@ -362,7 +364,8 @@ describe("datasets and cohorts on one page", () => {
     expect(refused?.getAttribute("href")).toBe("#data/batch/30");
     // record 56: the files set aside are not scans; "why" says their kinds, and nothing asks about them
     const meta = () => [...d.querySelectorAll(".meta")].map((m) => m.textContent ?? "");
-    expect(meta().some((t) => t.includes(" · 3 set aside, why · 1 refused, why"))).toBe(true);
+    // a subject whose every file was set aside is counted among the subjects, said beside them
+    expect(meta().some((t) => t.includes(" · 3 set aside, why · 1 subject with no scans · 1 refused, why"))).toBe(true);
     expect(meta().some((t) => t.startsWith("Not scans"))).toBe(false);
     const why = [...d.querySelectorAll<HTMLButtonElement>("button.link-button")].find((b) => b.textContent === "why")!;
     expect(why.getAttribute("aria-expanded")).toBe("false");

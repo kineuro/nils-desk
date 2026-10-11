@@ -43,6 +43,7 @@ import {
   idsWords,
   logLine,
   maySummarise,
+  noScansWords,
   operationOf,
   originalIdWords,
   railSteps,
@@ -424,6 +425,8 @@ function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; 
   const setAside = s?.files.set_aside ?? 0;
   const asideKinds = setAsideWords(s?.files.set_aside_kinds);
   const [why, setWhy] = useState(false);
+  // Nima, 2026-10-11: a subject whose every file was set aside is still the dataset's, one with no scans
+  const noScans = s?.no_scans ?? d.totals.no_scans ?? 0;
   const refused = refusedOnly({ refused: s?.files.refused ?? d.totals.refused_files, set_aside: setAside });
   const batch = s?.files.refused_batch ?? null;
   // the duplicate policy (2026-10-10): files gone from the folder, files a
@@ -500,6 +503,12 @@ function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; 
                 </button>
               </>
             )}
+          </>
+        )}
+        {noScans > 0 && (
+          <>
+            {" · "}
+            <span className="dp-phrase">{noScansWords(noScans)}</span>
           </>
         )}
         {refused > 0 && (

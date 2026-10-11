@@ -4,7 +4,9 @@
 // its three columns side by side; a cohort chosen draws how it grew with no
 // event over another and its four steps on one line; a narrower window folds
 // the rail four to a row; a phone's width is one column of cards with no
-// sideways scroll; body part's, post-contrast's and main scans' Run sit inside their steps;
+// sideways scroll; body part's, post-contrast's and main scans' Run sit inside their steps,
+// main scans' Run, Rules and "?" on one line at 1280, 1440 and 1920 pixels also where an
+// identified dataset has nine steps, which says its subject with no scans;
 // a map copied as a person copies it reaches the pseudonymise step by Ctrl+V
 // on the box or by Paste, in Firefox as in chromium. Screenshots go to
 // test-results for a look.
@@ -12,6 +14,16 @@
 import { expect, test, type BrowserContext, type Locator, type Page } from "@playwright/test";
 
 const tops = async (l: Locator) => (await l.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)))) as number[];
+
+/** Main scans' Run, Rules and "?" side by side on one line, in that order, inside their step. */
+async function oneLine(run: Locator) {
+  const [button, rules, hint] = [(await run.locator("button").boundingBox())!, (await run.locator("a").boundingBox())!, (await run.locator(".hint").boundingBox())!];
+  expect(rules.x).toBeGreaterThanOrEqual(button.x + button.width);
+  expect(hint.x).toBeGreaterThanOrEqual(rules.x + rules.width);
+  for (const b of [rules, hint]) expect(Math.abs(b.y + b.height / 2 - (button.y + button.height / 2))).toBeLessThan(4);
+  // the "?" whole, not squeezed
+  expect(hint.width).toBeGreaterThan(15);
+}
 
 /** A map as a person copies it from a spreadsheet or an editor: from a page of its own, with the keys, onto the browser's clipboard. */
 async function copied(context: BrowserContext, page: Page) {
@@ -72,8 +84,12 @@ test("a cohort chosen draws how it grew, no event over another", async ({ page }
 });
 
 test("body part, post-contrast and main scans carry their Run inside their steps, post-contrast's held with its reason", async ({ page }) => {
+  // four widths, each a page of its own
+  test.setTimeout(120_000);
   for (const [width, rows] of [
+    [1280, 1],
     [1440, 1],
+    [1920, 1],
     [390, 4],
   ] as const) {
     await page.setViewportSize({ width, height: 900 });
@@ -90,8 +106,8 @@ test("body part, post-contrast and main scans carry their Run inside their steps
     await expect(runs.nth(2).locator("button")).toHaveText("Run again");
     await expect(runs.nth(2).locator("button")).toBeEnabled();
     await expect(runs.nth(2).locator("a")).toHaveText("Rules");
-    // each Run on one line inside its step, the rail as it was; main scans' Rules beside their Run,
-    // its "?" folding under them where the step is narrow
+    // each Run on one line inside its step, the rail as it was; main scans' Rules and "?" beside their Run
+    // on the same line (Nima, 2026-10-11: the "?" fell under them on a 1440 screen)
     for (const i of [3, 4, 5]) {
       const step = page.locator(".dp-detail .dp-step").nth(i);
       const cell = (await step.boundingBox())!;
@@ -101,15 +117,41 @@ test("body part, post-contrast and main scans carry their Run inside their steps
       expect(run.x + run.width).toBeLessThanOrEqual(cell.x + cell.width + 1);
       expect(run.y + run.height).toBeLessThanOrEqual(cell.y + cell.height + 1);
       expect(button.height).toBeLessThan(40);
-      expect(run.height).toBeLessThan(i === 5 ? 64 : 40);
+      expect(run.height).toBeLessThan(40);
     }
     const ms = page.locator(".dp-detail .dp-step").nth(5).locator(".dp-step-run");
-    const [msRun, msRules] = [(await ms.locator("button").boundingBox())!, (await ms.locator("a").boundingBox())!];
-    expect(msRules.x).toBeGreaterThanOrEqual(msRun.x + msRun.width);
-    expect(Math.abs(msRules.y + msRules.height / 2 - (msRun.y + msRun.height / 2))).toBeLessThan(4);
+    await oneLine(ms);
     expect(new Set(await tops(page.locator(".dp-detail .dp-step"))).size).toBe(rows);
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await page.locator(".dp-detail .dp-steps").screenshot({ path: `test-results/data-step-run-${width}.png` });
+  }
+});
+
+test("an identified dataset read keeps main scans' Run, Rules and \"?\" on one line, and says its subject with no scans", async ({ page }) => {
+  // five widths, each a page of its own
+  test.setTimeout(120_000);
+  for (const [width, rows] of [
+    [1280, 1],
+    [1440, 1],
+    [1920, 1],
+    [1000, 3],
+    [390, 5],
+  ] as const) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/data.html?read#data/datasets?dataset=study-identified");
+    await expect(page.locator(".dp-detail")).toHaveAttribute("aria-label", "study-identified");
+    await expect(page.locator(".dp-detail .dp-step")).toHaveCount(9);
+    expect(new Set(await tops(page.locator(".dp-detail .dp-step"))).size).toBe(rows);
+    const ms = page.locator(".dp-detail .dp-step").filter({ hasText: "Main scans" });
+    await expect(ms.locator(".dp-step-run button")).toHaveText("Run again");
+    await oneLine(ms.locator(".dp-step-run"));
+    const cell = (await ms.boundingBox())!;
+    const run = (await ms.locator(".dp-step-run").boundingBox())!;
+    expect(run.x + run.width).toBeLessThanOrEqual(cell.x + cell.width + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    // a subject whose every file the read set aside is the dataset's still, said beside the files set aside
+    await expect(page.locator(".dp-detail .meta").filter({ hasText: "set aside" }).first()).toContainText("183 set aside, why · 1 subject with no scans · 216 refused, why");
+    await page.locator(".dp-detail").screenshot({ path: `test-results/data-no-scans-${width}.png` });
   }
 });
 
