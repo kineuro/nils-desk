@@ -31,6 +31,7 @@ import {
   checkDoors,
   checkItemWords,
   checkKey,
+  checkProgress,
   clearLast,
   flag,
   gridOf,
@@ -55,6 +56,7 @@ import {
   type Marks,
   type Verdict,
 } from "./check";
+import { campaigns } from "./client";
 import { READER_VIEWS } from "./compare";
 import { CompareReader, type Built, type ComparePanel, type CompareSheet, type CompareSpec, type ItemCtx, type ItemPage } from "./CompareReader";
 import { slotOf } from "./values";
@@ -64,31 +66,10 @@ export const CHECK_PANEL_KEYS = ["p0", "p1", "p2", "p3", "p4", "p5", "p6", "p7"]
 
 /** The sheets read ahead, by campaign and item: each is taken once, so a sheet read again (an answer opened with `b`) is the engine's now. */
 const ahead = new Map<string, Promise<CheckSheet>>();
-/** How many items each campaign has, as its item door last said, and who waits to hear it. */
-const totals = new Map<string, number>();
-const waiting = new Map<string, ((n: number) => void)[]>();
-
-function toldTotal(c: string, n: number): void {
-  totals.set(c, n);
-  for (const w of waiting.get(c) ?? []) w(n);
-  waiting.delete(c);
-}
-
-/** The campaign's count of items, once an item door said it (or nothing after a while). */
-function totalOf(c: string, ms = 4000): Promise<number | null> {
-  const have = totals.get(c);
-  if (have !== undefined) return Promise.resolve(have);
-  return new Promise((done) => {
-    const t = setTimeout(() => done(null), ms);
-    waiting.set(c, [...(waiting.get(c) ?? []), (n) => (clearTimeout(t), done(n))]);
-  });
-}
 
 /** Forget the sheets read ahead (a test, or a page that knows the answers changed). */
 export function forgetCheckSheets(): void {
   ahead.clear();
-  totals.clear();
-  waiting.clear();
 }
 
 function sheetOf(c: string, item: number): Promise<CheckSheet> {
@@ -152,13 +133,10 @@ function checkSpec(role: "rater" | "adjudicator"): CompareSpec<Verdict> {
     answerHelp: VERDICT_HELP,
     panelKeys: CHECK_PANEL_KEYS,
     panelWord: (k) => `panel ${Number(k.slice(1)) + 1}`,
-    sheet: (c, item) =>
-      sheetOf(c, item).then((s): CompareSheet => {
-        toldTotal(c, s.of);
-        return { item: s.item, panels: comparePanels(s), extra: s };
-      }),
-    summary: (c) =>
-      Promise.all([checkDoors.stats(c), totalOf(c)]).then(([s, items]) => ({ items: Math.max(items ?? 0, s.answers), answered: s.answers, median: s.median, counts: verdictLine(s.verdicts) })),
+    sheet: (c, item) => sheetOf(c, item).then((s): CompareSheet => ({ item: s.item, panels: comparePanels(s), extra: s })),
+    // the reader's own: their answers against the items given to them, their own pace and verdicts
+    summary: (c, me) =>
+      Promise.all([checkDoors.stats(c, me, true), campaigns.one(c)]).then(([s, campaign]) => ({ ...checkProgress(campaign, me, role), median: s.median, counts: verdictLine(s.verdicts), verb: role === "adjudicator" ? "settled" : "read" })),
     says: () => null,
     difference: false,
     useItem: useCheckItem,

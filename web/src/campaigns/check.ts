@@ -18,7 +18,7 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import type { Manifest } from "../viewer/doors";
 import { dot, geometry, planePosition, type Vec3 } from "../viewer/geometry";
-import type { Campaign } from "./client";
+import type { Assignment, Campaign } from "./client";
 
 /** The doors of a check, as the engine's OpenAPI 7 names them (E2). */
 export const CHECK = {
@@ -338,11 +338,44 @@ export interface CheckStats {
   own: boolean;
 }
 
-export function checkStatsOf(raw: Json, principal: string | null = null): CheckStats {
+/**
+ * The stats door's counts: every rater's where the caller reads them, else
+ * their own row. With `own`, the caller's own row whatever else they read
+ * (the reader's band): none yet is nothing, never another rater's row.
+ */
+export function checkStatsOf(raw: Json, principal: string | null = null, own = false): CheckStats {
   const all = raw.all && typeof raw.all === "object" && !Array.isArray(raw.all) ? (raw.all as Json) : null;
-  const rows = Array.isArray(raw.raters) ? (raw.raters as Json[]) : [];
-  const row = all ?? rows.find((r) => r && r.principal === principal) ?? rows[0] ?? {};
-  return { verdicts: counts(row.verdicts), reasons: counts(row.reasons), median: num(row.median_seconds), answers: num(row.answers) ?? 0, own: !all };
+  const rows = (Array.isArray(raw.raters) ? (raw.raters as Json[]) : []).filter((r): r is Json => !!r && typeof r === "object");
+  const mine = rows.find((r) => r.principal === principal) ?? null;
+  const row = own ? (mine ?? (!all && rows.length === 1 ? rows[0] : {})) : (all ?? mine ?? rows[0] ?? {});
+  return { verdicts: counts(row.verdicts), reasons: counts(row.reasons), median: num(row.median_seconds), answers: num(row.answers) ?? 0, own: own || !all };
+}
+
+/**
+ * A reader's own progress in a check: their own answers against the items
+ * given to them, never every rater's (with two raters to an item, the other
+ * rater's answers are not this one's reads). A rater's items are those they
+ * answered or hold, and those a claim may still give them: open, never given
+ * to them in any role or state (a result given back is not offered again),
+ * and wanting more raters than the campaign shows holding it. A rater who
+ * reads blind sees only their own assignments, so there another rater's
+ * lease still counts as open until it is answered. An adjudicator's items
+ * are those they settled or hold, and those waiting for one that they did
+ * not rate and no other adjudicator holds.
+ */
+export function checkProgress(c: Pick<Campaign, "items" | "assignments" | "raters_per_item">, me: string, role: "rater" | "adjudicator" = "rater"): { items: number; answered: number } {
+  const all: Assignment[] = c.assignments ?? [];
+  const mine = all.filter((a) => a.principal === me);
+  const done = new Set(mine.filter((a) => a.role === role && a.state === "submitted").map((a) => a.item_id));
+  const held = new Set(mine.filter((a) => a.role === role && (a.state === "leased" || a.state === "offered") && !done.has(a.item_id)).map((a) => a.item_id));
+  // a rater is never given an item twice; an adjudicator never one they rated
+  const given = new Set(mine.filter((a) => role === "rater" || a.role === "adjudicator" || a.state === "submitted").map((a) => a.item_id));
+  const taken = new Map<number, number>();
+  for (const a of all) if (a.principal !== me && a.role === role && (a.state === "leased" || a.state === "submitted" || (role === "adjudicator" && a.state === "offered"))) taken.set(a.item_id, (taken.get(a.item_id) ?? 0) + 1);
+  const want = role === "rater" ? Math.max(1, c.raters_per_item || 1) : 1;
+  const waiting = role === "rater" ? "open" : "needs_adjudication";
+  const left = (c.items ?? []).filter((i) => i.state === waiting && !given.has(i.id) && (taken.get(i.id) ?? 0) < want).length;
+  return { answered: done.size, items: done.size + held.size + left };
 }
 
 export const checkDoors = {
@@ -353,7 +386,7 @@ export const checkDoors = {
       return s;
     }),
   preview: (body: Json) => door<Json>("POST", "/api/campaigns/preview", body).then(previewOf),
-  stats: (c: number | string, principal: string | null = null) => door<Json>("GET", `/api/campaigns/${id(c)}/stats`).then((r) => checkStatsOf(r, principal)),
+  stats: (c: number | string, principal: string | null = null, own = false) => door<Json>("GET", `/api/campaigns/${id(c)}/stats`).then((r) => checkStatsOf(r, principal, own)),
 };
 
 // ---------------------------------------------------------------- an answer

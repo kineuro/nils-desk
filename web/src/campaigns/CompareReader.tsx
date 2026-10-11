@@ -40,7 +40,7 @@ import type { Manifest } from "../viewer/doors";
 import type { ViewerProps } from "../viewer/Viewer";
 import type { ViewMode } from "../viewer/view";
 import { aheadOf, Warmer, type Ahead } from "./ahead";
-import { beatEvery, campaigns, leaseLeft, leaseWords, refused as refusedWords, type AnswerBody, type Campaign, type Item, type MyAnswer } from "./client";
+import { beatEvery, campaigns, leaseLeft, leaseWords, principalOf, refused as refusedWords, type AnswerBody, type Campaign, type Item, type MyAnswer } from "./client";
 import { compareKey, hubFollow, hubLinks, keyGroups, loadPrefs, nextView, prefsKey, READER_VIEWS, savePrefs, tiedCount, viewLabel, viewOf, withAll, withPanel, DEFAULT_PREFS, type ReaderPrefs } from "./compare";
 import { RegionJumps, WindowControl } from "./Compare";
 import { answerOf, useCorrection } from "./correct";
@@ -129,9 +129,12 @@ export interface ItemPage<A extends string> {
   keyGroups?: { title: string; keys: [string, string][] }[];
 }
 
+/** The reader's own progress: their answers against the items given to them. */
 export interface CompareSummary {
   items: number;
   answered: number;
+  /** What the reader does to an item, in the band: "read" where none is said, "settled". */
+  verb?: string;
   median: number | null;
   /** How often each answer was given, in words. */
   counts: string;
@@ -152,7 +155,8 @@ export interface CompareSpec<A extends string> {
   panelKeys: readonly string[];
   panelWord: (key: string) => string;
   sheet: (c: string, item: number) => Promise<CompareSheet>;
-  summary: (c: string) => Promise<CompareSummary>;
+  /** The band's counts for the reader `me` (the engine's principal). */
+  summary: (c: string, me: string) => Promise<CompareSummary>;
   /** What the chosen answer says of a panel, shown on it. */
   says: (chosen: A, panel: string) => { words: string; post: boolean } | null;
   /** The candidate minus each reference (anchored reading). */
@@ -239,9 +243,10 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
     },
     [id, spec],
   );
+  const me = principalOf(caps);
   const refreshSummary = useCallback(() => {
-    spec.summary(id).then(setSummary, () => undefined);
-  }, [id, spec]);
+    spec.summary(id, me).then(setSummary, () => undefined);
+  }, [id, spec, me]);
 
   useEffect(() => {
     let alive = true;
@@ -797,16 +802,17 @@ function Progress({ summary, open, shownAt, noun }: { summary: CompareSummary | 
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
-  const share = summary && summary.items > 0 ? summary.answered / summary.items : null;
+  const share = summary && summary.items > 0 ? Math.min(1, summary.answered / summary.items) : null;
+  const verb = summary?.verb ?? "read";
   return (
     <span className="rate-count-line compare-progress">
       {summary ? (
         <>
-          <span className="compare-meter" role="progressbar" aria-valuemin={0} aria-valuemax={summary.items} aria-valuenow={summary.answered} aria-label={`${summary.answered} of ${summary.items} read`}>
+          <span className="compare-meter" role="progressbar" aria-valuemin={0} aria-valuemax={summary.items} aria-valuenow={summary.answered} aria-label={`${summary.answered} of ${summary.items} ${verb}`}>
             <span style={{ width: `${Math.round((share ?? 0) * 1000) / 10}%` }} />
           </span>
           <span title={summary.counts}>
-            <b>{summary.answered.toLocaleString("en")}</b> of {summary.items.toLocaleString("en")} read · <b>{Math.max(0, summary.items - summary.answered).toLocaleString("en")}</b> left
+            <b>{summary.answered.toLocaleString("en")}</b> of {summary.items.toLocaleString("en")} {verb} · <b>{Math.max(0, summary.items - summary.answered).toLocaleString("en")}</b> left
             {summary.median !== null && ` · median ${summary.median} s`}
           </span>
         </>

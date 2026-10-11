@@ -40,6 +40,8 @@ export interface CheckOpts {
   open?: number;
   log?: Asked[];
   kept?: KeptCheck[];
+  /** Another rater, other@site, who read the first n items already: each item then wants two raters, as in a check read by two. */
+  others?: number;
 }
 
 /** The lesions of the result, bottom to top: a box of voxel corners and the voxel nearest the centre, mm LPS. */
@@ -65,8 +67,8 @@ export function checkCampaign(o: CheckOpts = {}): Campaign {
     grain: o.grain ?? "result",
     source: { run: RUN_ID, output: "labels", which: "unchecked" },
     handle_id: null,
-    raters_per_item: 1,
-    rater_policy: { raters: ["rater@site"], adjudicators: [] },
+    raters_per_item: o.others === undefined ? 1 : 2,
+    rater_policy: { raters: o.others === undefined ? ["rater@site"] : ["rater@site", "other@site"], adjudicators: [] },
     adjudication: { when: "disagree", metric: "exact", threshold: null },
     closes_into: "check",
     lease_seconds: 900,
@@ -195,7 +197,21 @@ export function checkEngine(o: CheckOpts = {}): typeof fetch {
   const campaign = checkCampaign(o);
   const items = (campaign as unknown as { items: { id: number; position: number }[] }).items;
   let next = 800;
+  /** The item the caller holds a lease on, from the claim until it is answered or given back. */
+  let leased: number | null = null;
   const standing = () => kept.filter((k) => k.superseded_by === null).sort((a, b) => b.answer - a.answer);
+  // the campaign's assignments now: the other rater's answers, the caller's, and the caller's lease
+  const assignment = (id: number, item: number, principal: string, state: string) => ({ id, campaign_id: CAMPAIGN_ID, item_id: item, principal, role: "rater", round: 1, state, created_at: "2026-10-11T08:30:00Z", leased_at: "2026-10-11T08:30:00Z", lease_until: null, ended_at: null });
+  const assignments = () => [
+    ...items.slice(0, o.others ?? 0).map((i, n) => assignment(600 + n, i.id, "other@site", "submitted")),
+    ...[...new Set(kept.map((k) => k.item))].map((item, n) => assignment(700 + n, item, "rater@site", "submitted")),
+    ...(leased !== null && !kept.some((k) => k.item === leased) ? [assignment(500, leased, "rater@site", "leased")] : []),
+  ];
+  const ownRow = () => {
+    const mine = standing();
+    const verdicts = Object.fromEntries(["accepted", "rejected", "flagged"].map((v) => [v, mine.filter((k) => k.value === v).length]));
+    return { principal: "rater@site", answers: mine.length, median_seconds: mine.length > 0 ? 4.2 : null, verdicts, reasons: {} };
+  };
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://desk.test");
     const path = url.pathname;
@@ -204,14 +220,19 @@ export function checkEngine(o: CheckOpts = {}): typeof fetch {
     log.push({ method, path: path + url.search, body });
     const c = `/api/campaigns/${CAMPAIGN_ID}`;
     const open = items.findIndex((i) => !kept.some((k) => k.item === i.id));
-    if (method === "GET" && path === c) return json(200, campaign);
+    if (method === "GET" && path === c) return json(200, { ...campaign, assignments: assignments() });
     if (method === "GET" && path === "/api/campaigns") return json(200, { count: 1, campaigns: [campaign] });
-    if (method === "POST" && path === `${c}/claim`) return json(200, open < 0 ? { assignment: null, item: null, why: "every item is answered" } : checkClaimed(open, o));
+    if (method === "POST" && path === `${c}/claim`) {
+      leased = open < 0 ? null : items[open].id;
+      return json(200, open < 0 ? { assignment: null, item: null, why: "every item is answered" } : checkClaimed(open, o));
+    }
+    if (method === "POST" && path.endsWith("/release")) leased = null;
     if (method === "POST" && (path.endsWith("/renew") || path.endsWith("/release"))) return json(200, checkClaimed(Math.max(0, open), o).assignment);
     if (method === "POST" && path.startsWith(`${c}/assignments/`) && path.endsWith("/answer")) {
       const it = items[Math.max(0, open)];
       const k: KeptCheck = { answer: ++next, item: it.id, position: it.position, value: String(body?.value), form: body?.form ?? null, why: typeof body?.why === "string" ? body.why : null, via: "claim", supersedes: null, superseded_by: null };
       kept.push(k);
+      leased = null;
       return json(200, { answer: k.answer, item: it.id, state: "agreed", adjudication: null });
     }
     if (method === "GET" && path === `${c}/mine`) {
@@ -234,7 +255,7 @@ export function checkEngine(o: CheckOpts = {}): typeof fetch {
       const mine = standing().find((k) => k.item === item);
       return json(200, checkSheet(item, o, mine ? { answer: mine.answer, value: mine.value, form: mine.form, why: mine.why, seconds: 4.2, round: 1 } : null));
     }
-    if (method === "GET" && path === `${c}/stats`) return json(200, { campaign: CAMPAIGN_ID, all: { answers: 38, median_seconds: 6.4, verdicts: { accepted: 30, rejected: 1, flagged: 7 }, reasons: { under: 3, not_lesion: 4, missed: 2 } }, raters: [{ principal: "rater@site", answers: 38, median_seconds: 6.4 }] });
+    if (method === "GET" && path === `${c}/stats`) return json(200, { campaign: CAMPAIGN_ID, all: { answers: 38, median_seconds: 6.4, verdicts: { accepted: 30, rejected: 1, flagged: 7 }, reasons: { under: 3, not_lesion: 4, missed: 2 } }, raters: [ownRow(), ...(o.others ? [{ principal: "other@site", answers: o.others, median_seconds: 5.2, verdicts: { accepted: o.others }, reasons: {} }] : [])] });
     if (method === "GET" && path === `${c}/answers`) return json(200, { campaign: CAMPAIGN_ID, count: 0, answers: [] });
     if (method === "GET" && path === "/api/label-sets") return json(200, { label_sets: [] });
     if (method === "POST" && path === "/api/campaigns/preview") {
