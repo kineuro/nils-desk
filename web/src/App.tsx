@@ -20,6 +20,7 @@ import { PipelinesPage } from "./ops/PipelinesPage";
 import { ReleasePage } from "./ops/ReleasePage";
 import { QueryPage } from "./query/QueryPage";
 import { door, state } from "./deployment";
+import { type Load, type Read, missed, next, outage, READ_EVERY_MS, RETRY_MS } from "./held";
 import { may } from "./grants";
 import { Home } from "./home/Home";
 import { CampaignsPage } from "./campaigns/CampaignsPage";
@@ -44,7 +45,6 @@ import { useKept } from "./ui/kept";
 import { PageBoundary } from "./ui/PageBoundary";
 import { ThemeSwitch } from "./ui/ThemeSwitch";
 
-type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
 
 export function App() {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
@@ -71,17 +71,25 @@ export function App() {
 
   useEffect(() => {
     let alive = true;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    // refreshed when a part's health or the engine's epoch moves; a read that
+    // missed keeps the page shown (held.ts) and is asked again sooner
     const fetchCaps = () =>
       fetch("/desk/capabilities")
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`the desk answered ${r.status}`))))
-        .then((caps: Capabilities) => alive && setLoad({ kind: "ready", caps }))
-        .catch((e: Error) => alive && setLoad({ kind: "failed", why: e.message }));
+        .then(
+          (caps: Capabilities): Read => ({ caps }),
+          (e: Error): Read => ({ error: e.message }),
+        )
+        .then((read) => {
+          if (!alive) return;
+          setLoad((prev) => next(prev, read, Date.now()));
+          t = setTimeout(fetchCaps, missed(read) ? RETRY_MS : READ_EVERY_MS);
+        });
     fetchCaps();
-    // refreshed when a part's health or the engine's epoch moves
-    const t = setInterval(fetchCaps, 15_000);
     return () => {
       alive = false;
-      clearInterval(t);
+      clearTimeout(t);
     };
   }, []);
 
@@ -153,6 +161,8 @@ export function App() {
   if (load.kind === "failed") return <main className="state lone">The desk did not answer: {load.why}</main>;
   const caps = load.caps;
   const st = state(caps);
+  // the engine has missed several reads in a row: said above the page, which stays
+  const slow = outage(load);
   // a model backend that is still warming keeps only the assistant waiting
   const ready = usable(caps);
   const side = sections(
@@ -226,6 +236,12 @@ export function App() {
       {caps.desk.contract_mismatch && !caps.desk.contract_mismatch.major && caps.desk.contract_mismatch.direction === "ahead" && (
         <div className="banner" role="note">
           The engine is ahead of this desk. Everything here still works; update the desk to see what the engine added.
+        </div>
+      )}
+      {slow !== null && (
+        <div className="banner" role="status">
+          The engine is slow to answer: nothing has come back since {new Date(slow).toLocaleTimeString()}. The page stays as it was and catches up when
+          the engine answers.
         </div>
       )}
       {st.kind === "warming" && (
