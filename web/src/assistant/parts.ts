@@ -103,6 +103,8 @@ export interface Change {
 export interface Step {
   words: string;
   reasoning: string;
+  /** A check sent the turn back after this step and the answer written after it replaces these words (2026-10-11). */
+  replaced?: boolean;
 }
 
 export interface Turn {
@@ -190,17 +192,29 @@ export function joinSteps(before: string, next: string): string {
   return before.endsWith("\n") ? `${before}\n${next}` : `${before}\n\n${next}`;
 }
 
-/** An assistant turn's answer and thinking, drawn from its steps: inline reasoning is read out of each step's own words. */
+/**
+ * An assistant turn's answer and thinking, drawn from its steps: inline reasoning is read out of each step's own words.
+ * Words a check replaced are left out once a later step has written its own, so the person reads the answer once
+ * (2026-10-11); a turn that wrote nothing after the check keeps them.
+ */
 function drawn(t: Turn, steps: Step[]): Turn {
+  const splits = steps.map((step) => splitReasoning(step.words));
+  let last = -1;
+  steps.forEach((step, i) => {
+    if (step.replaced) last = i;
+  });
+  const replaced = last >= 0 && splits.slice(last + 1).some((split) => split.text.trim() !== "");
   let text = "";
   let thinking = "";
-  for (const step of steps) {
-    const split = splitReasoning(step.words);
-    text = joinSteps(text, split.text);
-    thinking = joinSteps(thinking, joinSteps(step.reasoning.trim(), split.thinking));
-  }
+  steps.forEach((step, i) => {
+    if (!(replaced && i <= last)) text = joinSteps(text, splits[i].text);
+    thinking = joinSteps(thinking, joinSteps(step.reasoning.trim(), splits[i].thinking));
+  });
   return { ...t, steps, text, thinking };
 }
+
+/** Whether a part is the mark that the turn's words so far are replaced by the answer it writes next. */
+const isReplaced = (raw: unknown): boolean => asOneChatPart(raw)?.kind === "replaced";
 
 /** The steps of a turn that was built without them, as one step. */
 const stepsOf = (t: Turn): Step[] => t.steps ?? [{ words: t.text, reasoning: t.thinking ?? "" }];
@@ -229,6 +243,9 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
         }
         if (state.changes.some((x) => x.id === one.id)) return state;
         return { ...state, changes: [...state.changes, { id: one.id, change: one.change, title: one.title, sentence: one.sentence, lines: one.lines, turn: turnId, decided: null }] };
+      case "replaced":
+        // it marks the steps it follows, which only the stream and the history know (reduce, fromHistory)
+        return state;
     }
   }
   const p = asPart(raw);
@@ -339,6 +356,8 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
       return { ...state, turns: state.turns.map((t) => ({ ...t, tools: t.tools.map((x) => (x.id === c.toolCallId ? { ...x, state: done } : x)) })) };
     }
     case "data-part":
+      // the steps so far were sent back by a check: the answer that comes next replaces their words (2026-10-11)
+      if (isReplaced(c.data)) return withTurn(state, String(c.messageId), (t) => drawn(t, stepsOf(t).map((step) => ({ ...step, replaced: true }))));
       return acceptPart(state, String(c.messageId), c.data);
     case "message-completed":
       // a step of a tracked turn ends where it calls a tool, and the answer goes on: the turn's settlement ends it
@@ -418,6 +437,12 @@ export function fromHistory(h: History, previous: PaneState = empty(), now?: num
       else if (p.type === "dynamic-tool" && p.toolCallId) {
         t.tools.push(toolCall(p.toolCallId, p.toolName ?? "", p.state === "output-error" ? "failed" : p.state === "output-available" ? "done" : "running", p.input));
         called = true;
+      } else if (m.role === "assistant" && p.type.startsWith("data-") && isReplaced(p.data)) {
+        // the mark sits right after the step a check sent back: that step and those before it are replaced, and what follows begins a step of its own
+        for (const s of steps) s.replaced = true;
+        steps.push({ ...step, replaced: true });
+        step = { words: "", reasoning: "" };
+        called = false;
       }
     }
     // an open answer whose last part is a tool call: the words still to come begin the next step, as they would live

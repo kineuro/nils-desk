@@ -53,6 +53,13 @@
 //    options: {label: string, count?: number | null}[]}
 //       From `ask_user`; the turn ends there. A click sends the label as the
 //       person's next message; the box stays open for other words.
+//   {kind: "replaced"}
+//       The words the turn wrote so far are replaced by the answer it writes
+//       next: a check before the turn settled sent it back (2026-10-11). Live
+//       it arrives before the next step starts; in a history it sits right
+//       after the parts of the step it replaces. Once words follow it, the
+//       words before it are not shown; a turn that writes none after it keeps
+//       them.
 //   Today's parts stay as they are: move_proposal and choice map onto the
 //   approval and clarification cards, and a job plan from the inbox (today's
 //   Confirm card) maps onto the approval card.
@@ -93,14 +100,15 @@ export type OneChatPart =
       lines: string[];
       ref: { document?: number; parent?: number | null; plan?: string };
     }
-  | { kind: "clarification"; question: string; options: { label: string; count: number | null }[] };
+  | { kind: "clarification"; question: string; options: { label: string; count: number | null }[] }
+  | { kind: "replaced" };
 
 const STATUSES: PlanStatus[] = ["pending", "running", "done", "failed", "skipped"];
 const CHANGES: ChangeKind[] = ["query_version", "job_plan", "sorting_words", "identity_merge", "identity_rule"];
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** The guard of the one chat's parts: one of the four shapes, or null. */
+/** The guard of the one chat's parts: one of the five shapes, or null. */
 export function asOneChatPart(v: unknown): OneChatPart | null {
   if (typeof v !== "object" || v === null) return null;
   const o = v as Record<string, unknown>;
@@ -142,6 +150,8 @@ export function asOneChatPart(v: unknown): OneChatPart | null {
       });
       return { kind: "clarification", question: o.question, options };
     }
+    case "replaced":
+      return { kind: "replaced" };
     default:
       return null;
   }

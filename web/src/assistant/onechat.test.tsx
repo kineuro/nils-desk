@@ -96,6 +96,38 @@ describe("the Assistant, messages first", () => {
   });
 });
 
+describe("an answer a check sent back (2026-10-11)", () => {
+  it("is read once: the answer written after the check replaces the one before it", async () => {
+    const step = { type: "message-started", messageId: "a9", submissionId: "s5" };
+    // the stream as the assistant sends it: each step on the answer's one message, the mark after the step sent back
+    await mount([
+      { type: "message-appended", message: { id: "u9", role: "user", display: "visible", submissionId: "s5", parts: [text("how many dataset do we have?")] } },
+      step,
+      { type: "message-delta", messageId: "a9", kind: "text", delta: "Two. They are study-fresh and study-identified." },
+      { type: "message-completed", messageId: "a9" },
+      { type: "data-part", messageId: "a9", name: "replaced", data: { kind: "replaced" } },
+      step,
+      { type: "tool-input", messageId: "a9", toolCallId: "t9", toolName: "query_draft", input: {} },
+      { type: "message-completed", messageId: "a9" },
+      { type: "tool-output", toolCallId: "t9", output: "rows" },
+      step,
+      { type: "message-delta", messageId: "a9", kind: "text", delta: "Two: study-fresh and study-identified, by the saved question." },
+      { type: "message-completed", messageId: "a9" },
+      { type: "submission-settled", submissionId: "s5", outcome: "completed" },
+    ]);
+    const box = host.querySelector<HTMLTextAreaElement>("textarea")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, "how many dataset do we have?");
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button(host, "Send")!.click());
+    await settle(16);
+    const answers = [...host.querySelectorAll(".said")].filter((el) => !el.classList.contains("you")).map(words);
+    expect(answers.filter((w) => /study-fresh/u.test(w))).toEqual([expect.stringMatching(/^Two: study-fresh and study-identified, by the saved question\./u)]);
+    expect(words(host)).not.toMatch(/They are study-fresh/u);
+  });
+});
+
 describe("a query answer", () => {
   it("is one quiet card: Query and its version, its title, Open, the funnel as subjects, visits and scans, and three bars; nothing to accept on it", async () => {
     await mount();
