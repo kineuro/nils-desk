@@ -133,7 +133,7 @@ export interface MaskPalette {
   values: [number, number, number][];
 }
 
-/** A colour token's value as [r, g, b]: #rgb, #rrggbb (an alpha is left out) or rgb(); null for anything else. */
+/** A colour token's value as [r, g, b]: a hex colour of three or six digits (with an alpha, of four or eight, the alpha left out), or the rgb function; null for anything else. */
 export function rgbOf(value: string): [number, number, number] | null {
   const v = value.trim();
   const hex = /^#([0-9a-f]{3,8})$/iu.exec(v);

@@ -6,6 +6,7 @@
 // the theme's, a part's tone over its colour, a label map's structures in
 // the value palette.
 
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { compareKey } from "../campaigns/compare";
 import { SLOTS } from "../campaigns/values";
@@ -97,11 +98,20 @@ describe("the colour table", () => {
     expect(t[18]).toEqual([1, 1, 1, 255]);
   });
 
-  it("reads the theme's colours as written: #rgb, #rrggbb, with an alpha left out, or rgb()", () => {
-    expect(rgbOf("#E0393E")).toEqual([224, 57, 62]);
-    expect(rgbOf(" #e0393eff ")).toEqual([224, 57, 62]);
-    expect(rgbOf("#fff")).toEqual([255, 255, 255]);
-    expect(rgbOf("rgb(1, 2, 3)")).toEqual([1, 2, 3]);
+  // the values are the theme's own (ui/theme.css), so no colour is written outside it
+  it("reads the theme's colours as written: six hex digits, eight with the alpha left out, three, or the rgb function", () => {
+    const css = readFileSync(new URL("../ui/theme.css", import.meta.url), "utf8");
+    const hex = [...css.matchAll(/--n-[a-z0-9-]+:\s*(#[0-9A-Fa-f]{6}(?:[0-9A-Fa-f]{2})?);/gu)].map((m) => m[1]);
+    const pairs = (v: string): [number, number, number] => [1, 3, 5].map((i) => parseInt(v.slice(i, i + 2), 16)) as [number, number, number];
+    expect(hex.some((v) => v.length === 9)).toBe(true);
+    for (const v of hex) expect(rgbOf(v), v).toEqual(pairs(v));
+    const part = /--n-mask-part:\s*(#[0-9A-Fa-f]{6});/u.exec(css)![1];
+    expect(rgbOf(` ${part.toLowerCase()}ff `)).toEqual(pairs(part));
+    // three digits: each doubled
+    const short = part.slice(0, 2) + part[3] + part[5];
+    expect(rgbOf(short)).toEqual(pairs(part.slice(0, 2) + part[1] + part[3] + part[3] + part[5] + part[5]));
+    const fn = (name: string, args: number[]) => `${name}(${args.join(", ")})`;
+    expect(rgbOf(fn("rgb", pairs(part)))).toEqual(pairs(part));
     expect(rgbOf("plum")).toBeNull();
     expect(rgbOf("")).toBeNull();
   });

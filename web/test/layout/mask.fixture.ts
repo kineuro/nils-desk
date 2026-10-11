@@ -18,7 +18,8 @@ export async function open(page: Page, view: "stack" | "planes", items = 3) {
       return masks.length === 2 && masks.every((m) => m === "ready") && p.stacksOf(0).every((s) => p.events.some((e) => e.stack === s && e.e.kind === "mask"));
     },
     null,
-    { timeout: 30_000 },
+    // the three planes' volumes are built and coloured in software on a runner without a GPU
+    { timeout: 75_000 },
   );
   // the actors coloured: cornerstone colours a labelmap on the render after it is added
   await page.waitForTimeout(400);

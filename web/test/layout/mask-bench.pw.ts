@@ -7,7 +7,11 @@
 // does): headless chromium otherwise draws WebGL in software, whose frames
 // are a loaded machine's, not a reader's.
 //
-//   PORT=5297 npx playwright test mask-bench
+// A timing on a shared runner is the runner's, so it is no gate: like the
+// reader's bench (scripts/viewer-bench.mjs) it runs when asked, and the
+// layout check holds what it times without the clock (mask.pw.ts).
+//
+//   NILS_BENCH=1 PORT=5297 npx playwright test mask-bench
 
 import { expect, test } from "@playwright/test";
 import { call, fetches, open } from "./mask.fixture";
@@ -15,6 +19,7 @@ import { call, fetches, open } from "./mask.fixture";
 test.use({ viewport: { width: 900, height: 1300 }, channel: "chromium", launchOptions: { args: ["--enable-gpu", "--ignore-gpu-blocklist", "--use-angle=vulkan", "--enable-features=Vulkan"] } });
 
 test("the next item from memory with its masks, and lesion to lesion", async ({ page }) => {
+  test.skip(!process.env.NILS_BENCH, "a bench: NILS_BENCH=1 runs it");
   test.setTimeout(150_000);
   const items = 10;
   const renderer = async () => page.evaluate(() => {

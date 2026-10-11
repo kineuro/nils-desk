@@ -343,7 +343,7 @@ function Page() {
         return { fill: o?.getValue(1) ?? null, colour: rgb.map((x) => Math.round(x * 255)), outline: !!p.getUseLabelOutline?.() && thick.some((t) => t > 0), outlineOpacity: p.getLabelOutlineOpacity?.() ?? null, thickness: thick[0] ?? null };
       },
       /** The next item: the time until both its pictures and both its masks are on the screen, from the switch. */
-      next: () =>
+      next: (limitMs = 5000) =>
         new Promise((resolve, reject) => {
           const [a, b] = stacksOf(itemNow + 1);
           const start = events.length;
@@ -367,7 +367,7 @@ function Page() {
               }
             trace.push(`${Math.round(now - t0)}:${[a, b].map((st) => stageOf(st)).join("/")}`);
             if ([`p${a}`, `p${b}`, `m${a}`, `m${b}`].every((k) => got[k] !== undefined)) return resolve({ pictures: Math.max(got[`p${a}`], got[`p${b}`]), masks: Math.max(got[`m${a}`], got[`m${b}`]), got, trace, frame: frames.length > 2 ? frames.slice(1).map((t, i) => t - frames[i]).sort((x, y) => x - y)[Math.floor((frames.length - 1) / 2)] : 16.7 });
-            if (now - t0 > 5000) return reject(new Error(`the next item was not drawn: ${JSON.stringify(got)}`));
+            if (now - t0 > limitMs) return reject(new Error(`the next item was not drawn: ${JSON.stringify(got)}`));
             requestAnimationFrame(check);
           };
           check();
