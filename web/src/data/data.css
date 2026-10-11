@@ -75,7 +75,8 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .dp-gap { margin-top: 0.375rem !important; }
 
 /* where it is: a node a step, the line between them filled as far as it got */
-.dp-steps { display: grid; grid-template-columns: repeat(var(--steps, 6), minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
+/* the steps share the line, and one whose Run row is wider than its share takes what that row needs (2026-10-11) */
+.dp-steps { display: grid; grid-template-columns: repeat(var(--steps, 6), minmax(min-content, 1fr)); margin: 0; padding: 0; list-style: none; }
 .dp-step { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; padding-right: 0.625rem; }
 .dp-step-mark { display: flex; align-items: center; }
 .dp-step-mark .node { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 1px solid var(--n-neutral-line); background: var(--n-bg-page); }
@@ -89,7 +90,11 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .dp-step-when { font-family: var(--n-font-mono); font-size: 12px; color: var(--n-text-faint); }
 .dp-step-when.now { color: var(--n-brand-text); }
 /* record 56: a step's Run, and the reason a run would be refused behind its "?"; main scans' link to their page */
-.dp-step-run { display: flex; align-items: center; flex-wrap: wrap; row-gap: 0.25rem; min-width: 0; margin-top: auto; }
+/* a step's Run, its link and its "?" on one line (Nima, 2026-10-11) */
+.dp-step-run { display: flex; align-items: center; flex-wrap: nowrap; row-gap: 0.25rem; white-space: nowrap; min-width: 0; margin-top: auto; }
+.dp-step-run > * { flex: none; }
+/* a phrase of a line that wraps whole, never mid-way */
+.dp-phrase { white-space: nowrap; }
 .dp-step-run > a { font-size: var(--n-text-size-small); }
 .dp-step-run > button + a { margin-left: 0.5rem; }
 .dp-step.failed .node { border-color: var(--n-caution-fg); }
@@ -166,13 +171,15 @@ a.dp-view:hover { background: var(--n-bg-hover); }
   .dp-col { border-right: 0; border-bottom: 1px solid var(--n-line); }
   .dp-col:last-child { border-bottom: 0; }
   /* a rail of more than six steps, four to a row, the line ending with each row */
-  .dp-steps.many { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 0.875rem; }
+  .dp-steps.many { grid-template-columns: repeat(4, minmax(min-content, 1fr)); row-gap: 0.875rem; }
   .dp-steps.many .dp-step:nth-child(4n) .link { display: none; }
 }
 @media (max-width: 760px) {
   /* the steps two to a row, without the line between them */
   .dp-steps, .dp-steps.many { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 0.875rem; }
   .dp-step-mark .link { display: none; }
+  /* a phone narrower than the Run row folds its "?" under it */
+  .dp-step-run { flex-wrap: wrap; }
   /* how a cohort grew, one event a line */
   .dp-grew { height: auto; display: flex; flex-direction: column; gap: 0.5rem; }
   .dp-grew::before { display: none; }
