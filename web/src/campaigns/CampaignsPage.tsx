@@ -9,6 +9,8 @@
 //   #campaigns/<id>/pairs       a pair campaign read two stacks at a time (the post-contrast study, pair mode; ?amend=<answer> one's own answer to correct)
 //   #campaigns/<id>/anchored    an anchored campaign: a candidate read beside a reference pre and a reference post (?amend=<answer> likewise)
 //   #campaigns/<id>/gallery     a hundred items of a one-axis campaign at once (record 50)
+//   #campaigns/<id>/check       a check's results read one at a time (job type 3, record 55 H3; ?as=adjudicator settles, ?amend=<answer> likewise)
+//   #campaigns?make=check       New check, from its run chooser (&run=<id> filled for that run)
 //   #campaigns/label-sets[/<n>] the label sets, or one
 
 import { useEffect, useState } from "react";
@@ -40,6 +42,10 @@ import { Workspace } from "./Workspace";
 import { AbReader } from "./AbReader";
 import { PairReader } from "./PairReader";
 import { AnchoredReader } from "./AnchoredReader";
+import { CheckReader } from "./CheckReader";
+import { NewCheck, runChoiceOf, type RunChoice } from "./NewCheck";
+import { checkServed, makeCheckRefusal } from "./check";
+import { catalog } from "../ops/catalog";
 import "./campaigns.css";
 
 export function CampaignsPage({ caps, page, arg, query }: { caps: Capabilities; page: string | null; arg: string | null; query?: Record<string, string> }) {
@@ -49,18 +55,34 @@ export function CampaignsPage({ caps, page, arg, query }: { caps: Capabilities; 
     if (arg === "settle") return <AbReader key={`${page}/settle`} caps={caps} id={page} />;
     if (arg === "pairs") return <PairReader key={`${page}/pairs/${query?.amend ?? ""}`} caps={caps} id={page} query={query} />;
     if (arg === "anchored") return <AnchoredReader key={`${page}/anchored/${query?.amend ?? ""}`} caps={caps} id={page} query={query} />;
+    if (arg === "check") return <CheckReader key={`${page}/check/${query?.amend ?? ""}/${query?.as ?? ""}`} caps={caps} id={page} query={query} role={query?.as === "adjudicator" ? "adjudicator" : "rater"} />;
     if (arg === "adjudicate") return <Workspace key={`${page}/adj`} caps={caps} id={page} role="adjudicator" />;
     if (arg === "gallery") return <Gallery key={`${page}/gallery`} caps={caps} id={page} />;
     return <CampaignPage caps={caps} id={page} missing={query?.missing && /^\d+$/u.test(query.missing) ? Number(query.missing) : null} />;
   }
-  return <ListPage caps={caps} prefill={prefillOf(query)} />;
+  return <ListPage caps={caps} prefill={prefillOf(query)} check={query?.make === "check" ? (query.run && /^\d+$/u.test(query.run) ? Number(query.run) : 0) : null} />;
 }
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Campaign[] };
 
-function ListPage({ caps, prefill }: { caps: Capabilities; prefill: Prefill | null }) {
+function ListPage({ caps, prefill, check = null }: { caps: Capabilities; prefill: Prefill | null; check?: number | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [making, setMaking] = useState<Prefill | null>(prefill);
+  // New check: from its run chooser (0), or filled for a run
+  const [checking, setChecking] = useState<{ run: RunChoice | null } | null>(check === 0 ? { run: null } : null);
+  useEffect(() => {
+    if (!check) return;
+    let alive = true;
+    Promise.all([catalog.runs(200), catalog.list()])
+      .then(([r, c]) => {
+        const run = r.runs.find((x) => x.id === check);
+        if (alive) setChecking({ run: run ? runChoiceOf(run, c.pipelines) : null });
+      })
+      .catch(() => alive && setChecking({ run: null }));
+    return () => {
+      alive = false;
+    };
+  }, [check]);
   useEffect(() => {
     campaigns
       .list()
@@ -79,6 +101,17 @@ function ListPage({ caps, prefill }: { caps: Capabilities; prefill: Prefill | nu
           taken={load.kind === "ready" ? load.list.map((c) => c.name) : []}
           onClose={() => {
             setMaking(null);
+            if (location.hash.includes("?")) history.replaceState(null, "", href("campaigns"));
+          }}
+          onCheck={checkServed(caps) && makeCheckRefusal(caps) === null ? () => (setMaking(null), setChecking({ run: null })) : undefined}
+        />
+      )}
+      {checking && (
+        <NewCheck
+          caps={caps}
+          run={checking.run}
+          onClose={() => {
+            setChecking(null);
             if (location.hash.includes("?")) history.replaceState(null, "", href("campaigns"));
           }}
         />
@@ -182,8 +215,8 @@ function CampaignTable({ caps, list }: { caps: Capabilities; list: readonly Camp
               <td className="meta nowrap">{c.agreement ? agreementWords(c.agreement) : "on its page"}</td>
               <td className="acts nowrap">
                 {rateRefusal(caps, c) === null && (c.counts.items.open ?? 0) > 0 && (
-                  <a className="button secondary" href={href("campaigns", String(c.id), "rate")}>
-                    Rate
+                  <a className="button secondary" href={href("campaigns", String(c.id), c.question.kind === "check" ? "check" : "rate")}>
+                    {c.question.kind === "check" ? "Check" : "Rate"}
                   </a>
                 )}
                 {adjudicatorHas(caps, c) && (

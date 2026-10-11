@@ -40,8 +40,17 @@
 // its own place while it is paged: the planes are turned to their cameras
 // once, and again only when the cut changes, never on a render (a render
 // that turned them again sent every plane back to its middle).
+//
+// A result's mask (record 55 H3, job type 3) is drawn over the scan where a
+// page names one (`mask`, useMask.ts): a labelmap on the stack view and on
+// the three planes, from the result's layer on this scan, shown, hidden and
+// restyled without a read. A page that shows several scans keeps one point
+// in the patient for all of them (`point`, set by a click through
+// `onPoint`): each shows the plane through it. Focusing a part (`focus`)
+// moves every view to the plane of its anchor and zooms to its box
+// (focus.ts); focus taken away gives the whole picture back.
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import * as cs from "@cornerstonejs/core";
 import * as tools from "@cornerstonejs/tools";
 import { DoorError } from "../ask/client";
@@ -59,10 +68,13 @@ import { coarsePlan, fps, levelFor, type VolumePlan } from "./ring";
 import { dropVolume, filledAhead, fillVolume, max3dTexture, volumePath, type Filling } from "./volume";
 import { viewerKey } from "./keys";
 import { drawnAs, isOblique, type ViewMode } from "./view";
+import { focusCamera, planeOfPoint, pointOnPlane, throughPoint, type Camera, type PartPlace } from "./focus";
+import { useMask, type MaskProp, type PlanesBuilt } from "./useMask";
 import "./viewer.css";
 
 export { PLANES, type Plane } from "./prefetch";
 export { drawnAs, isOblique, isViewMode, VIEW_MODES, type ViewMode } from "./view";
+export type { MaskProp, MaskState } from "./useMask";
 
 /** The one rendering engine the page's viewers share: its WebGL context outlives each stack. */
 export const ENGINE_ID = "nils-viewer";
@@ -89,7 +101,8 @@ function afterPaint(): Promise<void> {
 export type ViewerEvent =
   | { kind: "first-image"; ms: number; level: number }
   | { kind: "volume"; level: number; stride: number; bytes: number; filled: number; depth: number; done: boolean }
-  | { kind: "fallback"; why: string };
+  | { kind: "fallback"; why: string }
+  | { kind: "mask"; where: "stack" | "planes"; ms: number };
 
 export interface ViewerProps {
   stack: number;
@@ -127,6 +140,14 @@ export interface ViewerProps {
   voi?: { lower: number; upper: number } | null;
   /** The window the person dragged the pictures to, in stored values, for a page that moves the others with it. */
   onVoi?: (range: { lower: number; upper: number }) => void;
+  /** A result's mask over the scan (job type 3): its layer, its look, its parts' tones. */
+  mask?: MaskProp | null;
+  /** The point every panel of a page shows the plane through, mm in the patient (LPS). */
+  point?: Vec3 | null;
+  /** A click on the pictures (not a drag): the point under it, for the page to link. */
+  onPoint?: (p: Vec3) => void;
+  /** A part brought into view: the plane of its anchor, zoomed to its box; `key` names one focus apart from the next. Null gives the whole picture back. */
+  focus?: (PartPlace & { key: string | number }) | null;
 }
 
 interface Numbers {
@@ -198,7 +219,7 @@ function toolGroup(id: string): tools.Types.IToolGroup {
   return group;
 }
 
-export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", bare = false, onReady, budget, onEvent, onView, keys = false, slice = null, onSlice, onManifest, voi = null, onVoi }: ViewerProps) {
+export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", bare = false, onReady, budget, onEvent, onView, keys = false, slice = null, onSlice, onManifest, voi = null, onVoi, mask = null, point = null, onPoint, focus = null }: ViewerProps) {
   // one object per stack: an effect that names the ids must not run again on every render
   const ids = useMemo(() => viewerIds(stack), [stack]);
   const initial = drawnAs(mode, null);
@@ -268,6 +289,22 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
   const pressing = useRef(false);
   // the stack view built with its images, so a plane asked for before it was can be shown once it is
   const [stackReady, setStackReady] = useState(false);
+  // the planes' volume set on their viewports: the plan they end on, counted each time it is set (the mask is drawn on it again)
+  const [planesBuilt, setPlanesBuilt] = useState<PlanesBuilt | null>(null);
+  const toldPoint = useRef(onPoint);
+  toldPoint.current = onPoint;
+  const maskShown = useMask({
+    stack,
+    manifest,
+    mask,
+    engine,
+    ids,
+    stackEl: el,
+    stackReady,
+    level: () => levelRef.current,
+    planes: planesBuilt,
+    landed: (where) => tell.current?.({ kind: "mask", where, ms: Math.round(performance.now() - since) }),
+  });
 
   // the manifest, or the reason there is none: a 403 is the gated case, the render path alone is tried
   useEffect(() => {
@@ -380,6 +417,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
       turned.current = null;
       stackMounted.current = false;
       setStackReady(false);
+      setPlanesBuilt(null);
       drawn.current = new Set();
       setPainted(0);
       setWaited(false);
@@ -446,6 +484,103 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiKey, manifest, stackReady, volume?.done]);
 
+  // the linked point: the stack view to its plane nearest it, each of the three planes moved along its normal through it
+  const pointKey = point ? point.map((v) => v.toFixed(2)).join(",") : null;
+  const planesEpoch = planesBuilt?.epoch ?? 0;
+  // before the browser paints, so the views move in the frame the point is set in
+  useLayoutEffect(() => {
+    const re = engine.current;
+    if (!point || !re || !manifest) return;
+    const svp = stackReady ? (re.getViewport(ids.stack) as cs.StackViewport | undefined) : undefined;
+    if (svp && typeof svp.getCurrentImageIdIndex === "function") {
+      const { z } = planeOfPoint(manifest, point);
+      if (z !== svp.getCurrentImageIdIndex()) {
+        following.current = true;
+        svp.setImageIdIndex(z).catch(() => (following.current = false));
+      }
+    }
+    if (planesEpoch === 0) return;
+    for (const p of PLANES) {
+      const vp = re.getViewport(ids.planes[p]) as cs.VolumeViewport | undefined;
+      if (!vp) continue;
+      vp.setCamera(throughPoint(vp.getCamera() as Camera, point));
+      vp.render();
+    }
+    setTouched({ axial: true, coronal: true, sagittal: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pointKey, stackReady, planesEpoch, manifest]);
+
+  // a part in focus: every view to the plane of its anchor, zoomed to its box; once per focus and view, so a view built later is focused too
+  const focusKey = focus ? String(focus.key) : null;
+  const focusNow = useRef(focus);
+  focusNow.current = focus;
+  const focused = useRef<{ stack: string | null; planes: string | null }>({ stack: null, planes: null });
+  useLayoutEffect(() => {
+    const re = engine.current;
+    if (!re || !manifest) return;
+    const f = focusNow.current;
+    const aspect = (vp: { element: HTMLDivElement }) => (vp.element.clientWidth > 0 && vp.element.clientHeight > 0 ? vp.element.clientWidth / vp.element.clientHeight : 1);
+    const svp = stackReady ? (re.getViewport(ids.stack) as cs.StackViewport | undefined) : undefined;
+    const planeVps = planesEpoch > 0 ? PLANES.map((p) => re.getViewport(ids.planes[p]) as cs.VolumeViewport | undefined).filter((v): v is cs.VolumeViewport => !!v) : [];
+    const reset = { resetPan: true, resetZoom: true, resetToCenter: false, resetOrientation: false };
+    if (!f) {
+      // focus taken away: the whole picture again, on the planes it shows now
+      if (svp && focused.current.stack !== null) {
+        svp.resetCamera(reset);
+        svp.render();
+      }
+      if (focused.current.planes !== null) for (const vp of planeVps) (vp.resetCamera(reset), vp.render());
+      focused.current = { stack: null, planes: null };
+      return;
+    }
+    const k = String(f.key);
+    let alive = true;
+    if (svp && typeof svp.getCurrentImageIdIndex === "function" && focused.current.stack !== k) {
+      focused.current.stack = k;
+      const { z } = planeOfPoint(manifest, f.anchor);
+      const level = levelRef.current;
+      const moving = z !== svp.getCurrentImageIdIndex();
+      following.current = moving;
+      (moving ? svp.setImageIdIndex(z) : Promise.resolve(""))
+        .then(() => {
+          if (!alive) return;
+          svp.setCamera(focusCamera(svp.getCamera() as Camera, f, aspect(svp), pointOnPlane(manifest, level, z)));
+          svp.render();
+        })
+        .catch(() => undefined);
+    }
+    if (planeVps.length && focused.current.planes !== k) {
+      focused.current.planes = k;
+      for (const vp of planeVps) {
+        vp.setCamera(focusCamera(vp.getCamera() as Camera, f, aspect(vp)));
+        vp.render();
+      }
+      setTouched({ axial: true, coronal: true, sagittal: true });
+    }
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey, stackReady, planesEpoch, manifest]);
+
+  // a click on the pictures, not a drag: the point under it, for the page to link every panel through
+  const down = useRef<{ x: number; y: number; t: number } | null>(null);
+  const clicked = (e: ReactPointerEvent) => {
+    const d = down.current;
+    down.current = null;
+    const re = engine.current;
+    if (!d || !re || !toldPoint.current || e.button !== 0) return;
+    if (Math.hypot(e.clientX - d.x, e.clientY - d.y) > 4 || performance.now() - d.t > 500) return;
+    for (const id of [ids.stack, ...PLANES.map((p) => ids.planes[p])]) {
+      const vp = re.getViewport(id);
+      if (!vp || !vp.element.contains(e.target as Node)) continue;
+      const r = vp.element.getBoundingClientRect();
+      const w = vp.canvasToWorld([e.clientX - r.left, e.clientY - r.top]);
+      if (w && w.every((v) => Number.isFinite(v))) toldPoint.current([w[0], w[1], w[2]]);
+      return;
+    }
+  };
+
   // the volume waits for the server's planes, or for a while when one of them does not come
   useEffect(() => {
     if (!planesOpened || !manifest) return;
@@ -498,6 +633,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
     filling.current = f;
     report(opening, 0, false);
     await cs.setVolumesForViewports(re, [{ volumeId: f.volumeId }], planeIds);
+    setPlanesBuilt((b) => ({ plan, at: Math.floor(zRef.current / plan.stride), epoch: (b?.epoch ?? 0) + 1 }));
     const shown = shownWindow(manifest, voiAsked.current);
     for (const p of PLANES) {
       const vp = re.getViewport(ids.planes[p]) as cs.VolumeViewport;
@@ -542,6 +678,8 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
     refining.current = null;
     f.close();
     dropVolume(f.volumeId);
+    // setting the volumes took the mask's off the planes: drawn again
+    setPlanesBuilt((b) => ({ plan, at: b?.at ?? Math.floor(zRef.current / plan.stride), epoch: (b?.epoch ?? 0) + 1 }));
     render();
     report(plan, fine.filled, true);
   }, [manifest, planesOpened, planesDrawn, fallback, budget, stack, ids.planes, letter, stamp]);
@@ -687,7 +825,9 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
   // what is on the screen, for the page and its tests: nothing yet, the first picture, or the full one
   const ready = readyNow.current;
   const cutChoice = view === "planes" && oblique && !fallback;
-  const tags = !!(manifest.annotation?.burned_in || manifest.held) || !g.regular;
+  // a mask asked for and not drawn says why, in a few words
+  const maskTag = maskShown.state === "building" ? { words: "mask being prepared", caution: false } : maskShown.state === "failed" ? { words: "mask could not be built", caution: true } : maskShown.state === "refused" ? { words: `mask not drawn: ${maskShown.why ?? "refused"}`, caution: true } : null;
+  const tags = !!(manifest.annotation?.burned_in || manifest.held) || !g.regular || !!maskTag;
   const toggleBig = (p: Plane) => {
     if (!single) setBig((b) => (b ? null : p));
   };
@@ -697,8 +837,15 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
       data-ready={ready}
       data-view={view}
       ref={root}
-      onPointerDownCapture={() => (pressing.current = true)}
-      onPointerUpCapture={() => (pressing.current = false)}
+      data-mask={maskShown.state}
+      onPointerDownCapture={(e) => {
+        pressing.current = true;
+        down.current = { x: e.clientX, y: e.clientY, t: performance.now() };
+      }}
+      onPointerUpCapture={(e) => {
+        pressing.current = false;
+        clicked(e);
+      }}
       onPointerCancelCapture={() => (pressing.current = false)}
       onPointerLeave={() => (pressing.current = false)}
     >
@@ -746,6 +893,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
         )}
         {(manifest.annotation?.burned_in || manifest.held) && <span className="tag caution">burned-in annotation held</span>}
         {!g.regular && <span className="tag caution">planes not evenly spaced</span>}
+        {maskTag && <span className={maskTag.caution ? "tag caution viewer-mask-tag" : "tag viewer-mask-tag"}>{maskTag.words}</span>}
         {!bare && (
           <button type="button" className={numbersOpen ? "viewer-numbers-toggle on" : "viewer-numbers-toggle"} aria-expanded={numbersOpen} aria-label="the viewer's numbers" title="the viewer's numbers: loading, frames, bytes" onClick={() => setNumbersOpen((o) => !o)}>
             i

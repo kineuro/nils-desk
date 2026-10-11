@@ -547,6 +547,7 @@ export const KIND_WORDS: Record<string, string> = {
   free: "Free text",
   pair: "Two stacks side by side",
   anchored: "A stack beside two anchors",
+  check: "Check results",
 };
 
 /** The question in a few words. */
@@ -568,6 +569,11 @@ export function questionWords(q: Question): string {
       return `which is post · ${q.axis ?? "post_contrast"}`;
     case "anchored":
       return `like the pre or the post · ${q.axis ?? "post_contrast"}`;
+    case "check": {
+      const c = q as unknown as { part_set?: unknown; grain?: unknown; reasons?: unknown };
+      const n = Array.isArray(c.reasons) ? c.reasons.length : 0;
+      return `${typeof c.part_set === "string" ? c.part_set : "the result"}${c.grain === "part" ? ", one item per part" : ""} · ${n} ${n === 1 ? "reason" : "reasons"}`;
+    }
     default:
       return q.kind;
   }
@@ -575,6 +581,8 @@ export function questionWords(q: Question): string {
 
 /** Where the items came from. */
 export function sourceWords(source: Json): string {
+  if (typeof source.run === "number") return `run ${source.run}${typeof source.output === "string" ? ` · ${source.output}` : ""}${typeof source.which === "string" && source.which !== "all" ? ` · ${source.which === "unchecked" ? "not yet checked" : source.which === "breached" ? "flagged by its checks" : source.which}` : ""}${typeof source.sample === "number" ? ` · a sample of ${source.sample}` : ""}`;
+  if (Array.isArray(source.derivatives)) return `${source.derivatives.length} results`;
   if (typeof source.selection === "string") return `selection ${source.selection}`;
   if (source.handle !== undefined) return `result ${String(source.handle)}`;
   if (source.review && typeof source.review === "object") {
@@ -590,6 +598,7 @@ export const CLOSES_WORDS: Record<string, string> = {
   decision: "decisions in force",
   stage: "staged decisions",
   pick: "picks",
+  check: "a status on each result and its parts",
   none: "nothing: the answers are the labels",
 };
 
@@ -757,7 +766,9 @@ export function closure(c: Campaign, answers: Answer[] | null = null): Closure {
         ? plural("staged decision, for a person to commit", "staged decisions, for a person to commit")
         : c.closes_into === "pick"
           ? plural("person's pick", "person's picks")
-          : plural("review item closed with its outcome", "review items closed with their outcomes");
+          : c.closes_into === "check"
+            ? plural("result's check, with its parts'", "results' checks, with their parts'")
+            : plural("review item closed with its outcome", "review items closed with their outcomes");
   const unresolved = STATES.filter((s) => !settled(s.state))
     .map((s) => ({ state: s.state, words: s.words, n: items.filter((i) => i.state === s.state).length }))
     .filter((s) => s.n > 0);

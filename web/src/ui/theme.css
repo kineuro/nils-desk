@@ -109,6 +109,10 @@
   --n-scrim: #1C1A1F40;
   /* behind a scan's picture, as a reading room shows it, in either theme */
   --n-image-bg: #000000;
+  /* a result's mask over a scan (job type 3): on the image's black, so the same in both themes; a part, the part in focus, and a flagged part in the caution colour as the theme draws it on a dark ground (--n-caution-fg of the dark tables) */
+  --n-mask-part: #E0393E;
+  --n-mask-focus: #FF7A7F;
+  --n-mask-flagged: #E3A46A;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -159,6 +163,9 @@
     --n-value-10: #B5B5C0; --n-value-10-bg: #2A2A30;
     --n-scrim: #00000080;
     --n-image-bg: #000000;
+    --n-mask-part: #E0393E;
+    --n-mask-focus: #FF7A7F;
+    --n-mask-flagged: #E3A46A;
   }
 }
 
@@ -209,4 +216,7 @@
   --n-value-10: #B5B5C0; --n-value-10-bg: #2A2A30;
   --n-scrim: #00000080;
   --n-image-bg: #000000;
+  --n-mask-part: #E0393E;
+  --n-mask-focus: #FF7A7F;
+  --n-mask-flagged: #E3A46A;
 }

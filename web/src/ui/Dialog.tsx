@@ -8,8 +8,8 @@ import { useEffect, useId, useRef } from "react";
 import type React from "react";
 import { Icon, type IconName } from "./Icon";
 
-export function Dialog(props: { title: string; icon: IconName; onClose: () => void; children: React.ReactNode; foot: React.ReactNode }) {
-  const { title, icon, onClose, children, foot } = props;
+export function Dialog(props: { title: string; icon: IconName; onClose: () => void; children: React.ReactNode; foot: React.ReactNode; eyebrow?: string; className?: string }) {
+  const { title, icon, onClose, children, foot, eyebrow, className } = props;
   const ref = useRef<HTMLDialogElement>(null);
   // a click beside the dialog lands on the dialog itself; a selection dragged out from inside does not close it
   const pressedBeside = useRef(false);
@@ -24,7 +24,7 @@ export function Dialog(props: { title: string; icon: IconName; onClose: () => vo
   return (
     <dialog
       ref={ref}
-      className="dialog"
+      className={className ? `dialog ${className}` : "dialog"}
       aria-labelledby={id}
       onCancel={(e) => {
         e.preventDefault();
@@ -43,7 +43,14 @@ export function Dialog(props: { title: string; icon: IconName; onClose: () => vo
     >
       <div className="dialog-head">
         <Icon name={icon} size="lg" />
-        <h2 id={id}>{title}</h2>
+        {eyebrow ? (
+          <div className="dialog-title">
+            <span className="eyebrow">{eyebrow}</span>
+            <h2 id={id}>{title}</h2>
+          </div>
+        ) : (
+          <h2 id={id}>{title}</h2>
+        )}
         <button type="button" className="icon-button" aria-label="Close" onClick={onClose}>
           <Icon name="x" />
         </button>

@@ -87,7 +87,7 @@ export function viewWindow(m: Manifest): { voiRange: { lower: number; upper: num
 const H = { "X-Nils-Desk": "1" };
 
 /** The shape of a level: every level halves in plane, never in depth (the slab is scrolled at full depth). */
-export function levelShape(m: Manifest, level: number): [number, number, number] {
+export function levelShape(m: Pick<Manifest, "shape" | "level_shapes">, level: number): [number, number, number] {
   const named = m.level_shapes?.find((l) => l.level === level);
   if (named) return named.shape;
   const f = 2 ** level;

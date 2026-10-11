@@ -4,7 +4,9 @@
 // table of measures as the ask reads it (one row per scan at detail quasi;
 // below it the totals over groups, which the engine withholds under 5
 // scans), its checks and breaches with the way to their review items, and
-// the files it made. Read again every few seconds while it runs.
+// the files it made. Read again every few seconds while it runs. Since
+// record 55 H3 (job type 3) a mask's file says its check, and a run that
+// made masks offers Check results, which opens the New check filled for it.
 
 import { useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -14,6 +16,8 @@ import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Says, Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
+import { checkTag, makeCheckRefusal } from "../campaigns/check";
+import { NewCheck, runChoiceOf } from "../campaigns/NewCheck";
 import { catalog, type Pipeline } from "./catalog";
 import { ops } from "./client";
 import {
@@ -55,6 +59,7 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   const [files, setFiles] = useState<Derivative[] | null>(null);
   const [by, setBy] = useState("subject.sex");
   const [said, setSaid] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const read = useCallback(() => {
     runs
@@ -112,21 +117,30 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   if (load.kind === "loading") return <Wait phase="reading the run" since={load.since} size="panel" />;
   if (load.kind === "failed") return <p className="warn">Run {id} could not be read: {load.why}</p>;
   const r = load.run;
+  // a run that made masks is checked from here: one press, then Start checking
+  const choice = load.pipeline ? runChoiceOf(r, [load.pipeline]) : null;
+  const masks = (files ?? []).filter((f) => f.kind === "mask");
+  const checkable = choice !== null && masks.length > 0 && makeCheckRefusal(caps) === null;
   return (
-    <RunView
-      caps={caps}
-      run={r}
-      pipeline={load.pipeline}
-      resumedAt={load.resumedAt}
-      jobAlive={load.jobAlive}
-      table={table}
-      files={files}
-      by={by}
-      onBy={setBy}
-      said={said}
-      onCancel={r.job_id !== null && acts.cancel && load.jobAlive ? () => act(`Run ${r.id} stops at its next heartbeat; the units it finished are kept.`, ops.cancel(r.job_id!)) : null}
-      onResume={acts.queue && resumable(r, load.jobAlive) ? () => act(`Run ${r.id} is queued to go on where it stopped.`, ops.enqueue(resumeCommand(r))) : null}
-    />
+    <>
+      {checking && choice && <NewCheck caps={caps} run={choice} onClose={() => setChecking(false)} />}
+      <RunView
+        caps={caps}
+        run={r}
+        pipeline={load.pipeline}
+        resumedAt={load.resumedAt}
+        jobAlive={load.jobAlive}
+        table={table}
+        files={files}
+        by={by}
+        onBy={setBy}
+        said={said}
+        onCancel={r.job_id !== null && acts.cancel && load.jobAlive ? () => act(`Run ${r.id} stops at its next heartbeat; the units it finished are kept.`, ops.cancel(r.job_id!)) : null}
+        onResume={acts.queue && resumable(r, load.jobAlive) ? () => act(`Run ${r.id} is queued to go on where it stopped.`, ops.enqueue(resumeCommand(r))) : null}
+        onCheck={checkable ? () => setChecking(true) : null}
+        checkPrimary={masks.some((f) => !f.check)}
+      />
+    </>
   );
 }
 
@@ -147,8 +161,12 @@ export function RunView(props: {
   said: string | null;
   onCancel: (() => void) | null;
   onResume: (() => void) | null;
+  /** Check results: the New check for this run's masks, where it made any. */
+  onCheck?: (() => void) | null;
+  /** Masks no check has decided remain: the button is the page's primary act. */
+  checkPrimary?: boolean;
 }) {
-  const { caps, run: r, pipeline, resumedAt, table, files, by, onBy, said, onCancel, onResume } = props;
+  const { caps, run: r, pipeline, resumedAt, table, files, by, onBy, said, onCancel, onResume, onCheck = null, checkPrimary = false } = props;
   const acts = runActs(caps);
   const units = r.units_run ?? [];
   const counts = unitCounts(units, resumedAt);
@@ -192,6 +210,11 @@ export function RunView(props: {
         {onResume && (
           <button type="button" className="button small" onClick={onResume}>
             Resume
+          </button>
+        )}
+        {onCheck && (
+          <button type="button" className={checkPrimary ? "button small" : "button quiet small"} onClick={onCheck}>
+            Check results
           </button>
         )}
       </div>
@@ -398,6 +421,7 @@ function TableView({ table, by, onBy, choices }: { table: Table; by: string; onB
 function FilesView({ files }: { files: Derivative[] }) {
   const byKind = new Map<string, number>();
   for (const f of files) byKind.set(f.kind, (byKind.get(f.kind) ?? 0) + 1);
+  const masks = files.some((f) => f.kind === "mask");
   return (
     <>
       <p className="meta">{[...byKind.entries()].map(([k, c]) => `${n(c)} ${k}`).join(" · ")}</p>
@@ -410,6 +434,7 @@ function FilesView({ files }: { files: Derivative[] }) {
               <th>Of</th>
               <th className="num">Bytes</th>
               <th>Digest</th>
+              {masks && <th>Check</th>}
             </tr>
           </thead>
           <tbody>
@@ -420,6 +445,15 @@ function FilesView({ files }: { files: Derivative[] }) {
                 <td className="meta">{f.stack_id ? `stack ${f.stack_id}` : (f.scope ?? "")}</td>
                 <td className="num">{n(f.bytes)}</td>
                 <td className="path">{f.sha256.slice(0, 12)}</td>
+                {masks && (
+                  <td>
+                    {f.kind === "mask" && (
+                      <span className={checkTag(f.check).className} title={f.grid_link === "none" ? "no scan is known for it: it cannot be drawn" : undefined}>
+                        {checkTag(f.check).words}
+                      </span>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
