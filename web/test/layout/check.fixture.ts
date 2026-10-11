@@ -339,7 +339,7 @@ export function checkEngine(o: CheckOpts = {}): typeof fetch {
       if (Array.isArray(q.reasons) && q.reasons.length === 0) return json(400, { error: "question.reasons: one to 7 reasons, the keys 3 to 9; 0 given" });
       return json(200, checkPreview(body ?? {}));
     }
-    if (method === "POST" && path === "/api/campaigns") return json(201, { ...campaign, id: 52, name: body?.name, pictures: { stacks: 900, have: 880, missing: 20, place: "working", job: 41 }, layers: { pairs: 1000, missing: 40, have: 960, job: 41 } });
+    if (method === "POST" && path === "/api/campaigns") return json(201, { ...campaign, id: 52, name: body?.name, raters_per_item: body?.raters_per_item ?? 1, rater_policy: { raters: Array.isArray(body?.raters) ? body.raters : [], adjudicators: [] }, pictures: { stacks: 900, have: 880, missing: 20, place: "working", job: 41 }, layers: { pairs: 1000, missing: 40, have: 960, job: 41 } });
     if (method === "GET" && path === `/api/pipeline-runs/${RUN_ID}`) return json(200, RUN);
     if (method === "GET" && path === "/api/pipeline-runs") return json(200, { runs: [RUN, { ...RUN, id: 76, status: "done", derivatives: [], pipeline: "mriqc", pipeline_id: 3 }] });
     if (method === "GET" && path === "/api/pipelines") return json(200, { pipelines: [SAMSEG], capability: null });

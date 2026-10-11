@@ -10,7 +10,8 @@
 // kind, which the person may change), and who reads. The foot says what
 // the engine would make (the preview door, asked again a moment after each
 // change) and what it leaves out, each in a tag with its why on hover.
-// Making it opens the check reader at once.
+// Making it opens the check reader at once for one of its raters; a maker
+// who does not read it lands on its page, which says who reads.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { door } from "../ask/client";
@@ -233,7 +234,9 @@ function CheckForm({ caps, run, onClose, onBack }: { caps: Capabilities; run: Ru
       .make(body.body as never)
       .then((c) => {
         onClose();
-        location.hash = href("campaigns", String(c.id), "check");
+        // the reader is a rater's alone: anyone else would claim and be refused
+        const raters = c.rater_policy?.raters ?? d.raters;
+        location.hash = raters.includes(me) ? href("campaigns", String(c.id), "check") : href("campaigns", String(c.id));
       })
       .catch((e: unknown) => {
         setBusy(false);

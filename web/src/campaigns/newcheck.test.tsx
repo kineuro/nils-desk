@@ -166,6 +166,23 @@ describe("the dialog and the pages", () => {
     await until(() => location.hash === "#campaigns/52/check");
   });
 
+  it("Start checking by a maker who does not read it lands on its page, not on a reader that would refuse them (T33)", async () => {
+    vi.stubGlobal("fetch", checkEngine({ log }));
+    root = createRoot(host);
+    await act(async () => root.render(<NewCheck caps={capsWith(checkDoorsOf())} run={RUN} onClose={() => undefined} />));
+    const dialog = await until(() => document.querySelector("dialog.new-check"));
+    const who = (name: string) => [...dialog.querySelectorAll<HTMLButtonElement>('[aria-label="who"] > .opt')].find((b) => b.textContent?.startsWith(name)) ?? null;
+    await click(await until(() => who("Adithya")));
+    await click(who("Me")!);
+    expect([...dialog.querySelectorAll('[aria-label="who"] > .opt.on')].map((b) => b.textContent)).toEqual(["Adithya"]);
+    await until(() => dialog.querySelector(".check-preview")?.textContent?.includes("results"));
+    await click(button("Start checking")!);
+    await until(() => log.some((a) => a.method === "POST" && a.path === "/api/campaigns"));
+    expect(log.find((a) => a.method === "POST" && a.path === "/api/campaigns")?.body).toMatchObject({ raters: ["adithya"] });
+    await until(() => location.hash === "#campaigns/52");
+    expect(log.some((a) => a.path.endsWith("/claim"))).toBe(false);
+  });
+
   it("asks the preview again after a change, and says a refusal in the dialog's words", async () => {
     vi.stubGlobal("fetch", checkEngine({ log }));
     root = createRoot(host);
