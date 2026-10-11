@@ -9,8 +9,8 @@
 // before it holds it, and says what each model said when one did not answer.
 // A model server (record 47) is asked for its list through Kvasir: its key is
 // sealed there first under a staging name (R4), every model shows its specs
-// and whether it is loaded, and the ticked ones are admitted one by one, each
-// with the result Kvasir reports.
+// and whether it is loaded, all of them ticked where it lists a handful, and
+// the ticked ones are admitted one by one, each with the result Kvasir reports.
 
 import { useEffect, useId, useRef, useState } from "react";
 import type React from "react";
@@ -45,7 +45,7 @@ import { useDownload } from "./DownloadModel";
 import { cardsOf, listWords, plainly } from "./gateway";
 import { KvasirError, kvasir, type LocalModel, type LocalStatus, type Locality, type Offer, type Subscription, type Ticked, triedOf } from "./kvasir";
 import { choiceWords, type Choice } from "./models";
-import { admittedWords, coldWords, listRefusal, listsNothing, resultTag, specWords, stageName, statusTag, tickable } from "./modelserver";
+import { admitOrder, admittedWords, coldWords, firstTicked, listRefusal, listsNothing, openToTick, resultTag, specWords, stageName, statusTag, tickable } from "./modelserver";
 import { useSignInPart } from "./SubscriptionCard";
 import type { Install } from "./supervise";
 
@@ -431,7 +431,7 @@ function useModelServer(props: { from?: HeldServer | null; onClose: () => void; 
         setKey("");
         setBare(false);
         setOffer(o);
-        setTicked([]);
+        setTicked(firstTicked(o));
         setResults(null);
         const n = o.models.length;
         return [n === 1 ? "It lists one model." : `It lists ${n.toLocaleString("en-GB")} models.`, o.note].filter(Boolean).join(" ");
@@ -442,7 +442,7 @@ function useModelServer(props: { from?: HeldServer | null; onClose: () => void; 
   };
 
   const admit = () => {
-    const models = ticked;
+    const models = offer ? admitOrder(offer, ticked) : ticked;
     const cold = offer ? coldWords(offer, models) : null;
     admitting.act(`admitting ${listWords(models)}${cold ? "; a cold model loads first, which takes minutes" : ""}`, async () => {
       try {
@@ -498,6 +498,9 @@ function useModelServer(props: { from?: HeldServer | null; onClose: () => void; 
   };
 
   const tick = (m: string, on: boolean) => setTicked((t) => (on ? [...t.filter((x) => x !== m), m] : t.filter((x) => x !== m)));
+  // every model that may be ticked, ticked or unticked at once
+  const open = offer ? openToTick(offer, results) : [];
+  const allTicked = open.length > 0 && open.every((m) => ticked.includes(m));
   const cold = offer ? coldWords(offer, ticked) : null;
   const quiet = admitting.acting.kind === "done" && admitting.acting.words === "";
 
@@ -547,6 +550,11 @@ function useModelServer(props: { from?: HeldServer | null; onClose: () => void; 
             List its models
           </button>
           {cannotList && <span className="meta">{cannotList}</span>}
+          {offer && open.length > 1 && (
+            <button type="button" className="button secondary small" disabled={busy} onClick={() => setTicked(allTicked ? [] : open)}>
+              {allTicked ? "Untick all" : "Tick all"}
+            </button>
+          )}
         </div>
         <Acted acting={listing.acting} />
         {offer && <ServerOffer offer={offer} ticked={ticked} results={results} busy={busy} onTick={tick} />}
