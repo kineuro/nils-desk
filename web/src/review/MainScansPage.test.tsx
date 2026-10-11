@@ -54,7 +54,7 @@ const text = (sel: string) => [...host.querySelectorAll(sel)].map((e) => e.textC
 const pressed = (group: string) => [...host.querySelectorAll(`[role="group"][aria-label="${group}"] [aria-pressed="true"]`)].map((b) => b.textContent);
 
 describe("Main scans without a dataset or cohort", () => {
-  it("offers the datasets and the cohorts the person may see, each opening the page about it", async () => {
+  it("offers the datasets and the cohorts the person may see, each opening the page about it, and never a root", async () => {
     await open(undefined);
     expect(host.querySelector("h1")?.textContent).toBe("Which dataset or cohort");
     const links = [...host.querySelectorAll<HTMLAnchorElement>(".ms-choose a")].map((a) => [a.textContent, a.getAttribute("href")]);
@@ -63,6 +63,8 @@ describe("Main scans without a dataset or cohort", () => {
       ["ward-c", "#review/picks?dataset=ward-c"],
       ["ms-followup", "#review/picks?cohort=ms-followup"],
     ]);
+    // a root holds datasets and is none (the fixture's root is named data)
+    expect(host.querySelector('a[href="#review/picks?dataset=data"]')).toBeNull();
     // the old table is out of sight while no earlier run's question is open
     expect(host.textContent).not.toContain("from earlier runs");
   });

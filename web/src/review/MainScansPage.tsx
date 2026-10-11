@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { slotOf } from "../campaigns/values";
 import { cohorts as cohortsDoor } from "../data/cohorts";
+import { isRoot } from "../data/layout";
 import { sources } from "../data/sources";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -155,13 +156,13 @@ interface Lists {
   cohorts: string[];
 }
 
-/** The datasets and cohorts, read once and only once they are wanted: with no scope, or the chooser opened. */
+/** The datasets and cohorts, read once and only once they are wanted: with no scope, or the chooser opened. A root holds datasets and is none. */
 function useLists(caps: Capabilities, wanted: boolean): Lists | null {
   const [lists, setLists] = useState<Lists | null>(null);
   useEffect(() => {
     if (!wanted || lists !== null) return;
     let alive = true;
-    const datasets = served(caps, "GET /api/sources") ? sources.list().then((r) => r.sources.map((s) => s.name), () => [] as string[]) : Promise.resolve([] as string[]);
+    const datasets = served(caps, "GET /api/sources") ? sources.list().then((r) => r.sources.filter((s) => !isRoot(s)).map((s) => s.name), () => [] as string[]) : Promise.resolve([] as string[]);
     const cohorts = served(caps, "GET /api/cohorts") ? cohortsDoor.list().then((l) => l.filter((c) => !c.retired_at).map((c) => c.name), () => [] as string[]) : Promise.resolve([] as string[]);
     Promise.all([datasets, cohorts]).then(([d, c]) => alive && setLists({ datasets: [...d].sort((a, b) => a.localeCompare(b)), cohorts: [...c].sort((a, b) => a.localeCompare(b)) }));
     return () => {

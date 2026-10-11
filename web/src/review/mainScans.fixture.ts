@@ -159,7 +159,7 @@ export function mainScansDoors(over: (c: FakeCall) => FakeAnswer = () => undefin
     if (c.method === "POST" && c.path === "/api/picks/map/subjects") return { status: 200, body: subjectsAnswer(2, c.body?.rules !== undefined) };
     if (c.method === "POST" && c.path === "/api/picks/map/strips") return { status: 200, body: STRIPS };
     if (c.method === "GET" && c.path === "/api/review/summary") return { status: 200, body: { by_kind: {}, cohorts: [], none: 0 } };
-    if (c.method === "GET" && c.path === "/api/sources") return { status: 200, body: { count: 2, window_days: 30, sources: [{ id: 3, name: "study-big" }, { id: 4, name: "ward-c" }] } };
+    if (c.method === "GET" && c.path === "/api/sources") return { status: 200, body: { count: 3, window_days: 30, sources: [{ id: 2, name: "data", role: "source", dataset: { kind: "root" } }, { id: 3, name: "study-big" }, { id: 4, name: "ward-c" }] } };
     if (c.method === "GET" && c.path === "/api/cohorts") return { status: 200, body: [{ name: "ms-followup", retired_at: null }, { name: "old-trial", retired_at: "2026-01-01T00:00:00Z" }] };
     return undefined;
   };
