@@ -386,6 +386,8 @@ export const checkDoors = {
       return s;
     }),
   preview: (body: Json) => door<Json>("POST", "/api/campaigns/preview", body).then(previewOf),
+  /** A result's parts by name, the first page of its set (the campaign's table). */
+  parts: (derivative: number, set: string) => door<Json>("GET", `/api/derivatives/${derivative}/parts?set=${encodeURIComponent(set)}&per_page=500`).then(partNamesOf),
   stats: (c: number | string, principal: string | null = null, own = false) => door<Json>("GET", `/api/campaigns/${id(c)}/stats`).then((r) => checkStatsOf(r, principal, own)),
 };
 
@@ -503,6 +505,68 @@ export function buildAnswer(m: Marks, o: { reasons: readonly Reason[]; grain: "r
 export function answerWords(v: Verdict, n: { parts: number; points: number; reasons: number }, partWord = "part"): string {
   const bits = [n.parts > 0 ? `${n.parts} ${n.parts === 1 ? partWord : `${partWord}s`}` : "", n.points > 0 ? `${n.points} ${n.points === 1 ? "point" : "points"}` : "", n.reasons > 0 ? `${n.reasons} on the result` : ""].filter(Boolean);
   return bits.length > 0 && v !== "accepted" ? `${VERDICT_WORDS[v]} · ${bits.join(", ")}` : VERDICT_WORDS[v];
+}
+
+// ---------------------------------------------------------------- an answer in a table
+
+/** A result's parts by label, as the parts door names them, for an answer in words. */
+export interface PartNames {
+  kind: SetKind | null;
+  names: ReadonlyMap<number, string>;
+}
+
+/** The parts door read for names: the kind of the set, and each named part by its label. */
+export function partNamesOf(raw: Json): PartNames {
+  const kind = typeof raw.kind === "string" && KINDS.includes(raw.kind) ? (raw.kind as SetKind) : null;
+  const names = new Map<number, string>();
+  for (const p of Array.isArray(raw.parts) ? raw.parts : []) {
+    const o = p && typeof p === "object" ? (p as Json) : {};
+    const label = num(o.label);
+    const name = str(o.name);
+    if (label !== null && name) names.set(label, name);
+  }
+  return { kind, names };
+}
+
+/** A part in a word or two: a structure by its name, a lesion by its number bottom up, else its label. */
+export function partName(label: number, p: PartNames | null = null): string {
+  const name = p?.names.get(label);
+  if (name) return name;
+  return p?.kind === "components" ? `lesion ${label}` : p?.kind === "labels" ? `structure ${label}` : `part ${label}`;
+}
+
+/**
+ * A check's answer, or an item's outcome, in a few words for the campaign's
+ * table: the verdict, then each reason with what it is on, the parts by name.
+ * "flagged · Boundary off: Left-Hippocampus, Right-Thalamus · Missed lesion: 2 points".
+ */
+export function checkAnswerLine(value: unknown, form: unknown, reasons: readonly Reason[], parts: PartNames | null = null): string {
+  const f = formOf(form);
+  const words = (id: string) => reasons.find((r) => r.id === id)?.words ?? id;
+  const on = new Map<string, number[]>();
+  for (const p of f.parts) on.set(p.reason, [...(on.get(p.reason) ?? []), p.label]);
+  const points = new Map<string, number>();
+  for (const p of f.points) points.set(p.reason, (points.get(p.reason) ?? 0) + 1);
+  const verdict = typeof value === "string" ? ((VERDICTS as readonly string[]).includes(value) ? VERDICT_WORDS[value as Verdict] : value) : "";
+  return [
+    verdict,
+    ...f.reasons.map(words),
+    ...[...on].map(([r, labels]) => `${words(r)}: ${labels.map((l) => partName(l, parts)).join(", ")}`),
+    ...[...points].map(([r, n]) => `${words(r)}: ${n} ${n === 1 ? "point" : "points"}`),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Whether a check's answer or outcome flags any part, so its names are worth reading. */
+export const flagsParts = (form: unknown): boolean => formOf(form).parts.length > 0;
+
+/** The decisions a closed check's item wrote: the result's, and how many on its parts. */
+export function checkDecisionsWords(d: unknown): string {
+  const o = d && typeof d === "object" && !Array.isArray(d) ? (d as Json) : {};
+  const result = num(o.result);
+  const parts = o.parts && typeof o.parts === "object" && !Array.isArray(o.parts) ? Object.keys(o.parts).length : 0;
+  return [result !== null ? `decision ${result}` : "", parts > 0 ? `${parts} ${parts === 1 ? "part decision" : "part decisions"}` : ""].filter(Boolean).join(" · ");
 }
 
 // ---------------------------------------------------------------- the keys

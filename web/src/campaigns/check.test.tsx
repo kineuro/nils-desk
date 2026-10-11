@@ -25,6 +25,8 @@ import {
   accept,
   answerKeys,
   buildAnswer,
+  checkAnswerLine,
+  checkDecisionsWords,
   checkKey,
   checkProgress,
   checkSheetOf,
@@ -176,6 +178,16 @@ describe("the item door, the answer and the words", () => {
     const two = { all: { answers: 8, median_seconds: 5.3 }, raters: [{ principal: "a", answers: 4, median_seconds: 5.3 }, { principal: "b", answers: 1, median_seconds: 7 }] };
     expect(checkStatsOf(two, "b", true)).toMatchObject({ answers: 1, median: 7, own: true });
     expect(checkStatsOf({ ...two, raters: [two.raters[0]] }, "b", true)).toMatchObject({ answers: 0, median: null });
+  });
+
+  it("says a check's answer in a few words for the campaign's table: the verdict, each reason on what it is on, the parts by name or number (T33)", () => {
+    expect(checkAnswerLine("accepted", { reasons: [], parts: [], points: [], seen: [1], shown: [] }, REASONS)).toBe("accepted");
+    const many = { reasons: ["other"], parts: [{ label: 3, reason: "under" }, { label: 7, reason: "under" }], points: [{ reason: "missed", mm: [1, 2, 3] }, { reason: "missed", mm: [4, 5, 6] }], seen: [3, 7], shown: [] };
+    expect(checkAnswerLine("flagged", many, REASONS, { kind: "components", names: new Map() })).toBe("flagged · Other · Under-segmented: lesion 3, lesion 7 · Missed lesion: 2 points");
+    expect(checkAnswerLine("flagged", { parts: [{ label: 17, reason: "under" }] }, REASONS)).toBe("flagged · Under-segmented: part 17");
+    expect(checkAnswerLine("flagged", { parts: [{ label: 17, reason: "under" }] }, REASONS, { kind: "labels", names: new Map([[17, "Left-Hippocampus"]]) })).toBe("flagged · Under-segmented: Left-Hippocampus");
+    expect(checkDecisionsWords({ result: 40, parts: { "3": 41, "7": 42 } })).toBe("decision 40 · 2 part decisions");
+    expect(checkDecisionsWords({ result: null, parts: { "3": 41 } })).toBe("1 part decision");
   });
 
   it("counts a reader's own reads against the items given to them, never every rater's (T33)", () => {

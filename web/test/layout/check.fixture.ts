@@ -6,7 +6,10 @@
 // result, its lesions and one to eight panels, the stats with the counts by
 // verdict and reason, one's own answers kept and corrected as the mine and
 // amend doors do, the preview and the make door of New check, and a run of
-// samseg-lesions with its masks. Nothing here is a real person or a scan.
+// samseg-lesions with its masks. A check of structures (a label map's parts,
+// each by its name), a second rater, and a check read by two with its
+// answers, outcomes and the parts door that names them, for the campaign's
+// page. Nothing here is a real person or a scan.
 
 import type { Campaign, Claimed } from "../../src/campaigns/client";
 import { CAMPAIGN_ID, type Asked } from "./reader.fixture";
@@ -42,6 +45,10 @@ export interface CheckOpts {
   kept?: KeptCheck[];
   /** Another rater, other@site, who read the first n items already: each item then wants two raters, as in a check read by two. */
   others?: number;
+  /** The part set: each lesion (the default), or each structure of a label map, by its name. */
+  set?: "lesions" | "structures";
+  /** Every item read by rater@site and other@site, each answer on the campaign's answers door and each item's outcome on the campaign. */
+  read?: boolean;
 }
 
 /** The lesions of the result, bottom to top: a box of voxel corners and the voxel nearest the centre, mm LPS. */
@@ -52,23 +59,83 @@ export const LESIONS = [
   { label: 4, voxels: 1830, volume_mm3: 1828.5, anchor_mm: [-5, 40, 52], box_mm: [[-16, 31, 46], [6, 50, 60]], position: 3 },
 ].map((p) => ({ ...p, name: null, method: "26-connected", check: null, check_reason: null }));
 
+/** The structures of a label map, by value and name, bottom to top: the long names a parts list must keep apart. */
+export const STRUCTURES = [
+  [16, "Brain-Stem", 21000],
+  [17, "Left-Hippocampus", 4100],
+  [53, "Right-Hippocampus", 4300],
+  [4, "Left-Lateral-Ventricle", 7900],
+  [43, "Right-Lateral-Ventricle", 8200],
+  [2, "Left-Cerebral-White-Matter", 225000],
+  [41, "Right-Cerebral-White-Matter", 228000],
+  [24, "CSF", 1200],
+].map(([label, name, mm3], i) => ({ label: label as number, name: name as string, voxels: mm3 as number, volume_mm3: mm3 as number, anchor_mm: [(i % 2 ? 1 : -1) * 20, 10, 10 + 6 * i], box_mm: [[-40, -20, 5 + 6 * i], [40, 30, 15 + 6 * i]], position: i, method: "label", check: null, check_reason: null }));
+
+export const STRUCTURE_REASONS = [
+  { id: "boundary_off", words: "Boundary off", needs: "none" },
+  { id: "wrong_label", words: "Wrong label", needs: "none" },
+  { id: "part_missing", words: "Part missing", needs: "none" },
+  { id: "extra_part", words: "Extra part", needs: "none" },
+  { id: "other", words: "Other", needs: "note" },
+];
+
+const setOf = (o: CheckOpts) => (o.set === "structures" ? { key: "structures", words: "Structures", kind: "labels", parts: STRUCTURES, reasons: STRUCTURE_REASONS } : { key: "lesions", words: "Lesions", kind: "components", parts: LESIONS, reasons: REASONS });
+
+/**
+ * Two raters' answers to every item of a read check, as the answers door
+ * lists them: item 1 both accept; item 2 both flag a structure's boundary
+ * and the first flags a second; item 3 one rejects and one accepts, so it
+ * waits for an adjudicator; the rest both accept, the second with a note.
+ */
+export function checkAnswers(o: CheckOpts = {}): Record<string, unknown>[] {
+  const n = o.items ?? 3;
+  const [a, b] = o.set === "structures" ? [17, 53] : [1, 2];
+  const reason = o.set === "structures" ? "boundary_off" : "under";
+  const form = (parts: { label: number; reason: string }[] = [], reasons: string[] = []) => ({ reasons, parts, points: [], seen: parts.map((p) => p.label), shown: [] });
+  const out: Record<string, unknown>[] = [];
+  for (let i = 0; i < n; i++) {
+    const item = CHECK_ITEM + i;
+    const pair: [string, string, unknown, string | null][] =
+      i === 1
+        ? [["flagged", "rater@site", form([{ label: a, reason }, { label: b, reason }]), null], ["flagged", "other@site", form([{ label: a, reason }]), null]]
+        : i === 2
+          ? [["rejected", "rater@site", form(), null], ["accepted", "other@site", form(), null]]
+          : [["accepted", "rater@site", form(), null], ["accepted", "other@site", form(), i === 0 ? null : "fine at the edges"]];
+    pair.forEach(([value, principal, f, why], k) => out.push({ id: 900 + 2 * i + k, item_id: item, assignment_id: 600 + 2 * i + k, principal, role: "rater", round: 1, author_kind: "person", value, form: f, derivative_id: null, why, answered_at: "2026-10-11T09:00:00Z", seconds: 5.1, via: "claim" }));
+  }
+  return out;
+}
+
 const ROLES = ["made_on", "t1w", "flair", "t2w", "swi", "dwi", "pd", "t1w_post"];
 const WORDS: Record<string, string> = { made_on: "FLAIR", t1w: "T1w", flair: "FLAIR", t2w: "T2w", swi: "SWI", dwi: "DWI", pd: "PD", t1w_post: "T1w post" };
 
 export function checkCampaign(o: CheckOpts = {}): Campaign {
   const n = o.items ?? 3;
-  const items = Array.from({ length: n }, (_, i) => ({ id: CHECK_ITEM + i, campaign_id: CAMPAIGN_ID, position: 11 + i, review_item_id: 400 + i, stack_id: null, subject_id: null, session_day: null, key: null, input_derivative_ids: null, derivative_id: RESULT_ID + i, part_set: "lesions", part_label: o.grain === "part" ? 1 + (i % 4) : null, state: "open", round: 1 }));
+  const set = setOf(o);
+  const answers = o.read ? checkAnswers(o) : [];
+  // a read check: each item agreed on its outcome (resolved, with its decisions, once closed), but the one the raters split on
+  const outcomeOf = (item: number, i: number) => {
+    const two = answers.filter((x) => x.item_id === item);
+    if (two.length < 2 || two[0].value !== two[1].value) return null;
+    const parts = [...new Map(two.flatMap((x) => (x.form as { parts: { label: number; reason: string }[] }).parts).map((p) => [`${p.label}/${p.reason}`, p])).values()];
+    return { value: two[0].value, form: { reasons: [], parts, points: [], seen: parts.map((p) => p.label), shown: [] }, answers: two.map((x) => x.id), ...(o.status === "closed" ? { decisions: { result: 3000 + i, parts: Object.fromEntries(parts.map((p, k) => [String(p.label), 3100 + 10 * i + k])) } } : {}) };
+  };
+  const items = Array.from({ length: n }, (_, i) => {
+    const outcome = o.read ? outcomeOf(CHECK_ITEM + i, i) : null;
+    const state = !o.read ? "open" : outcome === null ? "needs_adjudication" : o.status === "closed" ? "resolved" : "agreed";
+    return { id: CHECK_ITEM + i, campaign_id: CAMPAIGN_ID, position: 11 + i, review_item_id: 400 + i, stack_id: null, subject_id: null, session_day: null, key: `result:${RESULT_ID + i}`, input_derivative_ids: null, derivative_id: RESULT_ID + i, part_set: set.key, part_label: o.grain === "part" ? 1 + (i % 4) : null, state, round: 1, agreement: null, metric: null, outcome, decision_id: outcome && o.status === "closed" ? 3000 + i : null, pick_id: null, resolved_at: null };
+  });
   return {
     id: CAMPAIGN_ID,
     name: "SAMSEG lesions, run 77",
     owner: "rater@site",
     status: o.status ?? "open",
-    question: { kind: "check", part_set: "lesions", grain: o.grain ?? "result", reasons: REASONS } as never,
+    question: { kind: "check", part_set: set.key, grain: o.grain ?? "result", reasons: set.reasons } as never,
     grain: o.grain ?? "result",
     source: { run: RUN_ID, output: "labels", which: "unchecked" },
     handle_id: null,
-    raters_per_item: o.others === undefined ? 1 : 2,
-    rater_policy: { raters: o.others === undefined ? ["rater@site"] : ["rater@site", "other@site"], adjudicators: [] },
+    raters_per_item: o.others === undefined && !o.read ? 1 : 2,
+    rater_policy: { raters: o.others === undefined && !o.read ? ["rater@site"] : ["rater@site", "other@site"], adjudicators: [] },
     adjudication: { when: "disagree", metric: "exact", threshold: null },
     closes_into: "check",
     lease_seconds: 900,
@@ -77,7 +144,7 @@ export function checkCampaign(o: CheckOpts = {}): Campaign {
     closed_by: null,
     agreement: null,
     suggest: "none",
-    counts: { items: { open: o.open ?? 340, agreed: 0 }, assignments: { leased: 1 }, answers: 0 },
+    counts: o.read ? { items: Object.fromEntries([...new Set(items.map((i) => i.state))].map((st) => [st, items.filter((i) => i.state === st).length])), assignments: {}, answers: answers.length } : { items: { open: o.open ?? 340, agreed: 0 }, assignments: { leased: 1 }, answers: 0 },
     items,
     assignments: [],
   } as unknown as Campaign;
@@ -87,19 +154,20 @@ export function checkCampaign(o: CheckOpts = {}): Campaign {
 export function checkSheet(item: number, o: CheckOpts = {}, mine: unknown = null): Record<string, unknown> {
   const panels = Math.min(8, Math.max(1, o.panels ?? 3));
   const i = item - CHECK_ITEM;
-  const part = o.grain === "part" ? LESIONS[i % 4] : null;
+  const set = setOf(o);
+  const part = o.grain === "part" ? set.parts[i % set.parts.length] : null;
   return {
     item,
     position: 12 + i,
     of: 340,
     state: "open",
     result: { id: RESULT_ID + i, pipeline: "samseg-lesions", version: "1", output: "labels", run: RUN_ID, sha256: "a3f1c2d4e5b6a7980112233445566778899aabbccddeeff00112233445566778", check: null },
-    set: { key: "lesions", words: "Lesions", kind: "components", grain: o.grain ?? "result", count: LESIONS.length, note: null },
+    set: { key: set.key, words: set.words, kind: set.kind, grain: o.grain ?? "result", count: set.parts.length, note: null },
     part,
     panels: Array.from({ length: panels }, (_, p) => ({ panel: p, stack: stackOf(item, p), shows: WORDS[ROLES[p]], role: ROLES[p], made_on: p === 0, link: p === 0 ? "same" : "world", layer: "ready" })),
     more: [{ stack: MORE_STACK, shows: "T2w" }],
-    parts: LESIONS,
-    reasons: REASONS,
+    parts: set.parts,
+    reasons: set.reasons,
     verdicts: ["accepted", "rejected", "flagged"],
     mine,
     warming: null,
@@ -256,7 +324,15 @@ export function checkEngine(o: CheckOpts = {}): typeof fetch {
       return json(200, checkSheet(item, o, mine ? { answer: mine.answer, value: mine.value, form: mine.form, why: mine.why, seconds: 4.2, round: 1 } : null));
     }
     if (method === "GET" && path === `${c}/stats`) return json(200, { campaign: CAMPAIGN_ID, all: { answers: 38, median_seconds: 6.4, verdicts: { accepted: 30, rejected: 1, flagged: 7 }, reasons: { under: 3, not_lesion: 4, missed: 2 } }, raters: [ownRow(), ...(o.others ? [{ principal: "other@site", answers: o.others, median_seconds: 5.2, verdicts: { accepted: o.others }, reasons: {} }] : [])] });
-    if (method === "GET" && path === `${c}/answers`) return json(200, { campaign: CAMPAIGN_ID, count: 0, answers: [] });
+    if (method === "GET" && path === `${c}/answers`) {
+      const list = o.read ? checkAnswers(o) : [];
+      return json(200, { campaign: CAMPAIGN_ID, count: list.length, answers: list, blind: false });
+    }
+    const parts = /^\/api\/derivatives\/(\d+)\/parts$/u.exec(path);
+    if (method === "GET" && parts) {
+      const set = setOf(o);
+      return json(200, { derivative: Number(parts[1]), set: set.key, words: set.words, kind: set.kind, count: set.parts.length, page: 0, per_page: 500, order: "position", parts: set.parts });
+    }
     if (method === "GET" && path === "/api/label-sets") return json(200, { label_sets: [] });
     if (method === "POST" && path === "/api/campaigns/preview") {
       const q = (body?.question ?? {}) as Record<string, unknown>;

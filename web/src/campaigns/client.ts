@@ -132,6 +132,10 @@ export interface Item {
   blind?: boolean;
   /** Record 48 R1: a batch held it back to be read alone. */
   held_back?: boolean;
+  /** Record 55 H3: the result a check's item asks about, the part set it is read as, and at part grain the part. */
+  derivative_id?: number | null;
+  part_set?: string | null;
+  part_label?: number | null;
 }
 
 export interface Assignment {

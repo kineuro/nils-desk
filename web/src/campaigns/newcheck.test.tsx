@@ -208,6 +208,21 @@ describe("the dialog and the pages", () => {
     await until(() => document.querySelector("dialog.new-check h2")?.textContent === "SAMSEG · lesions");
   });
 
+  it("the campaign page's items of a check: each answer and outcome by its verdict and the flagged structures by name (T33)", async () => {
+    vi.stubGlobal("fetch", checkEngine({ log, items: 4, set: "structures", read: true, status: "closed" }));
+    root = createRoot(host);
+    await act(async () => root.render(<CampaignPage caps={capsWith(checkDoorsOf())} id={String(CAMPAIGN_ID)} />));
+    await until(() => host.querySelector("table.campaign-items")?.textContent?.includes("Right-Hippocampus"));
+    const rows = [...host.querySelectorAll("table.campaign-items tbody tr")].map((r) => ({ answers: [...r.querySelectorAll(".answer-chip")].map((c) => c.textContent), outcome: r.querySelectorAll("td")[4].textContent }));
+    expect(rows[0]).toEqual({ answers: ["rater accepted", "other accepted"], outcome: "accepted · decision 3000" });
+    expect(rows[1]).toEqual({ answers: ["rater flagged · Boundary off: Left-Hippocampus, Right-Hippocampus", "other flagged · Boundary off: Left-Hippocampus"], outcome: "flagged · Boundary off: Left-Hippocampus, Right-Hippocampus · decision 3001 · 2 part decisions" });
+    expect(rows[2]).toEqual({ answers: ["rater rejected", "other accepted"], outcome: "" });
+    const table = host.querySelector("table.campaign-items")?.textContent ?? "";
+    for (const bad of ["[object Object]", "null", "reasons", "seen", "shown"]) expect(table).not.toContain(bad);
+    // the names are read once per result whose answers flag a part
+    expect(log.filter((a) => a.path.startsWith("/api/derivatives/") && a.path.includes("/parts")).map((a) => a.path)).toEqual(["/api/derivatives/9002/parts?set=structures&per_page=500"]);
+  });
+
   it("the campaign page of a check: its counts by verdict and reason, and one next action", async () => {
     vi.stubGlobal("fetch", checkEngine({ log }));
     root = createRoot(host);
