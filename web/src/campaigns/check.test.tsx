@@ -25,7 +25,10 @@ import {
   accept,
   answerKeys,
   buildAnswer,
+  checkAnswerLine,
+  checkDecisionsWords,
   checkKey,
+  checkProgress,
   checkSheetOf,
   checkStatsOf,
   clearLast,
@@ -171,6 +174,41 @@ describe("the item door, the answer and the words", () => {
     const s = checkStatsOf({ all: { answers: 38, median_seconds: 6.4, verdicts: { accepted: 30, flagged: 7 }, reasons: { under: 3 } }, raters: [] });
     expect(s).toMatchObject({ answers: 38, median: 6.4, own: false, verdicts: { accepted: 30, flagged: 7 }, reasons: { under: 3 } });
     expect(checkStatsOf({ raters: [{ principal: "me", answers: 4, verdicts: { accepted: 4 } }], blind: true }, "me")).toMatchObject({ answers: 4, own: true });
+    // the reader's band: one's own row, never every rater's, never another's row
+    const two = { all: { answers: 8, median_seconds: 5.3 }, raters: [{ principal: "a", answers: 4, median_seconds: 5.3 }, { principal: "b", answers: 1, median_seconds: 7 }] };
+    expect(checkStatsOf(two, "b", true)).toMatchObject({ answers: 1, median: 7, own: true });
+    expect(checkStatsOf({ ...two, raters: [two.raters[0]] }, "b", true)).toMatchObject({ answers: 0, median: null });
+  });
+
+  it("says a check's answer in a few words for the campaign's table: the verdict, each reason on what it is on, the parts by name or number (T33)", () => {
+    expect(checkAnswerLine("accepted", { reasons: [], parts: [], points: [], seen: [1], shown: [] }, REASONS)).toBe("accepted");
+    const many = { reasons: ["other"], parts: [{ label: 3, reason: "under" }, { label: 7, reason: "under" }], points: [{ reason: "missed", mm: [1, 2, 3] }, { reason: "missed", mm: [4, 5, 6] }], seen: [3, 7], shown: [] };
+    expect(checkAnswerLine("flagged", many, REASONS, { kind: "components", names: new Map() })).toBe("flagged · Other · Under-segmented: lesion 3, lesion 7 · Missed lesion: 2 points");
+    expect(checkAnswerLine("flagged", { parts: [{ label: 17, reason: "under" }] }, REASONS)).toBe("flagged · Under-segmented: part 17");
+    expect(checkAnswerLine("flagged", { parts: [{ label: 17, reason: "under" }] }, REASONS, { kind: "labels", names: new Map([[17, "Left-Hippocampus"]]) })).toBe("flagged · Under-segmented: Left-Hippocampus");
+    expect(checkDecisionsWords({ result: 40, parts: { "3": 41, "7": 42 } })).toBe("decision 40 · 2 part decisions");
+    expect(checkDecisionsWords({ result: null, parts: { "3": 41 } })).toBe("1 part decision");
+  });
+
+  it("counts a reader's own reads against the items given to them, never every rater's (T33)", () => {
+    const a = (item: number, principal: string, state: string, role = "rater") => ({ item_id: item, principal, role, state });
+    const open = [1, 2, 3, 4].map((id) => ({ id, state: "open" }));
+    // two raters to each of four results: a read all four, b holds the first
+    const two = { raters_per_item: 2, items: open, assignments: [...[1, 2, 3, 4].map((i) => a(i, "a", "submitted")), a(1, "b", "leased")] } as never;
+    expect(checkProgress(two, "b")).toEqual({ answered: 0, items: 4 });
+    expect(checkProgress(two, "a")).toEqual({ answered: 4, items: 4 });
+    const read = { raters_per_item: 2, items: open.map((i) => ({ ...i, state: "agreed" })), assignments: [1, 2, 3, 4].flatMap((i) => [a(i, "a", "submitted"), a(i, "b", "submitted")]) } as never;
+    expect(checkProgress(read, "b")).toEqual({ answered: 4, items: 4 });
+    // a result given back is not offered again
+    const back = { raters_per_item: 2, items: open, assignments: [...[1, 2, 3, 4].map((i) => a(i, "a", "submitted")), a(1, "b", "released")] } as never;
+    expect(checkProgress(back, "b")).toEqual({ answered: 0, items: 3 });
+    // one rater to a result among two: the other's answers and leases are not given to me
+    const split = { raters_per_item: 1, items: [{ id: 1, state: "agreed" }, ...open.slice(1)], assignments: [a(1, "a", "submitted"), a(2, "a", "leased"), a(3, "b", "leased")] } as never;
+    expect(checkProgress(split, "b")).toEqual({ answered: 0, items: 2 });
+    expect(checkProgress(split, "a")).toEqual({ answered: 1, items: 3 });
+    // an adjudicator: what they settled and what waits for one they did not rate
+    const settle = { raters_per_item: 2, items: [{ id: 1, state: "needs_adjudication" }, { id: 2, state: "adjudicated" }, { id: 3, state: "needs_adjudication" }, { id: 4, state: "agreed" }], assignments: [a(2, "x", "submitted", "adjudicator"), a(3, "x", "submitted")] } as never;
+    expect(checkProgress(settle, "x", "adjudicator")).toEqual({ answered: 1, items: 2 });
   });
 
   it("takes the presets from the engine, and the build spec's where it names none", () => {
@@ -276,6 +314,24 @@ describe("the check reader drawn", () => {
     expect(answers()[0].body).toEqual({ value: "accepted", form: { reasons: [], parts: [], points: [], seen: [], shown: [] } });
     await until(() => host.querySelector(".rate-item > b")?.textContent === "result 13");
     await until(() => drawn.has(stackOf(CHECK_ITEM + 1, 0)));
+  });
+
+  it("the band counts the reader's own reads against the results given to them, with a second rater ahead (T33)", async () => {
+    await open({ items: 3, others: 3 });
+    const band = () => host.querySelector(".compare-progress")?.textContent ?? "";
+    await until(() => band().includes("0 of 3 read · 3 left"));
+    await press("1");
+    await until(() => answers().length === 1);
+    await until(() => band().includes("1 of 3 read · 2 left"));
+    expect(log.some((a) => a.path.endsWith("/stats"))).toBe(true);
+  });
+
+  it("lists structures by their whole names, so two of one side read apart (T33)", async () => {
+    await open({ set: "structures" });
+    const rows = [...host.querySelectorAll(".check-part-row")];
+    expect(rows.map((r) => r.querySelector(".check-n")?.textContent)).toEqual(["Brain-Stem", "Left-Hippocampus", "Right-Hippocampus", "Left-Lateral-Ventricle", "Right-Lateral-Ventricle", "Left-Cerebral-White-Matter", "Right-Cerebral-White-Matter", "CSF"]);
+    expect(rows.every((r) => r.classList.contains("named"))).toBe(true);
+    expect(host.querySelector(".check-part")?.textContent).toBe("Whole result · 8 structures");
   });
 
   it("n opens a lesion on every panel, a reason flags it, Backspace clears it, Enter sends flagged", async () => {

@@ -19,7 +19,7 @@ import { RunPage } from "../ops/RunPage";
 import { CampaignPage } from "./CampaignPage";
 import { CampaignsPage } from "./CampaignsPage";
 import { checkBody, checkNameOf, leftOutTags, maskOutputs, previewLine, previewOf, refusalWords, sourceOf } from "./check";
-import { draftFor, NewCheck, principalFor, runChoiceOf, type RunChoice } from "./NewCheck";
+import { draftFor, NewCheck, principalFor, readersOf, runChoiceOf, type RunChoice } from "./NewCheck";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -166,6 +166,36 @@ describe("the dialog and the pages", () => {
     await until(() => location.hash === "#campaigns/52/check");
   });
 
+  it("Start checking by a maker who does not read it lands on its page, not on a reader that would refuse them (T33)", async () => {
+    vi.stubGlobal("fetch", checkEngine({ log }));
+    root = createRoot(host);
+    await act(async () => root.render(<NewCheck caps={capsWith(checkDoorsOf())} run={RUN} onClose={() => undefined} />));
+    const dialog = await until(() => document.querySelector("dialog.new-check"));
+    const who = (name: string) => [...dialog.querySelectorAll<HTMLButtonElement>('[aria-label="who"] > .opt')].find((b) => b.textContent?.startsWith(name)) ?? null;
+    await click(await until(() => who("Adithya")));
+    await click(who("Me")!);
+    expect([...dialog.querySelectorAll('[aria-label="who"] > .opt.on')].map((b) => b.textContent)).toEqual(["Adithya"]);
+    await until(() => dialog.querySelector(".check-preview")?.textContent?.includes("results"));
+    await click(button("Start checking")!);
+    await until(() => log.some((a) => a.method === "POST" && a.path === "/api/campaigns"));
+    expect(log.find((a) => a.method === "POST" && a.path === "/api/campaigns")?.body).toMatchObject({ raters: ["adithya"] });
+    await until(() => location.hash === "#campaigns/52");
+    expect(log.some((a) => a.path.endsWith("/claim"))).toBe(false);
+  });
+
+  it("Who offers the people who hold work on Campaigns, which a rater's claim needs, and names the others as lacking it (T33)", async () => {
+    vi.stubGlobal("fetch", checkEngine({ log }));
+    root = createRoot(host);
+    await act(async () => root.render(<NewCheck caps={capsWith(checkDoorsOf())} run={RUN} onClose={() => undefined} />));
+    const dialog = await until(() => document.querySelector("dialog.new-check"));
+    await until(() => dialog.querySelector(".check-lacking"));
+    expect([...dialog.querySelectorAll('[aria-label="who"] > .opt')].map((b) => b.textContent)).toEqual(["Me", "Adithya"]);
+    expect(dialog.querySelector(".check-lacking")?.textContent).toBe("Bo without work on Campaigns");
+    expect(log.some((a) => a.path === "/desk/people?holding=campaigns:work")).toBe(true);
+    // a desk that does not say who holds it offers everyone, as before
+    expect(readersOf([{ principal: "bo", display: "Bo", holds: null }, { principal: "me", display: "Me", holds: true }], "me")).toEqual({ offered: [{ principal: "bo", display: "Bo", holds: null }], lacking: [] });
+  });
+
   it("asks the preview again after a change, and says a refusal in the dialog's words", async () => {
     vi.stubGlobal("fetch", checkEngine({ log }));
     root = createRoot(host);
@@ -206,6 +236,21 @@ describe("the dialog and the pages", () => {
     expect(run.textContent).toContain("2 not yet checked");
     await click(run);
     await until(() => document.querySelector("dialog.new-check h2")?.textContent === "SAMSEG · lesions");
+  });
+
+  it("the campaign page's items of a check: each answer and outcome by its verdict and the flagged structures by name (T33)", async () => {
+    vi.stubGlobal("fetch", checkEngine({ log, items: 4, set: "structures", read: true, status: "closed" }));
+    root = createRoot(host);
+    await act(async () => root.render(<CampaignPage caps={capsWith(checkDoorsOf())} id={String(CAMPAIGN_ID)} />));
+    await until(() => host.querySelector("table.campaign-items")?.textContent?.includes("Right-Hippocampus"));
+    const rows = [...host.querySelectorAll("table.campaign-items tbody tr")].map((r) => ({ answers: [...r.querySelectorAll(".answer-chip")].map((c) => c.textContent), outcome: r.querySelectorAll("td")[4].textContent }));
+    expect(rows[0]).toEqual({ answers: ["rater accepted", "other accepted"], outcome: "accepted · decision 3000" });
+    expect(rows[1]).toEqual({ answers: ["rater flagged · Boundary off: Left-Hippocampus, Right-Hippocampus", "other flagged · Boundary off: Left-Hippocampus"], outcome: "flagged · Boundary off: Left-Hippocampus, Right-Hippocampus · decision 3001 · 2 part decisions" });
+    expect(rows[2]).toEqual({ answers: ["rater rejected", "other accepted"], outcome: "" });
+    const table = host.querySelector("table.campaign-items")?.textContent ?? "";
+    for (const bad of ["[object Object]", "null", "reasons", "seen", "shown"]) expect(table).not.toContain(bad);
+    // the names are read once per result whose answers flag a part
+    expect(log.filter((a) => a.path.startsWith("/api/derivatives/") && a.path.includes("/parts")).map((a) => a.path)).toEqual(["/api/derivatives/9002/parts?set=structures&per_page=500"]);
   });
 
   it("the campaign page of a check: its counts by verdict and reason, and one next action", async () => {

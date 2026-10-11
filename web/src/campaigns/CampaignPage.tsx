@@ -57,7 +57,7 @@ import { isPair, pairServed } from "./pair";
 import { PairPanel } from "./PairReader";
 import { anchoredServed, isAnchored } from "./anchored";
 import { AnchoredPanel } from "./AnchoredReader";
-import { checkServed, isCheck } from "./check";
+import { checkAnswerLine, checkDecisionsWords, checkDoors, checkQuestionOf, checkServed, flagsParts, isCheck, type PartNames } from "./check";
 import { CheckPanel, checkActs } from "./CheckPanel";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -148,6 +148,11 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
   const check = isCheck(c) && checkServed(caps) ? checkActs(caps, c) : null;
   const byItem = new Map<number, Answer[]>();
   for (const x of answers ?? []) byItem.set(x.item_id, [...(byItem.get(x.item_id) ?? []), x]);
+  const rows = shown.slice(0, ROWS);
+  const names = useCheckNames(isCheck(c) ? rows : [], byItem);
+  // a check's answer in words: the verdict and the flagged parts by name, never its form's fields
+  const reasons = isCheck(c) ? checkQuestionOf(c).reasons : null;
+  const words = (i: Item) => (x: Pick<Answer, "value" | "form" | "derivative_id">) => (reasons ? checkAnswerLine(x.value, x.form, reasons, i.derivative_id ? (names.get(i.derivative_id) ?? null) : null) : answerWords(x));
   return (
     <section className="data campaign">
       <div className="data-head">
@@ -333,8 +338,8 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
             </tr>
           </thead>
           <tbody>
-            {shown.slice(0, ROWS).map((i) => (
-              <ItemRow key={i.id} item={i} answers={byItem.get(i.id) ?? []} blind={blind} />
+            {rows.map((i) => (
+              <ItemRow key={i.id} item={i} answers={byItem.get(i.id) ?? []} blind={blind} words={words(i)} check={reasons !== null} />
             ))}
           </tbody>
         </table>
@@ -353,7 +358,34 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
   );
 }
 
-function ItemRow({ item: i, answers, blind }: { item: Item; answers: Answer[]; blind: boolean }) {
+/**
+ * The names of the parts a check's answers flag, read from each result's
+ * parts door once, for the rows on the page that flag any. A result whose
+ * parts cannot be read keeps its parts by label.
+ */
+function useCheckNames(rows: Item[], byItem: Map<number, Answer[]>): Map<number, PartNames> {
+  const [names, setNames] = useState<Map<number, PartNames>>(() => new Map());
+  const wanted = [...new Map(rows.filter((i) => i.derivative_id && (flagsParts(i.outcome?.form) || (byItem.get(i.id) ?? []).some((a) => flagsParts(a.form)))).map((i) => [i.derivative_id!, i.part_set ?? ""])).entries()].filter(([d]) => !names.has(d));
+  const key = wanted.map(([d, set]) => `${d}/${set}`).join(",");
+  useEffect(() => {
+    if (wanted.length === 0) return;
+    let alive = true;
+    void (async () => {
+      for (const [d, set] of wanted) {
+        const got = await checkDoors.parts(d, set).catch((): PartNames => ({ kind: null, names: new Map() }));
+        if (!alive) return;
+        setNames((m) => new Map(m).set(d, got));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return names;
+}
+
+function ItemRow({ item: i, answers, blind, words = answerWords, check = false }: { item: Item; answers: Answer[]; blind: boolean; words?: (a: Pick<Answer, "value" | "form" | "derivative_id">) => string; check?: boolean }) {
   const tone = STATES.find((s) => s.state === i.state)?.tone ?? "";
   return (
     <tr>
@@ -371,17 +403,23 @@ function ItemRow({ item: i, answers, blind }: { item: Item; answers: Answer[]; b
           : blind
             ? `${answers.length} ${answers.length === 1 ? "answer" : "answers"}`
             : answers.map((a) => (
-              <span key={a.id} className="answer-chip" title={a.why ?? undefined}>
+              <span key={a.id} className={check ? "answer-chip is-check" : "answer-chip"} title={a.why ?? undefined}>
                 {a.principal.split("@")[0]}
-                {a.role === "adjudicator" ? " (adj.)" : ""} {answerWords(a)}
+                {a.role === "adjudicator" ? " (adj.)" : ""} {words(a)}
                 {a.unsure ? " · unsure" : ""}
               </span>
             ))}
       </td>
       <td>
-        {i.outcome ? answerWords({ value: i.outcome.value, form: i.outcome.form ?? null, derivative_id: i.outcome.derivative_id ?? null }) : ""}
-        {i.outcome?.decisions && <span className="meta"> · decisions {Object.values(i.outcome.decisions).join(", ")}</span>}
-        {i.decision_id !== null && <span className="meta"> · decision {i.decision_id}</span>}
+        {i.outcome ? words({ value: i.outcome.value, form: i.outcome.form ?? null, derivative_id: i.outcome.derivative_id ?? null }) : ""}
+        {check ? (
+          i.outcome?.decisions && checkDecisionsWords(i.outcome.decisions) && <span className="meta"> · {checkDecisionsWords(i.outcome.decisions)}</span>
+        ) : (
+          <>
+            {i.outcome?.decisions && <span className="meta"> · decisions {Object.values(i.outcome.decisions).join(", ")}</span>}
+            {i.decision_id !== null && <span className="meta"> · decision {i.decision_id}</span>}
+          </>
+        )}
         {i.pick_id !== null && <span className="meta"> · pick {i.pick_id}</span>}
       </td>
     </tr>

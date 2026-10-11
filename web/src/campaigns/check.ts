@@ -18,7 +18,7 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import type { Manifest } from "../viewer/doors";
 import { dot, geometry, planePosition, type Vec3 } from "../viewer/geometry";
-import type { Campaign } from "./client";
+import type { Assignment, Campaign } from "./client";
 
 /** The doors of a check, as the engine's OpenAPI 7 names them (E2). */
 export const CHECK = {
@@ -338,11 +338,44 @@ export interface CheckStats {
   own: boolean;
 }
 
-export function checkStatsOf(raw: Json, principal: string | null = null): CheckStats {
+/**
+ * The stats door's counts: every rater's where the caller reads them, else
+ * their own row. With `own`, the caller's own row whatever else they read
+ * (the reader's band): none yet is nothing, never another rater's row.
+ */
+export function checkStatsOf(raw: Json, principal: string | null = null, own = false): CheckStats {
   const all = raw.all && typeof raw.all === "object" && !Array.isArray(raw.all) ? (raw.all as Json) : null;
-  const rows = Array.isArray(raw.raters) ? (raw.raters as Json[]) : [];
-  const row = all ?? rows.find((r) => r && r.principal === principal) ?? rows[0] ?? {};
-  return { verdicts: counts(row.verdicts), reasons: counts(row.reasons), median: num(row.median_seconds), answers: num(row.answers) ?? 0, own: !all };
+  const rows = (Array.isArray(raw.raters) ? (raw.raters as Json[]) : []).filter((r): r is Json => !!r && typeof r === "object");
+  const mine = rows.find((r) => r.principal === principal) ?? null;
+  const row = own ? (mine ?? (!all && rows.length === 1 ? rows[0] : {})) : (all ?? mine ?? rows[0] ?? {});
+  return { verdicts: counts(row.verdicts), reasons: counts(row.reasons), median: num(row.median_seconds), answers: num(row.answers) ?? 0, own: own || !all };
+}
+
+/**
+ * A reader's own progress in a check: their own answers against the items
+ * given to them, never every rater's (with two raters to an item, the other
+ * rater's answers are not this one's reads). A rater's items are those they
+ * answered or hold, and those a claim may still give them: open, never given
+ * to them in any role or state (a result given back is not offered again),
+ * and wanting more raters than the campaign shows holding it. A rater who
+ * reads blind sees only their own assignments, so there another rater's
+ * lease still counts as open until it is answered. An adjudicator's items
+ * are those they settled or hold, and those waiting for one that they did
+ * not rate and no other adjudicator holds.
+ */
+export function checkProgress(c: Pick<Campaign, "items" | "assignments" | "raters_per_item">, me: string, role: "rater" | "adjudicator" = "rater"): { items: number; answered: number } {
+  const all: Assignment[] = c.assignments ?? [];
+  const mine = all.filter((a) => a.principal === me);
+  const done = new Set(mine.filter((a) => a.role === role && a.state === "submitted").map((a) => a.item_id));
+  const held = new Set(mine.filter((a) => a.role === role && (a.state === "leased" || a.state === "offered") && !done.has(a.item_id)).map((a) => a.item_id));
+  // a rater is never given an item twice; an adjudicator never one they rated
+  const given = new Set(mine.filter((a) => role === "rater" || a.role === "adjudicator" || a.state === "submitted").map((a) => a.item_id));
+  const taken = new Map<number, number>();
+  for (const a of all) if (a.principal !== me && a.role === role && (a.state === "leased" || a.state === "submitted" || (role === "adjudicator" && a.state === "offered"))) taken.set(a.item_id, (taken.get(a.item_id) ?? 0) + 1);
+  const want = role === "rater" ? Math.max(1, c.raters_per_item || 1) : 1;
+  const waiting = role === "rater" ? "open" : "needs_adjudication";
+  const left = (c.items ?? []).filter((i) => i.state === waiting && !given.has(i.id) && (taken.get(i.id) ?? 0) < want).length;
+  return { answered: done.size, items: done.size + held.size + left };
 }
 
 export const checkDoors = {
@@ -353,7 +386,9 @@ export const checkDoors = {
       return s;
     }),
   preview: (body: Json) => door<Json>("POST", "/api/campaigns/preview", body).then(previewOf),
-  stats: (c: number | string, principal: string | null = null) => door<Json>("GET", `/api/campaigns/${id(c)}/stats`).then((r) => checkStatsOf(r, principal)),
+  /** A result's parts by name, the first page of its set (the campaign's table). */
+  parts: (derivative: number, set: string) => door<Json>("GET", `/api/derivatives/${derivative}/parts?set=${encodeURIComponent(set)}&per_page=500`).then(partNamesOf),
+  stats: (c: number | string, principal: string | null = null, own = false) => door<Json>("GET", `/api/campaigns/${id(c)}/stats`).then((r) => checkStatsOf(r, principal, own)),
 };
 
 // ---------------------------------------------------------------- an answer
@@ -470,6 +505,68 @@ export function buildAnswer(m: Marks, o: { reasons: readonly Reason[]; grain: "r
 export function answerWords(v: Verdict, n: { parts: number; points: number; reasons: number }, partWord = "part"): string {
   const bits = [n.parts > 0 ? `${n.parts} ${n.parts === 1 ? partWord : `${partWord}s`}` : "", n.points > 0 ? `${n.points} ${n.points === 1 ? "point" : "points"}` : "", n.reasons > 0 ? `${n.reasons} on the result` : ""].filter(Boolean);
   return bits.length > 0 && v !== "accepted" ? `${VERDICT_WORDS[v]} · ${bits.join(", ")}` : VERDICT_WORDS[v];
+}
+
+// ---------------------------------------------------------------- an answer in a table
+
+/** A result's parts by label, as the parts door names them, for an answer in words. */
+export interface PartNames {
+  kind: SetKind | null;
+  names: ReadonlyMap<number, string>;
+}
+
+/** The parts door read for names: the kind of the set, and each named part by its label. */
+export function partNamesOf(raw: Json): PartNames {
+  const kind = typeof raw.kind === "string" && KINDS.includes(raw.kind) ? (raw.kind as SetKind) : null;
+  const names = new Map<number, string>();
+  for (const p of Array.isArray(raw.parts) ? raw.parts : []) {
+    const o = p && typeof p === "object" ? (p as Json) : {};
+    const label = num(o.label);
+    const name = str(o.name);
+    if (label !== null && name) names.set(label, name);
+  }
+  return { kind, names };
+}
+
+/** A part in a word or two: a structure by its name, a lesion by its number bottom up, else its label. */
+export function partName(label: number, p: PartNames | null = null): string {
+  const name = p?.names.get(label);
+  if (name) return name;
+  return p?.kind === "components" ? `lesion ${label}` : p?.kind === "labels" ? `structure ${label}` : `part ${label}`;
+}
+
+/**
+ * A check's answer, or an item's outcome, in a few words for the campaign's
+ * table: the verdict, then each reason with what it is on, the parts by name.
+ * "flagged · Boundary off: Left-Hippocampus, Right-Thalamus · Missed lesion: 2 points".
+ */
+export function checkAnswerLine(value: unknown, form: unknown, reasons: readonly Reason[], parts: PartNames | null = null): string {
+  const f = formOf(form);
+  const words = (id: string) => reasons.find((r) => r.id === id)?.words ?? id;
+  const on = new Map<string, number[]>();
+  for (const p of f.parts) on.set(p.reason, [...(on.get(p.reason) ?? []), p.label]);
+  const points = new Map<string, number>();
+  for (const p of f.points) points.set(p.reason, (points.get(p.reason) ?? 0) + 1);
+  const verdict = typeof value === "string" ? ((VERDICTS as readonly string[]).includes(value) ? VERDICT_WORDS[value as Verdict] : value) : "";
+  return [
+    verdict,
+    ...f.reasons.map(words),
+    ...[...on].map(([r, labels]) => `${words(r)}: ${labels.map((l) => partName(l, parts)).join(", ")}`),
+    ...[...points].map(([r, n]) => `${words(r)}: ${n} ${n === 1 ? "point" : "points"}`),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Whether a check's answer or outcome flags any part, so its names are worth reading. */
+export const flagsParts = (form: unknown): boolean => formOf(form).parts.length > 0;
+
+/** The decisions a closed check's item wrote: the result's, and how many on its parts. */
+export function checkDecisionsWords(d: unknown): string {
+  const o = d && typeof d === "object" && !Array.isArray(d) ? (d as Json) : {};
+  const result = num(o.result);
+  const parts = o.parts && typeof o.parts === "object" && !Array.isArray(o.parts) ? Object.keys(o.parts).length : 0;
+  return [result !== null ? `decision ${result}` : "", parts > 0 ? `${parts} ${parts === 1 ? "part decision" : "part decisions"}` : ""].filter(Boolean).join(" · ");
 }
 
 // ---------------------------------------------------------------- the keys
