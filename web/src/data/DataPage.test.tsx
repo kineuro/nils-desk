@@ -344,7 +344,11 @@ describe("datasets and cohorts on one page", () => {
     // record 56: body part and post-contrast are steps of their own; one not served says so, and an engine without the door to run them offers no Run
     expect(d.querySelector(".dp-step.off")?.getAttribute("title")).toBe("Neither the post-contrast label nor a post-contrast model is served here yet.");
     expect([...d.querySelectorAll(".dp-acts button, .dp-acts a")].map((b) => b.textContent).filter((t) => /run/i.test(t ?? ""))).toEqual([]);
-    expect(d.querySelector(".dp-step-run")).toBeNull();
+    expect(d.querySelector(".dp-step-run button")).toBeNull();
+    // main scans: no Run without the pick run door, the way to their page and one line of help
+    const ms = [...d.querySelectorAll<HTMLElement>(".dp-step")].find((x) => x.querySelector(".dp-step-title")?.textContent === "Main scans")!;
+    expect(ms.querySelector(".dp-step-run a")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
+    expect(ms.querySelector(".dp-step-run .hint")?.getAttribute("title")).toBe("Picks each visit's main scan per role, by this dataset's rules.");
     expect(d.querySelector(".dp-funnel")?.textContent).toBe("12 subjects→20 visits→40 scans");
     expect(d.querySelector(".dp-sure-words")?.textContent).toBe("32 sure8 need a look");
     expect([...d.querySelectorAll(".dp-kind > span:first-child")].map((s) => s.textContent)).toEqual(["T1w", "FLAIR"]);
@@ -374,7 +378,7 @@ describe("datasets and cohorts on one page", () => {
       },
     });
     const d = host.querySelector<HTMLElement>(".dp-detail")!;
-    const runs = () => [...d.querySelectorAll<HTMLElement>(".dp-step")].filter((x) => x.querySelector(".dp-step-run"));
+    const runs = () => [...d.querySelectorAll<HTMLElement>(".dp-step")].filter((x) => x.querySelector(".dp-step-run button"));
     expect(runs().map((x) => x.querySelector(".dp-step-title")?.textContent)).toEqual(["Body part", "Post-contrast"]);
     const [bp, pc] = runs().map((x) => x.querySelector<HTMLButtonElement>(".dp-step-run button")!);
     // body part ran before; post-contrast has no model, its reason behind the "?"
@@ -396,6 +400,33 @@ describe("datasets and cohorts on one page", () => {
     const said = host.querySelector<HTMLElement>("section.dp > p.warn")!;
     expect(said.textContent).toBe("Body part runs already.?");
     expect(said.querySelector(".hint")?.getAttribute("title")).toBe("body part runs already over these scans, as job 21");
+  });
+
+  it("picks a dataset's main scans again from their step on the rail, beside the way to their page (2026-10-11)", async () => {
+    const e = await page({
+      doors: [...DOORS, STEP_RUN_DOORS.datasets, "POST /api/picks/run"],
+      route: (c) => (c.method === "POST" && c.url === "/api/picks/run" ? { status: 202, body: { job: 31, state: "queued", for: "dataset:study-big", command: ["pick", "run", "--dataset", "study-big", "--pack", "mri"] } } : undefined),
+    });
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    const ms = () => [...d.querySelectorAll<HTMLElement>(".dp-step")].find((x) => x.querySelector(".dp-step-title")?.textContent === "Main scans")!;
+    const run = ms().querySelector<HTMLButtonElement>(".dp-step-run button")!;
+    expect(run.textContent).toBe("Run again");
+    expect(run.disabled).toBe(false);
+    expect(ms().querySelector(".dp-step-run a")?.textContent).toBe("Rules");
+    expect(ms().querySelector(".dp-step-run .hint")?.getAttribute("title")).toBe("Picks each visit's main scan per role, by this dataset's rules.");
+    act(() => run.click());
+    await settle();
+    expect(e.of("POST", "/api/picks/run").map((c) => c.body)).toEqual([{ dataset: "study-big" }]);
+    expect(e.of("POST", "/api/jobs")).toHaveLength(0);
+    expect(text()).toContain("study-big: main scans queued.");
+  });
+
+  it("offers a person who does not work on Pipelines no Run on main scans, only the way to their page", async () => {
+    await page({ doors: [...DOORS, "POST /api/picks/run"], grants: GRANTS.filter((g) => g !== "pipelines:work") });
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    const ms = [...d.querySelectorAll<HTMLElement>(".dp-step")].find((x) => x.querySelector(".dp-step-title")?.textContent === "Main scans")!;
+    expect(ms.querySelector(".dp-step-run button")).toBeNull();
+    expect(ms.querySelector(".dp-step-run a")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
   });
 
   it("runs a cohort's body part over its members' scans from its rail (record 56)", async () => {
