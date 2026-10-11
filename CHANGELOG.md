@@ -10,6 +10,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Fixed
 
+- The chat shows an answer once where the assistant's check sent it back. The model's first answer and the answer it wrote again after the check were shown one after the other; the first now leaves the screen once the new one begins, live and when the conversation is opened again, where the assistant marks it replaced (the data part `replaced`). A turn that writes nothing after the check keeps its first answer.
 - One read of the capabilities that misses no longer replaces the page with "The engine did not answer". The shell reads them every 15 s and the desk gives the engine 5 s, so an engine busy for a moment, or a desk restarting, turned the whole page into that state for one read while everything else went on. A page that was shown now stays shown: a read that misses keeps the last one and is asked again after 3 s, and only after three reads in a row miss does a line above the page say that the engine is slow to answer, and since when. A page never shown still says the engine did not answer.
 
 ## [1.0.0-alpha.62] - 2026-10-02
