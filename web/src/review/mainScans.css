@@ -1,0 +1,219 @@
+/* SPDX-License-Identifier: AGPL-3.0-only
+   Review, Main scans (record 55, decision 6 of 2026-10-10), drawn as the
+   approved canvas draws it, in the theme's tokens only. One canvas pixel is
+   --p, which grows with the window from a laptop's size, so the page, its
+   keys and its panel scale together (proportional, not bigger buttons), as
+   the dataset viewer does. Colour says a value only: a kind's thin frame,
+   its 3px left bar and its tint, in cards and strips and bars; the brand on
+   what a way of keeping alike keeps and the caution colour on what it gives
+   up and on a visit whose kind changed. */
+
+.ms {
+  --vw: clamp(14px, 0.42vw + 9px, 18px);
+  --p: calc(var(--vw) / 15);
+  display: flex;
+  flex-direction: column;
+  gap: calc(18 * var(--p));
+  min-width: 0;
+  font-size: var(--vw);
+}
+
+/* a kind's colour, every slot of the palette, whichever other page's sheet is loaded */
+.ms [data-slot="1"] { --vc: var(--n-value-1); --vc-bg: var(--n-value-1-bg); }
+.ms [data-slot="2"] { --vc: var(--n-value-2); --vc-bg: var(--n-value-2-bg); }
+.ms [data-slot="3"] { --vc: var(--n-value-3); --vc-bg: var(--n-value-3-bg); }
+.ms [data-slot="4"] { --vc: var(--n-value-4); --vc-bg: var(--n-value-4-bg); }
+.ms [data-slot="5"] { --vc: var(--n-value-5); --vc-bg: var(--n-value-5-bg); }
+.ms [data-slot="6"] { --vc: var(--n-value-6); --vc-bg: var(--n-value-6-bg); }
+.ms [data-slot="7"] { --vc: var(--n-value-7); --vc-bg: var(--n-value-7-bg); }
+.ms [data-slot="8"] { --vc: var(--n-value-8); --vc-bg: var(--n-value-8-bg); }
+.ms [data-slot="9"] { --vc: var(--n-value-9); --vc-bg: var(--n-value-9-bg); }
+.ms [data-slot="10"] { --vc: var(--n-value-10); --vc-bg: var(--n-value-10-bg); }
+
+/* the desk's keys and buttons, at the page's scale */
+.ms .chips { gap: calc(4 * var(--p)); align-items: center; }
+.ms .opt { min-height: calc(28 * var(--p)); padding: 0 calc(9 * var(--p)); font-size: calc(13 * var(--p)); text-align: left; }
+.ms .button { min-height: calc(32 * var(--p)); font-size: calc(15 * var(--p)); }
+.ms .button.small { min-height: calc(26 * var(--p)); font-size: calc(13 * var(--p)); }
+.ms .icon-button { width: calc(30 * var(--p)); height: calc(30 * var(--p)); }
+.ms .icon-button:disabled { opacity: 0.55; cursor: not-allowed; }
+.ms .hint { width: calc(18 * var(--p)); height: calc(18 * var(--p)); font-size: calc(11 * var(--p)); }
+.ms .eyebrow { font-size: calc(12 * var(--p)); }
+.ms .warn, .ms .meta { font-size: calc(13 * var(--p)); }
+.ms-none { font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+
+/* ------------------------------------------------------------ the head, the keys and the line under them */
+.ms-layout { display: flex; flex-wrap: wrap; gap: calc(20 * var(--p)); align-items: flex-start; min-width: 0; }
+/* the page and its panel side by side from a laptop's width up (the side and the page's margins take about 280 px of 1440) */
+.ms-main { flex: 1 1 calc(640 * var(--p)); min-width: 0; display: flex; flex-direction: column; gap: calc(18 * var(--p)); }
+.ms-head { display: flex; align-items: flex-end; gap: calc(12 * var(--p)); flex-wrap: wrap; }
+.ms-title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.ms-h1 { display: flex; align-items: center; gap: calc(6 * var(--p)); min-width: 0; }
+.ms-head h1 { font-size: calc(24 * var(--p)); overflow-wrap: anywhere; }
+.ms-rules-toggle .i { width: calc(14 * var(--p)); height: calc(14 * var(--p)); }
+.ms-rules-toggle[aria-expanded="true"], .ms-rules-toggle[aria-expanded="true"]:hover { border-color: var(--n-brand-text); background: var(--n-brand-bg); color: var(--n-brand-fg); }
+.ms-keys { display: flex; gap: calc(18 * var(--p)); flex-wrap: wrap; align-items: center; }
+.ms-label { margin-right: calc(4 * var(--p)); font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+.ms-line { margin-top: calc(-8 * var(--p)); font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+.ms-said { display: flex; align-items: center; gap: calc(6 * var(--p)); }
+.ms-map { display: flex; flex-direction: column; gap: calc(18 * var(--p)); min-width: 0; transition: opacity 120ms ease; }
+.ms-map.busy { opacity: 0.75; }
+
+/* the chooser beside the title: every dataset and cohort, the page's own marked */
+.ms-chooser { position: relative; }
+.ms-pop { position: absolute; left: 0; top: calc(100% + 6 * var(--p)); z-index: 5; display: flex; flex-direction: column; gap: calc(12 * var(--p)); width: max-content; min-width: calc(260 * var(--p)); max-width: min(calc(560 * var(--p)), calc(100vw - 2rem)); max-height: 60vh; overflow: auto; padding: calc(12 * var(--p)); border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); box-shadow: 0 8px 24px var(--n-scrim); }
+.ms-choose { display: flex; flex-direction: column; gap: calc(6 * var(--p)); }
+.ms-choose .opt { text-decoration: none; }
+
+/* ------------------------------------------------------------ a kind: its colour as a frame, a left bar and the tint */
+/* the desk's .value-tag draws a kind's frame, bar and tint; here it keeps one line, ends in an ellipsis and scales with the page */
+.ms .value-tag.ms-kind { display: inline-block; justify-self: start; max-width: 100%; min-height: calc(22 * var(--p)); padding: 0 calc(6 * var(--p)); border-radius: var(--n-radius); font-size: calc(13 * var(--p)); line-height: calc(20 * var(--p)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle; }
+.ms .value-tag.ms-kind.none { border: 1px dashed var(--n-neutral-line); background: transparent; color: var(--n-text-faint); }
+.ms .value-tag.ms-kind.plain { border: 1px solid var(--n-neutral-line); border-left: 3px solid var(--n-neutral-icon); background: var(--n-neutral-bg); color: var(--n-text); }
+.ms .value-tag.ms-kind.off { opacity: 0.45; text-decoration: line-through; }
+
+/* ------------------------------------------------------------ the five numbers */
+/* each tile's label, value, line and mark share rows with the others', so the values sit on one line however a label wraps */
+.ms-numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(124 * var(--p)), 1fr)); gap: 0 calc(12 * var(--p)); margin-bottom: calc(-12 * var(--p)); }
+.ms-number { display: grid; grid-row: span 4; grid-template-rows: subgrid; row-gap: calc(2 * var(--p)); align-items: start; min-width: 0; margin-bottom: calc(12 * var(--p)); padding: calc(12 * var(--p)) calc(14 * var(--p)); border: 1px solid var(--n-line); border-left: 3px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.ms-number.kept { border-left-color: var(--n-brand-text); }
+.ms-number.given { border-left-color: var(--n-caution-fg); }
+.ms-value { font-family: var(--n-font-serif); font-size: calc(28 * var(--p)); line-height: 1.2; font-variant-numeric: tabular-nums; }
+.ms-sub { font-size: calc(12 * var(--p)); color: var(--n-text-faint); }
+.ms-note { font-size: calc(12 * var(--p)); font-weight: 600; }
+.ms-number.kept .ms-note { color: var(--n-brand-text); }
+.ms-number.given .ms-note { color: var(--n-caution-fg); }
+
+/* ------------------------------------------------------------ the boxes: the kinds, where they come from, the series, visit by visit */
+.ms-pair { display: flex; flex-wrap: wrap; gap: calc(16 * var(--p)); min-width: 0; }
+.ms-box { flex: 1 1 calc(400 * var(--p)); min-width: 0; display: flex; flex-direction: column; gap: calc(10 * var(--p)); padding: calc(16 * var(--p)) calc(18 * var(--p)); border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.ms-where { flex-basis: calc(480 * var(--p)); }
+.ms-series { flex-basis: calc(520 * var(--p)); gap: calc(6 * var(--p)); }
+.ms-byvisit { flex-basis: calc(380 * var(--p)); }
+.ms-box-head { display: flex; align-items: center; gap: calc(8 * var(--p)); flex-wrap: wrap; min-height: calc(28 * var(--p)); }
+.ms-box-head .eyebrow { margin: 0; }
+.ms-head-line { flex: 1; font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+
+.ms-kind-row { display: grid; grid-template-columns: calc(132 * var(--p)) minmax(0, 1fr) calc(112 * var(--p)); gap: calc(12 * var(--p)); align-items: center; }
+.ms-bar { position: relative; display: block; height: calc(8 * var(--p)); background: var(--n-bg-page); }
+.ms-bar > i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--n-neutral-icon); }
+.ms-bar[data-slot] > i { background: var(--vc); }
+.ms-bar > i.has { opacity: 0.3; }
+.ms-count { font-size: calc(13 * var(--p)); color: var(--n-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.ms-matrix-wrap { overflow-x: auto; }
+.ms-matrix { display: grid; grid-template-columns: calc(132 * var(--p)) repeat(var(--cols, 1), minmax(calc(86 * var(--p)), 1fr)); gap: calc(4 * var(--p)); align-items: center; min-width: min-content; }
+.ms-col { align-self: end; padding: 0 calc(4 * var(--p)); font-size: calc(12 * var(--p)); color: var(--n-text-faint); overflow-wrap: anywhere; }
+.ms-cell { display: flex; flex-direction: column; gap: calc(4 * var(--p)); align-self: stretch; min-height: calc(44 * var(--p)); padding: calc(6 * var(--p)) calc(8 * var(--p)); border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.ms-cell:hover { border-color: var(--n-brand-line); }
+.ms-cell.on, .ms-cell.on:hover { border-color: var(--n-brand-text); background: var(--n-bg-selected); }
+.ms-cell.empty { border-style: dashed; background: transparent; cursor: default; }
+.ms-cell .num { font-size: calc(14 * var(--p)); }
+.ms-cellbar { display: block; height: calc(4 * var(--p)); background: var(--n-bg-page); }
+.ms-cellbar > i { display: block; height: 100%; background: var(--n-neutral-icon); }
+.ms-cellbar[data-slot] > i { background: var(--vc); }
+.ms-cellbar > i.none { background: var(--n-neutral-line); }
+
+.ms-series-row { display: flex; align-items: center; gap: calc(10 * var(--p)); flex-wrap: wrap; padding: calc(6 * var(--p)) 0; border-top: 1px solid var(--n-line); }
+.ms-steps { display: flex; align-items: center; gap: calc(6 * var(--p)); flex: 1 1 calc(300 * var(--p)); min-width: 0; flex-wrap: wrap; }
+.ms-then { font-size: calc(12 * var(--p)); color: var(--n-text-faint); }
+.ms-n { width: calc(96 * var(--p)); text-align: right; font-size: calc(14 * var(--p)); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ms-n.small { width: auto; font-size: calc(12 * var(--p)); color: var(--n-text-faint); text-align: left; }
+
+.ms-visit-row { display: grid; grid-template-columns: calc(64 * var(--p)) minmax(0, 1fr) calc(76 * var(--p)); gap: calc(10 * var(--p)); align-items: center; font-size: calc(13 * var(--p)); color: var(--n-text-dim); }
+.ms-band { display: flex; height: calc(12 * var(--p)); gap: 1px; background: var(--n-bg-page); }
+.ms-band > i { display: block; flex: 1 1 0; min-width: 1px; height: 100%; background: var(--n-neutral-icon); }
+.ms-band > i[data-slot] { background: var(--vc); }
+.ms-band > i.none { background: var(--n-neutral-line); }
+.ms-legend { display: flex; flex-wrap: wrap; gap: calc(8 * var(--p)); }
+.ms-legend .value-tag.ms-kind { font-size: calc(12 * var(--p)); }
+
+/* ------------------------------------------------------------ the group's subjects: cards, or every subject as a strip */
+.ms-group { gap: calc(12 * var(--p)); }
+.ms-group-head { display: flex; align-items: center; gap: calc(12 * var(--p)); flex-wrap: wrap; }
+.ms-group-title { font-size: calc(16 * var(--p)); font-weight: 600; }
+.ms-group-count { font-size: calc(14 * var(--p)); color: var(--n-text-faint); }
+.ms-pager { display: flex; align-items: center; gap: calc(4 * var(--p)); font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
+
+.ms-cards { display: flex; flex-wrap: wrap; gap: calc(8 * var(--p)); }
+.ms-card { display: flex; flex-direction: column; gap: calc(6 * var(--p)); min-width: 0; max-width: 100%; padding: calc(8 * var(--p)) calc(10 * var(--p)); border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.ms-card-head { display: flex; justify-content: space-between; gap: calc(8 * var(--p)); min-width: 0; font-size: calc(12 * var(--p)); }
+.ms-card-head b { font-family: var(--n-font-mono); font-weight: 500; }
+.ms-card-head span { min-width: 0; max-width: calc(150 * var(--p)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--n-text-faint); }
+.ms-card-visits { display: flex; flex-wrap: wrap; gap: calc(4 * var(--p)); }
+.ms-visit { display: flex; flex-direction: column; gap: calc(3 * var(--p)); width: calc(100 * var(--p)); padding: 0; border: 0; border-radius: var(--n-radius); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.ms-visit .value-tag.ms-kind { width: 100%; padding: 0 calc(5 * var(--p)); font-size: calc(11.5 * var(--p)); }
+.ms-visit:hover .ms-kind { box-shadow: 0 0 0 1px var(--n-brand-line); }
+.ms-visit-head { min-height: calc(16 * var(--p)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--p)); color: var(--n-text-faint); }
+.ms-visit.changed .ms-visit-head { color: var(--n-caution-fg); font-weight: 600; }
+/* a visit the draft picks otherwise than the saved rules: the brand's outline on its kind */
+.ms-visit.redrawn .ms-kind { outline: 2px solid var(--n-brand-text); outline-offset: 1px; }
+.ms-visit.blank { cursor: default; }
+.ms-visit.blank .value-tag.ms-kind { border-color: var(--n-line); }
+
+.ms-strips { display: flex; flex-direction: column; gap: calc(14 * var(--p)); }
+.ms-strip-group { display: flex; flex-direction: column; gap: calc(6 * var(--p)); }
+.ms-strip-label { font-size: calc(13 * var(--p)); color: var(--n-text-dim); }
+.ms-strip-list { display: flex; flex-wrap: wrap; gap: calc(3 * var(--p)); }
+.ms-strip { display: inline-flex; gap: 1px; padding: calc(2 * var(--p)); border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); opacity: 0.22; }
+.ms-strip.lit { opacity: 1; }
+.ms-strip > i { display: block; width: calc(9 * var(--p)); height: calc(9 * var(--p)); background: var(--n-neutral-icon); }
+.ms-strip > i[data-slot] { background: var(--vc); }
+.ms-strip > i.none { background: var(--n-neutral-line); }
+.ms-strip > i.blank { background: transparent; }
+.ms-strip > i.changed { box-shadow: inset 2px 0 0 var(--n-caution-fg); }
+
+/* ------------------------------------------------------------ the Rules panel beside the page */
+/* sticky from the page's own padding, so it starts level with the page and stays in view as the page scrolls */
+.ms-rules { flex: 0 1 calc(440 * var(--p)); min-width: 0; position: sticky; top: 0; display: flex; flex-direction: column; max-height: calc(100dvh - 6rem); overflow: auto; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); }
+.ms-rules-head { display: flex; align-items: center; gap: calc(10 * var(--p)); padding: calc(14 * var(--p)) calc(18 * var(--p)); border-bottom: 1px solid var(--n-line); }
+.ms-rules-head .grow { min-width: 0; display: flex; flex-direction: column; }
+.ms-rules-head h2 { font-size: calc(20 * var(--p)); overflow-wrap: anywhere; }
+.ms-effect { display: flex; flex-direction: column; gap: calc(8 * var(--p)); padding: calc(12 * var(--p)) calc(18 * var(--p)); border-bottom: 1px solid var(--n-line); background: var(--n-bg-raised); transition: opacity 120ms ease; }
+.ms-effect[aria-busy="true"] { opacity: 0.7; }
+.ms-effect-line { font-size: calc(14 * var(--p)); }
+.ms-effect-rows { display: grid; grid-template-columns: minmax(0, 1fr) calc(52 * var(--p)) calc(18 * var(--p)) calc(52 * var(--p)); gap: calc(3 * var(--p)) calc(8 * var(--p)); font-size: calc(13 * var(--p)); font-variant-numeric: tabular-nums; }
+.ms-effect-row { display: contents; }
+.ms-effect-row .label { color: var(--n-text-dim); }
+.ms-effect-row .before { text-align: right; color: var(--n-text-faint); }
+.ms-effect-row .to { text-align: center; color: var(--n-text-faint); }
+.ms-effect-row .after { font-weight: 600; color: var(--n-text-dim); }
+.ms-effect-row .after.up { color: var(--n-ok-fg); }
+.ms-effect-row .after.down { color: var(--n-caution-fg); }
+/* a fieldset, so nothing in it is changed while a save is under way */
+.ms-rules-body { display: flex; flex-direction: column; gap: calc(18 * var(--p)); min-width: 0; margin: 0; padding: calc(14 * var(--p)) calc(18 * var(--p)); border: 0; }
+.ms-rules-body:disabled { opacity: 0.7; }
+.ms-effect.stale .ms-effect-rows { opacity: 0.5; }
+/* a role whose rules the draft changes says so beside its name */
+.ms-key-changed { margin-left: calc(2 * var(--p)); font-weight: 400; color: var(--n-text-faint); }
+/* whether a kind is used: a quiet switch on every row, not a coloured key */
+.ms-use { display: inline-flex; align-items: center; gap: calc(6 * var(--p)); font-size: calc(13 * var(--p)); color: var(--n-text-dim); cursor: pointer; }
+.ms-use input { width: calc(15 * var(--p)); height: calc(15 * var(--p)); margin: 0; accent-color: var(--n-text-dim); }
+.ms-rules-sec { display: flex; flex-direction: column; gap: calc(8 * var(--p)); }
+.ms-wide-keys { display: flex; flex-direction: column; gap: calc(4 * var(--p)); }
+.ms-wide-keys .opt { width: 100%; }
+.ms-order-row { display: grid; grid-template-columns: calc(18 * var(--p)) minmax(0, 1fr) calc(88 * var(--p)) calc(30 * var(--p)) calc(30 * var(--p)); gap: calc(6 * var(--p)); align-items: center; }
+.ms-order-name { display: flex; align-items: center; gap: calc(6 * var(--p)); min-width: 0; }
+.ms-order-name .ms-kind { flex: 0 1 auto; min-width: 0; }
+.ms-rank { font-size: calc(13 * var(--p)); color: var(--n-text-faint); text-align: right; font-variant-numeric: tabular-nums; }
+.ms-tie-row { display: grid; grid-template-columns: calc(18 * var(--p)) minmax(0, 1fr) calc(30 * var(--p)) calc(30 * var(--p)); gap: calc(6 * var(--p)); align-items: center; font-size: calc(14 * var(--p)); }
+.ms-allow { display: flex; gap: calc(4 * var(--p)); flex-wrap: wrap; align-items: center; }
+.ms-allow > .name { width: calc(112 * var(--p)); font-size: calc(14 * var(--p)); color: var(--n-text-dim); }
+.ms-range { display: flex; align-items: center; gap: calc(10 * var(--p)); font-size: calc(14 * var(--p)); color: var(--n-text-dim); }
+.ms-range > .name { flex: none; width: calc(112 * var(--p)); }
+.ms-range.wide > .name { width: calc(156 * var(--p)); }
+.ms-range input[type="range"] { flex: 1; min-width: 0; accent-color: var(--n-brand); }
+.ms-range > .val { flex: none; width: calc(92 * var(--p)); color: var(--n-text); font-variant-numeric: tabular-nums; }
+.ms-range > .val.mono { width: calc(52 * var(--p)); font-family: var(--n-font-mono); font-size: calc(13 * var(--p)); }
+.ms-fold, .ms-text-toggle { align-self: flex-start; gap: calc(6 * var(--p)); }
+.ms-fold .i { transition: transform 280ms ease; }
+.ms-fold[aria-expanded="true"] .i { transform: rotate(180deg); }
+.ms-fold-body { display: flex; flex-direction: column; gap: calc(12 * var(--p)); }
+.ms-yaml { margin: 0; padding: calc(10 * var(--p)) calc(12 * var(--p)); border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-page); color: var(--n-text-dim); font-family: var(--n-font-mono); font-size: calc(12 * var(--p)); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ms-rules-foot { display: flex; flex-direction: column; gap: calc(8 * var(--p)); padding: calc(12 * var(--p)) calc(18 * var(--p)) calc(14 * var(--p)); border-top: 1px solid var(--n-line); }
+.ms-reason { display: flex; flex-direction: column; gap: calc(4 * var(--p)); font-size: calc(13 * var(--p)); color: var(--n-text-dim); }
+.ms-reason input { min-height: calc(34 * var(--p)); padding: 0 calc(10 * var(--p)); border: 1px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-page); color: var(--n-text); font: inherit; font-size: calc(14 * var(--p)); }
+.ms-acts { flex-wrap: wrap; }
+.ms-status { font-size: calc(13 * var(--p)); }
+.ms-versions { font-size: calc(12 * var(--p)); color: var(--n-text-faint); }
+.ms-rules .wait { font-size: calc(13 * var(--p)); }

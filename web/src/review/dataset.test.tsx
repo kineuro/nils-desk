@@ -51,11 +51,12 @@ describe("Review narrowed to a dataset", () => {
     expect(el.querySelector(".review-dataset a")?.getAttribute("href")).toBe("#review");
   });
 
-  it("narrows the picks page the same way", async () => {
-    act(() => root.render(<ReviewPage caps={caps} page="picks" query={{ dataset: "ms-a" }} />));
+  it("narrows the table of earlier pick questions the same way", async () => {
+    // #review/picks is Main scans since record 55's decision 6; the earlier runs' questions keep their table at ?earlier=1
+    act(() => root.render(<ReviewPage caps={caps} page="picks" query={{ dataset: "ms-a", earlier: "1" }} />));
     await settle();
     expect(urls.some((u) => u.startsWith("/api/review?") && u.includes("kind=pick.border") && u.includes("dataset=ms-a"))).toBe(true);
-    expect(el.querySelector(".review-dataset a")?.getAttribute("href")).toBe("#review/picks");
+    expect(el.querySelector(".review-dataset a")?.getAttribute("href")).toBe("#review/picks?earlier=1");
   });
 
   it("keeps the dataset through a filter and through the page chips", async () => {

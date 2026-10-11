@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- Add a model, a model server: once its models are listed, every one that may be ticked is ticked where it lists eight or fewer (2026-10-11, Nima: "if several llm exist on them then all should be available not just one"), and none where it lists more, as a big provider lists hundreds. A Tick all / Untick all button beside the list turns them all at once. A cold model is still said before Admit, and the model loaded on the server now is asked last, so a server with one card ends with it loaded again.
+
+### Fixed
+
+- One read of the capabilities that misses no longer replaces the page with "The engine did not answer". The shell reads them every 15 s and the desk gives the engine 5 s, so an engine busy for a moment, or a desk restarting, turned the whole page into that state for one read while everything else went on. A page that was shown now stays shown: a read that misses keeps the last one and is asked again after 3 s, and only after three reads in a row miss does a line above the page say that the engine is slow to answer, and since when. A page never shown still says the engine did not answer.
+
 ## [1.0.0-alpha.62] - 2026-10-02
 
 The comparison reader (pair mode and anchored reading) after a rater's first long session on it. Moving to the next item draws from memory: the page warms the next five items in the view the rater chose while the current one is read, with engine 1.0.0-alpha.72's `ahead` on the claim. The view (the stack, the three planes, or one plane alone) is kept for every item and the next visit, for every panel or one. A plane paged in the three planes stays where it was paged. The controls are grouped by what they do, every one shows its key, and nothing wraps from a laptop up. Against an engine before alpha.72 nothing is warmed ahead and the rest works the same. The desk still speaks the engine's HTTP contract 7 and suite contract 3, and starts against HTTP contract 5 and suite contract 2 or newer.

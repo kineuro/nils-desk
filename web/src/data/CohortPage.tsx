@@ -17,6 +17,7 @@ import { may } from "../grants";
 import { objects } from "../objects/client";
 import { keepingRefusal } from "../query/cards";
 import { href, narrow } from "../routes";
+import { mayMainScans } from "../review/mainScans";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
@@ -166,6 +167,11 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                 </a>
               )}
               {!c.retired_at && <PickRun caps={caps} of={{ cohort: c.name }} />}
+              {mayMainScans(caps) && (
+                <a className="button quiet" href={narrow(href("review", "picks"), { cohort: c.name })}>
+                  Main scans
+                </a>
+              )}
               {acts.releasing === null && !c.retired_at && (
                 <a className="button" href={acts.release}>
                   <Icon name="release" />

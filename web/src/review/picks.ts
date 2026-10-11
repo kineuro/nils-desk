@@ -143,11 +143,12 @@ export interface PickWritten {
   model: string;
   role: string;
   subject_id: number;
-  session_day: string;
   stacks: number[];
   overruled: number[];
   replaced: number[];
   answered: number;
+  /** The dataset or cohort whose own picks it is, or null for the pack's (2026-10-11; no date leaves the door). */
+  scope?: { kind: "dataset" | "cohort"; id: number; name: string } | null;
 }
 
 /** The person's pick doors (record 42 S3). */

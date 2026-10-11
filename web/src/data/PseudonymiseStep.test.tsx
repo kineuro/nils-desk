@@ -538,7 +538,7 @@ describe("the pseudonymise step, in the dataset", () => {
     // 2026-10-10: a run on a test install wrote every file, and its read found the scans in the registry already, from another dataset
     const done = dataset({ held: { files: 0, identifiers: 0 }, trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1_900_000_000 }, anon: { path: "/srv/x/derivatives/dcm-anon", files: ORIGINALS, last_written: AT } } });
     const summary = summaryOf(done, { state: "done", files: ORIGINALS, waiting: 0, held: 0, job: 127, started_at: "2026-10-10T09:50:43Z", finished_at: "2026-10-10T09:50:47Z" });
-    summary.steps = summary.steps.map((x) => (x.step === "read" ? { ...x, state: "done", job: 128, files: 7328, refused: 216, reads: 1 } : x));
+    summary.steps = summary.steps.map((x) => (x.step === "read" ? { ...x, state: "done", job: 128, files: 7328, refused: 216, set_aside: 216, reads: 1 } : x));
     const job = (id: number, kind: string, result: unknown, progress: unknown = null) => ({ status: 200, body: { id, kind, name: "study-identified-2026-10-10", state: "done", started_at: AT, heartbeat_at: null, finished_at: AT, progress, error: null, args: {}, result } });
     await page(
       done,
@@ -552,7 +552,7 @@ describe("the pseudonymise step, in the dataset", () => {
       { step: "pseudonymisation", held: { ...heldIds({}, { coded: 8, generated: 8 }), files: 0, identifiers: 0, ids: [] } },
     );
     const line = host.querySelector(".ps-done .ps-outcome");
-    expect(line?.textContent).toBe("Last run7,544 files pseudonymised · 8 new subject codes · 7,328 files already in the registry · 216 files not images");
+    expect(line?.textContent).toBe("Last run7,544 files pseudonymised · 8 new subject codes · 7,328 files already in the registry · 216 files set aside: not scans");
     // the button that started it is gone: there is nothing left to pseudonymise
     expect(button(host, "Pseudonymise and sort 7,544 files")).toBeNull();
   });

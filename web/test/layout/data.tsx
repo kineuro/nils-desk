@@ -7,9 +7,9 @@
 // one event over another, and that a phone's width is one column with no
 // sideways scroll; and an identified dataset whose IDs need a code, so it
 // measures the pseudonymise step opened in place, its three boxes and its
-// IDs one row each; body part and post-contrast carry their Run, the
-// post-contrast one held with the engine's reason. Every name and number
-// here is made up.
+// IDs one row each; body part, post-contrast and main scans carry their
+// Run, the post-contrast one held with the engine's reason, main scans' with
+// the way to their page. Every name and number here is made up.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -41,6 +41,7 @@ const DOORS = [
   "GET /api/linkage/held/ids",
   "POST /api/linkage/held/code",
   "POST /api/linkage/held/reveal",
+  "POST /api/picks/run",
 ];
 
 const caps = {
