@@ -1609,6 +1609,8 @@ table.thin tr.made-row > td { padding-top: 0; }
 .over-version { min-height: var(--n-control); }
 /* record 55 (2026-10-12): a dataset's or a cohort's main scans, the role chosen on the chip */
 .over-role { min-height: var(--n-control); }
+/* 2026-10-12: of a pipeline that needs several roles, the roles the run takes, no role chosen */
+.over-roles { font-family: var(--n-font-mono); font-size: 12px; color: var(--n-text); }
 .over-opt.over-scope .over-v { color: var(--n-text); }
 .preflight-main { margin-top: 0.35rem; }
 .preflight-main .note-detail + .note-detail { margin-top: 0.2rem; }

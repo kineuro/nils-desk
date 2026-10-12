@@ -21,7 +21,7 @@ import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
 import { failureWords, type Failure, type Requirement } from "./failure";
 import { FailNote, KindTag } from "./Reason";
-import { blockedOf, cannotOf, mainReadOf, preflightCells, preflightChecks, preflightGate, unitWord, unitsWords, withoutByWhy, type MainRead, type Preflight } from "./runs";
+import { blockedOf, cannotOf, mainReadOf, mainReadRoles, preflightCells, preflightChecks, preflightGate, unitWord, unitsWords, withoutByWhy, type MainRead, type Preflight } from "./runs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -102,19 +102,31 @@ export function CannotList({ p }: { p: Preflight }) {
   );
 }
 
-/** The main scans read, and the visits with none by why: "12 visits have no main T1w", each reason with the visits it names. */
+/** The main scans read, and the visits with none by why: "12 visits have no main T1w", each reason with the visits it names; of several roles, the visits that lack one ("1 visit lacks a main FLAIR; the run goes over the 2 that have both"). */
 export function MainWithout({ m }: { m: MainRead }) {
+  const roles = mainReadRoles(m);
+  const several = roles.length > 1;
   const role = roleWord(m.main);
   const without = withoutByWhy(m);
+  // the roles the visits that lack one lack, as the engine counts them by role
+  const lacked = several ? [...new Set((m.without.why ?? []).map((w) => w.role).filter((r): r is string => typeof r === "string"))] : [];
+  const lacking = (lacked.length > 0 ? lacked : roles).map(roleWord);
+  const orWords = lacking.length <= 1 ? (lacking[0] ?? "") : `${lacking.slice(0, -1).join(", ")} or ${lacking[lacking.length - 1]}`;
   return (
     <div className="preflight-main">
       {m.read && <p className="note-detail">{m.read[0].toUpperCase() + m.read.slice(1)}.</p>}
       {m.without.visits > 0 && (
         <>
-          <p className="note-detail">
-            <b className="num">{n(m.without.visits)}</b> {m.without.visits === 1 ? "visit has" : "visits have"} no main {role}; the run goes over the {n(m.main_visits)} that {m.main_visits === 1 ? "has" : "have"} one.
-          </p>
-          <ul className="preflight-missing preflight-without" aria-label={`visits with no main ${role}`}>
+          {several ? (
+            <p className="note-detail">
+              <b className="num">{n(m.without.visits)}</b> {m.without.visits === 1 ? "visit lacks" : "visits lack"} a main {orWords}; the run goes over the {n(m.main_visits)} that {m.main_visits === 1 ? "has" : "have"} {roles.length === 2 ? "both" : "each"}.
+            </p>
+          ) : (
+            <p className="note-detail">
+              <b className="num">{n(m.without.visits)}</b> {m.without.visits === 1 ? "visit has" : "visits have"} no main {role}; the run goes over the {n(m.main_visits)} that {m.main_visits === 1 ? "has" : "have"} one.
+            </p>
+          )}
+          <ul className="preflight-missing preflight-without" aria-label={several ? "visits that lack a role" : `visits with no main ${role}`}>
             {without.map((w) => {
               const shown = w.visits.slice(0, 3);
               return (

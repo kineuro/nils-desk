@@ -116,6 +116,17 @@ describe("finding a dataset's or a cohort's main scans", () => {
     expect(roleOfWord("t2", ROLES)).toBe("t2w");
     expect(roleOfWord("dwi", ROLES)).toBeNull();
   });
+  it("takes every role a pipeline needs, no role chosen, where it needs several (2026-10-12)", () => {
+    const every = (typed: string) => findScopes(SCOPES, typed, ROLES, 6, ["t1w", "flair"]).found.map((f) => `${f.option.name} ${f.role}`);
+    expect(every("study")).toEqual(["study-anon null"]);
+    // a word that names a role still finds no name, and takes no role alone
+    expect(every("anon flair")).toEqual(["study-anon null"]);
+    expect(every("")).toEqual(["ms-2026 null", "study-anon null", "ms-followup null"]);
+    // one role needed: chosen as before
+    expect(findScopes(SCOPES, "anon flair", ROLES, 6, ["t1w"]).found.map((f) => f.role)).toEqual(["flair"]);
+    expect(specOf("main@dataset:study-anon")).toEqual({ main: { role: null, kind: "dataset", name: "study-anon" } });
+    expect(specOf(" main@Cohort:ms followup ")).toEqual({ main: { role: null, kind: "cohort", name: "ms followup" } });
+  });
   it("takes main:ROLE@dataset:NAME as typed, and finds nothing else for it", () => {
     expect(specOf("main:t1w@dataset:study-anon")).toEqual({ main: { role: "t1w", kind: "dataset", name: "study-anon" } });
     expect(specOf(" main:FLAIR@Cohort:ms followup ")).toEqual({ main: { role: "flair", kind: "cohort", name: "ms followup" } });
@@ -172,12 +183,13 @@ afterEach(() => {
   el.remove();
 });
 
-function Form({ doors = ["GET /api/ask/selections", "GET /api/ask/selections/{name}"], grants = ["pipelines:see", "pipelines:work", "query:see"] }: { doors?: string[]; grants?: Grant[] }) {
+function Form({ doors = ["GET /api/ask/selections", "GET /api/ask/selections/{name}"], grants = ["pipelines:see", "pipelines:work", "query:see"], needs = [] }: { doors?: string[]; grants?: Grant[]; needs?: string[] }) {
   const [over, setOver] = useState<Over | null>(null);
   return (
     <OverPicker
       caps={capsWith(doors, grants)}
       over={over}
+      needs={needs}
       onOver={(o) => {
         chosen.push(o);
         setOver(o);
@@ -362,5 +374,37 @@ describe("the Over field, over a dataset's or a cohort's main scans", () => {
     await key("Enter");
     expect(chosen).toEqual([{ main: { kind: "cohort", name: "ms-followup", role: "flair" } }]);
     expect(el.querySelector(".over-chip")?.textContent).toBe("ms-followup");
+  });
+});
+
+describe("the Over field, for a pipeline that needs several roles (2026-10-12)", () => {
+  const SCOPED = ["GET /api/ask/selections", "GET /api/ask/selections/{name}", "GET /api/sources", "GET /api/cohorts"];
+  const SEES: Grant[] = ["pipelines:see", "pipelines:work", "query:see", "data:see"];
+  const NEEDS = ["t1w", "flair"];
+
+  it("offers a dataset as its main T1w + FLAIR, and sends it without a role", async () => {
+    await act(async () => root.render(<Form doors={SCOPED} grants={SEES} needs={NEEDS} />));
+    await settle();
+    await act(async () => field().focus());
+    const scope = el.querySelectorAll(".over-opt.over-scope");
+    expect(scope[0].textContent).toBe("study-anonmain T1w + FLAIRdataset1,204 scans · 48 subjects, one main scan of each a visit");
+    await type("anon flair");
+    expect(lit()).toBe("study-anon");
+    await key("Enter");
+    expect(chosen).toEqual([{ main: { kind: "dataset", name: "study-anon", role: null, roles: NEEDS } }]);
+    // no role to choose on the chip: the roles the run takes
+    expect(el.querySelector('select[aria-label="The role"]')).toBeNull();
+    expect(el.querySelector(".over-roles")?.textContent).toBe("main T1w + FLAIR");
+    const meta = el.querySelector(".over-pick > .meta")?.textContent ?? "";
+    expect(meta).toContain("main@dataset:study-anon: the dataset's main T1w and FLAIR scans, one of each a visit, resolved and frozen when the run starts");
+  });
+  it("takes main@cohort:NAME as typed", async () => {
+    await act(async () => root.render(<Form needs={NEEDS} />));
+    await settle();
+    await act(async () => field().focus());
+    await type("main@cohort:ms-followup");
+    expect(lit()).toBe("main@cohort:ms-followup");
+    await key("Enter");
+    expect(chosen).toEqual([{ main: { kind: "cohort", name: "ms-followup", role: null, roles: NEEDS } }]);
   });
 });

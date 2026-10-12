@@ -20,6 +20,10 @@
 // and its Start queues it; and on the Jobs page a stopped run's job whose run
 // a later job took up again leaves Now and says which job, while that job,
 // which made nothing, waits in Now.
+//
+// Since 2026-10-12, for samseg-lesions, which needs a T1w and a FLAIR, a
+// dataset reads "study-anon · main T1w + FLAIR", is sent without a role, and
+// its pre-flight says the visits that lack one, inside the window too.
 // SHOTS=<dir> keeps a screenshot of each.
 
 import { expect, test, type Page } from "@playwright/test";
@@ -285,6 +289,34 @@ for (const vp of SIZES) {
     }
     await noSideways(page, vp.width);
     await shot(page, `jobs-taken-up-${vp.name}`);
+  });
+
+  test(`at ${vp.name} px a pipeline that needs a T1w and a FLAIR takes a dataset's main scans of both, and the pre-flight says the visits that lack one`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/runs.html?installed#pipelines/catalog");
+    await page.getByRole("button", { name: "Run on a selection" }).nth(0).click();
+    const dialog = page.locator("dialog[open]");
+    await dialog.getByRole("combobox", { name: "What the run goes over" }).click();
+    await page.keyboard.type("anon");
+    const lit = dialog.locator('.over-opt[aria-selected="true"]');
+    await expect(lit.locator(".over-name")).toHaveText("study-anon");
+    await expect(lit.locator(".over-v")).toHaveText("main T1w + FLAIR");
+    await expect(lit.locator(".over-about")).toHaveText("5,120 scans · 412 subjects, one main scan of each a visit");
+    await page.keyboard.press("Enter");
+    await expect(dialog.locator(".over-chip")).toHaveText("study-anon");
+    await expect(dialog.locator(".over-roles")).toHaveText("main T1w + FLAIR");
+    await expect(dialog.getByRole("combobox", { name: "The role" })).toHaveCount(0);
+    await expect(dialog.locator(".over-pick > .meta")).toContainText("main@dataset:study-anon: the dataset's main T1w and FLAIR scans, one of each a visit");
+    const pre = dialog.locator(".preflight");
+    await expect(pre.locator(".preflight-main")).toContainText("16 visits lack a main FLAIR or T1w; the run goes over the 470 that have both.");
+    await expect(pre.locator(".preflight-without li")).toHaveCount(2);
+    await expect(dialog.locator(".note-body code")).toHaveText("nils run samseg-lesions@1 --select main@dataset:study-anon");
+    for (const box of await pre.locator(".preflight-without li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect))) expect(box.right).toBeLessThanOrEqual(vp.width);
+    const chosen = (await dialog.locator(".over-chosen").boundingBox())!;
+    expect(chosen.x + chosen.width).toBeLessThanOrEqual(vp.width);
+    await pre.scrollIntoViewIfNeeded();
+    await shot(page, `over-every-role-${vp.name}`);
+    await noSideways(page, vp.width);
   });
 }
 

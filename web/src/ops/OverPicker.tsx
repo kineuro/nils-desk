@@ -10,6 +10,9 @@
 // dataset and cohort, whose main scans of a role a run goes straight over
 // ("study-anon · main T1w"); the role is chosen on the chip, or taken from a
 // word typed (study-anon flair), and main:ROLE@dataset:NAME works as typed.
+// Since 2026-10-12, for a pipeline that needs several roles (`needs`: a T1w
+// and a FLAIR), a dataset or a cohort reads "study-anon · main T1w + FLAIR"
+// and is sent without a role, main@dataset:NAME, which takes every one.
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -21,7 +24,7 @@ import { may } from "../grants";
 import { mayList, selections, sizeWords } from "../query/selections";
 import { roleWord } from "../review/mainScans";
 import { Icon } from "../ui/Icon";
-import { catalog, mainRoles, mainSpec, type MainOver, type Over } from "./catalog";
+import { andWords, catalog, mainRoles, mainRolesWords, mainSpec, type MainOver, type Over } from "./catalog";
 import { refusalOf } from "./failure";
 import { askWord, findOver, findScopes, merged, optionOf, specOf, type Found, type FoundScope, type OverOption, type ScopeOption, type Spec } from "./pick";
 
@@ -45,10 +48,11 @@ export function scopeSize(o: ScopeOption): string | null {
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-/** A dataset's or a cohort's second line in the list: its size, and what the run takes of it. */
-export function scopeWords(o: ScopeOption): string {
+/** A dataset's or a cohort's second line in the list: its size, and what the run takes of it (of several roles, one of each a visit). */
+export function scopeWords(o: ScopeOption, several = false): string {
   const size = scopeSize(o);
-  return size ? `${size}, one main scan a visit` : "one main scan a visit";
+  const takes = several ? "one main scan of each a visit" : "one main scan a visit";
+  return size ? `${size}, ${takes}` : takes;
 }
 
 /** Whether the datasets and the cohorts are listed for this person. */
@@ -86,8 +90,10 @@ type Entry = { kind: "option"; f: Found } | { kind: "scope"; f: FoundScope } | {
 
 const entryKey = (e: Entry) => (e.kind === "option" ? `s:${e.f.option.name}` : e.kind === "scope" ? `m:${e.f.option.kind}:${e.f.option.name}` : "typed");
 
-export function OverPicker({ caps, over, onOver }: { caps: Capabilities; over: Over | null; onOver: (o: Over | null) => void }) {
+export function OverPicker({ caps, over, onOver, needs = [] }: { caps: Capabilities; over: Over | null; onOver: (o: Over | null) => void; needs?: string[] }) {
   const lists = mayList(caps);
+  // a pipeline that needs several roles takes a scope's main scans of every one, no role chosen
+  const several = needs.length > 1;
   const listsScopes = mayListScopes(caps);
   const scopesListed = listsScopes.datasets || listsScopes.cohorts;
   const roles = useMemo(() => mainRoles(caps), [caps]);
@@ -157,7 +163,7 @@ export function OverPicker({ caps, over, onOver }: { caps: Capabilities; over: O
 
   const options = pool.kind === "ready" ? pool.options : [];
   const { found, more } = useMemo(() => findOver(options, typed), [options, typed]);
-  const { found: scopes, more: moreScopes } = useMemo(() => findScopes(scopePool, typed, roles), [scopePool, typed, roles]);
+  const { found: scopes, more: moreScopes } = useMemo(() => findScopes(scopePool, typed, roles, 6, needs), [scopePool, typed, roles, needs]);
   const spec = specOf(typed);
   const extra = typedEntry(typed, spec, found, scopes);
   const entries: Entry[] = [...(extra ? [{ kind: "typed" as const, spec: extra }] : []), ...found.map((f) => ({ kind: "option" as const, f })), ...scopes.map((f) => ({ kind: "scope" as const, f }))];
@@ -177,7 +183,7 @@ export function OverPicker({ caps, over, onOver }: { caps: Capabilities; over: O
       return;
     }
     if (e.kind === "scope") {
-      onOver({ main: { kind: e.f.option.kind, name: e.f.option.name, role: e.f.role } });
+      onOver({ main: e.f.role ? { kind: e.f.option.kind, name: e.f.option.name, role: e.f.role } : { kind: e.f.option.kind, name: e.f.option.name, role: null, roles: needs } });
       close();
       return;
     }
@@ -189,7 +195,7 @@ export function OverPicker({ caps, over, onOver }: { caps: Capabilities; over: O
     }
     // a dataset's or a cohort's main scans as typed: the engine's pre-flight says whether they are
     if ("main" in s) {
-      onOver({ main: s.main });
+      onOver({ main: s.main.role ? s.main : { ...s.main, roles: needs } });
       close();
       return;
     }
@@ -208,7 +214,7 @@ export function OverPicker({ caps, over, onOver }: { caps: Capabilities; over: O
     );
   };
 
-  if (over) return <OverChosen over={over} options={options} scopes={scopePool} roles={roles} onOver={onOver} reopen={() => setTimeout(() => input.current?.focus(), 0)} openList={() => setOpen(true)} />;
+  if (over) return <OverChosen over={over} options={options} scopes={scopePool} roles={roles} needs={needs} onOver={onOver} reopen={() => setTimeout(() => input.current?.focus(), 0)} openList={() => setOpen(true)} />;
 
   return (
     <div className="field over-pick">
@@ -230,7 +236,7 @@ export function OverPicker({ caps, over, onOver }: { caps: Capabilities; over: O
             aria-activedescendant={shown && entries.length > 0 ? `${listId}-${lit}` : undefined}
             autoComplete="off"
             spellCheck={false}
-            placeholder={pool.kind === "off" && !scopesListed ? "name@version, or main:t1w@dataset:name" : "a selection or a dataset: t1 3d, study-anon flair, name@version"}
+            placeholder={pool.kind === "off" && !scopesListed ? (several ? "name@version, or main@dataset:name" : "name@version, or main:t1w@dataset:name") : several ? "a selection or a dataset: t1 3d, study-anon, name@version" : "a selection or a dataset: t1 3d, study-anon flair, name@version"}
             onFocus={() => setOpen(true)}
             onBlur={() => setOpen(false)}
             onChange={(e) => {
@@ -283,9 +289,9 @@ export function OverPicker({ caps, over, onOver }: { caps: Capabilities; over: O
                 ) : e.kind === "scope" ? (
                   <>
                     <span className="over-name">{e.f.option.name}</span>
-                    <span className="over-v">main {roleWord(e.f.role)}</span>
+                    <span className="over-v">main {mainRolesWords({ role: e.f.role, roles: needs })}</span>
                     <span className="tag">{e.f.option.kind}</span>
-                    <span className="over-about">{scopeWords(e.f.option)}</span>
+                    <span className="over-about">{scopeWords(e.f.option, e.f.role === null)}</span>
                   </>
                 ) : (
                   <>
@@ -306,13 +312,16 @@ export function OverPicker({ caps, over, onOver }: { caps: Capabilities; over: O
   );
 }
 
-/** The choice as a chip: a selection with its version a step away, a scope's main scans with the role chosen on it, or a handle. */
-function OverChosen({ over, options, scopes, roles, onOver, reopen, openList }: { over: Over; options: OverOption[]; scopes: ScopeOption[]; roles: string[]; onOver: (o: Over | null) => void; reopen: () => void; openList: () => void }) {
+/** The choice as a chip: a selection with its version a step away, a scope's main scans with the role chosen on it (of several roles, every one, no role chosen), or a handle. */
+function OverChosen({ over, options, scopes, roles, needs, onOver, reopen, openList }: { over: Over; options: OverOption[]; scopes: ScopeOption[]; roles: string[]; needs: string[]; onOver: (o: Over | null) => void; reopen: () => void; openList: () => void }) {
   const chosen = "selection" in over ? (options.find((o) => o.name === over.selection) ?? null) : null;
   const scope = "main" in over ? (scopes.find((s) => s.kind === over.main.kind && s.name === over.main.name) ?? null) : null;
   const main: MainOver | null = "main" in over ? over.main : null;
+  const role = main?.role ?? null;
   // a role typed that the pack does not name stays offered, so the engine can say so
-  const roleChoices = main && !roles.includes(main.role) ? [...roles, main.role] : roles;
+  const roleChoices = role !== null && !roles.includes(role) ? [...roles, role] : roles;
+  const everyRoles = main && role === null ? (main.roles ?? needs) : null;
+  const every = everyRoles ? mainRolesWords({ role: null, roles: everyRoles }) : null;
   return (
     <div className="field over-pick">
       <span className="label">Over</span>
@@ -322,9 +331,10 @@ function OverChosen({ over, options, scopes, roles, onOver, reopen, openList }: 
           {"selection" in over ? over.selection : "main" in over ? over.main.name : `handle ${over.handle}`}
         </span>
         {main && <span className="tag">{main.kind}</span>}
-        {main && (
+        {main && every !== null && <span className="over-roles">main {every}</span>}
+        {main && role !== null && (
           <span className="input select over-role">
-            <select value={main.role} aria-label="The role" onChange={(e) => onOver({ main: { ...main, role: e.target.value } })}>
+            <select value={role} aria-label="The role" onChange={(e) => onOver({ main: { ...main, role: e.target.value } })}>
               {roleChoices.map((r) => (
                 <option key={r} value={r}>
                   main {roleWord(r)}
@@ -367,7 +377,9 @@ function OverChosen({ over, options, scopes, roles, onOver, reopen, openList }: 
         {"selection" in over
           ? `selection:${over.selection}@${over.version}, frozen when the run starts`
           : main
-            ? `${mainSpec(main)}: the ${main.kind}'s main ${roleWord(main.role)} scans, one a visit, resolved and frozen when the run starts`
+            ? everyRoles !== null
+              ? `${mainSpec(main)}: the ${main.kind}'s main ${everyRoles.length > 0 ? andWords(everyRoles.map(roleWord)) : "scans of each role the pipeline needs"}${everyRoles.length > 0 ? " scans" : ""}, one of each a visit, resolved and frozen when the run starts`
+              : `${mainSpec(main)}: the ${main.kind}'s main ${roleWord(role ?? "")} scans, one a visit, resolved and frozen when the run starts`
             : "a frozen answer, run as it is"}
       </span>
     </div>

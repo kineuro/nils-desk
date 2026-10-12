@@ -26,11 +26,16 @@ const obj = (v: unknown): Json => (v !== null && typeof v === "object" && !Array
  * 55, rulings of 2026-10-12, item 6): what was read, the scope's visits, those
  * with a main scan of the role, and the visits with none by why, named at
  * detail quasi (each says only why below it). A run says the same, unnamed.
+ * Since 2026-10-12, of each role a pipeline needs (`main@dataset:<name>`):
+ * the roles, the visits with a main scan of every one, the visits that lack
+ * one by role and by why, and each role's own count.
  */
 export interface MainRead {
-  /** The role. */
+  /** The role; of several, the roles joined by +. */
   main: string;
-  /** The spec: main:t1w@dataset:study-anon. */
+  /** Since 2026-10-12, of several roles: the roles, in the pipeline's order. */
+  roles?: string[] | null;
+  /** The spec: main:t1w@dataset:study-anon, or main@dataset:study-anon. */
   of: string;
   scope?: { kind: string; id?: number; name: string } | null;
   /** What was read, as a release records it: the scope's rules {version, digest, run}, or the pack's defaults. */
@@ -38,10 +43,18 @@ export interface MainRead {
   /** The same in words. */
   read?: string | null;
   visits: number;
+  /** The visits with a main scan of the role; of several, of every one. */
   main_visits: number;
   stacks: number;
-  without: { visits: number; why?: { why: string; visits: number }[] | null; named?: { subject_id?: number | null; subject?: string | null; session_day?: string | null; why: string }[] | null };
+  without: { visits: number; why?: { why: string; visits: number; role?: string | null }[] | null; named?: { subject_id?: number | null; subject?: string | null; session_day?: string | null; why: string; role?: string | null }[] | null };
+  /** Of several roles, each role's own count. */
+  by_role?: { main: string; main_visits: number; stacks: number; without?: { visits: number } | null }[] | null;
   part?: { part: number; of: number } | null;
+}
+
+/** The roles a read of main scans names: its several, else its one. */
+export function mainReadRoles(m: MainRead): string[] {
+  return Array.isArray(m.roles) && m.roles.length > 0 ? m.roles : [m.main];
 }
 
 /** The pre-flight as `POST /api/pipelines/{name}/preflight` answers it. */
@@ -228,11 +241,12 @@ export function mainReadOf(p: { main?: MainRead | null } | null | undefined): Ma
   return m && typeof m === "object" && typeof m.main === "string" && typeof m.visits === "number" ? m : null;
 }
 
-/** The main scans as cells: the scans they resolve to, of how many visits, and the visits with none. */
+/** The main scans as cells: the scans they resolve to, of how many visits, and the visits with none; of several roles, the visits that lack one. */
 export function mainCells(m: MainRead): { k: string; v: string; title?: string }[] {
-  const role = roleWord(m.main);
+  const roles = mainReadRoles(m);
+  const role = roles.map(roleWord).join(" + ");
   const cells: { k: string; v: string; title?: string }[] = [{ k: `main ${role}`, v: `${n(m.stacks)} ${m.stacks === 1 ? "scan" : "scans"} of ${n(m.main_visits)} ${m.main_visits === 1 ? "visit" : "visits"}`, title: m.read ?? undefined }];
-  if (m.without.visits > 0) cells.push({ k: `no main ${role}`, v: `${n(m.without.visits)} of ${n(m.visits)} visits`, title: (m.without.why ?? []).map((w) => `${n(w.visits)}: ${w.why}`).join("; ") || undefined });
+  if (m.without.visits > 0) cells.push({ k: roles.length > 1 ? "lacking a role" : `no main ${role}`, v: `${n(m.without.visits)} of ${n(m.visits)} visits`, title: (m.without.why ?? []).map((w) => `${n(w.visits)}: ${w.why}`).join("; ") || undefined });
   return cells;
 }
 
