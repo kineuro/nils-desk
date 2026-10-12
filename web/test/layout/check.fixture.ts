@@ -49,7 +49,12 @@ export interface CheckOpts {
   set?: "lesions" | "structures";
   /** Every item read by rater@site and other@site, each answer on the campaign's answers door and each item's outcome on the campaign. */
   read?: boolean;
+  /** With read and closed: the close refused the first item it could have written, and says why (the T33 pipe test). */
+  refused?: boolean;
 }
+
+/** Why the close refused an item, in the engine's words (the T33 pipe test). */
+export const REFUSED_WHY = "the outcome of item 12 (result 9001) cannot be read, so nothing is written for it: form.parts is a list";
 
 /** The lesions of the result, bottom to top: a box of voxel corners and the voxel nearest the centre, mm LPS. */
 export const LESIONS = [
@@ -125,9 +130,12 @@ export function checkCampaign(o: CheckOpts = {}): Campaign {
     return { value: two[0].value, form: { reasons: [], parts, points: [], seen: parts.map((p) => p.label), shown: [] }, answers: two.map((x) => x.id), ...(o.status === "closed" ? { decisions: { result: 3000 + i, parts: Object.fromEntries(parts.map((p, k) => [String(p.label), 3100 + 10 * i + k])) } } : {}) };
   };
   const items = Array.from({ length: n }, (_, i) => {
-    const outcome = o.read ? outcomeOf(CHECK_ITEM + i, i) : null;
-    const state = !o.read ? "open" : outcome === null ? "needs_adjudication" : o.status === "closed" ? "resolved" : "agreed";
-    return { id: CHECK_ITEM + i, campaign_id: CAMPAIGN_ID, position: 11 + i, review_item_id: 400 + i, stack_id: null, subject_id: null, session_day: null, key: `result:${RESULT_ID + i}`, input_derivative_ids: null, derivative_id: RESULT_ID + i, part_set: set.key, part_label: o.grain === "part" ? 1 + (i % 4) : null, state, round: 1, agreement: null, metric: null, outcome, decision_id: outcome && o.status === "closed" ? 3000 + i : null, pick_id: null, resolved_at: null };
+    const settled = o.read ? outcomeOf(CHECK_ITEM + i, i) : null;
+    // a refused item: what it came to stays, and nothing was written for it
+    const refused = o.refused === true && o.status === "closed" && i === 0 && settled !== null;
+    const outcome = refused && settled ? { value: settled.value, form: settled.form, answers: settled.answers } : settled;
+    const state = !o.read ? "open" : outcome === null ? "needs_adjudication" : refused ? "refused" : o.status === "closed" ? "resolved" : "agreed";
+    return { id: CHECK_ITEM + i, campaign_id: CAMPAIGN_ID, position: 11 + i, review_item_id: 400 + i, stack_id: null, subject_id: null, session_day: null, key: `result:${RESULT_ID + i}`, input_derivative_ids: null, derivative_id: RESULT_ID + i, part_set: set.key, part_label: o.grain === "part" ? 1 + (i % 4) : null, state, round: 1, agreement: null, metric: null, outcome, decision_id: outcome && o.status === "closed" && !refused ? 3000 + i : null, pick_id: null, resolved_at: null, refused: refused ? { why: REFUSED_WHY, at: "2026-10-12T02:47:16Z" } : null };
   });
   return {
     id: CAMPAIGN_ID,
@@ -146,6 +154,7 @@ export function checkCampaign(o: CheckOpts = {}): Campaign {
     created_at: "2026-10-11T08:00:00Z",
     closed_at: null,
     closed_by: null,
+    close_again: o.refused === true && o.status === "closed",
     agreement: null,
     suggest: "none",
     counts: o.read ? { items: Object.fromEntries([...new Set(items.map((i) => i.state))].map((st) => [st, items.filter((i) => i.state === st).length])), assignments: {}, answers: answers.length } : { items: { open: o.open ?? 340, agreed: 0 }, assignments: { leased: 1 }, answers: 0 },

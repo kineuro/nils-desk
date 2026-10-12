@@ -95,7 +95,7 @@ export type Condition = boolean | { axis?: string; is?: string; missing_or?: str
 /** An axes answer as the engine reads it: each asked axis with its values, none for no value. */
 export type Joint = Record<string, string[]>;
 
-export type ItemState = "open" | "awaiting_metric" | "needs_adjudication" | "agreed" | "adjudicated" | "disagreed" | "resolved";
+export type ItemState = "open" | "awaiting_metric" | "needs_adjudication" | "agreed" | "adjudicated" | "disagreed" | "refused" | "resolved";
 
 export interface Agreement {
   items: number;
@@ -136,6 +136,8 @@ export interface Item {
   derivative_id?: number | null;
   part_set?: string | null;
   part_label?: number | null;
+  /** An item a close could not write (state refused): the engine's reason and when; nothing was written for it, and a later close tries it again. Absent from an engine before it. */
+  refused?: { why?: string | null; at?: string | null } | null;
 }
 
 export interface Assignment {
@@ -184,6 +186,8 @@ export interface Campaign {
   /** The reader shows the pictures alone, no text of the file's header beside them, as pair mode does; absent from an engine before it, which showed the header. */
   hide_header?: boolean;
   counts: Counts;
+  /** A closed check that holds an item its close refused, whose question is still open: a person may close it again. Absent from an engine before it. */
+  close_again?: boolean;
   /** One campaign's read carries its items and assignments; the list leaves them out. */
   items?: Item[];
   assignments?: Assignment[];
@@ -234,7 +238,8 @@ export interface Closed {
   picks: number[];
   resolved: number;
   unresolved: number;
-  refused: unknown[];
+  /** The items the close could not write, each with the engine's own reason. */
+  refused: { item: number; why: string }[];
   /** Items whose stack (or an axis of it) someone decided while the campaign was open: that decision stands. */
   skipped?: { item: number; why: string }[];
   staged: boolean;
@@ -614,6 +619,7 @@ export const STATES: { state: string; words: string; tone: "" | "caution" | "bra
   { state: "disagreed", words: "disagreed", tone: "caution" },
   { state: "agreed", words: "agreed", tone: "ok" },
   { state: "adjudicated", words: "adjudicated", tone: "ok" },
+  { state: "refused", words: "refused", tone: "caution" },
   { state: "resolved", words: "resolved", tone: "brand" },
 ];
 
@@ -632,8 +638,8 @@ export function progress(counts: Counts): { state: string; words: string; tone: 
 
 export const itemTotal = (counts: Counts) => Object.values(counts.items).reduce<number>((a, b) => a + (b ?? 0), 0);
 
-/** Settled: agreed, adjudicated or resolved, what a close writes or wrote. */
-export const settled = (state: string) => state === "agreed" || state === "adjudicated" || state === "resolved";
+/** Settled: agreed, adjudicated or resolved, what a close writes or wrote, or refused, what a close could not write and a later one tries again. */
+export const settled = (state: string) => state === "agreed" || state === "adjudicated" || state === "refused" || state === "resolved";
 
 /** A share as a percentage, or a dash. */
 export const pct = (v: number | null | undefined) => (v === null || v === undefined || Number.isNaN(v) ? "none" : `${Math.round(v * 100)}%`);
@@ -711,9 +717,13 @@ export function seesAnswers(caps: Capabilities, c: Campaign): boolean {
   return adj.length > 0 ? adj.includes(me) : may(caps, "campaigns:work") && may(caps, "review:work");
 }
 
-/** Why the person may not close, or null. Closing writes decisions, so it needs Review work beside Campaigns work. */
+/**
+ * Why the person may not close, or null. Closing writes decisions, so it
+ * needs Review work beside Campaigns work. A closed check that holds an
+ * item its close refused is closed again, where the engine says so.
+ */
 export function closeRefusal(caps: Capabilities, c: Campaign): string | null {
-  if (c.status === "closed") return "It is closed.";
+  if (c.status === "closed" && c.close_again !== true) return "It is closed.";
   if (!served(caps, "POST /api/campaigns/{id}/close")) return "This engine has no door for closing a campaign.";
   if (!may(caps, "campaigns:work")) return "Closing needs work on the Campaigns page.";
   if (!may(caps, "review:work")) return "Closing writes through Review, so it needs work on the Review page as well.";
@@ -754,7 +764,8 @@ export interface Closure {
  */
 export function closure(c: Campaign, answers: Answer[] | null = null): Closure {
   const items = c.items ?? [];
-  const ready = items.filter((i) => i.state === "agreed" || i.state === "adjudicated");
+  // a close writes what is agreed or adjudicated, and tries again what an earlier close refused
+  const ready = items.filter((i) => i.state === "agreed" || i.state === "adjudicated" || i.state === "refused");
   const already = items.filter((i) => i.state === "resolved").length;
   const byItem = new Map<number, Answer[]>();
   for (const a of answers ?? []) byItem.set(a.item_id, [...(byItem.get(a.item_id) ?? []), a]);
@@ -789,10 +800,19 @@ export function closure(c: Campaign, answers: Answer[] | null = null): Closure {
 /** What the close answered, in one sentence. */
 export function closedWords(r: Closed, into: string): string {
   const wrote = into === "pick" ? `${r.picks.length} ${r.picks.length === 1 ? "pick" : "picks"}` : into === "none" ? `${r.resolved} resolved` : `${r.decisions.length} ${r.decisions.length === 1 ? "decision" : "decisions"}${r.staged ? ", staged" : ""}`;
-  const refused = r.refused.length > 0 ? `; ${r.refused.length} refused by a decision that outranks it` : "";
+  const refused = r.refused.length > 0 ? `; ${r.refused.length} refused: ${refusedWhy(r.refused)}` : "";
   const n = r.skipped?.length ?? 0;
   const skipped = n > 0 ? `; ${n} skipped, decided by someone while the campaign was open` : "";
   return `Closed: ${wrote}, ${r.unresolved} unresolved${refused}${skipped}.`;
+}
+
+/** The engine's own reasons for the items a close refused, each once: the first two, and how many more each item says. */
+export function refusedWhy(list: readonly unknown[]): string {
+  const whys = [...new Set(list.map((x) => (typeof x === "object" && x !== null && typeof (x as { why?: unknown }).why === "string" ? (x as { why: string }).why.trim() : "")).filter((w) => w !== ""))];
+  if (whys.length === 0) return "the engine gave no reason";
+  const shown = whys.slice(0, 2).join("; ");
+  const more = whys.length - 2;
+  return more > 0 ? `${shown}; and ${more} more ${more === 1 ? "reason" : "reasons"}, each on its item` : shown;
 }
 
 // ---------------------------------------------------------------- making one

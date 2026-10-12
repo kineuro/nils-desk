@@ -224,3 +224,38 @@ for (const vp of [
     await expect(d.getByRole("button", { name: "Start checking" })).toBeVisible();
   });
 }
+
+// A result the close could not write (the T33 pipe test) is shown refused on
+// the check's page, with the engine's reason whole, never as agreed and
+// accepted; the check offers Close again; nothing goes sideways.
+for (const vp of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+]) {
+  test(`a refused result on its check's page at ${vp.width} by ${vp.height}: refused, the reason whole, Close again`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/check.html?page=campaign&read=1&status=closed&refused=1&items=6");
+    const row = page.locator(".campaign-items tbody tr").filter({ hasText: "Not written:" });
+    await expect(row).toHaveCount(1);
+    await expect(row.locator(".tag")).toHaveText("refused");
+    await expect(row).toContainText("Not written: the outcome of item 12 (result 9001) cannot be read, so nothing is written for it: form.parts is a list");
+    await expect(page.locator(".data-head").getByRole("button", { name: "Close again" })).toBeVisible();
+    await expect(page.locator("p.warn")).toContainText("1 item was refused at the close");
+    await shot(page, `refused-campaign-${vp.width}x${vp.height}`);
+    await row.scrollIntoViewIfNeeded();
+    await shot(page, `refused-row-${vp.width}x${vp.height}`);
+    const m = await page.evaluate(() => {
+      const why = [...document.querySelectorAll(".campaign-items td .warn")][0];
+      const cell = why.closest("td")!;
+      const doc = document.documentElement;
+      return { cut: why.scrollWidth > why.clientWidth + 1 || why.getBoundingClientRect().right > cell.getBoundingClientRect().right + 1, scrollW: doc.scrollWidth - doc.clientWidth, agreed: document.querySelectorAll(".campaign-items .tag.ok").length };
+    });
+    expect(m.cut).toBe(false);
+    expect(m.scrollW).toBeLessThanOrEqual(0);
+    // the close again says what it will try
+    await page.locator(".data-head").getByRole("button", { name: "Close again" }).click();
+    await expect(page.locator("dialog")).toContainText("Writes 1 result's check, with its parts'.");
+    await expect(page.locator("dialog").getByRole("button", { name: "Close it again" })).toBeVisible();
+    await shot(page, `refused-close-again-${vp.width}x${vp.height}`);
+  });
+}

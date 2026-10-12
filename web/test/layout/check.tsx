@@ -6,11 +6,12 @@
 // layout check measures it in the shell a person really has. The viewers
 // are the stand-in with the real viewer's boxes (vite.layout.config.ts).
 //
-//   check.html?panels=1..8&grain=result|part&page=reader|new|campaign&others=n&set=lesions|structures&read=1&status=open|closed
+//   check.html?panels=1..8&grain=result|part&page=reader|new|campaign&others=n&set=lesions|structures&read=1&status=open|closed&refused=1
 //
 // `others` puts a second rater ahead who read the first n results; `set`
 // checks each structure of a label map instead of each lesion; `read=1`
-// has two raters' answers on every result, for the campaign's page.
+// has two raters' answers on every result, for the campaign's page; `refused=1`
+// on a closed one has the close refuse the first result it could write.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -23,7 +24,7 @@ const q = new URLSearchParams(location.search);
 const panels = Number(q.get("panels") ?? 3);
 const grain = q.get("grain") === "part" ? "part" : "result";
 const others = q.get("others");
-const engine = checkEngine({ panels, grain, items: 6, others: others === null ? undefined : Number(others), set: q.get("set") === "structures" ? "structures" : "lesions", read: q.get("read") === "1", status: q.get("status") === "closed" ? "closed" : "open" });
+const engine = checkEngine({ panels, grain, items: 6, others: others === null ? undefined : Number(others), set: q.get("set") === "structures" ? "structures" : "lesions", read: q.get("read") === "1", status: q.get("status") === "closed" ? "closed" : "open", refused: q.get("refused") === "1" });
 
 const caps = {
   engine: {
