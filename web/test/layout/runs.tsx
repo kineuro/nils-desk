@@ -21,6 +21,8 @@
 // Since 2026-10-12 samseg-lesions needs a T1w and a FLAIR a session, so a
 // dataset is taken with both (main@dataset:NAME), and its pre-flight says
 // the visits that lack one.
+// Since 2026-10-12 the catalog holds two versions of each pipeline: one row a
+// name, its versions in a select, and a replaced version not offered.
 // Every name and number here is made up.
 
 import { StrictMode } from "react";
@@ -118,9 +120,14 @@ const requirements = () => [
 ];
 
 const IMAGE = `ghcr.io/kineuro/nils-pipelines@sha256:${"4b".repeat(32)}`;
+const IMAGE_2 = `ghcr.io/kineuro/nils-pipelines@sha256:${"5c".repeat(32)}`;
+// Since 2026-10-12 each name's versions: samseg-lesions@2 fixes @1 and replaces it, so @1 is not offered though its runs keep its name;
+// n4-bias-correction@2 changes what it makes, so @1 stays selectable
 const PIPELINES = [
-  { id: 3, name: "samseg-lesions", version: "1", label: "samseg-lesions@1", description: "White matter lesions from a T1 and a FLAIR, by SAMSEG.", image: IMAGE, layout: "bids", level: "session", state: "active", parameters: [], inputs: [], outputs: [{ id: "lesions", kind: "mask" }, { id: "volumes", kind: "table" }], needs: { gpu: "none" }, proposals: [], roles: ["t1w", "flair"] },
-  { id: 4, name: "n4-bias-correction", version: "1", label: "n4-bias-correction@1", description: "N4 bias field correction of a T1.", image: IMAGE, layout: "bids", level: "session", state: "active", parameters: [{ id: "shrink", name: "Shrink factor", type: "Number", integer: true, minimum: 1, maximum: 8, "default-value": 4, optional: true }], inputs: [], outputs: [{ id: "corrected", kind: "image" }], needs: { gpu: "none" }, proposals: [] },
+  { id: 3, name: "samseg-lesions", version: "1", label: "samseg-lesions@1", description: "White matter lesions from a T1 and a FLAIR, by SAMSEG.", image: IMAGE, layout: "bids", level: "session", state: "active", standing: "replaced", replaced_by: "samseg-lesions@2", replaced_why: "It checks that each FLAIR sits on its T1w.", parameters: [], inputs: [], outputs: [{ id: "lesions", kind: "mask" }, { id: "volumes", kind: "table" }], needs: { gpu: "none" }, proposals: [], roles: ["t1w", "flair"] },
+  { id: 4, name: "n4-bias-correction", version: "1", label: "n4-bias-correction@1", description: "N4 bias field correction of a T1.", image: IMAGE, layout: "bids", level: "session", state: "active", standing: "selectable", parameters: [{ id: "shrink", name: "Shrink factor", type: "Number", integer: true, minimum: 1, maximum: 8, "default-value": 4, optional: true }], inputs: [], outputs: [{ id: "corrected", kind: "image" }], needs: { gpu: "none" }, proposals: [] },
+  { id: 5, name: "samseg-lesions", version: "2", label: "samseg-lesions@2", description: "White matter lesions from a T1 and a FLAIR, by SAMSEG, each FLAIR checked against its T1w.", image: IMAGE, layout: "bids", level: "session", state: "active", standing: "current", parameters: [], inputs: [], outputs: [{ id: "lesions", kind: "mask" }, { id: "volumes", kind: "table" }], needs: { gpu: "none" }, proposals: [], roles: ["t1w", "flair"] },
+  { id: 6, name: "n4-bias-correction", version: "2", label: "n4-bias-correction@2", description: "N4 bias field correction of a T1, with its bias field.", image: IMAGE_2, layout: "bids", level: "session", state: "active", standing: "current", parameters: [{ id: "shrink", name: "Shrink factor", type: "Number", integer: true, minimum: 1, maximum: 8, "default-value": 4, optional: true }], inputs: [], outputs: [{ id: "corrected", kind: "image" }, { id: "bias_field", kind: "image" }], needs: { gpu: "none" }, proposals: [] },
 ];
 
 const run = (id: number, pipeline: (typeof PIPELINES)[number], selection: string, status: string, minutes: number, more: Record<string, unknown> = {}) => ({

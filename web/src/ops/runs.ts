@@ -13,7 +13,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may, sees } from "../grants";
 import { roleWord } from "../review/mainScans";
-import { mainOfSpec, selectOf, type Over, type Pipeline } from "./catalog";
+import { mainOfSpec, offered, selectOf, type Over, type Pipeline } from "./catalog";
 import { failureOf, firstSentence, requirementsOf, SLICE, type Failure, type Requirement } from "./failure";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -638,10 +638,11 @@ export function runDocumentOf(verdict: { station?: unknown; result?: unknown } |
   };
 }
 
-/** The pipeline a run document names, from the catalog: by id, name@version, or the newest active version of a name. */
+/** The pipeline a run document names, from the catalog: by id, name@version, or the newest active version of a name; a version a later one replaces is read as the name's current one. */
 export function pipelineOf(catalog: Pipeline[], name: string): Pipeline | null {
   const exact = catalog.find((p) => p.label === name || String(p.id) === name);
-  if (exact) return exact;
-  const versions = catalog.filter((p) => p.name === name && p.state !== "retired");
-  return versions.sort((a, b) => b.id - a.id)[0] ?? null;
+  // a version a later one replaces is not run again (2026-10-12): the name's current version stands for it
+  if (exact && exact.standing !== "replaced") return exact;
+  const versions = catalog.filter((p) => p.name === (exact?.name ?? name) && offered(p));
+  return versions.find((p) => p.standing === "current") ?? versions.sort((a, b) => b.id - a.id)[0] ?? null;
 }

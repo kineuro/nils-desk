@@ -3,14 +3,16 @@
 // them, a run on a selection as the command line the jobs door queues, the
 // parameters checked as the descriptor declares them, the runs counted, and
 // no Run where the engine has no runtime, the person no work or the door no
-// queue.
+// queue. Since 2026-10-12, one row a name with the versions a new run may
+// take, newest first, and none a later version replaces.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { capsWith } from "../review/caps.fixture";
 import { CatalogBody, RunDialog } from "./Catalog";
-import { andWords, catalogActs, imageWords, mainOfSpec, mainRoles, mainSpec, mainWords, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, selectOf, writesWords, type Pipeline, type Run } from "./catalog";
+import { andWords, catalogActs, catalogRows, imageWords, mainOfSpec, mainRoles, mainSpec, mainWords, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, selectOf, writesWords, type Pipeline, type Run } from "./catalog";
 import { PipelinesPage } from "./PipelinesPage";
+import { pipelineOf } from "./runs";
 
 const TRAIN: Pipeline = {
   id: 4,
@@ -154,5 +156,52 @@ describe("the catalog page", () => {
     expect(older).not.toContain("#pipelines/catalog");
     // an address to the catalog on an engine without it opens the jobs
     expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(["GET /api/jobs"], ["pipelines:see"])} page="catalog" />)).toContain("<h1>Jobs</h1>");
+  });
+});
+
+describe("a pipeline's versions (Nima's ruling of 2026-10-12)", () => {
+  // seg@1 is replaced by seg@2, which fixes it; seg@3 changes what it makes and replaces nothing, so seg@2 stays selectable
+  const SEG1: Pipeline = { ...N4, id: 21, name: "seg", version: "1", label: "seg@1", description: "Segments, as the first did.", standing: "replaced", replaced_by: "seg@2", replaced_why: "the first missed small lesions" };
+  const SEG2: Pipeline = { ...SEG1, id: 22, version: "2", label: "seg@2", description: "Segments small lesions too.", standing: "selectable", replaced_by: null, replaced_why: null };
+  const SEG3: Pipeline = { ...SEG2, id: 23, version: "3", label: "seg@3", description: "Segments, with a bias field.", image: `ghcr.io/kineuro/seg@sha256:${"3c".repeat(32)}`, standing: "current" };
+  const OLD: Pipeline = { ...N4, id: 30, name: "old", version: "1", label: "old@1", state: "retired", standing: "retired" };
+  const RAN: Run = { ...RUN, id: 8, pipeline_id: 21, pipeline: "seg@1" };
+
+  it("offers each name once, with the versions a new run may take, newest first", () => {
+    const rows = catalogRows([N4, SEG1, SEG2, SEG3, OLD]);
+    expect(rows.map((r) => [r.name, r.versions.map((v) => v.label)])).toEqual([
+      ["n4", ["n4@1"]],
+      ["seg", ["seg@3", "seg@2"]],
+    ]);
+    // an engine that says no standing: every version not retired, newest first
+    expect(catalogRows([{ ...SEG1, standing: undefined }, { ...SEG2, standing: undefined }])[0].versions.map((v) => v.label)).toEqual(["seg@2", "seg@1"]);
+  });
+  it("draws one row a name with a plain select, the newest chosen, and names each run's own version", () => {
+    const caps = capsWith(DOORS, ["pipelines:see", "pipelines:work"]);
+    const html = renderToStaticMarkup(<CatalogBody caps={caps} pipelines={[N4, SEG1, SEG2, SEG3]} capability={ON} runs={[RAN]} onRun={() => undefined} />);
+    expect(html).toContain("2 pipelines · podman");
+    expect(html.match(/>Run on a selection<\/button>/gu)).toHaveLength(2);
+    expect(html).toContain('aria-label="The version of seg"');
+    expect(html).toMatch(/<option value="23" selected="">v3, newest<\/option><option value="22">v2<\/option><\/select>/u);
+    expect(html).not.toContain('<option value="21"');
+    // the row reads as the version chosen: its description and its image
+    expect(html).toContain("Segments, with a bias field.");
+    expect(html).not.toContain("Segments small lesions too.");
+    expect(html).toContain("ghcr.io/kineuro/seg@sha256:3c3c3c3c3c3c");
+    // a name with one version offered says it, with no select
+    expect(html).not.toContain('aria-label="The version of n4"');
+    expect(html).toContain('<span class="meta">v1</span>');
+    // the runs keep the version they ran, a replaced one too
+    expect(html).toContain("<td>seg@1</td>");
+  });
+  it("titles the run dialog and its command by the version chosen", () => {
+    const html = renderToStaticMarkup(<RunDialog caps={capsWith(DOORS, ["pipelines:see", "pipelines:work"])} pipeline={SEG2} onClose={() => undefined} onDone={() => undefined} />);
+    expect(html).toContain("Run seg@2");
+    expect(runCommand({ pipeline: SEG2, over: { selection: "ms", version: 1 }, params: {}, models: [], labels: null })[1]).toBe("seg@2");
+  });
+  it("reads a plan that names a replaced version as the name's current one", () => {
+    expect(pipelineOf([SEG1, SEG2, SEG3], "seg@1")?.label).toBe("seg@3");
+    expect(pipelineOf([SEG1, SEG2, SEG3], "seg@2")?.label).toBe("seg@2");
+    expect(pipelineOf([SEG1, SEG2, SEG3], "seg")?.label).toBe("seg@3");
   });
 });

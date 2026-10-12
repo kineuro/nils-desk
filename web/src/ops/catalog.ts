@@ -7,7 +7,9 @@
 // [--labels id]`, or since record 55 (2026-10-12) straight over a dataset's
 // or a cohort's main scans of a role, `--select main:<role>@dataset:<name>`,
 // or of each role the pipeline needs, `--select main@dataset:<name>`; and a
-// run's own account, counted.
+// run's own account, counted. Since 2026-10-12 the Catalog is one row a name
+// with the versions a new run may take, newest first: a version a later one
+// replaces because it fixes it is not offered, and its runs keep its name.
 
 import { door, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -61,6 +63,11 @@ export interface Pipeline {
   proposals?: { axis: string }[] | null;
   /** The pick roles a unit of a bids input needs (`x-nils.input.roles`): a T1w and a FLAIR for samseg-lesions. */
   roles?: string[] | null;
+  /** How it stands for a new run (2026-10-12): the newest, an older one a person may still choose, one a later version replaces because it fixes it, or retired. Absent from an engine before. */
+  standing?: "current" | "selectable" | "replaced" | "retired" | null;
+  /** The version that replaces it, as name@version, and why. */
+  replaced_by?: string | null;
+  replaced_why?: string | null;
 }
 
 /** The runtime as the catalog door answers it: whether this engine can run anything, and why not. */
@@ -105,6 +112,34 @@ export const catalog = {
   labelSets: () => door<{ label_sets: LabelSet[] }>("GET", "/api/label-sets"),
   models: () => door<{ models: { id: number; name: string; version: string; task: string; state: string; kind: string }[] }>("GET", "/api/models"),
 };
+
+/** Whether a new run may take this version (Nima's ruling of 2026-10-12: "if it fixes any bug then we simply dont show previous version"): the current one and an older one nothing replaces; on an engine that says no standing, any not retired. */
+export function offered(p: Pick<Pipeline, "standing" | "state">): boolean {
+  return p.standing ? p.standing === "current" || p.standing === "selectable" : p.state !== "retired";
+}
+
+const versionOf = (p: Pick<Pipeline, "version" | "id">): number => (Number.isFinite(Number(p.version)) ? Number(p.version) : p.id);
+
+/** One row of the Catalog: a name, and the versions a new run may take, newest first (the default). A name with none offered has no row. */
+export interface CatalogRow {
+  name: string;
+  versions: Pipeline[];
+}
+
+/** The catalog one row a name, in the order the engine lists the names. */
+export function catalogRows(pipelines: Pipeline[]): CatalogRow[] {
+  const rows: CatalogRow[] = [];
+  for (const p of pipelines) {
+    let row = rows.find((r) => r.name === p.name);
+    if (!row) {
+      row = { name: p.name, versions: [] };
+      rows.push(row);
+    }
+    if (offered(p)) row.versions.push(p);
+  }
+  for (const r of rows) r.versions.sort((a, b) => versionOf(b) - versionOf(a));
+  return rows.filter((r) => r.versions.length > 0);
+}
 
 /** What a person may do on the catalog, by grant, door and runtime. */
 export function catalogActs(caps: Capabilities, capability: Capability | null): { see: boolean; run: boolean; why: string | null } {
