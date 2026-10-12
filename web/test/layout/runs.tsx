@@ -15,14 +15,14 @@ import { createRoot } from "react-dom/client";
 import { App } from "../../src/App";
 import "../../src/shell.css";
 import { GRANTS } from "../../src/grants";
-import { SLICE } from "../../src/ops/failure";
-import { installDoor } from "../../src/ops/tools";
 
 const ask = new URLSearchParams(location.search);
 const OFFLINE = ask.has("offline");
+/** ?refuse: the pre-flight passes, and the jobs door refuses the run when it is pressed, as it does when the machine changed between. */
+const REFUSE = ask.has("refuse");
 let installed = ask.has("installed");
 
-const INSTALL = installDoor("dcm2niix");
+const INSTALL = "POST /api/tools/dcm2niix/install";
 const DOORS = [
   "GET /api/capabilities",
   "GET /api/pipelines",
@@ -38,27 +38,38 @@ const DOORS = [
   "POST /api/jobs",
   "POST /api/jobs/{id}/cancel",
   "GET /api/review",
+  "GET /api/tools",
   INSTALL,
 ];
 
-/** A value at one of SLICE's dotted paths, the tool's name put in. */
-function put(o: Record<string, unknown>, name: keyof typeof SLICE, v: unknown) {
-  const path = SLICE[name].replace("{tool}", "dcm2niix").split(".");
-  let at = o;
-  for (const k of path.slice(0, -1)) at = (at[k] ??= {}) as Record<string, unknown>;
-  at[path[path.length - 1]] = v;
-  return o;
-}
-const VERSION = "v1.0.20250506";
-const WHERE = "/usr/local/bin/dcm2niix";
-const status = () => put(put(put({}, "present", installed), "path", installed ? WHERE : null), "version", installed ? VERSION : null);
+const PINNED = "v1.0.20260724";
+const WHERE = "/usr/local/lib/nils/tools/dcm2niix";
+const FIX = { tool: "dcm2niix", door: INSTALL, command: "nils tools install dcm2niix", grant: "install:work" };
+/** dcm2niix as GET /api/tools and the capabilities answer it. */
+const tool = () => ({
+  name: "dcm2niix",
+  present: installed,
+  path: installed ? WHERE : null,
+  found_by: installed ? "tools" : null,
+  version: installed ? PINNED : null,
+  pinned: PINNED,
+  current: installed ? true : null,
+  problem: null,
+  install: { door: INSTALL, command: FIX.command, grant: FIX.grant, available: true, into: "/usr/local/lib/nils/tools", source: "https://github.com/rordenlab/dcm2niix/releases", sha256: "5e".repeat(32), why: null },
+});
 
-const engine = (): Record<string, unknown> =>
-  put(
-    { engine: { name: "nils", version: "1.0.0-alpha.80" }, contracts: { openapi: "7" }, doors: DOORS, policy: [], auth: "token", principal: "astrid@site", roles: [], registry: { epoch: 4 }, packs: [{ name: "mri", version: "1.0.1" }] },
-    "status",
-    status(),
-  );
+const engine = (): Record<string, unknown> => ({
+  engine: { name: "nils", version: "1.0.0-alpha.80" },
+  contracts: { openapi: "7" },
+  doors: DOORS,
+  policy: [],
+  auth: "token",
+  principal: "astrid@site",
+  roles: [],
+  registry: { epoch: 4 },
+  packs: [{ name: "mri", version: "1.0.1" }],
+  tools: { dcm2niix: tool() },
+});
 const caps = () => ({
   engine: engine(),
   kvasir: null,
@@ -72,8 +83,23 @@ const NOW = Date.now();
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString().replace(/\.\d+Z$/u, "Z");
 
 const ERROR = `the release of the input failed: dcm2niix is not runnable (No such file or directory (os error 2)). dcm2niix is a prerequisite of a deployment: install a current build from rordenlab/dcm2niix, which a distribution's package lags, and pass --dcm2niix if it is not on the path.`;
-const TODO = "Install dcm2niix where the engine runs, then run it again.";
-const slice = (o: Record<string, unknown>, kind: string, todo: string) => put(put(o, "kind", kind), "todo", todo);
+const ADVICE = "Install dcm2niix where the engine runs: an admin can from Settings, Parts, or with nils tools install dcm2niix; then run it again.";
+const failure = (kind: string, cause: string, advice: string, fix: unknown = null) => ({ kind, cause, advice, fix });
+const NO_DCM2NIIX = failure("dependency", "dcm2niix", ADVICE, FIX);
+
+/** The checks as this page's engine answers them: with ?refuse a dcm2niix of the site's is found on the search path. */
+const checksNow = () => (REFUSE && !installed ? requirements().map((c) => (c.check === "converter" ? { ...c, ok: true, said: "v1.0.20250506 at /usr/bin/dcm2niix (on the engine's search path)", failure: null } : c)) : requirements());
+
+/** What a run needs of this machine, as the pre-flight checks it. */
+const requirements = () => [
+  installed
+    ? { check: "converter", ok: true, said: `${PINNED} at ${WHERE} (in the registry's tools folder)`, failure: null, path: WHERE, found_by: "tools", version: PINNED }
+    : { check: "converter", ok: false, said: "dcm2niix is not on the engine's search path, beside nils, where the setup record names one, or in the registry's tools folder", failure: NO_DCM2NIIX, path: null, found_by: null },
+  { check: "runtime", ok: true, said: "podman 5.4.2", failure: null, runtime: "podman", version: "5.4.2" },
+  { check: "image", ok: true, said: "the image is not here yet; it is pulled when the run starts", failure: null, present: false },
+  { check: "memory", ok: true, said: "a unit needs 8 GB; the machine has 62 GB and the lane 48 GB", failure: null, need_gb: 8, machine_gb: 62, lane_gb: 48 },
+  { check: "disk", ok: true, said: "the units take 14 GB of the 812 GB free in the working place work", failure: null, place: "work", free_gb: 812, need_gb: 14 },
+];
 
 const IMAGE = `ghcr.io/kineuro/nils-pipelines@sha256:${"4b".repeat(32)}`;
 const PIPELINES = [
@@ -101,12 +127,12 @@ const run = (id: number, pipeline: (typeof PIPELINES)[number], selection: string
 });
 const unit = (u: string, status: string, error: string | null = null) => ({ unit: u, state: "over", status, attempts: 1, device: "cpu", exit_code: status === "failed" ? 137 : 0, started_at: ago(200), finished_at: ago(190), error });
 const RUNS = [
-  slice(run(14, PIPELINES[1], "selection:3d-t1-siemens@1", "failed", 12, { error: ERROR }), "dependency", TODO),
+  run(14, PIPELINES[1], "selection:3d-t1-siemens@1", "failed", 12, { error: ERROR, failure: NO_DCM2NIIX }),
   run(13, PIPELINES[0], "selection:t1-3d-stacks@1", "failed", 20, { error: ERROR }),
   run(12, PIPELINES[1], "selection:flair-2d-ge@1", "partial", 200, {
     results_digest: "9f",
-    summary: { units: { total: 3, succeeded: 2, failed: 1 }, derivatives: 2 },
-    units_run: [unit("sub-1a2b_ses-1", "succeeded"), slice(unit("sub-3c4d_ses-1", "failed", "the container was killed: out of memory at 15.8 GB. The lane allows 16 GB a unit."), "resource", "Give the lane more memory, or run fewer units at once."), unit("sub-5e6f_ses-2", "succeeded")],
+    summary: { units: { total: 3, succeeded: 2, failed: 1 }, derivatives: 2, failures_by_cause: [{ kind: "resource", cause: "memory", units: 1 }], converter: { version: PINNED, path: WHERE, found_by: "tools" } },
+    units_run: [unit("sub-1a2b_ses-1", "succeeded"), { ...unit("sub-3c4d_ses-1", "failed", "the container was killed: out of memory at 15.8 GB. The lane allows 16 GB a unit."), failure: failure("resource", "memory", "Give the lane more memory, or run fewer units at once.") }, unit("sub-5e6f_ses-2", "succeeded")],
   }),
   run(11, PIPELINES[0], "selection:ms-followup-source@3", "done", 1500, { results_digest: "ab", summary: { units: { total: 41, succeeded: 41 }, derivatives: 82 } }),
 ];
@@ -151,7 +177,14 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     return r ? json(200, r) : json(404, { error: "no such run" });
   }
   if (/^\/api\/jobs\/\d+$/u.test(path)) return json(200, { id: 44, state: "failed", started_at: ago(12) });
-  if (path === "/api/jobs" && method === "POST") return json(200, { job: 51, state: "queued" });
+  if (path === "/api/jobs" && method === "POST") {
+    const command = (body.command ?? []) as string[];
+    // a new run is checked for what it needs of this machine; one taken up again is not
+    if (REFUSE && command[0] === "run" && !command.includes("--resume")) return json(409, { error: "refused before it started: the units take 920 GB and the working place work has 812 GB free; free space or choose another place", failure: failure("resource", "disk", "Free space in the working place, or name another with nils pipeline lane --output-place, then run it again."), requirements: [...checksNow().slice(0, 4), { check: "disk", ok: false, said: "the units take 920 GB and the working place work has 812 GB free", failure: failure("resource", "disk", "Free space in the working place, or name another with nils pipeline lane --output-place, then run it again."), place: "work", free_gb: 812, need_gb: 920 }] });
+    return json(200, { job: 51, state: "queued" });
+  }
+  if (path === "/api/jobs") return json(200, { count: 1, jobs: [{ id: 44, kind: "run", name: null, state: "failed", started_at: ago(12), heartbeat_at: null, finished_at: ago(11), progress: null, error: ERROR, failure: NO_DCM2NIIX, args: { argv: ["run", "n4-bias-correction@1", "--select", "selection:3d-t1-siemens@1"], principal: "astrid@site" }, result: null }] });
+  if (path === "/api/tools") return json(200, { tools: [tool()] });
   if (path === "/api/derivatives") return json(200, { derivatives: [] });
   if (path === "/api/ask/selections") {
     const q = (url.searchParams.get("q") ?? "").toLowerCase();
@@ -165,14 +198,20 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     return s && (!v || Number(v) <= s.versions) ? json(200, { name, version: v ? Number(v) : s.versions }) : json(404, { error: `no selection ${decodeURIComponent(named[1])}` });
   }
   if (/^\/api\/pipelines\/[^/]+\/preflight$/u.test(path)) {
-    // a bids input is released with dcm2niix: refused until it is installed
-    if (!installed) return json(400, slice({ error: ERROR }, "dependency", TODO));
-    return json(200, { pipeline: "n4-bias-correction@1", selection: body.select, layout: "bids", level: "session", stacks: 318, units: { total: 140, ready: 138, missing: 2 }, missing: [{ unit: "sub-7a8b_ses-1", why: "no t1w picked" }, { unit: "sub-9c0d_ses-2", why: "no t1w picked" }], estimate: { seconds_per_unit: 95, source: "descriptor", seconds: 3300, slots: 4 }, gpu: { need: "none", available: null, device: null }, budget: { cores: 16, memory_gb: 64, fits: true }, ready: true, blockers: [] });
+    // a bids input is released with dcm2niix: not ready until it is installed (or, with ?refuse, said ready)
+    const ready = installed || REFUSE;
+    const checks = checksNow();
+    return json(200, { pipeline: "n4-bias-correction@1", selection: body.select, layout: "bids", level: "session", stacks: 318, units: { total: 140, ready: 138, missing: 2 }, missing: [{ unit: "sub-7a8b_ses-1", why: "no t1w picked" }, { unit: "sub-9c0d_ses-2", why: "no t1w picked" }], estimate: { seconds_per_unit: 95, source: "descriptor", seconds: 3300, slots: 4 }, gpu: { need: "none", available: null, device: null }, budget: { cores: 16, memory_gb: 48, fits: true }, ready, blockers: ready ? [] : [checks[0].said], requirements: checks, failure: ready ? null : NO_DCM2NIIX });
   }
   if (path === INSTALL.split(" ")[1] && method === "POST") {
-    if (OFFLINE) return json(502, put({ error: "the download of dcm2niix failed: github.com could not be reached (no route to host). The engine's machine is offline." }, "kind", "dependency"));
+    if (OFFLINE)
+      return json(502, {
+        error: `the releases of dcm2niix could not be reached (github.com: no route to host). By hand: fetch dcm2niix_lnx.zip of ${PINNED} from github.com/rordenlab/dcm2niix/releases, check that its sha256 is ${"5e".repeat(32)}, and put its dcm2niix in /usr/local/lib/nils/tools.`,
+        offline: true,
+        failure: NO_DCM2NIIX,
+      });
     installed = true;
-    return new Promise((r) => setTimeout(r, 400)).then(() => json(200, status()));
+    return new Promise((r) => setTimeout(r, 400)).then(() => json(200, { installed: true, source: "https://github.com/rordenlab/dcm2niix/releases", tool: tool() }));
   }
   return json(404, { error: `the layout check's engine has no ${path}` });
 }) as typeof fetch;

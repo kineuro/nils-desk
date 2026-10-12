@@ -13,7 +13,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may, sees } from "../grants";
 import type { Over, Pipeline } from "./catalog";
-import { failureOf, firstSentence, SLICE, type Failure } from "./failure";
+import { failureOf, firstSentence, requirementsOf, SLICE, type Failure, type Requirement } from "./failure";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -43,6 +43,10 @@ export interface Preflight {
   place?: string | null;
   ready: boolean;
   blockers?: string[] | null;
+  /** Since 2026-10-12: what the run needs of this machine, each {check, ok, said, failure}; a check that fails is a blocker. */
+  requirements?: unknown[] | null;
+  /** The first check that fails, as a run's failure is named, or null. */
+  failure?: unknown;
 }
 
 export interface UnitRun {
@@ -118,6 +122,8 @@ export const runs = {
   /** Save a stored ask document as the next version of a selection (PUT /api/ask/selections/{name}, query:work at detail quasi). */
   saveSelection: (name: string, document_id: number) => door<{ id: number; name: string; version: number; hash: string }>("PUT", `/api/ask/selections/${encodeURIComponent(name)}`, { document_id }),
   job: (id: number) => door<{ id: number; state: string; started_at: string | null }>("GET", `/api/jobs/${id}`),
+  /** A run queued at the jobs door; one refused for what it needs of this machine answers 409 with its failure and requirements, which the refusal keeps. */
+  queue: (command: string[]) => door<{ job: number; state: string }>("POST", "/api/jobs", { command }),
   /** The ask, as the Query page runs it: one bounded page of rows. */
   ask: (document: Json) =>
     door<{ columns: (string | { name: string })[]; rows: unknown[][]; truncated?: boolean }>("POST", "/api/ask/run", { document, limit: 500 }).then((a) => ({
@@ -196,14 +202,19 @@ export function preflightGate(p: Preflight | null): { go: boolean; why: string |
   return { go: false, why: b.length > 0 ? b.join("; ") : "the pre-flight says the run is not ready" };
 }
 
-/** Why a pre-flight is not ready, as a failure: its blockers, with the kind and what to do where the engine says them beside them. */
+/** Why a pre-flight is not ready, as a failure: its blockers, with the first failing check's kind, cause, advice and fix where the engine names them. */
 export function blockedOf(p: Preflight | null): Failure | null {
   if (p === null || p.ready) return null;
   const gate = preflightGate(p);
-  const f = failureOf({ ...(p as unknown as Json), [SLICE.error]: gate.why });
+  const f = failureOf({ [SLICE.error]: gate.why, [SLICE.failure]: p.failure });
   if (!f) return null;
   const blockers = (p.blockers ?? []).filter(Boolean);
-  return { ...f, line: f.todo ?? (blockers.length > 0 ? blockers.map(firstSentence).join("; ") : f.line) };
+  return { ...f, line: f.advice ?? (blockers.length > 0 ? blockers.map(firstSentence).join("; ") : f.line) };
+}
+
+/** What the run needs of this machine, as the pre-flight checked it. */
+export function preflightChecks(p: Preflight | null): Requirement[] {
+  return p === null ? [] : requirementsOf(p);
 }
 
 /** The range a parameter takes, in a few words, from its descriptor. */
@@ -308,6 +319,20 @@ export function breachesByCheck(r: RunDetail): { check: string; units: Held }[] 
   const by = new Map<string, number>();
   for (const u of checksOf(r).units) for (const b of u.breaches) by.set(b.check || b.metric, (by.get(b.check || b.metric) ?? 0) + 1);
   return [...by.entries()].map(([check, units]) => ({ check, units })).sort((a, b) => heldOrder(a.units, b.units));
+}
+
+/** The units that failed or went unreported, by cause, as the engine counts them (since 2026-10-12): the most first; below detail quasi a count of 1 to 4 withheld. */
+export function failuresByCause(r: RunDetail): { kind: string; cause: string; units: Held }[] {
+  const list = obj(r.summary)[SLICE.byCause];
+  return (Array.isArray(list) ? (list as Json[]) : []).map((f) => ({ kind: text(f.kind) ?? "pipeline", cause: text(f.cause) ?? "pipeline", units: f.withheld === true ? null : heldOf(f, "units") }));
+}
+
+/** The dcm2niix a run's release ran, and how it was found, where the run had a bids input. */
+export function converterOf(r: RunDetail): { version: string | null; path: string | null; found_by: string | null } | null {
+  const c = obj(r.summary)[SLICE.converter];
+  if (c === null || typeof c !== "object") return null;
+  const o = obj(c);
+  return { version: text(o.version), path: text(o.path), found_by: text(o.found_by) };
 }
 
 /** The units that failed, by reason, as the engine counts them below detail quasi; empty at quasi, where the units say it. */

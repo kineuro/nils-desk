@@ -4,12 +4,17 @@
 // is one line under its row, inside the window at a laptop's width and at a
 // phone's, with nothing sideways; the run form's Over finds "t1 3d", moves by
 // the arrows, takes by Enter and closes by Escape without closing the form;
-// the refused pre-flight offers Install dcm2niix, which clears it; a run's
-// page says the reason whole with Install and Run again; Settings, Parts
-// lists dcm2niix under Tools, and an install that fails says why and the way
-// by hand. SHOTS=<dir> keeps a screenshot of each.
+// the pre-flight lists each check of what the run needs of this machine and
+// offers Install dcm2niix on the one that fails, which clears it; a run the
+// jobs door refused says why with its checks; a run's page says the reason
+// whole with Install and Run again, and its failed units by cause; a failed
+// job says why on the Jobs page; Settings, Parts lists dcm2niix under Tools,
+// and an install that fails offline says the engine's reason with the way by
+// hand. SHOTS=<dir> keeps a screenshot of each.
 
 import { expect, test, type Page } from "@playwright/test";
+
+const ADVICE = "Install dcm2niix where the engine runs: an admin can from Settings, Parts, or with nils tools install dcm2niix; then run it again.";
 
 const SIZES = [
   { name: "1440", width: 1440, height: 900 },
@@ -33,7 +38,7 @@ for (const vp of SIZES) {
     await expect(lines).toHaveCount(2);
     // the slice's kind and what to do on the first; today's engine's first sentence on the second
     await expect(lines.nth(0).locator(".kind-tag")).toHaveText("dependency");
-    await expect(lines.nth(0).locator(".fail-words")).toHaveText("Install dcm2niix where the engine runs, then run it again.");
+    await expect(lines.nth(0).locator(".fail-words")).toHaveText(ADVICE);
     await expect(lines.nth(1).locator(".kind-tag")).toHaveCount(0);
     await expect(lines.nth(1).locator(".fail-words")).toHaveText("the release of the input failed: dcm2niix is not runnable (No such file or directory (os error 2)).");
     await expect(lines.nth(0).getByRole("button", { name: "Install dcm2niix" })).toBeVisible();
@@ -79,15 +84,19 @@ for (const vp of SIZES) {
     await page.keyboard.press("Enter");
     await expect(dialog.locator(".over-chip")).toHaveText("3d-t1-siemens");
     await expect(dialog.getByRole("combobox", { name: "The version" })).toHaveValue("2");
-    // the pre-flight refuses for want of dcm2niix, and says so as a failed run does
-    const refusal = dialog.locator(".fail-note");
-    await expect(refusal.locator(".kind-tag")).toHaveText("dependency");
+    // the pre-flight is not ready for want of dcm2niix: each check in the engine's words, and the failing one says what to do
+    const pre = dialog.locator(".preflight");
+    await expect(pre.locator(".req")).toHaveCount(5);
+    await expect(pre.locator(".req.not .req-check")).toHaveText("converter");
+    await expect(pre.locator(".fail-said .kind-tag")).toHaveText("dependency");
+    await expect(pre.locator(".fail-said")).toContainText(ADVICE);
     await expect(dialog.getByRole("button", { name: "Run", exact: true })).toBeDisabled();
-    await refusal.scrollIntoViewIfNeeded();
+    for (const box of await pre.locator(".req").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect))) expect(box.right).toBeLessThanOrEqual(vp.width);
+    await pre.scrollIntoViewIfNeeded();
     await shot(page, `refused-${vp.name}`);
-    await refusal.getByRole("button", { name: "Install dcm2niix" }).click();
+    await pre.getByRole("button", { name: "Install dcm2niix" }).click();
     await expect(dialog.locator(".note.brand.preflight .note-lead")).toHaveText("Pre-flight");
-    await expect(dialog.locator(".fail-note")).toHaveCount(0);
+    await expect(dialog.locator(".preflight .req.not")).toHaveCount(0);
     await expect(dialog.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
     await shot(page, `installed-${vp.name}`);
     await noSideways(page, vp.width);
@@ -101,7 +110,7 @@ for (const vp of SIZES) {
     await expect(note.locator(".note-detail")).toContainText("is a prerequisite of a deployment");
     await shot(page, `run-${vp.name}`);
     await note.getByRole("button", { name: "Install dcm2niix" }).click();
-    await expect(note.locator(".tool-said")).toContainText("dcm2niix v1.0.20250506 is installed");
+    await expect(note.locator(".tool-said")).toContainText("dcm2niix v1.0.20260724 is installed");
     await note.getByRole("button", { name: "Run again" }).click();
     await expect(note.locator(".tool-said")).toContainText("Run 14 is queued again as job 51.");
     await shot(page, `run-again-${vp.name}`);
@@ -115,29 +124,62 @@ for (const vp of SIZES) {
     await expect(tools.locator(".tag.caution")).toHaveText("missing");
     await shot(page, `parts-${vp.name}`);
     await tools.getByRole("button", { name: "Install dcm2niix" }).click();
-    await expect(tools.locator("tbody")).toContainText("v1.0.20250506");
-    await expect(tools.locator("tbody")).toContainText("/usr/local/bin/dcm2niix");
+    await expect(tools.locator("tbody")).toContainText("v1.0.20260724");
+    await expect(tools.locator("tbody")).toContainText("/usr/local/lib/nils/tools/dcm2niix");
+    await expect(tools.locator("tbody")).toContainText("in the registry's tools folder");
     await noSideways(page, vp.width);
   });
 }
 
-test("an install that fails says the engine's reason and the way by hand", async ({ page }) => {
+test("an install that fails offline says the engine's reason whole, the way by hand in it, and the command", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/runs.html?offline#settings/parts");
   await page.locator("table.tools").getByRole("button", { name: "Install dcm2niix" }).click();
   const said = page.locator("table.tools .tool-said");
-  await expect(said).toContainText("dcm2niix was not installed: the download of dcm2niix failed: github.com could not be reached (no route to host).");
-  await expect(said).toContainText("By hand: install a current build from github.com/rordenlab/dcm2niix where the engine runs, on its path.");
+  await expect(said).toContainText("dcm2niix was not installed: the releases of dcm2niix could not be reached (github.com: no route to host). By hand: fetch dcm2niix_lnx.zip");
+  await expect(said).toContainText("At the command line: nils tools install dcm2niix");
   await expect(page.locator("table.tools").getByRole("button", { name: "Try again" })).toBeVisible();
   await shot(page, "parts-offline-1440");
 });
 
-test("a failed unit's reason sits under the unit, its kind beside it", async ({ page }) => {
+test("a failed unit's reason sits under the unit, and the run counts its failed units by cause", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/runs.html#pipelines/runs/12");
   const line = page.locator("tr.fail-row .fail-line");
   await expect(line).toHaveCount(1);
   await expect(line.locator(".kind-tag")).toHaveText("resource");
   await expect(line.locator(".fail-words")).toHaveText("Give the lane more memory, or run fewer units at once.");
+  await expect(page.locator("th", { hasText: "Failed, by cause" })).toBeVisible();
+  await expect(page.locator(".values")).toContainText("v1.0.20260724");
   await shot(page, "run-units-1440");
+});
+
+for (const vp of SIZES) {
+  test(`at ${vp.name} px a run the jobs door refused says why with its checks, and nothing is queued`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/runs.html?refuse#pipelines/catalog");
+    await page.getByRole("button", { name: "Run on a selection" }).nth(1).click();
+    const dialog = page.locator("dialog[open]");
+    await dialog.getByRole("combobox", { name: "The selection" }).click();
+    await page.keyboard.type("siemens");
+    await page.keyboard.press("Enter");
+    await expect(dialog.locator(".note.brand.preflight .note-lead")).toHaveText("Pre-flight");
+    await dialog.getByRole("button", { name: "Run", exact: true }).click();
+    const note = dialog.locator(".dialog-foot .fail-note");
+    await expect(note.locator(".note-lead")).toHaveText("Not queued");
+    await expect(note.locator(".fail-said .kind-tag")).toHaveText("resource");
+    await expect(note.locator(".req.not .req-check")).toHaveText("disk");
+    await expect(dialog).toHaveCount(1);
+    await shot(page, `run-refused-${vp.name}`);
+    await noSideways(page, vp.width);
+  });
+}
+
+test("a failed job says why on the Jobs page, its kind beside the line", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/runs.html#pipelines");
+  const line = page.locator(".fail-line").first();
+  await expect(line.locator(".kind-tag")).toHaveText("dependency");
+  await expect(line.locator(".fail-words")).toHaveText(ADVICE);
+  await shot(page, "jobs-1440");
 });

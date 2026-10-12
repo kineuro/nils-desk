@@ -22,11 +22,14 @@ import { catalog, type Pipeline } from "./catalog";
 import { ops } from "./client";
 import { failureOf } from "./failure";
 import { InstallFor } from "./Install";
-import { FailLine, FailNote } from "./Reason";
+import { FailLine, FailNote, KindTag } from "./Reason";
+import { foundByWords } from "./tools";
 import {
   allPassed,
   breachesByCheck,
+  failuresByCause,
   failuresByReason,
+  converterOf,
   heldWords,
   cellWords,
   checksOf,
@@ -189,6 +192,9 @@ export function RunView(props: {
   const checks = checksOf(r);
   const byCheck = breachesByCheck(r);
   const failures = failuresByReason(r);
+  // since 2026-10-12 the engine counts the failed units by cause, at every detail
+  const causes = failuresByCause(r);
+  const converter = converterOf(r);
   const running = OPEN.has(r.status);
   // why it failed, whole (2026-10-12): the kind and what to do where the engine says them, else the error's first sentence
   const failed = failureOf(r);
@@ -209,6 +215,7 @@ export function RunView(props: {
     ...unitCells,
     { k: "over", v: r.selection ?? (r.handle_id ? `handle ${r.handle_id}` : "") },
     { k: "on", v: [r.runtime, r.device].filter(Boolean).join(", ") || "not yet" },
+    ...(converter ? [{ k: "dcm2niix", v: converter.version ?? "found", title: [converter.path, foundByWords(converter.found_by)].filter(Boolean).join(", ") || undefined }] : []),
     { k: running ? "since" : "ran", v: whenWords(r.started_at ?? "") },
   ];
   return (
@@ -306,7 +313,32 @@ export function RunView(props: {
                 .join(" · ") || "none yet"}
         </span>
       </div>
-      {totals && failures.length > 0 && (
+      {causes.length > 0 && (
+        <div className="table-wrap">
+          <table className="thin">
+            <thead>
+              <tr>
+                <th>Failed, by cause</th>
+                <th className="num">Units</th>
+              </tr>
+            </thead>
+            <tbody>
+              {causes.map((c) => (
+                <tr key={`${c.kind}:${c.cause}`}>
+                  <td>
+                    <span className="fail-said">
+                      <KindTag kind={c.kind} cause={c.cause} />
+                      <span>{c.cause.replace(/_/gu, " ")}</span>
+                    </span>
+                  </td>
+                  <td className="num">{heldWords(c.units)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {totals && causes.length === 0 && failures.length > 0 && (
         <div className="table-wrap">
           <table className="thin">
             <thead>

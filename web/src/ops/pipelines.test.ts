@@ -60,6 +60,12 @@ describe("a job's card", () => {
     expect(c.icon).toBe("alert");
     expect(c.error).toBe("No pack reads CT. Add a pack that does, then read again.");
     expect(c.next).toEqual({ label: "Read again", command: ["digest", "@ct-lab"] });
+    // an engine before the failure slice names no failure: the card says the error
+    expect(c.failure).toMatchObject({ kind: null, line: "No pack reads CT." });
+    // since it, a failed job's failure: its kind and what to do (2026-10-12)
+    const run = cardOf(job(118, ["run", "n4-bias-correction@1", "--select", "selection:3d-t1-siemens@1"], "failed", { error: "the release of the input failed: dcm2niix is not runnable", failure: { kind: "dependency", cause: "dcm2niix", advice: "Install dcm2niix where the engine runs.", fix: null } } as Partial<ChainedJob>), now);
+    expect(run.failure).toMatchObject({ kind: "dependency", cause: "dcm2niix", line: "Install dcm2niix where the engine runs." });
+    expect(cardOf(job(119, ["digest", "@a"], "done"), now).failure).toBeNull();
     expect(nextMove(job(1, ["classify", "--pack", "mri"], "cancelled"))?.label).toBe("Sort again");
     expect(nextMove(job(1, ["digest", "@a"], "done"))).toBeNull();
     expect(titleOf(job(2, ["release", "--name", "spring-v1"], "done"))).toBe("Release of spring-v1 done");

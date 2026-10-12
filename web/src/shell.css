@@ -1574,6 +1574,11 @@ table.thin tr.fail-row > td { padding-top: 0; }
 .kind-tag[data-kind="input"] { --vc: var(--n-value-3); --vc-bg: var(--n-value-3-bg); }
 .kind-tag[data-kind="pipeline"] { --vc: var(--n-value-4); --vc-bg: var(--n-value-4-bg); }
 .fail-note .note-detail { overflow-wrap: anywhere; }
+.requirements { list-style: none; margin: 0.4rem 0 0; padding: 0; display: grid; gap: 0.2rem; font-size: var(--n-text-size-small); }
+.req { display: grid; grid-template-columns: 5.5rem minmax(0, 1fr); align-items: baseline; column-gap: 0.6rem; padding: 0.15rem 0 0.15rem 0.55rem; border-left: 2px solid var(--n-ok-line); color: var(--n-text); }
+.req.not { border-left-color: var(--n-caution-line); }
+.req-check { font-family: var(--n-font-mono); color: var(--n-text-dim); }
+.req-said { overflow-wrap: anywhere; }
 .tool-act { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.3rem; }
 .tool-said { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; margin: 0.3rem 0 0; font-size: var(--n-text-size-small); color: var(--n-text); }
 td > .tool-said { width: 0; min-width: min(100%, calc(100vw - 3rem)); position: sticky; left: 0; padding-left: 0.55rem; }

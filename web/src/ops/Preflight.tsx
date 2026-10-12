@@ -4,14 +4,16 @@
 // lack an input folded by why, the time, the GPU and the lane's budget, and
 // the blockers that keep Run from being pressed. A refusal, or a pre-flight
 // that is not ready, says why as a failed run does (2026-10-12): the kind,
-// what to do, and what can be done about it.
+// what to do, and what can be done about it; and each check of what the run
+// needs of this machine (the converter, the runtime, the image, memory, the
+// GPU, disk) says whether it holds, in the engine's words.
 
 import type React from "react";
 import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
-import { failureWords, type Failure } from "./failure";
+import { failureWords, type Failure, type Requirement } from "./failure";
 import { FailNote, KindTag } from "./Reason";
-import { blockedOf, missingByWhy, preflightCells, preflightGate, type Preflight } from "./runs";
+import { blockedOf, missingByWhy, preflightCells, preflightChecks, preflightGate, type Preflight } from "./runs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -50,10 +52,11 @@ export function PreflightPanel({ p, checking = false, why = null, act = null }: 
             ))}
           </ul>
         )}
+        <Requirements checks={preflightChecks(p)} />
         {blocked && (
           <>
             <p className="fail-said">
-              {blocked.kind && <KindTag kind={blocked.kind} />}
+              {blocked.kind && <KindTag kind={blocked.kind} cause={blocked.cause} />}
               <span>{blocked.line}</span>
             </p>
             {blocked.error !== blocked.line && <p className="note-detail">{blocked.error}</p>}
@@ -63,5 +66,20 @@ export function PreflightPanel({ p, checking = false, why = null, act = null }: 
         {checking && <p className="note-detail">Checking again…</p>}
       </div>
     </div>
+  );
+}
+
+/** What the run needs of this machine, one check a line: its border says whether it holds, its words are the engine's. */
+export function Requirements({ checks }: { checks: Requirement[] }) {
+  if (checks.length === 0) return null;
+  return (
+    <ul className="requirements" aria-label="what the run needs of this machine">
+      {checks.map((c, i) => (
+        <li key={`${c.check}${i}`} className={c.ok ? "req ok" : "req not"}>
+          <span className="req-check">{c.check}</span>
+          <span className="req-said">{c.said}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

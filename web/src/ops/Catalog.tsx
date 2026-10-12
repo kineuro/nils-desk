@@ -22,10 +22,11 @@ import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { stations } from "../assistant/stations";
 import { plansOffered } from "./PlanPage";
-import { failureOf, refusalOf, type Failure } from "./failure";
+import { DoorError } from "../ask/client";
+import { failureOf, refusalOf, requirementsOf, type Failure, type Requirement } from "./failure";
 import { OverPicker } from "./OverPicker";
-import { PreflightPanel } from "./Preflight";
-import { FailLine } from "./Reason";
+import { PreflightPanel, Requirements } from "./Preflight";
+import { FailLine, FailNote } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
 import { PLAN_STATION, preflightGate, rangeWords, resumeCommand, runActs, runs as runDoors, type Preflight } from "./runs";
 import { catalog, catalogActs, imageWords, needsOf, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
@@ -184,7 +185,7 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
 /** A failed run's reason under its row, with Install where it is a tool the engine installs, and then Run again where the run can be taken up. */
 function RunFailRow({ caps, run, f, cols }: { caps: Capabilities; run: Run; f: Failure; cols: number }) {
   const again = runActs(caps).queue && run.status === "failed" && !run.results_digest ? () => ops.enqueue(resumeCommand(run)).then((j) => `Run ${run.id} is queued again as job ${j.job}.`) : null;
-  const install = useInstall(caps, f.tool, again, null, true);
+  const install = useInstall(caps, f.fix, again, null, true);
   return (
     <tr className="fail-row">
       <td colSpan={cols}>
@@ -206,7 +207,8 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
   const [modelList, setModelList] = useState<{ id: number; name: string; version: string; state: string }[]>([]);
   const [labelSets, setLabelSets] = useState<LabelSet[]>([]);
   const [busy, setBusy] = useState(false);
-  const [refused, setRefused] = useState<string | null>(null);
+  // a run the jobs door refused before queueing it (409): its failure, and the checks that fail, as the pre-flight says them
+  const [refused, setRefused] = useState<{ f: Failure; checks: Requirement[] } | null>(null);
   useEffect(() => {
     if (needs.models.length > 0 && served(caps, "GET /api/models") && may(caps, "models:see")) catalog.models().then((r) => setModelList(r.models.filter((m) => m.state === "admitted" || m.state === "promoted")), () => undefined);
     if (needs.labels && served(caps, "GET /api/label-sets")) catalog.labelSets().then((r) => setLabelSets(r.label_sets.filter((s) => !s.sealed)), () => undefined);
@@ -252,11 +254,11 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
     if (!command) return;
     setBusy(true);
     setRefused(null);
-    ops.enqueue(command).then(
+    runDoors.queue(command).then(
       (j) => onDone(`Queued ${pipeline.label} as job ${j.job}.`),
       (e: unknown) => {
         setBusy(false);
-        setRefused(e instanceof Error ? e.message : String(e));
+        setRefused({ f: refusalOf(e), checks: requirementsOf(e instanceof DoorError ? e.body : null) });
       },
     );
   };
@@ -266,15 +268,22 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
       icon="play"
       onClose={onClose}
       foot={
-        <div className="row actions">
-          <button type="button" className="button" disabled={!ready} onClick={go}>
-            Run
-          </button>
-          <button type="button" className="button secondary" onClick={onClose}>
-            Cancel
-          </button>
-          {refused && <span className="warn">{refused}</span>}
-        </div>
+        <>
+          {refused && (
+            <FailNote f={refused.f} lead="Not queued">
+              <Requirements checks={refused.checks.filter((c) => !c.ok)} />
+              <InstallFor caps={caps} f={refused.f} onInstalled={() => setRefused(null)} />
+            </FailNote>
+          )}
+          <div className="row actions">
+            <button type="button" className="button" disabled={!ready} onClick={go}>
+              Run
+            </button>
+            <button type="button" className="button secondary" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </>
       }
     >
       <OverPicker caps={caps} over={over} onOver={setOver} />

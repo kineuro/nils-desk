@@ -1,19 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Install a missing tool from where its absence is said (2026-10-12): beside a
 // failed run's reason, a refused pre-flight's and on Settings, Parts, an
-// admin presses Install dcm2niix; the engine installs its pinned build, and
-// the version is said with the run's Run again. Anyone else reads a sentence
-// asking an admin. An install that fails (offline, say) shows the engine's
-// reason and the way by hand. Nothing shows where the engine has no door.
+// admin presses Install dcm2niix where the failure's `fix` names the engine's
+// install; the engine fetches its pinned build, and the version is said with
+// the run's Run again. Anyone else reads a sentence asking an admin. An
+// install that fails (offline, say) shows the engine's reason whole, which
+// says the way by hand. Nothing shows where the engine offers no fix.
 
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
-import { firstSentence, INSTALLABLE, refusalOf, type Failure } from "./failure";
-import { installServed, mayInstall, tools, toolStatus, type ToolStatus } from "./tools";
+import { door as served } from "../deployment";
+import { mayAny } from "../grants";
+import { refusalOf, type Failure, type Fix } from "./failure";
+import { fixOfTool, foundByWords, mayInstall, mayListTools, tools, toolsInCaps, toolStatus, type ToolEntry } from "./tools";
 
 /** The tools installed from this page since it loaded: every place that offered Install then says the tool is there. */
-const installedNow = new Map<string, ToolStatus>();
+const installedNow = new Map<string, ToolEntry>();
 const listeners = new Set<() => void>();
 const subscribe = (l: () => void) => {
   listeners.add(l);
@@ -21,8 +24,8 @@ const subscribe = (l: () => void) => {
     listeners.delete(l);
   };
 };
-function noteInstalled(s: ToolStatus) {
-  installedNow.set(s.tool, s);
+function noteInstalled(t: ToolEntry) {
+  installedNow.set(t.name, t);
   for (const l of listeners) l();
 }
 
@@ -42,13 +45,13 @@ type Again = { kind: "idle" | "busy" | "done"; said: string | null };
  * `onInstalled` lets a page read again; `quiet` draws the button as a
  * secondary one, for a table of several.
  */
-export function useInstall(caps: Capabilities, tool: string | null, again: (() => Promise<string>) | null = null, onInstalled: ((s: ToolStatus) => void) | null = null, quiet = false): { button: React.ReactNode; said: React.ReactNode } {
+export function useInstall(caps: Capabilities, fix: Fix | null, again: (() => Promise<string>) | null = null, onInstalled: ((t: ToolEntry) => void) | null = null, quiet = false): { button: React.ReactNode; said: React.ReactNode } {
   const [state, setState] = useState<State>({ kind: "idle" });
   const [rerun, setRerun] = useState<Again>({ kind: "idle", said: null });
-  const snapshot = () => (tool === null ? null : (installedNow.get(tool) ?? null));
+  const snapshot = () => (fix === null ? null : (installedNow.get(fix.tool) ?? null));
   const now = useSyncExternalStore(subscribe, snapshot, snapshot);
-  if (tool === null || !installServed(caps, tool)) return { button: null, said: null };
-  const present = toolStatus(caps, tool);
+  if (fix === null || !served(caps, fix.door)) return { button: null, said: null };
+  const present = toolStatus(caps, fix.tool);
   const there = now ?? (present?.present ? present : null);
   if (there) {
     const runAgain = () => {
@@ -64,7 +67,7 @@ export function useInstall(caps: Capabilities, tool: string | null, again: (() =
       said: (
         <div className="tool-said">
           <span>
-            {tool} {there.version && <span className="path">{there.version}</span>} is installed{there.path ? <span className="meta"> at {there.path}</span> : null}.
+            {fix.tool} {there.version && <span className="path">{there.version}</span>} is installed{there.path ? <span className="meta"> at {there.path}</span> : null}.
           </span>
           {again && rerun.kind !== "done" && (
             <button type="button" className="button small" disabled={rerun.kind === "busy"} onClick={runAgain}>
@@ -76,14 +79,15 @@ export function useInstall(caps: Capabilities, tool: string | null, again: (() =
       ),
     };
   }
-  if (!mayInstall(caps, tool)) return { button: null, said: <p className="meta tool-said">Ask an admin to install {tool}.</p> };
+  if (!mayInstall(caps, fix)) return { button: null, said: <p className="meta tool-said">Ask an admin to install {fix.tool}.</p> };
   const go = () => {
     setState({ kind: "busy" });
-    tools.install(tool).then(
-      (s) => {
+    tools.install(fix).then(
+      (a) => {
+        const t = a.tool ?? { ...(present ?? { name: fix.tool, path: null, found_by: null, version: null, pinned: null, current: null, problem: null, install: null }), present: true };
         setState({ kind: "idle" });
-        noteInstalled(s);
-        onInstalled?.(s);
+        noteInstalled(t);
+        onInstalled?.(t);
       },
       (e: unknown) => setState({ kind: "failed", f: refusalOf(e) }),
     );
@@ -92,24 +96,29 @@ export function useInstall(caps: Capabilities, tool: string | null, again: (() =
   return {
     button: (
       <button type="button" className={quiet || state.kind === "failed" ? "button secondary small" : "button small"} disabled={busy} onClick={go}>
-        {busy ? `Installing ${tool}…` : state.kind === "failed" ? "Try again" : `Install ${tool}`}
+        {busy ? `Installing ${fix.tool}…` : state.kind === "failed" ? "Try again" : `Install ${fix.tool}`}
       </button>
     ),
     said:
       state.kind === "failed" ? (
         <div className="tool-said">
-          <span className="warn" title={state.f.error}>
-            {tool} was not installed: {firstSentence(state.f.error)}
+          {/* the engine's reason whole: offline, it says the way by hand (the archive, its sha256 and where the binary goes) */}
+          <span className="warn">
+            {fix.tool} was not installed: {state.f.error}
           </span>
-          <span className="meta">{state.f.todo ?? INSTALLABLE[tool]?.manual ?? ""}</span>
+          {fix.command && (
+            <span className="meta">
+              At the command line: <code>{fix.command}</code>
+            </span>
+          )}
         </div>
       ) : null,
   };
 }
 
-/** The install for a failure about a tool the engine installs: the button, and under it what it said; nothing for any other failure. */
-export function InstallFor({ caps, f, again = null, onInstalled = null }: { caps: Capabilities; f: Failure; again?: (() => Promise<string>) | null; onInstalled?: ((s: ToolStatus) => void) | null }) {
-  const { button, said } = useInstall(caps, f.tool, again, onInstalled);
+/** The install for a failure whose fix the engine offers: the button, and under it what it said; nothing for any other failure. */
+export function InstallFor({ caps, f, again = null, onInstalled = null }: { caps: Capabilities; f: Failure; again?: (() => Promise<string>) | null; onInstalled?: ((t: ToolEntry) => void) | null }) {
+  const { button, said } = useInstall(caps, f.fix, again, onInstalled);
   return (
     <>
       {button && <div className="tool-act">{button}</div>}
@@ -118,9 +127,23 @@ export function InstallFor({ caps, f, again = null, onInstalled = null }: { caps
   );
 }
 
-/** The tools the engine installs, on Settings, Parts: each with its version and where it is, or Install for an admin where it is missing. */
+/** The tools the engine runs beside itself, on Settings, Parts: each with its version and where it is, or missing with Install for an admin. */
 export function ToolsSection({ caps, onChanged }: { caps: Capabilities; onChanged: () => void }) {
-  const shown = Object.keys(INSTALLABLE).filter((t) => toolStatus(caps, t) !== null || installServed(caps, t));
+  const lists = mayListTools(caps);
+  const [listed, setListed] = useState<ToolEntry[] | null>(null);
+  const [asked, setAsked] = useState(0);
+  useEffect(() => {
+    if (!lists) return;
+    let alive = true;
+    tools.list().then(
+      (l) => alive && setListed(l),
+      () => alive && setListed(null),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [lists, asked]);
+  const shown = listed ?? (mayAny(caps, "install:see", "pipelines:see") ? toolsInCaps(caps) : []);
   if (shown.length === 0) return null;
   return (
     <section className="stack">
@@ -140,7 +163,15 @@ export function ToolsSection({ caps, onChanged }: { caps: Capabilities; onChange
           </thead>
           <tbody>
             {shown.map((t) => (
-              <ToolRow key={t} caps={caps} tool={t} onChanged={onChanged} />
+              <ToolRow
+                key={t.name}
+                caps={caps}
+                tool={t}
+                onInstalled={() => {
+                  setAsked((k) => k + 1);
+                  onChanged();
+                }}
+              />
             ))}
           </tbody>
         </table>
@@ -149,28 +180,45 @@ export function ToolsSection({ caps, onChanged }: { caps: Capabilities; onChange
   );
 }
 
-function ToolRow({ caps, tool, onChanged }: { caps: Capabilities; tool: string; onChanged: () => void }) {
-  const [installed, setInstalled] = useState<ToolStatus | null>(null);
-  const s = installed ?? toolStatus(caps, tool);
-  const missing = s === null ? null : s.present === false;
-  const { button, said } = useInstall(caps, missing === false ? null : tool, null, (now) => {
-    setInstalled(now);
-    onChanged();
+function ToolRow({ caps, tool, onInstalled }: { caps: Capabilities; tool: ToolEntry; onInstalled: () => void }) {
+  const [now, setNow] = useState<ToolEntry | null>(null);
+  const t = now ?? tool;
+  const offered = !t.present && t.install?.available ? fixOfTool(t) : null;
+  const { button, said } = useInstall(caps, offered, null, (n) => {
+    setNow(n);
+    onInstalled();
   });
-  // once installed, the row says it: its version and where, and nothing under it
+  // under the row: why one found does not run, why no build is offered here, or what the install said
+  const under = t.present ? null : t.problem ? (
+    <div className="tool-said">
+      <span className="warn">{t.problem}</span>
+    </div>
+  ) : t.install && !t.install.available ? (
+    <div className="tool-said">
+      <span className="meta">{t.install.why}</span>
+    </div>
+  ) : (
+    said
+  );
   return (
     <>
-      <tr className={said && !installed ? "has-fail" : undefined}>
+      <tr className={under ? "has-fail" : undefined}>
         <td>
-          <b>{tool}</b>
+          <b>{t.name}</b>
         </td>
-        <td>{s?.version ? <span className="path">{s.version}</span> : missing ? <span className="tag caution">missing</span> : <span className="meta">not said</span>}</td>
-        <td className="path">{s?.path ?? ""}</td>
+        <td>
+          {t.present && t.version ? <span className="path">{t.version}</span> : <span className="tag caution">missing</span>}
+          {t.pinned && t.current === false && <div className="meta">this engine pins {t.pinned}</div>}
+        </td>
+        <td>
+          {t.path && <span className="path">{t.path}</span>}
+          {t.path && t.found_by && <div className="meta">{foundByWords(t.found_by)}</div>}
+        </td>
         <td className="acts">{button}</td>
       </tr>
-      {said && !installed && (
+      {under && (
         <tr className="fail-row">
-          <td colSpan={4}>{said}</td>
+          <td colSpan={4}>{under}</td>
         </tr>
       )}
     </>

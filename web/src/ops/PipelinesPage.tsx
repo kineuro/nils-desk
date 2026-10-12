@@ -26,6 +26,7 @@ import { RunPage } from "./RunPage";
 import { runActs } from "./runs";
 import { cardOf, countByFilter, FILTERS, filterJobs, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
 import { isWorker, wordsOf } from "./verbs";
+import { FailLine } from "./Reason";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -285,10 +286,16 @@ function Card({ card: c, reason, onCancel, onNext, onDismiss }: { card: JobCard;
           <span className="meta num">{c.progress.words}</span>
         </div>
       )}
-      {c.error && (
+      {c.failure?.kind ? (
         <div className="how">
-          <span className="warn">{c.error}</span>
+          <FailLine f={c.failure} />
         </div>
+      ) : (
+        c.error && (
+          <div className="how">
+            <span className="warn">{c.error}</span>
+          </div>
+        )
       )}
     </div>
   );
