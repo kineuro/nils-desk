@@ -344,12 +344,27 @@ export interface Metrics {
   series_complete: { subjects: number; of: number };
 }
 
+/**
+ * One column of the map, a scanner or a dataset, and how many visits it
+ * shows. By dataset a visit shows under every dataset whose folder holds a
+ * file of its scan (a copied scan is one scan with a path in each), so
+ * `shared` says how many of its visits another column shows too; by scanner
+ * it is none.
+ */
+export interface MapColumn {
+  key: string;
+  visits: number;
+  shared: number;
+}
+
 export interface MapAnswer {
   role: string;
   rules_version: number | null;
   kinds: MapKind[];
   metrics: Metrics;
-  columns: { key: string; visits: number }[];
+  columns: MapColumn[];
+  /** How many visits show under more than one column, so the columns add up to more than the visits; the metrics and visit by visit count each visit once. */
+  shared_visits: number;
   matrix: { kind: string | null; cells: number[] }[];
   series: { steps: (string | null)[]; subjects: number }[];
   single_visit_subjects: number;
@@ -374,9 +389,13 @@ export function metricsOf(raw: unknown): Metrics {
   };
 }
 
+/** The columns as the map and the strips doors answer them; an engine from before named a column alone, or said nothing of what it shares. */
+const columnsOf = (v: unknown): MapColumn[] =>
+  (Array.isArray(v) ? v : []).map((c) => (typeof c === "string" ? { key: c, visits: 0, shared: 0 } : { key: text(obj(c).key) ?? "", visits: count(obj(c).visits), shared: count(obj(c).shared) }));
+
 export function mapOf(raw: unknown): MapAnswer {
   const a = obj(raw);
-  const columns = (Array.isArray(a.columns) ? a.columns : []).map((c) => (typeof c === "string" ? { key: c, visits: 0 } : { key: text(obj(c).key) ?? "", visits: count(obj(c).visits) }));
+  const columns = columnsOf(a.columns);
   const e = a.effect && typeof a.effect === "object" ? obj(a.effect) : null;
   return {
     role: text(a.role) ?? "",
@@ -387,6 +406,7 @@ export function mapOf(raw: unknown): MapAnswer {
       .map((k) => ({ key: k.key as string, visits_with: count(k.visits_with), visits_taken: count(k.visits_taken), allowed: k.allowed !== false, used: k.used !== false, new: k.new === true })),
     metrics: metricsOf(a.metrics),
     columns,
+    shared_visits: count(a.shared_visits),
     matrix: (Array.isArray(a.matrix) ? a.matrix : []).map(obj).map((r) => ({ kind: kindOf(r.kind), cells: columns.map((_, i) => count((Array.isArray(r.cells) ? r.cells : [])[i])) })),
     series: (Array.isArray(a.series) ? a.series : [])
       .map(obj)
@@ -421,7 +441,10 @@ export interface MapVisit {
   /** The engine's id of the visit, which a pick names; never its date. */
   sessionId: number | null;
   visit: number;
+  /** The first of the columns it shows under. */
   column: string | null;
+  /** Every column it shows under, `column` first: several where several datasets hold its scan. */
+  columns: string[];
   field: string | null;
   kind: string | null;
   /** The scans picked: none where nothing is. */
@@ -454,10 +477,14 @@ function visitOf(raw: unknown, i: number): MapVisit {
   const v = obj(raw);
   const stacks = ints(v.stacks);
   const one = num(v.stack);
+  const column = text(v.column);
+  const columns = texts(v.columns).filter((c) => c !== "");
   return {
     sessionId: num(v.session_id),
     visit: count(v.visit) || i + 1,
-    column: text(v.column),
+    column: column ?? columns[0] ?? null,
+    // an engine from before names the one column alone
+    columns: columns.length > 0 ? columns : column !== null ? [column] : [],
     field: text(v.field),
     kind: kindOf(v.kind),
     stacks: stacks.length > 0 ? stacks : one !== null ? [one] : [],
@@ -488,10 +515,13 @@ export function subjectsOf(raw: unknown): SubjectsPage {
   };
 }
 
-/** Every subject's kinds per visit, compactly: a kind by its place in `kinds`, -1 for no pick. */
+/** Every subject's kinds per visit, compactly: a kind by its place in `kinds`, -1 for no pick. A subject is drawn once, under its `column`, the one most of its visits show under. */
 export interface Strips {
   kinds: string[];
-  columns: string[];
+  /** The map's columns. */
+  columns: MapColumn[];
+  /** As the map's. */
+  shared_visits: number;
   subjects: { subject_id: number; column: number; visits: number[] }[];
 }
 
@@ -499,7 +529,8 @@ export function stripsOf(raw: unknown): Strips {
   const a = obj(raw);
   return {
     kinds: texts(a.kinds),
-    columns: (Array.isArray(a.columns) ? a.columns : []).map((c) => (typeof c === "string" ? c : (text(obj(c).key) ?? ""))),
+    columns: columnsOf(a.columns),
+    shared_visits: count(a.shared_visits),
     subjects: (Array.isArray(a.subjects) ? a.subjects : []).map(obj).map((s) => ({ subject_id: count(s.subject_id), column: num(s.column) ?? -1, visits: (Array.isArray(s.visits) ? s.visits : []).map((v) => (typeof v === "number" && Number.isInteger(v) ? v : -1)) })),
   };
 }
@@ -535,7 +566,7 @@ const sameSteps = (a: readonly (string | null)[], b: readonly (string | null)[])
  */
 export function litOf(strips: Strips, g: Group): Set<number> {
   const out = new Set<number>();
-  const columnAt = g.by === "cell" ? strips.columns.indexOf(g.column) : -1;
+  const columnAt = g.by === "cell" ? strips.columns.findIndex((c) => c.key === g.column) : -1;
   for (const s of strips.subjects) {
     const kinds = stripKinds(strips, s.visits);
     const hit =
@@ -620,6 +651,41 @@ export function effectWords(e: { visits_changed: number; subjects_changed: numbe
   const s = e.subjects_changed === 1 ? "1 subject its series" : `${n(e.subjects_changed)} subjects their series`;
   return `${v} · ${s}`;
 }
+
+// ---------------------------------------------------------------- a scan in more than one dataset
+
+/** "a", "a and b", "a, b and c". */
+export function listWords(items: readonly string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+/** The map's one line where visits show under more than one dataset, so its columns are not read as adding up; null where none do. */
+export function sharedWords(visits: number): string | null {
+  if (visits <= 0) return null;
+  return `${visits === 1 ? "1 visit is" : `${n(visits)} visits are`} in more than one dataset, counted in each.`;
+}
+
+/** A column's header on hover: its visits, and how many of them are in another dataset too. */
+export function columnTitle(c: MapColumn): string {
+  const visits = `${c.key}: ${n(c.visits)} ${c.visits === 1 ? "visit" : "visits"}`;
+  return c.shared > 0 ? `${visits}, ${n(c.shared)} also in another dataset` : visits;
+}
+
+/** The columns a visit shows under besides the one its list is about: the cell's where the visit is under it, else its first. */
+export function othersOf(v: Pick<MapVisit, "column" | "columns">, here: string | null): string[] {
+  const at = here !== null && v.columns.includes(here) ? here : (v.column ?? v.columns[0] ?? null);
+  return v.columns.filter((c) => c !== at);
+}
+
+/** A column named on a visit that already says its field strength: "first · 3 T" is "first" on a 3 T visit. */
+export function besideField(key: string, field: string | null): string {
+  const tail = field ? ` · ${field}` : "";
+  return tail && key.endsWith(tail) && key.length > tail.length ? key.slice(0, -tail.length) : key;
+}
+
+/** The other datasets a visit is in, in a few words; null where it is in one. */
+export const alsoWords = (others: readonly string[]): string | null => (others.length > 0 ? `also in ${listWords(others)}` : null);
 
 // ---------------------------------------------------------------- the colours
 

@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { button, dialogs, settle } from "../../test/safeWayIn";
 import { GRANTS, type Grant } from "../grants";
 import { capsWith } from "./caps.fixture";
-import { fakeEngine, MAIN_SCANS_DOORS, mainScansDoors, subjectsAnswer, type FakeAnswer, type FakeCall } from "./mainScans.fixture";
+import { byDataset, fakeEngine, MAIN_SCANS_DOORS, mainScansDoors, subjectsAnswer, type FakeAnswer, type FakeCall } from "./mainScans.fixture";
 import { earlierHref } from "./MainScansPage";
 import { ReviewPage } from "./ReviewPage";
 
@@ -306,3 +306,88 @@ describe("Main scans of a cohort", () => {
   });
 });
 
+
+describe("Main scans by dataset, where a scan is in two datasets", () => {
+  // the engine since 2026-10-12: a dataset is a folder that holds scans, and a scan copied into two is one scan with a path
+  // in each, so its visit shows under both; the cohort's first subject's first visit is in study-big and ward-c
+  const datasets = async () => {
+    const engine = await open({ cohort: "ms-followup" }, byDataset);
+    act(() => button(host, "By dataset")!.click());
+    await settle();
+    return engine;
+  };
+
+  it("says in one line how many visits are in more than one dataset, counted in each, and each column's on hover", async () => {
+    await open({ cohort: "ms-followup" }, byDataset);
+    // by scanner a visit is in one column, and nothing is said
+    expect(host.querySelector(".ms-shared")).toBeNull();
+    expect(host.querySelector(".ms-col")?.getAttribute("title")).toBe("Siemens Skyra · 3 T: 420 visits");
+    act(() => button(host, "By dataset")!.click());
+    await settle();
+    const line = host.querySelector(".ms-where .ms-shared");
+    expect(line?.textContent).toBe("1 visit is in more than one dataset, counted in each.");
+    // the line sits over the columns it speaks of
+    expect(line?.nextElementSibling?.classList.contains("ms-matrix-wrap")).toBe(true);
+    expect([...host.querySelectorAll(".ms-col")].map((c) => [c.textContent, c.getAttribute("title")])).toEqual([
+      ["study-big · 3 T", "study-big · 3 T: 3 visits, 1 also in another dataset"],
+      ["ward-c · 3 T", "ward-c · 3 T: 2 visits, 1 also in another dataset"],
+    ]);
+    // the numbers count the copied visit once
+    expect(text(".ms-number .ms-sub")[0]).toBe("4 of 4 have a T1w");
+    // words, never a glyph
+    expect(host.querySelectorAll(".ms-where .dot, .ms-where .tag, .ms-where .i")).toHaveLength(0);
+  });
+
+  it("opens a cell's subjects under either dataset, and the copied visit names the other one it is in", async () => {
+    const engine = await datasets();
+    act(() => button(host, "2 visits at ward-c · 3 T take 3D MPRAGE")!.click());
+    await settle();
+    expect(engine.of("POST", "/api/picks/map/subjects").at(-1)?.body).toMatchObject({ columns: "dataset", group: { by: "cell", kind: "3D MPRAGE", column: "ward-c · 3 T" } });
+    const cards = [...host.querySelectorAll(".ms-card")];
+    expect(cards.map((c) => c.querySelector(".ms-card-head b")?.textContent)).toEqual(["5a9f30c6e8b21d41", "5a9f30c6e8b21d43"]);
+    // the card names the cell's dataset first, the other on hover
+    const head = cards[0].querySelector(".ms-card-head span");
+    expect([head?.textContent, head?.getAttribute("title")]).toEqual(["ward-c · 3 T and 1 more", "ward-c · 3 T, study-big · 3 T"]);
+    const [copied, own] = [...cards[0].querySelectorAll(".ms-visit")];
+    const also = copied.querySelector(".ms-visit-also");
+    // the field is said once, in the visit's head
+    expect([also?.textContent, also?.getAttribute("title")]).toEqual(["also in study-big", "also in study-big · 3 T"]);
+    expect(copied.querySelector(".ms-visit-head")?.textContent).toBe("V1 · 3 T");
+    expect(copied.getAttribute("aria-label")).toBe("Subject 5a9f30c6e8b21d41, visit 1: 3D MPRAGE, also in study-big · 3 T");
+    // a visit in one dataset says nothing more
+    expect(own.querySelector(".ms-visit-also")).toBeNull();
+    expect(cards[1].querySelector(".ms-visit-also")).toBeNull();
+    // from the other dataset's cell, the same visit names this one
+    act(() => button(host, "3 visits at study-big · 3 T take 3D MPRAGE")!.click());
+    await settle();
+    expect(text(".ms-card-head b")).toEqual(["5a9f30c6e8b21d41", "5a9f30c6e8b21d42"]);
+    expect(text(".ms-visit-also")).toEqual(["also in ward-c"]);
+    expect(host.querySelector(".ms-card-head span")?.textContent).toBe("study-big · 3 T and 1 more");
+  });
+
+  it("names both datasets on the copied visit's pick", async () => {
+    await datasets();
+    act(() => button(host, "2 visits at ward-c · 3 T take 3D MPRAGE")!.click());
+    await settle();
+    act(() => button(host, "Subject 5a9f30c6e8b21d41, visit 1: 3D MPRAGE, also in study-big · 3 T")!.click());
+    const d = host.querySelector("dialog")!;
+    expect(d.textContent).toContain("Subject 5a9f30c6e8b21d41 · visit 1 · study-big · 3 T and ward-c · 3 T");
+  });
+
+  it("draws every subject once in the strips, under the dataset most of its visits are in", async () => {
+    const engine = await datasets();
+    act(() => button(host, "All subjects")!.click());
+    await settle();
+    expect(engine.of("POST", "/api/picks/map/strips").at(-1)?.body?.columns).toBe("dataset");
+    expect(text(".ms-strip-label")).toEqual(["study-big · 3 T · 2 subjects", "ward-c · 3 T · 1 subject"]);
+    expect(host.querySelectorAll(".ms-strip")).toHaveLength(3);
+  });
+
+  it("says datasets, subjects and visits, never the engine's words", async () => {
+    await datasets();
+    act(() => button(host, "2 visits at ward-c · 3 T take 3D MPRAGE")!.click());
+    await settle();
+    const words = (host.textContent ?? "").toLowerCase();
+    for (const w of ["session", "stack", "column", "shared", "occasion"]) expect(words).not.toContain(w);
+  });
+});
