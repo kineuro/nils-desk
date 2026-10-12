@@ -1569,6 +1569,10 @@ table.thin tr.fail-row > td { padding-top: 0; }
 .fail-line .fail-words { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--n-text); }
 .fail-said { display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; }
 .fail-note .note-detail { overflow-wrap: anywhere; }
+.tool-act { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.3rem; }
+.tool-said { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; margin: 0.3rem 0 0; font-size: var(--n-text-size-small); color: var(--n-text); }
+td > .tool-said { width: 0; min-width: min(100%, calc(100vw - 3rem)); position: sticky; left: 0; padding-left: 0.55rem; }
+td > .fail-line + .tool-said { border-left: 2px solid var(--n-caution-line); margin-top: 0; padding-top: 0.25rem; }
 
 /* Wave 7a: a dataset not read yet, and the datasets a source holds */
 .not-read { flex-wrap: wrap; margin-top: 0.3rem; align-items: baseline; }

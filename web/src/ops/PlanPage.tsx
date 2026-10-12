@@ -18,6 +18,7 @@ import { Wait } from "../ui/Wait";
 import { catalog, runCommand, type Over, type Pipeline } from "./catalog";
 import { ops } from "./client";
 import { refusalOf, type Failure } from "./failure";
+import { InstallFor } from "./Install";
 import { PreflightPanel } from "./Preflight";
 import { handleGone, PLAN_STATION, pipelineOf, planSelectionName, preflightGate, rangeWords, runActs, runDocumentOf, runs, type Preflight, type RunDocument } from "./runs";
 
@@ -69,7 +70,8 @@ export function PlanRunner({ caps, doc, pipeline }: { caps: Capabilities; doc: R
   const [gone, setGone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
-  const overKey = JSON.stringify(over);
+  const [installs, setInstalls] = useState(0);
+  const overKey = JSON.stringify([over, installs]);
   useEffect(() => {
     if (!pipeline || !acts.preflight) return;
     setLive(null);
@@ -141,6 +143,7 @@ export function PlanRunner({ caps, doc, pipeline }: { caps: Capabilities; doc: R
       onStart={acts.queue && pipeline ? start : null}
       gone={gone}
       onSave={gone && acts.save && doc.proposed !== null ? save : null}
+      onInstalled={() => setInstalls((k) => k + 1)}
     />
   );
 }
@@ -160,9 +163,11 @@ export function PlanView(props: {
   onStart: (() => void) | null;
   /** The plan's handle is gone, as the engine said. */
   gone?: boolean;
+  /** A missing tool installed from the pre-flight: the page checks again. */
+  onInstalled?: (() => void) | null;
   onSave?: ((name: string) => void) | null;
 }) {
-  const { caps, doc, pipeline, live, liveWhy, busy, said, onStart, gone = false, onSave = null } = props;
+  const { caps, doc, pipeline, live, liveWhy, busy, said, onStart, gone = false, onSave = null, onInstalled = null } = props;
   const acts = runActs(caps);
   const target = props.over ?? doc.over;
   const moved = JSON.stringify(target) !== JSON.stringify(doc.over);
@@ -233,7 +238,7 @@ export function PlanView(props: {
           </div>
         </div>
       ) : (
-        <PreflightPanel p={shown} checking={acts.preflight && live === null && liveWhy === null && pipeline !== null} why={liveWhy} />
+        <PreflightPanel p={shown} checking={acts.preflight && live === null && liveWhy === null && pipeline !== null} why={liveWhy} act={(f) => <InstallFor caps={caps} f={f} onInstalled={onInstalled} />} />
       )}
       {!acts.preflight && doc.preflight && <p className="meta">The pre-flight as the assistant saw it; this engine does not check again.</p>}
       <div className="row actions">

@@ -21,6 +21,7 @@ import { NewCheck, runChoiceOf } from "../campaigns/NewCheck";
 import { catalog, type Pipeline } from "./catalog";
 import { ops } from "./client";
 import { failureOf } from "./failure";
+import { InstallFor } from "./Install";
 import { FailLine, FailNote } from "./Reason";
 import {
   allPassed,
@@ -140,6 +141,15 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
         onCancel={r.job_id !== null && acts.cancel && load.jobAlive ? () => act(`Run ${r.id} stops at its next heartbeat; the units it finished are kept.`, ops.cancel(r.job_id!)) : null}
         onResume={acts.queue && resumable(r, load.jobAlive) ? () => act(`Run ${r.id} is queued to go on where it stopped.`, ops.enqueue(resumeCommand(r))) : null}
         onCheck={checkable ? () => setChecking(true) : null}
+        onAgain={
+          acts.queue && resumable(r, load.jobAlive)
+            ? () =>
+                ops.enqueue(resumeCommand(r)).then((j) => {
+                  read();
+                  return `Run ${r.id} is queued again as job ${j.job}.`;
+                })
+            : null
+        }
         checkPrimary={masks.some((f) => !f.check)}
       />
     </>
@@ -167,8 +177,10 @@ export function RunView(props: {
   onCheck?: (() => void) | null;
   /** Masks no check has decided remain: the button is the page's primary act. */
   checkPrimary?: boolean;
+  /** Run again, once a missing tool is installed: takes the run up again and says what it queued. */
+  onAgain?: (() => Promise<string>) | null;
 }) {
-  const { caps, run: r, pipeline, resumedAt, table, files, by, onBy, said, onCancel, onResume, onCheck = null, checkPrimary = false } = props;
+  const { caps, run: r, pipeline, resumedAt, table, files, by, onBy, said, onCancel, onResume, onCheck = null, checkPrimary = false, onAgain = null } = props;
   const acts = runActs(caps);
   const units = r.units_run ?? [];
   const counts = unitCounts(units, resumedAt);
@@ -224,7 +236,11 @@ export function RunView(props: {
       </div>
       <Values cells={cells} />
       {said && <p className="meta">{said}</p>}
-      {failed && <FailNote f={failed} />}
+      {failed && (
+        <FailNote f={failed}>
+          <InstallFor caps={caps} f={failed} again={onAgain} />
+        </FailNote>
+      )}
 
       <div className="section-head rule-top">
         <h2>Table</h2>

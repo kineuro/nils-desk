@@ -25,7 +25,8 @@ import { plansOffered } from "./PlanPage";
 import { failureOf, refusalOf, type Failure } from "./failure";
 import { PreflightPanel } from "./Preflight";
 import { FailLine } from "./Reason";
-import { PLAN_STATION, preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
+import { InstallFor, useInstall } from "./Install";
+import { PLAN_STATION, preflightGate, rangeWords, resumeCommand, runActs, runs as runDoors, type Preflight } from "./runs";
 import { catalog, catalogActs, imageWords, needsOf, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { ops } from "./client";
 
@@ -167,13 +168,7 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
                       <td className="num">{c.staged > 0 && proposals ? <a href={href("review", "proposals")}>{n(c.staged)}</a> : n(c.staged)}</td>
                       <td className="num">{whenWords(r.started_at ?? "")}</td>
                     </tr>
-                    {f && (
-                      <tr className="fail-row">
-                        <td colSpan={8}>
-                          <FailLine f={f} />
-                        </td>
-                      </tr>
-                    )}
+                    {f && <RunFailRow caps={caps} run={r} f={f} cols={8} />}
                   </Fragment>
                 );
               })}
@@ -182,6 +177,20 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
         </div>
       )}
     </section>
+  );
+}
+
+/** A failed run's reason under its row, with Install where it is a tool the engine installs, and then Run again where the run can be taken up. */
+function RunFailRow({ caps, run, f, cols }: { caps: Capabilities; run: Run; f: Failure; cols: number }) {
+  const again = runActs(caps).queue && run.status === "failed" && !run.results_digest ? () => ops.enqueue(resumeCommand(run)).then((j) => `Run ${run.id} is queued again as job ${j.job}.`) : null;
+  const install = useInstall(caps, f.tool, again);
+  return (
+    <tr className="fail-row">
+      <td colSpan={cols}>
+        <FailLine f={f}>{install.button}</FailLine>
+        {install.said}
+      </td>
+    </tr>
   );
 }
 
@@ -220,7 +229,9 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
   // record 49 A7: the engine's pre-flight, asked again as the selection or a parameter changes
   const checks = runActs(caps).preflight;
   const [pre, setPre] = useState<{ key: string; p: Preflight | null; why: Failure | null } | null>(null);
-  const preKey = over && errors.length === 0 ? JSON.stringify([over, changed]) : null;
+  // a tool installed from the refusal asks the pre-flight again
+  const [installs, setInstalls] = useState(0);
+  const preKey = over && errors.length === 0 ? JSON.stringify([over, changed, installs]) : null;
   useEffect(() => {
     if (!checks || preKey === null || over === null) return;
     let alive = true;
@@ -341,7 +352,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
           </span>
         </div>
       )}
-      {checks && over !== null && <PreflightPanel p={current?.p ?? null} checking={current === null && errors.length === 0} why={current?.why ?? null} />}
+      {checks && over !== null && <PreflightPanel p={current?.p ?? null} checking={current === null && errors.length === 0} why={current?.why ?? null} act={(f) => <InstallFor caps={caps} f={f} onInstalled={() => setInstalls((k) => k + 1)} />} />}
       <div className="note brand">
         <Icon name="info" />
         <div className="note-body">

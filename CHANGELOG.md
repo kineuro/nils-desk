@@ -7,6 +7,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Added
 
 - A failed run says why. The Runs table shows each failed run's reason on one line under its row, the whole error a hover away; a run's page shows it in full, and a failed unit's reason sits under the unit. Where the run form's pre-flight refuses, or is not ready, it says why the same way. Where the engine sorts a failure into a kind (dependency, resource, input or pipeline) and says what to do, the kind is a tag and what to do is the line; an engine that says neither gets the error's first sentence.
+- Install dcm2niix from the desk. Where a run failed, or a pre-flight refused, because dcm2niix is missing and the engine can install its pinned build, an admin sees Install dcm2niix beside the reason; pressing it installs it, says the version and offers Run again, which takes the run up again (a refused pre-flight is asked again). Anyone else reads a sentence asking an admin. An install that fails, offline say, shows the engine's reason and the way by hand. Settings, Parts lists dcm2niix under Tools with its version and where it is, or missing with Install for an admin. Nothing of this shows against an engine without the install door.
 
 ### Changed
 

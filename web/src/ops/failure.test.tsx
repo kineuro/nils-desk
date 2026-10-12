@@ -12,22 +12,11 @@ import { DoorError } from "../ask/client";
 import { capsWith } from "../review/caps.fixture";
 import { CatalogBody } from "./Catalog";
 import type { Run } from "./catalog";
-import { failureOf, firstSentence, refusalOf, SLICE } from "./failure";
+import { failureOf, firstSentence, refusalOf } from "./failure";
+import { withSlice } from "./failure.fixture";
 import { PreflightPanel } from "./Preflight";
 import { RunView } from "./RunPage";
 import { blockedOf, type Preflight, type RunDetail } from "./runs";
-
-/** An answer with a value at each of SLICE's dotted paths. */
-export function withSlice<T extends object>(answer: T, values: Partial<Record<keyof typeof SLICE, unknown>>): T {
-  const out = structuredClone(answer) as Record<string, unknown>;
-  for (const [name, v] of Object.entries(values)) {
-    const path = SLICE[name as keyof typeof SLICE].split(".");
-    let o = out;
-    for (const k of path.slice(0, -1)) o = (o[k] ??= {}) as Record<string, unknown>;
-    o[path[path.length - 1]] = v;
-  }
-  return out as T;
-}
 
 const DCM2NIIX =
   "the release of the input failed: /usr/local/bin/dcm2niix is not runnable (No such file or directory (os error 2)). dcm2niix is a prerequisite of a deployment: install a current build from rordenlab/dcm2niix, which a distribution's package lags, and pass --dcm2niix if it is not on the path.";
