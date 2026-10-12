@@ -12,9 +12,8 @@
 import { Fragment, useEffect, useState } from "react";
 import type { DocumentHandle, Json, Profile } from "../ask/client";
 import { cardTitle, chartOf, tabsOf, unitWords, type Bar } from "../query/cards";
-import { answerFile, refusalWords, savedWords } from "../query/csv";
+import { useAnswerFile } from "../query/useAnswerFile";
 import { Icon } from "../ui/Icon";
-import { saveText } from "./download";
 import { funnelOf, type FunnelStep } from "./inplay";
 import { reads } from "./reads";
 
@@ -125,22 +124,6 @@ const STATE_TAG: Record<Exclude<VersionState, "open">, { words: string; tone: st
   "set aside": { words: "set aside", tone: "tag" },
   stale: { words: "moved on", tone: "tag" },
 };
-
-/** The answer's rows saved as a CSV file: reading while it runs, then what was saved, or why it could not be. */
-function useAnswerFile(document: number, title: string, version: string | null) {
-  const [file, setFile] = useState<{ busy: boolean; said: string | null; warn: boolean }>({ busy: false, said: null, warn: false });
-  const download = () => {
-    setFile({ busy: true, said: "Reading the answer for the file", warn: false });
-    answerFile(document, title, version).then(
-      (f) => {
-        saveText(f.name, f.text, "text/csv");
-        setFile({ busy: false, said: savedWords(f), warn: false });
-      },
-      (e: unknown) => setFile({ busy: false, said: refusalWords(e), warn: true }),
-    );
-  };
-  return { ...file, download };
-}
 
 export function QueryCard(props: { document: number; label: string | null; epoch: number | null; state: VersionState; compact: boolean; shown: boolean; onOpen: () => void }) {
   const { document, label, epoch, state, compact, shown, onOpen } = props;
