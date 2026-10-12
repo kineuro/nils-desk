@@ -101,6 +101,8 @@
 .ms-bar > i.has { opacity: 0.3; }
 .ms-count { font-size: calc(13 * var(--p)); color: var(--n-text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+/* by dataset, the one line that says some visits are in more than one dataset, so the columns add up to more than the visits */
+.ms-shared { margin: 0; font-size: calc(13 * var(--p)); color: var(--n-text-faint); }
 .ms-matrix-wrap { overflow-x: auto; }
 .ms-matrix { display: grid; grid-template-columns: calc(132 * var(--p)) repeat(var(--cols, 1), minmax(calc(86 * var(--p)), 1fr)); gap: calc(4 * var(--p)); align-items: center; min-width: min-content; }
 .ms-col { align-self: end; padding: 0 calc(4 * var(--p)); font-size: calc(12 * var(--p)); color: var(--n-text-faint); overflow-wrap: anywhere; }
@@ -146,6 +148,8 @@
 .ms-visit:hover .ms-kind { box-shadow: 0 0 0 1px var(--n-brand-line); }
 .ms-visit-head { min-height: calc(16 * var(--p)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--p)); color: var(--n-text-faint); }
 .ms-visit.changed .ms-visit-head { color: var(--n-caution-fg); font-weight: 600; }
+/* a visit whose scan is in another dataset too names it under its kind, on one line */
+.ms-visit-also { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11 * var(--p)); color: var(--n-text-faint); }
 /* a visit the draft picks otherwise than the saved rules: the brand's outline on its kind */
 .ms-visit.redrawn .ms-kind { outline: 2px solid var(--n-brand-text); outline-offset: 1px; }
 .ms-visit.blank { cursor: default; }

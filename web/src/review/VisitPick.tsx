@@ -12,7 +12,7 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import { Dialog } from "../ui/Dialog";
 import { refusalWords } from "./client";
-import { mainScans, roleWord, type MapSubject, type MapVisit, type Scope } from "./mainScans";
+import { listWords, mainScans, roleWord, type MapSubject, type MapVisit, type Scope } from "./mainScans";
 import { SessionBoard, type BoardCandidate } from "./SessionBoard";
 
 const SCAN_WORDS = { one: "scan", many: "scans", chosen: "the rules' pick", why: "motion in series 9", empty: "No scan of this role at this visit." };
@@ -111,7 +111,7 @@ export function VisitPick({ caps, scope, role, subject, visit, version, draft, s
     >
       <p className="eyebrow">
         Subject {subject.subject} · visit {visit.visit}
-        {visit.column ? ` · ${visit.column}` : ""}
+        {visit.columns.length > 0 ? ` · ${listWords(visit.columns)}` : ""}
       </p>
       <p className="meta">{pickedWords(visit, version, draft)}</p>
       {visit.candidates === null && candidates.length > 0 && <p className="meta">Only the picked scan is named here.</p>}

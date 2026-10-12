@@ -7,7 +7,11 @@
 // strip for every subject, so mainscans.pw.ts measures that the page and
 // its Rules panel share a laptop's width, that a big screen grows them
 // together, that a phone is one column with no sideways scroll, and that a
-// visit's pick opens in the window. Every name and number here is made up.
+// visit's pick opens in the window. By dataset the subjects' scans are in
+// three datasets and about one visit in eight is copied into a second, as
+// the engine answers since 2026-10-12, so the check measures the line that
+// says so and a visit naming the other dataset it is in. Every name and
+// number here is made up.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -123,7 +127,9 @@ function mapOf(r: string, draft: boolean) {
     rules_version: 2,
     kinds: kinds.map((k, i) => ({ key: k, visits_with: count(k) + 40 - i * 5, visits_taken: count(k), allowed: true, used: true, new: r === "t1w" && i === kinds.length - 1 })),
     metrics: draft ? { ...metrics, visits_taken: metrics.visits_taken + 12, alike_data: { ...metrics.alike_data, visits: metrics.alike_data.visits + 40 } } : metrics,
-    columns: COLUMNS.map((c, i) => ({ key: c, visits: visits.filter((v) => v.column === i).length })),
+    // by scanner a visit is in one column
+    columns: COLUMNS.map((c, i) => ({ key: c, visits: visits.filter((v) => v.column === i).length, shared: 0 })),
+    shared_visits: 0,
     matrix: [...kinds, null].map((k) => ({ kind: k, cells: COLUMNS.map((_, i) => visits.filter((v) => v.column === i && v.kind === k).length) })),
     series: [...series.entries()].map(([k, n]) => ({ steps: JSON.parse(k), subjects: n })).sort((a, b) => b.subjects - a.subjects),
     single_visit_subjects: cohort.length - repeat.length,
@@ -135,7 +141,42 @@ function mapOf(r: string, draft: boolean) {
   };
 }
 
-function subjectsOf(r: string, page: number, order: string) {
+// ------------------------------------------------------------ by dataset
+
+const DATASETS = ["study-big", "ward-c-followup", "trial-2019"];
+
+/** Each visit's datasets with its field strength, in the map's column order: its subject's own, and for about one visit in eight a copy in the next one too. */
+function datasetsOf(r: string) {
+  const cohort = cohortOf(r);
+  const raw = cohort.map((s) =>
+    s.visits.map((v, j) => {
+      const own = s.id % DATASETS.length;
+      const names = (s.id * 7 + j * 13) % 8 === 0 ? [DATASETS[own], DATASETS[(own + 1) % DATASETS.length]] : [DATASETS[own]];
+      return names.map((n) => `${n} · ${v.field}`);
+    }),
+  );
+  const counts = new Map<string, number>();
+  for (const k of raw.flat(2)) counts.set(k, (counts.get(k) ?? 0) + 1);
+  const keys = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k]) => k);
+  const at = new Map(cohort.map((s, i) => [s.id, raw[i].map((ks) => [...ks].sort((a, b) => keys.indexOf(a) - keys.indexOf(b)))]));
+  return { cohort, keys, at };
+}
+
+/** The map by dataset: a copied visit is in both its columns, and each counts it; the rest counts each visit once. */
+function datasetMapOf(r: string, draft: boolean) {
+  const { cohort, keys, at } = datasetsOf(r);
+  const kinds = KINDS[r] ?? KINDS.t1w;
+  const visits = cohort.flatMap((s) => s.visits.map((v, j) => ({ kind: v.kind, under: at.get(s.id)![j] })));
+  return {
+    ...mapOf(r, draft),
+    columns: keys.map((k) => ({ key: k, visits: visits.filter((v) => v.under.includes(k)).length, shared: visits.filter((v) => v.under.length > 1 && v.under.includes(k)).length })),
+    shared_visits: visits.filter((v) => v.under.length > 1).length,
+    matrix: [...kinds, null].map((k) => ({ kind: k, cells: keys.map((c) => visits.filter((v) => v.kind === k && v.under.includes(c)).length) })),
+  };
+}
+
+function subjectsOf(r: string, page: number, order: string, columns: string) {
+  const under = columns === "dataset" ? datasetsOf(r).at : null;
   const all = cohortOf(r)
     .filter((s) => s.visits.length > 1 && changes(s) > 0)
     .sort((a, b) => (order === "visits" ? b.visits.length - a.visits.length : changes(b) - changes(a) || b.visits.length - a.visits.length) || a.id - b.id);
@@ -149,7 +190,8 @@ function subjectsOf(r: string, page: number, order: string) {
       visits: s.visits.map((v, j) => ({
         session_id: s.id * 10 + j,
         visit: j + 1,
-        column: COLUMNS[v.column],
+        column: under ? under.get(s.id)![j][0] : COLUMNS[v.column],
+        columns: under ? under.get(s.id)![j] : [COLUMNS[v.column]],
         field: v.field,
         kind: v.kind,
         stack: v.kind ? s.id * 10 + j : null,
@@ -161,9 +203,21 @@ function subjectsOf(r: string, page: number, order: string) {
   };
 }
 
-function stripsOf(r: string) {
+function stripsOf(r: string, columns: string) {
   const kinds = KINDS[r] ?? KINDS.t1w;
-  return { kinds, columns: COLUMNS.slice(0, 4), subjects: cohortOf(r).map((s) => ({ subject_id: s.id, column: s.column, visits: s.visits.map((v) => (v.kind === null ? -1 : kinds.indexOf(v.kind))) })) };
+  const strip = (v: { kind: string | null }) => (v.kind === null ? -1 : kinds.indexOf(v.kind));
+  if (columns === "dataset") {
+    // every subject once, under the dataset most of its visits are in
+    const map = datasetMapOf(r, false);
+    const { cohort, keys, at } = datasetsOf(r);
+    const most = (s: Subject) => {
+      const n = keys.map((k) => at.get(s.id)!.filter((under) => under.includes(k)).length);
+      return n.indexOf(Math.max(...n));
+    };
+    return { kinds, columns: map.columns, shared_visits: map.shared_visits, subjects: cohort.map((s) => ({ subject_id: s.id, column: most(s), visits: s.visits.map(strip) })) };
+  }
+  const map = mapOf(r, false);
+  return { kinds, columns: map.columns.slice(0, 4), shared_visits: 0, subjects: cohortOf(r).map((s) => ({ subject_id: s.id, column: s.column, visits: s.visits.map(strip) })) };
 }
 
 const RULES_DOC = {
@@ -184,9 +238,9 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (path === "/desk/capabilities") return json(200, caps);
   if (path === "/api/picks/rules" && (init?.method ?? "GET") === "GET") return json(200, RULES_DOC);
   if (path === "/api/picks/rules/text") return Promise.resolve(new Response(`# Main scans of ms-followup, version 2\nroles:\n  t1w:\n    keep_alike: balanced\n    kinds_in_order:\n${KINDS.t1w.map((k) => `      - ${k}`).join("\n")}\n`, { status: 200 }));
-  if (path === "/api/picks/map") return json(200, mapOf(String(body.role), body.rules !== undefined));
-  if (path === "/api/picks/map/subjects") return json(200, subjectsOf(String(body.role), Number(body.page ?? 0), String(body.order)));
-  if (path === "/api/picks/map/strips") return json(200, stripsOf(String(body.role)));
+  if (path === "/api/picks/map") return json(200, body.columns === "dataset" ? datasetMapOf(String(body.role), body.rules !== undefined) : mapOf(String(body.role), body.rules !== undefined));
+  if (path === "/api/picks/map/subjects") return json(200, subjectsOf(String(body.role), Number(body.page ?? 0), String(body.order), String(body.columns)));
+  if (path === "/api/picks/map/strips") return json(200, stripsOf(String(body.role), String(body.columns)));
   if (path === "/api/review/summary") return json(200, { by_kind: { "pick.border": 4 }, cohorts: [], none: 0 });
   if (path === "/api/sources") return json(200, { count: 2, window_days: 30, sources: [{ id: 3, name: "study-big" }, { id: 4, name: "ward-c" }] });
   if (path === "/api/cohorts") return json(200, [{ name: "ms-followup", retired_at: null }]);

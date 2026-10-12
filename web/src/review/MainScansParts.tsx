@@ -11,15 +11,20 @@ import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import {
+  alsoWords,
+  besideField,
+  columnTitle,
   groupTitle,
   keptBy,
   kindChanges,
   litOf,
   numbersOf,
+  othersOf,
   pct,
   pctWords,
   runOf,
   sameGroup,
+  sharedWords,
   stepWord,
   stripKinds,
   type Columns,
@@ -98,9 +103,10 @@ export function KindsBox({ map, slot, off }: { map: MapAnswer; slot: Slot; off: 
   );
 }
 
-/** Visits by the kind taken, per scanner or dataset; a cell opens its subjects. */
+/** Visits by the kind taken, per scanner or dataset; a cell opens its subjects. A visit whose scan is in several datasets is in each of their columns, which one line says. */
 export function WhereBox({ map, slot, group, onGroup, columns, onColumns }: { map: MapAnswer; slot: Slot; group: Group; onGroup: (g: Group) => void; columns: Columns; onColumns: ((c: Columns) => void) | null }) {
   const cols = map.columns;
+  const shared = sharedWords(map.shared_visits);
   return (
     <section className="ms-box ms-where" aria-label="Where the kinds come from">
       <div className="ms-box-head">
@@ -121,6 +127,7 @@ export function WhereBox({ map, slot, group, onGroup, columns, onColumns }: { ma
         )}
         <Hint text={`Visits by the kind taken, per ${columns === "dataset" ? "dataset" : "scanner"} and field strength. A cell opens its subjects.`} />
       </div>
+      {shared && cols.length > 0 && <p className="ms-shared">{shared}</p>}
       {cols.length === 0 ? (
         <p className="ms-none">No visit here.</p>
       ) : (
@@ -128,7 +135,7 @@ export function WhereBox({ map, slot, group, onGroup, columns, onColumns }: { ma
           <div className="ms-matrix" style={{ "--cols": cols.length } as CSSProperties}>
             <span />
             {cols.map((c) => (
-              <span key={c.key} className="ms-col" title={`${c.key}: ${plural(c.visits, "visit", "visits")}`}>
+              <span key={c.key} className="ms-col" title={columnTitle(c)}>
                 {c.key}
               </span>
             ))}
@@ -327,15 +334,18 @@ export function GroupBox(p: GroupBoxProps) {
   );
 }
 
-function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slot, onVisit }: GroupBoxProps) {
+function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slot, onVisit, group }: GroupBoxProps) {
   if (subjectsWhy) return <p className="warn">The subjects could not be read: {subjectsWhy}</p>;
   if (!subjects) return <Wait phase="reading the subjects" since={subjectsSince ?? Date.now()} size="panel" />;
   if (subjects.subjects.length === 0) return <p className="ms-none">No subject in this group.</p>;
   const slots = Math.max(1, ...subjects.subjects.map((s) => s.visits.length));
+  // a cell's list is about its column: a card names it first, and a visit in another dataset too names that one
+  const here = group.by === "cell" ? group.column : null;
   return (
     <div className="ms-cards">
       {subjects.subjects.map((s) => {
-        const where = [...new Set(s.visits.map((v) => v.column).filter((c): c is string => c !== null))];
+        const at = [...new Set(s.visits.flatMap((v) => v.columns))];
+        const where = here !== null && at.includes(here) ? [here, ...at.filter((c) => c !== here)] : at;
         const changes = kindChanges(s.visits.map((v) => v.kind));
         return (
           <div key={s.subject_id} className="ms-card">
@@ -353,13 +363,15 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
                       <span className="value-tag ms-kind none" />
                     </span>
                   );
+                const others = othersOf(v, here);
+                const also = alsoWords(others);
                 return (
                   <button
                     key={v.sessionId ?? `visit-${v.visit}`}
                     type="button"
                     disabled={subjectsBusy}
                     className={["ms-visit", changes[j] ? "changed" : "", v.redrawn ? "redrawn" : ""].filter(Boolean).join(" ")}
-                    aria-label={`Subject ${s.subject}, visit ${v.visit}: ${v.kind ?? "none"}${changes[j] ? ", a change" : ""}${v.redrawn ? ", picked differently by your changed rules" : ""}`}
+                    aria-label={`Subject ${s.subject}, visit ${v.visit}: ${v.kind ?? "none"}${changes[j] ? ", a change" : ""}${v.redrawn ? ", picked differently by your changed rules" : ""}${also ? `, ${also}` : ""}`}
                     onClick={() => onVisit(s, v)}
                   >
                     <span className="ms-visit-head">
@@ -367,6 +379,11 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
                       {v.field ? ` · ${v.field}` : ""}
                     </span>
                     <KindTag kind={v.kind} slot={slot} />
+                    {also && (
+                      <span className="ms-visit-also" title={also}>
+                        {alsoWords(others.map((c) => besideField(c, v.field)))}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -392,7 +409,7 @@ function StripsView({ strips, stripsWhy, slot, group }: GroupBoxProps) {
           .filter((s) => s.column === c)
           .map((s) => ({ s, kinds: stripKinds(strips, s.visits) }))
           .sort((a, b) => b.kinds.length - a.kinds.length || runOf(a.kinds).map(stepWord).join(">").localeCompare(runOf(b.kinds).map(stepWord).join(">")) || a.s.subject_id - b.s.subject_id);
-        const label = strips.columns[c] ?? "Elsewhere";
+        const label = strips.columns[c]?.key ?? "Elsewhere";
         return (
           <div key={c} className="ms-strip-group">
             <span className="ms-strip-label">

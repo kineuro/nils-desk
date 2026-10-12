@@ -9,7 +9,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DoorError } from "../ask/client";
 import {
+  alsoWords,
+  besideField,
   canonical,
+  columnTitle,
   effectRows,
   effectWords,
   groupTitle,
@@ -18,12 +21,14 @@ import {
   keptBy,
   kindChanges,
   kindsOrder,
+  listWords,
   litOf,
   mainScans,
   mapOf,
   moveKind,
   moveTie,
   numbersOf,
+  othersOf,
   paletteOf,
   refusalWords,
   rolesOf,
@@ -32,6 +37,7 @@ import {
   sameRules,
   saveRefusal,
   scopeOf,
+  sharedWords,
   stripsOf,
   subjectsOf,
   toggleKind,
@@ -139,6 +145,29 @@ describe("the map doors", () => {
     expect(m.by_visit.map((b) => b.visit)).toEqual([1, 2]);
     expect(m.effect?.before.visits_taken).toBe(1000);
     expect(mapOf({}).effect).toBeNull();
+    // an engine from before says nothing of visits in more than one column
+    expect(m.columns.map((c) => c.shared)).toEqual([0, 0]);
+    expect(m.shared_visits).toBe(0);
+  });
+  it("read a scan two datasets hold: each column's visits another column shows too, and how many visits show under more than one", () => {
+    // as the engine answers by dataset (2026-10-12): S-ONE's first visit is in both folders, so each column counts it
+    const m = mapOf({
+      columns: [
+        { key: "first · 3 T", visits: 3, shared: 1 },
+        { key: "second · 3 T", visits: 1, shared: 1 },
+      ],
+      shared_visits: 1,
+      matrix: [{ kind: "3D MPRAGE", cells: [3, 1] }],
+      metrics: METRICS({ visits: 3, visits_taken: 3, subjects: 2, subjects_taken: 2 }),
+    });
+    expect(m.columns).toEqual([
+      { key: "first · 3 T", visits: 3, shared: 1 },
+      { key: "second · 3 T", visits: 1, shared: 1 },
+    ]);
+    expect(m.shared_visits).toBe(1);
+    // the columns add up to the visits and the shared one again; the numbers count it once
+    expect(m.columns.reduce((t, c) => t + c.visits, 0)).toBe(m.metrics.visits + m.shared_visits);
+    expect(mapOf({ columns: [{ key: "first · 3 T", visits: 3, shared: -1 }], shared_visits: "1" })).toMatchObject({ columns: [{ shared: 0 }], shared_visits: 0 });
   });
   it("ask for a page of a group's subjects, and read a visit's pick, its scans and its candidates", async () => {
     const seen = answering(200, {
@@ -157,12 +186,37 @@ describe("the map doors", () => {
     ]);
     expect(two).toMatchObject({ sessionId: null, visit: 2, kind: null, stacks: [], redrawn: true, candidates: null });
     expect(subjectsOf({}).per_page).toBe(24);
+    // an engine from before names a visit's one column alone
+    expect(one.columns).toEqual(["Siemens Skyra · 3 T"]);
+    expect(two.columns).toEqual([]);
+  });
+  it("read every column a visit shows under, its first as its column, and find nothing under a column it is not under", () => {
+    const page = subjectsOf({
+      total: 1,
+      subjects: [
+        {
+          subject_id: 1,
+          subject: "5a9f30c6e8b21d41",
+          visits: [
+            { session_id: 11, visit: 1, column: "first · 3 T", columns: ["first · 3 T", "second · 3 T"], field: "3 T", kind: "3D MPRAGE", stack: 1 },
+            { session_id: 12, visit: 2, column: "first · 3 T", columns: ["first · 3 T"], field: "3 T", kind: "3D MPRAGE", stack: 2 },
+            { session_id: 13, visit: 3, columns: ["", "second · 3 T", 7], field: "3 T", kind: null },
+          ],
+        },
+      ],
+    });
+    const [copied, own, odd] = page.subjects[0].visits;
+    expect(copied).toMatchObject({ column: "first · 3 T", columns: ["first · 3 T", "second · 3 T"] });
+    expect(own).toMatchObject({ column: "first · 3 T", columns: ["first · 3 T"] });
+    // what is no column's name is left out, and the first named stands as its column
+    expect(odd).toMatchObject({ column: "second · 3 T", columns: ["second · 3 T"] });
   });
   it("ask for every subject's strips, and light the group's subjects in them", async () => {
     const seen = answering(200, { kinds: ["3D MPRAGE", "2D SE"], columns: [{ key: "Site A · 3 T" }, "Site B · 1.5 T"], subjects: [{ subject_id: 1, column: 0, visits: [0, 0] }, { subject_id: 2, column: 1, visits: [1, 0, -1] }, { subject_id: 3, column: 1, visits: [1] }, { subject_id: 4, column: 0, visits: [1, 1, 0] }] });
     const strips = await mainScans.strips({ kind: "dataset", name: "study-big" }, "t1w", "scanner", null);
     expect(seen[0].body).toEqual({ scope: { dataset: "study-big" }, role: "t1w", columns: "scanner" });
-    expect(strips.columns).toEqual(["Site A · 3 T", "Site B · 1.5 T"]);
+    expect(strips.columns.map((c) => c.key)).toEqual(["Site A · 3 T", "Site B · 1.5 T"]);
+    expect(strips.shared_visits).toBe(0);
     expect([...litOf(strips, { by: "breaks" })].sort()).toEqual([2, 4]);
     // a visit with no pick is left out of a series, as the engine counts them
     expect([...litOf(strips, { by: "series", steps: ["2D SE", "3D MPRAGE"] })].sort()).toEqual([2, 4]);
@@ -170,6 +224,26 @@ describe("the map doors", () => {
     expect([...litOf(strips, { by: "cell", kind: "2D SE", column: "Site B · 1.5 T" })].sort()).toEqual([2, 3]);
     expect([...litOf(strips, { by: "cell", kind: null, column: "Site B · 1.5 T" })]).toEqual([2]);
     expect(stripsOf({ subjects: [{ subject_id: 9, visits: [0, "x"] }] }).subjects[0]).toEqual({ subject_id: 9, column: -1, visits: [0, -1] });
+  });
+  it("read the strips' columns as the map's, with what they share, and light a cell's subjects by its column's name", () => {
+    const strips = stripsOf({
+      kinds: ["3D MPRAGE"],
+      columns: [
+        { key: "first · 3 T", visits: 3, shared: 1 },
+        { key: "second · 3 T", visits: 2, shared: 1 },
+      ],
+      shared_visits: 1,
+      subjects: [
+        { subject_id: 1, column: 0, visits: [0, 0] },
+        { subject_id: 3, column: 1, visits: [0] },
+      ],
+    });
+    expect(strips.columns).toEqual([
+      { key: "first · 3 T", visits: 3, shared: 1 },
+      { key: "second · 3 T", visits: 2, shared: 1 },
+    ]);
+    expect(strips.shared_visits).toBe(1);
+    expect([...litOf(strips, { by: "cell", kind: "3D MPRAGE", column: "second · 3 T" })]).toEqual([3]);
   });
   it("write a person's pick of a visit and its withdrawal in the scope", async () => {
     const seen = answering(201, { id: 97, stacks: [124] });
@@ -251,6 +325,39 @@ describe("the five numbers", () => {
     expect(groupTitle({ by: "cell", kind: null, column: "Site A · 3 T" })).toBe("Subjects with a visit at Site A · 3 T taking nothing");
     expect(runOf(["a", "a", null, null, "a", "b"])).toEqual(["a", "b"]);
     expect(kindChanges(["a", null, "a", "b", null, "b", "a"])).toEqual([false, false, false, true, false, false, true]);
+  });
+});
+
+describe("a scan in more than one dataset", () => {
+  it("is said in one line on the map, so its columns are not read as adding up, and nothing where no visit is", () => {
+    expect(sharedWords(0)).toBeNull();
+    expect(sharedWords(1)).toBe("1 visit is in more than one dataset, counted in each.");
+    expect(sharedWords(1204)).toBe("1,204 visits are in more than one dataset, counted in each.");
+  });
+  it("is said of a column on hover, with its visits", () => {
+    expect(columnTitle({ key: "first · 3 T", visits: 3, shared: 1 })).toBe("first · 3 T: 3 visits, 1 also in another dataset");
+    expect(columnTitle({ key: "second · 3 T", visits: 1, shared: 0 })).toBe("second · 3 T: 1 visit");
+    expect(columnTitle({ key: "Siemens Skyra · 3 T", visits: 1420, shared: 0 })).toBe("Siemens Skyra · 3 T: 1,420 visits");
+  });
+  it("names, on a visit, the columns besides the one its list is about: the cell's where it is under it, else its first", () => {
+    const copied = { column: "first · 3 T", columns: ["first · 3 T", "second · 3 T"] };
+    expect(othersOf(copied, "second · 3 T")).toEqual(["first · 3 T"]);
+    expect(othersOf(copied, "first · 3 T")).toEqual(["second · 3 T"]);
+    expect(othersOf(copied, null)).toEqual(["second · 3 T"]);
+    expect(othersOf(copied, "third · 3 T")).toEqual(["second · 3 T"]);
+    expect(othersOf({ column: "first · 3 T", columns: ["first · 3 T"] }, "second · 3 T")).toEqual([]);
+    expect(othersOf({ column: null, columns: [] }, null)).toEqual([]);
+  });
+  it("says the others in a few words, a column's field left out where the visit says it already", () => {
+    expect(alsoWords([])).toBeNull();
+    expect(alsoWords(["first · 3 T"])).toBe("also in first · 3 T");
+    expect(alsoWords(["a", "b", "Other datasets"])).toBe("also in a, b and Other datasets");
+    expect(listWords(["a", "b"])).toBe("a and b");
+    expect(listWords([])).toBe("");
+    expect(besideField("first · 3 T", "3 T")).toBe("first");
+    expect(besideField("first · 1.5 T", "3 T")).toBe("first · 1.5 T");
+    expect(besideField("Other datasets", "3 T")).toBe("Other datasets");
+    expect(besideField("first · 3 T", null)).toBe("first · 3 T");
   });
 });
 

@@ -5,12 +5,23 @@
 // its keys and its panel grow by one factor; a phone's width is one column,
 // the panel under the page, the table of where the kinds come from scrolling
 // inside its box and nothing sideways; every subject as a strip, the group
-// lit; and a card's visit opens its pick in the window. In chromium, and in
-// Firefox where it is installed. Screenshots go to test-results for a look.
+// lit; a card's visit opens its pick in the window; and by dataset, where a
+// scan is in two datasets, one line over the table says how many visits
+// are, and a visit names the other dataset on one line inside it. In
+// chromium, and in Firefox where it is installed. Screenshots go to
+// test-results for a look.
 
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 const tops = async (page: Page, sel: string) => (await page.locator(sel).evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().top)))) as number[];
+
+/** How many lines an element's text takes. */
+const lines = (loc: Locator) =>
+  loc.evaluate((e) => {
+    const r = document.createRange();
+    r.selectNodeContents(e);
+    return new Set([...r.getClientRects()].filter((x) => x.width > 0).map((x) => Math.round(x.top))).size;
+  });
 
 async function opened(page: Page, width: number, height: number) {
   await page.setViewportSize({ width, height });
@@ -137,5 +148,39 @@ test("a change in the panel shows its effect first, in light and dark", async ({
     await expect(page.locator(".ms-rules-toggle")).toHaveText("Rules · version 2 · changed");
     await expect(page.locator(".ms-number.given")).toHaveCount(1);
     await page.screenshot({ path: `test-results/mainscans-changed-${scheme}.png` });
+  }
+});
+
+test("by dataset, one line says how many visits are in more than one dataset, and a visit names the other one it is in", async ({ page }) => {
+  for (const [width, height] of [
+    [1440, 900],
+    [390, 844],
+  ] as const) {
+    await opened(page, width, height);
+    await page.getByRole("button", { name: "By dataset" }).click();
+    const line = page.locator(".ms-where .ms-shared");
+    await expect(line).toHaveText(/^[\d,]+ visits are in more than one dataset, counted in each\.$/);
+    // over the table it speaks of, and on one line from a laptop up
+    const said = (await line.boundingBox())!;
+    const table = (await page.locator(".ms-matrix-wrap").boundingBox())!;
+    expect(said.y + said.height).toBeLessThanOrEqual(table.y + 1);
+    if (width >= 1440) expect(await lines(line)).toBe(1);
+    // a column another dataset shares says so on hover, in words
+    const titles = await page.locator(".ms-col").evaluateAll((els) => els.map((e) => e.getAttribute("title") ?? ""));
+    expect(titles.some((t) => /: [\d,]+ visits, [\d,]+ also in another dataset$/.test(t))).toBe(true);
+    // a copied visit names the other dataset on one line, inside the visit, the whole on hover
+    await expect(page.locator(".ms-card").first()).toBeVisible();
+    const also = page.locator(".ms-card .ms-visit-also").first();
+    await expect(also).toHaveText(/^also in [a-z0-9-]+$/);
+    const fit = await also.evaluate((e) => {
+      const visit = e.closest(".ms-visit")!.getBoundingClientRect();
+      const box = e.getBoundingClientRect();
+      return { inside: box.left >= visit.left - 0.5 && box.right <= visit.right + 0.5, tall: box.height, head: e.closest(".ms-visit")!.querySelector(".ms-visit-head")!.getBoundingClientRect().height };
+    });
+    expect(fit.inside).toBe(true);
+    expect(fit.tall).toBeLessThan(fit.head * 1.6);
+    expect(await also.getAttribute("title")).toMatch(/^also in .+ · (3|1\.5) T$/);
+    await noSidewaysScroll(page, width);
+    await page.screenshot({ path: `test-results/mainscans-datasets-${width}.png`, fullPage: true });
   }
 });

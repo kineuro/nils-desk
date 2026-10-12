@@ -62,11 +62,13 @@ export function mapAnswer(role: string, draft: boolean, over: Record<string, unk
           { key: "2D FLAIR", visits_with: 500, visits_taken: 420, allowed: true, used: true, new: false },
         ],
     metrics: draft ? METRICS({ visits_taken: 1060, alike_data: { kind: "3D MPRAGE", visits: 700 } }) : METRICS(),
+    // by scanner a visit is in one column
     columns: [
-      { key: "Siemens Skyra · 3 T", visits: 420 },
-      { key: "GE Signa · 1.5 T", visits: 380 },
-      { key: "Other scanners", visits: 300 },
+      { key: "Siemens Skyra · 3 T", visits: 420, shared: 0 },
+      { key: "GE Signa · 1.5 T", visits: 380, shared: 0 },
+      { key: "Other scanners", visits: 300, shared: 0 },
     ],
+    shared_visits: 0,
     matrix: [
       { kind: "3D MPRAGE", cells: [300, 60, 28] },
       { kind: "2D SE", cells: [0, 200, 50] },
@@ -98,14 +100,14 @@ export function subjectsAnswer(total = 2, draft = false) {
         subject_id: 17,
         subject: "5a9f30c6e8b21d41",
         visits: [
-          { session_id: 4021, visit: 1, column: "GE Signa · 1.5 T", field: "1.5 T", kind: "2D SE", stack: 121, by: "rules", changed: draft, candidates: [{ stacks: [121], kind: "2D SE", score: 0.81 }] },
-          { session_id: 4022, visit: 2, column: "Siemens Skyra · 3 T", field: "3 T", kind: "3D MPRAGE", stack: 123, by: "rules", changed: false, candidates: [{ stacks: [123], kind: "3D MPRAGE", score: 0.88 }, { stacks: [124], kind: "3D MPRAGE", score: 0.85 }] },
+          { session_id: 4021, visit: 1, column: "GE Signa · 1.5 T", columns: ["GE Signa · 1.5 T"], field: "1.5 T", kind: "2D SE", stack: 121, by: "rules", changed: draft, candidates: [{ stacks: [121], kind: "2D SE", score: 0.81 }] },
+          { session_id: 4022, visit: 2, column: "Siemens Skyra · 3 T", columns: ["Siemens Skyra · 3 T"], field: "3 T", kind: "3D MPRAGE", stack: 123, by: "rules", changed: false, candidates: [{ stacks: [123], kind: "3D MPRAGE", score: 0.88 }, { stacks: [124], kind: "3D MPRAGE", score: 0.85 }] },
         ],
       },
       {
         subject_id: 18,
         subject: "5a9f30c6e8b21d42",
-        visits: [{ session_id: 4031, visit: 1, column: "Siemens Skyra · 3 T", field: "3 T", kind: "3D MPRAGE", stack: 131, by: "person", pick: 97, why: "motion in series 9", changed: false, candidates: [{ stacks: [130], kind: "3D MPRAGE", score: 0.9 }, { stacks: [131], kind: "3D MPRAGE", score: 0.7 }] }],
+        visits: [{ session_id: 4031, visit: 1, column: "Siemens Skyra · 3 T", columns: ["Siemens Skyra · 3 T"], field: "3 T", kind: "3D MPRAGE", stack: 131, by: "person", pick: 97, why: "motion in series 9", changed: false, candidates: [{ stacks: [130], kind: "3D MPRAGE", score: 0.9 }, { stacks: [131], kind: "3D MPRAGE", score: 0.7 }] }],
       },
     ],
   };
@@ -113,13 +115,98 @@ export function subjectsAnswer(total = 2, draft = false) {
 
 export const STRIPS = {
   kinds: ["3D MPRAGE", "2D SE"],
-  columns: ["Siemens Skyra · 3 T", "GE Signa · 1.5 T"],
+  columns: [
+    { key: "Siemens Skyra · 3 T", visits: 420, shared: 0 },
+    { key: "GE Signa · 1.5 T", visits: 380, shared: 0 },
+  ],
+  shared_visits: 0,
   subjects: [
     { subject_id: 17, column: 1, visits: [1, 0] },
     { subject_id: 18, column: 0, visits: [0] },
     { subject_id: 19, column: 0, visits: [0, 0, -1] },
   ],
 };
+
+// ---------------------------------------------------------------- by dataset, a scan in two datasets
+// The cohort by dataset, as the engine answers it since 2026-10-12: a
+// dataset is a folder that holds scans, and a scan copied into two is one
+// scan with a path in each, so its visit shows under both. The first
+// subject's first visit is in study-big and ward-c, its second in study-big
+// alone; the second subject is in study-big, the third in ward-c.
+
+const STUDY_BIG = "study-big · 3 T";
+const WARD_C = "ward-c · 3 T";
+
+/** The map by dataset: four visits, five in the columns, the copied one counted in each. */
+export function mapByDataset(role: string) {
+  return {
+    ...mapAnswer(role, false),
+    kinds: [{ key: "3D MPRAGE", visits_with: 4, visits_taken: 4, allowed: true, used: true, new: false }],
+    metrics: METRICS({ visits: 4, visits_taken: 4, subjects: 3, subjects_taken: 3, alike_data: { kind: "3D MPRAGE", visits: 4 }, alike_within: { subjects: 1, of: 1 }, series_complete: { subjects: 1, of: 1 } }),
+    columns: [
+      { key: STUDY_BIG, visits: 3, shared: 1 },
+      { key: WARD_C, visits: 2, shared: 1 },
+    ],
+    shared_visits: 1,
+    matrix: [{ kind: "3D MPRAGE", cells: [3, 2] }],
+    series: [{ steps: ["3D MPRAGE"], subjects: 1 }],
+    single_visit_subjects: 2,
+    by_visit: [
+      { visit: 1, visits: 3, kinds: [{ kind: "3D MPRAGE", visits: 3 }] },
+      { visit: 2, visits: 1, kinds: [{ kind: "3D MPRAGE", visits: 1 }] },
+    ],
+  };
+}
+
+const visitIn = (session: number, visit: number, columns: string[]) => ({
+  session_id: session,
+  visit,
+  column: columns[0],
+  columns,
+  field: "3 T",
+  kind: "3D MPRAGE",
+  stack: session * 10,
+  by: "rules",
+  changed: false,
+  candidates: [{ stacks: [session * 10], kind: "3D MPRAGE", score: 0.9 }],
+});
+
+const BY_DATASET = [
+  { subject_id: 17, subject: "5a9f30c6e8b21d41", visits: [visitIn(4021, 1, [STUDY_BIG, WARD_C]), visitIn(4022, 2, [STUDY_BIG])] },
+  { subject_id: 18, subject: "5a9f30c6e8b21d42", visits: [visitIn(4031, 1, [STUDY_BIG])] },
+  { subject_id: 19, subject: "5a9f30c6e8b21d43", visits: [visitIn(4041, 1, [WARD_C])] },
+];
+
+/** A cell's subjects by dataset, found under any of a visit's columns, as the engine finds them; no subject's series breaks. */
+export function subjectsByDataset(group: unknown) {
+  const g = (group ?? {}) as { by?: string; column?: string };
+  const subjects = g.by === "cell" ? BY_DATASET.filter((s) => s.visits.some((v) => v.columns.includes(String(g.column)))) : [];
+  return { total: subjects.length, page: 0, per_page: 24, subjects };
+}
+
+/** Every subject once, under the dataset most of its visits are in. */
+export const STRIPS_BY_DATASET = {
+  kinds: ["3D MPRAGE"],
+  columns: [
+    { key: STUDY_BIG, visits: 3, shared: 1 },
+    { key: WARD_C, visits: 2, shared: 1 },
+  ],
+  shared_visits: 1,
+  subjects: [
+    { subject_id: 17, column: 0, visits: [0, 0] },
+    { subject_id: 18, column: 0, visits: [0] },
+    { subject_id: 19, column: 1, visits: [0] },
+  ],
+};
+
+/** The doors by dataset where the map, a cell's subjects and the strips are asked by dataset; by scanner, the cohort's own. */
+export function byDataset(c: FakeCall): FakeAnswer {
+  if (c.method !== "POST" || c.body?.columns !== "dataset") return undefined;
+  if (c.path === "/api/picks/map") return { status: 200, body: mapByDataset(String(c.body.role)) };
+  if (c.path === "/api/picks/map/subjects") return { status: 200, body: subjectsByDataset(c.body.group) };
+  if (c.path === "/api/picks/map/strips") return { status: 200, body: STRIPS_BY_DATASET };
+  return undefined;
+}
 
 export interface FakeCall {
   method: string;
