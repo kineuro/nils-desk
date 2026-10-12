@@ -27,7 +27,13 @@
 //     plan_update       "Planning"
 //     ask_user          "Asking you"
 //     propose_change    "Preparing a change for you"
-//     activate_skill    the skill's plain name (SKILL_WORDS below)
+//     analysis_table    "Putting the rows in the workspace"
+//     bash              "Analysing the rows"
+//     read              "Reading a result"
+//     write             "Writing a file"
+//     activate_skill    the skill's plain name (SKILL_WORDS in steps.ts)
+//   bash, read and write are Flue's own tools, at work in the analysis
+//   workspace, where analysis_table puts the rows they work on.
 //   `settle` and `advance` are never shown.
 //
 // DATA PARTS (chunk type data-part, written with Flue's useDataWriter(kind);
