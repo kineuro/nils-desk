@@ -20,7 +20,7 @@ import { useCopy } from "../ui/clipboard";
 import { Markdown } from "./Markdown";
 import { plainMentions, saidWithMentions } from "./mentions";
 import type { Change, PaneMemory, Proposal, Turn } from "./parts";
-import { ApprovalCardView, ClarificationCardView, StepsHelp } from "./Cards";
+import { ApprovalCardView, AskedView, ClarificationCardView, StepsHelp } from "./Cards";
 import { cardOfChange, cardOfProposal } from "./events";
 import { MISSES } from "./thread";
 
@@ -71,10 +71,14 @@ export function TurnView(props: {
   if (turn.role === "user") return <Asked turn={turn} actions={actions} />;
   if (turn.role === "system") return <p className="meta">{turn.text}</p>;
   const steps = turn.done && turn.tools.length > 0 ? <StepsHelp tools={turn.tools} open={open} onToggle={onToggle} /> : null;
+  const settledOn = Boolean(said) && turn.done && proposals.length === 0;
+  // a turn never ends with nothing to read (2026-10-12): its words, a card, its question, or a line that says so
+  const nothing = turn.done && !turn.text && !settledOn && proposals.length === 0 && (changes ?? []).length === 0 && (memories ?? []).length === 0 && !choice && !turn.asked;
   return (
     <div className="said">
       {turn.thinking && <Thinking text={turn.thinking} live={!turn.done && !turn.text} />}
-      {turn.text ? <Markdown text={turn.text} streaming={!turn.done} /> : said && turn.done && proposals.length === 0 ? <Markdown text={said} /> : null}
+      {turn.text ? <Markdown text={turn.text} streaming={!turn.done} /> : settledOn && said ? <Markdown text={said} /> : null}
+      {nothing && <p className="meta">No answer was written to this. Ask again, or say it another way.</p>}
       {proposals.map((p) =>
         queryCard ? (
           <Fragment key={p.document}>{queryCard(p)}</Fragment>
@@ -125,7 +129,7 @@ export function TurnView(props: {
           </div>
         );
       })}
-      {choice && <ClarificationCardView card={choice} onChoose={onChoose} />}
+      {choice ? <ClarificationCardView card={choice} onChoose={onChoose} /> : turn.asked && <AskedView card={turn.asked} />}
       {actions && turn.done ? <Answered turn={turn} actions={actions} steps={steps} /> : steps && <div className="turn-actions">{steps}</div>}
     </div>
   );

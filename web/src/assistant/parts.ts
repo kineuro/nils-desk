@@ -121,6 +121,8 @@ export interface Turn {
   /** The submission an answer belongs to, where the runtime tracks its turn: its steps end without ending it (2026-10-09). */
   submission?: string;
   tools: Tool[];
+  /** The question the turn asked the person, kept with it once a later turn closes its card (2026-10-12). */
+  asked?: { question: string; options: { label: string; count: number | null }[] };
 }
 
 export interface Proposal {
@@ -233,7 +235,8 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
       case "plan_update":
         return { ...state, plan: one.items };
       case "clarification":
-        return { ...state, choice: { question: one.question, options: one.options, turn: turnId } };
+        // the card answers it while it is the latest turn's; the turn keeps the question as words after that (2026-10-12)
+        return withTurn({ ...state, choice: { question: one.question, options: one.options, turn: turnId } }, turnId, (t) => ({ ...t, asked: { question: one.question, options: one.options } }));
       case "approval":
         // a query version is decided as a move proposal is: on the query card, by its document
         if (one.change === "query_version" && one.ref.document !== undefined) {
@@ -255,7 +258,7 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
       if (state.proposals.some((x) => x.document === p.document)) return state;
       return { ...state, proposals: [...state.proposals, { document: p.document, parent: p.parent, sentence: p.sentence, turn: turnId, decided: null }] };
     case "choice":
-      return { ...state, choice: { question: p.question, options: p.options, turn: turnId } };
+      return withTurn({ ...state, choice: { question: p.question, options: p.options, turn: turnId } }, turnId, (t) => ({ ...t, asked: { question: p.question, options: p.options } }));
     case "status":
       return {
         ...state,
@@ -447,7 +450,8 @@ export function fromHistory(h: History, previous: PaneState = empty(), now?: num
     }
     // an open answer whose last part is a tool call: the words still to come begin the next step, as they would live
     if (m.role === "assistant") t = drawn(t, open && called ? [...steps, step, { words: "", reasoning: "" }] : [...steps, step]);
-    state = { ...state, turns: [...state.turns, t] };
+    // a new answer closes the question card before it, as it does live: a reload never opens an old question again (2026-10-12)
+    state = { ...state, turns: [...state.turns, t], ...(m.role === "assistant" ? { choice: null } : {}) };
     for (const p of m.parts) if (p.type.startsWith("data-")) state = acceptPart(state, m.id, p.data);
   }
   // decided proposals stay decided across a reload

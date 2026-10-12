@@ -102,3 +102,35 @@ describe("a turn in the one chat", () => {
     expect(html).toContain("Count them");
   });
 });
+
+describe("a turn that asked, or wrote nothing (2026-10-12)", () => {
+  const asking: Turn = {
+    id: "a2",
+    role: "assistant",
+    text: "",
+    done: true,
+    tools: [{ id: "1", name: "ask_user", state: "done", words: "Asking you" }],
+    asked: { question: "Which rows did you want?", options: [{ label: "The two failed jobs", count: 2 }, { label: "Something else", count: null }] },
+  };
+  const view = (t: Turn, choice: { question: string; options: { label: string; count: number | null }[] } | null) =>
+    renderToStaticMarkup(<TurnView turn={t} open={false} onToggle={() => undefined} proposals={[]} choice={choice} onChoose={() => undefined} />);
+
+  it("answers the latest question on its card, and keeps an earlier one as words with no buttons", () => {
+    const live = view(asking, asking.asked ?? null);
+    expect(live).toContain("ask-option");
+    expect(live).toContain("Which rows did you want?");
+    const later = view(asking, null);
+    expect(later).toContain("Which rows did you want?");
+    expect(later).toContain("The two failed jobs (2); Something else");
+    expect(later).not.toContain("ask-option");
+    expect(later).not.toContain("No answer was written");
+  });
+
+  it("says so where a turn ended with nothing to read", () => {
+    const silent: Turn = { id: "a3", role: "assistant", text: "", thinking: "the model reasoned", done: true, tools: [{ id: "1", name: "registry_search", state: "done" }] };
+    expect(view(silent, null)).toContain("No answer was written to this. Ask again, or say it another way.");
+    // a turn still running is no turn that wrote nothing
+    expect(view({ ...silent, done: false }, null)).not.toContain("No answer was written");
+    expect(view({ ...silent, text: "Here." }, null)).not.toContain("No answer was written");
+  });
+});

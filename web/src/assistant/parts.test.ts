@@ -429,3 +429,47 @@ describe("an answer a check sent back (2026-10-11)", () => {
     expect(plain.reduce(reduce, empty()).turns[1].text).toMatch(/They are study-fresh[\s\S]*The saved question/u);
   });
 });
+
+describe("a turn that asked the person something (2026-10-12)", () => {
+  const question = { kind: "clarification", question: "I can't attach a file here. Which rows did you want?", options: [{ label: "The two failed jobs", count: 2 }, { label: "Something else" }] };
+  const asked = { question: question.question, options: [{ label: "The two failed jobs", count: 2 }, { label: "Something else", count: null }] };
+
+  it("keeps the question with its turn once the next turn starts, live", () => {
+    const live: Chunk[] = [
+      { type: "message-appended", message: { id: "u1", role: "user", display: "visible", parts: [{ type: "text", text: "can you make a csv and upload it here?" }] } },
+      { type: "message-started", messageId: "a1" },
+      { type: "tool-input", messageId: "a1", toolCallId: "t1", toolName: "ask_user", input: {} },
+      { type: "tool-output", toolCallId: "t1", output: { asked: true } },
+      { type: "data-part", messageId: "a1", name: "clarification", data: question },
+      { type: "submission-settled", submissionId: "x", outcome: "completed" },
+    ];
+    const s = live.reduce(reduce, empty());
+    expect(s.choice).toEqual({ ...asked, turn: "a1" });
+    expect(s.turns[1].asked).toEqual(asked);
+    // the person typed something else: the card closes, and the turn still says what it asked
+    const next = [
+      { type: "message-appended", message: { id: "u2", role: "user", display: "visible", parts: [{ type: "text", text: "so you have no sandbox?" }] } },
+      { type: "message-started", messageId: "a2" },
+    ].reduce(reduce, s);
+    expect(next.choice).toBeNull();
+    expect(next.turns.find((t) => t.id === "a1")?.asked).toEqual(asked);
+  });
+
+  it("opens no old question again on a reload, and keeps each with its turn", () => {
+    const h: History = {
+      messages: [
+        { id: "u1", role: "user", display: "visible", parts: [{ type: "text", text: "can you make a csv and upload it here?" }] },
+        { id: "a1", role: "assistant", parts: [{ type: "dynamic-tool", toolCallId: "t1", toolName: "ask_user", state: "output-available" }, { type: "data-clarification", data: question }] },
+        { id: "u2", role: "user", display: "visible", parts: [{ type: "text", text: "so you have no sandbox?" }] },
+        { id: "a2", role: "assistant", parts: [{ type: "text", text: "Not yet: a file needs the analysis sandbox, which is coming." }] },
+      ],
+      settlements: [{ submissionId: "x", outcome: "completed" }],
+    };
+    const s = fromHistory(h);
+    expect(s.choice).toBeNull();
+    expect(s.turns.find((t) => t.id === "a1")?.asked).toEqual(asked);
+    // the latest turn's own question is still the card it answers by
+    const last = fromHistory({ ...h, messages: h.messages.slice(0, 2) });
+    expect(last.choice).toEqual({ ...asked, turn: "a1" });
+  });
+});
