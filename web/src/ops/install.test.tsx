@@ -18,7 +18,7 @@ import { CatalogBody, RunDialog } from "./Catalog";
 import type { Pipeline, Run } from "./catalog";
 import { SLICE } from "./failure";
 import { withSlice } from "./failure.fixture";
-import { ToolsSection } from "./Install";
+import { forgetInstalled, ToolsSection } from "./Install";
 import { RunView } from "./RunPage";
 import { installDoor, mayInstall, toolStatus } from "./tools";
 import type { RunDetail } from "./runs";
@@ -76,6 +76,7 @@ beforeEach(() => {
 afterEach(() => {
   act(() => root.unmount());
   el.remove();
+  forgetInstalled();
 });
 
 const settle = async () => {
@@ -104,12 +105,24 @@ describe("Install dcm2niix beside a failed run's reason", () => {
     expect(el.querySelector(".fail-line")?.textContent).toContain(TODO);
     await press("Install dcm2niix");
     expect(asked.filter((a) => a.method === "POST" && a.path === PATH)).toHaveLength(1);
-    expect(el.querySelector(".tool-said")?.textContent).toBe("dcm2niix v1.0.20250506 installed at /usr/local/bin/dcm2niix.Run again");
+    expect(el.querySelector(".tool-said")?.textContent).toBe("dcm2niix v1.0.20250506 is installed at /usr/local/bin/dcm2niix.Run again");
     expect(button("Install dcm2niix")).toBeNull();
     await press("Run again");
     expect(asked.find((a) => a.path === "/api/jobs")?.body).toEqual({ command: ["run", "--resume", "12"] });
     expect(el.querySelector(".tool-said")?.textContent).toContain("Run 12 is queued again as job 41.");
     expect(button("Run again")).toBeNull();
+  });
+  it("says the tool is there on every failed run once one press installed it, and where the capabilities say it is present", async () => {
+    const two = (caps: Capabilities) => <CatalogBody caps={caps} pipelines={[]} capability={{ enabled: true }} runs={[RUN, { ...RUN, id: 13 }]} onRun={() => undefined} />;
+    await act(async () => root.render(two(capsOf(DOORS, ADMIN))));
+    expect([...el.querySelectorAll("button")].filter((b) => b.textContent === "Install dcm2niix")).toHaveLength(2);
+    await press("Install dcm2niix");
+    expect(button("Install dcm2niix")).toBeNull();
+    expect([...el.querySelectorAll(".tool-said")].map((e) => e.textContent)).toEqual(Array(2).fill("dcm2niix v1.0.20250506 is installed at /usr/local/bin/dcm2niix.Run again"));
+    forgetInstalled();
+    await act(async () => root.render(two(capsOf(DOORS, ["pipelines:see", "pipelines:work"], withSlice({}, { present: true, version: "v1.0.20250506" })))));
+    expect(button("Install dcm2niix")).toBeNull();
+    expect(el.querySelector(".tool-said")?.textContent).toBe("dcm2niix v1.0.20250506 is installed.Run again");
   });
   it("asks an admin, for anyone else; and offers nothing where the engine has no door", async () => {
     await act(async () => root.render(runs(capsOf(DOORS, ["pipelines:see", "pipelines:work"]))));

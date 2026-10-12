@@ -183,7 +183,7 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
 /** A failed run's reason under its row, with Install where it is a tool the engine installs, and then Run again where the run can be taken up. */
 function RunFailRow({ caps, run, f, cols }: { caps: Capabilities; run: Run; f: Failure; cols: number }) {
   const again = runActs(caps).queue && run.status === "failed" && !run.results_digest ? () => ops.enqueue(resumeCommand(run)).then((j) => `Run ${run.id} is queued again as job ${j.job}.`) : null;
-  const install = useInstall(caps, f.tool, again);
+  const install = useInstall(caps, f.tool, again, null, true);
   return (
     <tr className="fail-row">
       <td colSpan={cols}>

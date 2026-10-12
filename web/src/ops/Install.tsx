@@ -6,63 +6,92 @@
 // asking an admin. An install that fails (offline, say) shows the engine's
 // reason and the way by hand. Nothing shows where the engine has no door.
 
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { firstSentence, INSTALLABLE, refusalOf, type Failure } from "./failure";
 import { installServed, mayInstall, tools, toolStatus, type ToolStatus } from "./tools";
 
-type State = { kind: "idle" } | { kind: "busy" } | { kind: "done"; s: ToolStatus; said: string | null; again: "idle" | "busy" | "done" } | { kind: "failed"; f: Failure };
+/** The tools installed from this page since it loaded: every place that offered Install then says the tool is there. */
+const installedNow = new Map<string, ToolStatus>();
+const listeners = new Set<() => void>();
+const subscribe = (l: () => void) => {
+  listeners.add(l);
+  return () => {
+    listeners.delete(l);
+  };
+};
+function noteInstalled(s: ToolStatus) {
+  installedNow.set(s.tool, s);
+  for (const l of listeners) l();
+}
+
+/** For the tests: a page loaded afresh, nothing installed from it. */
+export function forgetInstalled() {
+  installedNow.clear();
+}
+
+type State = { kind: "idle" } | { kind: "busy" } | { kind: "failed"; f: Failure };
+type Again = { kind: "idle" | "busy" | "done"; said: string | null };
 
 /**
  * The install, as two pieces a page places: the button, beside the reason,
- * and what it said, under it. `again` takes the run up again once the tool is
- * there and says what it queued; `onInstalled` lets a page read again.
+ * and what it said, under it. Once the tool is there (installed from here, or
+ * present as the capabilities say) the line says its version, with Run again
+ * where `again` is given: it takes the run up again and says what it queued.
+ * `onInstalled` lets a page read again; `quiet` draws the button as a
+ * secondary one, for a table of several.
  */
-export function useInstall(caps: Capabilities, tool: string | null, again: (() => Promise<string>) | null = null, onInstalled: ((s: ToolStatus) => void) | null = null): { button: React.ReactNode; said: React.ReactNode } {
+export function useInstall(caps: Capabilities, tool: string | null, again: (() => Promise<string>) | null = null, onInstalled: ((s: ToolStatus) => void) | null = null, quiet = false): { button: React.ReactNode; said: React.ReactNode } {
   const [state, setState] = useState<State>({ kind: "idle" });
+  const [rerun, setRerun] = useState<Again>({ kind: "idle", said: null });
+  const snapshot = () => (tool === null ? null : (installedNow.get(tool) ?? null));
+  const now = useSyncExternalStore(subscribe, snapshot, snapshot);
   if (tool === null || !installServed(caps, tool)) return { button: null, said: null };
-  if (!mayInstall(caps, tool)) return { button: null, said: <p className="meta tool-said">Ask an admin to install {tool}.</p> };
-  const go = () => {
-    setState({ kind: "busy" });
-    tools.install(tool).then(
-      (s) => {
-        setState({ kind: "done", s, said: null, again: "idle" });
-        onInstalled?.(s);
-      },
-      (e: unknown) => setState({ kind: "failed", f: refusalOf(e) }),
-    );
-  };
-  const runAgain = () => {
-    if (state.kind !== "done" || again === null) return;
-    setState({ ...state, again: "busy" });
-    again().then(
-      (said) => setState({ ...state, said, again: "done" }),
-      (e: unknown) => setState({ ...state, said: refusalOf(e).line, again: "idle" }),
-    );
-  };
-  if (state.kind === "done") {
+  const present = toolStatus(caps, tool);
+  const there = now ?? (present?.present ? present : null);
+  if (there) {
+    const runAgain = () => {
+      if (again === null) return;
+      setRerun({ kind: "busy", said: null });
+      again().then(
+        (said) => setRerun({ kind: "done", said }),
+        (e: unknown) => setRerun({ kind: "idle", said: refusalOf(e).line }),
+      );
+    };
     return {
       button: null,
       said: (
         <div className="tool-said">
           <span>
-            {tool} <span className="path">{state.s.version ?? ""}</span> installed{state.s.path ? <span className="meta"> at {state.s.path}</span> : null}.
+            {tool} {there.version && <span className="path">{there.version}</span>} is installed{there.path ? <span className="meta"> at {there.path}</span> : null}.
           </span>
-          {again && state.again !== "done" && (
-            <button type="button" className="button small" disabled={state.again === "busy"} onClick={runAgain}>
+          {again && rerun.kind !== "done" && (
+            <button type="button" className="button small" disabled={rerun.kind === "busy"} onClick={runAgain}>
               Run again
             </button>
           )}
-          {state.said && <span className="meta">{state.said}</span>}
+          {rerun.said && <span className="meta">{rerun.said}</span>}
         </div>
       ),
     };
   }
+  if (!mayInstall(caps, tool)) return { button: null, said: <p className="meta tool-said">Ask an admin to install {tool}.</p> };
+  const go = () => {
+    setState({ kind: "busy" });
+    tools.install(tool).then(
+      (s) => {
+        setState({ kind: "idle" });
+        noteInstalled(s);
+        onInstalled?.(s);
+      },
+      (e: unknown) => setState({ kind: "failed", f: refusalOf(e) }),
+    );
+  };
   const busy = state.kind === "busy";
   return {
     button: (
-      <button type="button" className={state.kind === "failed" ? "button secondary small" : "button small"} disabled={busy} onClick={go}>
+      <button type="button" className={quiet || state.kind === "failed" ? "button secondary small" : "button small"} disabled={busy} onClick={go}>
         {busy ? `Installing ${tool}…` : state.kind === "failed" ? "Try again" : `Install ${tool}`}
       </button>
     ),
@@ -128,9 +157,10 @@ function ToolRow({ caps, tool, onChanged }: { caps: Capabilities; tool: string; 
     setInstalled(now);
     onChanged();
   });
+  // once installed, the row says it: its version and where, and nothing under it
   return (
     <>
-      <tr className={said ? "has-fail" : undefined}>
+      <tr className={said && !installed ? "has-fail" : undefined}>
         <td>
           <b>{tool}</b>
         </td>
@@ -138,7 +168,7 @@ function ToolRow({ caps, tool, onChanged }: { caps: Capabilities; tool: string; 
         <td className="path">{s?.path ?? ""}</td>
         <td className="acts">{button}</td>
       </tr>
-      {said && (
+      {said && !installed && (
         <tr className="fail-row">
           <td colSpan={4}>{said}</td>
         </tr>
