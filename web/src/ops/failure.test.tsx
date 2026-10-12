@@ -81,7 +81,7 @@ describe("the Runs table", () => {
   });
   it("says what to do, the kind as a value tag, where the engine says them", () => {
     const html = draw([withSlice(FAILED, { kind: "dependency", todo: TODO })]);
-    expect(html).toContain('<div class="fail-line"><span class="tag">dependency</span><span class="fail-words"');
+    expect(html).toContain('<div class="fail-line"><span class="value-tag kind-tag" data-kind="dependency">dependency</span><span class="fail-words"');
     expect(html).toContain(`${TODO}</span>`);
   });
 });
@@ -99,14 +99,14 @@ describe("a run's page", () => {
   });
   it("leads with what to do and the kind where the engine says them", () => {
     const html = view(withSlice(DETAIL, { kind: "dependency", todo: TODO }));
-    expect(html).toContain(`<p class="note-lead fail-said"><span class="tag">dependency</span><span>${TODO}</span></p>`);
+    expect(html).toContain(`<p class="note-lead fail-said"><span class="value-tag kind-tag" data-kind="dependency">dependency</span><span>${TODO}</span></p>`);
   });
   it("says each failed unit's reason under its row", () => {
     const unit = (u: string, status: string, error: string | null) => ({ unit: u, state: "over", status, attempts: 1, started_at: null, finished_at: null, error });
     const run: RunDetail = { ...DETAIL, error: null, status: "partial", units_run: [unit("sub-a", "succeeded", null), withSlice(unit("sub-b", "failed", "the container was killed: out of memory. It held 31 GB."), { kind: "resource", todo: "Give the lane more memory, or run fewer units at once." })] };
     const html = view(run);
     expect(html.match(/class="fail-row"/gu)).toHaveLength(1);
-    expect(html).toContain('<span class="tag">resource</span><span class="fail-words" title="the container was killed: out of memory. It held 31 GB.">Give the lane more memory, or run fewer units at once.</span>');
+    expect(html).toContain('<span class="value-tag kind-tag" data-kind="resource">resource</span><span class="fail-words" title="the container was killed: out of memory. It held 31 GB.">Give the lane more memory, or run fewer units at once.</span>');
   });
 });
 
@@ -117,7 +117,7 @@ describe("the run form's pre-flight", () => {
     const why = refusalOf(new DoorError(400, withSlice({ error: DCM2NIIX }, { kind: "dependency", todo: TODO })));
     const html = renderToStaticMarkup(<PreflightPanel p={null} why={why} />);
     expect(html).toContain('<p class="note-lead">The pre-flight refused</p>');
-    expect(html).toContain(`<p class="fail-said"><span class="tag">dependency</span><span>${TODO}</span></p>`);
+    expect(html).toContain(`<p class="fail-said"><span class="value-tag kind-tag" data-kind="dependency">dependency</span><span>${TODO}</span></p>`);
     expect(html).toContain("is a prerequisite of a deployment");
   });
   it("says a refusal from today's engine by its first sentence", () => {
@@ -130,7 +130,7 @@ describe("the run form's pre-flight", () => {
     expect(blockedOf({ ...PRE, ready: true })).toBeNull();
     const html = renderToStaticMarkup(<PreflightPanel p={withSlice(PRE, { kind: "dependency", todo: TODO })} />);
     expect(html).toContain('<p class="note-lead">Not ready</p>');
-    expect(html).toContain(`<span class="tag">dependency</span><span>${TODO}</span>`);
+    expect(html).toContain(`<span class="value-tag kind-tag" data-kind="dependency">dependency</span><span>${TODO}</span>`);
     expect(html).toContain("A bids input is released with it.");
   });
 });

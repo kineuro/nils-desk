@@ -1568,6 +1568,11 @@ table.thin tr.fail-row > td { padding-top: 0; }
 .fail-line > * { flex: none; }
 .fail-line .fail-words { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--n-text); }
 .fail-said { display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; }
+.kind-tag { display: inline-flex; align-items: center; min-height: 1.35rem; padding: 0 0.4rem; border: 1px solid var(--vc, var(--n-neutral-line)); border-left: 3px solid var(--vc, var(--n-neutral-icon)); border-radius: var(--n-radius); background: var(--vc-bg, var(--n-neutral-bg)); color: var(--n-text); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.kind-tag[data-kind="dependency"] { --vc: var(--n-value-1); --vc-bg: var(--n-value-1-bg); }
+.kind-tag[data-kind="resource"] { --vc: var(--n-value-2); --vc-bg: var(--n-value-2-bg); }
+.kind-tag[data-kind="input"] { --vc: var(--n-value-3); --vc-bg: var(--n-value-3-bg); }
+.kind-tag[data-kind="pipeline"] { --vc: var(--n-value-4); --vc-bg: var(--n-value-4-bg); }
 .fail-note .note-detail { overflow-wrap: anywhere; }
 .tool-act { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.3rem; }
 .tool-said { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; margin: 0.3rem 0 0; font-size: var(--n-text-size-small); color: var(--n-text); }

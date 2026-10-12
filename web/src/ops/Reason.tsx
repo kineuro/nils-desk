@@ -9,11 +9,20 @@ import type React from "react";
 import { Icon } from "../ui/Icon";
 import type { Failure } from "./failure";
 
+/** The kind as a value tag: framed and barred in its own value's colour, as the desk draws a value. */
+export function KindTag({ kind }: { kind: string }) {
+  return (
+    <span className="value-tag kind-tag" data-kind={kind}>
+      {kind}
+    </span>
+  );
+}
+
 /** The one line: the kind, what to do, and what can be done, the whole error in its title. */
 export function FailLine({ f, children }: { f: Failure; children?: React.ReactNode }) {
   return (
     <div className="fail-line">
-      {f.kind && <span className="tag">{f.kind}</span>}
+      {f.kind && <KindTag kind={f.kind} />}
       <span className="fail-words" title={f.error}>
         {f.line}
       </span>
@@ -30,7 +39,7 @@ export function FailNote({ f, lead = null, children }: { f: Failure; lead?: stri
       <div className="note-body">
         {lead && <p className="note-lead">{lead}</p>}
         <p className={lead ? "fail-said" : "note-lead fail-said"}>
-          {f.kind && <span className="tag">{f.kind}</span>}
+          {f.kind && <KindTag kind={f.kind} />}
           <span>{f.line}</span>
         </p>
         {f.error !== f.line && <p className="note-detail">{f.error}</p>}

@@ -10,7 +10,7 @@ import type React from "react";
 import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
 import { failureWords, type Failure } from "./failure";
-import { FailNote } from "./Reason";
+import { FailNote, KindTag } from "./Reason";
 import { blockedOf, missingByWhy, preflightCells, preflightGate, type Preflight } from "./runs";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -53,7 +53,7 @@ export function PreflightPanel({ p, checking = false, why = null, act = null }: 
         {blocked && (
           <>
             <p className="fail-said">
-              {blocked.kind && <span className="tag">{blocked.kind}</span>}
+              {blocked.kind && <KindTag kind={blocked.kind} />}
               <span>{blocked.line}</span>
             </p>
             {blocked.error !== blocked.line && <p className="note-detail">{blocked.error}</p>}
