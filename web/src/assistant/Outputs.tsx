@@ -5,7 +5,7 @@
 // it; each file as one line with its size, its rows and a download. They come
 // after the turn's words and before any card that waits for the person.
 
-import { memo } from "react";
+import { memo, useEffect, useState } from "react";
 import { Icon } from "../ui/Icon";
 import { saveBase64, saveText } from "./download";
 import type { ChartItem, FileItem } from "./events";
@@ -36,21 +36,45 @@ export function fileWords(f: FileItem): string {
 
 const saveChart = (c: ChartItem) => (c.encoding === "base64" ? saveBase64(c.name, c.data, c.media) : saveText(c.name, c.data, c.media));
 
+/** One chart: the image in the column, tapped to open at its own size (a phone shows the column's width, 2026-10-12). */
+function ChartFigure({ chart: c }: { chart: ChartItem }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [open]);
+  return (
+    <figure className="out-chart">
+      <button type="button" className="out-chart-open" aria-label={`Enlarge ${c.title}`} title="Enlarge" onClick={() => setOpen(true)}>
+        <img src={chartSrc(c)} alt={c.title} />
+      </button>
+      <figcaption className="out-chart-foot">
+        <span className="grow">{c.title}</span>
+        <button type="button" className="icon-button" aria-label={`Save ${c.name}`} title={`Save ${c.name}`} onClick={() => saveChart(c)}>
+          <Icon name="download" />
+        </button>
+      </figcaption>
+      {open && (
+        <div className="out-chart-full" role="dialog" aria-modal="true" aria-label={c.title} onClick={() => setOpen(false)}>
+          <img src={chartSrc(c)} alt={c.title} />
+          <button type="button" className="button secondary small" onClick={() => setOpen(false)}>
+            Close
+          </button>
+        </div>
+      )}
+    </figure>
+  );
+}
+
 /** A turn's charts and files, drawn again only when the turn writes its lists again, not on every word of the answer. */
 export const TurnOutputs = memo(function TurnOutputs({ charts = [], files = [] }: { charts?: ChartItem[]; files?: FileItem[] }) {
   if (charts.length === 0 && files.length === 0) return null;
   return (
     <div className="turn-outputs">
       {charts.map((c, i) => (
-        <figure key={`c${i}:${c.name}`} className="out-chart">
-          <img src={chartSrc(c)} alt={c.title} />
-          <figcaption className="out-chart-foot">
-            <span className="grow">{c.title}</span>
-            <button type="button" className="icon-button" aria-label={`Save ${c.name}`} title={`Save ${c.name}`} onClick={() => saveChart(c)}>
-              <Icon name="download" />
-            </button>
-          </figcaption>
-        </figure>
+        <ChartFigure key={`c${i}:${c.name}`} chart={c} />
       ))}
       {files.map((f, i) => (
         <div key={`f${i}:${f.name}`} className="out-file">

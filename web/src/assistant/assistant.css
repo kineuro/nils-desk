@@ -157,6 +157,10 @@ button.qbar:hover .qbar-label, button.qbar:focus-visible .qbar-label { color: va
 .out-chart { display: grid; min-width: 0; margin: 0; overflow: hidden; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
 /* the column's width, at the chart's own proportions; a tall one is held to most of the window */
 .out-chart img { display: block; width: 100%; height: auto; max-height: 75vh; object-fit: contain; }
+.out-chart-open { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; }
+/* tapped open: the chart at its own size over the page, scrolled and pinched on a phone, closed by a tap or Escape */
+.out-chart-full { position: fixed; inset: 0; z-index: 50; display: grid; justify-items: center; align-content: start; gap: 12px; padding: 16px; overflow: auto; background: var(--n-bg-raised); touch-action: pan-x pan-y pinch-zoom; cursor: zoom-out; }
+.out-chart-full img { width: max(100%, 720px); max-width: none; height: auto; max-height: none; }
 .out-chart-foot { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 3px 3px 12px; border-top: 1px solid var(--n-line); color: var(--n-text-dim); font-size: var(--n-text-size-small); }
 .out-chart-foot > span { min-width: 0; overflow-wrap: anywhere; }
 .out-chart-foot .icon-button { width: 1.75rem; height: 1.75rem; color: var(--n-text-faint); }

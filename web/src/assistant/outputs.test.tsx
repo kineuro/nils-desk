@@ -169,6 +169,21 @@ describe("a turn's charts and files in the thread", () => {
     );
   };
 
+  it("opens a chart at its own size when tapped, and closes it by a tap or Escape (2026-10-12)", () => {
+    draw();
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    const open = host.querySelector<HTMLButtonElement>(".out-chart-open");
+    expect(open?.getAttribute("aria-label")).toMatch(/^Enlarge /u);
+    act(() => open?.click());
+    const dialog = host.querySelector('[role="dialog"]');
+    expect(dialog?.querySelector("img")?.getAttribute("src")).toBe(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(SVG)}`);
+    act(() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+    act(() => open?.click());
+    act(() => host.querySelector<HTMLElement>('[role="dialog"]')?.click());
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+  });
+
   it("draws each chart as an image from a data URL, captioned by its title, after the words and before the card that waits", () => {
     draw();
     const [svg, png] = [...host.querySelectorAll("img")];
