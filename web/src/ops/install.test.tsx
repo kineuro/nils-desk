@@ -178,7 +178,7 @@ describe("the run form", () => {
   const open = async () => {
     answers["GET /api/ask/selections/3d-t1-siemens%401"] = () => ({ status: 200, body: { name: "3d-t1-siemens", version: 1 } });
     await act(async () => root.render(<RunDialog caps={capsOf([...DOORS, "GET /api/ask/selections/{name}"], ADMIN)} pipeline={N4} onClose={() => undefined} onDone={() => undefined} />));
-    const field = el.querySelector<HTMLInputElement>('input[aria-label="The selection"]')!;
+    const field = el.querySelector<HTMLInputElement>('input[aria-label="What the run goes over"]')!;
     await act(async () => field.focus());
     await typeInto(field, "3d-t1-siemens@1");
     await act(async () => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));

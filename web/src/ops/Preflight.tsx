@@ -6,14 +6,18 @@
 // that is not ready, says why as a failed run does (2026-10-12): the kind,
 // what to do, and what can be done about it; and each check of what the run
 // needs of this machine (the converter, the runtime, the image, memory, the
-// GPU, disk) says whether it holds, in the engine's words.
+// GPU, disk) says whether it holds, in the engine's words. Over a dataset's
+// or a cohort's main scans (record 55, 2026-10-12), how many scans they
+// resolve to, under which rules, and the visits that have none, by why,
+// named at detail quasi.
 
 import type React from "react";
+import { roleWord } from "../review/mainScans";
 import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
 import { failureWords, type Failure, type Requirement } from "./failure";
 import { FailNote, KindTag } from "./Reason";
-import { blockedOf, missingByWhy, preflightCells, preflightChecks, preflightGate, type Preflight } from "./runs";
+import { blockedOf, mainReadOf, missingByWhy, preflightCells, preflightChecks, preflightGate, withoutByWhy, type MainRead, type Preflight } from "./runs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -30,12 +34,14 @@ export function PreflightPanel({ p, checking = false, why = null, act = null }: 
   const gate = preflightGate(p);
   const blocked = blockedOf(p);
   const missing = missingByWhy(p);
+  const main = mainReadOf(p);
   return (
     <div className={gate.go ? "note brand preflight" : "note caution preflight"}>
       <Icon name={gate.go ? "check" : "alert"} />
       <div className="note-body">
         <p className="note-lead">{gate.go ? "Pre-flight" : "Not ready"}</p>
         <Values cells={preflightCells(p)} />
+        {main && <MainWithout m={main} />}
         {missing.length > 0 && (
           <ul className="preflight-missing">
             {missing.map((m) => (
@@ -65,6 +71,41 @@ export function PreflightPanel({ p, checking = false, why = null, act = null }: 
         )}
         {checking && <p className="note-detail">Checking again…</p>}
       </div>
+    </div>
+  );
+}
+
+/** The main scans read, and the visits with none by why: "12 visits have no main T1w", each reason with the visits it names. */
+export function MainWithout({ m }: { m: MainRead }) {
+  const role = roleWord(m.main);
+  const without = withoutByWhy(m);
+  return (
+    <div className="preflight-main">
+      {m.read && <p className="note-detail">{m.read[0].toUpperCase() + m.read.slice(1)}.</p>}
+      {m.without.visits > 0 && (
+        <>
+          <p className="note-detail">
+            <b className="num">{n(m.without.visits)}</b> {m.without.visits === 1 ? "visit has" : "visits have"} no main {role}; the run goes over the {n(m.main_visits)} that {m.main_visits === 1 ? "has" : "have"} one.
+          </p>
+          <ul className="preflight-missing preflight-without" aria-label={`visits with no main ${role}`}>
+            {without.map((w) => {
+              const shown = w.visits.slice(0, 3);
+              return (
+                <li key={w.why}>
+                  <b className="num">{n(w.count)}</b> {w.why}
+                  {shown.length > 0 && (
+                    <span className="meta">
+                      {" "}
+                      · {shown.join(", ")}
+                      {w.count > shown.length ? ` and ${n(w.count - shown.length)} more` : ""}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

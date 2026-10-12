@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { capsWith } from "../review/caps.fixture";
 import { CatalogBody, RunDialog } from "./Catalog";
-import { catalogActs, imageWords, needsOf, paramError, runCommand, runCounts, writesWords, type Pipeline, type Run } from "./catalog";
+import { catalogActs, imageWords, mainOfSpec, mainRoles, needsOf, overWords, paramError, runCommand, runCounts, selectOf, writesWords, type Pipeline, type Run } from "./catalog";
 import { PipelinesPage } from "./PipelinesPage";
 
 const TRAIN: Pipeline = {
@@ -59,6 +59,22 @@ describe("a run on a selection", () => {
     expect(runCommand({ pipeline: TRAIN, over: { selection: "chest-ct", version: 2 }, params: { estimator: "rf" }, models: [], labels: 9 })).toEqual(["run", "bodypart-train@1", "--select", "selection:chest-ct@2", "--param", "estimator=rf", "--labels", "9"]);
     expect(runCommand({ pipeline: INFER, over: { handle: 71 }, params: {}, models: ["bodypart-head@3"], labels: null })).toEqual(["run", "bodypart-infer@1", "--handle", "71", "--model", "bodypart-head@3"]);
   });
+  it("goes straight over a dataset's or a cohort's main scans of a role (record 55, 2026-10-12)", () => {
+    const over = { main: { kind: "dataset" as const, name: "study-anon", role: "t1w" } };
+    expect(runCommand({ pipeline: INFER, over, params: {}, models: [], labels: null })).toEqual(["run", "bodypart-infer@1", "--select", "main:t1w@dataset:study-anon"]);
+    expect(selectOf({ main: { kind: "cohort", name: "ms-followup", role: "flair" } })).toEqual({ select: "main:flair@cohort:ms-followup" });
+    expect(selectOf({ selection: "x", version: 2 })).toEqual({ select: "selection:x@2" });
+    expect(selectOf({ handle: 7 })).toEqual({ handle: 7 });
+    expect(mainOfSpec("main:t1w@dataset:study-anon")).toEqual(over.main);
+    expect(mainOfSpec("selection:x@2")).toBeNull();
+    // the runs table names a run's main scans in words, a selection as it is
+    expect(overWords("main:flair@cohort:ms-followup")).toBe("ms-followup · main FLAIR");
+    expect(overWords("selection:x@2")).toBe("selection:x@2");
+    expect(overWords(null)).toBe("");
+    // the roles are the served pack's, else the MRI pack's
+    expect(mainRoles(capsWith([], [], [{ name: "mri", version: "1.0.3", main_roles: ["t1w", "flair"] } as { name: string; version: string }]))).toEqual(["t1w", "flair"]);
+    expect(mainRoles(capsWith([], []))).toEqual(["t1w", "flair", "t2w"]);
+  });
   it("checks each parameter as the descriptor declares it", () => {
     const [estimator, per, threshold] = TRAIN.parameters!;
     expect(paramError(estimator, "")).toBeNull();
@@ -107,7 +123,7 @@ describe("the catalog page", () => {
   });
   it("draws the run dialog with the selection, the parameters and the model the descriptor asks for", () => {
     const html = renderToStaticMarkup(<RunDialog caps={capsWith(DOORS, ["pipelines:see", "pipelines:work"])} pipeline={INFER} onClose={() => undefined} onDone={() => undefined} />);
-    expect(html).toContain('aria-label="The selection"');
+    expect(html).toContain('aria-label="What the run goes over"');
     expect(html).toContain("Model: head");
     expect(html).toContain("choose an admitted model");
     expect(html).toContain("proposals on body_part");

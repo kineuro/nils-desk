@@ -4,12 +4,15 @@
 // parameters, typed inputs, outputs and the axes it may propose on; a run on
 // a selection as the command line the jobs door queues, `run <pipeline>
 // --select selection:<name>@<v> [--param id=value]... [--model m]...
-// [--labels id]`; and a run's own account, counted.
+// [--labels id]`, or since record 55 (2026-10-12) straight over a dataset's
+// or a cohort's main scans of a role, `--select main:<role>@dataset:<name>`;
+// and a run's own account, counted.
 
 import { door, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
+import { roleWord } from "../review/mainScans";
 
 export interface Param {
   id: string;
@@ -70,6 +73,7 @@ export interface Run {
   pipeline_id: number;
   pipeline: string;
   job_id: number | null;
+  /** A saved selection's spec, or a dataset's or a cohort's main scans (`main:t1w@dataset:study-anon`). */
   selection?: string | null;
   status: string;
   started_at: string | null;
@@ -124,8 +128,47 @@ export function paramError(p: Param, raw: string): string | null {
   return null;
 }
 
-/** What a run is asked over: a saved selection's version, or a frozen handle. */
-export type Over = { selection: string; version: number } | { handle: number };
+/** A dataset's or a cohort's main scans of a role (record 55, 2026-10-12): resolved and frozen when the run is made. */
+export interface MainOver {
+  kind: "dataset" | "cohort";
+  name: string;
+  role: string;
+}
+
+/** What a run is asked over: a saved selection's version, a dataset's or a cohort's main scans of a role, or a frozen handle. */
+export type Over = { selection: string; version: number } | { main: MainOver } | { handle: number };
+
+/** The roles a run over main scans takes: the served pack's, as the engine names them (`main_roles`), else the MRI pack's. */
+export function mainRoles(caps: Capabilities): string[] {
+  const packs = caps.engine?.packs ?? [];
+  const pack = packs.find((p) => p.name === "mri" && p.main_roles?.length) ?? packs.find((p) => p.main_roles?.length);
+  return pack?.main_roles?.length ? pack.main_roles : ["t1w", "flair", "t2w"];
+}
+
+/** A dataset's or a cohort's main scans as the engine takes them: `main:t1w@dataset:study-anon`. */
+export const mainSpec = (m: MainOver): string => `main:${m.role}@${m.kind}:${m.name}`;
+
+/** The main scans a spec names, or null where it names none. */
+export function mainOfSpec(spec: string | null | undefined): MainOver | null {
+  const m = /^\s*main:\s*([a-z0-9_+-]+)\s*@\s*(dataset|cohort)\s*:\s*(\S(?:.*\S)?)\s*$/iu.exec(spec ?? "");
+  return m ? { role: m[1].toLowerCase(), kind: m[2].toLowerCase() as MainOver["kind"], name: m[3] } : null;
+}
+
+/** A dataset's or a cohort's main scans in a person's words: "study-anon · main T1w". */
+export const mainWords = (m: MainOver): string => `${m.name} · main ${roleWord(m.role)}`;
+
+/** What a run went over, as the runs table shows it: a scope's main scans in words, a selection's spec as it is. */
+export function overWords(selection: string | null | undefined): string {
+  const m = mainOfSpec(selection);
+  return m ? mainWords(m) : (selection ?? "");
+}
+
+/** The body a pre-flight is asked with, and the `--select` or `--handle` a run is queued with. */
+export function selectOf(over: Over): { select: string } | { handle: number } {
+  if ("selection" in over) return { select: `selection:${over.selection}@${over.version}` };
+  if ("main" in over) return { select: mainSpec(over.main) };
+  return { handle: over.handle };
+}
 
 export interface RunAsk {
   pipeline: Pick<Pipeline, "label">;
@@ -139,8 +182,9 @@ export interface RunAsk {
 /** The command line the jobs door queues for a run. */
 export function runCommand(a: RunAsk): string[] {
   const out = ["run", a.pipeline.label];
-  if ("selection" in a.over) out.push("--select", `selection:${a.over.selection}@${a.over.version}`);
-  else out.push("--handle", String(a.over.handle));
+  const over = selectOf(a.over);
+  if ("select" in over) out.push("--select", over.select);
+  else out.push("--handle", String(over.handle));
   for (const [id, v] of Object.entries(a.params)) if (v.trim() !== "") out.push("--param", `${id}=${v.trim()}`);
   for (const m of a.models) out.push("--model", m);
   if (a.labels !== null) out.push("--labels", String(a.labels));

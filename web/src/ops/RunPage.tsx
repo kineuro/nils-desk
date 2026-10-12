@@ -18,7 +18,7 @@ import { Says, Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { checkTag, makeCheckRefusal } from "../campaigns/check";
 import { NewCheck, runChoiceOf } from "../campaigns/NewCheck";
-import { catalog, type Pipeline } from "./catalog";
+import { catalog, overWords, type Pipeline } from "./catalog";
 import { ops } from "./client";
 import { failureOf } from "./failure";
 import { InstallFor } from "./Install";
@@ -32,6 +32,8 @@ import {
   converterOf,
   heldWords,
   cellWords,
+  mainReadOf,
+  rulesWords,
   checksOf,
   groupBy,
   headerWords,
@@ -198,6 +200,7 @@ export function RunView(props: {
   const running = OPEN.has(r.status);
   // why it failed, whole (2026-10-12): the kind and what to do where the engine says them, else the error's first sentence
   const failed = failureOf(r);
+  const main = mainReadOf(r);
   // below detail quasi the engine lists no unit: the totals are its own, a withheld one fewer than five
   const totals = checks.totals ? unitTotals(r) : null;
   const unitCells = totals
@@ -213,7 +216,9 @@ export function RunView(props: {
   const cells = [
     { k: "status", v: r.status },
     ...unitCells,
-    { k: "over", v: r.selection ?? (r.handle_id ? `handle ${r.handle_id}` : "") },
+    { k: "over", v: r.selection ? overWords(r.selection) : r.handle_id ? `handle ${r.handle_id}` : "", title: main ? [main.of, main.read].filter(Boolean).join(": ") : (r.selection ?? undefined) },
+    // record 55 (2026-10-12): a dataset's or a cohort's main scans say which rules picked them
+    ...(main && rulesWords(main) ? [{ k: "picked by", v: rulesWords(main)!, title: main.read ?? undefined }] : []),
     { k: "on", v: [r.runtime, r.device].filter(Boolean).join(", ") || "not yet" },
     ...(converter ? [{ k: "dcm2niix", v: converter.version ?? "found", title: [converter.path, foundByWords(converter.found_by)].filter(Boolean).join(", ") || undefined }] : []),
     { k: running ? "since" : "ran", v: whenWords(r.started_at ?? "") },
