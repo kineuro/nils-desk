@@ -291,6 +291,8 @@ export interface Preview {
   parts: number;
   drawable: number;
   notDrawable: { why: string; count: number }[];
+  /** Results left out first: made from a scan of a sample sealed for certification (record 55). How many, never which. */
+  leftOutSealed: number;
   checkedAlready: number;
   held: number;
   partsPending: number;
@@ -316,6 +318,7 @@ export function previewOf(raw: Json): Preview {
     parts: num(raw.parts) ?? 0,
     drawable: num(raw.drawable) ?? 0,
     notDrawable: Array.isArray(raw.not_drawable) ? raw.not_drawable.flatMap((x) => (x && typeof x === "object" && typeof (x as Json).why === "string" && num((x as Json).count) !== null ? [{ why: (x as Json).why as string, count: (x as Json).count as number }] : [])) : [],
+    leftOutSealed: num(raw.left_out_sealed) ?? 0,
     checkedAlready: num(raw.checked_already) ?? 0,
     held: num(raw.held) ?? 0,
     partsPending: num(raw.parts_pending) ?? 0,
@@ -835,6 +838,7 @@ export function previewLine(p: Preview, setKind: SetKind, grain: "result" | "par
 export function leftOutTags(p: Preview): { words: string; why: string }[] {
   const n = (v: number) => v.toLocaleString("en-US");
   const out: { words: string; why: string }[] = [];
+  if (p.leftOutSealed > 0) out.push({ words: `${n(p.leftOutSealed)} left out: sealed for certification`, why: "made from a scan of a sample sealed for certification; a check never holds one until a certificate unseals it" });
   const cant = p.notDrawable.reduce((a, x) => a + x.count, 0);
   if (cant > 0) out.push({ words: `${n(cant)} can't be drawn`, why: p.notDrawable.map((x) => `${n(x.count)}: ${x.why}`).join("; ") });
   if (p.held > 0) out.push({ words: `${n(p.held)} in another check`, why: "an open check holds them; it decides them" });
