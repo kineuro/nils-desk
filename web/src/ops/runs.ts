@@ -57,7 +57,13 @@ export interface Preflight {
   level?: string;
   stacks?: number;
   units: { total: number; ready: number; missing: number };
-  missing?: { unit: string | null; subject_id?: number | null; session_day?: string | null; stack_id?: number | null; why: string }[];
+  missing?: { unit?: string | null; subject_id?: number | null; session_day?: string | null; stack_id?: number | null; why: string | string[]; lacks?: string[] | null }[];
+  /** Since 2026-10-12: what one unit is called (session, subject or stack). */
+  unit?: string | null;
+  /** Since 2026-10-12: the units that cannot run, one entry a reason in a few words, the most first, with the units under it (none named below detail quasi). */
+  cannot?: { why: string; units: number | null; named?: string[] | null }[] | null;
+  /** Since 2026-10-12: the run taken up again, how many of its units are over and kept, and how many of those made what they were for. */
+  resume?: { run: number; status?: string | null; job?: number | null; kept: number; made: number } | null;
   roles?: string[] | null;
   left_out?: { stacks: number; why: string | null } | null;
   estimate?: { seconds_per_unit: number | null; source: string | null; runs?: number | null; slots?: number | null; units_apart?: boolean | null; seconds: number | null } | null;
@@ -89,6 +95,9 @@ export interface UnitRun {
   finished_at: string | null;
   /** Why the unit failed, where the engine says it; the failure slice's kind and what to do sit beside it. */
   error?: string | null;
+  failure?: unknown;
+  /** Since 2026-10-12: what a skipped unit lacked, in a few words ("no FLAIR picked"). */
+  lacks?: string[] | null;
 }
 
 export interface Breach {
@@ -124,6 +133,8 @@ export interface RunDetail {
   summary?: Json | null;
   error?: string | null;
   derivatives?: number[] | null;
+  /** Since 2026-10-12: its units summed, what a person reads of it beside its status (./made). */
+  made?: unknown;
 }
 
 export interface Derivative {
@@ -145,6 +156,8 @@ export const runs = {
   /** The pipeline by its catalog id, or a name; the door reads its path as it stands, so a name@version is not sent encoded. */
   preflight: (pipeline: number | string, over: Over, params: Record<string, string>) =>
     door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { ...selectOf(over), params }),
+  /** Since 2026-10-12: the pre-flight of a run taken up again, for the units it still has to run. */
+  preflightResume: (pipeline: number | string, run: number) => door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { resume: run }),
   get: (id: number) => door<RunDetail>("GET", `/api/pipeline-runs/${id}`),
   derivatives: (run: number) => door<{ derivatives: Derivative[] }>("GET", `/api/derivatives?run=${run}&limit=200`),
   /** Save a stored ask document as the next version of a selection (PUT /api/ask/selections/{name}, query:work at detail quasi). */
@@ -176,6 +189,28 @@ export function runActs(caps: Capabilities): { preflight: boolean; open: boolean
     files: see && served(caps, "GET /api/derivatives"),
     save: may(caps, "query:work") && sees(caps, "quasi") && served(caps, "PUT /api/ask/selections/{name}"),
   };
+}
+
+/** Whether the engine checks a run taken up again before it queues it, and answers its pre-flight (since 2026-10-12, `pipelines.preflight.resume`). */
+export function resumeChecked(caps: Capabilities): boolean {
+  const pipelines = obj(caps.engine?.pipelines);
+  return runActs(caps).preflight && obj(pipelines.preflight).resume === true;
+}
+
+/** What one unit of a run is called: a session or a subject of a bids input, a scan of a stacks one. */
+export function unitWord(p: { unit?: string | null; layout?: string | null; level?: string | null }): string {
+  if (p.unit === "stack" || p.layout === "stacks") return "scan";
+  if (p.unit === "session" || p.unit === "subject") return p.unit;
+  return p.level === "session" ? "session" : p.level === "participant" ? "subject" : "unit";
+}
+
+/** "1 session", "4 sessions". */
+export const unitsWords = (count: number, word: string): string => `${n(count)} ${word}${count === 1 ? "" : "s"}`;
+
+/** The units that cannot run, one entry a reason with the units under it: the engine's `cannot`, else its units missing an input folded by why (an engine before 2026-10-12). */
+export function cannotOf(p: Preflight): { why: string; count: number | null; units: string[] }[] {
+  if (Array.isArray(p.cannot)) return p.cannot.map((c) => ({ why: c.why, count: c.units, units: (c.named ?? []).filter((u): u is string => typeof u === "string") }));
+  return missingByWhy(p).map((m) => ({ why: m.why, count: m.count, units: m.units }));
 }
 
 /** Seconds in a person's words: "under a minute", "about 40 min", "about 3 h". */
@@ -249,7 +284,7 @@ export function preflightCells(p: Preflight): { k: string; v: string; title?: st
 export function missingByWhy(p: Preflight): { why: string; count: number; units: string[] }[] {
   const by = new Map<string, { why: string; count: number; units: string[] }>();
   for (const m of p.missing ?? []) {
-    const k = m.why || "no reason given";
+    const k = (Array.isArray(m.why) ? m.why.join("; ") : m.why) || "no reason given";
     const row = by.get(k) ?? { why: k, count: 0, units: [] };
     row.count += 1;
     if (m.unit) row.units.push(m.unit);
@@ -294,20 +329,21 @@ export function rangeWords(p: Pipeline["parameters"] extends (infer P)[] | null 
   return p.integer ? "a whole number" : null;
 }
 
-export type UnitTone = "running" | "waiting" | "done" | "failed" | "kept";
+export type UnitTone = "running" | "waiting" | "done" | "skipped" | "failed" | "kept";
 
-/** A unit's state in one word: running, waiting, done, failed, or kept (finished before the run was taken up again). */
+/** A unit's state in one word (2026-10-12: each unit says its own): running, waiting, done, skipped (it lacked an input and never ran), failed, or kept (done before the run was taken up again). */
 export function unitTone(u: UnitRun, resumedAt: string | null): UnitTone {
   if (u.state === "running" || u.state === "registering") return "running";
   if (u.state === "queued") return "waiting";
-  const ok = u.status === "succeeded" || u.status === "skipped";
+  if (u.status === "skipped") return "skipped";
+  const ok = u.status === "succeeded";
   if (ok && resumedAt !== null && u.finished_at !== null && Date.parse(u.finished_at) < Date.parse(resumedAt)) return "kept";
   return ok ? "done" : "failed";
 }
 
 /** The units counted by tone, in the order a person reads them. */
 export function unitCounts(units: UnitRun[], resumedAt: string | null): Record<UnitTone, number> {
-  const out: Record<UnitTone, number> = { running: 0, waiting: 0, done: 0, failed: 0, kept: 0 };
+  const out: Record<UnitTone, number> = { running: 0, waiting: 0, done: 0, skipped: 0, failed: 0, kept: 0 };
   for (const u of units) out[unitTone(u, resumedAt)] += 1;
   return out;
 }

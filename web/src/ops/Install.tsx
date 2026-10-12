@@ -5,7 +5,9 @@
 // install; the engine fetches its pinned build, and the version is said with
 // the run's Run again. Anyone else reads a sentence asking an admin. An
 // install that fails (offline, say) shows the engine's reason whole, which
-// says the way by hand. Nothing shows where the engine offers no fix.
+// says the way by hand. Nothing shows where the engine offers no fix. Since
+// 2026-10-12 Run again opens the run's pre-flight first (./RunAgain), which
+// says what it queued.
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type React from "react";
@@ -35,33 +37,23 @@ export function forgetInstalled() {
 }
 
 type State = { kind: "idle" } | { kind: "busy" } | { kind: "failed"; f: Failure };
-type Again = { kind: "idle" | "busy" | "done"; said: string | null };
 
 /**
  * The install, as two pieces a page places: the button, beside the reason,
  * and what it said, under it. Once the tool is there (installed from here, or
  * present as the capabilities say) the line says its version, with Run again
- * where `again` is given: it takes the run up again and says what it queued.
- * `onInstalled` lets a page read again; `quiet` draws the button as a
+ * where `again` is given: it opens the run's pre-flight, which takes it up
+ * again. `onInstalled` lets a page read again; `quiet` draws the button as a
  * secondary one, for a table of several.
  */
-export function useInstall(caps: Capabilities, fix: Fix | null, again: (() => Promise<string>) | null = null, onInstalled: ((t: ToolEntry) => void) | null = null, quiet = false): { button: React.ReactNode; said: React.ReactNode } {
+export function useInstall(caps: Capabilities, fix: Fix | null, again: (() => void) | null = null, onInstalled: ((t: ToolEntry) => void) | null = null, quiet = false): { button: React.ReactNode; said: React.ReactNode } {
   const [state, setState] = useState<State>({ kind: "idle" });
-  const [rerun, setRerun] = useState<Again>({ kind: "idle", said: null });
   const snapshot = () => (fix === null ? null : (installedNow.get(fix.tool) ?? null));
   const now = useSyncExternalStore(subscribe, snapshot, snapshot);
   if (fix === null || !served(caps, fix.door)) return { button: null, said: null };
   const present = toolStatus(caps, fix.tool);
   const there = now ?? (present?.present ? present : null);
   if (there) {
-    const runAgain = () => {
-      if (again === null) return;
-      setRerun({ kind: "busy", said: null });
-      again().then(
-        (said) => setRerun({ kind: "done", said }),
-        (e: unknown) => setRerun({ kind: "idle", said: refusalOf(e).line }),
-      );
-    };
     return {
       button: null,
       said: (
@@ -69,12 +61,11 @@ export function useInstall(caps: Capabilities, fix: Fix | null, again: (() => Pr
           <span>
             {fix.tool} {there.version && <span className="path">{there.version}</span>} is installed{there.path ? <span className="meta"> at {there.path}</span> : null}.
           </span>
-          {again && rerun.kind !== "done" && (
-            <button type="button" className="button small" disabled={rerun.kind === "busy"} onClick={runAgain}>
+          {again && (
+            <button type="button" className="button small" onClick={again}>
               Run again
             </button>
           )}
-          {rerun.said && <span className="meta">{rerun.said}</span>}
         </div>
       ),
     };
@@ -117,7 +108,7 @@ export function useInstall(caps: Capabilities, fix: Fix | null, again: (() => Pr
 }
 
 /** The install for a failure whose fix the engine offers: the button, and under it what it said; nothing for any other failure. */
-export function InstallFor({ caps, f, again = null, onInstalled = null }: { caps: Capabilities; f: Failure; again?: (() => Promise<string>) | null; onInstalled?: ((t: ToolEntry) => void) | null }) {
+export function InstallFor({ caps, f, again = null, onInstalled = null }: { caps: Capabilities; f: Failure; again?: (() => void) | null; onInstalled?: ((t: ToolEntry) => void) | null }) {
   const { button, said } = useInstall(caps, f.fix, again, onInstalled);
   return (
     <>

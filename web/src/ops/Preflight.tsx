@@ -9,7 +9,11 @@
 // GPU, disk) says whether it holds, in the engine's words. Over a dataset's
 // or a cohort's main scans (record 55, 2026-10-12), how many scans they
 // resolve to, under which rules, and the visits that have none, by why,
-// named at detail quasi.
+// named at detail quasi. Since 2026-10-12 (Nima: "these sessions cannot be
+// [run] unless they have whatever"): the units that cannot run are one line a
+// reason, in the engine's few words, with the units under it, and a run whose
+// units can all run says so plainly; a run taken up again says how many of
+// its units it keeps.
 
 import type React from "react";
 import { roleWord } from "../review/mainScans";
@@ -17,7 +21,7 @@ import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
 import { failureWords, type Failure, type Requirement } from "./failure";
 import { FailNote, KindTag } from "./Reason";
-import { blockedOf, mainReadOf, missingByWhy, preflightCells, preflightChecks, preflightGate, withoutByWhy, type MainRead, type Preflight } from "./runs";
+import { blockedOf, cannotOf, mainReadOf, preflightCells, preflightChecks, preflightGate, unitWord, unitsWords, withoutByWhy, type MainRead, type Preflight } from "./runs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -33,31 +37,21 @@ export function PreflightPanel({ p, checking = false, why = null, act = null }: 
   if (p === null) return checking ? <p className="meta">Checking what the run would do…</p> : null;
   const gate = preflightGate(p);
   const blocked = blockedOf(p);
-  const missing = missingByWhy(p);
   const main = mainReadOf(p);
+  const r = p.resume;
   return (
     <div className={gate.go ? "note brand preflight" : "note caution preflight"}>
       <Icon name={gate.go ? "check" : "alert"} />
       <div className="note-body">
         <p className="note-lead">{gate.go ? "Pre-flight" : "Not ready"}</p>
         <Values cells={preflightCells(p)} />
-        {main && <MainWithout m={main} />}
-        {missing.length > 0 && (
-          <ul className="preflight-missing">
-            {missing.map((m) => (
-              <li key={m.why}>
-                <b className="num">{n(m.count)}</b> {m.why}
-                {m.units.length > 0 && (
-                  <span className="meta">
-                    {" "}
-                    · {m.units.slice(0, 3).join(", ")}
-                    {m.units.length > 3 ? ` and ${n(m.units.length - 3)} more` : ""}
-                  </span>
-                )}
-              </li>
-            ))}
-          </ul>
+        {r && r.kept > 0 && (
+          <p className="note-detail">
+            {unitsWords(r.kept, unitWord(p))} over before {r.kept === 1 ? "is" : "are"} kept ({n(r.made)} made).
+          </p>
         )}
+        {main && <MainWithout m={main} />}
+        <CannotList p={p} />
         <Requirements checks={preflightChecks(p)} />
         {blocked && (
           <>
@@ -72,6 +66,39 @@ export function PreflightPanel({ p, checking = false, why = null, act = null }: 
         {checking && <p className="note-detail">Checking again…</p>}
       </div>
     </div>
+  );
+}
+
+/** How many units a reason holds: its count, or fewer than five where the engine withholds it. */
+const countWords = (count: number | null): string => (count === null ? "fewer than five" : n(count));
+
+/** The units that cannot run, one line a reason with the units under it ("2 sessions cannot run: no FLAIR picked"), or, where every one can, that they all can. */
+export function CannotList({ p }: { p: Preflight }) {
+  const word = unitWord(p);
+  const cannot = cannotOf(p);
+  if (cannot.length === 0) {
+    const total = p.units.total;
+    if (total === 0 || p.units.missing > 0) return null;
+    return <p className="note-detail can-run">{total === 1 ? `The one ${word} can run.` : `All ${unitsWords(total, word)} can run.`}</p>;
+  }
+  return (
+    <ul className="preflight-missing preflight-cannot" aria-label={`the ${word}s that cannot run`}>
+      {cannot.map((c) => {
+        const shown = c.units.slice(0, 6);
+        const more = (c.count ?? c.units.length) - shown.length;
+        return (
+          <li key={c.why}>
+            <b className="num">{countWords(c.count)}</b> {c.count === 1 ? word : `${word}s`} cannot run: {c.why}
+            {shown.length > 0 && (
+              <div className="meta cannot-units">
+                {shown.join(", ")}
+                {more > 0 ? ` and ${n(more)} more` : ""}
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

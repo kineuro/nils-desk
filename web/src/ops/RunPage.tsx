@@ -7,6 +7,10 @@
 // the files it made. Read again every few seconds while it runs. Since
 // record 55 H3 (job type 3) a mask's file says its check, and a run that
 // made masks offers Check results, which opens the New check filled for it.
+// Since 2026-10-12 each unit says its own status (done, failed or skipped,
+// with why), the run reads as its units summed, never a bare done, and a run
+// that did not make all it was for says why, one line a reason with the
+// units under it; Resume and Run again open its pre-flight first.
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -23,6 +27,8 @@ import { ops } from "./client";
 import { failureOf } from "./failure";
 import { InstallFor } from "./Install";
 import { FailLine, FailNote, KindTag } from "./Reason";
+import { madeOf, madeWords, runTag, unitsByWhy } from "./made";
+import { againOfRun, RunAgainDialog } from "./RunAgain";
 import { foundByWords } from "./tools";
 import {
   allPassed,
@@ -40,7 +46,6 @@ import {
   shownColumns,
   measureColumns,
   resumable,
-  resumeCommand,
   runActs,
   runs,
   tableAsk,
@@ -68,6 +73,7 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   const [by, setBy] = useState("subject.sex");
   const [said, setSaid] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [again, setAgain] = useState(false);
 
   const read = useCallback(() => {
     runs
@@ -129,9 +135,22 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   const choice = load.pipeline ? runChoiceOf(r, [load.pipeline]) : null;
   const masks = (files ?? []).filter((f) => f.kind === "mask");
   const checkable = choice !== null && masks.length > 0 && makeCheckRefusal(caps) === null;
+  const goesOn = acts.queue && resumable(r, load.jobAlive) ? () => setAgain(true) : null;
   return (
     <>
       {checking && choice && <NewCheck caps={caps} run={choice} onClose={() => setChecking(false)} />}
+      {again && (
+        <RunAgainDialog
+          caps={caps}
+          again={againOfRun(r)}
+          onClose={() => setAgain(false)}
+          onDone={(w) => {
+            setAgain(false);
+            setSaid(w);
+            read();
+          }}
+        />
+      )}
       <RunView
         caps={caps}
         run={r}
@@ -144,25 +163,17 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
         onBy={setBy}
         said={said}
         onCancel={r.job_id !== null && acts.cancel && load.jobAlive ? () => act(`Run ${r.id} stops at its next heartbeat; the units it finished are kept.`, ops.cancel(r.job_id!)) : null}
-        onResume={acts.queue && resumable(r, load.jobAlive) ? () => act(`Run ${r.id} is queued to go on where it stopped.`, ops.enqueue(resumeCommand(r))) : null}
+        onResume={goesOn}
         onCheck={checkable ? () => setChecking(true) : null}
-        onAgain={
-          acts.queue && resumable(r, load.jobAlive)
-            ? () =>
-                ops.enqueue(resumeCommand(r)).then((j) => {
-                  read();
-                  return `Run ${r.id} is queued again as job ${j.job}.`;
-                })
-            : null
-        }
+        onAgain={goesOn}
         checkPrimary={masks.some((f) => !f.check)}
       />
     </>
   );
 }
 
-const TONE_WORDS: Record<UnitTone, string> = { running: "running", waiting: "waiting", done: "done", failed: "failed", kept: "kept on resume" };
-const TONE_TAG: Record<UnitTone, string> = { running: "tag brand", waiting: "tag", done: "tag ok", failed: "tag caution", kept: "tag ok" };
+const TONE_WORDS: Record<UnitTone, string> = { running: "running", waiting: "waiting", done: "done", skipped: "skipped", failed: "failed", kept: "kept on resume" };
+const TONE_TAG: Record<UnitTone, string> = { running: "tag brand", waiting: "tag", done: "tag ok", skipped: "tag caution", failed: "tag caution", kept: "tag ok" };
 
 /** The run as the page draws it from what it read. */
 export function RunView(props: {
@@ -182,8 +193,8 @@ export function RunView(props: {
   onCheck?: (() => void) | null;
   /** Masks no check has decided remain: the button is the page's primary act. */
   checkPrimary?: boolean;
-  /** Run again, once a missing tool is installed: takes the run up again and says what it queued. */
-  onAgain?: (() => Promise<string>) | null;
+  /** Run again, once a missing tool is installed: opens the run's pre-flight, which takes it up again. */
+  onAgain?: (() => void) | null;
 }) {
   const { caps, run: r, pipeline, resumedAt, table, files, by, onBy, said, onCancel, onResume, onCheck = null, checkPrimary = false, onAgain = null } = props;
   const acts = runActs(caps);
@@ -203,18 +214,27 @@ export function RunView(props: {
   const main = mainReadOf(r);
   // below detail quasi the engine lists no unit: the totals are its own, a withheld one fewer than five
   const totals = checks.totals ? unitTotals(r) : null;
+  // 2026-10-12: the units summed as the engine says them, never a bare done
+  const made = madeOf(r);
+  const words = made && made.units > 0 ? madeWords(made) : null;
+  const tag = runTag(r);
   const unitCells = totals
     ? [
-        { k: "units", v: total > 0 ? `${n(totals.over)} of ${n(total)} over` : "none yet" },
+        { k: "units", v: words && !running ? words.head : total > 0 ? `${n(totals.over)} of ${n(total)} over` : "none yet" },
         ...(totals.failed !== 0 ? [{ k: "failed", v: heldWords(totals.failed) }] : []),
       ]
     : [
-        { k: "units", v: total > 0 ? `${n(counts.done + counts.kept)} of ${n(total)} done` : "none yet" },
+        { k: "units", v: words && !running ? words.head : total > 0 ? `${n(counts.done + counts.kept)} of ${n(total)} done` : "none yet" },
         ...(counts.failed > 0 ? [{ k: "failed", v: n(counts.failed) }] : []),
+        ...(counts.skipped > 0 ? [{ k: "skipped", v: n(counts.skipped) }] : []),
         ...(counts.kept > 0 ? [{ k: "kept on resume", v: n(counts.kept) }] : []),
       ];
+  // a run that ended without making all it was for says why, one line a reason with the units under it
+  const short = words !== null && words.tone === "caution" && !running && r.status !== "failed";
+  const reasons = short ? (units.length > 0 ? unitsByWhy(units).map((w) => ({ why: `${w.status}: ${w.why}`, count: w.units.length as number | null, units: w.units })) : (made?.why ?? []).map((w) => ({ why: `${w.status}: ${w.why}`, count: w.units, units: [] as string[] }))) : [];
   const cells = [
-    { k: "status", v: r.status },
+    // a run that ended reads as its units summed (the tag above, and units here), never a bare done
+    ...(words && !running && (r.status === "done" || r.status === "partial") ? [] : [{ k: "status", v: r.status }]),
     ...unitCells,
     { k: "over", v: r.selection ? overWords(r.selection) : r.handle_id ? `handle ${r.handle_id}` : "", title: main ? [main.of, main.read].filter(Boolean).join(": ") : (r.selection ?? undefined) },
     // record 55 (2026-10-12): a dataset's or a cohort's main scans say which rules picked them
@@ -226,7 +246,7 @@ export function RunView(props: {
   return (
     <section className="stack roomy run-page">
       <div className="row actions">
-        <span className={r.status === "done" ? "tag ok" : r.status === "failed" || r.status === "partial" ? "tag caution" : running ? "tag brand" : "tag"}>{r.status}</span>
+        <span className={tag.className}>{tag.words}</span>
         <b>{r.pipeline}</b>
         <span className="meta">run {r.id}{r.job_id !== null ? ` · job ${r.job_id}` : ""}{(r.resumes ?? 0) > 0 ? ` · taken up ${n(r.resumes!)} ${r.resumes === 1 ? "time" : "times"}` : ""}</span>
         <span className="grow" />
@@ -253,6 +273,30 @@ export function RunView(props: {
           <InstallFor caps={caps} f={failed} again={onAgain} />
         </FailNote>
       )}
+      {short && words && (
+        <div className="note caution made-note">
+          <Icon name="alert" />
+          <div className="note-body">
+            <p className="note-lead">{words.head[0].toUpperCase() + words.head.slice(1)}</p>
+            {words.rest && reasons.length === 0 && <p className="note-detail">{words.rest}</p>}
+            {reasons.length > 0 && (
+              <ul className="preflight-missing made-why" aria-label="why units made nothing">
+                {reasons.map((w) => (
+                  <li key={w.why}>
+                    <b className="num">{heldWords(w.count)}</b> {w.why}
+                    {w.units.length > 0 && (
+                      <div className="meta cannot-units">
+                        {w.units.slice(0, 6).join(", ")}
+                        {w.units.length > 6 ? ` and ${n(w.units.length - 6)} more` : ""}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="section-head rule-top">
         <h2>Table</h2>
@@ -266,7 +310,7 @@ export function RunView(props: {
           {checks.declared === 0 ? "none declared" : `${n(checks.declared)} declared · ${heldWords(checks.breaches)} ${checks.breaches === 1 ? "breach" : "breaches"}${checks.unchecked > 0 ? ` · ${n(checks.unchecked)} unchecked` : ""}`}
         </span>
       </div>
-      {allPassed(r) && !running && <p className="meta">Every unit that finished passed its checks.</p>}
+      {allPassed(r) && !running && (made === null || (made.made ?? 1) > 0) && <p className="meta">Every unit that finished passed its checks.</p>}
       {checks.totals && <p className="meta">Counted by check at your detail; a count under five scans reads fewer than five.</p>}
       {byCheck.length > 0 && (
         <div className="table-wrap">
@@ -380,9 +424,11 @@ export function RunView(props: {
               {units.slice(0, 200).map((u, i) => {
                 const t = unitTone(u, resumedAt);
                 const f = t === "failed" ? failureOf(u) : null;
+                // a skipped unit says what it lacked, in the engine's few words
+                const lacks = t === "skipped" ? (u.lacks && u.lacks.length > 0 ? u.lacks.join("; ") : (u.error ?? null)) : null;
                 return (
                   <Fragment key={u.unit ?? `u${i}`}>
-                    <tr className={f ? "has-fail" : undefined}>
+                    <tr className={f || lacks ? "has-fail" : undefined}>
                       <td className="path">{u.unit ?? `unit ${i + 1}`}</td>
                       <td>
                         <span className={TONE_TAG[t]}>{TONE_WORDS[t]}</span>
@@ -396,6 +442,17 @@ export function RunView(props: {
                       <tr className="fail-row">
                         <td colSpan={5}>
                           <FailLine f={f} />
+                        </td>
+                      </tr>
+                    )}
+                    {lacks && (
+                      <tr className="made-row">
+                        <td colSpan={5}>
+                          <div className="made-line">
+                            <span className="made-words" title={u.error ?? lacks}>
+                              {lacks}
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     )}

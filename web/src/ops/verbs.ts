@@ -165,12 +165,17 @@ export function doingWords(job: Pick<JobRow, "args" | "kind" | "name">): string 
   return target ? `${w.doing} ${target}` : w.doing;
 }
 
-/** A job that ended, as a title: "Digest of ct-lab stopped", "Map import for north stopped", "Merge done". */
-export function endedWords(job: Pick<JobRow, "args" | "kind" | "name">, ended: "stopped" | "done" | "cancelled"): string {
+/** A job as a thing, with its target: "Digest of ct-lab", "Pipeline run of n4@1", "Merge". */
+export function namedWords(job: Pick<JobRow, "args" | "kind" | "name">): string {
   const w = wordsOf(job);
   const target = targetOf(job);
   const noun = w.noun.charAt(0).toUpperCase() + w.noun.slice(1);
-  return `${noun}${target ? ` ${w.link} ${target}` : ""} ${ended}`;
+  return `${noun}${target ? ` ${w.link} ${target}` : ""}`;
+}
+
+/** A job that ended, as a title: "Digest of ct-lab stopped", "Map import for north stopped", "Merge done". */
+export function endedWords(job: Pick<JobRow, "args" | "kind" | "name">, ended: "stopped" | "done" | "cancelled"): string {
+  return `${namedWords(job)} ${ended}`;
 }
 
 /** The grant a job's cancel needs, and the page that grant is work on. */
