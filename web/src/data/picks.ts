@@ -68,8 +68,19 @@ export function pickLineWords(l: PickLine): string {
   return `${l.role}: ${parts.join(" · ")}`;
 }
 
+/** Why the last run picked nothing, in the engine's words ("none of its 10 subjects has a scan of a main role"); null where it picked, or the engine does not say (2026-10-12). */
+export function nothingOf(a: unknown): string | null {
+  if (!a || typeof a !== "object") return null;
+  const run = (a as Json).last_run;
+  const report = run && typeof run === "object" ? (run as Json).report : null;
+  const why = report && typeof report === "object" ? (report as Json).nothing : null;
+  return typeof why === "string" && why.length > 0 ? why : null;
+}
+
 export const picksSummary = {
   read: (dataset: string) => door<unknown>("GET", `/api/picks/summary?dataset=${encodeURIComponent(dataset)}`).then(pickLinesOf),
+  /** A dataset's lines, and why its last run picked nothing where it did. */
+  dataset: (dataset: string) => door<unknown>("GET", `/api/picks/summary?dataset=${encodeURIComponent(dataset)}`).then((a) => ({ lines: pickLinesOf(a), nothing: nothingOf(a) })),
   /** Wave 7a (2026-10-09): the main scans of a cohort's members, with how many of them the engine counted. */
   cohort: (name: string) =>
     door<{ subjects?: number } & Record<string, unknown>>("GET", `/api/picks/summary?cohort=${encodeURIComponent(name)}`).then((a) => ({ members: typeof a.subjects === "number" ? a.subjects : null, lines: pickLinesOf(a) })),

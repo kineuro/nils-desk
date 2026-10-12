@@ -128,6 +128,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const [now, setNow] = useState(() => Date.now());
   const [log, setLog] = useState<ChainedJob[] | null>(null);
   const [picks, setPicks] = useState<PickLine[] | null>(null);
+  /** Why the last run picked nothing, in the engine's words. */
+  const [nothing, setNothing] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const [settings, setSettings] = useState(false);
   /** A step's Run pressed, until the engine answers. */
@@ -172,9 +174,17 @@ export function DatasetDetail(props: DatasetDetailProps) {
     if (!maySeePicks(caps)) return;
     let alive = true;
     picksSummary
-      .read(d.name)
-      .then((lines) => alive && setPicks(lines))
-      .catch(() => alive && setPicks(null));
+      .dataset(d.name)
+      .then((p) => {
+        if (!alive) return;
+        setPicks(p.lines);
+        setNothing(p.nothing);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setPicks(null);
+        setNothing(null);
+      });
     return () => {
       alive = false;
     };
@@ -374,7 +384,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
           </div>
           <div className="dp-col">
             <h3 className="eyebrow">Main scans</h3>
-            <MainScans caps={caps} dataset={d.name} picks={picks} step={stepOf(s, "main_scans")} />
+            <MainScans caps={caps} dataset={d.name} picks={picks} nothing={nothing} step={stepOf(s, "main_scans")} />
           </div>
           {logCol}
         </div>
@@ -537,13 +547,15 @@ function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; 
 }
 
 /** The main scans per role: picked, clear and borders, with the way to Review. */
-function MainScans({ caps, dataset, picks, step }: { caps: Capabilities; dataset: string; picks: PickLine[] | null; step: SummaryStep | null }) {
+function MainScans({ caps, dataset, picks, nothing, step }: { caps: Capabilities; dataset: string; picks: PickLine[] | null; nothing: string | null; step: SummaryStep | null }) {
   const reviews = may(caps, "review:see");
   const lines = [...(picks ?? [])].sort((a, b) => roleOrder(a.role, b.role));
+  // 2026-10-12: a run that picked nothing says why, in the engine's words
+  const none = step?.state === "running" ? "Picking now." : nothing ? `None picked: ${nothing}.` : "None picked yet.";
   return (
     <>
       {step?.state === "off" && <p className="meta">Off for this dataset.</p>}
-      {step?.state !== "off" && lines.length === 0 && <p className="meta">{step?.state === "running" ? "Picking now." : "None picked yet."}</p>}
+      {step?.state !== "off" && lines.length === 0 && <p className="meta">{none}</p>}
       {lines.map((l) => {
         const rest = Math.max(0, l.picked - l.clear);
         return (

@@ -384,6 +384,23 @@ describe("datasets and cohorts on one page", () => {
     expect(log).toEqual(["Body part ", "Main scans picked for 12 subjects", "Read 120 files, 12 new subjects", "Added as a dataset anonymised, PatientID holds the subject code"]);
   });
 
+  it("says why a run of its main scans picked nothing, in its log and beside its main scans (2026-10-12)", async () => {
+    const nothing = "none of its 12 subjects has a scan of a main role";
+    const report = { subjects: 12, written: 0, visits: 0, visits_picked: 0, subjects_picked: 0, nothing, said: `No main scans picked: ${nothing}` };
+    await page({
+      route: (c) => {
+        const url = new URL(c.url, "http://x");
+        if (c.method === "GET" && url.pathname === "/api/picks/summary" && url.searchParams.get("dataset")) return { status: 200, body: { dataset: "study-big", roles: {}, last_run: { job: 8, report } } };
+        if (c.method === "GET" && url.pathname === "/api/jobs" && url.searchParams.get("dataset") === "study-big") return { status: 200, body: { count: 1, jobs: [{ ...jobsOfBig[2], result: report }] } };
+        return undefined;
+      },
+    });
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    expect([...d.querySelectorAll(".meta")].map((m) => m.textContent)).toContain(`None picked: ${nothing}.`);
+    const log = [...d.querySelectorAll(".dp-log-row")].map((r) => `${r.querySelector(".what")?.textContent} ${r.querySelector(".how")?.textContent}`);
+    expect(log).toContain(`No main scans picked ${nothing}`);
+  });
+
   it("runs body part from its step on the rail, holds post-contrast's Run with the engine's reason, and says a refusal plainly (record 56)", async () => {
     const door = "/api/datasets/study-big/steps/body_part/run";
     const e = await page({
