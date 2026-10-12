@@ -39,10 +39,16 @@ export function optionWords(o: OverOption): string {
   return [size, o.owner ? `by ${o.owner}` : null, o.made ? whenWords(o.made) : null].filter(Boolean).join(" · ");
 }
 
-/** A dataset's or a cohort's second line: its scans and subjects, where the engine says them. */
-export function scopeWords(o: ScopeOption): string {
+/** A dataset's or a cohort's size: its scans and subjects, where the engine says them; null where it says neither. */
+export function scopeSize(o: ScopeOption): string | null {
   const parts = [o.scans !== null ? `${n(o.scans)} ${o.scans === 1 ? "scan" : "scans"}` : null, o.subjects !== null ? `${n(o.subjects)} ${o.subjects === 1 ? "subject" : "subjects"}` : null].filter(Boolean);
-  return parts.length > 0 ? `${parts.join(" · ")}, one main scan a visit` : "one main scan a visit";
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+/** A dataset's or a cohort's second line in the list: its size, and what the run takes of it. */
+export function scopeWords(o: ScopeOption): string {
+  const size = scopeSize(o);
+  return size ? `${size}, one main scan a visit` : "one main scan a visit";
 }
 
 /** Whether the datasets and the cohorts are listed for this person. */
@@ -357,7 +363,7 @@ function OverChosen({ over, options, scopes, roles, onOver, reopen, openList }: 
       </div>
       <span className="meta">
         {chosen ? `${optionWords(chosen)} · ` : ""}
-        {scope ? `${scopeWords(scope)} · ` : ""}
+        {scope && scopeSize(scope) ? `${scopeSize(scope)} · ` : ""}
         {"selection" in over
           ? `selection:${over.selection}@${over.version}, frozen when the run starts`
           : main
