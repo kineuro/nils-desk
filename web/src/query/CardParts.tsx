@@ -9,8 +9,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ask, catalogFields, chain, type Diagnosis, type DocumentHandle, type Json, type Move, type Options, type Profile } from "../ask/client";
 import { editor, setsOf, type Step } from "../ask/editor";
 import { nextMoves } from "../ask/start";
+import { CountText } from "../ui/Count";
 import { Icon } from "../ui/Icon";
-import { argsOf, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, tabsOf, unitWords, versionsOf, type Chart, type ChartTab, type Version } from "./cards";
+import { argsOf, chartOf, clauseText, countsOf, fieldChoices, inputOf, moveWords, preview, tabsOf, versionsOf, type Chart, type ChartTab, type Version } from "./cards";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -191,7 +192,9 @@ export function ProfilePanel(props: {
         <div className="profile-counts">
           {counts.map((c) => (
             <div key={c.label} className="profile-count">
-              <b className="num">{n(c.value)}</b>
+              <b>
+                <CountText value={c.value} />
+              </b>
               <span className="meta">{c.value === 1 && c.label.endsWith("s") ? c.label.slice(0, -1) : c.label}</span>
             </div>
           ))}
@@ -260,10 +263,10 @@ export function Bars({ chart, unit }: { chart: Chart; unit: string }) {
             {b.label}
           </span>
           <span className="bar-track">
-            <i style={{ width: `${Math.max(1, Math.round(100 * b.share))}%` }} />
+            <i style={{ width: b.count === null ? 0 : `${Math.max(1, Math.round(100 * b.share))}%` }} />
           </span>
-          <span className="num">{unitWords(b.count, unit)}</span>
-          {!three && <span className="num meta">{unitWords(b.subjects, "subjects")}</span>}
+          <CountText value={b.count} unit={unit} />
+          {!three && <CountText value={b.subjects} unit="subjects" className="num meta" />}
         </div>
       ))}
     </div>

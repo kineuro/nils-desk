@@ -93,6 +93,39 @@ test("on a phone: nothing sideways, the words on the right, and the panel takes 
   await page.screenshot({ path: shot("phone-panel") });
 });
 
+for (const vp of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+]) {
+  test(`at ${vp.width} by ${vp.height}: counts held back at plain read held back on one line, the card and the panel lined up, nothing sideways`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/assistant.html?theme=dark&held=1");
+    await expect(page.locator(".qcard")).toHaveCount(2);
+    const card = page.locator(".qcard").nth(1);
+    await expect(card.locator(".qstep .held")).toHaveCount(3);
+    await expect(card.locator(".qstep .held").first()).toHaveText("held back");
+    await expect(card.locator(".qstep .held").first()).toHaveAttribute("title", /^fewer than 5, or held beside/u);
+    // each held count sits on one line inside its step and its bar
+    const lines = async (selector: string) =>
+      page.locator(selector).evaluateAll((els) => els.filter((el) => el.getClientRects().length > 0).map((el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight || "16"))));
+    for (const h of await lines(".qcard .held")) expect(h).toBeLessThanOrEqual(1);
+    const inside = await card.locator(".qstep").evaluateAll((els) => els.every((el) => el.scrollWidth <= el.clientWidth + 1));
+    expect(inside).toBe(true);
+    expect(await sideways(page)).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: shot(`held-${vp.width}`) });
+    await card.getByRole("button", { name: "Open" }).click();
+    await expect(page.locator(".qpanel .qbar")).toHaveCount(3);
+    await expect(page.locator(".qpanel .qfunnel .qstep .held")).toHaveCount(3);
+    // a held bar draws nothing, and the counts still line up from row to row
+    for (const w of await page.locator(".qpanel .qbar-track i").evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width))) expect(w).toBe(0);
+    const rows = await page.locator(".qpanel .qbar").evaluateAll((els) => els.map((el) => ({ label: el.querySelector(".qbar-label")!.getBoundingClientRect().left, count: el.querySelector(".qbar-n")!.getBoundingClientRect().right })));
+    for (const k of ["label", "count"] as const) expect(new Set(rows.map((r) => Math.round(r[k]))).size).toBe(1);
+    for (const h of await lines(".qpanel .held")) expect(h).toBeLessThanOrEqual(1);
+    expect(await sideways(page)).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: shot(`held-${vp.width}-panel`) });
+  });
+}
+
 test("a new conversation: one line, the ways to begin, the input at the foot", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/assistant.html?theme=dark#assistant/new");

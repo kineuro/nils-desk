@@ -1019,6 +1019,9 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .profile-counts { display: flex; flex-wrap: wrap; gap: 0.4rem 1.8rem; }
 .profile-count { display: grid; gap: 0.1rem; }
 .profile-count b { font-size: 1.55rem; font-weight: 600; line-height: 1.1; color: var(--n-text); }
+/* a count the engine held back at plain (record 55 K7) reads fewer than 5, why on hover, on one line */
+.held { white-space: nowrap; color: var(--n-text-dim); cursor: help; }
+.profile-count b .held { font-size: 1.05rem; }
 .chart-tabs { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; justify-self: start; align-self: start; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); }
 .chart-tabs button { border: 0; border-radius: 2px; padding: 0.25rem 0.7rem; background: transparent; color: var(--n-text-dim); font: inherit; font-size: var(--n-text-size-small); cursor: pointer; }
 .chart-tabs button:hover { color: var(--n-text); }

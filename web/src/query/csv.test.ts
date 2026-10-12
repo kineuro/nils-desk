@@ -45,11 +45,22 @@ describe("an answer as a CSV file", () => {
     const asked: string[] = [];
     const f = await answerFile(12, "Sessions per subject", "v2", doorsOver([[["S-1", 4], ["S-2", 1]], [["S-3", 2]]], [0, 1], asked));
     expect(asked).toEqual(["run 12", "rows 7 0 export", "rows 7 1 export"]);
-    expect(f).toEqual({ name: "sessions-per-subject-v2.csv", text: "code,n_sessions\nS-1,4\nS-2,1\nS-3,2\n", rows: 3, withheld: 1 });
+    expect(f).toEqual({ name: "sessions-per-subject-v2.csv", text: "code,n_sessions\nS-1,4\nS-2,1\nS-3,2\n", rows: 3, withheld: 1, held: [] });
     expect(savedWords(f)).toBe("Saved sessions-per-subject-v2.csv: 3 rows. 1 stack of a sealed sample left out.");
     const none = await answerFile(12, "Nothing", "v1", doorsOver([]));
     expect(none).toMatchObject({ text: "code,n_sessions\n", rows: 0 });
     expect(savedWords({ ...none, rows: 1 })).toBe("Saved nothing-v1.csv: 1 row.");
+  });
+
+  it("says which columns it left empty for counts held back at plain (record 55 K7)", async () => {
+    const why = "fewer than 5, or held beside a count of fewer than 5 so that it is not found by subtraction";
+    const doors = doorsOver([[["S-1", null]]]);
+    const rows = doors.rows;
+    doors.rows = async (handle, page, purpose) => ({ ...(await rows(handle, page, purpose)), held_back: [{ column: "n_sessions", why }] });
+    const f = await answerFile(12, "Few", "v1", doors);
+    expect(f.held).toEqual(["n_sessions"]);
+    expect(f.text).toBe("code,n_sessions\nS-1,\n");
+    expect(savedWords(f)).toBe("Saved few-v1.csv: 1 row. Held back, left empty: n_sessions.");
   });
 
   it("says why the file could not be made, in the engine's words", () => {

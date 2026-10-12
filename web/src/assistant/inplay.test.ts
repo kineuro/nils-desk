@@ -75,6 +75,18 @@ describe("an answer's funnel", () => {
     expect(funnelOf(profile({ refused: "no" }))).toEqual([]);
     expect(funnelOf(null)).toEqual([]);
   });
+
+  it("keeps a step whose count is held back at plain, as held, and says nothing of the version before it (record 55 K7)", () => {
+    const steps = funnelOf(profile({ subjects: null, sessions: null, stacks: null }), profile({ subjects: 48, sessions: 61, stacks: 212 }));
+    expect(steps.map((s) => [s.word, s.n, s.before])).toEqual([
+      ["subjects", null, null],
+      ["visits", null, null],
+      ["scans", null, null],
+    ]);
+    expect(steps.map(beforeWords)).toEqual([null, null, null]);
+    // a held count before is no count to compare with
+    expect(funnelOf(profile({ subjects: 41, sessions: 52, stacks: 139 }), profile({ subjects: null, sessions: 61, stacks: 212 })).map(beforeWords)).toEqual([null, "of 61", "of 212"]);
+  });
 });
 
 const DOC = {

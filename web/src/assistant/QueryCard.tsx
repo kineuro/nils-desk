@@ -11,8 +11,9 @@
 
 import { Fragment, useEffect, useState } from "react";
 import type { DocumentHandle, Json, Profile } from "../ask/client";
-import { cardTitle, chartOf, tabsOf, unitWords, type Bar } from "../query/cards";
+import { cardTitle, chartOf, tabsOf, type Bar } from "../query/cards";
 import { useAnswerFile } from "../query/useAnswerFile";
+import { CountText } from "../ui/Count";
 import { Icon } from "../ui/Icon";
 import { funnelOf, type FunnelStep } from "./inplay";
 import { reads } from "./reads";
@@ -79,7 +80,7 @@ export function FunnelChips({ steps }: { steps: FunnelStep[] }) {
           <span className={s.answer ? "qstep on" : "qstep"}>
             <b>{s.word}</b>
             {s.hint && <span className="qstep-hint">{s.hint}</span>}
-            <span className="num">{s.n.toLocaleString("en-US")}</span>
+            <CountText value={s.n} />
           </span>
         </Fragment>
       ))}
@@ -99,10 +100,10 @@ export function BarRows({ bars, unit, three, onPick }: { bars: Bar[]; unit: stri
               {b.label}
             </span>
             <span className="qbar-track" aria-hidden="true">
-              <i style={{ width: `${Math.max(1, Math.round(100 * b.share))}%` }} />
+              <i style={{ width: b.count === null ? 0 : `${Math.max(1, Math.round(100 * b.share))}%` }} />
             </span>
-            <span className="num qbar-n">{unitWords(b.count, unit)}</span>
-            {!three && <span className="num qbar-subjects">{unitWords(b.subjects, "subjects")}</span>}
+            <CountText value={b.count} unit={unit} className="num qbar-n" />
+            {!three && <CountText value={b.subjects} unit="subjects" className="num qbar-subjects" />}
           </>
         );
         return pick ? (

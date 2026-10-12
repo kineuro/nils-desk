@@ -15,13 +15,16 @@ export type Part =
   | { kind: "todo"; text: string }
   | { kind: "lookup"; level: string; field: string; values: string[] }
   | { kind: "handle_ref"; handle: number }
-  | { kind: "funnel"; rows: { set: string; stage: string; rows: number; subjects: number }[] }
+  /** A count held back (record 55 K7, small counts at plain) is null: it reads held back. */
+  | { kind: "funnel"; rows: { set: string; stage: string; rows: number | null; subjects: number | null }[] }
   | { kind: "status"; phase: string; text: string }
   /** The chat, slice 6: a memory the assistant offered, kept because the person asked, or forgot. */
   | { kind: "memory"; state: "proposed" | "saved" | "forgotten"; text: string; id: number | null };
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
+/** A count, or null where the engine held it back; anything else (absent, a word) is no count. */
+const isCount = (v: unknown): v is number | null => v === null || isNum(v);
 
 /** The guard of the closed union: a value of exactly one of the eight shapes, or null. */
 export function asPart(v: unknown): Part | null {
@@ -55,7 +58,7 @@ export function asPart(v: unknown): Part | null {
             kind: "funnel",
             rows: o.rows.flatMap((x) => {
               const r = x as Record<string, unknown>;
-              return isStr(r?.set) && isStr(r.stage) && isNum(r.rows) && isNum(r.subjects) ? [{ set: r.set, stage: r.stage, rows: r.rows, subjects: r.subjects }] : [];
+              return isStr(r?.set) && isStr(r.stage) && isCount(r.rows) && isCount(r.subjects) ? [{ set: r.set, stage: r.stage, rows: r.rows, subjects: r.subjects }] : [];
             }),
           }
         : null;

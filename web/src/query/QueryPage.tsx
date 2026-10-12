@@ -17,8 +17,9 @@ import { TurnView } from "../assistant/TurnView";
 import { StatusLine } from "../assistant/Cards";
 import { liveLine } from "../assistant/steps";
 import { useConversation, type Conversing } from "../assistant/useConversation";
-import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
+import { ask, catalogFields, chain, columnName, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
 import { editor, setsOf } from "../ask/editor";
+import { countIn, countText, heldCell, heldColumns, HELD_WHY } from "../ask/held";
 import { countWords, startBody, type From, type Started } from "../ask/start";
 import type { Capabilities } from "../capabilities";
 import { PromoteDialog } from "../data/PromoteDialog";
@@ -28,6 +29,7 @@ import { objects, type DocumentRow } from "../objects/client";
 import { href } from "../routes";
 import { assistantModel, assistantOffered } from "../sections";
 import { admit } from "../ui/context";
+import { CountText } from "../ui/Count";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
@@ -202,7 +204,11 @@ function StartDialog({ caps, onClose }: { caps: Capabilities; onClose: () => voi
           </div>
         )}
       </div>
-      {started && <p className="lede">{countWords(started)}</p>}
+      {started && (
+        <p className="lede" title={started.count === null ? HELD_WHY : undefined}>
+          {countWords(started)}
+        </p>
+      )}
       {keeping !== null ? (
         <p className="meta">{keeping} Counting here keeps nothing.</p>
       ) : (
@@ -435,7 +441,9 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   if (!doc) return why ? <p className="warn">This card could not be read: {why}</p> : <Wait phase="reading the card" since={since} size="panel" />;
 
   const groups = (diagnosis?.groups ?? []).filter((g) => current && g.set === current.set);
-  const widest = Math.max(1, ...groups.map((g) => g.kept + g.lost));
+  // a held count draws no bar and stands in no width
+  const widest = Math.max(1, ...groups.map((g) => (countIn(g.kept) ?? 0) + (countIn(g.lost) ?? 0)));
+  const held = heldColumns(rows);
   // a new step is a move on the whole query, offered with any set's options
   const addSet = current ? options[current.set]?.moves.find((m) => m.kind === "add_set") ?? null : null;
   return (
@@ -508,11 +516,11 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               <div key={g.group} className="count-bar">
                 <span className="count-group">{g.group}</span>
                 <span className="count-track">
-                  <i style={{ width: `${Math.round((100 * g.kept) / widest)}%` }} />
+                  <i style={{ width: `${Math.round((100 * (countIn(g.kept) ?? 0)) / widest)}%` }} />
                 </span>
-                <span className="num">{n(g.kept)} rows</span>
-                <span className="num meta">{n(g.subjects)} subjects</span>
-                {g.lost > 0 && <span className="num warn">−{n(g.lost)}</span>}
+                <CountText value={countIn(g.kept)} unit="rows" />
+                <CountText value={countIn(g.subjects)} unit="subjects" className="num meta" />
+                {g.lost !== null && g.lost > 0 && <span className="num warn">−{n(g.lost)}</span>}
               </div>
             ))}
             <p className="meta">A row is a member for each path that reaches it, so a subject in two of the cohorts a query starts from is two rows. The numbers above count each member once.</p>
@@ -537,7 +545,16 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                   </thead>
                   <tbody>
                     {rows.rows.map((r, i) => (
-                      <tr key={i}>{r.map((v, j) => <td key={j}>{v === null ? "" : String(v)}</td>)}</tr>
+                      <tr key={i}>
+                        {r.map((v, j) => {
+                          const why = v === null ? held.get(columnName(rows.columns[j])) : undefined;
+                          return (
+                            <td key={j} className={why ? "held" : undefined} title={why}>
+                              {why ? heldCell(why) : v === null ? "" : String(v)}
+                            </td>
+                          );
+                        })}
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -555,6 +572,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
             </div>
             {steps.map((s) => {
               const counts = stepCounts(diagnosis?.groups, s.set);
+              const shown = counts ? (s.grain === "subject" ? counts.subjects : counts.rows) : null;
               return (
                 <button key={s.set} type="button" className={s.set === current?.set ? "timeline-step on" : "timeline-step"} onClick={() => { setChosen(s.set); setMove(null); setTyped({}); }}>
                   <span className="timeline-dot" />
@@ -567,7 +585,13 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                     {s.where.map((c, i) => <span key={i} className="timeline-clause">where {clauseText(c)}</span>)}
                     {Object.entries(s.clauses).flatMap(([part, lines]) => (lines ?? []).map((l, i) => <span key={`${part}${i}`} className="timeline-clause">{part} {l}</span>))}
                   </span>
-                  <span className="num timeline-count" title={counts ? (s.grain === "subject" ? "subjects, each once" : "rows") : undefined}>{counts ? n(s.grain === "subject" ? counts.subjects : counts.rows) : ""}</span>
+                  {counts ? (
+                    <span className={shown === null ? "num timeline-count held" : "num timeline-count"} title={shown === null ? HELD_WHY : s.grain === "subject" ? "subjects, each once" : "rows"}>
+                      {countText(shown)}
+                    </span>
+                  ) : (
+                    <span className="num timeline-count" />
+                  )}
                 </button>
               );
             })}

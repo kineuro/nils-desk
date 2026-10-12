@@ -18,6 +18,7 @@ import { argsOf, chartOf, tabsOf, type Bar } from "../query/cards";
 import { SaveSelection } from "../query/SaveSelection";
 import { maySave } from "../query/selections";
 import { href } from "../routes";
+import { CountText } from "../ui/Count";
 import { Icon } from "../ui/Icon";
 import { beforeWords, type ChartKey, conditionsOf, funnelOf, levelSet, listingMove, narrowing, type Narrowing, pathOf, stacksOf } from "./inplay";
 import { BarRows, titleOfDocument } from "./QueryCard";
@@ -202,7 +203,7 @@ export function QueryPanel({ play, caps, keeping, epoch, onClose }: { play: Play
                   >
                     <b>{s.word}</b>
                     {s.hint && <span className="qstep-hint">{s.hint}</span>}
-                    <span className="num">{s.n.toLocaleString("en-US")}</span>
+                    <CountText value={s.n} />
                     {was && <span className="qstep-hint">{was}</span>}
                   </button>
                 </Fragment>
