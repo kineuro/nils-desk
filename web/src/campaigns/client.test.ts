@@ -35,6 +35,7 @@ import {
   progress,
   questionWords,
   rateRefusal,
+  refusedWhy,
   showsRules,
   sourceWords,
   suggestOf,
@@ -90,6 +91,21 @@ describe("a campaign read from the engine", () => {
     expect(closedWords({ ...(closeAnswer as Closed), skipped: [{ item: 4, why: "decided" }] }, "decision")).toBe("Closed: 1 decision, 5 unresolved; 1 skipped, decided by someone while the campaign was open.");
     expect(closure(closed).already).toBe(1);
     expect(closure(closed).writes.n).toBe(0);
+  });
+
+  it("names the engine's own reason for each item the close refused (T33)", () => {
+    const why = "the outcome of item 1 (result 1) cannot be read, so nothing is written for it: form.parts is a list";
+    expect(closedWords({ ...(closeAnswer as Closed), decisions: [1, 2, 3], unresolved: 1, refused: [{ item: 1, why }] }, "check")).toBe(`Closed: 3 decisions, 1 unresolved; 1 refused: ${why}.`);
+    expect(refusedWhy([{ item: 1, why: "a" }, { item: 2, why: "a" }, { item: 3, why: "b" }])).toBe("a; b");
+    expect(refusedWhy([{ item: 1, why: "a" }, { item: 2, why: "b" }, { item: 3, why: "c" }, { item: 4, why: "d" }])).toBe("a; b; and 2 more reasons, each on its item");
+    expect(refusedWhy([{ item: 1 }])).toBe("the engine gave no reason");
+  });
+
+  it("closes a check again where the engine says it holds a refused item, and refuses a closed campaign otherwise", () => {
+    const check = { ...closed, question: { kind: "check" }, closes_into: "check" } as unknown as Campaign;
+    expect(closeRefusal(capsFor({ grants: ADMIN }), check)).toBe("It is closed.");
+    expect(closeRefusal(capsFor({ grants: ADMIN }), { ...check, close_again: true })).toBeNull();
+    expect(closeRefusal(capsFor({ grants: ["campaigns:see", "campaigns:work"] }), { ...check, close_again: true })).toBe("Closing writes through Review, so it needs work on the Review page as well.");
   });
 });
 

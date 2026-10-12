@@ -191,6 +191,11 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
             Close and write the checks
           </button>
         )}
+        {c.status === "closed" && close === null && (
+          <button type="button" className="button" title="a later close writes each refused item that can be written now, as any close does" onClick={() => onAct("close")}>
+            Close again
+          </button>
+        )}
         {exp === null && (
           <button type="button" className="button secondary" onClick={() => onAct("export")}>
             Export
@@ -316,6 +321,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
       )}
       {stats && stats.raters.length > 0 && <RaterStats stats={stats} />}
       <h2>Items</h2>
+      {refusedLine(c) && <p className="warn">{refusedLine(c)}</p>}
       <div className="chips">
         <button type="button" className={filter === null ? "opt on" : "opt"} onClick={() => setFilter(null)}>
           all <b>{n(items.length)}</b>
@@ -411,8 +417,16 @@ function ItemRow({ item: i, answers, blind, words = answerWords, check = false }
             ))}
       </td>
       <td>
-        {i.outcome ? words({ value: i.outcome.value, form: i.outcome.form ?? null, derivative_id: i.outcome.derivative_id ?? null }) : ""}
-        {check ? (
+        {i.state === "refused" ? (
+          <span className="warn" title={i.refused?.at ? `refused ${day(i.refused.at)}` : undefined}>
+            Not written: {i.refused?.why ?? "the close refused it"}
+          </span>
+        ) : i.outcome ? (
+          words({ value: i.outcome.value, form: i.outcome.form ?? null, derivative_id: i.outcome.derivative_id ?? null })
+        ) : (
+          ""
+        )}
+        {i.state === "refused" ? null : check ? (
           i.outcome?.decisions && checkDecisionsWords(i.outcome.decisions) && <span className="meta"> · {checkDecisionsWords(i.outcome.decisions)}</span>
         ) : (
           <>
@@ -428,6 +442,14 @@ function ItemRow({ item: i, answers, blind, words = answerWords, check = false }
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
+/** What the page says of the items a close refused, or null where there are none. */
+export function refusedLine(c: Campaign): string | null {
+  const k = c.counts.items.refused ?? 0;
+  if (k === 0) return null;
+  const which = k === 1 ? "1 item was refused at the close; nothing was written for it" : `${n(k)} items were refused at the close; nothing was written for them`;
+  return `${which}, and the row says why.${c.close_again ? " Close again once the reason is gone." : ""}`;
+}
+
 /** The closure panel: what a close will write, counted before anything is written. */
 export function ClosurePanel({ campaign: c, plan }: { campaign: Campaign; plan: Closure }) {
   return (
@@ -439,13 +461,13 @@ export function ClosurePanel({ campaign: c, plan }: { campaign: Campaign; plan: 
       {plan.already > 0 && <p className="meta">{n(plan.already)} were resolved by an earlier close.</p>}
       {plan.unresolvedTotal > 0 ? (
         <p>
-          Leaves {n(plan.unresolvedTotal)} unresolved: {plan.unresolved.map((u) => `${n(u.n)} ${u.words}`).join(", ")}. Their review items stay in the queue.
+          Leaves {n(plan.unresolvedTotal)} unresolved: {plan.unresolved.map((u) => `${n(u.n)} ${u.words}`).join(", ")}. {c.closes_into === "check" ? "Their questions close with it; a later check asks them again." : "Their review items stay in the queue."}
         </p>
       ) : (
         <p>Leaves nothing unresolved.</p>
       )}
       {plan.leases > 0 && <p className="meta">Ends {n(plan.leases)} {plan.leases === 1 ? "lease" : "leases"} still out.</p>}
-      <p className="meta">A decision that outranks one of these is left standing, and its item is named as refused. The campaign then takes no claim or answer.</p>
+      <p className="meta">An item that cannot be written (a decision that outranks it stands, or its result or its outcome cannot be read) is left as it is and named as refused, with why. The campaign then takes no claim or answer.</p>
       {c.closes_into === "none" && <p className="meta">It writes no decision: the answers are the labels, to export.</p>}
     </div>
   );
@@ -465,9 +487,10 @@ function CloseDialog({ campaign: c, plan, onClose, onDone }: { campaign: Campaig
         setWhy(refusedWords(e));
       });
   };
+  const again = c.status === "closed";
   return (
     <Dialog
-      title={`Close ${c.name}`}
+      title={again ? `Close ${c.name} again` : `Close ${c.name}`}
       icon="check"
       onClose={onClose}
       foot={
@@ -477,7 +500,7 @@ function CloseDialog({ campaign: c, plan, onClose, onDone }: { campaign: Campaig
             Cancel
           </button>
           <button type="button" className="button" disabled={busy} onClick={go}>
-            Close the campaign
+            {again ? "Close it again" : "Close the campaign"}
           </button>
         </div>
       }

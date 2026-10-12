@@ -165,6 +165,52 @@ describe("one campaign", () => {
   });
 });
 
+describe("a check whose close refused an item", () => {
+  const why = "the outcome of item 1 (result 1) cannot be read, so nothing is written for it: form.parts is a list";
+  const base = closed.items![0];
+  const check: Campaign = {
+    ...closed,
+    name: "SYNTHSEG structures, run 1",
+    question: { kind: "check", part_set: "structures", grain: "result", reasons: [{ id: "boundary_off", words: "Boundary off", needs: "none" }] } as unknown as Campaign["question"],
+    closes_into: "check",
+    close_again: true,
+    counts: { ...closed.counts, items: { refused: 1, resolved: 1 } },
+    items: [
+      { ...base, id: 1, position: 0, stack_id: null, state: "refused", outcome: { value: "accepted", form: { reasons: [], parts: "x" } }, decision_id: null, resolved_at: null, derivative_id: 1, part_set: "structures", part_label: null, refused: { why, at: "2026-10-12T02:47:16Z" } },
+      { ...base, id: 2, position: 1, stack_id: null, state: "resolved", outcome: { value: "rejected", form: { reasons: [] }, decisions: { result: 1 } }, decision_id: 1, derivative_id: 4, part_set: "structures", part_label: null, refused: null },
+    ],
+  };
+  const draw = (c: Campaign, caps = capsFor({ grants: ADMIN })) => renderToStaticMarkup(<CampaignBody caps={caps} campaign={c} answers={[]} sets={[]} onAct={none} />);
+
+  it("shows the refused item as refused with the engine's reason, never as agreed and accepted", () => {
+    const html = draw(check);
+    expect(html).toContain('<span class="tag caution">refused</span>');
+    expect(html).toContain(`Not written: ${why}`);
+    expect(html).not.toContain(">agreed</span>");
+    expect(html).not.toMatch(/<td>accepted/u);
+    expect(html).toContain("refused <b>1</b>");
+    expect(html).toContain("1 refused · 1 resolved of 2");
+    expect(html).toContain("1 item was refused at the close; nothing was written for it, and the row says why. Close again once the reason is gone.");
+  });
+
+  it("offers Close again where the engine says the check may be closed again, and only then", () => {
+    expect(draw(check)).toContain(">Close again</button>");
+    const done = draw({ ...check, close_again: false });
+    expect(done).not.toContain(">Close again</button>");
+    expect(done).not.toContain("Close again once");
+    expect(draw(check, capsFor({ grants: ["campaigns:see", "campaigns:work"] }))).not.toContain(">Close again</button>");
+    // a later close tries the refused item again, and counts the one resolved before
+    const plan = closure(check);
+    expect([plan.writes.n, plan.already, plan.unresolvedTotal]).toEqual([1, 1, 0]);
+    const html = renderToStaticMarkup(<ClosurePanel campaign={check} plan={plan} />);
+    expect(html).toContain("Writes 1 result&#x27;s check, with its parts&#x27;.");
+    expect(html).toContain("named as refused, with why");
+    // a check's items no one settled are asked again by a later check, never left in the queue
+    const unread = { ...check, items: [...check.items!, { ...base, id: 3, position: 2, state: "open", outcome: null, decision_id: null }] };
+    expect(renderToStaticMarkup(<ClosurePanel campaign={unread} plan={closure(unread)} />)).toContain("Leaves 1 unresolved: 1 open. Their questions close with it; a later check asks them again.");
+  });
+});
+
 describe("making one", () => {
   const pack = packDoc({ pack: "mri", version: "0.4.0", axes: [{ axis: "base", values: ["T1w"] }, { axis: "body_part", values: ["brain"] }] });
 

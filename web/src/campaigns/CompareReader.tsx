@@ -654,8 +654,13 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
   return (
     <section className={`data campaign-rate reader-one pair-reader compare-reader ${spec.kind === "anchored" ? "anchored-reader" : spec.kind === "check" ? "check-reader" : "pairs-reader"}`} data-panels={spec.grid ? count : spec.panelKeys.length}>
       <header className="reader-head compare-head">
-        <span className="eyebrow">
-          <a href={href("campaigns")}>Campaigns</a> · <a href={href("campaigns", String(campaign.id))}>{campaign.name}</a>
+        {/* on a laptop the band names the campaign alone, the side naming the section; where the band is short the name gives way first, whole on hover, so the last answer is said whole */}
+        <span className="eyebrow" title={campaign.name}>
+          <a className="eyebrow-section" href={href("campaigns")}>
+            Campaigns
+          </a>
+          <span className="eyebrow-section"> · </span>
+          <a href={href("campaigns", String(campaign.id))}>{campaign.name}</a>
         </span>
         <h1>{spec.title}</h1>
         <span className="rate-item compare-item">
@@ -804,30 +809,34 @@ function Progress({ summary, open, shownAt, noun }: { summary: CompareSummary | 
   }, []);
   const share = summary && summary.items > 0 ? Math.min(1, summary.answered / summary.items) : null;
   const verb = summary?.verb ?? "read";
+  // how far, then the pace: where the band is short the pace gives way, each part whole or not at all
   return (
-    <span className="rate-count-line compare-progress">
-      {summary ? (
-        <>
-          <span className="compare-meter" role="progressbar" aria-valuemin={0} aria-valuemax={summary.items} aria-valuenow={summary.answered} aria-label={`${summary.answered} of ${summary.items} ${verb}`}>
-            <span style={{ width: `${Math.round((share ?? 0) * 1000) / 10}%` }} />
-          </span>
-          <span title={summary.counts}>
-            <b>{summary.answered.toLocaleString("en")}</b> of {summary.items.toLocaleString("en")} {verb} · <b>{Math.max(0, summary.items - summary.answered).toLocaleString("en")}</b> left
-            {summary.median !== null && ` · median ${summary.median} s`}
-          </span>
-        </>
-      ) : (
-        open !== null && (
-          <span>
-            <b>{open}</b> open
-          </span>
-        )
-      )}
-      <span className="on-this" title={`how long this ${noun} has been on the screen`}>
-        {" "}
-        · this one <b>{shownAt === null ? "–" : secondsWords(now - shownAt)}</b>
+    <>
+      <span className="rate-count-line compare-progress">
+        {summary ? (
+          <>
+            <span className="compare-meter" role="progressbar" aria-valuemin={0} aria-valuemax={summary.items} aria-valuenow={summary.answered} aria-label={`${summary.answered} of ${summary.items} ${verb}`}>
+              <span style={{ width: `${Math.round((share ?? 0) * 1000) / 10}%` }} />
+            </span>
+            <span title={summary.counts}>
+              <b>{summary.answered.toLocaleString("en")}</b> of {summary.items.toLocaleString("en")} {verb} · <b>{Math.max(0, summary.items - summary.answered).toLocaleString("en")}</b> left
+            </span>
+          </>
+        ) : (
+          open !== null && (
+            <span>
+              <b>{open}</b> open
+            </span>
+          )
+        )}
       </span>
-    </span>
+      <span className="rate-count-line compare-pace">
+        {summary !== null && summary.median !== null && <span>median {summary.median} s</span>}
+        <span className="on-this" title={`how long this ${noun} has been on the screen`}>
+          this one <b>{shownAt === null ? "–" : secondsWords(now - shownAt)}</b>
+        </span>
+      </span>
+    </>
   );
 }
 
