@@ -43,6 +43,7 @@ import {
   pointOnSlice,
   presetFor,
   PRESETS,
+  reasonsIn,
   reject,
   stepPart,
   stripWords,
@@ -186,6 +187,13 @@ describe("the item door, the answer and the words", () => {
     expect(checkAnswerLine("flagged", many, REASONS, { kind: "components", names: new Map() })).toBe("flagged · Other · Under-segmented: lesion 3, lesion 7 · Missed lesion: 2 points");
     expect(checkAnswerLine("flagged", { parts: [{ label: 17, reason: "under" }] }, REASONS)).toBe("flagged · Under-segmented: part 17");
     expect(checkAnswerLine("flagged", { parts: [{ label: 17, reason: "under" }] }, REASONS, { kind: "labels", names: new Map([[17, "Left-Hippocampus"]]) })).toBe("flagged · Under-segmented: Left-Hippocampus");
+    // a part several raters flagged for different reasons: the engine joins its reasons with ", "
+    expect(reasonsIn("under, not_lesion")).toEqual(["under", "not_lesion"]);
+    expect(reasonsIn("under")).toEqual(["under"]);
+    expect(reasonsIn(" ,under,,not_lesion, under ")).toEqual(["under", "not_lesion"]);
+    expect(reasonsIn(null)).toEqual([]);
+    const joined = { reasons: [], parts: [{ label: 3, reason: "under, not_lesion" }, { label: 7, reason: "under" }], points: [], seen: [3, 7], shown: [] };
+    expect(checkAnswerLine("flagged", joined, REASONS, { kind: "components", names: new Map() })).toBe("flagged · Under-segmented: lesion 3, lesion 7 · Not a lesion: lesion 3");
     expect(checkDecisionsWords({ result: 40, parts: { "3": 41, "7": 42 } })).toBe("decision 40 · 2 part decisions");
     expect(checkDecisionsWords({ result: null, parts: { "3": 41 } })).toBe("1 part decision");
   });

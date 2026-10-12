@@ -536,15 +536,36 @@ export function partName(label: number, p: PartNames | null = null): string {
 }
 
 /**
+ * The reasons one text gives: a reason id, or the reasons of a part several
+ * raters flagged for different reasons, which the engine joins with ", " in
+ * an outcome's part, in the part's status (`check_reason`) and in its
+ * decision's why ("under, not_lesion"). Reason ids hold no comma, so the
+ * join reads back whole: each reason once, in its order.
+ */
+export function reasonsIn(text: string | null | undefined): string[] {
+  const out: string[] = [];
+  for (const r of (text ?? "").split(",")) {
+    const id = r.trim();
+    if (id && !out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/**
  * A check's answer, or an item's outcome, in a few words for the campaign's
- * table: the verdict, then each reason with what it is on, the parts by name.
+ * table: the verdict, then each reason with what it is on, the parts by name;
+ * a part an outcome joined several reasons on is named under each of them.
  * "flagged · Boundary off: Left-Hippocampus, Right-Thalamus · Missed lesion: 2 points".
  */
 export function checkAnswerLine(value: unknown, form: unknown, reasons: readonly Reason[], parts: PartNames | null = null): string {
   const f = formOf(form);
   const words = (id: string) => reasons.find((r) => r.id === id)?.words ?? id;
   const on = new Map<string, number[]>();
-  for (const p of f.parts) on.set(p.reason, [...(on.get(p.reason) ?? []), p.label]);
+  for (const p of f.parts)
+    for (const r of reasonsIn(p.reason)) {
+      const labels = on.get(r) ?? [];
+      if (!labels.includes(p.label)) on.set(r, [...labels, p.label]);
+    }
   const points = new Map<string, number>();
   for (const p of f.points) points.set(p.reason, (points.get(p.reason) ?? 0) + 1);
   const verdict = typeof value === "string" ? ((VERDICTS as readonly string[]).includes(value) ? VERDICT_WORDS[value as Verdict] : value) : "";

@@ -43,6 +43,7 @@ import {
   partWord,
   placePoint,
   pointOnSlice,
+  reasonsIn,
   reject,
   sawPart,
   stepPart,
@@ -447,12 +448,17 @@ export function useCheckItem(ctx: ItemCtx<Verdict>): ItemPage<Verdict> {
                   <span className={seen.has(label) || focus === label ? "check-n" : "check-n unseen"}>{named ? p.name : i + 1}</span>
                   <span className="check-ml">{mlWords(p.volumeMm3)}</span>
                   {r && (
-                    <span className="value-tag check-flag" data-slot={slotOf(reasonIds, r) ?? undefined}>
-                      {reasonWords(r)}
+                    // one tag per reason, each in its own colour: a part's reason may be several, joined
+                    <span className="check-flags">
+                      {reasonsIn(r).map((x) => (
+                        <span key={x} className="value-tag check-flag" data-slot={slotOf(reasonIds, x) ?? undefined}>
+                          {reasonWords(x)}
+                        </span>
+                      ))}
                     </span>
                   )}
                   {votes.map((a) => (
-                    <span key={a.as} className="tag check-vote" title={`${a.as}: ${a.form.parts.filter((x) => x.label === label).map((x) => reasonWords(x.reason)).join(", ")}`}>
+                    <span key={a.as} className="tag check-vote" title={`${a.as}: ${a.form.parts.filter((x) => x.label === label).flatMap((x) => reasonsIn(x.reason)).map(reasonWords).join(", ")}`}>
                       {a.as}
                     </span>
                   ))}

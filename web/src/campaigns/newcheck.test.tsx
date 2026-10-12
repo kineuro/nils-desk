@@ -245,10 +245,11 @@ describe("the dialog and the pages", () => {
     await until(() => host.querySelector("table.campaign-items")?.textContent?.includes("Right-Hippocampus"));
     const rows = [...host.querySelectorAll("table.campaign-items tbody tr")].map((r) => ({ answers: [...r.querySelectorAll(".answer-chip")].map((c) => c.textContent), outcome: r.querySelectorAll("td")[4].textContent }));
     expect(rows[0]).toEqual({ answers: ["rater accepted", "other accepted"], outcome: "accepted · decision 3000" });
-    expect(rows[1]).toEqual({ answers: ["rater flagged · Boundary off: Left-Hippocampus, Right-Hippocampus", "other flagged · Boundary off: Left-Hippocampus"], outcome: "flagged · Boundary off: Left-Hippocampus, Right-Hippocampus · decision 3001 · 2 part decisions" });
+    // a part the raters flagged for different reasons: the outcome joins them, "boundary_off, wrong_label", and each reads on its own
+    expect(rows[1]).toEqual({ answers: ["rater flagged · Boundary off: Left-Hippocampus, Right-Hippocampus", "other flagged · Wrong label: Left-Hippocampus"], outcome: "flagged · Boundary off: Left-Hippocampus, Right-Hippocampus · Wrong label: Left-Hippocampus · decision 3001 · 2 part decisions" });
     expect(rows[2]).toEqual({ answers: ["rater rejected", "other accepted"], outcome: "" });
     const table = host.querySelector("table.campaign-items")?.textContent ?? "";
-    for (const bad of ["[object Object]", "null", "reasons", "seen", "shown"]) expect(table).not.toContain(bad);
+    for (const bad of ["[object Object]", "null", "reasons", "seen", "shown", "boundary_off", "wrong_label"]) expect(table).not.toContain(bad);
     // the names are read once per result whose answers flag a part
     expect(log.filter((a) => a.path.startsWith("/api/derivatives/") && a.path.includes("/parts")).map((a) => a.path)).toEqual(["/api/derivatives/9002/parts?set=structures&per_page=500"]);
   });

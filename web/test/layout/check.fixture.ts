@@ -83,21 +83,22 @@ const setOf = (o: CheckOpts) => (o.set === "structures" ? { key: "structures", w
 
 /**
  * Two raters' answers to every item of a read check, as the answers door
- * lists them: item 1 both accept; item 2 both flag a structure's boundary
- * and the first flags a second; item 3 one rejects and one accepts, so it
- * waits for an adjudicator; the rest both accept, the second with a note.
+ * lists them: item 1 both accept; item 2 both flag a part, for different
+ * reasons, and the first flags a second; item 3 one rejects and one
+ * accepts, so it waits for an adjudicator; the rest both accept, the second
+ * with a note.
  */
 export function checkAnswers(o: CheckOpts = {}): Record<string, unknown>[] {
   const n = o.items ?? 3;
   const [a, b] = o.set === "structures" ? [17, 53] : [1, 2];
-  const reason = o.set === "structures" ? "boundary_off" : "under";
+  const [reason, another] = o.set === "structures" ? ["boundary_off", "wrong_label"] : ["under", "not_lesion"];
   const form = (parts: { label: number; reason: string }[] = [], reasons: string[] = []) => ({ reasons, parts, points: [], seen: parts.map((p) => p.label), shown: [] });
   const out: Record<string, unknown>[] = [];
   for (let i = 0; i < n; i++) {
     const item = CHECK_ITEM + i;
     const pair: [string, string, unknown, string | null][] =
       i === 1
-        ? [["flagged", "rater@site", form([{ label: a, reason }, { label: b, reason }]), null], ["flagged", "other@site", form([{ label: a, reason }]), null]]
+        ? [["flagged", "rater@site", form([{ label: a, reason }, { label: b, reason }]), null], ["flagged", "other@site", form([{ label: a, reason: another }]), null]]
         : i === 2
           ? [["rejected", "rater@site", form(), null], ["accepted", "other@site", form(), null]]
           : [["accepted", "rater@site", form(), null], ["accepted", "other@site", form(), i === 0 ? null : "fine at the edges"]];
@@ -117,7 +118,10 @@ export function checkCampaign(o: CheckOpts = {}): Campaign {
   const outcomeOf = (item: number, i: number) => {
     const two = answers.filter((x) => x.item_id === item);
     if (two.length < 2 || two[0].value !== two[1].value) return null;
-    const parts = [...new Map(two.flatMap((x) => (x.form as { parts: { label: number; reason: string }[] }).parts).map((p) => [`${p.label}/${p.reason}`, p])).values()];
+    // as the engine's union: each part once by label, the reasons the raters gave it joined with ", "
+    const by = new Map<number, string[]>();
+    for (const p of two.flatMap((x) => (x.form as { parts: { label: number; reason: string }[] }).parts)) by.set(p.label, [...new Set([...(by.get(p.label) ?? []), p.reason])]);
+    const parts = [...by].sort(([x], [y]) => x - y).map(([label, rs]) => ({ label, reason: rs.join(", ") }));
     return { value: two[0].value, form: { reasons: [], parts, points: [], seen: parts.map((p) => p.label), shown: [] }, answers: two.map((x) => x.id), ...(o.status === "closed" ? { decisions: { result: 3000 + i, parts: Object.fromEntries(parts.map((p, k) => [String(p.label), 3100 + 10 * i + k])) } } : {}) };
   };
   const items = Array.from({ length: n }, (_, i) => {
