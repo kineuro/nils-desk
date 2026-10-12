@@ -8,7 +8,7 @@
 // record 55 H3 (job type 3) a mask's file says its check, and a run that
 // made masks offers Check results, which opens the New check filled for it.
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
 import { engineWords } from "../models/ModelsPage";
@@ -20,10 +20,16 @@ import { checkTag, makeCheckRefusal } from "../campaigns/check";
 import { NewCheck, runChoiceOf } from "../campaigns/NewCheck";
 import { catalog, type Pipeline } from "./catalog";
 import { ops } from "./client";
+import { failureOf } from "./failure";
+import { InstallFor } from "./Install";
+import { FailLine, FailNote, KindTag } from "./Reason";
+import { foundByWords } from "./tools";
 import {
   allPassed,
   breachesByCheck,
+  failuresByCause,
   failuresByReason,
+  converterOf,
   heldWords,
   cellWords,
   checksOf,
@@ -138,6 +144,15 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
         onCancel={r.job_id !== null && acts.cancel && load.jobAlive ? () => act(`Run ${r.id} stops at its next heartbeat; the units it finished are kept.`, ops.cancel(r.job_id!)) : null}
         onResume={acts.queue && resumable(r, load.jobAlive) ? () => act(`Run ${r.id} is queued to go on where it stopped.`, ops.enqueue(resumeCommand(r))) : null}
         onCheck={checkable ? () => setChecking(true) : null}
+        onAgain={
+          acts.queue && resumable(r, load.jobAlive)
+            ? () =>
+                ops.enqueue(resumeCommand(r)).then((j) => {
+                  read();
+                  return `Run ${r.id} is queued again as job ${j.job}.`;
+                })
+            : null
+        }
         checkPrimary={masks.some((f) => !f.check)}
       />
     </>
@@ -165,8 +180,10 @@ export function RunView(props: {
   onCheck?: (() => void) | null;
   /** Masks no check has decided remain: the button is the page's primary act. */
   checkPrimary?: boolean;
+  /** Run again, once a missing tool is installed: takes the run up again and says what it queued. */
+  onAgain?: (() => Promise<string>) | null;
 }) {
-  const { caps, run: r, pipeline, resumedAt, table, files, by, onBy, said, onCancel, onResume, onCheck = null, checkPrimary = false } = props;
+  const { caps, run: r, pipeline, resumedAt, table, files, by, onBy, said, onCancel, onResume, onCheck = null, checkPrimary = false, onAgain = null } = props;
   const acts = runActs(caps);
   const units = r.units_run ?? [];
   const counts = unitCounts(units, resumedAt);
@@ -175,7 +192,12 @@ export function RunView(props: {
   const checks = checksOf(r);
   const byCheck = breachesByCheck(r);
   const failures = failuresByReason(r);
+  // since 2026-10-12 the engine counts the failed units by cause, at every detail
+  const causes = failuresByCause(r);
+  const converter = converterOf(r);
   const running = OPEN.has(r.status);
+  // why it failed, whole (2026-10-12): the kind and what to do where the engine says them, else the error's first sentence
+  const failed = failureOf(r);
   // below detail quasi the engine lists no unit: the totals are its own, a withheld one fewer than five
   const totals = checks.totals ? unitTotals(r) : null;
   const unitCells = totals
@@ -193,6 +215,7 @@ export function RunView(props: {
     ...unitCells,
     { k: "over", v: r.selection ?? (r.handle_id ? `handle ${r.handle_id}` : "") },
     { k: "on", v: [r.runtime, r.device].filter(Boolean).join(", ") || "not yet" },
+    ...(converter ? [{ k: "dcm2niix", v: converter.version ?? "found", title: [converter.path, foundByWords(converter.found_by)].filter(Boolean).join(", ") || undefined }] : []),
     { k: running ? "since" : "ran", v: whenWords(r.started_at ?? "") },
   ];
   return (
@@ -220,7 +243,11 @@ export function RunView(props: {
       </div>
       <Values cells={cells} />
       {said && <p className="meta">{said}</p>}
-      {r.error && <p className="warn">{r.error}</p>}
+      {failed && (
+        <FailNote f={failed}>
+          <InstallFor caps={caps} f={failed} again={onAgain} />
+        </FailNote>
+      )}
 
       <div className="section-head rule-top">
         <h2>Table</h2>
@@ -286,7 +313,32 @@ export function RunView(props: {
                 .join(" · ") || "none yet"}
         </span>
       </div>
-      {totals && failures.length > 0 && (
+      {causes.length > 0 && (
+        <div className="table-wrap">
+          <table className="thin">
+            <thead>
+              <tr>
+                <th>Failed, by cause</th>
+                <th className="num">Units</th>
+              </tr>
+            </thead>
+            <tbody>
+              {causes.map((c) => (
+                <tr key={`${c.kind}:${c.cause}`}>
+                  <td>
+                    <span className="fail-said">
+                      <KindTag kind={c.kind} cause={c.cause} />
+                      <span>{c.cause.replace(/_/gu, " ")}</span>
+                    </span>
+                  </td>
+                  <td className="num">{heldWords(c.units)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {totals && causes.length === 0 && failures.length > 0 && (
         <div className="table-wrap">
           <table className="thin">
             <thead>
@@ -322,17 +374,27 @@ export function RunView(props: {
             <tbody>
               {units.slice(0, 200).map((u, i) => {
                 const t = unitTone(u, resumedAt);
+                const f = t === "failed" ? failureOf(u) : null;
                 return (
-                  <tr key={u.unit ?? `u${i}`}>
-                    <td className="path">{u.unit ?? `unit ${i + 1}`}</td>
-                    <td>
-                      <span className={TONE_TAG[t]}>{TONE_WORDS[t]}</span>
-                      {u.exit_code !== null && u.exit_code !== undefined && u.exit_code !== 0 ? <span className="meta"> · exit {u.exit_code}</span> : null}
-                    </td>
-                    <td className="num">{u.attempts ?? ""}</td>
-                    <td className="meta">{u.device ?? ""}</td>
-                    <td className="num">{u.finished_at ? whenWords(u.finished_at) : ""}</td>
-                  </tr>
+                  <Fragment key={u.unit ?? `u${i}`}>
+                    <tr className={f ? "has-fail" : undefined}>
+                      <td className="path">{u.unit ?? `unit ${i + 1}`}</td>
+                      <td>
+                        <span className={TONE_TAG[t]}>{TONE_WORDS[t]}</span>
+                        {u.exit_code !== null && u.exit_code !== undefined && u.exit_code !== 0 ? <span className="meta"> · exit {u.exit_code}</span> : null}
+                      </td>
+                      <td className="num">{u.attempts ?? ""}</td>
+                      <td className="meta">{u.device ?? ""}</td>
+                      <td className="num">{u.finished_at ? whenWords(u.finished_at) : ""}</td>
+                    </tr>
+                    {f && (
+                      <tr className="fail-row">
+                        <td colSpan={5}>
+                          <FailLine f={f} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>

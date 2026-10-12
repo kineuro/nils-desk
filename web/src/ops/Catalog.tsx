@@ -9,7 +9,7 @@
 // run's number opens its page; the assistant's analysis-plan station, where
 // it is served, turns a question into a plan the person starts.
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
 import { door as served } from "../deployment";
@@ -22,8 +22,13 @@ import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { stations } from "../assistant/stations";
 import { plansOffered } from "./PlanPage";
-import { PreflightPanel } from "./Preflight";
-import { PLAN_STATION, preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
+import { DoorError } from "../ask/client";
+import { failureOf, refusalOf, requirementsOf, type Failure, type Requirement } from "./failure";
+import { OverPicker } from "./OverPicker";
+import { PreflightPanel, Requirements } from "./Preflight";
+import { FailLine, FailNote } from "./Reason";
+import { InstallFor, useInstall } from "./Install";
+import { PLAN_STATION, preflightGate, rangeWords, resumeCommand, runActs, runs as runDoors, type Preflight } from "./runs";
 import { catalog, catalogActs, imageWords, needsOf, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { ops } from "./client";
 
@@ -145,23 +150,28 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
             <tbody>
               {runs.map((r) => {
                 const c = runCounts(r);
+                // a failed run says why on one line under its row (2026-10-12)
+                const f = r.status === "failed" || r.status === "partial" ? failureOf(r) : null;
                 return (
-                  <tr key={r.id}>
-                    <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
-                    <td>{r.pipeline}</td>
-                    <td className="path">{r.selection ?? ""}</td>
-                    <td>
-                      <span className={r.status === "done" ? "tag ok" : r.status === "failed" || r.status === "partial" ? "tag caution" : "tag"}>{r.status}</span>
-                      {c.models > 0 && <span className="meta"> · {n(c.models)} model{c.models === 1 ? "" : "s"}</span>}
-                    </td>
-                    <td className="num">
-                      {n(c.units)}
-                      {c.failed > 0 ? ` · ${n(c.failed)} failed` : ""}
-                    </td>
-                    <td className="num">{n(c.derivatives)}</td>
-                    <td className="num">{c.staged > 0 && proposals ? <a href={href("review", "proposals")}>{n(c.staged)}</a> : n(c.staged)}</td>
-                    <td className="num">{whenWords(r.started_at ?? "")}</td>
-                  </tr>
+                  <Fragment key={r.id}>
+                    <tr className={f ? "has-fail" : undefined}>
+                      <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
+                      <td>{r.pipeline}</td>
+                      <td className="path">{r.selection ?? ""}</td>
+                      <td>
+                        <span className={r.status === "done" ? "tag ok" : r.status === "failed" || r.status === "partial" ? "tag caution" : "tag"}>{r.status}</span>
+                        {c.models > 0 && <span className="meta"> · {n(c.models)} model{c.models === 1 ? "" : "s"}</span>}
+                      </td>
+                      <td className="num">
+                        {n(c.units)}
+                        {c.failed > 0 ? ` · ${n(c.failed)} failed` : ""}
+                      </td>
+                      <td className="num">{n(c.derivatives)}</td>
+                      <td className="num">{c.staged > 0 && proposals ? <a href={href("review", "proposals")}>{n(c.staged)}</a> : n(c.staged)}</td>
+                      <td className="num">{whenWords(r.started_at ?? "")}</td>
+                    </tr>
+                    {f && <RunFailRow caps={caps} run={r} f={f} cols={8} />}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -172,49 +182,54 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
   );
 }
 
+/** A failed run's reason under its row, with Install where it is a tool the engine installs, and then Run again where the run can be taken up. */
+function RunFailRow({ caps, run, f, cols }: { caps: Capabilities; run: Run; f: Failure; cols: number }) {
+  const again = runActs(caps).queue && run.status === "failed" && !run.results_digest ? () => ops.enqueue(resumeCommand(run)).then((j) => `Run ${run.id} is queued again as job ${j.job}.`) : null;
+  const install = useInstall(caps, f.fix, again, null, true);
+  return (
+    <tr className="fail-row">
+      <td colSpan={cols}>
+        <FailLine f={f}>{install.button}</FailLine>
+        {install.said}
+      </td>
+    </tr>
+  );
+}
+
 /** Run on a selection: what it runs over, its parameters and inputs, and the panel that says what it writes. */
 export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilities; pipeline: Pipeline; onClose: () => void; onDone: (words: string) => void }) {
   const needs = needsOf(pipeline);
   const params = pipeline.parameters ?? [];
-  const [selection, setSelection] = useState("");
   const [over, setOver] = useState<Over | null>(null);
-  const [overWhy, setOverWhy] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [chosenModels, setChosenModels] = useState<string[]>(() => needs.models.map(() => ""));
   const [labels, setLabels] = useState<string>("");
   const [modelList, setModelList] = useState<{ id: number; name: string; version: string; state: string }[]>([]);
   const [labelSets, setLabelSets] = useState<LabelSet[]>([]);
   const [busy, setBusy] = useState(false);
-  const [refused, setRefused] = useState<string | null>(null);
+  // a run the jobs door refused before queueing it (409): its failure, and the checks that fail, as the pre-flight says them
+  const [refused, setRefused] = useState<{ f: Failure; checks: Requirement[] } | null>(null);
   useEffect(() => {
     if (needs.models.length > 0 && served(caps, "GET /api/models") && may(caps, "models:see")) catalog.models().then((r) => setModelList(r.models.filter((m) => m.state === "admitted" || m.state === "promoted")), () => undefined);
     if (needs.labels && served(caps, "GET /api/label-sets")) catalog.labelSets().then((r) => setLabelSets(r.label_sets.filter((s) => !s.sealed)), () => undefined);
     // the lists are read once, when the dialog opens
   }, []);
-  const find = () => {
-    setOver(null);
-    setOverWhy(null);
-    const name = selection.trim();
-    if (name === "") return;
-    catalog.selection(name).then(
-      (s) => setOver({ selection: s.name, version: s.version }),
-      (e: unknown) => setOverWhy(engineWords(e)),
-    );
-  };
   const errors = params.map((p) => paramError(p, values[p.id] ?? "")).filter((e): e is string => e !== null);
   const missing = needs.models.some((m, i) => !m.optional && chosenModels[i] === "") || (needs.labels !== null && !needs.labels.optional && labels === "");
   const changed = Object.fromEntries(Object.entries(values).filter(([id, v]) => v.trim() !== "" && String(params.find((p) => p.id === id)?.["default-value"] ?? "") !== v.trim()));
   // record 49 A7: the engine's pre-flight, asked again as the selection or a parameter changes
   const checks = runActs(caps).preflight;
-  const [pre, setPre] = useState<{ key: string; p: Preflight | null; why: string | null } | null>(null);
-  const preKey = over && errors.length === 0 ? JSON.stringify([over, changed]) : null;
+  const [pre, setPre] = useState<{ key: string; p: Preflight | null; why: Failure | null } | null>(null);
+  // a tool installed from the refusal asks the pre-flight again
+  const [installs, setInstalls] = useState(0);
+  const preKey = over && errors.length === 0 ? JSON.stringify([over, changed, installs]) : null;
   useEffect(() => {
     if (!checks || preKey === null || over === null) return;
     let alive = true;
     const t = setTimeout(() => {
       runDoors.preflight(pipeline.id, over, changed).then(
         (p) => alive && setPre({ key: preKey, p, why: null }),
-        (e: unknown) => alive && setPre({ key: preKey, p: null, why: engineWords(e) }),
+        (e: unknown) => alive && setPre({ key: preKey, p: null, why: refusalOf(e) }),
       );
     }, 300);
     return () => {
@@ -239,11 +254,11 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
     if (!command) return;
     setBusy(true);
     setRefused(null);
-    ops.enqueue(command).then(
+    runDoors.queue(command).then(
       (j) => onDone(`Queued ${pipeline.label} as job ${j.job}.`),
       (e: unknown) => {
         setBusy(false);
-        setRefused(e instanceof Error ? e.message : String(e));
+        setRefused({ f: refusalOf(e), checks: requirementsOf(e instanceof DoorError ? e.body : null) });
       },
     );
   };
@@ -253,30 +268,25 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
       icon="play"
       onClose={onClose}
       foot={
-        <div className="row actions">
-          <button type="button" className="button" disabled={!ready} onClick={go}>
-            Run
-          </button>
-          <button type="button" className="button secondary" onClick={onClose}>
-            Cancel
-          </button>
-          {refused && <span className="warn">{refused}</span>}
-        </div>
+        <>
+          {refused && (
+            <FailNote f={refused.f} lead="Not queued">
+              <Requirements checks={refused.checks.filter((c) => !c.ok)} />
+              <InstallFor caps={caps} f={refused.f} onInstalled={() => setRefused(null)} />
+            </FailNote>
+          )}
+          <div className="row actions">
+            <button type="button" className="button" disabled={!ready} onClick={go}>
+              Run
+            </button>
+            <button type="button" className="button secondary" onClick={onClose}>
+              Cancel
+            </button>
+          </div>
+        </>
       }
     >
-      <div className="field">
-        <span className="label">Over the selection</span>
-        <div className="field-row">
-          <span className="input">
-            <input value={selection} placeholder="name, or name@version" aria-label="The selection" onChange={(e) => setSelection(e.target.value)} onBlur={find} />
-          </span>
-          <button type="button" className="button secondary small" onClick={find}>
-            Find
-          </button>
-        </div>
-        {over && "selection" in over && <span className="meta">selection:{over.selection}@{over.version}, frozen when the run starts</span>}
-        {overWhy && <span className="warn">{overWhy}</span>}
-      </div>
+      <OverPicker caps={caps} over={over} onOver={setOver} />
       {params.map((p) => (
         <div key={p.id} className="field">
           <span className="label">{p.name}</span>
@@ -328,7 +338,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
           </span>
         </div>
       )}
-      {checks && over !== null && <PreflightPanel p={current?.p ?? null} checking={current === null && errors.length === 0} why={current?.why ?? null} />}
+      {checks && over !== null && <PreflightPanel p={current?.p ?? null} checking={current === null && errors.length === 0} why={current?.why ?? null} act={(f) => <InstallFor caps={caps} f={f} onInstalled={() => setInstalls((k) => k + 1)} />} />}
       <div className="note brand">
         <Icon name="info" />
         <div className="note-body">

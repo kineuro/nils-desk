@@ -78,6 +78,8 @@ export interface Run {
   summary?: Json | null;
   error?: string | null;
   derivatives?: number[] | null;
+  /** Set once its containers ended; a failed run without it is taken up again (`nils run --resume`). */
+  results_digest?: string | null;
 }
 
 export interface LabelSet {

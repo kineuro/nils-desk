@@ -107,7 +107,7 @@ describe("the catalog page", () => {
   });
   it("draws the run dialog with the selection, the parameters and the model the descriptor asks for", () => {
     const html = renderToStaticMarkup(<RunDialog caps={capsWith(DOORS, ["pipelines:see", "pipelines:work"])} pipeline={INFER} onClose={() => undefined} onDone={() => undefined} />);
-    expect(html).toContain("Over the selection");
+    expect(html).toContain('aria-label="The selection"');
     expect(html).toContain("Model: head");
     expect(html).toContain("choose an admitted model");
     expect(html).toContain("proposals on body_part");

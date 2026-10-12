@@ -26,6 +26,7 @@ import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
 import { checkedWords, contractWords, keptByWords, newerWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
 import { supervise, type Install } from "./supervise";
+import { ToolsSection } from "../ops/Install";
 
 interface PageProps {
   caps: Capabilities;
@@ -247,6 +248,8 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
         </div>
         {!install && <p className="meta">{missing}</p>}
       </section>
+
+      <ToolsSection caps={caps} onChanged={onChanged} />
 
       {install && (
         <section className="pair">

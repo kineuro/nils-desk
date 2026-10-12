@@ -38,6 +38,7 @@ import { Selections } from "./Selections";
 import { mayList, maySave } from "./selections";
 import { ProfilePanel, StepEditor } from "./CardParts";
 import { cardTitle, changeWords, clauseText, fieldChoices, keepingRefusal, stepCounts, versionsOf, type ChartTab, type Version } from "./cards";
+import { useAnswerFile } from "./useAnswerFile";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -265,6 +266,8 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
 
   const steps = useMemo(() => (doc ? editor(doc.ask, options) : []), [doc, options]);
   const answer = ((doc?.ask.out as Json | undefined)?.set as string | undefined) ?? null;
+  // Download CSV beside the preview (2026-10-12): the answer's rows as a file, as the chat's card saves them
+  const file = useAnswerFile(id, cardTitle((doc?.ask as Json | undefined)?.name as string | undefined, answer), versions.find((v) => v.id === id)?.label ?? null);
   const current = steps.find((s) => s.set === chosen) ?? steps.find((s) => s.answers) ?? steps[0] ?? null;
   // a list of identifiers is started from with detail quasi (record 25)
   const lists = sees(caps, "quasi");
@@ -520,7 +523,12 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               <button type="button" className="button secondary small" onClick={() => ask.preview(id).then(setRows, (e: Error) => setWhy(e.message))}>
                 Preview 10 rows
               </button>
+              <button type="button" className="button secondary small" disabled={file.busy} onClick={file.download}>
+                <Icon name="file" />
+                Download CSV
+              </button>
             </div>
+            {file.said && <p className={file.warn ? "warn" : "meta"}>{file.said}</p>}
             {rows && (
               <div className="table-wrap">
                 <table className="thin">

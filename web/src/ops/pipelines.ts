@@ -10,6 +10,7 @@ import type { Grant } from "../grants";
 import type { IconName } from "../ui/Icon";
 import { whenWords } from "../data/sources";
 import { doingWords, endedWords, nextMove as nextOf, VERBS, wordsOf } from "./verbs";
+import { failureOf, type Failure } from "./failure";
 
 /** A job row as an engine that chains jobs reports it: the one shape, defined beside the job row. */
 export type { ChainedJob } from "../ask/client";
@@ -39,6 +40,8 @@ export interface JobCard {
   progress: Progress | null;
   /** What stopped it, for a failed job. */
   error: string | null;
+  /** Its failure, the kind and what to do, where the engine names them (2026-10-12). */
+  failure: Failure | null;
   /** The command to queue again, with its label, for a job that stopped. */
   next: { label: string; command: string[] } | null;
   /** For a queued job in a chain: the job it waits for. */
@@ -114,6 +117,7 @@ export function cardOf(job: ChainedJob, now = Date.now()): JobCard {
     meta,
     progress: progressOf(job, now),
     error: job.error,
+    failure: job.state === "failed" ? failureOf(job) : null,
     next: nextMove(job),
     waits: job.state === "queued" ? (job.chain?.before ?? null) : null,
     then: (job.then ?? []).map(thenWords),
