@@ -57,8 +57,10 @@ for (const vp of SIZES) {
     await expect(dialog).toHaveCount(1);
     const over = dialog.getByRole("combobox", { name: "The selection" });
     await over.click();
-    // the recent ones before anything is typed
+    // the recent ones before anything is typed, a cohort's source among them
     await expect(dialog.locator(".over-opt")).toHaveCount(5);
+    await expect(dialog.locator(".over-opt .tag")).toHaveText("cohort ms-followup");
+    await shot(page, `over-recent-${vp.name}`);
     await page.keyboard.type("x");
     await page.keyboard.press("Escape");
     await expect(dialog.locator('[role="listbox"]')).toHaveCount(0);
