@@ -236,7 +236,7 @@ export function RunView(props: {
     // a run that ended reads as its units summed (the tag above, and units here), never a bare done
     ...(words && !running && (r.status === "done" || r.status === "partial") ? [] : [{ k: "status", v: r.status }]),
     ...unitCells,
-    { k: "over", v: r.selection ? overWords(r.selection) : r.handle_id ? `handle ${r.handle_id}` : "", title: main ? [main.of, main.read].filter(Boolean).join(": ") : (r.selection ?? undefined) },
+    { k: "over", v: r.selection ? overWords(r.selection, main?.roles ?? null) : r.handle_id ? `handle ${r.handle_id}` : "", title: main ? [main.of, main.read].filter(Boolean).join(": ") : (r.selection ?? undefined) },
     // record 55 (2026-10-12): a dataset's or a cohort's main scans say which rules picked them
     ...(main && rulesWords(main) ? [{ k: "picked by", v: rulesWords(main)!, title: main.read ?? undefined }] : []),
     { k: "on", v: [r.runtime, r.device].filter(Boolean).join(", ") || "not yet" },

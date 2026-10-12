@@ -34,7 +34,7 @@ import { InstallFor, useInstall } from "./Install";
 import { runTag } from "./made";
 import { againOfRun, RunAgainDialog, type Again } from "./RunAgain";
 import { PLAN_STATION, preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
-import { catalog, catalogActs, imageWords, needsOf, overWords, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
+import { andWords, catalog, catalogActs, imageWords, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { roleWord } from "../review/mainScans";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -179,7 +179,7 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
                       <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
                       <td>{r.pipeline}</td>
                       <td className="path" title={r.selection ?? undefined}>
-                        {overWords(r.selection)}
+                        {overWords(r.selection, pipelineRoles(pipelines.find((p) => p.id === r.pipeline_id) ?? {}))}
                       </td>
                       <td>
                         <span className={tag.className}>{tag.words}</span>
@@ -320,7 +320,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
         </>
       }
     >
-      <OverPicker caps={caps} over={over} onOver={setOver} />
+      <OverPicker caps={caps} over={over} onOver={setOver} needs={pipelineRoles(pipeline)} />
       {params.map((p) => (
         <div key={p.id} className="field">
           <span className="label">{p.name}</span>
@@ -386,7 +386,9 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
       </div>
       <Says head="What a run is">
         {over && "main" in over
-          ? `The ${over.main.kind}'s main ${roleWord(over.main.role)} scans are resolved when the run starts, one a visit as its main-scan rules pick them, and frozen and pinned with the rules they were read under`
+          ? over.main.role
+            ? `The ${over.main.kind}'s main ${roleWord(over.main.role)} scans are resolved when the run starts, one a visit as its main-scan rules pick them, and frozen and pinned with the rules they were read under`
+            : `The ${over.main.kind}'s main ${andWords((over.main.roles ?? pipelineRoles(pipeline)).map(roleWord))} scans are resolved when the run starts, one of each a visit as its main-scan rules pick them, a visit taken where it has each, and frozen and pinned with the rules they were read under`
           : "The selection is frozen into its stacks when the run starts and pinned"}
         , every parameter is recorded with its default filled, and the image is the one the catalog pins. A model&apos;s proposals are evidence until a person commits them.
       </Says>

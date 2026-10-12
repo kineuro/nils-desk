@@ -10,6 +10,9 @@
 // cohort's main scans of a role: each dataset and cohort is offered beside
 // the selections, found by its name, the role taken from a word typed (t1,
 // flair, t2) or the first of the pack's, and main:ROLE@dataset:NAME works as
+// typed. Since 2026-10-12, for a pipeline that needs several roles (a T1w and
+// a FLAIR), a dataset or a cohort is taken with every role it needs, no role
+// chosen ("study-anon · main T1w + FLAIR"), and main@dataset:NAME works as
 // typed.
 
 import type { SelectionRow, SelectionSize } from "../query/selections";
@@ -41,7 +44,7 @@ export function specOf(typed: string): Spec | null {
   const t = typed.trim();
   const h = /^handle:\s*(\d+)$/iu.exec(t);
   if (h) return { handle: Number(h[1]) };
-  if (/^main:/iu.test(t)) {
+  if (/^main\s*[:@]/iu.test(t)) {
     const main = mainOfSpec(t);
     return main ? { main } : null;
   }
@@ -157,8 +160,8 @@ export function roleOfWord(word: string, roles: readonly string[]): string | nul
 
 export interface FoundScope {
   option: ScopeOption;
-  /** The role taken: the one a typed word names, else the first of the pack's. */
-  role: string;
+  /** The role taken: the one a typed word names, else the first of the pack's; null for a pipeline that needs several, which takes each of them. */
+  role: string | null;
   score: number;
 }
 
@@ -167,9 +170,11 @@ export interface FoundScope {
  * role a word names (t1, flair) or the first of the pack's. A word that
  * names a role need not find the name; every other word must, by a word of
  * the name, a part of it, or its kind. With nothing typed, every one, the
- * datasets first, by name: they come after the recent selections.
+ * datasets first, by name: they come after the recent selections. Where the
+ * pipeline needs several roles (`needs`), each is taken with no role chosen,
+ * since the run takes the main scans of every one.
  */
-export function findScopes(options: ScopeOption[], typed: string, roles: readonly string[], max = 6): { found: FoundScope[]; more: number } {
+export function findScopes(options: ScopeOption[], typed: string, roles: readonly string[], max = 6, needs: readonly string[] = []): { found: FoundScope[]; more: number } {
   const spec = specOf(typed);
   if (roles.length === 0 || (spec && "main" in spec)) return { found: [], more: 0 };
   const words = wordsOf(typed.replace(/^selection:/iu, "").replace(/@\d*$/u, ""));
@@ -192,7 +197,7 @@ export function findScopes(options: ScopeOption[], typed: string, roles: readonl
     }
     if (missed) continue;
     // nothing of a name typed (nothing at all, or only a role): every one
-    all.push({ option: o, role: role ?? roles[0], score });
+    all.push({ option: o, role: needs.length > 1 ? null : (role ?? roles[0]), score });
   }
   const kind = (f: FoundScope) => (f.option.kind === "dataset" ? 0 : 1);
   all.sort((a, b) => b.score - a.score || kind(a) - kind(b) || a.option.name.localeCompare(b.option.name));

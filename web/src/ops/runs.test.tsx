@@ -555,3 +555,50 @@ describe("what cannot run, and what a run made (2026-10-12)", () => {
     expect(html).not.toContain(">done</span>");
   });
 });
+
+describe("a dataset's main scans of every role a pipeline needs (2026-10-12)", () => {
+  const MAIN = {
+    main: "t1w+flair",
+    roles: ["t1w", "flair"],
+    of: "main@dataset:study-anon",
+    scope: { kind: "dataset", id: 3, name: "study-anon" },
+    picks: { scope: null, version: 1, defaults: true, pack: "mri" },
+    read: "the pack's main scans of dataset study-anon",
+    visits: 3,
+    main_visits: 2,
+    stacks: 4,
+    without: {
+      visits: 1,
+      why: [{ role: "flair", why: "it holds no flair scan", visits: 1 }],
+      named: [{ subject_id: 4, subject: "a1b2c3", session_day: "2022-03-01", role: "flair", why: "it holds no flair scan" }],
+    },
+    by_role: [
+      { main: "t1w", main_visits: 3, stacks: 2, without: { visits: 0 } },
+      { main: "flair", main_visits: 2, stacks: 2, without: { visits: 1 } },
+    ],
+  };
+  it("the pre-flight says the roles, the visits with each, and the visits that lack one by role and why", () => {
+    const p: Preflight = { ...PRE, pipeline: "samseg-lesions@1", selection: MAIN.of, stacks: 4, main: MAIN, units: { total: 2, ready: 2, missing: 0 } };
+    expect(mainReadOf(p)).toBe(MAIN);
+    const cells = Object.fromEntries(preflightCells(p).map((c) => [c.k, c.v]));
+    expect(cells["main T1w + FLAIR"]).toBe("4 scans of 2 visits");
+    expect(cells["lacking a role"]).toBe("1 of 3 visits");
+    const html = renderToStaticMarkup(<PreflightPanel p={p} />);
+    expect(html).toContain('<b class="num">1</b> visit lacks a main FLAIR; the run goes over the 2 that have both.');
+    expect(html).toContain('<b class="num">1</b> it holds no flair scan<span class="meta"> · a1b2c3 2022-03-01</span>');
+    // one role, as before
+    const one = { ...MAIN, main: "t1w", roles: undefined, by_role: undefined, without: { visits: 1, why: [{ why: "it holds no t1w scan", visits: 1 }] } };
+    expect(renderToStaticMarkup(<PreflightPanel p={{ ...p, main: one }} />)).toContain('<b class="num">1</b> visit has no main T1w; the run goes over the 2 that have one.');
+  });
+  it("the Runs table names the roles of a run over every role its pipeline needs", () => {
+    const LESIONS_PIPE = { ...VOLUMES, id: 9, name: "samseg-lesions", label: "samseg-lesions@1", roles: ["t1w", "flair"] };
+    const row = { id: 3, pipeline_id: 9, pipeline: "samseg-lesions@1", job_id: 40, selection: "main@dataset:study-anon", status: "running", started_at: null, finished_at: null };
+    const html = renderToStaticMarkup(<CatalogBody caps={capsWith(DOORS, ["pipelines:see"])} pipelines={[LESIONS_PIPE]} capability={{ enabled: true }} runs={[row]} onRun={() => undefined} />);
+    expect(html).toContain("study-anon · main T1w + FLAIR");
+  });
+  it("a run's page names the roles it went over", () => {
+    const run: RunDetail = { ...RUN, selection: MAIN.of, main: MAIN };
+    const html = renderToStaticMarkup(<RunView caps={capsWith(DOORS, [...WORK])} run={run} pipeline={VOLUMES} resumedAt={null} jobAlive={false} table={{ kind: "off", why: null }} files={null} by="subject.sex" onBy={() => undefined} said={null} onCancel={null} onResume={null} />);
+    expect(html).toContain("study-anon · main T1w + FLAIR");
+  });
+});

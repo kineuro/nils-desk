@@ -9,7 +9,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { capsWith } from "../review/caps.fixture";
 import { CatalogBody, RunDialog } from "./Catalog";
-import { catalogActs, imageWords, mainOfSpec, mainRoles, needsOf, overWords, paramError, runCommand, runCounts, selectOf, writesWords, type Pipeline, type Run } from "./catalog";
+import { andWords, catalogActs, imageWords, mainOfSpec, mainRoles, mainSpec, mainWords, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, selectOf, writesWords, type Pipeline, type Run } from "./catalog";
 import { PipelinesPage } from "./PipelinesPage";
 
 const TRAIN: Pipeline = {
@@ -74,6 +74,24 @@ describe("a run on a selection", () => {
     // the roles are the served pack's, else the MRI pack's
     expect(mainRoles(capsWith([], [], [{ name: "mri", version: "1.0.3", main_roles: ["t1w", "flair"] } as { name: string; version: string }]))).toEqual(["t1w", "flair"]);
     expect(mainRoles(capsWith([], []))).toEqual(["t1w", "flair", "t2w"]);
+  });
+  it("goes over the main scans of each role a pipeline needs, sent without a role (2026-10-12)", () => {
+    const every = { kind: "dataset" as const, name: "study-anon", role: null, roles: ["t1w", "flair"] };
+    expect(mainSpec(every)).toBe("main@dataset:study-anon");
+    expect(runCommand({ pipeline: { label: "samseg-lesions@1" }, over: { main: every }, params: {}, models: [], labels: null })).toEqual(["run", "samseg-lesions@1", "--select", "main@dataset:study-anon"]);
+    expect(mainWords(every)).toBe("study-anon · main T1w + FLAIR");
+    expect(mainOfSpec("main@cohort:ms-followup")).toEqual({ kind: "cohort", name: "ms-followup", role: null });
+    // a selection named main is no scope
+    expect(mainOfSpec("main@2")).toBeNull();
+    // the runs table: the roles where the run says them, else its main scans
+    expect(overWords("main@dataset:study-anon", ["t1w", "flair"])).toBe("study-anon · main T1w + FLAIR");
+    expect(overWords("main@dataset:study-anon")).toBe("study-anon · main scans");
+    // a role named stays the role, whatever the pipeline needs
+    expect(overWords("main:t1w@dataset:study-anon", ["t1w", "flair"])).toBe("study-anon · main T1w");
+    expect(pipelineRoles({ roles: ["t1w", "flair"] })).toEqual(["t1w", "flair"]);
+    expect(pipelineRoles({ roles: null, descriptor: { "x-nils": { input: { layout: "bids", roles: ["t1w"] } } } })).toEqual(["t1w"]);
+    expect(pipelineRoles({})).toEqual([]);
+    expect(andWords(["T1w", "FLAIR", "T2w"])).toBe("T1w, FLAIR and T2w");
   });
   it("checks each parameter as the descriptor declares it", () => {
     const [estimator, per, threshold] = TRAIN.parameters!;

@@ -5,8 +5,9 @@
 // a selection as the command line the jobs door queues, `run <pipeline>
 // --select selection:<name>@<v> [--param id=value]... [--model m]...
 // [--labels id]`, or since record 55 (2026-10-12) straight over a dataset's
-// or a cohort's main scans of a role, `--select main:<role>@dataset:<name>`;
-// and a run's own account, counted.
+// or a cohort's main scans of a role, `--select main:<role>@dataset:<name>`,
+// or of each role the pipeline needs, `--select main@dataset:<name>`; and a
+// run's own account, counted.
 
 import { door, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -58,6 +59,8 @@ export interface Pipeline {
   outputs?: Output[] | null;
   needs?: { gpu?: string; "memory-gb"?: number; cores?: number } | null;
   proposals?: { axis: string }[] | null;
+  /** The pick roles a unit of a bids input needs (`x-nils.input.roles`): a T1w and a FLAIR for samseg-lesions. */
+  roles?: string[] | null;
 }
 
 /** The runtime as the catalog door answers it: whether this engine can run anything, and why not. */
@@ -128,11 +131,13 @@ export function paramError(p: Param, raw: string): string | null {
   return null;
 }
 
-/** A dataset's or a cohort's main scans of a role (record 55, 2026-10-12): resolved and frozen when the run is made. */
+/** A dataset's or a cohort's main scans of a role (record 55, 2026-10-12): resolved and frozen when the run is made. Since 2026-10-12 a role of null takes those of each role the run's pipeline needs (`main@dataset:<name>`). */
 export interface MainOver {
   kind: "dataset" | "cohort";
   name: string;
-  role: string;
+  role: string | null;
+  /** Where the role is null, the roles the pipeline needs, for the words alone: the engine reads them from the pipeline. */
+  roles?: string[] | null;
 }
 
 /** What a run is asked over: a saved selection's version, a dataset's or a cohort's main scans of a role, or a frozen handle. */
@@ -145,22 +150,44 @@ export function mainRoles(caps: Capabilities): string[] {
   return pack?.main_roles?.length ? pack.main_roles : ["t1w", "flair", "t2w"];
 }
 
-/** A dataset's or a cohort's main scans as the engine takes them: `main:t1w@dataset:study-anon`. */
-export const mainSpec = (m: MainOver): string => `main:${m.role}@${m.kind}:${m.name}`;
+/** A dataset's or a cohort's main scans as the engine takes them: `main:t1w@dataset:study-anon`, or of each role the pipeline needs `main@dataset:study-anon`. */
+export const mainSpec = (m: MainOver): string => (m.role ? `main:${m.role}@${m.kind}:${m.name}` : `main@${m.kind}:${m.name}`);
 
-/** The main scans a spec names, or null where it names none. */
+/** The main scans a spec names, or null where it names none: of a role, or (role null) of each role the pipeline needs. */
 export function mainOfSpec(spec: string | null | undefined): MainOver | null {
   const m = /^\s*main:\s*([a-z0-9_+-]+)\s*@\s*(dataset|cohort)\s*:\s*(\S(?:.*\S)?)\s*$/iu.exec(spec ?? "");
-  return m ? { role: m[1].toLowerCase(), kind: m[2].toLowerCase() as MainOver["kind"], name: m[3] } : null;
+  if (m) return { role: m[1].toLowerCase(), kind: m[2].toLowerCase() as MainOver["kind"], name: m[3] };
+  const e = /^\s*main\s*@\s*(dataset|cohort)\s*:\s*(\S(?:.*\S)?)\s*$/iu.exec(spec ?? "");
+  return e ? { role: null, kind: e[1].toLowerCase() as MainOver["kind"], name: e[2] } : null;
 }
 
-/** A dataset's or a cohort's main scans in a person's words: "study-anon · main T1w". */
-export const mainWords = (m: MainOver): string => `${m.name} · main ${roleWord(m.role)}`;
+/** Words joined as a person lists them: "T1w and FLAIR", "T1w, FLAIR and T2w". */
+export function andWords(words: string[]): string {
+  return words.length <= 1 ? (words[0] ?? "") : `${words.slice(0, -1).join(", ")} and ${words[words.length - 1]}`;
+}
 
-/** What a run went over, as the runs table shows it: a scope's main scans in words, a selection's spec as it is. */
-export function overWords(selection: string | null | undefined): string {
+/** The roles of a scope's main scans in words: "T1w", "T1w + FLAIR"; "scans" where the roles are not known here. */
+export function mainRolesWords(m: Pick<MainOver, "role" | "roles">): string {
+  if (m.role) return roleWord(m.role);
+  const r = (m.roles ?? []).map(roleWord);
+  return r.length > 0 ? r.join(" + ") : "scans";
+}
+
+/** A dataset's or a cohort's main scans in a person's words: "study-anon · main T1w", "study-anon · main T1w + FLAIR". */
+export const mainWords = (m: MainOver): string => `${m.name} · main ${mainRolesWords(m)}`;
+
+/** What a run went over, as the runs table shows it: a scope's main scans in words (with the roles its run read, where it says them), a selection's spec as it is. */
+export function overWords(selection: string | null | undefined, roles: string[] | null = null): string {
   const m = mainOfSpec(selection);
-  return m ? mainWords(m) : (selection ?? "");
+  return m ? mainWords(m.role ? m : { ...m, roles }) : (selection ?? "");
+}
+
+/** The pick roles a pipeline's units need, as its catalog entry names them. */
+export function pipelineRoles(p: Pick<Pipeline, "roles"> & { descriptor?: Json | null }): string[] {
+  if (Array.isArray(p.roles)) return p.roles.filter((r): r is string => typeof r === "string");
+  const xn = ((p.descriptor ?? {}) as Json)["x-nils"] as Json | undefined;
+  const roles = ((xn?.input ?? {}) as Json).roles;
+  return Array.isArray(roles) ? roles.filter((r): r is string => typeof r === "string") : [];
 }
 
 /** The body a pre-flight is asked with, and the `--select` or `--handle` a run is queued with. */

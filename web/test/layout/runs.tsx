@@ -17,6 +17,10 @@
 // were for, each read as its units summed; a resumed run's pre-flight, which
 // Run again opens first; and on the Jobs page a stopped run's job whose run a
 // later job took up again, and that later job, which made nothing.
+//
+// Since 2026-10-12 samseg-lesions needs a T1w and a FLAIR a session, so a
+// dataset is taken with both (main@dataset:NAME), and its pre-flight says
+// the visits that lack one.
 // Every name and number here is made up.
 
 import { StrictMode } from "react";
@@ -115,7 +119,7 @@ const requirements = () => [
 
 const IMAGE = `ghcr.io/kineuro/nils-pipelines@sha256:${"4b".repeat(32)}`;
 const PIPELINES = [
-  { id: 3, name: "samseg-lesions", version: "1", label: "samseg-lesions@1", description: "White matter lesions from a T1 and a FLAIR, by SAMSEG.", image: IMAGE, layout: "bids", level: "session", state: "active", parameters: [], inputs: [], outputs: [{ id: "lesions", kind: "mask" }, { id: "volumes", kind: "table" }], needs: { gpu: "none" }, proposals: [] },
+  { id: 3, name: "samseg-lesions", version: "1", label: "samseg-lesions@1", description: "White matter lesions from a T1 and a FLAIR, by SAMSEG.", image: IMAGE, layout: "bids", level: "session", state: "active", parameters: [], inputs: [], outputs: [{ id: "lesions", kind: "mask" }, { id: "volumes", kind: "table" }], needs: { gpu: "none" }, proposals: [], roles: ["t1w", "flair"] },
   { id: 4, name: "n4-bias-correction", version: "1", label: "n4-bias-correction@1", description: "N4 bias field correction of a T1.", image: IMAGE, layout: "bids", level: "session", state: "active", parameters: [{ id: "shrink", name: "Shrink factor", type: "Number", integer: true, minimum: 1, maximum: 8, "default-value": 4, optional: true }], inputs: [], outputs: [{ id: "corrected", kind: "image" }], needs: { gpu: "none" }, proposals: [] },
 ];
 
@@ -198,6 +202,37 @@ const COHORTS = [
 
 /** A dataset's or a cohort's main scans as the engine resolves them: how many, under which rules, and the visits with none. */
 function mainRead(spec: string): Record<string, unknown> | null {
+  // of each role samseg-lesions needs: the visits with both, and those that lack one by role and why
+  const every = /^main@(dataset|cohort):(.+)$/u.exec(spec);
+  if (every) {
+    const [, kind, name] = every;
+    return {
+      main: "t1w+flair",
+      roles: ["t1w", "flair"],
+      of: spec,
+      scope: { kind, id: 3, name },
+      picks: { scope: null, version: 1, defaults: true, pack: "mri", pack_version: "1.0.1" },
+      read: `the pack's main scans of ${kind} ${name}`,
+      visits: 486,
+      main_visits: 470,
+      stacks: 940,
+      without: {
+        visits: 16,
+        why: [
+          { role: "flair", why: "it holds no flair scan", visits: 12 },
+          { role: "t1w", why: "it holds a t1w scan and none is picked", visits: 4 },
+        ],
+        named: [
+          { subject_id: 21, subject: "7a8b9c0d", session_day: "2023-01-15", role: "flair", why: "it holds no flair scan" },
+          { subject_id: 22, subject: "1e2f3a4b", session_day: "2022-11-02", role: "t1w", why: "it holds a t1w scan and none is picked" },
+        ],
+      },
+      by_role: [
+        { main: "t1w", main_visits: 482, stacks: 470, without: { visits: 4 } },
+        { main: "flair", main_visits: 474, stacks: 470, without: { visits: 12 } },
+      ],
+    };
+  }
   const m = /^main:([a-z0-9]+)@(dataset|cohort):(.+)$/u.exec(spec);
   if (!m) return null;
   const [, role, kind, name] = m;
