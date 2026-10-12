@@ -87,6 +87,20 @@ describe("the body New check makes", () => {
     ]);
   });
 
+  it("says the results the engine left out as sealed for certification, how many and never which (record 55)", () => {
+    const body = (checkBody(draftFor(caps, RUN)) as { body: Record<string, unknown> }).body;
+    const p = previewOf({ ...checkPreview(body), left_out_sealed: 3 } as never);
+    expect(p.leftOutSealed).toBe(3);
+    expect(leftOutTags(p).map((t) => [t.words, t.why])).toEqual([
+      ["3 left out: sealed for certification", "made from a scan of a sample sealed for certification; a check never holds one until a certificate unseals it"],
+      ["2 can't be drawn", "2: no scan is known whose grid it is on"],
+      ["FLAIR missing for 4", "a visit without that main scan shows one panel fewer"],
+    ]);
+    // an engine that says none, or says nothing of it, shows no such tag
+    expect(previewOf({ ...checkPreview(body), left_out_sealed: 0 } as never).leftOutSealed).toBe(0);
+    expect(previewOf(checkPreview(body) as never).leftOutSealed).toBe(0);
+  });
+
   it("puts the engine's refusals in the dialog's words, by the row they are about", () => {
     expect(refusalWords("question.reasons: one to 7 reasons, the keys 3 to 9; 0 given")).toBe("Answers: one to 7 reasons, the keys 3 to 9; 0 given");
     expect(refusalWords("panels: flair2 is not a role of the pack's picks: flair, t1w")).toBe("Beside it: flair2 is not a role of the pack's picks: flair, t1w");
@@ -219,6 +233,25 @@ describe("the dialog and the pages", () => {
     await click(button("T2w"));
     await until(() => document.querySelector(".check-foot .warn"));
     expect(document.querySelector(".check-foot .warn")?.textContent).toBe("Beside it: t1w is not a role of the pack's picks: flair");
+  });
+
+  it("says on the foot how many results the engine left out as sealed for certification, where it says so (record 55)", async () => {
+    const engine = checkEngine({ log });
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://desk.test");
+      const answer = await engine(input, init);
+      if (url.pathname !== "/api/campaigns/preview" || !answer.ok) return answer;
+      return new Response(JSON.stringify({ ...((await answer.json()) as Record<string, unknown>), left_out_sealed: 2 }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    root = createRoot(host);
+    await act(async () => root.render(<NewCheck caps={capsWith(checkDoorsOf())} run={RUN} onClose={() => undefined} />));
+    const dialog = await until(() => document.querySelector("dialog.new-check"));
+    await until(() => dialog.querySelector(".check-preview")?.textContent?.includes("results"));
+    const caution = [...dialog.querySelectorAll(".check-foot-line .tag.caution")];
+    expect(caution.map((t) => t.textContent)).toEqual(["2 left out: sealed for certification", "2 can't be drawn", "FLAIR missing for 4"]);
+    expect(caution[0].getAttribute("title")).toContain("sealed for certification");
+    // the rest of the line is the preview's as before
+    expect(dialog.querySelector(".check-preview")?.textContent).toBe("336 results · 2,128 lesions · 2 to 3 scans each");
   });
 
   it("from Campaigns, New: Check results asks which run first, each with its results not yet checked", async () => {
