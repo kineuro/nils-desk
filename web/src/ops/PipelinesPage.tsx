@@ -6,7 +6,10 @@
 // what it did, for whom, how far it got, what stopped it and the next move.
 // A cancel goes by the verb's grant: a digest is Data work, a sort
 // Pipelines work, a release Release work; the card keeps its button and
-// says why when a person lacks the grant.
+// says why when a person lacks the grant. Since 2026-10-12 a stopped run's
+// job leaves Now once a later job took its run up again, and says which; a
+// run's job that made nothing stays in Now to be looked at; Run again of a
+// run opens its pre-flight first.
 
 import { useCallback, useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
@@ -23,8 +26,9 @@ import { CatalogPage } from "./Catalog";
 import { ops } from "./client";
 import { PlanPage, plansOffered } from "./PlanPage";
 import { RunPage } from "./RunPage";
+import { RunAgainDialog, type Again } from "./RunAgain";
 import { runActs } from "./runs";
-import { cardOf, countByFilter, FILTERS, filterJobs, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
+import { cardOf, countByFilter, FILTERS, filterJobs, needsALook, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
 import { isWorker, wordsOf } from "./verbs";
 import { FailLine } from "./Reason";
 
@@ -102,6 +106,7 @@ function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
   const [filter, setFilter] = useState<StateFilter>("all");
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const [said, setSaid] = useState<string | null>(null);
+  const [again, setAgain] = useState<Again | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [since] = useState(() => Date.now());
   const lists = served(caps, "GET /api/jobs");
@@ -157,21 +162,35 @@ function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
         card={c}
         reason={holds ? null : `needs work on ${wordsOf(j).page}`}
         onCancel={mayCancel && (c.tone === "running" || c.tone === "queued") ? () => act(c.tone === "queued" ? `Job ${j.id} is dropped from the queue.` : `Job ${j.id} stops at its next heartbeat; what is written stays written.`, ops.cancel(j.id)) : null}
-        onNext={mayQueue && c.next ? () => act(`Queued again as a new job.`, ops.enqueue(c.next!.command)) : null}
-        onDismiss={c.tone === "failed" || c.tone === "cancelled" ? () => setDismissed((was) => new Set([...was, j.id])) : null}
+        onNext={mayQueue && c.next ? () => (c.again ? setAgain(c.again) : act(`Queued again as a new job.`, ops.enqueue(c.next!.command))) : null}
+        onDismiss={c.tone === "failed" || c.tone === "cancelled" || c.made?.head === "nothing made" ? () => setDismissed((was) => new Set([...was, j.id])) : null}
       />
     );
   };
 
   const nowJobs = (live.open ?? all?.filter((j) => j.state === "running" || j.state === "queued" || j.state === "cancelling") ?? []).filter((j) => !dismissed.has(j.id));
-  // a queue worker's own row ends when the engine restarts: never a failure of anyone's work, so it waits folded under All jobs
-  const recentFailed = (all ?? []).filter((j) => !isWorker(j) && (j.state === "failed" || j.state === "cancelled") && !dismissed.has(j.id) && Date.parse(j.finished_at ?? j.started_at) > now - 7 * 86_400_000).slice(0, 5);
+  // a queue worker's own row ends when the engine restarts: never a failure of anyone's work, so it waits folded under All jobs;
+  // a stopped run's job whose run a later job took up again needs no look, and a run's job that made nothing does
+  const recentFailed = (all ?? []).filter((j) => !isWorker(j) && !dismissed.has(j.id) && needsALook(j, now)).slice(0, 5);
   const shown = filterJobs(all ?? [], filter).filter((j) => !dismissed.has(j.id) && !isWorker(j));
   const workers = (all ?? []).filter((j) => isWorker(j) && j.state !== "running");
   const counts = countByFilter((all ?? []).filter((j) => !isWorker(j)));
 
   return (
     <section className="pipelines">
+      {again && (
+        <RunAgainDialog
+          caps={caps}
+          again={again}
+          onClose={() => setAgain(null)}
+          onDone={(w) => {
+            setAgain(null);
+            setSaid(w);
+            live.refresh();
+            read();
+          }}
+        />
+      )}
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">Pipelines</span>
@@ -231,8 +250,11 @@ function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
 }
 
 function Card({ card: c, reason, onCancel, onNext, onDismiss }: { card: JobCard; reason: string | null; onCancel: (() => void) | null; onNext: (() => void) | null; onDismiss: (() => void) | null }) {
-  const tone = c.tone === "queued" ? "job queued" : c.tone === "failed" ? "job failed" : c.tone === "cancelled" ? "job cancelled" : c.tone === "done" ? "job done" : "job";
-  const sq = c.tone === "failed" ? "sq caution" : c.tone === "running" ? "sq brand" : "sq";
+  // a run's job that did not make all it was for reads in caution, never a bare done
+  const short = c.made !== null && c.made.tone === "caution";
+  // a stopped job whose run a later job took up again reads as over, not as a failure to mend
+  const tone = c.tone === "queued" ? "job queued" : c.tone === "failed" ? (c.taken ? "job done" : "job failed") : c.tone === "cancelled" ? "job cancelled" : c.tone === "done" ? (short ? "job done short" : "job done") : "job";
+  const sq = (c.tone === "failed" && !c.taken) || short ? "sq caution" : c.tone === "running" ? "sq brand" : "sq";
   const open = c.tone === "running" || c.tone === "queued";
   return (
     <div className={tone}>
@@ -284,6 +306,11 @@ function Card({ card: c, reason, onCancel, onNext, onDismiss }: { card: JobCard;
             <i style={{ width: `${Math.round((c.progress.fraction ?? 0.05) * 100)}%` }} />
           </span>
           <span className="meta num">{c.progress.words}</span>
+        </div>
+      )}
+      {c.made?.rest && (
+        <div className="how">
+          <span className="made-rest">{c.made.rest}</span>
         </div>
       )}
       {c.failure?.kind ? (

@@ -273,6 +273,10 @@ export interface JobRow {
   error: string | null;
   args: { argv?: string[]; principal?: string } & Json;
   result: Json | null;
+  /** Since 2026-10-12, a pipeline run's job: what its run made, as the engine sums its units (ops/made). */
+  made?: unknown;
+  /** Since 2026-10-12, a pipeline run's job: the later job that took its run up again, by its state, where one did. */
+  taken_up?: { job: number; state: string; run?: number | null } | null;
 }
 
 /** A job row at record 26: the commands queued after it once it ends done, and the jobs before and after it in a chain; an older engine sends neither. */

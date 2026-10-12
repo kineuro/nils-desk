@@ -7,7 +7,10 @@
 // Record 49 A7: the dialog shows the engine's pre-flight before Run (units,
 // missing inputs and why, time, GPU, budget) and each parameter's range; a
 // run's number opens its page; the assistant's analysis-plan station, where
-// it is served, turns a question into a plan the person starts.
+// it is served, turns a question into a plan the person starts. Since
+// 2026-10-12 a run reads as its units summed, never a bare done ("3 of 4
+// made", "nothing made"), the rest on one line under its row ("4 of 4
+// skipped: no FLAIR picked"), and Run again opens its pre-flight first.
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -28,10 +31,11 @@ import { OverPicker } from "./OverPicker";
 import { PreflightPanel, Requirements } from "./Preflight";
 import { FailLine, FailNote } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
-import { PLAN_STATION, preflightGate, rangeWords, resumeCommand, runActs, runs as runDoors, type Preflight } from "./runs";
+import { runTag } from "./made";
+import { againOfRun, RunAgainDialog, type Again } from "./RunAgain";
+import { PLAN_STATION, preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
 import { catalog, catalogActs, imageWords, needsOf, overWords, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { roleWord } from "../review/mainScans";
-import { ops } from "./client";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -40,6 +44,7 @@ type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string }
 export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: (words: string) => void }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [running, setRunning] = useState<Pipeline | null>(null);
+  const [again, setAgain] = useState<Again | null>(null);
   const read = useCallback(() => {
     Promise.all([catalog.list(), served(caps, "GET /api/pipeline-runs") ? catalog.runs(50).catch(() => ({ runs: [] as Run[] })) : Promise.resolve({ runs: [] as Run[] })]).then(
       ([c, r]) => setLoad({ kind: "ready", pipelines: c.pipelines, capability: c.capability ?? null, runs: r.runs }),
@@ -52,7 +57,19 @@ export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: 
   return (
     <>
       {plansOffered(caps) && <PlanAsk />}
-      <CatalogBody caps={caps} pipelines={load.pipelines} capability={load.capability} runs={load.runs} onRun={setRunning} />
+      <CatalogBody caps={caps} pipelines={load.pipelines} capability={load.capability} runs={load.runs} onRun={setRunning} onAgain={runActs(caps).queue ? (r) => setAgain(againOfRun(r)) : null} />
+      {again && (
+        <RunAgainDialog
+          caps={caps}
+          again={again}
+          onClose={() => setAgain(null)}
+          onDone={(w) => {
+            setAgain(null);
+            read();
+            onQueued(w);
+          }}
+        />
+      )}
       {running && (
         <RunDialog
           caps={caps}
@@ -70,7 +87,7 @@ export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: 
 }
 
 /** The catalog and the runs, as the page draws them from what it read. */
-export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps: Capabilities; pipelines: Pipeline[]; capability: Capability | null; runs: Run[]; onRun: (p: Pipeline) => void }) {
+export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain = null }: { caps: Capabilities; pipelines: Pipeline[]; capability: Capability | null; runs: Run[]; onRun: (p: Pipeline) => void; onAgain?: ((r: Run) => void) | null }) {
   const acts = catalogActs(caps, capability);
   const active = pipelines.filter((p) => p.state !== "retired");
   const proposals = may(caps, "review:see") && served(caps, "GET /api/review");
@@ -153,16 +170,19 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
                 const c = runCounts(r);
                 // a failed run says why on one line under its row (2026-10-12)
                 const f = r.status === "failed" || r.status === "partial" ? failureOf(r) : null;
+                // a run that ended reads as its units summed, never a bare done, the rest on one line under its row
+                const tag = runTag(r);
+                const rest = f ? null : tag.rest;
                 return (
                   <Fragment key={r.id}>
-                    <tr className={f ? "has-fail" : undefined}>
+                    <tr className={f || rest ? "has-fail" : undefined}>
                       <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
                       <td>{r.pipeline}</td>
                       <td className="path" title={r.selection ?? undefined}>
                         {overWords(r.selection)}
                       </td>
                       <td>
-                        <span className={r.status === "done" ? "tag ok" : r.status === "failed" || r.status === "partial" ? "tag caution" : "tag"}>{r.status}</span>
+                        <span className={tag.className}>{tag.words}</span>
                         {c.models > 0 && <span className="meta"> · {n(c.models)} model{c.models === 1 ? "" : "s"}</span>}
                       </td>
                       <td className="num">
@@ -173,7 +193,18 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
                       <td className="num">{c.staged > 0 && proposals ? <a href={href("review", "proposals")}>{n(c.staged)}</a> : n(c.staged)}</td>
                       <td className="num">{whenWords(r.started_at ?? "")}</td>
                     </tr>
-                    {f && <RunFailRow caps={caps} run={r} f={f} cols={8} />}
+                    {f && <RunFailRow caps={caps} run={r} f={f} cols={8} onAgain={onAgain} />}
+                    {rest && (
+                      <tr className="made-row">
+                        <td colSpan={8}>
+                          <div className="made-line">
+                            <span className="made-words" title={rest}>
+                              {rest}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                   </Fragment>
                 );
               })}
@@ -185,9 +216,9 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
   );
 }
 
-/** A failed run's reason under its row, with Install where it is a tool the engine installs, and then Run again where the run can be taken up. */
-function RunFailRow({ caps, run, f, cols }: { caps: Capabilities; run: Run; f: Failure; cols: number }) {
-  const again = runActs(caps).queue && run.status === "failed" && !run.results_digest ? () => ops.enqueue(resumeCommand(run)).then((j) => `Run ${run.id} is queued again as job ${j.job}.`) : null;
+/** A failed run's reason under its row, with Install where it is a tool the engine installs, and then Run again where the run can be taken up, which opens its pre-flight. */
+function RunFailRow({ caps, run, f, cols, onAgain }: { caps: Capabilities; run: Run; f: Failure; cols: number; onAgain: ((r: Run) => void) | null }) {
+  const again = onAgain && run.status === "failed" && !run.results_digest ? () => onAgain(run) : null;
   const install = useInstall(caps, f.fix, again, null, true);
   return (
     <tr className="fail-row">

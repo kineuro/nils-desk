@@ -191,6 +191,46 @@ export function runCommand(a: RunAsk): string[] {
   return out;
 }
 
+/** The flags the engine adds to a run it queues, which a door refuses from a caller: dropped when a stopped job's command is queued again. */
+const ADDED = new Set(["--pack-dir", "--dcm2niix"]);
+
+/** A queued run's command line as a door takes it again: without the flags the engine added to it. */
+export function requeued(command: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < command.length; i++) {
+    if (ADDED.has(command[i])) {
+      i++;
+      continue;
+    }
+    out.push(command[i]);
+  }
+  return out;
+}
+
+/** What a queued run's command line names (2026-10-12, for Run again on a stopped job): its pipeline, what it goes over and the parameters given; null for a run taken up again, or one it cannot read. */
+export function overOfCommand(command: string[]): { pipeline: string; over: Over; params: Record<string, string> } | null {
+  if (command[0] !== "run") return null;
+  let pipeline: string | null = null;
+  let over: Over | null = null;
+  const params: Record<string, string> = {};
+  for (let i = 1; i < command.length; i++) {
+    const w = command[i];
+    const v = command[i + 1];
+    if (w === "--resume") return null;
+    if (w.startsWith("--")) {
+      if (v === undefined) return null;
+      if (w === "--select") {
+        const main = mainOfSpec(v);
+        const sel = /^(?:selection:)?([^@]+)@(\d+)$/u.exec(v);
+        over = main ? { main } : sel ? { selection: sel[1], version: Number(sel[2]) } : null;
+      } else if (w === "--handle") over = /^\d+$/u.test(v) ? { handle: Number(v) } : null;
+      else if (w === "--param" && v.includes("=")) params[v.slice(0, v.indexOf("="))] = v.slice(v.indexOf("=") + 1);
+      i++;
+    } else if (pipeline === null) pipeline = w;
+  }
+  return pipeline && over ? { pipeline, over, params } : null;
+}
+
 /** The typed inputs a person names for a run: the models it reads and the label set, where the descriptor declares them. */
 export function needsOf(p: Pipeline): { models: TypedInput[]; labels: TypedInput | null; derivatives: TypedInput[] } {
   const inputs = p.inputs ?? [];

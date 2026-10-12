@@ -14,6 +14,12 @@
 // the selections, takes a dataset's main FLAIR scans from "anon flair", the
 // role changes on the chip, and the pre-flight says how many scans they
 // resolve to and the visits with none, inside the window at both widths.
+// Since 2026-10-12: a run that made nothing reads so on its tag, the rest on
+// one line under its row, inside the window at both widths; its page says
+// each session skipped and why; Run again opens the run's pre-flight first,
+// and its Start queues it; and on the Jobs page a stopped run's job whose run
+// a later job took up again leaves Now and says which job, while that job,
+// which made nothing, waits in Now.
 // SHOTS=<dir> keeps a screenshot of each.
 
 import { expect, test, type Page } from "@playwright/test";
@@ -116,8 +122,15 @@ for (const vp of SIZES) {
     await shot(page, `run-${vp.name}`);
     await note.getByRole("button", { name: "Install dcm2niix" }).click();
     await expect(note.locator(".tool-said")).toContainText("dcm2niix v1.0.20260724 is installed");
+    // Run again opens the run's pre-flight first; Start waits on it, then queues the run up again
     await note.getByRole("button", { name: "Run again" }).click();
-    await expect(note.locator(".tool-said")).toContainText("Run 14 is queued again as job 51.");
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog.locator(".preflight .note-lead")).toHaveText("Pre-flight");
+    await expect(dialog.locator(".can-run")).toHaveText("All 140 sessions can run.");
+    await shot(page, `run-again-preflight-${vp.name}`);
+    await dialog.getByRole("button", { name: "Start" }).click();
+    await expect(page.locator("dialog[open]")).toHaveCount(0);
+    await expect(page.locator(".run-page")).toContainText("Run 14 is queued again as job 51.");
     await shot(page, `run-again-${vp.name}`);
     await noSideways(page, vp.width);
   });
@@ -228,4 +241,62 @@ test("a failed job says why on the Jobs page, its kind beside the line", async (
   await expect(line.locator(".kind-tag")).toHaveText("dependency");
   await expect(line.locator(".fail-words")).toHaveText(ADVICE);
   await shot(page, "jobs-1440");
+});
+
+for (const vp of SIZES) {
+  test(`at ${vp.name} px a run that made nothing reads so on its tag, the rest on one line under its row`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/runs.html#pipelines/catalog");
+    const row = page.locator("tr", { has: page.locator('a[href="#pipelines/runs/15"]') });
+    await expect(row.locator(".tag")).toHaveText("nothing made");
+    await expect(row.locator(".tag")).toHaveClass(/caution/u);
+    const line = page.locator("tr.made-row .made-line").first();
+    await expect(line).toHaveText("4 of 4 skipped: no FLAIR picked");
+    // the partly made run keeps its counts, and the one that made all it was for reads ok
+    await expect(page.locator(".tag", { hasText: "2 of 3 made" })).toHaveClass(/caution/u);
+    await expect(page.locator("tr.made-row .made-line").nth(1)).toHaveText("1 failed: out of memory");
+    await expect(page.locator(".tag", { hasText: "41 of 41 made" })).toHaveClass(/ok/u);
+    await expect(page.locator("table.thin .tag", { hasText: /^done$/u })).toHaveCount(0);
+    const box = (await line.boundingBox())!;
+    expect(box.height).toBeLessThanOrEqual(34);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
+    await noSideways(page, vp.width);
+    await shot(page, `made-${vp.name}`);
+  });
+
+  test(`at ${vp.name} px a stopped run's job taken up again leaves Now and says which job, and the job that made nothing waits there`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/runs.html#pipelines");
+    const now = page.locator(".jobs-now").first();
+    const nothing = now.locator(".job", { hasText: "Pipeline run of samseg-lesions@1: nothing made" });
+    await expect(nothing).toHaveCount(1);
+    await expect(nothing).toHaveClass(/short/u);
+    await expect(nothing.locator(".made-rest")).toHaveText("4 of 4 skipped: no FLAIR picked");
+    await expect(now.locator(".job", { hasText: "job 18" })).toHaveCount(0);
+    // under All jobs, the job that stopped says which job took its run up again, with no fix to make and no Run again
+    const old = page.locator(".jobs-now").nth(1).locator(".job", { hasText: "job 18" });
+    await expect(old).toContainText("ran again as job 46, done");
+    await expect(old.locator(".fail-line")).toHaveCount(0);
+    await expect(old.getByRole("button", { name: "Run again" })).toHaveCount(0);
+    for (const card of [nothing, old]) {
+      const b = (await card.boundingBox())!;
+      expect(b.x + b.width).toBeLessThanOrEqual(vp.width);
+    }
+    await noSideways(page, vp.width);
+    await shot(page, `jobs-taken-up-${vp.name}`);
+  });
+}
+
+test("a run's page says each session skipped and why, and that the run made nothing", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/runs.html#pipelines/runs/15");
+  await expect(page.locator(".run-page > .row.actions .tag")).toHaveText("nothing made");
+  await expect(page.locator(".made-note .note-lead")).toHaveText("Nothing made");
+  await expect(page.locator(".made-why li")).toHaveText("4 skipped: no FLAIR picked" + "sub-7a8b_ses-1, sub-9c0d_ses-1, sub-1e2f_ses-2, sub-3a4b_ses-1");
+  await expect(page.locator("table.thin .tag.caution", { hasText: "skipped" })).toHaveCount(4);
+  await expect(page.locator("tr.made-row .made-line")).toHaveCount(4);
+  await expect(page.locator("tr.made-row .made-line").first()).toHaveText("no FLAIR picked");
+  await expect(page.locator(".run-page")).not.toContainText("Every unit that finished passed its checks.");
+  await shot(page, "run-nothing-1440");
 });

@@ -1583,6 +1583,14 @@ table.thin tr.fail-row > td { padding-top: 0; }
 .tool-said { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; margin: 0.3rem 0 0; font-size: var(--n-text-size-small); color: var(--n-text); }
 td > .tool-said { width: 0; min-width: min(100%, calc(100vw - 3rem)); position: sticky; left: 0; padding-left: 0.55rem; }
 td > .fail-line + .tool-said { border-left: 2px solid var(--n-caution-line); margin-top: 0; padding-top: 0.25rem; }
+/* 2026-10-12: a run reads as its units summed; what it did not make is one line in caution's border, its units under each reason */
+.job.short { border-color: var(--n-caution-line); }
+.job .made-rest { padding-left: 0.55rem; border-left: 2px solid var(--n-caution-line); font-size: var(--n-text-size-small); color: var(--n-text); overflow-wrap: anywhere; }
+.preflight-cannot .cannot-units, .made-why .cannot-units { overflow-wrap: anywhere; }
+.can-run { margin-top: 0.3rem; }
+table.thin tr.made-row > td { padding-top: 0; }
+.made-line { display: flex; align-items: center; width: 0; min-width: min(100%, calc(100vw - 3rem)); position: sticky; left: 0; padding-left: 0.55rem; border-left: 2px solid var(--n-caution-line); font-size: var(--n-text-size-small); color: var(--n-text); }
+.made-line .made-words { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* 2026-10-12: the run form's Over, a combobox over the saved selections; the chosen one alone framed in the brand's line */
 .over-box { position: relative; }

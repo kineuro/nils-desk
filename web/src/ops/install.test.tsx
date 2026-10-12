@@ -3,7 +3,7 @@
 // Install a missing tool from where its absence is said (2026-10-12): an
 // admin presses Install dcm2niix beside a failed run's reason where its
 // failure's fix names the engine's install; the engine fetches its pinned
-// build, the version is said and Run again takes the run up again; anyone
+// build, the version is said and Run again opens the run's pre-flight; anyone
 // else reads a sentence asking an admin; an install that fails says the
 // engine's reason whole, which says the way by hand; a refused pre-flight
 // asks again once it is installed; a run the jobs door refused says why with
@@ -63,6 +63,7 @@ beforeEach(() => {
   if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
   if (!HTMLDialogElement.prototype.close) HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) { this.removeAttribute("open"); };
   asked = [];
+  againOn = [];
   answers = {
     [`POST ${PATH}`]: () => ({ status: 200, body: { installed: true, source: "https://github.com/rordenlab/dcm2niix/releases", tool: tool(true) } }),
     "POST /api/jobs": () => ({ status: 200, body: { job: 41, state: "queued" } }),
@@ -104,7 +105,9 @@ async function typeInto(input: HTMLInputElement, text: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
-const runs = (caps: Capabilities, list: Run[] = [RUN]) => <CatalogBody caps={caps} pipelines={[]} capability={{ enabled: true }} runs={list} onRun={() => undefined} />;
+/** The runs Run again was pressed on: since 2026-10-12 it opens the run's pre-flight (./RunAgain), which takes it up again. */
+let againOn: number[] = [];
+const runs = (caps: Capabilities, list: Run[] = [RUN]) => <CatalogBody caps={caps} pipelines={[]} capability={{ enabled: true }} runs={list} onRun={() => undefined} onAgain={(r) => againOn.push(r.id)} />;
 
 describe("Install dcm2niix beside a failed run's reason", () => {
   it("installs it for an admin, says the version and takes the run up again", async () => {
@@ -115,9 +118,9 @@ describe("Install dcm2niix beside a failed run's reason", () => {
     expect(el.querySelector(".tool-said")?.textContent).toBe("dcm2niix v1.0.20260724 is installed at /srv/registry/tools/dcm2niix.Run again");
     expect(button("Install dcm2niix")).toBeNull();
     await press("Run again");
-    expect(asked.find((a) => a.path === "/api/jobs")?.body).toEqual({ command: ["run", "--resume", "12"] });
-    expect(el.querySelector(".tool-said")?.textContent).toContain("Run 12 is queued again as job 41.");
-    expect(button("Run again")).toBeNull();
+    // the run's pre-flight opens first: nothing is queued by the press itself
+    expect(againOn).toEqual([12]);
+    expect(asked.find((a) => a.path === "/api/jobs")).toBeUndefined();
   });
   it("says the tool is there where the engine found one already, and on every run once one press installed it", async () => {
     answers[`POST ${PATH}`] = () => ({ status: 200, body: { installed: false, why: "dcm2niix was found already on the engine's search path and left as it is", tool: tool(true, { path: "/usr/bin/dcm2niix", found_by: "path" }) } });
@@ -159,14 +162,15 @@ describe("Install dcm2niix beside a failed run's reason", () => {
     let again = 0;
     await act(async () =>
       root.render(
-        <RunView caps={capsOf(DOORS, ADMIN)} run={detail} pipeline={null} resumedAt={null} jobAlive={false} table={{ kind: "off", why: null }} files={null} by="subject.sex" onBy={() => undefined} said={null} onCancel={null} onResume={null} onAgain={async () => `again ${++again}`} />,
+        <RunView caps={capsOf(DOORS, ADMIN)} run={detail} pipeline={null} resumedAt={null} jobAlive={false} table={{ kind: "off", why: null }} files={null} by="subject.sex" onBy={() => undefined} said={null} onCancel={null} onResume={null} onAgain={() => void ++again} />,
       ),
     );
     expect(el.querySelector(".fail-note .note-lead")?.textContent).toBe(`dependency${ADVICE}`);
     await press("Install dcm2niix");
+    // Run again opens the run's pre-flight (./RunAgain); nothing is queued by the press itself
     await press("Run again");
     expect(again).toBe(1);
-    expect(el.querySelector(".fail-note .tool-said")?.textContent).toContain("again 1");
+    expect(asked.find((a) => a.path === "/api/jobs")).toBeUndefined();
   });
 });
 

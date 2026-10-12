@@ -12,6 +12,11 @@
 // never offered) and two cohorts (one retired, never offered), whose main
 // scans of a role a run goes straight over, and a pre-flight of them that
 // says how many scans they resolve to and the visits that have none.
+// Since 2026-10-12: a run that made nothing though it is done (every session
+// skipped for want of a FLAIR) and runs that made part or all of what they
+// were for, each read as its units summed; a resumed run's pre-flight, which
+// Run again opens first; and on the Jobs page a stopped run's job whose run a
+// later job took up again, and that later job, which made nothing.
 // Every name and number here is made up.
 
 import { StrictMode } from "react";
@@ -75,6 +80,7 @@ const engine = (): Record<string, unknown> => ({
   registry: { epoch: 4 },
   packs: [{ name: "mri", version: "1.0.1", main_roles: ["t1w", "flair", "t2w"] }],
   tools: { dcm2niix: tool() },
+  pipelines: { enabled: true, preflight: { door: "POST /api/pipelines/{name}/preflight", resume: true } },
 });
 const caps = () => ({
   engine: engine(),
@@ -132,15 +138,26 @@ const run = (id: number, pipeline: (typeof PIPELINES)[number], selection: string
   ...more,
 });
 const unit = (u: string, status: string, error: string | null = null) => ({ unit: u, state: "over", status, attempts: 1, device: "cpu", exit_code: status === "failed" ? 137 : 0, started_at: ago(200), finished_at: ago(190), error });
+/** What a run made, as the engine sums its units. */
+const made = (units: number, done: number, failed: number, skipped: number, why: { status: string; why: string; units: number }[]) => ({ units, made: done, failed, skipped, left: 0, nothing: done === 0, line: null, why });
+const SKIPPED = ["sub-7a8b_ses-1", "sub-9c0d_ses-1", "sub-1e2f_ses-2", "sub-3a4b_ses-1"];
 const RUNS = [
+  // taken up again once dcm2niix was there, with no session able to run: done, and made nothing
+  run(15, PIPELINES[0], "selection:t1-3d-stacks@1", "done", 8, {
+    results_digest: "c4",
+    summary: { units: { total: 4, succeeded: 0, failed: 0, skipped: 4, unreported: 0, missing_input: 4 }, derivatives: 0, converter: { version: PINNED, path: WHERE, found_by: "tools" } },
+    made: made(4, 0, 0, 4, [{ status: "skipped", why: "no FLAIR picked", units: 4 }]),
+    units_run: SKIPPED.map((u) => ({ ...unit(u, "skipped", "missing an input: no flair is picked for it among the selection's stacks"), attempts: 0, exit_code: null, lacks: ["no FLAIR picked"] })),
+  }),
   run(14, PIPELINES[1], "selection:3d-t1-siemens@1", "failed", 12, { error: ERROR, failure: NO_DCM2NIIX }),
   run(13, PIPELINES[0], "selection:t1-3d-stacks@1", "failed", 20, { error: ERROR }),
   run(12, PIPELINES[1], "selection:flair-2d-ge@1", "partial", 200, {
     results_digest: "9f",
     summary: { units: { total: 3, succeeded: 2, failed: 1 }, derivatives: 2, failures_by_cause: [{ kind: "resource", cause: "memory", units: 1 }], converter: { version: PINNED, path: WHERE, found_by: "tools" } },
+    made: made(3, 2, 1, 0, [{ status: "failed", why: "out of memory", units: 1 }]),
     units_run: [unit("sub-1a2b_ses-1", "succeeded"), { ...unit("sub-3c4d_ses-1", "failed", "the container was killed: out of memory at 15.8 GB. The lane allows 16 GB a unit."), failure: failure("resource", "memory", "Give the lane more memory, or run fewer units at once.") }, unit("sub-5e6f_ses-2", "succeeded")],
   }),
-  run(11, PIPELINES[0], "selection:ms-followup-source@3", "done", 1500, { results_digest: "ab", summary: { units: { total: 41, succeeded: 41 }, derivatives: 82 } }),
+  run(11, PIPELINES[0], "selection:ms-followup-source@3", "done", 1500, { results_digest: "ab", summary: { units: { total: 41, succeeded: 41 }, derivatives: 82 }, made: made(41, 41, 0, 0, []) }),
 ];
 
 const sel = (id: number, name: string, versions: number, rows: number | null, owner: string, made: number, more: Record<string, unknown> = {}) => ({
@@ -232,7 +249,20 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (REFUSE && command[0] === "run" && !command.includes("--resume")) return json(409, { error: "refused before it started: the units take 920 GB and the working place work has 812 GB free; free space or choose another place", failure: failure("resource", "disk", "Free space in the working place, or name another with nils pipeline lane --output-place, then run it again."), requirements: [...checksNow().slice(0, 4), { check: "disk", ok: false, said: "the units take 920 GB and the working place work has 812 GB free", failure: failure("resource", "disk", "Free space in the working place, or name another with nils pipeline lane --output-place, then run it again."), place: "work", free_gb: 812, need_gb: 920 }] });
     return json(200, { job: 51, state: "queued" });
   }
-  if (path === "/api/jobs") return json(200, { count: 1, jobs: [{ id: 44, kind: "run", name: null, state: "failed", started_at: ago(12), heartbeat_at: null, finished_at: ago(11), progress: null, error: ERROR, failure: NO_DCM2NIIX, args: { argv: ["run", "n4-bias-correction@1", "--select", "selection:3d-t1-siemens@1"], principal: "astrid@site" }, result: null }] });
+  if (path === "/api/jobs") {
+    const queued = ["run", "samseg-lesions@1", "--select", "selection:t1-3d-stacks@1", "--pack-dir", "/usr/local/share/nils/packs"];
+    const resumed = ["run", "--resume", "15", "--pack-dir", "/usr/local/share/nils/packs"];
+    const jobs = [
+      // run 15 taken up again once dcm2niix was there: done, with no session able to run
+      { id: 46, kind: "pipeline", name: "samseg-lesions@1", state: "done", started_at: ago(9), heartbeat_at: null, finished_at: ago(8), progress: null, error: null, failure: null, args: { argv: resumed, queued: resumed, principal: "astrid@site", pipeline: "samseg-lesions@1", resume: 15, run: 15 }, result: { run: 15, status: "done", summary: RUNS[0].summary, results_digest: "c4" }, made: RUNS[0].made, taken_up: null },
+      { id: 44, kind: "run", name: null, state: "failed", started_at: ago(12), heartbeat_at: null, finished_at: ago(11), progress: null, error: ERROR, failure: NO_DCM2NIIX, args: { argv: ["run", "n4-bias-correction@1", "--select", "selection:3d-t1-siemens@1"], principal: "astrid@site" }, result: null },
+      // the job run 15 stopped in for want of dcm2niix, taken up again since as job 46
+      { id: 18, kind: "pipeline", name: "samseg-lesions@1", state: "failed", started_at: ago(560), heartbeat_at: null, finished_at: ago(559), progress: null, error: ERROR, failure: NO_DCM2NIIX, args: { argv: queued, queued, principal: "astrid@site", pipeline: "samseg-lesions@1", run: 15 }, result: { run: 15, status: "failed", summary: {}, results_digest: null, failure: NO_DCM2NIIX }, made: null, taken_up: { job: 46, state: "done", run: 15 } },
+    ];
+    // without ?all the door lists the jobs not over, as the engine's does
+    const listed = url.searchParams.has("all") ? jobs : jobs.filter((j) => j.state === "queued" || j.state === "running" || j.state === "cancelling");
+    return json(200, { count: listed.length, jobs: listed });
+  }
   if (path === "/api/tools") return json(200, { tools: [tool()] });
   if (path === "/api/derivatives") return json(200, { derivatives: [] });
   if (path === "/api/sources") return json(200, { count: SOURCES.length, window_days: 0, sources: SOURCES });
@@ -252,6 +282,9 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     // a bids input is released with dcm2niix: not ready until it is installed (or, with ?refuse, said ready)
     const ready = installed || REFUSE;
     const checks = checksNow();
+    // a run taken up again: the units it still has to run, every one of which can
+    if (typeof body.resume === "number")
+      return json(200, { pipeline: "n4-bias-correction@1", selection: "selection:3d-t1-siemens@1", resume: { run: body.resume, status: "failed", job: 44, kept: 0, made: 0 }, layout: "bids", level: "session", unit: "session", stacks: 318, units: { total: 140, ready: 140, missing: 0 }, missing: [], cannot: [], estimate: { seconds_per_unit: 95, source: "descriptor", seconds: 3300, slots: 4 }, gpu: { need: "none", available: null, device: null }, budget: { cores: 16, memory_gb: 48, fits: true }, ready, blockers: ready ? [] : [checks[0].said], requirements: checks, failure: ready ? null : NO_DCM2NIIX });
     const main = typeof body.select === "string" ? mainRead(body.select) : null;
     if (main)
       return json(200, { pipeline: "n4-bias-correction@1", selection: body.select, main, layout: "bids", level: "session", stacks: 481, units: { total: 474, ready: 474, missing: 0 }, missing: [], estimate: { seconds_per_unit: 95, source: "descriptor", seconds: 11300, slots: 4 }, gpu: { need: "none", available: null, device: null }, budget: { cores: 16, memory_gb: 48, fits: true }, ready, blockers: ready ? [] : [checks[0].said], requirements: checks, failure: ready ? null : NO_DCM2NIIX });

@@ -20,6 +20,7 @@ import { RunView, type Table } from "./RunPage";
 import {
   allPassed,
   breachesByCheck,
+  cannotOf,
   cellWords,
   checksOf,
   durationWords,
@@ -94,6 +95,8 @@ const PRE: Preflight = {
 const LESIONS: Preflight = {
   ...PRE,
   pipeline: "samseg-lesions@1",
+  layout: "bids",
+  level: "session",
   units: { total: 6, ready: 3, missing: 3 },
   missing: [
     { unit: "sub-1_ses-a", why: "no flair picked" },
@@ -161,8 +164,9 @@ describe("the pre-flight", () => {
     expect(preflightGate(LESIONS)).toEqual({ go: false, why: "a unit needs 16 GB of memory and the lane allows 8" });
     const html = renderToStaticMarkup(<PreflightPanel p={LESIONS} />);
     expect(html).toContain("Not ready");
-    expect(html).toContain("<b class=\"num\">2</b> no flair picked");
-    expect(html).toContain("sub-1_ses-a, sub-2_ses-a");
+    // an engine from before `cannot`: its units missing an input folded by why, one line a reason with the units under it
+    expect(html).toContain("<b class=\"num\">2</b> sessions cannot run: no flair picked<div class=\"meta cannot-units\">sub-1_ses-a, sub-2_ses-a</div>");
+    expect(html).toContain("<b class=\"num\">1</b> session cannot run: no t1w picked</li>");
     expect(html).toContain("a unit needs 16 GB of memory and the lane allows 8");
   });
   it("says what a dataset's main scans resolve to, under which rules, and the visits that have none, by why", () => {
@@ -286,7 +290,7 @@ describe("a run's page", () => {
     };
     const resumedAt = "2026-09-24T19:40:00Z";
     expect(unitTone(cancelled.units_run![0], resumedAt)).toBe("kept");
-    expect(unitCounts(cancelled.units_run!, resumedAt)).toEqual({ running: 1, waiting: 1, done: 0, failed: 0, kept: 1 });
+    expect(unitCounts(cancelled.units_run!, resumedAt)).toEqual({ running: 1, waiting: 1, done: 0, skipped: 0, failed: 0, kept: 1 });
     expect(resumable(cancelled, false)).toBe(true);
     expect(resumable(RUN, false)).toBe(false);
     expect(resumable({ ...RUN, status: "failed", results_digest: "x" }, false)).toBe(false);
@@ -465,5 +469,89 @@ describe("the assistant's plan", () => {
     expect(plansOffered(caps)).toBe(false);
     expect(plansOffered({ ...caps, assistant: { stations: [{ id: "analysis-plan" }] } })).toBe(true);
     expect(renderToStaticMarkup(<PipelinesPage caps={caps} page="plan" arg="r1" />)).toContain("<h1>Jobs</h1>");
+  });
+});
+
+describe("what cannot run, and what a run made (2026-10-12)", () => {
+  const SESSIONS = ["sub-7a8b9c0d_ses-1", "sub-1e2f3a4b_ses-1", "sub-5c6d7e8f_ses-2", "sub-9d0e1f2a_ses-1"];
+  const T1_ONLY: Preflight = {
+    ...PRE,
+    pipeline: "samseg-lesions@1",
+    layout: "bids",
+    level: "session",
+    unit: "session",
+    stacks: 4,
+    units: { total: 4, ready: 0, missing: 4 },
+    missing: SESSIONS.map((unit) => ({ unit, why: ["no flair is picked for it among the selection's stacks"], lacks: ["no FLAIR picked"] })),
+    cannot: [{ why: "no FLAIR picked", units: 4, named: SESSIONS }],
+    ready: false,
+    blockers: ["no session can run: 4 of 4 lack an input (no FLAIR picked)"],
+  };
+  it("the pre-flight names the sessions that cannot run, one line a reason with the sessions under it, and holds Run", () => {
+    expect(cannotOf(T1_ONLY)).toEqual([{ why: "no FLAIR picked", count: 4, units: SESSIONS }]);
+    expect(preflightGate(T1_ONLY)).toEqual({ go: false, why: "no session can run: 4 of 4 lack an input (no FLAIR picked)" });
+    const html = renderToStaticMarkup(<PreflightPanel p={T1_ONLY} />);
+    expect(html).toContain("Not ready");
+    expect(html).toContain(`<b class="num">4</b> sessions cannot run: no FLAIR picked<div class="meta cannot-units">${SESSIONS.join(", ")}</div>`);
+    expect(html).toContain("no session can run: 4 of 4 lack an input (no FLAIR picked)");
+    // below detail quasi the engine names no session: the count and the reason
+    const plainP: Preflight = { ...T1_ONLY, cannot: [{ why: "no FLAIR picked", units: 4, named: [] }] };
+    const flat = renderToStaticMarkup(<PreflightPanel p={plainP} />);
+    expect(flat).toContain('<b class="num">4</b> sessions cannot run: no FLAIR picked</li>');
+    expect(flat).not.toContain("sub-");
+  });
+  it("says so plainly where every session can run, and how many a run taken up again keeps", () => {
+    const all: Preflight = { ...T1_ONLY, units: { total: 4, ready: 4, missing: 0 }, missing: [], cannot: [], ready: true, blockers: [] };
+    expect(renderToStaticMarkup(<PreflightPanel p={all} />)).toContain("All 4 sessions can run.");
+    expect(renderToStaticMarkup(<PreflightPanel p={{ ...all, units: { total: 1, ready: 1, missing: 0 } }} />)).toContain("The one session can run.");
+    const again: Preflight = { ...all, units: { total: 2, ready: 2, missing: 0 }, resume: { run: 14, status: "cancelled", job: 51, kept: 2, made: 2 } };
+    expect(renderToStaticMarkup(<PreflightPanel p={again} />)).toContain("2 sessions over before are kept (2 made).");
+  });
+  const skipped = (u: string) => ({ unit: u, state: "over", status: "skipped", attempts: 0, device: null, exit_code: null, started_at: null, finished_at: "2026-10-12T10:23:56Z", error: "missing an input: no flair is picked for it among the selection's stacks", lacks: ["no FLAIR picked"] });
+  const NOTHING: RunDetail = {
+    ...RUN,
+    id: 1,
+    pipeline: "samseg-lesions@1",
+    status: "done",
+    selection: "selection:t1-3d-stacks@1",
+    units_run: SESSIONS.map(skipped),
+    summary: { units: { total: 4, succeeded: 0, failed: 0, skipped: 4, unreported: 0, missing_input: 4 }, numbers: { checks: { declared: 2, breaches: 0 } }, breaches: [], review_items: [] },
+    made: { units: 4, made: 0, failed: 0, skipped: 4, left: 0, nothing: true, line: "nothing made · 4 of 4 skipped: no FLAIR picked", why: [{ status: "skipped", why: "no FLAIR picked", units: 4 }] },
+  };
+  it("a run's page reads as its units summed, each unit says its own status, and a run that made nothing says why", () => {
+    expect(unitTone(NOTHING.units_run![0], null)).toBe("skipped");
+    const html = renderToStaticMarkup(<RunView caps={capsWith(DOORS, [...WORK])} run={NOTHING} pipeline={VOLUMES} resumedAt={null} jobAlive={false} table={{ kind: "off", why: null }} files={null} by="subject.sex" onBy={() => undefined} said={null} onCancel={null} onResume={null} />);
+    expect(html).toContain('<span class="tag caution">nothing made</span><b>samseg-lesions@1</b>');
+    expect(html).not.toContain(">done</span>");
+    expect(html).toContain('<p class="note-lead">Nothing made</p>');
+    expect(html).toContain(`<b class="num">4</b> skipped: no FLAIR picked<div class="meta cannot-units">${SESSIONS.join(", ")}</div>`);
+    expect(html.match(/<span class="tag caution">skipped<\/span>/gu)).toHaveLength(4);
+    expect(html.match(/<span class="made-words" title="missing an input: no flair is picked for it among the selection&#x27;s stacks">no FLAIR picked<\/span>/gu)).toHaveLength(4);
+    expect(html).toContain("4 skipped");
+    expect(html).not.toContain("Every unit that finished passed its checks.");
+    // a run that made all it was for is ok, with no note
+    const all: RunDetail = { ...RUN, made: { units: 3, made: 3, failed: 0, skipped: 0, left: 0, nothing: false, line: "3 of 3 made", why: [] } };
+    const fine = renderToStaticMarkup(<RunView caps={capsWith(DOORS, [...WORK])} run={all} pipeline={VOLUMES} resumedAt={null} jobAlive={false} table={{ kind: "off", why: null }} files={null} by="subject.sex" onBy={() => undefined} said={null} onCancel={null} onResume={null} />);
+    expect(fine).toContain('<span class="tag ok">3 of 3 made</span>');
+    expect(fine).not.toContain("made-note");
+  });
+  it("the Runs table carries each run's units summed on its tag, and the rest on one line under its row", () => {
+    const row = (id: number, made: unknown, status = "done") => ({ id, pipeline_id: 1, pipeline: "samseg-lesions@1", job_id: 40 + id, selection: "selection:t1-3d-stacks@1", status, started_at: null, finished_at: null, made });
+    const html = renderToStaticMarkup(
+      <CatalogBody
+        caps={capsWith(DOORS, ["pipelines:see"])}
+        pipelines={[VOLUMES]}
+        capability={{ enabled: true }}
+        runs={[row(1, NOTHING.made), row(2, { units: 4, made: 3, failed: 0, skipped: 1, left: 0, nothing: false, line: null, why: [{ status: "skipped", why: "no FLAIR picked", units: 1 }] }), row(3, { units: 4, made: 4, failed: 0, skipped: 0, left: 0, nothing: false, line: null, why: [] })]}
+        onRun={() => undefined}
+      />,
+    );
+    expect(html).toContain('<span class="tag caution">nothing made</span>');
+    expect(html).toContain('<span class="made-words" title="4 of 4 skipped: no FLAIR picked">4 of 4 skipped: no FLAIR picked</span>');
+    expect(html).toContain('<span class="tag caution">3 of 4 made</span>');
+    expect(html).toContain(">1 skipped: no FLAIR picked</span>");
+    expect(html).toContain('<span class="tag ok">4 of 4 made</span>');
+    expect(html.match(/made-row/gu)).toHaveLength(2);
+    expect(html).not.toContain(">done</span>");
   });
 });

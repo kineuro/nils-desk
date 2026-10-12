@@ -7,7 +7,8 @@
 import { describe, expect, it } from "vitest";
 import type { JobRow } from "../ask/client";
 import { parseJobsEvent } from "../data/now";
-import { cancelGrant, cardOf, countByFilter, filterJobs, nextMove, progressOf, targetOf, thenWords, titleOf, type ChainedJob } from "./pipelines";
+import { cancelGrant, cardOf, countByFilter, filterJobs, needsALook, nextMove, progressOf, targetOf, thenWords, titleOf, againOfJob, type ChainedJob } from "./pipelines";
+import { overOfCommand, requeued } from "./catalog";
 
 const at = "2026-09-15T21:02:00Z";
 const now = Date.parse("2026-09-15T21:04:00Z");
@@ -114,5 +115,77 @@ describe("the event stream", () => {
     expect(parseJobsEvent('{"jobs": [{"id": 1}]}')?.jobs.length).toBe(1);
     expect(parseJobsEvent("{}")).toBeNull();
     expect(parseJobsEvent("not json")).toBeNull();
+  });
+});
+
+describe("a pipeline run's job (2026-10-12)", () => {
+  const DCM2NIIX = { kind: "dependency", cause: "dcm2niix", advice: "Install dcm2niix where the engine runs; then run it again.", fix: null };
+  const queued = ["run", "samseg-lesions@1", "--select", "selection:t1-3d-stacks@1", "--pack-dir", "/srv/packs"];
+  /** The job that stopped for want of dcm2niix, as the engine answers it once a later job took its run up again. */
+  const stopped = (over: Partial<ChainedJob> = {}): ChainedJob =>
+    job(18, ["/usr/bin/nils", "--registry", "/srv/reg", ...queued], "failed", {
+      kind: "pipeline",
+      name: "samseg-lesions@1",
+      error: "run 1 the release of the input failed: dcm2niix is not runnable",
+      args: { argv: ["/usr/bin/nils", "--registry", "/srv/reg", ...queued], queued, principal: "astrid", pipeline: "samseg-lesions@1", run: 1, handle: 2 },
+      result: { run: 1, status: "failed", summary: {}, results_digest: null, failure: DCM2NIIX },
+      failure: DCM2NIIX,
+      ...over,
+    } as Partial<ChainedJob>);
+  const MADE_NOTHING = { units: 4, made: 0, failed: 0, skipped: 4, left: 0, nothing: true, line: "nothing made · 4 of 4 skipped: no FLAIR picked", why: [{ status: "skipped", why: "no FLAIR picked", units: 4 }] };
+  /** The job that took run 1 up again, done with every session skipped. */
+  const again = job(44, ["run", "--resume", "1"], "done", {
+    kind: "pipeline",
+    name: "samseg-lesions@1",
+    args: { argv: ["run", "--resume", "1"], queued: ["run", "--resume", "1", "--pack-dir", "/srv/packs"], principal: "astrid", pipeline: "samseg-lesions@1", resume: 1, run: 1, handle: 2 },
+    result: { run: 1, status: "done", summary: { units: { total: 4, succeeded: 0, failed: 0, skipped: 4 } }, results_digest: "ab" },
+    made: MADE_NOTHING,
+  } as Partial<ChainedJob>);
+
+  it("a stopped job whose run was taken up again says which job did, offers no Run again, and leaves Now", () => {
+    const c = cardOf({ ...stopped(), taken_up: { job: 44, state: "done", run: 1 } }, now);
+    expect(c.title).toBe("Pipeline run of samseg-lesions@1 stopped");
+    expect(c.meta).toMatch(/· ran again as job 44, done$/u);
+    expect(c.taken).toEqual({ job: 44, state: "done" });
+    expect(c.next).toBeNull();
+    expect(c.again).toBeNull();
+    expect(c.failure).toBeNull();
+    expect(c.error).toBeNull();
+    expect(needsALook({ ...stopped(), taken_up: { job: 44, state: "done", run: 1 } }, now)).toBe(false);
+    // not taken up yet: it needs a look, and Run again takes its run up again
+    const open = cardOf(stopped(), now);
+    expect(open.failure?.kind).toBe("dependency");
+    expect(open.next?.label).toBe("Run again");
+    expect(open.again).toEqual({ kind: "resume", run: 1, pipeline: "samseg-lesions@1", label: "samseg-lesions@1" });
+    expect(needsALook(stopped(), now)).toBe(true);
+  });
+  it("a run's job that ended reads as its units summed, never a bare done, and one that made nothing needs a look", () => {
+    const c = cardOf(again, now);
+    expect(c.title).toBe("Pipeline run of samseg-lesions@1: nothing made");
+    expect(c.made).toEqual({ head: "nothing made", rest: "4 of 4 skipped: no FLAIR picked", tone: "caution" });
+    expect(needsALook(again, now)).toBe(true);
+    const partly = { ...again, made: { ...MADE_NOTHING, made: 3, skipped: 1, nothing: false, why: [{ status: "skipped", why: "no FLAIR picked", units: 1 }] } };
+    expect(cardOf(partly, now).title).toBe("Pipeline run of samseg-lesions@1: 3 of 4 made");
+    expect(cardOf(partly, now).made?.rest).toBe("1 skipped: no FLAIR picked");
+    expect(needsALook(partly, now)).toBe(false);
+    // an engine before `made`: its result's counts
+    const before = { ...again, made: undefined };
+    expect(cardOf(before, now).title).toBe("Pipeline run of samseg-lesions@1: nothing made");
+    expect(cardOf(before, now).made?.rest).toBe("4 of 4 skipped");
+    // any other job is as it was
+    expect(cardOf(job(9, ["digest", "@a"], "done"), now).made).toBeNull();
+    expect(cardOf(job(9, ["digest", "@a"], "done"), now).title).toBe("Read of a done");
+  });
+  it("Run again of a run that cannot be taken up runs its command again as a new run, without the flags the engine added", () => {
+    const after = stopped({ result: { run: 1, status: "failed", summary: {}, results_digest: "ab" } });
+    expect(againOfJob(after)).toEqual({ kind: "new", pipeline: "samseg-lesions@1", over: { selection: "t1-3d-stacks", version: 1 }, params: {}, command: ["run", "samseg-lesions@1", "--select", "selection:t1-3d-stacks@1"] });
+    expect(overOfCommand(["run", "n4@1", "--select", "main:t1w@dataset:study-anon", "--param", "shrink=2", "--pack-dir", "/p"])).toEqual({ pipeline: "n4@1", over: { main: { kind: "dataset", name: "study-anon", role: "t1w" } }, params: { shrink: "2" } });
+    expect(overOfCommand(["run", "n4@1", "--handle", "7"])).toEqual({ pipeline: "n4@1", over: { handle: 7 }, params: {} });
+    expect(overOfCommand(["run", "--resume", "3"])).toBeNull();
+    expect(overOfCommand(["digest", "@a"])).toBeNull();
+    expect(requeued(["run", "n4@1", "--select", "selection:a@1", "--pack-dir", "/srv/packs", "--dcm2niix", "/x"])).toEqual(["run", "n4@1", "--select", "selection:a@1"]);
+    // a job of no run, or one that never stopped, has no Run again of its own
+    expect(againOfJob(job(9, ["digest", "@a"], "failed"))).toBeNull();
+    expect(againOfJob(again)).toBeNull();
   });
 });
