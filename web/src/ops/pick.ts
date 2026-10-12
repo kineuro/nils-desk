@@ -5,11 +5,15 @@
 // name and words, so "t1 3d" finds t1-3d-stacks and "siemens" finds
 // 3d-t1-siemens; each with its newest version, its size, who made it and
 // when, and the cohort it is the source of. Exact text still works as typed:
-// selection:NAME@V, NAME@V, NAME, or handle:ID. The run's door takes a saved
-// selection or a handle only, so a cohort or a dataset is offered through
-// the selection that is its source, never by itself.
+// selection:NAME@V, NAME@V, NAME, or handle:ID. Since record 55 (rulings of
+// 2026-10-12, item 6) a run also goes straight over a dataset's or a
+// cohort's main scans of a role: each dataset and cohort is offered beside
+// the selections, found by its name, the role taken from a word typed (t1,
+// flair, t2) or the first of the pack's, and main:ROLE@dataset:NAME works as
+// typed.
 
 import type { SelectionRow, SelectionSize } from "../query/selections";
+import { mainOfSpec, type MainOver } from "./catalog";
 
 export interface OverOption {
   name: string;
@@ -30,13 +34,17 @@ export function optionOf(r: SelectionRow): OverOption {
   return { name: r.name, newest: Math.max(1, r.versions || 1), size: r.size ?? null, owner: r.owner ?? null, made: r.created_at ?? null, saved: r.updated_at ?? r.created_at ?? null, cohort: r.cohort ?? null, description: r.description ?? null };
 }
 
-/** What exact text names: a selection with or without its version, or a handle; null where the text is not one name. */
-export type Spec = { selection: string; version: number | null } | { handle: number };
+/** What exact text names: a selection with or without its version, a dataset's or a cohort's main scans, or a handle; null where the text is not one name. */
+export type Spec = { selection: string; version: number | null } | { main: MainOver } | { handle: number };
 
 export function specOf(typed: string): Spec | null {
   const t = typed.trim();
   const h = /^handle:\s*(\d+)$/iu.exec(t);
   if (h) return { handle: Number(h[1]) };
+  if (/^main:/iu.test(t)) {
+    const main = mainOfSpec(t);
+    return main ? { main } : null;
+  }
   const m = /^(?:selection:)?([^\s@:,]+)(?:@(\d+))?$/iu.exec(t);
   return m ? { selection: m[1], version: m[2] ? Number(m[2]) : null } : null;
 }
@@ -126,4 +134,67 @@ export function merged(pool: OverOption[], more: OverOption[]): OverOption[] {
 /** The longest typed word: what the engine's own filter, part of the name, is asked for where the pool is not every selection. */
 export function askWord(typed: string): string {
   return wordsOf(typed.replace(/^selection:/iu, "").replace(/@\d*$/u, "")).sort((a, b) => b.length - a.length)[0] ?? "";
+}
+
+/** A dataset or a cohort whose main scans a run may go over, with its size where the engine says it. */
+export interface ScopeOption {
+  kind: MainOver["kind"];
+  name: string;
+  /** Its scans and subjects (a dataset's: those with a scan in its folder; a cohort's: its members). */
+  scans: number | null;
+  subjects: number | null;
+}
+
+/** The words a person types for a role, by the role the pack names: t1, t1w for t1w; flair; t2, t2w for t2w. */
+export function roleOfWord(word: string, roles: readonly string[]): string | null {
+  const w = word.toLowerCase();
+  for (const r of roles) {
+    const bare = r.toLowerCase();
+    if (w === bare || w === bare.replace(/w$/u, "")) return r;
+  }
+  return null;
+}
+
+export interface FoundScope {
+  option: ScopeOption;
+  /** The role taken: the one a typed word names, else the first of the pack's. */
+  role: string;
+  score: number;
+}
+
+/**
+ * The datasets and cohorts the typed words find, best first, each with the
+ * role a word names (t1, flair) or the first of the pack's. A word that
+ * names a role need not find the name; every other word must, by a word of
+ * the name, a part of it, or its kind. With nothing typed, every one, the
+ * datasets first, by name: they come after the recent selections.
+ */
+export function findScopes(options: ScopeOption[], typed: string, roles: readonly string[], max = 6): { found: FoundScope[]; more: number } {
+  const spec = specOf(typed);
+  if (roles.length === 0 || (spec && "main" in spec)) return { found: [], more: 0 };
+  const words = wordsOf(typed.replace(/^selection:/iu, "").replace(/@\d*$/u, ""));
+  let role: string | null = null;
+  const rest: string[] = [];
+  for (const w of words) {
+    const r = roleOfWord(w, roles);
+    if (r && role === null) role = r;
+    else if (!r) rest.push(w);
+  }
+  const all: FoundScope[] = [];
+  for (const o of options) {
+    const name = o.name.toLowerCase();
+    let score = 0;
+    let missed = false;
+    for (const w of rest) {
+      const s = wordScore(w, name, wordsOf(o.name), [o.kind, "main", "scans"]);
+      if (s === 0) missed = true;
+      score += s;
+    }
+    if (missed) continue;
+    // nothing of a name typed (nothing at all, or only a role): every one
+    all.push({ option: o, role: role ?? roles[0], score });
+  }
+  const kind = (f: FoundScope) => (f.option.kind === "dataset" ? 0 : 1);
+  all.sort((a, b) => b.score - a.score || kind(a) - kind(b) || a.option.name.localeCompare(b.option.name));
+  return { found: all.slice(0, max), more: Math.max(0, all.length - max) };
 }

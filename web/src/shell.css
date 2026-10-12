@@ -1599,6 +1599,11 @@ td > .fail-line + .tool-said { border-left: 2px solid var(--n-caution-line); mar
 .chip.over-chip { min-height: var(--n-control); padding: 0 0.6rem; border: 1px solid var(--n-brand-line); background: var(--n-brand-bg); color: var(--n-brand-fg); max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
 .chip.over-chip .i { color: var(--n-brand-icon); }
 .over-version { min-height: var(--n-control); }
+/* record 55 (2026-10-12): a dataset's or a cohort's main scans, the role chosen on the chip */
+.over-role { min-height: var(--n-control); }
+.over-opt.over-scope .over-v { color: var(--n-text); }
+.preflight-main { margin-top: 0.35rem; }
+.preflight-main .note-detail + .note-detail { margin-top: 0.2rem; }
 
 /* Wave 7a: a dataset not read yet, and the datasets a source holds */
 .not-read { flex-wrap: wrap; margin-top: 0.3rem; align-items: baseline; }

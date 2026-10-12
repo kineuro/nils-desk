@@ -5,7 +5,10 @@
 // 3d-t1-siemens), each with its newest version, size, maker and day; arrows,
 // Enter and Escape; the newest version taken and an older one a step away on
 // the chip; exact text taken as typed; past the pages read, the engine's own
-// filter asked for the word typed. Against a fake engine.
+// filter asked for the word typed. Record 55 (2026-10-12): beside them, each
+// dataset (never a root) and open cohort, whose main scans of a role a run
+// goes straight over, the role taken from a word typed and changed on the
+// chip; main:ROLE@dataset:NAME taken as typed. Against a fake engine.
 
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -14,7 +17,8 @@ import type { SelectionRow } from "../query/selections";
 import { capsWith } from "../review/caps.fixture";
 import type { Over } from "./catalog";
 import { OverPicker } from "./OverPicker";
-import { askWord, findOver, optionOf, specOf } from "./pick";
+import type { Grant } from "../grants";
+import { askWord, findOver, findScopes, optionOf, roleOfWord, specOf, type ScopeOption } from "./pick";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -81,7 +85,47 @@ describe("finding a selection by name and words", () => {
   });
 });
 
-/** A fake engine: the list of selections (paged where `paged`), one selection by name, and what was asked. */
+const SCOPES: ScopeOption[] = [
+  { kind: "dataset", name: "study-anon", scans: 1204, subjects: 48 },
+  { kind: "dataset", name: "ms-2026", scans: 310, subjects: 12 },
+  { kind: "cohort", name: "ms-followup", scans: 2210, subjects: 41 },
+];
+const ROLES = ["t1w", "flair", "t2w"];
+const scoped = (typed: string) => findScopes(SCOPES, typed, ROLES).found.map((f) => `${f.option.name} ${f.role}`);
+
+describe("finding a dataset's or a cohort's main scans", () => {
+  it("finds a dataset or a cohort by its name, the role from a word typed, else the pack's first", () => {
+    expect(scoped("study")).toEqual(["study-anon t1w"]);
+    expect(scoped("anon flair")).toEqual(["study-anon flair"]);
+    expect(scoped("FLAIR anon")).toEqual(["study-anon flair"]);
+    // a tie goes to the dataset, then the name
+    expect(scoped("ms t2")).toEqual(["ms-2026 t2w", "ms-followup t2w"]);
+    expect(scoped("cohort")).toEqual(["ms-followup t1w"]);
+    expect(scoped("siemens")).toEqual([]);
+  });
+  it("lists every one with nothing typed, or only a role, the datasets first", () => {
+    expect(scoped("")).toEqual(["ms-2026 t1w", "study-anon t1w", "ms-followup t1w"]);
+    expect(scoped("t2")).toEqual(["ms-2026 t2w", "study-anon t2w", "ms-followup t2w"]);
+    expect(findScopes(SCOPES, "", ROLES, 2)).toMatchObject({ more: 1 });
+    expect(findScopes(SCOPES, "study", [])).toEqual({ found: [], more: 0 });
+  });
+  it("reads a role from the word a person types for it", () => {
+    expect(roleOfWord("T1", ROLES)).toBe("t1w");
+    expect(roleOfWord("t1w", ROLES)).toBe("t1w");
+    expect(roleOfWord("Flair", ROLES)).toBe("flair");
+    expect(roleOfWord("t2", ROLES)).toBe("t2w");
+    expect(roleOfWord("dwi", ROLES)).toBeNull();
+  });
+  it("takes main:ROLE@dataset:NAME as typed, and finds nothing else for it", () => {
+    expect(specOf("main:t1w@dataset:study-anon")).toEqual({ main: { role: "t1w", kind: "dataset", name: "study-anon" } });
+    expect(specOf(" main:FLAIR@Cohort:ms followup ")).toEqual({ main: { role: "flair", kind: "cohort", name: "ms followup" } });
+    expect(specOf("main:t1w@study-anon")).toBeNull();
+    expect(specOf("main:t1w")).toBeNull();
+    expect(findScopes(SCOPES, "main:t1w@dataset:study-anon", ROLES).found).toEqual([]);
+  });
+});
+
+/** A fake engine: the list of selections (paged where `paged`), one selection by name, the datasets and the cohorts, and what was asked. */
 let asked: string[] = [];
 let paged = false;
 let root: Root;
@@ -102,6 +146,20 @@ beforeEach(() => {
       return json(200, { count: ROWS.length, total: paged ? 900 : ROWS.length, matching: ROWS.length, selections: ROWS, next: paged ? "zz" : null });
     }
     if (url.pathname === "/api/ask/selections/kept-aside%402") return json(200, { name: "kept-aside", version: 2 });
+    if (url.pathname === "/api/sources")
+      return json(200, {
+        count: 2,
+        window_days: 0,
+        sources: [
+          { id: 3, name: "study-anon", kind: "dataset", totals: { subjects: 48, studies: 60, sessions: 60, stacks: 1204, refused_files: 0, to_sort: 0 } },
+          { id: 2, name: "archive", kind: "root", totals: { subjects: 0, studies: 0, sessions: 0, stacks: 0, refused_files: 0, to_sort: 0 } },
+        ],
+      });
+    if (url.pathname === "/api/cohorts")
+      return json(200, [
+        { name: "ms-followup", subjects: 41, stacks: 2210, retired_at: null },
+        { name: "pilot-2024", subjects: 9, stacks: 300, retired_at: "2026-01-02T10:00:00Z" },
+      ]);
     return json(404, { error: "no selection kept-asid" });
   }) as typeof fetch;
   el = document.createElement("div");
@@ -114,11 +172,11 @@ afterEach(() => {
   el.remove();
 });
 
-function Form({ doors = ["GET /api/ask/selections", "GET /api/ask/selections/{name}"] }: { doors?: string[] }) {
+function Form({ doors = ["GET /api/ask/selections", "GET /api/ask/selections/{name}"], grants = ["pipelines:see", "pipelines:work", "query:see"] }: { doors?: string[]; grants?: Grant[] }) {
   const [over, setOver] = useState<Over | null>(null);
   return (
     <OverPicker
-      caps={capsWith(doors, ["pipelines:see", "pipelines:work", "query:see"])}
+      caps={capsWith(doors, grants)}
       over={over}
       onOver={(o) => {
         chosen.push(o);
@@ -252,5 +310,57 @@ describe("the Over field, by keyboard", () => {
     expect(lit()).toBe("dwi-b1000-ge");
     await key("Enter");
     expect(chosen).toEqual([{ selection: "dwi-b1000-ge", version: 4 }]);
+  });
+});
+
+describe("the Over field, over a dataset's or a cohort's main scans", () => {
+  const SCOPED = ["GET /api/ask/selections", "GET /api/ask/selections/{name}", "GET /api/sources", "GET /api/cohorts"];
+  const SEES: Grant[] = ["pipelines:see", "pipelines:work", "query:see", "data:see"];
+  const names = () => [...el.querySelectorAll(".over-opt")].map((e) => `${e.querySelector(".over-name")?.textContent} ${e.querySelector(".over-v")?.textContent}`);
+
+  it("lists each dataset and open cohort after the selections, never a root or a retired cohort", async () => {
+    await act(async () => root.render(<Form doors={SCOPED} grants={SEES} />));
+    await settle();
+    expect(asked).toContain("/api/sources?recent=0");
+    expect(asked).toContain("/api/cohorts");
+    await act(async () => field().focus());
+    expect(names()).toEqual(["t1-3d-stacks v1", "flair-2d-ge v1", "3d-t1-siemens v2", "ms-followup-source v3", "study-anon main T1w", "ms-followup main T1w"]);
+    const scope = el.querySelectorAll(".over-opt.over-scope");
+    expect(scope[0].textContent).toBe("study-anonmain T1wdataset1,204 scans · 48 subjects, one main scan a visit");
+    expect(scope[1].querySelector(".tag")?.textContent).toBe("cohort");
+  });
+  it("takes a dataset's main scans of the role a word names, and the role changes on the chip", async () => {
+    await act(async () => root.render(<Form doors={SCOPED} grants={SEES} />));
+    await settle();
+    await act(async () => field().focus());
+    await type("anon flair");
+    expect(lit()).toBe("study-anon");
+    expect(el.querySelector('[role="option"][aria-selected="true"] .over-v')?.textContent).toBe("main FLAIR");
+    await key("Enter");
+    expect(chosen).toEqual([{ main: { kind: "dataset", name: "study-anon", role: "flair" } }]);
+    expect(el.querySelector(".over-chip")?.textContent).toBe("study-anon");
+    expect(el.querySelector(".over-chosen .tag")?.textContent).toBe("dataset");
+    const role = el.querySelector<HTMLSelectElement>('select[aria-label="The role"]')!;
+    expect([...role.options].map((o) => o.textContent)).toEqual(["main T1w", "main FLAIR", "main T2w"]);
+    expect(role.value).toBe("flair");
+    await act(async () => {
+      role.value = "t2w";
+      role.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect(chosen.at(-1)).toEqual({ main: { kind: "dataset", name: "study-anon", role: "t2w" } });
+    const meta = el.querySelector(".over-pick > .meta")?.textContent ?? "";
+    expect(meta).toContain("1,204 scans · 48 subjects");
+    expect(meta).toContain("main:t2w@dataset:study-anon: the dataset's main T2w scans, one a visit, resolved and frozen when the run starts");
+  });
+  it("takes main:ROLE@cohort:NAME as typed, where the lists are not served too", async () => {
+    await act(async () => root.render(<Form />));
+    await settle();
+    expect(asked.filter((a) => a.startsWith("/api/sources") || a.startsWith("/api/cohorts"))).toEqual([]);
+    await act(async () => field().focus());
+    await type("main:FLAIR@cohort:ms-followup");
+    expect(lit()).toBe("main:flair@cohort:ms-followup");
+    await key("Enter");
+    expect(chosen).toEqual([{ main: { kind: "cohort", name: "ms-followup", role: "flair" } }]);
+    expect(el.querySelector(".over-chip")?.textContent).toBe("ms-followup");
   });
 });

@@ -8,6 +8,10 @@
 // pre-flight that an install of dcm2niix clears; a run's page; and Settings,
 // Parts with dcm2niix under Tools. ?offline makes the install fail as an
 // engine without the network does; ?installed has dcm2niix there already.
+// Record 55 (2026-10-12): beside the selections, two datasets (and a root,
+// never offered) and two cohorts (one retired, never offered), whose main
+// scans of a role a run goes straight over, and a pre-flight of them that
+// says how many scans they resolve to and the visits that have none.
 // Every name and number here is made up.
 
 import { StrictMode } from "react";
@@ -33,6 +37,8 @@ const DOORS = [
   "GET /api/derivatives",
   "GET /api/ask/selections",
   "GET /api/ask/selections/{name}",
+  "GET /api/sources",
+  "GET /api/cohorts",
   "GET /api/jobs",
   "GET /api/jobs/{id}",
   "POST /api/jobs",
@@ -67,7 +73,7 @@ const engine = (): Record<string, unknown> => ({
   principal: "astrid@site",
   roles: [],
   registry: { epoch: 4 },
-  packs: [{ name: "mri", version: "1.0.1" }],
+  packs: [{ name: "mri", version: "1.0.1", main_roles: ["t1w", "flair", "t2w"] }],
   tools: { dcm2niix: tool() },
 });
 const caps = () => ({
@@ -161,6 +167,49 @@ const SELECTIONS = [
   sel(5, "dwi-b1000-all-sites", 1, null, "bjorn", 600),
 ].sort((a, b) => a.name.localeCompare(b.name));
 
+/** The datasets, a root among them, and the cohorts, a retired one among them: the root and the retired one are never offered. */
+const totals = (subjects: number, stacks: number) => ({ subjects, studies: subjects, sessions: subjects, stacks, refused_files: 0, to_sort: 0 });
+const SOURCES = [
+  { id: 2, name: "archive", kind: "root", totals: totals(0, 0) },
+  { id: 3, name: "study-anon", kind: "dataset", totals: totals(412, 5120) },
+  { id: 4, name: "ms-2026", kind: "dataset", totals: totals(38, 960) },
+];
+const COHORTS = [
+  { name: "ms-followup", subjects: 41, stacks: 2210, retired_at: null },
+  { name: "pilot-2024", subjects: 9, stacks: 300, retired_at: ago(90 * 1440) },
+];
+
+/** A dataset's or a cohort's main scans as the engine resolves them: how many, under which rules, and the visits with none. */
+function mainRead(spec: string): Record<string, unknown> | null {
+  const m = /^main:([a-z0-9]+)@(dataset|cohort):(.+)$/u.exec(spec);
+  if (!m) return null;
+  const [, role, kind, name] = m;
+  const own = name === "study-anon";
+  return {
+    main: role,
+    of: spec,
+    scope: { kind, id: 3, name },
+    picks: own ? { scope: { kind, id: 3, name }, version: 3, digest: "c0ffee", run: 88 } : { scope: null, version: 1, defaults: true, pack: "mri", pack_version: "1.0.1" },
+    read: own ? `${kind} ${name}'s main scans under its own rules, version 3` : `the pack's main scans of ${kind} ${name}`,
+    visits: 486,
+    main_visits: 474,
+    stacks: 481,
+    without: {
+      visits: 12,
+      why: [
+        { why: `it holds no ${role} scan`, visits: 9 },
+        { why: `it holds a ${role} scan and none is picked`, visits: 3 },
+      ],
+      named: [
+        { subject_id: 21, subject: "7a8b9c0d", session_day: "2023-01-15", why: `it holds a ${role} scan and none is picked` },
+        { subject_id: 22, subject: "1e2f3a4b", session_day: "2022-11-02", why: `it holds a ${role} scan and none is picked` },
+        { subject_id: 23, subject: "5c6d7e8f", session_day: "2024-03-09", why: `it holds a ${role} scan and none is picked` },
+        { subject_id: 24, subject: "9a0b1c2d", session_day: "2021-06-30", why: `it holds no ${role} scan` },
+      ],
+    },
+  };
+}
+
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);
@@ -186,6 +235,8 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (path === "/api/jobs") return json(200, { count: 1, jobs: [{ id: 44, kind: "run", name: null, state: "failed", started_at: ago(12), heartbeat_at: null, finished_at: ago(11), progress: null, error: ERROR, failure: NO_DCM2NIIX, args: { argv: ["run", "n4-bias-correction@1", "--select", "selection:3d-t1-siemens@1"], principal: "astrid@site" }, result: null }] });
   if (path === "/api/tools") return json(200, { tools: [tool()] });
   if (path === "/api/derivatives") return json(200, { derivatives: [] });
+  if (path === "/api/sources") return json(200, { count: SOURCES.length, window_days: 0, sources: SOURCES });
+  if (path === "/api/cohorts") return json(200, COHORTS);
   if (path === "/api/ask/selections") {
     const q = (url.searchParams.get("q") ?? "").toLowerCase();
     const list = SELECTIONS.filter((s) => s.name.includes(q));
@@ -201,6 +252,9 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     // a bids input is released with dcm2niix: not ready until it is installed (or, with ?refuse, said ready)
     const ready = installed || REFUSE;
     const checks = checksNow();
+    const main = typeof body.select === "string" ? mainRead(body.select) : null;
+    if (main)
+      return json(200, { pipeline: "n4-bias-correction@1", selection: body.select, main, layout: "bids", level: "session", stacks: 481, units: { total: 474, ready: 474, missing: 0 }, missing: [], estimate: { seconds_per_unit: 95, source: "descriptor", seconds: 11300, slots: 4 }, gpu: { need: "none", available: null, device: null }, budget: { cores: 16, memory_gb: 48, fits: true }, ready, blockers: ready ? [] : [checks[0].said], requirements: checks, failure: ready ? null : NO_DCM2NIIX });
     return json(200, { pipeline: "n4-bias-correction@1", selection: body.select, layout: "bids", level: "session", stacks: 318, units: { total: 140, ready: 138, missing: 2 }, missing: [{ unit: "sub-7a8b_ses-1", why: "no t1w picked" }, { unit: "sub-9c0d_ses-2", why: "no t1w picked" }], estimate: { seconds_per_unit: 95, source: "descriptor", seconds: 3300, slots: 4 }, gpu: { need: "none", available: null, device: null }, budget: { cores: 16, memory_gb: 48, fits: true }, ready, blockers: ready ? [] : [checks[0].said], requirements: checks, failure: ready ? null : NO_DCM2NIIX });
   }
   if (path === INSTALL.split(" ")[1] && method === "POST") {

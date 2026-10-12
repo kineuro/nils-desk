@@ -28,8 +28,11 @@ import {
   groupBy,
   handleGone,
   measureColumns,
+  mainReadOf,
   missingByWhy,
   pipelineOf,
+  rulesWords,
+  withoutByWhy,
   planSelectionName,
   preflightCells,
   preflightGate,
@@ -161,6 +164,50 @@ describe("the pre-flight", () => {
     expect(html).toContain("<b class=\"num\">2</b> no flair picked");
     expect(html).toContain("sub-1_ses-a, sub-2_ses-a");
     expect(html).toContain("a unit needs 16 GB of memory and the lane allows 8");
+  });
+  it("says what a dataset's main scans resolve to, under which rules, and the visits that have none, by why", () => {
+    const main = {
+      main: "t1w",
+      of: "main:t1w@dataset:study-anon",
+      scope: { kind: "dataset", id: 3, name: "study-anon" },
+      picks: { scope: { kind: "dataset", id: 3, name: "study-anon" }, version: 3, digest: "ab", run: 41 },
+      read: "dataset study-anon's main scans under its own rules, version 3",
+      visits: 140,
+      main_visits: 128,
+      stacks: 131,
+      without: {
+        visits: 12,
+        why: [
+          { why: "it holds no t1w scan", visits: 9 },
+          { why: "it holds a t1w scan and none is picked", visits: 3 },
+        ],
+        named: [
+          { subject_id: 4, subject: "a1b2c3", session_day: "2023-01-15", why: "it holds a t1w scan and none is picked" },
+          { subject_id: 5, subject: "d4e5f6", session_day: "2022-04-01", why: "it holds no t1w scan" },
+        ],
+      },
+    };
+    const p: Preflight = { ...PRE, selection: main.of, stacks: 131, main };
+    expect(mainReadOf(p)).toBe(main);
+    expect(mainReadOf(PRE)).toBeNull();
+    const cells = Object.fromEntries(preflightCells(p).map((c) => [c.k, c.v]));
+    expect(cells["main T1w"]).toBe("131 scans of 128 visits");
+    expect(cells["no main T1w"]).toBe("12 of 140 visits");
+    expect(rulesWords(main)).toBe("its own rules, v3");
+    expect(rulesWords({ ...main, picks: { scope: null, version: 1, defaults: true, pack: "mri" } })).toBe("the pack's rules");
+    expect(withoutByWhy(main)).toEqual([
+      { why: "it holds no t1w scan", count: 9, visits: ["d4e5f6 2022-04-01"] },
+      { why: "it holds a t1w scan and none is picked", count: 3, visits: ["a1b2c3 2023-01-15"] },
+    ]);
+    const html = renderToStaticMarkup(<PreflightPanel p={p} />);
+    expect(html).toContain("Dataset study-anon&#x27;s main scans under its own rules, version 3.");
+    expect(html).toContain("<b class=\"num\">12</b> visits have no main T1w; the run goes over the 128 that have one.");
+    expect(html).toContain("<b class=\"num\">9</b> it holds no t1w scan<span class=\"meta\"> · d4e5f6 2022-04-01 and 8 more</span>");
+    // below detail quasi the engine names no visit: only the counts by why
+    const plainP: Preflight = { ...p, main: { ...main, without: { ...main.without, named: main.without.named.map((v) => ({ why: v.why })) } } };
+    const plainHtml = renderToStaticMarkup(<PreflightPanel p={plainP} />);
+    expect(plainHtml).toContain("<b class=\"num\">3</b> it holds a t1w scan and none is picked</li>");
+    expect(plainHtml).not.toContain("a1b2c3");
   });
   it("says each parameter's range from the descriptor", () => {
     expect(rangeWords(VOLUMES.parameters![1])).toBe("1 to 5000");
@@ -348,6 +395,8 @@ describe("the assistant's plan", () => {
     expect(doc.preflight?.units.total).toBe(12);
     expect(doc.question).toBe("brain volume in every scan");
     expect(docOf({ station: "analysis-plan", result: { run_document: { pipeline: "volumes@1", handle: 4, params: ["low=2"] } } })).toMatchObject({ over: { handle: 4 }, params: { low: "2" } });
+    // a plan may go straight over a dataset's main scans (record 55, 2026-10-12)
+    expect(docOf({ station: "analysis-plan", result: { run_document: { pipeline: "volumes", select: "main:t1w@dataset:study-anon" } } }).over).toEqual({ main: { kind: "dataset", name: "study-anon", role: "t1w" } });
   });
   it("refuses another station's verdict, and any shape but run_document", () => {
     expect(runDocumentOf({ station: "ask-help", result })).toEqual({ refused: "this is not a plan: the run is of the ask-help station, not analysis-plan" });

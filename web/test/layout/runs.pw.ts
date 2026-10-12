@@ -10,7 +10,11 @@
 // whole with Install and Run again, and its failed units by cause; a failed
 // job says why on the Jobs page; Settings, Parts lists dcm2niix under Tools,
 // and an install that fails offline says the engine's reason with the way by
-// hand. SHOTS=<dir> keeps a screenshot of each.
+// hand. Record 55 (2026-10-12): the Over offers each dataset and cohort beside
+// the selections, takes a dataset's main FLAIR scans from "anon flair", the
+// role changes on the chip, and the pre-flight says how many scans they
+// resolve to and the visits with none, inside the window at both widths.
+// SHOTS=<dir> keeps a screenshot of each.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -60,11 +64,12 @@ for (const vp of SIZES) {
     await page.getByRole("button", { name: "Run on a selection" }).nth(1).click();
     const dialog = page.locator("dialog[open]");
     await expect(dialog).toHaveCount(1);
-    const over = dialog.getByRole("combobox", { name: "The selection" });
+    const over = dialog.getByRole("combobox", { name: "What the run goes over" });
     await over.click();
-    // the recent ones before anything is typed, a cohort's source among them
-    await expect(dialog.locator(".over-opt")).toHaveCount(5);
-    await expect(dialog.locator(".over-opt .tag")).toHaveText("cohort ms-followup");
+    // the recent ones before anything is typed, a cohort's source among them, then each dataset's and cohort's main scans
+    await expect(dialog.locator(".over-opt:not(.over-scope)")).toHaveCount(5);
+    await expect(dialog.locator(".over-opt:not(.over-scope) .tag")).toHaveText("cohort ms-followup");
+    await expect(dialog.locator(".over-opt.over-scope .over-name")).toHaveText(["ms-2026", "study-anon", "ms-followup"]);
     await shot(page, `over-recent-${vp.name}`);
     await page.keyboard.type("x");
     await page.keyboard.press("Escape");
@@ -160,7 +165,7 @@ for (const vp of SIZES) {
     await page.goto("/runs.html?refuse#pipelines/catalog");
     await page.getByRole("button", { name: "Run on a selection" }).nth(1).click();
     const dialog = page.locator("dialog[open]");
-    await dialog.getByRole("combobox", { name: "The selection" }).click();
+    await dialog.getByRole("combobox", { name: "What the run goes over" }).click();
     await page.keyboard.type("siemens");
     await page.keyboard.press("Enter");
     await expect(dialog.locator(".note.brand.preflight .note-lead")).toHaveText("Pre-flight");
@@ -171,6 +176,47 @@ for (const vp of SIZES) {
     await expect(note.locator(".req.not .req-check")).toHaveText("disk");
     await expect(dialog).toHaveCount(1);
     await shot(page, `run-refused-${vp.name}`);
+    await noSideways(page, vp.width);
+  });
+}
+
+for (const vp of SIZES) {
+  test(`at ${vp.name} px the Over offers a dataset's main scans, the role on the chip, and the pre-flight says the visits with none`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/runs.html?installed#pipelines/catalog");
+    await page.getByRole("button", { name: "Run on a selection" }).nth(1).click();
+    const dialog = page.locator("dialog[open]");
+    await dialog.getByRole("combobox", { name: "What the run goes over" }).click();
+    await page.keyboard.type("anon flair");
+    const lit = dialog.locator('.over-opt[aria-selected="true"]');
+    await expect(lit.locator(".over-name")).toHaveText("study-anon");
+    await expect(lit.locator(".over-v")).toHaveText("main FLAIR");
+    await expect(lit.locator(".tag")).toHaveText("dataset");
+    await expect(lit.locator(".over-about")).toHaveText("5,120 scans · 412 subjects, one main scan a visit");
+    const list = await dialog.locator(".over-list").boundingBox();
+    expect(list!.x).toBeGreaterThanOrEqual(0);
+    expect(list!.x + list!.width).toBeLessThanOrEqual(vp.width);
+    await shot(page, `over-scope-list-${vp.name}`);
+    await page.keyboard.press("Enter");
+    await expect(dialog.locator(".over-chip")).toHaveText("study-anon");
+    const role = dialog.getByRole("combobox", { name: "The role" });
+    await expect(role).toHaveValue("flair");
+    await role.selectOption("t1w");
+    await expect(dialog.locator(".over-pick > .meta")).toContainText("main:t1w@dataset:study-anon: the dataset's main T1w scans, one a visit");
+    // the pre-flight: how many scans they resolve to, under which rules, and the visits with none by why
+    const pre = dialog.locator(".preflight");
+    await expect(pre.locator(".note-lead")).toHaveText("Pre-flight");
+    await expect(pre.locator(".preflight-main")).toContainText("Dataset study-anon's main scans under its own rules, version 3.");
+    await expect(pre.locator(".preflight-main")).toContainText("12 visits have no main T1w; the run goes over the 474 that have one.");
+    const without = pre.locator(".preflight-without li");
+    await expect(without).toHaveCount(2);
+    await expect(without.nth(0)).toContainText("9 it holds no t1w scan");
+    await expect(without.nth(1)).toContainText("3 it holds a t1w scan and none is picked · 7a8b9c0d 2023-01-15, 1e2f3a4b 2022-11-02, 5c6d7e8f 2024-03-09");
+    await expect(dialog.locator(".note-body code")).toHaveText("nils run n4-bias-correction@1 --select main:t1w@dataset:study-anon");
+    await expect(dialog.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
+    for (const box of await pre.locator(".preflight-without li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect))) expect(box.right).toBeLessThanOrEqual(vp.width);
+    await pre.scrollIntoViewIfNeeded();
+    await shot(page, `over-scope-preflight-${vp.name}`);
     await noSideways(page, vp.width);
   });
 }

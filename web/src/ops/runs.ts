@@ -12,7 +12,8 @@ import { door, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may, sees } from "../grants";
-import type { Over, Pipeline } from "./catalog";
+import { roleWord } from "../review/mainScans";
+import { mainOfSpec, selectOf, type Over, type Pipeline } from "./catalog";
 import { failureOf, firstSentence, requirementsOf, SLICE, type Failure, type Requirement } from "./failure";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -20,12 +21,37 @@ const num = (v: unknown): number | null => (typeof v === "number" && Number.isFi
 const text = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const obj = (v: unknown): Json => (v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Json) : {});
 
+/**
+ * A dataset's or a cohort's main scans as the engine resolved them (record
+ * 55, rulings of 2026-10-12, item 6): what was read, the scope's visits, those
+ * with a main scan of the role, and the visits with none by why, named at
+ * detail quasi (each says only why below it). A run says the same, unnamed.
+ */
+export interface MainRead {
+  /** The role. */
+  main: string;
+  /** The spec: main:t1w@dataset:study-anon. */
+  of: string;
+  scope?: { kind: string; id?: number; name: string } | null;
+  /** What was read, as a release records it: the scope's rules {version, digest, run}, or the pack's defaults. */
+  picks?: Json | null;
+  /** The same in words. */
+  read?: string | null;
+  visits: number;
+  main_visits: number;
+  stacks: number;
+  without: { visits: number; why?: { why: string; visits: number }[] | null; named?: { subject_id?: number | null; subject?: string | null; session_day?: string | null; why: string }[] | null };
+  part?: { part: number; of: number } | null;
+}
+
 /** The pre-flight as `POST /api/pipelines/{name}/preflight` answers it. */
 export interface Preflight {
   pipeline: string;
   pipeline_id?: number;
   handle?: number | null;
   selection?: string | null;
+  /** Since 2026-10-12: a dataset's or a cohort's main scans, where the run goes over them; null otherwise. */
+  main?: MainRead | null;
   params?: Record<string, unknown> | null;
   layout?: string;
   level?: string;
@@ -82,6 +108,8 @@ export interface RunDetail {
   job_id: number | null;
   handle_id?: number | null;
   selection?: string | null;
+  /** Since 2026-10-12: what a run over a dataset's or a cohort's main scans went over, as its frozen list records it. */
+  main?: MainRead | null;
   params?: Record<string, unknown> | null;
   runtime?: string | null;
   device?: string | null;
@@ -116,7 +144,7 @@ export interface Derivative {
 export const runs = {
   /** The pipeline by its catalog id, or a name; the door reads its path as it stands, so a name@version is not sent encoded. */
   preflight: (pipeline: number | string, over: Over, params: Record<string, string>) =>
-    door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { ...("selection" in over ? { select: `selection:${over.selection}@${over.version}` } : { handle: over.handle }), params }),
+    door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { ...selectOf(over), params }),
   get: (id: number) => door<RunDetail>("GET", `/api/pipeline-runs/${id}`),
   derivatives: (run: number) => door<{ derivatives: Derivative[] }>("GET", `/api/derivatives?run=${run}&limit=200`),
   /** Save a stored ask document as the next version of a selection (PUT /api/ask/selections/{name}, query:work at detail quasi). */
@@ -159,9 +187,45 @@ export function durationWords(s: number | null | undefined): string {
   return `about ${n(Math.round(s / 8640) / 10)} days`;
 }
 
+/** A run's main scans, read where the engine answers them: null for a selection or a handle. */
+export function mainReadOf(p: { main?: MainRead | null } | null | undefined): MainRead | null {
+  const m = p?.main;
+  return m && typeof m === "object" && typeof m.main === "string" && typeof m.visits === "number" ? m : null;
+}
+
+/** The main scans as cells: the scans they resolve to, of how many visits, and the visits with none. */
+export function mainCells(m: MainRead): { k: string; v: string; title?: string }[] {
+  const role = roleWord(m.main);
+  const cells: { k: string; v: string; title?: string }[] = [{ k: `main ${role}`, v: `${n(m.stacks)} ${m.stacks === 1 ? "scan" : "scans"} of ${n(m.main_visits)} ${m.main_visits === 1 ? "visit" : "visits"}`, title: m.read ?? undefined }];
+  if (m.without.visits > 0) cells.push({ k: `no main ${role}`, v: `${n(m.without.visits)} of ${n(m.visits)} visits`, title: (m.without.why ?? []).map((w) => `${n(w.visits)}: ${w.why}`).join("; ") || undefined });
+  return cells;
+}
+
+/** The visits with no main scan, by why, the most first: each with the visits named where the engine names them ("a1b2c3 2023-01-15"). */
+export function withoutByWhy(m: MainRead): { why: string; count: number; visits: string[] }[] {
+  const named = m.without.named ?? [];
+  return (m.without.why ?? [])
+    .map((w) => ({
+      why: w.why,
+      count: w.visits,
+      visits: named.filter((v) => v.why === w.why && (v.subject || v.session_day)).map((v) => [v.subject, v.session_day].filter(Boolean).join(" ")),
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** Which rules the main scans were read under, in a few words: "its own rules, v3", or "the pack's rules". */
+export function rulesWords(m: MainRead): string | null {
+  const p = m.picks;
+  if (!p || typeof p !== "object") return null;
+  if (p.defaults === true || p.scope === null) return "the pack's rules";
+  return typeof p.version === "number" ? `its own rules, v${p.version}` : null;
+}
+
 /** The pre-flight as the values a person reads before pressing Run. */
 export function preflightCells(p: Preflight): { k: string; v: string; title?: string }[] {
   const cells: { k: string; v: string; title?: string }[] = [];
+  const main = mainReadOf(p);
+  if (main) cells.push(...mainCells(main));
   cells.push({ k: "units", v: `${n(p.units.ready)} of ${n(p.units.total)} ready` });
   if (p.units.missing > 0) cells.push({ k: "missing an input", v: n(p.units.missing) });
   if (p.left_out && p.left_out.stacks > 0) cells.push({ k: "stacks left out", v: n(p.left_out.stacks), title: p.left_out.why ?? undefined });
@@ -494,8 +558,11 @@ export function runDocumentOf(verdict: { station?: unknown; result?: unknown } |
   const pipeline = String(d.pipeline);
   let over: Over | null = null;
   const sel = typeof d.select === "string" ? d.select : typeof d.selection === "string" ? d.selection : null;
-  const m = sel ? /^(?:selection:)?([^@]+)@(\d+)$/.exec(sel) : null;
-  if (m) over = { selection: m[1], version: Number(m[2]) };
+  // record 55 (2026-10-12): a plan may go straight over a dataset's or a cohort's main scans
+  const main = mainOfSpec(sel);
+  const m = sel && !main ? /^(?:selection:)?([^@]+)@(\d+)$/.exec(sel) : null;
+  if (main) over = { main };
+  else if (m) over = { selection: m[1], version: Number(m[2]) };
   else if (d.selection && typeof d.selection === "object") {
     const s = obj(d.selection);
     if (typeof s.name === "string" && num(s.version) !== null) over = { selection: s.name, version: num(s.version)! };

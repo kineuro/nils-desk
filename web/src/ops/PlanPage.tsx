@@ -15,7 +15,7 @@ import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { catalog, runCommand, type Over, type Pipeline } from "./catalog";
+import { catalog, mainSpec, runCommand, type Over, type Pipeline } from "./catalog";
 import { ops } from "./client";
 import { refusalOf, type Failure } from "./failure";
 import { InstallFor } from "./Install";
@@ -174,7 +174,7 @@ export function PlanView(props: {
   const shown = live ?? (moved || gone ? null : doc.preflight);
   // with the door, only a fresh pre-flight of what the run goes over now lets Start go
   const gate = acts.preflight ? (live === null ? { go: false, why: typeof liveWhy === "string" ? liveWhy : (liveWhy?.error ?? null) } : preflightGate(live)) : preflightGate(doc.preflight);
-  const overWords = "selection" in target ? `selection:${target.selection}@${target.version}` : `handle ${target.handle}`;
+  const overWords = "selection" in target ? `selection:${target.selection}@${target.version}` : "main" in target ? mainSpec(target.main) : `handle ${target.handle}`;
   const params = pipeline?.parameters ?? [];
   const [name, setName] = useState(() => planSelectionName(doc.question));
   return (

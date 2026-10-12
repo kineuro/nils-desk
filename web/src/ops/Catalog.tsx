@@ -29,7 +29,8 @@ import { PreflightPanel, Requirements } from "./Preflight";
 import { FailLine, FailNote } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
 import { PLAN_STATION, preflightGate, rangeWords, resumeCommand, runActs, runs as runDoors, type Preflight } from "./runs";
-import { catalog, catalogActs, imageWords, needsOf, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
+import { catalog, catalogActs, imageWords, needsOf, overWords, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
+import { roleWord } from "../review/mainScans";
 import { ops } from "./client";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -157,7 +158,9 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
                     <tr className={f ? "has-fail" : undefined}>
                       <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
                       <td>{r.pipeline}</td>
-                      <td className="path">{r.selection ?? ""}</td>
+                      <td className="path" title={r.selection ?? undefined}>
+                        {overWords(r.selection)}
+                      </td>
                       <td>
                         <span className={r.status === "done" ? "tag ok" : r.status === "failed" || r.status === "partial" ? "tag caution" : "tag"}>{r.status}</span>
                         {c.models > 0 && <span className="meta"> · {n(c.models)} model{c.models === 1 ? "" : "s"}</span>}
@@ -351,7 +354,10 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
         </div>
       </div>
       <Says head="What a run is">
-        The selection is frozen into its stacks when the run starts and pinned, every parameter is recorded with its default filled, and the image is the one the catalog pins. A model&apos;s proposals are evidence until a person commits them.
+        {over && "main" in over
+          ? `The ${over.main.kind}'s main ${roleWord(over.main.role)} scans are resolved when the run starts, one a visit as its main-scan rules pick them, and frozen and pinned with the rules they were read under`
+          : "The selection is frozen into its stacks when the run starts and pinned"}
+        , every parameter is recorded with its default filled, and the image is the one the catalog pins. A model&apos;s proposals are evidence until a person commits them.
       </Says>
     </Dialog>
   );
