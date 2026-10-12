@@ -225,7 +225,9 @@ export const ask = {
   upload: (values: string[], namespace?: string) => door<{ upload: number; resolved?: number; unresolved?: number }>("POST", "/api/ask/values", namespace ? { values, namespace } : { values }),
   diff: (a: Side, b: Side) => door<Diff>("POST", "/api/ask/diff", { a, b }),
   run: (document_id: number, name?: string) => door<Run>("POST", "/api/ask/run", name ? { document_id, name } : { document_id }),
-  rows: (handle: number, page: number) => door<{ columns: Column[]; rows: unknown[][]; page: number; pages: number }>("GET", `/api/ask/handles/${handle}/rows?page=${page}`),
+  /** One page of a handle's rows at the caller's detail; with purpose `export`, refused (409) for an answer that no longer reproduces, and written so on the read's audit row. */
+  rows: (handle: number, page: number, purpose?: "export") =>
+    door<{ columns: Column[]; rows: unknown[][]; page: number; pages: number; withheld_sealed?: number }>("GET", `/api/ask/handles/${handle}/rows?page=${page}${purpose ? `&purpose=${purpose}` : ""}`),
   handle: (id: number) => door<Json>("GET", `/api/ask/handles/${id}`),
   /** The value sampler: a capped sample of a field's values at a level, under the caller's scope. */
   values: (level: string, field: string, limit = 20) =>

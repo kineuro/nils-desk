@@ -4,12 +4,17 @@
 // visits and scans; and the top three bars of its first chart. Open puts the
 // version on the panel beside the chat, where it is worked on. While the
 // panel is open the chat is narrow, and the card is one line that opens its
-// version there. Nothing is kept or set aside on the card itself.
+// version there. Nothing is kept or set aside on the card itself. Download
+// CSV saves the answer's rows as a file at the person's own detail, named
+// after the question and its version, and says how many rows it holds
+// (2026-10-12).
 
 import { Fragment, useEffect, useState } from "react";
 import type { DocumentHandle, Json, Profile } from "../ask/client";
 import { cardTitle, chartOf, tabsOf, unitWords, type Bar } from "../query/cards";
+import { answerFile, refusalWords, savedWords } from "../query/csv";
 import { Icon } from "../ui/Icon";
+import { saveText } from "./download";
 import { funnelOf, type FunnelStep } from "./inplay";
 import { reads } from "./reads";
 
@@ -121,10 +126,27 @@ const STATE_TAG: Record<Exclude<VersionState, "open">, { words: string; tone: st
   stale: { words: "moved on", tone: "tag" },
 };
 
+/** The answer's rows saved as a CSV file: reading while it runs, then what was saved, or why it could not be. */
+function useAnswerFile(document: number, title: string, version: string | null) {
+  const [file, setFile] = useState<{ busy: boolean; said: string | null; warn: boolean }>({ busy: false, said: null, warn: false });
+  const download = () => {
+    setFile({ busy: true, said: "Reading the answer for the file", warn: false });
+    answerFile(document, title, version).then(
+      (f) => {
+        saveText(f.name, f.text, "text/csv");
+        setFile({ busy: false, said: savedWords(f), warn: false });
+      },
+      (e: unknown) => setFile({ busy: false, said: refusalWords(e), warn: true }),
+    );
+  };
+  return { ...file, download };
+}
+
 export function QueryCard(props: { document: number; label: string | null; epoch: number | null; state: VersionState; compact: boolean; shown: boolean; onOpen: () => void }) {
   const { document, label, epoch, state, compact, shown, onOpen } = props;
   const { doc, profile, why } = useQuick(document, epoch);
   const title = titleOfDocument(doc);
+  const file = useAnswerFile(document, title, label);
   if (compact)
     return (
       <button type="button" className={shown ? "qcard-row on" : "qcard-row"} aria-pressed={shown} onClick={onOpen}>
@@ -142,11 +164,16 @@ export function QueryCard(props: { document: number; label: string | null; epoch
         <span className="eyebrow">{label ? `Query · ${label}` : "Query"}</span>
         <span className="qcard-title">{title}</span>
         {tag && <span className={tag.tone}>{tag.words}</span>}
+        <button type="button" className="button secondary small" disabled={file.busy} onClick={file.download}>
+          <Icon name="file" />
+          Download CSV
+        </button>
         <button type="button" className="button secondary small" onClick={onOpen}>
           Open
           <Icon name="external" />
         </button>
       </div>
+      {file.said && <p className={file.warn ? "warn qcard-why" : "meta qcard-why"}>{file.said}</p>}
       {why && !profile && <p className="meta qcard-why">It could not be counted: {why}</p>}
       <div className="qcard-funnel">
         <FunnelChips steps={funnelOf(profile)} />
