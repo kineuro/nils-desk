@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* The Assistant (the redesign Nima confirmed on 2026-10-09): messages first, in
  * one column of about 800px; the person's words in raised boxes on the right
- * and the answers as plain text; one quiet card per query answer; a panel
- * beside the chat to work a query in; the cards that wait for the person. Every
- * colour, face and size comes from ui/theme.css. In the bundle this file comes
- * before shell.css, so a rule that changes one of the shell's classes is
- * scoped under one of this file's own, and wins by being more specific. */
+ * and the answers as plain text; one quiet card per query answer; the charts
+ * and files a turn wrote; a panel beside the chat to work a query in; the
+ * cards that wait for the person. Every colour, face and size comes from
+ * ui/theme.css. In the bundle this file comes before shell.css, so a rule that
+ * changes one of the shell's classes is scoped under one of this file's own,
+ * and wins by being more specific. */
 
 /* ------------------------------------------------------------ the page: the thread scrolls between the head and the input */
 /* below 861px the shell lets the whole page scroll; the Assistant keeps the window's height there too, so its input stays at the foot */
@@ -150,6 +151,20 @@ button.qbar:hover .qbar-label, button.qbar:focus-visible .qbar-label { color: va
 .qpicture img { width: 100%; height: 100%; object-fit: contain; }
 .qpictures-none { flex-wrap: wrap; }
 .qpanel .qpanel-hint { font-size: var(--n-text-size-small); }
+
+/* ------------------------------------------------------------ what a turn wrote: a chart on its own light surface, a file to download */
+.turn-outputs { display: grid; gap: 10px; min-width: 0; }
+.out-chart { display: grid; min-width: 0; margin: 0; overflow: hidden; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+/* the column's width, at the chart's own proportions; a tall one is held to most of the window */
+.out-chart img { display: block; width: 100%; height: auto; max-height: 75vh; object-fit: contain; }
+.out-chart-foot { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 3px 3px 12px; border-top: 1px solid var(--n-line); color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.out-chart-foot > span { min-width: 0; overflow-wrap: anywhere; }
+.out-chart-foot .icon-button { width: 1.75rem; height: 1.75rem; color: var(--n-text-faint); }
+.out-chart-foot .icon-button:hover { color: var(--n-brand-text); }
+.out-file { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; padding: 5px 5px 5px 12px; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.out-file > .i { color: var(--n-text-faint); }
+.out-file-name { flex: 1 1 8rem; min-width: 0; overflow-wrap: anywhere; }
+.out-file .button .i { width: 13px; height: 13px; }
 
 /* ------------------------------------------------------------ a change that waits for the person, and a question */
 .approval-card { border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }

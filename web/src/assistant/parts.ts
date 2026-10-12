@@ -4,7 +4,7 @@
 // touch. A part of any other shape is dropped here and nowhere else. The
 // assistant never calls a desk function and never navigates the desk.
 
-import { asOneChatPart, type ChangeKind, type PlanItem } from "./events";
+import { asOneChatPart, type ChangeKind, type ChartItem, type FileItem, type PlanItem } from "./events";
 import { splitReasoning } from "./reasoning";
 import { toolWords } from "./steps";
 
@@ -152,6 +152,9 @@ export interface PaneState {
   aside: Extract<Part, { kind: "note" | "todo" | "lookup" | "funnel" }>[];
   /** The memories offered, kept or forgotten in the conversation, by the turn that did it. */
   memories: PaneMemory[];
+  /** The charts and files each turn wrote under the workspace's /out, by turn: its whole list as it last wrote it. */
+  charts: Record<string, ChartItem[]>;
+  files: Record<string, FileItem[]>;
   /** The sentence each turn settled on: what a turn that wrote no words answered (the chat, slice 7). */
   finals: Record<string, string>;
   settled: null | { outcome: string; error?: string };
@@ -169,6 +172,8 @@ export const empty = (offset = "-1"): PaneState => ({
   handles: [],
   aside: [],
   memories: [],
+  charts: {},
+  files: {},
   finals: {},
   settled: null,
 });
@@ -221,7 +226,7 @@ const isReplaced = (raw: unknown): boolean => asOneChatPart(raw)?.kind === "repl
 /** The steps of a turn that was built without them, as one step. */
 const stepsOf = (t: Turn): Step[] => t.steps ?? [{ words: t.text, reasoning: t.thinking ?? "" }];
 
-/** What one part may touch: a proposal, the choice, the status line, a handle, or the aside. */
+/** What one part may touch: a proposal, the choice, the status line, a handle, a turn's charts and files, or the aside. */
 export function acceptPart(state: PaneState, turnId: string, raw: unknown): PaneState {
   const one = asOneChatPart(raw);
   if (one) {
@@ -249,6 +254,11 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
       case "replaced":
         // it marks the steps it follows, which only the stream and the history know (reduce, fromHistory)
         return state;
+      // each write is the turn's whole list so far, and a rewrite takes the place of the list before it
+      case "chart":
+        return { ...state, charts: { ...state.charts, [turnId]: one.items } };
+      case "file":
+        return { ...state, files: { ...state.files, [turnId]: one.items } };
     }
   }
   const p = asPart(raw);
