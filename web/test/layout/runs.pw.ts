@@ -24,6 +24,10 @@
 // Since 2026-10-12, for samseg-lesions, which needs a T1w and a FLAIR, a
 // dataset reads "study-anon · main T1w + FLAIR", is sent without a role, and
 // its pre-flight says the visits that lack one, inside the window too.
+// Since 2026-10-12 (pipeline versions): the catalog is one row a name with a
+// plain select of the versions a new run may take, newest first, a replaced
+// one not among them; the row and the run follow the version chosen, and the
+// runs keep the version each ran, inside the window at both widths.
 // SHOTS=<dir> keeps a screenshot of each.
 
 import { expect, test, type Page } from "@playwright/test";
@@ -229,7 +233,7 @@ for (const vp of SIZES) {
     await expect(without).toHaveCount(2);
     await expect(without.nth(0)).toContainText("9 it holds no t1w scan");
     await expect(without.nth(1)).toContainText("3 it holds a t1w scan and none is picked · 7a8b9c0d 2023-01-15, 1e2f3a4b 2022-11-02, 5c6d7e8f 2024-03-09");
-    await expect(dialog.locator(".note-body code")).toHaveText("nils run n4-bias-correction@1 --select main:t1w@dataset:study-anon");
+    await expect(dialog.locator(".note-body code")).toHaveText("nils run n4-bias-correction@2 --select main:t1w@dataset:study-anon");
     await expect(dialog.getByRole("button", { name: "Run", exact: true })).toBeEnabled();
     for (const box of await pre.locator(".preflight-without li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect))) expect(box.right).toBeLessThanOrEqual(vp.width);
     await pre.scrollIntoViewIfNeeded();
@@ -310,7 +314,7 @@ for (const vp of SIZES) {
     const pre = dialog.locator(".preflight");
     await expect(pre.locator(".preflight-main")).toContainText("16 visits lack a main FLAIR or T1w; the run goes over the 470 that have both.");
     await expect(pre.locator(".preflight-without li")).toHaveCount(2);
-    await expect(dialog.locator(".note-body code")).toHaveText("nils run samseg-lesions@1 --select main@dataset:study-anon");
+    await expect(dialog.locator(".note-body code")).toHaveText("nils run samseg-lesions@2 --select main@dataset:study-anon");
     for (const box of await pre.locator(".preflight-without li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect))) expect(box.right).toBeLessThanOrEqual(vp.width);
     const chosen = (await dialog.locator(".over-chosen").boundingBox())!;
     expect(chosen.x + chosen.width).toBeLessThanOrEqual(vp.width);
@@ -332,3 +336,48 @@ test("a run's page says each session skipped and why, and that the run made noth
   await expect(page.locator(".run-page")).not.toContainText("Every unit that finished passed its checks.");
   await shot(page, "run-nothing-1440");
 });
+
+for (const vp of SIZES) {
+  test(`at ${vp.name} px the catalog is one row a name, its versions in a select, and the run follows the version chosen`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/runs.html?installed#pipelines/catalog");
+    const catalog = page.locator("table.thin").first();
+    await expect(catalog.locator("tbody > tr")).toHaveCount(2);
+    await expect(page.locator(".section-head .meta").first()).toContainText("2 pipelines");
+    // samseg-lesions@1 is replaced, so its row offers @2 alone, with no select
+    const samseg = catalog.locator("tbody > tr").nth(0);
+    await expect(samseg.locator(".catalog-name b")).toHaveText("samseg-lesions");
+    await expect(samseg.locator(".catalog-name .meta")).toHaveText("v2");
+    await expect(samseg.getByRole("combobox")).toHaveCount(0);
+    // n4's two versions, newest first and chosen
+    const n4 = catalog.locator("tbody > tr").nth(1);
+    const version = n4.getByRole("combobox", { name: "The version of n4-bias-correction" });
+    await expect(version.locator("option")).toHaveText(["v2, newest", "v1"]);
+    await expect(version).toHaveValue("6");
+    await expect(n4.locator("td").first().locator("> .meta")).toHaveText("N4 bias field correction of a T1, with its bias field.");
+    await expect(n4.locator("td.path")).toHaveText("ghcr.io/kineuro/nils-pipelines@sha256:5c5c5c5c5c5c");
+    await shot(page, `versions-${vp.name}`);
+    // the older one: the row reads as it
+    await version.selectOption("4");
+    await expect(n4.locator("td").first().locator("> .meta")).toHaveText("N4 bias field correction of a T1.");
+    await expect(n4.locator("td.path")).toHaveText("ghcr.io/kineuro/nils-pipelines@sha256:4b4b4b4b4b4b");
+    for (const box of await catalog.locator(".catalog-name").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect))) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(vp.width);
+    }
+    // the runs keep the version each ran, the replaced one too
+    await expect(page.locator("table.thin").nth(1).locator("tbody td", { hasText: /^samseg-lesions@1$/u }).first()).toBeVisible();
+    await noSideways(page, vp.width);
+    // the run of the version chosen: its title and the command it queues
+    await n4.getByRole("button", { name: "Run on a selection" }).click();
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog.getByRole("heading")).toContainText("Run n4-bias-correction@1");
+    await dialog.getByRole("combobox", { name: "What the run goes over" }).click();
+    await page.keyboard.type("t1 3d");
+    await page.keyboard.press("Enter");
+    await expect(dialog.locator(".note-body code")).toHaveText("nils run n4-bias-correction@1 --select selection:t1-3d-stacks@1");
+    await shot(page, `versions-run-${vp.name}`);
+    await noSideways(page, vp.width);
+  });
+}
+

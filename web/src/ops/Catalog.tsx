@@ -11,6 +11,11 @@
 // 2026-10-12 a run reads as its units summed, never a bare done ("3 of 4
 // made", "nothing made"), the rest on one line under its row ("4 of 4
 // skipped: no FLAIR picked"), and Run again opens its pre-flight first.
+// Since 2026-10-12 (Nima: "be able to select the version (simple like a drop
+// down)") the catalog is one row a name with a plain select of the versions
+// a new run may take, newest first; the row and the run follow the version
+// chosen. A version a later one replaces because it fixes it is not offered;
+// the Runs table still names each run's own version.
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -34,7 +39,7 @@ import { InstallFor, useInstall } from "./Install";
 import { runTag } from "./made";
 import { againOfRun, RunAgainDialog, type Again } from "./RunAgain";
 import { PLAN_STATION, preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
-import { andWords, catalog, catalogActs, imageWords, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
+import { andWords, catalog, catalogActs, catalogRows, imageWords, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { roleWord } from "../review/mainScans";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -89,7 +94,9 @@ export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: 
 /** The catalog and the runs, as the page draws them from what it read. */
 export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain = null }: { caps: Capabilities; pipelines: Pipeline[]; capability: Capability | null; runs: Run[]; onRun: (p: Pipeline) => void; onAgain?: ((r: Run) => void) | null }) {
   const acts = catalogActs(caps, capability);
-  const active = pipelines.filter((p) => p.state !== "retired");
+  const rows = catalogRows(pipelines);
+  // the version chosen of each name, by id; the newest until one is chosen
+  const [chosen, setChosen] = useState<Record<string, number>>({});
   const proposals = may(caps, "review:see") && served(caps, "GET /api/review");
   const opens = runActs(caps).open;
   return (
@@ -106,12 +113,12 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
       <div className="section-head rule-top">
         <h2>Catalog</h2>
         <span className="meta">
-          {n(active.length)} {active.length === 1 ? "pipeline" : "pipelines"}
+          {n(rows.length)} {rows.length === 1 ? "pipeline" : "pipelines"}
           {capability?.runtime ? ` · ${capability.runtime.name}${capability.runtime.gpu ? " with a GPU" : ""}` : ""}
         </span>
       </div>
-      {active.length === 0 && <p className="meta">Nothing in the catalog. A pipeline is added at the command line, pinned by its image digest.</p>}
-      {active.length > 0 && (
+      {rows.length === 0 && <p className="meta">Nothing in the catalog. A pipeline is added at the command line, pinned by its image digest.</p>}
+      {rows.length > 0 && (
         <div className="table-wrap">
           <table className="thin">
             <thead>
@@ -124,22 +131,41 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
               </tr>
             </thead>
             <tbody>
-              {active.map((p) => (
-                <tr key={p.id}>
-                  <td>
-                    <b>{p.label}</b>
-                    {p.description && <div className="meta">{p.description}</div>}
-                  </td>
-                  <td>
-                    {p.level} · {p.layout}
-                  </td>
-                  <td className="path" title={p.image}>
-                    {imageWords(p)}
-                  </td>
-                  <td className="meta">{writesWords(p)}</td>
-                  <td className="acts">{acts.run && <button type="button" className="button small" onClick={() => onRun(p)}>Run on a selection</button>}</td>
-                </tr>
-              ))}
+              {rows.map((row) => {
+                const p = row.versions.find((v) => v.id === chosen[row.name]) ?? row.versions[0];
+                return (
+                  <tr key={row.name}>
+                    <td>
+                      <div className="catalog-name">
+                        <b>{row.name}</b>
+                        {row.versions.length > 1 ? (
+                          <span className="input select catalog-version">
+                            <select value={p.id} aria-label={`The version of ${row.name}`} onChange={(e) => setChosen((was) => ({ ...was, [row.name]: Number(e.target.value) }))}>
+                              {row.versions.map((v, i) => (
+                                <option key={v.id} value={v.id}>
+                                  v{v.version}
+                                  {i === 0 ? ", newest" : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </span>
+                        ) : (
+                          <span className="meta">v{p.version}</span>
+                        )}
+                      </div>
+                      {p.description && <div className="meta">{p.description}</div>}
+                    </td>
+                    <td>
+                      {p.level} · {p.layout}
+                    </td>
+                    <td className="path" title={p.image}>
+                      {imageWords(p)}
+                    </td>
+                    <td className="meta">{writesWords(p)}</td>
+                    <td className="acts">{acts.run && <button type="button" className="button small" onClick={() => onRun(p)}>Run on a selection</button>}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -423,6 +423,14 @@ describe("the assistant's plan", () => {
     expect(html.match(/Start this run<\/button>/gu)).toHaveLength(1);
     expect(html).not.toMatch(/disabled="">.*Start this run/u);
   });
+  it("says when the plan named a version a later one replaces, and runs the current one (2026-10-12)", () => {
+    const caps = capsWith(DOORS, [...WORK]);
+    const doc = { ...docOf(verdict), pipeline: "volumes@1" };
+    const v2 = { ...VOLUMES, id: 9, version: "2", label: "volumes@2", standing: "current" as const };
+    const html = renderToStaticMarkup(<PlanView caps={caps} doc={doc} pipeline={pipelineOf([{ ...VOLUMES, standing: "replaced" }, v2], doc.pipeline)} live={PRE} liveWhy={null} busy={false} said={null} onStart={() => undefined} />);
+    expect(html).toContain("<b>volumes@2</b>");
+    expect(html).toContain("The plan named volumes@1, which a later version replaces; it runs volumes@2.");
+  });
   it("holds the button when the pre-flight is not ready, and offers none without the work grant", () => {
     const doc = docOf(verdict);
     const held = renderToStaticMarkup(<PlanView caps={capsWith(DOORS, [...WORK])} doc={doc} pipeline={VOLUMES} live={LESIONS} liveWhy={null} busy={false} said={null} onStart={() => undefined} />);

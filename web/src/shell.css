@@ -1639,3 +1639,7 @@ table.thin tr.made-row > td { padding-top: 0; }
 @keyframes scan-making { from { background-position: 100% 0; } to { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) { .scan-tile .scan-blank.making { animation: none; } }
 .scan-canvas .scan-wait { z-index: 2; }
+/* 2026-10-12: a catalog row's name and the version chosen, a plain select as the Over chip's */
+.catalog-name { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+.input.select.catalog-version { min-height: 1.65rem; padding: 0 0.4rem; font-size: var(--n-text-size-small); }
+.input.select.catalog-version select { padding: 0.1rem 0; }

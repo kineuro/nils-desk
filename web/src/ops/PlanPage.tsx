@@ -195,6 +195,7 @@ export function PlanView(props: {
               <td>
                 <b>{pipeline?.label ?? doc.pipeline}</b>
                 {pipeline?.description && <div className="meta">{pipeline.description}</div>}
+                {pipeline && doc.pipeline.includes("@") && doc.pipeline !== pipeline.label && <div className="meta">The plan named {doc.pipeline}, which a later version replaces; it runs {pipeline.label}.</div>}
               </td>
             </tr>
             <tr>
