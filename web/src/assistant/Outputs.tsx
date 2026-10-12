@@ -55,7 +55,7 @@ export const TurnOutputs = memo(function TurnOutputs({ charts = [], files = [] }
       {files.map((f, i) => (
         <div key={`f${i}:${f.name}`} className="out-file">
           <Icon name="file" />
-          <span className="path out-file-name">{f.name}</span>
+          <span className="out-file-name">{f.name}</span>
           <span className="meta num">{fileWords(f)}</span>
           <button type="button" className="button secondary small" aria-label={`Download ${f.name}`} onClick={() => saveText(f.name, f.data, f.media)}>
             <Icon name="download" />

@@ -153,7 +153,7 @@ button.qbar:hover .qbar-label, button.qbar:focus-visible .qbar-label { color: va
 .qpanel .qpanel-hint { font-size: var(--n-text-size-small); }
 
 /* ------------------------------------------------------------ what a turn wrote: a chart on its own light surface, a file to download */
-.turn-outputs { display: grid; gap: 10px; min-width: 0; }
+.turn-outputs { display: grid; gap: 10px; min-width: 0; container-type: inline-size; }
 .out-chart { display: grid; min-width: 0; margin: 0; overflow: hidden; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
 /* the column's width, at the chart's own proportions; a tall one is held to most of the window */
 .out-chart img { display: block; width: 100%; height: auto; max-height: 75vh; object-fit: contain; }
@@ -161,10 +161,16 @@ button.qbar:hover .qbar-label, button.qbar:focus-visible .qbar-label { color: va
 .out-chart-foot > span { min-width: 0; overflow-wrap: anywhere; }
 .out-chart-foot .icon-button { width: 1.75rem; height: 1.75rem; color: var(--n-text-faint); }
 .out-chart-foot .icon-button:hover { color: var(--n-brand-text); }
-.out-file { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-width: 0; padding: 5px 5px 5px 12px; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.out-file { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 0 10px; padding: 5px 5px 5px 12px; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
 .out-file > .i { color: var(--n-text-faint); }
-.out-file-name { flex: 1 1 8rem; min-width: 0; overflow-wrap: anywhere; }
+.out-file-name { min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
 .out-file .button .i { width: 13px; height: 13px; }
+/* in a narrow column a file's size and rows go under its name, Download beside both */
+@container (max-width: 480px) {
+  .out-file { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .out-file > .meta { grid-row: 2; grid-column: 2; }
+  .out-file > .button { grid-row: 1 / span 2; grid-column: 3; }
+}
 
 /* ------------------------------------------------------------ a change that waits for the person, and a question */
 .approval-card { border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
