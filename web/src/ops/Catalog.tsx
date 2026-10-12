@@ -9,7 +9,7 @@
 // run's number opens its page; the assistant's analysis-plan station, where
 // it is served, turns a question into a plan the person starts.
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
 import { door as served } from "../deployment";
@@ -22,7 +22,9 @@ import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { stations } from "../assistant/stations";
 import { plansOffered } from "./PlanPage";
+import { failureOf, refusalOf, type Failure } from "./failure";
 import { PreflightPanel } from "./Preflight";
+import { FailLine } from "./Reason";
 import { PLAN_STATION, preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
 import { catalog, catalogActs, imageWords, needsOf, paramError, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { ops } from "./client";
@@ -145,23 +147,34 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun }: { caps
             <tbody>
               {runs.map((r) => {
                 const c = runCounts(r);
+                // a failed run says why on one line under its row (2026-10-12)
+                const f = r.status === "failed" || r.status === "partial" ? failureOf(r) : null;
                 return (
-                  <tr key={r.id}>
-                    <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
-                    <td>{r.pipeline}</td>
-                    <td className="path">{r.selection ?? ""}</td>
-                    <td>
-                      <span className={r.status === "done" ? "tag ok" : r.status === "failed" || r.status === "partial" ? "tag caution" : "tag"}>{r.status}</span>
-                      {c.models > 0 && <span className="meta"> · {n(c.models)} model{c.models === 1 ? "" : "s"}</span>}
-                    </td>
-                    <td className="num">
-                      {n(c.units)}
-                      {c.failed > 0 ? ` · ${n(c.failed)} failed` : ""}
-                    </td>
-                    <td className="num">{n(c.derivatives)}</td>
-                    <td className="num">{c.staged > 0 && proposals ? <a href={href("review", "proposals")}>{n(c.staged)}</a> : n(c.staged)}</td>
-                    <td className="num">{whenWords(r.started_at ?? "")}</td>
-                  </tr>
+                  <Fragment key={r.id}>
+                    <tr className={f ? "has-fail" : undefined}>
+                      <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
+                      <td>{r.pipeline}</td>
+                      <td className="path">{r.selection ?? ""}</td>
+                      <td>
+                        <span className={r.status === "done" ? "tag ok" : r.status === "failed" || r.status === "partial" ? "tag caution" : "tag"}>{r.status}</span>
+                        {c.models > 0 && <span className="meta"> · {n(c.models)} model{c.models === 1 ? "" : "s"}</span>}
+                      </td>
+                      <td className="num">
+                        {n(c.units)}
+                        {c.failed > 0 ? ` · ${n(c.failed)} failed` : ""}
+                      </td>
+                      <td className="num">{n(c.derivatives)}</td>
+                      <td className="num">{c.staged > 0 && proposals ? <a href={href("review", "proposals")}>{n(c.staged)}</a> : n(c.staged)}</td>
+                      <td className="num">{whenWords(r.started_at ?? "")}</td>
+                    </tr>
+                    {f && (
+                      <tr className="fail-row">
+                        <td colSpan={8}>
+                          <FailLine f={f} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>
@@ -206,7 +219,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
   const changed = Object.fromEntries(Object.entries(values).filter(([id, v]) => v.trim() !== "" && String(params.find((p) => p.id === id)?.["default-value"] ?? "") !== v.trim()));
   // record 49 A7: the engine's pre-flight, asked again as the selection or a parameter changes
   const checks = runActs(caps).preflight;
-  const [pre, setPre] = useState<{ key: string; p: Preflight | null; why: string | null } | null>(null);
+  const [pre, setPre] = useState<{ key: string; p: Preflight | null; why: Failure | null } | null>(null);
   const preKey = over && errors.length === 0 ? JSON.stringify([over, changed]) : null;
   useEffect(() => {
     if (!checks || preKey === null || over === null) return;
@@ -214,7 +227,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
     const t = setTimeout(() => {
       runDoors.preflight(pipeline.id, over, changed).then(
         (p) => alive && setPre({ key: preKey, p, why: null }),
-        (e: unknown) => alive && setPre({ key: preKey, p: null, why: engineWords(e) }),
+        (e: unknown) => alive && setPre({ key: preKey, p: null, why: refusalOf(e) }),
       );
     }, 300);
     return () => {

@@ -1561,6 +1561,15 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
 .preflight-missing li + li { margin-top: 0.15rem; }
 .run-page > .row.actions, .plan-page > .row.actions { align-items: center; gap: 0.5rem; }
 
+/* 2026-10-12: a failed run says why, one line under its row (kept to the window on a phone) and whole on its page */
+table.thin tr.has-fail > td { border-bottom: 0; padding-bottom: 0.15rem; }
+table.thin tr.fail-row > td { padding-top: 0; }
+.fail-line { display: flex; align-items: center; gap: 0.45rem; width: 0; min-width: min(100%, calc(100vw - 3rem)); position: sticky; left: 0; padding-left: 0.55rem; border-left: 2px solid var(--n-caution-line); font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.fail-line > * { flex: none; }
+.fail-line .fail-words { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--n-text); }
+.fail-said { display: flex; align-items: baseline; gap: 0.45rem; flex-wrap: wrap; }
+.fail-note .note-detail { overflow-wrap: anywhere; }
+
 /* Wave 7a: a dataset not read yet, and the datasets a source holds */
 .not-read { flex-wrap: wrap; margin-top: 0.3rem; align-items: baseline; }
 .found-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }

@@ -13,6 +13,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may, sees } from "../grants";
 import type { Over, Pipeline } from "./catalog";
+import { failureOf, firstSentence, SLICE, type Failure } from "./failure";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -56,6 +57,8 @@ export interface UnitRun {
   exit_code?: number | null;
   started_at: string | null;
   finished_at: string | null;
+  /** Why the unit failed, where the engine says it; the failure slice's kind and what to do sit beside it. */
+  error?: string | null;
 }
 
 export interface Breach {
@@ -191,6 +194,16 @@ export function preflightGate(p: Preflight | null): { go: boolean; why: string |
   if (p.ready) return { go: true, why: null };
   const b = (p.blockers ?? []).filter(Boolean);
   return { go: false, why: b.length > 0 ? b.join("; ") : "the pre-flight says the run is not ready" };
+}
+
+/** Why a pre-flight is not ready, as a failure: its blockers, with the kind and what to do where the engine says them beside them. */
+export function blockedOf(p: Preflight | null): Failure | null {
+  if (p === null || p.ready) return null;
+  const gate = preflightGate(p);
+  const f = failureOf({ ...(p as unknown as Json), [SLICE.error]: gate.why });
+  if (!f) return null;
+  const blockers = (p.blockers ?? []).filter(Boolean);
+  return { ...f, line: f.todo ?? (blockers.length > 0 ? blockers.map(firstSentence).join("; ") : f.line) };
 }
 
 /** The range a parameter takes, in a few words, from its descriptor. */

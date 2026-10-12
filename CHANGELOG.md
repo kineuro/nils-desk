@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- A failed run says why. The Runs table shows each failed run's reason on one line under its row, the whole error a hover away; a run's page shows it in full, and a failed unit's reason sits under the unit. Where the run form's pre-flight refuses, or is not ready, it says why the same way. Where the engine sorts a failure into a kind (dependency, resource, input or pipeline) and says what to do, the kind is a tag and what to do is the line; an engine that says neither gets the error's first sentence.
+
 ### Changed
 
 - Add a model, a model server: once its models are listed, every one that may be ticked is ticked where it lists eight or fewer (2026-10-11, Nima: "if several llm exist on them then all should be available not just one"), and none where it lists more, as a big provider lists hundreds. A Tick all / Untick all button beside the list turns them all at once. A cold model is still said before Admit, and the model loaded on the server now is asked last, so a server with one card ends with it loaded again.

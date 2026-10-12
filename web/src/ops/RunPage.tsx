@@ -8,7 +8,7 @@
 // record 55 H3 (job type 3) a mask's file says its check, and a run that
 // made masks offers Check results, which opens the New check filled for it.
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
 import { engineWords } from "../models/ModelsPage";
@@ -20,6 +20,8 @@ import { checkTag, makeCheckRefusal } from "../campaigns/check";
 import { NewCheck, runChoiceOf } from "../campaigns/NewCheck";
 import { catalog, type Pipeline } from "./catalog";
 import { ops } from "./client";
+import { failureOf } from "./failure";
+import { FailLine, FailNote } from "./Reason";
 import {
   allPassed,
   breachesByCheck,
@@ -176,6 +178,8 @@ export function RunView(props: {
   const byCheck = breachesByCheck(r);
   const failures = failuresByReason(r);
   const running = OPEN.has(r.status);
+  // why it failed, whole (2026-10-12): the kind and what to do where the engine says them, else the error's first sentence
+  const failed = failureOf(r);
   // below detail quasi the engine lists no unit: the totals are its own, a withheld one fewer than five
   const totals = checks.totals ? unitTotals(r) : null;
   const unitCells = totals
@@ -220,7 +224,7 @@ export function RunView(props: {
       </div>
       <Values cells={cells} />
       {said && <p className="meta">{said}</p>}
-      {r.error && <p className="warn">{r.error}</p>}
+      {failed && <FailNote f={failed} />}
 
       <div className="section-head rule-top">
         <h2>Table</h2>
@@ -322,17 +326,27 @@ export function RunView(props: {
             <tbody>
               {units.slice(0, 200).map((u, i) => {
                 const t = unitTone(u, resumedAt);
+                const f = t === "failed" ? failureOf(u) : null;
                 return (
-                  <tr key={u.unit ?? `u${i}`}>
-                    <td className="path">{u.unit ?? `unit ${i + 1}`}</td>
-                    <td>
-                      <span className={TONE_TAG[t]}>{TONE_WORDS[t]}</span>
-                      {u.exit_code !== null && u.exit_code !== undefined && u.exit_code !== 0 ? <span className="meta"> · exit {u.exit_code}</span> : null}
-                    </td>
-                    <td className="num">{u.attempts ?? ""}</td>
-                    <td className="meta">{u.device ?? ""}</td>
-                    <td className="num">{u.finished_at ? whenWords(u.finished_at) : ""}</td>
-                  </tr>
+                  <Fragment key={u.unit ?? `u${i}`}>
+                    <tr className={f ? "has-fail" : undefined}>
+                      <td className="path">{u.unit ?? `unit ${i + 1}`}</td>
+                      <td>
+                        <span className={TONE_TAG[t]}>{TONE_WORDS[t]}</span>
+                        {u.exit_code !== null && u.exit_code !== undefined && u.exit_code !== 0 ? <span className="meta"> · exit {u.exit_code}</span> : null}
+                      </td>
+                      <td className="num">{u.attempts ?? ""}</td>
+                      <td className="meta">{u.device ?? ""}</td>
+                      <td className="num">{u.finished_at ? whenWords(u.finished_at) : ""}</td>
+                    </tr>
+                    {f && (
+                      <tr className="fail-row">
+                        <td colSpan={5}>
+                          <FailLine f={f} />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 );
               })}
             </tbody>

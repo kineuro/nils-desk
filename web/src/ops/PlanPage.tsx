@@ -17,6 +17,7 @@ import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { catalog, runCommand, type Over, type Pipeline } from "./catalog";
 import { ops } from "./client";
+import { refusalOf, type Failure } from "./failure";
 import { PreflightPanel } from "./Preflight";
 import { handleGone, PLAN_STATION, pipelineOf, planSelectionName, preflightGate, rangeWords, runActs, runDocumentOf, runs, type Preflight, type RunDocument } from "./runs";
 
@@ -64,7 +65,7 @@ export function PlanRunner({ caps, doc, pipeline }: { caps: Capabilities; doc: R
   const acts = runActs(caps);
   const [over, setOver] = useState<Over>(doc.over);
   const [live, setLive] = useState<Preflight | null>(null);
-  const [liveWhy, setLiveWhy] = useState<string | null>(null);
+  const [liveWhy, setLiveWhy] = useState<Failure | null>(null);
   const [gone, setGone] = useState(false);
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState<string | null>(null);
@@ -79,9 +80,9 @@ export function PlanRunner({ caps, doc, pipeline }: { caps: Capabilities; doc: R
         setGone(false);
       },
       (e: unknown) => {
-        const words = engineWords(e);
-        setLiveWhy(words);
-        setGone("handle" in over && handleGone(words));
+        const why = refusalOf(e);
+        setLiveWhy(why);
+        setGone("handle" in over && handleGone(why.error));
       },
     );
   }, [pipeline?.id, acts.preflight, overKey]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -152,7 +153,8 @@ export function PlanView(props: {
   over?: Over;
   pipeline: Pipeline | null;
   live: Preflight | null;
-  liveWhy: string | null;
+  /** Why the fresh pre-flight was refused: the engine's failure, or its words. */
+  liveWhy: string | Failure | null;
   busy: boolean;
   said: string | null;
   onStart: (() => void) | null;
@@ -166,7 +168,7 @@ export function PlanView(props: {
   const moved = JSON.stringify(target) !== JSON.stringify(doc.over);
   const shown = live ?? (moved || gone ? null : doc.preflight);
   // with the door, only a fresh pre-flight of what the run goes over now lets Start go
-  const gate = acts.preflight ? (live === null ? { go: false, why: liveWhy } : preflightGate(live)) : preflightGate(doc.preflight);
+  const gate = acts.preflight ? (live === null ? { go: false, why: typeof liveWhy === "string" ? liveWhy : (liveWhy?.error ?? null) } : preflightGate(live)) : preflightGate(doc.preflight);
   const overWords = "selection" in target ? `selection:${target.selection}@${target.version}` : `handle ${target.handle}`;
   const params = pipeline?.parameters ?? [];
   const [name, setName] = useState(() => planSelectionName(doc.question));
