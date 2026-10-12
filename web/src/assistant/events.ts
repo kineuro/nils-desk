@@ -27,7 +27,13 @@
 //     plan_update       "Planning"
 //     ask_user          "Asking you"
 //     propose_change    "Preparing a change for you"
-//     activate_skill    the skill's plain name (SKILL_WORDS below)
+//     analysis_table    "Putting the rows in the workspace"
+//     bash              "Analysing the rows"
+//     read              "Reading a result"
+//     write             "Writing a file"
+//     activate_skill    the skill's plain name (SKILL_WORDS in steps.ts)
+//   bash, read and write are Flue's own tools, at work in the analysis
+//   workspace, where analysis_table puts the rows they work on.
 //   `settle` and `advance` are never shown.
 //
 // DATA PARTS (chunk type data-part, written with Flue's useDataWriter(kind);
@@ -60,6 +66,28 @@
 //       after the parts of the step it replaces. Once words follow it, the
 //       words before it are not shown; a turn that writes none after it keeps
 //       them.
+//   {kind: "chart", items: {call: string | null, name: string, title: string,
+//    media: "image/svg+xml" | "image/png", encoding: "utf8" | "base64",
+//    data: string, bytes: number}[]}
+//       The charts the turn wrote under the analysis workspace's /out. A PNG
+//       is base64; an SVG is utf8 (base64 is read too) and at most 300,000
+//       characters. Each is drawn in the turn as an image with its own light
+//       surface, the same in either theme, from a data URL and never inlined
+//       into the page; `title` is its caption, and it saves under `name`.
+//   {kind: "file", items: {call: string | null, name: string,
+//    media: "text/csv" | "text/tab-separated-values" | "text/plain" |
+//    "application/json" | "text/markdown", encoding: "utf8", data: string,
+//    bytes: number, rows: number | null}[]}
+//       The files the turn wrote there, each at most 600,000 characters,
+//       offered as a download. `rows` counts a CSV's or TSV's data rows, the
+//       header left out; null otherwise.
+//   In both, `call` is the toolCallId that wrote it, `name` a bare file name
+//   (no slash, no ".."), and `bytes` its size. Each write carries the turn's
+//   whole list so far, as plan_update carries the whole plan: Flue keeps one
+//   part per name per response and a rewrite replaces it in place, so the desk
+//   replaces the turn's list with the latest write, live and in a history
+//   alike. An item of any other shape is dropped, and a turn keeps eight of
+//   each at most.
 //   Today's parts stay as they are: move_proposal and choice map onto the
 //   approval and clarification cards, and a job plan from the inbox (today's
 //   Confirm card) maps onto the approval card.
@@ -88,6 +116,32 @@ export interface PlanItem {
 
 export type ChangeKind = "query_version" | "job_plan" | "sorting_words" | "identity_merge" | "identity_rule";
 
+export type FileMedia = "text/csv" | "text/tab-separated-values" | "text/plain" | "application/json" | "text/markdown";
+
+/** A chart a turn wrote under the workspace's /out: an SVG in utf8 or base64, a PNG in base64. */
+export interface ChartItem {
+  call: string | null;
+  name: string;
+  /** Its caption; the file's name where the agent gave none. */
+  title: string;
+  media: "image/svg+xml" | "image/png";
+  encoding: "utf8" | "base64";
+  data: string;
+  bytes: number;
+}
+
+/** A file a turn wrote there, offered as a download. */
+export interface FileItem {
+  call: string | null;
+  name: string;
+  media: FileMedia;
+  encoding: "utf8";
+  data: string;
+  bytes: number;
+  /** A CSV's or TSV's data rows, the header left out; null for any other file. */
+  rows: number | null;
+}
+
 export type OneChatPart =
   | { kind: "progress"; call: string | null; text: string }
   | { kind: "plan_update"; items: PlanItem[] }
@@ -101,14 +155,75 @@ export type OneChatPart =
       ref: { document?: number; parent?: number | null; plan?: string };
     }
   | { kind: "clarification"; question: string; options: { label: string; count: number | null }[] }
-  | { kind: "replaced" };
+  | { kind: "replaced" }
+  | { kind: "chart"; items: ChartItem[] }
+  | { kind: "file"; items: FileItem[] };
 
 const STATUSES: PlanStatus[] = ["pending", "running", "done", "failed", "skipped"];
 const CHANGES: ChangeKind[] = ["query_version", "job_plan", "sorting_words", "identity_merge", "identity_rule"];
+const FILE_MEDIA: FileMedia[] = ["text/csv", "text/tab-separated-values", "text/plain", "application/json", "text/markdown"];
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 
-/** The guard of the one chat's parts: one of the five shapes, or null. */
+/** The most charts and the most files a turn keeps, and the longest an SVG and a file may be, in characters. */
+export const OUTPUTS_KEPT = 8;
+export const SVG_MOST = 300_000;
+export const FILE_MOST = 600_000;
+
+/** A bare file name: no folder, no way up, nothing unprintable. */
+const bare = (v: unknown): v is string => isStr(v) && v.trim() !== "" && !/[\/\\]|\.\.|[\u0000-\u001f\u007f]/u.test(v);
+const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/u;
+/** A PNG's bytes in base64 begin with its signature. */
+const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]*={0,2}$/u;
+
+/** The size the item said, or what its data holds where it said none. */
+function sized(said: unknown, data: string, encoding: "utf8" | "base64"): number {
+  if (isNum(said) && said >= 0) return said;
+  if (encoding === "utf8") return new TextEncoder().encode(data).length;
+  return Math.floor((data.length * 3) / 4) - (data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0);
+}
+
+function asChart(v: unknown): ChartItem | null {
+  const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
+  if (!bare(o.name) || !isStr(o.data)) return null;
+  const name = o.name;
+  const head = { call: isStr(o.call) ? o.call : null, name, title: isStr(o.title) && o.title.trim() ? o.title.trim() : name };
+  // base64 may come wrapped in lines; a data URL takes it whole
+  const packed = o.encoding === "base64" ? o.data.replace(/\s+/gu, "") : o.data;
+  if (o.media === "image/png" && o.encoding === "base64" && PNG_BASE64.test(packed))
+    return { ...head, media: "image/png", encoding: "base64", data: packed, bytes: sized(o.bytes, packed, "base64") };
+  if (o.media !== "image/svg+xml" || packed.length > SVG_MOST) return null;
+  if (o.encoding === "utf8" && /<svg[\s>]/iu.test(packed)) return { ...head, media: "image/svg+xml", encoding: "utf8", data: packed, bytes: sized(o.bytes, packed, "utf8") };
+  if (o.encoding === "base64" && BASE64.test(packed)) return { ...head, media: "image/svg+xml", encoding: "base64", data: packed, bytes: sized(o.bytes, packed, "base64") };
+  return null;
+}
+
+function asFile(v: unknown): FileItem | null {
+  const o = (typeof v === "object" && v !== null ? v : {}) as Record<string, unknown>;
+  if (!bare(o.name) || !FILE_MEDIA.includes(o.media as FileMedia) || o.encoding !== "utf8" || !isStr(o.data) || o.data.length > FILE_MOST) return null;
+  return {
+    call: isStr(o.call) ? o.call : null,
+    name: o.name,
+    media: o.media as FileMedia,
+    encoding: "utf8",
+    data: o.data,
+    bytes: sized(o.bytes, o.data, "utf8"),
+    rows: isNum(o.rows) && Number.isInteger(o.rows) && o.rows >= 0 ? o.rows : null,
+  };
+}
+
+/** A turn's whole list as one write carries it: what is malformed dropped, eight kept at most. */
+function listOf<T>(items: unknown, one: (v: unknown) => T | null): T[] | null {
+  if (!Array.isArray(items)) return null;
+  return items
+    .flatMap((x) => {
+      const item = one(x);
+      return item ? [item] : [];
+    })
+    .slice(0, OUTPUTS_KEPT);
+}
+
+/** The guard of the one chat's parts: one of the seven shapes, or null. */
 export function asOneChatPart(v: unknown): OneChatPart | null {
   if (typeof v !== "object" || v === null) return null;
   const o = v as Record<string, unknown>;
@@ -152,6 +267,14 @@ export function asOneChatPart(v: unknown): OneChatPart | null {
     }
     case "replaced":
       return { kind: "replaced" };
+    case "chart": {
+      const items = listOf(o.items, asChart);
+      return items ? { kind: "chart", items } : null;
+    }
+    case "file": {
+      const items = listOf(o.items, asFile);
+      return items ? { kind: "file", items } : null;
+    }
     default:
       return null;
   }

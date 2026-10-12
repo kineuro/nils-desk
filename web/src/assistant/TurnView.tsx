@@ -5,7 +5,8 @@
 // approval card, and a question on the one clarification card. A page that
 // decides proposals somewhere else passes no onDecide, and the turn only names
 // them; the Assistant page draws each proposed version as its query card
-// instead (the redesign, 2026-10-09). On the Assistant page a turn carries its
+// instead (the redesign, 2026-10-09). The charts and files a turn wrote come
+// after its words, before any card. On the Assistant page a turn carries its
 // actions too (the chat, slice 4): a person's message is copied, edited, or
 // switched to another way it was sent, and an answer is copied, asked for
 // again, or given a verdict.
@@ -21,7 +22,8 @@ import { Markdown } from "./Markdown";
 import { plainMentions, saidWithMentions } from "./mentions";
 import type { Change, PaneMemory, Proposal, Turn } from "./parts";
 import { ApprovalCardView, AskedView, ClarificationCardView, StepsHelp } from "./Cards";
-import { cardOfChange, cardOfProposal } from "./events";
+import { cardOfChange, cardOfProposal, type ChartItem, type FileItem } from "./events";
+import { TurnOutputs } from "./Outputs";
 import { MISSES } from "./thread";
 
 export interface TurnActions {
@@ -66,19 +68,23 @@ export function TurnView(props: {
   /** The sentence the turn settled on, shown when it wrote no words and proposed nothing (the chat, slice 7). */
   said?: string;
   memoryActions?: { state: (m: PaneMemory) => "saved" | "dismissed" | null; keep: (m: PaneMemory) => void; dismiss: (m: PaneMemory) => void };
+  /** One chat: the charts and files this turn wrote under the workspace's /out, its whole list as it last wrote it. */
+  charts?: ChartItem[];
+  files?: FileItem[];
 }) {
-  const { turn, open, onToggle, proposals, changes, onChange, onRevise, queryCard, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions, said } = props;
+  const { turn, open, onToggle, proposals, changes, onChange, onRevise, queryCard, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions, said, charts, files } = props;
   if (turn.role === "user") return <Asked turn={turn} actions={actions} />;
   if (turn.role === "system") return <p className="meta">{turn.text}</p>;
   const steps = turn.done && turn.tools.length > 0 ? <StepsHelp tools={turn.tools} open={open} onToggle={onToggle} /> : null;
   const settledOn = Boolean(said) && turn.done && proposals.length === 0;
   // a turn never ends with nothing to read (2026-10-12): its words, a card, its question, or a line that says so
-  const nothing = turn.done && !turn.text && !settledOn && proposals.length === 0 && (changes ?? []).length === 0 && (memories ?? []).length === 0 && !choice && !turn.asked;
+  const nothing = turn.done && !turn.text && !settledOn && proposals.length === 0 && (changes ?? []).length === 0 && (memories ?? []).length === 0 && !choice && !turn.asked && (charts ?? []).length === 0 && (files ?? []).length === 0;
   return (
     <div className="said">
       {turn.thinking && <Thinking text={turn.thinking} live={!turn.done && !turn.text} />}
       {turn.text ? <Markdown text={turn.text} streaming={!turn.done} /> : settledOn && said ? <Markdown text={said} /> : null}
       {nothing && <p className="meta">No answer was written to this. Ask again, or say it another way.</p>}
+      <TurnOutputs charts={charts} files={files} />
       {proposals.map((p) =>
         queryCard ? (
           <Fragment key={p.document}>{queryCard(p)}</Fragment>

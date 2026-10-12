@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* The Assistant (the redesign Nima confirmed on 2026-10-09): messages first, in
  * one column of about 800px; the person's words in raised boxes on the right
- * and the answers as plain text; one quiet card per query answer; a panel
- * beside the chat to work a query in; the cards that wait for the person. Every
- * colour, face and size comes from ui/theme.css. In the bundle this file comes
- * before shell.css, so a rule that changes one of the shell's classes is
- * scoped under one of this file's own, and wins by being more specific. */
+ * and the answers as plain text; one quiet card per query answer; the charts
+ * and files a turn wrote; a panel beside the chat to work a query in; the
+ * cards that wait for the person. Every colour, face and size comes from
+ * ui/theme.css. In the bundle this file comes before shell.css, so a rule that
+ * changes one of the shell's classes is scoped under one of this file's own,
+ * and wins by being more specific. */
 
 /* ------------------------------------------------------------ the page: the thread scrolls between the head and the input */
 /* below 861px the shell lets the whole page scroll; the Assistant keeps the window's height there too, so its input stays at the foot */
@@ -150,6 +151,30 @@ button.qbar:hover .qbar-label, button.qbar:focus-visible .qbar-label { color: va
 .qpicture img { width: 100%; height: 100%; object-fit: contain; }
 .qpictures-none { flex-wrap: wrap; }
 .qpanel .qpanel-hint { font-size: var(--n-text-size-small); }
+
+/* ------------------------------------------------------------ what a turn wrote: a chart on its own light surface, a file to download */
+.turn-outputs { display: grid; gap: 10px; min-width: 0; container-type: inline-size; }
+.out-chart { display: grid; min-width: 0; margin: 0; overflow: hidden; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+/* the column's width, at the chart's own proportions; a tall one is held to most of the window */
+.out-chart img { display: block; width: 100%; height: auto; max-height: 75vh; object-fit: contain; }
+.out-chart-open { display: block; padding: 0; border: 0; background: none; cursor: zoom-in; }
+/* tapped open: the chart at its own size over the page, scrolled and pinched on a phone, closed by a tap or Escape */
+.out-chart-full { position: fixed; inset: 0; z-index: 50; display: grid; justify-items: center; align-content: start; gap: 12px; padding: 16px; overflow: auto; background: var(--n-bg-raised); touch-action: pan-x pan-y pinch-zoom; cursor: zoom-out; }
+.out-chart-full img { width: max(100%, 720px); max-width: none; height: auto; max-height: none; }
+.out-chart-foot { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 3px 3px 12px; border-top: 1px solid var(--n-line); color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.out-chart-foot > span { min-width: 0; overflow-wrap: anywhere; }
+.out-chart-foot .icon-button { width: 1.75rem; height: 1.75rem; color: var(--n-text-faint); }
+.out-chart-foot .icon-button:hover { color: var(--n-brand-text); }
+.out-file { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 0 10px; padding: 5px 5px 5px 12px; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.out-file > .i { color: var(--n-text-faint); }
+.out-file-name { min-width: 0; overflow-wrap: anywhere; font-weight: 500; }
+.out-file .button .i { width: 13px; height: 13px; }
+/* in a narrow column a file's size and rows go under its name, Download beside both */
+@container (max-width: 480px) {
+  .out-file { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .out-file > .meta { grid-row: 2; grid-column: 2; }
+  .out-file > .button { grid-row: 1 / span 2; grid-column: 3; }
+}
 
 /* ------------------------------------------------------------ a change that waits for the person, and a question */
 .approval-card { border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }

@@ -713,6 +713,8 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
                 proposals={pane.proposals.filter((p) => p.turn === t.id)}
                 choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
                 onChoose={(label) => onSay(label)}
+                charts={pane.charts[t.id]}
+                files={pane.files[t.id]}
                 decidedElsewhere="It stands in the steps below."
                 said={pane.finals[t.id]}
               />
