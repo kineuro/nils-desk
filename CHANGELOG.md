@@ -11,6 +11,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Changed
 
+- The run form's Over finds what a person means. It is a combobox over the saved selections the engine lists: as a person types, it finds them by name and words, so "t1 3d" finds t1-3d-stacks and "siemens" finds 3d-t1-siemens, a letter missed or not; each entry says its newest version, its size, who made it and when, and the cohort it is the source of, and with nothing typed the most recent come first. Arrows move, Enter takes, Escape closes the list and leaves the form open. The choice is a chip with its newest version taken and the older ones a step away; exact text such as selection:x@2, x@2 or handle:7 is still taken as typed and checked by the engine, which is the way where the list is not served to the person. Past the first thousand selections the engine's own filter is asked for the word typed.
 - Add a model, a model server: once its models are listed, every one that may be ticked is ticked where it lists eight or fewer (2026-10-11, Nima: "if several llm exist on them then all should be available not just one"), and none where it lists more, as a big provider lists hundreds. A Tick all / Untick all button beside the list turns them all at once. A cold model is still said before Admit, and the model loaded on the server now is asked last, so a server with one card ends with it loaded again.
 
 ### Fixed

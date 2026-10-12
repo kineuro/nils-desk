@@ -172,8 +172,11 @@ describe("a refused pre-flight", () => {
     answers["POST /api/pipelines/3/preflight"] = () =>
       ++checks === 1 ? { status: 400, body: withSlice({ error: ERROR }, { kind: "dependency", todo: TODO }) } : { status: 200, body: { pipeline: N4.label, units: { total: 6, ready: 6, missing: 0 }, ready: true } };
     await act(async () => root.render(<RunDialog caps={capsOf([...DOORS, "GET /api/ask/selections/{name}"], ADMIN)} pipeline={N4} onClose={() => undefined} onDone={() => undefined} />));
-    await typeInto(el.querySelector<HTMLInputElement>('input[aria-label="The selection"]')!, "3d-t1-siemens@1");
-    await press("Find");
+    const field = el.querySelector<HTMLInputElement>('input[aria-label="The selection"]')!;
+    await act(async () => field.focus());
+    await typeInto(field, "3d-t1-siemens@1");
+    await act(async () => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+    await settle();
     await act(async () => new Promise((r) => setTimeout(r, 350)));
     await settle();
     expect(el.querySelector(".fail-note")?.textContent).toContain(TODO);

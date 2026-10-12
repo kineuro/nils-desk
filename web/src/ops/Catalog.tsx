@@ -23,6 +23,7 @@ import { Wait } from "../ui/Wait";
 import { stations } from "../assistant/stations";
 import { plansOffered } from "./PlanPage";
 import { failureOf, refusalOf, type Failure } from "./failure";
+import { OverPicker } from "./OverPicker";
 import { PreflightPanel } from "./Preflight";
 import { FailLine } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
@@ -198,9 +199,7 @@ function RunFailRow({ caps, run, f, cols }: { caps: Capabilities; run: Run; f: F
 export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilities; pipeline: Pipeline; onClose: () => void; onDone: (words: string) => void }) {
   const needs = needsOf(pipeline);
   const params = pipeline.parameters ?? [];
-  const [selection, setSelection] = useState("");
   const [over, setOver] = useState<Over | null>(null);
-  const [overWhy, setOverWhy] = useState<string | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [chosenModels, setChosenModels] = useState<string[]>(() => needs.models.map(() => ""));
   const [labels, setLabels] = useState<string>("");
@@ -213,16 +212,6 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
     if (needs.labels && served(caps, "GET /api/label-sets")) catalog.labelSets().then((r) => setLabelSets(r.label_sets.filter((s) => !s.sealed)), () => undefined);
     // the lists are read once, when the dialog opens
   }, []);
-  const find = () => {
-    setOver(null);
-    setOverWhy(null);
-    const name = selection.trim();
-    if (name === "") return;
-    catalog.selection(name).then(
-      (s) => setOver({ selection: s.name, version: s.version }),
-      (e: unknown) => setOverWhy(engineWords(e)),
-    );
-  };
   const errors = params.map((p) => paramError(p, values[p.id] ?? "")).filter((e): e is string => e !== null);
   const missing = needs.models.some((m, i) => !m.optional && chosenModels[i] === "") || (needs.labels !== null && !needs.labels.optional && labels === "");
   const changed = Object.fromEntries(Object.entries(values).filter(([id, v]) => v.trim() !== "" && String(params.find((p) => p.id === id)?.["default-value"] ?? "") !== v.trim()));
@@ -288,19 +277,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
         </div>
       }
     >
-      <div className="field">
-        <span className="label">Over the selection</span>
-        <div className="field-row">
-          <span className="input">
-            <input value={selection} placeholder="name, or name@version" aria-label="The selection" onChange={(e) => setSelection(e.target.value)} onBlur={find} />
-          </span>
-          <button type="button" className="button secondary small" onClick={find}>
-            Find
-          </button>
-        </div>
-        {over && "selection" in over && <span className="meta">selection:{over.selection}@{over.version}, frozen when the run starts</span>}
-        {overWhy && <span className="warn">{overWhy}</span>}
-      </div>
+      <OverPicker caps={caps} over={over} onOver={setOver} />
       {params.map((p) => (
         <div key={p.id} className="field">
           <span className="label">{p.name}</span>
