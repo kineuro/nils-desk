@@ -91,6 +91,21 @@ const profileOf = (id: number) => ({
   ...(PROFILES[id] as object),
 });
 
+/** A value whose counts the engine held back at plain. */
+const held = (v: string | null) => ({ value: v, count: null, subjects: null });
+/**
+ * The profile of a version at detail plain whose answer a quasi-identifying field chose and that holds 1 to 4
+ * subjects (record 55 K7, small counts): every count of it is held back, and the demographics withheld.
+ */
+const heldProfileOf = (id: number) => ({
+  ...profileOf(id),
+  counts: { subjects: null, sessions: null, stacks: null },
+  stack_types: [held("T1w"), held("T2w"), held("FLAIR")],
+  field: { name: "manufacturer", values: [held("Siemens"), held("GE")] },
+  demographics: { withheld: "the sex and the age of a subject are quasi-identifying, counted from detail quasi" },
+  clinical: { kinds: [held("EDSS")], sensitive_withheld: false },
+});
+
 const move = (id: number, kind: string, set: string | null, holes: unknown[]) => ({ id, kind, set, template: kind, holes });
 const optionsOf = (set: string) => ({
   token: `tok-${set}`,
@@ -138,8 +153,8 @@ export interface Call {
   body: Record<string, unknown> | null;
 }
 
-/** The fake assistant and engine, by door; `turn` is what the stream answers after a message is sent. */
-export function fakeDoors(turn: unknown[] = []): (c: Call, nth: number) => { status: number; body: unknown } | undefined {
+/** The fake assistant and engine, by door; `turn` is what the stream answers after a message is sent, and the versions `held` answer their profile as detail plain holds a small count back. */
+export function fakeDoors(turn: unknown[] = [], opts: { held?: number[] } = {}): (c: Call, nth: number) => { status: number; body: unknown } | undefined {
   let applied = 102;
   return (c, nth) => {
     const u = new URL(c.url, "http://x");
@@ -157,7 +172,10 @@ export function fakeDoors(turn: unknown[] = []): (c: Call, nth: number) => { sta
     if (doc) return { status: 200, body: docOf(Number(doc[1])) };
     if (u.pathname === "/api/ask/documents" && c.method === "POST") return { status: 200, body: { document: 150, hash: "h150", parent: body.parent } };
     if (u.pathname === "/api/ask/options") return { status: 200, body: optionsOf(String(body.set)) };
-    if (u.pathname === "/api/ask/profile") return { status: 200, body: profileOf(Number(body.document_id)) };
+    if (u.pathname === "/api/ask/profile") {
+      const id = Number(body.document_id);
+      return { status: 200, body: opts.held?.includes(id) ? heldProfileOf(id) : profileOf(id) };
+    }
     if (u.pathname === "/api/ask/diagnose") return { status: 200, body: { valid: true, issues: [], repairs: [], warnings: [], zero_rows: null, drops: [], ties: [], unresolved: [], coarse: [], cost: { sets: 4, class: "small" }, funnel: [], next: [], by: "clause", groups: [] } };
     if (u.pathname === "/api/ask/catalog/stack") return { status: 200, body: { level: "stack", fields: [{ level: "stack", path: "manufacturer", type: "text", class: "technical", dated: false, description: "" }], next: null, total: 1 } };
     if (u.pathname === "/api/ask/preview") return { status: 200, body: { level: "count", columns: ["rows", "subjects"], rows: [[139, 41]], truncated: false } };

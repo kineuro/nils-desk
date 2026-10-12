@@ -6,6 +6,7 @@
 
 import type { ClauseGroup, Funnel, Move, Options } from "./client";
 import { PARTS, type Part, partOf, removes, type Step } from "./editor";
+import type { Count } from "./held";
 
 /** What a new question starts from (section 7.1). */
 export type From =
@@ -39,18 +40,20 @@ export interface Started {
   document: Record<string, unknown>;
   set: string;
   grain: string;
-  count: number;
-  subjects: number | null;
-  sessions: number | null;
+  /** Null where held back: a quasi-identifying field chose 1 to 4 subjects (record 55 K7). */
+  count: Count;
+  subjects: Count;
+  sessions: Count;
   epoch: number;
 }
 
-/** The count under the picker: the set, then the subjects and the sessions under it. */
+/** The count under the picker: the set, then the subjects and the sessions under it. The start door holds only a set of 1 to 4 subjects, so a held one may say so. */
 export function countWords(s: Started): string {
-  const head = `${s.count} ${s.grain}${s.count === 1 ? "" : "s"}`;
+  if (s.count === null) return "fewer than 5 subjects";
+  const head = `${s.count.toLocaleString("en-US")} ${s.grain}${s.count === 1 ? "" : "s"}`;
   const under: string[] = [];
-  if (s.subjects !== null && s.grain !== "subject") under.push(`${s.subjects} subjects`);
-  if (s.sessions !== null && s.grain !== "session") under.push(`${s.sessions} sessions`);
+  if (s.subjects !== null && s.grain !== "subject") under.push(`${s.subjects.toLocaleString("en-US")} subjects`);
+  if (s.sessions !== null && s.grain !== "session") under.push(`${s.sessions.toLocaleString("en-US")} sessions`);
   return under.length > 0 ? `${head}, ${under.join(", ")}` : head;
 }
 
@@ -69,10 +72,11 @@ export const GROUP_ORDER: Part[] = ["source", "near", "attach", "has", "where", 
 
 export interface GroupRow {
   group: string;
-  rows: number;
-  subjects: number;
-  /** What this group lost against the group before it. */
-  lost: number;
+  /** Null where held back (record 55 K7). */
+  rows: Count;
+  subjects: Count;
+  /** What this group lost against the group before it; null where either count is held. */
+  lost: Count;
 }
 
 /** The funnel of one set keyed by clause group, in the language's order (section 12.3); an engine that answered by set gives its stages instead. */
@@ -92,10 +96,11 @@ export function clauseGroups(funnel: Funnel[], set: string, groups?: ClauseGroup
     byGroup.set(g, f);
   }
   const order = [...GROUP_ORDER.filter((g) => byGroup.has(g)), ...[...byGroup.keys()].filter((g) => !(GROUP_ORDER as string[]).includes(g))];
-  let before: number | null = null;
+  // the first group lost nothing; a group beside a held count lost what cannot be said
+  let before: Count | undefined;
   return order.map((g) => {
     const f = byGroup.get(g)!;
-    const lost = before === null ? 0 : Math.max(0, before - f.rows);
+    const lost = before === undefined ? 0 : before === null || f.rows === null ? null : Math.max(0, before - f.rows);
     before = f.rows;
     return { group: g, rows: f.rows, subjects: f.subjects, lost };
   });

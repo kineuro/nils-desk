@@ -11,6 +11,7 @@
 // writes a document itself: the engine checks and counts it before anything
 // is kept, and keeps it as a card, as a selection or as a cohort's source.
 
+import { HELD } from "../ask/held";
 import { DoorError, ask, door, results, type Diagnosis, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
@@ -362,9 +363,9 @@ export function browserKept(scope: Scope, words: string[], matched: Scan[], read
 const GRAIN_WORD: Record<KeptGrain, [string, string]> = { subject: ["subject", "subjects"], session: ["visit", "visits"], stack: ["scan", "scans"] };
 
 /** A count at a kept grain, in words: "12 subjects", "1 visit". */
-export function grainWords(grain: KeptGrain, count: number): string {
+export function grainWords(grain: KeptGrain, count: number | null): string {
   const [one, many] = GRAIN_WORD[grain];
-  return plural(count, one, many);
+  return count === null ? `${many} ${HELD}` : plural(count, one, many);
 }
 
 /** What no question asks, the ones the person's word leaves out. */
@@ -391,8 +392,8 @@ export function mayCohort(caps: Capabilities): boolean {
   return may(caps, "data:work") && may(caps, "query:work") && served(caps, KEEP_DOORS.count) && served(caps, KEEP_DOORS.store) && served(caps, KEEP_DOORS.run) && served(caps, KEEP_DOORS.promote);
 }
 
-/** The engine's count of a document: the last stage of its answer's funnel, its rows and their subjects. */
-export function countOf(d: Diagnosis, answer: string): { rows: number; subjects: number } | null {
+/** The engine's count of a document: the last stage of its answer's funnel, its rows and their subjects; each null where held back (record 55 K7). */
+export function countOf(d: Diagnosis, answer: string): { rows: number | null; subjects: number | null } | null {
   const stage = d.funnel.filter((f) => f.set === answer).at(-1);
   return stage ? { rows: stage.rows, subjects: stage.subjects } : null;
 }

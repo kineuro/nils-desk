@@ -10,6 +10,7 @@
 // a cell that holds a comma, a quote or a line break quoted. The file is
 // named after the question and its version.
 
+import { heldColumns } from "../ask/held";
 import { ask, columnName, DoorError } from "../ask/client";
 
 /** The doors an answer's file is read through: the run door and the rows door. */
@@ -21,6 +22,8 @@ export interface AnswerFile {
   text: string;
   rows: number;
   withheld: number;
+  /** The columns with values the engine held back at the person's detail, left empty in the file (record 55 K7). */
+  held?: string[];
 }
 
 const cell = (v: unknown): string => (v === null || v === undefined ? "" : typeof v === "string" ? v : JSON.stringify(v));
@@ -53,19 +56,23 @@ export async function answerFile(document: number, title: string, version: strin
   const run = await doors.run(document);
   const rows: unknown[][] = [];
   let withheld = 0;
+  const held = new Set(heldColumns(run).keys());
   for (let page = 0; page < run.pages; page++) {
     const p = await doors.rows(run.handle, page, "export");
     rows.push(...p.rows);
     withheld += p.withheld_sealed ?? 0;
+    for (const c of heldColumns(p).keys()) held.add(c);
   }
-  return { name: csvName(title, version, document), text: csvOf(run.columns.map(columnName), rows), rows: rows.length, withheld };
+  const columns = run.columns.map(columnName);
+  return { name: csvName(title, version, document), text: csvOf(columns, rows), rows: rows.length, withheld, held: columns.filter((c) => held.has(c)) };
 }
 
 /** What the card says once the file is saved: its name and how many rows it holds. */
 export function savedWords(f: AnswerFile): string {
   const rows = `${f.rows.toLocaleString("en-US")} ${f.rows === 1 ? "row" : "rows"}`;
   const sealed = f.withheld > 0 ? ` ${f.withheld.toLocaleString("en-US")} ${f.withheld === 1 ? "stack" : "stacks"} of a sealed sample left out.` : "";
-  return `Saved ${f.name}: ${rows}.${sealed}`;
+  const held = f.held?.length ? ` Held back, left empty: ${f.held.join(", ")}.` : "";
+  return `Saved ${f.name}: ${rows}.${sealed}${held}`;
 }
 
 /** Why the file could not be made, in the engine's words where it gave some. */

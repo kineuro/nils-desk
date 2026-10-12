@@ -13,6 +13,11 @@ describe("the closed union of parts (section 9.8)", () => {
     expect(asPart({ kind: "note" })).toBeNull();
     expect(asPart("note")).toBeNull();
     expect(asPart({ kind: "funnel", rows: [{ set: "a", stage: "scope", rows: 3, subjects: 2 }, { set: "b" }] })).toEqual({ kind: "funnel", rows: [{ set: "a", stage: "scope", rows: 3, subjects: 2 }] });
+    // a stage held back at plain keeps its place, its counts null (record 55 K7)
+    expect(asPart({ kind: "funnel", rows: [{ set: "a", stage: "where", rows: null, subjects: null }, { set: "b", stage: "where", rows: "few", subjects: 2 }] })).toEqual({
+      kind: "funnel",
+      rows: [{ set: "a", stage: "where", rows: null, subjects: null }],
+    });
   });
 
   it("lets each part touch one thing", () => {

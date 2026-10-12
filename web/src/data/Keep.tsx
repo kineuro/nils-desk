@@ -25,6 +25,8 @@ import { cohorts, type Cohort } from "./cohorts";
 import { cannotPromote, countOf, grainWords, keepDoors, keepError, KEEP_DOORS, mayCohort, maySelect, Refusal, unasked, type Kept } from "./keep";
 import { suggestedCohort } from "./PromoteDialog";
 import { plural } from "./viewer";
+import { HELD } from "../ask/held";
+
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -35,17 +37,20 @@ export interface Said {
   words: string;
   href: string;
   link: string;
-  job?: { id: number; cohort: string; subjects: number };
+  /** The subjects the question counted, null where held back. */
+  job?: { id: number; cohort: string; subjects: number | null };
 }
 
 /** Why the page and the question may count differently, behind the "?". */
 const DIFFERS =
   "A question leaves out the scans the pack ruled out, reads a visit as a session NILS built, and finds subjects by their subject code alone, so it can count otherwise than the page.";
 
-type Count = { kind: "counting"; since: number } | { kind: "counted"; rows: number; subjects: number } | { kind: "refused"; detail: string } | { kind: "failed"; detail: string };
+type Count = { kind: "counting"; since: number } | { kind: "counted"; rows: number | null; subjects: number | null } | { kind: "refused"; detail: string } | { kind: "failed"; detail: string };
 
 /** How many the question keeps, in words: a selection keeps its rows, a cohort takes their subjects. */
-function countWords(kind: KeepKind, kept: Kept, c: { rows: number; subjects: number }): string {
+function countWords(kind: KeepKind, kept: Kept, c: { rows: number | null; subjects: number | null }): string {
+  // a held count is held with what sits beside it: one line, never which of them is small
+  if (c.rows === null || c.subjects === null) return HELD;
   if (kept.grain === "subject") return grainWords("subject", c.rows);
   if (kind === "cohort") return `${plural(c.subjects, "subject")}, from ${grainWords(kept.grain, c.rows)}`;
   return `${grainWords(kept.grain, c.rows)} of ${plural(c.subjects, "subject")}`;
@@ -124,8 +129,9 @@ export function KeepActions({ caps, kept, ready }: { caps: Capabilities; kept: (
 }
 
 /** What a promotion's job did, in words: who joined, and who was in the cohort already. */
-export function joinedWords(cohort: string, subjects: number, added: number | null): string {
-  if (added === null || added === subjects) return `${plural(subjects, "subject")} joined ${cohort}.`;
+export function joinedWords(cohort: string, subjects: number | null, added: number | null): string {
+  if (added === null && subjects === null) return `They joined ${cohort}.`;
+  if (added === null || added === subjects) return `${plural((added ?? subjects) as number, "subject")} joined ${cohort}.`;
   if (added === 0) return `They were in ${cohort} already.`;
   return `${plural(added, "subject")} joined ${cohort}; the rest were in it already.`;
 }
@@ -213,7 +219,8 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
 
   const left = unasked(kept);
   const counted = count.kind === "counted" ? count : null;
-  const differs = left.length === 0 && counted !== null && kept.shown !== null && counted.rows !== kept.shown;
+  // a held count is never said to differ: that would tell how many it holds
+  const differs = left.length === 0 && counted !== null && counted.rows !== null && kept.shown !== null && counted.rows !== kept.shown;
   const needsWord = left.length > 0 || differs;
   const asked = kept.narrowed.filter((x) => x.asked).map((x) => x.words);
   const howMany = counted ? countWords(kind, kept, counted) : count.kind === "counting" ? "counting" : "not counted";
@@ -256,8 +263,8 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
         return keepDoors.promote(run.handle, { cohort: clean, create: into === "new", ...(note.trim() ? { reason: note.trim() } : {}) });
       })
       .then((r) => {
-        const subjects = counted?.subjects ?? 0;
-        onDone({ words: `${plural(subjects, "subject")} ${subjects === 1 ? "is" : "are"} joining ${clean}.`, href: href("data", "cohorts", clean), link: `Open ${clean}`, job: { id: r.job, cohort: clean, subjects } });
+        const subjects = counted ? counted.subjects : 0;
+        onDone({ words: subjects === null ? `They are joining ${clean}.` : `${plural(subjects, "subject")} ${subjects === 1 ? "is" : "are"} joining ${clean}.`, href: href("data", "cohorts", clean), link: `Open ${clean}`, job: { id: r.job, cohort: clean, subjects } });
       }, failed);
   };
 
@@ -310,7 +317,7 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
           </div>
         </div>
       )}
-      {differs && counted && kept.shown !== null && (
+      {differs && counted && counted.rows !== null && kept.shown !== null && (
         <div className="note caution keep-word">
           <Icon name="alert" />
           <div className="note-body">

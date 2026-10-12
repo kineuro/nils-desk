@@ -41,10 +41,10 @@ const caps = (): Capabilities => ({
 });
 
 /** The fake assistant and engine, keeping every call; `turn` is what the stream answers after a message is sent. */
-const doors = (turn: unknown[] = []) => engine(fakeDoors(turn));
+const doors = (turn: unknown[] = [], held: number[] = []) => engine(fakeDoors(turn, { held }));
 
-async function mount(turn: unknown[] = []) {
-  const e = doors(turn);
+async function mount(turn: unknown[] = [], held: number[] = []) {
+  const e = doors(turn, held);
   act(() => root.render(<AssistantPage caps={caps()} conversation="c1" />));
   await settle(12);
   return e;
@@ -141,6 +141,26 @@ describe("a query answer", () => {
     expect(words(cards()[1].querySelector(".eyebrow"))).toBe("Query · v2");
     for (const w of ["Accept", "Disregard", "Keep v1", "Keep v2"]) expect(button(host.querySelector(".one-chat-thread")!, w)).toBeNull();
     expect(host.querySelector(".one-chat-thread")!.textContent).not.toMatch(/\bpeople\b/);
+  });
+});
+
+describe("a query answer held back at plain (record 55 K7)", () => {
+  it("says each held count as held back, why on hover, never null, 0 or NaN, on the card and on the panel", async () => {
+    await mount([], [102]);
+    const card = cards()[1];
+    expect([...card.querySelectorAll(".qstep")].map(words)).toEqual(["subjects held back", "visits session held back", "scans stack held back"]);
+    expect([...card.querySelectorAll(".qbar")].map(words)).toEqual(["T1w scans held back subjects held back", "T2w scans held back subjects held back", "FLAIR scans held back subjects held back"]);
+    for (const el of card.querySelectorAll(".held")) expect(el.getAttribute("title")).toMatch(/^fewer than 5, or held beside a count of fewer than 5/u);
+    expect(card.querySelectorAll(".held").length).toBe(9);
+    // a held bar draws no length
+    for (const i of card.querySelectorAll<HTMLElement>(".qbar-track i")) expect(i.style.width).toBe("0px");
+    expect(card.textContent).not.toMatch(/null|NaN|fewer than 5/u);
+    act(() => button(card, "Open")!.click());
+    await settle(10);
+    const p = panel()!;
+    // nothing is compared with the version before, which would tell the count
+    expect([...p.querySelectorAll(".qfunnel .qstep")].map(words)).toEqual(["subjects held back", "visits session held back", "scans stack held back"]);
+    expect(p.textContent).not.toMatch(/null|NaN|\bof 48\b/u);
   });
 });
 

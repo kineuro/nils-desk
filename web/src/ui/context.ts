@@ -12,7 +12,8 @@ export interface PageContext {
   chain?: number[];
   epoch?: number;
   sets?: { name: string; grain: string }[];
-  funnel?: { set: string; rows: number }[];
+  /** Each set's rows; null where the engine held the count back (record 55 K7), which the assistant reads as held, never as none. */
+  funnel?: { set: string; rows: number | null }[];
   pack?: { name: string; version: string };
   handle_id?: number;
   declaration?: Record<string, string | number | boolean | null>;
@@ -68,7 +69,7 @@ export function admit(input: unknown): PageContext {
       case "funnel":
         if (Array.isArray(v)) {
           out.funnel = v
-            .filter((x): x is { set: string; rows: number } => typeof x?.set === "string" && typeof x?.rows === "number")
+            .filter((x): x is { set: string; rows: number | null } => typeof x?.set === "string" && ((typeof x?.rows === "number" && Number.isFinite(x.rows)) || x?.rows === null))
             .map((x) => ({ set: x.set.slice(0, MAX_TEXT), rows: x.rows }))
             .slice(0, MAX_LIST);
         }
