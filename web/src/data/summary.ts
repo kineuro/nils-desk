@@ -710,8 +710,13 @@ export function logLine(j: JobRow, now = new Date(), op?: Operation | null): Log
       const stacks = num(pv["stacks"]);
       return { id: j.id, at, what: end("Sorted", "Sort"), how: failed || stopped || stacks === null ? "" : `${ns(stacks, "scan", "scans")}, pictures made`, failed, batch: null };
     }
-    case "pick":
-      return { id: j.id, at, what: end("Main scans picked", "Picking"), how: failed || stopped ? "" : `for ${ns(r["subjects"], "subject", "subjects")}`, failed, batch: null };
+    case "pick": {
+      // 2026-10-12: what the run wrote, the visits and subjects it picked on, or why it wrote nothing, in the engine's words; an older engine's run by the subjects it decided
+      const visits = num(r["visits_picked"]);
+      if (failed || stopped || visits === null) return { id: j.id, at, what: end("Main scans picked", "Picking"), how: failed || stopped ? "" : `for ${ns(r["subjects"], "subject", "subjects")}`, failed, batch: null };
+      if (visits === 0) return { id: j.id, at, what: "No main scans picked", how: typeof r["nothing"] === "string" ? r["nothing"] : "", failed, batch: null };
+      return { id: j.id, at, what: "Main scans picked", how: `for ${ns(visits, "visit", "visits")} of ${ns(r["subjects_picked"], "subject", "subjects")}`, failed, batch: null };
+    }
     case "pyramid": {
       const built = num(r["built"]) ?? num(p["built"]) ?? 0;
       const skipped = num(r["skipped"]) ?? num(p["skipped"]) ?? 0;

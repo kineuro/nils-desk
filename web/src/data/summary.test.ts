@@ -468,6 +468,13 @@ describe("a dataset's log", () => {
     expect(logLine(job({ progress: { batch_id: 8, ingested: 0, changed: 0 } }), NOW)).toMatchObject({ what: "Read", how: "nothing new" });
     expect(logLine(job({ kind: "classify", result: { previews: { stacks: 1003, built: 991 } } }), NOW)).toMatchObject({ what: "Sorted", how: "1,003 scans, pictures made" });
     expect(logLine(job({ kind: "pick", result: { subjects: 70 } }), NOW)).toMatchObject({ what: "Main scans picked", how: "for 70 subjects" });
+    // 2026-10-12: what the run wrote, or why it wrote nothing, as the engine says it
+    expect(logLine(job({ kind: "pick", result: { subjects: 2, written: 3, visits_picked: 3, subjects_picked: 2 } }), NOW)).toMatchObject({ what: "Main scans picked", how: "for 3 visits of 2 subjects" });
+    expect(logLine(job({ kind: "pick", result: { subjects: 1, written: 1, visits_picked: 1, subjects_picked: 1 } }), NOW)).toMatchObject({ what: "Main scans picked", how: "for 1 visit of 1 subject" });
+    expect(logLine(job({ kind: "pick", result: { subjects: 10, written: 0, visits_picked: 0, subjects_picked: 0, nothing: "no visits found for its 10 subjects, whose studies carry no date" } }), NOW)).toMatchObject({
+      what: "No main scans picked",
+      how: "no visits found for its 10 subjects, whose studies carry no date",
+    });
     expect(logLine(job({ kind: "pyramid", result: { built: 57, skipped: 0, failed: 2 } }), NOW)).toMatchObject({ what: "3D views", how: "57 made, 2 could not be" });
     expect(logLine(job({ kind: "classify", state: "failed", error: "no pack directory" }), NOW)).toMatchObject({ what: "Sort failed", how: "", failed: true });
     expect(logLine(job({ kind: "pseudonymize", result: { files: { written: 213 } } }), NOW)).toMatchObject({ what: "Pseudonymised", how: "213 files" });
