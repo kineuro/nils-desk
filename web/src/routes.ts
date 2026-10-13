@@ -72,3 +72,10 @@ export function fromCampaigns(route: Route): string {
         : href("review", "campaigns");
   return narrow(to, route.query ?? {});
 }
+
+/** Where an address that moved now leads, or null where it did not move: Models is a page of Pipelines since Wave 7a (spec section 13.1), so #models opens #pipelines/models and #models/model/3 opens #pipelines/models/3. */
+export function moved(r: Route): string | null {
+  if (r.section !== "models") return null;
+  const id = r.page === "model" && r.arg !== null && /^\d+$/.test(r.arg) ? r.arg : null;
+  return narrow(href("pipelines", "models", id), r.query ?? {});
+}

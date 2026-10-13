@@ -16,7 +16,6 @@ import { DataPage } from "./data/DataPage";
 import { browsing as viewsBrowser, Viewer } from "./data/Viewer";
 import { REGISTRY, type Scope } from "./data/viewer";
 import { PseudonymsPage } from "./data/PseudonymsPage";
-import { ModelsPage } from "./models/ModelsPage";
 import { LogsPage } from "./ops/LogsPage";
 import { logsOffered } from "./ops/logs";
 import { PipelinesPage } from "./ops/PipelinesPage";
@@ -34,7 +33,7 @@ import { placesKept } from "./objects/kept";
 import { ProfilePage } from "./profile/ProfilePage";
 import { PersonMenu } from "./ui/PersonMenu";
 import { ReviewPage } from "./review/ReviewPage";
-import { fromCampaigns, href, narrow, parse, type Route } from "./routes";
+import { fromCampaigns, href, moved, narrow, parse, type Route } from "./routes";
 import { assistantOffered, foot, initials, sections, usable } from "./sections";
 import { where } from "./settings/install";
 import { backupsKept } from "./settings/kept";
@@ -71,6 +70,9 @@ export function App() {
     if (route.section === "data" && route.page === "cohorts" && !route.arg) location.replace(narrow(href("data", "datasets"), route.query ?? {}));
     // Campaigns joined Review (Wave 7a, record 55 H3): an old address leads to the same page there
     if (route.section === "campaigns") location.replace(fromCampaigns(route));
+    // Models is a page of Pipelines (spec section 13.1): an old link leads there
+    const to = moved(route);
+    if (to !== null) location.replace(to);
   }, [route]);
 
   useEffect(() => {
@@ -304,7 +306,6 @@ export function App() {
           {ready && active?.id === "pipelines" && !(route.page === "logs" && logsOffered(caps)) && <PipelinesPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "review" && route.section === "review" && <ReviewPage caps={caps} page={route.page} arg={route.arg} sub={route.sub} query={route.query} />}
-          {ready && active?.id === "models" && <ModelsPage caps={caps} page={route.page} arg={route.arg} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {onProfile && <ProfilePage caps={caps} />}

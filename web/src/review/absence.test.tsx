@@ -43,8 +43,8 @@ describe("against an engine without the doors", () => {
   });
   it("no page links anywhere the side does not offer", () => {
     const pages: [string, string][] = [
-      ["models", renderToStaticMarkup(<ModelsBody caps={bare} list={[MODEL]} onChanged={() => undefined} />)],
-      ["models", renderToStaticMarkup(<ModelBody caps={bare} m={MODEL} list={[MODEL]} onChanged={() => undefined} />)],
+      ["pipelines", renderToStaticMarkup(<ModelsBody caps={bare} list={[MODEL]} onChanged={() => undefined} />)],
+      ["pipelines", renderToStaticMarkup(<ModelBody caps={bare} m={MODEL} onChanged={() => undefined} />)],
       ["pipelines", renderToStaticMarkup(<PipelinesPage caps={bare} page="catalog" />)],
       ["pipelines", renderToStaticMarkup(<CatalogBody caps={bare} pipelines={[]} capability={null} runs={[{ id: 1, pipeline_id: 1, pipeline: "x@1", job_id: null, status: "done", started_at: null, finished_at: null, summary: { proposals: { ingested: { members: 3, staged_members: 3 } } } }]} onRun={() => undefined} />)],
       ["review", renderToStaticMarkup(<ModelFamily caps={bare} groups={modelGroups([])} askHref={asksPeople(bare) ? (k) => askPeopleHref({ kind: k }) : null} onChanged={() => undefined} />)],
@@ -54,7 +54,7 @@ describe("against an engine without the doors", () => {
     for (const [own, html] of pages) expect(dead(html, bare, own)).toEqual([]);
   });
   it("no act is offered where its door is missing", () => {
-    const html = renderToStaticMarkup(<ModelBody caps={bare} m={MODEL} list={[MODEL]} onChanged={() => undefined} />);
+    const html = renderToStaticMarkup(<ModelBody caps={bare} m={MODEL} onChanged={() => undefined} />);
     expect(html).not.toContain(">Admit</button>");
     expect(html).not.toContain(">Promote</button>");
     const pick = renderToStaticMarkup(<PickDialog caps={bare} item={BORDER} onClose={() => undefined} onDone={() => undefined} pictures={false} />);
