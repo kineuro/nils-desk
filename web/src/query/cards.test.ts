@@ -208,3 +208,13 @@ describe("a proposed version", () => {
     expect(changeWords({ part: "params", kind: "changed" })).toBe("changes the query's params");
   });
 });
+
+describe("a selection's size", () => {
+  it("says a newest answer whose list was held back whole as held back, never as 0 (record 55 K7, small lists)", async () => {
+    const { sizeWords } = await import("./selections");
+    const size = { grain: "stack", version: 2, handle: 7, at: "2026-10-13T08:00:00Z", truncated: false };
+    expect(sizeWords({ ...size, rows: null })).toBe("held back");
+    expect(sizeWords({ ...size, rows: 0 })).toBe("0 stacks");
+    expect(sizeWords({ ...size, rows: 1204 })).toBe("1,204 stacks");
+  });
+});

@@ -154,7 +154,7 @@ export interface Call {
 }
 
 /** The fake assistant and engine, by door; `turn` is what the stream answers after a message is sent, and the versions `held` answer their profile as detail plain holds a small count back. */
-export function fakeDoors(turn: unknown[] = [], opts: { held?: number[] } = {}): (c: Call, nth: number) => { status: number; body: unknown } | undefined {
+export function fakeDoors(turn: unknown[] = [], opts: { held?: number[]; heldLists?: number[] } = {}): (c: Call, nth: number) => { status: number; body: unknown } | undefined {
   let applied = 102;
   return (c, nth) => {
     const u = new URL(c.url, "http://x");
@@ -178,6 +178,11 @@ export function fakeDoors(turn: unknown[] = [], opts: { held?: number[] } = {}):
     }
     if (u.pathname === "/api/ask/diagnose") return { status: 200, body: { valid: true, issues: [], repairs: [], warnings: [], zero_rows: null, drops: [], ties: [], unresolved: [], coarse: [], cost: { sets: 4, class: "small" }, funnel: [], next: [], by: "clause", groups: [] } };
     if (u.pathname === "/api/ask/catalog/stack") return { status: 200, body: { level: "stack", fields: [{ level: "stack", path: "manufacturer", type: "text", class: "technical", dated: false, description: "" }], next: null, total: 1 } };
+    // a version in `heldLists` answers its list as detail plain holds back one of 1 to 4 subjects (record 55 K7, small lists)
+    if (u.pathname === "/api/ask/preview" && opts.heldLists?.includes(Number(body.document_id))) {
+      const why = "a list of fewer than 5 subjects that a quasi identifying field chose; its length is a count, so no row is shown";
+      return { status: 200, body: { level: "record", columns: ["_key", "series"], rows: [], truncated: false, shaped: [], held_back: [{ column: "_key", why }, { column: "series", why }] } };
+    }
     if (u.pathname === "/api/ask/preview") return { status: 200, body: { level: "count", columns: ["rows", "subjects"], rows: [[139, 41]], truncated: false } };
     if (u.pathname === "/api/ask/apply") {
       applied = applied === 102 ? 103 : applied + 1;

@@ -157,7 +157,11 @@ export function QueryCard(props: { document: number; label: string | null; epoch
           <Icon name="external" />
         </button>
       </div>
-      {file.said && <p className={file.warn ? "warn qcard-why" : "meta qcard-why"}>{file.said}</p>}
+      {file.said && (
+        <p className={file.warn ? "warn qcard-why" : "meta qcard-why"} title={file.why ?? undefined}>
+          {file.said}
+        </p>
+      )}
       {why && !profile && <p className="meta qcard-why">It could not be counted: {why}</p>}
       <div className="qcard-funnel">
         <FunnelChips steps={funnelOf(profile)} />
