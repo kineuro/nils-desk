@@ -1712,7 +1712,12 @@ async fn a_campaign_maker_without_the_assistant_lists_who_may_read_it_and_nothin
     }
     // one who may make no campaign is refused it all
     let bo = login(&client, &origin, "bo", "another long password").await;
-    let r = client.get(&raters).header("cookie", &bo).send().await.unwrap();
+    let r = client
+        .get(&raters)
+        .header("cookie", &bo)
+        .send()
+        .await
+        .unwrap();
     assert_eq!(r.status(), 403);
 }
 
