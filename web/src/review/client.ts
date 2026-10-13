@@ -177,12 +177,14 @@ export function cohortChips(summary: ReviewSummary | null, items: ReviewItem[]):
 }
 
 /** The three kinds the queue is made of: a scan the rules could not place, subjects that may be one person, a session that moved. */
-export type Family = "unsure" | "identity" | "moved" | "picks" | "proposals" | "asked";
+export type Family = "unsure" | "identity" | "moved" | "picks" | "proposals" | "asked" | "campaigns";
 
 /** The families with a page of their own under Review (record 45): a row there opens it. */
 export const PAGED: readonly Family[] = ["picks", "proposals", "asked"];
 
 export function familyOf(kind: string): Family | null {
+  // Wave 7a, H3: an item a campaign holds is a family of its own, answered in its campaign and never in the queue
+  if (kind.startsWith("campaign.")) return "campaigns";
   const k = kindOf(kind);
   if (kind === "pick.border") return "picks";
   if (kind === "classify.asked") return "asked";
@@ -201,6 +203,12 @@ function num(v: unknown): number | null {
 
 function text(v: unknown): string | null {
   return typeof v === "string" && v !== "" ? v : null;
+}
+
+/** The campaign that holds an item of the campaigns family, as its evidence names it. */
+export function heldBy(item: Pick<ReviewItem, "evidence">): { id: number | null; name: string | null } {
+  const ev = (item.evidence ?? {}) as Json;
+  return { id: num(ev.campaign), name: text(ev.campaign_name) };
 }
 
 /** How many stacks an item is about. */
@@ -287,6 +295,10 @@ export function itemWords(item: ReviewItem): string {
     const ref = (item.ref ?? {}) as Json;
     return `${text(ref.role) ?? "a role"} of subject ${num(ref.subject_id) ?? ""}${text(ref.session_day) ? ` on ${text(ref.session_day)}` : ""}: the pick run doubts it`;
   }
+  if (familyOf(item.kind) === "campaigns") {
+    const held = heldBy(item);
+    return `held by ${held.name ? `campaign ${held.name}` : "a campaign"}, answered there`;
+  }
   if (item.kind === "classify.asked") return `System 1 asks about stack ${num(((item.ref ?? {}) as Json).stack_id) ?? ""}`;
   if (k.classifier && k.what === "model") {
     const model = text(ev.model) ?? "a model";
@@ -369,6 +381,7 @@ export function kindTag(kind: string): { words: string; tone: "gated" | "caution
   if (f === "picks") return { words: "pick", tone: "caution" };
   if (f === "proposals") return { words: "model", tone: "caution" };
   if (f === "asked") return { words: "asked", tone: "caution" };
+  if (f === "campaigns") return { words: "campaign", tone: "" };
   return { words: kindOf(kind).area, tone: "" };
 }
 

@@ -38,7 +38,7 @@ for (const vp of VIEWPORTS) {
       await reason.getByRole("button", { name: "rules conflict" }).click();
       await expect(page.locator("tbody tr")).toHaveCount(1);
       await expect(page.locator(".section-head .meta").first()).toContainText("base: rules conflict, 1 open");
-      await expect(page.getByRole("link", { name: "Ask people about these" })).toHaveAttribute("href", "#campaigns?make=review&from=base%3Aconflict");
+      await expect(page.getByRole("link", { name: "Ask people about these" })).toHaveAttribute("href", "#review/campaigns?make=review&from=base%3Aconflict");
       // a pick border's reasons open under the reasons, in words
       await reason.getByRole("button", { name: "pick borders" }).click();
       const border = page.getByRole("group", { name: "Border" });

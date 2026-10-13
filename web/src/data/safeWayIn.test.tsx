@@ -325,7 +325,7 @@ describe("the Data page", () => {
     const acts = host.querySelector(".dp-detail .dp-acts")!;
     const next = acts.querySelector<HTMLAnchorElement>("a.button:not(.secondary)");
     expect(next?.textContent).toBe("Review 8");
-    expect(next?.getAttribute("href")).toBe("#review?dataset=ward-g");
+    expect(next?.getAttribute("href")).toBe("#review/questions?dataset=ward-g");
     // the one next step: no second primary button beside it
     expect(acts.querySelectorAll(".button:not(.secondary):not(.quiet)")).toHaveLength(1);
     expect(host.querySelector("section.data")!.textContent).not.toContain("Pick main scans");

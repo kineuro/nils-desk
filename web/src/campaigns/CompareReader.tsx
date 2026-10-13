@@ -483,7 +483,7 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
         if (then !== "stop") return;
         // Stop gives the item leased back, as it does without a correction open
         if (holding) campaigns.release(id, holding.assignment.id).catch(() => undefined);
-        location.hash = href("campaigns", id);
+        location.hash = href("review", "campaigns", id);
         return;
       }
       if (!holding) return;
@@ -493,7 +493,7 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
         .then(() => {
           say(`Gave ${spec.words(holding.item)} back.`);
           if (then === "next") claim();
-          else location.hash = href("campaigns", id);
+          else location.hash = href("review", "campaigns", id);
         })
         .catch((e: unknown) => setRefused(refusedWords(e)))
         .finally(() => setBusy(false));
@@ -656,11 +656,11 @@ export function CompareReader<A extends string>({ caps, id, query, spec }: { cap
       <header className="reader-head compare-head">
         {/* on a laptop the band names the campaign alone, the side naming the section; where the band is short the name gives way first, whole on hover, so the last answer is said whole */}
         <span className="eyebrow" title={campaign.name}>
-          <a className="eyebrow-section" href={href("campaigns")}>
-            Campaigns
+          <a className="eyebrow-section" href={href("review")}>
+            Review
           </a>
           <span className="eyebrow-section"> · </span>
-          <a href={href("campaigns", String(campaign.id))}>{campaign.name}</a>
+          <a href={href("review", "campaigns", String(campaign.id))}>{campaign.name}</a>
         </span>
         <h1>{spec.title}</h1>
         <span className="rate-item compare-item">
@@ -937,7 +937,7 @@ function SeatNote({ seat, campaign, onAgain, onMine }: { seat: Seat; campaign: C
         <p className="note-lead">Nothing left for you.</p>
         <p className="note-detail">{seat.why}</p>
         <p>
-          <a href={href("campaigns", String(campaign.id))}>Back to {campaign.name}</a> ·{" "}
+          <a href={href("review", "campaigns", String(campaign.id))}>Back to {campaign.name}</a> ·{" "}
           <button type="button" className="link-button" onClick={onAgain}>
             Look again
           </button>{" "}

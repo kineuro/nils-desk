@@ -205,17 +205,17 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         if (!alive) return;
         // an A/B campaign (record 48) is settled from its candidates, on a page of its own
         if (role === "rater" && isAb(c) && abServed(capsNow.current)) {
-          location.hash = href("campaigns", String(c.id), "settle");
+          location.hash = href("review", "campaigns", String(c.id), "settle");
           return;
         }
         // a pair campaign (the post-contrast study) is read two stacks at a time, on a page of its own
         if (role === "rater" && isPair(c) && pairServed(capsNow.current)) {
-          location.hash = href("campaigns", String(c.id), "pairs");
+          location.hash = href("review", "campaigns", String(c.id), "pairs");
           return;
         }
         // an anchored campaign (the post-contrast study) is read beside its anchors, on a page of its own
         if (role === "rater" && isAnchored(c) && anchoredServed(capsNow.current)) {
-          location.hash = href("campaigns", String(c.id), "anchored");
+          location.hash = href("review", "campaigns", String(c.id), "anchored");
           return;
         }
         setCampaign(c);
@@ -401,8 +401,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
           last.current = { ...was, answer: r.unchanged ? was.answer : r.answer, value: b.body.value ?? was.value, unsure: b.body.unsure === true, supersedes: r.unchanged ? was.supersedes : was.answer, via: r.unchanged ? was.via : "amend" };
           setSaid(r.unchanged ? `${itemWords(holding.item)} kept as it was: ${now}.` : `Corrected ${itemWords(holding.item)}: ${mineWords(q, was.value)} is now ${now}; the earlier answer is kept.`);
           // back where the correction was opened from: the gallery, the reader's own address, or the item held before it
-          if (back === "gallery") location.hash = href("campaigns", id, "gallery");
-          else if (amendAt !== null) location.hash = href("campaigns", id, "rate");
+          if (back === "gallery") location.hash = href("review", "campaigns", id, "gallery");
+          else if (amendAt !== null) location.hash = href("review", "campaigns", id, "rate");
           else claim();
         })
         .catch((e: unknown) => setRefused(refusedWords(e)))
@@ -511,8 +511,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       // a correction left as it was: back to where it came from
       if (holding.amend) {
         setSaid(`${itemWords(holding.item)} left as it was.`);
-        if (then === "stop" || back === "gallery") location.hash = href("campaigns", id, back === "gallery" ? "gallery" : null);
-        else if (amendAt !== null) location.hash = href("campaigns", id, "rate");
+        if (then === "stop" || back === "gallery") location.hash = href("review", "campaigns", id, back === "gallery" ? "gallery" : null);
+        else if (amendAt !== null) location.hash = href("review", "campaigns", id, "rate");
         else claim();
         return;
       }
@@ -522,7 +522,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         .then(() => {
           setSaid(`Gave ${itemWords(holding.item)} back.`);
           if (then === "next") claim();
-          else location.hash = href("campaigns", id);
+          else location.hash = href("review", "campaigns", id);
         })
         .catch((e: unknown) => setRefused(refusedWords(e)))
         .finally(() => setBusy(false));
@@ -789,7 +789,7 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">
-            <a href={href("campaigns")}>Campaigns</a> · <a href={href("campaigns", String(c.id))}>{c.name}</a>
+            <a href={href("review")}>Review</a> · <a href={href("review", "campaigns", String(c.id))}>{c.name}</a>
           </span>
           <h1>{role === "adjudicator" ? "Adjudicate" : "Rate"}</h1>
           <p className="lede">{questionWords(q)}</p>
@@ -872,7 +872,7 @@ function ReaderOne(p: Drawn) {
     <section className="data campaign-rate reader-one">
       <div className="reader-head">
         <span className="eyebrow">
-          <a href={href("campaigns")}>Campaigns</a> · <a href={href("campaigns", String(c.id))}>{c.name}</a>
+          <a href={href("review")}>Review</a> · <a href={href("review", "campaigns", String(c.id))}>{c.name}</a>
         </span>
         <h1>{role === "adjudicator" ? "Adjudicate" : "Rate"}</h1>
         <span className="grow said-slot">
@@ -990,7 +990,7 @@ function SeatState(p: WorkspaceBodyProps & { refusal: string | null }) {
         <p className="note-lead">Nothing left for you.</p>
         <p className="note-detail">{seat.why}</p>
         <p>
-          <a href={href("campaigns", String(c.id))}>Back to {c.name}</a> ·{" "}
+          <a href={href("review", "campaigns", String(c.id))}>Back to {c.name}</a> ·{" "}
           <button type="button" className="link-button" onClick={p.onAgain}>
             Look again
           </button>

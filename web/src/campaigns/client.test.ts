@@ -270,7 +270,7 @@ describe("making one", () => {
 
   it("opens from another page with its source filled in", () => {
     const at = parse(makeHref("selection", "probe@1"));
-    expect(at.section).toBe("campaigns");
+    expect([at.section, at.page]).toEqual(["review", "campaigns"]);
     expect(prefillOf(at.query)).toEqual({ source: "selection", from: "probe@1" });
     expect(prefillOf(parse(makeHref("review", "base:")).query)).toEqual({ source: "review", from: "base:" });
     expect(prefillOf(undefined)).toBeNull();

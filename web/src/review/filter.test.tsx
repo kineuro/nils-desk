@@ -10,7 +10,6 @@ import { emptyDraft, makeBody, prefillOf } from "../campaigns/client";
 import type { Grant } from "../grants";
 import { GRANTS } from "../grants";
 import type { ReviewItem } from "../ops/client";
-import { PLACEHOLDERS } from "../home/placeholders";
 import { parse } from "../routes";
 import { capsWith } from "./caps.fixture";
 import { DISAGREES, itemWords, modelDisagrees } from "./client";
@@ -52,7 +51,6 @@ const disagrees = item(9, "body_part:decision", {
 /** The badge as a static render writes it. */
 const BADGE = DISAGREES.replace(/'/gu, "&#x27;");
 
-const built = PLACEHOLDERS.some((p) => p.id === "campaigns" && p.built === true);
 const caps = capsWith(["POST /api/campaigns", "GET /api/campaigns", "GET /api/review/summary"], [...GRANTS] as Grant[]);
 
 describe("the queue's filter by axis and reason", () => {
@@ -64,7 +62,7 @@ describe("the queue's filter by axis and reason", () => {
 
   it("keeps base:conflict through a reload, shows only those items, and hands --review-kind base:conflict to the maker", () => {
     const address = queueHref({ axis: "base", reason: "conflict", border: null }, "north");
-    expect(address).toBe("#review?cohort=north&axis=base&reason=conflict");
+    expect(address).toBe("#review/questions?cohort=north&axis=base&reason=conflict");
     // a reload reads the page's address back
     const route = parse(address);
     expect(route.section).toBe("review");
@@ -84,9 +82,9 @@ describe("the queue's filter by axis and reason", () => {
     expect(html).toContain('aria-pressed="true">base</button>');
     // "Ask people about these" carries it to the maker as a kind, the source --review-kind makes
     expect(filterKind(filter)).toEqual({ kind: "base:conflict" });
-    const ask = /href="(#campaigns\?make=review[^"]*)">Ask people about these/u.exec(html);
-    expect(ask !== null).toBe(built);
-    const href = (ask?.[1] ?? "#campaigns?make=review&from=base%3Aconflict&cohort=north").replace(/&amp;/gu, "&");
+    const ask = /href="(#review\/campaigns\?make=review[^"]*)">Ask people about these/u.exec(html);
+    expect(ask !== null).toBe(true);
+    const href = (ask?.[1] ?? "#review/campaigns?make=review&from=base%3Aconflict&cohort=north").replace(/&amp;/gu, "&");
     const prefill = prefillOf(parse(href).query)!;
     expect(prefill).toEqual({ source: "review", from: "base:conflict", cohort: "north" });
     const made = makeBody({ ...emptyDraft(prefill), name: "ask", axis: "base" });
@@ -95,7 +93,7 @@ describe("the queue's filter by axis and reason", () => {
 
   it("carries an axis alone as a prefix, a pick border as its kind, and a reason alone not at all", () => {
     expect(filterKind({ axis: "technique", reason: null, border: null })).toEqual({ kind_prefix: "technique:" });
-    const prefill = prefillOf(parse("#campaigns?make=review&from=technique%3A").query)!;
+    const prefill = prefillOf(parse("#review/campaigns?make=review&from=technique%3A").query)!;
     const made = makeBody({ ...emptyDraft(prefill), name: "ask", axis: "technique" });
     expect(made.ok && made.body.source).toEqual({ review: { kind_prefix: "technique:" } });
     expect(filterKind({ axis: null, reason: "pick.border", border: "retake" })).toEqual({ kind: "pick.border" });

@@ -43,7 +43,7 @@ export function LabelSetsBody({ caps, sets, why, since }: { caps: Capabilities; 
     <section className="data label-sets">
       <div className="data-head">
         <div className="grow">
-          <span className="eyebrow">Campaigns</span>
+          <span className="eyebrow">Review</span>
           <h1>Label sets</h1>
           <p className="lede">Labels with their provenance and a digest.</p>
         </div>
@@ -68,7 +68,7 @@ export function LabelSetsBody({ caps, sets, why, since }: { caps: Capabilities; 
               {sets.map((s) => (
                 <tr key={s.id}>
                   <td>
-                    <a href={href("campaigns", "label-sets", String(s.id))}>
+                    <a href={href("review", "label-sets", String(s.id))}>
                       {s.name} v{s.version}
                     </a>
                     <div className="meta">
@@ -126,7 +126,7 @@ export function LabelSetBody({ caps, set: s }: { caps: Capabilities; set: LabelS
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">
-            <a href={href("campaigns", "label-sets")}>Label sets</a>
+            <a href={href("review", "label-sets")}>Label sets</a>
           </span>
           <h1>
             {s.name} v{s.version}
@@ -154,7 +154,7 @@ export function LabelSetBody({ caps, set: s }: { caps: Capabilities; set: LabelS
           <div className="facts-pair">
             <dt>campaign</dt>
             <dd>
-              <a href={href("campaigns", String(s.campaign_id))}>{typeof s.source?.name === "string" ? s.source.name : `campaign ${s.campaign_id}`}</a>
+              <a href={href("review", "campaigns", String(s.campaign_id))}>{typeof s.source?.name === "string" ? s.source.name : `campaign ${s.campaign_id}`}</a>
             </dd>
           </div>
         )}

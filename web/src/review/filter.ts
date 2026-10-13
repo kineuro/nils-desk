@@ -5,8 +5,8 @@
 // run's doubts, narrowed by the border's reasons), and the filter lives in the
 // page's address, so a reload or a link keeps it:
 //
-//   #review?axis=base&reason=conflict
-//   #review?reason=pick.border&border=too_close
+//   #review/questions?axis=base&reason=conflict
+//   #review/questions?reason=pick.border&border=too_close
 //
 // "Ask people about these" carries it to the campaign maker as the source the
 // campaign door takes, a kind (`--review-kind base:conflict`) or a prefix
@@ -61,7 +61,7 @@ export function queueFilterOf(query: Record<string, string> | undefined): QueueF
 
 /** The queue's address with a filter, the cohort it was narrowed to, and the dataset it was opened for (a dataset's card's Review), which a filter keeps. */
 export function queueHref(f: QueueFilter, cohort = "", dataset = ""): string {
-  return narrow(href("review"), { dataset, cohort, axis: f.axis, reason: f.reason, border: f.border });
+  return narrow(href("review", "questions"), { dataset, cohort, axis: f.axis, reason: f.reason, border: f.border });
 }
 
 /** The classifier's axis and reason of a kind, or null for a kind that is not one of the classifier's questions. */

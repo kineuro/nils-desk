@@ -287,7 +287,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
             <h2>Also here</h2>
           </div>
           {refusedCount > 0 && (
-            <a className="tail" href={narrow(href("review"), { batch: id })}>
+            <a className="tail" href={narrow(href("review", "questions"), { batch: id })}>
               The {n(refusedCount)} refused files, on Review
               <Icon name="chevron-right" />
             </a>
@@ -335,7 +335,7 @@ export function StageStrip({ strip, jobs, batch }: { strip: Stage[]; jobs: JobRo
             s.mark === "wait" ? (
               <>
                 {s.since && <span className="meta">since {whenWords(s.since)}</span>}
-                <a className="tail" href={narrow(href("review"), { batch: batch.id })}>
+                <a className="tail" href={narrow(href("review", "questions"), { batch: batch.id })}>
                   Open on Review
                   <Icon name="chevron-right" />
                 </a>

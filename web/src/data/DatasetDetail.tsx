@@ -95,7 +95,7 @@ export interface DatasetDetailProps {
 export function datasetActions(caps: Capabilities, d: Dataset, why: string | null) {
   const works = may(caps, "data:work");
   const next = nextStep(d, why);
-  const review = next.step === "review" ? (may(caps, "review:see") ? narrow(href("review"), { dataset: d.name }) : null) : null;
+  const review = next.step === "review" ? (may(caps, "review:see") ? narrow(href("review", "questions"), { dataset: d.name }) : null) : null;
   const primary: { label: string; step: StepId | null; href: string | null; busy: boolean } | null =
     next.step === "review"
       ? review

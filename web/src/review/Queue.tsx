@@ -18,7 +18,7 @@ import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { askPeopleHref, asksPeople } from "./askPeople";
-import { acts, batchOf, DISAGREES, isGrouped, itemKey, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, modelDisagrees, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
+import { acts, batchOf, DISAGREES, heldBy, isGrouped, itemKey, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, modelDisagrees, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
 import { filterChoices, filterKind, filterWords, NO_FILTER, passes, reasonWords, type QueueFilter } from "./filter";
 import { borderWords, PICK_BORDER } from "./picks";
 import { bulkPlan, kindOf, needsReading, sortByCost } from "./triage";
@@ -193,6 +193,11 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
                         Merge
                       </a>
                     )}
+                    {family === "campaigns" && heldBy(i).id !== null && (
+                      <a className="button secondary small" href={href("review", "campaigns", String(heldBy(i).id))}>
+                        Open
+                      </a>
+                    )}
                     {family !== null && PAGED.includes(family) && (
                       <a className="button secondary small" href={family === "picks" ? narrow(href("review", "picks"), { earlier: 1 }) : href("review", family)}>
                         Open
@@ -299,12 +304,12 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
       {onFilter && <FilterChips choices={choices} filter={filter} onFilter={onFilter} />}
       {batch !== null && (
         <p className="meta">
-          The items of batch {batch}. <a href={href("review")}>The whole queue</a>
+          The items of batch {batch}. <a href={href("review", "questions")}>The whole queue</a>
         </p>
       )}
       {run !== null && (
         <p className="meta">
-          The items of pipeline run {run}. <a href={href("review")}>The whole queue</a>
+          The items of pipeline run {run}. <a href={href("review", "questions")}>The whole queue</a>
         </p>
       )}
       <div className="needs">

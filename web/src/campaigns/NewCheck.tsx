@@ -254,7 +254,7 @@ function CheckForm({ caps, run, onClose, onBack }: { caps: Capabilities; run: Ru
         onClose();
         // the reader is a rater's alone: anyone else would claim and be refused
         const raters = c.rater_policy?.raters ?? d.raters;
-        location.hash = raters.includes(me) ? href("campaigns", String(c.id), "check") : href("campaigns", String(c.id));
+        location.hash = raters.includes(me) ? href("review", "campaigns", String(c.id), "check") : href("review", "campaigns", String(c.id));
       })
       .catch((e: unknown) => {
         setBusy(false);

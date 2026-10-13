@@ -17,7 +17,7 @@ import { CAMPAIGN_ID, type Asked } from "../../test/layout/reader.fixture";
 import type { Capabilities } from "../capabilities";
 import { RunPage } from "../ops/RunPage";
 import { CampaignPage } from "./CampaignPage";
-import { CampaignsPage } from "./CampaignsPage";
+import { WorkPage } from "../review/WorkPage";
 import { checkBody, checkNameOf, leftOutTags, maskOutputs, previewLine, previewOf, refusalWords, sourceOf } from "./check";
 import { draftFor, NewCheck, principalFor, readersOf, runChoiceOf, type RunChoice } from "./NewCheck";
 
@@ -177,7 +177,7 @@ describe("the dialog and the pages", () => {
     await click(button("Start checking"));
     await until(() => log.some((a) => a.method === "POST" && a.path === "/api/campaigns"));
     expect(log.find((a) => a.method === "POST" && a.path === "/api/campaigns")?.body).toMatchObject({ source: { run: RUN_ID, output: "labels", which: "unchecked" }, panels: ["made_on", "t1w", "flair"], closes_into: "check" });
-    await until(() => location.hash === "#campaigns/52/check");
+    await until(() => location.hash === "#review/campaigns/52/check");
   });
 
   it("Start checking by a maker who does not read it lands on its page, not on a reader that would refuse them (T33)", async () => {
@@ -193,7 +193,7 @@ describe("the dialog and the pages", () => {
     await click(button("Start checking")!);
     await until(() => log.some((a) => a.method === "POST" && a.path === "/api/campaigns"));
     expect(log.find((a) => a.method === "POST" && a.path === "/api/campaigns")?.body).toMatchObject({ raters: ["adithya"] });
-    await until(() => location.hash === "#campaigns/52");
+    await until(() => location.hash === "#review/campaigns/52");
     expect(log.some((a) => a.path.endsWith("/claim"))).toBe(false);
   });
 
@@ -254,10 +254,10 @@ describe("the dialog and the pages", () => {
     expect(dialog.querySelector(".check-preview")?.textContent).toBe("336 results · 2,128 lesions · 2 to 3 scans each");
   });
 
-  it("from Campaigns, New: Check results asks which run first, each with its results not yet checked", async () => {
+  it("from Review's list of work, New: Check results asks which run first, each with its results not yet checked", async () => {
     vi.stubGlobal("fetch", checkEngine({ log }));
     root = createRoot(host);
-    await act(async () => root.render(<CampaignsPage caps={capsWith(checkDoorsOf())} page={null} arg={null} />));
+    await act(async () => root.render(<WorkPage caps={capsWith(checkDoorsOf())} />));
     await click(await until(() => button("Make a campaign")));
     await click(await until(() => button("Check results")));
     const dialog = await until(() => document.querySelector("dialog.new-check"));
@@ -292,7 +292,7 @@ describe("the dialog and the pages", () => {
     root = createRoot(host);
     await act(async () => root.render(<CampaignPage caps={capsWith(checkDoorsOf())} id={String(CAMPAIGN_ID)} />));
     const go = await until(() => [...host.querySelectorAll("a.button")].find((a) => a.textContent === "Continue checking"));
-    expect(go.getAttribute("href")).toBe(`#campaigns/${CAMPAIGN_ID}/check`);
+    expect(go.getAttribute("href")).toBe(`#review/campaigns/${CAMPAIGN_ID}/check`);
     await until(() => host.querySelector(".check-line"));
     expect(host.querySelector(".check-line b")?.textContent).toBe("30 accepted · 1 rejected · 7 flagged");
     expect([...host.querySelectorAll(".check-counts > *")].map((t) => t.textContent)).toEqual(["accepted 30", "rejected 1", "flagged 7", "Under-segmented 3", "Not a lesion 4", "Missed lesion 2"]);

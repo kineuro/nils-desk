@@ -26,6 +26,8 @@ import { jobs as jobsDoor } from "./datasets";
 import { maySeePicks, picksSummary, PICKS_SUMMARY_DOOR, type PickLine } from "./picks";
 import { plainError, type Plain } from "./plain";
 import { StepRail } from "./StepRail";
+import { HeatMap } from "./HeatMap";
+import { mayHeat } from "./picksHeat";
 import { runOffers, startedWords, stepRuns } from "./stepRun";
 import { clock, cohortRail, doingTitle, fedWords, growth, joinTitle, OPERATIONS, roleOrder, roleWord, runningWords, slotOf, type Holding, type Operation, type SummaryStep } from "./summary";
 import { mayBrowse, viewHref } from "./viewer";
@@ -48,7 +50,7 @@ export interface CohortDetailProps {
 /** The actions of a cohort's head: the ones offered, and which is the primary, the next step. */
 export function cohortActions(caps: Capabilities, c: Pick<Cohort, "name" | "waiting" | "subjects" | "releases" | "retired_at">) {
   const acts = cohortActs(caps, c.name);
-  const review = c.waiting > 0 && may(caps, "review:see") ? narrow(href("review"), { cohort: c.name }) : null;
+  const review = c.waiting > 0 && may(caps, "review:see") ? narrow(href("review", "questions"), { cohort: c.name }) : null;
   const release = acts.releasing === null && !c.retired_at ? href("release", "new", c.name) : null;
   const query = may(caps, "query:see") && may(caps, "data:work") && !c.retired_at ? href("query") : null;
   // the viewer over its members, where the person may browse them
@@ -287,6 +289,12 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
           )}
         </div>
       </div>
+      {mayHeat(caps) && (
+        <div className="dp-sec">
+          <h3 className="eyebrow">Main scans, visit by visit</h3>
+          <HeatMap cohort={row.name} />
+        </div>
+      )}
       {open === "members" && (
         <MembersDialog
           cohort={row}

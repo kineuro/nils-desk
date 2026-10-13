@@ -354,7 +354,7 @@ export function RunView(props: {
       )}
       {checks.items !== 0 && acts.review && (
         <p className="meta">
-          <a href={narrow(href("review"), { run: r.id })}>
+          <a href={narrow(href("review", "questions"), { run: r.id })}>
             {heldWords(checks.items)} review {checks.items === 1 ? "item" : "items"}
           </a>{" "}
           for the failures and breaches of this run

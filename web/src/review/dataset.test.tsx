@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
-// Review opened from a dataset's card (record 55 H2): #review?dataset=NAME
+// Review opened from a dataset's card (record 55 H2): #review/questions?dataset=NAME
 // narrows the queue and its summary to that dataset's scans, says which, and
 // takes the narrowing off in one click; the picks page narrows the same way.
 
@@ -48,7 +48,7 @@ describe("Review narrowed to a dataset", () => {
     expect(urls.some((u) => u.startsWith("/api/review?") && u.includes("dataset=ms-a"))).toBe(true);
     expect(urls.some((u) => u.startsWith("/api/review/summary") && u.includes("dataset=ms-a"))).toBe(true);
     expect(el.querySelector(".review-dataset .tag")?.textContent).toBe("ms-a");
-    expect(el.querySelector(".review-dataset a")?.getAttribute("href")).toBe("#review");
+    expect(el.querySelector(".review-dataset a")?.getAttribute("href")).toBe("#review/questions");
   });
 
   it("narrows the table of earlier pick questions the same way", async () => {
@@ -63,13 +63,15 @@ describe("Review narrowed to a dataset", () => {
     act(() => root.render(<ReviewPage caps={caps} page={null} query={{ dataset: "ms-a" }} />));
     await settle();
     const chips = [...el.querySelectorAll<HTMLAnchorElement>(".chips.pages a")].map((a) => a.getAttribute("href"));
-    expect(chips.length).toBeGreaterThan(1);
-    for (const c of chips) expect(c).toContain("dataset=ms-a");
-    expect(queueHref({ axis: "base", reason: null, border: null }, "", "ms-a")).toBe("#review?dataset=ms-a&axis=base");
+    expect(chips.length).toBeGreaterThan(2);
+    // the one list of work is the whole site's; every page of the queue keeps the dataset
+    expect(chips[0]).toBe("#review");
+    for (const c of chips.slice(1)) expect(c).toContain("dataset=ms-a");
+    expect(queueHref({ axis: "base", reason: null, border: null }, "", "ms-a")).toBe("#review/questions?dataset=ms-a&axis=base");
   });
 
   it("asks for every dataset without one", async () => {
-    act(() => root.render(<ReviewPage caps={caps} page={null} />));
+    act(() => root.render(<ReviewPage caps={caps} page="questions" />));
     await settle();
     expect(urls.some((u) => u.includes("dataset="))).toBe(false);
     expect(el.querySelector(".review-dataset")).toBeNull();

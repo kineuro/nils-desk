@@ -129,7 +129,7 @@ describe.skipIf(ENGINE === "" || TOKEN === "")("a question's plan to a run's tab
     expect(page.match(/<tr>/gu)?.length).toBeGreaterThanOrEqual(2 * pre.units.total);
     expect(page).toContain("<th>brain volume</th>");
     expect(page).toContain("kept on resume");
-    expect(page).toContain(`href="#review?run=${id}"`);
+    expect(page).toContain(`href="#review/questions?run=${id}"`);
 
     // the breach, and its review item
     expect(checksOf(done)).toMatchObject({ declared: 1, breaches: 1 });

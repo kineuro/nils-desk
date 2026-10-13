@@ -213,7 +213,7 @@ describe("the rater's workspace", () => {
   it("says nothing is left, with the way back, and refuses a person the campaign does not name", () => {
     const done = draw({ campaign: open, seat: seatOf(nothing as unknown as Claimed) });
     expect(done).toContain("Nothing left for you.");
-    expect(done).toContain('href="#campaigns/6"');
+    expect(done).toContain('href="#review/campaigns/6"');
     const notOne = draw({ campaign: open, role: "adjudicator", seat: { kind: "claiming" } });
     expect(notOne).toContain("The campaign names its adjudicators, and you are not one.");
     expect(draw({ campaign: closed, seat: { kind: "claiming" } })).toContain("The campaign is closed.");

@@ -7,10 +7,10 @@
 // side opens one section at a time (the 2026-10-09 design).
 
 import type { Capabilities } from "./capabilities";
-import { door, state } from "./deployment";
+import { state } from "./deployment";
 import { may } from "./grants";
 import { ladderPages } from "./assistant/ladder";
-import { PLACEHOLDERS } from "./home/placeholders";
+import { holds, PLACEHOLDERS, serves } from "./home/placeholders";
 import { href } from "./routes";
 import { settingsPages } from "./settings/pages";
 import type { IconName } from "./ui/Icon";
@@ -69,7 +69,7 @@ export function sections(caps: Capabilities, ready: boolean | null = true, conve
   // the assistant helps set an install up as well, so it does not wait for it
   if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: assistantPages(conversations, ladderPages(caps)), rest: "none" });
   if (ready !== true) return out;
-  for (const p of PLACEHOLDERS) if (may(caps, p.grant) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon, ...(p.pages ? { pages: p.pages(caps) } : {}) });
+  for (const p of PLACEHOLDERS) if (holds(caps, p.grant) && serves(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon, ...(p.pages ? { pages: p.pages(caps) } : {}) });
   return out;
 }
 

@@ -1,0 +1,42 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* Review's one list of work (Wave 7a, record 55 H3): a group per job, a row
+   per kind of the machine's questions or per campaign. A row's kind is its
+   left border's colour, never a glyph: the machine's questions neutral, a
+   campaign the brand's, an adjudication the caution's. On a phone a row's
+   bar and act wrap under its words; nothing scrolls sideways. Theme tokens
+   only. */
+
+.work .work-group { display: grid; gap: 0.5rem; margin-top: 1.2rem; }
+.work .work-group .section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.7rem; }
+.work .work-group .section-head h2 { margin: 0; }
+.work .work-empty, .work .work-held { margin: 0; }
+.work .chips .opt b { margin-left: 0.35rem; font-weight: 500; }
+.work .chips.pages a { text-decoration: none; }
+
+.work-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.work-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 14rem) 7rem;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--n-line);
+  border-left: 3px solid var(--n-neutral-line);
+  border-radius: var(--n-radius);
+  background: var(--n-bg-raised);
+}
+.work-row.from-campaign { border-left-color: var(--n-brand-line); }
+.work-row.from-adjudication { border-left-color: var(--n-caution-line); }
+.work-row.from-closed { grid-template-columns: minmax(0, 1fr) minmax(10rem, 14rem); }
+.work-what { display: grid; gap: 0.1rem; min-width: 0; }
+.work-title { font-weight: 500; overflow-wrap: anywhere; }
+.work-what .meta { overflow-wrap: anywhere; }
+.work-count { font-family: var(--n-font-serif); font-size: 1.2rem; text-align: right; }
+.work-act { display: flex; justify-content: flex-end; }
+
+@media (max-width: 640px) {
+  .work-row, .work-row.from-closed { grid-template-columns: minmax(0, 1fr) auto; }
+  .work-row .state-bar { grid-column: 1 / -1; min-width: 0; }
+  .work-row .work-count { grid-row: 1; grid-column: 2; }
+  .work-row .work-act { grid-column: 1 / -1; justify-content: flex-start; }
+}

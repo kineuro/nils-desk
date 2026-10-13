@@ -17,11 +17,14 @@ import { FAMILY_SLOT, FAMILY_WORD, familyOf, type Family } from "./tree";
 
 // ------------------------------------------------------------ where
 
-/** What the viewer shows: a dataset, or a cohort's members across datasets. */
+/** What the viewer shows: a dataset, a cohort's members across datasets, or the whole registry (Data, Browse; Wave 7a, spec 13.1). */
 export interface Scope {
-  kind: "dataset" | "cohort";
+  kind: "dataset" | "cohort" | "registry";
   name: string;
 }
+
+/** The whole registry, as Data's Browse shows it: subjects, then sessions, then scans. */
+export const REGISTRY: Scope = { kind: "registry", name: "Every subject" };
 
 export type Mode = "grid" | "browser";
 
@@ -77,6 +80,9 @@ export function onSearch(heard: () => void): () => void {
 
 const pageOf = (s: Scope) => (s.kind === "dataset" ? "datasets" : "cohorts");
 
+/** Where a scope's view lives: a dataset's and a cohort's under their own page, the registry's at Data, Browse. */
+const viewAt = (s: Scope): string => (s.kind === "registry" ? href("data", "browse") : href("data", pageOf(s), s.name, "view"));
+
 const id = (v: string | undefined): number | null => (v !== undefined && /^\d+$/.test(v) ? Number(v) : null);
 const list = (v: string | undefined): string[] => (v ? v.split(",").map((x) => x.trim()).filter(Boolean) : []);
 
@@ -98,7 +104,7 @@ export function parseView(query: Record<string, string> | undefined): ViewState 
 /** The address of a view of a scope. The search is never part of it. */
 export function viewHref(scope: Scope, v: Partial<ViewState> = {}): string {
   const s = { ...EMPTY_VIEW, ...v };
-  return narrow(href("data", pageOf(scope), scope.name, "view"), {
+  return narrow(viewAt(scope), {
     mode: s.mode,
     subject: s.subject,
     visit: s.visit,
@@ -110,11 +116,12 @@ export function viewHref(scope: Scope, v: Partial<ViewState> = {}): string {
 
 /** Where Esc from the subjects goes: the scope's own card or page. */
 export function scopeHome(scope: Scope): string {
-  return href("data", pageOf(scope), scope.name);
+  return scope.kind === "registry" ? href("data", "browse") : href("data", pageOf(scope), scope.name);
 }
 
 /** The page the scope is listed on, the first crumb. */
 export function scopeList(scope: Scope): { label: string; href: string } {
+  if (scope.kind === "registry") return { label: "Data", href: href("data", "datasets") };
   return scope.kind === "dataset" ? { label: "Datasets", href: href("data", "datasets") } : { label: "Cohorts", href: href("data", "cohorts") };
 }
 
@@ -125,17 +132,35 @@ export const VISITS_DOOR = "GET /api/datasets/{name}/subjects/{subject}/visits";
 export const COHORT_SUBJECTS_DOOR = "GET /api/cohorts/{name}/subjects";
 export const COHORT_VISITS_DOOR = "GET /api/cohorts/{name}/subjects/{subject}/visits";
 export const COHORT_SCANS_DOOR = "GET /api/cohorts/{name}/scans";
+/** Browse's doors (Wave 7a, spec 13.1): the registry's subjects, one subject's sessions, one session's scans and every scan, under the person's detail level. */
+export const BROWSE_SUBJECTS_DOOR = "GET /api/subjects";
+export const BROWSE_SESSIONS_DOOR = "GET /api/subjects/{id}/sessions";
+export const BROWSE_STACKS_DOOR = "GET /api/sessions/{id}/stacks";
+export const BROWSE_SCANS_DOOR = "GET /api/scans";
 
 const base = (s: Scope) => `/api/${pageOf(s)}/${encodeURIComponent(s.name)}`;
 
+/** A scope's doors as paths: the subjects, one subject's visits, a page of scans narrowed or not. */
+const paths = (s: Scope) =>
+  s.kind === "registry"
+    ? {
+        subjects: "/api/subjects",
+        visits: (subject: number) => `/api/subjects/${subject}/sessions`,
+        // one visit's scans by its session, or by its studies where the cache keeps no session
+        scans: (f: Record<string, string> | null) => (f?.session ? `/api/sessions/${encodeURIComponent(f.session)}/stacks` : f?.studies ? "/api/sessions/none/stacks" : "/api/scans"),
+      }
+    : { subjects: `${base(s)}/subjects`, visits: (subject: number) => `${base(s)}/subjects/${subject}/visits`, scans: () => `${base(s)}/scans` };
+
 /** Whether the browser is offered: Data reading and the scope's scans door. */
 export function mayBrowse(caps: Capabilities, scope: Scope): boolean {
+  if (scope.kind === "registry") return may(caps, "data:see") && served(caps, BROWSE_SCANS_DOOR) && served(caps, BROWSE_STACKS_DOOR);
   return may(caps, "data:see") && served(caps, scope.kind === "dataset" ? SCANS_DOOR : COHORT_SCANS_DOOR);
 }
 
 /** Whether the grid is offered: the browser's, and the subjects and visits doors. */
 export function mayGrid(caps: Capabilities, scope: Scope): boolean {
   if (!mayBrowse(caps, scope)) return false;
+  if (scope.kind === "registry") return served(caps, BROWSE_SUBJECTS_DOOR) && served(caps, BROWSE_SESSIONS_DOOR);
   return scope.kind === "dataset" ? served(caps, SUBJECTS_DOOR) && served(caps, VISITS_DOOR) : served(caps, COHORT_SUBJECTS_DOOR) && served(caps, COHORT_VISITS_DOOR);
 }
 
@@ -331,21 +356,23 @@ export const viewerDoors = {
     if (ask.q.trim() !== "") q.set("q", ask.q.trim());
     if (ask.filter.length > 0) q.set("filter", ask.filter.join(","));
     if (after !== null) q.set("after", String(after));
-    return door<Json>("GET", `${base(scope)}/subjects?${q}`).then(subjectsOf);
+    return door<Json>("GET", `${paths(scope).subjects}?${q}`).then(subjectsOf);
   },
   visits: (scope: Scope, subject: number, ask: { name: string; show: string; filter: string[] }): Promise<VisitsPage> => {
     const q = new URLSearchParams({ name: ask.name, show: ask.show });
     if (ask.filter.length > 0) q.set("filter", ask.filter.join(","));
-    return door<Json>("GET", `${base(scope)}/subjects/${subject}/visits?${q}`).then(visitsOf);
+    return door<Json>("GET", `${paths(scope).visits(subject)}?${q}`).then(visitsOf);
   },
   /** One visit's scans with their pictures, the most a page holds. */
   visit: (scope: Scope, key: string, pictures = true, after: number | null = null): Promise<ScanPage> => {
     const f = visitFilter(key);
     if (!f) return Promise.reject(new Error("no such visit"));
-    const q = new URLSearchParams({ ...f, limit: "200" });
+    // the registry's session door names the session in its path, so only the studies go in the query
+    const asked = scope.kind === "registry" && f.session ? {} : f;
+    const q = new URLSearchParams({ ...asked, limit: "200" });
     if (pictures) q.set("pictures", "1");
     if (after !== null) q.set("after", String(after));
-    return door<ScansAnswer>("GET", `${base(scope)}/scans?${q}`).then((a) => ({
+    return door<ScansAnswer>("GET", `${paths(scope).scans(f)}?${q}`).then((a) => ({
       total: a.total,
       scans: scansOf(a.scans ?? []),
       next: a.next ?? null,
@@ -356,7 +383,7 @@ export const viewerDoors = {
   tree: (scope: Scope, after: number | null = null): Promise<ScanPage> => {
     const q = new URLSearchParams({ limit: "200" });
     if (after !== null) q.set("after", String(after));
-    return door<ScansAnswer>("GET", `${base(scope)}/scans?${q}`).then((a) => ({
+    return door<ScansAnswer>("GET", `${paths(scope).scans(null)}?${q}`).then((a) => ({
       total: a.total,
       scans: scansOf(a.scans ?? []),
       next: a.next ?? null,

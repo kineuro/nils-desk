@@ -78,7 +78,7 @@ describe("one's own answers", () => {
 
   it("opens an answer in the reader where it can be corrected, and says why not where it cannot", () => {
     const caps = capsWith(["POST /api/campaigns/{id}/answers/{answer}/amend"]);
-    expect(amendHref(7, 91, "gallery")).toBe("#campaigns/7/rate?amend=91&back=gallery");
+    expect(amendHref(7, 91, "gallery")).toBe("#review/campaigns/7/rate?amend=91&back=gallery");
     expect(amendRefusal(caps, { status: "open", question: AXIS }, { open: true })).toBeNull();
     expect(amendRefusal(caps, { status: "closed", question: AXIS }, null)).toContain("closed");
     expect(amendRefusal(caps, { status: "open", question: AXIS }, { open: false })).toContain("closed");
@@ -306,7 +306,7 @@ describe("the reader corrects one's own answer", () => {
     expect(host.querySelector(".actions .opt.on")?.textContent).toContain("Unsure");
     await press("Enter");
     await until(() => log.some((a) => a.path.endsWith("/answers/90/amend")));
-    await until(() => location.hash === "#campaigns/7/gallery");
+    await until(() => location.hash === "#review/campaigns/7/gallery");
   });
 
   it("claims only the items read one by one when the gallery's link asks", async () => {
@@ -329,7 +329,7 @@ describe("the gallery", () => {
     const line = await until(() => host.querySelector("[data-alone]"));
     expect(line.textContent).toContain("3 items are held back to be read one by one");
     expect(line.textContent).toContain("2 are of a sealed sample");
-    expect(line.querySelector("a")?.getAttribute("href")).toBe("#campaigns/7/rate?alone=1");
+    expect(line.querySelector("a")?.getAttribute("href")).toBe("#review/campaigns/7/rate?alone=1");
     await press("u");
     const list = await until(() => host.querySelectorAll(".mine-row").length === 2 && host.querySelector(".mine-drawer"));
     const rows = [...list.querySelectorAll(".mine-row")];
@@ -337,7 +337,7 @@ describe("the gallery", () => {
     expect(rows[0].textContent).toContain("in a batch");
     expect(rows[0].querySelector(".value-tag")?.getAttribute("data-slot")).toBe("5");
     expect(rows[1].querySelector(".tag.gated")?.textContent).toBe("blind");
-    expect(rows[0].querySelector("a")?.getAttribute("href")).toBe("#campaigns/7/rate?amend=91&back=gallery");
+    expect(rows[0].querySelector("a")?.getAttribute("href")).toBe("#review/campaigns/7/rate?amend=91&back=gallery");
     // nothing suggested is ever listed beside one's own answer
     expect(list.textContent).not.toContain("suggested");
     // a filter asks the engine for that value alone

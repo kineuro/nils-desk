@@ -19,7 +19,7 @@ export function checkActs(caps: Capabilities, c: Campaign): { head: React.ReactN
   const reads = rateRefusal(caps, c) === null && open > 0;
   return {
     head: reads ? (
-      <a className="button" href={href("campaigns", String(c.id), "check")}>
+      <a className="button" href={href("review", "campaigns", String(c.id), "check")}>
         Continue checking
       </a>
     ) : null,
