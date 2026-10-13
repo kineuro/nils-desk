@@ -42,7 +42,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   return engine(input, init);
 }) as typeof fetch;
 
-if (!location.hash) location.hash = `#campaigns/${CAMPAIGN_ID}/pairs`;
+if (!location.hash) location.hash = `#review/campaigns/${CAMPAIGN_ID}/pairs`;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

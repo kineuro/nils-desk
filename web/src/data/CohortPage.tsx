@@ -203,7 +203,7 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                 <span className="v">{n(c.waiting)}</span>
                 <span className="meta">{c.waiting > 0 ? "on Review" : "nothing waits"}</span>
                 {c.waiting > 0 && may(caps, "review:see") && (
-                  <a className="tail" href={narrow(href("review"), { cohort: c.name })}>
+                  <a className="tail" href={narrow(href("review", "questions"), { cohort: c.name })}>
                     Open on Review
                     <Icon name="chevron-right" />
                   </a>

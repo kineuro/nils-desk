@@ -106,7 +106,7 @@ describe("the family's page", () => {
   });
   it("draws no campaign link when the Campaigns section is not here", () => {
     const html = renderToStaticMarkup(<ModelFamily caps={capsWith(doors, ["review:see", "review:work"])} groups={modelGroups(ITEMS)} askHref={null} onChanged={() => undefined} />);
-    expect(html).not.toContain("#campaigns");
+    expect(html).not.toContain("#review/campaigns");
     expect(html).toContain("body_part now");
   });
   it("says in its closure panel what the commit puts in force, counted", () => {

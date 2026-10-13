@@ -267,7 +267,7 @@ describe("a run's page", () => {
     expect(html).toContain("3,000");
     expect(html).toContain("2 declared · 1 breach");
     expect(html).toContain("stack-3 (3.5)");
-    expect(html).toContain('href="#review?run=1"');
+    expect(html).toContain('href="#review/questions?run=1"');
     expect(html).toContain("3 done");
     expect(html).not.toContain("Totals by");
   });
@@ -345,7 +345,7 @@ describe("a run's page", () => {
     expect(html).not.toContain("Every unit that finished passed");
     expect(html).not.toContain(">0<");
     expect(html).toContain("withheld below detail quasi");
-    expect(html).toContain('href="#review?run=1"');
+    expect(html).toContain('href="#review/questions?run=1"');
     // review_items as the engine counts them since dd41d9a: a number, null where withheld
     expect(checksOf({ ...held, summary: { ...held.summary, review_items: null } }).items).toBeNull();
     expect(checksOf({ ...held, summary: { ...held.summary, review_items: 7 } }).items).toBe(7);

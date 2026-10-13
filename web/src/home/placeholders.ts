@@ -8,7 +8,7 @@
 
 import type { Capabilities } from "../capabilities";
 import { door } from "../deployment";
-import { may, type Grant } from "../grants";
+import { may, mayAny, type Grant } from "../grants";
 import { logsOffered } from "../ops/logs";
 import { href } from "../routes";
 import type { SidePage } from "../sections";
@@ -18,9 +18,10 @@ export interface Placeholder {
   id: string;
   title: string;
   icon: IconName;
-  /** The grant that opens the section. */
-  grant: Grant;
-  door: string;
+  /** The grant that opens the section, or the grants any one of which does (record 55 H2: a section whose pages carry their own grants opens for any of them). */
+  grant: Grant | readonly Grant[];
+  /** The door the section reads, or the doors any one of which it reads. */
+  door: string | readonly string[];
   words: string;
   /** Built back: the section renders its own page, not this placeholder. */
   built?: boolean;
@@ -55,29 +56,24 @@ export const PLACEHOLDERS: Placeholder[] = [
     door: "GET /api/sources",
     words: "The datasets, where the files come from, and the cohorts, groups of subjects from any dataset, on one page.",
     built: true,
-    pages: (caps) => [page("datasets", "Datasets and cohorts"), ...(door(caps, "GET /api/linkage/types") ? [page("pseudonyms", "Pseudonyms")] : [])],
+    // Browse where the engine serves the registry's subjects (Wave 7a, spec 13.1): subjects, then sessions, then scans
+    pages: (caps) => [
+      page("datasets", "Datasets and cohorts"),
+      ...(door(caps, "GET /api/subjects") && door(caps, "GET /api/scans") ? [page("browse", "Browse")] : []),
+      ...(door(caps, "GET /api/linkage/types") ? [page("pseudonyms", "Pseudonyms")] : []),
+    ],
   },
   {
     id: "review",
     title: "Review",
     icon: "review",
-    grant: "review:see",
-    door: "GET /api/review",
-    words: "What needs a reviewer's judgement: a scan the rules could not place, a subject to confirm.",
+    // Wave 7a, H3 (spec 13.1 and 13.2): Review and Campaigns are one section, one list of work.
+    // A person who holds only campaigns:* (a rater) finds their campaigns and no queue, rules or identifiers.
+    grant: ["review:see", "campaigns:see"],
+    door: ["GET /api/review", "GET /api/campaigns"],
+    words: "One list of work: what the machine asks, and the campaigns people read.",
     built: true,
-    // the queue answers Questions, with what models proposed and what System 1 asks under it
-    pages: () => [page("questions", "Questions", { to: href("review") }), page("picks", "Main scans"), page("identifiers", "Subjects"), page("rules", "Rules")],
-  },
-  {
-    id: "campaigns",
-    title: "Campaigns",
-    icon: "users",
-    grant: "campaigns:see",
-    door: "GET /api/campaigns",
-    words: "One question asked of many items, rated, adjudicated, closed into decisions.",
-    built: true,
-    // the label sets where the engine lists them, as the page's own tabs (campaigns/parts.tsx)
-    pages: (caps) => [page("campaigns", "Campaigns", { to: href("campaigns") }), ...(door(caps, "GET /api/label-sets") ? [page("label-sets", "Label sets")] : [])],
+    pages: (caps) => reviewPages(caps),
   },
   {
     id: "models",
@@ -117,3 +113,34 @@ export const PLACEHOLDERS: Placeholder[] = [
     ],
   },
 ];
+
+/** Whether the person holds the grant, or one of the grants, that opens a section. */
+export function holds(caps: Capabilities, grant: Grant | readonly Grant[]): boolean {
+  return typeof grant === "string" ? may(caps, grant) : mayAny(caps, ...grant);
+}
+
+/** Whether the engine serves the door, or one of the doors, a section reads. */
+export function serves(caps: Capabilities, doors: string | readonly string[]): boolean {
+  return typeof doors === "string" ? door(caps, doors) : doors.some((d) => door(caps, d));
+}
+
+/**
+ * Review's pages in the side, each under its own grant (record 55 H2 and
+ * H3): the one list of work for anyone who reviews or reads a campaign
+ * (the queue and a campaign opened from it keep it marked); Main scans,
+ * Subjects and Rules for a reviewer; the label sets for a reader of
+ * campaigns where the engine lists them.
+ */
+export function reviewPages(caps: Capabilities): SidePage[] {
+  const out: SidePage[] = [];
+  if (reviews(caps) || readsCampaigns(caps)) out.push(page("work", "Work", { to: href("review"), also: ["questions", "campaigns"] }));
+  if (reviews(caps)) out.push(page("picks", "Main scans"), page("identifiers", "Subjects"), page("rules", "Rules"));
+  if (readsCampaigns(caps) && door(caps, "GET /api/label-sets")) out.push(page("label-sets", "Label sets"));
+  return out;
+}
+
+/** Whether the person works the machine's queue: the grant and the door. */
+export const reviews = (caps: Capabilities): boolean => may(caps, "review:see") && door(caps, "GET /api/review");
+
+/** Whether the person reads campaigns: the grant and the door. */
+export const readsCampaigns = (caps: Capabilities): boolean => may(caps, "campaigns:see") && door(caps, "GET /api/campaigns");

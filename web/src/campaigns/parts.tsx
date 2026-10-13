@@ -9,16 +9,16 @@ import { itemTotal, progress, type Counts } from "./client";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-/** The tabs of the section: the campaigns, and the label sets where the person may read them. */
+/** Review's tabs on a campaign's pages: the one list of work, and the label sets where the person may read them. */
 export function Tabs({ caps, on }: { caps: Capabilities; on: "campaigns" | "label-sets" }) {
   const sets = served(caps, "GET /api/label-sets") && mayAny(caps, "campaigns:see", "review:see");
   return (
     <div className="chips pages">
-      <a className={on === "campaigns" ? "opt on" : "opt"} href={href("campaigns")} aria-current={on === "campaigns" ? "page" : undefined}>
-        Campaigns
+      <a className={on === "campaigns" ? "opt on" : "opt"} href={href("review")} aria-current={on === "campaigns" ? "page" : undefined}>
+        Work
       </a>
       {sets && (
-        <a className={on === "label-sets" ? "opt on" : "opt"} href={href("campaigns", "label-sets")} aria-current={on === "label-sets" ? "page" : undefined}>
+        <a className={on === "label-sets" ? "opt on" : "opt"} href={href("review", "label-sets")} aria-current={on === "label-sets" ? "page" : undefined}>
           Label sets
         </a>
       )}

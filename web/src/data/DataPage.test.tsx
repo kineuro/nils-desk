@@ -325,7 +325,7 @@ describe("datasets and cohorts on one page", () => {
     expect(card("study-big").className).toContain("on");
     const primary = [...d.querySelectorAll<HTMLElement>(".dp-acts .button")].filter((b) => !b.classList.contains("secondary") && !b.classList.contains("quiet"));
     expect(primary.map((b) => b.textContent)).toEqual(["Review 8"]);
-    expect(primary[0].getAttribute("href")).toBe("#review?dataset=study-big");
+    expect(primary[0].getAttribute("href")).toBe("#review/questions?dataset=study-big");
     expect([...d.querySelectorAll(".dp-acts .button.secondary")].map((b) => b.textContent)).toEqual(["Read new files", "View"]);
     expect(d.querySelector(".dp-detail-where")?.textContent).toBe("incoming/study-big · anonymised · PatientID holds the subject code");
     // the cohorts it brings subjects into light up; the rest dim
@@ -683,7 +683,7 @@ describe("datasets and cohorts on one page", () => {
     expect([...d.querySelectorAll(".dp-acts .button.secondary")].map((b) => b.textContent)).toEqual(["Add subjects from a query", "Release", "View"]);
     const primary = d.querySelector<HTMLAnchorElement>(".dp-acts a.button:not(.secondary)")!;
     expect(primary.textContent).toBe("Review 3");
-    expect(primary.getAttribute("href")).toBe("#review?cohort=ms-followup");
+    expect(primary.getAttribute("href")).toBe("#review/questions?cohort=ms-followup");
     expect(d.querySelector(".dp-detail-head .tag")?.textContent).toBe("fed by study-big");
     // how it grew: the read that fed it, its release, the hand that added more
     expect([...d.querySelectorAll(".dp-ev .title")].map((t) => t.textContent)).toEqual(["12 joined", "Release 1", "4 joined"]);

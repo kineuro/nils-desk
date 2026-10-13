@@ -28,8 +28,8 @@ export function amendPageOf(c: Pick<Campaign, "question">): AmendPage {
 
 /** Where a correction opens: the reader, on that answer, and back to where it came from after. */
 export function amendHref(campaign: number | string, answer: number, back: "gallery" | "rate" = "rate", page: AmendPage = "rate"): string {
-  if (page !== "rate") return narrow(href("campaigns", String(campaign), page), { amend: answer });
-  return narrow(href("campaigns", String(campaign), "rate"), { amend: answer, back });
+  if (page !== "rate") return narrow(href("review", "campaigns", String(campaign), page), { amend: answer });
+  return narrow(href("review", "campaigns", String(campaign), "rate"), { amend: answer, back });
 }
 
 /** Why an answer cannot be corrected here, or null. */

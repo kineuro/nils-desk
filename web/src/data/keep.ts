@@ -135,6 +135,8 @@ const SCOPE_SET = "scope";
  * (its current members), the helper sets then reading their subject's rows.
  */
 function scopeOf(scope: Scope): { sets: Record<string, Json>; where: Clause[]; of: string | null } {
+  // the whole registry keeps every set as it is
+  if (scope.kind === "registry") return { sets: {}, where: [], of: null };
   const dataset = scope.kind === "dataset";
   return {
     /** The sets the scope brings: none for a dataset, the cohort for a cohort. */
@@ -192,7 +194,7 @@ export function subjectsKept(scope: Scope, view: { found: number[] | null; filte
   const where: Clause[] = [...s.where];
   const has: { set: string; min: number }[] = [];
   const narrowed: Narrowed[] = [];
-  const tags: string[] = [scope.name];
+  const tags: string[] = scope.kind === "registry" ? ["subjects"] : [scope.name];
   if (view.found !== null) {
     where.push(among(field("id"), view.found));
     narrowed.push({ key: "q", words: `found by the search, ${plural(view.found.length, "subject")}`, asked: true });
@@ -237,7 +239,7 @@ export function subjectsKept(scope: Scope, view: { found: number[] | null; filte
   }
   sets.subjects = set("subject", { of: s.of, where, has });
   const asked = narrowed.filter((x) => x.asked && x.key !== "q").map((x) => x.words);
-  const name = `Subjects of ${scope.kind === "cohort" ? `the cohort ${scope.name}` : scope.name}${asked.length > 0 ? `, ${asked.join(", ")}` : ""}`;
+  const name = `${scope.kind === "registry" ? "Subjects" : `Subjects of ${scope.kind === "cohort" ? `the cohort ${scope.name}` : scope.name}`}${asked.length > 0 ? `, ${asked.join(", ")}` : ""}`;
   return { grain: "subject", where: scope.name, narrowed, document: documentOf(name, sets, "subjects"), shown: opts.shown, name: tagged(tags) };
 }
 

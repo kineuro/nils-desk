@@ -58,7 +58,7 @@ describe("a cohort's page", () => {
     expect(html).toContain('<span class="k">subjects</span><span class="v">212</span><span class="meta">38 joined today · 2 left</span>');
     expect(html).toContain('<span class="k">sessions</span><span class="v">240</span><span class="meta">of its members · 90-day window</span>');
     expect(html).toContain('<span class="k">stacks</span><span class="v">3,106</span><span class="meta">3,044 sorted</span>');
-    expect(html).toContain('<div class="wait"><span class="k">waiting</span><span class="v">62</span><span class="meta">on Review</span><a class="tail" href="#review?cohort=north">Open on Review');
+    expect(html).toContain('<div class="wait"><span class="k">waiting</span><span class="v">62</span><span class="meta">on Review</span><a class="tail" href="#review/questions?cohort=north">Open on Review');
   });
 
   it("says the sessions are not built yet where nobody has built the cache they are counted out of", () => {

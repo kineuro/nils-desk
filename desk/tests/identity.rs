@@ -1609,13 +1609,14 @@ async fn the_people_door_says_who_holds_a_grant_to_a_person_holding_it() {
 }
 
 /// Anyone who may make a check sees the names of the people who may read it,
-/// and nothing more (ruled on 2026-10-12): a maker of checks (work on
-/// Campaigns and Pipelines) who does not hold `assistant:use` asks who holds
-/// `campaigns:work` and reads each person's subject, display and `holds`;
-/// the same person is refused the list without `holding` and with `holding`
-/// naming another grant, and one who may make no check is refused it all.
+/// and nothing more (ruled on 2026-10-12), and since Wave 7a anyone who may
+/// make a campaign (record 55 H3): a maker (work on Campaigns) who does not
+/// hold `assistant:use` asks who holds `campaigns:work` and reads each
+/// person's subject, display and `holds`; the same person is refused the
+/// list without `holding` and with `holding` naming another grant, and one
+/// who may make no campaign is refused it all.
 #[tokio::test]
-async fn a_check_maker_without_the_assistant_lists_who_may_read_a_check_and_nothing_more() {
+async fn a_campaign_maker_without_the_assistant_lists_who_may_read_it_and_nothing_more() {
     let engine = fake_engine().await;
     let text = format!(
         "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
@@ -1681,13 +1682,37 @@ async fn a_check_maker_without_the_assistant_lists_who_may_read_a_check_and_noth
             .unwrap();
         assert_eq!(r.status(), 403, "{refused}");
     }
-    // work on Campaigns without Pipelines makes no check: the door stays shut
+    // work on Campaigns without Pipelines makes a campaign of any other kind
+    // (Wave 7a, record 55 H3): its maker names its raters from the same list,
+    // and nothing more
     let r = client
         .get(&raters)
         .header("cookie", &eve)
         .send()
         .await
         .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(
+        body,
+        json!({"people": [
+            {"subject": "anna", "display": "Anna", "holds": true},
+            {"subject": "bo", "display": "Bo", "holds": false},
+            {"subject": "dee", "display": "Dee", "holds": true}
+        ]})
+    );
+    for refused in ["/desk/people", "/desk/people?holding=campaigns:see"] {
+        let r = client
+            .get(format!("{origin}{refused}"))
+            .header("cookie", &eve)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 403, "{refused}");
+    }
+    // one who may make no campaign is refused it all
+    let bo = login(&client, &origin, "bo", "another long password").await;
+    let r = client.get(&raters).header("cookie", &bo).send().await.unwrap();
     assert_eq!(r.status(), 403);
 }
 

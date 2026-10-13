@@ -55,3 +55,20 @@ export function narrow(hash: string, query: Record<string, string | number | nul
     .join("&");
   return q ? `${hash}?${q}` : hash;
 }
+
+/**
+ * Where an address of the Campaigns section, which joined Review in Wave 7a
+ * (record 55 H3, spec 13.1), opens now: #campaigns is Review's one list of
+ * work, #campaigns/<id>[/<view>] is #review/campaigns/<id>[/<view>], and
+ * #campaigns/label-sets[/<n>] is #review/label-sets[/<n>]; the query stays.
+ * An old link never strands a person.
+ */
+export function fromCampaigns(route: Route): string {
+  const to =
+    route.page === "label-sets"
+      ? href("review", "label-sets", route.arg)
+      : route.page && /^\d+$/u.test(route.page)
+        ? href("review", "campaigns", route.page, route.arg)
+        : href("review", "campaigns");
+  return narrow(to, route.query ?? {});
+}

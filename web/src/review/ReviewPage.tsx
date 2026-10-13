@@ -1,13 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Review page (record 27, R5d): what needs a person, in three pages under
-// one head, each with a head of a line. The page reads the queue and its
-// summary once and again after every act, and holds the dialogs the three
-// share: a decision, a look in the viewer, why one stack was judged so, and a
-// word for the site.
+// The Review section (record 27, R5d; Wave 7a, record 55 H3): one list of
+// work first (WorkPage), the campaigns' pages and the label sets inside it,
+// and the machine's questions in pages under one head, each with a head of a
+// line. Those pages read the queue and its summary once and again after every
+// act, and hold the dialogs they share: a decision, a look in the viewer, why
+// one stack was judged so, and a word for the site. A person who holds only
+// campaigns:* finds the list of their campaigns at every page of Review that
+// would read the queue, and the queue is never read for them.
 
 import { useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
+import { may } from "../grants";
 import { ops, type ReviewItem } from "../ops/client";
 import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
@@ -22,6 +26,9 @@ import { IdentifiersPage } from "./Identifiers";
 import { MainScansPage } from "./MainScansPage";
 import { LookDialog, QueuePage } from "./Queue";
 import { RulesPage, type WordAt } from "./Rules";
+import { CampaignPages, LabelSetPages } from "../campaigns/CampaignsPage";
+import { queuedCount } from "./work";
+import { WorkPage } from "./WorkPage";
 
 export type ReviewSub = "queue" | "rules" | "identifiers" | "picks" | "proposals" | "asked";
 
@@ -65,15 +72,26 @@ const HEAD: Record<ReviewSub, { title: string; lede: string }> = {
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; items: ReviewItem[]; summary: ReviewSummary | null };
 
-/** The address of a page of Review: the old table of pick questions is #review/picks?earlier=1, since #review/picks is Main scans (record 55, decision 6). */
+/** The address of a page of Review: the queue is #review/questions, since #review is the one list of work; the old table of pick questions is #review/picks?earlier=1, since #review/picks is Main scans (record 55, decision 6). */
 export function reviewHref(page: string | null, dataset?: string): string {
-  return narrow(href("review", page), { earlier: page === "picks" ? 1 : undefined, dataset });
+  return narrow(href("review", page ?? "questions"), { earlier: page === "picks" ? 1 : undefined, dataset });
 }
 
-export function ReviewPage(props: { caps: Capabilities; page: string | null; query?: Record<string, string> }) {
+/**
+ * The page an address of Review opens. #review and #review/campaigns are the
+ * one list of work (the latter the make dialog's address); #review with a
+ * query is the queue it narrows, as Review's addresses were before the list
+ * (#review?dataset=, ?batch=, ?axis=), and so is #review/questions.
+ */
+export function ReviewPage(props: { caps: Capabilities; page: string | null; arg?: string | null; sub?: string | null; query?: Record<string, string> }) {
+  const { caps, page, arg = null, sub = null, query } = props;
+  if (page === "campaigns" && arg !== null && /^\d+$/u.test(arg)) return <CampaignPages caps={caps} id={arg} view={sub} query={query} />;
+  if (page === "label-sets") return <LabelSetPages caps={caps} id={arg} />;
+  const narrowed = query !== undefined && Object.keys(query).length > 0;
+  if (!may(caps, "review:see") || page === "campaigns" || page === "work" || (page === null && !narrowed)) return <WorkPage caps={caps} query={query} />;
   // Main scans has a page of its own; the pick questions of earlier runs keep their table under Review's head
-  if (subOf(props.page) === "picks" && !props.query?.earlier) return <MainScansPage caps={props.caps} query={props.query} />;
-  return <ReviewPages {...props} />;
+  if (subOf(page) === "picks" && !query?.earlier) return <MainScansPage caps={caps} query={query} />;
+  return <ReviewPages caps={caps} page={page === "questions" ? null : page} query={query} />;
 }
 
 function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string | null; query?: Record<string, string> }) {
@@ -125,7 +143,7 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
   const open = items.filter((i) => i.status === "open");
   // the queue's count is the whole queue's, where the summary gives it, also while the table reads one kind
   const summary = load.kind === "ready" ? load.summary : null;
-  const queued = summary ? Object.values(summary.by_kind).reduce((a, b) => a + b, 0) : open.length;
+  const queued = summary ? queuedCount(summary) : open.filter((i) => familyOf(i.kind) !== "campaigns").length;
   const identity = open.filter((i) => familyOf(i.kind) === "identity").length;
   const changed = (words: string) => {
     setSaid(words);
@@ -152,8 +170,11 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
         </div>
       </div>
       <div className="chips pages">
+        <a className="opt" href={href("review")}>
+          Work
+        </a>
         <a className={sub === "queue" ? "opt on" : "opt"} href={pageHref(null)} aria-current={sub === "queue" ? "page" : undefined}>
-          Queue
+          Questions
           {load.kind === "ready" && <b>{n(queued)}</b>}
         </a>
         <a className={sub === "rules" ? "opt on" : "opt"} href={pageHref("rules")} aria-current={sub === "rules" ? "page" : undefined}>

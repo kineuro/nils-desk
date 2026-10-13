@@ -158,7 +158,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">
-            <a href={href("campaigns")}>Campaigns</a>
+            <a href={href("review")}>Review</a>
           </span>
           <h1>{c.name}</h1>
           <p className="lede">
@@ -167,17 +167,17 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
         </div>
         {check?.head}
         {rate && !check && (
-          <a className="button" href={href("campaigns", String(c.id), ab ? "settle" : pair ? "pairs" : anchored ? "anchored" : "rate")} title={ab ? "each item's candidates as A and B, blind to who gave which" : pair ? "two stacks side by side, nothing else of them: which is post" : anchored ? "a candidate beside a reference pre and a reference post, nothing else of them: which does it look like" : undefined}>
+          <a className="button" href={href("review", "campaigns", String(c.id), ab ? "settle" : pair ? "pairs" : anchored ? "anchored" : "rate")} title={ab ? "each item's candidates as A and B, blind to who gave which" : pair ? "two stacks side by side, nothing else of them: which is post" : anchored ? "a candidate beside a reference pre and a reference post, nothing else of them: which does it look like" : undefined}>
             {ab ? "Settle" : pair ? "Read pairs" : anchored ? "Read against anchors" : "Rate"}
           </a>
         )}
         {rate && !ab && !pair && !anchored && !check && galleryOffered(caps, c.question) && (
-          <a className="button secondary" href={href("campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
+          <a className="button secondary" href={href("review", "campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
             Gallery
           </a>
         )}
         {adjudicate && (
-          <a className="button" href={check ? `${href("campaigns", String(c.id), "check")}?as=adjudicator` : href("campaigns", String(c.id), "adjudicate")}>
+          <a className="button" href={check ? `${href("review", "campaigns", String(c.id), "check")}?as=adjudicator` : href("review", "campaigns", String(c.id), "adjudicate")}>
             Adjudicate
           </a>
         )}
@@ -312,7 +312,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           {sets.map((s, i) => (
             <span key={s.id}>
               {i > 0 && ", "}
-              <a href={href("campaigns", "label-sets", String(s.id))}>
+              <a href={href("review", "label-sets", String(s.id))}>
                 {s.name} v{s.version}
               </a>
             </span>

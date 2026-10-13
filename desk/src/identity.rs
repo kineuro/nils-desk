@@ -552,21 +552,22 @@ pub async fn users_entitlements(
 
 /// `?holding=<grant>` on the people door: say of each person whether what
 /// their groups and their own grants add up to holds that grant, for a person
-/// choosing who does work that needs it (a check's raters need
+/// choosing who does work that needs it (a campaign's raters need
 /// `campaigns:work`, or their claim is refused). Asked by a person who holds
-/// the grant themselves, or for a check's raters by one who may make a check.
+/// the grant themselves, or for a campaign's raters by one who may make one.
 #[derive(Debug, Default, serde::Deserialize)]
 pub struct PeopleQuery {
     holding: Option<String>,
 }
 
-/// What a check's raters need: their claims are refused without it.
-const RATES_A_CHECK: &str = "campaigns:work";
+/// What a campaign's raters need: their claims are refused without it.
+const RATES_A_CAMPAIGN: &str = "campaigns:work";
 
-/// What making a check takes, as the engine's make door asks it: work on
-/// Campaigns, and Pipelines beside it for a question of kind `check` (a 403
-/// without either); the desk's New check refuses without either as well.
-const MAKES_A_CHECK: [&str; 2] = ["campaigns:work", "pipelines:see"];
+/// What making a campaign takes, as the engine's make door asks it: work on
+/// Campaigns. A check asks Pipelines beside it, which its own dialog says;
+/// either maker names its raters from the same list (Wave 7a, record 55 H3:
+/// nothing typed by hand that a list can offer).
+const MAKES_A_CAMPAIGN: [&str; 1] = ["campaigns:work"];
 
 /// The people a person may name when sharing a conversation: everyone the desk
 /// keeps in `local` mode, and everyone who has signed in at least once in
@@ -575,7 +576,9 @@ const MAKES_A_CHECK: [&str; 2] = ["campaigns:work", "pipelines:see"];
 /// lists nobody. With `holding`, each person adds `holds` (see [`PeopleQuery`]).
 ///
 /// Anyone who may make a check sees the names of the people who may read it,
-/// and nothing more (ruled on 2026-10-12): `?holding=campaigns:work` answers
+/// and nothing more (ruled on 2026-10-12); since Wave 7a (record 55 H3) the
+/// same holds for anyone who may make a campaign of any kind, whose make
+/// dialog names its raters from a list: `?holding=campaigns:work` answers
 /// them without `assistant:use`, each person by subject, display and `holds`.
 /// Every other use of the door still needs `assistant:use`.
 pub async fn people_list(
@@ -598,9 +601,9 @@ pub async fn people_list(
             )));
         };
         let me = session::person(&desk, &session);
-        // a check's maker names its raters: who may read it, by name, and nothing more
-        let raters = q.holding.as_deref() == Some(RATES_A_CHECK)
-            && MAKES_A_CHECK.iter().all(|g| me.holds(g));
+        // a campaign's maker names its raters: who may read it, by name, and nothing more
+        let raters = q.holding.as_deref() == Some(RATES_A_CAMPAIGN)
+            && MAKES_A_CAMPAIGN.iter().all(|g| me.holds(g));
         if !raters && !me.holds_name("assistant:use") {
             return Err(Box::new(error(
                 StatusCode::FORBIDDEN,

@@ -324,6 +324,8 @@ export const campaigns = {
   one: (c: number | string) => door<Campaign>("GET", `/api/campaigns/${id(c)}`),
   answers: (c: number | string) => door<{ campaign: number; count: number; answers: Answer[] }>("GET", `/api/campaigns/${id(c)}/answers`).then((r) => r.answers),
   make: (body: MakeBody) => door<Campaign & { pictures?: Pictures }>("POST", "/api/campaigns", body),
+  /** What a make would draw, written nowhere (a check's, and since Wave 7a a pair, anchored or A/B campaign's). */
+  preview: (body: MakeBody) => door<Json>("POST", "/api/campaigns/preview", body),
   claim: (c: number | string, role: "rater" | "adjudicator" = "rater") => door<Claimed>("POST", `/api/campaigns/${id(c)}/claim`, { role }),
   answer: (c: number | string, assignment: number, body: AnswerBody) => door<Answered>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/answer`, body),
   release: (c: number | string, assignment: number) => door<Assignment>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/release`, {}),
@@ -530,11 +532,23 @@ export function principalOf(caps: Capabilities): string {
   return caps.engine?.principal || caps.person.subject;
 }
 
-/** The kinds a campaign may ask, with the ones this engine knows: `axes` only where its contract says so. */
+/** The kinds a campaign may ask, with the ones this engine knows: `axes` only where its contract says so; pair, anchored and A/B where its make door draws their items (Wave 7a, record 55 H3). */
 export function kindsOffered(caps: Capabilities): string[] {
   const kinds = ["axis", "form", "free", "derivative", "pick"];
   if (axesServed(caps)) kinds.splice(1, 0, "axes");
+  for (const k of DRAWN) if (draws(caps, k) && (k !== "ab" || axesServed(caps))) kinds.push(k);
   return kinds;
+}
+
+/** The campaigns whose items the make door draws from selections, not from a source of keys (Wave 7a, record 55 H3). */
+export const DRAWN = ["pair", "anchored", "ab"] as const;
+export type Drawn = (typeof DRAWN)[number];
+export const isDrawn = (kind: string): kind is Drawn => (DRAWN as readonly string[]).includes(kind);
+
+/** Whether the engine's make door draws a kind's items: the capabilities' `campaigns.draws`. */
+export function draws(caps: Capabilities, kind: Drawn): boolean {
+  const list = (caps.engine as { campaigns?: { draws?: unknown } } | null)?.campaigns?.draws;
+  return Array.isArray(list) && list.includes(kind);
 }
 
 /** The door a record 45 engine adds beside the axes question; OpenAPI 7 grew both in place, so the door is how the desk knows. */
@@ -556,6 +570,7 @@ export const KIND_WORDS: Record<string, string> = {
   free: "Free text",
   pair: "Two stacks side by side",
   anchored: "A stack beside two anchors",
+  ab: "Settle readings (A/B)",
   check: "Check results",
 };
 
@@ -873,6 +888,31 @@ export interface Draft {
   suggest: SuggestMode;
   /** An axis or an axes question that suggests nothing: the pictures alone, with no text of the file's header; off unless chosen. */
   hideHeader: boolean;
+  /** Pair: the selection each stack is paired with in its session; empty pairs the stacks of `from` among themselves. */
+  with: string;
+  /** Anchored: the selections the pre and the post anchors come from. */
+  pre: string;
+  post: string;
+  /** Pair and anchored: the axis each answer resolves into, and its values for post and pre; empty takes the engine's. */
+  pairAxis: string;
+  postValue: string;
+  preValue: string;
+  /** Pair, anchored and A/B: the seed of the draw, written down before it; the campaign keeps its sha256 only. */
+  seed: string;
+  /** A/B: the rules as a voter, and the voters' readings brought from folders. */
+  rules: boolean;
+  voters: Voter[];
+  /** A/B: the share of the stacks the voters agree on that is audited, as written. */
+  auditShare: string;
+}
+
+/** One voter of an A/B campaign: its name and its reading of each stack, read in the browser from a folder of JSON files, one per stack. */
+export interface Voter {
+  name: string;
+  stacks: Record<string, Json>;
+  /** Files read, and those that named no stack or held no JSON. */
+  files: number;
+  skipped: number;
 }
 
 export interface DraftField {
@@ -908,6 +948,16 @@ export function emptyDraft(prefill: Partial<Prefill> = {}): Draft {
     leaseMinutes: 60,
     suggest: "none",
     hideHeader: false,
+    with: "",
+    pre: "",
+    post: "",
+    pairAxis: "",
+    postValue: "",
+    preValue: "",
+    seed: "",
+    rules: true,
+    voters: [],
+    auditShare: "0.1",
   };
 }
 
@@ -915,6 +965,7 @@ export function emptyDraft(prefill: Partial<Prefill> = {}): Draft {
 export function closesFor(kind: string): string[] {
   if (kind === "axis" || kind === "axes") return ["stage", "decision", "none"];
   if (kind === "pick") return ["pick", "none"];
+  if (kind === "ab") return ["none", "stage", "decision"];
   return ["none"];
 }
 
@@ -941,6 +992,7 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
   if (!name) return { ok: false, needs: "a name" };
   if (!/^[\p{L}\p{N}][\p{L}\p{N}_.-]*$/u.test(name)) return { ok: false, needs: "a name of letters, digits, dots, dashes or underscores" };
   const from = d.from.trim();
+  if (isDrawn(d.kind)) return drawnBody(d, name);
   let source: Json;
   if (d.source === "selection") {
     if (!/^[^@\s]+@\d+$/u.test(from)) return { ok: false, needs: "a selection as name@version" };
@@ -1009,6 +1061,110 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
   };
 }
 
+const SPEC = /^[^@\s]+@\d+$/u;
+
+/** A pair, anchored or A/B campaign's body: its selections, its axis and the seed of its draw (Wave 7a, record 55 H3). */
+function drawnBody(d: Draft, name: string): { ok: true; body: MakeBody } | { ok: false; needs: string } {
+  const sel = (v: string) => v.trim();
+  if (!SPEC.test(sel(d.from))) return { ok: false, needs: d.kind === "anchored" ? "the candidates' selection" : "a selection" };
+  if (!d.seed.trim()) return { ok: false, needs: "a seed for the draw" };
+  const raters = list(d.raters);
+  const common = {
+    name,
+    raters_per_item: d.kind === "ab" ? 1 : Math.max(1, Math.floor(d.ratersPerItem)),
+    ...(raters.length > 0 ? { raters } : {}),
+    adjudication: { when: "never", metric: "exact" },
+    lease_seconds: Math.max(60, Math.round(d.leaseMinutes * 60)),
+  };
+  const axis = { ...(d.pairAxis.trim() ? { axis: d.pairAxis.trim() } : {}), ...(d.postValue.trim() ? { post: d.postValue.trim() } : {}), ...(d.preValue.trim() ? { pre: d.preValue.trim() } : {}) };
+  if (d.kind === "pair") {
+    if (sel(d.with) && !SPEC.test(sel(d.with))) return { ok: false, needs: "the paired selection" };
+    return { ok: true, body: { ...common, question: { kind: "pair", ...axis }, source: { pair: { selection: sel(d.from), ...(sel(d.with) ? { with: sel(d.with) } : {}), seed: d.seed.trim() } }, closes_into: "none" } };
+  }
+  if (d.kind === "anchored") {
+    if (!SPEC.test(sel(d.pre))) return { ok: false, needs: "the pre anchors' selection" };
+    if (!SPEC.test(sel(d.post))) return { ok: false, needs: "the post anchors' selection" };
+    return { ok: true, body: { ...common, question: { kind: "anchored", ...axis }, source: { anchored: { selection: sel(d.from), pre: sel(d.pre), post: sel(d.post), seed: d.seed.trim() } }, closes_into: "none" } };
+  }
+  if (!d.rules && d.voters.length === 0) return { ok: false, needs: "a voter: the rules, or readings from a folder" };
+  const share = Number(d.auditShare);
+  if (!(share >= 0 && share <= 1)) return { ok: false, needs: "an audit share from 0 to 1" };
+  const voters: Json = {};
+  for (const v of d.voters) voters[v.name] = v.stacks as Json;
+  return {
+    ok: true,
+    body: {
+      ...common,
+      question: { kind: "axes", ...(d.axes.length > 0 ? { axes: d.axes } : {}) },
+      source: { ab: { selection: sel(d.from), rules: d.rules, ...(d.voters.length > 0 ? { voters } : {}), seed: d.seed.trim(), audit_share: share } },
+      closes_into: closesFor("ab").includes(d.closesInto) ? d.closesInto : "none",
+    },
+  };
+}
+
+/** A fresh seed for a draw, to be written down before it: sixteen random hex digits. */
+export function freshSeed(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * One voter's readings from the files of a folder the person chose, read in
+ * the browser as the engine reads a voter's folder (`nils campaign ab
+ * --voter NAME=DIR`): one JSON file per stack, the stack under `stack` or as
+ * the file's name, the answer under `answer` or the whole file.
+ */
+export function voterOf(name: string, files: readonly { name: string; text: string }[]): Voter {
+  const stacks: Record<string, Json> = {};
+  let skipped = 0;
+  let read = 0;
+  for (const f of files) {
+    if (!f.name.toLowerCase().endsWith(".json")) continue;
+    read += 1;
+    let doc: unknown;
+    try {
+      doc = JSON.parse(f.text);
+    } catch {
+      skipped += 1;
+      continue;
+    }
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+      skipped += 1;
+      continue;
+    }
+    const d = doc as Json;
+    const stem = f.name.replace(/^.*\//u, "").replace(/\.json$/iu, "");
+    const stack = typeof d.stack === "number" ? d.stack : /^\d+$/u.test(stem) ? Number(stem) : null;
+    const answer = d.answer && typeof d.answer === "object" && !Array.isArray(d.answer) ? (d.answer as Json) : "answer" in d ? null : d;
+    if (stack === null || answer === null) {
+      skipped += 1;
+      continue;
+    }
+    const { stack: _drop, ...rest } = answer as Json & { stack?: unknown };
+    void _drop;
+    stacks[String(stack)] = rest;
+  }
+  return { name, stacks, files: read, skipped };
+}
+
+/** A voter's name that is not taken and not the rules': the folder's, numbered where it is. */
+export function voterName(wanted: string, taken: readonly string[]): string {
+  const base = (wanted.trim() || "voter").replace(/[^\p{L}\p{N}_.-]+/gu, "-").replace(/^-+|-+$/gu, "") || "voter";
+  const used = new Set([...taken, "rules"]);
+  if (!used.has(base)) return base;
+  for (let i = 2; ; i++) if (!used.has(`${base}-${i}`)) return `${base}-${i}`;
+}
+
+/** What a preview of a drawn campaign counted, in words: the engine's counts, each by its own name. */
+export function drawnCountsWords(counts: Json | null | undefined): string {
+  if (!counts || typeof counts !== "object") return "";
+  return Object.entries(counts)
+    .filter(([, v]) => typeof v === "number")
+    .map(([k, v]) => `${(v as number).toLocaleString("en-US")} ${k.replace(/_/gu, " ")}`)
+    .join(" · ");
+}
+
 /**
  * What another page fills the make dialog with: the source, and for Review
  * items the job that raised them, at most how many, and the cohort the queue
@@ -1026,10 +1182,10 @@ export interface Prefill {
 /**
  * The one address that opens the make dialog with its source filled in:
  * Query's from a selection or a result, Review's "Ask people about these"
- * from its filter (`#campaigns?make=review&from=<kind or prefix>&job=&limit=&cohort=`).
+ * from its filter (`#review/campaigns?make=review&from=<kind or prefix>&job=&limit=&cohort=`).
  */
 export function makeHref(source: SourceKind, from: string | number, more: { job?: number | null; limit?: number | null; cohort?: string | null } = {}): string {
-  return narrow(href("campaigns"), { make: source, from: String(from), job: more.job, limit: more.limit, cohort: more.cohort });
+  return narrow(href("review", "campaigns"), { make: source, from: String(from), job: more.job, limit: more.limit, cohort: more.cohort });
 }
 
 /** The dialog's prefill from an address's query, or null when it asks for none. */

@@ -48,7 +48,7 @@ export interface CohortDetailProps {
 /** The actions of a cohort's head: the ones offered, and which is the primary, the next step. */
 export function cohortActions(caps: Capabilities, c: Pick<Cohort, "name" | "waiting" | "subjects" | "releases" | "retired_at">) {
   const acts = cohortActs(caps, c.name);
-  const review = c.waiting > 0 && may(caps, "review:see") ? narrow(href("review"), { cohort: c.name }) : null;
+  const review = c.waiting > 0 && may(caps, "review:see") ? narrow(href("review", "questions"), { cohort: c.name }) : null;
   const release = acts.releasing === null && !c.retired_at ? href("release", "new", c.name) : null;
   const query = may(caps, "query:see") && may(caps, "data:work") && !c.retired_at ? href("query") : null;
   // the viewer over its members, where the person may browse them

@@ -55,7 +55,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   return engine(input, init);
 }) as typeof fetch;
 
-if (!location.hash) location.hash = q.get("page") === "new" ? `#campaigns?make=check&run=${RUN_ID}` : q.get("page") === "campaign" ? `#campaigns/${CAMPAIGN_ID}` : `#campaigns/${CAMPAIGN_ID}/check`;
+if (!location.hash) location.hash = q.get("page") === "new" ? `#review/campaigns?make=check&run=${RUN_ID}` : q.get("page") === "campaign" ? `#review/campaigns/${CAMPAIGN_ID}` : `#review/campaigns/${CAMPAIGN_ID}/check`;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

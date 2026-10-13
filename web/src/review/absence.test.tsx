@@ -11,7 +11,6 @@ import { emptyDraft, makeBody, prefillOf } from "../campaigns/client";
 import type { Capabilities } from "../capabilities";
 import type { Grant } from "../grants";
 import { GRANTS } from "../grants";
-import { PLACEHOLDERS } from "../home/placeholders";
 import { ModelBody, ModelsBody } from "../models/ModelsPage";
 import type { Model } from "../models/client";
 import { CatalogBody } from "../ops/Catalog";
@@ -65,17 +64,16 @@ describe("against an engine without the doors", () => {
 
 describe("ask people about these", () => {
   const all = capsWith(["POST /api/campaigns", "GET /api/campaigns"], [...GRANTS] as Grant[]);
-  it("leads nowhere until the Campaigns section is built into this desk", () => {
-    const built = PLACEHOLDERS.some((p) => p.id === "campaigns" && p.built === true);
-    expect(asksPeople(all)).toBe(built);
+  it("leads to the maker where the engine makes campaigns and the person may", () => {
+    expect(asksPeople(all)).toBe(true);
     expect(asksPeople(capsWith([], [...GRANTS] as Grant[]))).toBe(false);
     expect(asksPeople(capsWith(["POST /api/campaigns"], ["review:work"]))).toBe(false);
   });
   it("carries the Review filter to the maker through the maker's own address", () => {
-    expect(askPeopleHref({ kind: "body_part:model" })).toBe("#campaigns?make=review&from=body_part%3Amodel");
-    expect(askPeopleHref({ kind_prefix: "base:", job: 12, limit: 200, cohort: "north" })).toBe("#campaigns?make=review&from=base%3A&job=12&limit=200&cohort=north");
+    expect(askPeopleHref({ kind: "body_part:model" })).toBe("#review/campaigns?make=review&from=body_part%3Amodel");
+    expect(askPeopleHref({ kind_prefix: "base:", job: 12, limit: 200, cohort: "north" })).toBe("#review/campaigns?make=review&from=base%3A&job=12&limit=200&cohort=north");
     const r = parse(askPeopleHref({ kind: "pick.border", cohort: "north" }));
-    expect(r.section).toBe("campaigns");
+    expect([r.section, r.page]).toEqual(["review", "campaigns"]);
     expect(prefillOf(r.query)).toEqual({ source: "review", from: "pick.border", cohort: "north" });
     // the maker reads it back into the source the campaign door takes
     const d = { ...emptyDraft(prefillOf(parse(askPeopleHref({ kind_prefix: "base", job: 12, limit: 200 })).query)!), name: "ask", axis: "base" };
