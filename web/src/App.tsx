@@ -293,7 +293,7 @@ export function App() {
           )}
           {viewed !== null && <Viewer key={`${viewed.kind}/${viewed.name}`} caps={caps} scope={viewed} query={route.query} onSections={() => setMenu((m) => !m)} />}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
-          {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} page={route.page} arg={route.arg} />}
+          {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "review" && <ReviewPage caps={caps} page={route.page} query={route.query} />}
           {ready && active?.id === "campaigns" && <CampaignsPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}

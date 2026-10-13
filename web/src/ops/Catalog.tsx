@@ -15,7 +15,11 @@
 // down)") the catalog is one row a name with a plain select of the versions
 // a new run may take, newest first; the row and the run follow the version
 // chosen. A version a later one replaces because it fixes it is not offered;
-// the Runs table still names each run's own version.
+// the Runs table still names each run's own version. Since 2026-10-13 each
+// row says its newest run on one line, which opens it, and a run's whole row
+// in the Runs table opens its page. The assistant's plan is asked on the
+// Assistant page since (Nima: "the pipeline page should make user able to do
+// this manually"); its run still opens here filled in.
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -28,8 +32,6 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { stations } from "../assistant/stations";
-import { plansOffered } from "./PlanPage";
 import { DoorError } from "../ask/client";
 import { failureOf, refusalOf, requirementsOf, type Failure, type Requirement } from "./failure";
 import { OverPicker } from "./OverPicker";
@@ -37,8 +39,9 @@ import { PreflightPanel, Requirements } from "./Preflight";
 import { FailLine, FailNote } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
 import { runTag } from "./made";
+import { lastRunOf, lastRunWords } from "./results";
 import { againOfRun, RunAgainDialog, type Again } from "./RunAgain";
-import { PLAN_STATION, preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
+import { preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
 import { andWords, catalog, catalogActs, catalogRows, imageWords, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { roleWord } from "../review/mainScans";
 
@@ -61,7 +64,6 @@ export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: 
   if (load.kind === "failed") return <p className="warn">The catalog could not be read: {load.why}</p>;
   return (
     <>
-      {plansOffered(caps) && <PlanAsk />}
       <CatalogBody caps={caps} pipelines={load.pipelines} capability={load.capability} runs={load.runs} onRun={setRunning} onAgain={runActs(caps).queue ? (r) => setAgain(againOfRun(r)) : null} />
       {again && (
         <RunAgainDialog
@@ -133,6 +135,8 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
             <tbody>
               {rows.map((row) => {
                 const p = row.versions.find((v) => v.id === chosen[row.name]) ?? row.versions[0];
+                const last = lastRunOf(row.name, runs, pipelines);
+                const lastWords = last ? lastRunWords(last) : null;
                 return (
                   <tr key={row.name}>
                     <td>
@@ -154,6 +158,13 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
                         )}
                       </div>
                       {p.description && <div className="meta">{p.description}</div>}
+                      {last && lastWords && (opens ? (
+                        <a className={`catalog-last ${lastWords.tone}`} href={href("pipelines", "runs", String(last.id))}>
+                          {lastWords.words}
+                        </a>
+                      ) : (
+                        <span className={`catalog-last ${lastWords.tone}`}>{lastWords.words}</span>
+                      ))}
                     </td>
                     <td>
                       {p.level} · {p.layout}
@@ -199,9 +210,21 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
                 // a run that ended reads as its units summed, never a bare done, the rest on one line under its row
                 const tag = runTag(r);
                 const rest = f ? null : tag.rest;
+                // the whole row opens the run; a link or a button inside it keeps its own
+                const open = (e: { target: EventTarget | null }) => {
+                  if (!opens || (e.target instanceof Element && e.target.closest("a, button"))) return;
+                  location.hash = href("pipelines", "runs", String(r.id));
+                };
                 return (
                   <Fragment key={r.id}>
-                    <tr className={f || rest ? "has-fail" : undefined}>
+                    <tr
+                      className={[f || rest ? "has-fail" : "", opens ? "openable" : ""].filter(Boolean).join(" ") || undefined}
+                      tabIndex={opens ? 0 : undefined}
+                      onClick={open}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") open(e);
+                      }}
+                    >
                       <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
                       <td>{r.pipeline}</td>
                       <td className="path" title={r.selection ?? undefined}>
@@ -419,41 +442,5 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
         , every parameter is recorded with its default filled, and the image is the one the catalog pins. A model&apos;s proposals are evidence until a person commits them.
       </Says>
     </Dialog>
-  );
-}
-
-/** A question to the assistant's analysis-plan station; its plan opens as a run filled in, which the person starts. */
-function PlanAsk() {
-  const [question, setQuestion] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [why, setWhy] = useState<string | null>(null);
-  const ask = () => {
-    const q = question.trim();
-    if (q === "") return;
-    setBusy(true);
-    setWhy(null);
-    stations.start(PLAN_STATION, q).then(
-      (r) => {
-        location.hash = href("pipelines", "plan", r.run);
-      },
-      (e: unknown) => {
-        setBusy(false);
-        setWhy(engineWords(e));
-      },
-    );
-  };
-  return (
-    <div className="field">
-      <span className="label">Plan with the assistant</span>
-      <div className="field-row">
-        <span className="input grow">
-          <input value={question} placeholder="hippocampal volume in the MS patients with a 3D T1" aria-label="The question to plan a run for" onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => e.key === "Enter" && ask()} />
-        </span>
-        <button type="button" className="button secondary small" disabled={busy || question.trim() === ""} onClick={ask}>
-          Plan
-        </button>
-      </div>
-      {why && <span className="warn">{why}</span>}
-    </div>
   );
 }

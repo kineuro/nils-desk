@@ -1222,6 +1222,9 @@ button.tail.link-button:disabled { color: var(--n-text-faint); cursor: default; 
 .job.failed { border-color: var(--n-blocked-line); }
 .job.cancelled, .job.done { color: var(--n-text-dim); }
 .job .blocked .reason { max-width: 12rem; text-align: right; }
+/* 2026-10-13: a run's job opens its run anywhere on its card */
+.job.openable { cursor: pointer; }
+.job.openable:hover { border-color: var(--n-line-strong); }
 .now-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 1rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
 .now-line > span { display: inline-flex; align-items: center; gap: 0.35rem; }
 .now-line .i { width: 13px; height: 13px; }
@@ -1648,3 +1651,17 @@ table.thin tr.made-row > td { padding-top: 0; }
 .catalog-name { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem; }
 .input.select.catalog-version { min-height: 1.65rem; padding: 0 0.4rem; font-size: var(--n-text-size-small); }
 .input.select.catalog-version select { padding: 0.1rem 0; }
+/* 2026-10-13: a catalog row's newest run on one line, its state as the colour of its border, and it opens the run */
+.catalog-last { display: block; width: fit-content; max-width: 100%; margin-top: 0.25rem; padding-left: 0.5rem; border-left: 2px solid var(--n-neutral-line); font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.catalog-last:hover { color: var(--n-brand-text); }
+.catalog-last.ok { border-left-color: var(--n-ok-line); }
+.catalog-last.caution { border-left-color: var(--n-caution-line); }
+.catalog-last.brand { border-left-color: var(--n-brand-line); }
+/* 2026-10-13: a run's files by unit, and a unit's result drawn */
+table.run-files tr.unit-first > td { border-top: 1px solid var(--n-line); }
+table.run-files .run-file { max-width: min(28rem, 55vw); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.run-result .result-head { align-items: center; flex-wrap: wrap; gap: 0.4rem 0.5rem; }
+.run-result .result-unit { min-width: 0; overflow-wrap: anywhere; }
+.run-result .result-tools { align-items: center; flex-wrap: wrap; gap: 0.4rem; }
+.run-result .result-tools .chips { min-width: 0; }
+.run-result .stack-view { min-width: 0; }

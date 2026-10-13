@@ -18,6 +18,8 @@ export const COMMANDS: Command[] = [
   { name: "fork", words: "Continue in a copy of this conversation" },
   { name: "share", words: "Share this conversation" },
   { name: "remember", words: "Keep something for your later conversations", takes: "what to keep" },
+  // 2026-10-13: the analysis-plan station, moved here from the Catalog; offered where the assistant serves it
+  { name: "plan", words: "Plan a pipeline run; it opens filled in, for you to start", takes: "the question" },
   { name: "export", words: "Save this conversation as a markdown file" },
   { name: "summarize", words: "Summarize the earlier conversation, so it takes less of the context" },
   { name: "rename", words: "Rename this conversation", takes: "a name" },
@@ -32,10 +34,10 @@ export function commandOf(text: string): { name: string; rest: string; known: bo
   return { name: m[1], rest: (m[2] ?? "").trim(), known: COMMANDS.some((c) => c.name === m[1]) };
 }
 
-/** The commands offered while a name after a slash is still being typed. */
-export function commandsFor(text: string): Command[] {
+/** The commands offered while a name after a slash is still being typed, less those this desk does not serve. */
+export function commandsFor(text: string, without: readonly string[] = []): Command[] {
   const m = /^\/([a-z]*)$/u.exec(text);
-  return m ? COMMANDS.filter((c) => c.name.startsWith(m[1])) : [];
+  return m ? COMMANDS.filter((c) => c.name.startsWith(m[1]) && !without.includes(c.name)) : [];
 }
 
 /** The person's message an answer replied to: what a retry sends again. */

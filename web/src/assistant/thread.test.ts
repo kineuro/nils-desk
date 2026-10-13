@@ -17,7 +17,10 @@ describe("the message box", () => {
   });
 
   it("offers the commands a half-typed name could be, and none once the name is done", () => {
-    expect(commandsFor("/").map((c) => c.name)).toEqual(["new", "fork", "share", "remember", "export", "summarize", "rename", "status", "help"]);
+    expect(commandsFor("/").map((c) => c.name)).toEqual(["new", "fork", "share", "remember", "plan", "export", "summarize", "rename", "status", "help"]);
+    // /plan only where the assistant serves the analysis-plan station (2026-10-13)
+    expect(commandsFor("/p", ["plan"]).map((c) => c.name)).toEqual([]);
+    expect(commandsFor("/p").map((c) => c.name)).toEqual(["plan"]);
     expect(commandsFor("/re").map((c) => c.name)).toEqual(["remember", "rename"]);
     expect(commandsFor("/rename cohorts")).toEqual([]);
     expect(commandsFor("cohorts")).toEqual([]);
