@@ -12,6 +12,9 @@
 // run opens its pre-flight first. Since 2026-10-13 a pipeline run's job, in
 // Now and in All jobs, opens its run, where what it made is: a click anywhere
 // on its card, or Open run.
+// Since Wave 7a Models is a page here
+// (#pipelines/models, spec section 13.1), and a person who may see models
+// and not the jobs opens it first.
 
 import { useCallback, useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
@@ -24,6 +27,7 @@ import { href } from "../routes";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { ModelsPage } from "../models/ModelsPage";
 import { CatalogPage } from "./Catalog";
 import { ops } from "./client";
 import { PlanPage, plansOffered } from "./PlanPage";
@@ -57,6 +61,10 @@ export function PipelinesPage({ caps, page = null, arg = null, query }: { caps: 
         <RunResultPage id={Number(arg)} unit={query.view} />
       </section>
     );
+  }
+  const modelsOpen = may(caps, "models:see") && served(caps, "GET /api/models");
+  if (modelsOpen && (page === "models" || !may(caps, "pipelines:see"))) {
+    return <ModelsPage caps={caps} id={page === "models" && arg !== null && /^\d+$/.test(arg) ? Number(arg) : null} />;
   }
   if (page === "runs" && arg !== null && /^\d+$/.test(arg) && runActs(caps).open) {
     return (

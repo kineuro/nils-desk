@@ -69,7 +69,13 @@ export function sections(caps: Capabilities, ready: boolean | null = true, conve
   // the assistant helps set an install up as well, so it does not wait for it
   if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: assistantPages(conversations, ladderPages(caps)), rest: "none" });
   if (ready !== true) return out;
-  for (const p of PLACEHOLDERS) if (holds(caps, p.grant) && serves(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon, ...(p.pages ? { pages: p.pages(caps) } : {}) });
+  for (const p of PLACEHOLDERS) {
+    if (!holds(caps, p.grant) || !serves(caps, p.door)) continue;
+    const pages = p.pages ? p.pages(caps) : null;
+    // a section opened by any of its grants and doors shows only where one of its pages is the person's (Pipelines for models:see, spec 13.1)
+    if (pages !== null && pages.length === 0) continue;
+    out.push({ id: p.id, title: p.title, icon: p.icon, ...(pages ? { pages } : {}) });
+  }
   return out;
 }
 

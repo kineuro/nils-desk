@@ -40,7 +40,7 @@ async function measure(page: Page): Promise<{ top: number; bottom: number; group
 }
 
 // Campaigns are inside Review since Wave 7a (record 55 H3)
-const WORK = ["Home", "Query", "Data", "Review", "Models", "Release", "Pipelines"];
+const WORK = ["Home", "Query", "Data", "Review", "Release", "Pipelines"];
 const of = (m: { groups: Stand[] }, title: string) => m.groups.find((g) => g.title === title)!;
 
 /** The rows from `from` to the last sit one after another, with only the side's gap between them. */
@@ -79,10 +79,10 @@ for (const motion of ["reduce", "no-preference"] as const) {
     expect(of(m, "Review").pages).toBeGreaterThan(100);
     await expect(page.locator(".side-group.on .side-pages a")).toHaveText(["Work", "Main scans", "Subjects", "Rules"]);
     await expect(page.locator('.side-group.on .side-pages a[aria-current="page"]')).toHaveText("Work");
-    expect(of(m, "Models").top - (of(m, "Review").bottom + of(m, "Review").pages)).toBeGreaterThan(100);
-    packed(m, "Models");
+    expect(of(m, "Release").top - (of(m, "Review").bottom + of(m, "Review").pages)).toBeGreaterThan(100);
+    packed(m, "Release");
     expect(Math.abs(of(m, "Settings").bottom - m.bottom)).toBeLessThanOrEqual(2);
-    expect(m.groups.filter((g) => g.line).map((g) => g.title)).toEqual(["Models"]);
+    expect(m.groups.filter((g) => g.line).map((g) => g.title)).toEqual(["Release"]);
 
     // one of its pages: the address moves and the section stays open
     await page.locator('.side-pages a[href="#review/rules"]').click();

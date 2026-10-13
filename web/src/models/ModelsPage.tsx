@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Models (record 45 S6): the registered models by task and slot, the one
-// promoted in each first, and one model with its card, its encoders, the
-// label set it was trained on and its history. Under models:work a model is
-// registered (a train run registers what it fitted; a card from elsewhere is
-// posted), admitted by a check, promoted in its slot, or retired, each after
-// a panel that says what it moves. What the engine refuses is shown in its
-// own words.
+// Models (record 45 S6; record 55 D4, spec sections 10.2 and 13.1), a page
+// under Pipelines since Wave 7a: each task and slot with its models side by
+// side as their cards (what each was tested on, with the evidence run, its
+// speed on CPU and on GPU, what it needs of a GPU, its CPU and GPU
+// equivalence stated and measured, the label set it was trained on, and
+// whether the card is complete), the one chosen there marked, and why it
+// answers. An admin chooses another model, or goes back to the default,
+// after a panel that says what changes. One model's own page keeps its card,
+// its encoders, the label set and its history. Under models:work a model is
+// registered, admitted by a check, promoted or retired; promotion retires
+// nothing since Wave 7a. What the engine refuses is shown in its own words.
 
 import { useCallback, useEffect, useState } from "react";
 import { DoorError } from "../ask/client";
@@ -18,8 +22,9 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says, Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { byTask, checkOf, encodersOf, fittedBy, label, modelActs, models, openActs, promotedBeside, refusedModels, shortDigest, stateTag, trainedOn, type Model, type RunRow, type TaskSlot } from "./client";
+import { checkOf, choosable, chosenOf, chosenWords, encodersOf, equivalenceWords, fittedBy, gpuOf, label, missingWords, modelActs, models, openActs, rateWords, refusedModels, shortDigest, speedOf, stateTag, tasksOf, testedOf, trainedOn, type Model, type RunRow, type TaskEntry } from "./client";
 import "../review/grown.css";
+import "./models.css";
 
 /** The engine's own words for a refusal, as its door said them. */
 export function engineWords(e: unknown): string {
@@ -27,24 +32,27 @@ export function engineWords(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
 
-type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Model[] };
+/** A model's own address, under Pipelines. */
+export const modelHref = (id: number | string) => href("pipelines", "models", String(id));
 
-export function ModelsPage({ caps, page, arg }: { caps: Capabilities; page: string | null; arg: string | null }) {
+type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Model[]; tasks: TaskEntry[] | null };
+
+/** Models under Pipelines: every task, or one model where the address names it (#pipelines/models/<id>). */
+export function ModelsPage({ caps, id = null }: { caps: Capabilities; id?: number | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [said, setSaid] = useState<string | null>(null);
+  const tasksServed = served(caps, "GET /api/models/tasks");
   const read = useCallback(() => {
-    models.list().then(
-      (r) => setLoad({ kind: "ready", list: r.models }),
+    Promise.all([models.list(), tasksServed ? models.tasks().then((r) => r.tasks) : Promise.resolve(null)]).then(
+      ([r, tasks]) => setLoad({ kind: "ready", list: r.models, tasks }),
       (e: unknown) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: engineWords(e) })),
     );
-  }, []);
+  }, [tasksServed]);
   useEffect(read, [read]);
   const changed = (words: string) => {
     setSaid(words);
     read();
   };
-  const id = page === "model" && arg && /^\d+$/.test(arg) ? Number(arg) : null;
-  const list = load.kind === "ready" ? load.list : null;
   return (
     <>
       {said && (
@@ -55,101 +63,197 @@ export function ModelsPage({ caps, page, arg }: { caps: Capabilities; page: stri
       )}
       {load.kind === "loading" && <Wait phase="reading the models" since={load.since} size="panel" />}
       {load.kind === "failed" && <p className="warn">The models could not be read: {load.why}</p>}
-      {list && id === null && <ModelsBody caps={caps} list={list} onChanged={changed} />}
-      {list && id !== null && <ModelPage caps={caps} id={id} list={list} onChanged={changed} />}
+      {load.kind === "ready" && id === null && <ModelsBody caps={caps} list={load.list} tasks={load.tasks} onChanged={changed} />}
+      {load.kind === "ready" && id !== null && <ModelPage caps={caps} id={id} onChanged={changed} />}
     </>
   );
 }
 
-/** The models by task and slot, as the page draws them from what it read. */
-export function ModelsBody({ caps, list, onChanged }: { caps: Capabilities; list: Model[]; onChanged: (words: string) => void }) {
+/** Every task and slot with its models side by side, as the page draws them from what it read. */
+export function ModelsBody({ caps, list, tasks = null, onChanged }: { caps: Capabilities; list: Model[]; tasks?: TaskEntry[] | null; onChanged: (words: string) => void }) {
   const acts = modelActs(caps);
   const [registering, setRegistering] = useState(false);
-  const tasks = byTask(list);
+  const entries = tasksOf(list, tasks);
   return (
     <section className="data models">
       <div className="data-head">
         <div className="grow">
-          <span className="eyebrow">Models</span>
-          <h1>Models by task</h1>
-          <p className="lede">One promoted model answers each task in its slot. A model is registered, admitted by a check, then promoted.</p>
+          <span className="eyebrow">Pipelines</span>
+          <h1>Models</h1>
+          <p className="lede">One model answers each task: the one chosen there.</p>
         </div>
         {acts.register && (
-          <button type="button" className="button" onClick={() => setRegistering(true)}>
+          <button type="button" className="button secondary" onClick={() => setRegistering(true)}>
             <Icon name="plus" />
             Register
           </button>
         )}
       </div>
-      {tasks.length === 0 && (
+      {entries.length === 0 && (
         <div className="note">
           <Icon name="info" />
           <div className="note-body">
             <p className="note-lead">No model yet.</p>
-            <p className="note-detail">A train pipeline registers the model it fitted; a card from elsewhere is registered here.</p>
+            <p className="note-detail">A train run registers what it fitted; a card from elsewhere is registered here.</p>
           </div>
         </div>
       )}
-      {tasks.map((t) => (
-        <TaskCard key={`${t.task} ${t.slot}`} t={t} />
+      {entries.map((t) => (
+        <TaskModels key={`${t.task} ${t.slot}`} caps={caps} t={t} onChanged={onChanged} />
       ))}
       {registering && <RegisterDialog caps={caps} onClose={() => setRegistering(false)} onDone={(w) => { setRegistering(false); onChanged(w); }} />}
     </section>
   );
 }
 
-function ModelLine({ m }: { m: Model }) {
-  const tag = stateTag(m.state);
-  return (
-    <tr>
-      <td>
-        <a href={href("models", "model", String(m.id))}>{label(m)}</a>
-      </td>
-      <td>{m.kind}</td>
-      <td className="path">{shortDigest(m.digest)}</td>
-      <td>
-        <span className={`tag ${tag.tone}`}>{tag.words}</span>
-      </td>
-      <td className="num">{whenWords(m.promoted_at ?? m.admitted_at ?? m.registered_at)}</td>
-    </tr>
-  );
-}
+type Choosing = { m: Model } | { m: null };
 
-export function TaskCard({ t }: { t: TaskSlot }) {
-  const rows = t.promoted ? [t.promoted, ...t.others] : t.others;
+/** One task and slot: what answers it and why, and its models side by side. */
+export function TaskModels({ caps, t, onChanged }: { caps: Capabilities; t: TaskEntry; onChanged: (words: string) => void }) {
+  const acts = modelActs(caps);
+  const [choosing, setChoosing] = useState<Choosing | null>(null);
+  const on = chosenOf(t);
   return (
-    <section className="stack roomy">
+    <section className="stack roomy task-models" data-task={t.task}>
       <div className="section-head rule-top">
         <h2>{t.task}</h2>
         <span className="meta">
-          slot {t.slot} · {t.promoted ? `${label(t.promoted)} answers` : "nothing promoted"}
+          {t.slot === "site" ? "" : `slot ${t.slot} · `}
+          {on ? `${label(on)} answers · ${chosenWords(t.chosen)}` : chosenWords(null)}
+        </span>
+        {acts.choose && t.chosen?.by === "site" && (
+          <button type="button" className="button quiet small" onClick={() => setChoosing({ m: null })}>
+            Back to default
+          </button>
+        )}
+      </div>
+      <div className="model-cards">
+        {t.models.map((m) => (
+          <ModelCard key={m.id} m={m} chosen={on?.id === m.id} onChoose={acts.choose && choosable(m) && on?.id !== m.id ? () => setChoosing({ m }) : null} />
+        ))}
+      </div>
+      {choosing && <ChooseDialog t={t} m={choosing.m} onClose={() => setChoosing(null)} onDone={(w) => { setChoosing(null); onChanged(w); }} />}
+    </section>
+  );
+}
+
+/** One model as a card beside the others of its task: chosen by its border, its card's numbers in lines. */
+export function ModelCard({ m, chosen, onChoose = null }: { m: Model; chosen: boolean; onChoose?: (() => void) | null }) {
+  const claims = testedOf(m);
+  const speed = speedOf(m);
+  const gpu = gpuOf(m);
+  const trained = trainedOn(m);
+  const missing = missingWords(m);
+  return (
+    <article className={["model-card", chosen ? "on" : "", m.state === "retired" ? "retired" : ""].filter(Boolean).join(" ")} aria-current={chosen ? "true" : undefined}>
+      <div className="model-card-head">
+        <a href={modelHref(m.id)}>{label(m)}</a>
+        {chosen ? <span className="tag brand">answers</span> : <span className="meta">{m.state}</span>}
+      </div>
+      <dl className="facts card-facts">
+        <div className="facts-pair">
+          <dt>tested</dt>
+          <dd>{claims.length === 0 ? "nothing stated" : `${claimWords(claims[0])}${claims.length > 1 ? ` · ${claims.length - 1} more` : ""}`}</dd>
+        </div>
+        <div className="facts-pair">
+          <dt>CPU</dt>
+          <dd title={speed.cpu?.hardware}>{rateWords(speed.cpu)}</dd>
+        </div>
+        <div className="facts-pair">
+          <dt>GPU</dt>
+          <dd title={speed.gpu?.hardware}>{gpu === "none" ? "not used" : `${rateWords(speed.gpu)}${gpu ? ` · ${gpu}` : ""}`}</dd>
+        </div>
+        <div className="facts-pair">
+          <dt>CPU = GPU</dt>
+          <dd>{equivalenceWords(m)}</dd>
+        </div>
+        <div className="facts-pair">
+          <dt>trained on</dt>
+          <dd title={trained?.digest}>{trained ? (trained.name ?? shortDigest(trained.digest)) : "no label set"}</dd>
+        </div>
+      </dl>
+      <div className="model-card-foot">
+        <span className={missing ? "meta warn-text" : "meta"}>{missing ?? "card complete"}</span>
+        {onChoose && (
+          <button type="button" className="button secondary small" onClick={onChoose}>
+            Choose
+          </button>
+        )}
+      </div>
+    </article>
+  );
+}
+
+/** A claim in a line: what, its value, its bound, and the evidence run it cites. */
+export function claimWords(c: { claim: string; value: string; bound: string | null; evidence: string }): string {
+  return `${c.claim} ${c.value}${c.bound ? ` (bound ${c.bound})` : ""}${c.evidence ? ` · ${c.evidence}` : ""}`;
+}
+
+/** Choose a task's model, or go back to the default, after the panel that says what changes. */
+export function ChooseDialog({ t, m, onClose, onDone }: { t: TaskEntry; m: Model | null; onClose: () => void; onDone: (words: string) => void }) {
+  const [why, setWhy] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  const now = chosenOf(t);
+  const go = () => {
+    setBusy(true);
+    setRefused(null);
+    const reason = why.trim() || undefined;
+    const body = m ? { model: m.id, why: reason } : { task: t.task, slot: t.slot, model: null, why: reason };
+    models.choose(body).then(
+      (after) => {
+        const answers = chosenOf(after);
+        onDone(m ? `${label(m)} answers ${t.task}.` : answers ? `${t.task} is back to the default: ${label(answers)} answers.` : `${t.task} is back to the default: nothing answers.`);
+      },
+      (e: unknown) => {
+        setBusy(false);
+        setRefused(engineWords(e));
+      },
+    );
+  };
+  return (
+    <Dialog
+      title={m ? `Choose ${label(m)}` : `Default for ${t.task}`}
+      icon="check"
+      onClose={onClose}
+      foot={
+        <div className="row actions">
+          <button type="button" className="button" disabled={busy} onClick={go}>
+            {m ? "Choose" : "Use the default"}
+          </button>
+          <button type="button" className="button secondary" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      }
+    >
+      <p className="lede">
+        {m
+          ? `${label(m)} answers ${t.task}${t.slot === "site" ? "" : ` in slot ${t.slot}`}${now ? `, instead of ${label(now)}` : ""}. Past answers keep naming their model.`
+          : `The certified model answers ${t.task}, else the one promoted last, else the newest admitted.`}
+      </p>
+      <div className="field">
+        <span className="label">Why</span>
+        <span className="input">
+          <input value={why} placeholder="kept in the audit" aria-label="Why" onChange={(e) => setWhy(e.target.value)} />
         </span>
       </div>
-      <div className="table-wrap">
-        <table className="thin">
-          <thead>
-            <tr>
-              <th>Model</th>
-              <th>Kind</th>
-              <th>Digest</th>
-              <th>State</th>
-              <th className="num">Since</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((m) => (
-              <ModelLine key={m.id} m={m} />
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+      {refused && (
+        <div className="note caution" role="alert">
+          <Icon name="alert" />
+          <div className="note-body">
+            <p className="note-lead">The engine refused</p>
+            <p className="note-detail">{refused}</p>
+          </div>
+        </div>
+      )}
+    </Dialog>
   );
 }
 
 type One = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; m: Model };
 
-export function ModelPage({ caps, id, list, onChanged }: { caps: Capabilities; id: number; list: Model[]; onChanged: (words: string) => void }) {
+export function ModelPage({ caps, id, onChanged }: { caps: Capabilities; id: number; onChanged: (words: string) => void }) {
   const [one, setOne] = useState<One>(() => ({ kind: "loading", since: Date.now() }));
   const [asked, setAsked] = useState(0);
   useEffect(() => {
@@ -168,7 +272,6 @@ export function ModelPage({ caps, id, list, onChanged }: { caps: Capabilities; i
     <ModelBody
       caps={caps}
       m={one.m}
-      list={list}
       onChanged={(w) => {
         setAsked((n) => n + 1);
         onChanged(w);
@@ -180,24 +283,30 @@ export function ModelPage({ caps, id, list, onChanged }: { caps: Capabilities; i
 type Act = "admit" | "promote" | "retire";
 
 /** One model as the page draws it. */
-export function ModelBody({ caps, m, list, onChanged }: { caps: Capabilities; m: Model; list: Model[]; onChanged: (words: string) => void }) {
+export function ModelBody({ caps, m, onChanged }: { caps: Capabilities; m: Model; onChanged: (words: string) => void }) {
   const acts = modelActs(caps);
   const open = openActs(m);
   const [act, setAct] = useState<Act | null>(null);
   const tag = stateTag(m.state);
   const trained = trainedOn(m);
   const encoders = encodersOf(m);
+  const claims = testedOf(m);
+  const speed = speedOf(m);
+  const gpu = gpuOf(m);
+  const missing = missingWords(m);
   const events = [...(m.events ?? [])].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
   return (
     <section className="data model">
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">
-            <a href={href("models")}>Models</a> · {m.task}
+            <a href={href("pipelines", "models")}>Models</a> · {m.task}
           </span>
           <h1>{label(m)}</h1>
           <p className="lede">
-            <span className={`tag ${tag.tone}`}>{tag.words}</span> {m.kind} in slot {m.slot}
+            <span className={`tag ${tag.tone}`}>{tag.words}</span> {m.kind}
+            {m.slot === "site" ? "" : ` in slot ${m.slot}`}
+            {m.chosen ? " · answers its task" : ""}
           </p>
         </div>
         {acts.admit && open.admit && (
@@ -240,10 +349,29 @@ export function ModelBody({ caps, m, list, onChanged }: { caps: Capabilities; m:
               : encoders.map((e, i) => (
                   <span key={i}>
                     {i > 0 ? ", " : ""}
-                    {e.id !== null ? <a href={href("models", "model", String(e.id))}>{e.words}</a> : e.words}
+                    {e.id !== null ? <a href={modelHref(e.id)}>{e.words}</a> : e.words}
                   </span>
                 ))}
           </dd>
+        </div>
+        <div className="facts-pair">
+          <dt>speed</dt>
+          <dd>
+            CPU {rateWords(speed.cpu)}
+            {speed.cpu?.hardware ? ` on ${speed.cpu.hardware}` : ""} · GPU {gpu === "none" ? "not used" : `${rateWords(speed.gpu)}${speed.gpu?.hardware ? ` on ${speed.gpu.hardware}` : ""}`}
+          </dd>
+        </div>
+        <div className="facts-pair">
+          <dt>GPU</dt>
+          <dd>{gpu ?? "not stated"}</dd>
+        </div>
+        <div className="facts-pair">
+          <dt>CPU = GPU</dt>
+          <dd>{equivalenceWords(m)}</dd>
+        </div>
+        <div className="facts-pair">
+          <dt>card</dt>
+          <dd className={missing ? "warn-text" : undefined}>{missing ?? "complete"}</dd>
         </div>
         {typeof m.card.pack_version === "string" && (
           <div className="facts-pair">
@@ -252,6 +380,23 @@ export function ModelBody({ caps, m, list, onChanged }: { caps: Capabilities; m:
           </div>
         )}
       </dl>
+      {claims.length > 0 && (
+        <>
+          <div className="section-head rule-top">
+            <h2>Tested</h2>
+          </div>
+          <ul className="claims">
+            {claims.map((c, i) => (
+              <li key={i}>
+                {c.claim} <strong>{c.value}</strong>
+                {c.bound ? <span className="meta"> bound {c.bound}</span> : null}
+                {c.n !== null ? <span className="meta"> · n {c.n.toLocaleString("en-US")}</span> : null}
+                {c.evidence ? <span className="meta path"> · {c.evidence}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {m.check && m.check.checks.length > 0 && (
         <Says head={`The check: ${m.check.suite}`}>
           {m.check.checks.map((c) => `${c.name} ${c.passed ? "passed" : "failed"}${c.value != null ? ` at ${c.value}` : ""}${c.threshold != null ? ` (threshold ${c.threshold})` : ""}`).join("; ")}.
@@ -275,7 +420,7 @@ export function ModelBody({ caps, m, list, onChanged }: { caps: Capabilities; m:
         </p>
       )}
       {act === "admit" && <AdmitDialog m={m} onClose={() => setAct(null)} onDone={(w) => { setAct(null); onChanged(w); }} />}
-      {(act === "promote" || act === "retire") && <MoveDialog act={act} m={m} list={list} onClose={() => setAct(null)} onDone={(w) => { setAct(null); onChanged(w); }} />}
+      {(act === "promote" || act === "retire") && <MoveDialog act={act} m={m} onClose={() => setAct(null)} onDone={(w) => { setAct(null); onChanged(w); }} />}
     </section>
   );
 }
@@ -350,17 +495,16 @@ export function AdmitDialog({ m, onClose, onDone }: { m: Model; onClose: () => v
 }
 
 /** Promote or retire, after the panel that says what else it moves. */
-export function MoveDialog({ act, m, list, onClose, onDone }: { act: "promote" | "retire"; m: Model; list: Model[]; onClose: () => void; onDone: (words: string) => void }) {
+export function MoveDialog({ act, m, onClose, onDone }: { act: "promote" | "retire"; m: Model; onClose: () => void; onDone: (words: string) => void }) {
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
-  const beside = promotedBeside(m, list);
   const go = () => {
     setBusy(true);
     setRefused(null);
     const work =
       act === "promote"
-        ? models.promote(m.id, why.trim() || undefined).then((r) => `${label(m)} is promoted for ${m.task}${r.retired ? `; ${label(r.retired)} is retired` : ""}.`)
+        ? models.promote(m.id, why.trim() || undefined).then(() => `${label(m)} is promoted for ${m.task}.`)
         : models.retire(m.id, why.trim() || undefined).then(() => `${label(m)} is retired; its decisions stay and keep naming it.`);
     work.then(onDone, (e: unknown) => {
       setBusy(false);
@@ -385,7 +529,7 @@ export function MoveDialog({ act, m, list, onClose, onDone }: { act: "promote" |
     >
       {act === "promote" ? (
         <p className="lede">
-          {label(m)} answers {m.task} in slot {m.slot}. {beside ? `${label(beside)}, promoted there now, is retired.` : "Nothing is promoted there now."}
+          {label(m)} is promoted in {m.task}{m.slot === "site" ? "" : `, slot ${m.slot}`}. Nothing is retired; the model chosen there keeps answering.
           {m.state === "registered" ? " It is not admitted yet." : ""}
         </p>
       ) : (
@@ -435,7 +579,7 @@ export function RegisterDialog({ caps, onClose, onDone }: { caps: Capabilities; 
     setBusy(true);
     setRefused(null);
     models.register(parsed as Record<string, unknown>).then(
-      (m) => onDone(`${label(m)} is registered; admit it with a check before promoting it.`),
+      (m) => onDone(`${label(m)} is registered; admit it with a check before choosing it.`),
       (e: unknown) => {
         setBusy(false);
         setRefused(engineWords(e));

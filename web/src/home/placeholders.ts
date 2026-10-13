@@ -32,9 +32,10 @@ export interface Placeholder {
 /** A page of the side, by the word its address names past the section. */
 const page = (id: string, title: string, more: Partial<SidePage> = {}): SidePage => ({ id, title, depth: 1, ...more });
 
-// Left out until their views are built: Models' Checks (a check is recorded
-// on a model's own page), and Pipelines' Runs and Plans (a run's and a plan's
-// own pages are opened from the catalog). Data's Pseudonyms holds what spans
+// Left out until their views are built: Pipelines' Runs and Plans (a run's
+// and a plan's own pages are opened from the catalog). Models is a page of
+// Pipelines since Wave 7a (spec section 13.1), and a check is recorded on a
+// model's own page. Data's Pseudonyms holds what spans
 // datasets; a dataset's own pseudonymisation is a step of it, opened in place.
 export const PLACEHOLDERS: Placeholder[] = [
   {
@@ -76,16 +77,6 @@ export const PLACEHOLDERS: Placeholder[] = [
     pages: (caps) => reviewPages(caps),
   },
   {
-    id: "models",
-    title: "Models",
-    icon: "chip",
-    grant: "models:see",
-    door: "GET /api/models",
-    words: "The registered models by task: one promoted per slot, each admitted by a check first.",
-    built: true,
-    pages: () => [page("by-task", "By task", { to: href("models") })],
-  },
-  {
     id: "release",
     title: "Release",
     icon: "release",
@@ -100,16 +91,19 @@ export const PLACEHOLDERS: Placeholder[] = [
     id: "pipelines",
     title: "Pipelines",
     icon: "branch",
-    grant: "pipelines:see",
-    door: "GET /api/jobs",
-    words: "The jobs that ran and are running: digests, backups and releases.",
+    // Models is a page here (spec section 13.1): the section opens for pipelines:see or models:see
+    grant: ["pipelines:see", "models:see"],
+    door: ["GET /api/jobs", "GET /api/models"],
+    words: "The jobs that ran and are running, the pipelines that can run, and the models that answer each task.",
     built: true,
-    // the catalog where the engine serves it; a run's and a plan's own pages, opened from it, keep it marked
-    // record 55 H2, round 5: the jobs' logs where the engine keeps them (ops/logs.ts)
+    // the catalog where the engine serves it; a run's and a plan's own pages, opened from it, keep it marked;
+    // record 55 H2, round 5: the jobs' logs where the engine keeps them (ops/logs.ts);
+    // Models where the engine lists models (spec section 13.1), each page by its own grant
     pages: (caps) => [
-      page("now", "Running now", { to: href("pipelines") }),
-      ...(door(caps, "GET /api/pipelines") ? [page("catalog", "Catalog", { also: ["runs", "plan"] })] : []),
-      ...(logsOffered(caps) ? [page("logs", "Logs")] : []),
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/jobs") ? [page("now", "Running now", { to: href("pipelines") })] : []),
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/pipelines") ? [page("catalog", "Catalog", { also: ["runs", "plan"] })] : []),
+      ...(may(caps, "pipelines:see") && logsOffered(caps) ? [page("logs", "Logs")] : []),
+      ...(may(caps, "models:see") && door(caps, "GET /api/models") ? [page("models", "Models")] : []),
     ],
   },
 ];

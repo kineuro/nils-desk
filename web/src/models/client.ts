@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Models section's doors and pure parts (record 45 S6; record 42 S2): the
-// registered models by task and slot, one model with its card and events,
-// and the lifecycle a person moves it through: registered, admitted by a
-// check that passed, promoted in its task and slot (which retires the one
-// promoted before), retired. The engine refuses what the lifecycle does not
-// allow, and the page shows its words.
+// The Models page's doors and pure parts (record 45 S6; record 42 S2; record
+// 55 D4, spec section 10.2): the registered models by task and slot, one
+// model with its card and events, and the lifecycle a person moves it
+// through: registered, admitted by a check that passed, promoted, retired.
+// Since Wave 7a promotion retires nothing: several models live in a task and
+// slot, and one is chosen there, by the site's admin or by default (the model
+// a recorded certificate names, else the one promoted last, else the newest
+// admitted). The engine refuses what the lifecycle does not allow, and the
+// page shows its words.
 
 import { door, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -54,6 +57,44 @@ export interface Model {
   retired_at?: string | null;
   review_item?: number | null;
   events?: ModelEvent[];
+  /** Spec section 10.2: whether its card is complete, and the fields it lacks. */
+  complete?: boolean;
+  missing?: string[];
+  /** Whether it is the chosen model of its task and slot now. */
+  chosen?: boolean;
+  /** The CPU and GPU equivalence its admitting check measured (spec section 10.5). */
+  equivalence_measured?: Measured | null;
+}
+
+/** The CPU and GPU equivalence an admission measured. */
+export interface Measured {
+  class: string | null;
+  tolerance?: number | null;
+  n?: number | null;
+  changes?: number | null;
+  flips?: number | null;
+  max_difference?: number | null;
+  set?: string | null;
+}
+
+/** Why a task's model answers it: chosen by the site, named by a certificate, or the default among the promoted or admitted. */
+export type ChosenBy = "site" | "certificate" | "promoted" | "admitted";
+
+export interface Chosen {
+  model_id: number;
+  by: ChosenBy;
+  certificate_id?: number | null;
+  chosen_by?: string | null;
+  chosen_at?: string | null;
+  why?: string | null;
+}
+
+/** One task and slot as `GET /api/models/tasks` answers it: the model chosen there and every model of it, newest first. */
+export interface TaskEntry {
+  task: string;
+  slot: string;
+  chosen: Chosen | null;
+  models: Model[];
 }
 
 /** A model a pipeline run fitted and registered, as the run's summary names it. */
@@ -85,8 +126,11 @@ export const models = {
   get: (id: number) => door<Model>("GET", `/api/models/${id}`),
   register: (card: Json) => door<Model>("POST", "/api/models", card),
   admit: (id: number, check: Check) => door<Model>("POST", `/api/models/${id}/admit`, check),
-  promote: (id: number, why?: string) => door<{ model: Model; retired: Model | null }>("POST", `/api/models/${id}/promote`, why ? { why } : {}),
+  promote: (id: number, why?: string) => door<{ model: Model }>("POST", `/api/models/${id}/promote`, why ? { why } : {}),
   retire: (id: number, why?: string) => door<Model>("POST", `/api/models/${id}/retire`, why ? { why } : {}),
+  tasks: () => door<{ tasks: TaskEntry[] }>("GET", "/api/models/tasks"),
+  /** Choose a model for its task and slot, or with model null go back to the default. */
+  choose: (body: { model: number; why?: string } | { task: string; slot: string; model: null; why?: string }) => door<TaskEntry>("POST", "/api/models/choose", body),
   runs: (limit = 50) => door<{ runs: RunRow[] }>("GET", `/api/pipeline-runs?limit=${limit}`),
 };
 
@@ -183,9 +227,10 @@ export function refusedModels(run: RunRow): string[] {
 }
 
 /** What a person may do on the Models pages, by grant and door. */
-export function modelActs(caps: Capabilities): { register: boolean; admit: boolean; promote: boolean; retire: boolean; runs: boolean } {
+export function modelActs(caps: Capabilities): { register: boolean; admit: boolean; promote: boolean; retire: boolean; choose: boolean; runs: boolean } {
   const work = may(caps, "models:work");
   return {
+    choose: work && served(caps, "POST /api/models/choose"),
     register: work && served(caps, "POST /api/models"),
     admit: work && served(caps, "POST /api/models/{id}/admit"),
     promote: work && served(caps, "POST /api/models/{id}/promote"),
@@ -206,7 +251,104 @@ export function checkOf(suite: string, rows: { name: string; passed: boolean; va
   return { suite: suite.trim(), passed: checks.length > 0 && checks.every((c) => c.passed), checks };
 }
 
-/** The model promoted now in the same task and slot, which a promotion retires. */
-export function promotedBeside(m: Model, list: Model[]): Model | null {
-  return list.find((x) => x.id !== m.id && x.task === m.task && x.slot === m.slot && x.state === "promoted") ?? null;
+/** The tasks as the page draws them: from `GET /api/models/tasks` where the engine serves it, else from the list, with what it marks chosen. Tasks in name order, the site slot first. */
+export function tasksOf(list: Model[], served: TaskEntry[] | null = null): TaskEntry[] {
+  const out: TaskEntry[] = served
+    ? served.map((t) => ({ ...t, models: [...t.models].sort((a, b) => b.id - a.id) }))
+    : byTask(list).map((t) => {
+        const models = [...(t.promoted ? [t.promoted] : []), ...t.others].sort((a, b) => b.id - a.id);
+        // an engine before the tasks door: what it marks chosen, else its old default, the one promoted last, then the newest admitted
+        const on = models.find((m) => m.chosen === true) ?? models.find((m) => m.state === "promoted") ?? models.find((m) => m.state === "admitted");
+        return { task: t.task, slot: t.slot, chosen: on ? { model_id: on.id, by: on.state === "promoted" ? "promoted" : "admitted" } : null, models };
+      });
+  return out.sort((a, b) => a.task.localeCompare(b.task) || (a.slot === "site" ? -1 : b.slot === "site" ? 1 : a.slot.localeCompare(b.slot)));
+}
+
+/** The model a task's entry has chosen, or none. */
+export function chosenOf(t: TaskEntry): Model | null {
+  return t.chosen ? (t.models.find((m) => m.id === t.chosen!.model_id) ?? null) : null;
+}
+
+/** Why the chosen model answers, in a few words. */
+export function chosenWords(c: Chosen | null): string {
+  if (!c) return "nothing answers";
+  if (c.by === "site") return `chosen${c.chosen_by ? ` by ${c.chosen_by}` : " by the site"}`;
+  if (c.by === "certificate") return c.certificate_id != null ? `certificate ${c.certificate_id}` : "certified";
+  if (c.by === "promoted") return "promoted last";
+  return "newest admitted";
+}
+
+/** Whether a model may be chosen: one that answers, admitted or promoted. */
+export function choosable(m: Pick<Model, "state">): boolean {
+  return m.state === "admitted" || m.state === "promoted";
+}
+
+/** One claim a card states it tested, with the evidence run it comes from. */
+export interface Claim {
+  claim: string;
+  value: string;
+  bound: string | null;
+  n: number | null;
+  evidence: string;
+}
+
+const text = (v: unknown): string | null => (typeof v === "number" ? v.toLocaleString("en-US", { maximumFractionDigits: 6 }) : typeof v === "string" && v !== "" ? v : null);
+
+/** The claims a card states it tested (spec section 10.2). */
+export function testedOf(m: Model): Claim[] {
+  const list = Array.isArray(m.card?.tested) ? (m.card.tested as Json[]) : [];
+  return list.flatMap((c) => (c && typeof c.claim === "string" ? [{ claim: c.claim, value: text(c.value) ?? "", bound: text(c.bound), n: typeof c.n === "number" ? c.n : null, evidence: typeof c.evidence === "string" ? c.evidence : "" }] : []));
+}
+
+/** A speed as its card states it. */
+export interface Speed {
+  rate: number;
+  hardware: string;
+  evidence: string;
+}
+
+/** The card's speeds on CPU and on GPU, stacks a second. */
+export function speedOf(m: Model): { cpu: Speed | null; gpu: Speed | null } {
+  const one = (v: unknown): Speed | null => {
+    const s = v as Json | null | undefined;
+    return s && typeof s.stacks_per_second === "number" ? { rate: s.stacks_per_second, hardware: typeof s.hardware === "string" ? s.hardware : "", evidence: typeof s.evidence === "string" ? s.evidence : "" } : null;
+  };
+  const sp = (m.card?.speed ?? null) as Json | null;
+  return { cpu: one(sp?.cpu), gpu: one(sp?.gpu) };
+}
+
+/** A rate in stacks a second, for a line. */
+export function rateWords(s: Speed | null): string {
+  if (!s) return "not stated";
+  return `${s.rate.toLocaleString("en-US", { maximumFractionDigits: s.rate < 10 ? 2 : 1 })} stacks/s`;
+}
+
+/** What the card says it needs of a GPU. */
+export function gpuOf(m: Model): "none" | "optional" | "required" | null {
+  const g = m.card?.gpu;
+  return g === "none" || g === "optional" || g === "required" ? g : null;
+}
+
+/** The CPU and GPU equivalence the card states. */
+export function equivalenceOf(m: Model): { cls: string; tolerance: number | null; set: string; evidence: string } | null {
+  const e = (m.card?.equivalence ?? null) as Json | null;
+  if (!e || typeof e.class !== "string") return null;
+  return { cls: e.class, tolerance: typeof e.tolerance === "number" ? e.tolerance : null, set: typeof e.set === "string" ? e.set : "", evidence: typeof e.evidence === "string" ? e.evidence : "" };
+}
+
+/** The equivalence in a few words: stated, and measured where an admission measured it. */
+export function equivalenceWords(m: Model): string {
+  const stated = equivalenceOf(m);
+  const measured = m.equivalence_measured?.class ?? null;
+  if (!stated && !measured) return gpuOf(m) === "none" ? "CPU only" : "not stated";
+  const parts = [stated ? `class ${stated.cls} stated` : "not stated"];
+  parts.push(measured ? `${measured} measured` : "not measured");
+  return parts.join(" · ");
+}
+
+/** The card's fields in the words of the page, for what is missing. */
+export function missingWords(m: Model): string | null {
+  if (m.complete === true) return null;
+  if (!m.missing || m.missing.length === 0) return m.complete === false ? "incomplete" : null;
+  return `missing ${m.missing.map((f) => f.replace(/_/g, " ")).join(", ")}`;
 }
