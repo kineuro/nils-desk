@@ -4,8 +4,8 @@
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { type Mentionable, mentionables, mentionAt, mentionToken, plainMentions, saidWithMentions, withMention } from "./mentions";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { loadMentionables, type Mentionable, mentionables, mentionAt, mentionToken, plainMentions, saidWithMentions, SELECTIONS_OFFERED, withMention } from "./mentions";
 import { TurnView } from "./TurnView";
 
 const card: Mentionable = { kind: "card", id: "12", name: "Women in cohort A", detail: "3 versions" };
@@ -51,5 +51,71 @@ describe("a mention in a message", () => {
     expect(html).toContain('<span class="mention" title="Cohort">MS cohort</span>');
     expect(html).not.toContain("@[");
     expect(plainMentions(text)).toBe("How many in MS cohort match Women in cohort A?");
+  });
+});
+
+// record 55 K6: a saved selection named like a kept result
+const selection: Mentionable = { kind: "selection", id: "ms-baseline@2", name: "ms-baseline", detail: "v2 · 412 stacks" };
+
+describe("a saved selection named with @", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  /** The engine as the menu reads it: a card, a cohort, a kept result and two selections, one whose size is held back. */
+  const engine = (paths: string[]) =>
+    vi.fn(async (url: string) => {
+      paths.push(url);
+      const p = url.split("?")[0];
+      const body =
+        p === "/api/ask/documents"
+          ? { count: 1, next: null, documents: [{ document: 12, root: 12, name: "Women", versions: 1 }] }
+          : p === "/api/summary"
+            ? { subjects: { by_cohort: { MS: 3 } }, sessions: { by_cohort: {} }, stacks: { by_cohort: {} } }
+            : p === "/api/ask/handles"
+              ? { count: 1, handles: [{ id: 45, name: "T1 series", kept: true, grain: "stack", row_count: 9 }] }
+              : p === "/api/ask/selections"
+                ? {
+                    count: 2,
+                    total: 2,
+                    matching: 2,
+                    next: null,
+                    selections: [
+                      { id: 1, name: "ms-baseline", spec: "selection:ms-baseline@2", versions: 2, size: { rows: 412, grain: "stack", version: 2, handle: 70, at: "", truncated: false } },
+                      { id: 2, name: "ms-small", spec: "selection:ms-small@1", versions: 1, size: { rows: null, grain: "subject", version: 1, handle: 71, at: "", truncated: false } },
+                    ],
+                  }
+                : null;
+      return new Response(body === null ? JSON.stringify({ error: "no door" }) : JSON.stringify(body), { status: body === null ? 404 : 200 });
+    });
+
+  it("is offered beside the cards, cohorts and results, at the version current now, its size held back as held", async () => {
+    const paths: string[] = [];
+    vi.stubGlobal("fetch", engine(paths));
+    const all = await loadMentionables({ selections: true });
+    expect(all.map((m) => `${m.kind}:${m.id}`)).toEqual(["card:12", "cohort:MS", "result:45", "selection:ms-baseline@2", "selection:ms-small@1"]);
+    expect(all.find((m) => m.id === "ms-baseline@2")?.detail).toBe("v2 · 412 stacks");
+    expect(all.find((m) => m.id === "ms-small@1")?.detail).toMatch(/^v1 · held back/u);
+    expect(paths).toContain(`/api/ask/selections?limit=${SELECTIONS_OFFERED}`);
+    // the kinds take turns, so many cards crowd no selection out
+    const cards = Array.from({ length: 10 }, (_, i): Mentionable => ({ kind: "card", id: String(i), name: `Card ${i}` }));
+    expect(mentionables("", [...cards, ...all]).map((m) => m.kind)).toContain("selection");
+    expect(mentionables("small", all).map((m) => m.id)).toEqual(["ms-small@1"]);
+  });
+
+  it("is not read where the engine does not list selections to this person", async () => {
+    const paths: string[] = [];
+    vi.stubGlobal("fetch", engine(paths));
+    const all = await loadMentionables();
+    expect(all.some((m) => m.kind === "selection")).toBe(false);
+    expect(paths.some((p) => p.startsWith("/api/ask/selections"))).toBe(false);
+  });
+
+  it("is sent in the words as @[name](selection:name%40version), the shape the assistant reads, and read back as a chip", () => {
+    expect(mentionToken(selection)).toBe("@[ms-baseline](selection:ms-baseline%402)");
+    expect(withMention("scans in @ms-b", selection)).toBe("scans in @[ms-baseline](selection:ms-baseline%402) ");
+    const text = `How many in ${mentionToken(selection)}?`;
+    expect(saidWithMentions(text)[1]).toEqual({ kind: "mention", mention: { kind: "selection", id: "ms-baseline@2", name: "ms-baseline" } });
+    const html = renderToStaticMarkup(createElement(TurnView, { turn: { id: "u1", role: "user", text, done: true, tools: [] }, open: false, onToggle: () => undefined, proposals: [], choice: null, onChoose: () => undefined }));
+    expect(html).toContain('<a class="mention" href="#query/selections" title="Saved selection ms-baseline@2">ms-baseline</a>');
+    expect(plainMentions(text)).toBe("How many in ms-baseline?");
   });
 });

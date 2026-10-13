@@ -40,7 +40,8 @@ import { exportName, saveText } from "./download";
 import { memory } from "./memory";
 import { ladderPages } from "./ladder";
 import { GrantsPage, PlansPage } from "./LadderPages";
-import { loadMentionables, MENTION_KIND, type Mentionable, mentionables, mentionAt, plainMentions, withMention } from "./mentions";
+import { mayList as mayListSelections } from "../query/selections";
+import { loadMentionables, MENTION_KIND, MENTION_MENU_LABEL, type Mentionable, mentionables, mentionAt, plainMentions, withMention } from "./mentions";
 import { MemoryPage } from "./MemoryPage";
 import { ShareDialog } from "./ShareDialog";
 import { SharedList, SharedPage } from "./SharedPages";
@@ -410,12 +411,12 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
     });
 
   const offered = commandsFor(text, plans ? [] : ["plan"]);
-  // a card, a cohort or a result named with @ (the chat, slice 12): the lists are read once, when an @ is first typed
+  // a card, a cohort, a result or a saved selection named with @ (the chat, slice 12; record 55 K6): the lists are read once, when an @ is first typed
   const typing = mentionAt(text);
   useEffect(() => {
     if (typing === null || mentionable !== null) return;
     setMentionable([]);
-    loadMentionables().then(setMentionable, () => undefined);
+    loadMentionables({ selections: mayListSelections(caps) }).then(setMentionable, () => undefined);
   }, [typing === null]); // eslint-disable-line react-hooks/exhaustive-deps
   const mentionOffer = typing !== null && offered.length === 0 ? mentionables(typing, mentionable ?? []) : [];
   const ended = ending(pane.settled);
@@ -626,7 +627,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             </div>
           )}
           {mentionOffer.length > 0 && (
-            <div className="command-menu mention-menu" aria-label="Name a card, a cohort or a result">
+            <div className="command-menu mention-menu" aria-label={MENTION_MENU_LABEL}>
               {mentionOffer.map((m) => (
                 <button
                   key={`${m.kind}:${m.id}`}

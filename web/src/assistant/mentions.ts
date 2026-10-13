@@ -1,20 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Naming a card, a cohort or a result in a message (the chat, slice 12). Typing
-// @ in the message box offers the query cards, cohorts and results the person can
-// open; one picked is written into the words as @[its name](card:12),
-// @[its name](cohort:MS) or @[its name](result:45), so the mention travels in the
-// words the assistant reads, and in the history, a share and an export. A mention
-// grants nothing: the assistant reads what is named with its own tools, under its
-// own roles.
+// Naming a card, a cohort, a result or a saved selection in a message (the chat,
+// slice 12; record 55 K6). Typing @ in the message box offers the query cards,
+// cohorts, kept results and saved selections the person can open; one picked is
+// written into the words as @[its name](card:12), @[its name](cohort:MS),
+// @[its name](result:45) or @[its name](selection:ms-baseline%402), a selection
+// by its name and the version that is current when it is named, so the mention
+// travels in the words the assistant reads, and in the history, a share and an
+// export. A mention grants nothing: the assistant reads what is named with its
+// own tools, under the person's own access.
 
 import { HELD } from "../ask/held";
 import { results } from "../ask/client";
 import { cohortNames, objects } from "../objects/client";
+import { selections, sizeWords } from "../query/selections";
 
-export type MentionKind = "card" | "cohort" | "result";
+export type MentionKind = "card" | "cohort" | "result" | "selection";
 
 /** What each kind is called in the menu. */
-export const MENTION_KIND: Record<MentionKind, string> = { card: "Card", cohort: "Cohort", result: "Result" };
+export const MENTION_KIND: Record<MentionKind, string> = { card: "Card", cohort: "Cohort", result: "Result", selection: "Selection" };
+
+/** What the menu is, for a reader of the page. */
+export const MENTION_MENU_LABEL = "Name a card, a cohort, a result or a selection";
 
 export interface Mentionable {
   kind: MentionKind;
@@ -25,7 +31,7 @@ export interface Mentionable {
 }
 
 /** A mention in the words: @[name](kind:id), the name's brackets escaped and the id encoded. */
-const TOKEN = /@\[((?:\\.|[^\]\\])+)\]\((card|cohort|result):([^)\s]+)\)/gu;
+const TOKEN = /@\[((?:\\.|[^\]\\])+)\]\((card|cohort|result|selection):([^)\s]+)\)/gu;
 
 /** An @ at the start of the text or after a space, and the word typed after it so far. */
 const TYPING = /(?:^|\s)@([^\s@[\]()]*)$/u;
@@ -51,7 +57,7 @@ export function withMention(text: string, m: Mentionable): string {
   return `${text.slice(0, start)}${mentionToken(m)} `;
 }
 
-const KINDS: MentionKind[] = ["card", "cohort", "result"];
+const KINDS: MentionKind[] = ["card", "cohort", "result", "selection"];
 
 /** What the menu offers for the word typed: at most eight names holding it, the kinds taking turns so none is crowded out, grouped by kind in the order given. */
 export function mentionables(query: string, all: Mentionable[], limit = 8): Mentionable[] {
@@ -96,16 +102,25 @@ export function plainMentions(text: string): string {
     .join("");
 }
 
-/** What a person can name: their query cards, the registry's cohorts and the results kept for them. A list they cannot read is left out. */
-export async function loadMentionables(): Promise<Mentionable[]> {
-  const [docs, summary, handles] = await Promise.all([
+/** How many saved selections the menu reads: the first page of the list, by name. */
+export const SELECTIONS_OFFERED = 50;
+
+/**
+ * What a person can name: their query cards, the registry's cohorts, the results kept for them and, where the
+ * engine lists them to this person, the saved selections (record 55 K6). A list they cannot read is left out.
+ */
+export async function loadMentionables(o: { selections?: boolean } = {}): Promise<Mentionable[]> {
+  const [docs, summary, handles, saved] = await Promise.all([
     objects.documents().catch(() => null),
     objects.summary().catch(() => null),
     results.handles().catch(() => null),
+    o.selections ? selections.list("", null, SELECTIONS_OFFERED).catch(() => null) : Promise.resolve(null),
   ]);
   return [
     ...(docs?.documents ?? []).map((d) => ({ kind: "card" as const, id: String(d.document), name: d.name?.trim() || `Query ${d.root}`, detail: d.versions === 1 ? "1 version" : `${d.versions} versions` })),
     ...(summary ? cohortNames(summary) : []).map((c) => ({ kind: "cohort" as const, id: c, name: c })),
     ...(handles?.handles ?? []).filter((h) => h.kept).map((h) => ({ kind: "result" as const, id: String(h.id), name: h.name?.trim() || `Result ${h.id}`, detail: h.row_count === null ? `${h.grain} rows ${HELD}` : `${h.row_count.toLocaleString("en-US")} ${h.grain} rows` })),
+    // a selection is named at the version current now, as a run or a campaign pins it
+    ...(saved?.selections ?? []).map((s) => ({ kind: "selection" as const, id: `${s.name}@${s.versions}`, name: s.name, detail: `v${s.versions} · ${sizeWords(s.size)}` })),
   ];
 }

@@ -163,7 +163,7 @@ function Thinking({ text, live }: { text: string; live: boolean }) {
   );
 }
 
-/** A person's words, each card, cohort or result they named drawn as a chip; a card's opens it on the Query page (the chat, slice 12). */
+/** A person's words, each card, cohort, result or saved selection they named drawn as a chip; a card's opens it on the Query page, a selection's the selections list (the chat, slice 12; record 55 K6). */
 function SaidWords({ text }: { text: string }) {
   return (
     <>
@@ -172,6 +172,10 @@ function SaidWords({ text }: { text: string }) {
           <Fragment key={i}>{s.text}</Fragment>
         ) : s.mention.kind === "card" ? (
           <a key={i} className="mention" href={href("query", s.mention.id)} title={`Query card, document ${s.mention.id}`}>
+            {s.mention.name}
+          </a>
+        ) : s.mention.kind === "selection" ? (
+          <a key={i} className="mention" href={href("query", "selections")} title={`Saved selection ${s.mention.id}`}>
             {s.mention.name}
           </a>
         ) : (
