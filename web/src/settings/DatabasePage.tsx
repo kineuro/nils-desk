@@ -34,9 +34,11 @@ import {
   nextWords,
   registryRule,
   rehearseByHand,
+  restoreSteps,
   scheduleWords,
   sizeWords,
   tookWords,
+  type Archive,
   type Backups,
   type Calendar,
   type RegistryStatus,
@@ -393,6 +395,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                     <Command text={backupByHand(backups.schedule.keep)} />
                     {newest && <Command text={rehearseByHand(backups.dir, newest.name)} />}
                   </div>
+                  {newest && <Restore install={install} home={status?.home ?? null} dir={backups.dir} archives={backups.archives.filter((x) => x.ours)} />}
                 </>
               )}
             </section>
@@ -495,5 +498,47 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Restore stays a printed command (D50; spec 13.1 round 5): the procedure in
+ * three steps, each command ready to copy, for the archive chosen, newest
+ * first. Nothing here acts: the engine is stopped while it runs.
+ */
+function Restore({ install, home, dir, archives }: { install: Install | null; home: string | null; dir: string | null; archives: readonly Archive[] }) {
+  const [chosen, setChosen] = useState(archives[0]?.name ?? "");
+  const archive = archives.find((a) => a.name === chosen) ?? archives[0] ?? null;
+  if (!archive) return null;
+  const steps = restoreSteps(install, home, dir, archive.name);
+  return (
+    <details className="restore">
+      <summary>Restore an archive</summary>
+      <div className="restore-body">
+        <p className="meta">A restore is done by hand, on the machine the engine runs on, with the engine stopped. The key store is not in the archive and stays as it is.</p>
+        <div className="field">
+          <label className="label" htmlFor="restore-archive">
+            Archive
+          </label>
+          <div className="input">
+            <select id="restore-archive" value={archive.name} onChange={(e) => setChosen(e.target.value)}>
+              {archives.map((a) => (
+                <option key={a.name} value={a.name}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <ol className="restore-steps">
+          {steps.map((s) => (
+            <li key={s.words}>
+              <span>{s.words}</span>
+              {s.command && <Command text={s.command} />}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </details>
   );
 }

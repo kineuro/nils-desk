@@ -38,6 +38,8 @@ import { answersSummarize, type PaneState, type Proposal } from "./parts";
 import { CompactionNote, ContextMeter } from "./ContextMeter";
 import { exportName, saveText } from "./download";
 import { memory } from "./memory";
+import { ladderPages } from "./ladder";
+import { GrantsPage, PlansPage } from "./LadderPages";
 import { loadMentionables, MENTION_KIND, type Mentionable, mentionables, mentionAt, plainMentions, withMention } from "./mentions";
 import { MemoryPage } from "./MemoryPage";
 import { ShareDialog } from "./ShareDialog";
@@ -82,6 +84,9 @@ export function AssistantPage({ caps, conversation }: { caps: Capabilities; conv
   if (conversation?.startsWith("s-")) return <SharedPage id={conversation} />;
   // what the assistant keeps (the chat, slice 6)
   if (conversation === "memory") return <MemoryPage caps={caps} />;
+  // record 55 H2, round 5: what waits on the person, and the standing grants (spec 14)
+  if (conversation === "plans" && ladderPages(caps).plans) return <PlansPage caps={caps} />;
+  if (conversation === "grants" && ladderPages(caps).grants) return <GrantsPage caps={caps} />;
   return <ChatPage caps={caps} conversation={conversation} />;
 }
 

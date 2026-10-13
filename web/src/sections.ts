@@ -9,6 +9,7 @@
 import type { Capabilities } from "./capabilities";
 import { door, state } from "./deployment";
 import { may } from "./grants";
+import { ladderPages } from "./assistant/ladder";
 import { PLACEHOLDERS } from "./home/placeholders";
 import { href } from "./routes";
 import { settingsPages } from "./settings/pages";
@@ -66,19 +67,26 @@ export function sections(caps: Capabilities, ready: boolean | null = true, conve
   // Home is everyone's who holds a grant
   if (caps.person.grants.length > 0) out.push({ id: "home", title: ready === false ? "Get started" : "Home", icon: "home" });
   // the assistant helps set an install up as well, so it does not wait for it
-  if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: assistantPages(conversations), rest: "none" });
+  if (assistantOffered(caps)) out.push({ id: "assistant", title: "Assistant", icon: "assistant", pages: assistantPages(conversations, ladderPages(caps)), rest: "none" });
   if (ready !== true) return out;
   for (const p of PLACEHOLDERS) if (may(caps, p.grant) && door(caps, p.door)) out.push({ id: p.id, title: p.title, icon: p.icon, ...(p.pages ? { pages: p.pages(caps) } : {}) });
   return out;
 }
 
-/** The Assistant's pages: a new conversation, the lists, then the recent conversations under a small word, drawn as threads rather than pages. */
-export function assistantPages(conversations: SidePage[]): SidePage[] {
+/**
+ * The Assistant's pages: a new conversation, the lists, Plans waiting and
+ * Standing grants where the assistant serves them (spec 13.1, round 5), then
+ * the recent conversations under a small word, drawn as threads rather than
+ * pages.
+ */
+export function assistantPages(conversations: SidePage[], ladder: { plans: boolean; grants: boolean } = { plans: false, grants: false }): SidePage[] {
   const lists: SidePage[] = [
     { id: "new", title: "New conversation", depth: 1, kind: "new" },
     { id: "all", title: "All conversations", depth: 1 },
     { id: "shared", title: "Shared", depth: 1 },
     { id: "memory", title: "Memory", depth: 1 },
+    ...(ladder.plans ? [{ id: "plans", title: "Plans waiting", depth: 1 } as SidePage] : []),
+    ...(ladder.grants ? [{ id: "grants", title: "Standing grants", depth: 1 } as SidePage] : []),
   ];
   if (conversations.length === 0) return lists;
   return [...lists, { id: "recent", title: "Recent", depth: 1, kind: "label" }, ...conversations.map((c): SidePage => ({ id: c.id, title: c.title, depth: 1, kind: "thread" }))];

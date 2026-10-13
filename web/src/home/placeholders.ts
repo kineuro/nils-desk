@@ -9,6 +9,7 @@
 import type { Capabilities } from "../capabilities";
 import { door } from "../deployment";
 import { may, type Grant } from "../grants";
+import { logsOffered } from "../ops/logs";
 import { href } from "../routes";
 import type { SidePage } from "../sections";
 import type { IconName } from "../ui/Icon";
@@ -108,6 +109,11 @@ export const PLACEHOLDERS: Placeholder[] = [
     words: "The jobs that ran and are running: digests, backups and releases.",
     built: true,
     // the catalog where the engine serves it; a run's and a plan's own pages, opened from it, keep it marked
-    pages: (caps) => [page("now", "Running now", { to: href("pipelines") }), ...(door(caps, "GET /api/pipelines") ? [page("catalog", "Catalog", { also: ["runs", "plan"] })] : [])],
+    // record 55 H2, round 5: the jobs' logs where the engine keeps them (ops/logs.ts)
+    pages: (caps) => [
+      page("now", "Running now", { to: href("pipelines") }),
+      ...(door(caps, "GET /api/pipelines") ? [page("catalog", "Catalog", { also: ["runs", "plan"] })] : []),
+      ...(logsOffered(caps) ? [page("logs", "Logs")] : []),
+    ],
   },
 ];

@@ -16,6 +16,8 @@ import { DataPage } from "./data/DataPage";
 import { browsing as viewsBrowser, Viewer } from "./data/Viewer";
 import { PseudonymsPage } from "./data/PseudonymsPage";
 import { ModelsPage } from "./models/ModelsPage";
+import { LogsPage } from "./ops/LogsPage";
+import { logsOffered } from "./ops/logs";
 import { PipelinesPage } from "./ops/PipelinesPage";
 import { ReleasePage } from "./ops/ReleasePage";
 import { QueryPage } from "./query/QueryPage";
@@ -293,7 +295,8 @@ export function App() {
           )}
           {viewed !== null && <Viewer key={`${viewed.kind}/${viewed.name}`} caps={caps} scope={viewed} query={route.query} onSections={() => setMenu((m) => !m)} />}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
-          {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
+          {ready && active?.id === "pipelines" && route.page === "logs" && logsOffered(caps) && <LogsPage caps={caps} job={route.arg !== null && /^\d+$/.test(route.arg) ? Number(route.arg) : null} />}
+          {ready && active?.id === "pipelines" && !(route.page === "logs" && logsOffered(caps)) && <PipelinesPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
           {ready && active?.id === "review" && <ReviewPage caps={caps} page={route.page} query={route.query} />}
           {ready && active?.id === "campaigns" && <CampaignsPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
