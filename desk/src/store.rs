@@ -174,6 +174,14 @@ pub enum Change {
         grants: BTreeSet<String>,
         detail: Option<Detail>,
     },
+    /// A person removed (record 55 H2, round 5): their groups, their own
+    /// grants, their sessions, and the desk's row of them, the user with its
+    /// password in `local` mode; the results and lineage they kept go to
+    /// `to` where it names a person.
+    PersonRemove {
+        subject: String,
+        to: Option<String>,
+    },
 }
 
 /// Why a change was not made.
@@ -435,6 +443,43 @@ impl Store {
                 .unwrap_or(0);
         }
         ended
+    }
+
+    /// Every session of `subject` but `keep`, ended; how many ended (record
+    /// 55 H2, round 5: a password changed ends the sessions it opened).
+    pub fn end_sessions_of(&self, subject: &str, keep: Option<&str>) -> usize {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let _ = conn.execute(
+            "DELETE FROM session WHERE subject = ?1 AND expires_at <= ?2",
+            params![subject, now_iso()],
+        );
+        conn.execute(
+            "DELETE FROM session WHERE subject = ?1 AND id IS NOT ?2",
+            params![subject, keep],
+        )
+        .unwrap_or(0)
+    }
+
+    /// What a person holds in the desk's own keeping, as a removal hands it
+    /// over: their open sessions, their kept results and their lineage rows.
+    pub fn held_by(&self, subject: &str) -> (i64, i64, i64) {
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        let count = |table: &str| -> i64 {
+            conn.query_row(
+                &format!("SELECT COUNT(*) FROM {table} WHERE subject = ?1"),
+                params![subject],
+                |r| r.get(0),
+            )
+            .unwrap_or(0)
+        };
+        let open = conn
+            .query_row(
+                "SELECT COUNT(*) FROM session WHERE subject = ?1 AND expires_at > ?2",
+                params![subject, now_iso()],
+                |r| r.get(0),
+            )
+            .unwrap_or(0);
+        (open, count("result"), count("lineage"))
     }
 
     pub fn delete(&self, id: &str) {
@@ -953,9 +998,16 @@ impl Store {
         let mut conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         let book = book_in(&conn);
         let people = people_in(&conn, oidc);
-        let holders = |b: &Book| {
+        // a person removed is nobody's holder afterwards, whatever a
+        // provider's groups would give them
+        let gone = match &change {
+            Change::PersonRemove { subject, .. } => Some(subject.clone()),
+            _ => None,
+        };
+        let holders = |b: &Book, without: Option<&String>| {
             people
                 .iter()
+                .filter(|(s, _)| Some(s) != without)
                 .filter(|(s, c)| b.resolve(s, c.as_ref()).access.holds("identity:work"))
                 .count()
         };
@@ -1022,8 +1074,22 @@ impl Store {
                     .extend(groups.iter().map(|g| (subject.clone(), *g)));
                 after.own.insert(subject.clone(), (grants.clone(), *detail));
             }
+            Change::PersonRemove { subject, to } => {
+                if !people.iter().any(|(s, _)| s == subject) {
+                    return Err(Refused::Unknown(format!("no person {subject}")));
+                }
+                if let Some(to) = to
+                    && (to == subject || !people.iter().any(|(s, _)| s == to))
+                {
+                    return Err(Refused::Invalid(format!(
+                        "{to} is not another person this desk knows, to hand the work to"
+                    )));
+                }
+                after.members.retain(|(s, _)| s != subject);
+                after.own.remove(subject);
+            }
         }
-        if holders(&book) > 0 && holders(&after) == 0 {
+        if holders(&book, None) > 0 && holders(&after, gone.as_ref()) == 0 {
             return Err(Refused::Nobody);
         }
         let store = |e: rusqlite::Error| {
@@ -1092,6 +1158,26 @@ impl Store {
                         params![subject, json!(grants).to_string(), detail.map(Detail::as_str)],
                     )
                     .map_err(store)?;
+                }
+                None
+            }
+            Change::PersonRemove { subject, to } => {
+                for sql in [
+                    "DELETE FROM member WHERE subject = ?1",
+                    "DELETE FROM own WHERE subject = ?1",
+                    "DELETE FROM user WHERE username = ?1",
+                    "DELETE FROM person WHERE subject = ?1",
+                    "DELETE FROM session WHERE subject = ?1",
+                ] {
+                    tx.execute(sql, params![subject]).map_err(store)?;
+                }
+                if let Some(to) = to {
+                    for sql in [
+                        "UPDATE result SET subject = ?2 WHERE subject = ?1",
+                        "UPDATE lineage SET subject = ?2 WHERE subject = ?1",
+                    ] {
+                        tx.execute(sql, params![subject, to]).map_err(store)?;
+                    }
                 }
                 None
             }
