@@ -158,3 +158,31 @@ test("a new conversation: one line, the ways to begin, the input at the foot", a
   expect(await sideways(page)).toBeLessThanOrEqual(0);
   await page.screenshot({ path: shot("new") });
 });
+
+for (const vp of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+]) {
+  test(`at ${vp.width} by ${vp.height}: an @ offers saved selections beside cards, cohorts and results, inside the page, nothing sideways`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/assistant.html?theme=dark&mention=1");
+    await expect(page.locator(".qcard")).toHaveCount(2);
+    const input = page.locator(".one-chat-composer textarea");
+    await input.fill("how many scans in @ms");
+    const menu = page.locator(".mention-menu");
+    await expect(menu.getByRole("button")).toHaveCount(4);
+    await expect(menu.locator(".mention-kind", { hasText: "Selection" })).toHaveCount(2);
+    await expect(menu.getByRole("button", { name: /ms-baseline/u })).toContainText("v2 · 412 stacks");
+    await expect(menu.getByRole("button", { name: /ms-small/u })).toContainText("held back");
+    const m = await box(page, ".mention-menu");
+    expect(m.x).toBeGreaterThanOrEqual(0);
+    expect(m.x + m.width).toBeLessThanOrEqual(vp.width);
+    // each row's words stay inside it
+    expect(await menu.getByRole("button").evaluateAll((els) => els.every((el) => el.scrollWidth <= el.clientWidth + 1))).toBe(true);
+    expect(await sideways(page)).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: shot(`mention-${vp.width}`) });
+    // picked, it is written into the words as the assistant reads it
+    await menu.getByRole("button", { name: /ms-baseline/u }).click();
+    await expect(input).toHaveValue("how many scans in @[ms-baseline](selection:ms-baseline%402) ");
+  });
+}

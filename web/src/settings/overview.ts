@@ -153,7 +153,7 @@ function hostOf(url: string): string {
 
 /** Whether Kvasir is warm, the model the assistant reaches first, and where prompts may go. */
 export function gatewayCard(caps: Capabilities, backends: Backend[] | null): Card {
-  const title = "Kvasir";
+  const title = "Language models";
   if (caps.kvasir === null) return { page: "gateway", title, icon: "gateway", state: { tone: "blocked", words: "does not answer" }, value: "no model reached", facts: [] };
   const models = (caps.kvasir["models"] as { id?: unknown; locality?: unknown }[] | undefined) ?? [];
   const first = models.find((m) => m.locality === "local" && typeof m.id === "string") ?? models.find((m) => typeof m.id === "string");

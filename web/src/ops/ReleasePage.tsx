@@ -3,7 +3,8 @@
 // release: of a cohort or of a query card's complete answer at stack grain,
 // named for what it is of and the day, in a layout, leaving under each
 // dataset's own leaving policy, into an export place. Select first says what
-// it reaches without writing anything; Release queues the job.
+// it reaches without writing anything; Release queues the job. Each row hands
+// its release over or withdraws its version (record 55 H2, round 5).
 
 import { countText } from "../ask/held";
 import { useEffect, useMemo, useState } from "react";
@@ -25,6 +26,8 @@ import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { DATASETS_OWN, overrideNote, releaseBody, type ReleaseSource } from "./release";
+import { HandoverDialog, QueuedWords, WithdrawDialog, type Queued } from "./ReleaseActs";
+import { handoverRows } from "./releaseActs";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; list: Release[] };
 
@@ -33,6 +36,8 @@ const n = (v: number) => v.toLocaleString("en-US");
 export function ReleasePage({ caps, page, arg }: { caps: Capabilities; page: string | null; arg: string | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [said, setSaid] = useState<string | null>(null);
+  const [queued, setQueued] = useState<Queued | null>(null);
+  const [acting, setActing] = useState<{ kind: "handover" | "withdraw"; release: Release } | null>(null);
   const lists = served(caps, "GET /api/releases");
   const read = () => {
     if (!lists) {
@@ -50,7 +55,43 @@ export function ReleasePage({ caps, page, arg }: { caps: Capabilities; page: str
     location.hash = href("release");
   };
   return (
-    <ReleasesBody caps={caps} list={load.kind === "ready" ? load.list : null} since={load.kind === "loading" ? load.since : null} why={load.kind === "failed" ? load.why : null} said={said} lists={lists} onNew={() => (location.hash = href("release", "new"))}>
+    <ReleasesBody
+      caps={caps}
+      list={load.kind === "ready" ? load.list : null}
+      since={load.kind === "loading" ? load.since : null}
+      why={load.kind === "failed" ? load.why : null}
+      said={said}
+      queued={queued}
+      lists={lists}
+      onNew={() => (location.hash = href("release", "new"))}
+      onHandover={(release) => setActing({ kind: "handover", release })}
+      onWithdraw={(release) => setActing({ kind: "withdraw", release })}
+    >
+      {acting?.kind === "handover" && (
+        <HandoverDialog
+          caps={caps}
+          release={acting.release}
+          onClose={() => setActing(null)}
+          onDone={(q) => {
+            setActing(null);
+            setSaid(null);
+            setQueued(q);
+          }}
+        />
+      )}
+      {acting?.kind === "withdraw" && (
+        <WithdrawDialog
+          release={acting.release}
+          onClose={() => setActing(null)}
+          onDone={(q) => {
+            setActing(null);
+            setSaid(null);
+            setQueued(q);
+            // the withdrawal is quick: the row reads withdrawn once it has run
+            setTimeout(read, 2500);
+          }}
+        />
+      )}
       {making && (
         <NewReleaseDialog
           caps={caps}
@@ -58,6 +99,7 @@ export function ReleasePage({ caps, page, arg }: { caps: Capabilities; page: str
           existing={load.kind === "ready" ? load.list : []}
           onClose={close}
           onDone={(words) => {
+            setQueued(null);
             setSaid(words);
             close();
             read();
@@ -74,10 +116,15 @@ export interface ReleasesBodyProps {
   since?: number | null;
   why: string | null;
   said?: string | null;
+  /** A hand over or a withdrawal just queued. */
+  queued?: Queued | null;
   /** Whether the engine lists releases at all. */
   lists?: boolean;
   now?: number;
   onNew: () => void;
+  /** A row's hand over and withdraw, offered to a person with work on Release. */
+  onHandover?: (r: Release) => void;
+  onWithdraw?: (r: Release) => void;
   children?: React.ReactNode;
 }
 
@@ -88,9 +135,14 @@ export function releasingRefusal(caps: Capabilities): string | null {
 }
 
 /** The page as it draws from what it read. */
-export function ReleasesBody({ caps, list, since = null, why, said = null, lists = true, now = Date.now(), onNew, children }: ReleasesBodyProps) {
+export function ReleasesBody({ caps, list, since = null, why, said = null, queued = null, lists = true, now = Date.now(), onNew, onHandover, onWithdraw, children }: ReleasesBodyProps) {
   const today = new Date(now);
   const refusal = releasingRefusal(caps);
+  // a row's acts: hand over its name's newest version, and withdraw any version not withdrawn
+  const acts = may(caps, "release:work") && (onHandover !== undefined || onWithdraw !== undefined);
+  const handsOver = onHandover !== undefined && served(caps, "POST /api/handovers");
+  const withdraws = onWithdraw !== undefined && served(caps, "POST /api/jobs");
+  const newest = handoverRows(list ?? []);
   return (
     <section className="data releases">
       <div className="data-head">
@@ -108,6 +160,7 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, lists
       </div>
       {refusal !== null && <p className="meta">{refusal}</p>}
       {said && <p className="ok-words">{said}</p>}
+      {queued && <QueuedWords caps={caps} queued={queued} />}
       {list === null && !why && <Wait phase="reading the releases" since={since ?? now} size="panel" />}
       {why && <p className="warn">The releases could not be read: {why}</p>}
       {list !== null && list.length === 0 && <p className="meta">{lists ? "No release yet." : "This engine does not list its releases; a new one is still made from here."}</p>}
@@ -127,6 +180,11 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, lists
                 <th>By</th>
                 <th>Handed over</th>
                 <th>Withdrawn</th>
+                {acts && (
+                  <th className="acts">
+                    <span className="sr-only">Hand over or withdraw</span>
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -152,6 +210,20 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, lists
                     <td>{r.actor ?? ""}</td>
                     <td>{r.handed_over ? whenWords(r.handed_over, today) : "not yet"}</td>
                     <td>{r.withdrawn_at ? [whenWords(r.withdrawn_at, today), r.withdrawn_by, r.withdrawn_why].filter(Boolean).join(" · ") : ""}</td>
+                    {acts && (
+                      <td className="acts release-acts">
+                        {handsOver && newest.has(r.id) && (
+                          <button type="button" className="button quiet small" aria-label={`Hand over ${r.name}`} onClick={() => onHandover?.(r)}>
+                            Hand over
+                          </button>
+                        )}
+                        {withdraws && !r.withdrawn_at && (
+                          <button type="button" className="button quiet small" aria-label={`Withdraw ${r.name} version ${r.version}`} onClick={() => onWithdraw?.(r)}>
+                            Withdraw
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}

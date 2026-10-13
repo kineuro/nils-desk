@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Settings' pages (Wave 5 section 10), as the chosen design lays them out:
-// the parts, with the engine, the desk, Kvasir and the assistant under
+// the parts, with the engine, the desk, the language models (Kvasir, which
+// keeps its name on Parts) and the assistant under
 // them, then the places, the database, identity and the audit log. A page is
 // offered only once it is built back, where the deployment has what it
 // shows, and to a person holding the grant that opens it (record 25).
@@ -29,9 +30,10 @@ export function settingsPages(caps: Capabilities): SettingsPage[] {
       { id: "desk", title: "Desk", sub: true },
     );
   }
-  // Kvasir, where it answered the desk; its page keeps the id the links name.
+  // Kvasir, where it answered the desk, as "Language models" (spec 13.1: the
+  // part keeps its name on Parts); its page keeps the id the links name.
   // A part's page is set in under the parts only where the parts are drawn
-  if (caps.kvasir !== null && may(caps, "kvasir:see")) out.push({ id: "gateway", title: "Kvasir", sub: install });
+  if (caps.kvasir !== null && may(caps, "kvasir:see")) out.push({ id: "gateway", title: "Language models", sub: install });
   if (caps.assistant !== null && may(caps, "assistant-settings:see")) out.push({ id: "assistant", title: "Assistant", sub: install });
   // the places, where the engine serves them
   if (may(caps, "places:see") && door(caps, "GET /api/places")) out.push({ id: "places", title: "Places", sub: false });

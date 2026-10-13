@@ -81,7 +81,19 @@ export function IdentityPage({ caps }: { caps: Capabilities }) {
       {open?.kind === "add" && (
         <PersonForm mode="local" groups={groups} person={null} taken={(access?.people ?? []).map((p) => p.subject)} onClose={() => setOpen(null)} onDone={done("people")} onGroupMade={() => void load()} />
       )}
-      {open?.kind === "person" && <PersonForm mode={signs} groups={groups} person={open.person} taken={[]} onClose={() => setOpen(null)} onDone={done("people")} onGroupMade={() => void load()} />}
+      {open?.kind === "person" && (
+        <PersonForm
+          mode={signs}
+          groups={groups}
+          person={open.person}
+          taken={[]}
+          people={access?.people ?? []}
+          me={caps.person.subject}
+          onClose={() => setOpen(null)}
+          onDone={done("people")}
+          onGroupMade={() => void load()}
+        />
+      )}
       {open?.kind === "group" && (
         <GroupForm
           mode={signs}

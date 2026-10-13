@@ -1665,3 +1665,47 @@ table.run-files .run-file { max-width: min(28rem, 55vw); overflow: hidden; text-
 .run-result .result-tools { align-items: center; flex-wrap: wrap; gap: 0.4rem; }
 .run-result .result-tools .chips { min-width: 0; }
 .run-result .stack-view { min-width: 0; }
+
+/* record 55 H2, round 5: the Logs page, the jobs beside the log of the one opened; stacked on a phone */
+.logs-split { display: grid; grid-template-columns: minmax(15rem, 20rem) minmax(0, 1fr); gap: 1rem; align-items: start; margin-top: 0.8rem; }
+.logs-list { display: flex; flex-direction: column; gap: 2px; max-height: 70vh; overflow-y: auto; border: 1px solid var(--n-line); border-radius: var(--n-radius); padding: 0.3rem; }
+.logs-job { display: flex; align-items: center; gap: 0.5rem; min-height: var(--n-control); padding: 0 0.5rem; border-radius: var(--n-radius); border-left: 3px solid transparent; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.logs-job:hover { background: var(--n-bg-hover); color: var(--n-text); text-decoration: none; }
+.logs-job.on { border-left-color: var(--n-brand); background: var(--n-bg-hover); color: var(--n-text); }
+.logs-job-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.logs-job-when, .logs-job-id { white-space: nowrap; }
+.state-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; border: 2px solid var(--n-neutral-line); }
+.state-dot.running, .state-dot.cancelling { border-color: var(--n-brand-icon); }
+.state-dot.done { border-color: var(--n-ok-icon); }
+.state-dot.failed { border-color: var(--n-blocked-icon); }
+.state-dot.queued, .state-dot.cancelled { border-color: var(--n-neutral-icon); }
+.logs-open { min-width: 0; }
+.logs-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.3rem 0.8rem; }
+.logs-units { flex-wrap: wrap; }
+.logs-units .opt.unit-failed { border-color: var(--n-blocked-line); }
+.log-bar { flex-wrap: wrap; }
+.log-text { margin: 0; max-height: 60vh; overflow: auto; padding: 0.7rem 0.8rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); color: var(--n-text); font-family: var(--n-font-mono); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 860px) {
+  .logs-split { grid-template-columns: minmax(0, 1fr); }
+  .logs-list { max-height: 14rem; }
+}
+/* round 5: a release's row hands it over or withdraws it; a person's own lines in their form */
+.release-acts { white-space: nowrap; text-align: right; }
+.release-acts .button + .button { margin-left: 0.3rem; }
+.handover-out { display: block; margin-top: 0.3rem; overflow-wrap: anywhere; }
+.person-act .fields2 { margin-top: 0.5rem; }
+.password-form { display: grid; gap: 0.6rem; }
+/* round 5: the Assistant's plans waiting and standing grants */
+.plan-what { display: grid; gap: 0.15rem; min-width: min(100%, 14rem); }
+.plan-acts { flex-wrap: wrap; }
+.plan-steps { margin: 0.2rem 0 0; padding-left: 1.2rem; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.plan-step.failed { color: var(--n-blocked-fg); }
+.grant-row.revoked .chat-row-title { color: var(--n-text-faint); }
+.grant-add .input select { min-width: 0; max-width: 100%; }
+/* round 5: restore stays a printed command (D50), its three steps under the archives */
+.restore { margin-top: 0.4rem; }
+.restore summary { cursor: pointer; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.restore-body { display: grid; gap: 0.6rem; margin-top: 0.5rem; }
+.restore-steps { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.5rem; }
+.restore-steps li { display: grid; gap: 0.25rem; justify-items: start; }
+.restore-steps .chip.command { max-width: 100%; overflow-x: auto; }

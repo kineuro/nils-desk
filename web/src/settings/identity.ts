@@ -87,7 +87,57 @@ export const identity = {
   makeGroup: (body: GroupBody) => door<Group>("POST", "/desk/groups", body),
   setGroup: (id: GroupId, body: GroupBody) => door<Group>("PUT", groupPath(id), body),
   removeGroup: (id: GroupId) => door<Record<string, never>>("DELETE", groupPath(id)),
+  /** Record 55 H2, round 5: a password changed by its person, who gives the current one, or reset by an admin; local mode only. */
+  password: (name: string, password: string, current?: string) =>
+    door<PasswordSet>("POST", `/desk/people/${encodeURIComponent(name)}/password`, current === undefined ? { password } : { password, current }),
+  /** Record 55 H2, round 5: a person removed, what they kept in the desk handed to `to` when one is named. */
+  remove: (name: string, to: string | null) => door<Removed>("DELETE", `/desk/people/${encodeURIComponent(name)}${to ? `?to=${encodeURIComponent(to)}` : ""}`),
 };
+
+/** A password set: whose, and how many of their sessions it ended. */
+export interface PasswordSet {
+  username: string;
+  sessions_ended: number;
+}
+
+/** A person removed: their sessions ended, and what they kept handed to another. */
+export interface Removed {
+  removed: string;
+  sessions_ended: number;
+  handed: { results: number; lineage: number };
+  to: string | null;
+}
+
+/** The shortest password the desk takes, as it checks it itself. */
+export const PASSWORD_MIN = 8;
+
+/** A new password, checked before the door is asked: long enough, and typed the same twice. */
+export function passwordRefusal(password: string, again: string): string | null {
+  if (password.length < PASSWORD_MIN) return `At least ${PASSWORD_MIN} characters.`;
+  if (again !== password) return "The two do not match.";
+  return null;
+}
+
+/** A refusal of a password change or of a removal, in a few plain words. */
+export function personRefusal(e: unknown, what: "password" | "remove"): string {
+  if (e instanceof DoorError) {
+    const body = (e.body ?? {}) as { error?: unknown };
+    const raw = typeof body.error === "string" ? body.error : "";
+    if (e.status === 401) return "Session ended. Sign in again.";
+    if (e.status === 404) return what === "password" && /keeps no users|provider/iu.test(raw) ? "Passwords are kept by the identity provider here." : "This person is gone. Reload the page.";
+    if (e.status === 403) return what === "password" ? (/current/iu.test(raw) ? "The current password is not right." : "You may not change this password.") : "You may not remove people.";
+    if (e.status === 409) return /yourself|another admin/iu.test(raw) ? "You cannot remove yourself. Ask another admin." : "Refused: nobody would be left who may change people and groups.";
+    return saidOf(e) ?? `The desk answered ${e.status}.`;
+  }
+  return e instanceof Error ? e.message : String(e);
+}
+
+/** What a removal came to, in one line. */
+export function removedWords(name: string, r: Removed, toName: string | null): string {
+  const kept = r.handed.results;
+  const handed = r.to && kept > 0 ? `; ${kept === 1 ? "1 kept result" : `${kept} kept results`} handed to ${toName ?? r.to}` : "";
+  return `Removed: ${name}${handed}`;
+}
 
 /** How far a person goes on a page: hidden, see, or work, which includes see; the assistant is used. */
 export type Level = "hidden" | "see" | "work" | "use";

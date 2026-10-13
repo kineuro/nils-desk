@@ -369,6 +369,118 @@ pub async fn users_add(State(desk): State<Shared>, headers: HeaderMap, body: Str
     })())
 }
 
+// --- a person's password, and a person removed (record 55 H2, round 5)
+
+/// `POST /desk/people/{name}/password {password, current}` (`local` mode,
+/// from the desk's own origin): a person changes their own password with
+/// the one they have, and a person holding `identity:work` resets anyone
+/// else's without it. The rule is a person's at their adding: eight
+/// characters at least. An admin's reset ends every session of that person;
+/// one's own change ends one's other sessions and keeps this one.
+pub async fn person_password(
+    State(desk): State<Shared>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+    body: String,
+) -> Response {
+    answer((|| {
+        local_only(&desk)?;
+        same_origin(&desk.config.origins(), &headers)
+            .map_err(|why| Box::new(error(StatusCode::FORBIDDEN, why)))?;
+        let (session, _) = session::resolve(&desk, &headers);
+        let Some(session) = session else {
+            return Err(Box::new(error(
+                StatusCode::UNAUTHORIZED,
+                "no session; log in at the desk",
+            )));
+        };
+        let me = session::person(&desk, &session);
+        let doc = body_of(&body)?;
+        let Some(password) = doc["password"].as_str() else {
+            return Err(bad("password: the new password"));
+        };
+        let own = me.subject == name;
+        if own {
+            let current = doc["current"].as_str().unwrap_or_default();
+            if users::login(&desk.store, &name, current).is_none() {
+                return Err(Box::new(error(
+                    StatusCode::FORBIDDEN,
+                    "the current password is not right",
+                )));
+            }
+        } else if !me.holds_name("identity:work") {
+            return Err(Box::new(error(
+                StatusCode::FORBIDDEN,
+                "resetting another person's password needs identity:work",
+            )));
+        }
+        if desk.store.user(&name).is_none() {
+            return Err(Box::new(error(
+                StatusCode::NOT_FOUND,
+                format!("no user named {name}"),
+            )));
+        }
+        users::set_password(&desk.store, &name, password).map_err(bad)?;
+        let keep = own.then_some(session.id.as_str());
+        let ended = desk.store.end_sessions_of(&name, keep);
+        Ok(axum::Json(json!({"username": name, "sessions_ended": ended})).into_response())
+    })())
+}
+
+/// `?to=<subject>` on the removal: the person who takes over the removed
+/// person's kept results and lineage.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct RemoveQuery {
+    to: Option<String>,
+}
+
+/// `DELETE /desk/people/{name}?to=<subject>` (identity:work, from the desk's
+/// own origin; any mode where people sign in): the person removed, their
+/// groups, their own grants and their sessions, and in `local` mode the user
+/// with its password. Under `oidc` the desk forgets them: a later sign-in at
+/// the provider finds them holding only what a group that follows a
+/// provider group gives. Never oneself, and never the last holder of
+/// `identity:work`. `to` takes over the results and lineage they kept.
+pub async fn person_remove(
+    State(desk): State<Shared>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+    Query(q): Query<RemoveQuery>,
+) -> Response {
+    answer((|| {
+        let me = changer(&desk, &headers)?;
+        if me.subject == name {
+            return Err(Box::new(error(
+                StatusCode::CONFLICT,
+                "a person cannot remove themself; ask another admin",
+            )));
+        }
+        let to = q.to.filter(|t| !t.trim().is_empty());
+        let (sessions, results, lineage) = desk.store.held_by(&name);
+        desk.store
+            .change(
+                oidc(&desk),
+                Change::PersonRemove {
+                    subject: name.clone(),
+                    to: to.clone(),
+                },
+            )
+            .map_err(refused)?;
+        let (results, lineage) = if to.is_some() {
+            (results, lineage)
+        } else {
+            (0, 0)
+        };
+        Ok(axum::Json(json!({
+            "removed": name,
+            "sessions_ended": sessions,
+            "handed": {"results": results, "lineage": lineage},
+            "to": to,
+        }))
+        .into_response())
+    })())
+}
+
 // --- the users doors of the ladder, for one release
 
 /// `GET /desk/users` (identity:see, `local` mode): each user with the
