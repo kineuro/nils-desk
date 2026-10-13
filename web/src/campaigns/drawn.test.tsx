@@ -79,8 +79,9 @@ describe("the kinds the make door draws", () => {
     expect(judge).toEqual({ name: "judge", stacks: { "12": { base: { value: "T1w", reason: "TI 900" } }, "13": { base: { value: "FLAIR", reason: "TI 2500" } } }, files: 4, skipped: 2 });
     const made = makeBody(draft({ kind: "ab", from: "sealed-sample@3", axes: ["base"], voters: [judge], auditShare: "0.2", closesInto: "stage" }));
     expect(made.ok && made.body).toMatchObject({
-      question: { kind: "axes", axes: ["base"] },
-      source: { ab: { selection: "sealed-sample@3", rules: true, voters: { judge: judge.stacks }, seed: "written-down", audit_share: 0.2 } },
+      // the localizer's axis is always asked
+      question: { kind: "axes", axes: ["provenance", "base"] },
+      source: { ab: { selection: "sealed-sample@3", rules: true, voters: { judge: judge.stacks }, seed: "written-down", audit_share: 0.2, localizer_asks: ["provenance"] } },
       raters_per_item: 1,
       closes_into: "stage",
     });

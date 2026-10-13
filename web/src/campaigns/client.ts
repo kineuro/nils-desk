@@ -1095,11 +1095,29 @@ function drawnBody(d: Draft, name: string): { ok: true; body: MakeBody } | { ok:
     ok: true,
     body: {
       ...common,
-      question: { kind: "axes", ...(d.axes.length > 0 ? { axes: d.axes } : {}) },
-      source: { ab: { selection: sel(d.from), rules: d.rules, ...(d.voters.length > 0 ? { voters } : {}), seed: d.seed.trim(), audit_share: share } },
+      question: { kind: "axes", ...(d.axes.length > 0 ? { axes: abAxes(d.axes) } : {}) },
+      source: {
+        ab: {
+          selection: sel(d.from),
+          rules: d.rules,
+          ...(d.voters.length > 0 ? { voters } : {}),
+          seed: d.seed.trim(),
+          audit_share: share,
+          // a localizer is told by its provenance, so that axis is always asked; it is asked body part too where body part is
+          ...(d.axes.length > 0 ? { localizer_asks: abAxes(d.axes).filter((a) => a === LOCALIZER_AXIS || a === "body_part") } : {}),
+        },
+      },
       closes_into: closesFor("ab").includes(d.closesInto) ? d.closesInto : "none",
     },
   };
+}
+
+/** The axis an A/B campaign tells a localizer by (the engine's `provenance=Localizer`), always asked. */
+export const LOCALIZER_AXIS = "provenance";
+
+/** The axes an A/B campaign asks: those chosen, the localizer's axis first where it was not. */
+export function abAxes(chosen: readonly string[]): string[] {
+  return chosen.includes(LOCALIZER_AXIS) ? [...chosen] : [LOCALIZER_AXIS, ...chosen];
 }
 
 /** A fresh seed for a draw, to be written down before it: sixteen random hex digits. */

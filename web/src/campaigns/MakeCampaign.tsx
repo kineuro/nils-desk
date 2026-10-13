@@ -608,7 +608,7 @@ function AbFields({ draft: d, lists, axes, onChange: set }: { draft: Draft; list
             </button>
           ))}
         </span>
-        <span className="meta">{d.axes.length === 0 ? "None chosen: the reference read's seven." : "One answer names every axis chosen."}</span>
+        <span className="meta">{d.axes.length === 0 ? "None chosen: the reference read's seven." : "One answer names every axis chosen, and provenance, which tells a localizer."}</span>
       </fieldset>
       <fieldset className="field">
         <legend className="label">Voters</legend>

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* A cohort's main scans, visit by visit (Wave 7a, record 55 H3): a row a
    subject, a cell a session, the cell's state its fill and a person's pick
-   its border; the rows wrap their cells on a phone, nothing sideways. Theme
+   its border; a row's cells wrap on a phone, nothing sideways. Theme
    tokens only. */
 
 .heat { display: grid; gap: 0.5rem; }
@@ -19,5 +19,5 @@
 .heat-key { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
 
 @media (max-width: 640px) {
-  .heat-row { grid-template-columns: minmax(0, 1fr); gap: 0.15rem; }
+  .heat-row { grid-template-columns: 5.5rem minmax(0, 1fr); gap: 0.4rem; }
 }

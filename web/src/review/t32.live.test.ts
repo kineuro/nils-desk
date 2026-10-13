@@ -132,10 +132,14 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("T32 on a live engine over a lab r
     const r = await round(c, "brain", "spine");
     expect(r.decisions).toBe(8);
     // the decisions are what the sort now says of each stack, read through the explain door
-    const why = await as(CAROL, () => door<{ axes: { axis: string; value: string | null; decision?: { actor?: string } | null }[] }>("GET", `/api/explain/${r.stacks[0]}`));
-    const bp = why.axes.find((a) => a.axis === "body_part");
-    say(`explain ${r.stacks[0]}: body_part ${bp?.value}, decided by ${bp?.decision?.actor ?? "?"}`);
-    expect(bp?.value).toBe("brain");
+    for (const stack of [r.stacks[0], r.stacks[r.stacks.length - 1]]) {
+      const why = await as(CAROL, () => door<{ axes: { axis: string; value: string | null; decision?: Record<string, unknown> | null }[] }>("GET", `/api/explain/${stack}`));
+      const bp = why.axes.find((a) => a.axis === "body_part");
+      say(`explain ${stack}: body_part ${bp?.value}, decision ${JSON.stringify(bp?.decision ?? null)}`);
+      // the pack's label of the value the round decided, the adjudicated stack's included
+      expect(bp?.value?.toLowerCase()).toBe("brain");
+      expect(bp?.decision).toBeTruthy();
+    }
   });
 
   it("a per-axis review: the open questions of one axis asked of two raters and closed into decisions", { timeout: 180_000 }, async () => {
@@ -176,8 +180,14 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("T32 on a live engine over a lab r
     say(`pair preview: ${JSON.stringify(preview.counts)}`);
     const p = await as(CAROL, () => campaigns.make(pair.body));
     const pi = await as(CAROL, () => campaigns.one(p.id));
-    const sheet = await as(ALICE, () => door<Record<string, unknown>>("GET", `/api/campaigns/${p.id}/items/${pi.items![0].id}/pair`));
-    say(`pair ${p.name}: ${pi.items?.length} items; an item's sheet has ${Object.keys(sheet).join(", ")}`);
+    // the pair reader claims an item, then reads its sheet: the two stacks and nothing else of them
+    const seat = seatOf(await as(ALICE, () => campaigns.claim(p.id)));
+    expect(seat.kind).toBe("holding");
+    if (seat.kind === "holding") {
+      const sheet = await as(ALICE, () => door<Record<string, unknown>>("GET", `/api/campaigns/${p.id}/items/${seat.item.id}/pair`));
+      say(`pair ${p.name}: ${pi.items?.length} items; alice's first sheet has ${Object.keys(sheet).join(", ")}`);
+      await as(ALICE, () => campaigns.release(p.id, seat.assignment.id));
+    }
 
     const anchored = makeBody({ ...emptyDraft(), name: `t32-anchored-${STAMP}`, kind: "anchored", from: a, pre: a, post: a, seed: `t32-${STAMP}`, raters: ALICE.who });
     expect(anchored.ok).toBe(true);
@@ -194,9 +204,14 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("T32 on a live engine over a lab r
     if (ab.ok) {
       const made = await as(CAROL, () => campaigns.make(ab.body));
       const items = (await as(CAROL, () => campaigns.one(made.id))).items ?? [];
-      const sheet = await as(CAROL, () => door<Record<string, unknown>>("GET", `/api/campaigns/${made.id}/items/${items[0].id}/ab`));
-      say(`A/B ${made.name}: ${items.length} items to settle; an item's sheet has ${Object.keys(sheet).join(", ")}`);
+      say(`A/B ${made.name}: ${items.length} items to settle, from ${JSON.stringify((made as unknown as { ab?: { counts?: unknown } }).ab?.counts ?? null)}`);
       expect(items.length).toBeGreaterThan(0);
+      const seat = seatOf(await as(CAROL, () => campaigns.claim(made.id)));
+      if (seat.kind === "holding") {
+        const sheet = await as(CAROL, () => door<Record<string, unknown>>("GET", `/api/campaigns/${made.id}/items/${seat.item.id}/ab`));
+        say(`A/B: carol's first sheet has ${Object.keys(sheet).join(", ")}`);
+        await as(CAROL, () => campaigns.release(made.id, seat.assignment.id));
+      }
     }
   });
 
@@ -229,6 +244,7 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("T32 on a live engine over a lab r
     const names = (Array.isArray(cohorts) ? cohorts : cohorts.cohorts).map((c) => c.name);
     say(`cohorts: ${names.join(", ")}`);
     if (names.length === 0) return;
+    // the cohort's picks, as Main scans' Run makes them: the pick run queued at the door, worked by the lab's worker
     const picks = await as(CAROL, () => picksDoors.page(names[0]));
     say(`picks of ${names[0]}: ${picks.subjects.length} subjects, roles ${picks.roles.join(", ")}, totals ${JSON.stringify(picks.totals)}`);
     expect(picks.roles.length).toBeGreaterThan(0);

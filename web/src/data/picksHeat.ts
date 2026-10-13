@@ -20,6 +20,8 @@ export interface Cell {
   state: CellState;
   stack: number | null;
   by: "rules" | "person" | null;
+  /** A pick of a stack of a sample sealed now, its scan not named to a caller who does not read sealed stacks (record 48). */
+  withheld?: boolean;
 }
 
 export interface HeatSession {
@@ -58,7 +60,7 @@ const STATES: CellState[] = ["picked", "doubted", "missing"];
 function cellOf(v: unknown): Cell {
   const c = obj(v);
   const state = STATES.includes(c.state as CellState) ? (c.state as CellState) : "missing";
-  return { state, stack: nul(c.stack), by: c.by === "rules" || c.by === "person" ? c.by : null };
+  return { state, stack: nul(c.stack), by: c.by === "rules" || c.by === "person" ? c.by : null, ...(c.withheld === true ? { withheld: true } : {}) };
 }
 
 /** The picks door's answer as the heatmap reads it, whatever it left out. */
@@ -111,5 +113,5 @@ export function cellWords(s: HeatSession, role: string): string {
   const c = s.roles[role];
   if (!c || c.state === "missing") return `${s.label}: no ${role}`;
   const by = c.by === "person" ? ", a person's pick" : "";
-  return `${s.label}: ${c.state === "doubted" ? "doubted" : "picked"}${c.stack !== null ? `, scan ${c.stack}` : ""}${by}`;
+  return `${s.label}: ${c.state === "doubted" ? "doubted" : "picked"}${c.withheld ? ", a sealed scan" : c.stack !== null ? `, scan ${c.stack}` : ""}${by}`;
 }

@@ -38,6 +38,9 @@ describe("the picks door read", () => {
     expect(totalsWords(h.totals.flair)).toBe("30 picked · 17 missing");
     expect(cellWords(h.subjects[0].sessions[2], "t1w")).toBe("ses-3: picked, scan 903, a person's pick");
     expect(cellWords(h.subjects[1].sessions[0], "t1w")).toBe("ses-1: no t1w");
+    // a pick of a sealed scan keeps its state and never names the scan
+    const sealed = heatOf({ subjects: [{ id: 5, sessions: [{ session: 1, label: "ses-9", roles: { t1w: { state: "picked", stack: null, by: "rules", withheld: true } } }] }] });
+    expect(cellWords(sealed.subjects[0].sessions[0], "t1w")).toBe("ses-9: picked, a sealed scan");
   });
 
   it("is offered with review:see and the door", () => {
