@@ -19,7 +19,7 @@ import { liveLine } from "../assistant/steps";
 import { useConversation, type Conversing } from "../assistant/useConversation";
 import { ask, catalogFields, chain, columnName, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
 import { editor, setsOf } from "../ask/editor";
-import { countIn, countText, heldCell, heldColumns, HELD_WHY } from "../ask/held";
+import { countIn, countText, HELD, heldCell, heldColumns, heldList, HELD_WHY, LIST_WHY, LIST_WORDS } from "../ask/held";
 import { countWords, startBody, type From, type Started } from "../ask/start";
 import type { Capabilities } from "../capabilities";
 import { PromoteDialog } from "../data/PromoteDialog";
@@ -232,7 +232,8 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const [busy, setBusy] = useState<{ phase: string; since: number } | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const [rows, setRows] = useState<Preview | null>(null);
-  const [answered, setAnswered] = useState<{ count: number; truncated: boolean; handle: number; grain: string } | null>(null);
+  /** The run's answer: its rows, null with why `held` where the list is held back whole at plain (record 55 K7, small lists). */
+  const [answered, setAnswered] = useState<{ count: number | null; held: string | null; truncated: boolean; handle: number; grain: string } | null>(null);
   // record 26: a complete answer becomes a cohort, the subjects of its rows at any grain
   const [promoting, setPromoting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -374,7 +375,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
     ask
       .run(id)
       .then((r) => {
-        setAnswered({ count: r.row_count, truncated: r.truncated, handle: r.handle, grain: r.grain });
+        setAnswered({ count: r.row_count, held: heldList(r), truncated: r.truncated, handle: r.handle, grain: r.grain });
         setBusy(null);
       })
       .catch((e: Error) => {
@@ -509,7 +510,12 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
           <section className="panel card">
             <div className="row">
               <h2 className="grow">{current ? `Where the rows go in ${current.set}` : "Where the rows go"}</h2>
-              {answered && <span className="tag brand">{answered.truncated ? "at least " : ""}{n(answered.count)} rows</span>}
+              {answered && answered.count === null && (
+                <span className="tag held" title={answered.held ?? LIST_WHY}>
+                  rows {HELD}
+                </span>
+              )}
+              {answered && answered.count !== null && <span className="tag brand">{answered.truncated ? "at least " : ""}{n(answered.count)} rows</span>}
             </div>
             {groups.length === 0 && <p className="meta">The counts come once the engine has checked the query.</p>}
             {groups.map((g) => (
@@ -536,8 +542,17 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                 Download CSV
               </button>
             </div>
-            {file.said && <p className={file.warn ? "warn" : "meta"}>{file.said}</p>}
-            {rows && (
+            {file.said && (
+              <p className={file.warn ? "warn" : "meta"} title={file.why ?? undefined}>
+                {file.said}
+              </p>
+            )}
+            {rows && heldList(rows) !== null && (
+              <p className="meta held-words" title={heldList(rows) ?? undefined}>
+                {LIST_WORDS}
+              </p>
+            )}
+            {rows && heldList(rows) === null && (
               <div className="table-wrap">
                 <table className="thin">
                   <thead>
@@ -638,10 +653,16 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               <span className="timeline-dot" />
               <span className="timeline-body">
                 <b>The answer</b>
-                <span className="meta">{answered ? `${answered.truncated ? "at least " : ""}${n(answered.count)} rows` : "not run in this view"}</span>
-                {((answered && !answered.truncated && promotable) || maySave(caps)) && (
+                {answered && answered.count === null ? (
+                  <span className="meta held" title={answered.held ?? LIST_WHY}>
+                    rows {HELD}
+                  </span>
+                ) : (
+                  <span className="meta">{answered && answered.count !== null ? `${answered.truncated ? "at least " : ""}${n(answered.count)} rows` : "not run in this view"}</span>
+                )}
+                {((answered && !answered.truncated && answered.count !== null && promotable) || maySave(caps)) && (
                   <span className="row actions">
-                    {answered && !answered.truncated && promotable && (
+                    {answered && !answered.truncated && answered.count !== null && promotable && (
                       <button type="button" className="button secondary small" disabled={busy !== null} onClick={() => setPromoting(true)}>
                         <Icon name="users" />
                         Make a cohort
@@ -672,7 +693,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
           }}
         />
       )}
-      {promoting && answered && (
+      {promoting && answered && answered.count !== null && (
         <PromoteDialog
           caps={caps}
           card={{ id, name: cardTitle((doc.ask as Json).name as string | undefined, answer), version: versions.find((v) => v.id === id)?.label ?? null }}

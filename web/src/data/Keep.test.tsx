@@ -307,6 +307,22 @@ describe("keeping what the dataset viewer shows", () => {
     expect(said().textContent).toBe("1 subject joined ms-a-subject-1-symri. Open ms-a-subject-1-symri");
   });
 
+  it("says a list the engine held back whole at plain as held, never as nothing to add or a failure, and promotes nothing (record 55 K7)", async () => {
+    found = { rows: null, subjects: null };
+    await open("#data/datasets/ms-a/view?mode=grid&subject=1&vfilter=symri");
+    act(() => button(el, "Make a cohort")!.click());
+    await settle();
+    act(() => button(dialog()!, "Make the cohort")!.click());
+    await settle();
+    expect(asked("/api/ask/run")).toHaveLength(1);
+    expect(asked("/api/ask/handles/77/promote")).toHaveLength(0);
+    const said = dialog()!.querySelector(".held-words")!;
+    expect(said.textContent).toBe("The rows are held back, so they make no cohort.");
+    expect(said.getAttribute("title")).toMatch(/^a list of fewer than 5 subjects that a quasi identifying field chose/u);
+    expect(dialog()!.querySelector("[role=alert]")).toBeNull();
+    expect(dialog()!.textContent).not.toMatch(/Nothing to add|was not made|null|\b0 rows\b/u);
+  });
+
   it("adds them to an existing cohort, and refuses an answer the run cut off", async () => {
     await open("#data/datasets/ms-a/view");
     act(() => button(el, "Make a cohort")!.click());

@@ -126,6 +126,27 @@ for (const vp of [
   });
 }
 
+for (const vp of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+]) {
+  test(`at ${vp.width} by ${vp.height}: a list held back at plain says its scans are held back in the panel, on one line, nothing sideways`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/assistant.html?theme=dark&held-list=1");
+    await expect(page.locator(".qcard")).toHaveCount(2);
+    await page.locator(".qcard").nth(1).getByRole("button", { name: "Open" }).click();
+    await page.locator(".qpanel").getByRole("tab", { name: "Pictures" }).click();
+    const held = page.locator(".qpanel .held-words");
+    await expect(held).toHaveText("The scans are held back.");
+    await expect(held).toHaveAttribute("title", /^a list of fewer than 5 subjects/u);
+    await expect(page.locator(".qpanel").getByRole("button", { name: "List the scans" })).toHaveCount(0);
+    const box = (await held.boundingBox())!;
+    expect(box.height).toBeLessThan(30);
+    expect(await sideways(page)).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: shot(`held-list-${vp.width}`) });
+  });
+}
+
 test("a new conversation: one line, the ways to begin, the input at the foot", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/assistant.html?theme=dark#assistant/new");

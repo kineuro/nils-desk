@@ -56,3 +56,35 @@ export function heldColumns(body: unknown): Map<string, string> {
 export function heldCell(_why: string): string {
   return HELD;
 }
+
+// A list held back whole (record 55 K7, small lists, the ruling of
+// 2026-10-13). At detail plain an answer that lists the rows of 1 to 4
+// subjects a quasi-identifying field chose comes back with no row,
+// `row_count` null, `pages` 0 and every column in `held_back`; its handle
+// holds no rows, so its rows door answers 404 and a set, a start or a cohort
+// made from it is refused with 409. Such an answer reads "held back" with the
+// why, never as 0 rows or an empty result, and the 409 is held, not a failure.
+
+/** The engine's why for a list held back whole, where an answer gives none. */
+export const LIST_WHY = "a list of fewer than 5 subjects that a quasi identifying field chose; its length is a count, so no row is shown";
+
+const LIST = /^a list of fewer than 5\b/i;
+
+/** Why an answer (a run, a preview, a handle, a page, a job's result) is a list held back whole; null where it is not. */
+export function heldList(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const b = body as { rows?: unknown; row_count?: unknown };
+  if (Array.isArray(b.rows) && b.rows.length > 0) return null;
+  for (const why of heldColumns(body).values()) if (LIST.test(why)) return why;
+  return "row_count" in b && b.row_count === null ? LIST_WHY : null;
+}
+
+/** Whether a refusal is the engine's 409 for a handle whose list was held back ("handle N holds no rows"). */
+export function heldRefusal(e: unknown): boolean {
+  const status = (e as { status?: unknown } | null)?.status;
+  const message = e instanceof Error ? e.message : "";
+  return status === 409 && /\bholds no rows\b/i.test(message);
+}
+
+/** What a page says of a list held back whole, its why on hover. */
+export const LIST_WORDS = "The rows are held back.";

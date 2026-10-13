@@ -10,6 +10,7 @@
 
 import { Fragment, useEffect, useState } from "react";
 import { ask, type Json, type Profile } from "../ask/client";
+import { heldList } from "../ask/held";
 import { landing } from "../ask/start";
 import type { Capabilities } from "../capabilities";
 import { Thumb } from "../campaigns/Thumb";
@@ -302,12 +303,19 @@ function Subjects({ profile, onPick }: { profile: Profile; onPick: (b: Bar) => (
 function Pictures({ document, grain, listing, busy, onList }: { document: number; grain: string | null; listing: Narrowing | null; busy: boolean; onList: (n: Narrowing) => void }) {
   const [stacks, setStacks] = useState<number[] | null>(null);
   const [why, setWhy] = useState<string | null>(null);
+  const [held, setHeld] = useState<string | null>(null);
   useEffect(() => {
     let alive = true;
     setStacks(null);
     setWhy(null);
+    setHeld(null);
     ask.preview(document, 24).then(
-      (p) => alive && setStacks(stacksOf(p, grain)),
+      (p) => {
+        if (!alive) return;
+        // a list held back whole at plain shows no scan, and is not an answer that lists none (record 55 K7, small lists)
+        setHeld(heldList(p));
+        setStacks(stacksOf(p, grain));
+      },
       (e: Error) => alive && setWhy(e.message),
     );
     return () => {
@@ -316,6 +324,12 @@ function Pictures({ document, grain, listing, busy, onList }: { document: number
   }, [document, grain]);
   if (why) return <p className="warn">The scans could not be read: {why}</p>;
   if (stacks === null) return <p className="meta">Reading the scans</p>;
+  if (held !== null)
+    return (
+      <p className="meta held-words qpictures-none" title={held}>
+        The scans are held back.
+      </p>
+    );
   if (stacks.length > 0)
     return (
       <div className="qpictures">

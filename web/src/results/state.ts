@@ -4,6 +4,7 @@
 // own record of runs and lineage, each result's named states and what its
 // controls may do, with the reason on the control when they may not.
 
+import { LIST_WHY } from "../ask/held";
 import type { DeskRecord, HandleRow, JobRow } from "../ask/client";
 import { holdsGrant } from "../grants";
 
@@ -97,12 +98,15 @@ export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, grants:
   if (moved !== null) stale = { overlay: `document ${document} moved on to ${moved}`, document, moved_to: moved };
   else if (h.epoch !== epoch) stale = { overlay: `the registry moved: epoch ${h.epoch} then, ${epoch} now`, document, moved_to: null };
   let truncated: Truncated | null = null;
-  if (h.truncated) truncated = { by: h.limit !== null && h.row_count >= h.limit ? "you" : "us", limit: h.limit };
+  if (h.truncated) truncated = { by: h.limit !== null && h.row_count !== null && h.row_count >= h.limit ? "you" : "us", limit: h.limit };
+  // a list held back whole at plain holds no rows: nothing to release, promote or export (record 55 K7, small lists)
+  const held = h.row_count === null;
   const cannot = (why: string): Control => ({ enabled: false, reason: why });
   const can: Control = { enabled: true, reason: null };
   const gate = (what: string, doing: string, grant: "release:work" | "data:work", page: string): Control | null => {
     if (rows === "withdrawn") return cannot("the handle was withdrawn");
     if (rows === "dropped") return cannot("the rows were dropped by retention");
+    if (held) return cannot(`the rows are held back (${LIST_WHY})`);
     if (truncated) return cannot(truncated.by === "you" ? `a capped answer is not ${what}; raise your limit in the out step and run again` : `a truncated answer is not ${what}; narrow the question or run it as a job`);
     // the reason's order (Wave 5 section 6.6): truncated, stale, incomplete, grant
     if (stale) return cannot(stale.moved_to !== null ? `a stale answer is not ${what}; the question moved on to ${stale.moved_to}, run that` : `a stale answer is not ${what}; the registry moved to epoch ${epoch}, run the question again`);
@@ -118,7 +122,7 @@ export function stateOf(h: HandleRow, record: DeskRecord, epoch: number, grants:
     release: gate("released", "releasing it", "release:work", "Release") ?? can,
     // record 26: a cohort is made from an answer at any grain, by the subjects of its rows, and the cohort acts are Data work
     promote: gate("promoted", "promoting it", "data:work", "Data") ?? can,
-    export: rows !== "kept" ? cannot(rows === "withdrawn" ? "the handle was withdrawn" : "the rows were dropped by retention") : stale ? cannot("a stale answer is not exported; run the question again") : canExport ? can : cannot("export is not open to you on this desk"),
+    export: held ? cannot(`the rows are held back (${LIST_WHY})`) : rows !== "kept" ? cannot(rows === "withdrawn" ? "the handle was withdrawn" : "the rows were dropped by retention") : stale ? cannot("a stale answer is not exported; run the question again") : canExport ? can : cannot("export is not open to you on this desk"),
   };
 }
 

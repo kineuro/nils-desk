@@ -6,7 +6,9 @@
 
 import { describe, expect, it } from "vitest";
 import { DoorError, type Run } from "../ask/client";
-import { type AnswerDoors, answerFile, csvName, csvOf, refusalWords, savedWords } from "./csv";
+import { type AnswerDoors, answerFile, csvName, csvOf, HeldList, heldWhy, refusalWords, savedWords } from "./csv";
+
+const LIST = "a list of fewer than 5 subjects that a quasi identifying field chose; its length is a count, so no row is shown";
 
 /** A run door and a rows door over pages of rows, keeping what was asked of them. */
 function doorsOver(pages: unknown[][][], withheld: number[] = [], asked: string[] = []): AnswerDoors {
@@ -61,6 +63,23 @@ describe("an answer as a CSV file", () => {
     expect(f.held).toEqual(["n_sessions"]);
     expect(f.text).toBe("code,n_sessions\nS-1,\n");
     expect(savedWords(f)).toBe("Saved few-v1.csv: 1 row. Held back, left empty: n_sessions.");
+  });
+
+  it("makes no file of a list the engine held back whole, reads no page, and says it is held back, never 0 rows (record 55 K7)", async () => {
+    const asked: string[] = [];
+    const doors = doorsOver([], [], asked);
+    const run = doors.run;
+    doors.run = async (id) => ({ ...(await run(id)), row_count: null, pages: 0, rows: [], held_back: [{ column: "code", why: LIST }, { column: "n_sessions", why: LIST }] });
+    const e = await answerFile(12, "Few", "v1", doors).catch((x: unknown) => x);
+    expect(e).toBeInstanceOf(HeldList);
+    expect(asked).toEqual(["run 12"]);
+    expect(refusalWords(e)).toBe("The rows are held back, so no file is made.");
+    expect(heldWhy(e)).toBe(LIST);
+    // a rows door's or a promotion's 409 on such a handle is held as well
+    const refused = new DoorError(409, { error: `handle 7 holds no rows: its answer was ${LIST}` });
+    expect(refusalWords(refused)).toBe("The rows are held back, so no file is made.");
+    expect(heldWhy(refused)).toMatch(/^a list of fewer than 5/u);
+    expect(heldWhy(new DoorError(409, { error: "the answer is stale" }))).toBeNull();
   });
 
   it("says why the file could not be made, in the engine's words", () => {

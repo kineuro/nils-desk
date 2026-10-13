@@ -37,7 +37,9 @@ const theme = new URLSearchParams(location.search).get("theme");
 if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
 
 // `?held=1`: the second version's answer is held back at detail plain (record 55 K7), each count held back
-const doors = fakeDoors([], new URLSearchParams(location.search).get("held") ? { held: [102] } : {});
+// `?held-list=1`: the second version's list is held back whole at detail plain (record 55 K7, small lists)
+const search = new URLSearchParams(location.search);
+const doors = fakeDoors([], { ...(search.get("held") ? { held: [102] } : {}), ...(search.get("held-list") ? { heldLists: [102] } : {}) });
 const asked = new Map<string, number>();
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);

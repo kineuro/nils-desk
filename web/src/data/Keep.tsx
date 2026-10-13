@@ -22,10 +22,10 @@ import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { cohorts, type Cohort } from "./cohorts";
-import { cannotPromote, countOf, grainWords, keepDoors, keepError, KEEP_DOORS, mayCohort, maySelect, Refusal, unasked, type Kept } from "./keep";
+import { cannotPromote, countOf, HELD_LIST, grainWords, keepDoors, keepError, KEEP_DOORS, mayCohort, maySelect, Refusal, unasked, type Kept } from "./keep";
 import { suggestedCohort } from "./PromoteDialog";
 import { plural } from "./viewer";
-import { HELD } from "../ask/held";
+import { HELD, heldRefusal, LIST_WHY } from "../ask/held";
 
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -185,7 +185,7 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
   const [existing, setExisting] = useState("");
   const [list, setList] = useState<Cohort[] | null>(null);
   const [busy, setBusy] = useState<{ phase: string; since: number } | null>(null);
-  const [why, setWhy] = useState<{ words: string; detail: string } | null>(null);
+  const [why, setWhy] = useState<{ words: string; detail: string; held?: boolean } | null>(null);
   const answer = String((kept.document.out as { set: string }).set);
   const lists = kind === "cohort" && served(caps, "GET /api/cohorts");
 
@@ -238,7 +238,9 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
 
   const failed = (e: unknown) => {
     setBusy(null);
-    setWhy({ words: keepError(e) ?? (kind === "selection" ? "The selection was not saved." : "The cohort was not made."), detail: e instanceof Refusal ? "" : messageOf(e) });
+    // a list held back at plain is said as held, never as a failure (record 55 K7, small lists)
+    const held = heldRefusal(e) || (e instanceof Refusal && e.message === HELD_LIST);
+    setWhy({ words: keepError(e) ?? (kind === "selection" ? "The selection was not saved." : "The cohort was not made."), detail: e instanceof Refusal || held ? "" : messageOf(e), held });
   };
   const save = () => {
     if (!can || !clean) return;
@@ -412,7 +414,12 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
           </div>
         </>
       )}
-      {why && (
+      {why?.held && (
+        <p className="meta held-words" title={LIST_WHY}>
+          {why.words}
+        </p>
+      )}
+      {why && !why.held && (
         <p className="warn" role="alert">
           {why.words}
           {why.detail !== "" && <Hint text={why.detail} />}

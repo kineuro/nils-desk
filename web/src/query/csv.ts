@@ -10,7 +10,14 @@
 // a cell that holds a comma, a quote or a line break quoted. The file is
 // named after the question and its version.
 
-import { heldColumns } from "../ask/held";
+import { heldColumns, heldList, heldRefusal, LIST_WHY } from "../ask/held";
+
+/** An answer whose list the engine held back whole at plain (record 55 K7, small lists): no file is made, and it is no failure. */
+export class HeldList extends Error {
+  constructor(readonly why: string) {
+    super(why);
+  }
+}
 import { ask, columnName, DoorError } from "../ask/client";
 
 /** The doors an answer's file is read through: the run door and the rows door. */
@@ -54,17 +61,20 @@ export function csvName(title: string, version: string | null, document: number)
 /** An answer read whole for its file: the run's handle, every page of its rows for an export, in order. */
 export async function answerFile(document: number, title: string, version: string | null, doors: AnswerDoors = ask): Promise<AnswerFile> {
   const run = await doors.run(document);
+  // a list held back has no row to write: a file of its header would read as none
+  const held = heldList(run);
+  if (held !== null) throw new HeldList(held);
   const rows: unknown[][] = [];
   let withheld = 0;
-  const held = new Set(heldColumns(run).keys());
+  const heldCols = new Set(heldColumns(run).keys());
   for (let page = 0; page < run.pages; page++) {
     const p = await doors.rows(run.handle, page, "export");
     rows.push(...p.rows);
     withheld += p.withheld_sealed ?? 0;
-    for (const c of heldColumns(p).keys()) held.add(c);
+    for (const c of heldColumns(p).keys()) heldCols.add(c);
   }
   const columns = run.columns.map(columnName);
-  return { name: csvName(title, version, document), text: csvOf(columns, rows), rows: rows.length, withheld, held: columns.filter((c) => held.has(c)) };
+  return { name: csvName(title, version, document), text: csvOf(columns, rows), rows: rows.length, withheld, held: columns.filter((c) => heldCols.has(c)) };
 }
 
 /** What the card says once the file is saved: its name and how many rows it holds. */
@@ -75,8 +85,17 @@ export function savedWords(f: AnswerFile): string {
   return `Saved ${f.name}: ${rows}.${sealed}${held}`;
 }
 
+/** What the card says of an answer held back whole: no file, and why on hover. */
+export const HELD_FILE = "The rows are held back, so no file is made.";
+
+/** Why an answer is held back, for the hover; null where it is not. */
+export function heldWhy(e: unknown): string | null {
+  return e instanceof HeldList ? e.why : heldRefusal(e) ? LIST_WHY : null;
+}
+
 /** Why the file could not be made, in the engine's words where it gave some. */
 export function refusalWords(e: unknown): string {
+  if (e instanceof HeldList || heldRefusal(e)) return HELD_FILE;
   const why = e instanceof Error ? e.message : String(e);
   if (e instanceof DoorError && e.status === 409) return `The file could not be made: the answer no longer reproduces (${why}). Open the question and run it again, or narrow it.`;
   if (e instanceof DoorError && e.status === 403) return `The file could not be made: ${why}. Your account cannot see every column of this answer.`;

@@ -5,6 +5,7 @@
 // dataset's own leaving policy, into an export place. Select first says what
 // it reaches without writing anything; Release queues the job.
 
+import { countText } from "../ask/held";
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import { desk, results, type DeskRecord, type HandleRow } from "../ask/client";
@@ -329,7 +330,7 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
                 <option value="">{cards === null ? "reading the cards" : cards.length === 0 ? "no complete answer at stack grain is kept" : "choose a card"}</option>
                 {(cards ?? []).map((c) => (
                   <option key={c.handle.id} value={c.handle.id}>
-                    {c.name} · {n(c.handle.row_count)} stacks
+                    {c.name} · {countText(c.handle.row_count)} stacks
                   </option>
                 ))}
               </select>

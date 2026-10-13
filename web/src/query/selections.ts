@@ -5,12 +5,14 @@
 // name, each with how big its newest answer was.
 
 import { door } from "../ask/client";
+import { HELD } from "../ask/held";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may, sees } from "../grants";
 
 export interface SelectionSize {
-  rows: number;
+  /** Null where the newest answer's list was held back whole (record 55 K7, small lists). */
+  rows: number | null;
   grain: string;
   version: number;
   handle: number;
@@ -76,5 +78,6 @@ export function selectionName(typed: string): string | null {
 /** A selection's size in a few words: "1,204 stacks", or nothing run yet. */
 export function sizeWords(s: SelectionSize | null): string {
   if (!s) return "not run yet";
+  if (s.rows === null) return HELD;
   return `${s.truncated ? "at least " : ""}${s.rows.toLocaleString("en-US")} ${s.grain}${s.rows === 1 ? "" : "s"}`;
 }

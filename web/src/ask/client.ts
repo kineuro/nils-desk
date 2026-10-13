@@ -94,7 +94,8 @@ export interface Run {
   handle: number;
   hash: string;
   grain: string;
-  row_count: number;
+  /** Null where the list is held back whole at plain (record 55 K7, small lists): no row, pages 0. */
+  row_count: number | null;
   declaration: Declaration;
   content_hash: string;
   truncated: boolean;
@@ -256,7 +257,8 @@ export interface HandleRow {
   id: number;
   name: string | null;
   grain: string;
-  row_count: number;
+  /** Null on a handle whose list was held back whole (record 55 K7, small lists). */
+  row_count: number | null;
   content_hash: string | null;
   principal: string;
   actor: Json;

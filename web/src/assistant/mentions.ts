@@ -7,6 +7,7 @@
 // grants nothing: the assistant reads what is named with its own tools, under its
 // own roles.
 
+import { HELD } from "../ask/held";
 import { results } from "../ask/client";
 import { cohortNames, objects } from "../objects/client";
 
@@ -105,6 +106,6 @@ export async function loadMentionables(): Promise<Mentionable[]> {
   return [
     ...(docs?.documents ?? []).map((d) => ({ kind: "card" as const, id: String(d.document), name: d.name?.trim() || `Query ${d.root}`, detail: d.versions === 1 ? "1 version" : `${d.versions} versions` })),
     ...(summary ? cohortNames(summary) : []).map((c) => ({ kind: "cohort" as const, id: c, name: c })),
-    ...(handles?.handles ?? []).filter((h) => h.kept).map((h) => ({ kind: "result" as const, id: String(h.id), name: h.name?.trim() || `Result ${h.id}`, detail: `${h.row_count.toLocaleString("en-US")} ${h.grain} rows` })),
+    ...(handles?.handles ?? []).filter((h) => h.kept).map((h) => ({ kind: "result" as const, id: String(h.id), name: h.name?.trim() || `Result ${h.id}`, detail: h.row_count === null ? `${h.grain} rows ${HELD}` : `${h.row_count.toLocaleString("en-US")} ${h.grain} rows` })),
   ];
 }

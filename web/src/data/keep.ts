@@ -11,7 +11,10 @@
 // writes a document itself: the engine checks and counts it before anything
 // is kept, and keeps it as a card, as a selection or as a cohort's source.
 
-import { HELD } from "../ask/held";
+import { HELD, heldRefusal } from "../ask/held";
+
+/** Why a held list makes no cohort: its rows are held back, which is no failure and no empty answer. */
+export const HELD_LIST = "The rows are held back, so they make no cohort.";
 import { DoorError, ask, door, results, type Diagnosis, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
@@ -412,7 +415,9 @@ export const keepDoors = {
 export class Refusal extends Error {}
 
 /** Why a promotion cannot take a run's answer, in words; null where it can. */
-export function cannotPromote(run: { truncated: boolean; row_count: number }): string | null {
+export function cannotPromote(run: { truncated: boolean; row_count: number | null }): string | null {
+  // a list held back whole at plain holds no subject to promote, and is not empty either (record 55 K7, small lists)
+  if (run.row_count === null) return HELD_LIST;
   if (run.truncated) return "The answer is cut off at the run's limit; a cohort needs all of it.";
   if (run.row_count === 0) return "Nothing to add.";
   return null;
@@ -421,6 +426,7 @@ export function cannotPromote(run: { truncated: boolean; row_count: number }): s
 /** The refusals the dialog knows, in its own words. */
 export function keepError(e: unknown): string | null {
   if (e instanceof Refusal) return e.message;
+  if (heldRefusal(e)) return HELD_LIST;
   const m = e instanceof Error ? e.message : String(e);
   if (/is a cohort; a selection may take/i.test(m)) return "That name is a cohort's. Choose another.";
   if (/is a selection's name; a cohort cannot/i.test(m)) return "That name is a selection's. Choose another.";

@@ -41,10 +41,10 @@ const caps = (): Capabilities => ({
 });
 
 /** The fake assistant and engine, keeping every call; `turn` is what the stream answers after a message is sent. */
-const doors = (turn: unknown[] = [], held: number[] = []) => engine(fakeDoors(turn, { held }));
+const doors = (turn: unknown[] = [], held: number[] = [], heldLists: number[] = []) => engine(fakeDoors(turn, { held, heldLists }));
 
-async function mount(turn: unknown[] = [], held: number[] = []) {
-  const e = doors(turn, held);
+async function mount(turn: unknown[] = [], held: number[] = [], heldLists: number[] = []) {
+  const e = doors(turn, held, heldLists);
   act(() => root.render(<AssistantPage caps={caps()} conversation="c1" />));
   await settle(12);
   return e;
@@ -161,6 +161,22 @@ describe("a query answer held back at plain (record 55 K7)", () => {
     // nothing is compared with the version before, which would tell the count
     expect([...p.querySelectorAll(".qfunnel .qstep")].map(words)).toEqual(["subjects held back", "visits session held back", "scans stack held back"]);
     expect(p.textContent).not.toMatch(/null|NaN|\bof 48\b/u);
+  });
+});
+
+describe("a query answer whose list is held back at plain (record 55 K7, small lists)", () => {
+  it("shows its scans as held back with why on hover, never as an answer that lists none, and offers no listing", async () => {
+    await mount([], [], [102]);
+    act(() => button(cards()[1], "Open")!.click());
+    await settle(10);
+    const p = panel()!;
+    act(() => [...p.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((t) => t.textContent === "Pictures")!.click());
+    await settle(10);
+    const held = p.querySelector(".qchart .held-words")!;
+    expect(held.textContent).toBe("The scans are held back.");
+    expect(held.getAttribute("title")).toMatch(/^a list of fewer than 5 subjects that a quasi identifying field chose/u);
+    expect(p.textContent).not.toMatch(/The pictures show once the answer lists its scans/u);
+    expect(button(p, "List the scans")).toBeNull();
   });
 });
 
