@@ -26,6 +26,8 @@ import { jobs as jobsDoor } from "./datasets";
 import { maySeePicks, picksSummary, PICKS_SUMMARY_DOOR, type PickLine } from "./picks";
 import { plainError, type Plain } from "./plain";
 import { StepRail } from "./StepRail";
+import { HeatMap } from "./HeatMap";
+import { mayHeat } from "./picksHeat";
 import { runOffers, startedWords, stepRuns } from "./stepRun";
 import { clock, cohortRail, doingTitle, fedWords, growth, joinTitle, OPERATIONS, roleOrder, roleWord, runningWords, slotOf, type Holding, type Operation, type SummaryStep } from "./summary";
 import { mayBrowse, viewHref } from "./viewer";
@@ -287,6 +289,12 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
           )}
         </div>
       </div>
+      {mayHeat(caps) && (
+        <div className="dp-sec">
+          <h3 className="eyebrow">Main scans, visit by visit</h3>
+          <HeatMap cohort={row.name} />
+        </div>
+      )}
       {open === "members" && (
         <MembersDialog
           cohort={row}
