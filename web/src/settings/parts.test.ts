@@ -250,3 +250,72 @@ describe("each part beside its own newest release", () => {
     expect(partRows(caps(), install(), null, [])[1]).toMatchObject({ newer: { text: "1.0.0-alpha.15", tag: true }, update: null });
   });
 });
+
+describe("a row per rule pack (record 55 B5)", () => {
+  const rules = (pack: string, installed: string | null, newest: string | null, takes: string | null, over: Partial<PartRelease> = {}): PartRelease => ({
+    part: "rules",
+    pack,
+    installed,
+    newest,
+    newer: takes,
+    held: null,
+    follows: null,
+    error: null,
+    command: "nils update --part rules",
+    waits: null,
+    edited: false,
+    pinned: null,
+    ...over,
+  });
+  const packs = {
+    dir: "/srv/nils/engine/packs",
+    release: "1.0.0-alpha.80",
+    installed: [
+      { name: "clinical", version: "0.3.0", digest: "c1" },
+      { name: "mri", version: "1.0.1", digest: "m1" },
+      { name: "site", version: "2.0.0", digest: "s1" },
+    ],
+    bundled: [
+      { name: "clinical", version: "0.3.0", digest: "c1" },
+      { name: "mri", version: "1.0.1", digest: "m1" },
+    ],
+    stale: [],
+    edited: [],
+    own: ["site"],
+    behind: false,
+    command: "nils update --all",
+  };
+  const at = (part: string) => own(part, "1.0.0-alpha.80", "1.0.0-alpha.80", null);
+
+  it("draws each pack with its version, offers a newer release of its own, and says one that waits", () => {
+    const mri = rules("mri", "1.0.1", "1.0.2", "1.0.2");
+    const clinical = rules("clinical", "0.3.0", "0.4.0", null, { waits: "clinical 0.4.0 needs pack contract 11" });
+    const i = install({ release: { ...listed([at("engine"), at("desk"), mri, clinical]), packs, rules: [mri, clinical] } });
+    const rows = partRows(caps(), i, null, []);
+    expect(rows.map((r) => r.id)).toEqual(["engine", "rules-mri", "rules-clinical", "packs-own", "desk", "gateway", "postgres"]);
+    expect(rows[1]).toMatchObject({ title: "MRI rules", version: "mri 1.0.1", health: { tone: "ok", words: "in use" }, newer: { text: "1.0.2", tag: true }, update: "rules" });
+    expect(rows[2]).toMatchObject({ title: "Clinical rules", newer: { text: "0.4.0 waits for a newer engine", tag: false }, update: null });
+    expect(rows[3]).toMatchObject({ title: "Site's packs", version: "site 2.0.0", newer: { text: "kept", tag: false } });
+    expect(newerWords(i)).toBe("MRI rules 1.0.2 is out");
+    expect(updateWords(i)).toEqual([
+      "The MRI rules move from 1.0.1 to 1.0.2, their own release; the engine reads them at its next look, and nothing is started again.",
+      "Postgres stays at 17, and its data is not touched.",
+    ]);
+  });
+
+  it("says a pinned pack, and offers nothing for it", () => {
+    const mri = rules("mri", "1.0.0", "1.0.2", null, { pinned: "1.0.0" });
+    const i = install({ release: { ...listed([at("engine"), at("desk"), mri]), packs: { ...packs, pinned: ["mri"] }, rules: [mri] } });
+    const row = partRows(caps(), i, null, []).find((r) => r.id === "rules-mri");
+    expect(row).toMatchObject({ version: "mri 1.0.0", health: { tone: "ok", words: "pinned at 1.0.0" }, newer: { text: "pinned; 1.0.2 is out", tag: false }, update: null });
+    expect(newerWords(i)).toBeNull();
+  });
+
+  it("reads the rules rows from the parts where the engine sends no list of its own, and keeps one packs row for an engine without them", () => {
+    const mri = rules("mri", "1.0.1", "1.0.1", null);
+    const withRows = install({ release: { ...listed([at("engine"), mri]), packs } });
+    expect(partRows(caps(), withRows, null, []).find((r) => r.id === "rules-mri")).toMatchObject({ newer: { text: "the newest", tag: false } });
+    const without = install({ release: { ...listed([at("engine")]), packs } });
+    expect(partRows(caps(), without, null, []).map((r) => r.id)).toContain("packs");
+  });
+});

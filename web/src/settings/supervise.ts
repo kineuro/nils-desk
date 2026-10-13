@@ -44,6 +44,14 @@ export interface PartRelease {
   follows: string | null;
   error: string | null;
   command: string;
+  /** A rules row's pack (part `rules`, record 55 B5): one row per first-party pack with releases of its own. */
+  pack?: string;
+  /** Why a newer release of the pack waits: it needs a pack contract the engine lacks, or names other engines. */
+  waits?: string | null;
+  /** The pack was changed on this machine after an update put it there, and is kept. */
+  edited?: boolean;
+  /** The version the install pins the pack to, or none (2026-10-10). */
+  pinned?: string | null;
 }
 
 /**
@@ -61,6 +69,8 @@ export interface Release {
   parts?: PartRelease[];
   /** The rule packs where the engine reads them, beside the ones its release carries; an engine older than this, or one in a container, sends none. */
   packs?: Packs;
+  /** The rules rows, one per first-party pack beside its own releases (record 55 B5); the same rows are in `parts`. */
+  rules?: PartRelease[];
 }
 
 /** One rule pack: its folder's name, the version its pack.yml states, and a digest of its files. */
@@ -86,6 +96,8 @@ export interface Packs {
   stale?: string[];
   edited?: string[];
   own?: string[];
+  /** The packs the install pins to one version (2026-10-10). */
+  pinned?: string[];
   behind?: boolean;
   error?: string;
   command: string;
