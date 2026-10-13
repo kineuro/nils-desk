@@ -163,6 +163,12 @@ export interface Derivative {
   check?: string | null;
   /** How a mask is tied to its scan: same, world or none (record 55 H3). */
   grid_link?: string | null;
+  /** The scan whose grid a mask is on: where it is drawn (record 55 H3). */
+  grid_stack_id?: number | null;
+  /** A mask's part sets: lesions, structures; none for a mask read whole (record 55 H3). */
+  part_sets?: { key?: string; words?: string; kind?: string; count?: number | null; names?: Record<string, string> | null }[] | null;
+  subject_id?: number | null;
+  run_id?: number | null;
 }
 
 export const runs = {

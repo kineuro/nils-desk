@@ -11,6 +11,9 @@
 // with why), the run reads as its units summed, never a bare done, and a run
 // that did not make all it was for says why, one line a reason with the
 // units under it; Resume and Run again open its pre-flight first.
+// Since 2026-10-13 a unit with a mask offers View (its scan with the mask
+// drawn over it, read only; ./RunResult), and the files are listed by unit
+// with their names and sizes.
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -30,6 +33,7 @@ import { FailLine, FailNote, KindTag } from "./Reason";
 import { madeOf, madeWords, runTag, unitsByWhy } from "./made";
 import { againOfRun, RunAgainDialog } from "./RunAgain";
 import { foundByWords } from "./tools";
+import { drawable, fileName, filesByUnit, shortName, sizeWords, viewActs } from "./results";
 import {
   allPassed,
   breachesByCheck,
@@ -218,6 +222,12 @@ export function RunView(props: {
   const made = madeOf(r);
   const words = made && made.units > 0 ? madeWords(made) : null;
   const tag = runTag(r);
+  // 2026-10-13: each unit's files, and View where one is a mask drawn on a scan
+  const unitNames = units.map((u) => u.unit).filter((u): u is string => typeof u === "string");
+  const byUnit = files ? filesByUnit(files, unitNames).units : null;
+  const views = viewActs(caps) && byUnit !== null && [...byUnit.values()].some((fs) => fs.some(drawable));
+  const viewOf = (unit: string | null) => (views && unit && byUnit?.get(unit)?.some(drawable) ? narrow(href("pipelines", "runs", String(r.id)), { view: unit }) : null);
+  const cols = views ? 6 : 5;
   const unitCells = totals
     ? [
         { k: "units", v: words && !running ? words.head : total > 0 ? `${n(totals.over)} of ${n(total)} over` : "none yet" },
@@ -418,6 +428,7 @@ export function RunView(props: {
                 <th className="num">Tries</th>
                 <th>On</th>
                 <th className="num">Ended</th>
+                {views && <th className="acts" />}
               </tr>
             </thead>
             <tbody>
@@ -426,6 +437,7 @@ export function RunView(props: {
                 const f = t === "failed" ? failureOf(u) : null;
                 // a skipped unit says what it lacked, in the engine's few words
                 const lacks = t === "skipped" ? (u.lacks && u.lacks.length > 0 ? u.lacks.join("; ") : (u.error ?? null)) : null;
+                const view = viewOf(u.unit);
                 return (
                   <Fragment key={u.unit ?? `u${i}`}>
                     <tr className={f || lacks ? "has-fail" : undefined}>
@@ -437,17 +449,26 @@ export function RunView(props: {
                       <td className="num">{u.attempts ?? ""}</td>
                       <td className="meta">{u.device ?? ""}</td>
                       <td className="num">{u.finished_at ? whenWords(u.finished_at) : ""}</td>
+                      {views && (
+                        <td className="acts">
+                          {view && (
+                            <a className="button secondary small" href={view} aria-label={`View ${u.unit}`}>
+                              View
+                            </a>
+                          )}
+                        </td>
+                      )}
                     </tr>
                     {f && (
                       <tr className="fail-row">
-                        <td colSpan={5}>
+                        <td colSpan={cols}>
                           <FailLine f={f} />
                         </td>
                       </tr>
                     )}
                     {lacks && (
                       <tr className="made-row">
-                        <td colSpan={5}>
+                        <td colSpan={cols}>
                           <div className="made-line">
                             <span className="made-words" title={u.error ?? lacks}>
                               {lacks}
@@ -471,7 +492,7 @@ export function RunView(props: {
             <h2>Files</h2>
             <span className="meta">{n(files.length)} made</span>
           </div>
-          {files.length > 0 && <FilesView files={files} />}
+          {files.length > 0 && <FilesView files={files} units={unitNames} />}
         </>
       )}
       {pipeline === null && <p className="meta">The catalog no longer lists this run&apos;s pipeline, so its table is not read.</p>}
@@ -542,33 +563,39 @@ function TableView({ table, by, onBy, choices }: { table: Table; by: string; onB
   );
 }
 
-function FilesView({ files }: { files: Derivative[] }) {
+/** The files a run made, by unit: each file's short name, kind and size, and a mask's check. */
+function FilesView({ files, units }: { files: Derivative[]; units: string[] }) {
   const byKind = new Map<string, number>();
   for (const f of files) byKind.set(f.kind, (byKind.get(f.kind) ?? 0) + 1);
   const masks = files.some((f) => f.kind === "mask");
+  const grouped = filesByUnit(files, units);
+  const rows: { unit: string | null; f: Derivative; first: boolean }[] = [];
+  for (const [unit, fs] of grouped.units) fs.forEach((f, i) => rows.push({ unit, f, first: i === 0 }));
+  grouped.own.forEach((f, i) => rows.push({ unit: null, f, first: i === 0 }));
+  const shown = rows.slice(0, 50);
   return (
     <>
       <p className="meta">{[...byKind.entries()].map(([k, c]) => `${n(c)} ${k}`).join(" · ")}</p>
       <div className="table-wrap">
-        <table className="thin">
+        <table className="thin run-files">
           <thead>
             <tr>
-              <th className="num">File</th>
+              <th>Unit</th>
+              <th>File</th>
               <th>Kind</th>
-              <th>Of</th>
-              <th className="num">Bytes</th>
-              <th>Digest</th>
+              <th className="num">Size</th>
               {masks && <th>Check</th>}
             </tr>
           </thead>
           <tbody>
-            {files.slice(0, 50).map((f) => (
-              <tr key={f.id}>
-                <td className="num">{f.id}</td>
+            {shown.map(({ unit, f, first }) => (
+              <tr key={f.id} className={first ? "unit-first" : undefined}>
+                <td className="path">{first ? (unit ?? "the run") : ""}</td>
+                <td className="path run-file" title={`file ${f.id} · ${fileName(f)} · sha256 ${f.sha256.slice(0, 12)}`}>
+                  {shortName(fileName(f), unit)}
+                </td>
                 <td>{f.kind}</td>
-                <td className="meta">{f.stack_id ? `stack ${f.stack_id}` : (f.scope ?? "")}</td>
-                <td className="num">{n(f.bytes)}</td>
-                <td className="path">{f.sha256.slice(0, 12)}</td>
+                <td className="num">{sizeWords(f.bytes)}</td>
                 {masks && (
                   <td>
                     {f.kind === "mask" && (

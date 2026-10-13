@@ -76,7 +76,7 @@ describe("the Runs table", () => {
   it("says a failed run's reason on one line under its row, its first sentence today", () => {
     const html = draw([FAILED, DONE]);
     expect(html.match(/class="fail-row"/gu)).toHaveLength(1);
-    expect(html).toContain('<tr class="has-fail">');
+    expect(html).toMatch(/<tr class="has-fail( openable)?"/u);
     expect(html).toContain("is not runnable (No such file or directory (os error 2)).</span>");
     // the whole error a hover away, never the second sentence on the line
     expect(html).toContain(`title="${DCM2NIIX.replace(/'/gu, "&#x27;")}"`);
