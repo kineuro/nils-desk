@@ -25,13 +25,14 @@ async function measure(page: Page) {
   });
 }
 
-// on a big screen the panel grows with the screen as well (scale.pw.ts), so the lead plane gives up a little of its side to it
+// on a big screen the panel grows with the screen as well (scale.pw.ts), so the lead plane gives up a little of its side to it;
+// since record 55 H5 the picture box is the screen class's (`box`, its height), below a laptop's class the window's height
 const SCREENS = [
-  { width: 2000, height: 1154, lead: 640 },
-  { width: 2000, height: 1230, lead: 690 },
-  { width: 1920, height: 1080, lead: 600 },
-  { width: 1440, height: 900, lead: 380 },
-  { width: 1366, height: 768, lead: 330 },
+  { width: 2000, height: 1154, lead: 600, box: 820 },
+  { width: 2000, height: 1230, lead: 600, box: 820 },
+  { width: 1920, height: 1080, lead: 600, box: 820 },
+  { width: 1440, height: 900, lead: 380, box: 640 },
+  { width: 1366, height: 768, lead: 330, box: null },
 ];
 
 for (const vp of SCREENS) {
@@ -41,7 +42,8 @@ for (const vp of SCREENS) {
     await expect(page.locator('.axis-row[aria-label="body_part"] .opt')).toHaveCount(6);
     const m = await measure(page);
     console.log(`${vp.width}x${vp.height}: picture side ${Math.round(m.picture.width)} by ${Math.round(m.picture.height)}, the lead plane ${Math.round(m.own.width)} px, panel ${Math.round(m.panel.height)} px high`);
-    expect(m.picture.height).toBeGreaterThan(vp.height - 160);
+    if (vp.box !== null) expect(Math.round(m.picture.height)).toBe(vp.box);
+    else expect(m.picture.height).toBeGreaterThan(vp.height - 160);
     expect(m.own.width).toBeGreaterThan(vp.lead);
     expect(m.own.bottom).toBeLessThanOrEqual(vp.height);
     expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);

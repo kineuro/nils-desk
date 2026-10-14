@@ -116,6 +116,28 @@ function narrowed(r: Reading, axes: string[]): Reading {
 /** Forget the readings (a test). */
 export function forgetReadings(): void {
   lines.clear();
+  stackLines.clear();
+}
+
+/** The reviewer's evidence door (record 48 R1, review:see): why one stack was judged so, one line per axis. */
+export const STACK_WHY = "GET /api/stacks/{stack}/why";
+
+const stackLines = new Map<number, Promise<Reading | null>>();
+
+/**
+ * A queue item's reading (record 55 H5): the engine's why door for its
+ * stack, where the engine serves it and the person may read the queue; null
+ * otherwise, or where the door refuses. A stack of a sample sealed now comes
+ * back blind, with no lines.
+ */
+export function stackReadingFor(caps: Capabilities, stack: number): Promise<Reading | null> {
+  if (!served(caps, STACK_WHY) || !may(caps, "review:see")) return Promise.resolve(null);
+  const have = stackLines.get(stack);
+  if (have) return have;
+  const p = door<Json>("GET", `/api/stacks/${stack}/why`).then(readingOf, () => null);
+  stackLines.set(stack, p);
+  bound(stackLines);
+  return p;
 }
 
 /** The batches of like stacks open to the caller, each with as many of its items as `sample` asks (a grid's worth). */

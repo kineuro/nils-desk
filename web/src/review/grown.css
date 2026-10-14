@@ -27,3 +27,12 @@
 .queue-filter .chips { align-items: center; }
 .queue-filter .chips > .label { font-size: var(--n-text-size-small); font-weight: 500; color: var(--n-text-dim); min-width: 3.5rem; }
 .tag.badge { white-space: normal; margin-right: 0.4rem; }
+
+/* A queue item looked at (record 55 H5): the stack in the viewer, and why the rules decided beside it */
+.dialog.look-dialog { width: min(72rem, calc(100vw - 2rem)); }
+.look-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(16rem, 2fr); gap: 1rem; align-items: start; }
+.look-picture, .look-side { min-width: 0; }
+.look-side { display: grid; gap: 0.6rem; align-content: start; }
+@media (max-width: 860px) {
+  .look-grid { grid-template-columns: minmax(0, 1fr); }
+}

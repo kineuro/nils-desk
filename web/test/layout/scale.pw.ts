@@ -4,7 +4,8 @@
 // elements should get bigger based on available size"). On a laptop the
 // panel is the compact one it was before the large keys; on a big screen
 // the panel, its keys, the file's words, the answer's bar and the head line
-// grow together, by one factor, and the pictures take the rest. The chosen
+// grow together, by one factor, and the pictures take the rest; since record
+// 55 H5 the factor and the picture box are set per screen class (reader-size.pw.ts). The chosen
 // value alone is coloured by a frame and a bar, no shape beside it. Measured in the
 // desk's own shell (rater.html) and on the gallery's page, in chromium and,
 // with LAYOUT_FIREFOX=1, Firefox. SHOTS=<dir> keeps a screenshot of each.
@@ -68,14 +69,14 @@ test("the reader on a laptop is the compact panel it was before the large keys",
   }
 });
 
-test("on a big screen the whole panel grows by one factor, and the pictures still take the rest", async ({ page }) => {
+test("on a big screen the whole panel grows by its screen class's one factor, and the picture box is the class's", async ({ page }) => {
   const small = await readerAt(page, 1366, 768);
-  for (const [w, h, lo, hi, lead] of [[2000, 1230, 1.3, 1.5, 690], [2000, 1320, 1.3, 1.5, 690], [1920, 1080, 1.2, 1.35, 600]]) {
+  // record 55 H5: a fixed size per screen class, 1.25 from 1880 by 940 and 1.5 from 2520 by 1280 (campaigns.css)
+  for (const [w, h, factor, lead] of [[1920, 1080, 1.25, 600], [2000, 1230, 1.25, 600], [2560, 1440, 1.5, 750]]) {
     const big = await readerAt(page, w, h);
     const f = big.key / small.key;
     console.log(`reader ${w}x${h}: grows ${f.toFixed(3)} times`);
-    expect(f).toBeGreaterThanOrEqual(lo);
-    expect(f).toBeLessThanOrEqual(hi);
+    expect(f).toBeCloseTo(factor, 2);
     // everything by the same factor, the laptop's proportions kept
     for (const k of ["keyFont", "header", "h1", "answer", "panel"] as const) expect(big[k] / small[k]).toBeCloseTo(f, 1);
     expect(big.own).toBeGreaterThan(lead);

@@ -108,19 +108,28 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator(".header-drawer")).toHaveCount(0);
     });
 
-    test("an item read in the open fits with its suggestion, the evidence one key away", async ({ page }) => {
+    test("an item read in the open fits with its suggestion, and why the rules decided beside the picture", async ({ page }) => {
       await page.goto("/?mode=seen");
       await expect(page.locator(".suggest")).toContainText("differ on technique, modifier");
       await expect(page.locator(".candidate")).toHaveCount(4);
       const m = await measure(page);
-      console.log(`${vp.width}x${vp.height} in the open: content ${m.used} of ${m.panel.client} px in the panel`);
-      expect(m.used).toBeLessThanOrEqual(m.panel.client);
+      console.log(`${vp.width}x${vp.height} in the open, expanded: content ${m.used} of ${m.panel.client} px in the panel`);
+      // record 55 H5: expanded may scroll the panel under an answer bar that stays on screen; the page never scrolls
+      expect(m.answerBottom).toBeLessThanOrEqual(vp.height);
       expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
+      // open beside the picture, no key to press; expanded, a line that needs a look carries its clause and votes
+      await expect(page.locator(".rate-side .evidence-lines")).toContainText("technique:first");
+      await expect(page.locator(".rate-side .evidence-lines .ev-more").first()).toBeVisible();
+      // H turns the whole reader compact: the lines stay, one line per axis, and it still fits
       await page.locator("body").click({ position: { x: 5, y: 5 } });
       await page.keyboard.press("Shift+H");
-      await expect(page.locator(".evidence-drawer")).toContainText("technique:first");
-      await page.keyboard.press("Escape");
-      await expect(page.locator(".evidence-drawer")).toHaveCount(0);
+      await expect(page.locator(".reader-one")).toHaveAttribute("data-reader-size", "compact");
+      await expect(page.locator(".rate-side .evidence-lines")).toContainText("technique:first");
+      await expect(page.locator(".rate-side .evidence-lines .ev-more")).toHaveCount(0);
+      const c = await measure(page);
+      console.log(`${vp.width}x${vp.height} in the open, compact: content ${c.used} of ${c.panel.client} px in the panel`);
+      expect(c.used).toBeLessThanOrEqual(c.panel.client);
+      expect(c.doc.scroll).toBeLessThanOrEqual(c.doc.client);
     });
 
     test("the key facts stand on their own, never cut, and long text wraps inside the block", async ({ page }) => {
