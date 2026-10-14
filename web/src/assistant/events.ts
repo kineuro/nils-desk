@@ -46,7 +46,7 @@
 //       two or more items exists and is not all done.
 //   {kind: "approval", id: string, change: ChangeKind, title?: string,
 //    sentence: string, lines?: string[], ref?: {document?: number,
-//    parent?: number | null, plan?: string}}
+//    parent?: number | null, plan?: string, proposal?: number, pack?: string}}
 //       One pending change from `propose_change`. The model never applies it.
 //       query_version (with ref.document) is decided as a move_proposal is
 //       today: POST /assistant/conversations/<id>/feedback. Every other kind:
@@ -54,7 +54,13 @@
 //       and the assistant applies it in application code. The assistant's
 //       analysis_plan arrives as job_plan and its overlay as sorting_words; an
 //       identity_rule is only recorded on approval, and the card then points to
-//       the dataset's page, where the rule is changed.
+//       the dataset's page, where the rule is changed. rule_change (record 56,
+//       added 2026-10-14) carries ref.proposal, a proposed rule change the
+//       agent made through POST /api/packs/{name}/proposals (ref.pack names
+//       the pack, the engine's first when absent): the card is the Rules
+//       page's own, read from the engine's proposal, and only a person decides
+//       it there, through the engine's decide door, never through the
+//       assistant's; a rule_change without ref.proposal is not shown.
 //   {kind: "clarification", question: string,
 //    options: {label: string, count?: number | null}[]}
 //       From `ask_user`; the turn ends there. A click sends the label as the
@@ -114,7 +120,7 @@ export interface PlanItem {
   status: PlanStatus;
 }
 
-export type ChangeKind = "query_version" | "job_plan" | "sorting_words" | "identity_merge" | "identity_rule";
+export type ChangeKind = "query_version" | "job_plan" | "sorting_words" | "identity_merge" | "identity_rule" | "rule_change";
 
 export type FileMedia = "text/csv" | "text/tab-separated-values" | "text/plain" | "application/json" | "text/markdown";
 
@@ -152,7 +158,7 @@ export type OneChatPart =
       title: string | null;
       sentence: string;
       lines: string[];
-      ref: { document?: number; parent?: number | null; plan?: string };
+      ref: { document?: number; parent?: number | null; plan?: string; proposal?: number; pack?: string };
     }
   | { kind: "clarification"; question: string; options: { label: string; count: number | null }[] }
   | { kind: "replaced" }
@@ -160,7 +166,7 @@ export type OneChatPart =
   | { kind: "file"; items: FileItem[] };
 
 const STATUSES: PlanStatus[] = ["pending", "running", "done", "failed", "skipped"];
-const CHANGES: ChangeKind[] = ["query_version", "job_plan", "sorting_words", "identity_merge", "identity_rule"];
+const CHANGES: ChangeKind[] = ["query_version", "job_plan", "sorting_words", "identity_merge", "identity_rule", "rule_change"];
 const FILE_MEDIA: FileMedia[] = ["text/csv", "text/tab-separated-values", "text/plain", "application/json", "text/markdown"];
 const isStr = (v: unknown): v is string => typeof v === "string";
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
@@ -242,11 +248,15 @@ export function asOneChatPart(v: unknown): OneChatPart | null {
     case "approval": {
       if (!isStr(o.id) || !CHANGES.includes(o.change as ChangeKind) || !isStr(o.sentence)) return null;
       const r = (typeof o.ref === "object" && o.ref !== null ? o.ref : {}) as Record<string, unknown>;
-      const ref: { document?: number; parent?: number | null; plan?: string } = {};
+      const ref: { document?: number; parent?: number | null; plan?: string; proposal?: number; pack?: string } = {};
       if (isNum(r.document)) ref.document = r.document;
       if (r.parent === null || isNum(r.parent)) ref.parent = r.parent as number | null;
       if (isStr(r.plan)) ref.plan = r.plan;
+      if (isNum(r.proposal)) ref.proposal = r.proposal;
+      if (isStr(r.pack) && r.pack !== "") ref.pack = r.pack;
       if (o.change === "query_version" && ref.document === undefined) return null;
+      // a rule change is the engine's proposal, decided on its own card; without one there is nothing to decide
+      if (o.change === "rule_change" && ref.proposal === undefined) return null;
       return {
         kind: "approval",
         id: o.id,
@@ -312,6 +322,7 @@ export const CHANGE_TITLES: Record<ChangeKind, string> = {
   sorting_words: "New sorting words",
   identity_merge: "Two identities as one person",
   identity_rule: "A new identity rule",
+  rule_change: "A change to the rules",
 };
 
 /** The kind of change in a word or two, over its card. */
@@ -321,6 +332,7 @@ export const CHANGE_KINDS: Record<ChangeKind, string> = {
   sorting_words: "Sorting words",
   identity_merge: "Identities",
   identity_rule: "Identity rule",
+  rule_change: "Rule change",
 };
 
 /** A card's line and what it will do: the title the agent gave over its sentence, or the sentence alone, or the kind's own title when it said nothing. */

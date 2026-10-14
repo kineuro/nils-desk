@@ -6,7 +6,8 @@
 // button; Adopt is one press and one line follows the re-sort to what it
 // did; the pack's quality with each row's mend; Change a rule with a form
 // per operation, only the chosen key in colour, and the effect before
-// anything is proposed; a dataset's detail with its proposed rule fixes in
+// anything is proposed; a rule change the assistant proposed on the same
+// card in the one chat; a dataset's detail with its proposed rule fixes in
 // one line; nothing sideways; and on a big screen the page, its keys and
 // its cards grow by one factor. In chromium, and in Firefox where it is
 // installed. Screenshots go to test-results for a look.
@@ -153,6 +154,20 @@ for (const vp of VIEWPORTS) {
       await inside(page.locator(".rf"), vp.width);
       await noSideways(page, vp.width);
       await page.screenshot({ path: `test-results/rules-change-${vp.name}.png`, fullPage: true });
+    });
+
+    test("in the one chat, a rule change the assistant proposed is the same approval card", async ({ page }) => {
+      await pictures(page);
+      await page.goto("/rulechat.html#assistant/c1");
+      const card = page.locator(".rule-card");
+      await expect(card).toHaveCount(1);
+      await expect(card.locator(".approval-kind .tag").first()).toHaveText("waits for you");
+      await expect(card.locator(".rx-breaks-head")).toHaveText("Breaks 3 answers people settled");
+      await expect(card.locator(".approval-foot button")).toHaveText(["Adopt", "Change it", "Reject", "Details"]);
+      await card.scrollIntoViewIfNeeded();
+      await inside(card, vp.width);
+      await noSideways(page, vp.width);
+      await card.screenshot({ path: `test-results/rules-chat-${vp.name}.png` });
     });
 
     test("a dataset's detail says its proposed rule fixes in one line, with the way to them", async ({ page }) => {

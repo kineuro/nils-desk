@@ -57,6 +57,8 @@ export function TurnView(props: {
   onRevise?: () => void;
   /** How the page draws a proposed version, in place of the approval card. */
   queryCard?: (p: Proposal) => ReactNode;
+  /** How the page draws a proposed rule change: the Rules page's own card (record 56). */
+  ruleCard?: (c: Change) => ReactNode;
   onChoose: (label: string) => void;
   /** Where an undecided proposal is decided, when it is not here. */
   decidedElsewhere?: string;
@@ -72,7 +74,7 @@ export function TurnView(props: {
   charts?: ChartItem[];
   files?: FileItem[];
 }) {
-  const { turn, open, onToggle, proposals, changes, onChange, onRevise, queryCard, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions, said, charts, files } = props;
+  const { turn, open, onToggle, proposals, changes, onChange, onRevise, queryCard, ruleCard, choice, onDecide, onChoose, decidedElsewhere, actions, openQuery, memories, memoryActions, said, charts, files } = props;
   if (turn.role === "user") return <Asked turn={turn} actions={actions} />;
   if (turn.role === "system") return <p className="meta">{turn.text}</p>;
   const steps = turn.done && turn.tools.length > 0 ? <StepsHelp tools={turn.tools} open={open} onToggle={onToggle} /> : null;
@@ -99,9 +101,18 @@ export function TurnView(props: {
           </Fragment>
         ),
       )}
-      {(changes ?? []).map((c) => (
-        <ApprovalCardView key={c.id} card={cardOfChange(c)} onDecide={onChange ? (v) => onChange(c, v) : undefined} onRevise={onChange ? onRevise : undefined} />
-      ))}
+      {(changes ?? []).map((c) =>
+        c.change === "rule_change" ? (
+          // a rule change is decided on its own card, through the engine, never through the assistant
+          ruleCard ? (
+            <Fragment key={c.id}>{ruleCard(c)}</Fragment>
+          ) : (
+            <ApprovalCardView key={c.id} card={{ ...cardOfChange(c), elsewhere: "It is decided on the Rules page." }} />
+          )
+        ) : (
+          <ApprovalCardView key={c.id} card={cardOfChange(c)} onDecide={onChange ? (v) => onChange(c, v) : undefined} onRevise={onChange ? onRevise : undefined} />
+        ),
+      )}
       {(memories ?? []).map((mem) => {
         const here = memoryActions?.state(mem) ?? null;
         const key = `${mem.state}:${mem.text}`;
