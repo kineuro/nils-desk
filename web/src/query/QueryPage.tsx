@@ -36,6 +36,7 @@ import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
 import { SaveSelection } from "./SaveSelection";
+import { Exports } from "./Exports";
 import { Selections } from "./Selections";
 import { mayList, maySave } from "./selections";
 import { ProfilePanel, StepEditor } from "./CardParts";
@@ -46,35 +47,38 @@ const n = (v: number) => v.toLocaleString("en-US");
 
 export function QueryPage({ caps, open }: { caps: Capabilities; open: string | null }) {
   if (open === "selections" && mayList(caps)) return <SelectionsPage caps={caps} />;
+  if (open === "exports" && mayExport(caps)) return <ExportsPage caps={caps} />;
   const id = open !== null && /^\d+$/.test(open) ? Number(open) : null;
   return id === null ? <Cards caps={caps} /> : <Card caps={caps} id={id} />;
 }
 
-/** Cards and Selections, the section's two lists. */
-function QueryChips({ caps, on }: { caps: Capabilities; on: "cards" | "selections" }) {
-  if (!mayList(caps)) return null;
-  return (
-    <div className="chips" role="group" aria-label="the query lists">
-      <a className={on === "cards" ? "tag brand" : "tag"} aria-current={on === "cards" ? "page" : undefined} href={href("query")}>
-        Cards
-      </a>
-      <a className={on === "selections" ? "tag brand" : "tag"} aria-current={on === "selections" ? "page" : undefined} href={href("query", "selections")}>
-        Selections
-      </a>
-    </div>
-  );
-}
+/** Whether the person finds Ask's Exports: the kept results, where the engine lists them. */
+export const mayExport = (caps: Capabilities): boolean => may(caps, "query:see") && served(caps, "GET /api/ask/handles");
 
-function SelectionsPage({ caps }: { caps: Capabilities }) {
+
+function ExportsPage(_: { caps: Capabilities }) {
   return (
     <section className="query">
       <div className="data-head">
         <div className="grow">
-          <span className="eyebrow">Query</span>
+          <span className="eyebrow">Ask</span>
+          <h1>Exports</h1>
+        </div>
+      </div>
+      <Exports />
+    </section>
+  );
+}
+
+function SelectionsPage(_: { caps: Capabilities }) {
+  return (
+    <section className="query">
+      <div className="data-head">
+        <div className="grow">
+          <span className="eyebrow">Ask</span>
           <h1>Selections</h1>
         </div>
       </div>
-      <QueryChips caps={caps} on="selections" />
       <Selections />
     </section>
   );
@@ -95,7 +99,7 @@ function Cards({ caps }: { caps: Capabilities }) {
     <section className="query">
       <div className="data-head">
         <div className="grow">
-          <span className="eyebrow">Query</span>
+          <span className="eyebrow">Ask</span>
           <h1>Cards</h1>
         </div>
         <button type="button" className="button" onClick={() => setStarting(true)}>
@@ -103,14 +107,13 @@ function Cards({ caps }: { caps: Capabilities }) {
           New query
         </button>
       </div>
-      <QueryChips caps={caps} on="cards" />
       {rows === null && !why && <Wait phase="reading the cards" since={since} size="panel" />}
       {why && <p className="warn">The cards could not be read: {why}</p>}
       {rows !== null && rows.length === 0 && <p className="lede">No query yet. Start one from everyone or from a cohort.</p>}
       {rows !== null && rows.length > 0 && (
         <div className="query-cards">
           {rows.map((r) => (
-            <a key={r.root} className="query-card-link" href={href("query", String(r.document))}>
+            <a key={r.root} className="query-card-link" href={href("ask", String(r.document))}>
               <span className="query-card-title">
                 <span className="grow">{cardTitle(r.name)}</span>
                 <span className="chip">v{r.versions}</span>
@@ -156,7 +159,7 @@ function StartDialog({ caps, onClose }: { caps: Capabilities; onClose: () => voi
     ask
       .store(started.document as Json)
       .then((d) => {
-        location.hash = href("query", String(d.document));
+        location.hash = href("ask", String(d.document));
       })
       .catch((e: Error) => {
         setBusy(false);
@@ -349,7 +352,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       setMove(null);
       setTyped({});
       load();
-    } else location.hash = href("query", String(document));
+    } else location.hash = href("ask", String(document));
   };
 
   const applyMove = (set: string, m: Move, args: Json) => {
@@ -452,14 +455,14 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       <div className="query-head">
         <div className="grow">
           <span className="eyebrow">
-            <a href={href("query")}>Query</a> · card
+            <a href={href("ask")}>Ask</a> · card
           </span>
           <h1>{cardTitle((doc.ask as Json).name as string | undefined, answer)}</h1>
         </div>
         {versions.length > 0 && (
           <nav className="versions" aria-label="versions">
             {versions.map((v) => (
-              <a key={v.id} className={v.id === id ? "version on" : "version"} href={href("query", String(v.id))} title={[v.principal, whenWords(v.at)].filter(Boolean).join(", ")}>
+              <a key={v.id} className={v.id === id ? "version on" : "version"} href={href("ask", String(v.id))} title={[v.principal, whenWords(v.at)].filter(Boolean).join(", ")}>
                 {v.label}
               </a>
             ))}

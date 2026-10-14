@@ -46,10 +46,10 @@ export function OverviewPage({ caps, install }: { caps: Capabilities; install: I
   // the reads this person's cards want, by the pages offered and the doors served
   const reads: Read[] = [
     has("places") ? placesKept : null,
-    has("database") && served(caps, "GET /api/backups") ? backupsKept : null,
-    has("database") && served(caps, "GET /api/status") ? statusKept : null,
-    has("identity") && caps.desk.mode === "local" ? usersKept : null,
-    has("gateway") ? backendsKept : null,
+    has("backups") && served(caps, "GET /api/backups") ? backupsKept : null,
+    has("backups") && served(caps, "GET /api/status") ? statusKept : null,
+    has("people") && caps.desk.mode === "local" ? usersKept : null,
+    has("language-models") ? backendsKept : null,
     has("audit") ? auditKept : null,
   ].filter((r): r is NonNullable<typeof r> => r !== null);
 
@@ -71,19 +71,19 @@ export function OverviewPage({ caps, install }: { caps: Capabilities; install: I
   const containers = install !== null && (install.runtime === "docker" || install.runtime === "podman");
   const slots: Slot[] = [{ key: "parts", page: "parts", title: "Parts", icon: "layers", card: partsCard(caps, install), failed: null }];
   if (has("places")) slots.push({ key: "places", page: "places", title: "Places", icon: "folder", card: places.value ? placesCard(places.value.places, containers) : null, failed: failed(places.error, places.value) });
-  if (has("database")) {
-    if (served(caps, "GET /api/backups")) slots.push({ key: "backups", page: "database", title: "Backups", icon: "shield", card: backups.value ? backupsCard(backups.value, now) : null, failed: failed(backups.error, backups.value) });
+  if (has("backups")) {
+    if (served(caps, "GET /api/backups")) slots.push({ key: "backups", page: "backups", title: "Backups", icon: "shield", card: backups.value ? backupsCard(backups.value, now) : null, failed: failed(backups.error, backups.value) });
     slots.push({
       key: "registry",
-      page: "database",
+      page: "backups",
       title: "Registry",
       icon: "data",
       card: registryCard(caps, install, status.value?.backend ?? null, places.value?.places ?? null, backups.value?.schedule.timezone ?? null),
       failed: null,
     });
   }
-  if (has("identity")) slots.push({ key: "signin", page: "identity", title: "Sign-in", icon: "users", card: signinCard(caps, users.value), failed: null });
-  if (has("gateway")) slots.push({ key: "gateway", page: "gateway", title: "Language models", icon: "gateway", card: backends.value ? gatewayCard(caps, backends.value) : null, failed: failed(backends.error, backends.value) });
+  if (has("people")) slots.push({ key: "signin", page: "people", title: "Sign-in", icon: "users", card: signinCard(caps, users.value), failed: null });
+  if (has("language-models")) slots.push({ key: "gateway", page: "language-models", title: "Language models", icon: "gateway", card: backends.value ? gatewayCard(caps, backends.value) : null, failed: failed(backends.error, backends.value) });
   if (has("audit")) slots.push({ key: "audit", page: "audit", title: "Audit", icon: "file", card: audit.value ? auditCard(audit.value, now) : null, failed: failed(audit.error, audit.value) });
   const needs = attention(slots.flatMap((s) => (s.card ? [s.card] : [])));
   const settled = slots.every((s) => s.card !== null || s.failed !== null);

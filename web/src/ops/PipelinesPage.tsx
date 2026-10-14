@@ -57,7 +57,6 @@ export function PipelinesPage({ caps, page = null, arg = null, query }: { caps: 
             <h1>Run {arg}</h1>
           </div>
         </div>
-        <PipelinesChips on="catalog" />
         <RunResultPage id={Number(arg)} unit={query.view} />
       </section>
     );
@@ -75,7 +74,6 @@ export function PipelinesPage({ caps, page = null, arg = null, query }: { caps: 
             <h1>Run {arg}</h1>
           </div>
         </div>
-        <PipelinesChips on="catalog" />
         <RunPage caps={caps} id={Number(arg)} />
       </section>
     );
@@ -89,7 +87,6 @@ export function PipelinesPage({ caps, page = null, arg = null, query }: { caps: 
             <h1>A planned run</h1>
           </div>
         </div>
-        <PipelinesChips on="catalog" />
         <PlanPage caps={caps} id={arg} />
       </section>
     );
@@ -104,29 +101,31 @@ export function PipelinesPage({ caps, page = null, arg = null, query }: { caps: 
             <p className="lede">What this engine can run, pinned by image, and what each run made.</p>
           </div>
         </div>
-        <PipelinesChips on="catalog" />
         {said && <p className="meta">{said}</p>}
-        <CatalogPage caps={caps} onQueued={setSaid} />
+        <CatalogPage caps={caps} onQueued={setSaid} part="catalog" />
+      </section>
+    );
+  }
+  // spec 13.1: the runs are a page of their own in the side
+  if (page === "runs" && arg === null && catalog) {
+    return (
+      <section className="pipelines">
+        <div className="data-head">
+          <div className="grow">
+            <span className="eyebrow">Pipelines</span>
+            <h1>Runs</h1>
+          </div>
+        </div>
+        {said && <p className="meta">{said}</p>}
+        <CatalogPage caps={caps} onQueued={setSaid} part="runs" />
       </section>
     );
   }
   return <JobsPage caps={caps} catalog={catalog} />;
 }
 
-function PipelinesChips({ on }: { on: "jobs" | "catalog" }) {
-  return (
-    <div className="chips pages">
-      <a className={on === "jobs" ? "opt on" : "opt"} href={href("pipelines")} aria-current={on === "jobs" ? "page" : undefined}>
-        Jobs
-      </a>
-      <a className={on === "catalog" ? "opt on" : "opt"} href={href("pipelines", "catalog")} aria-current={on === "catalog" ? "page" : undefined}>
-        Catalog
-      </a>
-    </div>
-  );
-}
 
-function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
+function JobsPage({ caps }: { caps: Capabilities; catalog?: boolean }) {
   const live = useLiveJobs(caps);
   const [all, setAll] = useState<JobRow[] | null>(null);
   const [why, setWhy] = useState<string | null>(null);
@@ -228,7 +227,6 @@ function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
           <p className="lede">Everything heavy runs as a job the engine queues: digests, pseudonymisation, sorting, releases, backups. What runs is here as it runs; what ran stays.</p>
         </div>
       </div>
-      {catalog && <PipelinesChips on="jobs" />}
       {!lists && <p className="meta">This engine does not list its jobs.</p>}
       {said && <p className="meta">{said}</p>}
       {why && all === null && <p className="warn">The jobs could not be read: {why}</p>}
@@ -272,7 +270,7 @@ function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
         <Icon name="lock" />
         <div className="note-body">
           <p className="note-lead">Who may act</p>
-          <p className="note-detail">A digest is cancelled with Data: Work, a sort with Pipelines: Work, a release with Release: Work, a backup with Database: Work. The card keeps its button and says why when a person lacks the grant.</p>
+          <p className="note-detail">A digest is cancelled with Data: Work, a sort with Pipelines: Work, a release with Release: Work, a backup with Backups: Work. The card keeps its button and says why when a person lacks the grant.</p>
         </div>
       </div>
     </section>

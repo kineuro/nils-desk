@@ -24,7 +24,7 @@ import { StateBar } from "../campaigns/parts";
 import { catalog } from "../ops/catalog";
 import { reviews } from "../home/placeholders";
 import { review, type ReviewSummary } from "./client";
-import { heldCount, queuedCount, shareWords, workList, type WorkRow } from "./work";
+import { heldCount, shareWords, workList, type WorkRow } from "./work";
 import "../campaigns/campaigns.css";
 import "./work.css";
 
@@ -178,7 +178,6 @@ export function WorkBody({ caps, summary, list, mine = {}, since = null, why = [
   const groups = useMemo(() => workList(caps, summary, list), [caps, summary, list]);
   const closed = (list ?? []).filter((c) => c.status === "closed");
   const held = heldCount(summary);
-  const queued = queuedCount(summary);
   return (
     <section className="data review work">
       <div className="data-head">
@@ -192,27 +191,6 @@ export function WorkBody({ caps, summary, list, mine = {}, since = null, why = [
             <Icon name="plus" />
             Make a campaign
           </button>
-        )}
-      </div>
-      <div className="chips pages">
-        <a className="opt on" href={href("review")} aria-current="page">
-          Work
-        </a>
-        {reviewer && (
-          <a className="opt" href={href("review", "questions")}>
-            Questions
-            {summary && <b>{n(queued)}</b>}
-          </a>
-        )}
-        {reviewer && served(caps, "GET /api/review/rounds") && (
-          <a className="opt" href={href("review", "rounds")}>
-            Rounds
-          </a>
-        )}
-        {may(caps, "campaigns:see") && served(caps, "GET /api/label-sets") && (
-          <a className="opt" href={href("review", "label-sets")}>
-            Label sets
-          </a>
         )}
       </div>
       {since !== null && <Wait phase="reading the work" since={since ?? now} size="panel" />}

@@ -73,9 +73,22 @@ export function fromCampaigns(route: Route): string {
   return narrow(to, route.query ?? {});
 }
 
-/** Where an address that moved now leads, or null where it did not move: Models is a page of Pipelines since Wave 7a (spec section 13.1), so #models opens #pipelines/models and #models/model/3 opens #pipelines/models/3. */
+/** The Settings pages that took the words of the map (spec section 13.1): Database is Backups, Identity is People, and Kvasir's page is Language models. */
+const SETTINGS_MOVED: Record<string, string> = { database: "backups", identity: "people", gateway: "language-models" };
+
+/**
+ * Where an address that moved now leads, or null where it did not move:
+ * Models is a page of Pipelines since Wave 7a (spec section 13.1), so #models
+ * opens #pipelines/models and #models/model/3 opens #pipelines/models/3; the
+ * query section is Ask (#query is #ask); and the Settings pages renamed by
+ * the map keep their old addresses as links to the new ones.
+ */
 export function moved(r: Route): string | null {
-  if (r.section !== "models") return null;
-  const id = r.page === "model" && r.arg !== null && /^\d+$/.test(r.arg) ? r.arg : null;
-  return narrow(href("pipelines", "models", id), r.query ?? {});
+  if (r.section === "models") {
+    const id = r.page === "model" && r.arg !== null && /^\d+$/.test(r.arg) ? r.arg : null;
+    return narrow(href("pipelines", "models", id), r.query ?? {});
+  }
+  if (r.section === "query") return narrow(href("ask", r.page, r.arg, r.sub), r.query ?? {});
+  if (r.section === "settings" && r.page !== null && r.page in SETTINGS_MOVED) return narrow(href("settings", SETTINGS_MOVED[r.page], r.arg, r.sub), r.query ?? {});
+  return null;
 }

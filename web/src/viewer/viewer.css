@@ -8,7 +8,7 @@
 .viewer-plane { position: relative; aspect-ratio: 1; min-width: 0; overflow: hidden; border-radius: var(--n-radius); background: var(--n-bg-sunken); }
 .viewer-plane-server { display: grid; grid-template-rows: 1fr auto; aspect-ratio: auto; }
 .viewer-plane-server .viewer-render { aspect-ratio: 1; }
-.viewer-plane-server input[type="range"] { width: 100%; accent-color: var(--n-brand); }
+.viewer-plane-server input[type="range"] { width: 100%; accent-color: var(--n-brand-mark); }
 .viewer-plane-name { position: absolute; left: 0.4rem; bottom: 0.3rem; color: var(--n-text-on-brand); font-size: 11px; opacity: 0.7; pointer-events: none; }
 .viewer-plane-server .viewer-plane-name { bottom: 2rem; }
 .viewer-note { margin: 0; }

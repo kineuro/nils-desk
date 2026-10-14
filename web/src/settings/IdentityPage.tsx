@@ -132,7 +132,7 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
   const work = may(caps, "identity:work");
   return (
     <div className="settings">
-      <Head title="Identity" lede={mode === "off" ? "Nobody signs in: whoever opens the desk may do everything." : "People, groups and what each may open."} />
+      <Head title="People" lede={mode === "off" ? "Nobody signs in: whoever opens the desk may do everything." : "People, groups and what each may open."} />
       <Stats items={accessStats(caps, groups, access)} />
       {why && <p className="warn">{why}</p>}
       <SignIn caps={caps} sessions={access?.sessions_open ?? null} />

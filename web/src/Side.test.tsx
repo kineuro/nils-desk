@@ -25,7 +25,7 @@ const TOP: Section[] = [
     rest: "none",
     pages: assistantPages([page("c-1", "T1 with contrast in study-big"), page("c-2", "Sort the new files tonight")]),
   },
-  { id: "query", title: "Query", icon: "search", pages: [page("cards", "Cards", { to: "#query" }), page("selections", "Selections")] },
+  { id: "query", title: "Query", icon: "search", pages: [page("cards", "Cards", { to: "#ask" }), page("selections", "Selections")] },
   { id: "review", title: "Review", icon: "review", pages: [page("questions", "Questions", { to: "#review" }), page("picks", "Main scans"), page("identifiers", "Subjects"), page("rules", "Rules")] },
   { id: "pipelines", title: "Pipelines", icon: "branch", pages: [page("now", "Running now", { to: "#pipelines" }), page("catalog", "Catalog", { also: ["runs", "plan"] })] },
 ];

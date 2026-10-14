@@ -70,6 +70,32 @@ describe("theme", () => {
     }
   });
 
+  // record 55 K5b (round 4): what fills a bar or marks a step must show on the ground in both themes
+  it("a mark and a bar's fill stand out from the page and the sunken ground, and a selected row from the page, in both themes", () => {
+    const values = (b: string) => Object.fromEntries([...b.matchAll(/(--n-[a-z0-9-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+    const lum = (hex: string) => {
+      const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+    const ratio = (a: string, b: string) => {
+      const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p);
+      return (x + 0.05) / (y + 0.05);
+    };
+    for (const [name, t] of [["light", values(block("\n:root {"))], ["dark", values(block(':root:not([data-theme="light"])'))]] as const) {
+      for (const k of ["--n-brand-mark", "--n-progress"]) for (const g of ["--n-bg-page", "--n-bg-sunken", "--n-bg-raised"]) expect(ratio(t[k], t[g]), `${name} ${k} on ${g}`).toBeGreaterThanOrEqual(3);
+      expect(ratio(t["--n-bg-selected"], t["--n-bg-page"]), `${name} selected`).toBeGreaterThanOrEqual(1.12);
+    }
+  });
+
+  it("the shell draws no mark in the plain brand colour, which vanishes on the dark ground", () => {
+    for (const f of ["../shell.css", "../campaigns/campaigns.css", "../data/data.css", "../viewer/viewer.css", "../review/mainScans.css"]) {
+      const text = readFileSync(new URL(f, import.meta.url), "utf8");
+      const rules = text.split("}").filter((r) => /var\(--n-brand\)/.test(r));
+      // a filled control carries its words in the brand's own text colour, so it stays readable; a mark has none
+      for (const r of rules.filter((r) => !/color:\s*var\(--n-text-on-brand\)/.test(r))) expect(/(accent-color|outline|box-shadow|border(-top|-left)?(-color)?)\s*:[^;]*var\(--n-brand\)/.test(r) || /::before|::after|\.now \{|progress|track|meter/.test(r) && /background:\s*var\(--n-brand\)/.test(r), `${f}: ${r.trim().slice(0, 80)}`).toBe(false);
+    }
+  });
+
   it("the two dark tables agree", () => {
     const d = block(':root:not([data-theme="light"])').replace(/\s+/g, " ");
     const f = block(':root[data-theme="dark"]').replace(/\s+/g, " ");

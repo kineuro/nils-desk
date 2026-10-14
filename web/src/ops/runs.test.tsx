@@ -468,7 +468,7 @@ describe("the assistant's plan", () => {
     // no save where the person may not save a selection, or the engine has no door
     const reader = renderToStaticMarkup(<PlanView caps={capsWith(DOORS, [...WORK])} doc={doc} pipeline={VOLUMES} live={null} liveWhy="no handle 41" busy={false} said={null} onStart={() => undefined} gone onSave={null} />);
     expect(reader).not.toContain("Save as a selection</button>");
-    expect(reader).toContain("Saving it as a selection needs Query: Work at detail quasi.");
+    expect(reader).toContain("Saving it as a selection needs Ask: Work at detail quasi.");
     expect(runActs(capsWith(DOORS, [...WORK])).save).toBe(false);
     expect(runActs(caps).save).toBe(true);
   });

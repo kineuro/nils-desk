@@ -48,13 +48,13 @@ export function Settings(props: PageProps & { page: string | null }) {
       return <DeskPage {...props} />;
     case "assistant":
       return <AssistantPage {...props} />;
-    case "gateway":
+    case "language-models":
       return <GatewayPage caps={props.caps} install={props.install} />;
     case "places":
       return <PlacesPage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
-    case "database":
+    case "backups":
       return <DatabasePage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
-    case "identity":
+    case "people":
       return <IdentityPage caps={props.caps} />;
     case "audit":
       return <AuditPage />;

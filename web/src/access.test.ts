@@ -14,12 +14,12 @@ const handling: Work[] = [
 
 describe("what a control needs", () => {
   it("is nothing to say while the person holds the work of every page it needs", () => {
-    expect(needsWork(holding(["query:work"]), "Keeping cards", [["query:work", "the Query page"]])).toBeNull();
+    expect(needsWork(holding(["query:work"]), "Keeping cards", [["query:work", "the Ask page"]])).toBeNull();
     expect(needsWork(holding(["data:work", "places:work"]), "Changing how a source is handled", handling)).toBeNull();
   });
 
   it("names the one page whose work it needs", () => {
-    expect(needsWork(holding(["query:see"]), "Keeping cards", [["query:work", "the Query page"]])).toBe("Keeping cards needs work on the Query page.");
+    expect(needsWork(holding(["query:see"]), "Keeping cards", [["query:work", "the Ask page"]])).toBe("Keeping cards needs work on the Ask page.");
   });
 
   it("names every page it needs, and the ones this person has no work on", () => {

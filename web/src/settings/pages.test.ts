@@ -45,11 +45,11 @@ describe("the settings pages", () => {
 
   it("name the gateway and the assistant under the parts, where they answered", () => {
     const both = caps(SETS.operator.grants, { kvasir: { models: [] }, assistant: { stations: [] } });
-    expect(ids(both)).toEqual(["overview", "parts", "engine", "desk", "gateway", "assistant", "setup"]);
-    expect(settingsPages(both).filter((p) => p.sub).map((p) => p.id)).toEqual(["engine", "desk", "gateway", "assistant"]);
+    expect(ids(both)).toEqual(["overview", "parts", "engine", "desk", "language-models", "assistant", "setup"]);
+    expect(settingsPages(both).filter((p) => p.sub).map((p) => p.id)).toEqual(["engine", "desk", "language-models", "assistant"]);
     // without the install's pages there are no parts to set them in under
     const answered = { kvasir: { models: [] }, assistant: { stations: [] } };
-    expect(settingsPages(caps(["kvasir:see"], answered))).toEqual([{ id: "gateway", title: "Language models", sub: false }]);
+    expect(settingsPages(caps(["kvasir:see"], answered))).toEqual([{ id: "language-models", title: "Language models", sub: false }]);
     expect(settingsPages(caps(["assistant-settings:work"], answered))).toEqual([{ id: "assistant", title: "Assistant", sub: false }]);
     expect(ids(caps(["kvasir:work"]))).toEqual([]);
   });
@@ -57,10 +57,10 @@ describe("the settings pages", () => {
   it("offer the places, the database, identity and the audit log by their grants where the engine serves them, and setup last", () => {
     const doors = ["GET /api/places", "GET /api/backups", "GET /api/audit"];
     expect(ids(served(SETS.operator.grants, doors))).toEqual(["overview", "parts", "engine", "desk", "places", "setup"]);
-    expect(ids(served(SETS.admin.grants, doors))).toEqual(["overview", "parts", "engine", "desk", "places", "database", "identity", "audit", "setup"]);
-    expect(ids(caps(SETS.admin.grants))).toEqual(["overview", "parts", "engine", "desk", "identity", "setup"]);
-    expect(ids(served(["places:work", "database:see", "audit:see"], doors))).toEqual(["places", "database", "audit"]);
-    expect(ids(served(["identity:work"], doors))).toEqual(["identity"]);
+    expect(ids(served(SETS.admin.grants, doors))).toEqual(["overview", "parts", "engine", "desk", "places", "backups", "people", "audit", "setup"]);
+    expect(ids(caps(SETS.admin.grants))).toEqual(["overview", "parts", "engine", "desk", "people", "setup"]);
+    expect(ids(served(["places:work", "database:see", "audit:see"], doors))).toEqual(["places", "backups", "audit"]);
+    expect(ids(served(["identity:work"], doors))).toEqual(["people"]);
   });
 
   it("open the page an address names, and the first page offered for anything else", () => {
@@ -69,6 +69,6 @@ describe("the settings pages", () => {
     expect(settingsPage(pages, "nowhere")?.id).toBe("overview");
     expect(settingsPage(pages, null)?.id).toBe("overview");
     expect(settingsPage([], "parts")).toBeNull();
-    expect(settingsPage(settingsPages(caps(["identity:see"])), "parts")?.id).toBe("identity");
+    expect(settingsPage(settingsPages(caps(["identity:see"])), "parts")?.id).toBe("people");
   });
 });

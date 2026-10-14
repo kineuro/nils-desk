@@ -444,7 +444,7 @@ function CheckForm({ caps, run, onClose, onBack }: { caps: Capabilities; run: Ru
             );
           })}
           {readers.lacking.length > 0 && (
-            <span className="meta check-lacking" title={`${readers.lacking.map((p) => p.display).join(", ")}: a claim needs work on Campaigns, which an admin gives on the Identity page`}>
+            <span className="meta check-lacking" title={`${readers.lacking.map((p) => p.display).join(", ")}: a claim needs work on Campaigns, which an admin gives on the People page`}>
               {readers.lacking.length <= 3 ? readers.lacking.map((p) => p.display).join(", ") : `${n(readers.lacking.length)} more`} without work on Campaigns
             </span>
           )}

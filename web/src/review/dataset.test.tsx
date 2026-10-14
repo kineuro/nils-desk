@@ -63,10 +63,9 @@ describe("Review narrowed to a dataset", () => {
     act(() => root.render(<ReviewPage caps={caps} page={null} query={{ dataset: "ms-a" }} />));
     await settle();
     const chips = [...el.querySelectorAll<HTMLAnchorElement>(".chips.pages a")].map((a) => a.getAttribute("href"));
-    expect(chips.length).toBeGreaterThan(2);
-    // the one list of work is the whole site's; every page of the queue keeps the dataset
-    expect(chips[0]).toBe("#review");
-    for (const c of chips.slice(1)) expect(c).toContain("dataset=ms-a");
+    // the questions and their three grown families, each shown, zero too (record 55 H2, round 4), and each keeps the dataset
+    expect(chips.length).toBe(4);
+    for (const c of chips) expect(c).toContain("dataset=ms-a");
     expect(queueHref({ axis: "base", reason: null, border: null }, "", "ms-a")).toBe("#review/questions?dataset=ms-a&axis=base");
   });
 

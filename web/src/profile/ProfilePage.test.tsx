@@ -34,9 +34,9 @@ describe("a person's own page", () => {
     expect(html).toContain("<h2>Access</h2>");
     expect(html).not.toContain("set by whoever");
     expect(html).toMatch(/<b>Assistant<\/b><span class="state"><span class="amark do">use<\/span><\/span><span class="what">Chat with the assistant<\/span>/u);
-    expect(html).toMatch(/<b>Query<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">Ask, run and chart questions · keep cards, queue ask jobs<\/span>/u);
-    expect(html).toMatch(/<b>Data<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Sources and batches<\/span>/u);
-    expect(html).toMatch(/<div class="arow deep"><b>Kvasir<\/b>/u);
+    expect(html).toMatch(/<b>Ask<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">Cards, selections and exports · keep cards, save selections<\/span>/u);
+    expect(html).toMatch(/<b>Data<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Datasets, cohorts and Browse<\/span>/u);
+    expect(html).toMatch(/<div class="arow deep"><b>Language models<\/b>/u);
     expect(html).toContain('<div class="arow hidden" title="Whoever may change people and groups can open them.">');
     expect(html).toContain('<b>Release, Pipelines, Models and Campaigns</b><span class="state meta">hidden</span></div>');
     expect(html).not.toContain("admin");
@@ -63,7 +63,7 @@ describe("a person's own page", () => {
 
   it("reads a grant for a page not built yet as a line, never a link, and never names that page hidden", () => {
     const html = renderToStaticMarkup(<ProfilePage caps={caps(["query:see", "models:see"], "plain", { groups: [] })} />);
-    expect(html).toMatch(/<div class="arow"><b>Models<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Registered classifier models<\/span><\/div>/u);
+    expect(html).toMatch(/<div class="arow"><b>Models<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Models, under Pipelines<\/span><\/div>/u);
     expect(html).not.toMatch(/href="[^"]*(models|campaigns)/u);
     // Models is not built yet and is never named hidden; Campaigns is built, and is
     expect(html).toContain("<b>Assistant, Data, Review, Release, Pipelines, Campaigns and Settings</b>");

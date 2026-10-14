@@ -59,7 +59,7 @@ for (const vp of SIZES) {
 
   test(`at ${vp.name} px an admin resets another person's password and removes them from their form, inside the window`, async ({ page }) => {
     await page.setViewportSize(vp);
-    await page.goto("/round5.html#settings/identity");
+    await page.goto("/round5.html#settings/people");
     await page.getByRole("button", { name: "Change Erik Lund" }).click();
     const dialog = page.locator("dialog[open]");
     await dialog.getByRole("button", { name: "Reset the password" }).click();
@@ -91,7 +91,7 @@ for (const vp of SIZES) {
 
   test(`at ${vp.name} px Backups prints restore as three steps to copy`, async ({ page }) => {
     await page.setViewportSize(vp);
-    await page.goto("/round5.html#settings/database");
+    await page.goto("/round5.html#settings/backups");
     await page.locator("details.restore summary").click();
     const steps = page.locator(".restore-steps li");
     await expect(steps).toHaveCount(3);

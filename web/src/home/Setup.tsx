@@ -61,7 +61,7 @@ async function finished(id: number, limitMs = 60 * 60_000): Promise<JobRow> {
     }
     await new Promise((done) => setTimeout(done, 2000));
   }
-  throw new Error("It is still running; the Database page shows its archive once it is done.");
+  throw new Error("It is still running; the Backups page shows its archive once it is done.");
 }
 
 export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities; install: Install | null; onChanged: () => void; onHome?: () => void }) {
@@ -258,7 +258,7 @@ export function SourcesBody(props: { caps: Capabilities; install: Install | null
 function BackupsBody(props: { caps: Capabilities; install: Install | null; places: Place[]; archives: Backups | null; status: RegistryStatus | null; onDone: () => void }) {
   const { caps, install, places, archives, status, onDone } = props;
   const acting = useActing();
-  if (!may(caps, "database:see")) return <p className="meta">Where the registry's backups go, and when they run, are named on the Database page.</p>;
+  if (!may(caps, "database:see")) return <p className="meta">Where the registry's backups go, and when they run, are named on the Backups page.</p>;
   const changes = may(caps, "database:work");
   // naming the engine's folder adds or changes places too, so it asks for work on both pages
   const refusal = backupFolderRefusal(caps);
@@ -295,7 +295,7 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
       const { job } = await ops.enqueue(["backup", "--rehearse", "--keep", String(archives?.schedule.keep ?? 14)], "backup from setup");
       const ended = await finished(job);
       onDone();
-      if (ended.state !== "done") throw new Error("The backup did not finish cleanly; the Database page says how its archive stands.");
+      if (ended.state !== "done") throw new Error("The backup did not finish cleanly; the Backups page says how its archive stands.");
       return "The first archive is written, and every store in it opens.";
     });
 
@@ -345,8 +345,8 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
             Back up now
           </button>
         )}
-        <a className="button quiet small" href={href("settings", "database")}>
-          The Database page
+        <a className="button quiet small" href={href("settings", "backups")}>
+          The Backups page
         </a>
       </div>
       {refusal !== null && !backup && dir && <p className="meta">{refusal}</p>}
@@ -378,8 +378,8 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
             Add a person
           </button>
           {users.value && <span className="meta">{users.value.users.length === 1 ? "one person so far" : `${users.value.users.length} people so far`}</span>}
-          <a className="button quiet small" href={href("settings", "identity")}>
-            The Identity page
+          <a className="button quiet small" href={href("settings", "people")}>
+            The People page
           </a>
         </div>
       )}
@@ -410,7 +410,7 @@ function ModelBody({ caps }: { caps: Capabilities }) {
 
       <div className="row actions">
         {reaches && (
-          <a className="button small" href={href("settings", "gateway")}>
+          <a className="button small" href={href("settings", "language-models")}>
             Language models
           </a>
         )}

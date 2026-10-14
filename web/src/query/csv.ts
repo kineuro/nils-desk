@@ -77,6 +77,23 @@ export async function answerFile(document: number, title: string, version: strin
   return { name: csvName(title, version, document), text: csvOf(columns, rows), rows: rows.length, withheld, held: columns.filter((c) => heldCols.has(c)) };
 }
 
+/** A kept result read whole for its file (Ask, Exports): every page of its rows for an export, in order, named after the result. */
+export async function handleFile(handle: number, title: string, doors: Pick<typeof ask, "rows"> = ask): Promise<AnswerFile> {
+  const rows: unknown[][] = [];
+  let withheld = 0;
+  let columns: string[] = [];
+  const heldCols = new Set<string>();
+  for (let page = 0, pages = 1; page < pages; page++) {
+    const p = await doors.rows(handle, page, "export");
+    if (page === 0) columns = p.columns.map(columnName);
+    pages = p.pages;
+    rows.push(...p.rows);
+    withheld += p.withheld_sealed ?? 0;
+    for (const c of heldColumns(p).keys()) heldCols.add(c);
+  }
+  return { name: csvName(title, `result-${handle}`, handle), text: csvOf(columns, rows), rows: rows.length, withheld, held: columns.filter((c) => heldCols.has(c)) };
+}
+
 /** What the card says once the file is saved: its name and how many rows it holds. */
 export function savedWords(f: AnswerFile): string {
   const rows = `${f.rows.toLocaleString("en-US")} ${f.rows === 1 ? "row" : "rows"}`;

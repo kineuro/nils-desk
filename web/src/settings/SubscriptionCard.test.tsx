@@ -51,7 +51,7 @@ describe("the subscription's card", () => {
     const theirs = renderToStaticMarkup(<SubscriptionCard row={sub({ for: "system", state: "waiting", user_code: "WXYZ-1234" })} may={false} />);
     expect(theirs).not.toContain("<button");
     expect(theirs).not.toContain("WXYZ-1234");
-    expect(theirs).toContain("Needs the assistant and Kvasir: See.");
+    expect(theirs).toContain("Needs the assistant and Language models: See.");
   });
 
   it("names the model once signed in, with whose it is, its context and since when as a hover title, the stations it answers, another model and a sign-out", () => {

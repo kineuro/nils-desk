@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
-// Download CSV beside the Query page card's preview (2026-10-12), as on the
+// Download CSV beside the Ask page card's preview (2026-10-12), as on the
 // chat's answer card: the version run, every page of its answer read for an
 // export at the person's own detail, the file named after the question and
 // saved, and the card saying how many rows it holds, or why the engine would
@@ -66,7 +66,7 @@ function open(run: { status: number; body: unknown }) {
   act(() => root.render(<QueryPage caps={caps7a(["PUT /api/ask/selections/{name}", "POST /api/ask/profile"])} open="102" />));
 }
 
-describe("Download CSV on the Query page card", () => {
+describe("Download CSV on the Ask page card", () => {
   it("sits beside Preview 10 rows, saves every row of the answer for an export, and says how many", async () => {
     open({ status: 200, body: { handle: 7, pages: 2, row_count: 2, truncated: false, grain: "stack", columns: [{ name: "code", type: "text" }, { name: "technique", type: "text" }], rows: [] } });
     await settle(20);

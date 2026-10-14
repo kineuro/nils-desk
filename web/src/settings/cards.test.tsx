@@ -2,7 +2,7 @@
 // A model Kvasir holds, as its card draws (record 25): its name, where it runs
 // in a few words with the rest as a hover title, one tag, and how many
 // stations it answers with their names as a hover title; its check, its key
-// and its removal along the bottom for a person with Kvasir: Work, and nothing
+// and its removal along the bottom for a person with Language models: Work, and nothing
 // to act on for anyone else.
 
 import { renderToStaticMarkup } from "react-dom/server";

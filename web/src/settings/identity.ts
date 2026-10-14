@@ -170,19 +170,19 @@ const SEE_WORK: readonly Level[] = ["hidden", "see", "work"];
 /** A line for each page, in the order the form and the profile draw them. */
 export const PAGE_LINES: readonly PageLine[] = [
   { id: "assistant", title: "Assistant", mark: "Assistant", named: "Assistant", settings: false, levels: ["hidden", "use"], see: "Chat with the assistant" },
-  { id: "query", title: "Query", mark: "Query", named: "Query", settings: false, levels: SEE_WORK, see: "Ask, run and chart questions", work: "keep cards, queue ask jobs" },
-  { id: "data", title: "Data", mark: "Data", named: "Data", settings: false, levels: SEE_WORK, see: "Sources and batches", work: "bring DICOM in, run digests" },
+  { id: "query", title: "Ask", mark: "Ask", named: "Ask", settings: false, levels: SEE_WORK, see: "Cards, selections and exports", work: "keep cards, save selections" },
+  { id: "data", title: "Data", mark: "Data", named: "Data", settings: false, levels: SEE_WORK, see: "Datasets, cohorts and Browse", work: "add datasets, pseudonymise, read, sort" },
   { id: "review", title: "Review", mark: "Review", named: "Review", settings: false, levels: SEE_WORK, see: "What waits for a person", work: "decide, tune rules" },
   { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "Releases made", work: "make and hand over" },
-  { id: "pipelines", title: "Pipelines", mark: "Pipelines", named: "Pipelines", settings: false, levels: SEE_WORK, see: "Runs and results", work: "start and cancel runs" },
-  { id: "models", title: "Models", mark: "Models", named: "Models", settings: false, levels: SEE_WORK, see: "Registered classifier models", work: "register, admit, promote" },
-  { id: "campaigns", title: "Campaigns", mark: "Campaigns", named: "Campaigns", settings: false, levels: SEE_WORK, see: "Annotation and curation campaigns", work: "claim, answer, export" },
+  { id: "pipelines", title: "Pipelines", mark: "Pipelines", named: "Pipelines", settings: false, levels: SEE_WORK, see: "Jobs, catalog, runs, logs", work: "start and cancel runs" },
+  { id: "models", title: "Models", mark: "Models", named: "Models", settings: false, levels: SEE_WORK, see: "Models, under Pipelines", work: "register, admit, choose" },
+  { id: "campaigns", title: "Campaigns", mark: "Campaigns", named: "Campaigns", settings: false, levels: SEE_WORK, see: "Campaigns, in Review", work: "claim, answer, export" },
   { id: "install", title: "The install", mark: "Install", named: "the install", settings: true, levels: SEE_WORK, see: "Overview, parts, setup", work: "restart, update" },
-  { id: "kvasir", title: "Kvasir", mark: "Kvasir", named: "Kvasir", settings: true, levels: SEE_WORK, see: "Stations and models", work: "models, keys, stations" },
+  { id: "kvasir", title: "Language models", mark: "Language models", named: "Language models", settings: true, levels: SEE_WORK, see: "Stations and models", work: "models, keys, stations" },
   { id: "assistant-settings", title: "The assistant's settings", mark: "Assistant settings", named: "the assistant's settings", settings: true, levels: SEE_WORK, see: "Reach and memory", work: "instructions, standing grants" },
   { id: "places", title: "Places", mark: "Places", named: "Places", settings: true, levels: SEE_WORK, see: "Scan and export places", work: "add, change" },
-  { id: "database", title: "Database", mark: "Database", named: "Database", settings: true, levels: SEE_WORK, see: "Archives and schedule", work: "back up, check" },
-  { id: "identity", title: "Identity", mark: "Identity", named: "Identity", settings: true, levels: SEE_WORK, see: "People and groups", work: "add, change" },
+  { id: "database", title: "Backups", mark: "Backups", named: "Backups", settings: true, levels: SEE_WORK, see: "Archives and schedule", work: "back up, check" },
+  { id: "identity", title: "People", mark: "People", named: "People", settings: true, levels: SEE_WORK, see: "People and groups", work: "add, change" },
   { id: "audit", title: "Audit", mark: "Audit", named: "Audit", settings: true, levels: ["hidden", "see"], see: "Who did what, when" },
 ];
 
