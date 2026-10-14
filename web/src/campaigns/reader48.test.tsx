@@ -135,7 +135,7 @@ describe("a blind item shows the file", () => {
     expect(block.querySelector(".hb-line")?.getAttribute("title")).toContain("second_attempt_with_prescan_normalize");
     expect(host.querySelector(".tag.gated")?.textContent).toBe("blind");
     expect(host.querySelector(".suggest")).toBeNull();
-    expect(host.querySelector(".evidence-lines, .evidence-drawer")).toBeNull();
+    expect(host.querySelector(".evidence-lines")).toBeNull();
     expect(host.querySelector(".candidate")).toBeNull();
     expect(host.textContent).not.toMatch(/System 1|agreed|differ/u);
   });
@@ -168,11 +168,11 @@ describe("the whole header, one key away", () => {
     expect(headerDoorOf(caps, 5, 9, { headerDoor: "/api/x" } as never)).toBe("/api/x");
     expect(headerDoorOf(caps, 5, 9, null)).toBe("/api/campaigns/5/items/9/header");
     expect(headerDoorOf(capsWith(doorsOf({ header: false })), 5, 9, null)).toBeNull();
-    // h opens it where it is served, the evidence where it is not; H is the evidence
+    // h opens it where it is served and nothing where it is not; H turns the reader compact or expanded (record 55 H5)
     const rows = rowsOf(QUESTION, null);
     expect(keyAct("h", { ctrl: false, inField: false, q: QUESTION, rows, header: true })).toEqual({ kind: "header" });
-    expect(keyAct("h", { ctrl: false, inField: false, q: QUESTION, rows })).toEqual({ kind: "evidence" });
-    expect(keyAct("H", { ctrl: false, inField: false, q: QUESTION, rows, header: true })).toEqual({ kind: "evidence" });
+    expect(keyAct("h", { ctrl: false, inField: false, q: QUESTION, rows })).toBeNull();
+    expect(keyAct("H", { ctrl: false, inField: false, q: QUESTION, rows, header: true })).toEqual({ kind: "view" });
   });
 });
 

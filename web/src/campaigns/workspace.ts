@@ -155,7 +155,7 @@ export type KeyAct =
   | { kind: "skip" }
   | { kind: "keys" }
   | { kind: "candidate"; index: number }
-  | { kind: "evidence" }
+  | { kind: "view" }
   | { kind: "reset" }
   | { kind: "batch" }
   | { kind: "cant_tell"; row: Row }
@@ -248,9 +248,10 @@ export function keyAct(key: string, opts: { ctrl: boolean; inField: boolean; q: 
   if (opts.q.kind === "axis" || opts.q.kind === "axes") {
     const c = CANDIDATE_KEYS.indexOf(key.toLowerCase());
     if (c >= 0 && c < (opts.offered ?? 0)) return { kind: "candidate", index: c };
-    // h opens the whole header where the engine serves it (record 48), else the evidence as before; H is always the evidence
-    if (key === "h") return opts.header ? { kind: "header" } : { kind: "evidence" };
-    if (key === "H") return { kind: "evidence" };
+    // h opens the whole header where the engine serves it (record 48); H turns the whole reader compact or expanded (record 55 H5),
+    // since the rules' evidence stands beside the picture and needs no key to open
+    if (key === "h") return opts.header ? { kind: "header" } : null;
+    if (key === "H") return { kind: "view" };
     if (key === "Backspace") return { kind: "reset" };
     if ((key === "b" || key === "B") && opts.batches) return { kind: "batch" };
   }

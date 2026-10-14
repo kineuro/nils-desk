@@ -354,7 +354,7 @@ describe("can't tell and unsure (record 48)", () => {
     // no clash with the keys already there: on three rows or more a number finds its row (record 48, one screen)
     expect(at("1")).toEqual({ kind: "find", row: rows[0] });
     expect(at("s")).toEqual({ kind: "skip" });
-    expect(at("h")).toEqual({ kind: "evidence" });
+    expect(at("H")).toEqual({ kind: "view" });
     expect(at("a", q, true)).toBeNull();
     // an older engine names neither
     expect(at("a", older)).toBeNull();

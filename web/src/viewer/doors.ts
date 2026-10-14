@@ -102,12 +102,24 @@ export function levelSpacing(m: Manifest, level: number): [number, number, numbe
 /**
  * Whether the stack has planes to cut across: a stack of one plane (a
  * single scout, one reformatted image) gives three planes of which two are
- * a line one pixel high, which a rater read as a broken picture. Such a
- * stack opens on its own plane, whatever view was chosen.
+ * a line one pixel high, which a rater read as a broken picture. A stack of
+ * a few planes is the same (record 55 H5, the 200-item round: three coronal
+ * planes 4 mm apart drew a line and a black plane): where the planes span
+ * less than a fifth of the plane's own field across, there is nothing to
+ * read across them. Such a stack opens on its own plane, whatever view was
+ * chosen.
  */
-export function cutsAcross(m: Pick<Manifest, "shape">): boolean {
-  return Array.isArray(m.shape) && m.shape[0] >= 2;
+export const ACROSS_SHARE = 0.2;
+export function cutsAcross(m: Pick<Manifest, "shape"> & Partial<Pick<Manifest, "spacing">>): boolean {
+  if (!Array.isArray(m.shape) || m.shape[0] < 2) return false;
+  if (!Array.isArray(m.spacing)) return true;
+  const across = m.shape[0] * planeSpacing(m as Pick<Manifest, "spacing">);
+  const field = Math.min(m.shape[1] * Math.abs(m.spacing[1]), m.shape[2] * Math.abs(m.spacing[2]));
+  return !(field > 0) || across >= ACROSS_SHARE * field;
 }
+
+/** Why the three planes are not offered for a stack, in the viewer's words. */
+export const notAcrossWords = (m: Pick<Manifest, "shape"> | null): string => (m && Array.isArray(m.shape) && m.shape[0] >= 2 ? "a few planes: too thin to cut across" : "one plane: nothing to cut across");
 
 /**
  * The distance from one plane to the next along the stack, mm: the

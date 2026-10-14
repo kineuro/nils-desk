@@ -251,6 +251,7 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
       )}
       {looking && looking.item && (
         <LookDialog
+          caps={caps}
           item={looking.item}
           stack={looking.stack}
           onClose={() => setLooking(null)}

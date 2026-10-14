@@ -159,6 +159,7 @@ test.describe("a pick clears the box and goes on", () => {
 // question's panel is short, and the pictures must not take their height
 // from it. The stack view and an enlarged plane take the largest square the
 // side holds. shell.pw.ts checks the same in the desk's own shell and bundle.
+// Since record 55 H5 the side is the screen class's fixed picture box.
 
 for (const vp of [{ width: 2000, height: 1150 }, { width: 1920, height: 1080 }]) {
   test(`a one-axis item at ${vp.width} by ${vp.height}: the planes fill the side, not the panel's height`, async ({ page }) => {
@@ -167,8 +168,8 @@ for (const vp of [{ width: 2000, height: 1150 }, { width: 1920, height: 1080 }])
     await expect(page.locator('.axis-row[aria-label="body_part"] .opt')).toHaveCount(6);
     const m = await planes(page);
     console.log(`${vp.width}x${vp.height}: planes ${Math.round(m.block.w)} by ${Math.round(m.block.h)} in ${Math.round(m.side.w)} by ${Math.round(m.side.h)}, the large one ${m.own} px`);
-    // the side is the window's height less the bar and the head, whatever the panel holds
-    expect(m.side.h).toBeGreaterThan(vp.height - 160);
+    // the side is the screen class's picture box (record 55 H5: 820 px high from 1880 by 940), whatever the panel holds
+    expect(Math.round(m.side.h)).toBe(820);
     expect(Math.max(m.block.w / m.side.w, m.block.h / (m.side.h - 40))).toBeGreaterThan(0.95);
     expect(m.own).toBeGreaterThan(m.side.w / 2.2);
     expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
