@@ -30,7 +30,8 @@ import { AskedFamily, PicksFamily, ProposalsFamily } from "./Families";
 import { IdentifiersPage } from "./Identifiers";
 import { MainScansPage } from "./MainScansPage";
 import { LookDialog, QueuePage } from "./Queue";
-import { RulesPage, type WordAt } from "./Rules";
+import type { WordAt } from "./Rules";
+import { RulesPage, tabOf } from "./RulesPage";
 import { CampaignPages, LabelSetPages } from "../campaigns/CampaignsPage";
 import { queuedCount } from "./work";
 import { WorkPage } from "./WorkPage";
@@ -69,7 +70,7 @@ export const GROWN: { sub: "picks" | "proposals" | "asked"; title: string }[] = 
 
 const HEAD: Record<ReviewSub, { title: string; lede: string }> = {
   queue: { title: "What needs a person", lede: "The questions the rules leave open, and what else waits." },
-  rules: { title: "How scans are sorted", lede: "Eleven axes. Every list the pack opens is the site's to grow." },
+  rules: { title: "Rules", lede: "The pack decides every answer. One fix to a rule mends every scan it touches." },
   identifiers: { title: "Who a file is about", lede: "What the map does not settle, and what two codes share." },
   picks: { title: "Which scan stands for a role", lede: "Occasions a pick run doubts. A person's pick stands through every later run." },
   proposals: { title: "What models proposed", lede: "Staged until a person commits them. From the value held now to the value proposed." },
@@ -101,10 +102,10 @@ export function ReviewPage(props: { caps: Capabilities; page: string | null; arg
   if (!may(caps, "review:see") || page === "campaigns" || page === "work" || (page === null && !narrowed)) return <WorkPage caps={caps} query={query} />;
   // Main scans has a page of its own; the pick questions of earlier runs keep their table under Review's head
   if (subOf(page) === "picks" && !query?.earlier) return <MainScansPage caps={caps} query={query} />;
-  return <ReviewPages caps={caps} page={page === "questions" ? null : page} query={query} />;
+  return <ReviewPages caps={caps} page={page === "questions" ? null : page} arg={arg} sub={sub} query={query} />;
 }
 
-function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string | null; query?: Record<string, string> }) {
+function ReviewPages({ caps, page, arg = null, sub: opens = null, query }: { caps: Capabilities; page: string | null; arg?: string | null; sub?: string | null; query?: Record<string, string> }) {
   const sub = subOf(page);
   const batch = query?.batch && /^\d+$/.test(query.batch) ? Number(query.batch) : null;
   const run = query?.run && /^\d+$/.test(query.run) ? Number(query.run) : null;
@@ -188,7 +189,7 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
   const grown = familyCounts(items, load.kind === "ready" ? load.summary : null);
 
   return (
-    <section className="data review">
+    <section className={sub === "rules" ? "data review rules-scale" : "data review"}>
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">Review</span>
@@ -250,7 +251,19 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
           onChanged={changed}
         />
       )}
-      {sub === "rules" && <RulesPage caps={caps} items={items} wordAt={wordAt} onWordClose={() => setWordAt(null)} onChanged={changed} />}
+      {sub === "rules" && (
+        <RulesPage
+          caps={caps}
+          items={items}
+          tab={tabOf(arg)}
+          opened={tabOf(arg) === "proposals" && opens !== null && /^\d+$/u.test(opens) ? Number(opens) : null}
+          dataset={dataset ?? null}
+          wordAt={wordAt}
+          onWordClose={() => setWordAt(null)}
+          onChanged={changed}
+          onOpen={(stack) => setExplaining({ item: null, stack })}
+        />
+      )}
       {sub === "identifiers" && load.kind === "ready" && <IdentifiersPage caps={caps} items={items} onDecide={setDeciding} onChanged={changed} />}
       {sub === "picks" && <PicksFamily key={dataset ?? ""} caps={caps} packName={packName} dataset={dataset} onChanged={changed} />}
       {sub === "proposals" && <ProposalsFamily caps={caps} onChanged={changed} />}
@@ -270,7 +283,7 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
           onAddWord={(at) => {
             setExplaining(null);
             setWordAt(at);
-            if (sub !== "rules") location.hash = href("review", "rules");
+            if (sub !== "rules" || tabOf(arg) !== "words") location.hash = href("review", "rules", "words");
           }}
           onDecided={(w) => {
             setExplaining(null);

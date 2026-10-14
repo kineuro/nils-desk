@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// How scans are sorted (record 27, R5a): every axis the pack declares, not
-// the four word lists the old page showed. The axes stand on one side and the
-// chosen one on the other, with its values and the words that reach each.
+// The Rules page's Words tab (record 27, R5a; a tab of the Rules page since
+// record 56): every axis the pack declares, not the four word lists the old
+// page showed. The axes stand on one side and the chosen one on the other,
+// with its values and the words that reach each.
 // Which values take a word is the pack's own answer, not a list fixed here,
 // so an axis reached by no word anywhere is shown, marked as such, and its
 // Add a word refused with the reason. A word the site added is drawn apart
@@ -201,7 +202,7 @@ export function AxisValues({ pack, axis, signals, overlays, may, onAdd }: { pack
   );
 }
 
-export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: RulesProps) {
+export function WordsPage({ caps, items, wordAt, onWordClose, onChanged }: RulesProps) {
   const [pack, setPack] = useState<PackDoc | null>(null);
   const [packWhy, setPackWhy] = useState<string | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -363,7 +364,7 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
 
       <section className="stack roomy">
         <div className="section-head rule-top">
-          <h2>Proposals</h2>
+          <h2>Proposed words</h2>
           <span className="meta">tried on real stacks first</span>
           {tunable && (
             <button type="button" className="button secondary small" onClick={() => setTuning(true)}>
