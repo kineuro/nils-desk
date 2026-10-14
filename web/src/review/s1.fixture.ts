@@ -33,7 +33,15 @@ export const SUGGESTIONS: Suggestions = {
         },
         {
           axis: "technique",
-          rules: { axis: "technique", value: "TSE", set_by: { kind: "rule" }, decided: { rule_set: "technique", rule: "tse", clause: 0, header: { text_sequence_name: "*tse2d1" }, matched: "tse" }, line: "" },
+          rules: {
+            axis: "technique",
+            value: "TSE",
+            set_by: { kind: "rule" },
+            decided: { rule_set: "technique", rule: "tse", clause: 0, header: { text_sequence_name: "*tse2d1" }, matched: "tse" },
+            line: "",
+            // record 56: the rule it was decided over, kept as evidence
+            overridden: [{ rule_set: "physics", rule: "se_by_te", value: "SE", tier: "physics", basis: "physics", confidence: 0.7, rank: "rule_set_order", by: { rule_set: "technique", rule: "tse", tier: "name", confidence: 0.95 } }],
+          },
           system1: { value: "TSE", p: 0.99, reliability: 0.41, fields: [], agrees: true, model: null },
         },
       ],

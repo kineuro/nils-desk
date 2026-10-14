@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The queue's filters (record 51, G4): by axis and by reason, as v0's axes QC
-// filtered by axis and flag type. The kinds come from what the engine lists
+// filtered by axis and flag type. Since Review round 1 (record 56 section
+// 6.3, DR4) no chips offer them: the sort's questions are answered as a grid
+// above the list, and an address that names a filter (a link from the list
+// of work) still narrows the list under them. The kinds come from what the engine lists
 // (`<axis>:<reason>` for the classifier's questions, `pick.border` for a pick
 // run's doubts, narrowed by the border's reasons), and the filter lives in the
 // page's address, so a reload or a link keeps it:
@@ -16,7 +19,6 @@
 import type { Json } from "../ask/client";
 import type { ReviewItem } from "../ops/client";
 import { href, narrow } from "../routes";
-import type { ReviewSummary } from "./client";
 import type { ReviewFilter } from "./askPeople";
 import { borderWords, PICK_BORDER } from "./picks";
 import { kindOf } from "./triage";
@@ -40,6 +42,8 @@ const REASON_WORDS: Record<string, string> = {
   vote: "vote split",
   decision: "a decision disagrees",
   model: "a model proposes",
+  disagree: "the rules and System 1 disagree",
+  unsure: "System 1 is not sure",
   [PICK_BORDER]: "pick borders",
 };
 
@@ -89,29 +93,6 @@ export function filterKind(f: QueueFilter): Pick<ReviewFilter, "kind" | "kind_pr
   if (f.axis && f.reason) return { kind: `${f.axis}:${f.reason}` };
   if (f.axis) return { kind_prefix: `${f.axis}:` };
   return null;
-}
-
-/** The chips the queue offers, from the kinds the engine lists (the summary's where it gives one) and the pick borders among the items read. */
-export function filterChoices(summary: ReviewSummary | null, items: ReviewItem[]): { axes: string[]; reasons: string[]; borders: string[] } {
-  const kinds = summary ? Object.keys(summary.by_kind) : [...new Set(items.filter((i) => i.status === "open").map((i) => i.kind))];
-  const axes = new Set<string>();
-  const reasons = new Set<string>();
-  for (const kind of kinds) {
-    const c = classifierKind(kind);
-    if (c) {
-      axes.add(c.axis);
-      reasons.add(c.reason);
-    }
-  }
-  const borders = new Set<string>();
-  for (const i of items) {
-    if (i.kind !== PICK_BORDER) continue;
-    const b = ((i.evidence ?? {}) as Json).borders;
-    if (Array.isArray(b)) for (const r of b) borders.add(String(r));
-  }
-  const ordered: string[] = REASONS.filter((r) => reasons.has(r));
-  if (kinds.includes(PICK_BORDER) || borders.size > 0) ordered.push(PICK_BORDER);
-  return { axes: [...axes].sort(), reasons: ordered, borders: [...borders].sort() };
 }
 
 /** The filter in words, for the table's head. */

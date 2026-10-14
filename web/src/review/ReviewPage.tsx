@@ -6,7 +6,10 @@
 // act, and hold the dialogs they share: a decision, a look in the viewer, why
 // one stack was judged so, and a word for the site. A person who holds only
 // campaigns:* finds the list of their campaigns at every page of Review that
-// would read the queue, and the queue is never read for them.
+// would read the queue, and the queue is never read for them. Review round
+// 1 (record 56 section 6.3): Questions is the sort's own questions in plain
+// words, each answered as a grid of its scans at #review/questions/<key>,
+// with what else waits under them.
 
 import { useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -20,7 +23,9 @@ import { familyOf, modelDisagrees, review, type PackDoc, type ReviewSummary } fr
 import { DecideDialog } from "./Decide";
 import { kindOf } from "./triage";
 import { ExplainDialog } from "./Explain";
-import { filterKind, queueFilterOf, queueHref } from "./filter";
+import { filterKind, queueFilterOf } from "./filter";
+import { QuestionGrid, QuestionsList } from "./Questions";
+import { kindsAnswered, questions, questionsServed, whereOf, type QuestionList, type Where } from "./questions";
 import { AskedFamily, PicksFamily, ProposalsFamily } from "./Families";
 import { IdentifiersPage } from "./Identifiers";
 import { MainScansPage } from "./MainScansPage";
@@ -63,7 +68,7 @@ export const GROWN: { sub: "picks" | "proposals" | "asked"; title: string }[] = 
 ];
 
 const HEAD: Record<ReviewSub, { title: string; lede: string }> = {
-  queue: { title: "What needs a person", lede: "Unsure scans, subjects that may be one person, sessions that moved." },
+  queue: { title: "What needs a person", lede: "The questions the rules leave open, and what else waits." },
   rules: { title: "How scans are sorted", lede: "Eleven axes. Every list the pack opens is the site's to grow." },
   identifiers: { title: "Who a file is about", lede: "What the map does not settle, and what two codes share." },
   picks: { title: "Which scan stands for a role", lede: "Occasions a pick run doubts. A person's pick stands through every later run." },
@@ -88,6 +93,8 @@ export function ReviewPage(props: { caps: Capabilities; page: string | null; arg
   const { caps, page, arg = null, sub = null, query } = props;
   if (page === "campaigns" && arg !== null && /^\d+$/u.test(arg)) return <CampaignPages caps={caps} id={arg} view={sub} query={query} />;
   if (page === "label-sets") return <LabelSetPages caps={caps} id={arg} />;
+  // record 56 section 6.3: one question, as a grid of its scans
+  if (page === "questions" && arg !== null && arg !== "" && questionsServed(caps)) return <QuestionGrid key={`${arg}|${query?.dataset ?? ""}|${query?.cohort ?? ""}`} caps={caps} qkey={arg} where={whereOf(query)} />;
   // record 55 D3 and D7: the rounds, what each accepted and its blind audit
   if (page === "rounds" && may(caps, "review:see") && served(caps, "GET /api/review/rounds")) return <RoundsPage caps={caps} />;
   const narrowed = query !== undefined && Object.keys(query).length > 0;
@@ -119,6 +126,27 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
   const [pack, setPack] = useState<PackDoc | null>(null);
   const filters = served(caps, "GET /api/review/summary");
   const packName = caps.engine?.packs[0]?.name ?? null;
+  // record 56 section 6.3: the sort's own questions, gathered, where the engine serves them; read on
+  // every page of Review for the Questions chip's count, drawn on the questions' own page
+  const listed = questionsServed(caps);
+  const asks = listed && sub === "queue";
+  const where: Where = dataset ? { dataset } : cohort !== "" && cohort !== "none" ? { cohort } : {};
+  const whereKey = `${where.dataset ?? ""}|${where.cohort ?? ""}`;
+  const [qlist, setQlist] = useState<{ list: QuestionList | null; failed: string | null; since: number }>(() => ({ list: null, failed: null, since: Date.now() }));
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!listed) return;
+    let alive = true;
+    setQlist((was) => ({ ...was, failed: null }));
+    questions.list(where).then(
+      (list) => alive && setQlist({ list, failed: null, since: Date.now() }),
+      (e: Error) => alive && setQlist((was) => ({ ...was, failed: e.message })),
+    );
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the scope and an act are what read again
+  }, [listed, whereKey, tick]);
   useEffect(() => {
     if (!deciding || pack !== null || packName === null || !kindOf(deciding.kind).classifier) return;
     let alive = true;
@@ -150,7 +178,12 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
   const changed = (words: string) => {
     setSaid(words);
     read();
+    setTick((x) => x + 1);
   };
+  // what the questions above answer leaves the list under them: the kinds the grid takes, but a model's disagreement with a person's decision
+  const answeredHere = kindsAnswered(qlist.list);
+  const rest = asks ? items.filter((i) => !answeredHere.has(i.kind) || modelDisagrees(i) !== null) : items;
+  const questionsCount = listed && qlist.list ? qlist.list.scans : null;
   const head = HEAD[sub];
   const grown = familyCounts(items, load.kind === "ready" ? load.summary : null);
 
@@ -176,7 +209,7 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
       <div className="chips pages">
         <a className={sub === "queue" ? "opt on" : "opt"} href={pageHref(null)} aria-current={sub === "queue" ? "page" : undefined}>
           Questions
-          {load.kind === "ready" && <b>{n(queued)}</b>}
+          {questionsCount !== null ? <b>{n(questionsCount)}</b> : load.kind === "ready" && <b>{n(queued)}</b>}
         </a>
         {/* record 55 H2, round 4: nothing hidden while empty, each with its count, zero too */}
         {GROWN.map((g) => (
@@ -195,10 +228,11 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
       )}
       {load.kind === "loading" && (sub === "queue" || sub === "identifiers") && <Wait phase="reading the queue" since={load.since} size="panel" />}
       {load.kind === "failed" && (sub === "queue" || sub === "identifiers") && <p className="warn">The queue could not be read: {load.why}</p>}
+      {asks && <QuestionsList list={qlist.list} where={where} failed={qlist.failed} since={qlist.since} />}
       {sub === "queue" && load.kind === "ready" && (
         <QueuePage
           caps={caps}
-          items={items}
+          items={rest}
           summary={load.summary}
           cohort={cohort}
           onCohort={(c) => {
@@ -206,10 +240,9 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
             setSaid(null);
           }}
           filter={filter}
-          onFilter={(f) => {
-            setSaid(null);
-            location.hash = queueHref(f, cohort, dataset ?? "");
-          }}
+          dataset={dataset ?? ""}
+          title={asks ? "Also waiting" : undefined}
+          families={asks ? ["identity", "moved"] : undefined}
           batch={batch}
           run={run}
           onDecide={setDeciding}

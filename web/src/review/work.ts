@@ -60,6 +60,9 @@ export function queuedCount(summary: ReviewSummary | null): number {
   return Object.entries(summary?.by_kind ?? {}).reduce((s, [k, v]) => s + (heldKind(k) ? 0 : v), 0);
 }
 
+/** The reasons of the sort's own questions about one axis (record 56), each answered in a question's grid. */
+const SORT_WHY: readonly string[] = ["missing", "disagree", "unsure", "decision", "conflict", "low_confidence"];
+
 /** The row of one kind of the machine's open questions: its job, its words and where it is worked. */
 export function machineRow(kind: string, count: number): WorkRow | null {
   if (heldKind(kind) || count <= 0) return null;
@@ -69,6 +72,8 @@ export function machineRow(kind: string, count: number): WorkRow | null {
   if (kind === "classify.asked") return { ...base, job: "answer", title: "System 1 asks", what: "Legal candidates for a whole stack.", href: href("review", "asked"), act: "Open" };
   if (kind === "pipeline:qc") return { ...base, job: "check", title: "A run's checks", what: "Units a pipeline's own checks flagged.", href: href("review", "questions"), act: "Open" };
   if (k.classifier && k.what === "model") return { ...base, job: "answer", title: `${k.area}: a model proposes`, what: "Staged until a person commits them.", href: href("review", "proposals"), act: "Open" };
+  // record 56 section 6.3: the sort's own questions are answered as a question's grid, from the list of them
+  if (k.classifier && SORT_WHY.includes(k.what)) return { ...base, job: "answer", title: `${k.area}: ${reasonWords(k.what)}`, what: "Scans the rules left to a person.", href: href("review", "questions"), act: "Answer" };
   if (k.classifier && (REASONS as readonly string[]).includes(k.what)) return { ...base, job: "answer", title: `${k.area}: ${reasonWords(k.what)}`, what: "Scans the rules left to a person.", href: queueHref({ axis: k.area, reason: k.what, border: null }), act: "Answer" };
   if (k.area === "identity" || k.area === "linkage") return { ...base, job: "answer", title: `Subjects: ${k.what.replace(/_/gu, " ")}`, what: "Who a file is about.", href: href("review", "identifiers"), act: "Decide" };
   if (k.area === "session") return { ...base, job: "answer", title: `Sessions: ${k.what.replace(/_/gu, " ")}`, what: "Sessions that moved between visits.", href: href("review", "questions"), act: "See" };

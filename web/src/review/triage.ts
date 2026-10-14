@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Review's pure parts (Wave 5 section 8.2): items sorted by what they cost
-// if wrong, which items need looking at, and the plan of a bulk decision,
-// which writes one audit row per item and is refused for an item that needs
-// reading.
+// if wrong, and which items need looking at. The bulk accept went with
+// Review round 1 (record 56 section 6.3, DR4): it looped accept over items
+// whose rules disagreed, under a name the engine does not use.
 
 import type { ReviewItem } from "../ops/client";
 
@@ -39,31 +39,13 @@ export function sortByCost(items: ReviewItem[]): ReviewItem[] {
   });
 }
 
-/** An item that needs looking at: an identity or linkage question, a vote the pack could not settle, or a low-confidence call; never decided in bulk. */
+/** An item that needs looking at: an identity or linkage question, a vote the pack could not settle, or a low-confidence call. */
 export function needsReading(item: ReviewItem): string | null {
   const k = kindOf(item.kind);
   if (k.area === "identity" || k.area === "linkage") return "an identity question is read, never bulk-accepted";
   if (k.classifier && k.what === "vote") return "the pack's rules disagreed; someone looks";
   if (k.classifier && k.what === "low_confidence") return "the pack was not confident; someone looks";
   return null;
-}
-
-/** The plan of a bulk accept: what will be accepted, one audit row each, and what is refused with its reason. */
-export function bulkPlan(items: ReviewItem[], selected: number[]): { accepts: ReviewItem[]; refused: { item: ReviewItem; why: string }[]; stacks: number } {
-  const chosen = items.filter((i) => selected.includes(i.id));
-  const accepts: ReviewItem[] = [];
-  const refused: { item: ReviewItem; why: string }[] = [];
-  for (const i of chosen) {
-    if (i.status !== "open") {
-      refused.push({ item: i, why: "already decided" });
-      continue;
-    }
-    const why = needsReading(i);
-    if (why) refused.push({ item: i, why });
-    else accepts.push(i);
-  }
-  const stacks = accepts.reduce((n, i) => n + (typeof i.members === "number" ? i.members : Array.isArray(i.members) ? i.members.length : 1), 0);
-  return { accepts, refused, stacks };
 }
 
 /** The words for a kind on a row. */

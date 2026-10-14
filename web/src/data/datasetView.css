@@ -70,7 +70,7 @@
 .dview-none { padding: 0.5em; }
 
 /* ------------------------------------------------------------ the scan, filling the rest */
-.dview-main { flex: 1; display: grid; grid-template-rows: minmax(0, 1fr) auto; min-width: 0; min-height: 0; }
+.dview-main { flex: 1; display: grid; grid-template-rows: minmax(0, 1fr) auto auto; min-width: 0; min-height: 0; }
 .dview-stage { min-height: 0; display: grid; background: var(--n-image-bg); }
 .dview-stage .scan-view.bare { position: static; height: 100%; min-height: 0; grid-template-rows: minmax(0, 1fr); gap: 0; }
 .dview-stage .scan-view.bare .scan-canvas { height: 100%; min-height: 0; border: 0; border-radius: 0; }

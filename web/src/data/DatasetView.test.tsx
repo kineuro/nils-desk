@@ -246,3 +246,83 @@ describe("the dataset viewer's browser", () => {
     expect(el.querySelector(".dview-keys")?.textContent).toBe("↑↓ images · ←→ scans · 3 three planes · Esc back");
   });
 });
+
+describe("the question under a scan that needs a look (Review round 1, DR3)", () => {
+  let root: Root;
+  let el: HTMLDivElement;
+  let posted: unknown[];
+  beforeEach(() => {
+    posted = [];
+    forgetHeld();
+    el = document.createElement("div");
+    document.body.appendChild(el);
+    root = createRoot(el);
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      const json = (v: unknown) => new Response(JSON.stringify(v));
+      if (url === "/api/datasets/ms-a/scans?limit=200") return json({ total: 3, scans: PAGE1, next: null });
+      if (url === "/api/review/questions?dataset=ms-a&stack=12")
+        return json({
+          scope: { kind: "dataset", name: "ms-a", id: 3 },
+          scans: 1,
+          questions: [{ key: "base:missing", axis: "base", shape: "missing", values: ["T1w", "T2w"], words: "Which base?", reason: "The rules found no base for these scans.", scans: 7, staged: 0, kinds: { "base:missing": 7 } }],
+          vocabularies: { base: [{ value: "T2w", name: "T2w", label: null }, { value: "T1w", name: "T1w", label: null }] },
+          elsewhere: [],
+          held: { scans: 0, campaigns: [] },
+        });
+      if (url === "/api/review/questions/base%3Amissing/answer") {
+        posted.push(JSON.parse(String(init?.body)));
+        return json({ key: "base:missing", axis: "base", answered: 1, decisions: [{ stack: 12, value: "T2w", decision: 9 }], skipped: [], staged: false, blind: 0, resort: { job: 4, state: "done", stacks: 1 }, left: 6 });
+      }
+      return new Response("{}", { status: 404 });
+    });
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    el.remove();
+    vi.unstubAllGlobals();
+  });
+  const settle = async () => {
+    for (let k = 0; k < 3; k++)
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 0));
+        for (let i = 0; i < 10; i++) await Promise.resolve();
+      });
+  };
+  const key = (k: string) => act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { key: k, bubbles: true })));
+
+  it("frames the scan, takes the keys, answers it alone and clears its look in the tree", async () => {
+    const caps = {
+      engine: { engine: { name: "nils", version: "1" }, contracts: { openapi: "7" }, doors: ["GET /api/datasets/{name}/scans", "GET /api/review/questions", "GET /api/review/questions/{key}/scans", "POST /api/review/questions/{key}/answer"], policy: [], auth: "token", principal: "astrid@site", roles: [], registry: { epoch: 1 }, packs: [] },
+      kvasir: null,
+      assistant: null,
+      apps: [],
+      person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "review:see", "review:work"], detail: "quasi", groups: [] },
+      desk: { version: "1", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
+    } as unknown as import("../capabilities").Capabilities;
+    const scope = { kind: "dataset" as const, name: "ms-a" };
+    location.hash = "#data/datasets/ms-a/view?mode=browser&subject=1&visit=s7&scan=12";
+    const view = parseView(Object.fromEntries(new URLSearchParams(location.hash.split("?")[1] ?? "")));
+    act(() => root.render(<Browser caps={caps} scope={scope} view={view} grid go={() => undefined} onSections={() => undefined} />));
+    await settle();
+    expect(viewer()?.getAttribute("data-stack")).toBe("12");
+    // the question, under the scan, framed in the caution colour while NILS has no base
+    expect(el.querySelector(".scan-question .q-ask")?.textContent).toBe("Which base?");
+    expect(el.querySelector(".dview-stage")?.className).toBe("dview-stage asks");
+    expect(el.querySelector(".scan-question")?.textContent).toContain("NILS: T1w");
+    key("2");
+    expect(el.querySelector(".scan-question .opt.on")?.textContent).toBe("2T2w");
+    key("Enter");
+    await settle();
+    expect(posted).toEqual([{ value: "T2w", stacks: [12], except: [], dataset: "ms-a" }]);
+    // answered here: the tree's look is gone, NILS says the answer, the frame goes
+    const rows = [...el.querySelectorAll(".dview-row.scan")];
+    expect(rows.map((r) => r.classList.contains("look"))).toEqual([false, false]);
+    expect(el.querySelector(".dview-stage")?.className).toBe("dview-stage");
+    expect(el.querySelector(".scan-question")?.textContent).toContain("base: T2w · sorted again");
+    expect([...el.querySelectorAll(".dview-fact")].map((f) => f.textContent)).toContain("T2w");
+  });
+
+  function viewer() {
+    return el.querySelector("[data-testid=viewer]");
+  }
+});

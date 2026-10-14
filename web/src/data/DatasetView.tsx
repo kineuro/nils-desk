@@ -12,7 +12,9 @@
 // switches the names, g turns to the grid at the same place and Esc goes
 // back up to it. The scan open is in the address, so back and forward work.
 // Under the filter, how many scans it leaves, and keeping them as a
-// selection or a cohort (Keep.tsx).
+// selection or a cohort (Keep.tsx). Review round 1 (record 56 section 6.3,
+// DR3): under a scan that needs a look, its question with the grid's mark
+// and keys (1, 2, 0, - and Enter), answered for this scan alone.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -20,6 +22,8 @@ import { href, narrow } from "../routes";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { ScanQuestion, type ScanMark } from "../review/ScanQuestion";
+import type { Where } from "../review/questions";
 import { ModeSwitch, NamesSwitch, type Go } from "./Grid";
 import { KeepActions } from "./Keep";
 import { browserKept } from "./keep";
@@ -67,6 +71,21 @@ export function shownName(s: Scan, names: Names): string {
 function heldVisits(scope: Scope, subject: number, filter: string[]): VisitsPage | null {
   const ask = { name: kept(KEPT.visits, ["date", "number", "days"] as const, "date"), show: keptText(KEPT.show, "code"), filter };
   return heldValue<VisitsPage>(visitsKey(scope, subject, ask));
+}
+
+/** Where a scope's questions are read: its dataset, its cohort, or the whole registry. */
+export function whereOfScope(scope: Scope): Where {
+  if (scope.kind === "dataset") return { dataset: scope.name };
+  if (scope.kind === "cohort") return { cohort: scope.name };
+  return {};
+}
+
+/** A scan answered on an axis: its questions on that axis gone, and NILS's answer the one given. */
+export function answeredScan(s: Scan, axis: string, value: string | null): Scan {
+  const axes = { ...s.axes };
+  if (value === null) delete axes[axis];
+  else axes[axis] = value;
+  return { ...s, questions: s.questions.filter((q) => !q.startsWith(`${axis}:`)), axes };
 }
 
 /** The scans to show first, so the scan the address names opens at once: its visit's, else the subject's first visit's. */
@@ -371,6 +390,13 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
   const timing = scan ? [paramsWords(scan), scan.images !== null ? `${n(scan.images)} ${scan.images === 1 ? "image" : "images"}` : ""].filter(Boolean).join(" · ") : "";
   const list0 = scopeList(scope);
   const looks = scan ? needsLook(scan) : false;
+  // DR3: the frame the scan's question gives its picture, and an answer that clears its look here
+  const [mark, setMark] = useState<ScanMark | null>(null);
+  const answered = useCallback((id: number, axis: string, value: string | null) => {
+    const fix = (s: Scan) => (s.id === id ? answeredScan(s, axis, value) : s);
+    setScans((was) => was.map(fix));
+    setSeed((was) => was.map(fix));
+  }, []);
 
   return (
     <div className="dview" aria-label={scope.name}>
@@ -450,9 +476,10 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
         <main className="dview-main">
           {scan ? (
             <>
-              <div className="dview-stage">
+              <div className={mark ? "dview-stage asks" : "dview-stage"} data-slot={mark?.slot ?? undefined}>
                 <ScanViewer bare scans={shown} at={at} onAt={onAt} onClose={back} />
               </div>
+              {caps && <ScanQuestion caps={caps} where={whereOfScope(scope)} scan={scan} looks={looks} onMark={setMark} onAnswered={(axis, value) => answered(scan.id, axis, value)} />}
               <footer className="dview-facts">
                 {facts.map((f) => (
                   <span key={f.what} className="dview-fact" title={f.what}>

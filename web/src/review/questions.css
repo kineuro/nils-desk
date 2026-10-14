@@ -1,0 +1,122 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* Review round 1 (record 56 section 6.3): the few questions the sort leaves
+   to a person, as a list in plain words and as a grid of each question's
+   scans. Colour by border only: a scan's tile is framed in the colour of
+   NILS's answer (the theme's value tokens, slotted by the axis's own order,
+   so a value keeps its colour everywhere), a question that needs a person
+   has the caution bar, and of the keys offered only the chosen one takes its
+   value's colour. The grid's page grows with the screen as the gallery's
+   does (proportional, not bigger buttons). Theme tokens only. */
+
+/* ------------------------------------------------------------ the list */
+.questions { display: grid; gap: 0.45rem; margin: 0.6rem 0 1.2rem; }
+.q-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
+.q-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.3rem 1rem;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--n-line);
+  border-left: 3px solid var(--n-caution-line);
+  border-radius: var(--n-radius);
+  background: var(--n-bg-raised);
+}
+.q-row:hover { border-color: var(--n-caution-line); }
+.q-what { display: grid; gap: 0.1rem; min-width: 0; color: var(--n-text); text-decoration: none; }
+.q-what:hover { text-decoration: none; }
+.q-what:hover .q-words { color: var(--n-brand-hover); }
+.q-words { font-family: var(--n-font-serif); font-size: 1.1rem; overflow-wrap: anywhere; }
+.q-what .meta { overflow-wrap: anywhere; }
+.q-count { display: inline-flex; align-items: baseline; gap: 0.35rem; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--n-text-faint); }
+.q-count b { font-family: var(--n-font-serif); font-size: 1.2rem; font-weight: 400; color: var(--n-text); }
+.q-count .tag { align-self: center; }
+.q-act { display: flex; justify-content: flex-end; }
+.questions .q-none, .questions .q-else, .questions .q-held { margin: 0; }
+.q-else a { margin-left: 0.3rem; }
+@media (max-width: 640px) {
+  .q-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .q-row .q-act { grid-column: 1 / -1; justify-content: flex-start; }
+}
+
+/* ------------------------------------------------------------ the grid's page */
+.page:has(.qgrid-page) { display: flex; flex-direction: column; padding: 0.6rem 1.1rem 0.7rem; overflow: hidden; }
+.qgrid-page { --reader-scale: clamp(1, min(tan(atan2(100vw, 1440px)), tan(atan2(100vh, 850px))), 1.5); display: flex; flex-direction: column; gap: 0.45rem; flex: 1; min-height: 0; min-width: 0; }
+.qgrid-page > :not(.qgrid-full) { zoom: var(--reader-scale); }
+.qgrid-head { display: flex; align-items: baseline; gap: 0.3rem 0.8rem; flex-wrap: wrap; min-width: 0; }
+.qgrid-head .eyebrow a { color: inherit; }
+.qgrid-head h1 { margin: 0; font-family: var(--n-font-serif); font-weight: 400; font-size: 1.35rem; line-height: 1.2; }
+.qgrid-head .meta { overflow-wrap: anywhere; }
+
+.qgrid-bar { display: flex; align-items: center; gap: 0.4rem 0.6rem; flex-wrap: wrap; padding: 0.35rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); min-width: 0; }
+.qgrid-bar .q-keys { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; min-width: 0; }
+.qgrid-bar .q-help { display: inline-flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; color: var(--n-text-faint); font-size: var(--n-text-size-small); }
+.qgrid-page kbd { display: inline-block; min-width: 1.1em; margin-right: 0.3rem; padding: 0 0.25rem; border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: var(--n-radius); background: var(--n-bg-raised); font-family: var(--n-font-mono); font-size: 11px; line-height: 1.35; text-align: center; color: var(--n-text-faint); }
+.qgrid-page .button kbd { margin: 0 0 0 0.35rem; background: transparent; color: inherit; border-color: currentColor; opacity: 0.7; }
+.q-tally { font-size: var(--n-text-size-small); font-variant-numeric: tabular-nums; color: var(--n-text-faint); white-space: nowrap; }
+.q-tally b { color: var(--n-text); font-weight: 500; }
+
+/* the axis's full list, for key 0: a row of values to choose from, not a dialog */
+.q-list { display: flex; flex-wrap: wrap; gap: 0.3rem; padding: 0.4rem 0.55rem; border: 1px solid var(--n-line); border-left: 3px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.q-list .meta { align-self: center; margin-right: 0.3rem; }
+
+.qgrid-said { margin: 0; }
+.qgrid { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr)); gap: 0.5rem; align-content: start; padding: 2px; }
+
+/* a tile: the scan's picture and NILS's answer as its frame */
+.q-tile { position: relative; display: grid; gap: 0.2rem; align-content: start; padding: 0.3rem; border: 1px solid var(--n-line); border-left: 5px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); cursor: pointer; min-width: 0; }
+.q-tile[data-slot] { border: 1px solid var(--vc); border-left: 5px solid var(--vc); }
+/* NILS has no answer: the caution colour, dashed */
+.q-tile.none { border-color: var(--n-caution-line); border-style: dashed; border-left-style: solid; }
+/* a blind tile shows nothing of NILS's: neutral */
+.q-tile.blind { border-color: var(--n-gated-line); }
+.q-tile.focused { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+/* System 1 agrees with NILS: the tile steps back, so the ones it disputes stand out */
+.q-tile.dim:not(.focused):not(.apart) { opacity: 0.55; }
+.q-tile.apart { background: var(--n-bg-sunken); box-shadow: inset 0 0 0 2px var(--n-brand-icon); }
+.q-pic { position: relative; display: flex; justify-content: center; align-items: center; height: 108px; overflow: hidden; background: var(--n-image-bg, #000); border-radius: var(--n-radius); }
+.q-pic img { max-width: 100%; max-height: 108px; height: auto; }
+.q-pic .q-blank { color: var(--n-text-faint); font-size: 12px; }
+.q-pic .q-mark { position: absolute; display: inline-flex; align-items: center; gap: 0.25rem; max-width: calc(100% - 0.6rem); padding: 0 0.3rem; border-radius: var(--n-radius); font-size: 11px; line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.q-pic .q-s1 { left: 0.3rem; bottom: 0.3rem; border: 1px solid var(--vc, var(--n-neutral-line)); border-left: 3px solid var(--vc, var(--n-neutral-line)); background: var(--vc-bg, var(--n-neutral-bg)); color: var(--n-text); }
+.q-pic .q-staged { left: 0.3rem; top: 0.3rem; border: 1px solid var(--n-caution-line); background: var(--n-caution-bg); color: var(--n-caution-fg); }
+.q-pic .q-blind { left: 0.3rem; top: 0.3rem; border: 1px solid var(--n-gated-line); background: var(--n-gated-bg); color: var(--n-gated-fg); }
+.q-line { display: flex; align-items: center; gap: 0.35rem; min-width: 0; font-size: 13px; }
+.q-nils { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.q-tile.none .q-nils { color: var(--n-caution-fg); font-weight: 400; }
+.q-to { display: inline-flex; align-items: center; gap: 0.25rem; min-width: 0; margin-left: auto; }
+.q-to select { max-width: 7.5rem; font-size: 12px; }
+.q-name { font-family: var(--n-font-mono); font-size: 11px; color: var(--n-text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.q-rule { font-size: 11px; color: var(--n-text-dim); overflow-wrap: anywhere; }
+
+/* f: the scan full size with its slices, over the grid, not a dialog */
+.qgrid-full { position: absolute; inset: 0; z-index: 5; display: grid; padding: 0.6rem 1.1rem; background: var(--n-bg-page); }
+.qgrid-page { position: relative; }
+@media (max-width: 860px) {
+  /* the page grows with its tiles on a narrow window: the full view takes the window under the top bar */
+  .qgrid-full { position: fixed; inset: 3rem 0 0 0; padding: 0.5rem 1rem; }
+  .qgrid { overflow: visible; }
+}
+@media (max-width: 640px) {
+  /* two scans a row on a phone, so a page is read at a glance */
+  .qgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem; }
+  .q-pic { height: 88px; }
+  .q-pic img { max-height: 88px; }
+  .qgrid-bar .q-help { display: none; }
+}
+.qgrid-done { display: grid; gap: 0.6rem; justify-items: start; }
+
+/* ------------------------------------------------------------ the dataset viewer: the question under an open scan */
+.dview-stage.asks { position: relative; }
+.dview-stage.asks::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; border: 2px dashed var(--n-caution-line); }
+.dview-stage.asks[data-slot]::after { border: 2px solid var(--vc); border-left-width: 6px; }
+.scan-question { display: flex; flex-wrap: wrap; align-items: center; gap: calc(6 * var(--p, 1px)) calc(10 * var(--p, 1px)); min-width: 0; padding: calc(6 * var(--p, 1px)) calc(16 * var(--p, 1px)); border-top: 1px solid var(--n-line); background: var(--n-bg-raised); font-size: calc(13 * var(--p, 1px)); }
+.scan-question .q-ask { font-family: var(--n-font-serif); font-size: calc(15 * var(--p, 1px)); }
+.scan-question .q-keys { display: inline-flex; flex-wrap: wrap; gap: calc(4 * var(--p, 1px)); }
+.scan-question kbd { display: inline-block; min-width: 1.1em; margin-right: 0.3rem; padding: 0 0.25rem; border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: var(--n-radius); background: var(--n-bg-raised); font-family: var(--n-font-mono); font-size: 11px; line-height: 1.35; text-align: center; color: var(--n-text-faint); }
+.scan-question .button kbd { margin: 0 0 0 0.35rem; background: transparent; color: inherit; border-color: currentColor; opacity: 0.7; }
+.scan-question .q-list { flex-basis: 100%; }
+.scan-question .said { margin: 0; }
+@media (max-width: 720px) {
+  .scan-question { padding: calc(6 * var(--p, 1px)) 1rem; }
+}

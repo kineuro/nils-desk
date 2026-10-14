@@ -7,7 +7,7 @@
 // votes. Until a certificate confirms System 1 its column says so.
 
 import "./s1.css";
-import { prob, readWords, ruleWords, s1Words, valueWords, type Suggestions } from "./s1";
+import { overriddenWords, prob, readWords, ruleWords, s1Words, valueWords, type Suggestions } from "./s1";
 
 const STACKS_SHOWN = 3;
 
@@ -32,6 +32,12 @@ export function BothSides({ doc, axis }: { doc: Suggestions; axis?: string | nul
                     <span className="meta">{ruleWords(a.rules)}</span>
                     {readWords(a.rules) && <span className="meta">read {readWords(a.rules)}</span>}
                     {a.rules.decided?.matched && <span className="meta">matched “{a.rules.decided.matched}”</span>}
+                    {/* record 56: the rules this answer was decided over, never a question, kept as why */}
+                    {overriddenWords(a.rules).map((w) => (
+                      <span key={w} className="meta overridden">
+                        {w}
+                      </span>
+                    ))}
                   </section>
                   <section className={`both-side s1 ${status}`} aria-label={`System 1 on ${a.axis}`}>
                     <span className="eyebrow">{s1Words(status)}</span>
