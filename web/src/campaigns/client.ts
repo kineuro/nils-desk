@@ -160,6 +160,21 @@ export interface Counts {
   answers: number;
 }
 
+/** What a campaign's answers are for (record 55 D6, D7). */
+export type Purpose = "decide" | "train" | "measure" | "audit";
+
+export const PURPOSE_WORDS: Record<Purpose, { words: string; says: string }> = {
+  decide: { words: "Decide", says: "Its answers become decisions." },
+  train: { words: "Train", says: "Its answers train a model: each item is answered before any suggestion shows." },
+  measure: { words: "Measure", says: "Its answers measure an error: each item is answered before any suggestion shows." },
+  audit: { words: "Audit", says: "A blind read of accepted scans; its answers never train and become no decision." },
+};
+
+/** A campaign's purpose, decide where the engine says none. */
+export function purposeOf(c: Pick<Campaign, "purpose">): Purpose {
+  return c.purpose === "train" || c.purpose === "measure" || c.purpose === "audit" ? c.purpose : "decide";
+}
+
 export interface Campaign {
   id: number;
   name: string;
@@ -185,6 +200,8 @@ export interface Campaign {
   suggest?: SuggestMode | string;
   /** The reader shows the pictures alone, no text of the file's header beside them, as pair mode does; absent from an engine before it, which showed the header. */
   hide_header?: boolean;
+  /** Record 55 D6 and D7: what its answers are for; decide where an engine before it says none. Train and measure are read blind first; an audit's answers never train. */
+  purpose?: Purpose | string;
   counts: Counts;
   /** A closed check that holds an item its close refused, whose question is still open: a person may close it again. Absent from an engine before it. */
   close_again?: boolean;
@@ -305,6 +322,8 @@ export interface MakeBody extends Json {
   suggest?: SuggestMode;
   /** An axis or an axes question that suggests none: the pictures alone, no header text. */
   hide_header?: boolean;
+  /** Record 55 D6 and D7: what its answers are for, where not decide. */
+  purpose?: Purpose;
 }
 
 /** The body of an answer: a value for an axis, a pick and a free question, a form for a form, a file for a derivative. */
@@ -888,6 +907,8 @@ export interface Draft {
   suggest: SuggestMode;
   /** An axis or an axes question that suggests nothing: the pictures alone, with no text of the file's header; off unless chosen. */
   hideHeader: boolean;
+  /** Record 55 D6 and D7: what its answers are for; decide unless chosen. */
+  purpose: Purpose;
   /** Pair: the selection each stack is paired with in its session; empty pairs the stacks of `from` among themselves. */
   with: string;
   /** Anchored: the selections the pre and the post anchors come from. */
@@ -948,6 +969,7 @@ export function emptyDraft(prefill: Partial<Prefill> = {}): Draft {
     leaseMinutes: 60,
     suggest: "none",
     hideHeader: false,
+    purpose: "decide",
     with: "",
     pre: "",
     post: "",
@@ -1053,10 +1075,12 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
       ...(raters.length > 0 ? { raters } : {}),
       ...(adjudicators.length > 0 ? { adjudicators } : {}),
       adjudication: { when, metric, ...(metric !== "exact" || d.threshold.trim() !== "0.8" ? { threshold } : {}) },
-      closes_into: closes,
+      // record 55 D7: an audit reads blind and closes into nothing
+      closes_into: d.purpose === "audit" ? "none" : closes,
       lease_seconds: Math.max(60, Math.round(d.leaseMinutes * 60)),
-      ...(d.kind === "axis" || d.kind === "axes" ? { suggest: d.suggest } : {}),
-      ...((d.kind === "axis" || d.kind === "axes") && d.suggest === "none" && d.hideHeader ? { hide_header: true } : {}),
+      ...(d.kind === "axis" || d.kind === "axes" ? { suggest: d.purpose === "audit" ? "none" : d.suggest } : {}),
+      ...((d.kind === "axis" || d.kind === "axes") && (d.suggest === "none" || d.purpose === "audit") && d.hideHeader ? { hide_header: true } : {}),
+      ...(d.purpose !== "decide" ? { purpose: d.purpose } : {}),
     },
   };
 }

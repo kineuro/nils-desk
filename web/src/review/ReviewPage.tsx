@@ -29,6 +29,7 @@ import { RulesPage, type WordAt } from "./Rules";
 import { CampaignPages, LabelSetPages } from "../campaigns/CampaignsPage";
 import { queuedCount } from "./work";
 import { WorkPage } from "./WorkPage";
+import { RoundsPage } from "./RoundsPage";
 
 export type ReviewSub = "queue" | "rules" | "identifiers" | "picks" | "proposals" | "asked";
 
@@ -87,6 +88,8 @@ export function ReviewPage(props: { caps: Capabilities; page: string | null; arg
   const { caps, page, arg = null, sub = null, query } = props;
   if (page === "campaigns" && arg !== null && /^\d+$/u.test(arg)) return <CampaignPages caps={caps} id={arg} view={sub} query={query} />;
   if (page === "label-sets") return <LabelSetPages caps={caps} id={arg} />;
+  // record 55 D3 and D7: the rounds, what each accepted and its blind audit
+  if (page === "rounds" && may(caps, "review:see") && served(caps, "GET /api/review/rounds")) return <RoundsPage caps={caps} />;
   const narrowed = query !== undefined && Object.keys(query).length > 0;
   if (!may(caps, "review:see") || page === "campaigns" || page === "work" || (page === null && !narrowed)) return <WorkPage caps={caps} query={query} />;
   // Main scans has a page of its own; the pick questions of earlier runs keep their table under Review's head

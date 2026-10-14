@@ -43,6 +43,10 @@ export interface ReviewItem {
   grouped?: boolean;
   units?: number | null;
   withheld?: boolean;
+  /** Record 55 D6: routine, or blind first (the person answers before the suggestions show); absent from an engine before it. */
+  mode?: "routine" | "blind_first" | string;
+  /** Record 55 D6: the caller's provisional answer to a blind-first item, once given. */
+  provisional?: { answer: Json; seconds: number | null } | null;
 }
 
 export interface ReleaseRow {

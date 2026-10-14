@@ -204,6 +204,11 @@ export function WorkBody({ caps, summary, list, mine = {}, since = null, why = [
             {summary && <b>{n(queued)}</b>}
           </a>
         )}
+        {reviewer && served(caps, "GET /api/review/rounds") && (
+          <a className="opt" href={href("review", "rounds")}>
+            Rounds
+          </a>
+        )}
         {may(caps, "campaigns:see") && served(caps, "GET /api/label-sets") && (
           <a className="opt" href={href("review", "label-sets")}>
             Label sets

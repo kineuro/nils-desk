@@ -129,6 +129,8 @@ export function reviewPages(caps: Capabilities): SidePage[] {
   const out: SidePage[] = [];
   if (reviews(caps) || readsCampaigns(caps)) out.push(page("work", "Work", { to: href("review"), also: ["questions", "campaigns"] }));
   if (reviews(caps)) out.push(page("picks", "Main scans"), page("identifiers", "Subjects"), page("rules", "Rules"));
+  // record 55 D3 and D7: the rounds and their blind audits
+  if (reviews(caps) && door(caps, "GET /api/review/rounds")) out.push(page("rounds", "Rounds"));
   if (readsCampaigns(caps) && door(caps, "GET /api/label-sets")) out.push(page("label-sets", "Label sets"));
   return out;
 }

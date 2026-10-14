@@ -36,6 +36,8 @@ import {
   makeRefusal,
   refused as refusedWords,
   SUGGEST_WORDS,
+  PURPOSE_WORDS,
+  type Purpose,
   voterName,
   voterOf,
   whoRatesWords,
@@ -432,6 +434,19 @@ export function MakeForm({ caps, draft: d, pack, lists = NO_LISTS, onChange: set
               </span>
             </label>
           )}
+        </fieldset>
+      )}
+      {(d.kind === "axis" || d.kind === "axes") && (
+        <fieldset className="field">
+          <legend className="label">Its answers are for</legend>
+          <span className="chips">
+            {(["decide", "train", "measure", "audit"] as Purpose[]).map((p) => (
+              <button key={p} type="button" className={d.purpose === p ? "opt on" : "opt"} aria-pressed={d.purpose === p} onClick={() => set({ purpose: p })}>
+                {PURPOSE_WORDS[p].words}
+              </button>
+            ))}
+          </span>
+          <span className="meta">{PURPOSE_WORDS[d.purpose].says}</span>
         </fieldset>
       )}
       {d.kind === "pick" && roles.length > 0 && (
