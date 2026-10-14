@@ -318,6 +318,43 @@ describe("datasets and cohorts on one page", () => {
     expect(card("qc-sample").querySelector(".dp-big")?.textContent).toBe("5subjects · 10 scans");
   });
 
+  it("says a count that stopped short of a large tree as at least, on the card and the detail, until a read counts it", async () => {
+    // 2026-10-14: a production card said 49,836 files where its read saw 1,112,026; the probe reads a page's worth of entries
+    const big = ds("study-huge", 9, { trees: { originals: null, anon: { path: "/srv/in/study-huge/derivatives/dcm-anon", files: 49836, last_written: null, partial: true } } });
+    const summary = (counted: boolean): DatasetSummary => {
+      const s = summaryOf(big);
+      const files = counted ? 1112026 : 49836;
+      return {
+        ...s,
+        files: { ...s.files, found: files, bytes: counted ? 330_000_000_000 : 16_000_000_000, found_partial: !counted },
+        steps: s.steps.map((x) => (x.step === "found" ? { ...x, files, partial: !counted, counted_by: counted ? "read" : "probe" } : x)),
+      };
+    };
+    for (const counted of [false, true]) {
+      await page({
+        list: [big],
+        route: (c) => (c.method === "GET" && new URL(c.url, "http://x").pathname === "/api/datasets/study-huge/summary" ? { status: 200, body: summary(counted) } : undefined),
+      });
+      const files = card("study-huge").querySelector(".dp-nums > span")!;
+      const detail = host.querySelector<HTMLElement>(".dp-detail")!.textContent ?? "";
+      if (!counted) {
+        expect(files.textContent).toBe("at least 49,836files");
+        expect(files.getAttribute("title")).toBe("at least 49,836 files: counted until the count stopped; a read counts them all");
+        expect(detail).toContain("at least 49,836 files");
+        // a size counted part of the way is no size
+        expect(detail).not.toContain("16 GB");
+      } else {
+        // once a read counted the tree, the count is the read's, and final
+        expect(files.textContent).toBe("1,112,026files");
+        expect(files.getAttribute("title")).toBeNull();
+        expect(detail).toContain("1,112,026 files");
+        expect(detail).not.toContain("at least");
+      }
+      act(() => root.unmount());
+      root = createRoot(host);
+    }
+  });
+
   it("chooses the first dataset that needs a person, with its next step the one primary button", async () => {
     await page();
     const d = host.querySelector<HTMLElement>(".dp-detail")!;

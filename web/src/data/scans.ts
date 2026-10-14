@@ -48,6 +48,12 @@ export interface Scan {
   questions: string[];
   /** The family it is grouped in on a visit's page (SyMRI, spine and neck, derived, SWI ...); the engine's, else worked out from the axes. */
   family?: Family;
+  /**
+   * The acquisition family the pack's routes recognised in it (2026-10-14): SyMRI's, an SWI's, a mix sequence's or STAGE's, so an
+   * acquisition's own images join it (SyMRI's acquisition, an SWI's magnitude, phase and minIP); null where the engine says none,
+   * absent from an engine before it.
+   */
+  acquisitionFamily?: Family | null;
   /** Echo, repetition and inversion time in ms and the flip angle in degrees, where the scanner wrote them. */
   te?: number | null;
   tr?: number | null;
@@ -101,6 +107,8 @@ export interface ScanRow {
   questions?: string[] | null;
   /** The viewer's additions (2026-10-09): its family, timing and the roles it is the main scan for; absent from an engine before them. */
   family?: string | null;
+  /** The acquisition family the pack's routes recognised (2026-10-14): symri, swi, mix, stage or null; absent from an engine before it. */
+  acquisition_family?: string | null;
   te?: number | null;
   tr?: number | null;
   ti?: number | null;
@@ -151,6 +159,7 @@ export function scansOf(rows: ScanRow[]): Scan[] {
     partial: r.picture?.partial === true,
     questions: Array.isArray(r.questions) ? r.questions.filter((q): q is string => typeof q === "string") : [],
     family: typeof r.family === "string" && (FAMILIES as readonly string[]).includes(r.family) ? (r.family as Family) : undefined,
+    acquisitionFamily: acquisitionOf(r.acquisition_family),
     te: timing(r.te),
     tr: timing(r.tr),
     ti: timing(r.ti),
@@ -160,6 +169,14 @@ export function scansOf(rows: ScanRow[]): Scan[] {
 }
 
 const FAMILIES = ["plain", "symri", "mix", "stage", "swi", "derived", "body"] as const;
+/** The families an acquisition makes, of those the desk groups by. */
+const ACQUISITIONS: readonly Family[] = ["symri", "mix", "stage", "swi"];
+
+/** The engine's acquisition family: one it knows, null where it says none, absent where it says nothing (an older engine). */
+function acquisitionOf(v: unknown): Family | null | undefined {
+  if (v === null) return null;
+  return typeof v === "string" && ACQUISITIONS.includes(v as Family) ? (v as Family) : undefined;
+}
 const timing = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /**

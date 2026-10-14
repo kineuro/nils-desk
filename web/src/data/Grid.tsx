@@ -50,6 +50,7 @@ import {
   picturesToCome,
   roleWord,
   plural,
+  scanHint,
   scansKey,
   scopeHome,
   scopeList,
@@ -1135,6 +1136,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
                           const main = s.main ?? [];
                           const looks = needsLook(s);
                           const shown = names === "bids" && s.bids ? s.bids : s.name;
+                          const hint = scanHint(s);
                           return (
                             <a
                               key={s.id}
@@ -1166,6 +1168,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
                               <div className="vw-scan-words">
                                 <span className="vw-scan-name">{shown}</span>
                                 <span className="vw-scan-params">{paramsWords(s) || " "}</span>
+                                {hint && <span className="vw-scan-hint">{hint}</span>}
                               </div>
                             </a>
                           );

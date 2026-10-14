@@ -40,7 +40,8 @@ import { nextStep, stepCommand, type StepId } from "./steps";
 import {
   clock,
   doingTitle,
-  filesOf,
+  filesWords,
+  foundOf,
   idsWords,
   logLine,
   maySummarise,
@@ -435,8 +436,10 @@ function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; 
   const unsorted = s?.unsorted ?? d.totals.unsorted ?? 0;
   const kinds = (s?.kinds ?? []).slice(0, 6);
   const most = Math.max(1, ...kinds.map((k) => k.scans));
-  const files = filesOf(d, s);
-  const bytes = s?.files.bytes ?? null;
+  const found = foundOf(d, s);
+  const files = found.files;
+  // a count that stopped short of the tree counted part of its bytes too: no size until a read counts them all
+  const bytes = found.partial ? null : (s?.files.bytes ?? null);
   // record 56 (2026-10-11): the files set aside by policy are counted, with their kinds behind "why"; the rest were refused and keep their page
   const setAside = s?.files.set_aside ?? 0;
   const asideKinds = setAsideWords(s?.files.set_aside_kinds);
@@ -506,7 +509,7 @@ function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; 
       )}
       {scans === 0 && <p className="meta">Nothing read yet.</p>}
       <div className="meta">
-        {files === null ? "files not counted yet" : `${n(files)} ${files === 1 ? "file" : "files"}`}
+        {files === null ? "files not counted yet" : filesWords({ files, partial: found.partial })}
         {bytes !== null && bytes > 0 ? ` · ${sizeWords(bytes)}` : ""}
         {setAside > 0 && (
           <>

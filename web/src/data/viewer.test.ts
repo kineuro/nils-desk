@@ -20,6 +20,8 @@ import {
   onSearch,
   paramsWords,
   parseView,
+  scanFamily,
+  scanHint,
   scopeHome,
   searchOf,
   setSearch,
@@ -257,6 +259,40 @@ describe("a visit's folders", () => {
       ["body", [5]],
     ]);
     expect(f[0]).toMatchObject({ scans: 4, main: 1, look: 1 });
+  });
+
+  it("groups an acquisition's own images with what was made of them, by the family its route recognised (2026-10-14)", () => {
+    const scans = [
+      scan(1, { series: 1, axes: { base: "T1w" }, acquisitionFamily: null, family: "plain" }),
+      // SyMRI's acquisition, a working scan, beside its synthetic images: anat, in SyMRI's box, the acquisition first
+      scan(2, { series: 9, folder: "anat/SyMRI", axes: { provenance: "SyMRI", construct: "SyntheticT1w", disposition: "scanner_derived" }, acquisitionFamily: "symri", family: "symri" }),
+      scan(3, { series: 8, folder: "anat/SyMRI", axes: { provenance: "RawRecon", technique: "MDME", disposition: "working_scan" }, acquisitionFamily: "symri", family: "symri" }),
+      // an SWI's magnitude, phase, processed image and minIP, all in SWI's box, the acquisitions first
+      scan(4, { series: 4, axes: { provenance: "ProjectionDerived", construct: "MinIP", base: "SWI", disposition: "reformat" }, acquisitionFamily: "swi", family: "swi" }),
+      scan(5, { series: 5, axes: { provenance: "SWIRecon", construct: "SWI", base: "SWI", disposition: "scanner_derived" }, acquisitionFamily: "swi", family: "swi" }),
+      scan(6, { series: 2, axes: { provenance: "RawRecon", construct: "Magnitude", base: "T2*w" }, acquisitionFamily: "swi", family: "swi" }),
+      scan(7, { series: 3, axes: { provenance: "RawRecon", construct: "Phase" }, acquisitionFamily: "swi", family: "swi" }),
+      // a reverse phase-encoding b0 under fmap, and an ASL under perf
+      scan(8, { series: 10, datatype: "fmap", folder: "fmap", axes: { construct: "FieldmapRef,ND", base: "DWI" }, acquisitionFamily: null, family: "plain" }),
+      scan(9, { series: 11, datatype: "perf", folder: "perf", axes: { base: "ASL" }, acquisitionFamily: null, family: "plain" }),
+    ];
+    const f = foldersOf(scans, compareScans);
+    expect(f.map((x) => x.label)).toEqual(["anat", "fmap", "Perfusion (ASL)"]);
+    expect(f[0].groups.map((g) => [g.family, g.scans.map((s) => s.id)])).toEqual([
+      ["plain", [1]],
+      ["symri", [3, 2]],
+      ["swi", [6, 7, 5, 4]],
+    ]);
+    // the reverse phase-encoding reference says what it is for; nothing else does
+    expect(scanHint(scans[7])).toBe("reverse phase encoding, used to correct the DWI's distortion");
+    expect(scans.filter((s) => scanHint(s) !== null).map((s) => s.id)).toEqual([8]);
+    expect(scanHint(scan(10, { datatype: "dwi", axes: { construct: "FieldmapRef" } }))).toBeNull();
+    // an engine that says the family wins over an older engine's word, and an older engine's word over the axes
+    expect(scanFamily(scan(11, { axes: {}, family: "plain", acquisitionFamily: "swi" }))).toBe("swi");
+    expect(scanFamily(scan(12, { axes: { provenance: "SyMRI" }, family: "derived" }))).toBe("derived");
+    expect(scanFamily(scan(13, { axes: { provenance: "SyMRI" } }))).toBe("symri");
+    // coloured by family: the SWI's minIP is SWI's, no longer derived
+    expect(colourOf(scans[3], "family")).toEqual({ word: "SWI", slot: 6 });
   });
 
   it("fills pictures that came into the page shown, and nothing else", () => {

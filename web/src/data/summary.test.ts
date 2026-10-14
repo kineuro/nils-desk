@@ -22,6 +22,8 @@ import {
   fedWords,
   feedsWords,
   filesOf,
+  filesWords,
+  foundOf,
   growth,
   idsWords,
   joinTitle,
@@ -334,6 +336,22 @@ describe("a card's line", () => {
     const ident = dataset({ trees: { originals: { path: "/x/derivatives/dcm-original", files: 213, bytes: null }, anon: { path: "/x/derivatives/dcm-anon", files: 0, last_written: null } } });
     expect(filesOf(ident, null)).toBe(213);
     expect(filesOf(dataset({ trees: null }), null)).toBeNull();
+  });
+
+  it("says a count that stopped short of a large tree as at least, until a read counts it (2026-10-14)", () => {
+    const s = summary();
+    expect(foundOf(dataset(), { ...s, files: { ...s.files, found: 49836, found_partial: true } })).toEqual({ files: 49836, partial: true });
+    expect(foundOf(dataset(), { ...s, files: { ...s.files, found: 1112026, found_partial: false } })).toEqual({ files: 1112026, partial: false });
+    // an engine before it says nothing of where its count stopped
+    expect(foundOf(dataset(), s)).toEqual({ files: 45395, partial: false });
+    // the sources door's tree, where no summary was read
+    const big = dataset({ trees: { originals: null, anon: { path: "/x/derivatives/dcm-anon", files: 49836, last_written: null, partial: true } } });
+    expect(foundOf(big, null)).toEqual({ files: 49836, partial: true });
+    expect(filesWords({ files: 49836, partial: true })).toBe("at least 49,836 files");
+    expect(filesWords({ files: 1, partial: false })).toBe("1 file");
+    // the found step says it in the same words
+    expect(stepWords(step("found", { files: 49836, partial: true, counted_by: "probe", tree: "anon" }), NOW).what).toBe("at least 49,836 files");
+    expect(stepWords(step("found", { files: 1112026, partial: false, counted_by: "read", tree: "anon" }), NOW).what).toBe("1,112,026 files");
   });
 });
 

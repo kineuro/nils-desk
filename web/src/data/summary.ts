@@ -41,6 +41,9 @@ export interface SummaryStep {
   files?: number | null;
   bytes?: number | null;
   tree?: "anon" | "originals";
+  /** Found (2026-10-14): the count stopped short of a large tree, so `files` is a lower bound until a read counts it whole; and what counted it. */
+  partial?: boolean;
+  counted_by?: "read" | "pseudonymise" | "probe";
   waiting?: number;
   held?: number;
   /** The read: the files it refused, those set aside among them included. */
@@ -101,6 +104,8 @@ export interface DatasetSummary {
   files: {
     found: number | null;
     bytes: number | null;
+    /** 2026-10-14: `found` stopped short of a large tree and is a lower bound, until a read counts the tree whole; an engine from before says nothing. */
+    found_partial?: boolean;
     read: number;
     refused: number;
     refused_batch: number | null;
@@ -337,7 +342,7 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
   let hint: string | undefined;
   switch (s.step) {
     case "found":
-      what = typeof s.files === "number" ? `${n(s.files)} ${s.files === 1 ? "file" : "files"}` : "not counted yet";
+      what = typeof s.files === "number" ? filesWords({ files: s.files, partial: s.partial === true }) : "not counted yet";
       // an identified dataset's originals carry who each file is about
       if (s.tree === "originals" && typeof s.files === "number") what += ", with names";
       break;
@@ -422,11 +427,28 @@ export function readWords(s: Pick<SummaryStep, "new" | "known" | "twice" | "same
 
 /** How many files a dataset's card counts: the ones found in the tree NILS reads, or the originals of an identified dataset; null where none were counted. */
 export function filesOf(d: Pick<Dataset, "trees">, s: DatasetSummary | null): number | null {
-  if (s && typeof s.files.found === "number") return s.files.found;
-  const originals = d.trees?.originals?.files;
-  if (typeof originals === "number") return originals;
-  const anon = d.trees?.anon?.files;
-  return typeof anon === "number" ? anon : null;
+  return foundOf(d, s).files;
+}
+
+/** The files a dataset's card counts, and whether the count stopped short of the tree (2026-10-14), so it is a lower bound until a read counts the tree whole. */
+export interface FoundCount {
+  files: number | null;
+  partial: boolean;
+}
+
+/** The card's count of files and whether it stopped short: the summary's, else the sources door's tree it reads (the originals of an identified dataset). */
+export function foundOf(d: Pick<Dataset, "trees">, s: DatasetSummary | null): FoundCount {
+  if (s && typeof s.files.found === "number") return { files: s.files.found, partial: s.files.found_partial === true };
+  const originals = d.trees?.originals;
+  if (typeof originals?.files === "number") return { files: originals.files, partial: originals.partial === true };
+  const anon = d.trees?.anon;
+  return typeof anon?.files === "number" ? { files: anon.files, partial: anon.partial === true } : { files: null, partial: false };
+}
+
+/** A count of files in words: "49,836 files", or "at least 49,836 files" where the count stopped short of the tree. */
+export function filesWords(c: { files: number; partial: boolean }): string {
+  const words = `${n(c.files)} ${c.files === 1 ? "file" : "files"}`;
+  return c.partial ? `at least ${words}` : words;
 }
 
 /** A card's one line under its numbers: how sure the sort is, or what the dataset still needs. */
