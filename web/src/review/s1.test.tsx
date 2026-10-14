@@ -20,7 +20,7 @@ import type { ReviewItem } from "../ops/client";
 import { BothSides } from "./BothSides";
 import { DecideDialog } from "./Decide";
 import { RoundsBody } from "./RoundsPage";
-import { HeadersView, shareOf } from "./S1Settings";
+import { BlindShare, HeadersView, shareOf } from "./S1Settings";
 import { gradeWords, neverAskedHolds, owesBlind, pct, provisionalValue } from "./s1";
 import { ROUND, SUGGESTIONS } from "./s1.fixture";
 import { jobOf, workList } from "./work";
@@ -205,5 +205,27 @@ describe("the site's share and a dataset's headers", () => {
     const person = renderToStaticMarkup(<HeadersView flag={{ ...flag, by: "person", flag: { damaged: true, why: "anonymised export", by: "astrid", at: "" } }} may={false} asking={false} why="" said={null} onAsk={() => undefined} onWhy={() => undefined} onSet={() => undefined} />);
     expect(person).toContain("flagged by astrid");
     expect(person).not.toContain("<button");
+  });
+});
+
+describe("the blind-first card", () => {
+  it("reads the share from the site settings door, which a database admin without review:see opens", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (url: string) => {
+      urls.push(url);
+      return new Response(JSON.stringify({ timezone: "UTC", week_start: "monday", review: { blind_share: 0.25, default_blind_share: 0.2, system1: { task: "system1", chosen: null, confirmed: false, certificate_id: null }, audit_share: 0.01 } }), { status: 200 });
+    });
+    await act(async () => root.render(<BlindShare locked={null} />));
+    await act(async () => new Promise((r) => setTimeout(r, 0)));
+    expect(urls).toEqual(["/api/settings"]);
+    expect(host.querySelector<HTMLInputElement>("#blind-share")?.value).toBe("25");
+    expect(host.textContent).toContain("Default 20 %");
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
   });
 });

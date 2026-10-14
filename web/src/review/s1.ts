@@ -146,7 +146,11 @@ export const s1 = {
   suggestions: (item: number, member?: number) => door<Suggestions>("GET", `/api/review/${item}/suggestions${member ? `?member=${member}` : ""}`),
   provisional: (item: number, answer: Json) => door<{ item: number; mode: Mode; answer: Json; seconds: number | null }>("POST", `/api/review/${item}/provisional`, answer),
   rounds: () => door<Rounds>("GET", "/api/review/rounds"),
-  settings: () => door<ReviewSettings>("GET", "/api/review/settings"),
+  /** The review settings, from the site settings door, which needs no review grant (a database admin reads them). */
+  settings: () => door<{ review?: ReviewSettings }>("GET", "/api/settings").then((d) => {
+    if (!d.review) throw new Error("this engine's settings carry no review settings");
+    return d.review;
+  }),
   setShare: (share: number) => door<Json>("PUT", "/api/settings", { review: { blind_share: share } }),
   headers: (dataset: string) => door<HeadersFlag>("GET", `/api/datasets/${enc(dataset)}/headers`),
   setHeaders: (dataset: string, damaged: boolean | null, why?: string) => door<HeadersFlag>("PUT", `/api/datasets/${enc(dataset)}/headers`, { damaged, ...(why ? { why } : {}) }),

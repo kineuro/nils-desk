@@ -496,7 +496,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
               <p className="meta">Every answer's dates use these, never the browser's. A change moves the registry's epoch.</p>
             </section>
           )}
-          {served(caps, "GET /api/review/settings") && <BlindShare locked={calendarLocked} />}
+          {served(caps, "GET /api/settings") && <BlindShare locked={calendarLocked} />}
         </div>
       </div>
     </div>
