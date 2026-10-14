@@ -12,17 +12,24 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import { Dialog } from "../ui/Dialog";
 import { refusalWords } from "./client";
-import { listWords, mainScans, roleWord, type MapSubject, type MapVisit, type Scope } from "./mainScans";
+import { layerSlot, layerWord, listWords, mainScans, roleWord, type Layer, type MapSubject, type MapVisit, type Scope } from "./mainScans";
 import { SessionBoard, type BoardCandidate } from "./SessionBoard";
 
 const SCAN_WORDS = { one: "scan", many: "scans", chosen: "the rules' pick", why: "motion in series 9", empty: "No scan of this role at this visit." };
 
 const sameScans = (a: readonly number[], b: readonly number[]) => a.length === b.length && [...a].sort((x, y) => x - y).every((s, i) => s === [...b].sort((x, y) => x - y)[i]);
 
-/** The visit's candidates as the board draws them: the engine's list, or the scans picked alone where it names none. */
-export function boardOf(v: MapVisit, slot: (kind: string | null) => number | null): BoardCandidate[] {
-  const listed = v.candidates ?? (v.stacks.length > 0 ? [{ stacks: v.stacks, kind: v.kind, score: null }] : []);
-  return listed.map((c) => ({ stacks: c.stacks, score: c.score, chosen: v.by !== "person" && sameScans(c.stacks, v.stacks), label: c.kind, slot: slot(c.kind) }));
+/** The visit's candidates as the board draws them: the engine's list, or the scans picked alone where it names none; with a layer on, each candidate's value on it beside its kind. */
+export function boardOf(v: MapVisit, slot: (kind: string | null) => number | null, layer: Layer | null = null): BoardCandidate[] {
+  const listed: { stacks: number[]; kind: string | null; score: number | null; layer?: string | null }[] = v.candidates ?? (v.stacks.length > 0 ? [{ stacks: v.stacks, kind: v.kind, score: null }] : []);
+  return listed.map((c) => ({
+    stacks: c.stacks,
+    score: c.score,
+    chosen: v.by !== "person" && sameScans(c.stacks, v.stacks),
+    label: c.kind,
+    slot: slot(c.kind),
+    ...(layer !== null && c.layer !== undefined ? { extra: c.layer === null ? { label: "no answer", slot: null } : { label: layerWord(layer, c.layer), slot: layerSlot(layer, c.layer) } } : {}),
+  }));
 }
 
 /** Who picked the visit's scan, in one line. */
@@ -43,13 +50,15 @@ export interface VisitPickProps {
   version: number | null;
   draft: boolean;
   slot: (kind: string | null) => number | null;
+  /** The map's layer, whose value each candidate shows beside its kind. */
+  layer?: Layer | null;
   onClose: () => void;
   onDone: (words: string) => void;
   pictures?: boolean;
 }
 
-export function VisitPick({ caps, scope, role, subject, visit, version, draft, slot, onClose, onDone, pictures = true }: VisitPickProps) {
-  const candidates = boardOf(visit, slot);
+export function VisitPick({ caps, scope, role, subject, visit, version, draft, slot, layer = null, onClose, onDone, pictures = true }: VisitPickProps) {
+  const candidates = boardOf(visit, slot, layer);
   const now = candidates.findIndex((c) => sameScans(c.stacks, visit.stacks));
   const [main, setMain] = useState<number | null>(now >= 0 ? now : null);
   const [why, setWhy] = useState("");

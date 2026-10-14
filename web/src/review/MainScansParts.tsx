@@ -4,7 +4,10 @@
 // value tag in its colour (a thin frame, a 3px left bar and the tint, never
 // a glyph), the five numbers with the ones a way of keeping alike keeps and
 // gives up marked, the kinds, where they come from, the series, visit by
-// visit, and the group's subjects as cards or every subject as a strip.
+// visit, and the group's subjects as cards or every subject as a strip. A
+// layer (body region, body part or post-contrast) colours the visits by what
+// their scans are, in the same language: the scan taken's value filled, the
+// value most of a visit's scans carry outlined where it takes none.
 
 import { Fragment, type CSSProperties } from "react";
 import { Hint } from "../ui/Hint";
@@ -17,6 +20,10 @@ import {
   groupTitle,
   keptBy,
   kindChanges,
+  LAYERS,
+  layerName,
+  layerSlot,
+  layerWord,
   litOf,
   numbersOf,
   othersOf,
@@ -26,16 +33,22 @@ import {
   sameGroup,
   sharedWords,
   stepWord,
+  stripDrawn,
   stripKinds,
+  visitDrawn,
+  visitLayerWords,
   type Columns,
   type Group,
   type KeepAlike,
+  type Layer,
   type MapAnswer,
+  type MapLayer,
   type MapSubject,
   type MapVisit,
   type Order,
   type Strips,
   type SubjectsPage,
+  type VisitLayer,
 } from "./mainScans";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -242,8 +255,10 @@ export function ByVisitBox({ map, slot, palette }: { map: MapAnswer; slot: Slot;
 }
 
 const CARDS_HINT = "Visits as columns, 24 subjects a page. A visit whose head stands out takes another kind than the visit with a pick before it. A visit opens its pick.";
-const stripsHint = (columns: Columns) =>
-  `Every subject, by the ${columns === "dataset" ? "dataset" : "scanner"} most of its visits are at, longest series first. The group you opened is lit. One cell a visit; a marked left edge is a change of kind.`;
+const stripsHint = (columns: Columns, layer: Layer | null = null) =>
+  layer
+    ? `Every subject, by the ${columns === "dataset" ? "dataset" : "scanner"} most of its visits are at, longest series first. The group you opened is lit. One cell a visit, in the colour of its ${layerName(layer).toLowerCase()}: filled for the scan taken, outlined for what most of its scans are where none is taken.`
+    : `Every subject, by the ${columns === "dataset" ? "dataset" : "scanner"} most of its visits are at, longest series first. The group you opened is lit. One cell a visit; a marked left edge is a change of kind.`;
 const REDRAWN_HINT = "An outlined visit: your changed rules pick it differently.";
 
 export interface GroupBoxProps {
@@ -269,6 +284,8 @@ export interface GroupBoxProps {
   stripsWhy: string | null;
   slot: Slot;
   onVisit: (s: MapSubject, v: MapVisit) => void;
+  /** The layer the visits are coloured by, none for their kinds alone. */
+  layer?: Layer | null;
 }
 
 /** The group's subjects, as cards a page at a time or every subject as a strip with the group lit. */
@@ -286,7 +303,7 @@ export function GroupBox(p: GroupBoxProps) {
           </button>
         )}
         {total !== null && <span className="ms-group-count">{plural(total, "subject", "subjects")}</span>}
-        <Hint text={cards ? CARDS_HINT : stripsHint(p.columns)} />
+        <Hint text={cards ? (p.layer ? `${CARDS_HINT} ${layerCardsHint(p.layer)}` : CARDS_HINT) : stripsHint(p.columns, p.layer ?? null)} />
         {cards && p.draft && <Hint text={REDRAWN_HINT} />}
         <span className="grow" />
         <div className="chips" role="group" aria-label="View">
@@ -334,7 +351,7 @@ export function GroupBox(p: GroupBoxProps) {
   );
 }
 
-function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slot, onVisit, group }: GroupBoxProps) {
+function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slot, onVisit, group, layer = null }: GroupBoxProps) {
   if (subjectsWhy) return <p className="warn">The subjects could not be read: {subjectsWhy}</p>;
   if (!subjects) return <Wait phase="reading the subjects" since={subjectsSince ?? Date.now()} size="panel" />;
   if (subjects.subjects.length === 0) return <p className="ms-none">No subject in this group.</p>;
@@ -365,13 +382,17 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
                   );
                 const others = othersOf(v, here);
                 const also = alsoWords(others);
+                // the layer, where one is on and this answer carries it
+                const on = layer !== null && v.layer !== null ? v.layer : null;
+                const layered = on && layer ? `, ${layerName(layer).toLowerCase()} ${layerSaid(layer, on)}` : "";
                 return (
                   <button
                     key={v.sessionId ?? `visit-${v.visit}`}
                     type="button"
                     disabled={subjectsBusy}
                     className={["ms-visit", changes[j] ? "changed" : "", v.redrawn ? "redrawn" : ""].filter(Boolean).join(" ")}
-                    aria-label={`Subject ${s.subject}, visit ${v.visit}: ${v.kind ?? "none"}${changes[j] ? ", a change" : ""}${v.redrawn ? ", picked differently by your changed rules" : ""}${also ? `, ${also}` : ""}`}
+                    aria-label={`Subject ${s.subject}, visit ${v.visit}: ${v.kind ?? "none"}${changes[j] ? ", a change" : ""}${v.redrawn ? ", picked differently by your changed rules" : ""}${also ? `, ${also}` : ""}${layered}`}
+                    title={on && layer ? visitLayerWords(layer, on) : undefined}
                     onClick={() => onVisit(s, v)}
                   >
                     <span className="ms-visit-head">
@@ -379,6 +400,7 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
                       {v.field ? ` · ${v.field}` : ""}
                     </span>
                     <KindTag kind={v.kind} slot={slot} />
+                    {on && layer && <VisitLayerMark layer={layer} v={on} />}
                     {also && (
                       <span className="ms-visit-also" title={also}>
                         {alsoWords(others.map((c) => besideField(c, v.field)))}
@@ -395,11 +417,13 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
   );
 }
 
-function StripsView({ strips, stripsWhy, slot, group }: GroupBoxProps) {
+function StripsView({ strips, stripsWhy, slot, group, layer = null }: GroupBoxProps) {
   if (stripsWhy) return <p className="warn">The subjects could not be read: {stripsWhy}</p>;
   if (!strips) return <p className="ms-none">Reading every subject.</p>;
   if (strips.subjects.length === 0) return <p className="ms-none">No subject here.</p>;
   const lit = litOf(strips, group);
+  // the layer, where one is on and this answer carries it
+  const head = layer !== null && strips.layer?.layer === layer ? strips.layer : null;
   const slots = Math.min(12, Math.max(1, ...strips.subjects.map((s) => s.visits.length)));
   const columns = [...new Set(strips.subjects.map((s) => s.column))].sort((a, b) => (a < 0 ? 1 : b < 0 ? -1 : a - b));
   return (
@@ -417,6 +441,23 @@ function StripsView({ strips, stripsWhy, slot, group }: GroupBoxProps) {
             </span>
             <div className="ms-strip-list">
               {here.map(({ s, kinds }) => {
+                if (head && s.layer) {
+                  // the layer's colours in place of the kinds': filled for the scan taken, outlined for what most of a visit's scans are
+                  const lay = s.layer;
+                  const drawn = kinds.map((_, j) => stripDrawn(head, lay, j));
+                  const words = drawn.map((d) => (d === null ? "no answer" : `${layerWord(head.layer, d.value)}${d.taken ? "" : ", none taken"}`)).join("; ");
+                  return (
+                    <span key={s.subject_id} className={lit.has(s.subject_id) ? "ms-strip lit" : "ms-strip"} role="img" aria-label={words} title={words}>
+                      {Array.from({ length: slots }, (_, j) => {
+                        if (j >= kinds.length) return <i key={j} className="blank" />;
+                        const d = drawn[j];
+                        const sl = d === null ? null : layerSlot(head.layer, d.value);
+                        const cls = d === null ? "none" : d.taken ? "" : "held";
+                        return <i key={j} className={cls || undefined} {...(sl !== null ? { "data-slot": sl } : {})} />;
+                      })}
+                    </span>
+                  );
+                }
                 const words = kinds.map(stepWord).join(", ");
                 const changes = kindChanges(kinds);
                 return (
@@ -437,4 +478,154 @@ function StripsView({ strips, stripsWhy, slot, group }: GroupBoxProps) {
       })}
     </div>
   );
+}
+
+// ------------------------------------------------------------ the layer
+
+/** The cards' hint where a layer is on. */
+const layerCardsHint = (layer: Layer) => `Under each kind, the ${layerName(layer).toLowerCase()} of the scan taken; outlined, what most of the visit's scans are where none is taken. A visit's scans by value on hover.`;
+
+/** A visit's value on the layer in a few words, for one who hears the page. */
+function layerSaid(layer: Layer, v: VisitLayer): string {
+  const d = visitDrawn(v);
+  if (!d) return "no answer";
+  return d.taken ? layerWord(layer, d.value) : `none taken, its scans mostly ${layerWord(layer, d.value)}`;
+}
+
+/** A value of the layer, framed in its colour; outlined where it is not the scan taken's; dashed for no answer. */
+export function LayerTag({ layer, value, held = false }: { layer: Layer; value: string | null; held?: boolean }) {
+  const s = value === null ? null : layerSlot(layer, value);
+  const words = value === null ? "no answer" : layerWord(layer, value);
+  const cls = ["value-tag", "ms-kind", "ms-layer-tag", value === null ? "none" : s === null ? "plain" : "", held ? "held" : ""].filter(Boolean).join(" ");
+  return (
+    <span className={cls} title={words} {...(s !== null ? { "data-slot": s } : {})}>
+      {words}
+    </span>
+  );
+}
+
+/** A card's visit on the layer: the value of the scan taken, or, outlined, the one most of its scans carry; and the 72-hour flag where it is up. */
+function VisitLayerMark({ layer, v }: { layer: Layer; v: VisitLayer }) {
+  const d = visitDrawn(v);
+  return (
+    <span className="ms-visit-layer">
+      <LayerTag layer={layer} value={d?.value ?? null} held={d !== null && !d.taken} />
+      {layer === "post_contrast" && v.prior_72h > 0 && (
+        <span className="tag caution" title="Contrast was given in the 72 hours before this visit">
+          72 h
+        </span>
+      )}
+    </span>
+  );
+}
+
+/** A Run of the layer's step where it has not run over the scope, as the dataset's own page offers it. */
+export interface LayerRun {
+  label: string;
+  disabled: boolean;
+  why: string | null;
+  onRun: () => void;
+}
+
+export interface LayerBoxProps {
+  /** The layer chosen, none for the kinds alone. */
+  layer: Layer | null;
+  onLayer: (l: Layer | null) => void;
+  /** The map's answer for the chosen layer; null while it is read. */
+  answer: MapLayer | null;
+  /** The engine answered the map without the layer: it draws none yet. */
+  unanswered?: boolean;
+  /** Since when the chosen layer is being read. */
+  since: number | null;
+  /** The layer's step over the scope in one line, and whether it has run there. */
+  step: { words: string; ran: boolean } | null;
+  run: LayerRun | null;
+  /** One line once a run is asked for, or why it was refused. */
+  said: string | null;
+}
+
+/**
+ * The layer keys, only the chosen one in colour, and with a layer on its
+ * values over the visits as the kinds are drawn: faint the visits that hold a
+ * scan of the value, solid the visits whose scan taken carries it. What
+ * carries none, and whether the step that answers it has run over the
+ * dataset or cohort, with a Run where it has not.
+ */
+export function LayerBox({ layer, onLayer, answer, unanswered = false, since, step, run, said }: LayerBoxProps) {
+  const most = Math.max(1, ...(answer?.values.map((v) => v.visits_with) ?? []));
+  return (
+    <section className="ms-box ms-layer" aria-label="Layer">
+      <div className="ms-box-head">
+        <h3 className="eyebrow">Layer</h3>
+        <div className="chips" role="group" aria-label="Layer">
+          {LAYERS.map((l) => {
+            const on = l.key === layer;
+            return (
+              <button key={l.words} type="button" className={on ? "opt on" : "opt"} aria-pressed={on} onClick={() => onLayer(l.key)}>
+                {l.words}
+              </button>
+            );
+          })}
+        </div>
+        <Hint text="Colours each visit by what its scans are: body region and body part from the body-part step, post-contrast from the label. Filled: the scan taken. Outlined: none taken, what most of its scans are." />
+      </div>
+      {layer !== null && answer === null && unanswered && <p className="ms-none">This engine does not draw layers on the map yet.</p>}
+      {layer !== null && answer === null && !unanswered && <Wait phase={`reading the ${layerName(layer).toLowerCase()}`} since={since ?? Date.now()} />}
+      {layer !== null && answer !== null && (
+        <>
+          {step && (
+            <div className="ms-layer-step">
+              <span className={step.ran ? "ms-layer-said" : "ms-layer-said not-run"}>{step.words}</span>
+              {run && (
+                <>
+                  <button type="button" className="button secondary small" disabled={run.disabled} onClick={run.onRun}>
+                    {run.label}
+                  </button>
+                  {run.why && <Hint text={run.why} />}
+                </>
+              )}
+            </div>
+          )}
+          {said && (
+            <p className="meta ms-said" role="status">
+              {said}
+            </p>
+          )}
+          {answer.values.length === 0 && <p className="ms-none">No scan of these visits carries a {layerName(layer).toLowerCase()} yet.</p>}
+          {answer.values.map((v) => {
+            const s = layerSlot(layer, v.value);
+            const was = v.visits_taken_before !== null && v.visits_taken_before !== v.visits_taken ? ` (was ${n(v.visits_taken_before)})` : "";
+            return (
+              <div key={v.value} className="ms-kind-row" title={`${layerWord(layer, v.value)}: ${plural(v.scans, "scan", "scans")}`}>
+                <LayerTag layer={layer} value={v.value} />
+                <span className="ms-bar" aria-hidden="true" {...(s !== null ? { "data-slot": s } : {})}>
+                  <i className="has" style={{ width: `${pct(v.visits_with, most) ?? 0}%` }} />
+                  <i className="taken" style={{ width: `${pct(v.visits_taken, most) ?? 0}%` }} />
+                </span>
+                <span className="ms-count">
+                  {n(v.visits_taken)} taken of {n(v.visits_with)}
+                  {was}
+                </span>
+              </div>
+            );
+          })}
+          {(answer.none.scans > 0 || answer.none.visits > 0) && <p className="ms-none">{noneWords(layer, answer)}</p>}
+          {answer.prior_72h !== null && answer.prior_72h > 0 && (
+            <p className="ms-layer-flag">
+              <span className="tag caution">72 h</span> {plural(answer.prior_72h, "visit follows", "visits follow")} contrast given in the 72 hours before.
+            </p>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+/** What carries no value on the layer, in one line. */
+function noneWords(layer: Layer, a: MapLayer): string {
+  const name = layerName(layer).toLowerCase();
+  const parts = [`${plural(a.none.scans, "scan carries", "scans carry")} no ${name}`];
+  if (a.none.visits > 0) parts.push(`${plural(a.none.visits, "visit has", "visits have")} none at all`);
+  if (a.none.taken > 0) parts.push(`${plural(a.none.taken, "scan", "scans")} taken without one`);
+  return `${parts.join(" · ")}.`;
 }

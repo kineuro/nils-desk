@@ -9,7 +9,10 @@
 // the panel beside it: a draft in the browser until it is saved, each change
 // asked of the map door again, debounced. Nothing is asked of a person here.
 // While the engine still reports pick questions of earlier runs, one quiet
-// link leads to the old table.
+// link leads to the old table. A layer (body region, body part or
+// post-contrast) colours the visits by what their scans are, says whether
+// the step that answers it has run over the dataset or cohort, and offers
+// its Run where it has not, as the dataset's own page does.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -17,6 +20,7 @@ import { slotOf } from "../campaigns/values";
 import { cohorts as cohortsDoor } from "../data/cohorts";
 import { isRoot } from "../data/layout";
 import { sources } from "../data/sources";
+import { runControl, startedWords, stepRuns } from "../data/stepRun";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { ops } from "../ops/client";
@@ -29,6 +33,7 @@ import { review } from "./client";
 import {
   KEEP_ALIKE,
   MAP_DOOR,
+  layerStepWords,
   mainScansMissing,
   MAP_STRIPS_DOOR,
   MAP_SUBJECTS_DOOR,
@@ -47,6 +52,7 @@ import {
   scopeOf,
   type Columns,
   type Group,
+  type Layer,
   type MapAnswer,
   type MapSubject,
   type MapVisit,
@@ -58,7 +64,7 @@ import {
   type Strips,
   type SubjectsPage,
 } from "./mainScans";
-import { ByVisitBox, GroupBox, KindsBox, Numbers, SeriesBox, WhereBox, type Slot } from "./MainScansParts";
+import { ByVisitBox, GroupBox, KindsBox, LayerBox, Numbers, SeriesBox, WhereBox, type LayerRun, type Slot } from "./MainScansParts";
 import { RulesPanel, StatusLine, type Status } from "./RulesPanel";
 import { PICK_BORDER } from "./picks";
 import { VisitPick } from "./VisitPick";
@@ -148,6 +154,32 @@ function keepDraft(s: ScopeOf | null, d: Draft | null) {
     // a browser that keeps nothing keeps the draft for this page only
   }
 }
+
+// ------------------------------------------------------------------ the layer, kept in the tab
+
+const LAYER_KEY = "nils.mainScans.layer";
+
+/** The layer the person chose last in this tab; none where nothing is kept, or the browser keeps nothing. */
+function keptLayer(): Layer | null {
+  try {
+    const v = sessionStorage.getItem(LAYER_KEY);
+    return v === "body_region" || v === "body_part" || v === "post_contrast" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function keepLayer(l: Layer | null) {
+  try {
+    if (l) sessionStorage.setItem(LAYER_KEY, l);
+    else sessionStorage.removeItem(LAYER_KEY);
+  } catch {
+    // a browser that keeps nothing keeps the layer for this page only
+  }
+}
+
+/** How often the map is read again while the layer's step waits or runs, in milliseconds. */
+export const LAYER_POLL = 15_000;
 
 // ------------------------------------------------------------------ the chooser
 
@@ -298,12 +330,23 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   const [view, setView] = useState<"cards" | "strips">("cards");
   const [rulesOpen, setRulesOpen] = useState(true);
   const [reload, setReload] = useState(0);
-  const [map, setMap] = useState<{ at: string; load: Load<MapAnswer> }>({ at: "", load: loading() });
+  // the map's answer, with the layer it was asked for
+  const [map, setMap] = useState<{ at: string; load: Load<MapAnswer>; layer?: Layer | null }>({ at: "", load: loading() });
   const [subjects, setSubjects] = useState<{ at: string; load: Load<SubjectsPage> }>({ at: "", load: loading() });
   const [strips, setStrips] = useState<{ at: string; load: Load<Strips> }>({ at: "", load: loading() });
   const [palettes, setPalettes] = useState<Record<string, string[]>>({});
   const [visit, setVisit] = useState<{ role: string; subject: MapSubject; visit: MapVisit } | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  const [layer, setLayerState] = useState<Layer | null>(keptLayer);
+  const [layerSince, setLayerSince] = useState(() => Date.now());
+  const [layerSaid, setLayerSaid] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const setLayer = (l: Layer | null) => {
+    setLayerState(l);
+    setLayerSince(Date.now());
+    setLayerSaid(null);
+    keepLayer(l);
+  };
 
   const readRules = useCallback(
     () =>
@@ -452,20 +495,20 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
     if (shownRole === null || version === null || pending) return;
     let alive = true;
     const at = `${shownRole}|${columns}`;
-    setMap((m) => (m.at === at && m.load.kind === "ready" ? { at, load: { ...m.load, busy: true } } : { at, load: loading() }));
-    mainScans.map(scope, shownRole, columns, settled).then(
+    setMap((m) => (m.at === at && m.load.kind === "ready" ? { ...m, at, load: { ...m.load, busy: true } } : { at, load: loading() }));
+    mainScans.map(scope, shownRole, columns, settled, layer).then(
       (value) => {
         if (!alive) return;
-        setMap({ at, load: { kind: "ready", value, busy: false, why: null } });
+        setMap({ at, load: { kind: "ready", value, busy: false, why: null }, layer });
         grow(shownRole, value.kinds.map((k) => k.key));
       },
-      (e: unknown) => alive && setMap((m) => ({ at, load: m.at === at && m.load.kind === "ready" ? { ...m.load, busy: false, why: messageOf(e) } : { kind: "failed", why: messageOf(e) } })),
+      (e: unknown) => alive && setMap((m) => ({ ...m, at, load: m.at === at && m.load.kind === "ready" ? { ...m.load, busy: false, why: messageOf(e) } : { kind: "failed", why: messageOf(e) } })),
     );
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says, not by the object holding it
-  }, [scope, shownRole, columns, settledKey, pending, reload, version, grow]);
+  }, [scope, shownRole, columns, settledKey, pending, reload, version, grow, layer]);
 
   // the group's subjects, a page at a time
   // a page is shown only for the role, columns, group, order and page it was asked for; a draft's answer replaces the last one in place
@@ -475,7 +518,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
     let alive = true;
     const at = `${shownRole}|${columns}|${canonical(group)}|${order}|${page}`;
     setSubjects((s) => (s.at === at && s.load.kind === "ready" ? { at, load: { ...s.load, busy: true } } : { at, load: loading() }));
-    mainScans.subjects(scope, shownRole, columns, group, order, page, settled).then(
+    mainScans.subjects(scope, shownRole, columns, group, order, page, settled, undefined, layer).then(
       (value) => {
         if (!alive) return;
         setSubjects({ at, load: { kind: "ready", value, busy: false, why: null } });
@@ -490,7 +533,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says
-  }, [caps, scope, shownRole, columns, group, order, page, settledKey, pending, reload, version, view, grow]);
+  }, [caps, scope, shownRole, columns, group, order, page, settledKey, pending, reload, version, view, grow, layer]);
 
   // every subject's strips, while they are shown
   useEffect(() => {
@@ -498,7 +541,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
     let alive = true;
     const at = `${shownRole}|${columns}`;
     setStrips((s) => (s.at === at && s.load.kind === "ready" ? { at, load: { ...s.load, busy: true } } : { at, load: loading() }));
-    mainScans.strips(scope, shownRole, columns, settled).then(
+    mainScans.strips(scope, shownRole, columns, settled, layer).then(
       (value) => {
         if (!alive) return;
         setStrips({ at, load: { kind: "ready", value, busy: false, why: null } });
@@ -510,7 +553,15 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says
-  }, [caps, scope, shownRole, columns, settledKey, pending, reload, version, view, grow]);
+  }, [caps, scope, shownRole, columns, settledKey, pending, reload, version, view, grow, layer]);
+
+  // while the layer's step waits its turn or runs over the scope, the map is read again now and then, so the layer fills in
+  const layerState = map.at === mapAt && map.load.kind === "ready" && map.load.value.layer?.layer === layer ? (map.load.value.layer?.step?.state ?? null) : null;
+  useEffect(() => {
+    if (layerState !== "queued" && layerState !== "running") return;
+    const t = setTimeout(() => setReload((x) => x + 1), LAYER_POLL);
+    return () => clearTimeout(t);
+  }, [layerState, reload]);
 
   if (doc.kind === "loading") return <Wait phase="reading the rules" since={doc.since} size="panel" />;
   if (doc.kind === "failed")
@@ -552,6 +603,36 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
     setView("cards");
   };
   const keep = rr?.keep_alike ?? "balanced";
+  // the map's layer, once its answer is of the layer chosen; an engine from before answers the layer's map without one
+  const layerAnswer = layer !== null && map.layer === layer && mapValue?.layer?.layer === layer ? mapValue.layer : null;
+  const layerUnanswered = layer !== null && map.layer === layer && m.kind === "ready" && !m.busy && m.value.layer === null;
+  const layerStep = layerAnswer?.step ?? null;
+  // a Run of the layer's step where it has not run over the scope, as the dataset's or cohort's own page offers it
+  const runScope = scope.kind === "cohort" ? "cohorts" : "datasets";
+  const control = layerStep && layerStep.state !== "done" ? runControl(caps, runScope, layerStep) : null;
+  const layerRun: LayerRun | null =
+    control && layerStep && (layerStep.step === "body_part" || layerStep.step === "post_contrast")
+      ? {
+          ...control,
+          disabled: control.disabled || running,
+          onRun: () => {
+            const step = layerStep.step as "body_part" | "post_contrast";
+            setRunning(true);
+            setLayerSaid(null);
+            stepRuns.start(runScope, title, step).then(
+              () => {
+                setRunning(false);
+                setLayerSaid(startedWords(title, step));
+                setReload((x) => x + 1);
+              },
+              (e: unknown) => {
+                setRunning(false);
+                setLayerSaid(`Not started: ${messageOf(e)}`);
+              },
+            );
+          },
+        }
+      : null;
 
   return (
     <section className="ms" aria-label={`Main scans of ${scope.name}`}>
@@ -617,7 +698,18 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
                 <SeriesBox map={m.value} slot={slot} group={group} onGroup={chooseGroup} />
                 <ByVisitBox map={m.value} slot={slot} palette={palette} />
               </div>
+              <LayerBox
+                layer={layer}
+                onLayer={setLayer}
+                answer={layerAnswer}
+                unanswered={layerUnanswered}
+                since={layerSince}
+                step={layer && layerAnswer ? layerStepWords(layer, scope, layerAnswer.step) : null}
+                run={layerRun}
+                said={layerSaid}
+              />
               <GroupBox
+                layer={layer}
                 columns={columns}
                 draft={dirty}
                 group={group}
@@ -683,6 +775,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
           version={mapValue?.rules_version ?? rulesDoc.current.version}
           draft={dirty}
           slot={slot}
+          layer={layer}
           onClose={() => setVisit(null)}
           onDone={(words) => {
             setVisit(null);

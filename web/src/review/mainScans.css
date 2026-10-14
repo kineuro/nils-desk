@@ -221,3 +221,25 @@
 .ms-status { font-size: calc(13 * var(--p)); }
 .ms-versions { font-size: calc(12 * var(--p)); color: var(--n-text-faint); }
 .ms-rules .wait { font-size: calc(13 * var(--p)); }
+
+/* ------------------------------------------------------------ the layer (record 55, decision 6: the data map's layers) */
+/* the layer keys and, with a layer on, its values as the kinds are drawn; the step that answers it, with its Run */
+/* a box of the map by itself, not one of a pair: as tall as what it holds */
+.ms-layer { flex: none; gap: calc(8 * var(--p)); }
+.ms-layer-step { display: flex; align-items: center; gap: calc(8 * var(--p)); flex-wrap: wrap; font-size: calc(13 * var(--p)); }
+.ms-layer-said { color: var(--n-text-dim); }
+.ms-layer-said.not-run { color: var(--n-caution-fg); }
+.ms-layer-flag { display: flex; align-items: center; gap: calc(6 * var(--p)); margin: 0; font-size: calc(13 * var(--p)); color: var(--n-text-dim); }
+.ms-visit-layer .tag.caution, .ms-layer-flag .tag.caution { min-height: calc(18 * var(--p)); padding: 0 calc(5 * var(--p)); font-size: calc(11 * var(--p)); }
+/* a value that is not the scan taken's but what most of a visit's scans are: its colour as a frame only, no tint */
+.ms .value-tag.ms-kind.held { background: transparent; color: var(--n-text-dim); }
+/* a card's visit on the layer, under its kind: the value, and the 72-hour flag where it is up, on one line */
+.ms-visit-layer { display: flex; align-items: center; gap: calc(3 * var(--p)); min-width: 0; }
+.ms-visit-layer .value-tag.ms-kind { flex: 1 1 auto; min-width: 0; width: auto; }
+.ms-visit-layer .tag { flex: none; }
+/* a strip's cell outlined in a value's colour: what most of a visit's scans are, where it takes none */
+.ms-strip > i.held { background: transparent; box-shadow: inset 0 0 0 calc(2 * var(--p)) var(--vc); }
+/* a candidate's value on the layer in a visit's pick, dashed where it carries none */
+.ms .board .value-tag.none { display: inline-flex; align-items: center; padding: 0 0.35rem; border: 1px dashed var(--n-neutral-line); border-radius: var(--n-radius); color: var(--n-text-faint); white-space: nowrap; }
+/* a visit the draft picks otherwise outlines its kind alone, not its value on the layer */
+.ms-visit.redrawn .ms-layer-tag { outline: none; }
