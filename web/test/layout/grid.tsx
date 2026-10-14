@@ -67,22 +67,32 @@ const visits = [0, 418, 909].map((day, i) => ({
     { role: "flair", stack: 102, name: "Sag_T2w_3D_FLAIR_SPACE_ND" },
   ],
 }));
-const SCANS: [string, string, string, Record<string, string>, string[], string[]][] = [
-  ["Sag_T1w_3D_MPRAGE_ND", "anat", "plain", { base: "T1w" }, ["t1w"], []],
-  ["Sag_T2w_3D_FLAIR_SPACE_ND", "anat", "plain", { base: "T2w", modifier: "FLAIR" }, ["flair"], []],
-  ["Ax_T2w_2D_TSE_ND", "anat", "plain", { base: "T2w" }, ["t2w"], []],
-  ["Ax_T2starw_3D_FLASH_Magnitude_ND", "anat", "plain", { base: "T2starw" }, [], ["base:conflict"]],
-  ["Ax_T1w_3D_MPRAGE_ND_CE", "anat", "plain", { base: "T1w", post_contrast: "1" }, [], []],
-  ["Ax_T1w_2D_MDME_SyntheticT1w", "anat", "symri", { base: "T1w", provenance: "SyMRI" }, [], ["body_part:low_confidence"]],
-  ["Ax_T2w_2D_MDME_SyntheticT2w", "anat", "symri", { base: "T2w", provenance: "SyMRI" }, [], []],
-  ["Ax_FLAIR_2D_MDME_SyntheticFLAIR", "anat", "symri", { base: "T2w", modifier: "FLAIR", provenance: "SyMRI" }, [], []],
-  ["SC_Sag_T2w_2D_TSE_ND", "anat", "body", { base: "T2w", body_part: "spine" }, [], []],
-  ["SC_Sag_T1w_2D_TSE_ND", "anat", "body", { base: "T1w", body_part: "spine" }, [], []],
-  ["Ax_DWI_2D_DWI-EPI_ND_b1000", "dwi", "plain", { base: "DWI" }, [], []],
-  ["Ax_T1w_2D_GRE_Localizer", "other", "plain", { disposition: "scout" }, [], []],
+// name, datatype, the family an engine before 2026-10-14 said, axes, main roles, questions, and the acquisition family the
+// engine's route recognised since: SyMRI's acquisition beside its synthetic images, an SWI's magnitude, phase, processed image
+// and minIP, a reverse phase-encoding b0 under fmap and an ASL under perf
+const SCANS: [string, string, string, Record<string, string>, string[], string[], string | null][] = [
+  ["Sag_T1w_3D_MPRAGE_ND", "anat", "plain", { base: "T1w" }, ["t1w"], [], null],
+  ["Sag_T2w_3D_FLAIR_SPACE_ND", "anat", "plain", { base: "T2w", modifier: "FLAIR" }, ["flair"], [], null],
+  ["Ax_T2w_2D_TSE_ND", "anat", "plain", { base: "T2w" }, ["t2w"], [], null],
+  ["Ax_T2starw_3D_FLASH_Magnitude_ND", "anat", "plain", { base: "T2starw" }, [], ["base:conflict"], null],
+  ["Ax_T1w_3D_MPRAGE_ND_CE", "anat", "plain", { base: "T1w", post_contrast: "1" }, [], [], null],
+  ["Ax_2D_MDME_Magnitude-ND", "anat", "plain", { provenance: "RawRecon", technique: "MDME", construct: "Magnitude,ND", disposition: "working_scan" }, [], [], "symri"],
+  ["Ax_T1w_2D_MDME_SyntheticT1w", "anat", "symri", { base: "T1w", provenance: "SyMRI", disposition: "scanner_derived" }, [], ["body_part:low_confidence"], "symri"],
+  ["Ax_T2w_2D_MDME_SyntheticT2w", "anat", "symri", { base: "T2w", provenance: "SyMRI", disposition: "scanner_derived" }, [], [], "symri"],
+  ["Ax_FLAIR_2D_MDME_SyntheticFLAIR", "anat", "symri", { base: "T2w", modifier: "FLAIR", provenance: "SyMRI", disposition: "scanner_derived" }, [], [], "symri"],
+  ["Sag_T2starw_3D_GRE-EPI_Magnitude_WaterExc", "anat", "plain", { base: "T2*w", provenance: "RawRecon", construct: "Magnitude" }, [], [], "swi"],
+  ["Sag_3D_GRE-EPI_Phase_WaterExc", "anat", "plain", { provenance: "RawRecon", construct: "Phase" }, [], [], "swi"],
+  ["Ax_SWI_3D_FLASH_SWI", "anat", "swi", { base: "SWI", provenance: "SWIRecon", construct: "SWI", disposition: "scanner_derived" }, [], [], "swi"],
+  ["Ax_SWI_3D_FLASH_MinIP", "anat", "derived", { base: "SWI", provenance: "ProjectionDerived", construct: "MinIP", disposition: "reformat" }, [], [], "swi"],
+  ["SC_Sag_T2w_2D_TSE_ND", "anat", "body", { base: "T2w", body_part: "spine" }, [], [], null],
+  ["SC_Sag_T1w_2D_TSE_ND", "anat", "body", { base: "T1w", body_part: "spine" }, [], [], null],
+  ["Ax_DWI_2D_DWI-EPI_ND_b1000", "dwi", "plain", { base: "DWI" }, [], [], null],
+  ["Ax_DWI_2D_DWI-EPI_FieldmapRef_ND", "fmap", "plain", { base: "DWI", construct: "FieldmapRef,ND" }, [], [], null],
+  ["Ax_ASL_2D_EPI_Magnitude", "perf", "plain", { base: "ASL", construct: "Magnitude" }, [], [], null],
+  ["Ax_T1w_2D_GRE_Localizer", "other", "plain", { disposition: "scout" }, [], [], null],
 ];
 const rows = await Promise.all(
-  SCANS.map(async ([name, datatype, family, axes, main, questions], i) => ({
+  SCANS.map(async ([name, datatype, family, axes, main, questions, acquisition], i) => ({
     stack: 101 + i,
     subject: { id: 1, code: subjects[0].code },
     session: { id: 30, label: "20190913" },
@@ -94,11 +104,12 @@ const rows = await Promise.all(
     name,
     bids: null,
     datatype,
-    folder: datatype,
+    folder: acquisition === "symri" ? "anat/SyMRI" : datatype,
     axes,
     series_number: i + 1,
     questions,
     family,
+    acquisition_family: acquisition,
     te: 2.26 + i * 10,
     tr: 2300,
     ti: i % 2 === 0 ? 900 : null,

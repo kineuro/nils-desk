@@ -27,8 +27,13 @@ const FAMILY_ORDER: Family[] = ["plain", "symri", "mix", "stage", "swi", "derive
 /** The colour slot each family is outlined and framed in (the theme's value colours, as the redesign's canvas draws them: SyMRI violet, spine and neck green, derived blue, SWI teal); the plain ones take the brand's. */
 export const FAMILY_SLOT: Record<Family, number | null> = { plain: null, symri: 7, mix: 4, stage: 5, swi: 6, derived: 1, body: 3 };
 
-/** A scan's family, from what NILS says made it and where in the body it is. */
-export function familyOf(s: Pick<Scan, "axes">): Family {
+/**
+ * A scan's family: the acquisition family the engine says its route recognised (2026-10-14), so SyMRI's acquisition joins its
+ * maps and synthetic images and an SWI's magnitude, phase and minIP its processed image; on an engine before it, from what NILS
+ * says made it; else derived, spine and neck, or plain.
+ */
+export function familyOf(s: Pick<Scan, "axes" | "acquisitionFamily">): Family {
+  if (s.acquisitionFamily) return s.acquisitionFamily;
   const a = s.axes;
   switch (a.provenance) {
     case "SyMRI":
@@ -49,8 +54,8 @@ export function familyOf(s: Pick<Scan, "axes">): Family {
   return "plain";
 }
 
-/** Acquisitions before what the scanner made of them, reformats after, the rest last. */
-const MADE: Record<string, number> = { acquisition: 0, scanner_derived: 1, reformat: 2 };
+/** Acquisitions before what the scanner made of them, reformats after, the rest last; a working scan is what the scanner acquired (SyMRI's acquisition, before its maps). */
+const MADE: Record<string, number> = { acquisition: 0, working_scan: 0, scanner_derived: 1, reformat: 2 };
 
 /** The datatype folder a scan is shown under: its scanner's own folder where it has one (anat/SyMRI), else its datatype. */
 export function folderOf(s: Pick<Scan, "datatype" | "folder">): string {

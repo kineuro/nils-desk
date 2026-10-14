@@ -70,6 +70,39 @@ describe("a dataset as a tree", () => {
     expect(familyOf(scan(1, { axes: { body_part: "brain" } }))).toBe("plain");
   });
 
+  it("names an acquisition's own images by the family the engine's route recognised, and by what made them on an older engine", () => {
+    // 2026-10-14: SyMRI's acquisition is RawRecon and a working scan; an SWI's magnitude and phase are RawRecon, its minIP ProjectionDerived
+    const mdme = scan(1, { axes: { provenance: "RawRecon", technique: "MDME", disposition: "working_scan" }, folder: "anat/SyMRI", acquisitionFamily: "symri" });
+    const magnitude = scan(2, { axes: { provenance: "RawRecon", base: "T2*w" }, acquisitionFamily: "swi" });
+    const minip = scan(3, { axes: { provenance: "ProjectionDerived", construct: "MinIP", disposition: "reformat" }, acquisitionFamily: "swi" });
+    const stageMip = scan(4, { axes: { provenance: "ProjectionDerived", disposition: "reformat" }, acquisitionFamily: "stage" });
+    expect([mdme, magnitude, minip, stageMip].map(familyOf)).toEqual(["symri", "swi", "swi", "stage"]);
+    // the engine said no route: grouped as before
+    expect(familyOf(scan(5, { axes: { provenance: "ProjectionDerived" }, acquisitionFamily: null }))).toBe("derived");
+    // an engine before it says nothing: what made it, as before
+    expect(familyOf(scan(6, { axes: { provenance: "RawRecon", base: "T2*w" } }))).toBe("plain");
+    expect(familyOf(scan(7, { axes: { provenance: "SyMRI" } }))).toBe("symri");
+  });
+
+  it("keeps SyMRI's acquisition in anat/SyMRI with its synthetic images, and an SWI's four outputs in one family, acquisitions first", () => {
+    const exam = buildTree([
+      scan(21, { series: 21, axes: { provenance: "SWIRecon", construct: "SWI", disposition: "scanner_derived" }, acquisitionFamily: "swi" }),
+      scan(22, { series: 22, axes: { provenance: "ProjectionDerived", construct: "MinIP", disposition: "reformat" }, acquisitionFamily: "swi" }),
+      scan(20, { series: 20, axes: { provenance: "RawRecon", construct: "Phase" }, acquisitionFamily: "swi" }),
+      scan(19, { series: 19, axes: { provenance: "RawRecon", base: "T2*w", construct: "Magnitude" }, acquisitionFamily: "swi" }),
+      scan(18, { series: 18, axes: { base: "T1w" }, acquisitionFamily: null }),
+      scan(31, { series: 31, folder: "anat/SyMRI", axes: { provenance: "SyMRI", construct: "SyntheticT1w", disposition: "scanner_derived" }, acquisitionFamily: "symri" }),
+      scan(30, { series: 30, folder: "anat/SyMRI", axes: { provenance: "RawRecon", technique: "MDME", disposition: "working_scan" }, acquisitionFamily: "symri" }),
+    ]);
+    const types = exam[0].sessions[0].types;
+    expect(types.map((t) => t.folder)).toEqual(["anat", "anat/SyMRI"]);
+    expect(types[0].scans.map((s) => s.id)).toEqual([18, 19, 20, 21, 22]);
+    expect(types[1].scans.map((s) => s.id)).toEqual([30, 31]);
+    const rows = rowsOf(exam, new Set(), true);
+    expect(rows.filter((r) => r.kind === "family").map((r) => r.label)).toEqual(["SWI", "SyMRI"]);
+    expect(rows.filter((r) => r.kind === "scan" && r.family === "swi").map((r) => (r.kind === "scan" ? r.scan.id : 0))).toEqual([19, 20, 21, 22]);
+  });
+
   it("shows a branch's children only while it is open, every branch open while filtering, a family's quiet divider before it", () => {
     expect(rowsOf(tree, new Set()).map((r) => r.key)).toEqual(["u1", "u2"]);
     const open = new Set(pathOf(tree, 7));

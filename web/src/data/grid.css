@@ -148,6 +148,8 @@
 .vw-scan-words { display: flex; flex-direction: column; gap: calc(2 * var(--p)); min-width: 0; padding: calc(7 * var(--p)) calc(9 * var(--p)) calc(9 * var(--p)); }
 .vw-scan-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: calc(12.5 * var(--p)); color: var(--n-text); }
 .vw-scan-params { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--n-font-mono); font-size: calc(11 * var(--p)); color: var(--n-text-faint); }
+/* what a scan is for where its name does not say it (a field map's reverse phase-encoding reference): one plain line, wrapped in a narrow card */
+.vw-scan-hint { margin-top: calc(2 * var(--p)); font-size: calc(11.5 * var(--p)); line-height: 1.35; color: var(--n-text-dim); }
 
 /* the legend of what the cards are coloured by: each value framed as its cards are */
 .vw-legend { display: flex; flex-wrap: wrap; gap: calc(6 * var(--p)); font-size: calc(12 * var(--p)); }

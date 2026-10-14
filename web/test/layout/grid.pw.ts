@@ -31,10 +31,47 @@ test("on a laptop the cards fill rows on every level, and nothing scrolls sidewa
     expect(row, name).toBeGreaterThanOrEqual(name === "visits" ? 2 : 4);
     await page.screenshot({ path: `test-results/grid-${name}-laptop.png` });
   }
-  // a visit's families are outlined apart from the plain scans, the scouts folded
-  await expect(page.locator(".vw-family")).toHaveCount(2);
+  // a visit's families are outlined apart from the plain scans (SyMRI, SWI, the spine), the scouts folded
+  await expect(page.locator(".vw-family")).toHaveCount(3);
   await expect(page.locator(".vw-folder-head[aria-expanded='false']")).toHaveCount(1);
 });
+
+for (const [device, width, height] of [
+  ["laptop", 1440, 900],
+  ["phone", 390, 844],
+] as const) {
+  test(`on a ${device} an acquisition's own images sit in its family's box, and a reverse b0 says what it is for`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/grid.html#data/datasets/ms-a/view?mode=grid&subject=1&visit=s30");
+    await expect(page.locator(".vw-scan").first()).toBeVisible();
+    const box = (word: string) => page.locator(".vw-family").filter({ has: page.locator(".vw-family-name", { hasText: word }) });
+    // SyMRI's acquisition first, beside its three synthetic images
+    await expect(box("SyMRI").locator(".vw-scan-name")).toHaveText(["Ax_2D_MDME_Magnitude-ND", "Ax_T1w_2D_MDME_SyntheticT1w", "Ax_T2w_2D_MDME_SyntheticT2w", "Ax_FLAIR_2D_MDME_SyntheticFLAIR"]);
+    // the SWI's magnitude, phase, processed image and minIP in one box
+    await expect(box("SWI").locator(".vw-scan-name")).toHaveText(["Sag_T2starw_3D_GRE-EPI_Magnitude_WaterExc", "Sag_3D_GRE-EPI_Phase_WaterExc", "Ax_SWI_3D_FLASH_SWI", "Ax_SWI_3D_FLASH_MinIP"]);
+    await expect(page.locator(".vw-family-name")).toHaveText(["SyMRI", "SWI", "Spine and neck"]);
+    // the folders, ASL's named for what it holds
+    await expect(page.locator(".vw-folder-name")).toHaveText(["anat", "dwi", "fmap", "Perfusion (ASL)", "scouts and other"]);
+    // the reverse phase-encoding b0's line, inside its card and readable
+    const hint = page.locator(".vw-scan-hint");
+    await expect(hint).toHaveText(["reverse phase encoding, used to correct the DWI's distortion"]);
+    const card = (await page.locator(".vw-scan").filter({ has: hint }).boundingBox())!;
+    const line = (await hint.boundingBox())!;
+    expect(line.x).toBeGreaterThanOrEqual(card.x);
+    expect(line.x + line.width).toBeLessThanOrEqual(card.x + card.width + 1);
+    expect(line.y + line.height).toBeLessThanOrEqual(card.y + card.height + 1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    // a look at each: SyMRI's box from its top, SWI's (on a phone a screen of its own), and fmap with perf
+    await box("SyMRI").evaluate((e) => e.scrollIntoView({ block: "start" }));
+    await page.screenshot({ path: `test-results/grid-families-${device}.png` });
+    if (width < 500) {
+      await box("SWI").evaluate((e) => e.scrollIntoView({ block: "start" }));
+      await page.screenshot({ path: `test-results/grid-families-swi-${device}.png` });
+    }
+    await page.locator(".vw-folder", { has: hint }).evaluate((e) => e.scrollIntoView({ block: "start" }));
+    await page.screenshot({ path: `test-results/grid-families-fmap-${device}.png` });
+  });
+}
 
 test("on a phone every level keeps within the gutters, nothing sideways", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

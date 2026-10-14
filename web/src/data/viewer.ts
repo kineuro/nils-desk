@@ -587,9 +587,19 @@ export const COLOUR_BY: { value: ColourBy; label: string }[] = [
   { value: "nothing", label: "Nothing" },
 ];
 
-/** A scan's family: the engine's word, else worked out from its axes as the tree does. */
-export function scanFamily(s: Pick<Scan, "axes" | "family">): Family {
-  return s.family ?? familyOf(s);
+/** A scan's family: its acquisition's where the engine says one, else the engine's word, else worked out from its axes as the tree does. */
+export function scanFamily(s: Pick<Scan, "axes" | "family" | "acquisitionFamily">): Family {
+  return s.acquisitionFamily ?? s.family ?? familyOf(s);
+}
+
+/**
+ * A line a scan's card adds where what a scan is for is not plain from its name (2026-10-14): a field map's reverse phase-encoding
+ * reference (construct FieldmapRef, BIDS `fmap/epi`); none for any other scan.
+ */
+export function scanHint(s: Pick<Scan, "axes" | "datatype">): string | null {
+  const constructs = (s.axes.construct ?? "").split(",").map((c) => c.trim());
+  if (s.datatype === "fmap" && constructs.includes("FieldmapRef")) return "reverse phase encoding, used to correct the DWI's distortion";
+  return null;
 }
 
 /** Whether a contrast agent was given, in words; null where it is not known. */
@@ -645,7 +655,8 @@ export const FOLDERS: { key: string; label: string }[] = [
   { key: "dwi", label: "dwi" },
   { key: "func", label: "func" },
   { key: "fmap", label: "fmap" },
-  { key: "perf", label: "perf" },
+  // BIDS keeps ASL in perf/ (func/ is BOLD only), so the folder says what it holds
+  { key: "perf", label: "Perfusion (ASL)" },
   { key: "other", label: "scouts and other" },
 ];
 

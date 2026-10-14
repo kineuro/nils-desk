@@ -124,6 +124,24 @@ const VISIT_SCANS = [
 
 const SUBJECT2_SCAN = row(31, "Ax_FLAIR_2D_TSE", { subject: { id: 2, code: "sub-b2" }, session: { id: 40, label: "20210101" }, study: 9 });
 
+/**
+ * One exam as the engine answers it since 2026-10-14: SyMRI's acquisition (a working scan, RawRecon) beside its synthetic image,
+ * an SWI's magnitude, phase (RawRecon), processed image and minIP (ProjectionDerived, a reformat), a reverse phase-encoding b0
+ * under fmap and an ASL under perf. `family` is what an engine before it said, which the acquisition family now overrides.
+ */
+const exam = (stack: number, name: string, series: number, over: Partial<ScanRow>) => row(stack, name, { session: { id: 61, label: "20221010" }, series_number: series, bids: null, ...over });
+const EXAM_SCANS = [
+  exam(61, "Sag_T1w_3D_MPRAGE", 1, { acquisition_family: null }),
+  exam(62, "Ax_2D_MDME_Magnitude-ND", 5, { folder: "anat/SyMRI", axes: { provenance: "RawRecon", technique: "MDME", disposition: "working_scan" }, acquisition_family: "symri" }),
+  exam(63, "Ax_T1w_2D_MDME_SyntheticT1w", 6, { folder: "anat/SyMRI", family: "symri", axes: { base: "T1w", provenance: "SyMRI", disposition: "scanner_derived" }, acquisition_family: "symri" }),
+  exam(64, "Sag_T2starw_3D_GRE-EPI_Magnitude", 2, { axes: { base: "T2*w", provenance: "RawRecon", construct: "Magnitude" }, acquisition_family: "swi" }),
+  exam(65, "Sag_3D_GRE-EPI_Phase", 3, { axes: { provenance: "RawRecon", construct: "Phase" }, acquisition_family: "swi" }),
+  exam(66, "Ax_SWI_3D_FLASH_SWI", 4, { family: "swi", axes: { base: "SWI", provenance: "SWIRecon", construct: "SWI", disposition: "scanner_derived" }, acquisition_family: "swi" }),
+  exam(67, "Ax_SWI_3D_FLASH_MinIP", 4, { family: "derived", axes: { base: "SWI", provenance: "ProjectionDerived", construct: "MinIP", disposition: "reformat" }, acquisition_family: "swi" }),
+  exam(68, "Ax_DWI_2D_DWI-EPI_FieldmapRef", 7, { datatype: "fmap", folder: "fmap", axes: { base: "DWI", construct: "FieldmapRef,ND" }, acquisition_family: null }),
+  exam(69, "Ax_ASL_2D_EPI_Magnitude", 8, { datatype: "perf", folder: "perf", axes: { base: "ASL", construct: "Magnitude" }, acquisition_family: null }),
+];
+
 describe("the dataset viewer's grid", () => {
   let root: Root;
   let el: HTMLDivElement;
@@ -171,6 +189,7 @@ describe("the dataset viewer's grid", () => {
           return json({ total: 250, scans: part, next: from + 200 < 250 ? part[part.length - 1].stack : null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
         }
         if (q.get("session") === "40") return json({ total: 1, scans: [SUBJECT2_SCAN], next: null });
+        if (q.get("session") === "61") return json({ total: EXAM_SCANS.length, scans: EXAM_SCANS, next: null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
         if (q.get("studies") === "7,8") return json({ total: 1, scans: [row(21, "Ax_T2w_2D_TSE", { session: null, study: 7 })], next: null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
         return json({ total: VISIT_SCANS.length + 1, scans: [...VISIT_SCANS, SUBJECT2_SCAN], next: null });
       }
@@ -363,6 +382,24 @@ describe("the dataset viewer's grid", () => {
     // the names by BIDS where a scan has one
     act(() => [...el.querySelectorAll<HTMLButtonElement>(".vw-switch.names button")].find((b) => b.textContent === "BIDS")!.click());
     expect(text(".vw-scan .vw-scan-name").slice(0, 3)).toEqual(["acq-11_T1w", "acq-12_T1w", "Ax_T2w_2D_MDME_Synthetic"]);
+  });
+
+  it("keeps an acquisition's own images in its family's box by the family the engine's route recognised, and says what a reverse b0 is for", async () => {
+    await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s61");
+    // ASL is perfusion in BIDS, and the folder says so
+    expect(text(".vw-folder-name")).toEqual(["anat", "fmap", "Perfusion (ASL)"]);
+    expect(text(".vw-family-name")).toEqual(["SyMRI", "SWI"]);
+    const box = (word: string) => [...el.querySelectorAll(".vw-family")].find((f) => f.querySelector(".vw-family-name")?.textContent === word)!;
+    // SyMRI's acquisition beside its synthetic image, the acquisition first
+    expect([...box("SyMRI").querySelectorAll(".vw-scan-name")].map((x) => x.textContent)).toEqual(["Ax_2D_MDME_Magnitude-ND", "Ax_T1w_2D_MDME_SyntheticT1w"]);
+    // the SWI's magnitude, phase, processed image and minIP in one box, the acquisitions first
+    expect([...box("SWI").querySelectorAll(".vw-scan-name")].map((x) => x.textContent)).toEqual(["Sag_T2starw_3D_GRE-EPI_Magnitude", "Sag_3D_GRE-EPI_Phase", "Ax_SWI_3D_FLASH_SWI", "Ax_SWI_3D_FLASH_MinIP"]);
+    // nothing outside the boxes but the MPRAGE in anat
+    const anat = el.querySelector(".vw-folder")!;
+    expect([...anat.querySelectorAll(".vw-scan-name")].filter((n) => !n.closest(".vw-family")).map((x) => x.textContent)).toEqual(["Sag_T1w_3D_MPRAGE"]);
+    // the reverse phase-encoding b0 under fmap says what it is for, one line; no other card does
+    expect(text(".vw-scan-hint")).toEqual(["reverse phase encoding, used to correct the DWI's distortion"]);
+    expect(el.querySelector(".vw-scan-hint")?.closest(".vw-scan")?.getAttribute("data-stack")).toBe("68");
   });
 
   it("stops saying a picture is being made once it stops asking for it", async () => {

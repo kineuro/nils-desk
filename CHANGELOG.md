@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- A visit's families hold an acquisition's own images. With an engine that says each scan's `acquisition_family`, the family its route recognised, the SyMRI box holds SyMRI's acquisition, first, beside its maps and synthetic images, where it sat in Scouts and other, and the SWI box holds the magnitude, phase, processed image and minIP of one acquisition, where the magnitude and phase sat among the plain scans and the minIP among the derived ones; a projection or a reformat of SyMRI, an SWI or STAGE stays in its acquisition's box. On an older engine a scan is grouped by what made it, as before. The family labels are unchanged.
+- A visit's perf folder reads Perfusion (ASL), since BIDS keeps ASL in `perf/` and `func/` holds BOLD alone, and a field map's reverse phase-encoding reference says on its card what it is for: "reverse phase encoding, used to correct the DWI's distortion".
+
 ## [1.0.0-alpha.63] - 2026-10-14
 
 Wave 7a's desk, the beta candidate, for engine 1.0.0-alpha.80. The desk is redesigned around its map; Data has one safe way in, pseudonymises in place and says how sure each sort is; the chat is one chat; Review and Campaigns are one list of work, with both suggestions, blind first, rounds and the audit; Models sit under Pipelines with the model chosen per task; a result is checked over its scan; the reader shows the rules' evidence beside the picture at a fixed size; Settings lists each rules pack as a part that updates on its own; and one pattern of words, sides and empty states runs across the desk, with no command line inside a flow.
