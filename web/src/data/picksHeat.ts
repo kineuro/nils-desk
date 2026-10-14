@@ -11,6 +11,8 @@ import { door } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
+import { layerHeadOf, visitLayerOf, type Layer, type LayerHead, type VisitLayer } from "../review/mainScans";
+import type { SummaryStep } from "./summary";
 
 export const PICKS_DOOR = "GET /api/cohorts/{name}/picks";
 
@@ -22,6 +24,8 @@ export interface Cell {
   by: "rules" | "person" | null;
   /** A pick of a stack of a sample sealed now, its scan not named to a caller who does not read sealed stacks (record 48). */
   withheld?: boolean;
+  /** With a layer asked for: the value of the scan picked, null where it carries none. */
+  layer?: string | null;
 }
 
 export interface HeatSession {
@@ -30,6 +34,8 @@ export interface HeatSession {
   label: string;
   number: number;
   roles: Record<string, Cell>;
+  /** With a layer asked for: the session's scans on it. */
+  layer?: VisitLayer;
 }
 
 export interface HeatSubject {
@@ -46,6 +52,8 @@ export interface HeatPage {
   total: number;
   subjects: HeatSubject[];
   next: number | null;
+  /** With a layer asked for: the layer, its values on the page, and the step that answers it over the cohort. */
+  layer?: LayerHead & { step: SummaryStep | null };
 }
 
 /** The most subjects a page holds. */
@@ -60,7 +68,13 @@ const STATES: CellState[] = ["picked", "doubted", "missing"];
 function cellOf(v: unknown): Cell {
   const c = obj(v);
   const state = STATES.includes(c.state as CellState) ? (c.state as CellState) : "missing";
-  return { state, stack: nul(c.stack), by: c.by === "rules" || c.by === "person" ? c.by : null, ...(c.withheld === true ? { withheld: true } : {}) };
+  return {
+    state,
+    stack: nul(c.stack),
+    by: c.by === "rules" || c.by === "person" ? c.by : null,
+    ...(c.withheld === true ? { withheld: true } : {}),
+    ...("layer" in c ? { layer: typeof c.layer === "string" && c.layer !== "" ? c.layer : null } : {}),
+  };
 }
 
 /** The picks door's answer as the heatmap reads it, whatever it left out. */
@@ -82,16 +96,29 @@ export function heatOf(a: Json): HeatPage {
         label: typeof v.label === "string" ? v.label : `visit ${i + 1}`,
         number: num(v.number) || i + 1,
         roles: Object.fromEntries(Object.entries(obj(v.roles)).map(([r, c]) => [r, cellOf(c)])),
+        ...(v.layer && typeof v.layer === "object" ? { layer: visitLayerOf(v.layer) as VisitLayer } : {}),
       })),
     })),
     next: nul(a.next),
+    ...layerOf(a.layer),
   };
 }
 
+const STEP_STATES = ["done", "running", "queued", "waiting", "off", "failed"];
+
+function layerOf(raw: unknown): Pick<HeatPage, "layer"> {
+  const head = layerHeadOf(raw);
+  if (!head) return {};
+  const st = obj(obj(raw).step);
+  const step = typeof st.step === "string" && STEP_STATES.includes(String(st.state)) ? (st as unknown as SummaryStep) : null;
+  return { layer: { ...head, step } };
+}
+
 export const picksDoors = {
-  page: (cohort: string, after: number | null = null, limit = HEAT_PAGE): Promise<HeatPage> => {
+  page: (cohort: string, after: number | null = null, limit = HEAT_PAGE, layer: Layer | null = null): Promise<HeatPage> => {
     const q = new URLSearchParams({ limit: String(limit) });
     if (after !== null) q.set("after", String(after));
+    if (layer !== null) q.set("layer", layer);
     return door<Json>("GET", `/api/cohorts/${encodeURIComponent(cohort)}/picks?${q}`).then(heatOf);
   },
 };
@@ -114,4 +141,12 @@ export function cellWords(s: HeatSession, role: string): string {
   if (!c || c.state === "missing") return `${s.label}: no ${role}`;
   const by = c.by === "person" ? ", a person's pick" : "";
   return `${s.label}: ${c.state === "doubted" ? "doubted" : "picked"}${c.withheld ? ", a sealed scan" : c.stack !== null ? `, scan ${c.stack}` : ""}${by}`;
+}
+
+/** A cell on the layer: the value of the scan picked, filled; else what most of the session's scans are, outlined; else nothing. */
+export function heatDrawn(s: HeatSession, role: string): { value: string; taken: boolean } | null {
+  const picked = s.roles[role]?.layer ?? null;
+  if (picked !== null) return { value: picked, taken: true };
+  const most = [...(s.layer?.scans ?? [])].sort((a, b) => b.count - a.count)[0];
+  return most ? { value: most.value, taken: false } : null;
 }

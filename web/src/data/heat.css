@@ -21,3 +21,24 @@
 @media (max-width: 640px) {
   .heat-row { grid-template-columns: 5.5rem minmax(0, 1fr); gap: 0.4rem; }
 }
+
+/* a layer (record 55, decision 6: body region, body part or post-contrast): a cell in its value's colour, filled for
+   the scan picked, its colour as a frame alone for what most of the session's scans are where none is picked */
+.heat [data-slot="1"] { --vc: var(--n-value-1); --vc-bg: var(--n-value-1-bg); }
+.heat [data-slot="2"] { --vc: var(--n-value-2); --vc-bg: var(--n-value-2-bg); }
+.heat [data-slot="3"] { --vc: var(--n-value-3); --vc-bg: var(--n-value-3-bg); }
+.heat [data-slot="4"] { --vc: var(--n-value-4); --vc-bg: var(--n-value-4-bg); }
+.heat [data-slot="5"] { --vc: var(--n-value-5); --vc-bg: var(--n-value-5-bg); }
+.heat [data-slot="6"] { --vc: var(--n-value-6); --vc-bg: var(--n-value-6-bg); }
+.heat [data-slot="7"] { --vc: var(--n-value-7); --vc-bg: var(--n-value-7-bg); }
+.heat [data-slot="8"] { --vc: var(--n-value-8); --vc-bg: var(--n-value-8-bg); }
+.heat [data-slot="9"] { --vc: var(--n-value-9); --vc-bg: var(--n-value-9-bg); }
+.heat [data-slot="10"] { --vc: var(--n-value-10); --vc-bg: var(--n-value-10-bg); }
+.heat-cell.layered[data-slot] { background: var(--vc); border-color: var(--vc); }
+.heat-cell.layered.held[data-slot] { background: transparent; border: 2px solid var(--vc); }
+.heat-cell.layered.none { background: var(--n-bg-sunken); border-color: var(--n-line); }
+.heat-layers { margin-left: auto; }
+.heat-step { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; }
+.heat-not-run { color: var(--n-caution-fg); }
+.heat-value { display: inline-flex; align-items: center; padding: 0 0.35rem; border: 1px solid var(--n-neutral-line); border-left-width: 3px; border-radius: var(--n-radius); font-size: var(--n-text-size-small); color: var(--n-text); white-space: nowrap; }
+.heat-value[data-slot] { border-color: var(--vc); background: var(--vc-bg); }
