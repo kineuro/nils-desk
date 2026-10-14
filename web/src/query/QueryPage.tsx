@@ -104,12 +104,12 @@ function Cards({ caps }: { caps: Capabilities }) {
         </div>
         <button type="button" className="button" onClick={() => setStarting(true)}>
           <Icon name="plus" />
-          New query
+          New card
         </button>
       </div>
       {rows === null && !why && <Wait phase="reading the cards" since={since} size="panel" />}
       {why && <p className="warn">The cards could not be read: {why}</p>}
-      {rows !== null && rows.length === 0 && <p className="lede">No query yet. Start one from everyone or from a cohort.</p>}
+      {rows !== null && rows.length === 0 && <p className="lede">No card yet. New card starts one from everyone or from a cohort.</p>}
       {rows !== null && rows.length > 0 && (
         <div className="query-cards">
           {rows.map((r) => (

@@ -58,7 +58,7 @@ function identityCard(identity: ReviewItem[]): NeedCard {
   const identifiers = href("review", "identifiers");
   const base = { family: "identity" as const, bulk: 0, count: identity.length };
   if (twice.length > 0) {
-    return { ...base, value: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"}`, words: "may be one person twice", meta: ["the same identifier under two codes", from, heldWords, provisionalWords].filter(Boolean).join(" · "), act: { label: "Decide", href: identifiers } };
+    return { ...base, value: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"}`, words: "may be one subject twice", meta: ["the same identifier under two codes", from, heldWords, provisionalWords].filter(Boolean).join(" · "), act: { label: "Decide", href: identifiers } };
   }
   if (held.length > 0) {
     // one dataset's held files are mapped on its own page; several are named on the Identifiers page
@@ -68,7 +68,7 @@ function identityCard(identity: ReviewItem[]): NeedCard {
   if (provisional.length > 0) {
     return { ...base, value: `${n(provisional.length)} ${provisional.length === 1 ? "subject" : "subjects"}`, words: "coded without a map", meta: ["merged into the person it stands for by a merge, or by a map that names the identifier", from].filter(Boolean).join(" · "), act: { label: "Merge", href: identifiers } };
   }
-  return { ...base, value: "0 subjects", words: "may be one person twice", meta: "", act: null };
+  return { ...base, value: "0 subjects", words: "may be one subject twice", meta: "", act: null };
 }
 
 export interface QueueProps {

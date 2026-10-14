@@ -38,6 +38,8 @@ import { OverPicker } from "./OverPicker";
 import { PreflightPanel, Requirements } from "./Preflight";
 import { FailLine, FailNote } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
+import { LanePanel, SecretsPanel } from "./PipelineSetup";
+import { setupActs } from "./pipelineSetup";
 import { runTag } from "./made";
 import { lastRunOf, lastRunWords } from "./results";
 import { againOfRun, RunAgainDialog, type Again } from "./RunAgain";
@@ -117,14 +119,14 @@ export function CatalogBody({ caps, part = "both", pipelines, capability, runs, 
           </div>
         </div>
       )}
-      <div className="section-head rule-top">
-        <h2>Catalog</h2>
+      <div className={part === "both" ? "section-head rule-top" : "section-head"}>
+        {part === "both" && <h2>Catalog</h2>}
         <span className="meta">
           {n(rows.length)} {rows.length === 1 ? "pipeline" : "pipelines"}
           {capability?.runtime ? ` · ${capability.runtime.name}${capability.runtime.gpu ? " with a GPU" : ""}` : ""}
         </span>
       </div>
-      {rows.length === 0 && <p className="meta">Nothing in the catalog. A pipeline is added at the command line, pinned by its image digest.</p>}
+      {rows.length === 0 && <p className="meta">Nothing in the catalog yet. {setupActs(caps).add ? "Add a pipeline from its nils.job.yml." : "Someone with work on the install adds one."}</p>}
       {rows.length > 0 && (
         <div className="table-wrap">
           <table className="thin">
@@ -187,14 +189,18 @@ export function CatalogBody({ caps, part = "both", pipelines, capability, runs, 
         </div>
       )}
       {acts.why && acts.see && capability?.enabled && <p className="meta">{acts.why}</p>}
+      <LanePanel caps={caps} />
+      <SecretsPanel caps={caps} />
         </>
       )}
       {part !== "catalog" && (
         <>
-      <div className="section-head rule-top">
-        <h2>Runs</h2>
-        <span className="meta">newest first</span>
-      </div>
+      {part === "both" && (
+        <div className="section-head rule-top">
+          <h2>Runs</h2>
+          <span className="meta">newest first</span>
+        </div>
+      )}
       {runs.length === 0 && (
         <p className="meta">
           No run yet. {part === "runs" ? <a href={href("pipelines", "catalog")}>Run a pipeline from the Catalog.</a> : "Run a pipeline above."}

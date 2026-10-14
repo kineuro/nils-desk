@@ -58,7 +58,7 @@ export function SharedList() {
         <div className="grow">
           <span className="eyebrow">Assistant</span>
           <h1>Shared</h1>
-          <p className="lede">Conversations others share with you, and the ones you share. A share shows what was said as it stood when shared; its cards open with what you may see.</p>
+          <p className="lede">Conversations shared with you, and by you.</p>
         </div>
       </div>
       {why && <p className="warn">The shares could not be read: {why}</p>}

@@ -40,7 +40,7 @@ async function measure(page: Page): Promise<{ top: number; bottom: number; group
 }
 
 // Campaigns are inside Review since Wave 7a (record 55 H3)
-const WORK = ["Home", "Query", "Data", "Review", "Release", "Pipelines"];
+const WORK = ["Home", "Ask", "Data", "Review", "Release", "Pipelines"];
 const of = (m: { groups: Stand[] }, title: string) => m.groups.find((g) => g.title === title)!;
 
 /** The rows from `from` to the last sit one after another, with only the side's gap between them. */

@@ -66,8 +66,8 @@ for (const vp of SIZES) {
     await shot(page, `results-catalog-${vp.name}`);
     await last.first().click();
     await expect(page).toHaveURL(/#pipelines\/runs\/16$/u);
-    // the Runs table: a click anywhere on the row but its links opens the run
-    await page.goto("/results.html#pipelines/catalog");
+    // the Runs table, a page of its own since record 55 H2, round 4: a click anywhere on the row but its links opens the run
+    await page.goto("/results.html#pipelines/runs");
     const row = page.locator("tr.openable", { hasText: "n4-bias-correction@1" }).first();
     await row.locator("td").nth(1).click();
     await expect(page).toHaveURL(/#pipelines\/runs\/12$/u);

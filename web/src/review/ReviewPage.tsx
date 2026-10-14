@@ -171,6 +171,8 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
           <p className="lede">{head.lede}</p>
         </div>
       </div>
+      {/* the questions and their grown families; Rules and Subjects are pages of the side (record 55 H2, round 4) */}
+      {sub !== "rules" && sub !== "identifiers" && (
       <div className="chips pages">
         <a className={sub === "queue" ? "opt on" : "opt"} href={pageHref(null)} aria-current={sub === "queue" ? "page" : undefined}>
           Questions
@@ -184,6 +186,7 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
           </a>
         ))}
       </div>
+      )}
       {said && (
         <p className="meta said">
           <Icon name="check" />

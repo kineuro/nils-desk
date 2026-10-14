@@ -414,7 +414,8 @@ function ModelBody({ caps }: { caps: Capabilities }) {
             Language models
           </a>
         )}
-        <Command text="nils setup" />
+        {/* the installer's own way stays only where the desk cannot reach the model gateway */}
+        {!reaches && <Command text="nils setup" />}
       </div>
     </>
   );

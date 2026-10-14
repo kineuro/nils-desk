@@ -90,7 +90,12 @@ export const PLACEHOLDERS: Placeholder[] = [
     words: "Hand results out as a release, a BIDS tree or a table, written to an export place.",
     built: true,
     // New release only to whoever may make one, as the page offers its button (ops/ReleasePage.tsx)
-    pages: (caps) => [page("releases", "Releases", { to: href("release") }), ...(may(caps, "release:work") ? [page("new", "New release")] : [])],
+    // record 55 H2, round 4: the kept session schemes where the engine lists them
+    pages: (caps) => [
+      page("releases", "Releases", { to: href("release") }),
+      ...(may(caps, "release:work") ? [page("new", "New release")] : []),
+      ...(door(caps, "GET /api/session-schemes") ? [page("schemes", "Session schemes")] : []),
+    ],
   },
   {
     id: "pipelines",

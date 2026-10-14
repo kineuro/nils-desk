@@ -102,7 +102,7 @@ export function PseudonymsPage({ caps, onChanged }: { caps: Capabilities; onChan
           <Hint text={load.why} />
         </p>
       )}
-      {load.kind === "ready" && types.length === 0 && <p className="meta">No ID type yet.</p>}
+      {load.kind === "ready" && types.length === 0 && <p className="meta">No ID type yet. Add an ID type, or give a map.</p>}
       {types.length > 0 && (
         <div className="table-wrap">
           <table className="thin">

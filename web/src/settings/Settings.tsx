@@ -394,7 +394,7 @@ function EnginePage({ caps, install, onChanged }: PageProps) {
           <dl className="facts">
             <dt>callers</dt>
             <dd>{AUTH[engine.auth] ?? engine.auth}</dd>
-            <dt>folders a digest may name</dt>
+            <dt>folders a read may name</dt>
             <dd>{roots.length > 0 ? roots.join(", ") : "none yet"}</dd>
             <dt>backups</dt>
             <dd>{engine.backup_dir ? "written to the backup directory it was given" : "no backup directory: a backup from the desk is refused"}</dd>

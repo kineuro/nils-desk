@@ -900,6 +900,10 @@ a.mention:hover, a.mention:focus-visible { background: var(--n-bg-hover); }
 .memory-draft { display: grid; gap: 0.5rem; }
 .memory-draft .input { align-items: stretch; padding-block: 0.4rem; }
 .memory-draft textarea { min-height: 14rem; resize: vertical; }
+/* record 55 H2, round 4: a descriptor or a secret pasted, or read from a file */
+.setup-text { min-height: 12rem; resize: vertical; }
+.file-pick { margin-top: 0.4rem; cursor: pointer; }
+.setup-row .grow { flex: 1; }
 .memory-draft .row { gap: 0.4rem; flex-wrap: wrap; }
 .memory-offer { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; padding: 0.6rem 0.8rem; border: 1px dashed var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
 .memory-offer p { margin: 0; }

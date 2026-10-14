@@ -140,7 +140,7 @@ export function signinCard(caps: Capabilities, users: Users | null): Card {
   const issuer = caps.desk.settings?.signing?.issuer;
   if (mode === "oidc" && issuer) facts.push(`at ${hostOf(issuer)}`);
   if (origin) facts.push(local ? "the desk answers on this machine" : `the desk answers at ${origin}`);
-  return { page: "people", title: "Sign-in", icon: "users", state, value, facts };
+  return { page: "people", title: "People", icon: "users", state, value, facts };
 }
 
 function hostOf(url: string): string {

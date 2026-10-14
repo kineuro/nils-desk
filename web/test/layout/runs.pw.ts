@@ -51,7 +51,8 @@ async function noSideways(page: Page, width: number) {
 for (const vp of SIZES) {
   test(`at ${vp.name} px a failed run's reason is one line under its row, inside the window`, async ({ page }) => {
     await page.setViewportSize(vp);
-    await page.goto("/runs.html#pipelines/catalog");
+    // the runs are a page of their own since record 55 H2, round 4
+    await page.goto("/runs.html#pipelines/runs");
     const lines = page.locator("tr.fail-row .fail-line");
     await expect(lines).toHaveCount(2);
     // the slice's kind and what to do on the first; today's engine's first sentence on the second
@@ -254,7 +255,7 @@ test("a failed job says why on the Jobs page, its kind beside the line", async (
 for (const vp of SIZES) {
   test(`at ${vp.name} px a run that made nothing reads so on its tag, the rest on one line under its row`, async ({ page }) => {
     await page.setViewportSize(vp);
-    await page.goto("/runs.html#pipelines/catalog");
+    await page.goto("/runs.html#pipelines/runs");
     const row = page.locator("tr", { has: page.locator('a[href="#pipelines/runs/15"]') });
     await expect(row.locator(".tag")).toHaveText("nothing made");
     await expect(row.locator(".tag")).toHaveClass(/caution/u);
@@ -365,8 +366,6 @@ for (const vp of SIZES) {
       expect(box.left).toBeGreaterThanOrEqual(0);
       expect(box.right).toBeLessThanOrEqual(vp.width);
     }
-    // the runs keep the version each ran, the replaced one too
-    await expect(page.locator("table.thin").nth(1).locator("tbody td", { hasText: /^samseg-lesions@1$/u }).first()).toBeVisible();
     await noSideways(page, vp.width);
     // the run of the version chosen: its title and the command it queues
     await n4.getByRole("button", { name: "Run on a selection" }).click();
@@ -378,6 +377,10 @@ for (const vp of SIZES) {
     await expect(dialog.locator(".note-body code")).toHaveText("nils run n4-bias-correction@1 --select selection:t1-3d-stacks@1");
     await shot(page, `versions-run-${vp.name}`);
     await noSideways(page, vp.width);
+    // the runs, a page of their own since record 55 H2, round 4, keep the version each ran, the replaced one too
+    await page.keyboard.press("Escape");
+    await page.goto("/runs.html?installed#pipelines/runs");
+    await expect(page.locator("table.thin").first().locator("tbody td", { hasText: /^samseg-lesions@1$/u }).first()).toBeVisible();
   });
 }
 

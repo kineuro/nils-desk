@@ -82,7 +82,7 @@ export function OverviewPage({ caps, install }: { caps: Capabilities; install: I
       failed: null,
     });
   }
-  if (has("people")) slots.push({ key: "signin", page: "people", title: "Sign-in", icon: "users", card: signinCard(caps, users.value), failed: null });
+  if (has("people")) slots.push({ key: "signin", page: "people", title: "People", icon: "users", card: signinCard(caps, users.value), failed: null });
   if (has("language-models")) slots.push({ key: "gateway", page: "language-models", title: "Language models", icon: "gateway", card: backends.value ? gatewayCard(caps, backends.value) : null, failed: failed(backends.error, backends.value) });
   if (has("audit")) slots.push({ key: "audit", page: "audit", title: "Audit", icon: "file", card: audit.value ? auditCard(audit.value, now) : null, failed: failed(audit.error, audit.value) });
   const needs = attention(slots.flatMap((s) => (s.card ? [s.card] : [])));

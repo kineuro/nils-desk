@@ -82,8 +82,7 @@ describe("the Release page", () => {
 
   it("sends no leaving policy of its own: each dataset's own applies until a person overrides it in the dialog", () => {
     const dialog = renderToStaticMarkup(<NewReleaseDialog caps={caps()} cohort="north" existing={rows} onClose={none} onDone={none} />);
-    expect(dialog).toContain("Each dataset&#x27;s own leaving policy applies to its own files.");
-    expect(dialog).toContain("Nothing is sent for the UIDs unless you override them here.");
+    expect(dialog).toContain("Each dataset&#x27;s own policy, unless chosen here.");
     expect(dialog).toContain('aria-label="UIDs for every file"');
     expect(dialog).toContain("UIDs: each dataset&#x27;s own");
     // nothing is overridden as it opens, so the caution that an override brings is not there yet
@@ -95,7 +94,7 @@ describe("the Release page", () => {
     expect(dialog).not.toContain('aria-label="Dates for every file"');
     expect(dialog).not.toContain("shifted");
     expect(dialog).not.toContain("to the year");
-    expect(dialog).toContain("Every release keeps the real date. Where a date must not show in a path, label the sessions by months since baseline (M00, M06) with a session scheme.");
+    expect(dialog).toContain("Dates stay real; a months scheme labels sessions M00, M06 instead.");
   });
 
   it("offers as a card's answer only a complete stack answer the person may release", () => {

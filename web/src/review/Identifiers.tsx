@@ -29,7 +29,7 @@ export interface IdentifiersProps {
 }
 
 const KINDS: { what: string; title: string; remedy: string }[] = [
-  { what: "collision", title: "may be one person twice", remedy: "merge them, or decide they are two" },
+  { what: "collision", title: "may be one subject twice", remedy: "merge them, or decide they are two" },
   { what: "unmapped", title: "held until mapped", remedy: "map them on the dataset" },
   { what: "provisional", title: "coded without a map", remedy: "merge into the subject it stands for" },
   { what: "same_instance", title: "the same scan filed twice", remedy: "merge the two subjects, or let it go" },
