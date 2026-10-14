@@ -5,6 +5,7 @@
 // deletes all of it; everyone reads the install's instructions, and a person
 // with work on the assistant's settings writes their next version.
 
+import { Hint } from "../ui/Hint";
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
@@ -79,8 +80,8 @@ export function MemoryPage({ caps }: { caps: Capabilities }) {
           <span className="eyebrow">Assistant</span>
           <h1>Memory</h1>
           <p className="lede">
-            What the assistant reads at the start of each new conversation: the install's instructions, what you asked it to keep, up to 3,000 characters of it, and a few notes from your work. It keeps
-            something only when you ask or accept, never a person's data, and what it keeps about you is yours alone.
+            What the assistant reads as each conversation starts. Yours alone.
+            <Hint text="The install's instructions, what you asked it to keep (up to 3,000 characters) and a few notes from your work. It keeps something only when you ask or accept, and never a subject's data." />
           </p>
         </div>
       </div>

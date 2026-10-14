@@ -18,6 +18,13 @@ describe("start from anything", () => {
     expect(countWords({ document: {}, set: "visits", grain: "session", count: 1, subjects: 1, sessions: 1, epoch: 1 })).toBe("1 session, 1 subjects");
     expect(countWords({ document: {}, set: "scope", grain: "cohort", count: 2, subjects: null, sessions: null, epoch: 1 })).toBe("2 cohorts");
   });
+  it("says a set held back at plain as fewer than 5 subjects, never null, 0 or NaN (record 55 K7)", () => {
+    for (const grain of ["subject", "session"]) {
+      const words = countWords({ document: {}, set: "few", grain, count: null, subjects: null, sessions: null, epoch: 1 });
+      expect(words).toBe("fewer than 5 subjects");
+      expect(words).not.toMatch(/null|NaN|\b0\b/);
+    }
+  });
   it("reads a pasted list by lines or commas, trimmed, once each", () => {
     expect(pastedList(" a\nb, c;c\n\n")).toEqual(["a", "b", "c"]);
   });
@@ -36,6 +43,20 @@ describe("counts that move", () => {
       { group: "near", rows: 120, subjects: 44, lost: 52 },
       { group: "where", rows: 90, subjects: 40, lost: 30 },
     ]);
+  });
+  it("holds what a group lost where its count, or the count before it, is held back", () => {
+    const held: Funnel[] = [
+      { set: "women", grain: "subject", stage: "source", group: "source", rows: 48, subjects: 48, on_path: true },
+      { set: "women", grain: "subject", stage: "where", group: "where", rows: null, subjects: null, on_path: true, held_back: "fewer than 5" },
+      { set: "women", grain: "subject", stage: "pick", group: "pick", rows: 3, subjects: 3, on_path: true },
+    ];
+    expect(clauseGroups(held, "women")).toEqual([
+      { group: "source", rows: 48, subjects: 48, lost: 0 },
+      { group: "where", rows: null, subjects: null, lost: null },
+      { group: "pick", rows: 3, subjects: 3, lost: null },
+    ]);
+    const groups = [{ set: "women", grain: "subject", group: "where", clauses: 1, kept: null, subjects: null, lost: null }];
+    expect(clauseGroups([], "women", groups)).toEqual([{ group: "where", rows: null, subjects: null, lost: null }]);
   });
   it("falls back to the stage when an engine keys the funnel by set", () => {
     expect(clauseGroups(funnel, "people")).toEqual([{ group: "source", rows: 48, subjects: 48, lost: 0 }]);

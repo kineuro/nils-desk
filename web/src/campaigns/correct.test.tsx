@@ -89,9 +89,9 @@ describe("which answer `b` opens, and the words", () => {
     expect(amendPageOf(ANCHORED_CAMPAIGN)).toBe("anchored");
     expect(amendPageOf(PAIR_CAMPAIGN)).toBe("pairs");
     expect(amendPageOf({ question: { kind: "axis", axis: "x", values: [] } } as never)).toBe("rate");
-    expect(amendHref(7, 91, "rate", "anchored")).toBe("#campaigns/7/anchored?amend=91");
-    expect(amendHref(7, 91, "rate", "pairs")).toBe("#campaigns/7/pairs?amend=91");
-    expect(amendHref(7, 91, "gallery")).toBe("#campaigns/7/rate?amend=91&back=gallery");
+    expect(amendHref(7, 91, "rate", "anchored")).toBe("#review/campaigns/7/anchored?amend=91");
+    expect(amendHref(7, 91, "rate", "pairs")).toBe("#review/campaigns/7/pairs?amend=91");
+    expect(amendHref(7, 91, "gallery")).toBe("#review/campaigns/7/rate?amend=91&back=gallery");
     expect(ownWords(ANCHORED_CAMPAIGN, "like_pre")).toBe("like the pre");
     expect(ownWords(PAIR_CAMPAIGN, "both_post")).toBe("both post");
     expect(placeWords(ANCHORED_CAMPAIGN, 12)).toBe("item 13");
@@ -237,7 +237,7 @@ describe("in the reader", () => {
     await until(() => log.some((a) => a.path.endsWith("/release")));
     expect(log.find((a) => a.path.endsWith("/release"))?.path).toBe(`/api/campaigns/${CAMPAIGN_ID}/assignments/79/release`);
     expect(log.some((a) => a.path.endsWith("/amend"))).toBe(false);
-    expect(location.hash).toBe(`#campaigns/${CAMPAIGN_ID}`);
+    expect(location.hash).toBe(`#review/campaigns/${CAMPAIGN_ID}`);
   });
 
   it("anchored: a link's answer opens in the reader, and the same answer again writes nothing new", async () => {
@@ -249,7 +249,7 @@ describe("in the reader", () => {
     await press("Enter");
     await until(() => itemShown() === "item 14");
     await act(async () => root.unmount());
-    location.hash = `#campaigns/${CAMPAIGN_ID}/anchored?amend=${kept[0].answer}`;
+    location.hash = `#review/campaigns/${CAMPAIGN_ID}/anchored?amend=${kept[0].answer}`;
     root = createRoot(host);
     await act(async () => root.render(<AnchoredReader caps={capsWith(anchoredDoorsOf())} id={String(CAMPAIGN_ID)} query={{ amend: String(kept[0].answer) }} />));
     await until(() => itemShown() === "item 13" && host.querySelector(".pair-answer.yours")?.textContent?.includes("like the pre"));
@@ -257,7 +257,7 @@ describe("in the reader", () => {
     await until(() => host.querySelector(".said")?.textContent?.includes("item 13 kept as it was: like the pre."));
     expect(kept).toHaveLength(1);
     // the address is the reader's own again
-    expect(location.hash).toBe(`#campaigns/${CAMPAIGN_ID}/anchored`);
+    expect(location.hash).toBe(`#review/campaigns/${CAMPAIGN_ID}/anchored`);
     await until(() => itemShown() === "item 14");
   });
 
@@ -309,7 +309,7 @@ describe("in the reader", () => {
     root = createRoot(host);
     await act(async () => root.render(<MyAnswers caps={capsWith(anchoredDoorsOf())} campaign={ANCHORED_CAMPAIGN} values={[]} back="rate" onClose={() => undefined} />));
     const link = await until(() => host.querySelector<HTMLAnchorElement>(".mine-row a"));
-    expect(link.getAttribute("href")).toBe(`#campaigns/${CAMPAIGN_ID}/anchored?amend=700`);
+    expect(link.getAttribute("href")).toBe(`#review/campaigns/${CAMPAIGN_ID}/anchored?amend=700`);
     expect(host.querySelector(".mine-row")?.textContent).toContain("item 13");
     expect(host.querySelector(".mine-row")?.textContent).toContain("like the post");
     expect(host.querySelector(".mine-row")?.textContent).not.toContain("ago");

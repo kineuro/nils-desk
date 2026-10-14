@@ -4,7 +4,7 @@
 // touch. A part of any other shape is dropped here and nowhere else. The
 // assistant never calls a desk function and never navigates the desk.
 
-import { asOneChatPart, type ChangeKind, type PlanItem } from "./events";
+import { asOneChatPart, type ChangeKind, type ChartItem, type FileItem, type PlanItem } from "./events";
 import { splitReasoning } from "./reasoning";
 import { toolWords } from "./steps";
 
@@ -15,13 +15,16 @@ export type Part =
   | { kind: "todo"; text: string }
   | { kind: "lookup"; level: string; field: string; values: string[] }
   | { kind: "handle_ref"; handle: number }
-  | { kind: "funnel"; rows: { set: string; stage: string; rows: number; subjects: number }[] }
+  /** A count held back (record 55 K7, small counts at plain) is null: it reads held back. */
+  | { kind: "funnel"; rows: { set: string; stage: string; rows: number | null; subjects: number | null }[] }
   | { kind: "status"; phase: string; text: string }
   /** The chat, slice 6: a memory the assistant offered, kept because the person asked, or forgot. */
   | { kind: "memory"; state: "proposed" | "saved" | "forgotten"; text: string; id: number | null };
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
+/** A count, or null where the engine held it back; anything else (absent, a word) is no count. */
+const isCount = (v: unknown): v is number | null => v === null || isNum(v);
 
 /** The guard of the closed union: a value of exactly one of the eight shapes, or null. */
 export function asPart(v: unknown): Part | null {
@@ -55,7 +58,7 @@ export function asPart(v: unknown): Part | null {
             kind: "funnel",
             rows: o.rows.flatMap((x) => {
               const r = x as Record<string, unknown>;
-              return isStr(r?.set) && isStr(r.stage) && isNum(r.rows) && isNum(r.subjects) ? [{ set: r.set, stage: r.stage, rows: r.rows, subjects: r.subjects }] : [];
+              return isStr(r?.set) && isStr(r.stage) && isCount(r.rows) && isCount(r.subjects) ? [{ set: r.set, stage: r.stage, rows: r.rows, subjects: r.subjects }] : [];
             }),
           }
         : null;
@@ -103,6 +106,8 @@ export interface Change {
 export interface Step {
   words: string;
   reasoning: string;
+  /** A check sent the turn back after this step and the answer written after it replaces these words (2026-10-11). */
+  replaced?: boolean;
 }
 
 export interface Turn {
@@ -119,6 +124,8 @@ export interface Turn {
   /** The submission an answer belongs to, where the runtime tracks its turn: its steps end without ending it (2026-10-09). */
   submission?: string;
   tools: Tool[];
+  /** The question the turn asked the person, kept with it once a later turn closes its card (2026-10-12). */
+  asked?: { question: string; options: { label: string; count: number | null }[] };
 }
 
 export interface Proposal {
@@ -148,6 +155,9 @@ export interface PaneState {
   aside: Extract<Part, { kind: "note" | "todo" | "lookup" | "funnel" }>[];
   /** The memories offered, kept or forgotten in the conversation, by the turn that did it. */
   memories: PaneMemory[];
+  /** The charts and files each turn wrote under the workspace's /out, by turn: its whole list as it last wrote it. */
+  charts: Record<string, ChartItem[]>;
+  files: Record<string, FileItem[]>;
   /** The sentence each turn settled on: what a turn that wrote no words answered (the chat, slice 7). */
   finals: Record<string, string>;
   settled: null | { outcome: string; error?: string };
@@ -165,6 +175,8 @@ export const empty = (offset = "-1"): PaneState => ({
   handles: [],
   aside: [],
   memories: [],
+  charts: {},
+  files: {},
   finals: {},
   settled: null,
 });
@@ -190,22 +202,34 @@ export function joinSteps(before: string, next: string): string {
   return before.endsWith("\n") ? `${before}\n${next}` : `${before}\n\n${next}`;
 }
 
-/** An assistant turn's answer and thinking, drawn from its steps: inline reasoning is read out of each step's own words. */
+/**
+ * An assistant turn's answer and thinking, drawn from its steps: inline reasoning is read out of each step's own words.
+ * Words a check replaced are left out once a later step has written its own, so the person reads the answer once
+ * (2026-10-11); a turn that wrote nothing after the check keeps them.
+ */
 function drawn(t: Turn, steps: Step[]): Turn {
+  const splits = steps.map((step) => splitReasoning(step.words));
+  let last = -1;
+  steps.forEach((step, i) => {
+    if (step.replaced) last = i;
+  });
+  const replaced = last >= 0 && splits.slice(last + 1).some((split) => split.text.trim() !== "");
   let text = "";
   let thinking = "";
-  for (const step of steps) {
-    const split = splitReasoning(step.words);
-    text = joinSteps(text, split.text);
-    thinking = joinSteps(thinking, joinSteps(step.reasoning.trim(), split.thinking));
-  }
+  steps.forEach((step, i) => {
+    if (!(replaced && i <= last)) text = joinSteps(text, splits[i].text);
+    thinking = joinSteps(thinking, joinSteps(step.reasoning.trim(), splits[i].thinking));
+  });
   return { ...t, steps, text, thinking };
 }
+
+/** Whether a part is the mark that the turn's words so far are replaced by the answer it writes next. */
+const isReplaced = (raw: unknown): boolean => asOneChatPart(raw)?.kind === "replaced";
 
 /** The steps of a turn that was built without them, as one step. */
 const stepsOf = (t: Turn): Step[] => t.steps ?? [{ words: t.text, reasoning: t.thinking ?? "" }];
 
-/** What one part may touch: a proposal, the choice, the status line, a handle, or the aside. */
+/** What one part may touch: a proposal, the choice, the status line, a handle, a turn's charts and files, or the aside. */
 export function acceptPart(state: PaneState, turnId: string, raw: unknown): PaneState {
   const one = asOneChatPart(raw);
   if (one) {
@@ -219,7 +243,8 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
       case "plan_update":
         return { ...state, plan: one.items };
       case "clarification":
-        return { ...state, choice: { question: one.question, options: one.options, turn: turnId } };
+        // the card answers it while it is the latest turn's; the turn keeps the question as words after that (2026-10-12)
+        return withTurn({ ...state, choice: { question: one.question, options: one.options, turn: turnId } }, turnId, (t) => ({ ...t, asked: { question: one.question, options: one.options } }));
       case "approval":
         // a query version is decided as a move proposal is: on the query card, by its document
         if (one.change === "query_version" && one.ref.document !== undefined) {
@@ -229,6 +254,14 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
         }
         if (state.changes.some((x) => x.id === one.id)) return state;
         return { ...state, changes: [...state.changes, { id: one.id, change: one.change, title: one.title, sentence: one.sentence, lines: one.lines, turn: turnId, decided: null }] };
+      case "replaced":
+        // it marks the steps it follows, which only the stream and the history know (reduce, fromHistory)
+        return state;
+      // each write is the turn's whole list so far, and a rewrite takes the place of the list before it
+      case "chart":
+        return { ...state, charts: { ...state.charts, [turnId]: one.items } };
+      case "file":
+        return { ...state, files: { ...state.files, [turnId]: one.items } };
     }
   }
   const p = asPart(raw);
@@ -238,7 +271,7 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
       if (state.proposals.some((x) => x.document === p.document)) return state;
       return { ...state, proposals: [...state.proposals, { document: p.document, parent: p.parent, sentence: p.sentence, turn: turnId, decided: null }] };
     case "choice":
-      return { ...state, choice: { question: p.question, options: p.options, turn: turnId } };
+      return withTurn({ ...state, choice: { question: p.question, options: p.options, turn: turnId } }, turnId, (t) => ({ ...t, asked: { question: p.question, options: p.options } }));
     case "status":
       return {
         ...state,
@@ -339,6 +372,8 @@ export function reduce(state: PaneState, c: Chunk): PaneState {
       return { ...state, turns: state.turns.map((t) => ({ ...t, tools: t.tools.map((x) => (x.id === c.toolCallId ? { ...x, state: done } : x)) })) };
     }
     case "data-part":
+      // the steps so far were sent back by a check: the answer that comes next replaces their words (2026-10-11)
+      if (isReplaced(c.data)) return withTurn(state, String(c.messageId), (t) => drawn(t, stepsOf(t).map((step) => ({ ...step, replaced: true }))));
       return acceptPart(state, String(c.messageId), c.data);
     case "message-completed":
       // a step of a tracked turn ends where it calls a tool, and the answer goes on: the turn's settlement ends it
@@ -418,11 +453,18 @@ export function fromHistory(h: History, previous: PaneState = empty(), now?: num
       else if (p.type === "dynamic-tool" && p.toolCallId) {
         t.tools.push(toolCall(p.toolCallId, p.toolName ?? "", p.state === "output-error" ? "failed" : p.state === "output-available" ? "done" : "running", p.input));
         called = true;
+      } else if (m.role === "assistant" && p.type.startsWith("data-") && isReplaced(p.data)) {
+        // the mark sits right after the step a check sent back: that step and those before it are replaced, and what follows begins a step of its own
+        for (const s of steps) s.replaced = true;
+        steps.push({ ...step, replaced: true });
+        step = { words: "", reasoning: "" };
+        called = false;
       }
     }
     // an open answer whose last part is a tool call: the words still to come begin the next step, as they would live
     if (m.role === "assistant") t = drawn(t, open && called ? [...steps, step, { words: "", reasoning: "" }] : [...steps, step]);
-    state = { ...state, turns: [...state.turns, t] };
+    // a new answer closes the question card before it, as it does live: a reload never opens an old question again (2026-10-12)
+    state = { ...state, turns: [...state.turns, t], ...(m.role === "assistant" ? { choice: null } : {}) };
     for (const p of m.parts) if (p.type.startsWith("data-")) state = acceptPart(state, m.id, p.data);
   }
   // decided proposals stay decided across a reload

@@ -41,7 +41,12 @@ export function Side(props: { top: Section[]; foot: Section[]; section: string |
   }, [open, onClose]);
 
   const row = (s: Section) => (e: React.MouseEvent<HTMLAnchorElement>) => {
-    if ((s.pages ?? []).length === 0 || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    // a section with no pages (Home) is its own page: on the panel over the page it closes the panel, also where the address already names it
+    if ((s.pages ?? []).length === 0) {
+      if (open) onClose();
+      return;
+    }
     if (s.id === unfolded) {
       e.preventDefault();
       setPicked({ at: here, open: null });

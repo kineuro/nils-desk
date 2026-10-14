@@ -139,7 +139,7 @@ describe("the map's columns", () => {
     const columns = [column("personnummer", ["199001019999", "199002029999"]), column("radiology_accession", ["REG1234", "REG1235"]), column("subject_code", ["S-0001", "S-0002"])];
     const html = renderToStaticMarkup(<MapColumns columns={columns} types={types} working={false} onRole={none} onType={none} onDescription={none} />);
     for (const role of ['value="identifier"', 'value="canonical"', 'value="code"', 'value="ignore"']) expect(html).toContain(role);
-    expect(html).toContain('<option value="type:personnummer">of type personnummer</option>');
+    expect(html).toContain('<option value="type:personnummer">of type ID that is the same everywhere</option>');
     expect(html).toContain('<option value="type:lake-id">of type lake-id</option>');
     // a header no type answers to is offered as a new type, named after the header, with a description beside it
     expect(html).toContain("a new type: radiology-accession</option>");

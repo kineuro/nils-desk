@@ -101,7 +101,7 @@ describe("a dataset's card", () => {
     expect(arrivesOf(exports)).toBe("coded");
     expect(arrivesOf(older(exchange))).toBe("deidentified");
     expect(arrivesWords("identified")).toEqual({ words: "arrives identified", tone: "gated", icon: "lock" });
-    expect(arrivesWords("coded")).toEqual({ words: "our codes in PatientID", tone: "ok", icon: "shield" });
+    expect(arrivesWords("coded")).toEqual({ words: "our subject codes in PatientID", tone: "ok", icon: "shield" });
   });
 
   it("draws the two trees, and none for an engine that names no trees", () => {
@@ -110,7 +110,7 @@ describe("a dataset's card", () => {
       { icon: "shield", path: "dcm-anon", words: "16,208 · the source" },
     ]);
     expect(treeLines(exchange)).toEqual([{ icon: "shield", path: "dcm-anon", words: "6,112 · moved in, files as sent" }]);
-    expect(treeLines(exports)[0].words).toBe("1,433 · codes taken verbatim");
+    expect(treeLines(exports)[0].words).toBe("1,433 · subject codes taken verbatim");
     expect(treeLines(older(incoming))).toEqual([]);
     expect(newInOriginals(incoming)).toBe(2212);
     expect(newInOriginals(exchange)).toBeNull();

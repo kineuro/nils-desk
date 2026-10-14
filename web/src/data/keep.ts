@@ -11,6 +11,10 @@
 // writes a document itself: the engine checks and counts it before anything
 // is kept, and keeps it as a card, as a selection or as a cohort's source.
 
+import { HELD, heldRefusal } from "../ask/held";
+
+/** Why a held list makes no cohort: its rows are held back, which is no failure and no empty answer. */
+export const HELD_LIST = "The rows are held back, so they make no cohort.";
 import { DoorError, ask, door, results, type Diagnosis, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
@@ -131,6 +135,8 @@ const SCOPE_SET = "scope";
  * (its current members), the helper sets then reading their subject's rows.
  */
 function scopeOf(scope: Scope): { sets: Record<string, Json>; where: Clause[]; of: string | null } {
+  // the whole registry keeps every set as it is
+  if (scope.kind === "registry") return { sets: {}, where: [], of: null };
   const dataset = scope.kind === "dataset";
   return {
     /** The sets the scope brings: none for a dataset, the cohort for a cohort. */
@@ -188,7 +194,7 @@ export function subjectsKept(scope: Scope, view: { found: number[] | null; filte
   const where: Clause[] = [...s.where];
   const has: { set: string; min: number }[] = [];
   const narrowed: Narrowed[] = [];
-  const tags: string[] = [scope.name];
+  const tags: string[] = scope.kind === "registry" ? ["subjects"] : [scope.name];
   if (view.found !== null) {
     where.push(among(field("id"), view.found));
     narrowed.push({ key: "q", words: `found by the search, ${plural(view.found.length, "subject")}`, asked: true });
@@ -233,7 +239,7 @@ export function subjectsKept(scope: Scope, view: { found: number[] | null; filte
   }
   sets.subjects = set("subject", { of: s.of, where, has });
   const asked = narrowed.filter((x) => x.asked && x.key !== "q").map((x) => x.words);
-  const name = `Subjects of ${scope.kind === "cohort" ? `the cohort ${scope.name}` : scope.name}${asked.length > 0 ? `, ${asked.join(", ")}` : ""}`;
+  const name = `${scope.kind === "registry" ? "Subjects" : `Subjects of ${scope.kind === "cohort" ? `the cohort ${scope.name}` : scope.name}`}${asked.length > 0 ? `, ${asked.join(", ")}` : ""}`;
   return { grain: "subject", where: scope.name, narrowed, document: documentOf(name, sets, "subjects"), shown: opts.shown, name: tagged(tags) };
 }
 
@@ -362,9 +368,9 @@ export function browserKept(scope: Scope, words: string[], matched: Scan[], read
 const GRAIN_WORD: Record<KeptGrain, [string, string]> = { subject: ["subject", "subjects"], session: ["visit", "visits"], stack: ["scan", "scans"] };
 
 /** A count at a kept grain, in words: "12 subjects", "1 visit". */
-export function grainWords(grain: KeptGrain, count: number): string {
+export function grainWords(grain: KeptGrain, count: number | null): string {
   const [one, many] = GRAIN_WORD[grain];
-  return plural(count, one, many);
+  return count === null ? `${many} ${HELD}` : plural(count, one, many);
 }
 
 /** What no question asks, the ones the person's word leaves out. */
@@ -391,8 +397,8 @@ export function mayCohort(caps: Capabilities): boolean {
   return may(caps, "data:work") && may(caps, "query:work") && served(caps, KEEP_DOORS.count) && served(caps, KEEP_DOORS.store) && served(caps, KEEP_DOORS.run) && served(caps, KEEP_DOORS.promote);
 }
 
-/** The engine's count of a document: the last stage of its answer's funnel, its rows and their subjects. */
-export function countOf(d: Diagnosis, answer: string): { rows: number; subjects: number } | null {
+/** The engine's count of a document: the last stage of its answer's funnel, its rows and their subjects; each null where held back (record 55 K7). */
+export function countOf(d: Diagnosis, answer: string): { rows: number | null; subjects: number | null } | null {
   const stage = d.funnel.filter((f) => f.set === answer).at(-1);
   return stage ? { rows: stage.rows, subjects: stage.subjects } : null;
 }
@@ -411,7 +417,9 @@ export const keepDoors = {
 export class Refusal extends Error {}
 
 /** Why a promotion cannot take a run's answer, in words; null where it can. */
-export function cannotPromote(run: { truncated: boolean; row_count: number }): string | null {
+export function cannotPromote(run: { truncated: boolean; row_count: number | null }): string | null {
+  // a list held back whole at plain holds no subject to promote, and is not empty either (record 55 K7, small lists)
+  if (run.row_count === null) return HELD_LIST;
   if (run.truncated) return "The answer is cut off at the run's limit; a cohort needs all of it.";
   if (run.row_count === 0) return "Nothing to add.";
   return null;
@@ -420,6 +428,7 @@ export function cannotPromote(run: { truncated: boolean; row_count: number }): s
 /** The refusals the dialog knows, in its own words. */
 export function keepError(e: unknown): string | null {
   if (e instanceof Refusal) return e.message;
+  if (heldRefusal(e)) return HELD_LIST;
   const m = e instanceof Error ? e.message : String(e);
   if (/is a cohort; a selection may take/i.test(m)) return "That name is a cohort's. Choose another.";
   if (/is a selection's name; a cohort cannot/i.test(m)) return "That name is a selection's. Choose another.";

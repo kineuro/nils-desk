@@ -115,7 +115,7 @@ describe("Kvasir", () => {
 });
 
 describe("who looks at the page (record 25)", () => {
-  it("works on Kvasir with Kvasir: Work, and signs a subscription of their own in with the assistant and Kvasir: See", () => {
+  it("works on Kvasir with Language models: Work, and signs a subscription of their own in with the assistant and Language models: See", () => {
     expect(viewerOf(caps(["kvasir:work", "kvasir:see"]), null)).toEqual({ work: true, subscribes: false, system: false });
     expect(viewerOf(caps(["kvasir:work", "assistant:use"]), sub())).toEqual({ work: true, subscribes: true, system: false });
     expect(viewerOf(caps(["kvasir:see", "assistant:use"]), sub())).toEqual({ work: false, subscribes: true, system: false });
@@ -128,9 +128,9 @@ describe("who looks at the page (record 25)", () => {
     expect(viewerOf(caps(["kvasir:work", "assistant:use"], "off"), null).system).toBe(true);
   });
 
-  it("names a grant as the Identity page does", () => {
-    expect(grantWords("kvasir:work")).toBe("Kvasir: Work");
-    expect(grantWords("kvasir:see")).toBe("Kvasir: See");
+  it("names a grant as the People page does", () => {
+    expect(grantWords("kvasir:work")).toBe("Language models: Work");
+    expect(grantWords("kvasir:see")).toBe("Language models: See");
     expect(grantWords("assistant:use")).toBe("the assistant");
     expect(grantWords("assistant-settings:see")).toBe("Assistant settings: See");
   });
@@ -138,10 +138,10 @@ describe("who looks at the page (record 25)", () => {
   it("says a refusal for want of a grant in plain words, and leaves any other refusal as it came", () => {
     const refused = (body: unknown) => new KvasirError(403, "refused", body as KvasirError["body"]);
     expect((plainly(refused({ error: { code: "no_grant", needs: ["assistant:use", "kvasir:see"] } })) as Error).message).toBe(
-      "A subscription of your own needs the assistant and Kvasir: See. Someone with Identity: Work gives them on the Identity page.",
+      "A subscription of your own needs the assistant and Language models: See. Someone with People: Work gives them on the People page.",
     );
-    expect((plainly(refused({ error: { code: "no_grant", needs: ["kvasir:work"] } })) as Error).message).toBe("This needs Kvasir: Work, which you do not hold. Someone with Identity: Work gives it on the Identity page.");
-    expect((plainly(refused({ error: { code: "no_grant", message: "no grant" } })) as Error).message).toBe("This needs a grant you do not hold. Someone with Identity: Work gives it on the Identity page.");
+    expect((plainly(refused({ error: { code: "no_grant", needs: ["kvasir:work"] } })) as Error).message).toBe("This needs Language models: Work, which you do not hold. Someone with People: Work gives it on the People page.");
+    expect((plainly(refused({ error: { code: "no_grant", message: "no grant" } })) as Error).message).toBe("This needs a grant you do not hold. Someone with People: Work gives it on the People page.");
     expect((plainly(refused({ error: { code: "not_a_person" } })) as Error).message).toMatch(/^Kvasir keeps a subscription for a person/u);
     const other = new KvasirError(409, "in the list already", {});
     expect(plainly(other)).toBe(other);
@@ -280,7 +280,7 @@ describe("where each station goes (record 25)", () => {
     expect(carriesWords("identifiers")).toBe("carries identifiers");
   });
 
-  it("says where a server is only to a person with Kvasir: Work, and lets only them move a station", () => {
+  it("says where a server is only to a person with Language models: Work, and lets only them move a station", () => {
     const lines = routes([purpose({})], [local, minimax], at(person));
     expect(lines[0].to.meta).toBe("your systems");
     expect(lines[0].movable).toBe(false);

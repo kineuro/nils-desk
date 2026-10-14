@@ -1,0 +1,23 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* A cohort's main scans, visit by visit (Wave 7a, record 55 H3): a row a
+   subject, a cell a session, the cell's state its fill and a person's pick
+   its border; a row's cells wrap on a phone, nothing sideways. Theme
+   tokens only. */
+
+.heat { display: grid; gap: 0.5rem; }
+.heat-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; }
+.heat-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.heat-row { display: grid; grid-template-columns: minmax(6rem, 11rem) minmax(0, 1fr); align-items: center; gap: 0.6rem; }
+.heat-code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.heat-cells { display: flex; flex-wrap: wrap; gap: 2px; }
+.heat-cell { display: inline-block; width: 14px; height: 14px; border: 1px solid transparent; border-radius: 2px; box-sizing: border-box; vertical-align: middle; }
+.heat-cell.picked { background: var(--n-ok-icon); }
+.heat-cell.doubted { background: var(--n-caution-icon); }
+.heat-cell.missing { background: var(--n-bg-sunken); border-color: var(--n-line); }
+.heat-cell.by-person { border: 2px solid var(--n-brand-line); }
+.heat-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; }
+.heat-key { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.3rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+
+@media (max-width: 640px) {
+  .heat-row { grid-template-columns: 5.5rem minmax(0, 1fr); gap: 0.4rem; }
+}

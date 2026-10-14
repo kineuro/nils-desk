@@ -207,7 +207,7 @@ export function AbReader({ caps, id }: { caps: Capabilities; id: string }) {
         .then(() => {
           setSaid(`Gave ${itemWords(holding.item)} back.`);
           if (then === "next") claim();
-          else location.hash = href("campaigns", id);
+          else location.hash = href("review", "campaigns", id);
         })
         .catch((e: unknown) => setRefused(refusedWords(e)))
         .finally(() => setBusy(false));
@@ -265,7 +265,7 @@ export function AbReader({ caps, id }: { caps: Capabilities; id: string }) {
     <section className="data campaign-rate reader-one ab-reader">
       <div className="reader-head">
         <span className="eyebrow">
-          <a href={href("campaigns")}>Campaigns</a> · <a href={href("campaigns", String(campaign.id))}>{campaign.name}</a>
+          <a href={href("review")}>Review</a> · <a href={href("review", "campaigns", String(campaign.id))}>{campaign.name}</a>
         </span>
         <h1>Settle</h1>
         <span className="grow said-slot">
@@ -370,7 +370,7 @@ function SeatNote({ seat, campaign, now, onAgain }: { seat: Seat; campaign: Camp
         <p className="note-lead">Nothing left for you.</p>
         <p className="note-detail">{seat.why}</p>
         <p>
-          <a href={href("campaigns", String(campaign.id))}>Back to {campaign.name}</a> ·{" "}
+          <a href={href("review", "campaigns", String(campaign.id))}>Back to {campaign.name}</a> ·{" "}
           <button type="button" className="link-button" onClick={onAgain}>
             Look again
           </button>

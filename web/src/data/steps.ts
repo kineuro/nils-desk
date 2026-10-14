@@ -63,7 +63,7 @@ export const roots = {
    * A folder under a root added as a dataset; anonymised data says its IDs with it (`patient_id`, `subjects`), so it is read at once,
    * and identified data what its PatientID holds, as the rule its originals are read under (`identity`).
    */
-  addDataset: (root: string, folder: string, ids: Pick<DatasetFields, "patient_id" | "subjects" | "identity"> = {}) =>
+  addDataset: (root: string, folder: string, ids: Pick<DatasetFields, "patient_id" | "subjects" | "identity" | "unmapped"> = {}) =>
     door<PlaceAnswer & { not_read?: string | null }>("POST", "/api/places", { role: "source", root, folder, ...ids }),
 };
 

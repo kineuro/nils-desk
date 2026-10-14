@@ -75,7 +75,8 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .dp-gap { margin-top: 0.375rem !important; }
 
 /* where it is: a node a step, the line between them filled as far as it got */
-.dp-steps { display: grid; grid-template-columns: repeat(var(--steps, 6), minmax(0, 1fr)); margin: 0; padding: 0; list-style: none; }
+/* the steps share the line, and one whose Run row is wider than its share takes what that row needs (2026-10-11) */
+.dp-steps { display: grid; grid-template-columns: repeat(var(--steps, 6), minmax(min-content, 1fr)); margin: 0; padding: 0; list-style: none; }
 .dp-step { display: flex; flex-direction: column; gap: 0.375rem; min-width: 0; padding-right: 0.625rem; }
 .dp-step-mark { display: flex; align-items: center; }
 .dp-step-mark .node { width: 14px; height: 14px; flex: none; border-radius: 50%; border: 1px solid var(--n-neutral-line); background: var(--n-bg-page); }
@@ -88,8 +89,14 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .dp-step-what { font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
 .dp-step-when { font-family: var(--n-font-mono); font-size: 12px; color: var(--n-text-faint); }
 .dp-step-when.now { color: var(--n-brand-text); }
-/* record 56: a step's Run, and the reason a run would be refused behind its "?" */
-.dp-step-run { display: flex; align-items: center; min-width: 0; margin-top: auto; }
+/* record 56: a step's Run, and the reason a run would be refused behind its "?"; main scans' link to their page */
+/* a step's Run, its link and its "?" on one line (Nima, 2026-10-11) */
+.dp-step-run { display: flex; align-items: center; flex-wrap: nowrap; row-gap: 0.25rem; white-space: nowrap; min-width: 0; margin-top: auto; }
+.dp-step-run > * { flex: none; }
+/* a phrase of a line that wraps whole, never mid-way */
+.dp-phrase { white-space: nowrap; }
+.dp-step-run > a { font-size: var(--n-text-size-small); }
+.dp-step-run > button + a { margin-left: 0.5rem; }
 .dp-step.failed .node { border-color: var(--n-caution-fg); }
 .dp-step.failed .dp-step-what { color: var(--n-caution-fg); }
 
@@ -132,7 +139,7 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .dp-running-head > .grow { min-width: 0; }
 .dp-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--n-brand-text); }
 .dp-progress { height: 6px; overflow: hidden; border-radius: var(--n-radius); background: var(--n-bg-page); }
-.dp-progress > i { display: block; height: 100%; background: var(--n-brand-hover); }
+.dp-progress > i { display: block; height: 100%; background: var(--n-progress); }
 .dp-running .meta { font-size: 12px; }
 .dp-log-row { display: grid; grid-template-columns: 3.25rem minmax(0, 1fr); gap: 0.625rem; font-size: var(--n-text-size-small); }
 .dp-log-row .at { font-family: var(--n-font-mono); color: var(--n-text-faint); white-space: nowrap; }
@@ -164,13 +171,15 @@ a.dp-view:hover { background: var(--n-bg-hover); }
   .dp-col { border-right: 0; border-bottom: 1px solid var(--n-line); }
   .dp-col:last-child { border-bottom: 0; }
   /* a rail of more than six steps, four to a row, the line ending with each row */
-  .dp-steps.many { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 0.875rem; }
+  .dp-steps.many { grid-template-columns: repeat(4, minmax(min-content, 1fr)); row-gap: 0.875rem; }
   .dp-steps.many .dp-step:nth-child(4n) .link { display: none; }
 }
 @media (max-width: 760px) {
   /* the steps two to a row, without the line between them */
   .dp-steps, .dp-steps.many { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 0.875rem; }
   .dp-step-mark .link { display: none; }
+  /* a phone narrower than the Run row folds its "?" under it */
+  .dp-step-run { flex-wrap: wrap; }
   /* how a cohort grew, one event a line */
   .dp-grew { height: auto; display: flex; flex-direction: column; gap: 0.5rem; }
   .dp-grew::before { display: none; }
@@ -237,7 +246,12 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .ps-arrow { display: grid; place-items: center; color: var(--n-text-faint); }
 
 .ps-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.625rem; padding: 0 1rem 1rem; }
+.ps-next { flex-basis: 100%; margin: 0; font-size: 14px; color: var(--n-text); }
 .ps-pad { padding: 0 1rem 0.75rem; }
+/* a run that stopped, inside the panel under its boxes: the caution colours by border, no mark of its own (2026-10-10) */
+.ps-stopped { margin: 0; padding: 0.5rem 0.75rem; border: 1px solid var(--n-caution-line); border-left: 3px solid var(--n-caution-fg); border-radius: var(--n-radius); background: var(--n-caution-bg); color: var(--n-caution-fg); font-size: var(--n-text-size-small); overflow-wrap: anywhere; }
+.ps-stopped .meta { color: var(--n-text-dim); }
+.dp-stopped { margin-top: 0.625rem; }
 
 /* giving the IDs a code: the map dropped or pasted, the IDs one row each, what still waits */
 .ps-codes { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; padding: 0 1rem 1rem; }

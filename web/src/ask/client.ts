@@ -74,25 +74,35 @@ export interface Declaration {
   week_start?: string;
 }
 
+/** A column with values held back at the caller's detail, and why (record 55 K7): a held value is null in the rows. */
+export interface HeldBack {
+  column: string;
+  why: string;
+}
+
 export interface Preview {
   level: string;
   columns: Column[];
   rows: unknown[][];
   truncated: boolean;
   declaration: Declaration | null;
+  /** Since 2026-10-12: the columns with a value held back, a count of fewer than 5 subjects among them. */
+  held_back?: HeldBack[];
 }
 
 export interface Run {
   handle: number;
   hash: string;
   grain: string;
-  row_count: number;
+  /** Null where the list is held back whole at plain (record 55 K7, small lists): no row, pages 0. */
+  row_count: number | null;
   declaration: Declaration;
   content_hash: string;
   truncated: boolean;
   columns: Column[];
   rows: unknown[][];
   pages: number;
+  held_back?: HeldBack[];
 }
 
 export interface Described {
@@ -111,9 +121,12 @@ export interface Funnel {
   stage: string;
   /** Wave 5 section 12.3: the clause group, when the diagnosis was asked by clause. */
   group?: string;
-  rows: number;
-  subjects: number;
+  /** Null where held back (record 55 K7, small counts at plain). */
+  rows: number | null;
+  subjects: number | null;
   on_path: boolean;
+  /** Why the stage's counts are held back, where they are. */
+  held_back?: string;
 }
 
 export interface Diagnosis {
@@ -139,16 +152,17 @@ export interface ClauseGroup {
   grain: string;
   group: string;
   clauses: number;
-  kept: number;
-  subjects: number;
-  lost: number;
+  /** Null where held back (record 55 K7, small counts at plain). */
+  kept: number | null;
+  subjects: number | null;
+  lost: number | null;
 }
 
-/** One value of a profile's chart: how many members hold it, each once, and how many subjects. */
+/** One value of a profile's chart: how many members hold it, each once, and how many subjects; null where held back. */
 export interface ProfileValue {
   value: string | number | boolean | null;
-  count: number;
-  subjects: number;
+  count: number | null;
+  subjects: number | null;
 }
 
 type Refused = { refused: string };
@@ -157,7 +171,8 @@ type Refused = { refused: string };
 export interface Profile {
   set: string;
   grain: string;
-  counts: { subjects: number; sessions: number; stacks: number } | { rows: number; subjects: number } | Refused;
+  /** Null where held back (record 55 K7, small counts at plain). */
+  counts: { subjects: number | null; sessions: number | null; stacks: number | null } | { rows: number | null; subjects: number | null } | Refused;
   stack_types: ProfileValue[] | Refused | null;
   field: { name: string; values?: ProfileValue[]; truncated?: boolean; refused?: string; withheld?: string } | null;
   demographics: { sex: ProfileValue[] | Refused; age_decades: ProfileValue[] | Refused } | { withheld: string } | null;
@@ -220,12 +235,14 @@ export const ask = {
     ),
   diagnose: (document_id: number, by?: "set" | "clause") => door<Diagnosis>("POST", "/api/ask/diagnose", by ? { document_id, by } : { document_id }),
   /** Wave 5 section 12.1: the opening set of a new question, from anything a person may start from. */
-  start: (body: { from: Record<string, unknown> }) => door<{ document: Json; set: string; grain: string; count: number; subjects: number | null; sessions: number | null; epoch: number }>("POST", "/api/ask/start", body),
+  start: (body: { from: Record<string, unknown> }) => door<{ document: Json; set: string; grain: string; count: number | null; subjects: number | null; sessions: number | null; epoch: number }>("POST", "/api/ask/start", body),
   /** An uploaded identifier list, resolved through the linkage store; reviewer and above. */
   upload: (values: string[], namespace?: string) => door<{ upload: number; resolved?: number; unresolved?: number }>("POST", "/api/ask/values", namespace ? { values, namespace } : { values }),
   diff: (a: Side, b: Side) => door<Diff>("POST", "/api/ask/diff", { a, b }),
   run: (document_id: number, name?: string) => door<Run>("POST", "/api/ask/run", name ? { document_id, name } : { document_id }),
-  rows: (handle: number, page: number) => door<{ columns: Column[]; rows: unknown[][]; page: number; pages: number }>("GET", `/api/ask/handles/${handle}/rows?page=${page}`),
+  /** One page of a handle's rows at the caller's detail; with purpose `export`, refused (409) for an answer that no longer reproduces, and written so on the read's audit row. */
+  rows: (handle: number, page: number, purpose?: "export") =>
+    door<{ columns: Column[]; rows: unknown[][]; page: number; pages: number; withheld_sealed?: number; held_back?: HeldBack[] }>("GET", `/api/ask/handles/${handle}/rows?page=${page}${purpose ? `&purpose=${purpose}` : ""}`),
   handle: (id: number) => door<Json>("GET", `/api/ask/handles/${id}`),
   /** The value sampler: a capped sample of a field's values at a level, under the caller's scope. */
   values: (level: string, field: string, limit = 20) =>
@@ -240,7 +257,8 @@ export interface HandleRow {
   id: number;
   name: string | null;
   grain: string;
-  row_count: number;
+  /** Null on a handle whose list was held back whole (record 55 K7, small lists). */
+  row_count: number | null;
   content_hash: string | null;
   principal: string;
   actor: Json;
@@ -271,6 +289,10 @@ export interface JobRow {
   error: string | null;
   args: { argv?: string[]; principal?: string } & Json;
   result: Json | null;
+  /** Since 2026-10-12, a pipeline run's job: what its run made, as the engine sums its units (ops/made). */
+  made?: unknown;
+  /** Since 2026-10-12, a pipeline run's job: the later job that took its run up again, by its state, where one did. */
+  taken_up?: { job: number; state: string; run?: number | null } | null;
 }
 
 /** A job row at record 26: the commands queued after it once it ends done, and the jobs before and after it in a chain; an older engine sends neither. */

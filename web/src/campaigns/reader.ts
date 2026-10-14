@@ -58,6 +58,8 @@ export interface Reading {
   told?: Told[];
   /** The item's value to the model (record 48 "order by value"), where the engine says it. */
   value: number | null;
+  /** The pack and its version that judged the stack, as the why door names them. */
+  pack?: string | null;
   /** The batch of like stacks the item belongs to, where the engine groups them. */
   batch: string | null;
   /** An item of a sealed sample (record 48 R2): read blind, with no classification at all, nothing suggested and no candidates. */
@@ -284,6 +286,7 @@ export function readingOf(raw: Json): Reading {
     suggestedBy,
     suggestedP,
     told,
+    pack: text(raw.pack) ? `${raw.pack as string}${text(raw.version) ? ` ${raw.version as string}` : ""}` : null,
     value: num(raw.value) ?? (num(worth.confidence) !== null ? 1 - (worth.confidence as number) + (worth.disagree === true ? 1 : 0) : null),
     batch: text(raw.batch) ?? (num(raw.batch) !== null ? String(raw.batch) : null),
   };

@@ -127,6 +127,10 @@ const PATHS = {
   ),
   "chevron-right": <path d="m9 6 6 6-6 6" />,
   "chevron-down": <path d="m6 9 6 6 6-6" />,
+  "chevron-up": <path d="m6 15 6-6 6 6" />,
+  // a dataset's or cohort's own rules (Main scans), and the rules as text
+  sliders: <path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4" />,
+  code: <path d="m8 7-5 5 5 5M16 7l5 5-5 5" />,
   arrow: (
     <>
       <path d="M5 12h14" />
@@ -306,6 +310,8 @@ const PATHS = {
   calendar: <path d="M4 6h16v14H4zM4 10h16M9 3v4M15 3v4" />,
   // the pseudonymise step: a map given to it, and the IDs shown once
   upload: <path d="M12 16V4M7 9l5-5 5 5M4 16v4h16v-4" />,
+  // a chart or a file a turn wrote, saved
+  download: <path d="M12 4v12M7 11l5 5 5-5M4 16v4h16v-4" />,
   eye: (
     <>
       <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />

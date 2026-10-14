@@ -69,7 +69,7 @@ const NOW = Date.parse("2026-09-15T12:00:00Z");
 const draw = (c: Capabilities, groups: Group[] | null = [reviewers, admins], a: Access | null = access, why: string | null = null) =>
   renderToStaticMarkup(<IdentityBody caps={c} groups={groups} access={a} why={why} now={NOW} onOpen={none} />);
 
-describe("the Identity page when nobody signs in", () => {
+describe("the People page when nobody signs in", () => {
   const html = draw(caps("off"), null, null);
 
   it("is the sign-in row and the command only", () => {
@@ -100,7 +100,7 @@ describe("the Identity page when nobody signs in", () => {
   });
 });
 
-describe("the Identity page when the desk keeps the people", () => {
+describe("the People page when the desk keeps the people", () => {
   const html = draw(caps("local"));
 
   it("counts the people, the groups and who is signed in, and says sign-in as a row of values", () => {
@@ -142,12 +142,12 @@ describe("the Identity page when the desk keeps the people", () => {
     expect(html).toContain('<span class="tag brand">Admins</span>');
     expect(html).toContain('<td><span class="amarks"><span class="tag">Reviewers</span></span></td>');
     expect(html).not.toContain("of their own");
-    expect(html).toContain('<span class="amark own">Kvasir</span>');
+    expect(html).toContain('<span class="amark own">Language models</span>');
     expect(html).toContain('<span class="amark own">Query</span><span class="tag records own"');
     expect(html).toContain('<td class="meta">now</td>');
     expect(html).toContain('<td class="meta">never</td>');
     expect(html).toContain('aria-label="Change Erik Lund"');
-    expect(html).toContain('<div class="amark-legend"><span class="amark">Data</span><span>see</span><span class="amark do">Data</span><span>work</span><span class="amark own">Kvasir</span><span>own</span></div>');
+    expect(html).toContain('<div class="amark-legend"><span class="amark">Data</span><span>see</span><span class="amark do">Data</span><span>work</span><span class="amark own">Release</span><span>own</span></div>');
     expect(html).not.toContain("via provider");
     expect(html).not.toContain("A person in two groups");
   });
@@ -181,7 +181,7 @@ describe("the Identity page when the desk keeps the people", () => {
   });
 });
 
-describe("the Identity page with an identity provider", () => {
+describe("the People page with an identity provider", () => {
   const groups: Group[] = [{ ...reviewers, members: ["sam@id.example.org"] }, admins];
   const signedIn: Access = {
     mode: "oidc",
@@ -223,7 +223,7 @@ describe("the Identity page with an identity provider", () => {
       /<td><span class="amarks"><span class="tag followed" title="via provider"><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Reviewers<span class="sr-only">, through the provider&#x27;s groups<\/span><\/span><\/span><\/td>/u,
     );
     expect(html).toContain('<td><span class="amarks"><span class="tag">Reviewers</span></span></td>');
-    expect(html).toContain('<span class="amark own">Kvasir</span>');
+    expect(html).toContain('<span class="amark own">Language models</span>');
     expect(html).not.toContain('<span class="amark do own">Query</span>');
     expect(html).toMatch(/<\/svg>Reviewers<\/span><span>via provider<\/span><\/div>/u);
   });

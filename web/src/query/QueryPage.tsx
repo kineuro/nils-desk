@@ -17,8 +17,9 @@ import { TurnView } from "../assistant/TurnView";
 import { StatusLine } from "../assistant/Cards";
 import { liveLine } from "../assistant/steps";
 import { useConversation, type Conversing } from "../assistant/useConversation";
-import { ask, catalogFields, chain, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
+import { ask, catalogFields, chain, columnName, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
 import { editor, setsOf } from "../ask/editor";
+import { countIn, countText, HELD, heldCell, heldColumns, heldList, HELD_WHY, LIST_WHY, LIST_WORDS } from "../ask/held";
 import { countWords, startBody, type From, type Started } from "../ask/start";
 import type { Capabilities } from "../capabilities";
 import { PromoteDialog } from "../data/PromoteDialog";
@@ -28,41 +29,48 @@ import { objects, type DocumentRow } from "../objects/client";
 import { href } from "../routes";
 import { assistantModel, assistantOffered } from "../sections";
 import { admit } from "../ui/context";
+import { CountText } from "../ui/Count";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
 import { SaveSelection } from "./SaveSelection";
+import { Exports } from "./Exports";
 import { Selections } from "./Selections";
 import { mayList, maySave } from "./selections";
 import { ProfilePanel, StepEditor } from "./CardParts";
 import { cardTitle, changeWords, clauseText, fieldChoices, keepingRefusal, stepCounts, versionsOf, type ChartTab, type Version } from "./cards";
+import { useAnswerFile } from "./useAnswerFile";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
 export function QueryPage({ caps, open }: { caps: Capabilities; open: string | null }) {
   if (open === "selections" && mayList(caps)) return <SelectionsPage caps={caps} />;
+  if (open === "exports" && mayExport(caps)) return <ExportsPage caps={caps} />;
   const id = open !== null && /^\d+$/.test(open) ? Number(open) : null;
   return id === null ? <Cards caps={caps} /> : <Card caps={caps} id={id} />;
 }
 
-/** Cards and Selections, the section's two lists. */
-function QueryChips({ caps, on }: { caps: Capabilities; on: "cards" | "selections" }) {
-  if (!mayList(caps)) return null;
+/** Whether the person finds Query's Exports: the kept results, where the engine lists them. */
+export const mayExport = (caps: Capabilities): boolean => may(caps, "query:see") && served(caps, "GET /api/ask/handles");
+
+
+function ExportsPage(_: { caps: Capabilities }) {
   return (
-    <div className="chips" role="group" aria-label="the query lists">
-      <a className={on === "cards" ? "tag brand" : "tag"} aria-current={on === "cards" ? "page" : undefined} href={href("query")}>
-        Cards
-      </a>
-      <a className={on === "selections" ? "tag brand" : "tag"} aria-current={on === "selections" ? "page" : undefined} href={href("query", "selections")}>
-        Selections
-      </a>
-    </div>
+    <section className="query">
+      <div className="data-head">
+        <div className="grow">
+          <span className="eyebrow">Query</span>
+          <h1>Exports</h1>
+        </div>
+      </div>
+      <Exports />
+    </section>
   );
 }
 
-function SelectionsPage({ caps }: { caps: Capabilities }) {
+function SelectionsPage(_: { caps: Capabilities }) {
   return (
     <section className="query">
       <div className="data-head">
@@ -71,7 +79,6 @@ function SelectionsPage({ caps }: { caps: Capabilities }) {
           <h1>Selections</h1>
         </div>
       </div>
-      <QueryChips caps={caps} on="selections" />
       <Selections />
     </section>
   );
@@ -97,13 +104,12 @@ function Cards({ caps }: { caps: Capabilities }) {
         </div>
         <button type="button" className="button" onClick={() => setStarting(true)}>
           <Icon name="plus" />
-          New query
+          New card
         </button>
       </div>
-      <QueryChips caps={caps} on="cards" />
       {rows === null && !why && <Wait phase="reading the cards" since={since} size="panel" />}
       {why && <p className="warn">The cards could not be read: {why}</p>}
-      {rows !== null && rows.length === 0 && <p className="lede">No query yet. Start one from everyone or from a cohort.</p>}
+      {rows !== null && rows.length === 0 && <p className="lede">No card yet. New card starts one from everyone or from a cohort.</p>}
       {rows !== null && rows.length > 0 && (
         <div className="query-cards">
           {rows.map((r) => (
@@ -201,7 +207,11 @@ function StartDialog({ caps, onClose }: { caps: Capabilities; onClose: () => voi
           </div>
         )}
       </div>
-      {started && <p className="lede">{countWords(started)}</p>}
+      {started && (
+        <p className="lede" title={started.count === null ? HELD_WHY : undefined}>
+          {countWords(started)}
+        </p>
+      )}
       {keeping !== null ? (
         <p className="meta">{keeping} Counting here keeps nothing.</p>
       ) : (
@@ -225,7 +235,8 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const [busy, setBusy] = useState<{ phase: string; since: number } | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const [rows, setRows] = useState<Preview | null>(null);
-  const [answered, setAnswered] = useState<{ count: number; truncated: boolean; handle: number; grain: string } | null>(null);
+  /** The run's answer: its rows, null with why `held` where the list is held back whole at plain (record 55 K7, small lists). */
+  const [answered, setAnswered] = useState<{ count: number | null; held: string | null; truncated: boolean; handle: number; grain: string } | null>(null);
   // record 26: a complete answer becomes a cohort, the subjects of its rows at any grain
   const [promoting, setPromoting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -265,6 +276,8 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
 
   const steps = useMemo(() => (doc ? editor(doc.ask, options) : []), [doc, options]);
   const answer = ((doc?.ask.out as Json | undefined)?.set as string | undefined) ?? null;
+  // Download CSV beside the preview (2026-10-12): the answer's rows as a file, as the chat's card saves them
+  const file = useAnswerFile(id, cardTitle((doc?.ask as Json | undefined)?.name as string | undefined, answer), versions.find((v) => v.id === id)?.label ?? null);
   const current = steps.find((s) => s.set === chosen) ?? steps.find((s) => s.answers) ?? steps[0] ?? null;
   // a list of identifiers is started from with detail quasi (record 25)
   const lists = sees(caps, "quasi");
@@ -365,7 +378,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
     ask
       .run(id)
       .then((r) => {
-        setAnswered({ count: r.row_count, truncated: r.truncated, handle: r.handle, grain: r.grain });
+        setAnswered({ count: r.row_count, held: heldList(r), truncated: r.truncated, handle: r.handle, grain: r.grain });
         setBusy(null);
       })
       .catch((e: Error) => {
@@ -432,7 +445,9 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   if (!doc) return why ? <p className="warn">This card could not be read: {why}</p> : <Wait phase="reading the card" since={since} size="panel" />;
 
   const groups = (diagnosis?.groups ?? []).filter((g) => current && g.set === current.set);
-  const widest = Math.max(1, ...groups.map((g) => g.kept + g.lost));
+  // a held count draws no bar and stands in no width
+  const widest = Math.max(1, ...groups.map((g) => (countIn(g.kept) ?? 0) + (countIn(g.lost) ?? 0)));
+  const held = heldColumns(rows);
   // a new step is a move on the whole query, offered with any set's options
   const addSet = current ? options[current.set]?.moves.find((m) => m.kind === "add_set") ?? null : null;
   return (
@@ -498,18 +513,23 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
           <section className="panel card">
             <div className="row">
               <h2 className="grow">{current ? `Where the rows go in ${current.set}` : "Where the rows go"}</h2>
-              {answered && <span className="tag brand">{answered.truncated ? "at least " : ""}{n(answered.count)} rows</span>}
+              {answered && answered.count === null && (
+                <span className="tag held" title={answered.held ?? LIST_WHY}>
+                  rows {HELD}
+                </span>
+              )}
+              {answered && answered.count !== null && <span className="tag brand">{answered.truncated ? "at least " : ""}{n(answered.count)} rows</span>}
             </div>
             {groups.length === 0 && <p className="meta">The counts come once the engine has checked the query.</p>}
             {groups.map((g) => (
               <div key={g.group} className="count-bar">
                 <span className="count-group">{g.group}</span>
                 <span className="count-track">
-                  <i style={{ width: `${Math.round((100 * g.kept) / widest)}%` }} />
+                  <i style={{ width: `${Math.round((100 * (countIn(g.kept) ?? 0)) / widest)}%` }} />
                 </span>
-                <span className="num">{n(g.kept)} rows</span>
-                <span className="num meta">{n(g.subjects)} subjects</span>
-                {g.lost > 0 && <span className="num warn">−{n(g.lost)}</span>}
+                <CountText value={countIn(g.kept)} unit="rows" />
+                <CountText value={countIn(g.subjects)} unit="subjects" className="num meta" />
+                {g.lost !== null && g.lost > 0 && <span className="num warn">−{n(g.lost)}</span>}
               </div>
             ))}
             <p className="meta">A row is a member for each path that reaches it, so a subject in two of the cohorts a query starts from is two rows. The numbers above count each member once.</p>
@@ -520,8 +540,22 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               <button type="button" className="button secondary small" onClick={() => ask.preview(id).then(setRows, (e: Error) => setWhy(e.message))}>
                 Preview 10 rows
               </button>
+              <button type="button" className="button secondary small" disabled={file.busy} onClick={file.download}>
+                <Icon name="file" />
+                Download CSV
+              </button>
             </div>
-            {rows && (
+            {file.said && (
+              <p className={file.warn ? "warn" : "meta"} title={file.why ?? undefined}>
+                {file.said}
+              </p>
+            )}
+            {rows && heldList(rows) !== null && (
+              <p className="meta held-words" title={heldList(rows) ?? undefined}>
+                {LIST_WORDS}
+              </p>
+            )}
+            {rows && heldList(rows) === null && (
               <div className="table-wrap">
                 <table className="thin">
                   <thead>
@@ -529,7 +563,16 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                   </thead>
                   <tbody>
                     {rows.rows.map((r, i) => (
-                      <tr key={i}>{r.map((v, j) => <td key={j}>{v === null ? "" : String(v)}</td>)}</tr>
+                      <tr key={i}>
+                        {r.map((v, j) => {
+                          const why = v === null ? held.get(columnName(rows.columns[j])) : undefined;
+                          return (
+                            <td key={j} className={why ? "held" : undefined} title={why}>
+                              {why ? heldCell(why) : v === null ? "" : String(v)}
+                            </td>
+                          );
+                        })}
+                      </tr>
                     ))}
                   </tbody>
                 </table>
@@ -547,6 +590,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
             </div>
             {steps.map((s) => {
               const counts = stepCounts(diagnosis?.groups, s.set);
+              const shown = counts ? (s.grain === "subject" ? counts.subjects : counts.rows) : null;
               return (
                 <button key={s.set} type="button" className={s.set === current?.set ? "timeline-step on" : "timeline-step"} onClick={() => { setChosen(s.set); setMove(null); setTyped({}); }}>
                   <span className="timeline-dot" />
@@ -559,7 +603,13 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
                     {s.where.map((c, i) => <span key={i} className="timeline-clause">where {clauseText(c)}</span>)}
                     {Object.entries(s.clauses).flatMap(([part, lines]) => (lines ?? []).map((l, i) => <span key={`${part}${i}`} className="timeline-clause">{part} {l}</span>))}
                   </span>
-                  <span className="num timeline-count" title={counts ? (s.grain === "subject" ? "subjects, each once" : "rows") : undefined}>{counts ? n(s.grain === "subject" ? counts.subjects : counts.rows) : ""}</span>
+                  {counts ? (
+                    <span className={shown === null ? "num timeline-count held" : "num timeline-count"} title={shown === null ? HELD_WHY : s.grain === "subject" ? "subjects, each once" : "rows"}>
+                      {countText(shown)}
+                    </span>
+                  ) : (
+                    <span className="num timeline-count" />
+                  )}
                 </button>
               );
             })}
@@ -606,10 +656,16 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               <span className="timeline-dot" />
               <span className="timeline-body">
                 <b>The answer</b>
-                <span className="meta">{answered ? `${answered.truncated ? "at least " : ""}${n(answered.count)} rows` : "not run in this view"}</span>
-                {((answered && !answered.truncated && promotable) || maySave(caps)) && (
+                {answered && answered.count === null ? (
+                  <span className="meta held" title={answered.held ?? LIST_WHY}>
+                    rows {HELD}
+                  </span>
+                ) : (
+                  <span className="meta">{answered && answered.count !== null ? `${answered.truncated ? "at least " : ""}${n(answered.count)} rows` : "not run in this view"}</span>
+                )}
+                {((answered && !answered.truncated && answered.count !== null && promotable) || maySave(caps)) && (
                   <span className="row actions">
-                    {answered && !answered.truncated && promotable && (
+                    {answered && !answered.truncated && answered.count !== null && promotable && (
                       <button type="button" className="button secondary small" disabled={busy !== null} onClick={() => setPromoting(true)}>
                         <Icon name="users" />
                         Make a cohort
@@ -640,7 +696,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
           }}
         />
       )}
-      {promoting && answered && (
+      {promoting && answered && answered.count !== null && (
         <PromoteDialog
           caps={caps}
           card={{ id, name: cardTitle((doc.ask as Json).name as string | undefined, answer), version: versions.find((v) => v.id === id)?.label ?? null }}
@@ -705,6 +761,8 @@ function TalkPanel({ caps, talkable, talk, onSay }: { caps: Capabilities; talkab
                 proposals={pane.proposals.filter((p) => p.turn === t.id)}
                 choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
                 onChoose={(label) => onSay(label)}
+                charts={pane.charts[t.id]}
+                files={pane.files[t.id]}
                 decidedElsewhere="It stands in the steps below."
                 said={pane.finals[t.id]}
               />

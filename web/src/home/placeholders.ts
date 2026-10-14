@@ -8,7 +8,8 @@
 
 import type { Capabilities } from "../capabilities";
 import { door } from "../deployment";
-import { may, type Grant } from "../grants";
+import { may, mayAny, type Grant } from "../grants";
+import { logsOffered } from "../ops/logs";
 import { href } from "../routes";
 import type { SidePage } from "../sections";
 import type { IconName } from "../ui/Icon";
@@ -17,9 +18,10 @@ export interface Placeholder {
   id: string;
   title: string;
   icon: IconName;
-  /** The grant that opens the section. */
-  grant: Grant;
-  door: string;
+  /** The grant that opens the section, or the grants any one of which does (record 55 H2: a section whose pages carry their own grants opens for any of them). */
+  grant: Grant | readonly Grant[];
+  /** The door the section reads, or the doors any one of which it reads. */
+  door: string | readonly string[];
   words: string;
   /** Built back: the section renders its own page, not this placeholder. */
   built?: boolean;
@@ -30,9 +32,10 @@ export interface Placeholder {
 /** A page of the side, by the word its address names past the section. */
 const page = (id: string, title: string, more: Partial<SidePage> = {}): SidePage => ({ id, title, depth: 1, ...more });
 
-// Left out until their views are built: Models' Checks (a check is recorded
-// on a model's own page), and Pipelines' Runs and Plans (a run's and a plan's
-// own pages are opened from the catalog). Data's Pseudonyms holds what spans
+// Left out until their views are built: Pipelines' Runs and Plans (a run's
+// and a plan's own pages are opened from the catalog). Models is a page of
+// Pipelines since Wave 7a (spec section 13.1), and a check is recorded on a
+// model's own page. Data's Pseudonyms holds what spans
 // datasets; a dataset's own pseudonymisation is a step of it, opened in place.
 export const PLACEHOLDERS: Placeholder[] = [
   {
@@ -43,8 +46,13 @@ export const PLACEHOLDERS: Placeholder[] = [
     door: "POST /api/ask/run",
     words: "Narrow the registry to what you need, step by step or in words, and keep every version of it as a card.",
     built: true,
-    // the saved selections where the engine lists them, as the page's own chips (query/selections.ts)
-    pages: (caps) => [page("cards", "Cards", { to: href("query") }), ...(door(caps, "GET /api/ask/selections") ? [page("selections", "Selections")] : [])],
+    // the saved selections where the engine lists them, as the page's own chips (query/selections.ts);
+    // the kept results to save as files where the engine lists them (spec 13.1: Query is Cards, Selections, Exports)
+    pages: (caps) => [
+      page("cards", "Cards", { to: href("query") }),
+      ...(door(caps, "GET /api/ask/selections") ? [page("selections", "Selections")] : []),
+      ...(door(caps, "GET /api/ask/handles") ? [page("exports", "Exports")] : []),
+    ],
   },
   {
     id: "data",
@@ -54,39 +62,24 @@ export const PLACEHOLDERS: Placeholder[] = [
     door: "GET /api/sources",
     words: "The datasets, where the files come from, and the cohorts, groups of subjects from any dataset, on one page.",
     built: true,
-    pages: (caps) => [page("datasets", "Datasets and cohorts"), ...(door(caps, "GET /api/linkage/types") ? [page("pseudonyms", "Pseudonyms")] : [])],
+    // Browse where the engine serves the registry's subjects (Wave 7a, spec 13.1): subjects, then sessions, then scans
+    pages: (caps) => [
+      page("datasets", "Datasets and cohorts"),
+      ...(door(caps, "GET /api/subjects") && door(caps, "GET /api/scans") ? [page("browse", "Browse")] : []),
+      ...(door(caps, "GET /api/linkage/types") ? [page("pseudonyms", "Pseudonyms")] : []),
+    ],
   },
   {
     id: "review",
     title: "Review",
     icon: "review",
-    grant: "review:see",
-    door: "GET /api/review",
-    words: "What needs a reviewer's judgement: a scan the rules could not place, a subject to confirm.",
+    // Wave 7a, H3 (spec 13.1 and 13.2): Review and Campaigns are one section, one list of work.
+    // A person who holds only campaigns:* (a rater) finds their campaigns and no queue, rules or identifiers.
+    grant: ["review:see", "campaigns:see"],
+    door: ["GET /api/review", "GET /api/campaigns"],
+    words: "One list of work: what the machine asks, and the campaigns people read.",
     built: true,
-    // the queue answers Questions, with what models proposed and what System 1 asks under it
-    pages: () => [page("questions", "Questions", { to: href("review") }), page("picks", "Main scans"), page("identifiers", "Subjects"), page("rules", "Rules")],
-  },
-  {
-    id: "campaigns",
-    title: "Campaigns",
-    icon: "users",
-    grant: "campaigns:see",
-    door: "GET /api/campaigns",
-    words: "One question asked of many items, rated, adjudicated, closed into decisions.",
-    built: true,
-    // the label sets where the engine lists them, as the page's own tabs (campaigns/parts.tsx)
-    pages: (caps) => [page("campaigns", "Campaigns", { to: href("campaigns") }), ...(door(caps, "GET /api/label-sets") ? [page("label-sets", "Label sets")] : [])],
-  },
-  {
-    id: "models",
-    title: "Models",
-    icon: "chip",
-    grant: "models:see",
-    door: "GET /api/models",
-    words: "The registered models by task: one promoted per slot, each admitted by a check first.",
-    built: true,
-    pages: () => [page("by-task", "By task", { to: href("models") })],
+    pages: (caps) => reviewPages(caps),
   },
   {
     id: "release",
@@ -97,17 +90,65 @@ export const PLACEHOLDERS: Placeholder[] = [
     words: "Hand results out as a release, a BIDS tree or a table, written to an export place.",
     built: true,
     // New release only to whoever may make one, as the page offers its button (ops/ReleasePage.tsx)
-    pages: (caps) => [page("releases", "Releases", { to: href("release") }), ...(may(caps, "release:work") ? [page("new", "New release")] : [])],
+    // record 55 H2, round 4: the kept session schemes where the engine lists them
+    pages: (caps) => [
+      page("releases", "Releases", { to: href("release") }),
+      ...(may(caps, "release:work") ? [page("new", "New release")] : []),
+      ...(door(caps, "GET /api/session-schemes") ? [page("schemes", "Session schemes")] : []),
+    ],
   },
   {
     id: "pipelines",
     title: "Pipelines",
     icon: "branch",
-    grant: "pipelines:see",
-    door: "GET /api/jobs",
-    words: "The jobs that ran and are running: digests, backups and releases.",
+    // Models is a page here (spec section 13.1): the section opens for pipelines:see or models:see
+    grant: ["pipelines:see", "models:see"],
+    door: ["GET /api/jobs", "GET /api/models"],
+    words: "The jobs that ran and are running, the pipelines that can run, and the models that answer each task.",
     built: true,
-    // the catalog where the engine serves it; a run's and a plan's own pages, opened from it, keep it marked
-    pages: (caps) => [page("now", "Running now", { to: href("pipelines") }), ...(door(caps, "GET /api/pipelines") ? [page("catalog", "Catalog", { also: ["runs", "plan"] })] : [])],
+    // the catalog where the engine serves it; a run's and a plan's own pages, opened from it, keep it marked;
+    // record 55 H2, round 5: the jobs' logs where the engine keeps them (ops/logs.ts);
+    // Models where the engine lists models (spec section 13.1), each page by its own grant
+    pages: (caps) => [
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/jobs") ? [page("jobs", "Jobs", { to: href("pipelines") })] : []),
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/pipelines") ? [page("catalog", "Catalog", { also: ["plan"] })] : []),
+      // spec 13.1: the runs are a page of their own, and a run's page keeps it marked
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/pipelines") && door(caps, "GET /api/pipeline-runs") ? [page("runs", "Runs")] : []),
+      ...(may(caps, "pipelines:see") && logsOffered(caps) ? [page("logs", "Logs")] : []),
+      ...(may(caps, "models:see") && door(caps, "GET /api/models") ? [page("models", "Models")] : []),
+    ],
   },
 ];
+
+/** Whether the person holds the grant, or one of the grants, that opens a section. */
+export function holds(caps: Capabilities, grant: Grant | readonly Grant[]): boolean {
+  return typeof grant === "string" ? may(caps, grant) : mayAny(caps, ...grant);
+}
+
+/** Whether the engine serves the door, or one of the doors, a section reads. */
+export function serves(caps: Capabilities, doors: string | readonly string[]): boolean {
+  return typeof doors === "string" ? door(caps, doors) : doors.some((d) => door(caps, d));
+}
+
+/**
+ * Review's pages in the side, each under its own grant (record 55 H2 and
+ * H3): the one list of work for anyone who reviews or reads a campaign
+ * (the queue and a campaign opened from it keep it marked); Main scans,
+ * Subjects and Rules for a reviewer; the label sets for a reader of
+ * campaigns where the engine lists them.
+ */
+export function reviewPages(caps: Capabilities): SidePage[] {
+  const out: SidePage[] = [];
+  if (reviews(caps) || readsCampaigns(caps)) out.push(page("work", "Work", { to: href("review"), also: ["questions", "campaigns"] }));
+  if (reviews(caps)) out.push(page("picks", "Main scans"), page("identifiers", "Subjects"), page("rules", "Rules"));
+  // record 55 D3 and D7: the rounds and their blind audits
+  if (reviews(caps) && door(caps, "GET /api/review/rounds")) out.push(page("rounds", "Rounds"));
+  if (readsCampaigns(caps) && door(caps, "GET /api/label-sets")) out.push(page("label-sets", "Label sets"));
+  return out;
+}
+
+/** Whether the person works the machine's queue: the grant and the door. */
+export const reviews = (caps: Capabilities): boolean => may(caps, "review:see") && door(caps, "GET /api/review");
+
+/** Whether the person reads campaigns: the grant and the door. */
+export const readsCampaigns = (caps: Capabilities): boolean => may(caps, "campaigns:see") && door(caps, "GET /api/campaigns");

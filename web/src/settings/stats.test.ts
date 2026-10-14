@@ -30,7 +30,7 @@ describe("the Places page's numbers", () => {
   });
 });
 
-describe("the Database page's numbers", () => {
+describe("the Backups page's numbers", () => {
   const now = new Date("2026-09-13T12:00:00Z");
   const backups: Backups = {
     dir: "/data/backups",
@@ -51,7 +51,7 @@ describe("the Database page's numbers", () => {
   });
 });
 
-describe("the Identity page's numbers", () => {
+describe("the People page's numbers", () => {
   const desk = (mode: "off" | "local" | "oidc", origin: string): Capabilities["desk"] => ({
     version: "1.0.0-alpha.16",
     mode,

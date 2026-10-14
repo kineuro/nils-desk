@@ -12,7 +12,6 @@ import { Icon } from "../ui/Icon";
 import { Says, Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { campaigns, refused as refusedWords, sourceWords, type LabelSet } from "./client";
-import { Tabs } from "./parts";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -38,17 +37,16 @@ export function setSource(s: LabelSet): string {
   return s.what ? `decisions on ${s.what}` : "decisions";
 }
 
-export function LabelSetsBody({ caps, sets, why, since }: { caps: Capabilities; sets: LabelSet[] | null; why: string | null; since: number }) {
+export function LabelSetsBody({ sets, why, since }: { caps?: Capabilities; sets: LabelSet[] | null; why: string | null; since: number }) {
   return (
     <section className="data label-sets">
       <div className="data-head">
         <div className="grow">
-          <span className="eyebrow">Campaigns</span>
+          <span className="eyebrow">Review</span>
           <h1>Label sets</h1>
           <p className="lede">Labels with their provenance and a digest.</p>
         </div>
       </div>
-      <Tabs caps={caps} on="label-sets" />
       {sets === null && !why && <Wait phase="reading the label sets" since={since} size="panel" />}
       {why && <p className="warn">The label sets could not be read: {why}</p>}
       {sets !== null && sets.length === 0 && <p className="empty">No label set yet. A campaign&apos;s Export writes one.</p>}
@@ -68,7 +66,7 @@ export function LabelSetsBody({ caps, sets, why, since }: { caps: Capabilities; 
               {sets.map((s) => (
                 <tr key={s.id}>
                   <td>
-                    <a href={href("campaigns", "label-sets", String(s.id))}>
+                    <a href={href("review", "label-sets", String(s.id))}>
                       {s.name} v{s.version}
                     </a>
                     <div className="meta">
@@ -116,7 +114,7 @@ export function tsvRows(text: string | undefined): { head: string[]; rows: strin
   return { head: lines[0].split("\t"), rows: lines.slice(1).map((l) => l.split("\t")) };
 }
 
-export function LabelSetBody({ caps, set: s }: { caps: Capabilities; set: LabelSet }) {
+export function LabelSetBody({ set: s }: { caps?: Capabilities; set: LabelSet }) {
   const tsv = tsvRows(s.files?.["labels.tsv"]);
   // the empty columns of every row say nothing here
   const keep = tsv.head.map((_, i) => tsv.rows.some((r) => (r[i] ?? "") !== ""));
@@ -126,7 +124,7 @@ export function LabelSetBody({ caps, set: s }: { caps: Capabilities; set: LabelS
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">
-            <a href={href("campaigns", "label-sets")}>Label sets</a>
+            <a href={href("review", "label-sets")}>Label sets</a>
           </span>
           <h1>
             {s.name} v{s.version}
@@ -136,7 +134,6 @@ export function LabelSetBody({ caps, set: s }: { caps: Capabilities; set: LabelS
           </p>
         </div>
       </div>
-      <Tabs caps={caps} on="label-sets" />
       <Values
         cells={[
           { k: "rows", v: n(s.rows) },
@@ -154,7 +151,7 @@ export function LabelSetBody({ caps, set: s }: { caps: Capabilities; set: LabelS
           <div className="facts-pair">
             <dt>campaign</dt>
             <dd>
-              <a href={href("campaigns", String(s.campaign_id))}>{typeof s.source?.name === "string" ? s.source.name : `campaign ${s.campaign_id}`}</a>
+              <a href={href("review", "campaigns", String(s.campaign_id))}>{typeof s.source?.name === "string" ? s.source.name : `campaign ${s.campaign_id}`}</a>
             </dd>
           </div>
         )}

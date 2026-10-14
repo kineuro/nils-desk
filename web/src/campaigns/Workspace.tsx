@@ -56,7 +56,7 @@ import { BatchView, type BatchViewProps } from "./Batches";
 import type { AskedCandidate } from "../review/asked";
 import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, deriveValue, derivedWords, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type HeaderLine, type Order, type Pace, type Reading, type Suggestion } from "./reader";
 import { acceptBatch, batchesFor, claimIn, deriveAsked, deriveDoor, Deriver, headerDoorOf, headerFor, hintOf, nextOf, prefetchOn, R48, readingFor, valueOrderServed } from "./readerDoors";
-import { ComboSearch, DerivedLine, EvidenceDrawer, HeaderBlock, HeaderDoors, HeaderDrawer, headerLinesOf, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
+import { ComboSearch, DerivedLine, EvidenceLines, HeaderBlock, HeaderDoors, HeaderDrawer, headerLinesOf, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { combinationsOf, seedsOf, settle, takeCombo, vocabularyOf, type Combination, type Settled } from "./lookup";
 import { StackView } from "./StackView";
 import { abServed, isAb } from "./ab";
@@ -68,11 +68,12 @@ import { amendSeat, answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactR
 type Role = "rater" | "adjudicator";
 
 const ORDER_KEY = "nils.reader.order";
-const EVIDENCE_KEY = "nils.reader.evidence";
 // the picture's view a reader chose (record 48, the second real read), kept across items and visits
 const VIEW_KEY = "nils.reader.view";
 type View = "stack" | "planes";
-// the rows compact (every axis a find box) or expanded (the short rows drawn whole), kept per person (record 48, after the learners report)
+// the whole reader compact or expanded (record 55 H5; record 48 had it for the rows of an axes question alone), kept per person:
+// compact, a bigger picture box, the file's key lines, the evidence one line per axis and every axis a find box;
+// expanded, the panel wider, the file's lines whole, the evidence with its clause and votes, the short rows drawn whole
 const ROWS_KEY = "nils.reader.rows";
 type RowsView = "compact" | "expanded";
 const rowsRemembered = (who: string): RowsView => (remembered(`${ROWS_KEY}.${who}`) === "compact" ? "compact" : "expanded");
@@ -121,7 +122,6 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
   const [reading, setReading] = useState<Reading | null>(null);
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const [suggested, setSuggested] = useState<Given | null>(null);
-  const [evOpen, setEvOpen] = useState(() => remembered(EVIDENCE_KEY) === "open");
   const [pace, setPace] = useState<Pace>(NO_PACE);
   const [mode, setMode] = useState<"one" | "batch">("one");
   const [batches, setBatches] = useState<Batch[] | null>(null);
@@ -205,17 +205,17 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         if (!alive) return;
         // an A/B campaign (record 48) is settled from its candidates, on a page of its own
         if (role === "rater" && isAb(c) && abServed(capsNow.current)) {
-          location.hash = href("campaigns", String(c.id), "settle");
+          location.hash = href("review", "campaigns", String(c.id), "settle");
           return;
         }
         // a pair campaign (the post-contrast study) is read two stacks at a time, on a page of its own
         if (role === "rater" && isPair(c) && pairServed(capsNow.current)) {
-          location.hash = href("campaigns", String(c.id), "pairs");
+          location.hash = href("review", "campaigns", String(c.id), "pairs");
           return;
         }
         // an anchored campaign (the post-contrast study) is read beside its anchors, on a page of its own
         if (role === "rater" && isAnchored(c) && anchoredServed(capsNow.current)) {
-          location.hash = href("campaigns", String(c.id), "anchored");
+          location.hash = href("review", "campaigns", String(c.id), "anchored");
           return;
         }
         setCampaign(c);
@@ -401,8 +401,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
           last.current = { ...was, answer: r.unchanged ? was.answer : r.answer, value: b.body.value ?? was.value, unsure: b.body.unsure === true, supersedes: r.unchanged ? was.supersedes : was.answer, via: r.unchanged ? was.via : "amend" };
           setSaid(r.unchanged ? `${itemWords(holding.item)} kept as it was: ${now}.` : `Corrected ${itemWords(holding.item)}: ${mineWords(q, was.value)} is now ${now}; the earlier answer is kept.`);
           // back where the correction was opened from: the gallery, the reader's own address, or the item held before it
-          if (back === "gallery") location.hash = href("campaigns", id, "gallery");
-          else if (amendAt !== null) location.hash = href("campaigns", id, "rate");
+          if (back === "gallery") location.hash = href("review", "campaigns", id, "gallery");
+          else if (amendAt !== null) location.hash = href("review", "campaigns", id, "rate");
           else claim();
         })
         .catch((e: unknown) => setRefused(refusedWords(e)))
@@ -494,10 +494,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
     else n.add(i);
     return n;
   }), []);
-  const toggleEvidence = useCallback(() => setEvOpen((x) => {
-    remember(EVIDENCE_KEY, x ? "closed" : "open");
-    return !x;
-  }), []);
+  const toggleView = useCallback(() => chooseRows(rowsView === "compact" ? "expanded" : "compact"), [chooseRows, rowsView]);
   const chooseOrder = useCallback((o: Order) => {
     remember(ORDER_KEY, o);
     setOrder(o);
@@ -511,8 +508,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       // a correction left as it was: back to where it came from
       if (holding.amend) {
         setSaid(`${itemWords(holding.item)} left as it was.`);
-        if (then === "stop" || back === "gallery") location.hash = href("campaigns", id, back === "gallery" ? "gallery" : null);
-        else if (amendAt !== null) location.hash = href("campaigns", id, "rate");
+        if (then === "stop" || back === "gallery") location.hash = href("review", "campaigns", id, back === "gallery" ? "gallery" : null);
+        else if (amendAt !== null) location.hash = href("review", "campaigns", id, "rate");
         else claim();
         return;
       }
@@ -522,7 +519,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         .then(() => {
           setSaid(`Gave ${itemWords(holding.item)} back.`);
           if (then === "next") claim();
-          else location.hash = href("campaigns", id);
+          else location.hash = href("review", "campaigns", id);
         })
         .catch((e: unknown) => setRefused(refusedWords(e)))
         .finally(() => setBusy(false));
@@ -535,8 +532,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
 
   // the keys
   const offered = suggestion?.differ.length ? suggestion.offered : [];
-  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence, header: headerDoor !== null, openHeader, undo, mineOpen });
-  keyed.current = { q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleEvidence, header: headerDoor !== null, openHeader, undo, mineOpen };
+  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleView, header: headerDoor !== null, openHeader, undo, mineOpen });
+  keyed.current = { q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleView, header: headerDoor !== null, openHeader, undo, mineOpen };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
@@ -563,7 +560,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         const c = k.offered[act.index];
         const cg = c ? givenOfCandidate(k.q, c) : null;
         if (cg) setG(cg);
-      } else if (act.kind === "evidence") k.toggleEvidence();
+      } else if (act.kind === "view") k.toggleView();
       else if (act.kind === "header") k.openHeader();
       else if (act.kind === "combo") combo.current?.focus();
       else if (act.kind === "find") document.querySelector<HTMLInputElement>(`[data-find="${act.row.axis.replace(/["\\]/g, "")}"]`)?.focus();
@@ -631,6 +628,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       onMine={campaign && served(caps, AMEND) ? () => setMineOpen(true) : undefined}
       mine={mineOpen ? <MyAnswers caps={caps} campaign={campaign} values={rows.length === 1 ? rows[0].values : []} back="rate" onClose={() => setMineOpen(false)} /> : null}
       lines={reading?.lines ?? null}
+      pack={reading?.pack ?? null}
       suggestion={suggestion}
       blind={reading?.blind === true || item?.blind === true}
       header={picturesAlone ? null : (reading?.header ?? null)}
@@ -640,8 +638,6 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       headerDrawer={headerOpen ? { doc: headerDoc, failed: headerFailed } : null}
       onHeaderClose={() => setHeaderOpen(false)}
       derived={deriver.current && !deriveGone ? (derived ? derivedWords(derived, q) : null) : undefined}
-      evOpen={evOpen}
-      onEvidence={toggleEvidence}
       onCandidate={(c) => {
         const cg = givenOfCandidate(q!, c);
         if (cg) setG(cg);
@@ -720,16 +716,16 @@ export interface WorkspaceBodyProps {
   onStop: () => void;
   onKeys: () => void;
   onAgain: () => void;
-  /** The reader (record 48 R1): the evidence one line per axis, where it was read. */
+  /** The reader (record 48 R1): the evidence one line per axis, where it was read, beside the picture (record 55 H5). */
   lines?: AxisLine[] | null;
+  /** The pack and version that judged the stack, where the why door names them. */
+  pack?: string | null;
   /** The answer filled in and the candidates where the systems differ. */
   suggestion?: Suggestion | null;
   /** The item is of a sealed sample, read blind (record 48): no classification shown, only the pictures and the raw header. */
   blind?: boolean;
   /** The stack's raw header values, shown for a blind item. */
   header?: [string, string][] | null;
-  evOpen?: boolean;
-  onEvidence?: () => void;
   onCandidate?: (c: AskedCandidate) => void;
   pace?: Pace;
   /** When the item held was shown, for the time on it (after the first gold campaign). */
@@ -760,7 +756,7 @@ export interface WorkspaceBodyProps {
   /** The picture's view, kept across items. */
   view?: View;
   onView?: (v: View) => void;
-  /** The rows compact or expanded, kept per person. */
+  /** The whole reader compact or expanded (record 55 H5), kept per person. */
   rowsView?: RowsView;
   onRowsView?: (v: RowsView) => void;
   /** One's own answer being corrected (record 50, after the first gold campaign), in place of a claimed item. */
@@ -789,7 +785,7 @@ export function WorkspaceBody(p: WorkspaceBodyProps) {
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">
-            <a href={href("campaigns")}>Campaigns</a> · <a href={href("campaigns", String(c.id))}>{c.name}</a>
+            <a href={href("review")}>Review</a> · <a href={href("review", "campaigns", String(c.id))}>{c.name}</a>
           </span>
           <h1>{role === "adjudicator" ? "Adjudicate" : "Rate"}</h1>
           <p className="lede">{questionWords(q)}</p>
@@ -855,10 +851,15 @@ type Drawn = WorkspaceBodyProps & { refusal: string | null; left: number | null;
 /**
  * The reader on one screen (record 48, after the first real read): the
  * pictures on the left, and on the right from the top the file's header
- * text and physics, the asked rows, the derived line and the answer. On a
- * laptop nothing needs scrolling: the page is the window's height, the rows
- * are compact, and what does not fit a line (the whole header, the evidence,
- * the keys) opens over the reader on a key.
+ * text and physics, why the rules decided (record 55 H5: open, beside the
+ * picture, never on a blind item), the asked rows, the derived line and the
+ * answer. The page is the window's height, and what does not fit a line
+ * (the whole header, the keys) opens over the reader on a key. The picture
+ * box is of a fixed size per screen class (campaigns.css), so a big screen
+ * shows the same layout every time, and the whole reader is compact or
+ * expanded (`H`): compact holds an item read in the open, its candidates
+ * and seven axes on one laptop screen; expanded may scroll the panel, under
+ * an answer bar that stays on screen.
  */
 function ReaderOne(p: Drawn) {
   const { campaign: c, role, seat, refusal } = p;
@@ -868,17 +869,18 @@ function ReaderOne(p: Drawn) {
   const compact = compactRows(p.rows);
   const lines = p.lines ?? [];
   const evidence = !blind && lines.length > 0;
+  const size = p.rowsView ?? "expanded";
   return (
-    <section className="data campaign-rate reader-one">
+    <section className={`data campaign-rate reader-one reader-${size}`} data-reader-size={size}>
       <div className="reader-head">
         <span className="eyebrow">
-          <a href={href("campaigns")}>Campaigns</a> · <a href={href("campaigns", String(c.id))}>{c.name}</a>
+          <a href={href("review")}>Review</a> · <a href={href("review", "campaigns", String(c.id))}>{c.name}</a>
         </span>
         <h1>{role === "adjudicator" ? "Adjudicate" : "Rate"}</h1>
         <span className="grow said-slot">
           <Said said={p.said} />
         </span>
-        {q.kind === "axes" && compact && p.onRowsView && !refusal && <RowsToggle view={p.rowsView ?? "expanded"} onView={p.onRowsView} />}
+        {p.onRowsView && !refusal && <SizeToggle view={size} onView={p.onRowsView} />}
         {p.order && p.onOrder && !refusal && <OrderToggle order={p.order} onOrder={p.onOrder} />}
         {p.batchesOffered && p.onBatches && !p.batch && !refusal && (
           <button type="button" className="button secondary small" onClick={p.onBatches}>
@@ -912,11 +914,12 @@ function ReaderOne(p: Drawn) {
           <div className="rate-side" data-reader-panel="">
             <ItemLine {...p}>
               {q.kind === "axes" && compact && p.combos && p.onCombo && <ComboSearch combos={p.combos} vocab={vocabularyOf(q)} axes={p.rows.map((r) => r.axis)} inputRef={p.comboRef} onTake={p.onCombo} />}
-              <HeaderDoors whole={p.headerWhole ?? false} evidence={evidence} onWhole={p.onHeader} onEvidence={p.onEvidence} />
+              <HeaderDoors whole={p.headerWhole ?? false} onWhole={p.onHeader} />
             </ItemLine>
             {holding.note && <p className="note-lead">{holding.note}</p>}
             {!blind && p.suggestion && <SuggestionBar s={p.suggestion} chosen={chosenCandidate(q, p.suggestion.offered, p.given)} onChoose={(x) => p.onCandidate?.(x)} busy={p.busy} />}
-            <HeaderBlock lines={p.headerLines ?? []} flat={p.header ?? []} brief={!blind && (p.suggestion?.offered.length ?? 0) > 0} />
+            <HeaderBlock lines={p.headerLines ?? []} flat={p.header ?? []} brief={size === "compact" || (!blind && (p.suggestion?.offered.length ?? 0) > 0)} />
+            {evidence && <EvidenceLines lines={lines} full={size === "expanded"} pack={p.pack ?? null} />}
             <Adjudicate {...p} />
             <Renderer {...p} item={holding.item} assignment={holding.assignment.id} />
             {p.derived !== undefined && <DerivedLine words={p.derived} />}
@@ -935,11 +938,10 @@ function ReaderOne(p: Drawn) {
             <Actions {...p} withWhy />
             {p.keys && (
               <div className="drawer keys-drawer" role="dialog" aria-label="keys">
-                <KeyList rows={p.rows.length} compact={compact} combos={q.kind === "axes" && compact} reader candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} cantTell={cantTellOf(q) !== null ? p.rows.length : 0} unsure={unsureOf(q)} header={p.headerWhole ?? false} evidence={evidence} />
+                <KeyList rows={p.rows.length} compact={compact} combos={q.kind === "axes" && compact} reader candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} cantTell={cantTellOf(q) !== null ? p.rows.length : 0} unsure={unsureOf(q)} header={p.headerWhole ?? false} view />
               </div>
             )}
             {p.headerDrawer && <HeaderDrawer doc={p.headerDrawer.doc} failed={p.headerDrawer.failed} onClose={() => p.onHeaderClose?.()} />}
-            {evidence && p.evOpen && <EvidenceDrawer lines={lines} onClose={() => p.onEvidence?.()} />}
           </div>
         </div>
       )}
@@ -947,15 +949,16 @@ function ReaderOne(p: Drawn) {
   );
 }
 
-/** Compact (every axis a find box) or expanded (the short rows drawn whole), one pair of buttons. */
-function RowsToggle({ view, onView }: { view: RowsView; onView: (v: RowsView) => void }) {
+/** The whole reader compact or expanded (record 55 H5), one pair of keys, `H` between them. */
+function SizeToggle({ view, onView }: { view: RowsView; onView: (v: RowsView) => void }) {
   return (
-    <span className="chips order-toggle rows-toggle" role="group" aria-label="the rows">
+    <span className="chips order-toggle rows-toggle size-toggle" role="group" aria-label="the reader's view">
       {(["compact", "expanded"] as const).map((v) => (
-        <button key={v} type="button" className={view === v ? "opt on" : "opt"} aria-pressed={view === v} onClick={() => onView(v)} title={v === "compact" ? "every axis a box: type any name of a value" : "the short rows drawn whole, a key per value"}>
+        <button key={v} type="button" className={view === v ? "opt on" : "opt"} aria-pressed={view === v} onClick={() => onView(v)} title={v === "compact" ? "a bigger picture; the file's key lines, the evidence in a line per axis, every axis a box" : "a wider panel; the file whole, the evidence with its clause and votes, the short rows drawn whole"}>
           {v}
         </button>
       ))}
+      <kbd title="H turns the reader compact or expanded">H</kbd>
     </span>
   );
 }
@@ -990,7 +993,7 @@ function SeatState(p: WorkspaceBodyProps & { refusal: string | null }) {
         <p className="note-lead">Nothing left for you.</p>
         <p className="note-detail">{seat.why}</p>
         <p>
-          <a href={href("campaigns", String(c.id))}>Back to {c.name}</a> ·{" "}
+          <a href={href("review", "campaigns", String(c.id))}>Back to {c.name}</a> ·{" "}
           <button type="button" className="link-button" onClick={p.onAgain}>
             Look again
           </button>
@@ -1178,7 +1181,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
   }
 }
 
-function KeyList({ rows, compact = false, combos = false, reader = false, candidates = 0, batches = false, cantTell = 0, unsure = false, header = false, evidence = false }: { rows: number; compact?: boolean; combos?: boolean; reader?: boolean; candidates?: number; batches?: boolean; cantTell?: number; unsure?: boolean; header?: boolean; evidence?: boolean }) {
+function KeyList({ rows, compact = false, combos = false, reader = false, candidates = 0, batches = false, cantTell = 0, unsure = false, header = false, view = false }: { rows: number; compact?: boolean; combos?: boolean; reader?: boolean; candidates?: number; batches?: boolean; cantTell?: number; unsure?: boolean; header?: boolean; view?: boolean }) {
   const pair = (k: string, d: string) => (
     <div className="facts-pair" key={k + d}>
       <dt>{k}</dt>
@@ -1192,7 +1195,7 @@ function KeyList({ rows, compact = false, combos = false, reader = false, candid
       {reader && pair("↑ ↓", "page the stack, or the plane under the pointer, a plane at a time; Page Up and Page Down ten; the wheel too")}
       {candidates > 0 && pair(CANDIDATE_KEYS.slice(0, candidates).split("").join(" "), "choose a candidate")}
       {header && pair("h", "the whole header")}
-      {reader && (evidence || !header) && pair(header ? "H" : "h", "how each axis was decided")}
+      {reader && view && pair("H", "the whole reader compact or expanded")}
       {reader && pair("Backspace", "back to the suggestion")}
       {batches && pair("b", "like stacks in batches")}
       {combos && pair("/", "find a whole answer by any name in it (bravo, mprage t1); Enter fills every row, then change what differs")}

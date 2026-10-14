@@ -9,6 +9,7 @@
 import { columnName, type Json, type Move, type Options, type Preview, type Profile, type ProfileValue } from "../ask/client";
 import { movesForCell, type Step as SetStep } from "../ask/editor";
 import { clauseText } from "../query/cards";
+import type { Count } from "../ask/held";
 
 /** A version the conversation knows: proposed by the assistant, made by hand on the panel, or the card it was opened on. */
 export interface Known {
@@ -76,16 +77,20 @@ export interface FunnelStep {
   word: string;
   /** The engine's word for it, where it is not the page's own. */
   hint: string | null;
-  n: number;
-  /** How many the version it was made from held, when that differs. */
+  /** Null where the engine held the count back (record 55 K7): it reads held back. */
+  n: Count;
+  /** How many the version it was made from held, when that differs and both are known. */
   before: number | null;
   /** What the answer counts. */
   answer: boolean;
 }
 
-const countIn = (counts: unknown, key: string): number | null => {
-  const v = (counts as Record<string, unknown> | null | undefined)?.[key];
-  return typeof v === "number" && Number.isFinite(v) ? v : null;
+/** A count of the profile: a number, null where held back, undefined where the profile has none. */
+const countIn = (counts: unknown, key: string): Count | undefined => {
+  const c = counts as Record<string, unknown> | null | undefined;
+  if (!c || typeof c !== "object" || !(key in c)) return undefined;
+  const v = c[key];
+  return typeof v === "number" && Number.isFinite(v) ? v : v === null ? null : undefined;
 };
 
 /**
@@ -98,10 +103,11 @@ const countIn = (counts: unknown, key: string): number | null => {
 export function funnelOf(p: Profile | null, before: Profile | null = null): FunnelStep[] {
   if (!p) return [];
   const steps: FunnelStep[] = [];
-  const push = (grain: string, n: number | null, was: number | null) => {
-    if (n === null) return;
+  const push = (grain: string, n: Count | undefined, was: Count | undefined) => {
+    if (n === undefined) return;
     const word = grainWord(grain);
-    steps.push({ grain, word, hint: word === `${grain}s` ? null : grain, n, before: was !== null && was !== n ? was : null, answer: grain === p.grain });
+    const before = n !== null && typeof was === "number" && was !== n ? was : null;
+    steps.push({ grain, word, hint: word === `${grain}s` ? null : grain, n, before, answer: grain === p.grain });
   };
   for (const l of LEVELS) push(l.grain, countIn(p.counts, l.key), countIn(before?.counts, l.key));
   if (!LEVELS.some((l) => l.grain === p.grain)) push(p.grain, countIn(p.counts, "rows"), countIn(before?.counts, "rows"));
@@ -110,7 +116,7 @@ export function funnelOf(p: Profile | null, before: Profile | null = null): Funn
 
 /** How a step compares with the version before: fewer of so many, or up from so many. */
 export function beforeWords(s: FunnelStep): string | null {
-  if (s.before === null) return null;
+  if (s.before === null || s.n === null) return null;
   return `${s.n < s.before ? "of" : "was"} ${s.before.toLocaleString("en-US")}`;
 }
 

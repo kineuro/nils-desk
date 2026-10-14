@@ -7,6 +7,7 @@
 import { needsWork } from "../access";
 import type { CatalogField, ClauseGroup, DocumentHandle, Json, Move, Profile, ProfileValue } from "../ask/client";
 import type { Capabilities } from "../capabilities";
+import { type Count, countIn, countUnit, sumCounts } from "../ask/held";
 
 /** A card's name: the query's own name, else the set it answers, else plain words. */
 export function cardTitle(name: string | null | undefined, answer?: string | null): string {
@@ -123,17 +124,17 @@ export function clauseText(clause: unknown): string {
   return `${String(head).replace(/_/g, " ")}(${words.join(", ")})`;
 }
 
-/** What a step of the timeline counts: the rows and subjects its last clause group kept, and what its clauses lost in all. */
-export function stepCounts(groups: ClauseGroup[] | undefined, set: string): { rows: number; subjects: number; lost: number } | null {
+/** What a step of the timeline counts: the rows and subjects its last clause group kept, and what its clauses lost in all; each null where held back, and the loss held where any group's is. */
+export function stepCounts(groups: ClauseGroup[] | undefined, set: string): { rows: Count; subjects: Count; lost: Count } | null {
   const mine = (groups ?? []).filter((g) => g.set === set);
   if (mine.length === 0) return null;
   const last = mine[mine.length - 1];
-  return { rows: last.kept, subjects: last.subjects, lost: mine.reduce((a, g) => a + g.lost, 0) };
+  return { rows: countIn(last.kept), subjects: countIn(last.subjects), lost: sumCounts(mine.map((g) => countIn(g.lost))) };
 }
 
-/** A count with its unit, singular for one: 1 subject, 1,497 stacks. */
-export function unitWords(count: number, unit: string): string {
-  return `${count.toLocaleString("en-US")} ${count === 1 && unit.endsWith("s") ? unit.slice(0, -1) : unit}`;
+/** A count with its unit, singular for one: 1 subject, 1,497 stacks, and a held one subjects held back. */
+export function unitWords(count: Count, unit: string): string {
+  return countUnit(count, unit);
 }
 
 /** How a profile's value reads on a bar. */
@@ -153,17 +154,21 @@ export interface Bar {
   label: string;
   /** The value as the engine counted it, for a bar that narrows the question to it (the Assistant's panel). */
   value: ProfileValue["value"];
-  count: number;
-  subjects: number;
-  /** The bar's length against the longest, from 0 to 1. */
+  /** Null where held back (record 55 K7). */
+  count: Count;
+  subjects: Count;
+  /** The bar's length against the longest, from 0 to 1; 0 for a held count, which draws no bar. */
   share: number;
 }
 
 /** A chart's bars in the order they read: decades by age with the unknown last, anything else as the engine listed it, most first. */
 export function barsOf(values: ProfileValue[], as: ValueAs = "plain"): Bar[] {
   const ordered = as === "decade" ? [...values].sort((a, b) => (a.value === null ? 1 : b.value === null ? -1 : Number(a.value) - Number(b.value))) : values;
-  const widest = Math.max(1, ...ordered.map((v) => v.count));
-  return ordered.map((v) => ({ label: valueWords(v.value, as), value: v.value, count: v.count, subjects: v.subjects, share: v.count / widest }));
+  const widest = Math.max(1, ...ordered.map((v) => countIn(v.count) ?? 0));
+  return ordered.map((v) => {
+    const count = countIn(v.count);
+    return { label: valueWords(v.value, as), value: v.value, count, subjects: countIn(v.subjects), share: count === null ? 0 : count / widest };
+  });
 }
 
 export type Chart = { kind: "bars"; bars: Bar[] } | { kind: "words"; words: string } | { kind: "none" };
@@ -182,10 +187,10 @@ export function chartOf(part: unknown, as: ValueAs = "plain", empty = "Nothing t
   return { kind: "none" };
 }
 
-/** A profile's headline numbers, each member counted once: subjects, sessions and stacks, or the rows and subjects of a set of another grain. */
-export function countsOf(p: Profile | null): { label: string; value: number }[] {
+/** A profile's headline numbers, each member counted once: subjects, sessions and stacks, or the rows and subjects of a set of another grain; a held one is null. */
+export function countsOf(p: Profile | null): { label: string; value: Count }[] {
   const c = (p?.counts ?? {}) as Record<string, unknown>;
-  return ["subjects", "sessions", "stacks", "rows"].filter((k) => typeof c[k] === "number").map((k) => ({ label: k, value: c[k] as number }));
+  return ["subjects", "sessions", "stacks", "rows"].filter((k) => typeof c[k] === "number" || (k in c && c[k] === null)).map((k) => ({ label: k, value: countIn(c[k]) }));
 }
 
 export type ChartTab = "stacks" | "field" | "people" | "clinical";
@@ -195,7 +200,7 @@ export function tabsOf(p: Profile | null): { id: ChartTab; words: string }[] {
   if (!p) return [];
   const tabs: { id: ChartTab; words: string }[] = [];
   if (p.stack_types !== null) tabs.push({ id: "stacks", words: "Stack types" });
-  if (typeof (p.counts as Record<string, unknown>).stacks === "number") tabs.push({ id: "field", words: "By a field" });
+  if ("stacks" in (p.counts as Record<string, unknown>)) tabs.push({ id: "field", words: "By a field" });
   if (p.demographics !== null) tabs.push({ id: "people", words: "Demographics" });
   if (p.clinical !== null) tabs.push({ id: "clinical", words: "Clinical" });
   return tabs;

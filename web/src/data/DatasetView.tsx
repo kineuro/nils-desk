@@ -461,12 +461,12 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
                 ))}
                 {timing !== "" && <span className="dview-timing">{timing}</span>}
                 {looks && scope.kind === "dataset" && (
-                  <a className="dview-fact look" href={narrow(href("review"), { dataset: scope.name })} title={`Needs a look: ${questionWords(scan)}`}>
+                  <a className="dview-fact look" href={narrow(href("review", "questions"), { dataset: scope.name })} title={`Needs a look: ${questionWords(scan)}`}>
                     needs a look
                   </a>
                 )}
                 {looks && scope.kind === "cohort" && (
-                  <a className="dview-fact look" href={narrow(href("review"), { cohort: scope.name })} title={`Needs a look: ${questionWords(scan)}`}>
+                  <a className="dview-fact look" href={narrow(href("review", "questions"), { cohort: scope.name })} title={`Needs a look: ${questionWords(scan)}`}>
                     needs a look
                   </a>
                 )}

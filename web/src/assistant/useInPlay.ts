@@ -22,7 +22,8 @@ export interface InPlay {
   root: number;
   chain: number[];
   sets: { name: string; grain: string }[];
-  funnel: { set: string; rows: number }[];
+  /** Null where the engine held the count back (record 55 K7). */
+  funnel: { set: string; rows: number | null }[];
 }
 
 export interface Playing {

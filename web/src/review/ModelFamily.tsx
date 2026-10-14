@@ -114,7 +114,7 @@ export function ModelFamily({ caps, groups, askHref, onChanged }: { caps: Capabi
   const [said, setSaid] = useState<string | null>(null);
   const acts = modelActs(caps);
   const shown = axis !== null && axes.includes(axis) ? axis : (axes[0] ?? null);
-  if (shown === null) return <p className="meta">No model proposed anything that waits.</p>;
+  if (shown === null) return <p className="meta">Nothing proposed. A model run from Pipelines proposes its values here.</p>;
   const m = changeMatrix(groups, shown);
   const cell = on ? m.cells[on.from]?.[on.to] : undefined;
   const act = (work: Promise<unknown>, words: string) =>

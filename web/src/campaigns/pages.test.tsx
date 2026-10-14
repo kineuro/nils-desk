@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Each page of the Campaigns section as it draws from what an OpenAPI 7
-// engine answered: the list, one campaign with its closure panel, the make
+// Each campaign page of Review as it draws from what an OpenAPI 7
+// engine answered: the campaigns in the one list of work, one campaign with its closure panel, the make
 // dialog's form, the label sets and one set; and the section itself, offered
 // where the grant and the door are and absent where either is not.
 
@@ -16,7 +16,7 @@ import { packDoc } from "../review/client";
 import { sections } from "../sections";
 import { ADMIN, capsFor, DOORS, RATER } from "./caps.fixture";
 import { CampaignBody, ClosurePanel } from "./CampaignPage";
-import { CampaignsBody } from "./CampaignsPage";
+import { WorkBody } from "../review/WorkPage";
 import { closure, emptyDraft, type Answer, type Campaign, type LabelSet } from "./client";
 import { LabelSetBody, LabelSetsBody, tsvRows } from "./LabelSets";
 import { MakeForm } from "./MakeCampaign";
@@ -28,43 +28,45 @@ const answers = (answersOpen as { answers: Answer[] }).answers;
 const none = () => undefined;
 const NOW = Date.parse("2026-09-24T10:00:00Z");
 
-describe("the list", () => {
-  const html = renderToStaticMarkup(<CampaignsBody caps={capsFor({ grants: RATER, principal: "alice@walk" })} list={list} why={null} now={NOW} onMake={none} />);
+describe("the list, inside Review's one list of work", () => {
+  const html = renderToStaticMarkup(<WorkBody caps={capsFor({ grants: RATER, principal: "alice@walk" })} summary={null} list={list} now={NOW} onMake={none} />);
 
-  it("lists the open campaigns with their question, source and items by state, and keeps the closed ones apart", () => {
-    expect(html).toContain("<h1>Campaigns</h1>");
-    expect(html).toContain('<a href="#campaigns/6">base-check</a>');
-    expect(html).toContain("stack · 2 raters each");
-    expect(html).toContain("One axis<div class=\"meta\">base · 11 values</div>");
-    expect(html).toContain("selection probe@1");
+  it("lists the open campaigns under their job with their question and items by state, and keeps the closed ones apart", () => {
+    expect(html).toContain("<h1>Work</h1>");
+    expect(html).toContain('<a class="work-title" href="#review/campaigns/6/rate">base-check</a>');
+    expect(html).toContain("campaign · base · 11 values");
     expect(html).toContain("1 to adjudicate · 2 agreed of 6");
     expect(html).toContain('<i class="s-ok" style="width:33.3%"></i>');
-    expect(html).toContain("session · 1 rater each");
+    // the pick campaign is a session's main scan, job type 2
+    expect(html.indexOf("probe-pick")).toBeGreaterThan(html.indexOf("Pick a main scan"));
+    expect(html.indexOf("probe-pick")).toBeLessThan(html.indexOf("Check a result"));
     expect(html).toContain("1 closed campaign keeps every answer");
     expect(html.indexOf("probe-axis")).toBeGreaterThan(html.indexOf("closed campaign keeps"));
-    expect(html).toContain("0% exact · κ 0.00 · over 1 item");
   });
 
   it("offers Rate where the person may claim, Adjudicate only to a named adjudicator, and Make with work", () => {
-    expect(html).toContain('href="#campaigns/6/rate"');
-    expect(html).not.toContain('href="#campaigns/6/adjudicate"');
+    expect(html).toContain('href="#review/campaigns/6/rate"');
+    expect(html).not.toContain('href="#review/campaigns/6/adjudicate"');
     expect(html).toContain("Make a campaign");
-    const carol = renderToStaticMarkup(<CampaignsBody caps={capsFor({ principal: "carol@walk" })} list={list} why={null} now={NOW} onMake={none} />);
-    expect(carol).toContain('href="#campaigns/6/adjudicate"');
-    const looker = renderToStaticMarkup(<CampaignsBody caps={capsFor({ grants: ["campaigns:see"] })} list={list} why={null} now={NOW} onMake={none} />);
+    const carol = renderToStaticMarkup(<WorkBody caps={capsFor({ principal: "carol@walk" })} summary={null} list={list} now={NOW} onMake={none} />);
+    expect(carol).toContain('href="#review/campaigns/6/adjudicate"');
+    expect(carol.indexOf("#review/campaigns/6/adjudicate")).toBeGreaterThan(carol.indexOf("Settle a disagreement"));
+    const looker = renderToStaticMarkup(<WorkBody caps={capsFor({ grants: ["campaigns:see"] })} summary={null} list={list} now={NOW} onMake={none} />);
     expect(looker).not.toContain("/rate");
     expect(looker).not.toContain("Make a campaign");
   });
 
-  it("says there is none yet, and why it could not be read", () => {
-    expect(renderToStaticMarkup(<CampaignsBody caps={capsFor()} list={[]} why={null} now={NOW} onMake={none} />)).toContain("No campaign yet.");
-    expect(renderToStaticMarkup(<CampaignsBody caps={capsFor()} list={null} why="the engine answered 500" now={NOW} onMake={none} />)).toContain("The campaigns could not be read: the engine answered 500");
+  it("says nothing waits where a job has nothing, and why a list could not be read", () => {
+    expect(renderToStaticMarkup(<WorkBody caps={capsFor()} summary={null} list={[]} now={NOW} onMake={none} />)).toContain("Nothing waits.");
+    expect(renderToStaticMarkup(<WorkBody caps={capsFor()} summary={null} list={null} why={["the campaigns could not be read: the engine answered 500"]} now={NOW} onMake={none} />)).toContain(
+      "The campaigns could not be read: the engine answered 500",
+    );
   });
 
-  it("shows the label sets tab only where the door and a grant that reads it are", () => {
-    expect(html).toContain('href="#campaigns/label-sets"');
-    const old = renderToStaticMarkup(<CampaignsBody caps={capsFor({ doors: DOORS.filter((d) => !d.includes("label-sets")) })} list={list} why={null} now={NOW} onMake={none} />);
-    expect(old).not.toContain("label-sets");
+  // record 55 H2, round 4: one navigation pattern, a section's pages in the side (sections.test.ts), none as chips in the page
+  it("draws no tabs of Review's pages: the side carries them", () => {
+    expect(html).not.toContain('class="chips pages"');
+    expect(html).not.toContain('href="#review/label-sets"');
   });
 });
 
@@ -122,7 +124,7 @@ describe("one campaign", () => {
     const rater = draw(capsFor({ grants: ["campaigns:see", "campaigns:work"], principal: "alice@walk" }));
     expect(rater).not.toContain(">Close</button>");
     expect(rater).toContain("Closing writes through Review, so it needs work on the Review page as well.");
-    expect(rater).toContain('href="#campaigns/6/rate"');
+    expect(rater).toContain('href="#review/campaigns/6/rate"');
     const looker = draw(capsFor({ grants: ["campaigns:see"] }));
     expect(looker).not.toContain(">Export</button>");
     expect(looker).not.toContain("/rate");
@@ -134,7 +136,7 @@ describe("one campaign", () => {
     expect(html).toContain("<dt>closed</dt><dd>carol@walk · 24 Sept 2026</dd>");
     expect(html).toContain('<span class="tag brand">resolved</span>');
     expect(html).toContain("T1w<span class=\"meta\"> · decision 1</span>");
-    expect(html).toContain('<a href="#campaigns/label-sets/1">probe-axis v1</a>');
+    expect(html).toContain('<a href="#review/label-sets/1">probe-axis v1</a>');
     expect(html).not.toContain(">Close</button>");
     expect(html).toContain("The answers could not be read at this detail.");
   });
@@ -162,6 +164,52 @@ describe("one campaign", () => {
     expect(html).toContain("Ends 1 lease still out.");
     const staged = renderToStaticMarkup(<ClosurePanel campaign={{ ...open, closes_into: "stage" }} plan={closure({ ...open, closes_into: "stage" }, answers)} />);
     expect(staged).toContain("Writes 2 staged decisions, for a person to commit.");
+  });
+});
+
+describe("a check whose close refused an item", () => {
+  const why = "the outcome of item 1 (result 1) cannot be read, so nothing is written for it: form.parts is a list";
+  const base = closed.items![0];
+  const check: Campaign = {
+    ...closed,
+    name: "SYNTHSEG structures, run 1",
+    question: { kind: "check", part_set: "structures", grain: "result", reasons: [{ id: "boundary_off", words: "Boundary off", needs: "none" }] } as unknown as Campaign["question"],
+    closes_into: "check",
+    close_again: true,
+    counts: { ...closed.counts, items: { refused: 1, resolved: 1 } },
+    items: [
+      { ...base, id: 1, position: 0, stack_id: null, state: "refused", outcome: { value: "accepted", form: { reasons: [], parts: "x" } }, decision_id: null, resolved_at: null, derivative_id: 1, part_set: "structures", part_label: null, refused: { why, at: "2026-10-12T02:47:16Z" } },
+      { ...base, id: 2, position: 1, stack_id: null, state: "resolved", outcome: { value: "rejected", form: { reasons: [] }, decisions: { result: 1 } }, decision_id: 1, derivative_id: 4, part_set: "structures", part_label: null, refused: null },
+    ],
+  };
+  const draw = (c: Campaign, caps = capsFor({ grants: ADMIN })) => renderToStaticMarkup(<CampaignBody caps={caps} campaign={c} answers={[]} sets={[]} onAct={none} />);
+
+  it("shows the refused item as refused with the engine's reason, never as agreed and accepted", () => {
+    const html = draw(check);
+    expect(html).toContain('<span class="tag caution">refused</span>');
+    expect(html).toContain(`Not written: ${why}`);
+    expect(html).not.toContain(">agreed</span>");
+    expect(html).not.toMatch(/<td>accepted/u);
+    expect(html).toContain("refused <b>1</b>");
+    expect(html).toContain("1 refused · 1 resolved of 2");
+    expect(html).toContain("1 item was refused at the close; nothing was written for it, and the row says why. Close again once the reason is gone.");
+  });
+
+  it("offers Close again where the engine says the check may be closed again, and only then", () => {
+    expect(draw(check)).toContain(">Close again</button>");
+    const done = draw({ ...check, close_again: false });
+    expect(done).not.toContain(">Close again</button>");
+    expect(done).not.toContain("Close again once");
+    expect(draw(check, capsFor({ grants: ["campaigns:see", "campaigns:work"] }))).not.toContain(">Close again</button>");
+    // a later close tries the refused item again, and counts the one resolved before
+    const plan = closure(check);
+    expect([plan.writes.n, plan.already, plan.unresolvedTotal]).toEqual([1, 1, 0]);
+    const html = renderToStaticMarkup(<ClosurePanel campaign={check} plan={plan} />);
+    expect(html).toContain("Writes 1 result&#x27;s check, with its parts&#x27;.");
+    expect(html).toContain("named as refused, with why");
+    // a check's items no one settled are asked again by a later check, never left in the queue
+    const unread = { ...check, items: [...check.items!, { ...base, id: 3, position: 2, state: "open", outcome: null, decision_id: null }] };
+    expect(renderToStaticMarkup(<ClosurePanel campaign={unread} plan={closure(unread)} />)).toContain("Leaves 1 unresolved: 1 open. Their questions close with it; a later check asks them again.");
   });
 });
 
@@ -215,7 +263,7 @@ describe("label sets", () => {
   const sets = (labelSets as { label_sets: LabelSet[] }).label_sets;
   it("lists every set with where it came from and whether it may train", () => {
     const html = renderToStaticMarkup(<LabelSetsBody caps={capsFor()} sets={sets} why={null} since={NOW} />);
-    expect(html).toContain('<a href="#campaigns/label-sets/1">probe-axis v1</a>');
+    expect(html).toContain('<a href="#review/label-sets/1">probe-axis v1</a>');
     expect(html).toContain("campaign probe-axis · outcomes");
     expect(html).toContain('<span class="tag">allowed</span>');
     const sealed = renderToStaticMarkup(<LabelSetsBody caps={capsFor()} sets={[{ ...sets[0], sealed: true }]} why={null} since={NOW} />);
@@ -227,7 +275,7 @@ describe("label sets", () => {
     const html = renderToStaticMarkup(<LabelSetBody caps={capsFor()} set={s} />);
     expect(html).toContain("<h1>probe-axis v1</h1>");
     expect(html).toContain(`<dd class="mono">${s.digest}</dd>`);
-    expect(html).toContain('<a href="#campaigns/1">probe-axis</a>');
+    expect(html).toContain('<a href="#review/campaigns/1">probe-axis</a>');
     expect(html).toContain("<th>stack id</th><th>what</th><th>value</th><th>author kind</th><th>author</th><th>decision id</th><th>campaign id</th>");
     expect(html).toContain("<td>1</td><td>base</td><td>T1w</td><td>person</td><td>carol@walk</td><td>1</td><td>1</td>");
     expect(html).toContain("provenance.json");
@@ -240,13 +288,22 @@ describe("label sets", () => {
 
 describe("the section", () => {
   const base = ["GET /api/capabilities", "POST /api/ask/run", "GET /api/sources", "GET /api/review", "POST /api/releases", "GET /api/jobs"];
-  it("sits after Review where the person holds campaigns:see and the engine serves the door", () => {
+  const pages = (caps: ReturnType<typeof capsFor>) => sections(caps).find((s) => s.id === "review")?.pages?.map((p) => p.title) ?? null;
+  it("is Review: one section whose list holds the campaigns, with no Campaigns of its own (record 55 H3)", () => {
     const ids = sections(capsFor({ doors: [...base, ...DOORS], grants: ADMIN })).map((s) => s.id);
-    expect(ids.indexOf("campaigns")).toBe(ids.indexOf("review") + 1);
+    expect(ids).toContain("review");
+    expect(ids).not.toContain("campaigns");
+    expect(pages(capsFor({ doors: [...base, ...DOORS], grants: ADMIN }))).toEqual(["Work", "Main scans", "Subjects", "Rules", "Label sets"]);
   });
 
-  it("is absent on an engine without the door and for a person without the grant", () => {
-    expect(sections(capsFor({ doors: base, grants: ADMIN })).map((s) => s.id)).not.toContain("campaigns");
-    expect(sections(capsFor({ doors: [...base, ...DOORS], grants: ["review:see"] })).map((s) => s.id)).not.toContain("campaigns");
+  it("opens for a rater who holds only campaigns:*, with their list and the label sets, and no queue, rules or subjects", () => {
+    const rater = capsFor({ doors: [...base, ...DOORS], grants: ["campaigns:see", "campaigns:work"] });
+    expect(sections(rater).map((s) => s.id)).toContain("review");
+    expect(pages(rater)).toEqual(["Work", "Label sets"]);
+  });
+
+  it("is absent where the person reads neither the queue nor a campaign, or the engine serves neither door", () => {
+    expect(sections(capsFor({ doors: [...base, ...DOORS], grants: ["data:see"] })).map((s) => s.id)).not.toContain("review");
+    expect(sections(capsFor({ doors: base.filter((d) => d !== "GET /api/review"), grants: ADMIN })).map((s) => s.id)).not.toContain("review");
   });
 });

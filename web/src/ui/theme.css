@@ -65,6 +65,9 @@
   --n-brand-hover: #7A1F5A;
   --n-brand-soft: #EFE3EA;
   --n-brand-text: #4F0433;
+  /* record 55 K5b (round 4): a mark that must show on the page in both themes (a spinner, a bar that fills, the step now, a chosen card's band, a checkbox's tick), and a bar's fill */
+  --n-brand-mark: #4F0433;
+  --n-progress: #9C5A84;
 
   /* six intents, each a quad: foreground, background, border, icon */
   --n-neutral-fg: #3E3944; --n-neutral-bg: #ECE9E4; --n-neutral-line: #D8D4CD; --n-neutral-icon: #6B6470;
@@ -109,6 +112,10 @@
   --n-scrim: #1C1A1F40;
   /* behind a scan's picture, as a reading room shows it, in either theme */
   --n-image-bg: #000000;
+  /* a result's mask over a scan (job type 3): on the image's black, so the same in both themes; a part, the part in focus, and a flagged part in the caution colour as the theme draws it on a dark ground (--n-caution-fg of the dark tables) */
+  --n-mask-part: #E0393E;
+  --n-mask-focus: #FF7A7F;
+  --n-mask-flagged: #E3A46A;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -118,7 +125,7 @@
     --n-bg-raised: #222226;
     --n-bg-sunken: #1B1B1E;
     --n-bg-hover: #2A2A2F;
-    --n-bg-selected: #2E1C29;
+    --n-bg-selected: #3B2435;
     --n-text: #ECEAE6;
     --n-text-dim: #C9C6C1;
     --n-text-faint: #93909A;
@@ -129,6 +136,8 @@
     --n-brand-hover: #6B1A4C;
     --n-brand-soft: #2E1C29;
     --n-brand-text: #B57CA1;
+    --n-brand-mark: #B57CA1;
+    --n-progress: #A8709A;
     --n-neutral-fg: #C9C6C1; --n-neutral-bg: #2A2A2F; --n-neutral-line: #3E3D44; --n-neutral-icon: #93909A;
     --n-brand-fg: #B57CA1; --n-brand-bg: #2E1C29; --n-brand-line: #4F2E45; --n-brand-icon: #B57CA1;
     --n-ok-fg: #7FCB9A; --n-ok-bg: #1C3327; --n-ok-line: #2C4F3B; --n-ok-icon: #7FCB9A;
@@ -159,6 +168,9 @@
     --n-value-10: #B5B5C0; --n-value-10-bg: #2A2A30;
     --n-scrim: #00000080;
     --n-image-bg: #000000;
+    --n-mask-part: #E0393E;
+    --n-mask-focus: #FF7A7F;
+    --n-mask-flagged: #E3A46A;
   }
 }
 
@@ -168,7 +180,7 @@
   --n-bg-raised: #222226;
   --n-bg-sunken: #1B1B1E;
   --n-bg-hover: #2A2A2F;
-  --n-bg-selected: #2E1C29;
+  --n-bg-selected: #3B2435;
   --n-text: #ECEAE6;
   --n-text-dim: #C9C6C1;
   --n-text-faint: #93909A;
@@ -179,6 +191,8 @@
   --n-brand-hover: #6B1A4C;
   --n-brand-soft: #2E1C29;
   --n-brand-text: #B57CA1;
+  --n-brand-mark: #B57CA1;
+  --n-progress: #A8709A;
   --n-neutral-fg: #C9C6C1; --n-neutral-bg: #2A2A2F; --n-neutral-line: #3E3D44; --n-neutral-icon: #93909A;
   --n-brand-fg: #B57CA1; --n-brand-bg: #2E1C29; --n-brand-line: #4F2E45; --n-brand-icon: #B57CA1;
   --n-ok-fg: #7FCB9A; --n-ok-bg: #1C3327; --n-ok-line: #2C4F3B; --n-ok-icon: #7FCB9A;
@@ -209,4 +223,7 @@
   --n-value-10: #B5B5C0; --n-value-10-bg: #2A2A30;
   --n-scrim: #00000080;
   --n-image-bg: #000000;
+  --n-mask-part: #E0393E;
+  --n-mask-focus: #FF7A7F;
+  --n-mask-flagged: #E3A46A;
 }

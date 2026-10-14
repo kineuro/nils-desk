@@ -215,11 +215,11 @@ export function GalleryBody(p: GalleryBodyProps) {
     <section className="gallery-page" aria-label="gallery">
       <div className="gallery-head">
         <span className="eyebrow">
-          <a href={href("campaigns")}>Campaigns</a>
+          <a href={href("review")}>Review</a>
           {p.campaign && (
             <>
               {" · "}
-              <a href={href("campaigns", String(p.campaign.id))}>{p.campaign.name}</a>
+              <a href={href("review", "campaigns", String(p.campaign.id))}>{p.campaign.name}</a>
             </>
           )}
         </span>
@@ -233,7 +233,7 @@ export function GalleryBody(p: GalleryBodyProps) {
           </button>
         )}
         {p.campaign && (
-          <a className="button quiet small" href={href("campaigns", String(p.campaign.id), "rate")}>
+          <a className="button quiet small" href={href("review", "campaigns", String(p.campaign.id), "rate")}>
             One by one
           </a>
         )}
@@ -287,7 +287,7 @@ export function GalleryBody(p: GalleryBodyProps) {
         <p className="meta g-alone" data-alone="">
           <Icon name="info" />
           <span>{aloneWords(s.page)}</span>
-          <a href={narrow(href("campaigns", String(p.campaign.id), "rate"), { alone: 1 })}>Read them one by one</a>
+          <a href={narrow(href("review", "campaigns", String(p.campaign.id), "rate"), { alone: 1 })}>Read them one by one</a>
         </p>
       )}
       {p.mine}

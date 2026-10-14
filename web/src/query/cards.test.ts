@@ -88,6 +88,15 @@ describe("a step's counts", () => {
     expect(stepCounts(groups, "people")).toEqual({ rows: 107, subjects: 107, lost: 305 });
     expect(stepCounts(groups, "nothing")).toBeNull();
   });
+  it("are held where the engine held them back, and a loss beside a held one is never summed (record 55 K7)", () => {
+    const groups = [
+      { set: "women", grain: "subject", group: "source", clauses: 1, kept: 412, subjects: 412, lost: 0 },
+      { set: "women", grain: "subject", group: "where", clauses: 1, kept: null, subjects: null, lost: null },
+      { set: "women", grain: "subject", group: "pick", clauses: 1, kept: null, subjects: null, lost: 2 },
+    ];
+    expect(stepCounts(groups, "women")).toEqual({ rows: null, subjects: null, lost: null });
+    expect(unitWords(null, "subjects")).toBe("subjects held back");
+  });
 });
 
 describe("a clause read from a query", () => {
@@ -124,6 +133,27 @@ describe("a step's charts", () => {
     expect(countsOf(cohort)).toEqual([
       { label: "subjects", value: 43 },
       { label: "rows", value: 2 },
+    ]);
+  });
+  it("keep a count held back as held: a headline, a bar with no length, a tab still there", () => {
+    const held: Profile = {
+      ...profile,
+      counts: { subjects: null, sessions: null, stacks: null },
+      stack_types: [
+        { value: "T1w", count: 12, subjects: 9 },
+        { value: "T2w", count: null, subjects: null },
+      ],
+    };
+    expect(countsOf(held)).toEqual([
+      { label: "subjects", value: null },
+      { label: "sessions", value: null },
+      { label: "stacks", value: null },
+    ]);
+    expect(tabsOf(held).map((t) => t.id)).toEqual(["stacks", "field", "people", "clinical"]);
+    const chart = chartOf(held.stack_types, "base");
+    expect(chart.kind === "bars" && chart.bars.map((b) => [b.label, b.count, b.subjects, b.share])).toEqual([
+      ["T1w", 12, 9, 1],
+      ["T2w", null, null, 0],
     ]);
   });
   it("draw bars against the longest, a missing value named", () => {
@@ -176,5 +206,15 @@ describe("a proposed version", () => {
     expect(changeWords({ part: "keep", kind: "added" })).toBe("");
     expect(changeWords({ part: "out", kind: "changed" })).toBe("changes what the query answers with");
     expect(changeWords({ part: "params", kind: "changed" })).toBe("changes the query's params");
+  });
+});
+
+describe("a selection's size", () => {
+  it("says a newest answer whose list was held back whole as held back, never as 0 (record 55 K7, small lists)", async () => {
+    const { sizeWords } = await import("./selections");
+    const size = { grain: "stack", version: 2, handle: 7, at: "2026-10-13T08:00:00Z", truncated: false };
+    expect(sizeWords({ ...size, rows: null })).toBe("held back");
+    expect(sizeWords({ ...size, rows: 0 })).toBe("0 stacks");
+    expect(sizeWords({ ...size, rows: 1204 })).toBe("1,204 stacks");
   });
 });

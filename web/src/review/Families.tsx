@@ -77,7 +77,7 @@ export function BordersTable({ borders, onOpen }: { borders: Border[]; onOpen: (
           {rows.length === 0 && (
             <tr>
               <td colSpan={5} className="meta">
-                No pick run doubts anything.
+                No pick run doubts anything. A pick run raises its doubts here.
               </td>
             </tr>
           )}
@@ -248,7 +248,7 @@ export function AskedFamily({ caps, packName, onExplain, onChanged }: { caps: Ca
               </a>
             )}
           </div>
-          <AskedTable asked={asked} onOpen={setOpened} />
+          {asked.length === 0 ? <p className="meta">Nothing asked. System 1 asks here when it is unsure of a whole stack.</p> : <AskedTable asked={asked} onOpen={setOpened} />}
         </>
       )}
       {opened && load.kind === "ready" && (

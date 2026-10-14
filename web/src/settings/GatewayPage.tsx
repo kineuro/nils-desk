@@ -179,7 +179,7 @@ export function GatewayPage({ caps, install }: { caps: Capabilities; install: In
   return (
     <div className="settings">
       <Head
-        title="Kvasir"
+        title="Language models"
         under={may(caps, "install:see")}
         lede="Which model each station goes to."
       >

@@ -194,7 +194,7 @@ export function ScanViewer({ scans, at, onAt, onClose, store, bare = false }: { 
       guess.current = null;
       setZ((was) => (was === null || (was === g && !moved.current) ? mid : was));
       if (p.planes > 0)
-        pics.load(stack, p.planes, live.current.z ?? mid ?? 0, p.digest, p.partial).then(
+        pics.load(stack, p.planes, live.current.z ?? mid ?? 0, p.digest, p.partial, p.held).then(
           () => undefined,
           () => alive && setFramesFailed(true),
         );
@@ -231,7 +231,7 @@ export function ScanViewer({ scans, at, onAt, onClose, store, bare = false }: { 
       for (const n of next)
         pics.preview(n).then(
           (p) => {
-            if (alive && p.planes > 0) pics.ahead(n, p.planes, middleOf(p) ?? 0, p.digest, p.partial).catch(() => undefined);
+            if (alive && p.planes > 0) pics.ahead(n, p.planes, middleOf(p) ?? 0, p.digest, p.partial, p.held).catch(() => undefined);
           },
           () => undefined,
         );

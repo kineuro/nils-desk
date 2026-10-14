@@ -8,21 +8,25 @@
 // the campaign maker; a model that disagrees with a person's decision carries
 // a badge (record 51 R5).
 
-import { lazy, Suspense, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
 import { ops, type ReviewItem } from "../ops/client";
-import { href } from "../routes";
+import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
+import { EvidenceLines } from "../campaigns/ReaderParts";
+import { stackReadingFor } from "../campaigns/readerDoors";
+import type { Reading } from "../campaigns/reader";
 import { askPeopleHref, asksPeople } from "./askPeople";
-import { acts, batchOf, DISAGREES, isGrouped, itemKey, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, modelDisagrees, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
+import { acts, batchOf, DISAGREES, heldBy, isGrouped, itemKey, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, modelDisagrees, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
 import { filterChoices, filterKind, filterWords, NO_FILTER, passes, reasonWords, type QueueFilter } from "./filter";
 import { borderWords, PICK_BORDER } from "./picks";
 import { bulkPlan, kindOf, needsReading, sortByCost } from "./triage";
 import "./grown.css";
+import "../campaigns/campaigns.css";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -54,7 +58,7 @@ function identityCard(identity: ReviewItem[]): NeedCard {
   const identifiers = href("review", "identifiers");
   const base = { family: "identity" as const, bulk: 0, count: identity.length };
   if (twice.length > 0) {
-    return { ...base, value: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"}`, words: "may be one person twice", meta: ["the same identifier under two codes", from, heldWords, provisionalWords].filter(Boolean).join(" · "), act: { label: "Decide", href: identifiers } };
+    return { ...base, value: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"}`, words: "may be one subject twice", meta: ["the same identifier under two codes", from, heldWords, provisionalWords].filter(Boolean).join(" · "), act: { label: "Decide", href: identifiers } };
   }
   if (held.length > 0) {
     // one dataset's held files are mapped on its own page; several are named on the Identifiers page
@@ -64,7 +68,7 @@ function identityCard(identity: ReviewItem[]): NeedCard {
   if (provisional.length > 0) {
     return { ...base, value: `${n(provisional.length)} ${provisional.length === 1 ? "subject" : "subjects"}`, words: "coded without a map", meta: ["merged into the person it stands for by a merge, or by a map that names the identifier", from].filter(Boolean).join(" · "), act: { label: "Merge", href: identifiers } };
   }
-  return { ...base, value: "0 subjects", words: "may be one person twice", meta: "", act: null };
+  return { ...base, value: "0 subjects", words: "may be one subject twice", meta: "", act: null };
 }
 
 export interface QueueProps {
@@ -163,6 +167,7 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
               <tr key={itemKey(i)} className={i.status === "open" ? "" : "decided"}>
                 <td>
                   <span className={`tag ${tag.tone}`}>{tag.words}</span>
+                  {i.mode === "blind_first" && <span className="tag mode-blind">blind first</span>}
                 </td>
                 <td>
                   {modelDisagrees(i) && <span className="tag caution badge">{DISAGREES}</span>}
@@ -193,8 +198,13 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
                         Merge
                       </a>
                     )}
+                    {family === "campaigns" && heldBy(i).id !== null && (
+                      <a className="button secondary small" href={href("review", "campaigns", String(heldBy(i).id))}>
+                        Open
+                      </a>
+                    )}
                     {family !== null && PAGED.includes(family) && (
-                      <a className="button secondary small" href={href("review", family)}>
+                      <a className="button secondary small" href={family === "picks" ? narrow(href("review", "picks"), { earlier: 1 }) : href("review", family)}>
                         Open
                       </a>
                     )}
@@ -299,12 +309,12 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
       {onFilter && <FilterChips choices={choices} filter={filter} onFilter={onFilter} />}
       {batch !== null && (
         <p className="meta">
-          The items of batch {batch}. <a href={href("review")}>The whole queue</a>
+          The items of batch {batch}. <a href={href("review", "questions")}>The whole queue</a>
         </p>
       )}
       {run !== null && (
         <p className="meta">
-          The items of pipeline run {run}. <a href={href("review")}>The whole queue</a>
+          The items of pipeline run {run}. <a href={href("review", "questions")}>The whole queue</a>
         </p>
       )}
       <div className="needs">
@@ -370,21 +380,37 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
           work on the Data page too, since it changes how data is sorted.
         </Says>
       </section>
-      {look && <LookDialog item={look.item} stack={look.stack} onClose={() => setLook(null)} onExplain={() => { const l = look; setLook(null); onExplain(l.item, l.stack); }} onDecide={may ? () => { const l = look; setLook(null); onDecide(l.item); } : null} />}
+      {look && <LookDialog caps={caps} item={look.item} stack={look.stack} onClose={() => setLook(null)} onExplain={() => { const l = look; setLook(null); onExplain(l.item, l.stack); }} onDecide={may ? () => { const l = look; setLook(null); onDecide(l.item); } : null} />}
       {bulk && <BulkDialog items={open.filter((i) => familyOf(i.kind) === "unsure")} onClose={() => setBulk(false)} onDone={(words) => { setBulk(false); onChanged(words); }} />}
     </>
   );
 }
 
-/** A stack in the viewer, with the item's evidence beside it. */
-export function LookDialog({ item, stack, onClose, onExplain, onDecide }: { item: ReviewItem; stack: number; onClose: () => void; onExplain: () => void; onDecide: (() => void) | null }) {
+/**
+ * A stack in the viewer, with why the rules decided beside it (record 55
+ * H5: the engine's GET /api/stacks/{stack}/why, where it serves it and the
+ * person may read the queue) and the item's own evidence under that.
+ */
+export function LookDialog({ caps, item, stack, onClose, onExplain, onDecide }: { caps?: Capabilities; item: ReviewItem; stack: number; onClose: () => void; onExplain: () => void; onDecide: (() => void) | null }) {
   const ev = (item.evidence ?? {}) as Json;
   const facts = Object.entries(ev).filter(([, v]) => v === null || ["string", "number", "boolean"].includes(typeof v));
   const level = typeof ev.level === "number" ? ev.level : null;
+  const [reading, setReading] = useState<Reading | null>(null);
+  useEffect(() => {
+    if (!caps) return;
+    let alive = true;
+    setReading(null);
+    stackReadingFor(caps, stack).then((r) => alive && setReading(r));
+    return () => {
+      alive = false;
+    };
+  }, [caps, stack]);
+  const lines = reading && !reading.blind ? reading.lines : [];
   return (
     <Dialog
       title={`Stack ${n(stack)}`}
       icon="review"
+      className="look-dialog"
       onClose={onClose}
       foot={
         <div className="row actions">
@@ -409,20 +435,28 @@ export function LookDialog({ item, stack, onClose, onExplain, onDecide }: { item
         </p>
       )}
       <p className="lede">{itemWords(item)}</p>
-      <Suspense fallback={<Wait phase="loading the viewer" since={Date.now()} size="panel" />}>
-        <Viewer stack={stack} level={level} />
-      </Suspense>
-      {facts.length > 0 && (
-        <dl className="facts">
-          {facts.map(([k, v]) => (
-            <div key={k} className="facts-pair">
-              <dt>{k.replace(/_/g, " ")}</dt>
-              <dd>{v === null ? "" : String(v)}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {needsReading(item) && <p className="meta">{needsReading(item)}.</p>}
+      <div className="look-grid">
+        <div className="look-picture">
+          <Suspense fallback={<Wait phase="loading the viewer" since={Date.now()} size="panel" />}>
+            <Viewer stack={stack} level={level} />
+          </Suspense>
+        </div>
+        <div className="look-side">
+          {reading?.blind && <p className="meta">Sealed: read blind, the rules' answer is not shown.</p>}
+          <EvidenceLines lines={lines} full pack={reading?.pack ?? null} />
+          {facts.length > 0 && (
+            <dl className="facts">
+              {facts.map(([k, v]) => (
+                <div key={k} className="facts-pair">
+                  <dt>{k.replace(/_/g, " ")}</dt>
+                  <dd>{v === null ? "" : String(v)}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {needsReading(item) && <p className="meta">{needsReading(item)}.</p>}
+        </div>
+      </div>
     </Dialog>
   );
 }

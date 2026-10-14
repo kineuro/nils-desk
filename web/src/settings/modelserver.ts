@@ -3,9 +3,10 @@
 // or any OpenAI compatible server, added by its address and key. The key goes
 // once to Kvasir's credential door under a name the dialog makes up, and is
 // named by that reference after (R4); the desk keeps nothing of it. Kvasir
-// lists the server's models with their specs and loaded or cold state, the
-// admin ticks some, and Kvasir admits them one by one on the server's one
-// backend. The page shows the server as one card, each model removable, and a
+// lists the server's models with their specs and loaded or cold state, all
+// ticked where it lists a handful, the admin ticks or unticks, and Kvasir
+// admits them one by one on the server's one backend, the model loaded now
+// last. The page shows the server as one card, each model removable, and a
 // station's drawer picks a backend and a model.
 
 import { listWords, stationModel, stationOf, type Tone } from "./gateway";
@@ -64,12 +65,31 @@ export function tickable(o: Offered): boolean {
   return o.held_by === null;
 }
 
+/** How many models a server may list for the dialog to tick them all as it lists them; a big provider lists hundreds, many not chat models, so past this none is ticked. */
+export const TICK_ALL_UP_TO = 8;
+
+/** The models that "Tick all" ticks: every one that may be ticked and is not held from this dialog already. */
+export function openToTick(offer: Offer, results: Ticked[] | null): string[] {
+  return offer.models.filter((m) => tickable(m) && !results?.some((r) => r.id === m.id && r.answered)).map((m) => m.id);
+}
+
+/** The models ticked as a server's list arrives: every one that may be ticked where it lists a handful, so all of them are available (2026-10-11), none where it lists more. */
+export function firstTicked(offer: Offer): string[] {
+  return offer.models.length <= TICK_ALL_UP_TO ? openToTick(offer, null) : [];
+}
+
 /** What the server says of its card: the model loaded now, and how long its last swap took. */
 function loadedOf(offer: Offer): { loaded: string | null; swap: number | null } {
   const s = offer.server ?? {};
   const loaded = typeof s.loaded === "string" ? s.loaded : (offer.models.find((m) => m.status === "loaded")?.id ?? null);
   const swap = typeof s.last_swap_seconds === "number" ? s.last_swap_seconds : null;
   return { loaded, swap };
+}
+
+/** The ticked models in the order Kvasir asks them: the one loaded on the server now last, so a server with one card ends with it loaded again, as before the add. */
+export function admitOrder(offer: Offer, ticked: string[]): string[] {
+  const { loaded } = loadedOf(offer);
+  return loaded && ticked.includes(loaded) ? [...ticked.filter((m) => m !== loaded), loaded] : ticked;
 }
 
 /** Said before Admit where a ticked model is cold: asking it loads it on the server, which takes minutes and pauses the model loaded now. */

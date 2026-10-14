@@ -229,7 +229,7 @@ export function SubscriptionCard(props: { row: Subscription; may?: boolean; stat
           {more}
         </div>
       )}
-      {!may && !signed && <p className="meta">Needs the assistant and Kvasir: See.</p>}
+      {!may && !signed && <p className="meta">Needs the assistant and Language models: See.</p>}
       {!quiet && <Acted acting={acting} />}
     </div>
   );

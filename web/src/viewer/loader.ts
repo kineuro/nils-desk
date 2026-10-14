@@ -7,11 +7,19 @@
 // read ahead or read before draws from memory; the manifests too (tiles.ts).
 // The loader also counts the bytes moved and the decode time for the
 // viewer's footer.
+//
+// A stack that shows a result's mask (record 55 H3, job type 3) has its
+// layer attached here: each plane the stack view is given comes with its
+// labels, decoded from the layer's slab into the labelmap image cornerstone
+// draws beside it (mask.ts), so a plane and its mask land together and go
+// together when the ring lets them go.
 
 import * as cs from "@cornerstonejs/core";
 import { DecodePool } from "./decode";
 import { levelShape, levelSpacing, storedValue, storedWindow, type Manifest } from "./doors";
-import { slab as readSlab, type Slab } from "./slabs";
+import { slab as readSlab, layerSlab, type Slab } from "./slabs";
+import type { LayerManifest, LayerRef } from "./layer";
+import { cacheLabelPlane, labelImageId } from "./mask";
 import { tileManifest } from "./tiles";
 
 export { storedValue, storedWindow, viewWindow } from "./doors";
@@ -31,6 +39,8 @@ interface Stack {
   slabs: Map<string, Slab>;
   inflight: Map<string, Promise<void>>;
   previous: number | null;
+  /** A result's layer drawn on the stack view, the labels of planes being made, and whether its labelmap is on the viewport yet. */
+  layer: { ref: LayerRef; manifest: LayerManifest; making: Map<string, Promise<void>>; drawn: boolean } | null;
 }
 
 const stacks = new Map<number, Stack>();
@@ -62,7 +72,7 @@ export async function open(stack: number): Promise<Manifest> {
   const have = stacks.get(stack);
   if (have) return have.manifest;
   const manifest = await tileManifest(stack);
-  if (!stacks.has(stack)) stacks.set(stack, { manifest, slabs: new Map(), inflight: new Map(), previous: null });
+  if (!stacks.has(stack)) stacks.set(stack, { manifest, slabs: new Map(), inflight: new Map(), previous: null, layer: null });
   decoder();
   return manifest;
 }
@@ -70,11 +80,78 @@ export async function open(stack: number): Promise<Manifest> {
 export function close(stack: number): void {
   const s = stacks.get(stack);
   if (!s) return;
+  detachLayer(stack);
   for (const level of Array.from({ length: s.manifest.levels }, (_, i) => i)) {
     const [nz] = levelShape(s.manifest, level);
     for (let z = 0; z < nz; z++) forget(imageId(stack, level, z));
   }
   stacks.delete(stack);
+}
+
+/** Draw a result's layer on an open stack's planes: each plane given from now on comes with its labels. */
+export function attachLayer(stack: number, ref: LayerRef, manifest: LayerManifest): void {
+  const s = stacks.get(stack);
+  if (!s) return;
+  if (s.layer && s.layer.ref.derivative === ref.derivative && s.layer.ref.set === ref.set) return;
+  detachLayer(stack);
+  s.layer = { ref, manifest, making: new Map(), drawn: false };
+}
+
+/**
+ * The stack's labelmap is on its viewport: from now on a plane is given
+ * with its labels, so paging never shows a plane without its mask. Before
+ * it, the first picture is not held for labels nobody draws yet.
+ */
+export function labelsDrawn(stack: number): void {
+  const s = stacks.get(stack);
+  if (s?.layer) s.layer.drawn = true;
+}
+
+/** Stop drawing a stack's layer and let its labels go. */
+export function detachLayer(stack: number): void {
+  const s = stacks.get(stack);
+  if (!s?.layer) return;
+  const { ref } = s.layer;
+  s.layer = null;
+  for (let level = 0; level < s.manifest.levels; level++) {
+    const [nz] = levelShape(s.manifest, level);
+    for (let z = 0; z < nz; z++) forget(labelImageId(stack, ref, level, z));
+  }
+}
+
+/**
+ * A plane's labels in cornerstone's cache: `there` when they already were,
+ * `made` when they were made now from the layer's slab (a plane the stack
+ * view shows that was decoded before the layer was attached), `none` where
+ * the stack has no layer.
+ */
+export async function labelPlane(stack: number, level: number, z: number): Promise<"there" | "made" | "none"> {
+  const s = stacks.get(stack);
+  if (!s?.layer) return "none";
+  if (cs.cache.getImage(labelImageId(stack, s.layer.ref, level, z))) return "there";
+  await makeLabels(stack, s, level, z);
+  return s.layer && cs.cache.getImage(labelImageId(stack, s.layer.ref, level, z)) ? "made" : "none";
+}
+
+async function makeLabels(stack: number, s: Stack, level: number, z: number, later = false): Promise<void> {
+  const layer = s.layer;
+  if (!layer) return;
+  const id = labelImageId(stack, layer.ref, level, z);
+  if (cs.cache.getImage(id)) return;
+  const on = layer.making.get(id);
+  if (on) return on;
+  const m = s.manifest;
+  const [nz, ny, nx] = levelShape(m, level);
+  const z0 = slabOf(z) * SLAB;
+  const p = (async () => {
+    const slab = await layerSlab(stack, layer.ref, level, z0, Math.min(nz, z0 + SLAB), { warm: later });
+    const { plane } = await decoder().decode(layer.manifest.codec, slab.planes[z - z0], nx, ny, layer.manifest.tile, later);
+    // the layer may have gone while its plane was read
+    if (s.layer !== layer) return;
+    cacheLabelPlane(id, plane, m, stack, level, z, imageId(stack, level, z));
+  })().finally(() => layer.making.delete(id));
+  layer.making.set(id, p);
+  return p;
 }
 
 /** Drop a decoded plane from cornerstone's cache when it holds one; an id never loaded is nothing to drop. */
@@ -119,7 +196,10 @@ function ring(stack: number, s: Stack, level: number, z: number): Promise<void> 
   const p = plan(z, nz, dir, resident);
   for (const e of p.evict) {
     s.slabs.delete(key(level, e));
-    for (let zz = e * SLAB; zz < Math.min(nz, (e + 1) * SLAB); zz++) forget(imageId(stack, level, zz));
+    for (let zz = e * SLAB; zz < Math.min(nz, (e + 1) * SLAB); zz++) {
+      forget(imageId(stack, level, zz));
+      if (s.layer) forget(labelImageId(stack, s.layer.ref, level, zz));
+    }
   }
   const own = fetchSlab(stack, s, level, slabOf(z));
   for (const f of p.fetch) if (f !== slabOf(z)) void fetchSlab(stack, s, level, f);
@@ -132,16 +212,22 @@ async function loadPlane(id: string): Promise<cs.Types.IImage> {
   const s = stacks.get(stack);
   if (!s) throw new Error(`stack ${stack} is not open`);
   const dir = direction(s.previous, z);
+  // the plane's labels, where a layer is drawn: made beside it, and once its labelmap is on the viewport the two land
+  // together; a mask that fails leaves the picture
+  const made = s.layer ? makeLabels(stack, s, level, z).catch(() => undefined) : null;
+  const labels = s.layer?.drawn ? made : null;
   const early = ahead.get(id);
   if (early) {
     ahead.delete(id);
     // the ring moves with the plane shown, decoded ahead or not: it fetches ahead and evicts behind, so the slabs stay bounded
     ring(stack, s, level, z).catch(() => undefined);
     decodeAhead(stack, s, level, z, dir);
+    await labels;
     return early;
   }
   const image = await decodePlane(id, stack, s, level, z);
   decodeAhead(stack, s, level, z, dir);
+  await labels;
   return image;
 }
 
@@ -155,6 +241,7 @@ function decodeAhead(stack: number, s: Stack, level: number, z: number, dir: 1 |
     const p = decodePlane(id, stack, s, level, zz, true);
     ahead.set(id, p);
     p.catch(() => ahead.delete(id));
+    if (s.layer) makeLabels(stack, s, level, zz, true).catch(() => undefined);
   }
   // what was decoded ahead and passed by is let go
   for (const key of [...ahead.keys()]) {
@@ -217,7 +304,13 @@ export function register(): void {
   if (registered) return;
   registered = true;
   cs.imageLoader.registerImageLoader("nils", (id: string) => ({ promise: loadPlane(id) }) as cs.Types.IImageLoadObject);
-  cs.metaData.addProvider((type: string, id: string) => {
+  const provide = (type: string, id: string): unknown => {
+    // a plane's labels (mask.ts) sit where the plane does: asked of every plane by cornerstone before any is made
+    const label = /^nilsmask:\d+\/[^/]*\/(\d+)\/(\d+)\/(\d+)$/u.exec(id);
+    if (label) {
+      if (type === "imagePixelModule") return { bitsAllocated: 16, bitsStored: 16, highBit: 15, samplesPerPixel: 1, photometricInterpretation: "MONOCHROME2", pixelRepresentation: 0 };
+      return provide(type, imageId(Number(label[1]), Number(label[2]), Number(label[3])));
+    }
     if (!id.startsWith("nils:")) return undefined;
     const { stack, level, z } = parseImageId(id);
     const s = stacks.get(stack);
@@ -243,7 +336,8 @@ export function register(): void {
       default:
         return undefined;
     }
-  }, 10000);
+  };
+  cs.metaData.addProvider(provide, 10000);
   // the cache holds a few slabs' worth of decoded planes, never the stack; the ring holds the encoded ones
   cs.cache.setMaxCacheSize(256 * 1024 * 1024);
 }

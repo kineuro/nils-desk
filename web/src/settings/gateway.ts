@@ -58,11 +58,14 @@ export function viewerOf(caps: Capabilities, subscription: Subscription | null):
   };
 }
 
-/** A grant as the Identity page names it: the page and how far a person goes there, and the assistant as itself. */
+/** The pages whose grant keeps an older name than the page's own (spec 13.1, round 4: one word per thing). */
+const GRANT_PAGES: Record<string, string> = { "assistant-settings": "Assistant settings", kvasir: "Language models", database: "Backups", identity: "People" };
+
+/** A grant as the People page names it: the page and how far a person goes there, and the assistant as itself. */
 export function grantWords(grant: string): string {
   if (grant === "assistant:use") return "the assistant";
   const [page, level = ""] = grant.split(":");
-  const name = page === "assistant-settings" ? "Assistant settings" : page.charAt(0).toUpperCase() + page.slice(1);
+  const name = GRANT_PAGES[page] ?? page.charAt(0).toUpperCase() + page.slice(1);
   return level ? `${name}: ${level.charAt(0).toUpperCase()}${level.slice(1)}` : name;
 }
 
@@ -73,8 +76,8 @@ export function plainly(e: unknown): unknown {
   if (r.code === "not_a_person") return new Error("Kvasir keeps a subscription for a person, and this call named nobody. Sign in to the desk, then try again.");
   const needs = listWords(r.needs.map(grantWords));
   const them = r.needs.length > 1 ? "them" : "it";
-  if (r.needs.includes("assistant:use")) return new Error(`A subscription of your own needs ${needs}. Someone with Identity: Work gives ${them} on the Identity page.`);
-  return new Error(needs ? `This needs ${needs}, which you do not hold. Someone with Identity: Work gives ${them} on the Identity page.` : "This needs a grant you do not hold. Someone with Identity: Work gives it on the Identity page.");
+  if (r.needs.includes("assistant:use")) return new Error(`A subscription of your own needs ${needs}. Someone with People: Work gives ${them} on the People page.`);
+  return new Error(needs ? `This needs ${needs}, which you do not hold. Someone with People: Work gives ${them} on the People page.` : "This needs a grant you do not hold. Someone with People: Work gives it on the People page.");
 }
 
 /** Which backends show where: those Kvasir holds as models, and the one it has itself, ChatGPT through subscriptions, as the subscription's card. */

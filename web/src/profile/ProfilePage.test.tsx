@@ -2,7 +2,7 @@
 // A person's own page as it draws, kept terse: how they sign in with their
 // subject only on hover, their groups, the pages they hold in the Identity
 // page's few words with the rest hidden together, how much of a record they
-// see as one tag, and one line pointing to the Kvasir page for a subscription
+// see as one tag, and one line pointing to the Language models page for a subscription
 // of their own, or the install's when nobody signs in.
 
 import { renderToStaticMarkup } from "react-dom/server";
@@ -34,18 +34,18 @@ describe("a person's own page", () => {
     expect(html).toContain("<h2>Access</h2>");
     expect(html).not.toContain("set by whoever");
     expect(html).toMatch(/<b>Assistant<\/b><span class="state"><span class="amark do">use<\/span><\/span><span class="what">Chat with the assistant<\/span>/u);
-    expect(html).toMatch(/<b>Query<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">Ask, run and chart questions · keep cards, queue ask jobs<\/span>/u);
-    expect(html).toMatch(/<b>Data<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Sources and batches<\/span>/u);
-    expect(html).toMatch(/<div class="arow deep"><b>Kvasir<\/b>/u);
+    expect(html).toMatch(/<b>Query<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">Cards, selections and exports · keep cards, save selections<\/span>/u);
+    expect(html).toMatch(/<b>Data<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Datasets, cohorts and Browse<\/span>/u);
+    expect(html).toMatch(/<div class="arow deep"><b>Language models<\/b>/u);
     expect(html).toContain('<div class="arow hidden" title="Whoever may change people and groups can open them.">');
     expect(html).toContain('<b>Release, Pipelines, Models and Campaigns</b><span class="state meta">hidden</span></div>');
     expect(html).not.toContain("admin");
     expect(html).toMatch(/<b>Records<\/b><span class="state"><span class="tag records" title="Dates, subject codes, sex and age, scanner names and series and protocol descriptions\."><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Identifying/u);
   });
 
-  it("points to the Kvasir page in one line for a subscription of their own, and keeps none itself", () => {
+  it("points to the Language models page in one line for a subscription of their own, and keeps none itself", () => {
     const html = renderToStaticMarkup(<ProfilePage caps={caps(erik, "quasi")} />);
-    expect(html).toMatch(/<\/svg>Your ChatGPT subscription: (?:<a href="[^"]*">Kvasir page<\/a>|Kvasir page)<\/p>/u);
+    expect(html).toMatch(/<\/svg>Your ChatGPT subscription: (?:<a href="[^"]*">Language models page<\/a>|Language models page)<\/p>/u);
     expect(html).not.toContain("<h2>Subscription</h2>");
     expect(html).not.toContain("Sign out");
     const pointer = "ChatGPT subscription:";
@@ -63,7 +63,7 @@ describe("a person's own page", () => {
 
   it("reads a grant for a page not built yet as a line, never a link, and never names that page hidden", () => {
     const html = renderToStaticMarkup(<ProfilePage caps={caps(["query:see", "models:see"], "plain", { groups: [] })} />);
-    expect(html).toMatch(/<div class="arow"><b>Models<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Registered classifier models<\/span><\/div>/u);
+    expect(html).toMatch(/<div class="arow"><b>Models<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Models, under Pipelines<\/span><\/div>/u);
     expect(html).not.toMatch(/href="[^"]*(models|campaigns)/u);
     // Models is not built yet and is never named hidden; Campaigns is built, and is
     expect(html).toContain("<b>Assistant, Data, Review, Release, Pipelines, Campaigns and Settings</b>");
@@ -78,6 +78,6 @@ describe("a person's own page", () => {
     expect(html).toContain("<b>Settings</b>");
     expect(html).toMatch(/<\/svg>Everything<span class="sr-only"> records<\/span>/u);
     expect(html).toContain("The install&#x27;s ChatGPT subscription:");
-    expect(html).toContain("Kvasir page");
+    expect(html).toContain("Language models page");
   });
 });

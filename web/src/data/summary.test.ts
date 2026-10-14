@@ -32,9 +32,12 @@ import {
   partLabel,
   railOf,
   railSteps,
+  refusedOnly,
   roleOrder,
   roleWord,
   runningWords,
+  setAsideOfWords,
+  setAsideWords,
   slotOf,
   stateOf,
   stateWord,
@@ -119,7 +122,7 @@ function summary(over: Partial<DatasetSummary> = {}): DatasetSummary {
     pictures_place: "working",
     steps: [
       step("found", { finished_at: today("13:56"), files: 45395, bytes: 9.5e9, tree: "anon" }),
-      step("read", { job: 4, started_at: today("13:57"), finished_at: today("13:57"), files: 45179, refused: 216, reads: 1 }),
+      step("read", { job: 4, started_at: today("13:57"), finished_at: today("13:57"), files: 45179, refused: 216, set_aside: 216, reads: 1 }),
       step("sorted", { job: 6, started_at: today("13:58"), finished_at: today("14:01"), scans: 1003, of: 1003, look: 203, unsorted: 0 }),
       step("body_part", { job: 11, run: 3, started_at: today("14:10"), finished_at: today("14:20"), served: true, answered: 960, look: 30, of: 1003, jobs: [11, 10] }),
       step("post_contrast", { state: "off", served: false, answered: 0, look: 0, of: 1003, jobs: [] }),
@@ -154,7 +157,7 @@ describe("the detail's rail", () => {
     const words = railSteps(s).map((x) => stepWords(x, NOW));
     expect(words.map((w) => w.title)).toEqual(["Found", "Read", "Sorted", "Body part", "Post-contrast", "Main scans", "Pictures", "3D views"]);
     expect(words[0]).toMatchObject({ what: "45,395 files", when: clock(today("13:56"), NOW) });
-    expect(words[1].what).toBe("45,179 read · 216 refused");
+    expect(words[1].what).toBe("45,179 read · 216 set aside");
     expect(words[2].what).toBe("1,003 scans · 203 to look at");
     expect(words[2].when).toBe(`${clock(today("14:01"), NOW)} · 3 min`);
     expect(words[3]).toMatchObject({ what: "960 of 1,003 answered · 30 to look at", when: `${clock(today("14:20"), NOW)} · 10 min` });
@@ -178,6 +181,14 @@ describe("the detail's rail", () => {
     expect(pseudo).toMatchObject({ what: "213 to do", when: "" });
     expect(read).toMatchObject({ what: "not yet", when: "" });
     expect(stepWords(step("sorted", { state: "waiting", scans: 0, of: 0 }), NOW).what).toBe("not yet");
+    // the duplicate policy (2026-10-10): the read's own words, the held ones in the line and the rest behind its hint
+    const copies = stepWords(step("read", { files: 7330, new: 0, known: 7328, twice: 2, same_instance: 3, left_out: 1, gone: 4, refused: 216, set_aside: 210, reads: 2 }), NOW);
+    expect(copies.what).toBe("7,330 read · 3 held · 210 set aside · 6 refused");
+    expect(copies.hint).toBe(
+      "7,328 already in another dataset · 2 twice in this dataset · 3 held: the scan is filed under another subject, visit or series · 1 left out of the read by a person · 4 gone from the folder · 210 set aside: not scans · 6 refused",
+    );
+    // an engine from before gives none of these words, and no hint
+    expect(stepWords(step("read", { files: 10, refused: 0, reads: 1 }), NOW).hint).toBeUndefined();
     expect(stepWords(step("main_scans", { state: "off", picked: 0, borders: 0 }), NOW).what).toBe("off");
     expect(stepWords(step("views", { state: "off", made: 0, of: 3 }), NOW).what).toBe("no place for them");
   });
@@ -269,7 +280,36 @@ describe("an engine without the summary door", () => {
       ["pictures", "waiting"],
       ["views", "waiting"],
     ]);
+    // the sources door does not tell what was set aside from what was refused
     expect(steps.map((x) => stepWords(x, NOW).what).slice(0, 3)).toEqual(["45,395 files", "45,395 read · 216 refused", "1,003 scans · 203 to look at"]);
+  });
+});
+
+describe("the files a read set aside (record 56)", () => {
+  it("are counted apart from the refused ones and said by kind, most first", () => {
+    expect(refusedOnly({ refused: 217, set_aside: 216 })).toBe(1);
+    expect(refusedOnly({ refused: 216, set_aside: 216 })).toBe(0);
+    // an engine from before sets none aside
+    expect(refusedOnly({ refused: 5 })).toBe(5);
+    expect(refusedOnly({})).toBe(0);
+    expect(
+      setAsideWords([
+        { kind: "screen_capture", words: "screen captures", count: 176 },
+        { kind: "presentation_state", words: "presentation states", count: 15 },
+        { kind: "pdf", words: "PDFs", count: 2 },
+        { kind: "raw_data", words: "raw data", count: 0 },
+      ]),
+    ).toBe("screen captures 176 · presentation states 15 · PDFs 2");
+    expect(setAsideWords([])).toBeNull();
+    expect(setAsideWords(undefined)).toBeNull();
+  });
+
+  it("say whose they are where no stack of theirs is in the dataset, of the files and in a few words (2026-10-12)", () => {
+    expect(setAsideOfWords(183, { subjects: 1, files: 183 })).toBe("all from 1 subject with no scans");
+    expect(setAsideOfWords(1216, { subjects: 2, files: 1204 })).toBe("1,204 from 2 subjects with no scans");
+    expect(setAsideOfWords(3, { subjects: 0, files: 0 })).toBeNull();
+    // an engine from before says nothing of them
+    expect(setAsideOfWords(3, undefined)).toBeNull();
   });
 });
 
@@ -282,6 +322,11 @@ describe("a card's line", () => {
     expect(cardLine(loose, nextStep(loose), null)).toBe("Loose files: choose where they go");
     const fresh = dataset({ digests: { count: 0, first: null, last: null, recent: [] }, totals: { ...d.totals, stacks: 0, subjects: 0 } });
     expect(cardLine(fresh, nextStep(fresh), null)).toBe("Not read yet");
+    // an identified dataset whose IDs wait: a subject code, never a bare "code" (2026-10-10)
+    const waiting = dataset({ held: { files: 516, identifiers: 4 } } as never);
+    expect(cardLine(waiting, { word: "Identified", step: "pseudonymise", label: "Pseudonymise", busy: false }, null)).toBe("4 IDs need a subject code");
+    const one = dataset({ held: { files: 129, identifiers: 1 } } as never);
+    expect(cardLine(one, { word: "Identified", step: "pseudonymise", label: "Pseudonymise", busy: false }, null)).toBe("1 ID needs a subject code");
   });
 
   it("counts the files found, the originals of an identified dataset", () => {
@@ -423,6 +468,13 @@ describe("a dataset's log", () => {
     expect(logLine(job({ progress: { batch_id: 8, ingested: 0, changed: 0 } }), NOW)).toMatchObject({ what: "Read", how: "nothing new" });
     expect(logLine(job({ kind: "classify", result: { previews: { stacks: 1003, built: 991 } } }), NOW)).toMatchObject({ what: "Sorted", how: "1,003 scans, pictures made" });
     expect(logLine(job({ kind: "pick", result: { subjects: 70 } }), NOW)).toMatchObject({ what: "Main scans picked", how: "for 70 subjects" });
+    // 2026-10-12: what the run wrote, or why it wrote nothing, as the engine says it
+    expect(logLine(job({ kind: "pick", result: { subjects: 2, written: 3, visits_picked: 3, subjects_picked: 2 } }), NOW)).toMatchObject({ what: "Main scans picked", how: "for 3 visits of 2 subjects" });
+    expect(logLine(job({ kind: "pick", result: { subjects: 1, written: 1, visits_picked: 1, subjects_picked: 1 } }), NOW)).toMatchObject({ what: "Main scans picked", how: "for 1 visit of 1 subject" });
+    expect(logLine(job({ kind: "pick", result: { subjects: 10, written: 0, visits_picked: 0, subjects_picked: 0, nothing: "no visits found for its 10 subjects, whose studies carry no date" } }), NOW)).toMatchObject({
+      what: "No main scans picked",
+      how: "no visits found for its 10 subjects, whose studies carry no date",
+    });
     expect(logLine(job({ kind: "pyramid", result: { built: 57, skipped: 0, failed: 2 } }), NOW)).toMatchObject({ what: "3D views", how: "57 made, 2 could not be" });
     expect(logLine(job({ kind: "classify", state: "failed", error: "no pack directory" }), NOW)).toMatchObject({ what: "Sort failed", how: "", failed: true });
     expect(logLine(job({ kind: "pseudonymize", result: { files: { written: 213 } } }), NOW)).toMatchObject({ what: "Pseudonymised", how: "213 files" });

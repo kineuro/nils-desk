@@ -16,6 +16,12 @@ export default defineConfig({
   root: fileURLToPath(new URL("./test/layout", import.meta.url)),
   plugins: [react()],
   resolve: { alias: [{ find: "events", replacement: events }, { find: /^\.\.\/viewer\/Viewer$/, replacement: stub }] },
-  server: { port: Number(process.env.PORT ?? 5191), strictPort: true, host: "127.0.0.1" },
+  server: {
+    port: Number(process.env.PORT ?? 5191),
+    strictPort: true,
+    host: "127.0.0.1",
+    // lab.html (T32's look in a real browser): the engine's doors go to a lab engine, with the lab person's token
+    ...(process.env.LAB_ENGINE ? { proxy: { "/api": { target: process.env.LAB_ENGINE, changeOrigin: true, headers: { authorization: `Bearer ${process.env.LAB_TOKEN ?? ""}` } } } } : {}),
+  },
   logLevel: "warn",
 });

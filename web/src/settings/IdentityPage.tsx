@@ -81,7 +81,19 @@ export function IdentityPage({ caps }: { caps: Capabilities }) {
       {open?.kind === "add" && (
         <PersonForm mode="local" groups={groups} person={null} taken={(access?.people ?? []).map((p) => p.subject)} onClose={() => setOpen(null)} onDone={done("people")} onGroupMade={() => void load()} />
       )}
-      {open?.kind === "person" && <PersonForm mode={signs} groups={groups} person={open.person} taken={[]} onClose={() => setOpen(null)} onDone={done("people")} onGroupMade={() => void load()} />}
+      {open?.kind === "person" && (
+        <PersonForm
+          mode={signs}
+          groups={groups}
+          person={open.person}
+          taken={[]}
+          people={access?.people ?? []}
+          me={caps.person.subject}
+          onClose={() => setOpen(null)}
+          onDone={done("people")}
+          onGroupMade={() => void load()}
+        />
+      )}
       {open?.kind === "group" && (
         <GroupForm
           mode={signs}
@@ -120,7 +132,7 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
   const work = may(caps, "identity:work");
   return (
     <div className="settings">
-      <Head title="Identity" lede={mode === "off" ? "Nobody signs in: whoever opens the desk may do everything." : "People, groups and what each may open."} />
+      <Head title="People" lede={mode === "off" ? "Nobody signs in: whoever opens the desk may do everything." : "People, groups and what each may open."} />
       <Stats items={accessStats(caps, groups, access)} />
       {why && <p className="warn">{why}</p>}
       <SignIn caps={caps} sessions={access?.sessions_open ?? null} />

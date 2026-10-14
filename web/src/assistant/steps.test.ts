@@ -19,6 +19,13 @@ describe("the assistant's steps", () => {
     expect(toolWords("nils_diagnose")).toBe("Checking where the counts drop");
     expect(toolWords("nils_new_thing")).toBe("Using new thing");
   });
+  it("say what the analysis workspace's tools do", () => {
+    expect(toolWords("bash")).toBe("Analysing the rows");
+    expect(toolWords("analysis_table")).toBe("Putting the rows in the workspace");
+    expect(toolWords("read")).toBe("Reading a result");
+    expect(toolWords("write")).toBe("Writing a file");
+    expect(toolWords("activate_skill", "analyse-table")).toBe("Analysing a table");
+  });
   it("never show a hand-off, a phase or the settling call", () => {
     for (const name of ["delegate", "delegation_status", "advance", "settle"]) expect(toolWords(name)).not.toMatch(/station|Moved on|Handed/);
     const tools = [

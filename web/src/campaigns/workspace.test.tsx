@@ -213,7 +213,7 @@ describe("the rater's workspace", () => {
   it("says nothing is left, with the way back, and refuses a person the campaign does not name", () => {
     const done = draw({ campaign: open, seat: seatOf(nothing as unknown as Claimed) });
     expect(done).toContain("Nothing left for you.");
-    expect(done).toContain('href="#campaigns/6"');
+    expect(done).toContain('href="#review/campaigns/6"');
     const notOne = draw({ campaign: open, role: "adjudicator", seat: { kind: "claiming" } });
     expect(notOne).toContain("The campaign names its adjudicators, and you are not one.");
     expect(draw({ campaign: closed, seat: { kind: "claiming" } })).toContain("The campaign is closed.");
@@ -354,7 +354,7 @@ describe("can't tell and unsure (record 48)", () => {
     // no clash with the keys already there: on three rows or more a number finds its row (record 48, one screen)
     expect(at("1")).toEqual({ kind: "find", row: rows[0] });
     expect(at("s")).toEqual({ kind: "skip" });
-    expect(at("h")).toEqual({ kind: "evidence" });
+    expect(at("H")).toEqual({ kind: "view" });
     expect(at("a", q, true)).toBeNull();
     // an older engine names neither
     expect(at("a", older)).toBeNull();

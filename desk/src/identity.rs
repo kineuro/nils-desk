@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
@@ -369,6 +369,118 @@ pub async fn users_add(State(desk): State<Shared>, headers: HeaderMap, body: Str
     })())
 }
 
+// --- a person's password, and a person removed (record 55 H2, round 5)
+
+/// `POST /desk/people/{name}/password {password, current}` (`local` mode,
+/// from the desk's own origin): a person changes their own password with
+/// the one they have, and a person holding `identity:work` resets anyone
+/// else's without it. The rule is a person's at their adding: eight
+/// characters at least. An admin's reset ends every session of that person;
+/// one's own change ends one's other sessions and keeps this one.
+pub async fn person_password(
+    State(desk): State<Shared>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+    body: String,
+) -> Response {
+    answer((|| {
+        local_only(&desk)?;
+        same_origin(&desk.config.origins(), &headers)
+            .map_err(|why| Box::new(error(StatusCode::FORBIDDEN, why)))?;
+        let (session, _) = session::resolve(&desk, &headers);
+        let Some(session) = session else {
+            return Err(Box::new(error(
+                StatusCode::UNAUTHORIZED,
+                "no session; log in at the desk",
+            )));
+        };
+        let me = session::person(&desk, &session);
+        let doc = body_of(&body)?;
+        let Some(password) = doc["password"].as_str() else {
+            return Err(bad("password: the new password"));
+        };
+        let own = me.subject == name;
+        if own {
+            let current = doc["current"].as_str().unwrap_or_default();
+            if users::login(&desk.store, &name, current).is_none() {
+                return Err(Box::new(error(
+                    StatusCode::FORBIDDEN,
+                    "the current password is not right",
+                )));
+            }
+        } else if !me.holds_name("identity:work") {
+            return Err(Box::new(error(
+                StatusCode::FORBIDDEN,
+                "resetting another person's password needs identity:work",
+            )));
+        }
+        if desk.store.user(&name).is_none() {
+            return Err(Box::new(error(
+                StatusCode::NOT_FOUND,
+                format!("no user named {name}"),
+            )));
+        }
+        users::set_password(&desk.store, &name, password).map_err(bad)?;
+        let keep = own.then_some(session.id.as_str());
+        let ended = desk.store.end_sessions_of(&name, keep);
+        Ok(axum::Json(json!({"username": name, "sessions_ended": ended})).into_response())
+    })())
+}
+
+/// `?to=<subject>` on the removal: the person who takes over the removed
+/// person's kept results and lineage.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct RemoveQuery {
+    to: Option<String>,
+}
+
+/// `DELETE /desk/people/{name}?to=<subject>` (identity:work, from the desk's
+/// own origin; any mode where people sign in): the person removed, their
+/// groups, their own grants and their sessions, and in `local` mode the user
+/// with its password. Under `oidc` the desk forgets them: a later sign-in at
+/// the provider finds them holding only what a group that follows a
+/// provider group gives. Never oneself, and never the last holder of
+/// `identity:work`. `to` takes over the results and lineage they kept.
+pub async fn person_remove(
+    State(desk): State<Shared>,
+    headers: HeaderMap,
+    Path(name): Path<String>,
+    Query(q): Query<RemoveQuery>,
+) -> Response {
+    answer((|| {
+        let me = changer(&desk, &headers)?;
+        if me.subject == name {
+            return Err(Box::new(error(
+                StatusCode::CONFLICT,
+                "a person cannot remove themself; ask another admin",
+            )));
+        }
+        let to = q.to.filter(|t| !t.trim().is_empty());
+        let (sessions, results, lineage) = desk.store.held_by(&name);
+        desk.store
+            .change(
+                oidc(&desk),
+                Change::PersonRemove {
+                    subject: name.clone(),
+                    to: to.clone(),
+                },
+            )
+            .map_err(refused)?;
+        let (results, lineage) = if to.is_some() {
+            (results, lineage)
+        } else {
+            (0, 0)
+        };
+        Ok(axum::Json(json!({
+            "removed": name,
+            "sessions_ended": sessions,
+            "handed": {"results": results, "lineage": lineage},
+            "to": to,
+        }))
+        .into_response())
+    })())
+}
+
 // --- the users doors of the ladder, for one release
 
 /// `GET /desk/users` (identity:see, `local` mode): each user with the
@@ -438,12 +550,42 @@ pub async fn users_entitlements(
 
 // --- the people on this desk, for choosing whom to share a conversation with (the chat, slice 5)
 
+/// `?holding=<grant>` on the people door: say of each person whether what
+/// their groups and their own grants add up to holds that grant, for a person
+/// choosing who does work that needs it (a campaign's raters need
+/// `campaigns:work`, or their claim is refused). Asked by a person who holds
+/// the grant themselves, or for a campaign's raters by one who may make one.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct PeopleQuery {
+    holding: Option<String>,
+}
+
+/// What a campaign's raters need: their claims are refused without it.
+const RATES_A_CAMPAIGN: &str = "campaigns:work";
+
+/// What making a campaign takes, as the engine's make door asks it: work on
+/// Campaigns. A check asks Pipelines beside it, which its own dialog says;
+/// either maker names its raters from the same list (Wave 7a, record 55 H3:
+/// nothing typed by hand that a list can offer).
+const MAKES_A_CAMPAIGN: [&str; 1] = ["campaigns:work"];
+
 /// The people a person may name when sharing a conversation: everyone the desk
 /// keeps in `local` mode, and everyone who has signed in at least once in
 /// `oidc` mode, by subject and display name, never the person asking. A person
 /// holding `assistant:use` asks; a desk nobody signs in to has one person and
-/// lists nobody.
-pub async fn people_list(State(desk): State<Shared>, headers: HeaderMap) -> Response {
+/// lists nobody. With `holding`, each person adds `holds` (see [`PeopleQuery`]).
+///
+/// Anyone who may make a check sees the names of the people who may read it,
+/// and nothing more (ruled on 2026-10-12); since Wave 7a (record 55 H3) the
+/// same holds for anyone who may make a campaign of any kind, whose make
+/// dialog names its raters from a list: `?holding=campaigns:work` answers
+/// them without `assistant:use`, each person by subject, display and `holds`.
+/// Every other use of the door still needs `assistant:use`.
+pub async fn people_list(
+    State(desk): State<Shared>,
+    Query(q): Query<PeopleQuery>,
+    headers: HeaderMap,
+) -> Response {
     answer((|| {
         if desk.config.mode == Mode::Off {
             return Err(Box::new(error(
@@ -451,12 +593,23 @@ pub async fn people_list(State(desk): State<Shared>, headers: HeaderMap) -> Resp
                 "a desk nobody signs in to has one person",
             )));
         }
-        let me = session::holding(
-            &desk,
-            &headers,
-            "assistant:use",
-            "listing the people on the desk",
-        )?;
+        let (session, _) = session::resolve(&desk, &headers);
+        let Some(session) = session else {
+            return Err(Box::new(error(
+                StatusCode::UNAUTHORIZED,
+                "no session; log in at the desk",
+            )));
+        };
+        let me = session::person(&desk, &session);
+        // a campaign's maker names its raters: who may read it, by name, and nothing more
+        let raters = q.holding.as_deref() == Some(RATES_A_CAMPAIGN)
+            && MAKES_A_CAMPAIGN.iter().all(|g| me.holds(g));
+        if !raters && !me.holds_name("assistant:use") {
+            return Err(Box::new(error(
+                StatusCode::FORBIDDEN,
+                "listing the people on the desk needs assistant:use",
+            )));
+        }
         let mut people = std::collections::BTreeMap::<String, String>::new();
         if desk.config.mode == Mode::Local {
             for u in desk.store.users() {
@@ -468,6 +621,32 @@ pub async fn people_list(State(desk): State<Shared>, headers: HeaderMap) -> Resp
             }
         }
         people.remove(&me.subject);
+        let holding = match q.holding.as_deref() {
+            None => None,
+            Some(g) if !grants::is_grant(g) => {
+                return Err(bad(format!("holding: {g} is no grant")));
+            }
+            Some(g) if !raters && !me.holds(g) => {
+                return Err(Box::new(error(
+                    StatusCode::FORBIDDEN,
+                    format!("asking who holds {g} needs {g}"),
+                )));
+            }
+            Some(g) => Some(g),
+        };
+        // what each person's groups and own grants add up to, as the identity page lists it
+        let holders: BTreeSet<String> = match holding {
+            None => BTreeSet::new(),
+            Some(g) => rows(&desk)
+                .into_iter()
+                .filter(|r| {
+                    r["access"]["grants"]
+                        .as_array()
+                        .is_some_and(|a| a.iter().any(|x| x.as_str() == Some(g)))
+                })
+                .filter_map(|r| r["subject"].as_str().map(str::to_string))
+                .collect(),
+        };
         let mut list: Vec<(String, String)> = people.into_iter().collect();
         list.sort_by(|a, b| {
             a.1.to_lowercase()
@@ -476,7 +655,13 @@ pub async fn people_list(State(desk): State<Shared>, headers: HeaderMap) -> Resp
         });
         let out: Vec<Value> = list
             .into_iter()
-            .map(|(subject, display)| json!({"subject": subject, "display": display}))
+            .map(|(subject, display)| {
+                let mut v = json!({"subject": subject, "display": display});
+                if holding.is_some() {
+                    v["holds"] = json!(holders.contains(&subject));
+                }
+                v
+            })
             .collect();
         Ok(axum::Json(json!({ "people": out })).into_response())
     })())

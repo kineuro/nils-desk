@@ -45,7 +45,7 @@ import {
   upcoming,
   type Reading,
 } from "./reader";
-import { acceptBatch, hintOf, R48, valueOrderServed } from "./readerDoors";
+import { acceptBatch, hintOf, narrowed, R48, valueOrderServed } from "./readerDoors";
 import { EvidenceLines, PaceCount, SuggestionBar } from "./ReaderParts";
 import { blank } from "./renderers";
 import { WorkspaceBody, type WorkspaceBodyProps } from "./Workspace";
@@ -178,23 +178,34 @@ describe("the suggestion", () => {
   });
 });
 
+describe("why the rules decided, beside the picture (record 55 H5)", () => {
+  it("keeps the asked axes alone, in the question's order, the rows' order", () => {
+    const r = readingOf(whyDoc as unknown as Json);
+    const n = narrowed(r, ["technique", "base"]);
+    expect(n.lines.map((l) => l.axis)).toEqual(["technique", "base"]);
+    expect(narrowed(r, []).lines.length).toBe(r.lines.length);
+  });
+});
+
 describe("the reader's keys", () => {
   const rows = rowsOf(AXES, null);
   const k = (key: string, more: Partial<Parameters<typeof keyAct>[1]> = {}) => keyAct(key, { ctrl: false, inField: false, q: AXES, rows, offered: 2, batches: true, ...more });
-  it("choose a candidate with z and x, open the evidence with h, go back with Backspace, batches with b", () => {
+  it("choose a candidate with z and x, the reader's view with H, go back with Backspace, batches with b", () => {
     expect(k("z")).toEqual({ kind: "candidate", index: 0 });
     expect(k("x")).toEqual({ kind: "candidate", index: 1 });
     // only as many as are shown
     expect(k("c")).toBeNull();
-    expect(k("h")).toEqual({ kind: "evidence" });
+    // the evidence stands beside the picture (record 55 H5): no key opens it, and h without a header door does nothing
+    expect(k("h")).toBeNull();
+    expect(k("H")).toEqual({ kind: "view" });
     expect(k("Backspace")).toEqual({ kind: "reset" });
     expect(k("b")).toEqual({ kind: "batch" });
     expect(k("b", { batches: false })).toBeNull();
     // the row keys are untouched: none of the reader's keys finds a row
     expect(k("1")?.kind).toBe("find");
-    // with the whole header served, h opens it and H the evidence
+    // with the whole header served, h opens it; H still turns the reader compact or expanded
     expect(k("h", { header: true })).toEqual({ kind: "header" });
-    expect(k("H", { header: true })).toEqual({ kind: "evidence" });
+    expect(k("H", { header: true })).toEqual({ kind: "view" });
     // and a text field keeps its letters
     expect(k("z", { inField: true })).toBeNull();
   });
@@ -386,12 +397,12 @@ describe("the reader's parts", () => {
     expect(all).toContain("Rules and System 1 agree · p 0.71. Enter confirms.");
   });
 
-  it("draws one line per axis, and the rest when opened", () => {
-    const shut = renderToStaticMarkup(<EvidenceLines lines={reading.lines} open={false} onToggle={() => undefined} />);
+  it("draws one line per axis, and the rest in the expanded view", () => {
+    const shut = renderToStaticMarkup(<EvidenceLines lines={reading.lines} />);
     expect((shut.match(/class="ev( differ)?"/g) ?? []).length).toBe(3);
-    expect(shut).toContain("how it was decided");
+    expect(shut).toContain('aria-label="why the rules decided"');
     expect(shut).not.toContain("ev-more");
-    const opened = renderToStaticMarkup(<EvidenceLines lines={reading.lines} open onToggle={() => undefined} />);
+    const opened = renderToStaticMarkup(<EvidenceLines lines={reading.lines} full />);
     expect(opened).toContain("base/technique:MPRAGE · held: clause 0");
     expect(opened).toContain("not at this detail");
     expect(opened).toContain("FatSat · p 0.76");
@@ -443,10 +454,16 @@ describe("the reader's parts", () => {
     expect(html).toMatch(/aria-pressed="true"[^>]*>by value/u);
     expect(html).toContain("Like stacks in batches");
     expect(html).toContain("They agree on base, technique");
-    // the evidence is one key away (record 48, one screen): H opens it over the reader
-    expect(html).toContain("<kbd>H</kbd>how decided");
-    expect(html).not.toContain("rule technique:MPRAGE");
-    expect(renderToStaticMarkup(<WorkspaceBody {...props} evOpen />)).toContain("rule technique:MPRAGE");
+    // the evidence stands beside the picture, open (record 55 H5): one line per axis, the rest in the expanded view
+    expect(html).toContain('aria-label="why the rules decided"');
+    expect(html).toContain("rule technique:MPRAGE");
+    expect(html).toContain("ev-more");
+    expect(html).toContain('data-reader-size="expanded"');
+    const compact = renderToStaticMarkup(<WorkspaceBody {...props} rowsView="compact" onRowsView={none} />);
+    expect(compact).toContain('data-reader-size="compact"');
+    expect(compact).toContain("rule technique:MPRAGE");
+    expect(compact).not.toContain("ev-more");
+    expect(compact).toMatch(/aria-pressed="true"[^>]*>compact/u);
     // the agreed values are drawn chosen on their rows
     expect(html).toMatch(/class="opt on" aria-pressed="true"[^>]*>(?:<kbd>[^<]*<\/kbd>)?T1w/u);
     // the key list names the reader's keys

@@ -146,7 +146,16 @@ export const review = {
     door<{ overlay: number; review_item: number | null; status: string }>("POST", "/api/overlays", { name, overlay, scope, why, ...(try_ref ? { try_ref } : {}) }),
   closure: (overlay: number) => door<Closure>("GET", `/api/depends/overlay/${overlay}`),
   merge: (canonical: string, alias: string, why: string) => door<{ job: number; state: string }>("POST", "/api/linkage/merge", { canonical, alias, why }),
+  /** A scan held under another visit or series of its subject, let go: kept as another copy of it, or left out of the read (the duplicate policy's defaults, 2026-10-10). */
+  letGo: (id: number, keep: boolean, why: string) => door<{ item: number; keep: boolean; files: number }>("POST", `/api/review/${id}/let-go`, { keep, why }),
 };
+
+/** Whether an `identity.same_instance` item is about one subject (a scan under another visit or series of it), which a let-go settles, or two, which a merge does. */
+export function sameSubject(item: Pick<ReviewItem, "ref">): boolean {
+  const ref = (item.ref ?? {}) as Json;
+  const a = num(ref.subject_id);
+  return a !== null && a === num(ref.holder_id);
+}
 
 /** A chip of the queue: everything, one cohort with its open count, or the subjects in no cohort. */
 export interface CohortChip {
@@ -168,12 +177,14 @@ export function cohortChips(summary: ReviewSummary | null, items: ReviewItem[]):
 }
 
 /** The three kinds the queue is made of: a scan the rules could not place, subjects that may be one person, a session that moved. */
-export type Family = "unsure" | "identity" | "moved" | "picks" | "proposals" | "asked";
+export type Family = "unsure" | "identity" | "moved" | "picks" | "proposals" | "asked" | "campaigns";
 
 /** The families with a page of their own under Review (record 45): a row there opens it. */
 export const PAGED: readonly Family[] = ["picks", "proposals", "asked"];
 
 export function familyOf(kind: string): Family | null {
+  // Wave 7a, H3: an item a campaign holds is a family of its own, answered in its campaign and never in the queue
+  if (kind.startsWith("campaign.")) return "campaigns";
   const k = kindOf(kind);
   if (kind === "pick.border") return "picks";
   if (kind === "classify.asked") return "asked";
@@ -192,6 +203,12 @@ function num(v: unknown): number | null {
 
 function text(v: unknown): string | null {
   return typeof v === "string" && v !== "" ? v : null;
+}
+
+/** The campaign that holds an item of the campaigns family, as its evidence names it. */
+export function heldBy(item: Pick<ReviewItem, "evidence">): { id: number | null; name: string | null } {
+  const ev = (item.evidence ?? {}) as Json;
+  return { id: num(ev.campaign), name: text(ev.campaign_name) };
 }
 
 /** How many stacks an item is about. */
@@ -278,6 +295,10 @@ export function itemWords(item: ReviewItem): string {
     const ref = (item.ref ?? {}) as Json;
     return `${text(ref.role) ?? "a role"} of subject ${num(ref.subject_id) ?? ""}${text(ref.session_day) ? ` on ${text(ref.session_day)}` : ""}: the pick run doubts it`;
   }
+  if (familyOf(item.kind) === "campaigns") {
+    const held = heldBy(item);
+    return `held by ${held.name ? `campaign ${held.name}` : "a campaign"}, answered there`;
+  }
   if (item.kind === "classify.asked") return `System 1 asks about stack ${num(((item.ref ?? {}) as Json).stack_id) ?? ""}`;
   if (k.classifier && k.what === "model") {
     const model = text(ev.model) ?? "a model";
@@ -305,6 +326,14 @@ export function itemWords(item: ReviewItem): string {
       return `${files !== null ? `${n(files)} files ` : "files "}held until the map names ${shape ? `an identifier shaped ${shape}` : "their identifier"}`;
     }
     if (k.what === "provisional") return `a subject coded from an identifier the map does not know${between}`;
+    if (k.what === "same_instance") {
+      const files = num(ev.files);
+      const ref = (item.ref ?? {}) as Json;
+      const differs = (ev.differs ?? {}) as Json;
+      const lead = `${files !== null ? n(files) : "Some"} ${files === 1 ? "file" : "files"} of a scan filed already`;
+      if (sameSubject(item)) return `${lead}, read under another ${(num(differs.study) ?? 0) > 0 ? "visit" : "series"} of subject ${text(ref.code) ?? ""}`.trimEnd();
+      return `${lead} under subject ${text(ref.holder_code) ?? "another"}, read as subject ${text(ref.code) ?? "another"}`;
+    }
     return `${k.area} ${k.what.replace(/_/g, " ")}${between}`;
   }
   if (k.area === "session") {
@@ -324,12 +353,17 @@ export function itemWords(item: ReviewItem): string {
  * decided here; a subject coded without a map is merged into the one it
  * stands for, by a merge or by a map that names its identifier.
  */
-export function identityActs(item: Pick<ReviewItem, "kind">): { decide: boolean; merge: boolean; map: boolean } {
-  if (familyOf(item.kind) !== "identity") return { decide: false, merge: false, map: false };
+export function identityActs(item: Pick<ReviewItem, "kind"> & Partial<Pick<ReviewItem, "ref">>): { decide: boolean; merge: boolean; map: boolean; letGo: boolean } {
+  if (familyOf(item.kind) !== "identity") return { decide: false, merge: false, map: false, letGo: false };
   const what = kindOf(item.kind).what;
-  if (what === "unmapped") return { decide: false, merge: false, map: true };
-  if (what === "provisional") return { decide: false, merge: true, map: true };
-  return { decide: true, merge: true, map: false };
+  if (what === "unmapped") return { decide: false, merge: false, map: true, letGo: false };
+  if (what === "provisional") return { decide: false, merge: true, map: true, letGo: false };
+  // the same scan filed twice: a merge where two subjects hold it, a let-go where one subject does under another visit or series
+  if (what === "same_instance") {
+    const one = sameSubject({ ref: item.ref ?? null });
+    return { decide: false, merge: !one, map: false, letGo: one };
+  }
+  return { decide: true, merge: true, map: false, letGo: false };
 }
 
 /** Where Map them leads: the dataset's Pseudonymisation page when the item names its dataset, else the Identifiers page, which names each. */
@@ -347,6 +381,7 @@ export function kindTag(kind: string): { words: string; tone: "gated" | "caution
   if (f === "picks") return { words: "pick", tone: "caution" };
   if (f === "proposals") return { words: "model", tone: "caution" };
   if (f === "asked") return { words: "asked", tone: "caution" };
+  if (f === "campaigns") return { words: "campaign", tone: "" };
   return { words: kindOf(kind).area, tone: "" };
 }
 

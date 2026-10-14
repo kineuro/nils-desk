@@ -22,7 +22,7 @@ import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { progressWords, setupSteps } from "./setup";
 import type { Purpose } from "./steps";
-import { holdsTile, lastVisit, markVisit, needsTile, runningTile, sinceTile, tilesOffered, type Tile, type TileId } from "./tiles";
+import { holdsTile, lastVisit, markVisit, needsTile, runningTile, sinceTile, tileHref, tilesOffered, type Tile, type TileId } from "./tiles";
 
 interface Loaded {
   summary: Summary | null;
@@ -110,13 +110,25 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
       )}
       {tiles.length > 0 && (
         <section className="tiles rule-top" aria-label="the registry now">
-          {tiles.map((t) => (
-            <div key={t.id} className="tile">
-              <span className="eyebrow">{t.eyebrow}</span>
-              <span className="value num">{t.value}</span>
-              <span className="meta">{t.meta}</span>
-            </div>
-          ))}
+          {tiles.map((t) => {
+            const to = tileHref(t.id, caps);
+            const inner = (
+              <>
+                <span className="eyebrow">{t.eyebrow}</span>
+                <span className="value num">{t.value}</span>
+                <span className="meta">{t.meta}</span>
+              </>
+            );
+            return to === null ? (
+              <div key={t.id} className="tile">
+                {inner}
+              </div>
+            ) : (
+              <a key={t.id} className="tile link" href={to}>
+                {inner}
+              </a>
+            );
+          })}
         </section>
       )}
     </div>

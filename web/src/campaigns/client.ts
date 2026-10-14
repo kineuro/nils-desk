@@ -95,7 +95,7 @@ export type Condition = boolean | { axis?: string; is?: string; missing_or?: str
 /** An axes answer as the engine reads it: each asked axis with its values, none for no value. */
 export type Joint = Record<string, string[]>;
 
-export type ItemState = "open" | "awaiting_metric" | "needs_adjudication" | "agreed" | "adjudicated" | "disagreed" | "resolved";
+export type ItemState = "open" | "awaiting_metric" | "needs_adjudication" | "agreed" | "adjudicated" | "disagreed" | "refused" | "resolved";
 
 export interface Agreement {
   items: number;
@@ -132,6 +132,12 @@ export interface Item {
   blind?: boolean;
   /** Record 48 R1: a batch held it back to be read alone. */
   held_back?: boolean;
+  /** Record 55 H3: the result a check's item asks about, the part set it is read as, and at part grain the part. */
+  derivative_id?: number | null;
+  part_set?: string | null;
+  part_label?: number | null;
+  /** An item a close could not write (state refused): the engine's reason and when; nothing was written for it, and a later close tries it again. Absent from an engine before it. */
+  refused?: { why?: string | null; at?: string | null } | null;
 }
 
 export interface Assignment {
@@ -152,6 +158,21 @@ export interface Counts {
   items: Partial<Record<string, number>>;
   assignments: Partial<Record<string, number>>;
   answers: number;
+}
+
+/** What a campaign's answers are for (record 55 D6, D7). */
+export type Purpose = "decide" | "train" | "measure" | "audit";
+
+export const PURPOSE_WORDS: Record<Purpose, { words: string; says: string }> = {
+  decide: { words: "Decide", says: "Its answers become decisions." },
+  train: { words: "Train", says: "Its answers train a model: each item is answered before any suggestion shows." },
+  measure: { words: "Measure", says: "Its answers measure an error: each item is answered before any suggestion shows." },
+  audit: { words: "Audit", says: "A blind read of accepted scans; its answers never train and become no decision." },
+};
+
+/** A campaign's purpose, decide where the engine says none. */
+export function purposeOf(c: Pick<Campaign, "purpose">): Purpose {
+  return c.purpose === "train" || c.purpose === "measure" || c.purpose === "audit" ? c.purpose : "decide";
 }
 
 export interface Campaign {
@@ -179,7 +200,11 @@ export interface Campaign {
   suggest?: SuggestMode | string;
   /** The reader shows the pictures alone, no text of the file's header beside them, as pair mode does; absent from an engine before it, which showed the header. */
   hide_header?: boolean;
+  /** Record 55 D6 and D7: what its answers are for; decide where an engine before it says none. Train and measure are read blind first; an audit's answers never train. */
+  purpose?: Purpose | string;
   counts: Counts;
+  /** A closed check that holds an item its close refused, whose question is still open: a person may close it again. Absent from an engine before it. */
+  close_again?: boolean;
   /** One campaign's read carries its items and assignments; the list leaves them out. */
   items?: Item[];
   assignments?: Assignment[];
@@ -230,7 +255,8 @@ export interface Closed {
   picks: number[];
   resolved: number;
   unresolved: number;
-  refused: unknown[];
+  /** The items the close could not write, each with the engine's own reason. */
+  refused: { item: number; why: string }[];
   /** Items whose stack (or an axis of it) someone decided while the campaign was open: that decision stands. */
   skipped?: { item: number; why: string }[];
   staged: boolean;
@@ -296,6 +322,8 @@ export interface MakeBody extends Json {
   suggest?: SuggestMode;
   /** An axis or an axes question that suggests none: the pictures alone, no header text. */
   hide_header?: boolean;
+  /** Record 55 D6 and D7: what its answers are for, where not decide. */
+  purpose?: Purpose;
 }
 
 /** The body of an answer: a value for an axis, a pick and a free question, a form for a form, a file for a derivative. */
@@ -315,6 +343,8 @@ export const campaigns = {
   one: (c: number | string) => door<Campaign>("GET", `/api/campaigns/${id(c)}`),
   answers: (c: number | string) => door<{ campaign: number; count: number; answers: Answer[] }>("GET", `/api/campaigns/${id(c)}/answers`).then((r) => r.answers),
   make: (body: MakeBody) => door<Campaign & { pictures?: Pictures }>("POST", "/api/campaigns", body),
+  /** What a make would draw, written nowhere (a check's, and since Wave 7a a pair, anchored or A/B campaign's). */
+  preview: (body: MakeBody) => door<Json>("POST", "/api/campaigns/preview", body),
   claim: (c: number | string, role: "rater" | "adjudicator" = "rater") => door<Claimed>("POST", `/api/campaigns/${id(c)}/claim`, { role }),
   answer: (c: number | string, assignment: number, body: AnswerBody) => door<Answered>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/answer`, body),
   release: (c: number | string, assignment: number) => door<Assignment>("POST", `/api/campaigns/${id(c)}/assignments/${assignment}/release`, {}),
@@ -521,11 +551,23 @@ export function principalOf(caps: Capabilities): string {
   return caps.engine?.principal || caps.person.subject;
 }
 
-/** The kinds a campaign may ask, with the ones this engine knows: `axes` only where its contract says so. */
+/** The kinds a campaign may ask, with the ones this engine knows: `axes` only where its contract says so; pair, anchored and A/B where its make door draws their items (Wave 7a, record 55 H3). */
 export function kindsOffered(caps: Capabilities): string[] {
   const kinds = ["axis", "form", "free", "derivative", "pick"];
   if (axesServed(caps)) kinds.splice(1, 0, "axes");
+  for (const k of DRAWN) if (draws(caps, k) && (k !== "ab" || axesServed(caps))) kinds.push(k);
   return kinds;
+}
+
+/** The campaigns whose items the make door draws from selections, not from a source of keys (Wave 7a, record 55 H3). */
+export const DRAWN = ["pair", "anchored", "ab"] as const;
+export type Drawn = (typeof DRAWN)[number];
+export const isDrawn = (kind: string): kind is Drawn => (DRAWN as readonly string[]).includes(kind);
+
+/** Whether the engine's make door draws a kind's items: the capabilities' `campaigns.draws`. */
+export function draws(caps: Capabilities, kind: Drawn): boolean {
+  const list = (caps.engine as { campaigns?: { draws?: unknown } } | null)?.campaigns?.draws;
+  return Array.isArray(list) && list.includes(kind);
 }
 
 /** The door a record 45 engine adds beside the axes question; OpenAPI 7 grew both in place, so the door is how the desk knows. */
@@ -547,6 +589,8 @@ export const KIND_WORDS: Record<string, string> = {
   free: "Free text",
   pair: "Two stacks side by side",
   anchored: "A stack beside two anchors",
+  ab: "Settle readings (A/B)",
+  check: "Check results",
 };
 
 /** The question in a few words. */
@@ -568,6 +612,11 @@ export function questionWords(q: Question): string {
       return `which is post · ${q.axis ?? "post_contrast"}`;
     case "anchored":
       return `like the pre or the post · ${q.axis ?? "post_contrast"}`;
+    case "check": {
+      const c = q as unknown as { part_set?: unknown; grain?: unknown; reasons?: unknown };
+      const n = Array.isArray(c.reasons) ? c.reasons.length : 0;
+      return `${typeof c.part_set === "string" ? c.part_set : "the result"}${c.grain === "part" ? ", one item per part" : ""} · ${n} ${n === 1 ? "reason" : "reasons"}`;
+    }
     default:
       return q.kind;
   }
@@ -575,6 +624,8 @@ export function questionWords(q: Question): string {
 
 /** Where the items came from. */
 export function sourceWords(source: Json): string {
+  if (typeof source.run === "number") return `run ${source.run}${typeof source.output === "string" ? ` · ${source.output}` : ""}${typeof source.which === "string" && source.which !== "all" ? ` · ${source.which === "unchecked" ? "not yet checked" : source.which === "breached" ? "flagged by its checks" : source.which}` : ""}${typeof source.sample === "number" ? ` · a sample of ${source.sample}` : ""}`;
+  if (Array.isArray(source.derivatives)) return `${source.derivatives.length} results`;
   if (typeof source.selection === "string") return `selection ${source.selection}`;
   if (source.handle !== undefined) return `result ${String(source.handle)}`;
   if (source.review && typeof source.review === "object") {
@@ -590,6 +641,7 @@ export const CLOSES_WORDS: Record<string, string> = {
   decision: "decisions in force",
   stage: "staged decisions",
   pick: "picks",
+  check: "a status on each result and its parts",
   none: "nothing: the answers are the labels",
 };
 
@@ -601,6 +653,7 @@ export const STATES: { state: string; words: string; tone: "" | "caution" | "bra
   { state: "disagreed", words: "disagreed", tone: "caution" },
   { state: "agreed", words: "agreed", tone: "ok" },
   { state: "adjudicated", words: "adjudicated", tone: "ok" },
+  { state: "refused", words: "refused", tone: "caution" },
   { state: "resolved", words: "resolved", tone: "brand" },
 ];
 
@@ -619,8 +672,8 @@ export function progress(counts: Counts): { state: string; words: string; tone: 
 
 export const itemTotal = (counts: Counts) => Object.values(counts.items).reduce<number>((a, b) => a + (b ?? 0), 0);
 
-/** Settled: agreed, adjudicated or resolved, what a close writes or wrote. */
-export const settled = (state: string) => state === "agreed" || state === "adjudicated" || state === "resolved";
+/** Settled: agreed, adjudicated or resolved, what a close writes or wrote, or refused, what a close could not write and a later one tries again. */
+export const settled = (state: string) => state === "agreed" || state === "adjudicated" || state === "refused" || state === "resolved";
 
 /** A share as a percentage, or a dash. */
 export const pct = (v: number | null | undefined) => (v === null || v === undefined || Number.isNaN(v) ? "none" : `${Math.round(v * 100)}%`);
@@ -698,9 +751,13 @@ export function seesAnswers(caps: Capabilities, c: Campaign): boolean {
   return adj.length > 0 ? adj.includes(me) : may(caps, "campaigns:work") && may(caps, "review:work");
 }
 
-/** Why the person may not close, or null. Closing writes decisions, so it needs Review work beside Campaigns work. */
+/**
+ * Why the person may not close, or null. Closing writes decisions, so it
+ * needs Review work beside Campaigns work. A closed check that holds an
+ * item its close refused is closed again, where the engine says so.
+ */
 export function closeRefusal(caps: Capabilities, c: Campaign): string | null {
-  if (c.status === "closed") return "It is closed.";
+  if (c.status === "closed" && c.close_again !== true) return "It is closed.";
   if (!served(caps, "POST /api/campaigns/{id}/close")) return "This engine has no door for closing a campaign.";
   if (!may(caps, "campaigns:work")) return "Closing needs work on the Campaigns page.";
   if (!may(caps, "review:work")) return "Closing writes through Review, so it needs work on the Review page as well.";
@@ -741,7 +798,8 @@ export interface Closure {
  */
 export function closure(c: Campaign, answers: Answer[] | null = null): Closure {
   const items = c.items ?? [];
-  const ready = items.filter((i) => i.state === "agreed" || i.state === "adjudicated");
+  // a close writes what is agreed or adjudicated, and tries again what an earlier close refused
+  const ready = items.filter((i) => i.state === "agreed" || i.state === "adjudicated" || i.state === "refused");
   const already = items.filter((i) => i.state === "resolved").length;
   const byItem = new Map<number, Answer[]>();
   for (const a of answers ?? []) byItem.set(a.item_id, [...(byItem.get(a.item_id) ?? []), a]);
@@ -757,7 +815,9 @@ export function closure(c: Campaign, answers: Answer[] | null = null): Closure {
         ? plural("staged decision, for a person to commit", "staged decisions, for a person to commit")
         : c.closes_into === "pick"
           ? plural("person's pick", "person's picks")
-          : plural("review item closed with its outcome", "review items closed with their outcomes");
+          : c.closes_into === "check"
+            ? plural("result's check, with its parts'", "results' checks, with their parts'")
+            : plural("review item closed with its outcome", "review items closed with their outcomes");
   const unresolved = STATES.filter((s) => !settled(s.state))
     .map((s) => ({ state: s.state, words: s.words, n: items.filter((i) => i.state === s.state).length }))
     .filter((s) => s.n > 0);
@@ -774,10 +834,19 @@ export function closure(c: Campaign, answers: Answer[] | null = null): Closure {
 /** What the close answered, in one sentence. */
 export function closedWords(r: Closed, into: string): string {
   const wrote = into === "pick" ? `${r.picks.length} ${r.picks.length === 1 ? "pick" : "picks"}` : into === "none" ? `${r.resolved} resolved` : `${r.decisions.length} ${r.decisions.length === 1 ? "decision" : "decisions"}${r.staged ? ", staged" : ""}`;
-  const refused = r.refused.length > 0 ? `; ${r.refused.length} refused by a decision that outranks it` : "";
+  const refused = r.refused.length > 0 ? `; ${r.refused.length} refused: ${refusedWhy(r.refused)}` : "";
   const n = r.skipped?.length ?? 0;
   const skipped = n > 0 ? `; ${n} skipped, decided by someone while the campaign was open` : "";
   return `Closed: ${wrote}, ${r.unresolved} unresolved${refused}${skipped}.`;
+}
+
+/** The engine's own reasons for the items a close refused, each once: the first two, and how many more each item says. */
+export function refusedWhy(list: readonly unknown[]): string {
+  const whys = [...new Set(list.map((x) => (typeof x === "object" && x !== null && typeof (x as { why?: unknown }).why === "string" ? (x as { why: string }).why.trim() : "")).filter((w) => w !== ""))];
+  if (whys.length === 0) return "the engine gave no reason";
+  const shown = whys.slice(0, 2).join("; ");
+  const more = whys.length - 2;
+  return more > 0 ? `${shown}; and ${more} more ${more === 1 ? "reason" : "reasons"}, each on its item` : shown;
 }
 
 // ---------------------------------------------------------------- making one
@@ -838,6 +907,33 @@ export interface Draft {
   suggest: SuggestMode;
   /** An axis or an axes question that suggests nothing: the pictures alone, with no text of the file's header; off unless chosen. */
   hideHeader: boolean;
+  /** Record 55 D6 and D7: what its answers are for; decide unless chosen. */
+  purpose: Purpose;
+  /** Pair: the selection each stack is paired with in its session; empty pairs the stacks of `from` among themselves. */
+  with: string;
+  /** Anchored: the selections the pre and the post anchors come from. */
+  pre: string;
+  post: string;
+  /** Pair and anchored: the axis each answer resolves into, and its values for post and pre; empty takes the engine's. */
+  pairAxis: string;
+  postValue: string;
+  preValue: string;
+  /** Pair, anchored and A/B: the seed of the draw, written down before it; the campaign keeps its sha256 only. */
+  seed: string;
+  /** A/B: the rules as a voter, and the voters' readings brought from folders. */
+  rules: boolean;
+  voters: Voter[];
+  /** A/B: the share of the stacks the voters agree on that is audited, as written. */
+  auditShare: string;
+}
+
+/** One voter of an A/B campaign: its name and its reading of each stack, read in the browser from a folder of JSON files, one per stack. */
+export interface Voter {
+  name: string;
+  stacks: Record<string, Json>;
+  /** Files read, and those that named no stack or held no JSON. */
+  files: number;
+  skipped: number;
 }
 
 export interface DraftField {
@@ -873,6 +969,17 @@ export function emptyDraft(prefill: Partial<Prefill> = {}): Draft {
     leaseMinutes: 60,
     suggest: "none",
     hideHeader: false,
+    purpose: "decide",
+    with: "",
+    pre: "",
+    post: "",
+    pairAxis: "",
+    postValue: "",
+    preValue: "",
+    seed: "",
+    rules: true,
+    voters: [],
+    auditShare: "0.1",
   };
 }
 
@@ -880,6 +987,7 @@ export function emptyDraft(prefill: Partial<Prefill> = {}): Draft {
 export function closesFor(kind: string): string[] {
   if (kind === "axis" || kind === "axes") return ["stage", "decision", "none"];
   if (kind === "pick") return ["pick", "none"];
+  if (kind === "ab") return ["none", "stage", "decision"];
   return ["none"];
 }
 
@@ -906,6 +1014,7 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
   if (!name) return { ok: false, needs: "a name" };
   if (!/^[\p{L}\p{N}][\p{L}\p{N}_.-]*$/u.test(name)) return { ok: false, needs: "a name of letters, digits, dots, dashes or underscores" };
   const from = d.from.trim();
+  if (isDrawn(d.kind)) return drawnBody(d, name);
   let source: Json;
   if (d.source === "selection") {
     if (!/^[^@\s]+@\d+$/u.test(from)) return { ok: false, needs: "a selection as name@version" };
@@ -966,12 +1075,136 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
       ...(raters.length > 0 ? { raters } : {}),
       ...(adjudicators.length > 0 ? { adjudicators } : {}),
       adjudication: { when, metric, ...(metric !== "exact" || d.threshold.trim() !== "0.8" ? { threshold } : {}) },
-      closes_into: closes,
+      // record 55 D7: an audit reads blind and closes into nothing
+      closes_into: d.purpose === "audit" ? "none" : closes,
       lease_seconds: Math.max(60, Math.round(d.leaseMinutes * 60)),
-      ...(d.kind === "axis" || d.kind === "axes" ? { suggest: d.suggest } : {}),
-      ...((d.kind === "axis" || d.kind === "axes") && d.suggest === "none" && d.hideHeader ? { hide_header: true } : {}),
+      ...(d.kind === "axis" || d.kind === "axes" ? { suggest: d.purpose === "audit" ? "none" : d.suggest } : {}),
+      ...((d.kind === "axis" || d.kind === "axes") && (d.suggest === "none" || d.purpose === "audit") && d.hideHeader ? { hide_header: true } : {}),
+      ...(d.purpose !== "decide" ? { purpose: d.purpose } : {}),
     },
   };
+}
+
+const SPEC = /^[^@\s]+@\d+$/u;
+
+/** A pair, anchored or A/B campaign's body: its selections, its axis and the seed of its draw (Wave 7a, record 55 H3). */
+function drawnBody(d: Draft, name: string): { ok: true; body: MakeBody } | { ok: false; needs: string } {
+  const sel = (v: string) => v.trim();
+  if (!SPEC.test(sel(d.from))) return { ok: false, needs: d.kind === "anchored" ? "the candidates' selection" : "a selection" };
+  if (!d.seed.trim()) return { ok: false, needs: "a seed for the draw" };
+  const raters = list(d.raters);
+  const common = {
+    name,
+    raters_per_item: d.kind === "ab" ? 1 : Math.max(1, Math.floor(d.ratersPerItem)),
+    ...(raters.length > 0 ? { raters } : {}),
+    adjudication: { when: "never", metric: "exact" },
+    lease_seconds: Math.max(60, Math.round(d.leaseMinutes * 60)),
+  };
+  const axis = { ...(d.pairAxis.trim() ? { axis: d.pairAxis.trim() } : {}), ...(d.postValue.trim() ? { post: d.postValue.trim() } : {}), ...(d.preValue.trim() ? { pre: d.preValue.trim() } : {}) };
+  if (d.kind === "pair") {
+    if (sel(d.with) && !SPEC.test(sel(d.with))) return { ok: false, needs: "the paired selection" };
+    return { ok: true, body: { ...common, question: { kind: "pair", ...axis }, source: { pair: { selection: sel(d.from), ...(sel(d.with) ? { with: sel(d.with) } : {}), seed: d.seed.trim() } }, closes_into: "none" } };
+  }
+  if (d.kind === "anchored") {
+    if (!SPEC.test(sel(d.pre))) return { ok: false, needs: "the pre anchors' selection" };
+    if (!SPEC.test(sel(d.post))) return { ok: false, needs: "the post anchors' selection" };
+    return { ok: true, body: { ...common, question: { kind: "anchored", ...axis }, source: { anchored: { selection: sel(d.from), pre: sel(d.pre), post: sel(d.post), seed: d.seed.trim() } }, closes_into: "none" } };
+  }
+  if (!d.rules && d.voters.length === 0) return { ok: false, needs: "a voter: the rules, or readings from a folder" };
+  const share = Number(d.auditShare);
+  if (!(share >= 0 && share <= 1)) return { ok: false, needs: "an audit share from 0 to 1" };
+  const voters: Json = {};
+  for (const v of d.voters) voters[v.name] = v.stacks as Json;
+  return {
+    ok: true,
+    body: {
+      ...common,
+      question: { kind: "axes", ...(d.axes.length > 0 ? { axes: abAxes(d.axes) } : {}) },
+      source: {
+        ab: {
+          selection: sel(d.from),
+          rules: d.rules,
+          ...(d.voters.length > 0 ? { voters } : {}),
+          seed: d.seed.trim(),
+          audit_share: share,
+          // a localizer is told by its provenance, so that axis is always asked; it is asked body part too where body part is
+          ...(d.axes.length > 0 ? { localizer_asks: abAxes(d.axes).filter((a) => a === LOCALIZER_AXIS || a === "body_part") } : {}),
+        },
+      },
+      closes_into: closesFor("ab").includes(d.closesInto) ? d.closesInto : "none",
+    },
+  };
+}
+
+/** The axis an A/B campaign tells a localizer by (the engine's `provenance=Localizer`), always asked. */
+export const LOCALIZER_AXIS = "provenance";
+
+/** The axes an A/B campaign asks: those chosen, the localizer's axis first where it was not. */
+export function abAxes(chosen: readonly string[]): string[] {
+  return chosen.includes(LOCALIZER_AXIS) ? [...chosen] : [LOCALIZER_AXIS, ...chosen];
+}
+
+/** A fresh seed for a draw, to be written down before it: sixteen random hex digits. */
+export function freshSeed(): string {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * One voter's readings from the files of a folder the person chose, read in
+ * the browser as the engine reads a voter's folder (`nils campaign ab
+ * --voter NAME=DIR`): one JSON file per stack, the stack under `stack` or as
+ * the file's name, the answer under `answer` or the whole file.
+ */
+export function voterOf(name: string, files: readonly { name: string; text: string }[]): Voter {
+  const stacks: Record<string, Json> = {};
+  let skipped = 0;
+  let read = 0;
+  for (const f of files) {
+    if (!f.name.toLowerCase().endsWith(".json")) continue;
+    read += 1;
+    let doc: unknown;
+    try {
+      doc = JSON.parse(f.text);
+    } catch {
+      skipped += 1;
+      continue;
+    }
+    if (!doc || typeof doc !== "object" || Array.isArray(doc)) {
+      skipped += 1;
+      continue;
+    }
+    const d = doc as Json;
+    const stem = f.name.replace(/^.*\//u, "").replace(/\.json$/iu, "");
+    const stack = typeof d.stack === "number" ? d.stack : /^\d+$/u.test(stem) ? Number(stem) : null;
+    const answer = d.answer && typeof d.answer === "object" && !Array.isArray(d.answer) ? (d.answer as Json) : "answer" in d ? null : d;
+    if (stack === null || answer === null) {
+      skipped += 1;
+      continue;
+    }
+    const { stack: _drop, ...rest } = answer as Json & { stack?: unknown };
+    void _drop;
+    stacks[String(stack)] = rest;
+  }
+  return { name, stacks, files: read, skipped };
+}
+
+/** A voter's name that is not taken and not the rules': the folder's, numbered where it is. */
+export function voterName(wanted: string, taken: readonly string[]): string {
+  const base = (wanted.trim() || "voter").replace(/[^\p{L}\p{N}_.-]+/gu, "-").replace(/^-+|-+$/gu, "") || "voter";
+  const used = new Set([...taken, "rules"]);
+  if (!used.has(base)) return base;
+  for (let i = 2; ; i++) if (!used.has(`${base}-${i}`)) return `${base}-${i}`;
+}
+
+/** What a preview of a drawn campaign counted, in words: the engine's counts, each by its own name. */
+export function drawnCountsWords(counts: Json | null | undefined): string {
+  if (!counts || typeof counts !== "object") return "";
+  return Object.entries(counts)
+    .filter(([, v]) => typeof v === "number")
+    .map(([k, v]) => `${(v as number).toLocaleString("en-US")} ${k.replace(/_/gu, " ")}`)
+    .join(" · ");
 }
 
 /**
@@ -991,10 +1224,10 @@ export interface Prefill {
 /**
  * The one address that opens the make dialog with its source filled in:
  * Query's from a selection or a result, Review's "Ask people about these"
- * from its filter (`#campaigns?make=review&from=<kind or prefix>&job=&limit=&cohort=`).
+ * from its filter (`#review/campaigns?make=review&from=<kind or prefix>&job=&limit=&cohort=`).
  */
 export function makeHref(source: SourceKind, from: string | number, more: { job?: number | null; limit?: number | null; cohort?: string | null } = {}): string {
-  return narrow(href("campaigns"), { make: source, from: String(from), job: more.job, limit: more.limit, cohort: more.cohort });
+  return narrow(href("review", "campaigns"), { make: source, from: String(from), job: more.job, limit: more.limit, cohort: more.cohort });
 }
 
 /** The dialog's prefill from an address's query, or null when it asks for none. */

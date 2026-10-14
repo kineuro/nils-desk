@@ -126,6 +126,18 @@ export function foundFacts(l: Layout): { k: string; v: string }[] {
   return out;
 }
 
+/**
+ * Whether a layout's loose entries may be shown as names: never where the
+ * engine says they are shapes (2026-10-10: names go only to Data work at the
+ * sensitive level, shapes to anyone else), and otherwise only to a person at
+ * the sensitive level, as before an engine said which they are. A shape is
+ * never shown as a name, and no entry is ever acted on by its name: a move
+ * names the tree, and the engine moves the entries it found.
+ */
+export function namesShown(l: Layout, sensitive: boolean): boolean {
+  return sensitive && l.entry_names !== "shapes";
+}
+
 /** The entries with DICOM by name, the first hundred, and how many more there are. */
 export function dicomNamed(l: Layout): { names: string[]; more: number } {
   const names = l.loose_dicom ?? [];

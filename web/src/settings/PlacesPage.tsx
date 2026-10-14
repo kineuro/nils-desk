@@ -18,8 +18,9 @@ import { may } from "../grants";
 import { AddRootDialog } from "../data/AddRoot";
 import { isRoot, notReadOf } from "../data/layout";
 import { NotRead } from "../data/NotRead";
+import { door as served } from "../deployment";
 import { placeName } from "../home/look";
-import { objects, type Place } from "../objects/client";
+import { type Explored, objects, type Place } from "../objects/client";
 import { placesKept } from "../objects/kept";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
@@ -48,6 +49,16 @@ import {
 } from "./places";
 import { placeStats } from "./stats";
 import { followRun, supervise, type Install } from "./supervise";
+
+/**
+ * What exploring the sources did, in one line: every source explored, or each one it could not explore with the
+ * engine's words, which ends the act as a failure so it shows as one (2026-10-10).
+ */
+export function exploredWords(r: Explored): string {
+  if (r.errors.length === 0) return "Every source is explored again; new folders under a root are datasets now.";
+  const which = r.errors.map((e) => `${e.name}: ${e.error}`).join("; ");
+  throw new Error(`${r.errors.length === 1 ? "One source" : `${r.errors.length} sources`} could not be explored: ${which}.`);
+}
 
 /** The dialog open: a place added, a place changed, or a root folder added. */
 type Opened = { kind: "add" } | { kind: "change"; place: Place } | { kind: "source"; path: string } | null;
@@ -198,12 +209,18 @@ export function PlacesPage({ caps, install, onChanged }: { caps: Capabilities; i
             >
               Measure again
             </button>
-            {mayDeclare && places.some((p) => p.role === "source" && p.retired_at === null) && (
+            {mayDeclare && served(caps, "POST /api/places/explore") && places.some((p) => p.role === "source" && p.retired_at === null) && (
               <button
                 type="button"
                 className="button secondary small"
                 disabled={measure.working}
-                onClick={() => measure.act("exploring the sources again", () => placesKept.refresh(() => objects.places(false, true)).then(() => "Every source is explored again; new folders under a root are datasets now."))}
+                onClick={() =>
+                  measure.act("exploring the sources again", async () => {
+                    const r = await objects.explore();
+                    await placesKept.refresh();
+                    return exploredWords(r);
+                  })
+                }
               >
                 Explore the sources again
               </button>

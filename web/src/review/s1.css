@@ -1,0 +1,35 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* System 1 in the review rule: both suggestions side by side, the
+   blind-first mark, the rounds and the audit. Colour by border only. */
+
+.tag.mode-blind { border-color: var(--n-gated-line); background: var(--n-gated-bg); color: var(--n-gated-fg); margin-left: 0.4rem; }
+
+.both-sides { display: grid; gap: 0.5rem; margin: 0.5rem 0; }
+.both-stack { display: grid; gap: 0.35rem; }
+.both-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.both-row .both-side { display: grid; gap: 0.15rem; align-content: start; padding: 0.45rem 0.6rem; border: 1px solid var(--n-neutral-line); border-left-width: 3px; border-radius: var(--n-radius); min-width: 0; }
+.both-row .both-side .meta { overflow-wrap: anywhere; }
+.both-row .side-value { font-size: 15px; }
+.both-row.agree .both-side { border-left-color: var(--n-ok-line); }
+.both-row.differ .both-side { border-left-color: var(--n-caution-line); }
+.both-row .both-side.s1.not_confirmed { border-style: dashed; border-left-style: solid; }
+.both-row .both-side.s1.no_model { border-left-color: var(--n-neutral-line); }
+@media (max-width: 640px) {
+  .both-row { grid-template-columns: 1fr; }
+}
+
+.rounds .round { border: 1px solid var(--n-neutral-line); border-left: 3px solid var(--n-brand-line); border-radius: var(--n-radius); padding: 0.6rem 0.8rem; margin: 0.6rem 0; display: grid; gap: 0.45rem; }
+.rounds .round.current { border-left-color: var(--n-ok-line); }
+.rounds .round-head { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
+.rounds .nums { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; }
+.rounds .num-cell { display: grid; }
+.rounds .num-cell b { font-size: 18px; }
+.rounds .kinds { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.rounds .draw { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center; border-top: 1px solid var(--n-neutral-line); padding-top: 0.4rem; }
+.rounds .never.held { color: var(--n-ok-fg); }
+.rounds .never.broken { color: var(--n-blocked-fg); }
+
+.headers-flag { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center; }
+.headers-flag.damaged { border-left: 3px solid var(--n-caution-line); padding-left: 0.5rem; }
+.rounds .round, .rounds .round-head, .rounds .draw, .rounds .meta { min-width: 0; overflow-wrap: anywhere; }
+.rounds .tag, .rounds .meta { white-space: normal; }

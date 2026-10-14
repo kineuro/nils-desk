@@ -5,6 +5,7 @@
 
 import { DoorError } from "../ask/client";
 import { messageOf } from "../settings/common";
+import { failureOf } from "../ops/failure";
 
 /** One plain line and the engine's own words for the "?". */
 export interface Plain {
@@ -39,6 +40,9 @@ export function plainError(e: unknown, otherwise = "That did not work."): Plain 
     const said = STEP_REFUSED[e.body.reason];
     if (said) return { words: said(e.body.step), detail };
   }
+  // 2026-10-12: a run refused for what it needs of this machine says what to do in the engine's words
+  const advice = e instanceof DoorError ? failureOf(e.body)?.advice : null;
+  if (advice) return { words: advice, detail };
   const known = KNOWN.find((k) => k.test.test(detail));
   if (known) return { words: known.words, detail };
   if (status === 401 || status === 403) return { words: "You may not do this.", detail };

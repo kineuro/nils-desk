@@ -43,8 +43,18 @@ export interface SummaryStep {
   tree?: "anon" | "originals";
   waiting?: number;
   held?: number;
+  /** The read: the files it refused, those set aside among them included. */
   refused?: number;
+  /** The read (record 56, 2026-10-11): the files it set aside by policy, which are not scans and ask nobody anything. */
+  set_aside?: number;
   reads?: number;
+  /** The read (the duplicate policy, 2026-10-10): the files read as their scan's own, the copies of a scan another dataset read first or this one holds already, the files held because their scan is filed under another subject, visit or series, those a person let go out of the read, and those gone from the folder. */
+  new?: number;
+  known?: number;
+  twice?: number;
+  same_instance?: number;
+  left_out?: number;
+  gone?: number;
   scans?: number;
   of?: number;
   look?: number;
@@ -62,6 +72,13 @@ export interface SummaryStep {
   refusal?: StepRefusal | null;
 }
 
+/** One kind of file the read set aside, not a scan: a stable key, its plural in plain words, and how many. */
+export interface SetAsideKind {
+  kind: string;
+  words: string;
+  count: number;
+}
+
 /** What a dataset holds and where it is (`GET /api/datasets/{name}/summary`). */
 export interface DatasetSummary {
   dataset: string;
@@ -69,6 +86,7 @@ export interface DatasetSummary {
   detail: string;
   state: string;
   added_at: string;
+  /** The subjects counted in it: those with a stack its folder holds a file of (Nima, 2026-10-12: a dataset holds stacks, never subjects). */
   subjects: number;
   /** The visits, out of the session cache; null where nobody has built it. */
   sessions: number | null;
@@ -80,7 +98,27 @@ export interface DatasetSummary {
   look_kinds: Record<string, number>;
   kinds: { kind: string; scans: number }[];
   body_regions: { region: string; scans: number }[];
-  files: { found: number | null; bytes: number | null; read: number; refused: number; refused_batch: number | null; held: number };
+  files: {
+    found: number | null;
+    bytes: number | null;
+    read: number;
+    refused: number;
+    refused_batch: number | null;
+    /** Record 56 (2026-10-11): the files set aside by policy, not scans, and by kind in plain words; an engine from before says neither. */
+    set_aside?: number;
+    set_aside_kinds?: SetAsideKind[];
+    /** Nima, 2026-10-12: the subjects with no stack in the dataset its set-aside files are of, and how many of those files are theirs; an engine from before says nothing. */
+    set_aside_no_scans?: { subjects: number; files: number };
+    held: number;
+    new?: number;
+    known?: number;
+    twice?: number;
+    same_instance?: number;
+    left_out?: number;
+    gone?: number;
+  };
+  /** The open questions about the dataset's files filed already under another subject, visit or series, which its Review lists. */
+  identity_questions?: number;
   pictures_place: string | null;
   steps: SummaryStep[];
 }
@@ -147,6 +185,32 @@ export function stepsOfSources(d: Dataset): SummaryStep[] {
     { step: "pictures", state: "waiting", ...none, made: 0, of: d.totals.stacks },
     { step: "views", state: "waiting", ...none, made: 0, of: d.totals.stacks },
   ];
+}
+
+/**
+ * The files a read refused that a person may look at: the refused ones less
+ * those set aside by policy (record 56, 2026-10-11), which are not scans and
+ * ask nobody anything. An engine from before sets none aside.
+ */
+export function refusedOnly(s: { refused?: number; set_aside?: number }): number {
+  return Math.max(0, (s.refused ?? 0) - (s.set_aside ?? 0));
+}
+
+/** The kinds of file the read set aside, most first, in one terse line: "screen captures 176 · presentation states 15". */
+export function setAsideWords(kinds: SetAsideKind[] | undefined): string | null {
+  const shown = (kinds ?? []).filter((k) => k.count > 0);
+  return shown.length > 0 ? shown.map((k) => `${k.words} ${n(k.count)}`).join(" · ") : null;
+}
+
+/**
+ * Nima, 2026-10-12: whose the set-aside files are, where they are of subjects with no stack in the dataset, as a fact about the files and
+ * never a count of its subjects: "all from 1 subject with no scans", or "40 from 2 subjects with no scans" where others' files are among
+ * them. Null where they are of none, or the engine does not say.
+ */
+export function setAsideOfWords(setAside: number, of: { subjects: number; files: number } | undefined): string | null {
+  if (!of || of.subjects <= 0 || of.files <= 0) return null;
+  const who = `${n(of.subjects)} ${of.subjects === 1 ? "subject" : "subjects"} with no scans`;
+  return `${of.files >= setAside ? "all" : n(of.files)} from ${who}`;
 }
 
 /** A dataset's step by name, where the summary has it. */
@@ -283,7 +347,10 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
       break;
     case "read":
       what = s.state === "waiting" && v("reads") === 0 ? "not yet" : `${n(v("files"))} read`;
-      if (v("refused") > 0) what += ` · ${n(v("refused"))} refused`;
+      if (v("same_instance") > 0) what += ` · ${n(v("same_instance"))} held`;
+      if (v("set_aside") > 0) what += ` · ${n(v("set_aside"))} set aside`;
+      if (refusedOnly(s) > 0) what += ` · ${n(refusedOnly(s))} refused`;
+      hint = readWords(s) ?? undefined;
       break;
     case "sorted":
       what = v("of") === 0 ? (s.state === "waiting" ? "not yet" : "nothing to sort") : `${n(v("scans"))} scans`;
@@ -328,6 +395,31 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
 
 // ---------------------------------------------------------------- a card in words
 
+/**
+ * What a dataset's reading found, in plain words, for the read step's hint
+ * (the duplicate policy, 2026-10-10): new, already in another dataset,
+ * twice in this dataset, held because the scan is filed under another
+ * subject, visit or series, let go out of the read by a person, gone from
+ * the folder, set aside as not scans, and refused. Null where the engine
+ * gives none of these.
+ */
+export function readWords(s: Pick<SummaryStep, "new" | "known" | "twice" | "same_instance" | "left_out" | "gone" | "refused" | "set_aside">): string | null {
+  const parts: string[] = [];
+  const add = (v: number | undefined, words: string) => {
+    if (typeof v === "number" && v > 0) parts.push(`${n(v)} ${words}`);
+  };
+  if (typeof s.known !== "number" && typeof s.twice !== "number" && typeof s.same_instance !== "number") return null;
+  add(s.new, "new");
+  add(s.known, "already in another dataset");
+  add(s.twice, "twice in this dataset");
+  add(s.same_instance, "held: the scan is filed under another subject, visit or series");
+  add(s.left_out, "left out of the read by a person");
+  add(s.gone, "gone from the folder");
+  add(s.set_aside, "set aside: not scans");
+  add(refusedOnly(s), "refused");
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
 /** How many files a dataset's card counts: the ones found in the tree NILS reads, or the originals of an identified dataset; null where none were counted. */
 export function filesOf(d: Pick<Dataset, "trees">, s: DatasetSummary | null): number | null {
   if (s && typeof s.files.found === "number") return s.files.found;
@@ -343,7 +435,7 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
   if (next.step === "set-ids") return "Needs its IDs before it is read";
   if (next.word === "Identified" && next.step === "pseudonymise") {
     const held = d.held?.identifiers ?? 0;
-    return held > 0 ? `${n(held)} ${held === 1 ? "ID needs" : "IDs need"} a code` : "Waits to be pseudonymised";
+    return held > 0 ? `${n(held)} ${held === 1 ? "ID needs" : "IDs need"} a subject code` : "Waits to be pseudonymised";
   }
   const running = s?.steps.find((x) => x.state === "running");
   if (running) return `${TITLE[running.step]}: running now`;
@@ -618,8 +710,13 @@ export function logLine(j: JobRow, now = new Date(), op?: Operation | null): Log
       const stacks = num(pv["stacks"]);
       return { id: j.id, at, what: end("Sorted", "Sort"), how: failed || stopped || stacks === null ? "" : `${ns(stacks, "scan", "scans")}, pictures made`, failed, batch: null };
     }
-    case "pick":
-      return { id: j.id, at, what: end("Main scans picked", "Picking"), how: failed || stopped ? "" : `for ${ns(r["subjects"], "subject", "subjects")}`, failed, batch: null };
+    case "pick": {
+      // 2026-10-12: what the run wrote, the visits and subjects it picked on, or why it wrote nothing, in the engine's words; an older engine's run by the subjects it decided
+      const visits = num(r["visits_picked"]);
+      if (failed || stopped || visits === null) return { id: j.id, at, what: end("Main scans picked", "Picking"), how: failed || stopped ? "" : `for ${ns(r["subjects"], "subject", "subjects")}`, failed, batch: null };
+      if (visits === 0) return { id: j.id, at, what: "No main scans picked", how: typeof r["nothing"] === "string" ? r["nothing"] : "", failed, batch: null };
+      return { id: j.id, at, what: "Main scans picked", how: `for ${ns(visits, "visit", "visits")} of ${ns(r["subjects_picked"], "subject", "subjects")}`, failed, batch: null };
+    }
     case "pyramid": {
       const built = num(r["built"]) ?? num(p["built"]) ?? 0;
       const skipped = num(r["skipped"]) ?? num(p["skipped"]) ?? 0;

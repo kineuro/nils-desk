@@ -24,7 +24,7 @@ pub mod web;
 use std::sync::Arc;
 
 use axum::Router;
-use axum::routing::{any, get, post, put};
+use axum::routing::{any, delete, get, post, put};
 
 pub use config::Config;
 
@@ -143,6 +143,11 @@ pub fn router(desk: Shared) -> Router {
             put(identity::users_entitlements),
         )
         .route("/desk/people", get(identity::people_list))
+        .route("/desk/people/{name}", delete(identity::person_remove))
+        .route(
+            "/desk/people/{name}/password",
+            post(identity::person_password),
+        )
         .route(
             "/desk/groups",
             get(identity::groups_list).post(identity::groups_add),

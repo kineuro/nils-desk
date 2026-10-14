@@ -4,7 +4,8 @@
 // said so, and the letters at a picture's edges right for axial, coronal,
 // sagittal and an oblique stack, on cornerstone's own cameras.
 import { describe, expect, it } from "vitest";
-import { cutsAcross, levelSpacing, planeSpacing, type Manifest } from "./doors";
+import { cutsAcross, levelSpacing, notAcrossWords, planeSpacing, type Manifest } from "./doors";
+import { drawnAs } from "./view";
 import { cameraLabels, conventional, edgeLabels, geometry, letters, levelOrigin, nearestAxis, planePosition, renderAxes, stackLabels, volumeGrid, type Vec3 } from "./geometry";
 
 const base: Manifest = { codec: "htj2k", tile: 256, levels: 4, shape: [96, 256, 256], spacing: [1, 1, 1], dtype: "uint16", window: { center: 500, width: 1000 } };
@@ -158,6 +159,19 @@ describe("a stack whose planes all sit at one place", () => {
     expect(planeSpacing({ spacing: [2.5, 1, 1] })).toBe(2.5);
     expect(planeSpacing({ spacing: [Number.NaN, 1, 1] })).toBe(1);
     expect(planeSpacing({ spacing: [-3, 1, 1] })).toBe(1);
+  });
+});
+
+describe("a stack of a few planes (record 55 H5, the 200-item round)", () => {
+  it("is too thin to cut across where its planes span under a fifth of its field", () => {
+    // three coronal planes 4 mm apart over a 230 mm field: a line and a black plane across them
+    expect(cutsAcross({ shape: [3, 256, 256], spacing: [4, 0.9, 0.9] })).toBe(false);
+    expect(notAcrossWords({ shape: [3, 256, 256] })).toBe("a few planes: too thin to cut across");
+    expect(notAcrossWords({ shape: [1, 256, 256] })).toBe("one plane: nothing to cut across");
+    // twenty-four axial planes 5 mm apart, and a 3D stack, are read across
+    expect(cutsAcross({ shape: [24, 256, 256], spacing: [5, 0.9, 0.9] })).toBe(true);
+    expect(cutsAcross({ shape: [128, 256, 256], spacing: [1, 1, 1] })).toBe(true);
+    expect(drawnAs("planes", { ...base, shape: [3, 256, 256], spacing: [4, 0.9, 0.9] } as Manifest).view).toBe("stack");
   });
 });
 
