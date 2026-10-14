@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.63] - 2026-10-14
+
+Wave 7a's desk, the beta candidate, for engine 1.0.0-alpha.80. The desk is redesigned around its map; Data has one safe way in, pseudonymises in place and says how sure each sort is; the chat is one chat; Review and Campaigns are one list of work, with both suggestions, blind first, rounds and the audit; Models sit under Pipelines with the model chosen per task; a result is checked over its scan; the reader shows the rules' evidence beside the picture at a fixed size; Settings lists each rules pack as a part that updates on its own; and one pattern of words, sides and empty states runs across the desk, with no command line inside a flow.
+
 ### Added
 
 - One pattern across the desk (record 55 H2, round 4; spec 13.1). One word per thing: the query section is Query with Cards, Selections and Exports, the kept results saved as CSV files; Settings' Database, Identity and Kvasir pages are Backups, People and Language models (their old addresses lead to the new ones), and a grant is named by its page's word. Every section's pages are in the side: Pipelines lists Jobs, Catalog, Runs, Logs and Models, Release lists Releases, New release and Session schemes, and the tabs that repeated the side inside Review, Pipelines and Query are gone. Nothing hidden while empty: Picks, Proposals and Asked show with their count, zero too, and an empty page says in one line what fills it. Home's tiles are links to where the person acts. On a phone, tapping Home in the panel closes it.
