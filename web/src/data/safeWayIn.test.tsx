@@ -156,6 +156,9 @@ describe("the Data page", () => {
     await settle(8);
     expect(e.of("POST", "/api/places")[0].body).toEqual({ role: "source", root: "incoming", folder: "ward-c" });
     expect(host.textContent).toContain("ward-c is a dataset.");
+    // T4 (Wave 7a section 17): a folder of loose DICOM added on Data is read
+    // by nothing before the person's answer: no job is asked of the engine
+    expect(e.of("POST", "/api/jobs")).toHaveLength(0);
   });
 
   it("asks an anonymised folder's IDs on the way in, one select each set to the subject code and made from the ID, and sends them with the Add", async () => {
