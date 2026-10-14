@@ -58,7 +58,7 @@ import { classify, Failure, type Failed } from "../ui/Failure";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { NotBuilt, usePicture } from "./building";
-import { cutsAcross, doors, levelShape, type Manifest } from "./doors";
+import { cutsAcross, doors, levelShape, notAcrossWords, type Manifest } from "./doors";
 import { cameraLabels, geometry, planeCameras, type EdgeLabels, type Planes, type Vec3 } from "./geometry";
 import { close, counters, imageId, open, register, viewWindow } from "./loader";
 import { PLANES, serverPlane as serverPlaneOf, type Plane } from "./prefetch";
@@ -871,7 +871,7 @@ export function Viewer({ stack, level: ruleLevel = null, view: mode = "stack", b
           aria-selected={view === "planes"}
           className={view === "planes" ? "on" : ""}
           disabled={!cutsAcross(manifest)}
-          title={cutsAcross(manifest) ? undefined : "one plane: nothing to cut across"}
+          title={cutsAcross(manifest) ? undefined : notAcrossWords(manifest)}
           onClick={() => {
             setView("planes");
             setPlanesOpened(true);

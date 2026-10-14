@@ -853,11 +853,13 @@ type Drawn = WorkspaceBodyProps & { refusal: string | null; left: number | null;
  * pictures on the left, and on the right from the top the file's header
  * text and physics, why the rules decided (record 55 H5: open, beside the
  * picture, never on a blind item), the asked rows, the derived line and the
- * answer. On a laptop nothing needs scrolling: the page is the window's
- * height, and what does not fit a line (the whole header, the keys) opens
- * over the reader on a key. The picture box is of a fixed size per screen
- * class (campaigns.css), so a big screen shows the same layout every time,
- * and the whole reader is compact or expanded (`H`).
+ * answer. The page is the window's height, and what does not fit a line
+ * (the whole header, the keys) opens over the reader on a key. The picture
+ * box is of a fixed size per screen class (campaigns.css), so a big screen
+ * shows the same layout every time, and the whole reader is compact or
+ * expanded (`H`): compact holds an item read in the open, its candidates
+ * and seven axes on one laptop screen; expanded may scroll the panel, under
+ * an answer bar that stays on screen.
  */
 function ReaderOne(p: Drawn) {
   const { campaign: c, role, seat, refusal } = p;

@@ -108,9 +108,9 @@ export function readingFor(caps: Capabilities, c: number | string, q: Question, 
   return kept;
 }
 
-/** A reading's lines narrowed to the axes the question asks; the why door speaks of every axis of the stack. */
-function narrowed(r: Reading, axes: string[]): Reading {
-  return axes.length === 0 ? r : { ...r, lines: r.lines.filter((l) => axes.includes(l.axis)) };
+/** A reading's lines narrowed to the axes the question asks, in the question's order (the rows' order); the why door speaks of every axis of the stack. */
+export function narrowed(r: Reading, axes: string[]): Reading {
+  return axes.length === 0 ? r : { ...r, lines: r.lines.filter((l) => axes.includes(l.axis)).sort((a, b) => axes.indexOf(a.axis) - axes.indexOf(b.axis)) };
 }
 
 /** Forget the readings (a test). */

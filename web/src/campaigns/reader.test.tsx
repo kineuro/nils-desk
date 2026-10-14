@@ -45,7 +45,7 @@ import {
   upcoming,
   type Reading,
 } from "./reader";
-import { acceptBatch, hintOf, R48, valueOrderServed } from "./readerDoors";
+import { acceptBatch, hintOf, narrowed, R48, valueOrderServed } from "./readerDoors";
 import { EvidenceLines, PaceCount, SuggestionBar } from "./ReaderParts";
 import { blank } from "./renderers";
 import { WorkspaceBody, type WorkspaceBodyProps } from "./Workspace";
@@ -175,6 +175,15 @@ describe("the suggestion", () => {
     const s = suggestionOf(q, bad)!;
     expect(s.agreed).toEqual([]);
     expect(s.differ).toEqual(["base", "technique"]);
+  });
+});
+
+describe("why the rules decided, beside the picture (record 55 H5)", () => {
+  it("keeps the asked axes alone, in the question's order, the rows' order", () => {
+    const r = readingOf(whyDoc as unknown as Json);
+    const n = narrowed(r, ["technique", "base"]);
+    expect(n.lines.map((l) => l.axis)).toEqual(["technique", "base"]);
+    expect(narrowed(r, []).lines.length).toBe(r.lines.length);
   });
 });
 

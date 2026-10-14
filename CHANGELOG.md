@@ -43,6 +43,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Fixed
 
+- A stack of a few planes opens on its own plane in the reader (record 55 H5). Found by the 200-item test round: three coronal planes 4 mm apart, read in the three planes, drew a horizontal line and a black plane across them. Where a stack's planes span less than a fifth of its field, the three planes are not offered, as for a stack of one plane, and the tab says why ("a few planes: too thin to cut across").
 - A run of main scans says what it wrote (2026-10-12; it said "Main scans picked for 10 subjects" of a run that wrote nothing). A dataset's log says "Main scans picked for 3 visits of 2 subjects", or "No main scans picked" with the engine's reason ("none of its 10 subjects has a scan of a main role"), and its Main scans say "None picked:" and the reason after a run that wrote nothing. The page reads the pick report's `visits_picked`, `subjects_picked` and `nothing`, and the picks summary's `last_run.report.nothing`; against an engine from before, the log names the subjects as it did.
 
 - The reader's top band says the last answer whole on a laptop (found by type 3's first end-to-end test, 2026-10-12, where it read "Re…"). Where the band is short, what gives way does so in order: the campaign's name (whole on hover; on a laptop the band names the campaign alone, the side naming the section), then the pace, each part whole or not at all, then the last answer, and the part in focus last of all. On a phone the last answer takes a line of its own and wraps.
