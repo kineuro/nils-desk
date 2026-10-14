@@ -4,9 +4,13 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.64] - 2026-10-14
+
+Fixes found on the first dataset read on a site after the beta, for engine 1.0.0-alpha.81 (and older engines, which fall back): an acquisition's own images sit in its family's box, and a file count that stopped short says so.
+
 ### Fixed
 
-- A dataset's file count that stopped short reads "at least 49,836 files", on its card, its found step and its detail, until a read counts the tree whole. The engine counts a tree a page's worth of entries at a time and stops short of a large one, and the desk showed that count as final: a production card said 49,836 files where its read saw 1,112,026. With an engine that says `found_partial` (and the found step's `partial`), or the sources door's `partial` on a tree, the count is said as a lower bound, and its size, counted part of the way too, is not said; once a read has counted the tree, its count is the read's.
+- A dataset's file count that stopped short reads "at least N files", on its card, its found step and its detail, until a read counts the tree whole. The engine counts a tree a page's worth of entries at a time and stops short of a large one, and the desk showed that count as final: so a large dataset's card showed a small part of its files as the whole. With an engine that says `found_partial` (and the found step's `partial`), or the sources door's `partial` on a tree, the count is said as a lower bound, and its size, counted part of the way too, is not said; once a read has counted the tree, its count is the read's.
 
 - A visit's families hold an acquisition's own images. With an engine that says each scan's `acquisition_family`, the family its route recognised, the SyMRI box holds SyMRI's acquisition, first, beside its maps and synthetic images, where it sat in Scouts and other, and the SWI box holds the magnitude, phase, processed image and minIP of one acquisition, where the magnitude and phase sat among the plain scans and the minIP among the derived ones; a projection or a reformat of SyMRI, an SWI or STAGE stays in its acquisition's box. On an older engine a scan is grouped by what made it, as before. The family labels are unchanged.
 - A visit's perf folder reads Perfusion (ASL), since BIDS keeps ASL in `perf/` and `func/` holds BOLD alone, and a field map's reverse phase-encoding reference says on its card what it is for: "reverse phase encoding, used to correct the DWI's distortion".
