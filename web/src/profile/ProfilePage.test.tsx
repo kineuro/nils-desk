@@ -34,7 +34,7 @@ describe("a person's own page", () => {
     expect(html).toContain("<h2>Access</h2>");
     expect(html).not.toContain("set by whoever");
     expect(html).toMatch(/<b>Assistant<\/b><span class="state"><span class="amark do">use<\/span><\/span><span class="what">Chat with the assistant<\/span>/u);
-    expect(html).toMatch(/<b>Ask<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">Cards, selections and exports · keep cards, save selections<\/span>/u);
+    expect(html).toMatch(/<b>Query<\/b><span class="state"><span class="amark do">work<\/span><\/span><span class="what">Cards, selections and exports · keep cards, save selections<\/span>/u);
     expect(html).toMatch(/<b>Data<\/b><span class="state"><span class="amark">see<\/span><\/span><span class="what">Datasets, cohorts and Browse<\/span>/u);
     expect(html).toMatch(/<div class="arow deep"><b>Language models<\/b>/u);
     expect(html).toContain('<div class="arow hidden" title="Whoever may change people and groups can open them.">');

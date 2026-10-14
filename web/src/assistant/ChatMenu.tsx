@@ -136,7 +136,7 @@ export function ChatMenu(props: { chat: Chat; onShare: () => void; onRename: () 
             </div>
           }
         >
-          <p>{chatTitle(chat)} leaves your list and cannot be opened again. The cards it made stay on the Ask page.</p>
+          <p>{chatTitle(chat)} leaves your list and cannot be opened again. The cards it made stay on the Query page.</p>
         </Dialog>
       )}
     </div>

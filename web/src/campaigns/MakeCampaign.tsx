@@ -200,7 +200,7 @@ function SelectionField({ label, value, onChange, lists, optional = false, says 
       )}
       {rows !== null && rows.length === 0 && (
         <span className="meta">
-          No saved selection yet. <a href={href("ask")}>Save one from a card</a>.
+          No saved selection yet. <a href={href("query")}>Save one from a card</a>.
         </span>
       )}
       {says && <span className="meta">{says}</span>}

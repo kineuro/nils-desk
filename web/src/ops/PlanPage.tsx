@@ -234,7 +234,7 @@ export function PlanView(props: {
                 </div>
               </>
             ) : (
-              <p className="note-detail">{doc.proposed === null ? "The plan holds no question to save as a selection; ask the assistant again." : "Saving it as a selection needs Ask: Work at detail quasi."}</p>
+              <p className="note-detail">{doc.proposed === null ? "The plan holds no question to save as a selection; ask the assistant again." : "Saving it as a selection needs Query: Work at detail quasi."}</p>
             )}
           </div>
         </div>

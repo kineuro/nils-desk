@@ -210,7 +210,7 @@ export function SharedPage({ id }: { id: string }) {
             proposals={proposals.filter((p) => p.turn === t.id)}
             choice={null}
             onChoose={() => undefined}
-            openQuery={(document) => href("ask", String(document))}
+            openQuery={(document) => href("query", String(document))}
           />
         ))}
         {turns.length === 0 && <p className="meta">Nothing was said in it yet.</p>}

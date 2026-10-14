@@ -249,7 +249,7 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
     keepDoors
       .store(kept.document)
       .then((id) => selections.save(clean, id, note))
-      .then((s) => onDone({ words: `Saved as ${s.name}, version ${s.version}.`, href: href("ask", "selections"), link: "Selections" }), failed);
+      .then((s) => onDone({ words: `Saved as ${s.name}, version ${s.version}.`, href: href("query", "selections"), link: "Selections" }), failed);
   };
   const promote = () => {
     if (!can || !clean) return;

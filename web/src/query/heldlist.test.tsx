@@ -65,7 +65,7 @@ function open() {
 
 const panelOf = (title: RegExp) => [...host.querySelectorAll<HTMLElement>(".panel.card")].find((p) => title.test(p.querySelector("h2")?.textContent ?? ""))!;
 
-describe("the Ask page card, its list held back at plain (record 55 K7, small lists)", () => {
+describe("the Query page card, its list held back at plain (record 55 K7, small lists)", () => {
   it("says the rows are held back with why on hover, never 0 rows or an empty table, and offers no cohort of them", async () => {
     open();
     await settle(20);

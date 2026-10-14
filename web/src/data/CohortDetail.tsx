@@ -52,7 +52,7 @@ export function cohortActions(caps: Capabilities, c: Pick<Cohort, "name" | "wait
   const acts = cohortActs(caps, c.name);
   const review = c.waiting > 0 && may(caps, "review:see") ? narrow(href("review", "questions"), { cohort: c.name }) : null;
   const release = acts.releasing === null && !c.retired_at ? href("release", "new", c.name) : null;
-  const query = may(caps, "query:see") && may(caps, "data:work") && !c.retired_at ? href("ask") : null;
+  const query = may(caps, "query:see") && may(caps, "data:work") && !c.retired_at ? href("query") : null;
   // the viewer over its members, where the person may browse them
   const view = mayBrowse(caps, { kind: "cohort", name: c.name }) ? viewHref({ kind: "cohort", name: c.name }) : null;
   const primary: "review" | "release" | "query" | null = review ? "review" : release && c.releases === 0 && c.subjects > 0 ? "release" : query ? "query" : release ? "release" : null;

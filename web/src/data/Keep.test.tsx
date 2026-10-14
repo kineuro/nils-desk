@@ -197,13 +197,13 @@ describe("keeping what the dataset viewer shows", () => {
     typeInto(dialog()!.querySelector<HTMLInputElement>("#keep-note")!, "the T1w brains");
     act(() => button(dialog()!, "Save")!.click());
     await settle();
-    // the same question kept as a card, and the card saved under the name, as the Ask page saves one
+    // the same question kept as a card, and the card saved under the name, as the Query page saves one
     expect(asked("/api/ask/documents")[0].body).toEqual({ document });
     expect(asked("/api/ask/selections/ms-a-t1w-brain", "PUT")[0].body).toEqual({ document_id: 41, note: "the T1w brains" });
     expect(dialog()).toBeNull();
     const said = el.querySelector(".vw-said")!;
     expect(said.textContent).toBe("Saved as ms-a-t1w-brain, version 2. Selections");
-    expect(said.querySelector("a")?.getAttribute("href")).toBe("#ask/selections");
+    expect(said.querySelector("a")?.getAttribute("href")).toBe("#query/selections");
   });
 
   it("keeps a search as the subjects it found, by id: what was typed goes into no address, history, storage or question", async () => {

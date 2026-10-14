@@ -52,7 +52,7 @@ export function QueryPage({ caps, open }: { caps: Capabilities; open: string | n
   return id === null ? <Cards caps={caps} /> : <Card caps={caps} id={id} />;
 }
 
-/** Whether the person finds Ask's Exports: the kept results, where the engine lists them. */
+/** Whether the person finds Query's Exports: the kept results, where the engine lists them. */
 export const mayExport = (caps: Capabilities): boolean => may(caps, "query:see") && served(caps, "GET /api/ask/handles");
 
 
@@ -61,7 +61,7 @@ function ExportsPage(_: { caps: Capabilities }) {
     <section className="query">
       <div className="data-head">
         <div className="grow">
-          <span className="eyebrow">Ask</span>
+          <span className="eyebrow">Query</span>
           <h1>Exports</h1>
         </div>
       </div>
@@ -75,7 +75,7 @@ function SelectionsPage(_: { caps: Capabilities }) {
     <section className="query">
       <div className="data-head">
         <div className="grow">
-          <span className="eyebrow">Ask</span>
+          <span className="eyebrow">Query</span>
           <h1>Selections</h1>
         </div>
       </div>
@@ -99,7 +99,7 @@ function Cards({ caps }: { caps: Capabilities }) {
     <section className="query">
       <div className="data-head">
         <div className="grow">
-          <span className="eyebrow">Ask</span>
+          <span className="eyebrow">Query</span>
           <h1>Cards</h1>
         </div>
         <button type="button" className="button" onClick={() => setStarting(true)}>
@@ -113,7 +113,7 @@ function Cards({ caps }: { caps: Capabilities }) {
       {rows !== null && rows.length > 0 && (
         <div className="query-cards">
           {rows.map((r) => (
-            <a key={r.root} className="query-card-link" href={href("ask", String(r.document))}>
+            <a key={r.root} className="query-card-link" href={href("query", String(r.document))}>
               <span className="query-card-title">
                 <span className="grow">{cardTitle(r.name)}</span>
                 <span className="chip">v{r.versions}</span>
@@ -159,7 +159,7 @@ function StartDialog({ caps, onClose }: { caps: Capabilities; onClose: () => voi
     ask
       .store(started.document as Json)
       .then((d) => {
-        location.hash = href("ask", String(d.document));
+        location.hash = href("query", String(d.document));
       })
       .catch((e: Error) => {
         setBusy(false);
@@ -352,7 +352,7 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       setMove(null);
       setTyped({});
       load();
-    } else location.hash = href("ask", String(document));
+    } else location.hash = href("query", String(document));
   };
 
   const applyMove = (set: string, m: Move, args: Json) => {
@@ -455,14 +455,14 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       <div className="query-head">
         <div className="grow">
           <span className="eyebrow">
-            <a href={href("ask")}>Ask</a> · card
+            <a href={href("query")}>Query</a> · card
           </span>
           <h1>{cardTitle((doc.ask as Json).name as string | undefined, answer)}</h1>
         </div>
         {versions.length > 0 && (
           <nav className="versions" aria-label="versions">
             {versions.map((v) => (
-              <a key={v.id} className={v.id === id ? "version on" : "version"} href={href("ask", String(v.id))} title={[v.principal, whenWords(v.at)].filter(Boolean).join(", ")}>
+              <a key={v.id} className={v.id === id ? "version on" : "version"} href={href("query", String(v.id))} title={[v.principal, whenWords(v.at)].filter(Boolean).join(", ")}>
                 {v.label}
               </a>
             ))}

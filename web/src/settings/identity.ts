@@ -170,7 +170,7 @@ const SEE_WORK: readonly Level[] = ["hidden", "see", "work"];
 /** A line for each page, in the order the form and the profile draw them. */
 export const PAGE_LINES: readonly PageLine[] = [
   { id: "assistant", title: "Assistant", mark: "Assistant", named: "Assistant", settings: false, levels: ["hidden", "use"], see: "Chat with the assistant" },
-  { id: "query", title: "Ask", mark: "Ask", named: "Ask", settings: false, levels: SEE_WORK, see: "Cards, selections and exports", work: "keep cards, save selections" },
+  { id: "query", title: "Query", mark: "Query", named: "Query", settings: false, levels: SEE_WORK, see: "Cards, selections and exports", work: "keep cards, save selections" },
   { id: "data", title: "Data", mark: "Data", named: "Data", settings: false, levels: SEE_WORK, see: "Datasets, cohorts and Browse", work: "add datasets, pseudonymise, read, sort" },
   { id: "review", title: "Review", mark: "Review", named: "Review", settings: false, levels: SEE_WORK, see: "What waits for a person", work: "decide, tune rules" },
   { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "Releases made", work: "make and hand over" },

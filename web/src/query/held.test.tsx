@@ -89,7 +89,7 @@ const words = (el: Element | null | undefined): string => {
 };
 const panelOf = (title: RegExp) => [...host.querySelectorAll<HTMLElement>(".panel.card")].find((p) => title.test(p.querySelector("h2")?.textContent ?? ""))!;
 
-describe("the Ask page card, its counts held back at plain (record 55 K7)", () => {
+describe("the Query page card, its counts held back at plain (record 55 K7)", () => {
   it("says every held count as held back with why on hover, draws no bar for it, and sums none", async () => {
     open();
     await settle(20);

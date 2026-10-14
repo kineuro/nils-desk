@@ -123,7 +123,7 @@ describe("the People page when the desk keeps the people", () => {
   it("draws the groups as cards with their marks and one records tag, and nothing more", () => {
     expect(html).toContain('<h3 class="grow">Reviewers</h3><span class="meta">1 person</span>');
     expect(html).toMatch(
-      /<span class="amark do">Assistant<\/span><span class="amark do">Ask<\/span><span class="amark">Data<\/span><span class="amark do">Review<\/span><span class="tag records" title="Dates, subject codes, sex and age, scanner names and series and protocol descriptions\."><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Identifying<span class="sr-only"> records<\/span><\/span>/u,
+      /<span class="amark do">Assistant<\/span><span class="amark do">Query<\/span><span class="amark">Data<\/span><span class="amark do">Review<\/span><span class="tag records" title="Dates, subject codes, sex and age, scanner names and series and protocol descriptions\."><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Identifying<span class="sr-only"> records<\/span><\/span>/u,
     );
     expect(html).toMatch(/<span class="amark do">Every page<\/span><span class="amark do">Every setting<\/span><span class="tag records" title="[^"]*"><svg[^>]*>(?:(?!<\/svg>).)*<\/svg>Everything</u);
     expect(html).not.toContain("the desk always keeps at least one");
@@ -143,7 +143,7 @@ describe("the People page when the desk keeps the people", () => {
     expect(html).toContain('<td><span class="amarks"><span class="tag">Reviewers</span></span></td>');
     expect(html).not.toContain("of their own");
     expect(html).toContain('<span class="amark own">Language models</span>');
-    expect(html).toContain('<span class="amark own">Ask</span><span class="tag records own"');
+    expect(html).toContain('<span class="amark own">Query</span><span class="tag records own"');
     expect(html).toContain('<td class="meta">now</td>');
     expect(html).toContain('<td class="meta">never</td>');
     expect(html).toContain('aria-label="Change Erik Lund"');
@@ -224,7 +224,7 @@ describe("the People page with an identity provider", () => {
     );
     expect(html).toContain('<td><span class="amarks"><span class="tag">Reviewers</span></span></td>');
     expect(html).toContain('<span class="amark own">Language models</span>');
-    expect(html).not.toContain('<span class="amark do own">Ask</span>');
+    expect(html).not.toContain('<span class="amark do own">Query</span>');
     expect(html).toMatch(/<\/svg>Reviewers<\/span><span>via provider<\/span><\/div>/u);
   });
 });

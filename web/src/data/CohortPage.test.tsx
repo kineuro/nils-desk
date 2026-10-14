@@ -112,7 +112,7 @@ describe("a cohort's page", () => {
     expect(look).not.toContain(">Rename</button>");
     expect(look).not.toContain('href="#release/new/north"');
     expect(look).toContain("Adding or taking out members needs work on the Data page.");
-    expect(look).toContain("Keeping cards needs work on the Ask page.");
+    expect(look).toContain("Keeping cards needs work on the Query page.");
     expect(look).not.toContain("Everyone in north");
     const acts = cohortActs(caps([...GRANTS], []), "north");
     expect(acts.changing).toBe("This engine has no door for changing a cohort.");

@@ -19,7 +19,7 @@ export function cardTitle(name: string | null | undefined, answer?: string | nul
 
 /** Why keeping a card is not offered to this person, in words, or null when it is: the engine keeps a card only for work on the Query page (record 25). */
 export function keepingRefusal(caps: Capabilities): string | null {
-  return needsWork(caps, "Keeping cards", [["query:work", "the Ask page"]]);
+  return needsWork(caps, "Keeping cards", [["query:work", "the Query page"]]);
 }
 
 export interface Version {

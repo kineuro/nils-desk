@@ -5,8 +5,8 @@ import { exportWords } from "./exporting";
 
 describe("who may export a table, in words", () => {
   it("names the page a grant opens, and never the grant", () => {
-    expect(exportWords("query:work")).toBe("whoever may work on the Ask page");
-    expect(exportWords("query:see")).toBe("whoever may see the Ask page");
+    expect(exportWords("query:work")).toBe("whoever may work on the Query page");
+    expect(exportWords("query:see")).toBe("whoever may see the Query page");
     expect(exportWords("kvasir:see")).toBe("whoever may see the Language models page");
     expect(exportWords("install:work")).toBe("whoever may work on the install");
   });

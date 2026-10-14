@@ -9,9 +9,9 @@ import { argsOf, cardTitle, changeWords, chartOf, clauseText, countsOf, fieldCho
 
 describe("keeping a card", () => {
   const holding = (grants: Grant[]) => ({ person: { subject: "p", display_name: "p", grants, detail: "plain", groups: [] } }) as unknown as Capabilities;
-  it("is offered with work on the Ask page, and said in words without it", () => {
+  it("is offered with work on the Query page, and said in words without it", () => {
     expect(keepingRefusal(holding(["query:work"]))).toBeNull();
-    expect(keepingRefusal(holding(["query:see", "data:work"]))).toBe("Keeping cards needs work on the Ask page.");
+    expect(keepingRefusal(holding(["query:see", "data:work"]))).toBe("Keeping cards needs work on the Query page.");
   });
 });
 

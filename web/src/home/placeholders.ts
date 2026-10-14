@@ -39,17 +39,17 @@ const page = (id: string, title: string, more: Partial<SidePage> = {}): SidePage
 // datasets; a dataset's own pseudonymisation is a step of it, opened in place.
 export const PLACEHOLDERS: Placeholder[] = [
   {
-    id: "ask",
-    title: "Ask",
+    id: "query",
+    title: "Query",
     icon: "search",
     grant: "query:see",
     door: "POST /api/ask/run",
     words: "Narrow the registry to what you need, step by step or in words, and keep every version of it as a card.",
     built: true,
     // the saved selections where the engine lists them, as the page's own chips (query/selections.ts);
-    // the kept results to save as files where the engine lists them (spec 13.1: Ask is Cards, Selections, Exports)
+    // the kept results to save as files where the engine lists them (spec 13.1: Query is Cards, Selections, Exports)
     pages: (caps) => [
-      page("cards", "Cards", { to: href("ask") }),
+      page("cards", "Cards", { to: href("query") }),
       ...(door(caps, "GET /api/ask/selections") ? [page("selections", "Selections")] : []),
       ...(door(caps, "GET /api/ask/handles") ? [page("exports", "Exports")] : []),
     ],

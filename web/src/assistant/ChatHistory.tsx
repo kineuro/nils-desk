@@ -240,7 +240,7 @@ export function ChatActions({ chat, onChanged, onDeleted }: { chat: Chat; onChan
           }
         >
           <p>
-            {chatTitle(chat)} leaves your list and cannot be opened again. The cards it made stay on the Ask page.
+            {chatTitle(chat)} leaves your list and cannot be opened again. The cards it made stay on the Query page.
           </p>
         </Dialog>
       )}

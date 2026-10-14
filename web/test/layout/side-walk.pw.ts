@@ -55,7 +55,7 @@ async function shoot(page: Page, width: number, section: string, title: string) 
 const MAP: Record<string, string[]> = {
   Home: [],
   Assistant: ["New conversation", "All conversations", "Shared", "Memory"],
-  Ask: ["Cards", "Selections", "Exports"],
+  Query: ["Cards", "Selections", "Exports"],
   Data: ["Datasets and cohorts", "Browse", "Pseudonyms"],
   Review: ["Work", "Main scans", "Subjects", "Rules", "Rounds", "Label sets"],
   Release: ["Releases", "New release", "Session schemes"],
@@ -128,4 +128,14 @@ test("on a phone every section opens from the panel over the page, and every pag
       await shut(page);
     }
   }
+});
+
+test("round 4's #ask leads to Query, with the page it named marked in the side", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/walk.html#ask/selections");
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe("#query/selections");
+  await drew(page, "Query / Selections");
+  await expect(page.locator("nav.side .side-group.on .side-link .grow")).toHaveText("Query");
+  await expect(page.locator('nav.side .side-group.on .side-pages a[aria-current="page"]')).toHaveText("Selections");
 });

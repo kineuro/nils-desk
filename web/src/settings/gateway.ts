@@ -59,7 +59,7 @@ export function viewerOf(caps: Capabilities, subscription: Subscription | null):
 }
 
 /** The pages whose grant keeps an older name than the page's own (spec 13.1, round 4: one word per thing). */
-const GRANT_PAGES: Record<string, string> = { "assistant-settings": "Assistant settings", query: "Ask", kvasir: "Language models", database: "Backups", identity: "People" };
+const GRANT_PAGES: Record<string, string> = { "assistant-settings": "Assistant settings", kvasir: "Language models", database: "Backups", identity: "People" };
 
 /** A grant as the People page names it: the page and how far a person goes there, and the assistant as itself. */
 export function grantWords(grant: string): string {

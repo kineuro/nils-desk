@@ -80,7 +80,7 @@ const SETTINGS_MOVED: Record<string, string> = { database: "backups", identity: 
  * Where an address that moved now leads, or null where it did not move:
  * Models is a page of Pipelines since Wave 7a (spec section 13.1), so #models
  * opens #pipelines/models and #models/model/3 opens #pipelines/models/3; the
- * query section is Ask (#query is #ask); and the Settings pages renamed by
+ * query section is Query, and #ask, the word round 4 gave it, opens #query; and the Settings pages renamed by
  * the map keep their old addresses as links to the new ones.
  */
 export function moved(r: Route): string | null {
@@ -88,7 +88,7 @@ export function moved(r: Route): string | null {
     const id = r.page === "model" && r.arg !== null && /^\d+$/.test(r.arg) ? r.arg : null;
     return narrow(href("pipelines", "models", id), r.query ?? {});
   }
-  if (r.section === "query") return narrow(href("ask", r.page, r.arg, r.sub), r.query ?? {});
+  if (r.section === "ask") return narrow(href("query", r.page, r.arg, r.sub), r.query ?? {});
   if (r.section === "settings" && r.page !== null && r.page in SETTINGS_MOVED) return narrow(href("settings", SETTINGS_MOVED[r.page], r.arg, r.sub), r.query ?? {});
   return null;
 }

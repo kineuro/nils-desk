@@ -66,7 +66,7 @@ export function CohortPage({ caps, name }: { caps: Capabilities; name: string })
       .start(startBody({ kind: "cohorts", cohorts: [name] }))
       .then((s) => ask.store(s.document as Json))
       .then((d) => {
-        location.hash = href("ask", String(d.document));
+        location.hash = href("query", String(d.document));
       })
       .catch((e: Error) => {
         setBusy(null);
@@ -254,7 +254,7 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                                 </a>
                               )}
                               {typeof j.handle === "number" && (
-                                <a className="tail" href={href("ask")}>
+                                <a className="tail" href={href("query")}>
                                   The card
                                   <Icon name="chevron-right" />
                                 </a>

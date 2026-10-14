@@ -109,7 +109,7 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
     if (!run || !pipeline) return;
     const cols = measureColumns(pipeline as Pipeline & { descriptor?: Record<string, unknown> | null });
     if (cols.length === 0 || measures === 0) return setTable({ kind: "off", why: null });
-    if (!acts.table) return setTable({ kind: "off", why: "Reading a run's numbers needs Ask: Work." });
+    if (!acts.table) return setTable({ kind: "off", why: "Reading a run's numbers needs Query: Work." });
     setTable({ kind: "loading" });
     runs
       .ask(tableAsk({ pipeline: pipeline.name, level: pipeline.level, run: run.id, columns: cols, perScan: acts.perScan, by }))
@@ -558,7 +558,7 @@ function TableView({ table, by, onBy, choices }: { table: Table; by: string; onB
           </table>
         </div>
       )}
-      {table.truncated && <p className="meta">The first rows only; the whole table is answered in Ask.</p>}
+      {table.truncated && <p className="meta">The first rows only; the whole table is answered in Query.</p>}
     </>
   );
 }

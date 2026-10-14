@@ -153,7 +153,7 @@ describe("the marks", () => {
   it("draw a page seen as an outline, a page worked filled, and a person's own dashed", () => {
     expect(marksOf(reviewers.grants)).toEqual([
       { key: "assistant", label: "Assistant", work: true, own: false },
-      { key: "query", label: "Ask", work: true, own: false },
+      { key: "query", label: "Query", work: true, own: false },
       { key: "data", label: "Data", work: false, own: false },
       { key: "review", label: "Review", work: true, own: false },
     ]);
@@ -164,28 +164,28 @@ describe("the marks", () => {
 
   it("collapse to Every page and Every setting when all of them are held at their top", () => {
     expect(marksOf(everything).map((m) => m.label)).toEqual(["Every page", "Every setting"]);
-    expect(marksOf(SETS.admin.grants).map((m) => m.label)).toEqual(["Ask", "Data", "Review", "Release", "Pipelines", "Models", "Campaigns", "Every setting"]);
+    expect(marksOf(SETS.admin.grants).map((m) => m.label)).toEqual(["Query", "Data", "Review", "Release", "Pipelines", "Models", "Campaigns", "Every setting"]);
     // Models and Campaigns have their pages since record 45, so a group without either names its pages one by one
-    expect(marksOf(everything.filter((g) => !/^models:/u.test(g))).map((m) => m.label)).toEqual(["Assistant", "Ask", "Data", "Review", "Release", "Pipelines", "Campaigns", "Every setting"]);
-    expect(marksOf(everything.filter((g) => !/^campaigns:/u.test(g))).map((m) => m.label)).toEqual(["Assistant", "Ask", "Data", "Review", "Release", "Pipelines", "Models", "Every setting"]);
+    expect(marksOf(everything.filter((g) => !/^models:/u.test(g))).map((m) => m.label)).toEqual(["Assistant", "Query", "Data", "Review", "Release", "Pipelines", "Campaigns", "Every setting"]);
+    expect(marksOf(everything.filter((g) => !/^campaigns:/u.test(g))).map((m) => m.label)).toEqual(["Assistant", "Query", "Data", "Review", "Release", "Pipelines", "Models", "Every setting"]);
     expect(marksOf(everything.filter((g) => g !== "places:work")).map((m) => m.label)).toEqual(["Every page", "Install", "Language models", "Assistant settings", "Places", "Backups", "People", "Audit"]);
-    expect(marksOf(everything, new Set<PageId>(["query"])).map((m) => m.label)).toContain("Ask");
+    expect(marksOf(everything, new Set<PageId>(["query"])).map((m) => m.label)).toContain("Query");
   });
 });
 
 describe("the sentence under the form", () => {
   it("says in one sentence what a person sees, where they work, and how much of a record", () => {
     const grants = [...reviewers.grants, "kvasir:see"];
-    expect(summaryWords({ kind: "person", name: "Erik", grants, detail: "quasi" })).toBe("Erik sees Assistant, Ask, Data, Review and Language models, works in Ask and Review, with identifying details.");
+    expect(summaryWords({ kind: "person", name: "Erik", grants, detail: "quasi" })).toBe("Erik sees Assistant, Query, Data, Review and Language models, works in Query and Review, with identifying details.");
     expect(summaryWords({ kind: "person", name: " ", grants: [], detail: "plain" })).toBe("This person sees no page yet.");
     const sara = addUp([reviewers, dataTeam], { grants: [], detail: null }).grants;
     expect(summaryWords({ kind: "person", name: "Sara", grants: sara, detail: "sensitive" })).toBe(
-      "Sara sees Assistant, Ask, Data, Review, Release, Pipelines and Places, works in Ask, Data, Review, Release, Pipelines and Places, with every detail.",
+      "Sara sees Assistant, Query, Data, Review, Release, Pipelines and Places, works in Query, Data, Review, Release, Pipelines and Places, with every detail.",
     );
   });
 
   it("says it for a group's people", () => {
-    expect(summaryWords({ kind: "group", name: "Guests", grants: ["query:see", "data:see"], detail: "plain" })).toBe("People in Guests see Ask and Data, without identifying details.");
+    expect(summaryWords({ kind: "group", name: "Guests", grants: ["query:see", "data:see"], detail: "plain" })).toBe("People in Guests see Query and Data, without identifying details.");
     expect(summaryWords({ kind: "group", name: "", grants: [], detail: "sensitive" })).toBe("People in this group see no page yet.");
   });
 });

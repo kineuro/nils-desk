@@ -70,14 +70,14 @@ describe("changing a person", () => {
     expect(html).toMatch(/<button type="button" class="opt on" aria-pressed="true"><svg[^>]*>.*?<\/svg>Reviewers<\/button>/u);
     expect(html).toMatch(/<button type="button" class="opt" aria-pressed="false">Data team<\/button>/u);
     expect(html).not.toContain("followed");
-    expect(lineOf(html, "Ask")).toContain('<span class="what">Cards, selections and exports · work: keep cards, save selections · <span class="from">from Reviewers</span></span>');
+    expect(lineOf(html, "Query")).toContain('<span class="what">Cards, selections and exports · work: keep cards, save selections · <span class="from">from Reviewers</span></span>');
     expect(lineOf(html, "Language models")).toContain('<span class="what">Stations and models · work: models, keys, stations · <span class="from own">own</span></span>');
     expect(lineOf(html, "Release")).toContain('<span class="what">Releases made · work: make and hand over</span>');
     expect(html).toContain('<b>Settings</b></div>');
   });
 
   it("locks the levels below what a group gives, and says on hover which group gives them", () => {
-    expect(lineOf(html, "Ask")).toContain(
+    expect(lineOf(html, "Query")).toContain(
       '<button type="button" class="locked" aria-pressed="false" disabled="" title="from Reviewers">Hidden</button><button type="button" class="locked" aria-pressed="false" disabled="" title="from Reviewers">See</button><button type="button" class="on" aria-pressed="true">Work</button>',
     );
     expect(lineOf(html, "Assistant")).toContain('<button type="button" class="locked" aria-pressed="false" disabled="" title="from Reviewers">Hidden</button><button type="button" class="on" aria-pressed="true">Use</button>');
@@ -91,7 +91,7 @@ describe("changing a person", () => {
   });
 
   it("says what it comes to in one sentence", () => {
-    expect(html).toContain("<p>Erik Lund sees Assistant, Ask, Data, Review and Language models, works in Ask and Review, with identifying details.</p>");
+    expect(html).toContain("<p>Erik Lund sees Assistant, Query, Data, Review and Language models, works in Query and Review, with identifying details.</p>");
     expect(html).not.toContain("A page a group gives cannot go lower");
     expect(html).toMatch(/<button type="button" class="button">Save<\/button>/u);
   });
@@ -103,15 +103,15 @@ describe("changing a person", () => {
     expect(oidc).not.toMatch(/<button[^>]*>(?:<svg[^>]*>(?:(?!<\/svg>).)*<\/svg>)?Reviewers<\/button>/u);
     expect(oidc).toMatch(/<button type="button" class="opt" aria-pressed="false">Data team<\/button>/u);
     expect(oidc).not.toContain("A group with the globe");
-    expect(lineOf(oidc, "Ask")).toContain('<span class="from">from Reviewers</span>');
-    expect(lineOf(oidc, "Ask")).toContain('class="locked" aria-pressed="false" disabled="" title="from Reviewers">See</button>');
+    expect(lineOf(oidc, "Query")).toContain('<span class="from">from Reviewers</span>');
+    expect(lineOf(oidc, "Query")).toContain('class="locked" aria-pressed="false" disabled="" title="from Reviewers">See</button>');
     expect(lineOf(oidc, "Language models")).toContain('<span class="from own">own</span>');
-    expect(oidc).toContain("Erik Lund sees Assistant, Ask, Data, Review and Language models");
+    expect(oidc).toContain("Erik Lund sees Assistant, Query, Data, Review and Language models");
   });
 
   it("names every group that gives a line's level", () => {
     const lines = renderToStaticMarkup(<AccessLines kind="person" levels={levelsOf(["query:work", "data:work"])} detail="quasi" groups={[reviewers, dataTeam]} onLevel={none} onDetail={none} />);
-    expect(lineOf(lines, "Ask")).toContain("from Reviewers and Data team");
+    expect(lineOf(lines, "Query")).toContain("from Reviewers and Data team");
     expect(lineOf(lines, "Data")).toContain("from Data team");
   });
 });
@@ -137,7 +137,7 @@ describe("a group", () => {
     expect(html).not.toContain("A name people will know it by");
     expect(lineOf(html, "Data")).toContain('<button type="button" class="on" aria-pressed="true">Work</button>');
     expect(lineOf(html, "Data")).not.toContain("locked");
-    expect(html).toContain("<p>People in Data team see Ask, Data and Release, work in Ask, Data and Release, without identifying details.</p>");
+    expect(html).toContain("<p>People in Data team see Query, Data and Release, work in Query, Data and Release, without identifying details.</p>");
     expect(html).toMatch(/<button type="button" class="button">Save<\/button>/u);
     expect(html).toContain("Remove the group");
   });

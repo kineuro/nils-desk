@@ -77,7 +77,7 @@ export async function answerFile(document: number, title: string, version: strin
   return { name: csvName(title, version, document), text: csvOf(columns, rows), rows: rows.length, withheld, held: columns.filter((c) => heldCols.has(c)) };
 }
 
-/** A kept result read whole for its file (Ask, Exports): every page of its rows for an export, in order, named after the result. */
+/** A kept result read whole for its file (Query, Exports): every page of its rows for an export, in order, named after the result. */
 export async function handleFile(handle: number, title: string, doors: Pick<typeof ask, "rows"> = ask): Promise<AnswerFile> {
   const rows: unknown[][] = [];
   let withheld = 0;

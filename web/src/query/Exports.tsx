@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Ask's Exports (Wave 7a, spec 13.1, round 4): the kept results, newest
+// Query's Exports (Wave 7a, spec 13.1, round 4): the kept results, newest
 // first, each saved as a CSV file at the person's own detail, read through
 // the rows door with the purpose export as a card's Download CSV reads its
 // answer. A result whose rows are held back, dropped or withdrawn says so
