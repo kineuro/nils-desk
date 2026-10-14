@@ -14,6 +14,8 @@
 // from theirs, beside the way to their page.
 
 import { HeadersLine } from "../review/S1Settings";
+import { RuleFixesLine } from "../review/RuleFixesLine";
+import { readsProposals } from "../review/rulesDoors";
 import { useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -330,6 +332,12 @@ export function DatasetDetail(props: DatasetDetailProps) {
       {served(caps, "GET /api/datasets/{name}/headers") && (
         <div className="dp-sec">
           <HeadersLine dataset={d.name} may={may(caps, "data:work") && served(caps, "PUT /api/datasets/{name}/headers")} />
+        </div>
+      )}
+      {/* record 56: what its read found for the rules, and the way to it on the Rules page */}
+      {s?.proposals && (
+        <div className="dp-sec">
+          <RuleFixesLine dataset={d.name} counts={s.proposals} link={readsProposals(caps)} />
         </div>
       )}
       <div className="dp-sec">

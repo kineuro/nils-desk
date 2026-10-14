@@ -161,6 +161,10 @@ button.rx-scan:hover { border-color: var(--n-brand-text); }
 .rule-reject .input { min-width: calc(200 * var(--p, 1px)); }
 .rule-details { margin-left: auto; }
 
+/* ------------------------------------------------------------ a dataset's proposed rule fixes, one line on its detail */
+.fixes-line { display: flex; flex-wrap: wrap; gap: 0.4rem 0.8rem; align-items: center; }
+.fixes-line.waiting { border-left: 3px solid var(--n-caution-line); padding-left: 0.5rem; }
+
 /* ------------------------------------------------------------ a phone's width: one column, nothing sideways */
 @media (max-width: 760px) {
   .rq-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "axis count" "pair pair" "why why" "pics act"; }

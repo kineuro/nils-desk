@@ -6,9 +6,10 @@
 // button; Adopt is one press and one line follows the re-sort to what it
 // did; the pack's quality with each row's mend; Change a rule with a form
 // per operation, only the chosen key in colour, and the effect before
-// anything is proposed; nothing sideways; and on a big screen the page, its
-// keys and its cards grow by one factor. In chromium, and in Firefox where
-// it is installed. Screenshots go to test-results for a look.
+// anything is proposed; a dataset's detail with its proposed rule fixes in
+// one line; nothing sideways; and on a big screen the page, its keys and
+// its cards grow by one factor. In chromium, and in Firefox where it is
+// installed. Screenshots go to test-results for a look.
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
@@ -152,6 +153,20 @@ for (const vp of VIEWPORTS) {
       await inside(page.locator(".rf"), vp.width);
       await noSideways(page, vp.width);
       await page.screenshot({ path: `test-results/rules-change-${vp.name}.png`, fullPage: true });
+    });
+
+    test("a dataset's detail says its proposed rule fixes in one line, with the way to them", async ({ page }) => {
+      await page.goto("/data.html#data/datasets?dataset=study-big");
+      const line = page.locator(".dp-detail .fixes-line");
+      await expect(line).toHaveText("3 proposed rule fixes from this read1 adoptedReview them");
+      await expect(line.locator("a")).toHaveAttribute("href", "#review/rules/proposals?dataset=study-big");
+      expect(await line.evaluate((e) => getComputedStyle(e).borderLeftWidth)).toBe("3px");
+      // one line on a laptop, every part's middle within a couple of pixels of the others'; on a phone it folds within the window
+      const middles = await line.locator(":scope > *").evaluateAll((els) => els.map((e) => (e.getBoundingClientRect().top + e.getBoundingClientRect().bottom) / 2));
+      if (vp.width >= 1024) expect(Math.max(...middles) - Math.min(...middles)).toBeLessThan(3);
+      await inside(line, vp.width);
+      await noSideways(page, vp.width);
+      await page.locator(".dp-detail").screenshot({ path: `test-results/rules-dataset-line-${vp.name}.png` });
     });
   });
 }
