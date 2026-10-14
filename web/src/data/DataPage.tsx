@@ -40,7 +40,8 @@ import {
   cohortRelation,
   datasetRelation,
   feedsWords,
-  filesOf,
+  filesWords,
+  foundOf,
   maySummarise,
   originWords,
   partLabel,
@@ -533,7 +534,8 @@ const SEGMENT_WORDS = ["found", "read", "sorted", "main scans", "pictures", "3D 
 function DatasetCard(props: { dataset: Dataset; why: string | null; summary: DatasetSummary | null; on: boolean; relation: Relation | null; feeds: string; view: View; onPick: () => void }) {
   const { dataset: d, why, summary, on, relation, feeds, view, onPick } = props;
   const next = nextStep(d, why);
-  const files = filesOf(d, summary);
+  const found = foundOf(d, summary);
+  const files = found.files;
   const rail = railOf(d, summary);
   const line = cardLine(d, next, summary);
   // what the scans that need a look are asked, behind a hover
@@ -560,8 +562,11 @@ function DatasetCard(props: { dataset: Dataset; why: string | null; summary: Dat
         </span>
       </div>
       <div className="dp-nums">
-        <span>
-          <b>{files === null ? "?" : n(files)}</b>
+        <span title={files !== null && found.partial ? `${filesWords({ files, partial: true })}: counted until the count stopped; a read counts them all` : undefined}>
+          <b>
+            {files !== null && found.partial && <small className="dp-least">at least </small>}
+            {files === null ? "?" : n(files)}
+          </b>
           <span>files</span>
         </span>
         <span>

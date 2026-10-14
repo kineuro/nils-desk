@@ -58,6 +58,9 @@ const NOW = Date.now();
 const READ = new URLSearchParams(location.search).has("read");
 /** ?done draws the identified dataset pseudonymised, its step's summary beside its log. */
 const DONE = READ || new URLSearchParams(location.search).has("done");
+/** ?partial draws the big dataset before its read, its tree counted by a probe that stopped short (2026-10-14): at least so many files. */
+const PARTIAL = new URLSearchParams(location.search).has("partial");
+const SHORT = 49836;
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString().replace(/\.\d+Z$/u, "Z");
 
 interface Spec {
@@ -93,7 +96,7 @@ function source(s: Spec, i: number) {
       ? { originals: null, anon: null }
       : s.state === "identified"
         ? { originals: { path: `/srv/data-test/${s.name}/derivatives/dcm-original`, files: s.files, bytes: 2_000_000 }, anon: { path: `/srv/data-test/${s.name}/derivatives/dcm-anon`, files: DONE ? s.files : 0, last_written: null } }
-        : { originals: null, anon: { path: `/srv/data-test/${s.name}/derivatives/dcm-anon`, files: s.files, last_written: null } };
+        : { originals: null, anon: { path: `/srv/data-test/${s.name}/derivatives/dcm-anon`, files: PARTIAL && s.name === "study-big" ? SHORT : s.files, last_written: null, partial: PARTIAL && s.name === "study-big" } };
   return {
     id: i + 2,
     name: s.name,
@@ -124,7 +127,15 @@ const step = (name: string, state: string, counts: Record<string, unknown>, minu
 
 function summary(s: Spec) {
   const read = s.scans > 0;
-  const steps = [step("found", s.state === "unknown" ? "waiting" : "done", { files: s.files, bytes: 9_500_000_000, tree: s.state === "identified" ? "originals" : "anon" }, s.state === "unknown" ? null : 72)];
+  const short = PARTIAL && s.name === "study-big";
+  const steps = [
+    step(
+      "found",
+      s.state === "unknown" ? "waiting" : "done",
+      { files: short ? SHORT : s.files, bytes: 9_500_000_000, tree: s.state === "identified" ? "originals" : "anon", partial: short, counted_by: short ? "probe" : "read" },
+      s.state === "unknown" ? null : 72,
+    ),
+  ];
   if (s.state === "identified") steps.push(DONE ? step("pseudonymised", "done", { files: s.files, waiting: 0, held: 0 }, 50, 12) : step("pseudonymised", "waiting", { files: 0, waiting: s.files, held: s.files }, null));
   steps.push(
     step("read", read ? "done" : "waiting", { files: read ? s.files : 0, refused: read ? 216 + setAside(s) : 0, set_aside: setAside(s), reads: read ? 1 : 0 }, read ? 69 : null, 4),
@@ -163,8 +174,9 @@ function summary(s: Spec) {
       : [],
     body_regions: [],
     files: {
-      found: s.files,
+      found: short ? SHORT : s.files,
       bytes: 9_500_000_000,
+      found_partial: short,
       read: s.files ?? 0,
       refused: read ? 216 + setAside(s) : 0,
       refused_batch: read ? 3 : null,

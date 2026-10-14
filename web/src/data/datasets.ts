@@ -56,9 +56,10 @@ export interface IdentityRule {
 
 /** The counts are null on a place the engine has not probed since it was declared, or since the update that gave it trees. */
 export interface Trees {
-  originals: { path: string; files: number | null; bytes: number | null } | null;
+  /** `partial`: the engine's count stopped short of a large tree (it reads a page's worth of entries), so `files` is a lower bound. */
+  originals: { path: string; files: number | null; bytes: number | null; partial?: boolean } | null;
   /** Null on an undeclared dataset (Wave 7a), which has no tree and reads nothing. */
-  anon: { path: string; files: number | null; last_written: string | null } | null;
+  anon: { path: string; files: number | null; last_written: string | null; partial?: boolean } | null;
 }
 
 /** A tree's file count in words, or that the engine has not counted it yet. */

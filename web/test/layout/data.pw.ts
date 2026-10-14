@@ -277,3 +277,28 @@ test("Paste the browser lets read takes the map", async ({ page, context, browse
   await expect(page.locator(".ps-code-value")).toHaveCount(3);
   await expect(page.locator(".ps-drop")).toContainText("pasted · 3 of 4 IDs matched");
 });
+
+for (const [device, width, height] of [
+  ["laptop", 1440, 900],
+  ["phone", 390, 844],
+] as const) {
+  test(`on a ${device} a count that stopped short of a large tree reads at least, on the card and the found step`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/data.html?partial#data/datasets?dataset=study-big");
+    const card = page.locator(".dp-card").filter({ has: page.locator(".dp-pick", { hasText: "study-big" }) });
+    const files = card.locator(".dp-nums > span").first();
+    await expect(files).toHaveText("at least 49,836files");
+    // the found step says it in the same words, and the detail's line too
+    await expect(page.locator(".dp-step").first()).toContainText("at least 49,836 files");
+    await expect(page.locator(".dp-detail")).toContainText("at least 49,836 files");
+    // the card's numbers stay within it, and nothing goes sideways
+    const box = (await card.boundingBox())!;
+    for (const n of await card.locator(".dp-nums > span").all()) {
+      const b = (await n.boundingBox())!;
+      expect(b.x + b.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await card.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `test-results/data-partial-${device}.png` });
+  });
+}
