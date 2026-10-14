@@ -119,6 +119,36 @@ describe("the Places page", () => {
   });
 });
 
+describe("T4 on the Places page (Wave 7a section 17)", () => {
+  it("adds a folder of loose DICOM as a root in Add a root folder, and asks the engine for no read", async () => {
+    const loose = { ...root, id: 7, name: "loose", path: "/srv/loose", layout: { root: true, folders: 1, loose: 3 } };
+    const e = engine((c) => {
+      if (c.url.startsWith("/api/places") && c.method === "GET") return { status: 200, body: { places: [registry], enforced: true } };
+      if (c.method === "POST" && c.url === "/api/places") return { status: 201, body: loose };
+      return undefined;
+    });
+    await act(async () => {
+      await placesKept.refresh();
+    });
+    act(() => root2.render(<PlacesPage caps={caps7a([...DOORS, "POST /api/jobs"])} install={null} onChanged={() => undefined} />));
+    await settle();
+    act(() => button(host, "Add a place")!.click());
+    const path = host.querySelector<HTMLInputElement>("#place-path")!;
+    act(() => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(path, "/srv/loose");
+      path.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button(host, "Go on in Add a root folder")!.click());
+    await settle();
+    act(() => button(host, "Add")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/places")).toHaveLength(1);
+    expect(e.of("POST", "/api/places")[0].body).toMatchObject({ role: "source", path: "/srv/loose" });
+    expect(e.of("POST", "/api/jobs")).toHaveLength(0);
+  });
+});
+
 describe("exploring the sources again (2026-10-10)", () => {
   const listed = (c: { url: string; method: string }) => (c.url.startsWith("/api/places") && c.method === "GET" ? { status: 200, body: { places: [root, ward, registry], enforced: true } } : undefined);
 
@@ -173,6 +203,25 @@ describe("Setup's step", () => {
     await settle();
     expect(e.of("POST", "/api/places")[0].body).toEqual({ name: "more", role: "source", path: "/srv/more", guarantees: { backup: null, snapshots: false, protected: false, fast: false } });
     expect(onDone).toHaveBeenCalled();
+  });
+
+  // T4 (Wave 7a section 17): a folder of loose DICOM added in Setup's step is
+  // read by nothing before the person's answer, though the engine offers the
+  // door that would queue a read
+  it("adds a folder of loose DICOM and asks the engine for no read", async () => {
+    const loose = { ...root, name: "loose", path: "/srv/loose", layout: { root: true, folders: 1, loose: 3 } };
+    const e = engine((c) => (c.method === "POST" && c.url === "/api/places" ? { status: 201, body: loose } : undefined));
+    act(() => root2.render(<SourcesBody caps={caps7a([...DOORS, "POST /api/jobs"])} install={null} places={[registry]} met={false} onDone={() => undefined} />));
+    const path = host.querySelector<HTMLInputElement>("#root-path")!;
+    act(() => {
+      const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      set.call(path, "/srv/loose");
+      path.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button(host, "Add")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/places")).toHaveLength(1);
+    expect(e.of("POST", "/api/jobs")).toHaveLength(0);
   });
 
   it("says which work it needs to a person who may not add a folder", () => {
