@@ -13,6 +13,7 @@
 // 56), and their running job joins the log; main scans are picked again
 // from theirs, beside the way to their page.
 
+import { HeadersLine } from "../review/S1Settings";
 import { useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -325,6 +326,11 @@ export function DatasetDetail(props: DatasetDetailProps) {
         </span>
       </div>
 
+      {served(caps, "GET /api/datasets/{name}/headers") && (
+        <div className="dp-sec">
+          <HeadersLine dataset={d.name} may={may(caps, "data:work") && served(caps, "PUT /api/datasets/{name}/headers")} />
+        </div>
+      )}
       <div className="dp-sec">
         <h3 className="eyebrow">Where it is</h3>
         {s ? (

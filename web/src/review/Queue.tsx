@@ -167,6 +167,7 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
               <tr key={itemKey(i)} className={i.status === "open" ? "" : "decided"}>
                 <td>
                   <span className={`tag ${tag.tone}`}>{tag.words}</span>
+                  {i.mode === "blind_first" && <span className="tag mode-blind">blind first</span>}
                 </td>
                 <td>
                   {modelDisagrees(i) && <span className="tag caution badge">{DISAGREES}</span>}

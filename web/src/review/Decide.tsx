@@ -5,8 +5,10 @@
 // field of the old dialog stands; what a decision is worth against the rules
 // is one disclosure.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ops, type ReviewItem } from "../ops/client";
+import { BothSides } from "./BothSides";
+import { answerBody, modeOf, owesBlind, provisionalValue, s1, type Suggestions } from "./s1";
 import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
 import { itemWords, refusalWords, SCOPES, type PackDoc } from "./client";
@@ -25,12 +27,49 @@ export function DecideDialog({ item, pack, guess = null, onClose, onDone }: Deci
   const k = kindOf(item.kind);
   const axis = k.classifier ? k.area : null;
   const values = axis ? (pack?.axes.find((a) => a.axis === axis)?.values ?? []) : [];
-  const [value, setValue] = useState(guess ?? "");
+  const [value, setValue] = useState(axis !== null && owesBlind(item) ? "" : (guess ?? ""));
   const [nothing, setNothing] = useState(false);
   const [scope, setScope] = useState<(typeof SCOPES)[number]["scope"]>("stack");
   const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
+  // record 55 D6: a blind-first question is answered from the scan first;
+  // the suggestions show after the person's own answer
+  const mode = modeOf(item);
+  const [blind, setBlind] = useState(() => axis !== null && owesBlind(item));
+  const [both, setBoth] = useState<Suggestions | null>(null);
+  useEffect(() => {
+    if (!axis || blind) return;
+    let alive = true;
+    s1.suggestions(item.id).then(
+      (d) => {
+        if (!alive) return;
+        setBoth(d);
+        const p = provisionalValue(d.provisional);
+        if (p && value === "" && !nothing) {
+          setValue(p.value);
+          setNothing(p.nothing);
+        }
+      },
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+    };
+  }, [axis, blind, item.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const answerBlind = () => {
+    setBusy(true);
+    setRefused(null);
+    s1.provisional(item.id, answerBody(value, nothing))
+      .then(() => {
+        setBusy(false);
+        setBlind(false);
+      })
+      .catch((e: unknown) => {
+        setBusy(false);
+        setRefused(refusalWords(e));
+      });
+  };
 
   const apply = () => {
     setBusy(true);
@@ -39,7 +78,7 @@ export function DecideDialog({ item, pack, guess = null, onClose, onDone }: Deci
       ? ops.reviewApply(item.id, { ...(nothing ? { nothing: true } : { value: value.trim() }), scope, ...(why.trim() ? { why: why.trim() } : {}) })
       : ops.reviewAccept(item.id, why.trim() || undefined);
     call
-      .then(() => onDone(axis ? `Decided ${axis} ${nothing ? "has no value" : `is ${value.trim()}`} for ${SCOPES.find((s) => s.scope === scope)?.words ?? scope}.` : "Acknowledged."))
+      .then((r) => onDone((((r as { answer?: { blind?: boolean } }).answer?.blind) ? "Given blind. " : "") + (axis ? `Decided ${axis} ${nothing ? "has no value" : `is ${value.trim()}`} for ${SCOPES.find((s) => s.scope === scope)?.words ?? scope}.` : "Acknowledged.")))
       .catch((e: unknown) => {
         setBusy(false);
         setRefused(refusalWords(e));
@@ -53,9 +92,15 @@ export function DecideDialog({ item, pack, guess = null, onClose, onDone }: Deci
       onClose={onClose}
       foot={
         <div className="row actions">
-          <button type="button" className="button" disabled={busy || !ready} onClick={apply}>
-            {axis ? "Decide" : "Acknowledge"}
-          </button>
+          {blind ? (
+            <button type="button" className="button" disabled={busy || !ready} onClick={answerBlind}>
+              Answer, then see the suggestions
+            </button>
+          ) : (
+            <button type="button" className="button" disabled={busy || !ready} onClick={apply}>
+              {axis ? "Decide" : "Acknowledge"}
+            </button>
+          )}
           <button type="button" className="button secondary" onClick={onClose}>
             Cancel
           </button>
@@ -63,7 +108,11 @@ export function DecideDialog({ item, pack, guess = null, onClose, onDone }: Deci
         </div>
       }
     >
-      <p className="lede">{itemWords(item)}</p>
+      <p className="lede">
+        {blind ? `A question about ${axis}. Answer from the scan and its header; NILS's answers show after yours.` : itemWords(item)}
+        {mode === "blind_first" && <span className="tag mode-blind">blind first</span>}
+      </p>
+      {axis && !blind && both && <BothSides doc={both} axis={axis} />}
       {axis && (
         <div className="field">
           <span className="label">{axis} is</span>

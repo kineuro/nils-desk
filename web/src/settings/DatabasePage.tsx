@@ -16,6 +16,7 @@ import { placesKept } from "../objects/kept";
 import { ops, type CustodyStore } from "../ops/client";
 import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
+import { BlindShare } from "../review/S1Settings";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
 import { databaseStats } from "./stats";
 import {
@@ -495,6 +496,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
               <p className="meta">Every answer's dates use these, never the browser's. A change moves the registry's epoch.</p>
             </section>
           )}
+          {served(caps, "GET /api/settings") && <BlindShare locked={calendarLocked} />}
         </div>
       </div>
     </div>
