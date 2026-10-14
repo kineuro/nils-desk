@@ -107,7 +107,10 @@
 .reader-head .said { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reader-head .said .i { vertical-align: -3px; margin-right: 0.3rem; }
 .reader-head .order-toggle .opt { min-height: 1.5rem; font-size: 12px; }
-.rate-count-line { font-size: var(--n-text-size-small); color: var(--n-text-faint); font-variant-numeric: tabular-nums; }
+.rate-count-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--n-text-size-small); color: var(--n-text-faint); font-variant-numeric: tabular-nums; }
+/* the head stays one line: its toggles never wrap, the counts give way first */
+.reader-one[data-reader-size] .reader-head > .chips, .reader-one[data-reader-size] .reader-head > .button { flex: none; flex-wrap: nowrap; }
+.size-toggle kbd { align-self: center; margin-left: 0.2rem; }
 .rate-count-line b { color: var(--n-text); }
 .on-this { font-variant-numeric: tabular-nums; }
 /* an answer taken: its words come in with a brief light, then stay quiet */
@@ -164,25 +167,27 @@
    The compact view gives the picture the room the expanded view gives the panel. Below a laptop's
    class (a small window, a phone) the picture takes what is left, as before. 106 px is the top bar,
    the page's padding and the head line at the factor 1. */
-.reader-one { --side-w: 34rem; }
-.reader-one.reader-compact { --side-w: 30rem; }
-.reader-one .rate-grid { grid-template-columns: minmax(0, 1fr) calc(var(--side-w) * var(--reader-scale)); }
+.reader-one[data-reader-size] { --side-w: 34rem; }
+.reader-one[data-reader-size="compact"] { --side-w: 30rem; }
+@media (min-width: 860.02px) {
+  .reader-one[data-reader-size] .rate-grid { grid-template-columns: minmax(0, 1fr) calc(var(--side-w) * var(--reader-scale)); }
+}
 @media (min-width: 1400px) and (min-height: 760px) {
-  .reader-one { --reader-scale: 1; --pic-h: 640px; --pic-w: 584px; }
-  .reader-one.reader-compact { --pic-w: 648px; }
+  .reader-one[data-reader-size] { --reader-scale: 1; --pic-h: 640px; --pic-w: 584px; }
+  .reader-one[data-reader-size="compact"] { --pic-w: 648px; }
 }
 @media (min-width: 1880px) and (min-height: 940px) {
-  .reader-one { --reader-scale: 1.25; --pic-h: 820px; --pic-w: 920px; }
-  .reader-one.reader-compact { --pic-w: 1008px; }
+  .reader-one[data-reader-size] { --reader-scale: 1.25; --pic-h: 820px; --pic-w: 920px; }
+  .reader-one[data-reader-size="compact"] { --pic-w: 1008px; }
 }
 @media (min-width: 2520px) and (min-height: 1280px) {
-  .reader-one { --reader-scale: 1.5; --pic-h: 1150px; --pic-w: 1420px; }
-  .reader-one.reader-compact { --pic-w: 1528px; }
+  .reader-one[data-reader-size] { --reader-scale: 1.5; --pic-h: 1150px; --pic-w: 1420px; }
+  .reader-one[data-reader-size="compact"] { --pic-w: 1528px; }
 }
 @media (min-width: 1400px) and (min-height: 760px) {
-  .reader-one .rate-grid { grid-template-columns: var(--pic-w) calc(var(--side-w) * var(--reader-scale)); justify-content: center; }
+  .reader-one[data-reader-size] .rate-grid { grid-template-columns: var(--pic-w) calc(var(--side-w) * var(--reader-scale)); justify-content: center; }
   /* the picture box is the class's; the panel beside it takes the window's height */
-  .reader-one .rate-picture { height: var(--pic-h); align-self: start; }
+  .reader-one[data-reader-size] .rate-picture { height: var(--pic-h); align-self: start; }
 }
 
 /* a narrow screen (a phone, a window at half a laptop): the pictures over the panel and the page
@@ -267,8 +272,8 @@
 .reader-one .act-unsure { min-height: 1.9rem; }
 .reader-one .why-input { flex: 1 1 6rem; min-height: 1.9rem; }
 /* compact: the answer's bar on one line, the why box the one to give way */
-.reader-one.reader-compact .actions { flex-wrap: nowrap; }
-.reader-one.reader-compact .why-input { min-width: 3rem; }
+.reader-one[data-reader-size="compact"] .actions { flex-wrap: nowrap; }
+.reader-one[data-reader-size="compact"] .why-input { min-width: 3rem; }
 .reader-one .suggest { padding: 0.3rem 0.55rem; gap: 0.25rem; }
 .reader-one .suggest-words { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* a candidate on one line: only the axes the systems differ on, the rest are filled in on the rows */

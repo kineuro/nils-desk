@@ -29,6 +29,8 @@ async function box(page: Page) {
       panel: { w: Math.round(panel.getBoundingClientRect().width), scroll: panel.scrollHeight, client: panel.clientHeight, left: panel.getBoundingClientRect().left },
       evidence: { left: ev.left, top: ev.top, bottom: ev.bottom },
       size: document.querySelector(".reader-one")!.getAttribute("data-reader-size"),
+      // the head line in its own pixels: one line, its toggles never wrapping
+      head: document.querySelector<HTMLElement>(".reader-head")!.getBoundingClientRect().height / ((document.querySelector(".reader-head") as HTMLElement & { currentCSSZoom?: number }).currentCSSZoom ?? 1),
       doc: { scroll: doc.scrollHeight, client: doc.clientHeight, scrollW: doc.scrollWidth, clientW: doc.clientWidth },
     };
   });
@@ -62,6 +64,7 @@ for (const c of CLASSES) {
         // item with its suggestion, four candidates and seven axes without a scroll, expanded may scroll its panel
         // under an answer bar that stays on screen
         expect(m.evidence.left).toBeGreaterThanOrEqual(m.pic.right);
+        expect(m.head).toBeLessThan(40);
         if (v === "compact") expect(m.panel.scroll).toBeLessThanOrEqual(m.panel.client);
         expect(m.answer).toBeLessThanOrEqual(h);
         expect(m.doc.scroll).toBeLessThanOrEqual(m.doc.client);
