@@ -5,13 +5,16 @@
 // runs; held with the engine's reason behind a "?" where a run would be
 // refused, or where a run reads images the person may not see; every one
 // held while a press is answered; and a refusal at the door said plainly.
+// Main scans' Run (2026-10-11): the pick run door, with Pipelines work,
+// never while a pick waits or runs or picking is off, held without scans;
+// their link to the Main scans page where the person may read it.
 
 import { describe, expect, it } from "vitest";
 import { caps7a } from "../../test/safeWayIn";
 import { DoorError } from "../ask/client";
 import { GRANTS, type Grant } from "../grants";
 import { plainError } from "./plain";
-import { runControl, runOffers, startedWords, STEP_RUN_DOORS } from "./stepRun";
+import { MAIN_SCANS_HELP, mainScansMore, pickControl, pickOffer, runControl, runOffers, startedWords, STEP_RUN_DOORS } from "./stepRun";
 import type { SummaryStep } from "./summary";
 
 const DOORS = [STEP_RUN_DOORS.datasets, STEP_RUN_DOORS.cohorts];
@@ -80,6 +83,48 @@ describe("a step's Run", () => {
     expect(runOffers(caps, "datasets", steps, true, () => undefined).body_part?.disabled).toBe(true);
     expect(startedWords("study-big", "body_part")).toBe("study-big: body part queued.");
     expect(startedWords("ms-followup", "post_contrast")).toBe("ms-followup: post-contrast queued.");
+  });
+});
+
+describe("main scans' Run", () => {
+  const PICK = "POST /api/picks/run";
+  const main = (over: Partial<SummaryStep> = {}): SummaryStep => step({ step: "main_scans", state: "done", picked: 9, borders: 0, ...over });
+
+  it("is offered with the pick run door and work on Pipelines: Run, or Run again once it picked", () => {
+    const caps = caps7a([PICK]);
+    expect(pickControl(caps, main(), 40)).toEqual({ label: "Run again", disabled: false, why: null });
+    expect(pickControl(caps, main({ state: "waiting", picked: 0 }), 40)?.label).toBe("Run");
+    expect(pickControl(caps, main({ state: "failed" }), 40)?.label).toBe("Run again");
+    expect(pickControl(caps, step(), 40)).toBeNull();
+    expect(pickControl(caps, null, 40)).toBeNull();
+  });
+
+  it("is not offered while a pick waits or runs, where picking is off, nor without the door or work on Pipelines", () => {
+    const caps = caps7a([PICK]);
+    expect(pickControl(caps, main({ state: "queued", job: 30 }), 40)).toBeNull();
+    expect(pickControl(caps, main({ state: "running", job: 30 }), 40)).toBeNull();
+    expect(pickControl(caps, main({ state: "off" }), 40)).toBeNull();
+    expect(pickControl(caps7a(DOORS), main(), 40)).toBeNull();
+    const looks: Grant[] = GRANTS.filter((g) => g !== "pipelines:work");
+    expect(pickControl(caps7a([PICK], looks), main(), 40)).toBeNull();
+  });
+
+  it("is held without scans to pick from, and while a press is answered or the chain runs", () => {
+    const caps = caps7a([PICK]);
+    expect(pickControl(caps, main({ state: "waiting", picked: 0 }), 0)).toEqual({ label: "Run", disabled: true, why: "There are no scans to pick from yet." });
+    let ran = 0;
+    const offer = pickOffer(caps, main(), 40, false, () => ran++);
+    expect(offer?.disabled).toBe(false);
+    offer?.onRun();
+    expect(ran).toBe(1);
+    expect(pickOffer(caps, main(), 40, true, () => undefined)?.disabled).toBe(true);
+    expect(startedWords("study-big", "main_scans")).toBe("study-big: main scans queued.");
+  });
+
+  it("links to the dataset's Main scans page where the person may read it, with one line of help", () => {
+    expect(mainScansMore(caps7a([]), "study-big")).toEqual({ link: { label: "Rules", href: "#review/picks?dataset=study-big" }, help: MAIN_SCANS_HELP });
+    const blind: Grant[] = GRANTS.filter((g) => !g.startsWith("review:"));
+    expect(mainScansMore(caps7a([], blind), "study-big").link).toBeNull();
   });
 });
 

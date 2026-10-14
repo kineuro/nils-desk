@@ -74,7 +74,7 @@ const caps = {
   desk: { version: "1.0.0", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
 } as unknown as Capabilities;
 
-const SECTIONS = ["Home", "Data", "Review", "Campaigns", "Pipelines", "Models", "Results", "Ask"];
+const SECTIONS = ["Home", "Data", "Review", "Campaigns", "Pipelines", "Models", "Results", "Query"];
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

@@ -31,7 +31,7 @@ const seer: Viewer = { work: false, subscribes: false, system: false };
 const alone: Viewer = { work: true, subscribes: true, system: true };
 
 describe("Add a model's choices", () => {
-  it("offers a person with Kvasir: Work a download where Kvasir serves its local models, a server and a provider, and a subscription of their own with the assistant", () => {
+  it("offers a person with Language models: Work a download where Kvasir serves its local models, a server and a provider, and a subscription of their own with the assistant", () => {
     expect(addChoices(admin, { local, subscription: sub() })).toEqual(["download", "server", "provider", "subscription"]);
     expect(addChoices(worker, { local, subscription: sub() })).toEqual(["download", "server", "provider"]);
     expect(addChoices(admin, { local: null, subscription: null })).toEqual(["server", "provider"]);
@@ -103,7 +103,7 @@ describe("the cards of the models Kvasir holds", () => {
     expect(card.tag.title).toMatch(/^refused on 15 Sept?: failed tool calls$/u);
   });
 
-  it("says where a server answers, its runtime and its context, and a provider's key, only to a person with Kvasir: Work", () => {
+  it("says where a server answers, its runtime and its context, and a provider's key, only to a person with Language models: Work", () => {
     const addressed: Backend = { ...server, models: ["fast"], base_url: "http://127.0.0.1:30000/v1", entries: [{ id: "fast", name: "fast", reasoning: false, context_window: 131072, max_tokens: 4096, admitted: true }] };
     const records = [{ ...passed, backend: "sglang", model: "fast", runtime: { name: "sglang", version: "0.5", build: "" } }];
     expect(backendCards([addressed], at(admin, { admissions: records }))[0].facts).toBe("SGLang · 131,072 tokens · http://127.0.0.1:30000/v1");

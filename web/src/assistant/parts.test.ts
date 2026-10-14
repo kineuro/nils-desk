@@ -13,6 +13,11 @@ describe("the closed union of parts (section 9.8)", () => {
     expect(asPart({ kind: "note" })).toBeNull();
     expect(asPart("note")).toBeNull();
     expect(asPart({ kind: "funnel", rows: [{ set: "a", stage: "scope", rows: 3, subjects: 2 }, { set: "b" }] })).toEqual({ kind: "funnel", rows: [{ set: "a", stage: "scope", rows: 3, subjects: 2 }] });
+    // a stage held back at plain keeps its place, its counts null (record 55 K7)
+    expect(asPart({ kind: "funnel", rows: [{ set: "a", stage: "where", rows: null, subjects: null }, { set: "b", stage: "where", rows: "few", subjects: 2 }] })).toEqual({
+      kind: "funnel",
+      rows: [{ set: "a", stage: "where", rows: null, subjects: null }],
+    });
   });
 
   it("lets each part touch one thing", () => {
@@ -331,5 +336,145 @@ describe("where the person asked to summarize (the chat, slice 11)", () => {
     // a signal with no tag, or another tag, stays out of the thread
     const other = { ...mark, signal: { tagName: "registry" } };
     expect(fromHistory({ messages: [other] }).turns).toEqual([]);
+  });
+});
+
+describe("an answer a check sent back (2026-10-11)", () => {
+  // the person asked how many datasets; the model answered from the facts, the check sent it back to draft the question, and it answered again
+  const asked = { id: "u1", role: "user", display: "visible", submissionId: "sub_1", parts: [{ type: "text", text: "how many dataset do we have?" }] };
+  const check = { id: "s1", role: "system", display: "diagnostic", purpose: "dispatch", submissionId: "sub_1", parts: [{ type: "text", text: "Before you finish: this asks for data. Then give the person the whole answer again in plain words; it replaces the one before." }] };
+  const first = "\n\nTwo. They are study-fresh (4 subjects) and study-identified (11 subjects).";
+  const again = "\n\nTwo: study-fresh (4 subjects) and study-identified (11 subjects). The saved question counts subjects per dataset.";
+  const replaced = { kind: "replaced" };
+  const live = (words: string): Chunk[] => [
+    { type: "message-appended", message: asked },
+    { type: "message-started", messageId: "a1", submissionId: "sub_1" },
+    { type: "message-delta", messageId: "a1", kind: "reasoning", delta: "The facts list two." },
+    { type: "message-delta", messageId: "a1", kind: "text", delta: first },
+    { type: "message-completed", messageId: "a1" },
+    { type: "data-part", messageId: "a1", name: "replaced", data: replaced },
+    { type: "message-appended", message: check },
+    { type: "message-started", messageId: "a1", submissionId: "sub_1" },
+    { type: "tool-input", messageId: "a1", toolCallId: "t1", toolName: "activate_skill", input: { name: "find-data" } },
+    { type: "message-completed", messageId: "a1" },
+    { type: "tool-output", toolCallId: "t1", output: "skill" },
+    { type: "message-started", messageId: "a1", submissionId: "sub_1" },
+    { type: "tool-input", messageId: "a1", toolCallId: "t2", toolName: "query_draft", input: {} },
+    { type: "message-completed", messageId: "a1" },
+    { type: "data-part", messageId: "a1", name: "progress", data: { kind: "progress", call: "t2", text: "Counting the answer" } },
+    { type: "tool-output", toolCallId: "t2", output: "rows" },
+    { type: "message-started", messageId: "a1", submissionId: "sub_1" },
+    ...(words ? [{ type: "message-delta", messageId: "a1", kind: "text", delta: words }] : []),
+    { type: "message-completed", messageId: "a1" },
+  ];
+  const settled: Chunk = { type: "submission-settled", submissionId: "sub_1", outcome: "completed" };
+  /** The same turn as a history keeps it: one message for the answer, each data part right after the step it was written in. */
+  const kept = (words: string): History => ({
+    offset: "40",
+    messages: [
+      asked,
+      {
+        id: "a1",
+        role: "assistant",
+        display: "visible",
+        submissionId: "sub_1",
+        parts: [
+          { type: "reasoning", text: "The facts list two." },
+          { type: "text", text: first },
+          { type: "data-replaced", data: replaced },
+          { type: "dynamic-tool", toolCallId: "t1", toolName: "activate_skill", state: "output-available", input: { name: "find-data" } },
+          { type: "dynamic-tool", toolCallId: "t2", toolName: "query_draft", state: "output-available", input: {} },
+          { type: "data-progress", data: { kind: "progress", call: "t2", text: "Counting the answer" } },
+          ...(words ? [{ type: "text", text: words }] : []),
+        ],
+      },
+      check,
+    ],
+    settlements: [{ submissionId: "sub_1", outcome: "completed" }],
+  });
+
+  it("shows the new answer alone, live and once the conversation is opened again", () => {
+    const s = [...live(again), settled].reduce(reduce, empty());
+    expect(s.turns.map((t) => t.role)).toEqual(["user", "assistant"]);
+    expect(s.turns[1].text.trim()).toBe(again.trim());
+    expect(s.turns[1].text).not.toMatch(/They are study-fresh/u);
+    expect(s.turns[1].thinking).toMatch(/The facts list two/u);
+    const read = fromHistory(kept(again));
+    expect(read.turns.map((t) => t.role)).toEqual(["user", "assistant"]);
+    expect(read.turns[1].text).toBe(s.turns[1].text);
+    expect(read.turns[1].tools.map((x) => x.name)).toEqual(["activate_skill", "query_draft"]);
+  });
+
+  it("keeps the first answer on the screen while the turn works, until the new one begins", () => {
+    const chunks = live(again);
+    const working = chunks.slice(0, chunks.findIndex((c) => c.type === "tool-output" && c.toolCallId === "t2") + 1).reduce(reduce, empty());
+    expect(working.turns[1].text.trim()).toBe(first.trim());
+    // a new step that has only begun, its words not yet more than a break, replaces nothing yet
+    const begun = reduce(reduce(working, { type: "message-started", messageId: "a1", submissionId: "sub_1" }), { type: "message-delta", messageId: "a1", kind: "text", delta: "\n\n" });
+    expect(begun.turns[1].text.trim()).toBe(first.trim());
+    const next = reduce(begun, { type: "message-delta", messageId: "a1", kind: "text", delta: "Two:" });
+    expect(next.turns[1].text.trim()).toBe("Two:");
+  });
+
+  it("keeps the first answer where nothing was written after the check", () => {
+    const s = [...live(""), settled].reduce(reduce, empty());
+    expect(s.turns[1].text.trim()).toBe(first.trim());
+    expect(fromHistory(kept("")).turns[1].text.trim()).toBe(first.trim());
+  });
+
+  it("shows the one answer of a turn the check sent back before it wrote any words", () => {
+    const quiet = [...live(again), settled].filter((c) => !(c.type === "message-delta" && c.delta === first));
+    const s = quiet.reduce(reduce, empty());
+    expect(s.turns[1].text.trim()).toBe(again.trim());
+    const h = kept(again);
+    h.messages[1].parts = h.messages[1].parts.filter((p) => p.text !== first);
+    expect(fromHistory(h).turns[1].text.trim()).toBe(again.trim());
+    // and a turn the check never sent back is as it was
+    const plain = [...live(again), settled].filter((c) => !(c.type === "data-part" && (c.data as { kind?: string }).kind === "replaced"));
+    expect(plain.reduce(reduce, empty()).turns[1].text).toMatch(/They are study-fresh[\s\S]*The saved question/u);
+  });
+});
+
+describe("a turn that asked the person something (2026-10-12)", () => {
+  const question = { kind: "clarification", question: "I can't attach a file here. Which rows did you want?", options: [{ label: "The two failed jobs", count: 2 }, { label: "Something else" }] };
+  const asked = { question: question.question, options: [{ label: "The two failed jobs", count: 2 }, { label: "Something else", count: null }] };
+
+  it("keeps the question with its turn once the next turn starts, live", () => {
+    const live: Chunk[] = [
+      { type: "message-appended", message: { id: "u1", role: "user", display: "visible", parts: [{ type: "text", text: "can you make a csv and upload it here?" }] } },
+      { type: "message-started", messageId: "a1" },
+      { type: "tool-input", messageId: "a1", toolCallId: "t1", toolName: "ask_user", input: {} },
+      { type: "tool-output", toolCallId: "t1", output: { asked: true } },
+      { type: "data-part", messageId: "a1", name: "clarification", data: question },
+      { type: "submission-settled", submissionId: "x", outcome: "completed" },
+    ];
+    const s = live.reduce(reduce, empty());
+    expect(s.choice).toEqual({ ...asked, turn: "a1" });
+    expect(s.turns[1].asked).toEqual(asked);
+    // the person typed something else: the card closes, and the turn still says what it asked
+    const next = [
+      { type: "message-appended", message: { id: "u2", role: "user", display: "visible", parts: [{ type: "text", text: "so you have no sandbox?" }] } },
+      { type: "message-started", messageId: "a2" },
+    ].reduce(reduce, s);
+    expect(next.choice).toBeNull();
+    expect(next.turns.find((t) => t.id === "a1")?.asked).toEqual(asked);
+  });
+
+  it("opens no old question again on a reload, and keeps each with its turn", () => {
+    const h: History = {
+      messages: [
+        { id: "u1", role: "user", display: "visible", parts: [{ type: "text", text: "can you make a csv and upload it here?" }] },
+        { id: "a1", role: "assistant", parts: [{ type: "dynamic-tool", toolCallId: "t1", toolName: "ask_user", state: "output-available" }, { type: "data-clarification", data: question }] },
+        { id: "u2", role: "user", display: "visible", parts: [{ type: "text", text: "so you have no sandbox?" }] },
+        { id: "a2", role: "assistant", parts: [{ type: "text", text: "Not yet: a file needs the analysis sandbox, which is coming." }] },
+      ],
+      settlements: [{ submissionId: "x", outcome: "completed" }],
+    };
+    const s = fromHistory(h);
+    expect(s.choice).toBeNull();
+    expect(s.turns.find((t) => t.id === "a1")?.asked).toEqual(asked);
+    // the latest turn's own question is still the card it answers by
+    const last = fromHistory({ ...h, messages: h.messages.slice(0, 2) });
+    expect(last.choice).toEqual({ ...asked, turn: "a1" });
   });
 });

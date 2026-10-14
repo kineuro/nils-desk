@@ -9,9 +9,13 @@
 // drawn from memory. A warm read that nobody asked for since may be called
 // off when the reader jumps elsewhere; one the pictures wait on never is.
 // The decoded planes are cornerstone's and the viewer's (loader.ts); only
-// the encoded ones, a few times smaller, are kept here.
+// the encoded ones, a few times smaller, are kept here. A result's layer on
+// a scan (layer.ts) has slabs of the same shape, kept here under the same
+// budget and pinned with its scan, so a mask comes from memory with its
+// picture.
 
 import { doors } from "./doors";
+import { layerDoors, type LayerRef } from "./layer";
 
 export interface Slab {
   /** Each plane's tiles, in row-major order of its grid. */
@@ -44,6 +48,11 @@ export function slabKey(stack: number, level: number, z0: number, z1: number): s
   return `${stack}/${level}/${z0}-${z1}`;
 }
 
+/** A layer's slab: under its scan's number first, so it is pinned and let go with the scan's pictures. */
+export function layerSlabKey(stack: number, ref: LayerRef, level: number, z0: number, z1: number): string {
+  return `${stack}/m${ref.derivative}:${encodeURIComponent(ref.set)}/${level}/${z0}-${z1}`;
+}
+
 const stackOf = (key: string) => Number(key.slice(0, key.indexOf("/")));
 
 function keep(key: string, s: Slab): void {
@@ -67,13 +76,26 @@ export function hasSlab(stack: number, level: number, z0: number, z1: number): b
   return kept.has(slabKey(stack, level, z0, z1));
 }
 
+/** Whether a layer's slab is in memory now. */
+export function hasLayerSlab(stack: number, ref: LayerRef, level: number, z0: number, z1: number): boolean {
+  return kept.has(layerSlabKey(stack, ref, level, z0, z1));
+}
+
 /**
  * A slab, from memory where it is kept, else read once. `warm` reads it
  * for later: it waits behind nothing, but it may be called off by
  * `calloff` until something on the screen asks for it too.
  */
 export function slab(stack: number, level: number, z0: number, z1: number, o: { warm?: boolean; signal?: AbortSignal } = {}): Promise<Slab> {
-  const key = slabKey(stack, level, z0, z1);
+  return read(slabKey(stack, level, z0, z1), stack, (signal) => doors.slab(stack, level, z0, z1, signal), o);
+}
+
+/** A layer's slab on a scan, kept and read as a picture's slab is. */
+export function layerSlab(stack: number, ref: LayerRef, level: number, z0: number, z1: number, o: { warm?: boolean; signal?: AbortSignal } = {}): Promise<Slab> {
+  return read(layerSlabKey(stack, ref, level, z0, z1), stack, (signal) => layerDoors.slab(stack, ref, level, z0, z1, signal), o);
+}
+
+function read(key: string, stack: number, door: (signal: AbortSignal) => Promise<Slab>, o: { warm?: boolean; signal?: AbortSignal }): Promise<Slab> {
   const have = kept.get(key);
   if (have) {
     // the most recently used last
@@ -91,7 +113,7 @@ export function slab(stack: number, level: number, z0: number, z1: number, o: { 
   const ctl = new AbortController();
   // a caller's own signal stops its wait, never a read another may share
   const r: Reading = { ctl, wanted: !o.warm, stack, p: Promise.resolve(null as unknown as Slab) };
-  r.p = doors.slab(stack, level, z0, z1, ctl.signal).then(
+  r.p = door(ctl.signal).then(
     (x) => {
       const s: Slab = { planes: x.planes, codec: x.codec, bytes: x.bytes };
       slabCounters.reads += 1;

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The pseudonymise step of a dataset on the Data page (Wave 7a, the design
 // Nima confirmed on 2026-10-09), as it draws and acts against an engine: it
-// opens in place under the rail where IDs need a code, never on a page of its
+// opens in place under the rail where IDs need a subject code, never on a page of its
 // own, with the three boxes, one primary action and the rules as one line;
 // the IDs listed one row each by their shape, a dropped map rehearsed and the
 // rows filled as they match, a pasted one taken while the box has the focus
@@ -127,7 +127,7 @@ function summaryOf(d: Dataset, pseudonymised: Partial<SummaryStep>): DatasetSumm
   };
 }
 
-type HeldRowState = { state: string; code: string | null; also_in: string[] };
+type HeldRowState = { state: string; code: string | null; also_in: string[]; id_type?: string; shape?: string };
 
 /** The engine's held IDs: one row each, by shape and never by value. */
 function heldIds(states: Record<number, HeldRowState> = {}, subjects = { coded: 0, generated: 0 }) {
@@ -183,7 +183,7 @@ async function page(d: Dataset, pseudonymised: Partial<SummaryStep>, route: (c: 
 const text = () => host.textContent ?? "";
 
 describe("the pseudonymise step, in the dataset", () => {
-  it("opens in place under the rail where IDs need a code: three boxes, one primary action, the rules as one line", async () => {
+  it("opens in place under the rail where IDs need a subject code: three boxes, one primary action, the rules as one line", async () => {
     await page(dataset(), {});
     const detail = host.querySelector(".dp-detail")!;
     const panel = detail.querySelector(".ps-step")!;
@@ -191,14 +191,16 @@ describe("the pseudonymise step, in the dataset", () => {
     // never a page of its own: the dataset's detail holds it, and its other columns step aside
     expect(location.hash).not.toContain("pseudonymisation");
     expect(detail.textContent).not.toContain("What it holds");
-    expect(panel.querySelector(".tag.caution")?.textContent).toBe("8 IDs need a code");
-    expect([...panel.querySelectorAll(".ps-box-label")].map((b) => b.textContent)).toEqual(["Originals", "IDs to codes", "Pseudonymised copy"]);
+    expect(panel.querySelector(".tag.caution")?.textContent).toBe("8 IDs need a subject code");
+    expect([...panel.querySelectorAll(".ps-box-label")].map((b) => b.textContent)).toEqual(["Originals", "IDs to subject codes", "Pseudonymised copy"]);
     expect([...panel.querySelectorAll(".ps-big")].map((b) => b.textContent)).toEqual(["7,544", "8", "0"]);
     expect(panel.textContent).toContain("files · 1.9 GB · locked");
-    expect(panel.textContent).toContain("IDs · none has a code yet");
+    expect(panel.textContent).toContain("IDs · none has a subject code yet");
     expect(panel.textContent).toContain("files · what NILS reads");
-    expect(panel.querySelector(".ps-actions .button:not(.secondary)")?.textContent).toBe("Give the 8 IDs a code");
-    expect(button(panel, "Generate codes")).not.toBeNull();
+    // files that wait for subject codes: one line says it is the next step and why, and generating them is the one primary act
+    expect(panel.querySelector(".ps-next")?.textContent).toBe("Next: 8 IDs have no subject code yet, so their 7,544 files wait. Generate the subject codes from the IDs, or give them from a map.");
+    expect(panel.querySelector(".ps-actions .button:not(.secondary)")?.textContent).toBe("Generate subject codes");
+    expect(button(panel, "Give them from a map")?.classList.contains("secondary")).toBe(true);
     expect(panel.querySelector(".ps-rules-line")?.textContent).toBe("Standard rules");
     expect(button(panel, "Change")).not.toBeNull();
     // one primary button on screen: the head of the dataset leaves its own out
@@ -209,7 +211,7 @@ describe("the pseudonymise step, in the dataset", () => {
     const pick = detail.querySelector<HTMLButtonElement>(".dp-step-pick")!;
     expect(pick.getAttribute("aria-expanded")).toBe("true");
     expect(pick.closest(".dp-step")!.classList.contains("next")).toBe(true);
-    expect(pick.closest(".dp-step")!.textContent).toContain("8 IDs need a code");
+    expect(pick.closest(".dp-step")!.textContent).toContain("8 IDs need a subject code");
     expect(pick.closest(".dp-step")!.textContent).toContain("next step");
     expect(detail.querySelector(".dp-step")!.textContent).toContain("7,544 files, with names");
     act(() => pick.click());
@@ -219,6 +221,20 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(detail.querySelector(".ps-step")).not.toBeNull();
   });
 
+  it("generates every waiting ID's subject code and runs the dataset's own thread in one press (2026-10-10)", async () => {
+    const e = await page(dataset(), {}, (c) => {
+      if (c.method === "POST" && c.url === "/api/linkage/held/code") return { status: 200, body: { files: 7544, state: "marked" } };
+      if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 61, state: "queued" } };
+      return undefined;
+    });
+    act(() => button(host, "Generate subject codes")!.click());
+    await settle(10);
+    // every held ID of the dataset, none chosen one by one, marked and not run by the door itself
+    expect(e.of("POST", "/api/linkage/held/code").map((c) => c.body)).toEqual([{ place: "study-identified", run: false }]);
+    // then the dataset's own thread: pseudonymise, read and sort
+    expect(e.of("POST", "/api/jobs")).toHaveLength(1);
+  });
+
   it("lists the IDs by their shape, fills them as a dropped map matches, and files it before it pseudonymises and sorts", async () => {
     const e = await page(dataset(), {}, (c) => {
       if (c.method === "POST" && c.url === "/api/linkage/imports") return c.body?.dry_run ? { status: 200, body: REHEARSED } : { status: 202, body: { job: 51, state: "queued", rows: 6 } };
@@ -226,12 +242,12 @@ describe("the pseudonymise step, in the dataset", () => {
       if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 52, state: "queued" } };
       return undefined;
     });
-    act(() => button(host, "Give the 8 IDs a code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const rows = () => [...host.querySelectorAll(".ps-table .ps-row:not(.head)")];
     expect(rows()).toHaveLength(8);
     expect(rows().map((r) => r.querySelector(".ps-shape")?.textContent)).toEqual(FILES.map((_, i) => SHAPE(i)));
-    expect(rows().every((r) => r.textContent?.includes("no code yet"))).toBe(true);
-    expect(rows().filter((r) => button(r, "Generate a code") !== null)).toHaveLength(8);
+    expect(rows().every((r) => r.textContent?.includes("no subject code yet"))).toBe(true);
+    expect(rows().filter((r) => button(r, "Generate a subject code") !== null)).toHaveLength(8);
     expect(button(host, "Show the IDs · recorded")).not.toBeNull();
     expect(host.querySelector(".ps-boxes.compact")).not.toBeNull();
     // the map dropped in
@@ -250,9 +266,9 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(text()).toContain("study ID, subject code · 7,344 files can go now");
     expect(rows().filter((r) => r.querySelector(".ps-code-value"))).toHaveLength(6);
     expect([...host.querySelectorAll(".ps-code .tag")].map((t) => t.textContent)).toEqual(["also in study-big", "also in study-big"]);
-    expect(rows().filter((r) => r.textContent?.includes("no code yet"))).toHaveLength(2);
-    expect(host.querySelector(".ps-foot .warn")?.textContent).toBe("200 files of 2 IDs wait for a code");
-    expect(button(host, "Generate codes for these 2")).not.toBeNull();
+    expect(rows().filter((r) => r.textContent?.includes("no subject code yet"))).toHaveLength(2);
+    expect(host.querySelector(".ps-foot .warn")?.textContent).toBe("200 files of 2 IDs wait for a subject code");
+    expect(button(host, "Generate subject codes for these 2")).not.toBeNull();
     // no value of an ID is drawn
     for (const value of ["ABC123456", "aBCD1234"]) expect(text()).not.toContain(value);
     // the one button says what it does, and does it: the map filed, then the dataset's own thread
@@ -281,7 +297,7 @@ describe("the pseudonymise step, in the dataset", () => {
       if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 52, state: "queued" } };
       return undefined;
     });
-    act(() => button(host, "Give the 8 IDs a code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const input = host.querySelector<HTMLInputElement>(".ps-file input")!;
     Object.defineProperty(input, "files", { value: [new File([MAP], "map.csv", { type: "text/csv" })], configurable: true });
     await act(async () => {
@@ -314,7 +330,7 @@ describe("the pseudonymise step, in the dataset", () => {
   it("draws two hundred IDs at a time, the most files first, where a dataset holds thousands", async () => {
     const many = { ...heldIds(), identifiers: 450, ids: Array.from({ length: 450 }, (_, i) => ({ id: 1000 + i, shape: "aAAA9999", id_type: "study-id", files: 450 - i, first_seen: AT, batch: 3, waits_for: null, state: "held" as const, code: null, also_in: [] })) };
     await page(dataset({ held: { files: ORIGINALS, identifiers: 450 } }), {}, () => undefined, { held: many });
-    act(() => button(host, "Give the 450 IDs a code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const rows = () => [...host.querySelectorAll(".ps-table .ps-row:not(.head)")].filter((r) => r.querySelector(".ps-shape"));
     expect(rows()).toHaveLength(200);
     expect(rows()[0].textContent).toContain("450");
@@ -328,7 +344,7 @@ describe("the pseudonymise step, in the dataset", () => {
 
   it("takes a map pasted while the box has the focus, wherever the browser aims the paste, and Paste unread says to press Ctrl+V there", async () => {
     const e = await page(dataset(), {}, (c) => (c.method === "POST" && c.url === "/api/linkage/imports" ? { status: 200, body: REHEARSED } : undefined));
-    act(() => button(host, "Give the 8 IDs a code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     // Ctrl+V as Firefox aims it: at the selection, here the body, not at the box that has the focus
     const pasted = () => {
       const ev = new Event("paste", { bubbles: true, cancelable: true });
@@ -359,7 +375,7 @@ describe("the pseudonymise step, in the dataset", () => {
 
   it("keeps the first row of a map with no header, and draws no ID of it", async () => {
     const e = await page(dataset(), {}, (c) => (c.method === "POST" && c.url === "/api/linkage/imports" ? { status: 200, body: REHEARSED } : undefined));
-    act(() => button(host, "Give the 8 IDs a code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const input = host.querySelector<HTMLInputElement>(".ps-file input")!;
     const bare = MAP.slice(MAP.indexOf("\n") + 1);
     Object.defineProperty(input, "files", { value: [new File([bare], "map.csv", { type: "text/csv" })], configurable: true });
@@ -385,24 +401,33 @@ describe("the pseudonymise step, in the dataset", () => {
       if (c.url.startsWith("/api/linkage/held/ids") && marked) return { status: 200, body: heldIds({ 107: { state: "generated", code: null, also_in: [] } }) };
       return undefined;
     });
-    act(() => button(host, "Give the 8 IDs a code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     const last = [...host.querySelectorAll(".ps-table .ps-row:not(.head)")][7];
     await act(async () => {
-      button(last, "Generate a code")!.click();
+      button(last, "Generate a subject code")!.click();
     });
     await settle(8);
     expect(e.of("POST", "/api/linkage/held/code")[0].body).toEqual({ place: "study-identified", ids: [107], run: false });
     expect(e.of("POST", "/api/jobs")).toHaveLength(0);
     const after = [...host.querySelectorAll(".ps-table .ps-row:not(.head)")][7];
-    expect(after.textContent).toContain("a generated code, at the run");
-    expect(button(after, "Generate a code")).toBeNull();
+    expect(after.textContent).toContain("a generated subject code, at the run");
+    expect(button(after, "Generate a subject code")).toBeNull();
+  });
+
+  it("says where an ID's shape is the study's UID, not an ID of PatientID's form", async () => {
+    // 2026-10-10: study UID shapes stood under "ID, as its shape" unexplained
+    await page(dataset(), {}, undefined, { held: heldIds({ 101: { state: "held", code: null, also_in: [], id_type: "study-instance-uid", shape: "9.99.999.9.9" } }) });
+    act(() => button(host, "Give them from a map")!.click());
+    const rows = [...host.querySelectorAll(".ps-table .ps-row:not(.head)")];
+    expect(rows[1].querySelector(".ps-shape")?.textContent).toBe("9.99.999.9.9 no ID in PatientID's form: by study UID");
+    expect(rows[0].querySelector(".ps-shape-note")).toBeNull();
   });
 
   it("shows the IDs once, recorded, in their rows, and lets them go", async () => {
     const e = await page(dataset(), {}, (c) =>
       c.method === "POST" && c.url === "/api/linkage/held/reveal" ? { status: 200, body: [{ shape: "AAA999999", id_type: "study-id", files: 3115, identifiers: [{ id: 100, value: "ABC123456", files: 3115 }] }] } : undefined,
     );
-    act(() => button(host, "Give the 8 IDs a code")!.click());
+    act(() => button(host, "Give them from a map")!.click());
     await act(async () => {
       button(host, "Show the IDs · recorded")!.click();
     });
@@ -413,24 +438,65 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(text()).not.toContain("ABC123456");
   });
 
-  it("opens the rules from Change: four choices, Save sends what changed, a purge warns", async () => {
+  it("opens the rules from Change: its choices, Save sends what changed, a purge warns", async () => {
     const e = await page(dataset(), {}, (c) => (c.method === "PUT" && c.url === "/api/places/9" ? { status: 200, body: {} } : undefined));
     act(() => button(host.querySelector(".ps-step")!, "Change")!.click());
     await settle(4);
     const dialog = host.querySelector("dialog")!;
     expect(dialog.querySelector("h2")?.textContent).toBe("Rules for study-identified");
-    expect([...dialog.querySelectorAll(".ps-rule-label")].map((l) => l.textContent)).toEqual(["PatientID gets", "An ID with no code", "Tags", "The originals, once done"]);
+    expect([...dialog.querySelectorAll(".ps-rule-label")].map((l) => l.textContent)).toEqual(["PatientID holds", "The pseudonymised copy's PatientID gets", "An ID with no subject code", "Tags", "The originals, once done"]);
     expect(dialog.textContent).not.toContain("Feeds a cohort");
     expect(dialog.textContent).toContain("Standard, 96 removed");
     act(() => button(dialog, "Purged")!.click());
     expect(dialog.textContent).toContain("Deleted once each copy is proven. It cannot be undone.");
     act(() => button(dialog, "Kept")!.click());
-    act(() => button(dialog, "It gets a generated code")!.click());
+    act(() => button(dialog, "It gets a generated subject code")!.click());
     await act(async () => {
       button(dialog, "Save")!.click();
     });
     await settle(6);
     expect(e.of("PUT", "/api/places/9")[0].body).toEqual({ unmapped: "code" });
+  });
+
+  it("changes what the originals' PatientID holds in the rules, before anything is pseudonymised", async () => {
+    // 2026-10-10: a dataset added with the wrong kind of ID had no way back but removing it
+    const e = await page(dataset(), {}, (c) => (c.method === "PUT" && c.url === "/api/places/9" ? { status: 200, body: {} } : undefined));
+    act(() => button(host.querySelector(".ps-step")!, "Change")!.click());
+    await settle(4);
+    const dialog = host.querySelector("dialog")!;
+    act(() => button(dialog, "The same everywhere (personnummer, national ID)")!.click());
+    await act(async () => {
+      button(dialog, "Save")!.click();
+    });
+    await settle(6);
+    expect(e.of("PUT", "/api/places/9")[0].body).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+  });
+
+  it("says where its run stopped, in the job's own words, and tries it again: a failure never looks like nothing happened", async () => {
+    // 2026-10-10: a pseudonymise run that failed at once left the step as it was, its button the same
+    const words = "no id type named study-id; nils linkage id-type list shows them, id-type add creates one";
+    const e = await page(dataset({ held: { files: 0, identifiers: 0 }, identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } }), { held: 0, state: "failed", job: 154 }, (c) => {
+      if (c.method === "GET" && c.url === "/api/jobs/154") return { status: 200, body: { id: 154, kind: "pseudonymize", state: "failed", error: words } };
+      if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 155, state: "queued" } };
+      return undefined;
+    }, { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } });
+    await settle(6);
+    const panel = host.querySelector(".ps-step")!;
+    expect(panel.querySelector(".ps-stopped")?.textContent).toBe(`Stopped: ${words} Change what it names, then try again.`);
+    // inside the panel, under its boxes, never at its edge (2026-10-10)
+    expect(panel.querySelector(".ps-pad > .ps-stopped")).not.toBeNull();
+    // the steps line says it stopped
+    const rail = host.querySelector(".dp-steps")!;
+    expect([...rail.querySelectorAll(".dp-step")].find((li) => li.textContent?.startsWith("Pseudonymised"))?.textContent).toContain("stopped");
+    // the one button tries the run again
+    const again = button(panel, "Try again")!;
+    expect(again).not.toBeNull();
+    expect(button(panel, "Pseudonymise and sort 7,544 files")).toBeNull();
+    await act(async () => {
+      again.click();
+    });
+    await settle(6);
+    expect(e.of("POST", "/api/jobs")).toHaveLength(1);
   });
 
   it("goes at once where PatientID holds a personnummer: the key codes it, no map", async () => {
@@ -439,7 +505,7 @@ describe("the pseudonymise step, in the dataset", () => {
       { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } },
     );
     const panel = host.querySelector(".ps-step")!;
-    expect(panel.textContent).toContain("personnummer, coded by the key");
+    expect(panel.textContent).toContain("coded by the key from an ID that is the same everywhere");
     await act(async () => {
       button(panel, "Pseudonymise and sort 7,544 files")!.click();
     });
@@ -459,7 +525,7 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(summary.textContent).toContain("the subject code");
     expect(summary.textContent).toContain("names, birth date, address and 93 more");
     expect(summary.textContent).toContain("See all 100");
-    expect(summary.textContent).toContain("2 subjects have generated codes; a map later folds them into the right subject");
+    expect(summary.textContent).toContain("2 subjects have generated subject codes; a map later folds them into the right subject");
     expect(summary.textContent).toContain("The originals are kept, locked, 1.9 GB");
     expect(button(summary, "Vault or purge")).not.toBeNull();
     // and the log beside it
@@ -472,7 +538,7 @@ describe("the pseudonymise step, in the dataset", () => {
     // 2026-10-10: a run on a test install wrote every file, and its read found the scans in the registry already, from another dataset
     const done = dataset({ held: { files: 0, identifiers: 0 }, trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1_900_000_000 }, anon: { path: "/srv/x/derivatives/dcm-anon", files: ORIGINALS, last_written: AT } } });
     const summary = summaryOf(done, { state: "done", files: ORIGINALS, waiting: 0, held: 0, job: 127, started_at: "2026-10-10T09:50:43Z", finished_at: "2026-10-10T09:50:47Z" });
-    summary.steps = summary.steps.map((x) => (x.step === "read" ? { ...x, state: "done", job: 128, files: 7328, refused: 216, reads: 1 } : x));
+    summary.steps = summary.steps.map((x) => (x.step === "read" ? { ...x, state: "done", job: 128, files: 7328, refused: 216, set_aside: 216, reads: 1 } : x));
     const job = (id: number, kind: string, result: unknown, progress: unknown = null) => ({ status: 200, body: { id, kind, name: "study-identified-2026-10-10", state: "done", started_at: AT, heartbeat_at: null, finished_at: AT, progress, error: null, args: {}, result } });
     await page(
       done,
@@ -486,7 +552,7 @@ describe("the pseudonymise step, in the dataset", () => {
       { step: "pseudonymisation", held: { ...heldIds({}, { coded: 8, generated: 8 }), files: 0, identifiers: 0, ids: [] } },
     );
     const line = host.querySelector(".ps-done .ps-outcome");
-    expect(line?.textContent).toBe("Last run7,544 files pseudonymised · 8 new codes · 7,328 files already in the registry · 216 files not images");
+    expect(line?.textContent).toBe("Last run7,544 files pseudonymised · 8 new subject codes · 7,328 files already in the registry · 216 files set aside: not scans");
     // the button that started it is gone: there is nothing left to pseudonymise
     expect(button(host, "Pseudonymise and sort 7,544 files")).toBeNull();
   });

@@ -2,17 +2,19 @@
 // A person's own page (records 23 and 25), kept terse: how they sign in, with
 // the subject the desk knows them by on hover, their groups, and what they may
 // open in the Identity page's few words, the pages hidden from them together
-// and how much of a record they see as one tag. A line points to the Kvasir
-// page for a ChatGPT subscription of their own, or the install's when nobody
-// signs in.
+// and how much of a record they see as one tag. A line points to the
+// Language models page for a ChatGPT subscription of their own, or the
+// install's when nobody signs in. Where the desk keeps the people, a person
+// changes their own password here (record 55 H2, round 5).
 
+import { useId, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { may, type Detail } from "../grants";
 import { href } from "../routes";
 import { PAGE_ICONS } from "../settings/AccessForm";
-import { Head } from "../settings/common";
+import { Acted, Head, useActing } from "../settings/common";
 import { RecordsTag } from "../settings/GroupCards";
-import { PAGE_LINES, SIGN_IN, andWords, levelOf, yourWords, type PageLine } from "../settings/identity";
+import { PAGE_LINES, SIGN_IN, andWords, identity, levelOf, passwordRefusal, personRefusal, yourWords, type PageLine } from "../settings/identity";
 import { settingsPages } from "../settings/pages";
 import { Icon } from "../ui/Icon";
 
@@ -20,7 +22,7 @@ export function ProfilePage({ caps }: { caps: Capabilities }) {
   const { person, desk } = caps;
   const who = person.display_name || person.subject;
   const off = desk.mode === "off";
-  const kvasirPage = settingsPages(caps).some((p) => p.id === "gateway");
+  const kvasirPage = settingsPages(caps).some((p) => p.id === "language-models");
   // a subscription of one's own serves the assistant, so it is a person's who may use it and see Kvasir (record 25)
   const subscription = caps.kvasir === null ? null : off ? "install" : may(caps, "assistant:use") && may(caps, "kvasir:see") ? "own" : null;
 
@@ -53,10 +55,11 @@ export function ProfilePage({ caps }: { caps: Capabilities }) {
         </div>
         <YourAccess grants={person.grants} detail={person.detail} />
       </section>
+      {desk.mode === "local" && desk.signed_in && <YourPassword username={person.subject} />}
       {subscription && (
         <p className="signin-item subscription-line">
           <Icon name="cloud" />
-          {subscription === "own" ? "Your ChatGPT subscription:" : "The install's ChatGPT subscription:"} {kvasirPage ? <a href={href("settings", "gateway")}>Kvasir page</a> : "Kvasir page"}
+          {subscription === "own" ? "Your ChatGPT subscription:" : "The install's ChatGPT subscription:"} {kvasirPage ? <a href={href("settings", "language-models")}>Language models page</a> : "Language models page"}
         </p>
       )}
     </div>
@@ -112,5 +115,94 @@ export function YourAccess({ grants, detail }: { grants: readonly string[]; deta
         </span>
       </div>
     </div>
+  );
+}
+
+/** One's own password, where the desk keeps the people: the current one, then the new one twice; one's other sessions end. */
+export function YourPassword({ username }: { username: string }) {
+  const [open, setOpen] = useState(false);
+  const [current, setCurrent] = useState("");
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  const [said, setSaid] = useState<string | null>(null);
+  const changing = useActing();
+  const ids = useId();
+  const refusal = current ? passwordRefusal(password, again) : "Your current password first.";
+  const change = () =>
+    changing.act("changing your password", async () => {
+      let ended: number;
+      try {
+        ended = (await identity.password(username, password, current)).sessions_ended;
+      } catch (e) {
+        throw new Error(personRefusal(e, "password"));
+      }
+      setOpen(false);
+      setCurrent("");
+      setPassword("");
+      setAgain("");
+      const words = ended > 0 ? `Password changed. ${ended === 1 ? "Your other session was" : `Your ${ended} other sessions were`} signed out.` : "Password changed.";
+      setSaid(words);
+      return words;
+    });
+  return (
+    <section className="stack roomy">
+      <div className="section-head rule-top">
+        <h2>Password</h2>
+        {!open && (
+          <button
+            type="button"
+            className="button secondary small"
+            onClick={() => {
+              setSaid(null);
+              setOpen(true);
+            }}
+          >
+            <Icon name="key" />
+            Change your password
+          </button>
+        )}
+      </div>
+      {said && <p className="ok-words">{said}</p>}
+      {open && (
+        <div className="panel card password-form">
+          <div className="fields3">
+            <div className="field">
+              <label className="label" htmlFor={`${ids}-current`}>
+                Current password
+              </label>
+              <div className="input">
+                <input id={`${ids}-current`} type="password" value={current} autoComplete="current-password" onChange={(e) => setCurrent(e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <label className="label" htmlFor={`${ids}-new`}>
+                New password
+              </label>
+              <div className="input">
+                <input id={`${ids}-new`} type="password" value={password} autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
+              </div>
+            </div>
+            <div className="field">
+              <label className="label" htmlFor={`${ids}-again`}>
+                Again
+              </label>
+              <div className="input">
+                <input id={`${ids}-again`} type="password" value={again} autoComplete="new-password" onChange={(e) => setAgain(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          {refusal && password && <p className="warn">{refusal}</p>}
+          <Acted acting={changing.acting} />
+          <div className="row actions">
+            <button type="button" className="button" disabled={refusal !== null || changing.working} onClick={change}>
+              Change it
+            </button>
+            <button type="button" className="button secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

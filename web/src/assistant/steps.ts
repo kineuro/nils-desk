@@ -16,6 +16,11 @@ const WORDS: Record<string, string> = {
   ask_user: "Asking you",
   propose_change: "Preparing a change for you",
   activate_skill: "Getting ready",
+  // the analysis workspace: the rows put in it, and Flue's own tools that work in it
+  analysis_table: "Putting the rows in the workspace",
+  bash: "Analysing the rows",
+  read: "Reading a result",
+  write: "Writing a file",
   // the stations' tools, for the chats that still talk to one
   nils_draft: "Writing the query",
   nils_values: "Looking up the values of a field",
@@ -49,6 +54,7 @@ export const SKILL_WORDS: Record<string, string> = {
   "read-run": "Reading a run",
   "tune-sorting-words": "Tuning the sorting words",
   "check-identities": "Checking identities",
+  "analyse-table": "Analysing a table",
 };
 
 function skillWords(skill: string): string {

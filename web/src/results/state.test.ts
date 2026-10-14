@@ -48,6 +48,18 @@ describe("the three named states", () => {
   });
 });
 
+describe("a list held back whole at plain (record 55 K7, small lists)", () => {
+  it("holds no rows: nothing is released, promoted or exported, and the reason says it is held back", () => {
+    const held = stateOf(handle({ row_count: null, grain: "stack" }), record(), 1, all, true);
+    for (const c of [held.release, held.promote, held.export]) {
+      expect(c.enabled).toBe(false);
+      expect(c.reason).toMatch(/^the rows are held back \(a list of fewer than 5 subjects/u);
+    }
+    // a held list cut at a limit is held, never compared with it
+    expect(stateOf(handle({ row_count: null, truncated: true, limit: 3 }), record(), 1, all, true).truncated).toEqual({ by: "us", limit: 3 });
+  });
+});
+
 describe("the controls", () => {
   it("are gated by the grant the door wants, with the reason on the control", () => {
     const reader = stateOf(handle({ grain: "subject" }), record(), 1, SETS.reader.grants, true);

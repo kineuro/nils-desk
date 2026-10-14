@@ -25,7 +25,8 @@ export interface EngineCapabilities {
   event_streams?: number;
   ingest_roots?: string[];
   backup_dir?: boolean;
-  packs: { name: string; version: string; contract?: number }[];
+  /** Since record 55 (2026-10-12), each pack's `main_roles`: the roles its picks name, which a run over a dataset's or a cohort's main scans takes. */
+  packs: { name: string; version: string; contract?: number; main_roles?: string[] }[];
   assist?: string | null;
   [key: string]: unknown;
 }

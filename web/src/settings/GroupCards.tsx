@@ -45,7 +45,7 @@ export function MarksLegend({ followed = false }: { followed?: boolean }) {
       <span>see</span>
       <span className="amark do">Data</span>
       <span>work</span>
-      <span className="amark own">Kvasir</span>
+      <span className="amark own">Release</span>
       <span>own</span>
       {followed && (
         <>

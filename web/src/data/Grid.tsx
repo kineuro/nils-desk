@@ -447,7 +447,7 @@ function SubjectsLevel({ caps, scope, view, go }: LevelProps) {
         <label className="vw-search">
           <Icon name="search" />
           <span className="sr-only">Search subjects</span>
-          <input ref={search} type="search" placeholder="A code or an ID" value={text} onChange={(e) => setText(e.target.value)} />
+          <input ref={search} type="search" placeholder="A subject code or an ID" value={text} onChange={(e) => setText(e.target.value)} />
           <span className="vw-key" aria-hidden="true">
             /
           </span>
@@ -847,7 +847,7 @@ function readAhead(s: Scan): void {
   const pics = sharedPictures();
   pics.preview(s.id).then(
     (p) => {
-      if (p.planes > 0) pics.ahead(s.id, p.planes, Math.floor(p.planes / 2), p.digest, p.partial).catch(() => undefined);
+      if (p.planes > 0) pics.ahead(s.id, p.planes, Math.floor(p.planes / 2), p.digest, p.partial, p.held).catch(() => undefined);
     },
     () => undefined,
   );

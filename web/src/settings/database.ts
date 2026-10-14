@@ -194,6 +194,29 @@ export function rehearseByHand(dir: string | null, name: string): string {
   return `nils verify ${dir ? `${dir}/${name}` : name} --rehearse`;
 }
 
+/**
+ * Restore stays a command a person runs (D50; spec 13.1 round 5): the engine
+ * stopped, the archive put back with a pre-restore archive written first, the
+ * engine started again. Each step's command, as this install runs its engine.
+ */
+export function restoreSteps(install: Pick<Install, "services"> | null, home: string | null, dir: string | null, archive: string): { words: string; command: string | null }[] {
+  const engine = install?.services.filter((s) => s.part === "engine") ?? [];
+  const unit = engine[0];
+  // where the desk does not know how this machine runs the engine, the step is said and no command is made up
+  const watch = (verb: "stop" | "start"): string | null => {
+    if (!unit) return null;
+    if (unit.watcher === "docker") return `docker ${verb} ${unit.unit}`;
+    if (unit.watcher === "launchd") return verb === "stop" ? `launchctl bootout gui/$(id -u)/${unit.unit}` : `launchctl kickstart gui/$(id -u)/${unit.unit}`;
+    return `systemctl --user ${verb} ${engine.map((u) => u.unit).join(" ")}`;
+  };
+  const path = dir ? `${dir.replace(/\/+$/u, "")}/${archive}` : archive;
+  return [
+    { words: unit ? "Stop the engine. The desk loses it until step 3." : "Stop nils serve, however this machine runs it. The desk loses the engine until step 3.", command: watch("stop") },
+    { words: "Put the archive back. It is verified first, and the registry as it stands is archived beside it before anything is replaced.", command: `nils restore ${path} --yes${home ? ` --registry ${home}` : ""}` },
+    { words: unit ? "Start the engine again." : "Start nils serve again.", command: watch("start") },
+  ];
+}
+
 /** Whether the registry has a place with a backup place elsewhere, as section 10.2 rules. */
 export function registryRule(places: Place[]): { tone: Tone; words: string } {
   const live = places.filter((p) => p.retired_at === null);

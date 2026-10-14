@@ -5,6 +5,7 @@
 // what the engine's release door accepts: a stack list read off a handle,
 // or cohorts, subjects and axes named by hand.
 
+import { countText } from "../ask/held";
 import type { Column, HandleRow, Json } from "../ask/client";
 import { columnName } from "../ask/client";
 
@@ -92,7 +93,7 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
     // the door reads a stack handle's keys itself, and refuses one that no longer reproduces; rows read here are sent as they are
     if (stacks.length === 0) {
       body.handle = src.handle.id;
-      return { ok: true, body, summary: `${src.handle.row_count.toLocaleString("en-US")} stacks of handle ${src.handle.id}` };
+      return { ok: true, body, summary: `${countText(src.handle.row_count)} stacks of handle ${src.handle.id}` };
     }
     body.stacks = stacks;
     return { ok: true, body, summary: `${stacks.length} stacks off handle ${src.handle.id}` };

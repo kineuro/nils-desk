@@ -14,15 +14,17 @@ import { BatchPage } from "./data/BatchPage";
 import { CohortPage } from "./data/CohortPage";
 import { DataPage } from "./data/DataPage";
 import { browsing as viewsBrowser, Viewer } from "./data/Viewer";
+import { REGISTRY, type Scope } from "./data/viewer";
 import { PseudonymsPage } from "./data/PseudonymsPage";
-import { ModelsPage } from "./models/ModelsPage";
+import { LogsPage } from "./ops/LogsPage";
+import { logsOffered } from "./ops/logs";
 import { PipelinesPage } from "./ops/PipelinesPage";
 import { ReleasePage } from "./ops/ReleasePage";
 import { QueryPage } from "./query/QueryPage";
 import { door, state } from "./deployment";
+import { type Load, type Read, missed, next, outage, READ_EVERY_MS, RETRY_MS } from "./held";
 import { may } from "./grants";
 import { Home } from "./home/Home";
-import { CampaignsPage } from "./campaigns/CampaignsPage";
 import { PlaceholderPage } from "./home/Placeholder";
 import { PLACEHOLDERS } from "./home/placeholders";
 import { ready as readyToStart } from "./home/setup";
@@ -31,7 +33,7 @@ import { placesKept } from "./objects/kept";
 import { ProfilePage } from "./profile/ProfilePage";
 import { PersonMenu } from "./ui/PersonMenu";
 import { ReviewPage } from "./review/ReviewPage";
-import { href, narrow, parse, type Route } from "./routes";
+import { fromCampaigns, href, moved, narrow, parse, type Route } from "./routes";
 import { assistantOffered, foot, initials, sections, usable } from "./sections";
 import { where } from "./settings/install";
 import { backupsKept } from "./settings/kept";
@@ -44,7 +46,6 @@ import { useKept } from "./ui/kept";
 import { PageBoundary } from "./ui/PageBoundary";
 import { ThemeSwitch } from "./ui/ThemeSwitch";
 
-type Load = { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; caps: Capabilities };
 
 export function App() {
   const [load, setLoad] = useState<Load>({ kind: "loading" });
@@ -67,21 +68,34 @@ export function App() {
   // the cohorts live on the page of the datasets (Wave 7a, 2026-10-09): their old list's address leads there
   useEffect(() => {
     if (route.section === "data" && route.page === "cohorts" && !route.arg) location.replace(narrow(href("data", "datasets"), route.query ?? {}));
+    // Campaigns joined Review (Wave 7a, record 55 H3): an old address leads to the same page there
+    if (route.section === "campaigns") location.replace(fromCampaigns(route));
+    // Models is a page of Pipelines (spec section 13.1): an old link leads there
+    const to = moved(route);
+    if (to !== null) location.replace(to);
   }, [route]);
 
   useEffect(() => {
     let alive = true;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    // refreshed when a part's health or the engine's epoch moves; a read that
+    // missed keeps the page shown (held.ts) and is asked again sooner
     const fetchCaps = () =>
       fetch("/desk/capabilities")
         .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`the desk answered ${r.status}`))))
-        .then((caps: Capabilities) => alive && setLoad({ kind: "ready", caps }))
-        .catch((e: Error) => alive && setLoad({ kind: "failed", why: e.message }));
+        .then(
+          (caps: Capabilities): Read => ({ caps }),
+          (e: Error): Read => ({ error: e.message }),
+        )
+        .then((read) => {
+          if (!alive) return;
+          setLoad((prev) => next(prev, read, Date.now()));
+          t = setTimeout(fetchCaps, missed(read) ? RETRY_MS : READ_EVERY_MS);
+        });
     fetchCaps();
-    // refreshed when a part's health or the engine's epoch moves
-    const t = setInterval(fetchCaps, 15_000);
     return () => {
       alive = false;
-      clearInterval(t);
+      clearTimeout(t);
     };
   }, []);
 
@@ -153,6 +167,8 @@ export function App() {
   if (load.kind === "failed") return <main className="state lone">The desk did not answer: {load.why}</main>;
   const caps = load.caps;
   const st = state(caps);
+  // the engine has missed several reads in a row: said above the page, which stays
+  const slow = outage(load);
   // a model backend that is still warming keeps only the assistant waiting
   const ready = usable(caps);
   const side = sections(
@@ -170,10 +186,13 @@ export function App() {
   const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id && !p.built);
   const who = caps.person.display_name || caps.person.subject;
   // the dataset viewer (#data/datasets/NAME/view, #data/cohorts/NAME/view): the browser folds the side away
-  const viewed =
-    ready && active?.id === "data" && (route.page === "datasets" || route.page === "cohorts") && route.arg !== null && route.arg !== "" && route.sub === "view"
-      ? { kind: route.page === "datasets" ? ("dataset" as const) : ("cohort" as const), name: route.arg }
-      : null;
+  // Data, Browse (Wave 7a, spec 13.1): the same viewer over the whole registry, subjects then sessions then scans
+  const viewed: Scope | null =
+    ready && active?.id === "data" && route.page === "browse"
+      ? REGISTRY
+      : ready && active?.id === "data" && (route.page === "datasets" || route.page === "cohorts") && route.arg !== null && route.arg !== "" && route.sub === "view"
+        ? { kind: route.page === "datasets" ? ("dataset" as const) : ("cohort" as const), name: route.arg }
+        : null;
   const browsing = viewed !== null && viewsBrowser(caps, viewed, route.query);
   const body = ["body", sided ? "with-side" : null, browsing ? "browsing" : null].filter(Boolean).join(" ");
   const changed = () => setAsked((n) => n + 1);
@@ -228,6 +247,12 @@ export function App() {
           The engine is ahead of this desk. Everything here still works; update the desk to see what the engine added.
         </div>
       )}
+      {slow !== null && (
+        <div className="banner" role="status">
+          The engine is slow to answer: nothing has come back since {new Date(slow).toLocaleTimeString()}. The page stays as it was and catches up when
+          the engine answers.
+        </div>
+      )}
       {st.kind === "warming" && (
         <div className="banner" role="note">
           The model backend has not produced its first token since it started. The rest of the desk works; the assistant waits.
@@ -244,7 +269,7 @@ export function App() {
             <section className="state">
               <h1>No grant yet</h1>
               <p>
-                The account <code>{caps.person.subject}</code> exists and holds no grant. Pages are given on the Identity page, through a group or
+                The account <code>{caps.person.subject}</code> exists and holds no grant. Pages are given on the People page, through a group or
                 to this account alone{caps.desk.mode === "oidc" ? ", and a group there can follow a group of yours at the identity provider" : ""}. Nothing
                 here is broken; nothing is open yet.
               </p>
@@ -277,11 +302,10 @@ export function App() {
           )}
           {viewed !== null && <Viewer key={`${viewed.kind}/${viewed.name}`} caps={caps} scope={viewed} query={route.query} onSections={() => setMenu((m) => !m)} />}
           {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
-          {ready && active?.id === "pipelines" && <PipelinesPage caps={caps} page={route.page} arg={route.arg} />}
+          {ready && active?.id === "pipelines" && route.page === "logs" && logsOffered(caps) && <LogsPage caps={caps} job={route.arg !== null && /^\d+$/.test(route.arg) ? Number(route.arg) : null} />}
+          {ready && active?.id === "pipelines" && !(route.page === "logs" && logsOffered(caps)) && <PipelinesPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}
-          {ready && active?.id === "review" && <ReviewPage caps={caps} page={route.page} query={route.query} />}
-          {ready && active?.id === "campaigns" && <CampaignsPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
-          {ready && active?.id === "models" && <ModelsPage caps={caps} page={route.page} arg={route.arg} />}
+          {ready && active?.id === "review" && route.section === "review" && <ReviewPage caps={caps} page={route.page} arg={route.arg} sub={route.sub} query={route.query} />}
           {ready && placeholder && active && <PlaceholderPage id={active.id} />}
           {inSettings && <Settings caps={caps} install={install} checkedAt={installAt} page={route.page} onChanged={changed} />}
           {onProfile && <ProfilePage caps={caps} />}

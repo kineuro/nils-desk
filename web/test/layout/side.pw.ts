@@ -39,7 +39,8 @@ async function measure(page: Page): Promise<{ top: number; bottom: number; group
   });
 }
 
-const WORK = ["Home", "Query", "Data", "Review", "Campaigns", "Models", "Release", "Pipelines"];
+// Campaigns are inside Review since Wave 7a (record 55 H3)
+const WORK = ["Home", "Query", "Data", "Review", "Release", "Pipelines"];
 const of = (m: { groups: Stand[] }, title: string) => m.groups.find((g) => g.title === title)!;
 
 /** The rows from `from` to the last sit one after another, with only the side's gap between them. */
@@ -76,12 +77,12 @@ for (const motion of ["reduce", "no-preference"] as const) {
     await settle();
     m = await measure(page);
     expect(of(m, "Review").pages).toBeGreaterThan(100);
-    await expect(page.locator(".side-group.on .side-pages a")).toHaveText(["Questions", "Main scans", "Subjects", "Rules"]);
-    await expect(page.locator('.side-group.on .side-pages a[aria-current="page"]')).toHaveText("Questions");
-    expect(of(m, "Campaigns").top - (of(m, "Review").bottom + of(m, "Review").pages)).toBeGreaterThan(100);
-    packed(m, "Campaigns");
+    await expect(page.locator(".side-group.on .side-pages a")).toHaveText(["Work", "Main scans", "Subjects", "Rules"]);
+    await expect(page.locator('.side-group.on .side-pages a[aria-current="page"]')).toHaveText("Work");
+    expect(of(m, "Release").top - (of(m, "Review").bottom + of(m, "Review").pages)).toBeGreaterThan(100);
+    packed(m, "Release");
     expect(Math.abs(of(m, "Settings").bottom - m.bottom)).toBeLessThanOrEqual(2);
-    expect(m.groups.filter((g) => g.line).map((g) => g.title)).toEqual(["Campaigns"]);
+    expect(m.groups.filter((g) => g.line).map((g) => g.title)).toEqual(["Release"]);
 
     // one of its pages: the address moves and the section stays open
     await page.locator('.side-pages a[href="#review/rules"]').click();
@@ -120,7 +121,7 @@ test("on a phone the panel unfolds a section without leaving the page, and a pag
   await row(page, "Review").click();
   await expect(row(page, "Review")).toHaveAttribute("aria-expanded", "true");
   await expect(page).toHaveURL(/#home$/);
-  await expect(page.locator(".side-group.on .side-pages a")).toHaveText(["Questions", "Main scans", "Subjects", "Rules"]);
+  await expect(page.locator(".side-group.on .side-pages a")).toHaveText(["Work", "Main scans", "Subjects", "Rules"]);
   const m = await measure(page);
   expect(of(m, "Review").pages).toBeGreaterThan(100);
   expect(Math.abs(of(m, "Settings").bottom - m.bottom)).toBeLessThanOrEqual(2);

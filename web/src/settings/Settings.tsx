@@ -26,6 +26,7 @@ import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
 import { checkedWords, contractWords, keptByWords, newerWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
 import { supervise, type Install } from "./supervise";
+import { ToolsSection } from "../ops/Install";
 
 interface PageProps {
   caps: Capabilities;
@@ -47,13 +48,13 @@ export function Settings(props: PageProps & { page: string | null }) {
       return <DeskPage {...props} />;
     case "assistant":
       return <AssistantPage {...props} />;
-    case "gateway":
+    case "language-models":
       return <GatewayPage caps={props.caps} install={props.install} />;
     case "places":
       return <PlacesPage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
-    case "database":
+    case "backups":
       return <DatabasePage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
-    case "identity":
+    case "people":
       return <IdentityPage caps={props.caps} />;
     case "audit":
       return <AuditPage />;
@@ -248,6 +249,8 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
         {!install && <p className="meta">{missing}</p>}
       </section>
 
+      <ToolsSection caps={caps} onChanged={onChanged} />
+
       {install && (
         <section className="pair">
           <div className="panel card">
@@ -391,7 +394,7 @@ function EnginePage({ caps, install, onChanged }: PageProps) {
           <dl className="facts">
             <dt>callers</dt>
             <dd>{AUTH[engine.auth] ?? engine.auth}</dd>
-            <dt>folders a digest may name</dt>
+            <dt>folders a read may name</dt>
             <dd>{roots.length > 0 ? roots.join(", ") : "none yet"}</dd>
             <dt>backups</dt>
             <dd>{engine.backup_dir ? "written to the backup directory it was given" : "no backup directory: a backup from the desk is refused"}</dd>

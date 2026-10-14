@@ -6,7 +6,8 @@
 // to a row on a narrower window. A step that waits on a person says so and is
 // marked next; the one a dataset opens in place (its pseudonymise step) is a
 // button that opens and closes it. Body part and post-contrast carry their Run
-// (record 56), held with its reason behind a "?" where the engine would refuse it.
+// (record 56), held with its reason behind a "?" where the engine would refuse it;
+// main scans their Run, a link to their page and a line of help (2026-10-11).
 
 import type React from "react";
 import { Hint } from "../ui/Hint";
@@ -32,7 +33,27 @@ export interface StepRunOffer {
   onRun: () => void;
 }
 
-export function StepRail({ steps, now, says, pick, run }: { steps: SummaryStep[]; now: number; says?: StepSays; pick?: StepPick | null; run?: Partial<Record<StepName, StepRunOffer>> }) {
+/** What else a step offers beside its Run: a link to its own page, and one line of help behind a "?". */
+export interface StepMore {
+  link: { label: string; href: string } | null;
+  help: string;
+}
+
+export function StepRail({
+  steps,
+  now,
+  says,
+  pick,
+  run,
+  more,
+}: {
+  steps: SummaryStep[];
+  now: number;
+  says?: StepSays;
+  pick?: StepPick | null;
+  run?: Partial<Record<StepName, StepRunOffer>>;
+  more?: Partial<Record<StepName, StepMore>>;
+}) {
   const at = new Date(now);
   return (
     <ol className={steps.length > 6 ? "dp-steps many" : "dp-steps"} style={{ "--steps": steps.length } as React.CSSProperties}>
@@ -42,6 +63,8 @@ export function StepRail({ steps, now, says, pick, run }: { steps: SummaryStep[]
         const w = said ? { ...own, what: said.what, when: said.when } : own;
         const picked = pick?.step === st.step ? pick : null;
         const offer = run?.[st.step];
+        const also = more?.[st.step];
+        const hint = offer?.why ?? (offer || also?.link ? also?.help : null) ?? null;
         const cls = ["dp-step", st.state, said?.next ? "next" : null, picked?.open ? "open" : null].filter(Boolean).join(" ");
         return (
           <li key={st.step} className={cls} aria-current={st.state === "running" ? "step" : said?.next ? "step" : undefined} title={w.hint}>
@@ -58,12 +81,15 @@ export function StepRail({ steps, now, says, pick, run }: { steps: SummaryStep[]
             )}
             <span className="dp-step-what">{w.what}</span>
             <span className={w.now || said?.next ? "dp-step-when now" : "dp-step-when"}>{w.when || " "}</span>
-            {offer && (
+            {(offer || also?.link) && (
               <span className="dp-step-run">
-                <button type="button" className="button secondary small" disabled={offer.disabled} onClick={offer.onRun}>
-                  {offer.label}
-                </button>
-                {offer.why && <Hint text={offer.why} />}
+                {offer && (
+                  <button type="button" className="button secondary small" disabled={offer.disabled} onClick={offer.onRun}>
+                    {offer.label}
+                  </button>
+                )}
+                {also?.link && <a href={also.link.href}>{also.link.label}</a>}
+                {hint && <Hint text={hint} />}
               </span>
             )}
           </li>

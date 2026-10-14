@@ -94,7 +94,7 @@ const row = (stack: number, name: string, over: Partial<ScanRow> = {}): ScanRow 
 const SCANS = [row(11, "Sag_T1w_3D"), row(12, "Ax_FLAIR_2D", { axes: { base: "T2w", modifier: "FLAIR" } }), row(13, "Ax_T2w_2D", { axes: { base: "T2w" } })];
 
 /** What the fake engine answers: the count of every question it is asked, and how a run ends. */
-let found = { rows: 3, subjects: 3 };
+let found: { rows: number | null; subjects: number | null } = { rows: 3, subjects: 3 };
 let valid = true;
 let truncated = false;
 
@@ -269,6 +269,16 @@ describe("keeping what the dataset viewer shows", () => {
     expect(button(dialog()!, "Make the cohort")!.disabled).toBe(false);
   });
 
+  it("says a count held back at plain as held back, and never that it differs from the page (record 55 K7)", async () => {
+    found = { rows: null, subjects: null };
+    await open("#data/datasets/ms-a/view?mode=grid&filter=maker:GE");
+    act(() => button(el, "Make a cohort")!.click());
+    await settle();
+    expect(values()["who joins"]).toBe("held back");
+    expect(dialog()!.textContent).not.toMatch(/null|NaN/);
+    expect(dialog()!.querySelector(".note.caution")).toBeNull();
+  });
+
   it("makes a new cohort of the visits a filter leaves: the question kept and run, its handle promoted, the line following the job", async () => {
     found = { rows: 1, subjects: 1 };
     await open("#data/datasets/ms-a/view?mode=grid&subject=1&vfilter=symri");
@@ -295,6 +305,22 @@ describe("keeping what the dataset viewer shows", () => {
     await settle();
     expect(asked("/api/jobs/9", "GET")).toHaveLength(1);
     expect(said().textContent).toBe("1 subject joined ms-a-subject-1-symri. Open ms-a-subject-1-symri");
+  });
+
+  it("says a list the engine held back whole at plain as held, never as nothing to add or a failure, and promotes nothing (record 55 K7)", async () => {
+    found = { rows: null, subjects: null };
+    await open("#data/datasets/ms-a/view?mode=grid&subject=1&vfilter=symri");
+    act(() => button(el, "Make a cohort")!.click());
+    await settle();
+    act(() => button(dialog()!, "Make the cohort")!.click());
+    await settle();
+    expect(asked("/api/ask/run")).toHaveLength(1);
+    expect(asked("/api/ask/handles/77/promote")).toHaveLength(0);
+    const said = dialog()!.querySelector(".held-words")!;
+    expect(said.textContent).toBe("The rows are held back, so they make no cohort.");
+    expect(said.getAttribute("title")).toMatch(/^a list of fewer than 5 subjects that a quasi identifying field chose/u);
+    expect(dialog()!.querySelector("[role=alert]")).toBeNull();
+    expect(dialog()!.textContent).not.toMatch(/Nothing to add|was not made|null|\b0 rows\b/u);
   });
 
   it("adds them to an existing cohort, and refuses an answer the run cut off", async () => {

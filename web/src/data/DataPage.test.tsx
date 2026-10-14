@@ -93,6 +93,9 @@ const step = (name: SummaryStep["step"], over: Partial<SummaryStep> = {}): Summa
 /** Why post-contrast's run is refused here, as the engine says it (record 56). */
 const NO_MODEL = { reason: "no_model", error: "no post-contrast model is installed" };
 
+/** The files a dataset's read set aside: three, a screen capture twice and a PDF, for the one the detail opens on. */
+const aside = (d: Dataset) => (d.name === "study-big" ? 3 : 0);
+
 function summaryOf(d: Dataset, running = false): DatasetSummary {
   const scans = d.totals.stacks;
   return {
@@ -111,7 +114,23 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
     look_kinds: {},
     kinds: scans > 0 ? [{ kind: "T1w", scans: 16 }, { kind: "FLAIR", scans: 8 }] : [],
     body_regions: [],
-    files: { found: d.trees?.anon?.files ?? null, bytes: 5_000_000, read: 120, refused: d.totals.refused_files, refused_batch: d.totals.refused_files > 0 ? 30 : null, held: 0 },
+    files: {
+      found: d.trees?.anon?.files ?? null,
+      bytes: 5_000_000,
+      read: 120,
+      // record 56 (2026-10-11): what the read set aside by policy is counted among the refused, by kind, and asks nobody anything
+      refused: d.totals.refused_files + aside(d),
+      refused_batch: d.totals.refused_files > 0 ? 30 : null,
+      set_aside: aside(d),
+      set_aside_kinds: aside(d) > 0 ? [{ kind: "screen_capture", words: "screen captures", count: 2 }, { kind: "pdf", words: "PDFs", count: 1 }] : [],
+      // Nima, 2026-10-12: two of the three are of a subject with no stack in the dataset, which it does not count
+      set_aside_no_scans: aside(d) > 0 ? { subjects: 1, files: 2 } : { subjects: 0, files: 0 },
+      held: 0,
+      // the duplicate policy (2026-10-10): files gone from the folder, and the questions about scans filed already elsewhere
+      gone: d.name === "study-big" ? 3 : 0,
+      left_out: 0,
+    },
+    identity_questions: d.name === "study-big" ? 2 : 0,
     pictures_place: "working",
     steps:
       scans === 0
@@ -127,7 +146,7 @@ function summaryOf(d: Dataset, running = false): DatasetSummary {
           ]
         : [
             step("found", { files: 120, tree: "anon" }),
-            step("read", { job: 4, files: 120, refused: d.totals.refused_files, reads: 1 }),
+            step("read", { job: 4, files: 120, refused: d.totals.refused_files + aside(d), set_aside: aside(d), reads: 1 }),
             step("sorted", { job: 6, scans, of: scans, look: d.totals.to_sort, unsorted: 0 }),
             step("body_part", { job: 12, run: 2, served: true, answered: 36, look: 4, of: scans, jobs: [12] }),
             step("post_contrast", { state: "off", started_at: null, finished_at: null, served: false, answered: 0, look: 0, of: scans, jobs: [], refusal: NO_MODEL }),
@@ -306,7 +325,7 @@ describe("datasets and cohorts on one page", () => {
     expect(card("study-big").className).toContain("on");
     const primary = [...d.querySelectorAll<HTMLElement>(".dp-acts .button")].filter((b) => !b.classList.contains("secondary") && !b.classList.contains("quiet"));
     expect(primary.map((b) => b.textContent)).toEqual(["Review 8"]);
-    expect(primary[0].getAttribute("href")).toBe("#review?dataset=study-big");
+    expect(primary[0].getAttribute("href")).toBe("#review/questions?dataset=study-big");
     expect([...d.querySelectorAll(".dp-acts .button.secondary")].map((b) => b.textContent)).toEqual(["Read new files", "View"]);
     expect(d.querySelector(".dp-detail-where")?.textContent).toBe("incoming/study-big · anonymised · PatientID holds the subject code");
     // the cohorts it brings subjects into light up; the rest dim
@@ -322,7 +341,7 @@ describe("datasets and cohorts on one page", () => {
     expect([...d.querySelectorAll(".dp-step-title")].map((s) => s.textContent)).toEqual(["Found", "Read", "Sorted", "Body part", "Post-contrast", "Main scans", "Pictures", "3D views"]);
     expect([...d.querySelectorAll(".dp-step-what")].map((s) => s.textContent)).toEqual([
       "120 files",
-      "120 read · 1 refused",
+      "120 read · 3 set aside · 1 refused",
       "40 scans · 8 to look at",
       "36 of 40 answered · 4 to look at",
       "not available",
@@ -333,16 +352,53 @@ describe("datasets and cohorts on one page", () => {
     // record 56: body part and post-contrast are steps of their own; one not served says so, and an engine without the door to run them offers no Run
     expect(d.querySelector(".dp-step.off")?.getAttribute("title")).toBe("Neither the post-contrast label nor a post-contrast model is served here yet.");
     expect([...d.querySelectorAll(".dp-acts button, .dp-acts a")].map((b) => b.textContent).filter((t) => /run/i.test(t ?? ""))).toEqual([]);
-    expect(d.querySelector(".dp-step-run")).toBeNull();
+    expect(d.querySelector(".dp-step-run button")).toBeNull();
+    // main scans: no Run without the pick run door, the way to their page and one line of help
+    const ms = [...d.querySelectorAll<HTMLElement>(".dp-step")].find((x) => x.querySelector(".dp-step-title")?.textContent === "Main scans")!;
+    expect(ms.querySelector(".dp-step-run a")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
+    expect(ms.querySelector(".dp-step-run .hint")?.getAttribute("title")).toBe("Picks each visit's main scan per role, by this dataset's rules.");
     expect(d.querySelector(".dp-funnel")?.textContent).toBe("12 subjects→20 visits→40 scans");
     expect(d.querySelector(".dp-sure-words")?.textContent).toBe("32 sure8 need a look");
     expect([...d.querySelectorAll(".dp-kind > span:first-child")].map((s) => s.textContent)).toEqual(["T1w", "FLAIR"]);
     const refused = [...d.querySelectorAll("a")].find((a) => a.textContent === "1 refused, why");
     expect(refused?.getAttribute("href")).toBe("#data/batch/30");
+    // record 56: the files set aside are not scans; "why" says their kinds, and nothing asks about them
+    const meta = () => [...d.querySelectorAll(".meta")].map((m) => m.textContent ?? "");
+    // whose the set-aside files are, where they are of a subject with no stack here, said of the files; the subjects stay the stacks'
+    expect(meta().some((t) => t.includes(" · 3 set aside, 2 from 1 subject with no scans, why · 1 refused, why"))).toBe(true);
+    expect(meta().some((t) => t.startsWith("Not scans"))).toBe(false);
+    const why = [...d.querySelectorAll<HTMLButtonElement>("button.link-button")].find((b) => b.textContent === "why")!;
+    expect(why.getAttribute("aria-expanded")).toBe("false");
+    act(() => why.click());
+    expect(why.getAttribute("aria-expanded")).toBe("true");
+    expect(meta()).toContain("Not scans: screen captures 2 · PDFs 1");
+    // the duplicate policy (2026-10-10): the files gone from its folder, and its questions about scans filed already elsewhere, which its Review lists
+    expect([...d.querySelectorAll(".meta")].some((m) => m.textContent?.includes("3 gone from the folder"))).toBe(true);
+    const questions = [...d.querySelectorAll("a")].find((a) => a.textContent === "2 questions: a scan filed already elsewhere");
+    expect(questions?.getAttribute("href")).toBe("#review/identifiers?dataset=study-big");
     expect(d.querySelector(".dp-role-line")?.textContent).toBe("T1w20 picked · 17 clear · 2 bordersReview 2");
     expect(d.querySelector(".dp-role-line a")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
+    // its own main scans and their rules (record 55, decision 6)
+    expect([...d.querySelectorAll("a")].find((a) => a.textContent === "Main scans and rules")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
     const log = [...d.querySelectorAll(".dp-log-row")].map((r) => `${r.querySelector(".what")?.textContent} ${r.querySelector(".how")?.textContent}`);
     expect(log).toEqual(["Body part ", "Main scans picked for 12 subjects", "Read 120 files, 12 new subjects", "Added as a dataset anonymised, PatientID holds the subject code"]);
+  });
+
+  it("says why a run of its main scans picked nothing, in its log and beside its main scans (2026-10-12)", async () => {
+    const nothing = "none of its 12 subjects has a scan of a main role";
+    const report = { subjects: 12, written: 0, visits: 0, visits_picked: 0, subjects_picked: 0, nothing, said: `No main scans picked: ${nothing}` };
+    await page({
+      route: (c) => {
+        const url = new URL(c.url, "http://x");
+        if (c.method === "GET" && url.pathname === "/api/picks/summary" && url.searchParams.get("dataset")) return { status: 200, body: { dataset: "study-big", roles: {}, last_run: { job: 8, report } } };
+        if (c.method === "GET" && url.pathname === "/api/jobs" && url.searchParams.get("dataset") === "study-big") return { status: 200, body: { count: 1, jobs: [{ ...jobsOfBig[2], result: report }] } };
+        return undefined;
+      },
+    });
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    expect([...d.querySelectorAll(".meta")].map((m) => m.textContent)).toContain(`None picked: ${nothing}.`);
+    const log = [...d.querySelectorAll(".dp-log-row")].map((r) => `${r.querySelector(".what")?.textContent} ${r.querySelector(".how")?.textContent}`);
+    expect(log).toContain(`No main scans picked ${nothing}`);
   });
 
   it("runs body part from its step on the rail, holds post-contrast's Run with the engine's reason, and says a refusal plainly (record 56)", async () => {
@@ -357,7 +413,7 @@ describe("datasets and cohorts on one page", () => {
       },
     });
     const d = host.querySelector<HTMLElement>(".dp-detail")!;
-    const runs = () => [...d.querySelectorAll<HTMLElement>(".dp-step")].filter((x) => x.querySelector(".dp-step-run"));
+    const runs = () => [...d.querySelectorAll<HTMLElement>(".dp-step")].filter((x) => x.querySelector(".dp-step-run button"));
     expect(runs().map((x) => x.querySelector(".dp-step-title")?.textContent)).toEqual(["Body part", "Post-contrast"]);
     const [bp, pc] = runs().map((x) => x.querySelector<HTMLButtonElement>(".dp-step-run button")!);
     // body part ran before; post-contrast has no model, its reason behind the "?"
@@ -379,6 +435,33 @@ describe("datasets and cohorts on one page", () => {
     const said = host.querySelector<HTMLElement>("section.dp > p.warn")!;
     expect(said.textContent).toBe("Body part runs already.?");
     expect(said.querySelector(".hint")?.getAttribute("title")).toBe("body part runs already over these scans, as job 21");
+  });
+
+  it("picks a dataset's main scans again from their step on the rail, beside the way to their page (2026-10-11)", async () => {
+    const e = await page({
+      doors: [...DOORS, STEP_RUN_DOORS.datasets, "POST /api/picks/run"],
+      route: (c) => (c.method === "POST" && c.url === "/api/picks/run" ? { status: 202, body: { job: 31, state: "queued", for: "dataset:study-big", command: ["pick", "run", "--dataset", "study-big", "--pack", "mri"] } } : undefined),
+    });
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    const ms = () => [...d.querySelectorAll<HTMLElement>(".dp-step")].find((x) => x.querySelector(".dp-step-title")?.textContent === "Main scans")!;
+    const run = ms().querySelector<HTMLButtonElement>(".dp-step-run button")!;
+    expect(run.textContent).toBe("Run again");
+    expect(run.disabled).toBe(false);
+    expect(ms().querySelector(".dp-step-run a")?.textContent).toBe("Rules");
+    expect(ms().querySelector(".dp-step-run .hint")?.getAttribute("title")).toBe("Picks each visit's main scan per role, by this dataset's rules.");
+    act(() => run.click());
+    await settle();
+    expect(e.of("POST", "/api/picks/run").map((c) => c.body)).toEqual([{ dataset: "study-big" }]);
+    expect(e.of("POST", "/api/jobs")).toHaveLength(0);
+    expect(text()).toContain("study-big: main scans queued.");
+  });
+
+  it("offers a person who does not work on Pipelines no Run on main scans, only the way to their page", async () => {
+    await page({ doors: [...DOORS, "POST /api/picks/run"], grants: GRANTS.filter((g) => g !== "pipelines:work") });
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    const ms = [...d.querySelectorAll<HTMLElement>(".dp-step")].find((x) => x.querySelector(".dp-step-title")?.textContent === "Main scans")!;
+    expect(ms.querySelector(".dp-step-run button")).toBeNull();
+    expect(ms.querySelector(".dp-step-run a")?.getAttribute("href")).toBe("#review/picks?dataset=study-big");
   });
 
   it("runs a cohort's body part over its members' scans from its rail (record 56)", async () => {
@@ -600,7 +683,7 @@ describe("datasets and cohorts on one page", () => {
     expect([...d.querySelectorAll(".dp-acts .button.secondary")].map((b) => b.textContent)).toEqual(["Add subjects from a query", "Release", "View"]);
     const primary = d.querySelector<HTMLAnchorElement>(".dp-acts a.button:not(.secondary)")!;
     expect(primary.textContent).toBe("Review 3");
-    expect(primary.getAttribute("href")).toBe("#review?cohort=ms-followup");
+    expect(primary.getAttribute("href")).toBe("#review/questions?cohort=ms-followup");
     expect(d.querySelector(".dp-detail-head .tag")?.textContent).toBe("fed by study-big");
     // how it grew: the read that fed it, its release, the hand that added more
     expect([...d.querySelectorAll(".dp-ev .title")].map((t) => t.textContent)).toEqual(["12 joined", "Release 1", "4 joined"]);
@@ -613,6 +696,7 @@ describe("datasets and cohorts on one page", () => {
     expect([...d.querySelectorAll(".dp-step-what")].map((s) => s.textContent)).toEqual(["52 scans · 3 to look at", "40 of 52 answered · 2 to look at", "not available", "23 picked"]);
     // what its subjects have
     expect([...d.querySelectorAll(".dp-kind")].map((k) => k.textContent)).toEqual(["T1w11 of 16", "FLAIR9 of 16"]);
+    expect([...d.querySelectorAll("a")].find((a) => a.textContent === "Main scans and rules")?.getAttribute("href")).toBe("#review/picks?cohort=ms-followup");
     expect(text()).toContain("Clinical: EDSS for 10 of 16, Relapse for 3 of 16");
     expect(text()).toContain("3 wait on Review");
     // its log and its releases

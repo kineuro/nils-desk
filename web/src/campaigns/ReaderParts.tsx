@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The reader's parts (record 48 R1): the suggestion filled in with the
 // candidates where the two systems differ, the evidence one line per axis
-// (the rest one key away), the pace counter, and the order toggle. Terse
+// beside the picture (record 55 H5), the pace counter, and the order toggle. Terse
 // (record 27), theme tokens only, every act a key.
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
@@ -43,93 +43,66 @@ function askedOf(s: Suggestion): Asked {
   };
 }
 
-/** One line per axis: the value, then what decided it; `h` opens the rest. */
-export function EvidenceLines({ lines, open, onToggle }: { lines: AxisLine[]; open: boolean; onToggle: () => void }) {
+/**
+ * Why the rules decided, beside the picture and open (record 55 H5): one
+ * line per asked axis, the value in force, then what decided it, the flags
+ * first, the rule, the header values its clause read and the words it
+ * matched; compact, the lines alone, terse. Expanded, under a head naming
+ * the pack that judged, a line that needs a look (the systems differ, or the
+ * rules voted for more than one value) carries the rest under it: the
+ * clause, every vote, the words, System 1's word, the confidence; every
+ * other line holds it on hover. An axis where the systems differ is framed
+ * in the caution colour, no mark beside it. A blind item has no
+ * lines: it shows the file and never the rules' answer (record 48).
+ */
+export function EvidenceLines({ lines, full = false, pack = null }: { lines: AxisLine[]; full?: boolean; pack?: string | null }) {
   if (lines.length === 0) return null;
   return (
-    <div className="evidence-lines">
-      <button type="button" className="evidence-toggle link-button" aria-expanded={open} onClick={onToggle}>
-        <kbd>h</kbd>
-        {open ? "less" : "how it was decided"}
-      </button>
+    <section className={full ? "evidence-lines full" : "evidence-lines"} aria-label="why the rules decided">
+      {full && (
+        <p className="ev-head">
+          <span className="ev-title">Why</span>
+          {pack && <span className="meta mono">{pack}</span>}
+        </p>
+      )}
       <ul className="evidence">
         {lines.map((l) => {
           const w = lineWords(l);
+          const more = full && needsALook(l);
           return (
-            <li key={l.axis} className={l.agree === false ? "ev differ" : "ev"}>
+            <li key={l.axis} className={l.agree === false ? "ev differ" : "ev"} title={full && !more ? evidenceMoreWords(l).join(" · ") : undefined}>
               <span className="ev-axis">{l.axis}</span>
-              <b className="ev-value">{w.value}</b>
+              <b className="ev-value" title={w.value}>
+                {w.value}
+              </b>
               <span className="ev-why" title={w.why.join(" · ")}>
                 {w.why.length > 0 ? w.why.join(" · ") : "no rule spoke"}
               </span>
-              {open && <EvidenceMore l={l} />}
+              {more && <EvidenceMore l={l} />}
             </li>
           );
         })}
       </ul>
-    </div>
+    </section>
   );
 }
 
+/** The rest of an axis's evidence in the expanded view: one small line under it, wrapping where it must. */
+export function evidenceMoreWords(l: AxisLine): string[] {
+  const more: string[] = [];
+  if (l.rule) more.push(`${l.rule_set ? `${l.rule_set}/` : ""}${l.rule}${l.clause ? ` · held: ${l.clause}` : ""}`);
+  if (l.votes.length > 0) more.push(`votes ${l.votes.map((v) => `${v.rule} → ${v.value ?? "none"}`).join("; ")}`);
+  more.push(`words ${l.words === null ? "not at this detail" : l.words.length > 0 ? l.words.join(", ") : "none matched"}`);
+  if (l.model) more.push(`System 1 ${l.model.value ?? "no value"}${l.model.p !== null ? ` · p ${l.model.p.toFixed(2)}` : ""}${l.model.weighed.length > 0 ? ` · weighed ${l.model.weighed.join(", ")}` : ""}`);
+  if (l.confidence !== null) more.push(`confidence ${l.confidence.toFixed(2)}`);
+  return more;
+}
+
+/** A line that needs a look: the systems differ on it, or the rules voted for more than one value. */
+export const needsALook = (l: AxisLine): boolean => l.agree === false || new Set(l.votes.map((v) => v.value)).size > 1;
+
 function EvidenceMore({ l }: { l: AxisLine }) {
-  return (
-    <dl className="facts ev-more">
-      {l.flags.length > 0 && (
-        <div className="facts-pair">
-          <dt>flags</dt>
-          <dd>{l.flags.join(", ")}</dd>
-        </div>
-      )}
-      {l.rule && (
-        <div className="facts-pair">
-          <dt>rule</dt>
-          <dd>
-            {l.rule_set ? `${l.rule_set}/` : ""}
-            {l.rule}
-            {l.clause ? ` · held: ${l.clause}` : ""}
-          </dd>
-        </div>
-      )}
-      {l.reads.length > 0 && (
-        <div className="facts-pair">
-          <dt>read</dt>
-          <dd>
-            {l.reads.map(([k, v]) => (
-              <span key={k} className="ev-read">
-                {k} <b>{v}</b>
-              </span>
-            ))}
-          </dd>
-        </div>
-      )}
-      {l.votes.length > 0 && (
-        <div className="facts-pair">
-          <dt>votes</dt>
-          <dd>{l.votes.map((v) => `${v.rule} → ${v.value ?? "none"}`).join("; ")}</dd>
-        </div>
-      )}
-      <div className="facts-pair">
-        <dt>words</dt>
-        <dd>{l.words === null ? "not at this detail" : l.words.length > 0 ? l.words.join(", ") : "none matched"}</dd>
-      </div>
-      {l.model && (
-        <div className="facts-pair">
-          <dt>System 1</dt>
-          <dd>
-            {l.model.value ?? "no value"}
-            {l.model.p !== null ? ` · p ${l.model.p.toFixed(2)}` : ""}
-            {l.model.weighed.length > 0 ? ` · weighed ${l.model.weighed.join(", ")}` : ""}
-          </dd>
-        </div>
-      )}
-      {l.confidence !== null && (
-        <div className="facts-pair">
-          <dt>confidence</dt>
-          <dd>{l.confidence.toFixed(2)}</dd>
-        </div>
-      )}
-    </dl>
-  );
+  return <span className="ev-more">{evidenceMoreWords(l).join(" · ")}</span>;
 }
 
 /** The session's pace: decisions and their median time. */
@@ -300,21 +273,14 @@ function keep(key: string, v: string): void {
   }
 }
 
-/** The doors beside the header block: `h` the whole header where the engine serves it, `H` how each axis was decided where it was. */
-export function HeaderDoors({ whole = false, evidence = false, onWhole, onEvidence }: { whole?: boolean; evidence?: boolean; onWhole?: () => void; onEvidence?: () => void }) {
-  if (!whole && !evidence) return null;
+/** The door beside the header block: `h` the whole header where the engine serves it. */
+export function HeaderDoors({ whole = false, onWhole }: { whole?: boolean; onWhole?: () => void }) {
+  if (!whole) return null;
   return (
     <span className="hb-doors">
-      {whole && (
-        <button type="button" className="link-button" onClick={onWhole} title="the whole header">
-          <kbd>h</kbd>header
-        </button>
-      )}
-      {evidence && (
-        <button type="button" className="link-button" onClick={onEvidence} title="how each axis was decided">
-          <kbd>H</kbd>how decided
-        </button>
-      )}
+      <button type="button" className="link-button" onClick={onWhole} title="the whole header">
+        <kbd>h</kbd>header
+      </button>
     </span>
   );
 }
@@ -390,39 +356,6 @@ export function HeaderDrawer({ doc, failed, onClose }: { doc: HeaderDoc | null; 
           Left out: {out.identifying ?? 0} identifying, {out.below_detail ?? 0} below your detail level.
         </p>
       ) : null}
-    </div>
-  );
-}
-
-/** The evidence in a drawer over the reader (record 48, one screen): one line per axis and the rest, `H` or Escape closes it. */
-export function EvidenceDrawer({ lines, onClose }: { lines: AxisLine[]; onClose: () => void }) {
-  const box = useRef<HTMLDivElement | null>(null);
-  useEffect(() => box.current?.focus(), []);
-  return (
-    <div
-      ref={box}
-      tabIndex={-1}
-      className="drawer evidence-drawer"
-      role="dialog"
-      aria-label="how it was decided"
-      onKeyDown={(e) => {
-        if (e.key === "Escape" || e.key === "H") {
-          e.preventDefault();
-          e.stopPropagation();
-          onClose();
-        }
-      }}
-    >
-      <div className="drawer-head">
-        <b>How it was decided</b>
-        <span className="grow" />
-        <button type="button" className="button quiet small" onClick={onClose}>
-          Close <kbd>Esc</kbd>
-        </button>
-      </div>
-      <div className="drawer-body">
-        <EvidenceLines lines={lines} open onToggle={onClose} />
-      </div>
     </div>
   );
 }

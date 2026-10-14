@@ -154,7 +154,7 @@ describe("the dataset viewer's browser", () => {
     await settle();
     expect(viewer()?.getAttribute("data-stack")).toBe("12");
     expect(location.hash).toBe("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s7&scan=12");
-    expect(el.querySelector("a.dview-fact.look")?.getAttribute("href")).toBe("#review?dataset=ms-a");
+    expect(el.querySelector("a.dview-fact.look")?.getAttribute("href")).toBe("#review/questions?dataset=ms-a");
   });
 
   it("opens the scan the address names at once, read first from its visit", async () => {

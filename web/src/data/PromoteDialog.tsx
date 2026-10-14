@@ -11,7 +11,9 @@ import { href } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says, Values } from "../ui/Says";
+import { heldRefusal, LIST_WHY } from "../ask/held";
 import { cohorts, type Cohort } from "./cohorts";
+import { HELD_LIST } from "./keep";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -50,6 +52,8 @@ export function PromoteDialog({ caps, card, answer, onClose }: { caps: Capabilit
   const [list, setList] = useState<Cohort[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  /** The engine refused because the answer's list is held back at plain (409): said as held, never as a failure. */
+  const [held, setHeld] = useState(false);
   const [made, setMade] = useState<{ cohort: string; job: number } | null>(null);
   const lists = served(caps, "GET /api/cohorts");
 
@@ -78,7 +82,8 @@ export function PromoteDialog({ caps, card, answer, onClose }: { caps: Capabilit
       .then((r) => setMade({ cohort, job: r.job }))
       .catch((e: Error) => {
         setBusy(false);
-        setFailed(e.message);
+        if (heldRefusal(e)) setHeld(true);
+        else setFailed(e.message);
       });
   };
 
@@ -196,6 +201,11 @@ export function PromoteDialog({ caps, card, answer, onClose }: { caps: Capabilit
         {into === "new" && owner.trim() !== "" ? ` The owner is recorded as ${owner.trim()}.` : ""}
       </Says>
       {failed && <p className="warn">{failed}</p>}
+      {held && (
+        <p className="meta held-words" title={LIST_WHY}>
+          {HELD_LIST}
+        </p>
+      )}
     </Dialog>
   );
 }

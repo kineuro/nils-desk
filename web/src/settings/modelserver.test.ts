@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A model server on the Kvasir page (record 47), against what a throwaway
 // Kvasir answered for a server listing two models, one loaded and one cold:
-// the specs in a line, loaded or cold, what a cold tick costs, each ticked
+// the specs in a line, loaded or cold, which are ticked as the list arrives,
+// what a cold tick costs, each ticked
 // model's result as Kvasir reports it, the stations one model answers, what
 // removing one lets go, and the doors the dialog and the card call. The key is
 // sealed under a name the dialog makes up and never sent anywhere else.
@@ -12,7 +13,7 @@ import held from "../../test/fixtures/kvasir_backends_server.json";
 import offered from "../../test/fixtures/kvasir_servers_models.json";
 import { stationModel, targets } from "./gateway";
 import { admittedOf, type Backend, KvasirError, kvasir, type Offer, type PurposeRow, type ServerAdmitted } from "./kvasir";
-import { admittedWords, coldWords, listRefusal, listsNothing, modelRemovalWords, resultTag, specWords, stageName, stationsOf, statusTag, tickable } from "./modelserver";
+import { admitOrder, admittedWords, coldWords, firstTicked, listRefusal, listsNothing, modelRemovalWords, openToTick, resultTag, specWords, stageName, stationsOf, statusTag, TICK_ALL_UP_TO, tickable } from "./modelserver";
 
 const offer = offered as unknown as Offer;
 const done = admitted as unknown as ServerAdmitted;
@@ -47,6 +48,26 @@ describe("a model server's list", () => {
     expect(statusTag("unknown")).toBeNull();
     expect(tickable(dense)).toBe(true);
     expect(tickable({ ...dense, held_by: "127-0-0-1" })).toBe(false);
+  });
+
+  it("ticks every model that may be ticked where it lists a handful, and none where it lists more", () => {
+    expect(firstTicked(offer)).toEqual(["qwen3.8-flash-next", "qwen38-27b"]);
+    const held = { ...offer, models: [flash, { ...dense, held_by: "127-0-0-1" }] };
+    expect(firstTicked(held)).toEqual(["qwen3.8-flash-next"]);
+    const many = (n: number) => ({ ...offer, models: Array.from({ length: n }, (_, i) => ({ ...dense, id: `m${i}` })) });
+    expect(TICK_ALL_UP_TO).toBe(8);
+    expect(firstTicked(many(8))).toHaveLength(8);
+    expect(firstTicked(many(9))).toEqual([]);
+    // Tick all leaves out a model held here already and one this dialog has held since
+    expect(openToTick(held, null)).toEqual(["qwen3.8-flash-next"]);
+    expect(openToTick(offer, [{ id: "qwen38-27b", answered: true, admitted: true, record: 1, error: null }])).toEqual(["qwen3.8-flash-next"]);
+    expect(openToTick(offer, [{ id: "qwen38-27b", answered: false, admitted: null, record: null, error: null }])).toEqual(["qwen3.8-flash-next", "qwen38-27b"]);
+  });
+
+  it("asks the model loaded on the server now last, so a card with one model ends with it loaded", () => {
+    expect(admitOrder(offer, ["qwen38-27b", "qwen3.8-flash-next"])).toEqual(["qwen3.8-flash-next", "qwen38-27b"]);
+    expect(admitOrder(offer, ["qwen3.8-flash-next"])).toEqual(["qwen3.8-flash-next"]);
+    expect(admitOrder({ ...offer, server: null, models: offer.models.map((m) => ({ ...m, status: "unknown" as const })) }, ["qwen38-27b", "qwen3.8-flash-next"])).toEqual(["qwen38-27b", "qwen3.8-flash-next"]);
   });
 
   it("says before Admit that a cold model loads on the server and pauses the loaded one", () => {

@@ -36,12 +36,32 @@ const caps = {
 const theme = new URLSearchParams(location.search).get("theme");
 if (theme === "light" || theme === "dark") document.documentElement.dataset.theme = theme;
 
-const doors = fakeDoors();
+// `?held=1`: the second version's answer is held back at detail plain (record 55 K7), each count held back
+// `?held-list=1`: the second version's list is held back whole at detail plain (record 55 K7, small lists)
+const search = new URLSearchParams(location.search);
+const doors = fakeDoors([], { ...(search.get("held") ? { held: [102] } : {}), ...(search.get("held-list") ? { heldLists: [102] } : {}) });
+// `?mention=1`: what an @ offers, a card, a cohort, a kept result and saved selections (record 55 K6), made up
+const NAMED: Record<string, unknown> = {
+  "/api/ask/documents": { count: 1, next: null, documents: [{ document: 12, root: 12, name: "Women over 60", versions: 3 }] },
+  "/api/summary": { subjects: { by_cohort: { "ms-cohort": 40 } }, sessions: { by_cohort: {} }, stacks: { by_cohort: {} } },
+  "/api/ask/handles": { count: 1, handles: [{ id: 45, name: "MS baseline T1 answer", kept: true, grain: "stack", row_count: 412 }] },
+  "/api/ask/selections": {
+    count: 2,
+    total: 2,
+    matching: 2,
+    next: null,
+    selections: [
+      { id: 1, name: "ms-baseline", spec: "selection:ms-baseline@2", versions: 2, size: { rows: 412, grain: "stack", version: 2, handle: 70, at: "2026-10-12T08:00:00Z", truncated: false } },
+      { id: 2, name: "ms-small-followup-with-a-long-name", spec: "selection:ms-small-followup-with-a-long-name@1", versions: 1, size: { rows: null, grain: "subject", version: 1, handle: 71, at: "2026-10-12T08:00:00Z", truncated: false } },
+    ],
+  },
+};
 const asked = new Map<string, number>();
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);
   const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   if (url.pathname === "/desk/capabilities") return reply(200, caps);
+  if (search.get("mention") && url.pathname in NAMED) return reply(200, NAMED[url.pathname]);
   const method = init?.method ?? "GET";
   const key = `${method} ${url.pathname}${url.search}`;
   const nth = (asked.get(key) ?? 0) + 1;

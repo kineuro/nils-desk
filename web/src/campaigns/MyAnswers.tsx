@@ -21,27 +21,27 @@ import { Thumb } from "./Thumb";
 import { valueTone } from "./values";
 
 /** The page an answer of a campaign is corrected on: an anchored or a pair campaign's own reader, else the rating workspace. */
-export type AmendPage = "rate" | "anchored" | "pairs";
+export type AmendPage = "rate" | "anchored" | "pairs" | "check";
 export function amendPageOf(c: Pick<Campaign, "question">): AmendPage {
-  return isAnchored(c) ? "anchored" : isPair(c) ? "pairs" : "rate";
+  return isAnchored(c) ? "anchored" : isPair(c) ? "pairs" : c.question.kind === "check" ? "check" : "rate";
 }
 
 /** Where a correction opens: the reader, on that answer, and back to where it came from after. */
 export function amendHref(campaign: number | string, answer: number, back: "gallery" | "rate" = "rate", page: AmendPage = "rate"): string {
-  if (page !== "rate") return narrow(href("campaigns", String(campaign), page), { amend: answer });
-  return narrow(href("campaigns", String(campaign), "rate"), { amend: answer, back });
+  if (page !== "rate") return narrow(href("review", "campaigns", String(campaign), page), { amend: answer });
+  return narrow(href("review", "campaigns", String(campaign), "rate"), { amend: answer, back });
 }
 
 /** Why an answer cannot be corrected here, or null. */
 export function amendRefusal(caps: Capabilities, c: Pick<Campaign, "status" | "question">, mine: Pick<Mine, "open"> | null): string | null {
   if (!served(caps, AMEND)) return "This engine does not take corrections; update it.";
   if (c.status !== "open" || mine?.open === false) return "The campaign is closed: its answers stand as given.";
-  if (!["axis", "axes", "anchored", "pair"].includes(c.question.kind)) return "Only an axis, an anchored or a pair answer is corrected in the reader.";
+  if (!["axis", "axes", "anchored", "pair", "check"].includes(c.question.kind)) return "Only an axis, an anchored, a pair or a check answer is corrected in the reader.";
   return null;
 }
 
 /** Whether a campaign is read blind from pictures alone, so its answers are listed by place and words only. */
-const picturesOnly = (c: Pick<Campaign, "question">): boolean => isAnchored(c) || isPair(c);
+const picturesOnly = (c: Pick<Campaign, "question">): boolean => isAnchored(c) || isPair(c) || c.question.kind === "check";
 
 /** One's own answer in words: an anchored or a pair answer as its reader says it, anything else as the reader shows it. */
 export function ownWords(c: Pick<Campaign, "question">, value: unknown): string {
@@ -52,7 +52,7 @@ export function ownWords(c: Pick<Campaign, "question">, value: unknown): string 
 
 /** An answer's item by its place in the campaign, as its reader names it: never a stack. */
 export function placeWords(c: Pick<Campaign, "question">, position: number): string {
-  return `${isPair(c) ? "pair" : "item"} ${position + 1}`;
+  return `${isPair(c) ? "pair" : c.question.kind === "check" ? "result" : "item"} ${position + 1}`;
 }
 
 /** When an answer was given, in a few words. */

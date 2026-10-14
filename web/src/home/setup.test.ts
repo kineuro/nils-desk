@@ -114,10 +114,10 @@ describe("the rest of the desk", () => {
     expect(backupFolderRefusal(caps())).toBeNull();
     expect(backupFolderRefusal(holding(["database:work", "places:work"]))).toBeNull();
     expect(backupFolderRefusal(holding(["database:work", "places:see"]))).toBe(
-      "Backing up to the engine's backup folder needs work on the Database page and on the Places page; this account has no work on the Places page.",
+      "Backing up to the engine's backup folder needs work on the Backups page and on the Places page; this account has no work on the Places page.",
     );
-    expect(backupFolderRefusal(holding(["places:work", "database:see"]))).toMatch(/this account has no work on the Database page\.$/);
-    expect(backupFolderRefusal(holding(["database:see"]))).toMatch(/this account has no work on the Database page or on the Places page\.$/);
+    expect(backupFolderRefusal(holding(["places:work", "database:see"]))).toMatch(/this account has no work on the Backups page\.$/);
+    expect(backupFolderRefusal(holding(["database:see"]))).toMatch(/this account has no work on the Backups page or on the Places page\.$/);
     for (const g of [[], ["database:see"], ["places:work"]] as Grant[][]) expect(backupFolderRefusal(holding(g))).not.toMatch(/:(see|work|use)\b/);
   });
 });

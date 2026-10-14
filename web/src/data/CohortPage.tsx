@@ -17,6 +17,7 @@ import { may } from "../grants";
 import { objects } from "../objects/client";
 import { keepingRefusal } from "../query/cards";
 import { href, narrow } from "../routes";
+import { mayMainScans } from "../review/mainScans";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
@@ -166,6 +167,11 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                 </a>
               )}
               {!c.retired_at && <PickRun caps={caps} of={{ cohort: c.name }} />}
+              {mayMainScans(caps) && (
+                <a className="button quiet" href={narrow(href("review", "picks"), { cohort: c.name })}>
+                  Main scans
+                </a>
+              )}
               {acts.releasing === null && !c.retired_at && (
                 <a className="button" href={acts.release}>
                   <Icon name="release" />
@@ -197,7 +203,7 @@ export function CohortBody({ caps, cohort: c, since = null, why, said = null, bu
                 <span className="v">{n(c.waiting)}</span>
                 <span className="meta">{c.waiting > 0 ? "on Review" : "nothing waits"}</span>
                 {c.waiting > 0 && may(caps, "review:see") && (
-                  <a className="tail" href={narrow(href("review"), { cohort: c.name })}>
+                  <a className="tail" href={narrow(href("review", "questions"), { cohort: c.name })}>
                     Open on Review
                     <Icon name="chevron-right" />
                   </a>
@@ -394,7 +400,7 @@ export function MembersDialog({ cohort: c, onClose, onDone }: { cohort: Pick<Coh
       .members(c.name, built.body)
       .then((r) => {
         const unknown = Array.isArray(r.unknown) ? (r.unknown as unknown[]).length : 0;
-        onDone(`${built.summary} in ${c.name}${unknown > 0 ? `; ${unknown} ${unknown === 1 ? "code" : "codes"} the registry does not know left out` : ""}.`);
+        onDone(`${built.summary} in ${c.name}${unknown > 0 ? `; ${unknown} ${unknown === 1 ? "subject code" : "subject codes"} the registry does not know left out` : ""}.`);
       })
       .catch((e: Error) => {
         setBusy(false);

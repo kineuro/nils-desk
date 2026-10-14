@@ -151,6 +151,17 @@ pub fn add(
     Ok(())
 }
 
+/// A user's password, set anew under the rule a person is added with.
+pub fn set_password(store: &Store, username: &str, password: &str) -> Result<(), String> {
+    if password.len() < 8 {
+        return Err("a password is at least eight characters".into());
+    }
+    match store.user_set_password(username, &hash(password)?)? {
+        true => Ok(()),
+        false => Err(format!("no user named {username}")),
+    }
+}
+
 /// The user, when the password holds.
 pub fn login(store: &Store, username: &str, password: &str) -> Option<User> {
     let (user, stored) = store.user(username)?;

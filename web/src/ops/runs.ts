@@ -12,12 +12,50 @@ import { door, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may, sees } from "../grants";
-import type { Over, Pipeline } from "./catalog";
+import { roleWord } from "../review/mainScans";
+import { mainOfSpec, offered, selectOf, type Over, type Pipeline } from "./catalog";
+import { failureOf, firstSentence, requirementsOf, SLICE, type Failure, type Requirement } from "./failure";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const text = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const obj = (v: unknown): Json => (v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Json) : {});
+
+/**
+ * A dataset's or a cohort's main scans as the engine resolved them (record
+ * 55, rulings of 2026-10-12, item 6): what was read, the scope's visits, those
+ * with a main scan of the role, and the visits with none by why, named at
+ * detail quasi (each says only why below it). A run says the same, unnamed.
+ * Since 2026-10-12, of each role a pipeline needs (`main@dataset:<name>`):
+ * the roles, the visits with a main scan of every one, the visits that lack
+ * one by role and by why, and each role's own count.
+ */
+export interface MainRead {
+  /** The role; of several, the roles joined by +. */
+  main: string;
+  /** Since 2026-10-12, of several roles: the roles, in the pipeline's order. */
+  roles?: string[] | null;
+  /** The spec: main:t1w@dataset:study-anon, or main@dataset:study-anon. */
+  of: string;
+  scope?: { kind: string; id?: number; name: string } | null;
+  /** What was read, as a release records it: the scope's rules {version, digest, run}, or the pack's defaults. */
+  picks?: Json | null;
+  /** The same in words. */
+  read?: string | null;
+  visits: number;
+  /** The visits with a main scan of the role; of several, of every one. */
+  main_visits: number;
+  stacks: number;
+  without: { visits: number; why?: { why: string; visits: number; role?: string | null }[] | null; named?: { subject_id?: number | null; subject?: string | null; session_day?: string | null; why: string; role?: string | null }[] | null };
+  /** Of several roles, each role's own count. */
+  by_role?: { main: string; main_visits: number; stacks: number; without?: { visits: number } | null }[] | null;
+  part?: { part: number; of: number } | null;
+}
+
+/** The roles a read of main scans names: its several, else its one. */
+export function mainReadRoles(m: MainRead): string[] {
+  return Array.isArray(m.roles) && m.roles.length > 0 ? m.roles : [m.main];
+}
 
 /** The pre-flight as `POST /api/pipelines/{name}/preflight` answers it. */
 export interface Preflight {
@@ -25,12 +63,20 @@ export interface Preflight {
   pipeline_id?: number;
   handle?: number | null;
   selection?: string | null;
+  /** Since 2026-10-12: a dataset's or a cohort's main scans, where the run goes over them; null otherwise. */
+  main?: MainRead | null;
   params?: Record<string, unknown> | null;
   layout?: string;
   level?: string;
   stacks?: number;
   units: { total: number; ready: number; missing: number };
-  missing?: { unit: string | null; subject_id?: number | null; session_day?: string | null; stack_id?: number | null; why: string }[];
+  missing?: { unit?: string | null; subject_id?: number | null; session_day?: string | null; stack_id?: number | null; why: string | string[]; lacks?: string[] | null }[];
+  /** Since 2026-10-12: what one unit is called (session, subject or stack). */
+  unit?: string | null;
+  /** Since 2026-10-12: the units that cannot run, one entry a reason in a few words, the most first, with the units under it (none named below detail quasi). */
+  cannot?: { why: string; units: number | null; named?: string[] | null }[] | null;
+  /** Since 2026-10-12: the run taken up again, how many of its units are over and kept, and how many of those made what they were for. */
+  resume?: { run: number; status?: string | null; job?: number | null; kept: number; made: number } | null;
   roles?: string[] | null;
   left_out?: { stacks: number; why: string | null } | null;
   estimate?: { seconds_per_unit: number | null; source: string | null; runs?: number | null; slots?: number | null; units_apart?: boolean | null; seconds: number | null } | null;
@@ -42,6 +88,10 @@ export interface Preflight {
   place?: string | null;
   ready: boolean;
   blockers?: string[] | null;
+  /** Since 2026-10-12: what the run needs of this machine, each {check, ok, said, failure}; a check that fails is a blocker. */
+  requirements?: unknown[] | null;
+  /** The first check that fails, as a run's failure is named, or null. */
+  failure?: unknown;
 }
 
 export interface UnitRun {
@@ -56,6 +106,11 @@ export interface UnitRun {
   exit_code?: number | null;
   started_at: string | null;
   finished_at: string | null;
+  /** Why the unit failed, where the engine says it; the failure slice's kind and what to do sit beside it. */
+  error?: string | null;
+  failure?: unknown;
+  /** Since 2026-10-12: what a skipped unit lacked, in a few words ("no FLAIR picked"). */
+  lacks?: string[] | null;
 }
 
 export interface Breach {
@@ -75,6 +130,8 @@ export interface RunDetail {
   job_id: number | null;
   handle_id?: number | null;
   selection?: string | null;
+  /** Since 2026-10-12: what a run over a dataset's or a cohort's main scans went over, as its frozen list records it. */
+  main?: MainRead | null;
   params?: Record<string, unknown> | null;
   runtime?: string | null;
   device?: string | null;
@@ -89,6 +146,8 @@ export interface RunDetail {
   summary?: Json | null;
   error?: string | null;
   derivatives?: number[] | null;
+  /** Since 2026-10-12: its units summed, what a person reads of it beside its status (./made). */
+  made?: unknown;
 }
 
 export interface Derivative {
@@ -100,17 +159,31 @@ export interface Derivative {
   sha256: string;
   media_type?: string | null;
   path?: string | null;
+  /** A mask's status as a check left it: accepted, rejected, flagged, or none (record 55 H3). */
+  check?: string | null;
+  /** How a mask is tied to its scan: same, world or none (record 55 H3). */
+  grid_link?: string | null;
+  /** The scan whose grid a mask is on: where it is drawn (record 55 H3). */
+  grid_stack_id?: number | null;
+  /** A mask's part sets: lesions, structures; none for a mask read whole (record 55 H3). */
+  part_sets?: { key?: string; words?: string; kind?: string; count?: number | null; names?: Record<string, string> | null }[] | null;
+  subject_id?: number | null;
+  run_id?: number | null;
 }
 
 export const runs = {
   /** The pipeline by its catalog id, or a name; the door reads its path as it stands, so a name@version is not sent encoded. */
   preflight: (pipeline: number | string, over: Over, params: Record<string, string>) =>
-    door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { ...("selection" in over ? { select: `selection:${over.selection}@${over.version}` } : { handle: over.handle }), params }),
+    door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { ...selectOf(over), params }),
+  /** Since 2026-10-12: the pre-flight of a run taken up again, for the units it still has to run. */
+  preflightResume: (pipeline: number | string, run: number) => door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { resume: run }),
   get: (id: number) => door<RunDetail>("GET", `/api/pipeline-runs/${id}`),
   derivatives: (run: number) => door<{ derivatives: Derivative[] }>("GET", `/api/derivatives?run=${run}&limit=200`),
   /** Save a stored ask document as the next version of a selection (PUT /api/ask/selections/{name}, query:work at detail quasi). */
   saveSelection: (name: string, document_id: number) => door<{ id: number; name: string; version: number; hash: string }>("PUT", `/api/ask/selections/${encodeURIComponent(name)}`, { document_id }),
   job: (id: number) => door<{ id: number; state: string; started_at: string | null }>("GET", `/api/jobs/${id}`),
+  /** A run queued at the jobs door; one refused for what it needs of this machine answers 409 with its failure and requirements, which the refusal keeps. */
+  queue: (command: string[]) => door<{ job: number; state: string }>("POST", "/api/jobs", { command }),
   /** The ask, as the Query page runs it: one bounded page of rows. */
   ask: (document: Json) =>
     door<{ columns: (string | { name: string })[]; rows: unknown[][]; truncated?: boolean }>("POST", "/api/ask/run", { document, limit: 500 }).then((a) => ({
@@ -137,6 +210,28 @@ export function runActs(caps: Capabilities): { preflight: boolean; open: boolean
   };
 }
 
+/** Whether the engine checks a run taken up again before it queues it, and answers its pre-flight (since 2026-10-12, `pipelines.preflight.resume`). */
+export function resumeChecked(caps: Capabilities): boolean {
+  const pipelines = obj(caps.engine?.pipelines);
+  return runActs(caps).preflight && obj(pipelines.preflight).resume === true;
+}
+
+/** What one unit of a run is called: a session or a subject of a bids input, a scan of a stacks one. */
+export function unitWord(p: { unit?: string | null; layout?: string | null; level?: string | null }): string {
+  if (p.unit === "stack" || p.layout === "stacks") return "scan";
+  if (p.unit === "session" || p.unit === "subject") return p.unit;
+  return p.level === "session" ? "session" : p.level === "participant" ? "subject" : "unit";
+}
+
+/** "1 session", "4 sessions". */
+export const unitsWords = (count: number, word: string): string => `${n(count)} ${word}${count === 1 ? "" : "s"}`;
+
+/** The units that cannot run, one entry a reason with the units under it: the engine's `cannot`, else its units missing an input folded by why (an engine before 2026-10-12). */
+export function cannotOf(p: Preflight): { why: string; count: number | null; units: string[] }[] {
+  if (Array.isArray(p.cannot)) return p.cannot.map((c) => ({ why: c.why, count: c.units, units: (c.named ?? []).filter((u): u is string => typeof u === "string") }));
+  return missingByWhy(p).map((m) => ({ why: m.why, count: m.count, units: m.units }));
+}
+
 /** Seconds in a person's words: "under a minute", "about 40 min", "about 3 h". */
 export function durationWords(s: number | null | undefined): string {
   if (s === null || s === undefined || !Number.isFinite(s)) return "not known";
@@ -146,9 +241,46 @@ export function durationWords(s: number | null | undefined): string {
   return `about ${n(Math.round(s / 8640) / 10)} days`;
 }
 
+/** A run's main scans, read where the engine answers them: null for a selection or a handle. */
+export function mainReadOf(p: { main?: MainRead | null } | null | undefined): MainRead | null {
+  const m = p?.main;
+  return m && typeof m === "object" && typeof m.main === "string" && typeof m.visits === "number" ? m : null;
+}
+
+/** The main scans as cells: the scans they resolve to, of how many visits, and the visits with none; of several roles, the visits that lack one. */
+export function mainCells(m: MainRead): { k: string; v: string; title?: string }[] {
+  const roles = mainReadRoles(m);
+  const role = roles.map(roleWord).join(" + ");
+  const cells: { k: string; v: string; title?: string }[] = [{ k: `main ${role}`, v: `${n(m.stacks)} ${m.stacks === 1 ? "scan" : "scans"} of ${n(m.main_visits)} ${m.main_visits === 1 ? "visit" : "visits"}`, title: m.read ?? undefined }];
+  if (m.without.visits > 0) cells.push({ k: roles.length > 1 ? "lacking a role" : `no main ${role}`, v: `${n(m.without.visits)} of ${n(m.visits)} visits`, title: (m.without.why ?? []).map((w) => `${n(w.visits)}: ${w.why}`).join("; ") || undefined });
+  return cells;
+}
+
+/** The visits with no main scan, by why, the most first: each with the visits named where the engine names them ("a1b2c3 2023-01-15"). */
+export function withoutByWhy(m: MainRead): { why: string; count: number; visits: string[] }[] {
+  const named = m.without.named ?? [];
+  return (m.without.why ?? [])
+    .map((w) => ({
+      why: w.why,
+      count: w.visits,
+      visits: named.filter((v) => v.why === w.why && (v.subject || v.session_day)).map((v) => [v.subject, v.session_day].filter(Boolean).join(" ")),
+    }))
+    .sort((a, b) => b.count - a.count);
+}
+
+/** Which rules the main scans were read under, in a few words: "its own rules, v3", or "the pack's rules". */
+export function rulesWords(m: MainRead): string | null {
+  const p = m.picks;
+  if (!p || typeof p !== "object") return null;
+  if (p.defaults === true || p.scope === null) return "the pack's rules";
+  return typeof p.version === "number" ? `its own rules, v${p.version}` : null;
+}
+
 /** The pre-flight as the values a person reads before pressing Run. */
 export function preflightCells(p: Preflight): { k: string; v: string; title?: string }[] {
   const cells: { k: string; v: string; title?: string }[] = [];
+  const main = mainReadOf(p);
+  if (main) cells.push(...mainCells(main));
   cells.push({ k: "units", v: `${n(p.units.ready)} of ${n(p.units.total)} ready` });
   if (p.units.missing > 0) cells.push({ k: "missing an input", v: n(p.units.missing) });
   if (p.left_out && p.left_out.stacks > 0) cells.push({ k: "stacks left out", v: n(p.left_out.stacks), title: p.left_out.why ?? undefined });
@@ -172,7 +304,7 @@ export function preflightCells(p: Preflight): { k: string; v: string; title?: st
 export function missingByWhy(p: Preflight): { why: string; count: number; units: string[] }[] {
   const by = new Map<string, { why: string; count: number; units: string[] }>();
   for (const m of p.missing ?? []) {
-    const k = m.why || "no reason given";
+    const k = (Array.isArray(m.why) ? m.why.join("; ") : m.why) || "no reason given";
     const row = by.get(k) ?? { why: k, count: 0, units: [] };
     row.count += 1;
     if (m.unit) row.units.push(m.unit);
@@ -189,6 +321,21 @@ export function preflightGate(p: Preflight | null): { go: boolean; why: string |
   return { go: false, why: b.length > 0 ? b.join("; ") : "the pre-flight says the run is not ready" };
 }
 
+/** Why a pre-flight is not ready, as a failure: its blockers, with the first failing check's kind, cause, advice and fix where the engine names them. */
+export function blockedOf(p: Preflight | null): Failure | null {
+  if (p === null || p.ready) return null;
+  const gate = preflightGate(p);
+  const f = failureOf({ [SLICE.error]: gate.why, [SLICE.failure]: p.failure });
+  if (!f) return null;
+  const blockers = (p.blockers ?? []).filter(Boolean);
+  return { ...f, line: f.advice ?? (blockers.length > 0 ? blockers.map(firstSentence).join("; ") : f.line) };
+}
+
+/** What the run needs of this machine, as the pre-flight checked it. */
+export function preflightChecks(p: Preflight | null): Requirement[] {
+  return p === null ? [] : requirementsOf(p);
+}
+
 /** The range a parameter takes, in a few words, from its descriptor. */
 export function rangeWords(p: Pipeline["parameters"] extends (infer P)[] | null | undefined ? P : never): string | null {
   if (!p) return null;
@@ -202,20 +349,21 @@ export function rangeWords(p: Pipeline["parameters"] extends (infer P)[] | null 
   return p.integer ? "a whole number" : null;
 }
 
-export type UnitTone = "running" | "waiting" | "done" | "failed" | "kept";
+export type UnitTone = "running" | "waiting" | "done" | "skipped" | "failed" | "kept";
 
-/** A unit's state in one word: running, waiting, done, failed, or kept (finished before the run was taken up again). */
+/** A unit's state in one word (2026-10-12: each unit says its own): running, waiting, done, skipped (it lacked an input and never ran), failed, or kept (done before the run was taken up again). */
 export function unitTone(u: UnitRun, resumedAt: string | null): UnitTone {
   if (u.state === "running" || u.state === "registering") return "running";
   if (u.state === "queued") return "waiting";
-  const ok = u.status === "succeeded" || u.status === "skipped";
+  if (u.status === "skipped") return "skipped";
+  const ok = u.status === "succeeded";
   if (ok && resumedAt !== null && u.finished_at !== null && Date.parse(u.finished_at) < Date.parse(resumedAt)) return "kept";
   return ok ? "done" : "failed";
 }
 
 /** The units counted by tone, in the order a person reads them. */
 export function unitCounts(units: UnitRun[], resumedAt: string | null): Record<UnitTone, number> {
-  const out: Record<UnitTone, number> = { running: 0, waiting: 0, done: 0, failed: 0, kept: 0 };
+  const out: Record<UnitTone, number> = { running: 0, waiting: 0, done: 0, skipped: 0, failed: 0, kept: 0 };
   for (const u of units) out[unitTone(u, resumedAt)] += 1;
   return out;
 }
@@ -291,6 +439,20 @@ export function breachesByCheck(r: RunDetail): { check: string; units: Held }[] 
   const by = new Map<string, number>();
   for (const u of checksOf(r).units) for (const b of u.breaches) by.set(b.check || b.metric, (by.get(b.check || b.metric) ?? 0) + 1);
   return [...by.entries()].map(([check, units]) => ({ check, units })).sort((a, b) => heldOrder(a.units, b.units));
+}
+
+/** The units that failed or went unreported, by cause, as the engine counts them (since 2026-10-12): the most first; below detail quasi a count of 1 to 4 withheld. */
+export function failuresByCause(r: RunDetail): { kind: string; cause: string; units: Held }[] {
+  const list = obj(r.summary)[SLICE.byCause];
+  return (Array.isArray(list) ? (list as Json[]) : []).map((f) => ({ kind: text(f.kind) ?? "pipeline", cause: text(f.cause) ?? "pipeline", units: f.withheld === true ? null : heldOf(f, "units") }));
+}
+
+/** The dcm2niix a run's release ran, and how it was found, where the run had a bids input. */
+export function converterOf(r: RunDetail): { version: string | null; path: string | null; found_by: string | null } | null {
+  const c = obj(r.summary)[SLICE.converter];
+  if (c === null || typeof c !== "object") return null;
+  const o = obj(c);
+  return { version: text(o.version), path: text(o.path), found_by: text(o.found_by) };
 }
 
 /** The units that failed, by reason, as the engine counts them below detail quasi; empty at quasi, where the units say it. */
@@ -452,8 +614,11 @@ export function runDocumentOf(verdict: { station?: unknown; result?: unknown } |
   const pipeline = String(d.pipeline);
   let over: Over | null = null;
   const sel = typeof d.select === "string" ? d.select : typeof d.selection === "string" ? d.selection : null;
-  const m = sel ? /^(?:selection:)?([^@]+)@(\d+)$/.exec(sel) : null;
-  if (m) over = { selection: m[1], version: Number(m[2]) };
+  // record 55 (2026-10-12): a plan may go straight over a dataset's or a cohort's main scans
+  const main = mainOfSpec(sel);
+  const m = sel && !main ? /^(?:selection:)?([^@]+)@(\d+)$/.exec(sel) : null;
+  if (main) over = { main };
+  else if (m) over = { selection: m[1], version: Number(m[2]) };
   else if (d.selection && typeof d.selection === "object") {
     const s = obj(d.selection);
     if (typeof s.name === "string" && num(s.version) !== null) over = { selection: s.name, version: num(s.version)! };
@@ -479,10 +644,11 @@ export function runDocumentOf(verdict: { station?: unknown; result?: unknown } |
   };
 }
 
-/** The pipeline a run document names, from the catalog: by id, name@version, or the newest active version of a name. */
+/** The pipeline a run document names, from the catalog: by id, name@version, or the newest active version of a name; a version a later one replaces is read as the name's current one. */
 export function pipelineOf(catalog: Pipeline[], name: string): Pipeline | null {
   const exact = catalog.find((p) => p.label === name || String(p.id) === name);
-  if (exact) return exact;
-  const versions = catalog.filter((p) => p.name === name && p.state !== "retired");
-  return versions.sort((a, b) => b.id - a.id)[0] ?? null;
+  // a version a later one replaces is not run again (2026-10-12): the name's current version stands for it
+  if (exact && exact.standing !== "replaced") return exact;
+  const versions = catalog.filter((p) => p.name === (exact?.name ?? name) && offered(p));
+  return versions.find((p) => p.standing === "current") ?? versions.sort((a, b) => b.id - a.id)[0] ?? null;
 }

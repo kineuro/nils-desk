@@ -21,7 +21,7 @@ describe("the agent a new chat talks to", () => {
 });
 
 describe("the one chat's parts", () => {
-  it("admit the four shapes and drop the rest", () => {
+  it("admit the five shapes and drop the rest", () => {
     expect(asOneChatPart({ kind: "progress", call: "t1", text: " Reading 3 of 9 " })).toEqual({ kind: "progress", call: "t1", text: "Reading 3 of 9" });
     expect(asOneChatPart({ kind: "progress", text: "" })).toBeNull();
     expect(asOneChatPart({ kind: "plan_update", items: [{ text: "Find", status: "done" }, { text: "Count", status: "odd" }, { nope: 1 }] })).toEqual({
@@ -52,6 +52,7 @@ describe("the one chat's parts", () => {
         { label: "B", count: null },
       ],
     });
+    expect(asOneChatPart({ kind: "replaced", why: "kept out" })).toEqual({ kind: "replaced" });
     expect(asOneChatPart({ kind: "move_proposal", document: 1, parent: null, sentence: "x" })).toBeNull();
   });
 

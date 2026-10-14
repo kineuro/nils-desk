@@ -130,6 +130,10 @@ describe("the items ahead", () => {
     expect(aheadOf({})).toEqual([]);
     expect(aheadOf({ ahead: Array.from({ length: 9 }, (_, i) => ({ item: i, stacks: [i + 100] })) }).length).toBe(5);
   });
+  it("carry the result's layer of each stack where the claim names one (a check's panels), read defensively", () => {
+    expect(aheadOf({ ahead: [{ item: 4, stacks: [11, 12], layers: [{ stack: 11, derivative: 9001, set: "lesions" }, { stack: 12, derivative: "x", set: "lesions" }, { stack: 12, derivative: 9001, set: "" }] }] })).toEqual([{ item: 4, stacks: [11, 12], layers: { 11: { derivative: 9001, set: "lesions" } } }]);
+    expect(aheadOf({ ahead: [{ item: 4, stacks: [11], layers: "no" }] })).toEqual([{ item: 4, stacks: [11] }]);
+  });
   it("names a plane's slab as the viewer asks for it", () => {
     const m = manifest(160, 1, 0);
     expect(slabRange(m, 0, 80)).toEqual([64, 96]);

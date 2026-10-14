@@ -110,7 +110,7 @@ export function backupsCard(b: Backups, now: Date): Card {
   if (next) facts.push(next);
   if (ours.length > 0) facts.push(`${count(ours.length, "archive", "archives")}, ${sizeWords(ours.reduce((n, a) => n + a.bytes, 0))}`);
   const value = !Number.isNaN(at) ? `last ${agoWords(at, now.getTime())}` : b.dir ? "none yet" : "no backup directory";
-  return { page: "database", title: "Backups", icon: "shield", state: backupsTag(b), value, facts };
+  return { page: "backups", title: "Backups", icon: "shield", state: backupsTag(b), value, facts };
 }
 
 /** What keeps the registry, whether it has a backup place elsewhere, its epoch and its calendar. */
@@ -122,7 +122,7 @@ export function registryCard(caps: Capabilities, install: Install | null, backen
   const facts: string[] = [];
   if (r) facts.push(`epoch ${r.epoch.toLocaleString("en-GB")}${r.schema_version !== undefined ? ` · schema ${r.schema_version}` : ""}`);
   if (timezone) facts.push(`dates read in ${timezone}`);
-  return { page: "database", title: "Registry", icon: "data", state: places ? registryRule(places) : null, value, facts };
+  return { page: "backups", title: "Registry", icon: "data", state: places ? registryRule(places) : null, value, facts };
 }
 
 /** How people sign in, who they are, and where the desk answers. */
@@ -140,7 +140,7 @@ export function signinCard(caps: Capabilities, users: Users | null): Card {
   const issuer = caps.desk.settings?.signing?.issuer;
   if (mode === "oidc" && issuer) facts.push(`at ${hostOf(issuer)}`);
   if (origin) facts.push(local ? "the desk answers on this machine" : `the desk answers at ${origin}`);
-  return { page: "identity", title: "Sign-in", icon: "users", state, value, facts };
+  return { page: "people", title: "People", icon: "users", state, value, facts };
 }
 
 function hostOf(url: string): string {
@@ -153,8 +153,8 @@ function hostOf(url: string): string {
 
 /** Whether Kvasir is warm, the model the assistant reaches first, and where prompts may go. */
 export function gatewayCard(caps: Capabilities, backends: Backend[] | null): Card {
-  const title = "Kvasir";
-  if (caps.kvasir === null) return { page: "gateway", title, icon: "gateway", state: { tone: "blocked", words: "does not answer" }, value: "no model reached", facts: [] };
+  const title = "Language models";
+  if (caps.kvasir === null) return { page: "language-models", title, icon: "gateway", state: { tone: "blocked", words: "does not answer" }, value: "no model reached", facts: [] };
   const models = (caps.kvasir["models"] as { id?: unknown; locality?: unknown }[] | undefined) ?? [];
   const first = models.find((m) => m.locality === "local" && typeof m.id === "string") ?? models.find((m) => typeof m.id === "string");
   const facts: string[] = [];
@@ -171,7 +171,7 @@ export function gatewayCard(caps: Capabilities, backends: Backend[] | null): Car
     if (h.streams) facts.push(h.streams);
   }
   facts.push("identifiers never leave");
-  return { page: "gateway", title, icon: "gateway", state, value: typeof first?.id === "string" ? first.id : "no model yet", facts };
+  return { page: "language-models", title, icon: "gateway", state, value: typeof first?.id === "string" ? first.id : "no model yet", facts };
 }
 
 /** The newest act, who did it and when, and how many acts this month. */

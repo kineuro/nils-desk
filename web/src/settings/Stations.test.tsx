@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Where each station goes as it draws (record 25): a box that opens the drawer
-// for a person with Kvasir: Work, a plain box for anyone else and for a
+// for a person with Language models: Work, a plain box for anyone else and for a
 // station that may not move, who allowed it beside, and the drawer itself.
 
 import { renderToStaticMarkup } from "react-dom/server";
@@ -30,7 +30,7 @@ const purposes = [purpose({ purpose: "assistant.ask-help" }), purpose({ purpose:
 const lines = (viewer: Viewer, backends = [runtime, minimax], rows = purposes) => routes(rows, backends, { viewer, admissions: null, subscription: null });
 
 describe("where each station goes", () => {
-  it("opens a station's box for a person with Kvasir: Work, with the chevron that says so", () => {
+  it("opens a station's box for a person with Language models: Work, with the chevron that says so", () => {
     const html = renderToStaticMarkup(<StationRoutes routes={lines(admin)} onChange={() => undefined} />);
     expect(html.match(/<button type="button" class="dest">/gu)).toHaveLength(2);
     expect(html).toContain("Change where ask-help goes, now ");

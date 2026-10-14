@@ -32,6 +32,10 @@ import {
   highestDetail,
   identity,
   levelsOf,
+  passwordRefusal,
+  personRefusal,
+  removedWords,
+  type Removed,
   lineWords,
   locked,
   personBody,
@@ -218,12 +222,21 @@ export interface PersonFormProps {
   onDone: (words: string) => void;
   /** A group made from inside the form. */
   onGroupMade?: (group: Group) => void;
+  /**
+   * Record 55 H2, round 5: the person's own lines at the foot of the form, for
+   * an admin: reset their password (local mode) and remove them, handing what
+   * they kept to one of `people`. Left out for the admin's own row, whose
+   * password is changed on their profile and who is not removed by themself.
+   */
+  people?: readonly Person[];
+  me?: string;
 }
 
 /** Add a person, or change what one may see and do. */
 export function PersonForm(props: PersonFormProps) {
   const { mode, person, taken, onClose, onDone, onGroupMade } = props;
   const followed = person?.followed ?? [];
+  const [act, setAct] = useState<"reset" | "remove" | null>(null);
   const [username, setUsername] = useState("");
   const [display, setDisplay] = useState("");
   const [password, setPassword] = useState("");
@@ -259,18 +272,34 @@ export function PersonForm(props: PersonFormProps) {
       return said;
     });
 
+  // an admin's own lines on another person: never on their own row
+  const theirs = person !== null && props.me !== undefined && person.subject !== props.me;
   const foot = (
     <>
       <Acted acting={saving.acting} />
       {refusal && (username || password) && <p className="warn">{refusal}</p>}
-      <div className="row actions">
-        <button type="button" className="button" disabled={refusal !== null || saving.working || all === null} onClick={save}>
-          {person === null ? "Add the person" : "Save"}
-        </button>
-        <button type="button" className="button secondary" onClick={onClose}>
-          Cancel
-        </button>
-      </div>
+      {theirs && act === "reset" && <ResetPassword person={person} name={name} onKeep={() => setAct(null)} onDone={onDone} />}
+      {theirs && act === "remove" && <RemovePerson mode={mode} person={person} name={name} people={props.people ?? []} me={props.me ?? ""} onKeep={() => setAct(null)} onDone={onDone} />}
+      {act === null && (
+        <div className="row actions">
+          <button type="button" className="button" disabled={refusal !== null || saving.working || all === null} onClick={save}>
+            {person === null ? "Add the person" : "Save"}
+          </button>
+          <button type="button" className="button secondary" onClick={onClose}>
+            Cancel
+          </button>
+          {theirs && mode === "local" && (
+            <button type="button" className="button quiet small push" onClick={() => setAct("reset")}>
+              Reset the password
+            </button>
+          )}
+          {theirs && (
+            <button type="button" className={mode === "local" ? "button quiet small" : "button quiet small push"} onClick={() => setAct("remove")}>
+              Remove the person
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 
@@ -469,5 +498,128 @@ export function GroupForm(props: GroupFormProps) {
       <AccessLines kind="group" levels={levels} detail={detail} onLevel={(id, level) => setLevels((l) => ({ ...l, [id]: level }))} onDetail={setDetail} />
       <AccessNote words={words} />
     </Dialog>
+  );
+}
+
+/** An admin's reset of another person's password (local mode): typed twice, and their sessions end. */
+function ResetPassword({ person, name, onKeep, onDone }: { person: Person; name: string; onKeep: () => void; onDone: (words: string) => void }) {
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  const setting = useActing();
+  const ids = useId();
+  const refusal = passwordRefusal(password, again);
+  const set = () =>
+    setting.act(`setting ${name}'s password`, async () => {
+      try {
+        await identity.password(person.subject, password);
+      } catch (e) {
+        throw new Error(personRefusal(e, "password"));
+      }
+      const said = `Password set: ${name}. Their sessions ended; they sign in with the new one.`;
+      onDone(said);
+      return said;
+    });
+  return (
+    <div className="note person-act">
+      <Icon name="key" />
+      <div className="note-body">
+        <p className="note-lead">A new password for {name}</p>
+        <p className="note-detail">They are signed out, and sign in again with it. Tell them by another way than this desk.</p>
+        <div className="fields2">
+          <div className="field">
+            <label className="label" htmlFor={`${ids}-new`}>
+              New password
+            </label>
+            <div className="input">
+              <input id={`${ids}-new`} type="password" value={password} autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
+            </div>
+          </div>
+          <div className="field">
+            <label className="label" htmlFor={`${ids}-again`}>
+              Again
+            </label>
+            <div className="input">
+              <input id={`${ids}-again`} type="password" value={again} autoComplete="new-password" onChange={(e) => setAgain(e.target.value)} />
+            </div>
+          </div>
+        </div>
+        {refusal && password && <p className="warn">{refusal}</p>}
+        <Acted acting={setting.acting} />
+        <div className="row actions">
+          <button type="button" className="button" disabled={refusal !== null || setting.working} onClick={set}>
+            Set the password
+          </button>
+          <button type="button" className="button secondary" onClick={onKeep}>
+            Keep the old one
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Remove a person: they lose everything the desk gives them, their sessions end, and what they kept can go to another person. */
+function RemovePerson(props: { mode: "local" | "oidc"; person: Person; name: string; people: readonly Person[]; me: string; onKeep: () => void; onDone: (words: string) => void }) {
+  const { mode, person, name, people, me, onKeep, onDone } = props;
+  const others = people.filter((p) => p.subject !== person.subject);
+  const [to, setTo] = useState<string>(others.some((p) => p.subject === me) ? me : "");
+  const removing = useActing();
+  const ids = useId();
+  const toName = (s: string) => {
+    const p = others.find((x) => x.subject === s);
+    return p ? p.display || p.subject : s;
+  };
+  const remove = () =>
+    removing.act(`removing ${name}`, async () => {
+      let r: Removed;
+      try {
+        r = await identity.remove(person.subject, to || null);
+      } catch (e) {
+        throw new Error(personRefusal(e, "remove"));
+      }
+      const said = removedWords(name, r, to ? toName(to) : null);
+      onDone(said);
+      return said;
+    });
+  return (
+    <div className="note caution person-act">
+      <Icon name="alert" />
+      <div className="note-body">
+        <p className="note-lead">Remove {name}?</p>
+        <p className="note-detail">
+          {mode === "local"
+            ? "They can no longer sign in, and their sessions end now."
+            : "The desk forgets their groups and pages, and their sessions end now. They can sign in again at the provider, and then hold only what a followed group gives."}{" "}
+          What they did stays in the audit log under their name.
+        </p>
+        {others.length > 0 && (
+          <div className="field">
+            <label className="label" htmlFor={`${ids}-to`}>
+              Hand their kept results to
+            </label>
+            <span className="input">
+              <select id={`${ids}-to`} value={to} onChange={(e) => setTo(e.target.value)}>
+                <option value="">Nobody: they stay under {name}</option>
+                {others.map((p) => (
+                  <option key={p.subject} value={p.subject}>
+                    {p.display || p.subject}
+                    {p.subject === me ? " (you)" : ""}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </div>
+        )}
+        <Acted acting={removing.acting} />
+        <div className="row actions">
+          <button type="button" className="button" disabled={removing.working} onClick={remove}>
+            Remove
+          </button>
+          <button type="button" className="button secondary" onClick={onKeep}>
+            Keep
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

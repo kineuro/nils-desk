@@ -108,14 +108,36 @@ export function readingFor(caps: Capabilities, c: number | string, q: Question, 
   return kept;
 }
 
-/** A reading's lines narrowed to the axes the question asks; the why door speaks of every axis of the stack. */
-function narrowed(r: Reading, axes: string[]): Reading {
-  return axes.length === 0 ? r : { ...r, lines: r.lines.filter((l) => axes.includes(l.axis)) };
+/** A reading's lines narrowed to the axes the question asks, in the question's order (the rows' order); the why door speaks of every axis of the stack. */
+export function narrowed(r: Reading, axes: string[]): Reading {
+  return axes.length === 0 ? r : { ...r, lines: r.lines.filter((l) => axes.includes(l.axis)).sort((a, b) => axes.indexOf(a.axis) - axes.indexOf(b.axis)) };
 }
 
 /** Forget the readings (a test). */
 export function forgetReadings(): void {
   lines.clear();
+  stackLines.clear();
+}
+
+/** The reviewer's evidence door (record 48 R1, review:see): why one stack was judged so, one line per axis. */
+export const STACK_WHY = "GET /api/stacks/{stack}/why";
+
+const stackLines = new Map<number, Promise<Reading | null>>();
+
+/**
+ * A queue item's reading (record 55 H5): the engine's why door for its
+ * stack, where the engine serves it and the person may read the queue; null
+ * otherwise, or where the door refuses. A stack of a sample sealed now comes
+ * back blind, with no lines.
+ */
+export function stackReadingFor(caps: Capabilities, stack: number): Promise<Reading | null> {
+  if (!served(caps, STACK_WHY) || !may(caps, "review:see")) return Promise.resolve(null);
+  const have = stackLines.get(stack);
+  if (have) return have;
+  const p = door<Json>("GET", `/api/stacks/${stack}/why`).then(readingOf, () => null);
+  stackLines.set(stack, p);
+  bound(stackLines);
+  return p;
 }
 
 /** The batches of like stacks open to the caller, each with as many of its items as `sample` asks (a grid's worth). */

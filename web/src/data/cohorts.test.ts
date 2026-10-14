@@ -209,7 +209,7 @@ describe("members over time", () => {
 
 describe("adding and taking out by hand", () => {
   it("wants codes and a reason, and never both ways for one code", () => {
-    expect(membersBody("", "", "why")).toEqual({ ok: false, why: "codes to add or take out, one per line" });
+    expect(membersBody("", "", "why")).toEqual({ ok: false, why: "subject codes to add or take out, one per line" });
     expect(membersBody("A001\nA002", "", "")).toEqual({ ok: false, why: "a reason; it is recorded on every membership" });
     expect(membersBody("A001", "A001", "why")).toEqual({ ok: false, why: "A001 is both added and taken out" });
     expect(membersBody("A001, A002\nA002", "B009", " consent withdrawn ")).toEqual({ ok: true, body: { add: ["A001", "A002"], remove: ["B009"], why: "consent withdrawn" }, summary: "2 added, 1 taken out" });

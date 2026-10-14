@@ -122,7 +122,7 @@ describe("the page's store of pictures", () => {
     const fetcher = async (url: string) => {
       asked.push(url);
       if (url === "/api/instances/7/preview") return new Response(JSON.stringify(preview));
-      const m = /^\/api\/instances\/7\/preview\/planes\?from=(\d+)&to=(\d+)(?:&v=\w+)?$/.exec(url);
+      const m = /^\/api\/instances\/7\/preview\/planes\?from=(\d+)&to=(\d+)(?:&v=\w+&held=[01])?$/.exec(url);
       if (m) {
         const frames = [];
         for (let z = Number(m[1]); z < Number(m[2]); z++) frames.push({ plane: z, bytes: new Uint8Array([z]) });
@@ -169,7 +169,20 @@ describe("the page's store of pictures", () => {
     const e = engine();
     const pics = new Pictures(e.fetcher, e.decode);
     await pics.load(7, 40, 20, "d1g");
-    expect(e.asked[0]).toBe("/api/instances/7/preview/planes?from=12&to=28&v=d1g");
+    expect(e.asked[0]).toBe("/api/instances/7/preview/planes?from=12&to=28&v=d1g&held=0");
+  });
+
+  it("names the held state the preview was served beside its digest, since the held and the whole picture share one (2026-10-10)", async () => {
+    const e = engine();
+    const pics = new Pictures(e.fetcher, e.decode);
+    await pics.load(7, 40, 20, "d1g", false, true);
+    expect(e.asked[0]).toBe("/api/instances/7/preview/planes?from=12&to=28&v=d1g&held=1");
+    // read ahead, a scan names it too
+    await pics.ahead(8, 40, 20, "e2h", false, true).catch(() => undefined);
+    expect(e.asked.filter((u) => u.startsWith("/api/instances/8/")).every((u) => u.endsWith("&v=e2h&held=1"))).toBe(true);
+    // a partial preview names neither
+    await pics.load(9, 40, 20, "f3i", true, true).catch(() => undefined);
+    expect(e.asked.filter((u) => u.startsWith("/api/instances/9/")).every((u) => !u.includes("&v=") && !u.includes("held="))).toBe(true);
   });
 
   it("decodes a plane again from its frame once the LRU let it go", async () => {

@@ -126,7 +126,7 @@ describe("the gateway card", () => {
     expect(card.value).toBe("local-model");
     expect(card.state).toEqual({ tone: "ok", words: "warm" });
     expect(card.facts).toEqual(["1 local backend", "1 of 4 streams busy", "identifiers never leave"]);
-    expect(card.title).toBe("Kvasir");
+    expect(card.title).toBe("Language models");
   });
 
   it("counts ChatGPT through people's own subscriptions apart from the providers, and says when Kvasir holds no model", () => {

@@ -10,14 +10,17 @@
 // opened in place under the rail (the design of the same day): by itself
 // while it waits on a person, and from the rail or the address otherwise.
 // Body part and post-contrast are run from their steps on the rail (record
-// 56), and their running job joins the log.
+// 56), and their running job joins the log; main scans are picked again
+// from theirs, beside the way to their page.
 
+import { HeadersLine } from "../review/S1Settings";
 import { useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow } from "../routes";
+import { mayMainScans } from "../review/mainScans";
 import { MoreMenu } from "../settings/cards";
 import { sizeWords } from "../settings/database";
 import { Dialog } from "../ui/Dialog";
@@ -29,8 +32,10 @@ import { DatasetSettings } from "./DatasetSettings";
 import { maySeePicks, picksSummary, type PickLine } from "./picks";
 import { opensItself, PseudonymisedSummary, PseudonymiseStep, StepDialogs, usePseudonymise, type Opened } from "./PseudonymiseStep";
 import { railWords } from "./pseudoStep";
+import { STOPPED_NEXT, useStopped } from "./stopped";
 import { StepRail } from "./StepRail";
-import { runOffers, startedWords, stepRuns } from "./stepRun";
+import { pickRun } from "./pickRun";
+import { mainScansMore, pickOffer, runOffers, startedWords, stepRuns } from "./stepRun";
 import { nextStep, stepCommand, type StepId } from "./steps";
 import {
   clock,
@@ -42,9 +47,12 @@ import {
   operationOf,
   originalIdWords,
   railSteps,
+  refusedOnly,
   roleOrder,
   roleWord,
   runningWords,
+  setAsideOfWords,
+  setAsideWords,
   stateOf,
   stateWord,
   stepOf,
@@ -88,7 +96,7 @@ export interface DatasetDetailProps {
 export function datasetActions(caps: Capabilities, d: Dataset, why: string | null) {
   const works = may(caps, "data:work");
   const next = nextStep(d, why);
-  const review = next.step === "review" ? (may(caps, "review:see") ? narrow(href("review"), { dataset: d.name }) : null) : null;
+  const review = next.step === "review" ? (may(caps, "review:see") ? narrow(href("review", "questions"), { dataset: d.name }) : null) : null;
   const primary: { label: string; step: StepId | null; href: string | null; busy: boolean } | null =
     next.step === "review"
       ? review
@@ -121,6 +129,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const [now, setNow] = useState(() => Date.now());
   const [log, setLog] = useState<ChainedJob[] | null>(null);
   const [picks, setPicks] = useState<PickLine[] | null>(null);
+  /** Why the last run picked nothing, in the engine's words. */
+  const [nothing, setNothing] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   const [settings, setSettings] = useState(false);
   /** A step's Run pressed, until the engine answers. */
@@ -128,6 +138,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
   /** The next step's button, or Read new files or Read again, pressed until the engine answers: one press, one job. */
   const [asking, setAsking] = useState(false);
   const acts = datasetActions(caps, d, why);
+  /** Where its chain stopped, in the failed job's own words (2026-10-10). */
+  const stopped = useStopped(caps, s);
   // the pseudonymise step: open by itself while it waits on a person or runs, or as the person or the address opened it
   const pseudo = usePseudonymise(caps, d, s);
   const view = pseudo.view;
@@ -163,9 +175,17 @@ export function DatasetDetail(props: DatasetDetailProps) {
     if (!maySeePicks(caps)) return;
     let alive = true;
     picksSummary
-      .read(d.name)
-      .then((lines) => alive && setPicks(lines))
-      .catch(() => alive && setPicks(null));
+      .dataset(d.name)
+      .then((p) => {
+        if (!alive) return;
+        setPicks(p.lines);
+        setNothing(p.nothing);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setPicks(null);
+        setNothing(null);
+      });
     return () => {
       alive = false;
     };
@@ -196,9 +216,19 @@ export function DatasetDetail(props: DatasetDetailProps) {
       .catch(onFailed)
       .finally(() => setPressed(false));
   };
+  // main scans picked again by the dataset's saved rules, queued as a pick run
+  const runPick = () => {
+    setPressed(true);
+    pickRun
+      .start({ dataset: d.name })
+      .then(() => onChanged(startedWords(d.name, "main_scans")))
+      .catch(onFailed)
+      .finally(() => setPressed(false));
+  };
 
   const refusedBatch = s?.files.refused_batch ?? null;
-  const refused = s?.files.refused ?? d.totals.refused_files;
+  // record 56: the files set aside by policy are not scans and ask nobody anything; only the rest has a page to look at
+  const refused = refusedOnly({ refused: s?.files.refused ?? d.totals.refused_files, set_aside: s?.files.set_aside });
   const ids = idsWords(d);
   // an identified dataset says what its files carry until they are pseudonymised, and then what the copy NILS reads holds
   const where = (
@@ -221,6 +251,9 @@ export function DatasetDetail(props: DatasetDetailProps) {
   // the pictures, the 3D views and a model's run go on beside it and hold nothing
   const chainRuns = s?.steps.some((x) => CHAIN.has(x.step) && (x.state === "running" || x.state === "queued")) ?? false;
   const busy = asking || chainRuns;
+  // a step's Run on the rail: body part and post-contrast by their own door, main scans by the pick run, which waits on the chain
+  const pickNow = s ? pickOffer(caps, stepOf(s, "main_scans"), s.scans, pressed || busy, runPick) : null;
+  const railRuns = s ? { ...runOffers(caps, "datasets", railSteps(s), pressed, runStep), ...(pickNow ? { main_scans: pickNow } : {}) } : undefined;
   const logCol = (
     <div className="dp-col">
       <div className="dp-col-head">
@@ -257,7 +290,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
           )}
           {primary && primary.href === null && (
             <button type="button" className="button" disabled={primary.busy || primary.step === null || (busy && primary.step !== "pseudonymise")} onClick={() => primary.step && stepping(primary.step)}>
-              {chainRuns && !primary.busy && primary.step !== "pseudonymise" ? "Running" : primary.label}
+              {chainRuns && !primary.busy && primary.step !== "pseudonymise" ? "Running" : stopped && primary.step !== null ? "Try again" : primary.label}
             </button>
           )}
           {(acts.readAgain || acts.setIds || acts.settings || acts.originals || (refused > 0 && refusedBatch !== null) || acts.remove) && (
@@ -293,15 +326,21 @@ export function DatasetDetail(props: DatasetDetailProps) {
         </span>
       </div>
 
+      {served(caps, "GET /api/datasets/{name}/headers") && (
+        <div className="dp-sec">
+          <HeadersLine dataset={d.name} may={may(caps, "data:work") && served(caps, "PUT /api/datasets/{name}/headers")} />
+        </div>
+      )}
       <div className="dp-sec">
         <h3 className="eyebrow">Where it is</h3>
         {s ? (
           <StepRail
             steps={railSteps(s)}
             now={now}
-            says={said ? { pseudonymised: said } : undefined}
+            says={{ ...(said ? { pseudonymised: said } : {}), ...(stopped ? { [stopped.step]: { what: "stopped", when: "", next: true } } : {}) }}
             pick={view !== null && stepOf(s, "pseudonymised") !== null ? { step: "pseudonymised", open, controls: stepId, onPick: () => setStepOpen(!open) } : null}
-            run={runOffers(caps, "datasets", railSteps(s), pressed, runStep)}
+            run={railRuns}
+            more={{ main_scans: mainScansMore(caps, d.name) }}
           />
         ) : maySummarise(caps) && !props.summaryWhy ? (
           <p className="meta">Reading where it is.</p>
@@ -313,6 +352,11 @@ export function DatasetDetail(props: DatasetDetailProps) {
         ) : (
           <StepRail steps={stepsOfSources(d)} now={now} />
         )}
+        {stopped && !(open && view && view.phase !== "done") && (
+          <p className="ps-stopped dp-stopped" role="status">
+            Stopped: {stopped.words} <span className="meta">{STOPPED_NEXT}</span>
+          </p>
+        )}
       </div>
 
       {open && view && view.phase !== "done" && (
@@ -321,6 +365,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
           dataset={d}
           summary={s}
           pseudo={pseudo}
+          stopped={stopped}
           onChanged={(words, running) => {
             // what the person started stays in sight: the step's summary once it is done, the next steps running beside it
             setStepOpen(true);
@@ -341,11 +386,11 @@ export function DatasetDetail(props: DatasetDetailProps) {
         <div className="dp-cols">
           <div className="dp-col">
             <h3 className="eyebrow">What it holds</h3>
-            <Holds dataset={d} summary={s} />
+            <Holds dataset={d} summary={s} reviews={may(caps, "review:see")} />
           </div>
           <div className="dp-col">
             <h3 className="eyebrow">Main scans</h3>
-            <MainScans caps={caps} dataset={d.name} picks={picks} step={stepOf(s, "main_scans")} />
+            <MainScans caps={caps} dataset={d.name} picks={picks} nothing={nothing} step={stepOf(s, "main_scans")} />
           </div>
           {logCol}
         </div>
@@ -381,7 +426,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
 }
 
 /** What a dataset holds: the funnel, how sure the sort is, its kinds of scan and its files. */
-function Holds({ dataset: d, summary: s }: { dataset: Dataset; summary: DatasetSummary | null }) {
+function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; summary: DatasetSummary | null; reviews?: boolean }) {
   const subjects = s?.subjects ?? d.totals.subjects;
   const visits = s ? (s.sessions ?? s.studies) : d.totals.sessions || d.totals.studies;
   const scans = s?.scans ?? d.totals.stacks;
@@ -392,8 +437,20 @@ function Holds({ dataset: d, summary: s }: { dataset: Dataset; summary: DatasetS
   const most = Math.max(1, ...kinds.map((k) => k.scans));
   const files = filesOf(d, s);
   const bytes = s?.files.bytes ?? null;
-  const refused = s?.files.refused ?? d.totals.refused_files;
+  // record 56 (2026-10-11): the files set aside by policy are counted, with their kinds behind "why"; the rest were refused and keep their page
+  const setAside = s?.files.set_aside ?? 0;
+  const asideKinds = setAsideWords(s?.files.set_aside_kinds);
+  const [why, setWhy] = useState(false);
+  // Nima, 2026-10-12: a dataset counts the subjects of its stacks; whose its set-aside files are, where no stack of theirs is here, is said of the files
+  const asideOf = setAsideOfWords(setAside, s?.files.set_aside_no_scans);
+  const refused = refusedOnly({ refused: s?.files.refused ?? d.totals.refused_files, set_aside: setAside });
   const batch = s?.files.refused_batch ?? null;
+  // the duplicate policy (2026-10-10): files gone from the folder, files a
+  // person let go out of the read, and the questions about scans filed
+  // already under another subject, visit or series, which Review lists
+  const gone = s?.files.gone ?? 0;
+  const leftOut = s?.files.left_out ?? 0;
+  const questions = s?.identity_questions ?? 0;
   const nothing = scans === 0 && subjects === 0;
   return (
     <>
@@ -451,25 +508,60 @@ function Holds({ dataset: d, summary: s }: { dataset: Dataset; summary: DatasetS
       <div className="meta">
         {files === null ? "files not counted yet" : `${n(files)} ${files === 1 ? "file" : "files"}`}
         {bytes !== null && bytes > 0 ? ` · ${sizeWords(bytes)}` : ""}
+        {setAside > 0 && (
+          <>
+            {` · ${n(setAside)} set aside`}
+            {asideOf && (
+              <>
+                {", "}
+                <span className="dp-phrase">{asideOf}</span>
+              </>
+            )}
+            {asideKinds && (
+              <>
+                {", "}
+                <button type="button" className="link-button" aria-expanded={why} onClick={() => setWhy(!why)}>
+                  why
+                </button>
+              </>
+            )}
+          </>
+        )}
         {refused > 0 && (
           <>
             {" · "}
             {batch !== null ? <a href={href("data", "batch", String(batch))}>{n(refused)} refused, why</a> : `${n(refused)} refused`}
           </>
         )}
+        {gone > 0 && ` · ${n(gone)} gone from the folder`}
+        {leftOut > 0 && ` · ${n(leftOut)} left out of the read`}
       </div>
+      {why && asideKinds && <div className="meta">Not scans: {asideKinds}</div>}
+      {questions > 0 && (
+        <div className="meta">
+          {reviews ? (
+            <a href={narrow(href("review", "identifiers"), { dataset: d.name })}>
+              {n(questions)} {questions === 1 ? "question" : "questions"}: a scan filed already elsewhere
+            </a>
+          ) : (
+            `${n(questions)} ${questions === 1 ? "question" : "questions"}: a scan filed already elsewhere`
+          )}
+        </div>
+      )}
     </>
   );
 }
 
 /** The main scans per role: picked, clear and borders, with the way to Review. */
-function MainScans({ caps, dataset, picks, step }: { caps: Capabilities; dataset: string; picks: PickLine[] | null; step: SummaryStep | null }) {
+function MainScans({ caps, dataset, picks, nothing, step }: { caps: Capabilities; dataset: string; picks: PickLine[] | null; nothing: string | null; step: SummaryStep | null }) {
   const reviews = may(caps, "review:see");
   const lines = [...(picks ?? [])].sort((a, b) => roleOrder(a.role, b.role));
+  // 2026-10-12: a run that picked nothing says why, in the engine's words
+  const none = step?.state === "running" ? "Picking now." : nothing ? `None picked: ${nothing}.` : "None picked yet.";
   return (
     <>
       {step?.state === "off" && <p className="meta">Off for this dataset.</p>}
-      {step?.state !== "off" && lines.length === 0 && <p className="meta">{step?.state === "running" ? "Picking now." : "None picked yet."}</p>}
+      {step?.state !== "off" && lines.length === 0 && <p className="meta">{none}</p>}
       {lines.map((l) => {
         const rest = Math.max(0, l.picked - l.clear);
         return (
@@ -490,11 +582,11 @@ function MainScans({ caps, dataset, picks, step }: { caps: Capabilities; dataset
         );
       })}
       <div className="meta">
-        Picked after every sort by the rules in the pack
-        {reviews && (
+        Picked after every sort by its own rules, or the pack&apos;s
+        {mayMainScans(caps) && (
           <>
             {" · "}
-            <a href={href("review", "rules")}>the rules</a>
+            <a href={narrow(href("review", "picks"), { dataset })}>Main scans and rules</a>
           </>
         )}
       </div>

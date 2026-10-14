@@ -6,7 +6,15 @@
 // what it did, for whom, how far it got, what stopped it and the next move.
 // A cancel goes by the verb's grant: a digest is Data work, a sort
 // Pipelines work, a release Release work; the card keeps its button and
-// says why when a person lacks the grant.
+// says why when a person lacks the grant. Since 2026-10-12 a stopped run's
+// job leaves Now once a later job took its run up again, and says which; a
+// run's job that made nothing stays in Now to be looked at; Run again of a
+// run opens its pre-flight first. Since 2026-10-13 a pipeline run's job, in
+// Now and in All jobs, opens its run, where what it made is: a click anywhere
+// on its card, or Open run.
+// Since Wave 7a Models is a page here
+// (#pipelines/models, spec section 13.1), and a person who may see models
+// and not the jobs opens it first.
 
 import { useCallback, useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
@@ -19,21 +27,49 @@ import { href } from "../routes";
 import { messageOf } from "../settings/common";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { ModelsPage } from "../models/ModelsPage";
 import { CatalogPage } from "./Catalog";
+import { AddPipelineDialog } from "./PipelineSetup";
+import { setupActs } from "./pipelineSetup";
 import { ops } from "./client";
 import { PlanPage, plansOffered } from "./PlanPage";
 import { RunPage } from "./RunPage";
+import { RunAgainDialog, type Again } from "./RunAgain";
 import { runActs } from "./runs";
-import { cardOf, countByFilter, FILTERS, filterJobs, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
+import { runOfJob, viewActs } from "./results";
+import { RunResultPage } from "./RunResult";
+import { cardOf, countByFilter, FILTERS, filterJobs, needsALook, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
 import { isWorker, wordsOf } from "./verbs";
+import { FailLine } from "./Reason";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
 
-/** The Pipelines page's two pages: the jobs, and since record 45 the catalog where the engine serves it; since record 49 a run's own page and the assistant's plan. */
-export function PipelinesPage({ caps, page = null, arg = null }: { caps: Capabilities; page?: string | null; arg?: string | null }) {
+/** The Pipelines page's two pages: the jobs, and since record 45 the catalog where the engine serves it; since record 49 a run's own page and the assistant's plan; since 2026-10-13 a unit's result on its run. */
+export function PipelinesPage({ caps, page = null, arg = null, query }: { caps: Capabilities; page?: string | null; arg?: string | null; query?: Record<string, string> }) {
   const catalog = may(caps, "pipelines:see") && served(caps, "GET /api/pipelines");
   const [said, setSaid] = useState<string | null>(null);
+  // record 55 H2, round 4: a pipeline added in the desk, and the catalog read again after it
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState(0);
+  // since 2026-10-13 a unit's result, drawn: #pipelines/runs/4?view=<unit>
+  if (page === "runs" && arg !== null && /^\d+$/.test(arg) && query?.view && viewActs(caps)) {
+    return (
+      <section className="pipelines">
+        <div className="data-head">
+          <div className="grow">
+            <span className="eyebrow">Pipelines</span>
+            <h1>Run {arg}</h1>
+          </div>
+        </div>
+        <RunResultPage id={Number(arg)} unit={query.view} />
+      </section>
+    );
+  }
+  const modelsOpen = may(caps, "models:see") && served(caps, "GET /api/models");
+  if (modelsOpen && (page === "models" || !may(caps, "pipelines:see"))) {
+    return <ModelsPage caps={caps} id={page === "models" && arg !== null && /^\d+$/.test(arg) ? Number(arg) : null} />;
+  }
   if (page === "runs" && arg !== null && /^\d+$/.test(arg) && runActs(caps).open) {
     return (
       <section className="pipelines">
@@ -43,7 +79,6 @@ export function PipelinesPage({ caps, page = null, arg = null }: { caps: Capabil
             <h1>Run {arg}</h1>
           </div>
         </div>
-        <PipelinesChips on="catalog" />
         <RunPage caps={caps} id={Number(arg)} />
       </section>
     );
@@ -57,7 +92,6 @@ export function PipelinesPage({ caps, page = null, arg = null }: { caps: Capabil
             <h1>A planned run</h1>
           </div>
         </div>
-        <PipelinesChips on="catalog" />
         <PlanPage caps={caps} id={arg} />
       </section>
     );
@@ -69,43 +103,63 @@ export function PipelinesPage({ caps, page = null, arg = null }: { caps: Capabil
           <div className="grow">
             <span className="eyebrow">Pipelines</span>
             <h1>Catalog</h1>
-            <p className="lede">What this engine can run, pinned by image, and what each run made.</p>
+            <p className="lede">What this engine can run, each pinned by its image.</p>
+          </div>
+          {setupActs(caps).add && (
+            <button type="button" className="button" onClick={() => setAdding(true)}>
+              <Icon name="plus" />
+              Add a pipeline
+            </button>
+          )}
+        </div>
+        {said && <p className="meta">{said}</p>}
+        <CatalogPage key={added} caps={caps} onQueued={setSaid} part="catalog" />
+        {adding && (
+          <AddPipelineDialog
+            onClose={() => setAdding(false)}
+            onDone={(w) => {
+              setAdding(false);
+              setAdded((n) => n + 1);
+              setSaid(w);
+            }}
+          />
+        )}
+      </section>
+    );
+  }
+  // spec 13.1: the runs are a page of their own in the side
+  if (page === "runs" && arg === null && catalog) {
+    return (
+      <section className="pipelines">
+        <div className="data-head">
+          <div className="grow">
+            <span className="eyebrow">Pipelines</span>
+            <h1>Runs</h1>
           </div>
         </div>
-        <PipelinesChips on="catalog" />
         {said && <p className="meta">{said}</p>}
-        <CatalogPage caps={caps} onQueued={setSaid} />
+        <CatalogPage caps={caps} onQueued={setSaid} part="runs" />
       </section>
     );
   }
   return <JobsPage caps={caps} catalog={catalog} />;
 }
 
-function PipelinesChips({ on }: { on: "jobs" | "catalog" }) {
-  return (
-    <div className="chips pages">
-      <a className={on === "jobs" ? "opt on" : "opt"} href={href("pipelines")} aria-current={on === "jobs" ? "page" : undefined}>
-        Jobs
-      </a>
-      <a className={on === "catalog" ? "opt on" : "opt"} href={href("pipelines", "catalog")} aria-current={on === "catalog" ? "page" : undefined}>
-        Catalog
-      </a>
-    </div>
-  );
-}
 
-function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
+function JobsPage({ caps }: { caps: Capabilities; catalog?: boolean }) {
   const live = useLiveJobs(caps);
   const [all, setAll] = useState<JobRow[] | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const [filter, setFilter] = useState<StateFilter>("all");
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const [said, setSaid] = useState<string | null>(null);
+  const [again, setAgain] = useState<Again | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [since] = useState(() => Date.now());
   const lists = served(caps, "GET /api/jobs");
   const cancels = served(caps, "POST /api/jobs/{id}/cancel");
   const queues = served(caps, "POST /api/jobs");
+  const opensRuns = runActs(caps).open;
 
   const read = useCallback(() => {
     if (!lists) return;
@@ -150,35 +204,50 @@ function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
     const holds = may(caps, c.cancel);
     const mayCancel = holds && cancels;
     const mayQueue = holds && queues;
+    const run = opensRuns ? runOfJob(j) : null;
     return (
       <Card
         key={j.id}
         card={c}
+        open={run !== null ? href("pipelines", "runs", String(run)) : null}
         reason={holds ? null : `needs work on ${wordsOf(j).page}`}
         onCancel={mayCancel && (c.tone === "running" || c.tone === "queued") ? () => act(c.tone === "queued" ? `Job ${j.id} is dropped from the queue.` : `Job ${j.id} stops at its next heartbeat; what is written stays written.`, ops.cancel(j.id)) : null}
-        onNext={mayQueue && c.next ? () => act(`Queued again as a new job.`, ops.enqueue(c.next!.command)) : null}
-        onDismiss={c.tone === "failed" || c.tone === "cancelled" ? () => setDismissed((was) => new Set([...was, j.id])) : null}
+        onNext={mayQueue && c.next ? () => (c.again ? setAgain(c.again) : act(`Queued again as a new job.`, ops.enqueue(c.next!.command))) : null}
+        onDismiss={c.tone === "failed" || c.tone === "cancelled" || c.made?.head === "nothing made" ? () => setDismissed((was) => new Set([...was, j.id])) : null}
       />
     );
   };
 
   const nowJobs = (live.open ?? all?.filter((j) => j.state === "running" || j.state === "queued" || j.state === "cancelling") ?? []).filter((j) => !dismissed.has(j.id));
-  // a queue worker's own row ends when the engine restarts: never a failure of anyone's work, so it waits folded under All jobs
-  const recentFailed = (all ?? []).filter((j) => !isWorker(j) && (j.state === "failed" || j.state === "cancelled") && !dismissed.has(j.id) && Date.parse(j.finished_at ?? j.started_at) > now - 7 * 86_400_000).slice(0, 5);
+  // a queue worker's own row ends when the engine restarts: never a failure of anyone's work, so it waits folded under All jobs;
+  // a stopped run's job whose run a later job took up again needs no look, and a run's job that made nothing does
+  const recentFailed = (all ?? []).filter((j) => !isWorker(j) && !dismissed.has(j.id) && needsALook(j, now)).slice(0, 5);
   const shown = filterJobs(all ?? [], filter).filter((j) => !dismissed.has(j.id) && !isWorker(j));
   const workers = (all ?? []).filter((j) => isWorker(j) && j.state !== "running");
   const counts = countByFilter((all ?? []).filter((j) => !isWorker(j)));
 
   return (
     <section className="pipelines">
+      {again && (
+        <RunAgainDialog
+          caps={caps}
+          again={again}
+          onClose={() => setAgain(null)}
+          onDone={(w) => {
+            setAgain(null);
+            setSaid(w);
+            live.refresh();
+            read();
+          }}
+        />
+      )}
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">Pipelines</span>
           <h1>Jobs</h1>
-          <p className="lede">Everything heavy runs as a job the engine queues: digests, pseudonymisation, sorting, releases, backups. What runs is here as it runs; what ran stays.</p>
+          <p className="lede">What runs and waits now, and every job that ran.</p>
         </div>
       </div>
-      {catalog && <PipelinesChips on="jobs" />}
       {!lists && <p className="meta">This engine does not list its jobs.</p>}
       {said && <p className="meta">{said}</p>}
       {why && all === null && <p className="warn">The jobs could not be read: {why}</p>}
@@ -218,23 +287,25 @@ function JobsPage({ caps, catalog }: { caps: Capabilities; catalog: boolean }) {
           <div className="jobs-now">{workers.map(card)}</div>
         </details>
       )}
-      <div className="note gated">
-        <Icon name="lock" />
-        <div className="note-body">
-          <p className="note-lead">Who may act</p>
-          <p className="note-detail">A digest is cancelled with Data: Work, a sort with Pipelines: Work, a release with Release: Work, a backup with Database: Work. The card keeps its button and says why when a person lacks the grant.</p>
-        </div>
-      </div>
     </section>
   );
 }
 
-function Card({ card: c, reason, onCancel, onNext, onDismiss }: { card: JobCard; reason: string | null; onCancel: (() => void) | null; onNext: (() => void) | null; onDismiss: (() => void) | null }) {
-  const tone = c.tone === "queued" ? "job queued" : c.tone === "failed" ? "job failed" : c.tone === "cancelled" ? "job cancelled" : c.tone === "done" ? "job done" : "job";
-  const sq = c.tone === "failed" ? "sq caution" : c.tone === "running" ? "sq brand" : "sq";
+/** A job as a card; a pipeline run's job opens its run (`open`, its page's address). */
+export function Card({ card: c, reason, open: opens = null, onCancel, onNext, onDismiss }: { card: JobCard; reason: string | null; open?: string | null; onCancel: (() => void) | null; onNext: (() => void) | null; onDismiss: (() => void) | null }) {
+  // a run's job that did not make all it was for reads in caution, never a bare done
+  const short = c.made !== null && c.made.tone === "caution";
+  // a stopped job whose run a later job took up again reads as over, not as a failure to mend
+  const tone = c.tone === "queued" ? "job queued" : c.tone === "failed" ? (c.taken ? "job done" : "job failed") : c.tone === "cancelled" ? "job cancelled" : c.tone === "done" ? (short ? "job done short" : "job done") : "job";
+  const sq = (c.tone === "failed" && !c.taken) || short ? "sq caution" : c.tone === "running" ? "sq brand" : "sq";
   const open = c.tone === "running" || c.tone === "queued";
+  // a run's job opens its run on a click anywhere on the card but its buttons and links; Open run is the way by the keyboard
+  const go = (e: { target: EventTarget | null }) => {
+    if (!opens || (e.target instanceof Element && e.target.closest("a, button, input, select, summary"))) return;
+    location.hash = opens;
+  };
   return (
-    <div className={tone}>
+    <div className={opens ? `${tone} openable` : tone} onClick={opens ? go : undefined}>
       <span className={sq}>
         <Icon name={c.icon} />
       </span>
@@ -271,6 +342,11 @@ function Card({ card: c, reason, onCancel, onNext, onDismiss }: { card: JobCard;
             {reason && <span className="reason">{reason}</span>}
           </span>
         ))}
+        {opens && (
+          <a className="button secondary small" href={opens}>
+            Open run
+          </a>
+        )}
         {onDismiss && (
           <button type="button" className="button quiet small" onClick={onDismiss}>
             Dismiss
@@ -285,10 +361,21 @@ function Card({ card: c, reason, onCancel, onNext, onDismiss }: { card: JobCard;
           <span className="meta num">{c.progress.words}</span>
         </div>
       )}
-      {c.error && (
+      {c.made?.rest && (
         <div className="how">
-          <span className="warn">{c.error}</span>
+          <span className="made-rest">{c.made.rest}</span>
         </div>
+      )}
+      {c.failure?.kind ? (
+        <div className="how">
+          <FailLine f={c.failure} />
+        </div>
+      ) : (
+        c.error && (
+          <div className="how">
+            <span className="warn">{c.error}</span>
+          </div>
+        )
       )}
     </div>
   );

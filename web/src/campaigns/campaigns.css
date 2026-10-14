@@ -13,6 +13,8 @@
 .campaign > .state-bar { margin: 0.2rem 0 0.4rem; }
 
 .campaign-items .answer-chip { display: inline-block; margin-right: 0.6rem; white-space: nowrap; }
+/* a check's answer is a sentence: each rater's on its own line, wrapped, so the outcome keeps its width */
+.campaign-items .answer-chip.is-check { display: block; margin: 0 0 0.15rem; white-space: normal; }
 .closure { display: grid; gap: 0.4rem; }
 .closure p { margin: 0; }
 .make-form { display: grid; gap: 0.8rem; }
@@ -65,15 +67,19 @@
 .suggest .candidate { grid-template-columns: 5rem 1fr auto; }
 .suggest .candidate.on { border-color: var(--n-brand-line); background: var(--n-bg-selected); }
 .suggest .candidate .p kbd { margin-right: 0.4rem; }
-.evidence-lines { display: grid; gap: 0.25rem; }
-.evidence-toggle { justify-self: start; font-size: var(--n-text-size-small); }
-.evidence { display: grid; gap: 0.15rem; margin: 0; padding: 0; list-style: none; font-size: var(--n-text-size-small); }
-.evidence .ev { display: grid; grid-template-columns: 5.5rem 6.5rem minmax(0, 1fr); gap: 0.5rem; align-items: baseline; padding: 0.15rem 0; border-bottom: 1px solid var(--n-line); }
-.evidence .ev.differ .ev-value { color: var(--n-caution-fg); }
+.evidence-lines { display: grid; gap: 0.1rem; margin: 0; }
+.ev-head { display: flex; align-items: baseline; gap: 0.5rem; margin: 0; line-height: 1.2; font-size: 11px; }
+.ev-title { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--n-text-faint); }
+.evidence { display: grid; gap: 0; margin: 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.2; }
+.evidence .ev { display: grid; grid-template-columns: 5.5rem 6.5rem minmax(0, 1fr); gap: 0 0.5rem; align-items: baseline; font-size: 12px; line-height: 1.2; padding: 0 0 0 0.45rem; border-left: 3px solid transparent; }
+.evidence .ev + .ev { border-top: 1px solid var(--n-line); }
+/* where the rules and System 1 differ: the line framed in the caution colour, no mark beside it */
+.evidence .ev.differ { border-left-color: var(--n-caution-icon); background: var(--n-caution-bg); }
+.evidence-lines.full .ev-why { white-space: normal; }
 .evidence .ev-axis { color: var(--n-text-faint); }
 .evidence .ev-value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .evidence .ev-why { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--n-text-dim); }
-.evidence .ev-more { grid-column: 1 / -1; margin: 0.2rem 0 0.3rem; }
+.evidence .ev-more { grid-column: 1 / -1; color: var(--n-text-faint); font-size: 11px; line-height: 1.25; overflow-wrap: anywhere; }
 .evidence .ev-read { margin-right: 0.7rem; white-space: nowrap; font-family: var(--n-font-mono); }
 .batch { display: grid; gap: 0.6rem; }
 .batch-head { display: flex; gap: 0.6rem; align-items: baseline; flex-wrap: wrap; }
@@ -101,7 +107,10 @@
 .reader-head .said { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .reader-head .said .i { vertical-align: -3px; margin-right: 0.3rem; }
 .reader-head .order-toggle .opt { min-height: 1.5rem; font-size: 12px; }
-.rate-count-line { font-size: var(--n-text-size-small); color: var(--n-text-faint); font-variant-numeric: tabular-nums; }
+.rate-count-line { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: var(--n-text-size-small); color: var(--n-text-faint); font-variant-numeric: tabular-nums; }
+/* the head stays one line: its toggles never wrap, the counts give way first */
+.reader-one[data-reader-size] .reader-head > .chips, .reader-one[data-reader-size] .reader-head > .button { flex: none; flex-wrap: nowrap; }
+.size-toggle kbd { align-self: center; margin-left: 0.2rem; }
 .rate-count-line b { color: var(--n-text); }
 .on-this { font-variant-numeric: tabular-nums; }
 /* an answer taken: its words come in with a brief light, then stay quiet */
@@ -149,6 +158,37 @@
 .reader-one .viewer-planes.enlarged .viewer-plane.big { grid-row: auto; grid-column: auto; }
 .reader-one .viewer-stage { width: min(100cqw, calc(100cqh - 2.4rem)); max-height: none; }
 .reader-one .viewer-foot { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* A fixed size per screen class (record 55 H5, Nima: "a fixed size on a big screen"): from a laptop up,
+   the picture box and the panel are of a set size in each class, whatever the item and wherever the
+   window lies inside the class, so a screen shows the same layout every time; the room left over lies
+   around the reader, never inside the picture. Each class is chosen by the window's width and height
+   both, and grows the head and the panel by one factor (1, 1.25, 1.5), the laptop's proportions kept.
+   The compact view gives the picture the room the expanded view gives the panel. Below a laptop's
+   class (a small window, a phone) the picture takes what is left, as before. 106 px is the top bar,
+   the page's padding and the head line at the factor 1. */
+.reader-one[data-reader-size] { --side-w: 34rem; }
+.reader-one[data-reader-size="compact"] { --side-w: 30rem; }
+@media (min-width: 860.02px) {
+  .reader-one[data-reader-size] .rate-grid { grid-template-columns: minmax(0, 1fr) calc(var(--side-w) * var(--reader-scale)); }
+}
+@media (min-width: 1400px) and (min-height: 760px) {
+  .reader-one[data-reader-size] { --reader-scale: 1; --pic-h: 640px; --pic-w: 584px; }
+  .reader-one[data-reader-size="compact"] { --pic-w: 648px; }
+}
+@media (min-width: 1880px) and (min-height: 940px) {
+  .reader-one[data-reader-size] { --reader-scale: 1.25; --pic-h: 820px; --pic-w: 920px; }
+  .reader-one[data-reader-size="compact"] { --pic-w: 1008px; }
+}
+@media (min-width: 2520px) and (min-height: 1280px) {
+  .reader-one[data-reader-size] { --reader-scale: 1.5; --pic-h: 1150px; --pic-w: 1420px; }
+  .reader-one[data-reader-size="compact"] { --pic-w: 1528px; }
+}
+@media (min-width: 1400px) and (min-height: 760px) {
+  .reader-one[data-reader-size] .rate-grid { grid-template-columns: var(--pic-w) calc(var(--side-w) * var(--reader-scale)); justify-content: center; }
+  /* the picture box is the class's; the panel beside it takes the window's height */
+  .reader-one[data-reader-size] .rate-picture { height: var(--pic-h); align-self: start; }
+}
 
 /* a narrow screen (a phone, a window at half a laptop): the pictures over the panel and the page
    scrolls; the pictures keep a side as wide as the screen, the three planes two by three units */
@@ -231,6 +271,9 @@
 .reader-one .act-answer { min-width: 7.5rem; justify-content: center; font-size: 14px; }
 .reader-one .act-unsure { min-height: 1.9rem; }
 .reader-one .why-input { flex: 1 1 6rem; min-height: 1.9rem; }
+/* compact: the answer's bar on one line, the why box the one to give way */
+.reader-one[data-reader-size="compact"] .actions { flex-wrap: nowrap; }
+.reader-one[data-reader-size="compact"] .why-input { min-width: 3rem; }
 .reader-one .suggest { padding: 0.3rem 0.55rem; gap: 0.25rem; }
 .reader-one .suggest-words { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* a candidate on one line: only the axes the systems differ on, the rest are filled in on the rows */
@@ -399,8 +442,35 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .compare-reader .tool kbd, .compare-reader .compare-auto kbd, .compare-reader .said-undo kbd { text-transform: uppercase; }
 .compare-reader .said-undo kbd, .compare-reader .tool kbd, .compare-reader .compare-auto kbd { margin-left: 0.2rem; padding: 0 0.25rem; border: 1px solid var(--n-line); border-bottom-width: 2px; border-radius: 3px; background: var(--n-bg-raised); color: var(--n-text-faint); font-family: var(--n-font-mono); font-size: 10px; line-height: 1.3; }
 .compare-progress { display: inline-flex; align-items: center; gap: 0.5rem; white-space: nowrap; }
+.compare-pace { display: inline-flex; column-gap: 0.3em; white-space: nowrap; }
+.compare-pace > span { white-space: nowrap; }
+.compare-pace > span + span::before { content: "· "; }
+/* the band says the last answer whole (after type 3's first end-to-end test, where it read "Re…"). Where the
+   line is short, what gives way does so in this order: the campaign's name (cut, whole on hover), then the
+   pace (each part whole or not at all: a part that does not fit wraps onto a line that is not shown), then
+   the last answer, and the part in focus last of all */
+@media (min-width: 860.02px) {
+  .compare-head h1 { flex: none; white-space: nowrap; }
+  .compare-head .eyebrow { flex: 0 1000 auto; min-width: 6rem; overflow: hidden; text-overflow: ellipsis; }
+  .compare-head .compare-pace { flex: 0 100 auto; min-width: 0; flex-wrap: wrap; height: 1lh; margin-left: -0.4rem; overflow: hidden; }
+  .compare-head .compare-pace > span:first-child::before { content: "· "; }
+  .compare-head .said-slot { flex: 1 0.01 auto; min-width: 0; }
+  .compare-head .check-strip { flex-shrink: 0.0001; }
+}
+/* a laptop's band: a shorter meter, so the words beside it keep their room */
+@media (min-width: 860.02px) and (max-width: 1600px) {
+  .compare-head .compare-meter { width: 4.5rem; }
+  .compare-head .eyebrow-section { display: none; }
+}
+/* on a phone the band is lines of its own: the last answer takes a line and wraps, every word of it said */
+@media (max-width: 860px) {
+  .compare-reader .compare-head .said-slot { flex: 1 1 100%; overflow: visible; }
+  .compare-reader .compare-head .said { align-items: baseline; white-space: normal; overflow: visible; }
+  .compare-reader .compare-head .said-words { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
+  .compare-reader .compare-head .compare-pace { flex-wrap: wrap; white-space: normal; }
+}
 .compare-meter { position: relative; display: inline-block; width: 7rem; height: 0.35rem; overflow: hidden; border-radius: 999px; background: var(--n-bg-sunken); }
-.compare-meter > span { position: absolute; inset: 0 auto 0 0; background: var(--n-brand); border-radius: 999px; transition: width 0.3s ease-out; }
+.compare-meter > span { position: absolute; inset: 0 auto 0 0; background: var(--n-brand-mark); border-radius: 999px; transition: width 0.3s ease-out; }
 
 .compare-grid { position: relative; flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: 0.5rem 0.6rem; }
 .compare-reader[data-panels="2"] .compare-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 0.8rem; }
@@ -483,7 +553,7 @@ table.thin.header-table td:first-child { padding-left: 0; }
 .compare-reader .compare-answer .act-answer kbd, .compare-reader .compare-giveback kbd { margin-left: 0.3rem; font-family: var(--n-font-mono); font-size: 10.5px; opacity: 0.8; }
 .compare-reader .compare-giveback { flex: none; min-height: 2.5rem; }
 .compare-auto { flex: none; display: inline-flex; align-items: center; gap: 0.3rem; color: var(--n-text-dim); white-space: nowrap; cursor: pointer; }
-.compare-auto input { margin: 0; accent-color: var(--n-brand); }
+.compare-auto input { margin: 0; accent-color: var(--n-brand-mark); }
 .compare-refused { min-width: 0; display: flex; align-items: center; }
 .compare-refused .warn { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .compare-stop { flex: none; align-self: center; }
@@ -519,4 +589,114 @@ table.thin.header-table td:first-child { padding-left: 0; }
   .compare-tools { height: auto; flex-wrap: wrap; row-gap: 0.3rem; }
   .compare-answer { flex-wrap: wrap; }
   .compare-answers { flex-basis: 100%; }
+}
+
+/* A check (job type 3, record 55 H3, the build spec's section 9.3): the
+   comparison reader with the panels in a grid by their count (1 by 2 up to
+   2 by 4), the made-on scan framed in the brand line, the parts list
+   beside them, the mask's tools in the bar and the answer keys, a chosen
+   reason in its own colour. */
+.check-reader .compare-grid[data-cols] { grid-template-columns: repeat(var(--cols), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows), minmax(0, 1fr)); }
+.compare-body { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.6rem; }
+.compare-body > .compare-grid { min-height: 0; }
+.check-reader .compare-panel.is-made-on, .check-reader .compare-panel.is-made-on.active { border-color: var(--n-brand-line); box-shadow: inset 0 0 0 1px var(--n-brand-line); }
+.check-reader .compare-panel.is-made-on .compare-label { color: var(--n-brand-text); }
+.check-reader .compare-panel.is-added { border-style: dashed; border-color: var(--n-line); }
+.check-reader .compare-label .hint { flex: none; text-transform: none; }
+.check-strip { flex: 0 1 auto; display: inline-flex; align-items: center; gap: 0.5rem; min-width: 0; overflow: hidden; white-space: nowrap; }
+.check-strip .check-part { font-variant-numeric: tabular-nums; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.check-strip .check-placing kbd { margin-left: 0.25rem; font-family: var(--n-font-mono); font-size: 10.5px; }
+.check-strip .check-voters { overflow: hidden; text-overflow: ellipsis; }
+
+.check-parts { zoom: var(--reader-scale); width: 12rem; min-height: 0; display: flex; flex-direction: column; gap: 0.3rem; overflow: hidden; font-size: var(--n-text-size-small); }
+.check-parts-head { flex: none; display: flex; align-items: baseline; justify-content: space-between; gap: 0.4rem; padding: 0 0.2rem; color: var(--n-text-dim); }
+.check-parts-head .check-order { font-size: 12px; }
+.check-part-list, .check-points { min-height: 0; margin: 0; padding: 0; list-style: none; overflow: auto; }
+.check-part-list { flex: 1 1 auto; }
+.check-points { flex: none; max-height: 30%; border-top: 1px solid var(--n-line); padding-top: 0.2rem; }
+.check-part-row { width: 100%; display: grid; grid-template-columns: 2.2rem auto minmax(0, 1fr) auto; align-items: center; gap: 0.35rem; min-height: 1.6rem; padding: 0 0.3rem; border: 0; border-left: 3px solid transparent; border-radius: var(--n-radius); background: transparent; color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.check-part-row:hover { background: var(--n-bg-hover); }
+.check-part-row.on { border-left-color: var(--n-brand-text); background: var(--n-brand-soft); }
+.check-part-row.context { color: var(--n-text-faint); }
+.check-part-row:focus-visible { outline: 2px solid var(--n-focus); outline-offset: -1px; }
+.check-n { font-variant-numeric: tabular-nums; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.check-n.unseen { color: var(--n-text-faint); font-weight: 500; }
+/* a structure by its whole name: wrapped at its hyphens (anywhere when it has none), its volume beside it, its flags under it */
+.check-part-row.named { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 0.35rem; row-gap: 0.1rem; padding-block: 0.2rem; }
+.check-part-row.named .check-n { flex: 1 1 6rem; min-width: 0; overflow: visible; white-space: normal; overflow-wrap: anywhere; line-height: 1.25; }
+.check-part-row.named .check-ml { flex: none; margin-left: auto; }
+.check-part-row.named .check-flags, .check-part-row.named .check-flag { max-width: 100%; }
+.check-ml { font-variant-numeric: tabular-nums; color: var(--n-text-dim); white-space: nowrap; }
+.check-flags { display: flex; flex-wrap: wrap; gap: 0.2rem; min-width: 0; }
+.check-flag { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+.check-vote { padding: 0 0.25rem; font-size: 11px; }
+
+.check-mask input[type="range"] { width: 4.5rem; margin: 0; accent-color: var(--n-brand-mark); }
+.check-opacity { display: inline-flex; align-items: center; gap: 0.25rem; }
+.check-add select { max-width: 9rem; min-height: 1.4rem; padding: 0 0.3rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; font-size: 12px; }
+.check-add select:disabled { color: var(--n-text-faint); }
+
+.check-reader .compare-answers.check-answers { display: flex; gap: 0.35rem; }
+.check-reader .check-answers .pair-answer { flex: 1 1 auto; }
+.check-reader .check-answers .check-note { flex: 1 1 9rem; }
+.check-reader .check-answers .pair-answer .check-needs { flex: none; margin-left: auto; color: var(--n-text-faint); font-size: 11px; font-weight: 500; }
+.check-reader .compare-answers .pair-answer.opt.on.value-tag[data-slot] { border: 1px solid var(--vc); border-left: 4px solid var(--vc); background: var(--vc-bg); box-shadow: inset 0 0 0 1px var(--vc); color: var(--n-text); }
+.check-reader .compare-answers .pair-answer.opt.on.value-tag[data-slot] kbd { border-color: var(--vc); color: var(--n-text); }
+.check-note { display: flex; align-items: stretch; min-width: 9rem; }
+.check-note input { width: 100%; min-height: 2.5rem; padding: 0 0.5rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; }
+.check-note input:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 0; }
+/* up to nine keys: on a narrower bar they take their own line, the send and the rest under them */
+.check-reader .compare-answer { flex-wrap: wrap; row-gap: 0.35rem; }
+@container (max-width: 1500px) { .check-reader .compare-answer > .check-answers { flex: 1 1 100%; } }
+/* a laptop's bar: the nine keys tighter, so each says its words whole */
+@container (max-width: 1400px) {
+  .check-reader .compare-answers.check-answers { gap: 0.2rem; }
+  .check-reader .compare-answers .pair-answer.opt { gap: 0.25rem; padding: 0 0.35rem; font-size: 13px; }
+  .check-reader .compare-answers .pair-answer kbd { min-width: 1.1rem; height: 1.2rem; padding: 0 0.15rem; font-size: 10.5px; }
+  .check-reader .check-answers .pair-answer .check-needs { font-size: 10px; }
+}
+
+@media (max-width: 860px) {
+  .check-reader .compare-grid[data-cols] { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .compare-body { grid-template-columns: minmax(0, 1fr); }
+  .check-parts { width: auto; max-height: 14rem; }
+  .check-reader .compare-answers.check-answers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .check-note { grid-column: 1 / -1; }
+  .check-strip { flex-basis: 100%; white-space: normal; flex-wrap: wrap; }
+  .check-reader .compare-progress { flex-wrap: wrap; white-space: normal; }
+}
+
+/* the check on its campaign page */
+.check-panel { display: grid; gap: 0.4rem; }
+.check-line { margin: 0; }
+.check-counts b { margin-left: 0.25rem; font-variant-numeric: tabular-nums; }
+
+/* New check (section 9.2): rows of keys under an eyebrow and a serif title, the name a quiet edit */
+@media (min-width: 640.02px) { .dialog.new-check { width: min(46rem, calc(100vw - 2rem)); } }
+.dialog-title { flex: 1; display: grid; gap: 0.1rem; min-width: 0; }
+.dialog-title h2 { overflow-wrap: anywhere; }
+.check-name input { width: 100%; padding: 0.15rem 0; border: 0; border-bottom: 1px dashed transparent; background: transparent; color: var(--n-text-dim); font: inherit; font-size: var(--n-text-size-small); }
+.check-name input:hover, .check-name input:focus { border-bottom-color: var(--n-line); color: var(--n-text); outline: none; }
+.check-rows { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 0.75rem 1rem; align-items: baseline; }
+.check-row-label { color: var(--n-text-dim); font-size: var(--n-text-size-small); white-space: nowrap; }
+.check-rows .chips { align-items: center; }
+.opt .opt-count { margin-left: 0.4rem; font-variant-numeric: tabular-nums; }
+.opt.quiet-opt { border-style: dashed; background: transparent; color: var(--n-brand-text); }
+.check-sample input { width: 5rem; }
+.check-reason-tag { gap: 0.3rem; min-height: 1.75rem; font-size: 13px; }
+.check-reason-tag kbd { font-family: var(--n-font-mono); font-size: 11px; color: var(--n-text-dim); }
+.check-reason-tag .check-needs { font-size: 11px; color: var(--n-text-dim); }
+.check-reason-tag .check-remove .i { width: 12px; height: 12px; }
+.check-reason-tag .check-remove { width: 1.2rem; height: 1.2rem; color: var(--n-text-dim); }
+.check-reason-input input { width: 10rem; }
+.check-each { display: inline-flex; align-items: center; gap: 0.3rem; margin-left: 0.4rem; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
+.check-foot { display: grid; gap: 0.5rem; }
+.check-foot-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.check-foot .warn { margin: 0; }
+.check-runs { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.3rem; }
+.check-run { width: 100%; display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 0.7rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font: inherit; text-align: left; cursor: pointer; }
+.check-run:hover:not(:disabled) { border-color: var(--n-brand-line); background: var(--n-bg-hover); }
+@media (max-width: 600px) {
+  .check-rows { grid-template-columns: minmax(0, 1fr); gap: 0.3rem; }
+  .check-row-label { margin-top: 0.4rem; }
 }

@@ -38,11 +38,17 @@ import { answersSummarize, type PaneState, type Proposal } from "./parts";
 import { CompactionNote, ContextMeter } from "./ContextMeter";
 import { exportName, saveText } from "./download";
 import { memory } from "./memory";
-import { loadMentionables, MENTION_KIND, type Mentionable, mentionables, mentionAt, plainMentions, withMention } from "./mentions";
+import { ladderPages } from "./ladder";
+import { GrantsPage, PlansPage } from "./LadderPages";
+import { mayList as mayListSelections } from "../query/selections";
+import { loadMentionables, MENTION_KIND, MENTION_MENU_LABEL, type Mentionable, mentionables, mentionAt, plainMentions, withMention } from "./mentions";
 import { MemoryPage } from "./MemoryPage";
 import { ShareDialog } from "./ShareDialog";
 import { SharedList, SharedPage } from "./SharedPages";
 import { Starters } from "./Starters";
+import { stations } from "./stations";
+import { plansOffered } from "../ops/PlanPage";
+import { PLAN_STATION } from "../ops/runs";
 import { ApprovalCardView, PlanPanel, StatusLine } from "./Cards";
 import { agentFor, cardOfPlan, planShown } from "./events";
 import { liveLine } from "./steps";
@@ -79,6 +85,9 @@ export function AssistantPage({ caps, conversation }: { caps: Capabilities; conv
   if (conversation?.startsWith("s-")) return <SharedPage id={conversation} />;
   // what the assistant keeps (the chat, slice 6)
   if (conversation === "memory") return <MemoryPage caps={caps} />;
+  // record 55 H2, round 5: what waits on the person, and the standing grants (spec 14)
+  if (conversation === "plans" && ladderPages(caps).plans) return <PlansPage caps={caps} />;
+  if (conversation === "grants" && ladderPages(caps).grants) return <GrantsPage caps={caps} />;
   return <ChatPage caps={caps} conversation={conversation} />;
 }
 
@@ -89,6 +98,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   const handed = useRef(opened === null ? takeSaid() : null);
   // one chat: a new conversation goes to the one agent; one kept from before keeps whom it talks to
   const [station, setStation] = useState(() => known?.station ?? agentFor(caps));
+  // 2026-10-13: a plan of a pipeline run is asked here, /plan or its starter, where the assistant serves the station
+  const plans = plansOffered(caps);
   const [conv, setConv] = useState<string | null>(known?.id ?? null);
   const [meta, setMeta] = useState<Chat | null>(known);
   const [missing, setMissing] = useState(false);
@@ -259,8 +270,27 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
       location.hash = href("assistant", "new");
       return;
     }
+    if (name === "plan") {
+      // the analysis-plan station: its plan opens on the Pipelines page as a run filled in, which the person starts
+      if (!plans) {
+        setNote("This assistant makes no plans.");
+        return;
+      }
+      if (!rest) {
+        setNote("Say the question after /plan.");
+        return;
+      }
+      try {
+        const r = await stations.start(PLAN_STATION, rest);
+        location.hash = href("pipelines", "plan", r.run);
+      } catch (e) {
+        setText(`/plan ${rest}`);
+        setFailed(`The plan could not be started: ${said(e)}`);
+      }
+      return;
+    }
     if (name === "help") {
-      setNote(COMMANDS.map((c) => `/${c.name}${c.takes ? ` (${c.takes})` : ""}: ${c.words}`).join("\n"));
+      setNote(COMMANDS.filter((c) => plans || c.name !== "plan").map((c) => `/${c.name}${c.takes ? ` (${c.takes})` : ""}: ${c.words}`).join("\n"));
       return;
     }
     if (name === "status") {
@@ -380,13 +410,13 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
       return next;
     });
 
-  const offered = commandsFor(text);
-  // a card, a cohort or a result named with @ (the chat, slice 12): the lists are read once, when an @ is first typed
+  const offered = commandsFor(text, plans ? [] : ["plan"]);
+  // a card, a cohort, a result or a saved selection named with @ (the chat, slice 12; record 55 K6): the lists are read once, when an @ is first typed
   const typing = mentionAt(text);
   useEffect(() => {
     if (typing === null || mentionable !== null) return;
     setMentionable([]);
-    loadMentionables().then(setMentionable, () => undefined);
+    loadMentionables({ selections: mayListSelections(caps) }).then(setMentionable, () => undefined);
   }, [typing === null]); // eslint-disable-line react-hooks/exhaustive-deps
   const mentionOffer = typing !== null && offered.length === 0 ? mentionables(typing, mentionable ?? []) : [];
   const ended = ending(pane.settled);
@@ -493,6 +523,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
                 <p className="lede">{LEDE}</p>
                 {!conv && (
                   <Starters
+                    plan={plans}
                     onPick={(words) => {
                       setText(words);
                       input.current?.focus();
@@ -510,6 +541,8 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
                 proposals={pane.proposals.filter((p) => p.turn === t.id)}
                 queryCard={(p) => queryCard(p.document, stateOf(p))}
                 changes={pane.changes.filter((c) => c.turn === t.id)}
+                charts={pane.charts[t.id]}
+                files={pane.files[t.id]}
                 onChange={talk.decideChange}
                 onRevise={revise}
                 choice={pane.choice?.turn === t.id && !pane.busy ? pane.choice : null}
@@ -594,7 +627,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
             </div>
           )}
           {mentionOffer.length > 0 && (
-            <div className="command-menu mention-menu" aria-label="Name a card, a cohort or a result">
+            <div className="command-menu mention-menu" aria-label={MENTION_MENU_LABEL}>
               {mentionOffer.map((m) => (
                 <button
                   key={`${m.kind}:${m.id}`}

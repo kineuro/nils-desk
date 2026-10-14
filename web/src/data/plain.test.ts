@@ -15,6 +15,8 @@ describe("a refusal in plain words", () => {
       [new DoorError(403, { error: "this needs data:work" }), "You may not do this."],
       [new TypeError("Failed to fetch"), "NILS did not answer. Try again."],
       [new DoorError(500, { error: "something else entirely" }), "That did not work."],
+      // 2026-10-12: a step's run refused for what it needs of this machine says what to do in the engine's words
+      [new DoorError(409, { error: "refused before it started: the image will not pull; ...", failure: { kind: "dependency", cause: "image", advice: "Check the registry the image is pulled from can be reached, then run it again.", fix: null }, requirements: [] }), "Check the registry the image is pulled from can be reached, then run it again."],
     ];
     for (const [e, words] of cases) {
       const p = plainError(e);

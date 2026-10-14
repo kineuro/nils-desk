@@ -45,7 +45,7 @@ import {
   type Item,
   type LabelSet,
 } from "./client";
-import { StateBar, Tabs } from "./parts";
+import { StateBar } from "./parts";
 import type { RaterStats as Pace } from "./reader";
 import { R48, statsFor } from "./readerDoors";
 import { RaterStats } from "./ReaderParts";
@@ -57,6 +57,8 @@ import { isPair, pairServed } from "./pair";
 import { PairPanel } from "./PairReader";
 import { anchoredServed, isAnchored } from "./anchored";
 import { AnchoredPanel } from "./AnchoredReader";
+import { checkAnswerLine, checkDecisionsWords, checkDoors, checkQuestionOf, checkServed, flagsParts, isCheck, type PartNames } from "./check";
+import { CheckPanel, checkActs } from "./CheckPanel";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -81,7 +83,7 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   const c = load.c;
   return (
     <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} stats={load.stats} said={said} missing={missing} onAct={setActing}>
-      {isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : isAnchored(c) && anchoredServed(caps) ? <AnchoredPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
+      {isCheck(c) && checkServed(caps) ? null : isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : isAnchored(c) && anchoredServed(caps) ? <AnchoredPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
       {acting === "close" && (
         <CloseDialog
           campaign={c}
@@ -142,38 +144,56 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
   const exp = exportRefusal(caps);
   const a = c.agreement;
   const blind = !seesAnswers(caps, c);
+  // a check (job type 3) has one next action: go on checking while results are open, close and write the checks once none is
+  const check = isCheck(c) && checkServed(caps) ? checkActs(caps, c) : null;
   const byItem = new Map<number, Answer[]>();
   for (const x of answers ?? []) byItem.set(x.item_id, [...(byItem.get(x.item_id) ?? []), x]);
+  const rows = shown.slice(0, ROWS);
+  const names = useCheckNames(isCheck(c) ? rows : [], byItem);
+  // a check's answer in words: the verdict and the flagged parts by name, never its form's fields
+  const reasons = isCheck(c) ? checkQuestionOf(c).reasons : null;
+  const words = (i: Item) => (x: Pick<Answer, "value" | "form" | "derivative_id">) => (reasons ? checkAnswerLine(x.value, x.form, reasons, i.derivative_id ? (names.get(i.derivative_id) ?? null) : null) : answerWords(x));
   return (
     <section className="data campaign">
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">
-            <a href={href("campaigns")}>Campaigns</a>
+            <a href={href("review")}>Review</a>
           </span>
           <h1>{c.name}</h1>
           <p className="lede">
             {KIND_WORDS[c.question.kind] ?? c.question.kind}: {questionWords(c.question)} <span className={c.status === "open" ? "tag ok" : "tag"}>{c.status}</span>
           </p>
         </div>
-        {rate && (
-          <a className="button" href={href("campaigns", String(c.id), ab ? "settle" : pair ? "pairs" : anchored ? "anchored" : "rate")} title={ab ? "each item's candidates as A and B, blind to who gave which" : pair ? "two stacks side by side, nothing else of them: which is post" : anchored ? "a candidate beside a reference pre and a reference post, nothing else of them: which does it look like" : undefined}>
+        {check?.head}
+        {rate && !check && (
+          <a className="button" href={href("review", "campaigns", String(c.id), ab ? "settle" : pair ? "pairs" : anchored ? "anchored" : "rate")} title={ab ? "each item's candidates as A and B, blind to who gave which" : pair ? "two stacks side by side, nothing else of them: which is post" : anchored ? "a candidate beside a reference pre and a reference post, nothing else of them: which does it look like" : undefined}>
             {ab ? "Settle" : pair ? "Read pairs" : anchored ? "Read against anchors" : "Rate"}
           </a>
         )}
-        {rate && !ab && !pair && !anchored && galleryOffered(caps, c.question) && (
-          <a className="button secondary" href={href("campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
+        {rate && !ab && !pair && !anchored && !check && galleryOffered(caps, c.question) && (
+          <a className="button secondary" href={href("review", "campaigns", String(c.id), "gallery")} title={suggestOf(c) === "none" ? "a hundred items at once, nothing suggested; give each its value and accept the page in one move" : "a hundred items at once, each with its suggestion; correct the wrong ones and accept the rest in one move"}>
             Gallery
           </a>
         )}
         {adjudicate && (
-          <a className="button" href={href("campaigns", String(c.id), "adjudicate")}>
+          <a className="button" href={check ? `${href("review", "campaigns", String(c.id), "check")}?as=adjudicator` : href("review", "campaigns", String(c.id), "adjudicate")}>
             Adjudicate
           </a>
         )}
-        {c.status !== "closed" && close === null && (
-          <button type="button" className="button secondary" onClick={() => onAct("close")}>
+        {c.status !== "closed" && close === null && !check?.closes && (
+          <button type="button" className={check ? "button quiet" : "button secondary"} onClick={() => onAct("close")}>
             Close
+          </button>
+        )}
+        {check?.closes && c.status !== "closed" && close === null && (
+          <button type="button" className="button" onClick={() => onAct("close")}>
+            Close and write the checks
+          </button>
+        )}
+        {c.status === "closed" && close === null && (
+          <button type="button" className="button" title="a later close writes each refused item that can be written now, as any close does" onClick={() => onAct("close")}>
+            Close again
           </button>
         )}
         {exp === null && (
@@ -182,7 +202,6 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           </button>
         )}
       </div>
-      <Tabs caps={caps} on="campaigns" />
       {said && (
         <p className="meta said">
           <Icon name="check" />
@@ -199,6 +218,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
         ]}
       />
       <StateBar counts={c.counts} />
+      {check && <CheckPanel caps={caps} campaign={c} />}
       {a?.per_axis && Object.keys(a.per_axis).length > 0 && (
         <p className="meta">
           By axis:{" "}
@@ -291,7 +311,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           {sets.map((s, i) => (
             <span key={s.id}>
               {i > 0 && ", "}
-              <a href={href("campaigns", "label-sets", String(s.id))}>
+              <a href={href("review", "label-sets", String(s.id))}>
                 {s.name} v{s.version}
               </a>
             </span>
@@ -300,6 +320,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
       )}
       {stats && stats.raters.length > 0 && <RaterStats stats={stats} />}
       <h2>Items</h2>
+      {refusedLine(c) && <p className="warn">{refusedLine(c)}</p>}
       <div className="chips">
         <button type="button" className={filter === null ? "opt on" : "opt"} onClick={() => setFilter(null)}>
           all <b>{n(items.length)}</b>
@@ -322,8 +343,8 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
             </tr>
           </thead>
           <tbody>
-            {shown.slice(0, ROWS).map((i) => (
-              <ItemRow key={i.id} item={i} answers={byItem.get(i.id) ?? []} blind={blind} />
+            {rows.map((i) => (
+              <ItemRow key={i.id} item={i} answers={byItem.get(i.id) ?? []} blind={blind} words={words(i)} check={reasons !== null} />
             ))}
           </tbody>
         </table>
@@ -331,16 +352,45 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
       {shown.length > ROWS && <p className="meta">The first {n(ROWS)} of {n(shown.length)} are listed.</p>}
       {answers === null && <p className="meta">The answers could not be read at this detail.</p>}
       {blind && <p className="meta">Raters rate blind: each answer shows here once the campaign closes, and to its adjudicators before.</p>}
-      <Says head="What closing does">
-        Every agreed or adjudicated item becomes one decision through Review, {c.closes_into === "stage" ? "staged until a person commits it" : "in force"}; an item a model or an agent settled is staged
-        whatever the campaign says. Items without an outcome stay open in the queue. Leases still out end. Every answer stays, and the agreement is kept.
-      </Says>
+      {check ? null : (
+        <Says head="What closing does">
+          Every agreed or adjudicated item becomes one decision through Review, {c.closes_into === "stage" ? "staged until a person commits it" : "in force"}; an item a model or an agent settled is staged
+          whatever the campaign says. Items without an outcome stay open in the queue. Leases still out end. Every answer stays, and the agreement is kept.
+        </Says>
+      )}
       {children}
     </section>
   );
 }
 
-function ItemRow({ item: i, answers, blind }: { item: Item; answers: Answer[]; blind: boolean }) {
+/**
+ * The names of the parts a check's answers flag, read from each result's
+ * parts door once, for the rows on the page that flag any. A result whose
+ * parts cannot be read keeps its parts by label.
+ */
+function useCheckNames(rows: Item[], byItem: Map<number, Answer[]>): Map<number, PartNames> {
+  const [names, setNames] = useState<Map<number, PartNames>>(() => new Map());
+  const wanted = [...new Map(rows.filter((i) => i.derivative_id && (flagsParts(i.outcome?.form) || (byItem.get(i.id) ?? []).some((a) => flagsParts(a.form)))).map((i) => [i.derivative_id!, i.part_set ?? ""])).entries()].filter(([d]) => !names.has(d));
+  const key = wanted.map(([d, set]) => `${d}/${set}`).join(",");
+  useEffect(() => {
+    if (wanted.length === 0) return;
+    let alive = true;
+    void (async () => {
+      for (const [d, set] of wanted) {
+        const got = await checkDoors.parts(d, set).catch((): PartNames => ({ kind: null, names: new Map() }));
+        if (!alive) return;
+        setNames((m) => new Map(m).set(d, got));
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return names;
+}
+
+function ItemRow({ item: i, answers, blind, words = answerWords, check = false }: { item: Item; answers: Answer[]; blind: boolean; words?: (a: Pick<Answer, "value" | "form" | "derivative_id">) => string; check?: boolean }) {
   const tone = STATES.find((s) => s.state === i.state)?.tone ?? "";
   return (
     <tr>
@@ -358,17 +408,31 @@ function ItemRow({ item: i, answers, blind }: { item: Item; answers: Answer[]; b
           : blind
             ? `${answers.length} ${answers.length === 1 ? "answer" : "answers"}`
             : answers.map((a) => (
-              <span key={a.id} className="answer-chip" title={a.why ?? undefined}>
+              <span key={a.id} className={check ? "answer-chip is-check" : "answer-chip"} title={a.why ?? undefined}>
                 {a.principal.split("@")[0]}
-                {a.role === "adjudicator" ? " (adj.)" : ""} {answerWords(a)}
+                {a.role === "adjudicator" ? " (adj.)" : ""} {words(a)}
                 {a.unsure ? " · unsure" : ""}
               </span>
             ))}
       </td>
       <td>
-        {i.outcome ? answerWords({ value: i.outcome.value, form: i.outcome.form ?? null, derivative_id: i.outcome.derivative_id ?? null }) : ""}
-        {i.outcome?.decisions && <span className="meta"> · decisions {Object.values(i.outcome.decisions).join(", ")}</span>}
-        {i.decision_id !== null && <span className="meta"> · decision {i.decision_id}</span>}
+        {i.state === "refused" ? (
+          <span className="warn" title={i.refused?.at ? `refused ${day(i.refused.at)}` : undefined}>
+            Not written: {i.refused?.why ?? "the close refused it"}
+          </span>
+        ) : i.outcome ? (
+          words({ value: i.outcome.value, form: i.outcome.form ?? null, derivative_id: i.outcome.derivative_id ?? null })
+        ) : (
+          ""
+        )}
+        {i.state === "refused" ? null : check ? (
+          i.outcome?.decisions && checkDecisionsWords(i.outcome.decisions) && <span className="meta"> · {checkDecisionsWords(i.outcome.decisions)}</span>
+        ) : (
+          <>
+            {i.outcome?.decisions && <span className="meta"> · decisions {Object.values(i.outcome.decisions).join(", ")}</span>}
+            {i.decision_id !== null && <span className="meta"> · decision {i.decision_id}</span>}
+          </>
+        )}
         {i.pick_id !== null && <span className="meta"> · pick {i.pick_id}</span>}
       </td>
     </tr>
@@ -376,6 +440,14 @@ function ItemRow({ item: i, answers, blind }: { item: Item; answers: Answer[]; b
 }
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+/** What the page says of the items a close refused, or null where there are none. */
+export function refusedLine(c: Campaign): string | null {
+  const k = c.counts.items.refused ?? 0;
+  if (k === 0) return null;
+  const which = k === 1 ? "1 item was refused at the close; nothing was written for it" : `${n(k)} items were refused at the close; nothing was written for them`;
+  return `${which}, and the row says why.${c.close_again ? " Close again once the reason is gone." : ""}`;
+}
 
 /** The closure panel: what a close will write, counted before anything is written. */
 export function ClosurePanel({ campaign: c, plan }: { campaign: Campaign; plan: Closure }) {
@@ -388,13 +460,13 @@ export function ClosurePanel({ campaign: c, plan }: { campaign: Campaign; plan: 
       {plan.already > 0 && <p className="meta">{n(plan.already)} were resolved by an earlier close.</p>}
       {plan.unresolvedTotal > 0 ? (
         <p>
-          Leaves {n(plan.unresolvedTotal)} unresolved: {plan.unresolved.map((u) => `${n(u.n)} ${u.words}`).join(", ")}. Their review items stay in the queue.
+          Leaves {n(plan.unresolvedTotal)} unresolved: {plan.unresolved.map((u) => `${n(u.n)} ${u.words}`).join(", ")}. {c.closes_into === "check" ? "Their questions close with it; a later check asks them again." : "Their review items stay in the queue."}
         </p>
       ) : (
         <p>Leaves nothing unresolved.</p>
       )}
       {plan.leases > 0 && <p className="meta">Ends {n(plan.leases)} {plan.leases === 1 ? "lease" : "leases"} still out.</p>}
-      <p className="meta">A decision that outranks one of these is left standing, and its item is named as refused. The campaign then takes no claim or answer.</p>
+      <p className="meta">An item that cannot be written (a decision that outranks it stands, or its result or its outcome cannot be read) is left as it is and named as refused, with why. The campaign then takes no claim or answer.</p>
       {c.closes_into === "none" && <p className="meta">It writes no decision: the answers are the labels, to export.</p>}
     </div>
   );
@@ -414,9 +486,10 @@ function CloseDialog({ campaign: c, plan, onClose, onDone }: { campaign: Campaig
         setWhy(refusedWords(e));
       });
   };
+  const again = c.status === "closed";
   return (
     <Dialog
-      title={`Close ${c.name}`}
+      title={again ? `Close ${c.name} again` : `Close ${c.name}`}
       icon="check"
       onClose={onClose}
       foot={
@@ -426,7 +499,7 @@ function CloseDialog({ campaign: c, plan, onClose, onDone }: { campaign: Campaig
             Cancel
           </button>
           <button type="button" className="button" disabled={busy} onClick={go}>
-            Close the campaign
+            {again ? "Close it again" : "Close the campaign"}
           </button>
         </div>
       }

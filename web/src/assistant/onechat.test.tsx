@@ -41,10 +41,10 @@ const caps = (): Capabilities => ({
 });
 
 /** The fake assistant and engine, keeping every call; `turn` is what the stream answers after a message is sent. */
-const doors = (turn: unknown[] = []) => engine(fakeDoors(turn));
+const doors = (turn: unknown[] = [], held: number[] = [], heldLists: number[] = []) => engine(fakeDoors(turn, { held, heldLists }));
 
-async function mount(turn: unknown[] = []) {
-  const e = doors(turn);
+async function mount(turn: unknown[] = [], held: number[] = [], heldLists: number[] = []) {
+  const e = doors(turn, held, heldLists);
   act(() => root.render(<AssistantPage caps={caps()} conversation="c1" />));
   await settle(12);
   return e;
@@ -96,6 +96,38 @@ describe("the Assistant, messages first", () => {
   });
 });
 
+describe("an answer a check sent back (2026-10-11)", () => {
+  it("is read once: the answer written after the check replaces the one before it", async () => {
+    const step = { type: "message-started", messageId: "a9", submissionId: "s5" };
+    // the stream as the assistant sends it: each step on the answer's one message, the mark after the step sent back
+    await mount([
+      { type: "message-appended", message: { id: "u9", role: "user", display: "visible", submissionId: "s5", parts: [text("how many dataset do we have?")] } },
+      step,
+      { type: "message-delta", messageId: "a9", kind: "text", delta: "Two. They are study-fresh and study-identified." },
+      { type: "message-completed", messageId: "a9" },
+      { type: "data-part", messageId: "a9", name: "replaced", data: { kind: "replaced" } },
+      step,
+      { type: "tool-input", messageId: "a9", toolCallId: "t9", toolName: "query_draft", input: {} },
+      { type: "message-completed", messageId: "a9" },
+      { type: "tool-output", toolCallId: "t9", output: "rows" },
+      step,
+      { type: "message-delta", messageId: "a9", kind: "text", delta: "Two: study-fresh and study-identified, by the saved question." },
+      { type: "message-completed", messageId: "a9" },
+      { type: "submission-settled", submissionId: "s5", outcome: "completed" },
+    ]);
+    const box = host.querySelector<HTMLTextAreaElement>("textarea")!;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(box, "how many dataset do we have?");
+      box.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    act(() => button(host, "Send")!.click());
+    await settle(16);
+    const answers = [...host.querySelectorAll(".said")].filter((el) => !el.classList.contains("you")).map(words);
+    expect(answers.filter((w) => /study-fresh/u.test(w))).toEqual([expect.stringMatching(/^Two: study-fresh and study-identified, by the saved question\./u)]);
+    expect(words(host)).not.toMatch(/They are study-fresh/u);
+  });
+});
+
 describe("a query answer", () => {
   it("is one quiet card: Query and its version, its title, Open, the funnel as subjects, visits and scans, and three bars; nothing to accept on it", async () => {
     await mount();
@@ -109,6 +141,42 @@ describe("a query answer", () => {
     expect(words(cards()[1].querySelector(".eyebrow"))).toBe("Query · v2");
     for (const w of ["Accept", "Disregard", "Keep v1", "Keep v2"]) expect(button(host.querySelector(".one-chat-thread")!, w)).toBeNull();
     expect(host.querySelector(".one-chat-thread")!.textContent).not.toMatch(/\bpeople\b/);
+  });
+});
+
+describe("a query answer held back at plain (record 55 K7)", () => {
+  it("says each held count as held back, why on hover, never null, 0 or NaN, on the card and on the panel", async () => {
+    await mount([], [102]);
+    const card = cards()[1];
+    expect([...card.querySelectorAll(".qstep")].map(words)).toEqual(["subjects held back", "visits session held back", "scans stack held back"]);
+    expect([...card.querySelectorAll(".qbar")].map(words)).toEqual(["T1w scans held back subjects held back", "T2w scans held back subjects held back", "FLAIR scans held back subjects held back"]);
+    for (const el of card.querySelectorAll(".held")) expect(el.getAttribute("title")).toMatch(/^fewer than 5, or held beside a count of fewer than 5/u);
+    expect(card.querySelectorAll(".held").length).toBe(9);
+    // a held bar draws no length
+    for (const i of card.querySelectorAll<HTMLElement>(".qbar-track i")) expect(i.style.width).toBe("0px");
+    expect(card.textContent).not.toMatch(/null|NaN|fewer than 5/u);
+    act(() => button(card, "Open")!.click());
+    await settle(10);
+    const p = panel()!;
+    // nothing is compared with the version before, which would tell the count
+    expect([...p.querySelectorAll(".qfunnel .qstep")].map(words)).toEqual(["subjects held back", "visits session held back", "scans stack held back"]);
+    expect(p.textContent).not.toMatch(/null|NaN|\bof 48\b/u);
+  });
+});
+
+describe("a query answer whose list is held back at plain (record 55 K7, small lists)", () => {
+  it("shows its scans as held back with why on hover, never as an answer that lists none, and offers no listing", async () => {
+    await mount([], [], [102]);
+    act(() => button(cards()[1], "Open")!.click());
+    await settle(10);
+    const p = panel()!;
+    act(() => [...p.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find((t) => t.textContent === "Pictures")!.click());
+    await settle(10);
+    const held = p.querySelector(".qchart .held-words")!;
+    expect(held.textContent).toBe("The scans are held back.");
+    expect(held.getAttribute("title")).toMatch(/^a list of fewer than 5 subjects that a quasi identifying field chose/u);
+    expect(p.textContent).not.toMatch(/The pictures show once the answer lists its scans/u);
+    expect(button(p, "List the scans")).toBeNull();
   });
 });
 

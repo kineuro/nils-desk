@@ -88,6 +88,16 @@ export function ClarificationCardView({ card, onChoose }: { card: ClarificationC
   );
 }
 
+/** A question the agent asked that a later turn has closed: kept in its turn as words, its choices named, none of them a button (2026-10-12). */
+export function AskedView({ card }: { card: ClarificationCard }) {
+  return (
+    <div className="ask-choice asked">
+      <p>{card.question}</p>
+      {card.options.length > 0 && <p className="meta">{card.options.map((o) => (o.count !== null ? `${o.label} (${o.count.toLocaleString("en-US")})` : o.label)).join("; ")}</p>}
+    </div>
+  );
+}
+
 const MARK: Record<PlanItem["status"], "check" | "alert" | "play" | "chevron-right" | "x"> = {
   done: "check",
   failed: "alert",

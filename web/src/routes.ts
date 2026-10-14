@@ -55,3 +55,40 @@ export function narrow(hash: string, query: Record<string, string | number | nul
     .join("&");
   return q ? `${hash}?${q}` : hash;
 }
+
+/**
+ * Where an address of the Campaigns section, which joined Review in Wave 7a
+ * (record 55 H3, spec 13.1), opens now: #campaigns is Review's one list of
+ * work, #campaigns/<id>[/<view>] is #review/campaigns/<id>[/<view>], and
+ * #campaigns/label-sets[/<n>] is #review/label-sets[/<n>]; the query stays.
+ * An old link never strands a person.
+ */
+export function fromCampaigns(route: Route): string {
+  const to =
+    route.page === "label-sets"
+      ? href("review", "label-sets", route.arg)
+      : route.page && /^\d+$/u.test(route.page)
+        ? href("review", "campaigns", route.page, route.arg)
+        : href("review", "campaigns");
+  return narrow(to, route.query ?? {});
+}
+
+/** The Settings pages that took the words of the map (spec section 13.1): Database is Backups, Identity is People, and Kvasir's page is Language models. */
+const SETTINGS_MOVED: Record<string, string> = { database: "backups", identity: "people", gateway: "language-models" };
+
+/**
+ * Where an address that moved now leads, or null where it did not move:
+ * Models is a page of Pipelines since Wave 7a (spec section 13.1), so #models
+ * opens #pipelines/models and #models/model/3 opens #pipelines/models/3; the
+ * query section is Query, and #ask, the word round 4 gave it, opens #query; and the Settings pages renamed by
+ * the map keep their old addresses as links to the new ones.
+ */
+export function moved(r: Route): string | null {
+  if (r.section === "models") {
+    const id = r.page === "model" && r.arg !== null && /^\d+$/.test(r.arg) ? r.arg : null;
+    return narrow(href("pipelines", "models", id), r.query ?? {});
+  }
+  if (r.section === "ask") return narrow(href("query", r.page, r.arg, r.sub), r.query ?? {});
+  if (r.section === "settings" && r.page !== null && r.page in SETTINGS_MOVED) return narrow(href("settings", SETTINGS_MOVED[r.page], r.arg, r.sub), r.query ?? {});
+  return null;
+}

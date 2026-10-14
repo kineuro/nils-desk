@@ -29,10 +29,13 @@ import {
   readsPersonnummer,
   revealedOf,
   rulesLine,
+  holdsOf,
+  holdsPatch,
   rulesOf,
   rulesPatch,
   STANDARD,
   stepView,
+  waitingLine,
   waitWords,
   type HeldIds,
 } from "./pseudoStep";
@@ -98,7 +101,7 @@ describe("the held IDs, as the engine answers them", () => {
 });
 
 describe("where the step is", () => {
-  it("is never run, then IDs without a code, then ready, running and done", () => {
+  it("is never run, then IDs without a subject code, then ready, running and done", () => {
     const fresh = stepView({ ...d, held: { files: 0, identifiers: 0 } } as Dataset, step({ held: 0 }), { files: 0, identifiers: 0, ids: [], subjects: { coded: 0, generated: 0 } }, [], false);
     expect(fresh.phase).toBe("fresh");
     expect(fresh.go).toBe(7544);
@@ -123,7 +126,7 @@ describe("where the step is", () => {
     expect(stepView(copied, step({ state: "done", files: 7000, waiting: 544, held: 0 }), { ...heldIds, files: 0, ids: [] }, [], false)).toMatchObject({ phase: "ready", go: 544 });
   });
 
-  it("holds IDs without a code where the engine counts them and does not list them", () => {
+  it("holds IDs without a subject code where the engine counts them and does not list them", () => {
     const v = stepView(d, step(), null, [], false);
     expect(v.phase).toBe("codes");
     expect(v.without).toEqual({ ids: 8, files: 7544 });
@@ -137,7 +140,7 @@ describe("where the step is", () => {
     expect(pn.personnummer).toBe(true);
     expect(primaryOf(pn, false, false)?.label).toBe("Pseudonymise and sort 7,544 files");
     const codes = stepView(d, step(), heldIds, [], false);
-    expect(primaryOf(codes, false, false)).toEqual({ label: "Give the 8 IDs a code", act: "codes" });
+    expect(primaryOf(codes, false, false)).toEqual({ label: "Give the 8 IDs a subject code", act: "codes" });
     // opened, nothing can go yet: no primary until a code is given
     expect(primaryOf(codes, false, true)).toBeNull();
     const some = stepView(d, step(), heldIds, matched, false);
@@ -147,15 +150,19 @@ describe("where the step is", () => {
 
   it("says what waits on a person on its chip, its middle box, the rail and its foot", () => {
     const codes = stepView(d, step(), heldIds, [], false);
-    expect(chipOf(codes, false)).toEqual({ words: "8 IDs need a code", tone: "caution" });
-    expect(idsBox(codes)).toEqual({ big: "8", words: "IDs · none has a code yet", caution: true });
-    expect(railWords(codes)).toEqual({ what: "8 IDs need a code", when: "next step", next: true });
-    expect(waitWords(codes)).toBe("7,544 files of 8 IDs wait for a code");
+    expect(chipOf(codes, false)).toEqual({ words: "8 IDs need a subject code", tone: "caution" });
+    expect(idsBox(codes)).toEqual({ big: "8", words: "IDs · none has a subject code yet", caution: true });
+    expect(railWords(codes)).toEqual({ what: "8 IDs need a subject code", when: "next step", next: true });
+    expect(waitWords(codes)).toBe("7,544 files of 8 IDs wait for a subject code");
     const some = stepView(d, step(), heldIds, matched, false);
-    expect(chipOf(some, true)).toEqual({ words: "2 IDs without a code", tone: "caution" });
-    expect(idsBox(some)).toEqual({ big: "6 of 8", words: "have a code", caution: false });
-    expect(railWords(some)?.what).toBe("6 of 8 IDs have a code");
-    expect(waitWords(some)).toBe("200 files of 2 IDs wait for a code");
+    expect(chipOf(some, true)).toEqual({ words: "2 IDs without a subject code", tone: "caution" });
+    expect(idsBox(some)).toEqual({ big: "6 of 8", words: "have a subject code", caution: false });
+    expect(railWords(some)?.what).toBe("6 of 8 IDs have a subject code");
+    expect(waitWords(some)).toBe("200 files of 2 IDs wait for a subject code");
+    // the waiting step's one line: the next step, and why (2026-10-10)
+    expect(waitingLine(codes)).toBe("Next: 8 IDs have no subject code yet, so their 7,544 files wait. Generate the subject codes from the IDs, or give them from a map.");
+    expect(waitingLine({ ...codes, without: { ids: 1, files: 1 } })).toBe("Next: One ID has no subject code yet, so its file waits. Generate the subject codes from the IDs, or give them from a map.");
+    expect(waitingLine({ ...codes, phase: "ready" })).toBeNull();
     const fresh = stepView({ ...d, held: { files: 0, identifiers: 0 } } as Dataset, step({ held: 0 }), { ...heldIds, files: 0, ids: [] }, [], false);
     expect(railWords(fresh)).toEqual({ what: "not yet", when: "next step", next: true });
     expect(idsBox(fresh).words).toBe("found at the first run");
@@ -260,7 +267,7 @@ describe("the rules", () => {
     expect(rulesLine(d)).toBe("Standard rules");
     const own = { ...d, patient_id: "id-type:study-id", unmapped: "code", tags: { keep_demographics: true, remove: ["0008,1030"], keep: [] }, originals_kept: "vaulted" } as Dataset;
     expect(rulesOf(own)).toEqual({ pid: "type", pidType: "study-id", unknown: "generate", tags: "choose", originals: "vault" });
-    expect(rulesLine(own)).toBe("PatientID gets the study-id · generated codes · own tags · originals vaulted");
+    expect(rulesLine(own)).toBe("PatientID gets the study-id · generated subject codes · own tags · originals vaulted");
   });
 
   it("send only what changed, never where the originals stand, and standard tags clear the dataset's own", () => {
@@ -304,7 +311,9 @@ describe("what the last run did", () => {
     // a run of 2026-10-10 on a test install, whose scans another dataset held already
     const pseudonymise = { result: { files: { seen: 7544, written: 7544, unchanged: 0, held: 0 }, subjects: { new: 8 } } };
     const read = { result: null, progress: { ingested: 0, duplicate: 7328, changed: 0, held: 0, gone: 0 } };
-    expect(outcomeWords(pseudonymise, read, 216)).toBe("7,544 files pseudonymised · 8 new codes · 7,328 files already in the registry · 216 files not images");
+    expect(outcomeWords(pseudonymise, read, 216, 216)).toBe("7,544 files pseudonymised · 8 new subject codes · 7,328 files already in the registry · 216 files set aside: not scans");
+    // record 56: what was set aside is not scans; the rest the read refused
+    expect(outcomeWords(null, read, 217, 216)).toBe("7,328 files already in the registry · 216 files set aside: not scans · 1 file refused");
   });
 
   it("says a run that found everything done already, and a read that left the sort out", () => {
@@ -313,10 +322,40 @@ describe("what the last run did", () => {
     expect(outcomeWords(pseudonymise, read, 0)).toBe("7,544 files pseudonymised already · nothing new to sort");
   });
 
+  it("tells copies of another dataset's scans from this dataset's own, and says what a scan filed elsewhere holds (the duplicate policy)", () => {
+    const read = { result: null, progress: { ingested: 12, duplicate: 9, known: 7, twice: 2, same_instance: 3, changed: 0, held: 0 } };
+    expect(outcomeWords(null, read, 4)).toBe(
+      "12 new files · 7 files already in another dataset · 2 files twice in this dataset · 3 files held: their scan is filed under another subject or visit · 4 files refused",
+    );
+    // a read that found none of them says none of them
+    expect(outcomeWords(null, { result: null, progress: { ingested: 5, duplicate: 0, known: 0, twice: 0, same_instance: 0 } }, 0)).toBe("5 new files");
+  });
+
   it("says what was read and what was held, and nothing where no job is known", () => {
     const pseudonymise = { result: { files: { written: 6, unchanged: 0, held: 2 }, subjects: { new: 1 } } };
-    expect(outcomeWords(pseudonymise, { result: null, progress: { ingested: 6, duplicate: 0, held: 1 } }, 0)).toBe("6 files pseudonymised · 2 files held for a code · 1 new code · 6 files read · 1 file held at the read");
+    expect(outcomeWords(pseudonymise, { result: null, progress: { ingested: 6, duplicate: 0, held: 1 } }, 0)).toBe("6 files pseudonymised · 2 files held for a subject code · 1 new subject code · 6 new files · 1 file held at the read");
     expect(outcomeWords(null, null, 5)).toBeNull();
     expect(outcomeWords({ result: null }, { result: null, progress: null }, 0)).toBeNull();
+  });
+});
+
+describe("what the originals' PatientID holds (2026-10-10)", () => {
+  const rule = (id_type: string) => ({ identity: { id_type, from: [{ field: "PatientID" }], fallback: "StudyInstanceUID" } });
+
+  it("reads the kind from the dataset's rule, and none where no rule names one", () => {
+    expect(holdsOf(rule("personnummer"))).toEqual({ holds: "same", type: "" });
+    expect(holdsOf(rule("patient-id"))).toEqual({ holds: "type", type: "patient-id" });
+    expect(holdsOf({ identity: null })).toBeNull();
+    expect(holdsOf({})).toBeNull();
+  });
+
+  it("sends the rule with the new type and where it reads the ID kept, and nothing when nothing changed", () => {
+    expect(holdsPatch(rule("personnummer"), { holds: "type", type: "patient-id" })).toEqual({ identity: { id_type: "patient-id", from: [{ field: "PatientID" }], fallback: "StudyInstanceUID" } });
+    expect(holdsPatch(rule("patient-id"), { holds: "same", type: "" })).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }], fallback: "StudyInstanceUID" } });
+    expect(holdsPatch(rule("patient-id"), { holds: "type", type: "patient-id" })).toEqual({});
+    expect(holdsPatch(rule("patient-id"), { holds: "type", type: " " })).toEqual({});
+    expect(holdsPatch({}, { holds: "same", type: "" })).toEqual({});
+    // a subject code taken as written is no part of a rule for an identifying ID
+    expect(holdsPatch({ identity: { id_type: "study-id", code: "verbatim", from: [{ field: "PatientID" }] } }, { holds: "same", type: "" })).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
   });
 });

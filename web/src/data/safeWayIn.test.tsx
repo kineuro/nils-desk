@@ -156,6 +156,9 @@ describe("the Data page", () => {
     await settle(8);
     expect(e.of("POST", "/api/places")[0].body).toEqual({ role: "source", root: "incoming", folder: "ward-c" });
     expect(host.textContent).toContain("ward-c is a dataset.");
+    // T4 (Wave 7a section 17): a folder of loose DICOM added on Data is read
+    // by nothing before the person's answer: no job is asked of the engine
+    expect(e.of("POST", "/api/jobs")).toHaveLength(0);
   });
 
   it("asks an anonymised folder's IDs on the way in, one select each set to the subject code and made from the ID, and sends them with the Add", async () => {
@@ -175,7 +178,7 @@ describe("the Data page", () => {
     const subjects = host.querySelector<HTMLSelectElement>("#dataset-subjects")!;
     expect(pid.value).toBe("subject-code");
     expect(subjects.value).toBe("generated");
-    // never the personnummer: it is no PatientID a file may hold
+    // never the ID that is the same everywhere: it is no PatientID a file may hold
     expect([...pid.options].map((o) => o.value)).toEqual(["subject-code", "id-type:study-id"]);
     act(() => button(host, "Add")!.click());
     await settle(8);
@@ -216,7 +219,7 @@ describe("the Data page", () => {
     expect(host.querySelector("#dataset-patient-id")).not.toBeNull();
   });
 
-  it("asks an identified folder what its PatientID holds, a personnummer or an ID, and sends it as the rule its originals are read under", async () => {
+  it("asks an identified folder which kind of identifying ID its PatientID holds, the same everywhere or a hospital or study ID, and sends it as the rule its originals are read under", async () => {
     const e = await page([], (c) => {
       if (c.method === "GET" && c.url.startsWith("/api/places/1/folders?")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 2, folders: ["study-pn", "study-id"].map((name) => ({ name, path: `/srv/in/${name}`, added: false, dataset_id: null, dataset: null, has_derivatives: true })), next: null } };
       const look = /^\/api\/places\/1\/folders\/(study-pn|study-id)$/.exec(c.url);
@@ -229,27 +232,52 @@ describe("the Data page", () => {
     await settle();
     act(() => button(host, "study-pn")!.click());
     await settle();
-    // the one question, asked and never assumed: Add waits for it
-    expect(host.textContent).toContain("PatientID holds");
+    // the one question, asked and never assumed: Add waits for it; its one line says what an identifying ID is
+    expect(host.textContent).toContain("PatientID holds an identifying ID");
+    expect(host.textContent).toContain("NILS never keeps it; it becomes a subject code.");
     expect(button(host, "Add")!.disabled).toBe(true);
-    act(() => radio(host, "A personnummer").click());
+    act(() => radio(host, "The same everywhere").click());
     expect(button(host, "Add")!.disabled).toBe(false);
     act(() => button(host, "Add")!.click());
     await settle(8);
     expect(e.of("POST", "/api/places")[0].body).toEqual({ role: "source", root: "incoming", folder: "study-pn", identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
-    // an ID of a type: its codes come from a map, on the dataset's pseudonymise step
+    // a hospital or study ID: its subject codes come from a map, on the dataset's pseudonymise step
     act(() => button(host, "Add a dataset")!.click());
     act(() => button(host, "Browse")!.click());
     await settle();
     act(() => button(host, "study-id")!.click());
     await settle();
-    act(() => radio(host, "An ID").click());
-    const which = host.querySelector<HTMLSelectElement>('select[aria-label="Which ID"]')!;
-    // never the personnummer among the types: that is the other answer
+    act(() => radio(host, "A hospital or study ID").click());
+    const which = host.querySelector<HTMLSelectElement>('select[aria-label="Which hospital or study ID"]')!;
+    // never the ID that is the same everywhere among the types: that is the other answer
     expect([...which.options].map((o) => o.value)).toEqual(["study-id"]);
+    // and what becomes of an ID no map names is asked here too, its subject code made from the ID by default (2026-10-10)
+    expect(radio(host, "Generate its subject code from the ID").checked).toBe(true);
     act(() => button(host, "Add")!.click());
     await settle(8);
-    expect(e.of("POST", "/api/places")[1].body).toEqual({ role: "source", root: "incoming", folder: "study-id", identity: { id_type: "study-id", from: [{ field: "PatientID" }] } });
+    expect(e.of("POST", "/api/places")[1].body).toEqual({ role: "source", root: "incoming", folder: "study-id", identity: { id_type: "study-id", from: [{ field: "PatientID" }] }, unmapped: "code" });
+  });
+
+  it("lets a hospital or study ID's files wait for a map instead, when the person says so at Add", async () => {
+    const e = await page([], (c) => {
+      if (c.method === "GET" && c.url.startsWith("/api/places/1/folders?")) return { status: 200, body: { root: "incoming", root_id: 1, path: "/srv/in", count: 1, folders: [{ name: "study-id", path: "/srv/in/study-id", added: false, dataset_id: null, dataset: null, has_derivatives: true }], next: null } };
+      if (c.method === "GET" && c.url === "/api/places/1/folders/study-id") return { status: 200, body: { name: "study-id", path: "/srv/in/study-id", added: false, dataset_id: null, holds_dicom: "yes", has_derivatives: true, layout: IDENTIFIED } };
+      if (c.method === "POST" && c.url === "/api/places") return { status: 201, body: { ...WARD_A, name: c.body?.folder, layout: IDENTIFIED, not_read: null } };
+      return undefined;
+    });
+    act(() => button(host, "Add a dataset")!.click());
+    act(() => button(host, "Browse")!.click());
+    await settle();
+    act(() => button(host, "study-id")!.click());
+    await settle();
+    // the choice belongs to a hospital or study ID: an ID the same everywhere is coded by the key whatever is chosen
+    act(() => radio(host, "The same everywhere").click());
+    expect(host.querySelector('[aria-label="An ID with no subject code"]')).toBeNull();
+    act(() => radio(host, "A hospital or study ID").click());
+    act(() => radio(host, "Wait for a map").click());
+    act(() => button(host, "Add")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/places")[0].body).toEqual({ role: "source", root: "incoming", folder: "study-id", identity: { id_type: "study-id", from: [{ field: "PatientID" }] }, unmapped: "hold" });
   });
 
   it("says a refused Read in one plain line, the engine's words behind a \"?\"", async () => {
@@ -300,7 +328,7 @@ describe("the Data page", () => {
     const acts = host.querySelector(".dp-detail .dp-acts")!;
     const next = acts.querySelector<HTMLAnchorElement>("a.button:not(.secondary)");
     expect(next?.textContent).toBe("Review 8");
-    expect(next?.getAttribute("href")).toBe("#review?dataset=ward-g");
+    expect(next?.getAttribute("href")).toBe("#review/questions?dataset=ward-g");
     // the one next step: no second primary button beside it
     expect(acts.querySelectorAll(".button:not(.secondary):not(.quiet)")).toHaveLength(1);
     expect(host.querySelector("section.data")!.textContent).not.toContain("Pick main scans");
@@ -373,6 +401,23 @@ describe("Sort the files", () => {
     expect(host.textContent).not.toContain("sub-1");
   });
 
+  it("shows the engine's shapes as nothing to read, even at the sensitive level, and moves by the tree alone (2026-10-10)", async () => {
+    // an engine that shapes the names for a person without Data work says so
+    const shaped = { ...UNKNOWN, loose_dicom: ["Aaa-0000", "Aaa-0001"], entry_names: "shapes" as const };
+    const e = engine((c) => (c.method === "PUT" && c.url === "/api/places/4" ? { status: 409, body: { ...ASKED, layout: { ...ASKED.layout, loose_dicom: ["Aaa-0000", "Aaa-0001"], entry_names: "shapes" } } } : undefined));
+    act(() => root.render(<SortFilesDialog caps={caps7a(["PUT /api/places/{id}"])} place={place} layout={shaped} onClose={() => undefined} onDone={() => undefined} />));
+    expect(host.textContent).toContain("2 entries with DICOM. What are they?");
+    expect(host.textContent).not.toContain("Which entries");
+    act(() => radio(host, "Identified").click());
+    act(() => button(host, "Next")!.click());
+    await settle();
+    const asked = host.querySelector('[aria-label="Confirm the move"]')!;
+    expect(asked.querySelectorAll("li")).toHaveLength(0);
+    expect(host.textContent).not.toContain("Aaa-0000");
+    // what is sent names the tree, never an entry
+    expect(e.of("PUT", "/api/places/4")[0].body).toEqual({ move_into: "originals" });
+  });
+
   it("says why it cannot look inside the folder, never looking for good", async () => {
     act(() => root.render(<SortFilesDialog caps={caps7a(["PUT /api/places/{id}"])} place={place} layout={null} onClose={() => undefined} onDone={() => undefined} />));
     await settle();
@@ -417,8 +462,8 @@ describe("Set the IDs", () => {
     await settle();
     expect(button(host, "Save")!.disabled).toBe(true);
     expect(radio(host, "The ID").disabled).toBe(true);
-    act(() => radio(host, "An ID").click());
-    expect([...host.querySelector<HTMLSelectElement>('select[aria-label="Which ID"]')!.options].map((o) => o.value)).toEqual(["study-id"]);
+    act(() => radio(host, "A hospital or study ID").click());
+    expect([...host.querySelector<HTMLSelectElement>('select[aria-label="Which hospital or study ID"]')!.options].map((o) => o.value)).toEqual(["study-id"]);
     act(() => radio(host, "The ID").click());
     act(() => radio(host, "Made from the ID").click());
     act(() => button(host, "Save")!.click());
@@ -427,6 +472,26 @@ describe("Set the IDs", () => {
     expect(onDone).toHaveBeenCalledWith("ward-b: IDs set.");
     // its words sit behind a "?", never as paragraphs
     expect(host.querySelectorAll(".hint").length).toBeGreaterThan(0);
+  });
+});
+
+describe("the pseudonymised copy's PatientID (2026-10-10)", () => {
+  it("is asked apart from what the originals hold, the subject code first, an ID only behind a plain warning and never PatientID as written over an ID the same everywhere", async () => {
+    const types = { types: [{ name: "patient-id", description: "PatientID as written" }, ...TYPES.types] };
+    engine((c) => (c.url === "/api/linkage/types" ? { status: 200, body: types } : undefined));
+    const identified = { kind: "dataset", state: "identified", arrives: "identified", patient_id: "subject-code", identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } };
+    act(() =>
+      root.render(<SetIdsDialog caps={caps7a(["GET /api/linkage/types", "PUT /api/places/{id}"])} place={{ id: 6, name: "study-fresh", path: "/srv/in/study-fresh", dataset: identified as never }} layout={null} onClose={() => undefined} onDone={() => undefined} />),
+    );
+    await settle();
+    expect(host.textContent).toContain("The pseudonymised copy's PatientID gets");
+    expect(host.textContent).not.toContain("PatientID holds");
+    expect(radio(host, "Subject code").checked).toBe(true);
+    expect(host.querySelector(".warn")).toBeNull();
+    act(() => radio(host, "A hospital or study ID").click());
+    expect(host.querySelector(".warn")?.textContent).toContain("The copy then carries this ID");
+    const offered = [...host.querySelector<HTMLSelectElement>('select[aria-label="Which hospital or study ID"]')!.options].map((o) => o.value);
+    expect(offered).toEqual(["study-id"]);
   });
 });
 

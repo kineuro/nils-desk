@@ -88,6 +88,13 @@ describe("the context the assistant is handed", () => {
     expect(c.sets).toEqual([{ name: "people", grain: "subject" }]);
     expect(rowFree(c)).toBe(true);
   });
+  it("hands a count held back at plain on as held (null), never dropped or made 0 (record 55 K7)", () => {
+    const c = admit({ page: { kind: "query", id: "12" }, funnel: [{ set: "people", rows: 48 }, { set: "women", rows: null }, { set: "odd", rows: "few" }, { set: "nan", rows: Number.NaN }] });
+    expect(c.funnel).toEqual([
+      { set: "people", rows: 48 },
+      { set: "women", rows: null },
+    ]);
+  });
   it("drops what is not on the allowlist, and anything shaped like a row", () => {
     const c = admit({ page: { kind: "handle", id: "71" }, rows: [{ subject: "S-0001", edss: 3.5 }], columns: ["subject", "edss"], content_hash: "not a hash" }) as unknown as Record<string, unknown>;
     expect(Object.keys(c).sort()).toEqual(["page"]);

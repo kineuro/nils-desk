@@ -16,6 +16,7 @@ import { placesKept } from "../objects/kept";
 import { ops, type CustodyStore } from "../ops/client";
 import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
+import { BlindShare } from "../review/S1Settings";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
 import { databaseStats } from "./stats";
 import {
@@ -34,9 +35,11 @@ import {
   nextWords,
   registryRule,
   rehearseByHand,
+  restoreSteps,
   scheduleWords,
   sizeWords,
   tookWords,
+  type Archive,
   type Backups,
   type Calendar,
   type RegistryStatus,
@@ -141,8 +144,8 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
   const rule = places ? registryRule(places) : null;
   const refused = draft ? draftRule(draft) : null;
   // a person who may see the database reads it; every change asks for work on it
-  const backupsLocked = needsWork(caps, "Changing the schedule, backing up or rehearsing a restore", [["database:work", "the Database page"]]);
-  const calendarLocked = needsWork(caps, "Changing the calendar", [["database:work", "the Database page"]]);
+  const backupsLocked = needsWork(caps, "Changing the schedule, backing up or rehearsing a restore", [["database:work", "the Backups page"]]);
+  const calendarLocked = needsWork(caps, "Changing the calendar", [["database:work", "the Backups page"]]);
 
   const backUp = () =>
     backup.act("backing up, then rehearsing a restore of the archive", async () => {
@@ -193,7 +196,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
   const nothing = !backups && !calendar && !status;
   return (
     <div className="settings">
-      <Head title="Database" lede="Where the registry lives, and how it is backed up." />
+      <Head title="Backups" lede="Where the registry lives, and how it is backed up." />
       {(status || backups) && <Stats items={databaseStats(backups, status?.backend ?? null, now)} />}
       {why && <p className="warn">{why}</p>}
       {nothing && !why && <p className="meta">Reading the registry.</p>}
@@ -393,6 +396,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                     <Command text={backupByHand(backups.schedule.keep)} />
                     {newest && <Command text={rehearseByHand(backups.dir, newest.name)} />}
                   </div>
+                  {newest && <Restore install={install} home={status?.home ?? null} dir={backups.dir} archives={backups.archives.filter((x) => x.ours)} />}
                 </>
               )}
             </section>
@@ -492,8 +496,51 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
               <p className="meta">Every answer's dates use these, never the browser's. A change moves the registry's epoch.</p>
             </section>
           )}
+          {served(caps, "GET /api/settings") && <BlindShare locked={calendarLocked} />}
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Restore stays a printed command (D50; spec 13.1 round 5): the procedure in
+ * three steps, each command ready to copy, for the archive chosen, newest
+ * first. Nothing here acts: the engine is stopped while it runs.
+ */
+function Restore({ install, home, dir, archives }: { install: Install | null; home: string | null; dir: string | null; archives: readonly Archive[] }) {
+  const [chosen, setChosen] = useState(archives[0]?.name ?? "");
+  const archive = archives.find((a) => a.name === chosen) ?? archives[0] ?? null;
+  if (!archive) return null;
+  const steps = restoreSteps(install, home, dir, archive.name);
+  return (
+    <details className="restore">
+      <summary>Restore an archive</summary>
+      <div className="restore-body">
+        <p className="meta">A restore is done by hand, on the machine the engine runs on, with the engine stopped. The key store is not in the archive and stays as it is.</p>
+        <div className="field">
+          <label className="label" htmlFor="restore-archive">
+            Archive
+          </label>
+          <div className="input">
+            <select id="restore-archive" value={archive.name} onChange={(e) => setChosen(e.target.value)}>
+              {archives.map((a) => (
+                <option key={a.name} value={a.name}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <ol className="restore-steps">
+          {steps.map((s) => (
+            <li key={s.words}>
+              <span>{s.words}</span>
+              {s.command && <Command text={s.command} />}
+            </li>
+          ))}
+        </ol>
+      </div>
+    </details>
   );
 }

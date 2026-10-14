@@ -1550,6 +1550,177 @@ async fn the_people_on_the_desk_are_listed_for_a_person_holding_the_assistant() 
     assert_eq!(r.status(), 404);
 }
 
+/// New check's Who row: a person holding a grant asks which of the people on
+/// the desk hold it as well, each with `holds` from what their groups and own
+/// grants add up to; a person without the grant is refused, a name that is
+/// no grant is a bad request, and without the query the list is as it was.
+#[tokio::test]
+async fn the_people_door_says_who_holds_a_grant_to_a_person_holding_it() {
+    let engine = fake_engine().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    for (name, password, display, entitlements) in [
+        ("anna", "correct horse battery", "Anna", ["admin", "assist"]),
+        ("bo", "another long password", "Bo", ["admin", "admin"]),
+        ("cy", "a third long password", "Cy", ["reader", "assist"]),
+    ] {
+        nils_desk::users::add(
+            &shared.store,
+            name,
+            password,
+            Some(display),
+            &entitled(&entitlements),
+        )
+        .unwrap();
+    }
+    let client = client();
+    let anna = login(&client, &origin, "anna", "correct horse battery").await;
+    let cy = login(&client, &origin, "cy", "a third long password").await;
+    let asked = format!("{origin}/desk/people?holding=campaigns:work");
+    let body = get_json(&client, asked.clone(), &anna).await;
+    assert_eq!(
+        body["people"],
+        json!([
+            {"subject": "bo", "display": "Bo", "holds": true},
+            {"subject": "cy", "display": "Cy", "holds": false}
+        ])
+    );
+    let r = client
+        .get(&asked)
+        .header("cookie", &cy)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = client
+        .get(format!("{origin}/desk/people?holding=campaigns:everything"))
+        .header("cookie", &anna)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 400);
+    let body = get_json(&client, format!("{origin}/desk/people"), &cy).await;
+    assert_eq!(
+        body["people"],
+        json!([{"subject": "anna", "display": "Anna"}, {"subject": "bo", "display": "Bo"}])
+    );
+}
+
+/// Anyone who may make a check sees the names of the people who may read it,
+/// and nothing more (ruled on 2026-10-12), and since Wave 7a anyone who may
+/// make a campaign (record 55 H3): a maker (work on Campaigns) who does not
+/// hold `assistant:use` asks who holds `campaigns:work` and reads each
+/// person's subject, display and `holds`; the same person is refused the
+/// list without `holding` and with `holding` naming another grant, and one
+/// who may make no campaign is refused it all.
+#[tokio::test]
+async fn a_campaign_maker_without_the_assistant_lists_who_may_read_it_and_nothing_more() {
+    let engine = fake_engine().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    let own = |grants: &[&str]| Given {
+        grants: grants.iter().map(|g| g.to_string()).collect(),
+        ..Default::default()
+    };
+    for (name, password, display, given) in [
+        (
+            "anna",
+            "correct horse battery",
+            "Anna",
+            entitled(&["admin", "assist"]),
+        ),
+        ("bo", "another long password", "Bo", entitled(&["reader"])),
+        (
+            "dee",
+            "a fourth long password",
+            "Dee",
+            own(&["campaigns:see", "campaigns:work", "pipelines:see"]),
+        ),
+        (
+            "eve",
+            "a fifth long password",
+            "Eve",
+            own(&["campaigns:see", "campaigns:work"]),
+        ),
+    ] {
+        nils_desk::users::add(&shared.store, name, password, Some(display), &given).unwrap();
+    }
+    let client = client();
+    let dee = login(&client, &origin, "dee", "a fourth long password").await;
+    let eve = login(&client, &origin, "eve", "a fifth long password").await;
+    let raters = format!("{origin}/desk/people?holding=campaigns:work");
+    let r = client
+        .get(&raters)
+        .header("cookie", &dee)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(
+        body,
+        json!({"people": [
+            {"subject": "anna", "display": "Anna", "holds": true},
+            {"subject": "bo", "display": "Bo", "holds": false},
+            {"subject": "eve", "display": "Eve", "holds": true}
+        ]})
+    );
+    for refused in [
+        "/desk/people",
+        "/desk/people?holding=pipelines:see",
+        "/desk/people?holding=campaigns:see",
+    ] {
+        let r = client
+            .get(format!("{origin}{refused}"))
+            .header("cookie", &dee)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 403, "{refused}");
+    }
+    // work on Campaigns without Pipelines makes a campaign of any other kind
+    // (Wave 7a, record 55 H3): its maker names its raters from the same list,
+    // and nothing more
+    let r = client
+        .get(&raters)
+        .header("cookie", &eve)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(
+        body,
+        json!({"people": [
+            {"subject": "anna", "display": "Anna", "holds": true},
+            {"subject": "bo", "display": "Bo", "holds": false},
+            {"subject": "dee", "display": "Dee", "holds": true}
+        ]})
+    );
+    for refused in ["/desk/people", "/desk/people?holding=campaigns:see"] {
+        let r = client
+            .get(format!("{origin}{refused}"))
+            .header("cookie", &eve)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(r.status(), 403, "{refused}");
+    }
+    // one who may make no campaign is refused it all
+    let bo = login(&client, &origin, "bo", "another long password").await;
+    let r = client
+        .get(&raters)
+        .header("cookie", &bo)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+}
+
 /// A fake Kvasir whose catalog answers only a bearer, as Kvasir does wherever
 /// people sign in, and the bearers it saw.
 async fn fake_kvasir() -> (String, Arc<Mutex<Vec<String>>>) {
@@ -2090,4 +2261,287 @@ async fn the_desk_opens_the_assistant_the_supervisor_and_apps_by_grant() {
         .await
         .unwrap();
     assert_eq!(r.status(), 200);
+}
+
+/// Who a cookie signs in as, by the session door: null where it no longer
+/// holds.
+async fn signed_as(client: &reqwest::Client, origin: &str, cookie: &str) -> Value {
+    get_json(client, format!("{origin}/desk/session"), cookie).await["person"]["subject"].clone()
+}
+
+/// Record 55 H2, round 5: a person changes their own password with the one
+/// they have, an admin resets anyone else's, and a change ends the sessions
+/// it should; a write from elsewhere, a short password and a person who is
+/// not there are refused, and a desk that keeps no passwords has no such door.
+#[tokio::test]
+async fn a_person_changes_their_password_and_an_admin_resets_another_s() {
+    let engine = fake_engine().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    nils_desk::users::add(
+        &shared.store,
+        "anna",
+        "correct horse battery",
+        Some("Anna"),
+        &admin(),
+    )
+    .unwrap();
+    nils_desk::users::add(
+        &shared.store,
+        "bo",
+        "another long password",
+        Some("Bo"),
+        &entitled(&["reader"]),
+    )
+    .unwrap();
+    let client = client();
+    let anna = login(&client, &origin, "anna", "correct horse battery").await;
+    let bo = login(&client, &origin, "bo", "another long password").await;
+    let bo_too = login(&client, &origin, "bo", "another long password").await;
+    let door = |who: &str| format!("{origin}/desk/people/{who}/password");
+    let post = |url: String, cookie: &str, body: Value| {
+        ours(client.post(url), &origin)
+            .header("cookie", cookie.to_string())
+            .json(&body)
+    };
+
+    // one's own: the current password must be right, the new one long enough
+    let r = post(
+        door("bo"),
+        &bo,
+        json!({"password": "a new long password", "current": "wrong"}),
+    )
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = post(
+        door("bo"),
+        &bo,
+        json!({"password": "short", "current": "another long password"}),
+    )
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 400);
+    // from another site: refused before anything is read
+    let r = client
+        .post(door("bo"))
+        .header("cookie", &bo)
+        .header("origin", "http://elsewhere.example")
+        .json(&json!({"password": "a new long password", "current": "another long password"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = post(
+        door("bo"),
+        &bo,
+        json!({"password": "a new long password", "current": "another long password"}),
+    )
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(
+        body,
+        json!({"username": "bo", "sessions_ended": 1}),
+        "bo's other session ends, this one stays"
+    );
+    assert_eq!(signed_as(&client, &origin, &bo).await, "bo");
+    assert_eq!(signed_as(&client, &origin, &bo_too).await, Value::Null);
+    let r = ours(client.post(format!("{origin}/desk/login")), &origin)
+        .json(&json!({"username": "bo", "password": "another long password"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 401, "the old password no longer holds");
+    login(&client, &origin, "bo", "a new long password").await;
+
+    // another's: only with identity:work, and then without the current one
+    let r = post(door("anna"), &bo, json!({"password": "bo takes over anna"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403);
+    let r = post(door("bo"), &anna, json!({"password": "reset by an admin"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(
+        body["sessions_ended"], 2,
+        "every session of bo ends: {body}"
+    );
+    assert_eq!(signed_as(&client, &origin, &bo).await, Value::Null);
+    login(&client, &origin, "bo", "reset by an admin").await;
+    let r = post(
+        door("nobody"),
+        &anna,
+        json!({"password": "for nobody at all"}),
+    )
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 404);
+    let r = post(door("bo"), &anna, json!({})).send().await.unwrap();
+    assert_eq!(r.status(), 400);
+
+    // a desk that keeps no passwords has no password to change
+    let off = format!(
+        "origin = \"{{origin}}\"\nmode = \"off\"\nstore = \"{{dir}}/desk.sqlite\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, _shared, _dir) = desk(&off).await;
+    let r = ours(
+        client.post(format!("{origin}/desk/people/operator/password")),
+        &origin,
+    )
+    .json(&json!({"password": "a long enough one"}))
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 404);
+}
+
+/// Record 55 H2, round 5: an admin removes a person, whose sessions end, who
+/// signs in no more, and whose kept results go to the person named; never
+/// oneself, never by someone without identity:work, never the last holder of
+/// it, and never to someone the desk does not know.
+#[tokio::test]
+async fn an_admin_removes_a_person_and_hands_their_work_over() {
+    let engine = fake_engine().await;
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    nils_desk::users::add(
+        &shared.store,
+        "anna",
+        "correct horse battery",
+        Some("Anna"),
+        &admin(),
+    )
+    .unwrap();
+    nils_desk::users::add(
+        &shared.store,
+        "bo",
+        "another long password",
+        Some("Bo"),
+        &entitled(&["reader"]),
+    )
+    .unwrap();
+    nils_desk::users::add(
+        &shared.store,
+        "cy",
+        "a third long password",
+        Some("Cy"),
+        &entitled(&["reader"]),
+    )
+    .unwrap();
+    shared.store.result_put(11, 3, "bo");
+    shared.store.result_put(12, 4, "bo");
+    shared.store.lineage_put(4, 3, "bo");
+    shared.store.result_put(13, 5, "cy");
+    let client = client();
+    let anna = login(&client, &origin, "anna", "correct horse battery").await;
+    let bo = login(&client, &origin, "bo", "another long password").await;
+    let cy = login(&client, &origin, "cy", "a third long password").await;
+    let remove = |who: &str, cookie: &str| {
+        ours(
+            client.delete(format!("{origin}/desk/people/{who}")),
+            &origin,
+        )
+        .header("cookie", cookie.to_string())
+    };
+
+    let r = remove("cy", &bo).send().await.unwrap();
+    assert_eq!(r.status(), 403, "bo holds no identity:work");
+    let r = remove("anna", &anna).send().await.unwrap();
+    assert_eq!(r.status(), 409, "never oneself");
+    let r = remove("nobody", &anna).send().await.unwrap();
+    assert_eq!(r.status(), 404);
+    let r = remove("bo", &anna)
+        .query(&[("to", "ghost")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 400, "the work goes to a person the desk knows");
+    let r = client
+        .delete(format!("{origin}/desk/people/bo"))
+        .header("cookie", &anna)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 403, "a write from elsewhere");
+    assert_eq!(
+        signed_as(&client, &origin, &bo).await,
+        "bo",
+        "nothing changed yet"
+    );
+
+    let r = remove("bo", &anna)
+        .query(&[("to", "cy")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(
+        body,
+        json!({"removed": "bo", "sessions_ended": 1, "handed": {"results": 2, "lineage": 1}, "to": "cy"})
+    );
+    assert_eq!(signed_as(&client, &origin, &bo).await, Value::Null);
+    let r = ours(client.post(format!("{origin}/desk/login")), &origin)
+        .json(&json!({"username": "bo", "password": "another long password"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 401, "bo signs in no more");
+    let results = shared.store.results();
+    assert!(results.iter().all(|r| r.2 != "bo"), "{results:?}");
+    assert_eq!(results.iter().filter(|r| r.2 == "cy").count(), 3);
+    let people = get_json(&client, format!("{origin}/desk/access"), &anna).await;
+    assert!(
+        !people.to_string().contains("\"bo\""),
+        "bo is no longer listed: {people}"
+    );
+
+    // without `to`, the work stays where it was and nothing is handed
+    let r = remove("cy", &anna).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    let body: Value = r.json().await.unwrap();
+    assert_eq!(body["handed"], json!({"results": 0, "lineage": 0}));
+    assert_eq!(body["to"], Value::Null);
+    assert_eq!(signed_as(&client, &origin, &cy).await, Value::Null);
+
+    // the last holder of identity:work is never removed, whoever asks
+    assert_eq!(
+        shared.store.change(
+            false,
+            Change::PersonRemove {
+                subject: "anna".into(),
+                to: None
+            }
+        ),
+        Err(nils_desk::store::Refused::Nobody)
+    );
+    assert_eq!(signed_as(&client, &origin, &anna).await, "anna");
+
+    // a desk nobody signs in to removes nobody
+    let off = format!(
+        "origin = \"{{origin}}\"\nmode = \"off\"\nstore = \"{{dir}}/desk.sqlite\"\n[engine]\nurl = \"{engine}\"\n"
+    );
+    let (origin, _shared, _dir) = desk(&off).await;
+    let r = ours(
+        client.delete(format!("{origin}/desk/people/operator")),
+        &origin,
+    )
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 404);
 }
