@@ -10,6 +10,9 @@
 // its encoders, the label set and its history. Under models:work a model is
 // registered, admitted by a check, promoted or retired; promotion retires
 // nothing since Wave 7a. What the engine refuses is shown in its own words.
+// Record 55 ruling 22 (b): a model's card says whether a certificate names
+// it, and with what; a person records one that cites the graded run that
+// measured the model, under their own sign-in.
 
 import { useCallback, useEffect, useState } from "react";
 import { DoorError } from "../ask/client";
@@ -22,7 +25,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says, Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { checkOf, choosable, chosenOf, chosenWords, encodersOf, equivalenceWords, fittedBy, gpuOf, label, missingWords, modelActs, models, openActs, rateWords, refusedModels, shortDigest, speedOf, stateTag, tasksOf, testedOf, trainedOn, type Model, type RunRow, type TaskEntry } from "./client";
+import { certifiedWords, certifyAct, checkOf, choosable, chosenOf, chosenWords, citeBody, EMPTY_FORM, encodersOf, equivalenceWords, fittedBy, gpuOf, label, missingWords, modelActs, models, openActs, percentWords, rateWords, refusedModels, shortDigest, speedOf, stateTag, tasksOf, testedOf, trainedOn, type CertifyForm, type Model, type RunRow, type TaskEntry } from "./client";
 import "../review/grown.css";
 import "./models.css";
 
@@ -171,6 +174,12 @@ export function ModelCard({ m, chosen, onChoose = null }: { m: Model; chosen: bo
           <dt>trained on</dt>
           <dd title={trained?.digest}>{trained ? (trained.name ?? shortDigest(trained.digest)) : "no label set"}</dd>
         </div>
+        {m.certificate !== undefined && (
+          <div className="facts-pair">
+            <dt>certified</dt>
+            <dd title={m.certificate?.words}>{m.certificate ? certifiedWords(m.certificate) : "no certificate"}</dd>
+          </div>
+        )}
       </dl>
       <div className="model-card-foot">
         <span className={missing ? "meta warn-text" : "meta"}>{missing ?? "card complete"}</span>
@@ -280,7 +289,7 @@ export function ModelPage({ caps, id, onChanged }: { caps: Capabilities; id: num
   );
 }
 
-type Act = "admit" | "promote" | "retire";
+type Act = "admit" | "promote" | "retire" | "certify";
 
 /** One model as the page draws it. */
 export function ModelBody({ caps, m, onChanged }: { caps: Capabilities; m: Model; onChanged: (words: string) => void }) {
@@ -322,6 +331,11 @@ export function ModelBody({ caps, m, onChanged }: { caps: Capabilities; m: Model
         {acts.retire && open.retire && (
           <button type="button" className="button quiet" onClick={() => setAct("retire")}>
             Retire
+          </button>
+        )}
+        {certifyAct(caps) && m.state !== "retired" && (
+          <button type="button" className="button secondary" onClick={() => setAct("certify")}>
+            Record a certificate
           </button>
         )}
       </div>
@@ -380,6 +394,7 @@ export function ModelBody({ caps, m, onChanged }: { caps: Capabilities; m: Model
           </div>
         )}
       </dl>
+      <CertificateFacts m={m} />
       {claims.length > 0 && (
         <>
           <div className="section-head rule-top">
@@ -420,8 +435,156 @@ export function ModelBody({ caps, m, onChanged }: { caps: Capabilities; m: Model
         </p>
       )}
       {act === "admit" && <AdmitDialog m={m} onClose={() => setAct(null)} onDone={(w) => { setAct(null); onChanged(w); }} />}
+      {act === "certify" && <CertifyDialog m={m} onClose={() => setAct(null)} onDone={(w) => { setAct(null); onChanged(w); }} />}
       {(act === "promote" || act === "retire") && <MoveDialog act={act} m={m} onClose={() => setAct(null)} onDone={(w) => { setAct(null); onChanged(w); }} />}
     </section>
+  );
+}
+
+/** The certificate that names a model, as its page shows it: the run it cites or the sample it measured, and what it found. */
+export function CertificateFacts({ m }: { m: Model }) {
+  const c = m.certificate;
+  if (!c) return null;
+  const r = c.result ?? {};
+  const e = c.evidence ?? null;
+  return (
+    <>
+      <div className="section-head rule-top">
+        <h2>Certified</h2>
+        <span className="meta">
+          certificate {c.id} · {c.created_by} · {whenWords(c.created_at)}
+        </span>
+      </div>
+      <dl className="facts">
+        {e ? (
+          <>
+            <div className="facts-pair">
+              <dt>graded run</dt>
+              <dd>{e.run}</dd>
+            </div>
+            <div className="facts-pair">
+              <dt>manifest</dt>
+              <dd title={e.manifest_sha256}>{shortDigest(e.manifest_sha256)}</dd>
+            </div>
+            <div className="facts-pair">
+              <dt>plan</dt>
+              <dd title={e.plan ?? undefined}>{e.plan_commit.slice(0, 12)}</dd>
+            </div>
+            <div className="facts-pair">
+              <dt>artifact</dt>
+              <dd title={e.model_digest}>{shortDigest(e.model_digest)}</dd>
+            </div>
+            {e.equivalence && (
+              <div className="facts-pair">
+                <dt>served as</dt>
+                <dd title={e.equivalence.manifest_sha256}>
+                  {e.equivalence.run} · class {e.equivalence.class}
+                </dd>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="facts-pair">
+            <dt>sealed sample</dt>
+            <dd>{c.sample}</dd>
+          </div>
+        )}
+        <div className="facts-pair">
+          <dt>found</dt>
+          <dd>
+            {typeof r.errors === "number" && typeof r.n === "number" ? `${r.errors.toLocaleString("en-US")} of ${r.n.toLocaleString("en-US")} wrong` : "?"}
+            {typeof r.bound === "number" ? ` · bound ${percentWords(r.bound)}` : ""}
+            {typeof r.bar === "number" ? ` · bar ${percentWords(r.bar)}` : typeof r.risk === "number" ? ` · risk ${percentWords(r.risk)}` : ""}
+            {typeof r.coverage === "number" ? ` · coverage ${percentWords(r.coverage)}` : ""}
+          </dd>
+        </div>
+        {typeof r.test === "string" && (
+          <div className="facts-pair">
+            <dt>test</dt>
+            <dd>{r.test}</dd>
+          </div>
+        )}
+      </dl>
+    </>
+  );
+}
+
+/** The fields of Record a certificate, in order, each with its label and hint. */
+const CITE_FIELDS: { k: keyof CertifyForm; label: string; hint: string; wide?: boolean }[] = [
+  { k: "run", label: "Graded run", hint: "the evidence run" },
+  { k: "manifest", label: "Manifest sha256", hint: "of its MANIFEST.json", wide: true },
+  { k: "commit", label: "Plan commit", hint: "that registered the plan" },
+  { k: "bar", label: "Bar", hint: "0.01 for 1 %" },
+  { k: "n", label: "Graded", hint: "stacks" },
+  { k: "errors", label: "Wrong", hint: "of those" },
+  { k: "bound", label: "Bound", hint: "as the run reported it" },
+  { k: "coverage", label: "Coverage", hint: "the share accepted" },
+  { k: "test", label: "Test", hint: "such as T19" },
+  { k: "claim", label: "Claim", hint: "in words", wide: true },
+  { k: "eqRun", label: "Served as run", hint: "if repackaged" },
+  { k: "eqManifest", label: "Served as sha256", hint: "of that run's MANIFEST.json", wide: true },
+  { k: "eqClass", label: "Class", hint: "I, II or III" },
+];
+
+/** Record a certificate that cites the graded run that measured this model (record 55 ruling 22 b), under the person's own sign-in. */
+export function CertifyDialog({ m, onClose, onDone }: { m: Model; onClose: () => void; onDone: (words: string) => void }) {
+  const [form, setForm] = useState<CertifyForm>(EMPTY_FORM);
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  const built = citeBody(m, form);
+  const wrong = "wrong" in built ? built.wrong : [];
+  const go = () => {
+    if (!("body" in built)) return;
+    setBusy(true);
+    setRefused(null);
+    models.certify(built.body).then(
+      (c) => onDone(c.evidence ? `${label(m)} is certified by the graded run ${c.evidence.run}.` : `${label(m)} is certified: ${certifiedWords(c)}.`),
+      (e: unknown) => {
+        setBusy(false);
+        setRefused(engineWords(e));
+      },
+    );
+  };
+  return (
+    <Dialog
+      title="Record a certificate"
+      eyebrow={label(m)}
+      icon="check"
+      className="certify"
+      onClose={onClose}
+      foot={
+        <div className="row actions">
+          <button type="button" className="button" disabled={busy || wrong.length > 0} onClick={go}>
+            Record
+          </button>
+          <button type="button" className="button secondary" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      }
+    >
+      <p className="lede">The graded run that measured this model, for artifact {shortDigest(m.digest)}.</p>
+      <p className="meta">Yours alone, under your sign-in: it unseals nothing, so no second person is needed. The engine works the bound out again from the counts.</p>
+      <div className="cite-fields">
+        {CITE_FIELDS.map((f) => (
+          <label key={f.k} className={f.wide ? "field wide" : "field"}>
+            <span className="label">{f.label}</span>
+            <span className="input">
+              <input value={form[f.k]} placeholder={f.hint} aria-label={f.label} onChange={(e) => setForm((was) => ({ ...was, [f.k]: e.target.value }))} />
+            </span>
+          </label>
+        ))}
+      </div>
+      {refused && (
+        <div className="note caution" role="alert">
+          <Icon name="alert" />
+          <div className="note-body">
+            <p className="note-lead">The engine refused</p>
+            <p className="note-detail">{refused}</p>
+          </div>
+        </div>
+      )}
+    </Dialog>
   );
 }
 

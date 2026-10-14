@@ -5,7 +5,9 @@
 // window, the chosen one marked by its border, with nothing sideways; the side
 // lists Models under Pipelines and marks it; an old #models address leads
 // there; Choose moves what answers after its panel, and Back to default
-// returns it; a model's own page draws the card's speeds and claims.
+// returns it; a model's own page draws the card's speeds and claims. Record
+// 55 ruling 22 (b): a model's card says what certified it, and a person
+// records a certificate that cites the graded run from the model's page.
 // SHOTS=<dir> keeps a screenshot of each.
 
 import { expect, test, type Page } from "@playwright/test";
@@ -28,7 +30,7 @@ for (const vp of SIZES) {
     await page.setViewportSize(vp);
     await page.goto("/models.html#pipelines/models");
     const tasks = page.locator("section.task-models");
-    await expect(tasks).toHaveCount(2);
+    await expect(tasks).toHaveCount(3);
     const body = tasks.nth(0);
     await expect(body.locator("h2")).toHaveText("axis:body_part");
     await expect(body.locator(".section-head .meta")).toHaveText("bodypart-cascade@r7-fast answers · chosen by astrid@site");
@@ -36,7 +38,11 @@ for (const vp of SIZES) {
     await expect(body.locator(".model-card.on")).toHaveCount(1);
     await expect(body.locator(".model-card.on .model-card-head a")).toHaveText("bodypart-cascade@r7-fast");
     // the chosen key is the only coloured one
-    await expect(page.locator(".model-card .tag.brand")).toHaveCount(2);
+    await expect(page.locator(".model-card .tag.brand")).toHaveCount(3);
+    // what certified a model, on its card
+    await expect(tasks.nth(2).locator(".section-head .meta")).toHaveText("s1c@allow-2 answers · certificate 4");
+    await expect(tasks.nth(2).locator(".model-card").filter({ hasText: "s1c@allow-2" })).toContainText("s1-grade-7 · 1 of 5,482 wrong · bound 0.087 %");
+    await expect(tasks.nth(2).locator(".model-card").filter({ hasText: "s1c@allow-3" })).toContainText("no certificate");
     await expect(tasks.nth(1).locator(".section-head .meta")).toHaveText("bodypart-fusion-coarse@r7 answers · certificate 3");
     await expect(tasks.nth(1).locator(".model-card").filter({ hasText: "bodypart-coarse-next@r8" })).toContainText("missing trained on, tested, speed");
     for (const box of await page.locator(".model-card").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect))) {
@@ -67,6 +73,41 @@ for (const vp of SIZES) {
       await expect(models).toHaveClass(/\bon\b/u);
       await expect(page.locator(".side-link", { hasText: /^Models$/u })).toHaveCount(0);
     }
+  });
+
+  test(`at ${vp.name} px a person records a certificate that cites the graded run, and the model shows it`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/models.html#pipelines/models/7");
+    await expect(page.locator("h1")).toHaveText("s1c@allow-3");
+    await expect(page.getByRole("heading", { name: "Certified" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Record a certificate" }).click();
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog).toContainText("for artifact sha256:777777777777");
+    await expect(dialog).toContainText("it unseals nothing, so no second person is needed");
+    await expect(dialog.getByRole("button", { name: "Record" })).toBeDisabled();
+    for (const [field, value] of [
+      ["Graded run", "s1-grade-9"],
+      ["Manifest sha256", "9".repeat(64)],
+      ["Plan commit", "1f2e3d4c5b6a"],
+      ["Graded", "5482"],
+      ["Wrong", "1"],
+      ["Bound", "0.000865"],
+      ["Coverage", "0.892"],
+      ["Test", "T19"],
+    ]) {
+      await dialog.getByLabel(field, { exact: true }).fill(value);
+    }
+    for (const box of await dialog.locator("input").evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON() as DOMRect))) {
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(vp.width);
+    }
+    await shot(page, `certify-${vp.name}`);
+    await dialog.getByRole("button", { name: "Record" }).click();
+    await expect(page.locator("p.said")).toHaveText("s1c@allow-3 is certified by the graded run s1-grade-9.");
+    await expect(page.getByRole("heading", { name: "Certified" })).toBeVisible();
+    await expect(page.locator("dl.facts").getByText("s1-grade-9", { exact: true })).toBeVisible();
+    await noSideways(page, vp.width);
+    await shot(page, `certified-${vp.name}`);
   });
 
   test(`at ${vp.name} px Choose moves what answers after its panel, and Back to default returns it`, async ({ page }) => {

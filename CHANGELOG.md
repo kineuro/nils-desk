@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+
+### Added
+
+- Record a certificate (record 55, ruling 22 b). A model's page under Pipelines, Models, offers Record a certificate to a person with models:work where the engine serves `POST /api/certificates`: the graded run that measured the model (the run, the sha256 of its manifest, the commit that registered the plan, the bar, how many stacks it graded and how many were wrong, with the bound, the coverage, the test and the claim where known), for the model's own artifact digest. It is the person's own act under their sign-in and unseals nothing, so no second person is needed; the engine works the bound out again from the counts and its refusal shows in its words. A model's card says what certified it, the graded run or the sealed sample with its numbers, or that no certificate names it, and its page shows the certificate: the run, its manifest, the plan's commit, the artifact, the run that showed a repackaged artifact answers the same, and what it found. On an engine that does not say, the card leaves the line out.
+
 ## [1.0.0-alpha.64] - 2026-10-14
 
 Fixes found on the first dataset read on a site after the beta, for engine 1.0.0-alpha.81 (and older engines, which fall back): an acquisition's own images sit in its family's box, and a file count that stopped short says so.
