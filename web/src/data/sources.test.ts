@@ -68,7 +68,7 @@ describe("a source's card", () => {
     expect(datesWord("keep")).toBe("kept");
     expect(datesWord("shift")).toBe("shifted");
     expect(datesWord("year")).toBe("cut to the year");
-    expect(DATES_KEPT).toContain("(M00, M06)");
+    expect(DATES_KEPT).toContain("M00, M06");
   });
   it("counts a digest's files and says when briefly", () => {
     expect(fileWords(digest())).toBe("2,208 new · 14 changed · 9,102 unchanged");

@@ -6,6 +6,9 @@
 // it reaches without writing anything; Release queues the job. Each row hands
 // its release over or withdraws its version (record 55 H2, round 5).
 
+import { Hint } from "../ui/Hint";
+import { SchemePicker, SchemesPage } from "./Schemes";
+import { schemeActs } from "./schemes";
 import { countText } from "../ask/held";
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
@@ -34,6 +37,12 @@ type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string }
 const n = (v: number) => v.toLocaleString("en-US");
 
 export function ReleasePage({ caps, page, arg }: { caps: Capabilities; page: string | null; arg: string | null }) {
+  // record 55 H2, round 4: the kept session schemes are a page of Release
+  if (page === "schemes" && schemeActs(caps).see) return <SchemesPage caps={caps} />;
+  return <Releases caps={caps} page={page} arg={arg} />;
+}
+
+function Releases({ caps, page, arg }: { caps: Capabilities; page: string | null; arg: string | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [said, setSaid] = useState<string | null>(null);
   const [queued, setQueued] = useState<Queued | null>(null);
@@ -149,7 +158,7 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, queue
         <div className="grow">
           <span className="eyebrow">Release</span>
           <h1>Releases</h1>
-          <p className="lede">What left the registry: each release as a dataset written to an export place, under the leaving policy of the datasets its files came from, and whether it was handed over.</p>
+          <p className="lede">What left the registry, where it was written, and whether it was handed over.</p>
         </div>
         {refusal === null && (
           <button type="button" className="button" onClick={onNew}>
@@ -163,7 +172,7 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, queue
       {queued && <QueuedWords caps={caps} queued={queued} />}
       {list === null && !why && <Wait phase="reading the releases" since={since ?? now} size="panel" />}
       {why && <p className="warn">The releases could not be read: {why}</p>}
-      {list !== null && list.length === 0 && <p className="meta">{lists ? "No release yet." : "This engine does not list its releases; a new one is still made from here."}</p>}
+      {list !== null && list.length === 0 && <p className="meta">{lists ? "No release yet. New release makes one from a cohort or a card." : "This engine does not list its releases; a new one is still made from here."}</p>}
       {list !== null && list.length > 0 && (
         <div className="table-wrap">
           <table className="thin releases">
@@ -448,10 +457,12 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
           <div className="facts-pair">
             <dt>sessions</dt>
             <dd>
-              <span className="input scheme">
-                <input value={scheme} placeholder="the registry's scheme, as bound today" onChange={(e) => setScheme(e.target.value)} aria-label="Session scheme" />
+              {/* record 55 H2, round 3: a scheme chosen, or made here, never typed blind */}
+              <SchemePicker caps={caps} value={scheme} onChange={setScheme} />
+              <span className="meta">
+                {DATES_KEPT}
+                {windowDays !== null && <Hint text={`The session cache was built under a ${n(windowDays)}-day window.`} />}
               </span>
-              <span className="meta">{[windowDays === null ? null : `The session cache was built under a ${n(windowDays)}-day window.`, DATES_KEPT].filter(Boolean).join(" ")}</span>
             </dd>
           </div>
           <div className="facts-pair">
@@ -466,7 +477,7 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
                   </select>
                 </span>
               </span>
-              <span className={override === null ? "meta" : "warn"}>{override ?? "Each dataset's own leaving policy applies to its own files. Nothing is sent for the UIDs unless you override them here."}</span>
+              <span className={override === null ? "meta" : "warn"}>{override ?? "Each dataset's own policy, unless chosen here."}</span>
             </dd>
           </div>
           <div className="facts-pair">

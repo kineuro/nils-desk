@@ -38,6 +38,8 @@ import { OverPicker } from "./OverPicker";
 import { PreflightPanel, Requirements } from "./Preflight";
 import { FailLine, FailNote } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
+import { LanePanel, SecretsPanel } from "./PipelineSetup";
+import { setupActs } from "./pipelineSetup";
 import { runTag } from "./made";
 import { lastRunOf, lastRunWords } from "./results";
 import { againOfRun, RunAgainDialog, type Again } from "./RunAgain";
@@ -49,7 +51,10 @@ const n = (v: number) => v.toLocaleString("en-US");
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; pipelines: Pipeline[]; capability: Capability | null; runs: Run[] };
 
-export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: (words: string) => void }) {
+/** Which of the page's two lists is drawn: the catalog, the runs (spec 13.1: each its own page in the side), or both. */
+export type CatalogPart = "catalog" | "runs" | "both";
+
+export function CatalogPage({ caps, onQueued, part = "both" }: { caps: Capabilities; onQueued: (words: string) => void; part?: CatalogPart }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [running, setRunning] = useState<Pipeline | null>(null);
   const [again, setAgain] = useState<Again | null>(null);
@@ -64,7 +69,7 @@ export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: 
   if (load.kind === "failed") return <p className="warn">The catalog could not be read: {load.why}</p>;
   return (
     <>
-      <CatalogBody caps={caps} pipelines={load.pipelines} capability={load.capability} runs={load.runs} onRun={setRunning} onAgain={runActs(caps).queue ? (r) => setAgain(againOfRun(r)) : null} />
+      <CatalogBody caps={caps} part={part} pipelines={load.pipelines} capability={load.capability} runs={load.runs} onRun={setRunning} onAgain={runActs(caps).queue ? (r) => setAgain(againOfRun(r)) : null} />
       {again && (
         <RunAgainDialog
           caps={caps}
@@ -94,7 +99,7 @@ export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: 
 }
 
 /** The catalog and the runs, as the page draws them from what it read. */
-export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain = null }: { caps: Capabilities; pipelines: Pipeline[]; capability: Capability | null; runs: Run[]; onRun: (p: Pipeline) => void; onAgain?: ((r: Run) => void) | null }) {
+export function CatalogBody({ caps, part = "both", pipelines, capability, runs, onRun, onAgain = null }: { caps: Capabilities; part?: CatalogPart; pipelines: Pipeline[]; capability: Capability | null; runs: Run[]; onRun: (p: Pipeline) => void; onAgain?: ((r: Run) => void) | null }) {
   const acts = catalogActs(caps, capability);
   const rows = catalogRows(pipelines);
   // the version chosen of each name, by id; the newest until one is chosen
@@ -103,6 +108,8 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
   const opens = runActs(caps).open;
   return (
     <section className="stack roomy">
+      {part !== "runs" && (
+        <>
       {capability && !capability.enabled && (
         <div className="note gated">
           <Icon name="lock" />
@@ -112,14 +119,14 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
           </div>
         </div>
       )}
-      <div className="section-head rule-top">
-        <h2>Catalog</h2>
+      <div className={part === "both" ? "section-head rule-top" : "section-head"}>
+        {part === "both" && <h2>Catalog</h2>}
         <span className="meta">
           {n(rows.length)} {rows.length === 1 ? "pipeline" : "pipelines"}
           {capability?.runtime ? ` · ${capability.runtime.name}${capability.runtime.gpu ? " with a GPU" : ""}` : ""}
         </span>
       </div>
-      {rows.length === 0 && <p className="meta">Nothing in the catalog. A pipeline is added at the command line, pinned by its image digest.</p>}
+      {rows.length === 0 && <p className="meta">Nothing in the catalog yet. {setupActs(caps).add ? "Add a pipeline from its nils.job.yml." : "Someone with work on the install adds one."}</p>}
       {rows.length > 0 && (
         <div className="table-wrap">
           <table className="thin">
@@ -182,11 +189,23 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
         </div>
       )}
       {acts.why && acts.see && capability?.enabled && <p className="meta">{acts.why}</p>}
-      <div className="section-head rule-top">
-        <h2>Runs</h2>
-        <span className="meta">newest first</span>
-      </div>
-      {runs.length === 0 && <p className="meta">No run yet.</p>}
+      <LanePanel caps={caps} />
+      <SecretsPanel caps={caps} />
+        </>
+      )}
+      {part !== "catalog" && (
+        <>
+      {part === "both" && (
+        <div className="section-head rule-top">
+          <h2>Runs</h2>
+          <span className="meta">newest first</span>
+        </div>
+      )}
+      {runs.length === 0 && (
+        <p className="meta">
+          No run yet. {part === "runs" ? <a href={href("pipelines", "catalog")}>Run a pipeline from the Catalog.</a> : "Run a pipeline above."}
+        </p>
+      )}
       {runs.length > 0 && (
         <div className="table-wrap">
           <table className="thin">
@@ -260,6 +279,8 @@ export function CatalogBody({ caps, pipelines, capability, runs, onRun, onAgain 
             </tbody>
           </table>
         </div>
+      )}
+        </>
       )}
     </section>
   );

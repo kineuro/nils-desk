@@ -22,7 +22,7 @@ export function ProfilePage({ caps }: { caps: Capabilities }) {
   const { person, desk } = caps;
   const who = person.display_name || person.subject;
   const off = desk.mode === "off";
-  const kvasirPage = settingsPages(caps).some((p) => p.id === "gateway");
+  const kvasirPage = settingsPages(caps).some((p) => p.id === "language-models");
   // a subscription of one's own serves the assistant, so it is a person's who may use it and see Kvasir (record 25)
   const subscription = caps.kvasir === null ? null : off ? "install" : may(caps, "assistant:use") && may(caps, "kvasir:see") ? "own" : null;
 
@@ -59,7 +59,7 @@ export function ProfilePage({ caps }: { caps: Capabilities }) {
       {subscription && (
         <p className="signin-item subscription-line">
           <Icon name="cloud" />
-          {subscription === "own" ? "Your ChatGPT subscription:" : "The install's ChatGPT subscription:"} {kvasirPage ? <a href={href("settings", "gateway")}>Language models page</a> : "Language models page"}
+          {subscription === "own" ? "Your ChatGPT subscription:" : "The install's ChatGPT subscription:"} {kvasirPage ? <a href={href("settings", "language-models")}>Language models page</a> : "Language models page"}
         </p>
       )}
     </div>

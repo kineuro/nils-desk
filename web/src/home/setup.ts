@@ -95,7 +95,7 @@ export function ready(caps: Capabilities, install: Install | null, places: Place
  */
 export function backupFolderRefusal(caps: Capabilities): string | null {
   return needsWork(caps, "Backing up to the engine's backup folder", [
-    ["database:work", "the Database page"],
+    ["database:work", "the Backups page"],
     ["places:work", "the Places page"],
   ]);
 }

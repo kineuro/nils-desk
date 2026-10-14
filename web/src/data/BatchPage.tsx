@@ -292,7 +292,7 @@ export function BatchPage({ caps, id }: { caps: Capabilities; id: number }) {
               <Icon name="chevron-right" />
             </a>
           )}
-          <a className="tail" href={href("query")}>
+          <a className="tail" href={href("ask")}>
             Stacks of this batch, as a query
             <Icon name="chevron-right" />
           </a>

@@ -149,11 +149,13 @@ describe("the catalog page", () => {
     expect(html).toContain("proposals on body_part");
     expect(html).toMatch(/<button type="button" class="button" disabled="">Run<\/button>/u);
   });
-  it("adds the Catalog page beside the jobs only where the engine serves the catalog", () => {
-    const withCatalog = renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} />);
-    expect(withCatalog).toContain('href="#pipelines/catalog"');
-    const older = renderToStaticMarkup(<PipelinesPage caps={capsWith(["GET /api/jobs"], ["pipelines:see"])} />);
-    expect(older).not.toContain("#pipelines/catalog");
+  // record 55 H2, round 4: the side carries Jobs, Catalog and Runs (sections.test.ts); the page draws no tabs of them
+  it("opens the Catalog and the Runs as pages of their own only where the engine serves the catalog", () => {
+    const jobs = renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} />);
+    expect(jobs).not.toContain('class="chips pages"');
+    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} page="catalog" />)).toContain("<h1>Catalog</h1>");
+    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} page="runs" />)).toContain("<h1>Runs</h1>");
+    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(["GET /api/jobs"], ["pipelines:see"])} page="runs" />)).toContain("<h1>Jobs</h1>");
     // an address to the catalog on an engine without it opens the jobs
     expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(["GET /api/jobs"], ["pipelines:see"])} page="catalog" />)).toContain("<h1>Jobs</h1>");
   });

@@ -58,7 +58,7 @@ export function SharedList() {
         <div className="grow">
           <span className="eyebrow">Assistant</span>
           <h1>Shared</h1>
-          <p className="lede">Conversations others share with you, and the ones you share. A share shows what was said as it stood when shared; its cards open with what you may see.</p>
+          <p className="lede">Conversations shared with you, and by you.</p>
         </div>
       </div>
       {why && <p className="warn">The shares could not be read: {why}</p>}
@@ -210,7 +210,7 @@ export function SharedPage({ id }: { id: string }) {
             proposals={proposals.filter((p) => p.turn === t.id)}
             choice={null}
             onChoose={() => undefined}
-            openQuery={(document) => href("query", String(document))}
+            openQuery={(document) => href("ask", String(document))}
           />
         ))}
         {turns.length === 0 && <p className="meta">Nothing was said in it yet.</p>}

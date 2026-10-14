@@ -368,7 +368,7 @@ export function DataPage({
           <Hint text={load.why} />
         </p>
       )}
-      {load.kind === "ready" && list.length === 0 && <p className="meta">No dataset yet.</p>}
+      {load.kind === "ready" && list.length === 0 && <p className="meta">No dataset yet. Add a dataset from a folder under a root.</p>}
       {list.length > 0 && (
         <div className="dp-grid datasets">
           {list.map((d) => (
@@ -394,7 +394,7 @@ export function DataPage({
             <span className="meta">groups of subjects, from any dataset</span>
           </div>
           {cohortsWhy !== null && <p className="warn">The cohorts could not be read: {cohortsWhy}</p>}
-          {cohortList !== null && allCohorts.length === 0 && cohortsWhy === null && <p className="meta">No cohort yet.</p>}
+          {cohortList !== null && allCohorts.length === 0 && cohortsWhy === null && <p className="meta">No cohort yet. New cohort makes one, empty or from a list.</p>}
           {allCohorts.length > 0 && (
             <div className="dp-grid cohorts">
               {allCohorts.map((c) => (

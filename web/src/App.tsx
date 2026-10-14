@@ -269,7 +269,7 @@ export function App() {
             <section className="state">
               <h1>No grant yet</h1>
               <p>
-                The account <code>{caps.person.subject}</code> exists and holds no grant. Pages are given on the Identity page, through a group or
+                The account <code>{caps.person.subject}</code> exists and holds no grant. Pages are given on the People page, through a group or
                 to this account alone{caps.desk.mode === "oidc" ? ", and a group there can follow a group of yours at the identity provider" : ""}. Nothing
                 here is broken; nothing is open yet.
               </p>
@@ -301,7 +301,7 @@ export function App() {
             <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} step={route.page === "datasets" ? route.sub : null} query={route.query} />
           )}
           {viewed !== null && <Viewer key={`${viewed.kind}/${viewed.name}`} caps={caps} scope={viewed} query={route.query} onSections={() => setMenu((m) => !m)} />}
-          {ready && active?.id === "query" && <QueryPage caps={caps} open={route.page} />}
+          {ready && active?.id === "ask" && <QueryPage caps={caps} open={route.page} />}
           {ready && active?.id === "pipelines" && route.page === "logs" && logsOffered(caps) && <LogsPage caps={caps} job={route.arg !== null && /^\d+$/.test(route.arg) ? Number(route.arg) : null} />}
           {ready && active?.id === "pipelines" && !(route.page === "logs" && logsOffered(caps)) && <PipelinesPage caps={caps} page={route.page} arg={route.arg} query={route.query} />}
           {ready && active?.id === "release" && <ReleasePage caps={caps} page={route.page} arg={route.arg} />}

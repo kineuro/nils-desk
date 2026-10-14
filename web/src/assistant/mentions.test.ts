@@ -47,7 +47,7 @@ describe("a mention in a message", () => {
   it("is drawn as a chip in the person's message, a card's opening the card, and copied as its name", () => {
     const text = `How many in ${mentionToken(cohort)} match ${mentionToken(card)}?`;
     const html = renderToStaticMarkup(createElement(TurnView, { turn: { id: "u1", role: "user", text, done: true, tools: [] }, open: false, onToggle: () => undefined, proposals: [], choice: null, onChoose: () => undefined }));
-    expect(html).toContain('<a class="mention" href="#query/12"');
+    expect(html).toContain('<a class="mention" href="#ask/12"');
     expect(html).toContain('<span class="mention" title="Cohort">MS cohort</span>');
     expect(html).not.toContain("@[");
     expect(plainMentions(text)).toBe("How many in MS cohort match Women in cohort A?");
@@ -115,7 +115,7 @@ describe("a saved selection named with @", () => {
     const text = `How many in ${mentionToken(selection)}?`;
     expect(saidWithMentions(text)[1]).toEqual({ kind: "mention", mention: { kind: "selection", id: "ms-baseline@2", name: "ms-baseline" } });
     const html = renderToStaticMarkup(createElement(TurnView, { turn: { id: "u1", role: "user", text, done: true, tools: [] }, open: false, onToggle: () => undefined, proposals: [], choice: null, onChoose: () => undefined }));
-    expect(html).toContain('<a class="mention" href="#query/selections" title="Saved selection ms-baseline@2">ms-baseline</a>');
+    expect(html).toContain('<a class="mention" href="#ask/selections" title="Saved selection ms-baseline@2">ms-baseline</a>');
     expect(plainMentions(text)).toBe("How many in ms-baseline?");
   });
 });

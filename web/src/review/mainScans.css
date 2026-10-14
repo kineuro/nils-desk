@@ -206,7 +206,7 @@
 .ms-range { display: flex; align-items: center; gap: calc(10 * var(--p)); font-size: calc(14 * var(--p)); color: var(--n-text-dim); }
 .ms-range > .name { flex: none; width: calc(112 * var(--p)); }
 .ms-range.wide > .name { width: calc(156 * var(--p)); }
-.ms-range input[type="range"] { flex: 1; min-width: 0; accent-color: var(--n-brand); }
+.ms-range input[type="range"] { flex: 1; min-width: 0; accent-color: var(--n-brand-mark); }
 .ms-range > .val { flex: none; width: calc(92 * var(--p)); color: var(--n-text); font-variant-numeric: tabular-nums; }
 .ms-range > .val.mono { width: calc(52 * var(--p)); font-family: var(--n-font-mono); font-size: calc(13 * var(--p)); }
 .ms-fold, .ms-text-toggle { align-self: flex-start; gap: calc(6 * var(--p)); }

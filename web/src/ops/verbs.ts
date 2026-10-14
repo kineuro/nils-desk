@@ -34,8 +34,8 @@ export interface VerbWords {
 const data = { grant: "data:work" as Grant, page: "the Data page" };
 const pipelines = { grant: "pipelines:work" as Grant, page: "the Pipelines page" };
 const release = { grant: "release:work" as Grant, page: "the Release page" };
-const database = { grant: "database:work" as Grant, page: "the Database page" };
-const query = { grant: "query:work" as Grant, page: "the Query page" };
+const database = { grant: "database:work" as Grant, page: "the Backups page" };
+const query = { grant: "query:work" as Grant, page: "the Ask page" };
 
 /** Every verb the door queues, by its verb or its two-word verb. */
 export const VERBS: Record<string, VerbWords> = {

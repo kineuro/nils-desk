@@ -36,7 +36,7 @@ describe("the Kvasir page", () => {
     expect(html).not.toContain('href="#settings/parts"');
     expect(html).toContain('<p class="lede">Which model each station goes to.</p>');
     expect(html).not.toContain("version 1.0.0-alpha.7");
-    expect(html).not.toContain("Kvasir: Work");
+    expect(html).not.toContain("Language models: Work");
     expect(html).not.toContain("admin");
     // Add a model waits for Kvasir to answer with the subscription it offers
     expect(html).not.toContain("Add a model</button>");

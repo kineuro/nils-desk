@@ -125,7 +125,7 @@ export function QueryPanel({ play, caps, keeping, epoch, onClose }: { play: Play
         {kept && <span className="tag ok">kept</span>}
         {proposal?.stale && <span className="tag">moved on</span>}
         {display !== null && (
-          <a className="icon-button qpanel-quiet" href={href("query", String(display))} aria-label="Open on the Query page" title="Open on the Query page">
+          <a className="icon-button qpanel-quiet" href={href("ask", String(display))} aria-label="Open on the Ask page" title="Open on the Ask page">
             <Icon name="external" />
           </a>
         )}

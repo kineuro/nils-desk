@@ -39,15 +39,20 @@ const page = (id: string, title: string, more: Partial<SidePage> = {}): SidePage
 // datasets; a dataset's own pseudonymisation is a step of it, opened in place.
 export const PLACEHOLDERS: Placeholder[] = [
   {
-    id: "query",
-    title: "Query",
+    id: "ask",
+    title: "Ask",
     icon: "search",
     grant: "query:see",
     door: "POST /api/ask/run",
     words: "Narrow the registry to what you need, step by step or in words, and keep every version of it as a card.",
     built: true,
-    // the saved selections where the engine lists them, as the page's own chips (query/selections.ts)
-    pages: (caps) => [page("cards", "Cards", { to: href("query") }), ...(door(caps, "GET /api/ask/selections") ? [page("selections", "Selections")] : [])],
+    // the saved selections where the engine lists them, as the page's own chips (query/selections.ts);
+    // the kept results to save as files where the engine lists them (spec 13.1: Ask is Cards, Selections, Exports)
+    pages: (caps) => [
+      page("cards", "Cards", { to: href("ask") }),
+      ...(door(caps, "GET /api/ask/selections") ? [page("selections", "Selections")] : []),
+      ...(door(caps, "GET /api/ask/handles") ? [page("exports", "Exports")] : []),
+    ],
   },
   {
     id: "data",
@@ -85,7 +90,12 @@ export const PLACEHOLDERS: Placeholder[] = [
     words: "Hand results out as a release, a BIDS tree or a table, written to an export place.",
     built: true,
     // New release only to whoever may make one, as the page offers its button (ops/ReleasePage.tsx)
-    pages: (caps) => [page("releases", "Releases", { to: href("release") }), ...(may(caps, "release:work") ? [page("new", "New release")] : [])],
+    // record 55 H2, round 4: the kept session schemes where the engine lists them
+    pages: (caps) => [
+      page("releases", "Releases", { to: href("release") }),
+      ...(may(caps, "release:work") ? [page("new", "New release")] : []),
+      ...(door(caps, "GET /api/session-schemes") ? [page("schemes", "Session schemes")] : []),
+    ],
   },
   {
     id: "pipelines",
@@ -100,8 +110,10 @@ export const PLACEHOLDERS: Placeholder[] = [
     // record 55 H2, round 5: the jobs' logs where the engine keeps them (ops/logs.ts);
     // Models where the engine lists models (spec section 13.1), each page by its own grant
     pages: (caps) => [
-      ...(may(caps, "pipelines:see") && door(caps, "GET /api/jobs") ? [page("now", "Running now", { to: href("pipelines") })] : []),
-      ...(may(caps, "pipelines:see") && door(caps, "GET /api/pipelines") ? [page("catalog", "Catalog", { also: ["runs", "plan"] })] : []),
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/jobs") ? [page("jobs", "Jobs", { to: href("pipelines") })] : []),
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/pipelines") ? [page("catalog", "Catalog", { also: ["plan"] })] : []),
+      // spec 13.1: the runs are a page of their own, and a run's page keeps it marked
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/pipelines") && door(caps, "GET /api/pipeline-runs") ? [page("runs", "Runs")] : []),
       ...(may(caps, "pipelines:see") && logsOffered(caps) ? [page("logs", "Logs")] : []),
       ...(may(caps, "models:see") && door(caps, "GET /api/models") ? [page("models", "Models")] : []),
     ],

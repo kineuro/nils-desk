@@ -3,7 +3,7 @@
 // and an address without one reads as it did.
 
 import { describe, expect, it } from "vitest";
-import { href, narrow, parse } from "./routes";
+import { href, moved, narrow, parse } from "./routes";
 
 describe("an address that narrows a page", () => {
   it("reads the batch a queue is reached from", () => {
@@ -21,5 +21,20 @@ describe("an address that narrows a page", () => {
     expect(narrow(href("review"), { cohort: "spring scans" })).toBe("#review?cohort=spring%20scans");
     expect(parse(narrow(href("review"), { cohort: "spring scans" })).query).toEqual({ cohort: "spring scans" });
     expect(narrow(href("review"), { batch: null, cohort: "" })).toBe("#review");
+  });
+});
+
+// record 55 H2, round 4: one word per thing, and an old address never strands a person
+describe("addresses that took the map's words", () => {
+  it("lead Query to Ask and the renamed Settings pages to their new names, keeping what they open and narrow", () => {
+    expect(moved(parse("#query"))).toBe("#ask");
+    expect(moved(parse("#query/12"))).toBe("#ask/12");
+    expect(moved(parse("#query/selections"))).toBe("#ask/selections");
+    expect(moved(parse("#settings/database"))).toBe("#settings/backups");
+    expect(moved(parse("#settings/identity"))).toBe("#settings/people");
+    expect(moved(parse("#settings/gateway?x=1"))).toBe("#settings/language-models?x=1");
+    expect(moved(parse("#models/model/3"))).toBe("#pipelines/models/3");
+    expect(moved(parse("#settings/places"))).toBeNull();
+    expect(moved(parse("#ask/12"))).toBeNull();
   });
 });

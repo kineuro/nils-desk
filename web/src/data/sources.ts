@@ -37,7 +37,7 @@ export function datesWord(v: string | null | undefined): string {
 }
 
 /** Where a date must not show in a path, what to do instead: the words every page that speaks of the dates ends on. */
-export const DATES_KEPT = "Every release keeps the real date. Where a date must not show in a path, label the sessions by months since baseline (M00, M06) with a session scheme.";
+export const DATES_KEPT = "Dates stay real; a months scheme labels sessions M00, M06 instead.";
 
 export interface Digest {
   id: number;

@@ -98,7 +98,8 @@ describe("the page", () => {
     expect(html).toContain("<h1>Work</h1>");
     for (const t of ["Answer a question", "Pick a main scan", "Check a result", "Settle a disagreement"]) expect(html).toContain(`<h2>${t}</h2>`);
     expect(html).not.toContain("Draw");
-    expect(html).toContain('href="#review/questions">Questions<b>57</b>');
+    // the side carries Review's pages (record 55 H2, round 4): no tabs here
+    expect(html).not.toContain('class="chips pages"');
     expect(html).toContain("12 questions are held by campaigns, answered there.");
     expect(html).toContain("base · 11 values · 2 of 6 yours");
     // a row's kind is its border's colour, never a glyph

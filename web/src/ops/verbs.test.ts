@@ -98,8 +98,8 @@ describe("the verb in words", () => {
     expect(cancelNeeds(job(["digest", "@a"]))).toEqual(["data:work", "the Data page"]);
     expect(cancelNeeds(job(["classify"]))).toEqual(["pipelines:work", "the Pipelines page"]);
     expect(cancelNeeds(job(["release"]))).toEqual(["release:work", "the Release page"]);
-    expect(cancelNeeds(job(["backup"]))).toEqual(["database:work", "the Database page"]);
-    expect(cancelNeeds(job(["ask", "run"]))).toEqual(["query:work", "the Query page"]);
+    expect(cancelNeeds(job(["backup"]))).toEqual(["database:work", "the Backups page"]);
+    expect(cancelNeeds(job(["ask", "run"]))).toEqual(["query:work", "the Ask page"]);
     expect(cancelNeeds(job(["linkage", "merge"]))).toEqual(["data:work", "the Data page"]);
     expect(nextMove(job(["/home/lab/nils", "--registry", "/r", "digest", "@a", "--restart"]))).toEqual({ label: "Read again", command: ["digest", "@a"] });
     expect(nextMove(job(["linkage", "import", "/x/map.csv"]))).toEqual({ label: "File again", command: ["linkage", "import", "/x/map.csv"] });

@@ -85,6 +85,25 @@ export function sinceTile(last: string | null, s: Summary | null): Tile {
 
 const VISIT = "nils-desk.home.last-visit";
 
+/**
+ * Where a tile leads (record 55 H2, round 4: Home's tiles are links to where
+ * the person acts), or null where the section is not theirs: what the
+ * registry holds and what changed open Data's Browse (else the datasets),
+ * what needs you opens Review's list of work, what runs opens the jobs.
+ */
+export function tileHref(id: TileId, caps: Capabilities): string | null {
+  switch (id) {
+    case "holds":
+    case "since":
+      if (!may(caps, "data:see") || !door(caps, "GET /api/sources")) return null;
+      return door(caps, "GET /api/subjects") && door(caps, "GET /api/scans") ? "#data/browse" : "#data/datasets";
+    case "needs":
+      return "#review";
+    case "running":
+      return "#pipelines";
+  }
+}
+
 /** When this browser last opened Home; null on the first visit or in a window that keeps nothing. */
 export function lastVisit(): string | null {
   try {

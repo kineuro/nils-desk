@@ -182,7 +182,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
             ? { tone: "caution", words: "warming" }
             : { tone: "ok", words: of > 0 ? `warm · ${busy} of ${of} streams busy` : "warm" },
       ...own("kvasir", () => fromSource(kvasirPart?.kind)),
-      page: page("gateway"),
+      page: page("language-models"),
     });
     const local = backends.find((b) => b.locality === "local");
     if (local) {
@@ -204,7 +204,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
             : { tone: "caution", words: "no model admitted yet" },
         newer: { text: "yours to update", tag: false },
         update: null,
-        page: page("gateway"),
+        page: page("language-models"),
       });
     }
   }
@@ -243,7 +243,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
         health: service ? (service.running ? { tone: "ok", words: "running" } : { tone: "blocked", words: "stopped" }) : kept,
         newer: postgres ? { text: `stays at ${postgres.version}`, tag: false } : { text: "yours to update", tag: false },
         update: null,
-        page: page("database"),
+        page: page("backups"),
       });
     } else {
       rows.push({
@@ -257,7 +257,7 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
         health: engine !== null ? { tone: "ok", words: "kept by the engine" } : { tone: "blocked", words: "not known" },
         newer: { text: "moves with the engine", tag: false },
         update: null,
-        page: page("database"),
+        page: page("backups"),
       });
     }
   }

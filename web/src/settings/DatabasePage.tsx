@@ -144,8 +144,8 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
   const rule = places ? registryRule(places) : null;
   const refused = draft ? draftRule(draft) : null;
   // a person who may see the database reads it; every change asks for work on it
-  const backupsLocked = needsWork(caps, "Changing the schedule, backing up or rehearsing a restore", [["database:work", "the Database page"]]);
-  const calendarLocked = needsWork(caps, "Changing the calendar", [["database:work", "the Database page"]]);
+  const backupsLocked = needsWork(caps, "Changing the schedule, backing up or rehearsing a restore", [["database:work", "the Backups page"]]);
+  const calendarLocked = needsWork(caps, "Changing the calendar", [["database:work", "the Backups page"]]);
 
   const backUp = () =>
     backup.act("backing up, then rehearsing a restore of the archive", async () => {
@@ -196,7 +196,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
   const nothing = !backups && !calendar && !status;
   return (
     <div className="settings">
-      <Head title="Database" lede="Where the registry lives, and how it is backed up." />
+      <Head title="Backups" lede="Where the registry lives, and how it is backed up." />
       {(status || backups) && <Stats items={databaseStats(backups, status?.backend ?? null, now)} />}
       {why && <p className="warn">{why}</p>}
       {nothing && !why && <p className="meta">Reading the registry.</p>}

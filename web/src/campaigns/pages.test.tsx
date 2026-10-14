@@ -63,10 +63,10 @@ describe("the list, inside Review's one list of work", () => {
     );
   });
 
-  it("shows the label sets tab only where the door and a grant that reads it are", () => {
-    expect(html).toContain('href="#review/label-sets"');
-    const old = renderToStaticMarkup(<WorkBody caps={capsFor({ doors: DOORS.filter((d) => !d.includes("label-sets")) })} summary={null} list={list} now={NOW} onMake={none} />);
-    expect(old).not.toContain("label-sets");
+  // record 55 H2, round 4: one navigation pattern, a section's pages in the side (sections.test.ts), none as chips in the page
+  it("draws no tabs of Review's pages: the side carries them", () => {
+    expect(html).not.toContain('class="chips pages"');
+    expect(html).not.toContain('href="#review/label-sets"');
   });
 });
 

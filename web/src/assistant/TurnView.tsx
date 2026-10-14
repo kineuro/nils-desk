@@ -93,7 +93,7 @@ export function TurnView(props: {
             <ApprovalCardView card={cardOfProposal(p, decidedElsewhere)} onDecide={onDecide && !p.stale ? (v) => onDecide(p, v === "approved" ? "accepted" : "rejected") : undefined} />
             {openQuery && (
               <a className="button secondary small" href={openQuery(p.document)}>
-                Open in Query
+                Open in Ask
               </a>
             )}
           </Fragment>
@@ -171,11 +171,11 @@ function SaidWords({ text }: { text: string }) {
         s.kind === "words" ? (
           <Fragment key={i}>{s.text}</Fragment>
         ) : s.mention.kind === "card" ? (
-          <a key={i} className="mention" href={href("query", s.mention.id)} title={`Query card, document ${s.mention.id}`}>
+          <a key={i} className="mention" href={href("ask", s.mention.id)} title={`Query card, document ${s.mention.id}`}>
             {s.mention.name}
           </a>
         ) : s.mention.kind === "selection" ? (
-          <a key={i} className="mention" href={href("query", "selections")} title={`Saved selection ${s.mention.id}`}>
+          <a key={i} className="mention" href={href("ask", "selections")} title={`Saved selection ${s.mention.id}`}>
             {s.mention.name}
           </a>
         ) : (

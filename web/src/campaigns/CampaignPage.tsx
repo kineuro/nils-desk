@@ -45,7 +45,7 @@ import {
   type Item,
   type LabelSet,
 } from "./client";
-import { StateBar, Tabs } from "./parts";
+import { StateBar } from "./parts";
 import type { RaterStats as Pace } from "./reader";
 import { R48, statsFor } from "./readerDoors";
 import { RaterStats } from "./ReaderParts";
@@ -202,7 +202,6 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           </button>
         )}
       </div>
-      <Tabs caps={caps} on="campaigns" />
       {said && (
         <p className="meta said">
           <Icon name="check" />

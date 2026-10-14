@@ -147,7 +147,6 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
   // the queue's count is the whole queue's, where the summary gives it, also while the table reads one kind
   const summary = load.kind === "ready" ? load.summary : null;
   const queued = summary ? queuedCount(summary) : open.filter((i) => familyOf(i.kind) !== "campaigns").length;
-  const identity = open.filter((i) => familyOf(i.kind) === "identity").length;
   const changed = (words: string) => {
     setSaid(words);
     read();
@@ -172,28 +171,22 @@ function ReviewPages({ caps, page, query }: { caps: Capabilities; page: string |
           <p className="lede">{head.lede}</p>
         </div>
       </div>
+      {/* the questions and their grown families; Rules and Subjects are pages of the side (record 55 H2, round 4) */}
+      {sub !== "rules" && sub !== "identifiers" && (
       <div className="chips pages">
-        <a className="opt" href={href("review")}>
-          Work
-        </a>
         <a className={sub === "queue" ? "opt on" : "opt"} href={pageHref(null)} aria-current={sub === "queue" ? "page" : undefined}>
           Questions
           {load.kind === "ready" && <b>{n(queued)}</b>}
         </a>
-        <a className={sub === "rules" ? "opt on" : "opt"} href={pageHref("rules")} aria-current={sub === "rules" ? "page" : undefined}>
-          Rules
-        </a>
-        <a className={sub === "identifiers" ? "opt on" : "opt"} href={pageHref("identifiers")} aria-current={sub === "identifiers" ? "page" : undefined}>
-          Identifiers
-          {load.kind === "ready" && identity > 0 && <b>{n(identity)}</b>}
-        </a>
-        {GROWN.filter((g) => sub === g.sub || grown[g.sub] > 0).map((g) => (
+        {/* record 55 H2, round 4: nothing hidden while empty, each with its count, zero too */}
+        {GROWN.map((g) => (
           <a key={g.sub} className={sub === g.sub ? "opt on" : "opt"} href={pageHref(g.sub)} aria-current={sub === g.sub ? "page" : undefined}>
             {g.title}
-            {grown[g.sub] > 0 && <b>{n(grown[g.sub])}</b>}
+            {load.kind === "ready" && <b>{n(grown[g.sub])}</b>}
           </a>
         ))}
       </div>
+      )}
       {said && (
         <p className="meta said">
           <Icon name="check" />

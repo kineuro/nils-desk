@@ -77,14 +77,6 @@ export function RoundsBody({ caps, load, said = null, onDraw, onGrade }: RoundsB
           </button>
         )}
       </div>
-      <div className="chips pages">
-        <a className="opt" href={href("review")}>
-          Work
-        </a>
-        <a className="opt on" href={href("review", "rounds")} aria-current="page">
-          Rounds
-        </a>
-      </div>
       {said && <p className="meta said">{said}</p>}
       {load.kind === "loading" && <Wait phase="reading the rounds" since={load.since} size="panel" />}
       {load.kind === "failed" && <p className="warn">The rounds could not be read: {load.why}</p>}
