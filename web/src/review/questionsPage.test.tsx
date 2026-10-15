@@ -59,7 +59,7 @@ describe("Review's Questions page", () => {
     act(() => root.render(<ReviewPage caps={caps} page="questions" query={{ dataset: "ms-a" }} />));
     await settle();
     expect(urls).toContain("/api/review/questions?dataset=ms-a");
-    expect([...el.querySelectorAll(".q-row .q-words")].map((w) => w.textContent)).toEqual(["T2w or FLAIR?", "Which base?"]);
+    expect([...el.querySelectorAll(".q-row .q-words")].map((w) => w.textContent)).toEqual(["T2w or PDw?", "Which base?"]);
     expect(el.querySelector(".chips.pages a.on b")?.textContent).toBe("21");
     // what else waits: the identity question and a pass's, never the questions answered above
     const rows = [...el.querySelectorAll("table.queue tbody tr")].map((r) => r.textContent ?? "");
@@ -73,10 +73,10 @@ describe("Review's Questions page", () => {
 
   it("opens a question's grid at its address", async () => {
     const caps = capsWith([QUESTION_DOORS.list, QUESTION_DOORS.scans, QUESTION_DOORS.answer, "POST /api/campaigns"], [...GRANTS] as Grant[]);
-    act(() => root.render(<ReviewPage caps={caps} page="questions" arg="base:FLAIR|T2w" query={{ dataset: "ms-a" }} />));
+    act(() => root.render(<ReviewPage caps={caps} page="questions" arg="base:PDw|T2w" query={{ dataset: "ms-a" }} />));
     await settle();
-    expect(urls[0]).toBe("/api/review/questions/base%3AFLAIR%7CT2w/scans?dataset=ms-a&page=1&limit=50");
-    expect(el.querySelector(".qgrid-head h1")?.textContent).toBe("T2w or FLAIR?");
+    expect(urls[0]).toBe("/api/review/questions/base%3APDw%7CT2w/scans?dataset=ms-a&page=1&limit=50");
+    expect(el.querySelector(".qgrid-head h1")?.textContent).toBe("T2w or PDw?");
     expect(el.querySelectorAll(".q-tile")).toHaveLength(12);
     // the four System 1 agrees on step back, the eight it disputes stay bright
     expect(el.querySelectorAll(".q-tile.dim")).toHaveLength(4);

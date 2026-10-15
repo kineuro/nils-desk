@@ -12,7 +12,6 @@ export const VOCAB = [
   { value: "SWI", name: "SWI", label: null },
   { value: "T2*w", name: "T2starw", label: "T2*w" },
   { value: "T2w", name: "T2w", label: null },
-  { value: "FLAIR", name: "FLAIR", label: null },
   { value: "PDw", name: "PDw", label: null },
   { value: "T1w", name: "T1w", label: null },
 ];
@@ -21,7 +20,7 @@ export const LIST: Json = {
   scope: { kind: "dataset", name: "ms-a", id: 3 },
   scans: 21,
   questions: [
-    { key: "base:FLAIR|T2w", axis: "base", shape: "pair", values: ["T2w", "FLAIR"], words: "T2w or FLAIR?", reason: "The rules and System 1 disagree.", scans: 12, staged: 0, kinds: { "base:disagree": 12 } },
+    { key: "base:PDw|T2w", axis: "base", shape: "pair", values: ["T2w", "PDw"], words: "T2w or PDw?", reason: "The rules and System 1 disagree.", scans: 12, staged: 0, kinds: { "base:disagree": 12 } },
     { key: "base:missing", axis: "base", shape: "missing", values: ["T1w", "T2w"], words: "Which base?", reason: "The rules found no base for these scans.", scans: 7, staged: 1, kinds: { "base:missing": 7 } },
   ],
   vocabularies: { base: VOCAB },
@@ -86,14 +85,14 @@ export const PAGE_MISSING: Json = {
   ],
 };
 
-/** `base:FLAIR|T2w`: twelve scans the rules call T2w and System 1 FLAIR, but for four it agrees on. */
+/** `base:PDw|T2w`: twelve scans the rules call T2w and System 1 PDw, but for four it agrees on. */
 export const PAGE_PAIR: Json = {
-  key: "base:FLAIR|T2w",
+  key: "base:PDw|T2w",
   axis: "base",
   shape: "pair",
-  words: "T2w or FLAIR?",
+  words: "T2w or PDw?",
   reason: "The rules and System 1 disagree.",
-  values: ["T2w", "FLAIR"],
+  values: ["T2w", "PDw"],
   vocabulary: VOCAB,
   system1: { status: "confirmed", model: { id: 7, name: "s1c", version: "2026-10-09" }, why: null },
   total: 12,
@@ -107,16 +106,16 @@ export const PAGE_PAIR: Json = {
       items: [60 + k],
       name: `Ax_T2w_2D_IR-TSE_${301 + k}`,
       nils: "T2w",
-      other: "FLAIR",
+      other: "PDw",
       rules: {
         axis: "base",
         value: "T2w",
         set_by: { kind: "rule" },
         decided: { rule_set: "base", rule: "t2_by_name", clause: 0, tier: "name" },
         line: "base: T2w by base/t2_by_name (name)",
-        overridden: k % 4 === 0 ? [{ rule_set: "physics", rule: "flair_by_ti", value: "FLAIR", tier: "physics", rank: "rule_set_order" }] : [],
+        overridden: k % 4 === 0 ? [{ rule_set: "physics", rule: "pd_by_te", value: "PDw", tier: "physics", rank: "rule_set_order" }] : [],
       },
-      system1: agrees ? { value: "T2w", p: 0.96, reliability: 0.8, agrees: true } : { value: "FLAIR", p: 0.81 + (k % 5) / 50, reliability: 0.35, agrees: false },
+      system1: agrees ? { value: "T2w", p: 0.96, reliability: 0.8, agrees: true } : { value: "PDw", p: 0.81 + (k % 5) / 50, reliability: 0.35, agrees: false },
     });
   }),
 };

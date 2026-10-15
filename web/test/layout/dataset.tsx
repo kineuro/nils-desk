@@ -66,7 +66,7 @@ for (let u = 0; u < 6; u++)
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 const posted: unknown[] = [];
 (window as unknown as { posted: unknown[] }).posted = posted;
-const BASE = ["DWI", "SWI", "T2*w", "T2w", "FLAIR", "PDw", "T1w"].map((v) => ({ value: v, name: v === "T2*w" ? "T2starw" : v, label: null }));
+const BASE = ["DWI", "SWI", "T2*w", "T2w", "PDw", "T1w"].map((v) => ({ value: v, name: v === "T2*w" ? "T2starw" : v, label: null }));
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const u = new URL(url, location.origin);
@@ -78,7 +78,7 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     return json({
       scope: { kind: "dataset", name: "ms-a", id: 3 },
       scans: 2,
-      questions: asked ? [{ key: "base:FLAIR|T2w", axis: "base", shape: "pair", values: ["T2w", "FLAIR"], words: "T2w or FLAIR?", reason: "The rules and System 1 disagree.", scans: 2, staged: 0, kinds: { "base:disagree": 2 } }] : [],
+      questions: asked ? [{ key: "base:PDw|T2w", axis: "base", shape: "pair", values: ["T2w", "PDw"], words: "T2w or PDw?", reason: "The rules and System 1 disagree.", scans: 2, staged: 0, kinds: { "base:disagree": 2 } }] : [],
       vocabularies: { base: BASE },
       elsewhere: [],
       held: { scans: 0, campaigns: [] },
@@ -87,7 +87,7 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (u.pathname.endsWith("/answer")) {
     const body = JSON.parse(String(init?.body)) as { stacks: number[] };
     posted.push(body);
-    return json({ key: "base:FLAIR|T2w", axis: "base", answered: 1, decisions: [{ stack: body.stacks[0], value: "FLAIR", decision: 7 }], skipped: [], staged: false, blind: 0, resort: { job: 5, state: "done", stacks: 1 }, left: 1 });
+    return json({ key: "base:PDw|T2w", axis: "base", answered: 1, decisions: [{ stack: body.stacks[0], value: "PDw", decision: 7 }], skipped: [], staged: false, blind: 0, resort: { job: 5, state: "done", stacks: 1 }, left: 1 });
   }
   // keeping what the browser shows: the question counted before anything is kept
   if (u.pathname === "/api/ask/diagnose") {

@@ -385,14 +385,6 @@ export function kindTag(kind: string): { words: string; tone: "gated" | "caution
   return { words: kindOf(kind).area, tone: "" };
 }
 
-/** The decision's scope, as the door names it and as the page says it. */
-export const SCOPES: { scope: "stack" | "series" | "subject" | "origin"; words: string }[] = [
-  { scope: "stack", words: "this scan" },
-  { scope: "series", words: "its series" },
-  { scope: "subject", words: "this subject" },
-  { scope: "origin", words: "this scanner" },
-];
-
 /** Why a decision was refused, in words: the engine's ranking says who decided before and outranks the caller. */
 export function refusalWords(e: unknown): string {
   if (e instanceof DoorError) {

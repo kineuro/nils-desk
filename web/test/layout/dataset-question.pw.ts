@@ -19,21 +19,21 @@ for (const [name, width, height] of [
     await expect(page.locator(".scan-question")).toHaveCount(0);
     await page.locator(".dview-row.scan", { hasText: "Ax_T2w_2D_FLAIR_IR-TSE_ND" }).first().click();
     const bar = page.locator(".scan-question");
-    await expect(bar.locator(".q-ask")).toHaveText("T2w or FLAIR?");
+    await expect(bar.locator(".q-ask")).toHaveText("T2w or PDw?");
     await expect(bar).toContainText("NILS: T2w");
     // the picture is framed in the colour of NILS's answer
     await expect(page.locator(".dview-stage.asks")).toHaveAttribute("data-slot", "4");
     await page.locator(".scan-canvas").click();
     await page.keyboard.press("2");
-    await expect(bar.locator(".opt.on")).toHaveText("2FLAIR");
+    await expect(bar.locator(".opt.on")).toHaveText("2PDw");
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     const box = (await bar.boundingBox())!;
     expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
     if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/dataset-question-${name}.png` });
     await page.keyboard.press("Enter");
-    await expect(bar).toContainText("base: FLAIR · sorted again");
+    await expect(bar).toContainText("base: PDw · sorted again");
     const posted = await page.evaluate(() => (window as unknown as { posted: unknown[] }).posted);
-    expect(posted).toEqual([{ value: "FLAIR", stacks: [102], except: [], dataset: "ms-a" }]);
+    expect(posted).toEqual([{ value: "PDw", stacks: [102], except: [], dataset: "ms-a" }]);
     await expect(page.locator(".dview-row.scan.on")).not.toHaveClass(/look/u);
     await expect(page.locator(".dview-stage.asks")).toHaveCount(0);
   });

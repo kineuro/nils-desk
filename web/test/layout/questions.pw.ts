@@ -35,7 +35,7 @@ for (const vp of VIEWPORTS) {
     test("the questions read as a list in plain words, each with its scans and why", async ({ page }) => {
       await page.goto("/questions.html#review/questions?dataset=ms-a");
       await expect(page.locator(".q-row")).toHaveCount(2);
-      await expect(page.locator(".q-row .q-words")).toHaveText(["T2w or FLAIR?", "Which base?"]);
+      await expect(page.locator(".q-row .q-words")).toHaveText(["T2w or PDw?", "Which base?"]);
       await expect(page.locator(".q-row").nth(1)).toContainText("The rules found no base for these scans.");
       await expect(page.locator(".q-row").nth(1).locator(".q-count")).toContainText("7 scans");
       await expect(page.locator(".q-else")).toContainText("System 1 asks about a whole scan: 2 scans");
@@ -91,7 +91,7 @@ for (const vp of VIEWPORTS) {
         expect(tops[0]).toBe(tops[1]);
       }
       await page.keyboard.press("Enter");
-      await expect(page.locator(".qgrid-head h1")).toHaveText("T2w or FLAIR?");
+      await expect(page.locator(".qgrid-head h1")).toHaveText("T2w or PDw?");
       const posted = await page.evaluate(() => (window as unknown as { posted: unknown[] }).posted);
       expect(posted).toEqual([{ value: "T1w", stacks: [201, 202, 203, 204, 205, 206, 207], except: [{ stack: 203, value: "T2w" }], dataset: "ms-a" }]);
       await expect(page.locator(".qgrid-said")).toContainText("7 scans answered");
@@ -99,7 +99,7 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator(".q-tile")).toHaveCount(12);
       await expect(page.locator(".q-tile.dim")).toHaveCount(4);
       await page.keyboard.press("?");
-      await expect(page.locator(".q-rule").first()).toContainText("over physics/flair_by_ti (FLAIR)");
+      await expect(page.locator(".q-rule").first()).toContainText("over physics/pd_by_te (PDw)");
       await noSidewaysScroll(page, vp.width);
       await shot(page, `questions-pair-${vp.name}`);
     });

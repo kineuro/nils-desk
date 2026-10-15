@@ -2,7 +2,7 @@
 // Review round 1's layout check (record 56 section 6.3): the real desk, its
 // top bar and side, on Review's Questions for one dataset and on a
 // question's grid, against a fake engine that gathers its questions as the
-// engine's doors do: "T2w or FLAIR?" over twelve scans with System 1's
+// engine's doors do: "T2w or PDw?" over twelve scans with System 1's
 // answers, "Which base?" over seven with one answer staged and one read
 // blind first, a question about whole scans answered on Asked, three scans
 // a campaign holds, and an identity question that waits beside them. The
@@ -47,7 +47,7 @@ const ITEMS = [
 
 const w = window as unknown as { posted: unknown[]; left: Record<string, number> };
 w.posted = [];
-w.left = { "base:missing": 7, "base:FLAIR|T2w": 12 };
+w.left = { "base:missing": 7, "base:PDw|T2w": 12 };
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);
@@ -55,7 +55,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (path === "/desk/capabilities") return json(200, caps);
   if (path === "/api/review/questions") return json(200, { ...LIST, questions: (LIST.questions as { key: string }[]).filter((q) => w.left[q.key] > 0) });
   if (path === "/api/review/questions/base:missing/scans") return json(200, PAGE_MISSING);
-  if (path === "/api/review/questions/base:FLAIR|T2w/scans") return json(200, PAGE_PAIR);
+  if (path === "/api/review/questions/base:PDw|T2w/scans") return json(200, PAGE_PAIR);
   const answer = /^\/api\/review\/questions\/(.+)\/answer$/u.exec(path);
   if (answer) {
     const body = JSON.parse(String(init?.body)) as { stacks: number[]; except: { stack: number; skip?: boolean }[] };

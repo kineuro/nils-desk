@@ -3,7 +3,7 @@
 // studies/2026-10-09-review-round1): the few questions the sort leaves to a
 // person, each answered as a grid of its scans. The engine gathers its own
 // questions into plain ones with their distinct scans (`Which base? 7
-// scans`, `T2w or FLAIR? 12 scans`), pages a question's scans with each one's
+// scans`, `T2w or PDw? 12 scans`), pages a question's scans with each one's
 // picture and NILS's answer, and takes one answer for the scans a person saw
 // with the scans set apart as exceptions, then re-sorts them at once.
 //
@@ -171,7 +171,7 @@ const shapeOf = (v: unknown): Shape => (v === "pair" || v === "doubt" ? v : "mis
 /** An axis's name in words. */
 export const axisWords = (axis: string): string => axis.replaceAll("_", " ");
 
-/** The question in words where the engine gave none: `Which base?`, `T2w or FLAIR?`, `T2w?`. */
+/** The question in words where the engine gave none: `Which base?`, `T2w or PDw?`, `T2w?`. */
 export function wordsOf(shape: Shape, axis: string, values: string[]): string {
   if (shape === "pair" && values.length >= 2) return `${values[0]} or ${values[1]}?`;
   if (shape === "doubt" && values.length >= 1) return `${values[0]}?`;
