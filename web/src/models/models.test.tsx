@@ -319,5 +319,11 @@ describe("a certificate as the engine may send it", () => {
     }
     expect(citeBody(S1_NEXT, { ...f, bound: "1.5" })).toEqual({ wrong: ["bound"] });
     expect(citeBody(S1_NEXT, { ...f, bound: "-0.1" })).toEqual({ wrong: ["bound"] });
+    // shares are plain decimals: no exponent, hex, sign or Infinity
+    for (const v of ["8.65e-4", "0x1", "+0.5", "Infinity", "1.2.3"]) {
+      expect(citeBody(S1_NEXT, { ...f, bound: v, coverage: v })).toEqual({ wrong: ["bound", "coverage"] });
+    }
+    expect(citeBody(S1_NEXT, { ...f, bar: "1e-2" })).toEqual({ wrong: ["bar"] });
+    expect("body" in citeBody(S1_NEXT, { ...f, bound: ".000865", coverage: "0.892" })).toBe(true);
   });
 });
