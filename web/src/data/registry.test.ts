@@ -52,7 +52,7 @@ describe("Browse", () => {
     expect(urls).toEqual([
       "/api/subjects?limit=60&order=code&show=code&filter=look",
       "/api/subjects/12/sessions?name=date&show=code",
-      "/api/sessions/34/stacks?limit=200&pictures=1",
+      "/api/sessions/34/stacks?limit=200&pictures=1&links=1",
       "/api/sessions/none/stacks?studies=7%2C8&limit=200",
       "/api/scans?limit=200&after=500",
     ]);

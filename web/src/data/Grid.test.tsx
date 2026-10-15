@@ -346,7 +346,7 @@ describe("the dataset viewer's grid", () => {
 
   it("shows one visit's scans in folders by datatype that fold, each family outlined in its colour, with pictures, main and look", async () => {
     await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34");
-    expect(asked("/api/datasets/ms-a/scans")).toEqual(["/api/datasets/ms-a/scans?session=34&limit=200&pictures=1"]);
+    expect(asked("/api/datasets/ms-a/scans")).toEqual(["/api/datasets/ms-a/scans?session=34&limit=200&pictures=1&links=1"]);
     expect(el.querySelector(".vw-title h1")?.textContent).toBe("ses-20190913");
     expect(el.querySelector(".vw-title .vw-sum")?.textContent).toBe("day 0 · 6 scans · 1 need a look");
     expect(text(".vw-crumbs a")).toEqual(["Datasets", "ms-a", "sub-a1"]);
@@ -420,7 +420,7 @@ describe("the dataset viewer's grid", () => {
 
   it("reads every page of a visit, not its first two hundred scans alone", async () => {
     await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s50");
-    expect(asked("/api/datasets/ms-a/scans")).toEqual(["/api/datasets/ms-a/scans?session=50&limit=200&pictures=1", "/api/datasets/ms-a/scans?session=50&limit=200&pictures=1&after=1199"]);
+    expect(asked("/api/datasets/ms-a/scans")).toEqual(["/api/datasets/ms-a/scans?session=50&limit=200&pictures=1&links=1", "/api/datasets/ms-a/scans?session=50&limit=200&pictures=1&links=1&after=1199"]);
     expect(el.querySelectorAll(".vw-card.vw-scan").length).toBe(250);
     expect(el.textContent).not.toContain("The first");
   });
@@ -439,7 +439,7 @@ describe("the dataset viewer's grid", () => {
     key("ArrowRight", { altKey: true });
     await settle();
     expect(location.hash).toBe("#data/datasets/ms-a/view?mode=grid&subject=1&visit=t7.8");
-    expect(asked("/api/datasets/ms-a/scans?studies")).toEqual(["/api/datasets/ms-a/scans?studies=7%2C8&limit=200&pictures=1"]);
+    expect(asked("/api/datasets/ms-a/scans?studies")).toEqual(["/api/datasets/ms-a/scans?studies=7%2C8&limit=200&pictures=1&links=1"]);
     expect(el.querySelector(".vw-title h1")?.textContent).toBe("ses-20201104");
   });
 

@@ -40,7 +40,7 @@ export interface Scan {
   series: number | null;
   orientation: string | null;
   images: number | null;
-  /** The middle plane as a small picture (a data URL), where the engine made one at sort time. */
+  /** The middle plane as a small picture: the preview door's address (since 2026-10-15), or a data URL from an engine before it; null where none is made yet. */
   picture: string | null;
   /** The picture is a first one from the scan's one file while its preview is made: taken over when the whole one comes. */
   partial: boolean;
@@ -101,8 +101,11 @@ export interface ScanRow {
   folder?: string | null;
   axes?: Record<string, string> | null;
   series_number?: number | null;
-  /** With `pictures=1`: the middle plane's picture, about 256 px, its data a JPEG data URL; null where none is made yet. */
-  picture?: { data: string; width: number; height: number; digest: string | null; held: boolean; partial?: boolean } | null;
+  /**
+   * With `pictures=1`: the middle plane's picture, about 256 px: with `links=1` (2026-10-15) `url`, the preview door's middle plane named by
+   * its digest and held state, which the browser keeps; without it, or from an engine before it, `data`, a JPEG data URL. Null where none is made yet.
+   */
+  picture?: { url?: string; data?: string; width: number | null; height: number | null; digest: string | null; held: boolean | null; partial?: boolean } | null;
   /** With `pictures=1`: the open review kinds; empty is sure. */
   questions?: string[] | null;
   /** The viewer's additions (2026-10-09): its family, timing and the roles it is the main scan for; absent from an engine before them. */
@@ -155,7 +158,7 @@ export function scansOf(rows: ScanRow[]): Scan[] {
     series: typeof r.series_number === "number" ? r.series_number : null,
     orientation: r.orientation,
     images: r.images,
-    picture: r.picture && typeof r.picture.data === "string" && r.picture.data !== "" ? r.picture.data : null,
+    picture: pictureOf(r.picture),
     partial: r.picture?.partial === true,
     questions: Array.isArray(r.questions) ? r.questions.filter((q): q is string => typeof q === "string") : [],
     family: typeof r.family === "string" && (FAMILIES as readonly string[]).includes(r.family) ? (r.family as Family) : undefined,
@@ -166,6 +169,13 @@ export function scansOf(rows: ScanRow[]): Scan[] {
     fa: timing(r.fa),
     main: Array.isArray(r.main) ? r.main.filter((m): m is string => typeof m === "string") : [],
   }));
+}
+
+/** A scan's picture as an image's source: the preview door's address where the engine gave one, else its data URL. */
+function pictureOf(p: ScanRow["picture"]): string | null {
+  if (!p) return null;
+  if (typeof p.url === "string" && p.url.startsWith("/api/")) return p.url;
+  return typeof p.data === "string" && p.data !== "" ? p.data : null;
 }
 
 const FAMILIES = ["plain", "symri", "mix", "stage", "swi", "derived", "body"] as const;
