@@ -4,6 +4,9 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- A model's Certified section draws a citation that lacks a field, or holds one that is not text, as `?` instead of failing the page; Record a certificate takes the graded and wrong counts as digits only (no sign, hex, exponent or point) and a bound between 0 and 1.
 
 ### Added
 

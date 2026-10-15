@@ -212,12 +212,14 @@ export function citeBody(m: Pick<Model, "id" | "digest">, f: CertifyForm): { bod
   const num = (s: string) => (s.trim() === "" ? null : Number(s.trim()));
   const bar = num(f.bar);
   if (bar === null || !Number.isFinite(bar) || bar <= 0 || bar >= 1) wrong.push("bar");
-  const n = num(f.n);
-  if (n === null || !Number.isInteger(n) || n <= 0) wrong.push("graded");
-  const errors = num(f.errors);
-  if (errors === null || !Number.isInteger(errors) || errors < 0 || (n !== null && errors > n)) wrong.push("wrong");
+  // a count is digits only: no sign, hex, exponent or point
+  const count = (s: string) => (/^[0-9]+$/u.test(s.trim()) ? Number(s.trim()) : null);
+  const n = count(f.n);
+  if (n === null || !Number.isSafeInteger(n) || n <= 0) wrong.push("graded");
+  const errors = count(f.errors);
+  if (errors === null || !Number.isSafeInteger(errors) || (n !== null && errors > n)) wrong.push("wrong");
   const bound = num(f.bound);
-  if (bound !== null && !Number.isFinite(bound)) wrong.push("bound");
+  if (bound !== null && (!Number.isFinite(bound) || bound < 0 || bound > 1)) wrong.push("bound");
   const coverage = num(f.coverage);
   if (coverage !== null && (!Number.isFinite(coverage) || coverage < 0 || coverage > 1)) wrong.push("coverage");
   const served = f.eqRun.trim() !== "" || f.eqManifest.trim() !== "" || f.eqClass.trim() !== "";
@@ -238,6 +240,11 @@ export function citeBody(m: Pick<Model, "id" | "digest">, f: CertifyForm): { bod
   return { body: { models: [m.id], evidence, result } };
 }
 
+/** A citation's field as text, whatever the engine sent: none where it is not a string. */
+export function textOf(v: unknown): string | null {
+  return typeof v === "string" && v !== "" ? v : null;
+}
+
 /** A share as a percentage for a line. */
 export function percentWords(share: unknown): string {
   if (typeof share !== "number" || !Number.isFinite(share)) return "?";
@@ -249,7 +256,7 @@ export function percentWords(share: unknown): string {
 export function certifiedWords(c: Certificate): string {
   const r = c.result ?? {};
   const counts = typeof r.errors === "number" && typeof r.n === "number" ? `${r.errors.toLocaleString("en-US")} of ${r.n.toLocaleString("en-US")} wrong` : "";
-  if (c.evidence) return [c.evidence.run, counts, typeof r.bound === "number" ? `bound ${percentWords(r.bound)}` : ""].filter(Boolean).join(" · ");
+  if (c.evidence) return [textOf(c.evidence.run), counts, typeof r.bound === "number" ? `bound ${percentWords(r.bound)}` : ""].filter(Boolean).join(" · ");
   return [c.sample, counts, typeof r.risk === "number" ? `risk ${percentWords(r.risk)}` : ""].filter(Boolean).join(" · ");
 }
 
