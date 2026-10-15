@@ -10,7 +10,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AccessLines, GroupForm, PersonForm } from "./AccessForm";
-import { levelsOf, type Group, type Person } from "./identity";
+import { isAdminLevels, levelsOf, raiseArea, type Group, type Person } from "./identity";
 
 const reviewers: Group = { id: 1, name: "Reviewers", grants: ["assistant:use", "data:see", "query:work", "review:work"], detail: "quasi", follows: [], members: ["erik"] };
 const dataTeam: Group = { id: 2, name: "Data team", grants: ["query:work", "data:work", "release:work"], detail: "plain", follows: ["lab-data"], members: [] };
@@ -152,7 +152,7 @@ describe("an admin, and an area at once (record 55, ruling 24)", () => {
   it("draws an admin with every page at its top and every detail, nothing to choose, whatever their group gave", () => {
     const html = renderToStaticMarkup(<PersonForm mode="local" groups={[admins]} person={nima} taken={[]} onClose={none} onDone={none} />);
     expect(html).toContain("<b>Admin</b>");
-    expect(html).toContain("Every page, every detail. Nothing to give.");
+    expect(html).toContain("Work on People makes an admin: every page, every detail. Nothing to give.");
     expect(html).toContain("<p>Nima is an admin: every page, every detail.</p>");
     // campaigns at work, the records at Everything, and the levels below locked
     expect(lineOf(html, "Campaigns")).toMatch(/<button type="button" class="on" aria-pressed="true">Work<\/button>/u);
@@ -167,5 +167,17 @@ describe("an admin, and an area at once (record 55, ruling 24)", () => {
     expect(html).toContain(">Everything</button>");
     expect(html).toContain(">Every setting</button>");
     expect(lineOf(html, "People")).toContain("work: admin: everything, every detail");
+  });
+
+  it("never makes an admin by giving an area at once: People is raised to see, and work is chosen on its own line", () => {
+    const none = levelsOf([]);
+    for (const area of ["settings", "all"] as const) {
+      const raised = raiseArea(none, area);
+      expect(raised.identity).toBe("see");
+      expect(isAdminLevels(raised)).toBe(false);
+      expect(raised.audit).toBe("see");
+    }
+    expect(raiseArea(none, "all").campaigns).toBe("work");
+    expect(raiseArea({ ...none, identity: "work" }, "settings").identity).toBe("work");
   });
 });

@@ -117,7 +117,14 @@ export function PseudonymsPage({ caps, onChanged }: { caps: Capabilities; onChan
             <tbody>
               {types.map((t) => (
                 <tr key={t.name}>
-                  <td className="path">{typeLabel(t)}</td>
+                  <td className="path">
+                    {typeLabel(t)}
+                    {t.identifying && (
+                      <span className="tag caution" title="Looking a subject up by one of these needs every detail">
+                        Leads to a person
+                      </span>
+                    )}
+                  </td>
                   <td className="meta">{t.description ?? ""}</td>
                   <td className="num">{typeof t.identifiers === "number" ? n(t.identifiers) : ""}</td>
                   <td className="num">{typeof t.subjects === "number" ? n(t.subjects) : ""}</td>
@@ -143,6 +150,9 @@ export function PseudonymsPage({ caps, onChanged }: { caps: Capabilities; onChan
 function TypeDialog({ onClose, onMade }: { onClose: () => void; onMade: (name: string) => void }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  // record 55, ruling 24: does one of these lead to a person wherever it is met; sent only once the person chose,
+  // so naming a type that exists again never changes what it is
+  const [identifying, setIdentifying] = useState<boolean | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const plain = typeName(name);
@@ -151,7 +161,7 @@ function TypeDialog({ onClose, onMade }: { onClose: () => void; onMade: (name: s
     setSaving(true);
     setWhy(null);
     linkage
-      .addType(plain, description.trim())
+      .addType(plain, description.trim(), identifying ?? undefined)
       .then(() => onMade(plain))
       .catch((e: unknown) => {
         setSaving(false);
@@ -186,6 +196,20 @@ function TypeDialog({ onClose, onMade }: { onClose: () => void; onMade: (name: s
         </label>
         <div className="input">
           <input id="type-description" value={description} placeholder="the number a study gives each participant" disabled={saving} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+      </div>
+      <div className="field">
+        <span className="label" id="type-kind">
+          Leads to
+          <Hint text="A hospital's record number leads to a person anywhere: looking a subject up by one then needs every detail. A study's own ID does not." />
+        </span>
+        <div className="chips" role="group" aria-labelledby="type-kind">
+          <button type="button" className={identifying ? "opt" : "opt on"} aria-pressed={!identifying} disabled={saving} onClick={() => identifying && setIdentifying(false)}>
+            A study's subject
+          </button>
+          <button type="button" className={identifying ? "opt on" : "opt"} aria-pressed={identifying === true} disabled={saving} onClick={() => setIdentifying(true)}>
+            A person, anywhere
+          </button>
         </div>
       </div>
       {why && <p className="warn">{why}</p>}

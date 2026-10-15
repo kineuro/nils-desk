@@ -214,7 +214,13 @@ export function topLevels(only?: "pages" | "settings"): Levels {
 /** Levels with one area (the pages, or the settings) raised to its top, the rest kept. */
 export function raiseArea(levels: Levels, area: "pages" | "settings" | "all"): Levels {
   const top = topLevels();
-  return Object.fromEntries(PAGE_LINES.map((l) => [l.id, area === "all" || l.settings === (area === "settings") ? top[l.id] : levels[l.id]])) as Levels;
+  const raised = (l: PageLine): Level => {
+    if (!(area === "all" || l.settings === (area === "settings"))) return levels[l.id];
+    // work on People makes an admin: never given by an area at once, only chosen on its own line
+    if (l.id === "identity") return levels.identity === "work" ? "work" : "see";
+    return top[l.id];
+  };
+  return Object.fromEntries(PAGE_LINES.map((l) => [l.id, raised(l)])) as Levels;
 }
 
 /** A page's words in the form: what seeing it opens, then what work adds. */

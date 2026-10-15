@@ -65,12 +65,38 @@ describe("Pseudonyms", () => {
     };
     act(() => set(name, "Site ID"));
     act(() => set(what, "the site's own number"));
+    // record 55, ruling 24: a site's number leads to a person anywhere, and the type says so
+    act(() => button(host.querySelector("dialog")!, "A person, anywhere")!.click());
     await act(async () => {
       button(host.querySelector("dialog")!, "Add")!.click();
     });
     await settle();
-    expect(e.of("POST", "/api/linkage/types")[0].body).toEqual({ name: "site-id", description: "the site's own number" });
+    expect(e.of("POST", "/api/linkage/types")[0].body).toEqual({ name: "site-id", description: "the site's own number", identifying: true });
     expect(host.textContent).toContain("site-id is an ID type.");
+  });
+
+  it("sends whether an ID type leads to a person only when the person chose it, so naming one again changes nothing", async () => {
+    const e = engine((c) => {
+      if (c.method === "GET" && c.url === "/api/linkage/types") return { status: 200, body: TYPES };
+      if (c.method === "POST" && c.url === "/api/linkage/types") return { status: 200, body: { ...TYPES[0], created: false } };
+      return undefined;
+    });
+    act(() => root.render(<PseudonymsPage caps={caps7a(DOORS)} />));
+    await settle();
+    act(() => button(host, "Add an ID type")!.click());
+    const set = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    act(() => set(host.querySelector<HTMLInputElement>("#type-name")!, "patient-id"));
+    act(() => set(host.querySelector<HTMLInputElement>("#type-description")!, "what PatientID held"));
+    // the study's choice is shown as chosen, and clicking it is no choice made
+    act(() => button(host.querySelector("dialog")!, "A study's subject")!.click());
+    await act(async () => {
+      button(host.querySelector("dialog")!, "Add")!.click();
+    });
+    await settle();
+    expect(e.of("POST", "/api/linkage/types")[0].body).toEqual({ name: "patient-id", description: "what PatientID held" });
   });
 
   it("offers no act to a person who may only read Data", async () => {

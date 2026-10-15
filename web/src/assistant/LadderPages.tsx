@@ -224,7 +224,7 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
   if (!g && !why) return <Wait phase="reading the standing grants" since={since} size="panel" />;
   // record 55, ruling 24: an admin holds everything, and the assistant acts with it; nothing to give
   const admin = g?.admin === true;
-  const { everything, pages } = grantPages(g);
+  const { everything, pages, scopes } = grantPages(g, caps.person.grants);
   const any = pages.some((p) => p.rows.some((r) => r.door !== null));
   const revoke = (id: number, words: string) => act(assistant.revoke(id), `Revoked: ${words}`);
 
@@ -279,6 +279,7 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
         </div>
       ) : (
         <>
+          {(scopes || everything || (!any && pages.length === 0)) && (
           <section className="chat-group">
             <div className="row grant-head">
               <h2 className="chat-group-label grow">Everything</h2>
@@ -287,7 +288,8 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
                   Revoke
                 </button>
               ) : (
-                any && (
+                any &&
+                scopes && (
                   <button type="button" className="button small" disabled={busy} onClick={() => act(assistant.grant({ all: true }), "Standing now: everything")}>
                     <Icon name="plus" />
                     Give everything
@@ -297,6 +299,7 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
             </div>
             {!any && pages.length === 0 && <p className="meta">Nothing the assistant may do for you here is open to your account.</p>}
           </section>
+          )}
           {pages.map((p) => (
             <section key={p.page} className="chat-group">
               <div className="row grant-head">
@@ -305,7 +308,7 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
                   <button type="button" className="button secondary small" disabled={busy} aria-label={`Revoke all of ${p.title}`} onClick={() => p.whole && revoke(p.whole.id, `all of ${p.title}`)}>
                     Revoke all
                   </button>
-                ) : everything ? null : (
+                ) : everything || !scopes ? null : (
                   p.rows.some((r) => r.door !== null) && (
                     <button type="button" className="button quiet small" disabled={busy} aria-label={`Give all of ${p.title}`} onClick={() => act(assistant.grant({ page: p.page }), `Standing now: all of ${p.title}`)}>
                       Give all
