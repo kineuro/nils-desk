@@ -32,6 +32,29 @@ export interface RulesReason {
   } | null;
   voted?: { rule: string; value: string | null }[];
   line?: string;
+  /**
+   * The rules this answer was decided over by the pack's order (record 55
+   * H3, record 56 section 1): never a question, kept as evidence for why. The
+   * engine has sent it since record 56; absent from an engine before it.
+   */
+  overridden?: Overridden[] | null;
+  tier?: string | null;
+  basis?: string | null;
+}
+
+/** A rule an answer was decided over: what it said, its tier, and what ranked the winner above it. */
+export interface Overridden {
+  rule_set: string;
+  rule: string;
+  value: string | null;
+  tier?: string | null;
+  basis?: string | null;
+  confidence?: number | null;
+  /** What ranked the winner: the pack's rule sets' order, a set's rule order, a group's priority. */
+  rank?: string | null;
+  by?: { rule_set?: string; rule?: string; tier?: string | null; confidence?: number | null } | null;
+  /** The words it matched, at detail quasi. */
+  matched?: string | null;
 }
 
 export interface Similar {
@@ -207,6 +230,31 @@ export function ruleWords(r: RulesReason): string {
   if (!r.decided?.rule) return "no rule answered";
   const clause = typeof r.decided.clause === "number" ? `, clause ${r.decided.clause}` : "";
   return `${r.decided.rule_set ?? ""}/${r.decided.rule}${clause}`;
+}
+
+/** A rank as the engine names it, in words: `rule_set_order` reads "the pack's order of rule sets". */
+export function rankWords(rank: string | null | undefined): string {
+  switch (rank) {
+    case "rule_set_order":
+      return "the pack's order of rule sets";
+    case "rule_order":
+      return "the rule set's order";
+    case "priority":
+      return "the group's priority";
+    case "answer":
+      return "an answer given before it";
+    case null:
+    case undefined:
+    case "":
+      return "the pack's order";
+    default:
+      return rank.replaceAll("_", " ");
+  }
+}
+
+/** The rules an answer was decided over, each in words: "over base/t2 (T2w), by the pack's order of rule sets". */
+export function overriddenWords(r: Pick<RulesReason, "overridden">): string[] {
+  return (r.overridden ?? []).map((o) => `over ${o.rule_set}/${o.rule}${o.value ? ` (${valueWords(o.value)})` : ""}, by ${rankWords(o.rank)}`);
 }
 
 /** The answer a person gives an item as its doors take it: a value, nothing, or values by axis. */

@@ -5,7 +5,10 @@
 // (grey JPEG planes drawn here), so dataset.pw.ts measures that the scan is
 // the hero, the chrome stays two slim lines and a quiet tree, and a phone's
 // width keeps one column with no sideways scroll; and that the line keeping
-// what the filter leaves sits under it within the tree's width.
+// what the filter leaves sits under it within the tree's width. Review round
+// 1 (record 56 section 6.3, DR3): a scan whose rules and System 1 disagree
+// carries its question under it, answered with the grid's keys; what the
+// answer door was sent is kept on the window.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -42,7 +45,7 @@ async function dataUrl(z: number, stack: number): Promise<string> {
 
 const NAMES: [string, string | null, string, string, Record<string, string>, string[]][] = [
   ["Sag_T1w_3D_MPRAGE_ND", "acq-Sag+3D+MPRAGE_T1w", "anat", "anat", { base: "T1w", technique: "MPRAGE", construct: "ND", disposition: "acquisition" }, []],
-  ["Ax_T2w_2D_FLAIR_IR-TSE_ND", "acq-Ax+2D+FLAIR+IRTSE_T2w", "anat", "anat", { base: "T2w", technique: "IR-TSE", modifier: "FLAIR", disposition: "acquisition" }, ["base:missing"]],
+  ["Ax_T2w_2D_FLAIR_IR-TSE_ND", "acq-Ax+2D+FLAIR+IRTSE_T2w", "anat", "anat", { base: "T2w", technique: "IR-TSE", modifier: "FLAIR", disposition: "acquisition" }, ["base:disagree"]],
   ["Sag_T1w_3D_MPRAGE_ND_CE", "acq-Sag+3D+MPRAGE_ce-contrast_T1w", "anat", "anat", { base: "T1w", technique: "MPRAGE", post_contrast: "1", disposition: "acquisition" }, []],
   ["Ax_SWI_3D_GRE_MinIP", null, "anat", "anat", { base: "SWI", technique: "GRE", construct: "MinIP", provenance: "ProjectionDerived", disposition: "scanner_derived" }, []],
   ["Ax_T1w_2D_MDME_SyntheticT1w", "acq-Ax+2D+MDME_rec-SyMRI_T1w", "anat", "anat/SyMRI", { base: "T1w", technique: "MDME", provenance: "SyMRI", disposition: "scanner_derived" }, []],
@@ -61,10 +64,31 @@ for (let u = 0; u < 6; u++)
     });
 
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
+const posted: unknown[] = [];
+(window as unknown as { posted: unknown[] }).posted = posted;
+const BASE = ["DWI", "SWI", "T2*w", "T2w", "PDw", "T1w"].map((v) => ({ value: v, name: v === "T2*w" ? "T2starw" : v, label: null }));
 window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
   const u = new URL(url, location.origin);
   if (u.pathname === "/api/datasets/ms-a/scans") return json({ dataset: "ms-a", total: rows.length, count: rows.length, scans: rows, next: null });
+  // record 56 section 6.3: the questions that ask a scan, and an answer for it alone
+  if (u.pathname === "/api/review/questions") {
+    const stack = Number(u.searchParams.get("stack"));
+    const asked = (rows as { stack: number; questions: string[] }[]).find((r) => r.stack === stack)?.questions.includes("base:disagree");
+    return json({
+      scope: { kind: "dataset", name: "ms-a", id: 3 },
+      scans: 2,
+      questions: asked ? [{ key: "base:PDw|T2w", axis: "base", shape: "pair", values: ["T2w", "PDw"], words: "T2w or PDw?", reason: "The rules and System 1 disagree.", scans: 2, staged: 0, kinds: { "base:disagree": 2 } }] : [],
+      vocabularies: { base: BASE },
+      elsewhere: [],
+      held: { scans: 0, campaigns: [] },
+    });
+  }
+  if (u.pathname.endsWith("/answer")) {
+    const body = JSON.parse(String(init?.body)) as { stacks: number[] };
+    posted.push(body);
+    return json({ key: "base:PDw|T2w", axis: "base", answered: 1, decisions: [{ stack: body.stacks[0], value: "PDw", decision: 7 }], skipped: [], staged: false, blind: 0, resort: { job: 5, state: "done", stacks: 1 }, left: 1 });
+  }
   // keeping what the browser shows: the question counted before anything is kept
   if (u.pathname === "/api/ask/diagnose") {
     // the scans the words left, by their ids, else the dataset's
@@ -94,7 +118,7 @@ const caps = {
   engine: {
     engine: { name: "nils", version: "1.0.0-alpha.80" },
     contracts: { openapi: "7" },
-    doors: ["GET /api/datasets/{name}/scans", "POST /api/ask/diagnose", "POST /api/ask/documents", "POST /api/ask/run", "PUT /api/ask/selections/{name}", "POST /api/ask/handles/{id}/promote", "GET /api/cohorts"],
+    doors: ["GET /api/datasets/{name}/scans", "POST /api/ask/diagnose", "POST /api/ask/documents", "POST /api/ask/run", "PUT /api/ask/selections/{name}", "POST /api/ask/handles/{id}/promote", "GET /api/cohorts", "GET /api/review/questions", "GET /api/review/questions/{key}/scans", "POST /api/review/questions/{key}/answer"],
     policy: [],
     auth: "token",
     principal: "astrid@site",
@@ -105,7 +129,7 @@ const caps = {
   kvasir: null,
   assistant: null,
   apps: [],
-  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work"], detail: "quasi", groups: [] },
+  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work", "review:see", "review:work"], detail: "quasi", groups: [] },
   desk: { version: "1.0.0", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
 } as unknown as Capabilities;
 

@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Deciding one item (record 27, R5d): a classifier question takes a value, or
-// nothing, at a scope (this scan, its series, this subject, this scanner) and
-// goes through the apply door; any other item is acknowledged with why. Every
-// field of the old dialog stands; what a decision is worth against the rules
-// is one disclosure.
+// nothing, and goes through the apply door at the scan's own scope; any other
+// item is acknowledged. Review round 1 (record 56 section 6.3, DR4): no scope
+// to choose, no why field and no note on what a decision is worth; a
+// question about many scans is answered in its grid. A blind-first question
+// is still answered from the scan first (record 55 D6).
 
 import { useEffect, useState } from "react";
 import { ops, type ReviewItem } from "../ops/client";
 import { BothSides } from "./BothSides";
 import { answerBody, modeOf, owesBlind, provisionalValue, s1, type Suggestions } from "./s1";
 import { Dialog } from "../ui/Dialog";
-import { Says } from "../ui/Says";
-import { itemWords, refusalWords, SCOPES, type PackDoc } from "./client";
+import { itemWords, refusalWords, type PackDoc } from "./client";
 import { kindOf } from "./triage";
 
 export interface DecideProps {
@@ -29,8 +29,6 @@ export function DecideDialog({ item, pack, guess = null, onClose, onDone }: Deci
   const values = axis ? (pack?.axes.find((a) => a.axis === axis)?.values ?? []) : [];
   const [value, setValue] = useState(axis !== null && owesBlind(item) ? "" : (guess ?? ""));
   const [nothing, setNothing] = useState(false);
-  const [scope, setScope] = useState<(typeof SCOPES)[number]["scope"]>("stack");
-  const [why, setWhy] = useState("");
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   // record 55 D6: a blind-first question is answered from the scan first;
@@ -74,11 +72,10 @@ export function DecideDialog({ item, pack, guess = null, onClose, onDone }: Deci
   const apply = () => {
     setBusy(true);
     setRefused(null);
-    const call = axis
-      ? ops.reviewApply(item.id, { ...(nothing ? { nothing: true } : { value: value.trim() }), scope, ...(why.trim() ? { why: why.trim() } : {}) })
-      : ops.reviewAccept(item.id, why.trim() || undefined);
+    // a decision is the scan's own: the stack's scope, always
+    const call = axis ? ops.reviewApply(item.id, { ...(nothing ? { nothing: true } : { value: value.trim() }), scope: "stack" }) : ops.reviewAccept(item.id);
     call
-      .then((r) => onDone((((r as { answer?: { blind?: boolean } }).answer?.blind) ? "Given blind. " : "") + (axis ? `Decided ${axis} ${nothing ? "has no value" : `is ${value.trim()}`} for ${SCOPES.find((s) => s.scope === scope)?.words ?? scope}.` : "Acknowledged.")))
+      .then((r) => onDone((((r as { answer?: { blind?: boolean } }).answer?.blind) ? "Given blind. " : "") + (axis ? `Decided ${axis} ${nothing ? "has no value" : `is ${value.trim()}`}.` : "Acknowledged.")))
       .catch((e: unknown) => {
         setBusy(false);
         setRefused(refusalWords(e));
@@ -138,26 +135,8 @@ export function DecideDialog({ item, pack, guess = null, onClose, onDone }: Deci
               no value here
             </label>
           </div>
-          <span className="seg" role="radiogroup" aria-label="The decision's scope">
-            {SCOPES.map((s) => (
-              <button key={s.scope} type="button" role="radio" aria-checked={scope === s.scope} className={scope === s.scope ? "on" : ""} onClick={() => setScope(s.scope)}>
-                {s.words}
-              </button>
-            ))}
-          </span>
         </div>
       )}
-      <div className="field">
-        <span className="label">Why</span>
-        <span className="input">
-          <input value={why} placeholder={axis ? "what you saw, in a few words" : "why it needs no decision"} aria-label="Why" onChange={(e) => setWhy(e.target.value)} />
-        </span>
-      </div>
-      <Says head="What a decision is worth">
-        {axis
-          ? "A person's decision outranks the rules and survives re-sorting. A new pack that disagrees raises a new item; it never overwrites."
-          : "Acknowledging records who looked and closes the item without a decision. An identity question is settled on the Identifiers page, by a map or a merge."}
-      </Says>
     </Dialog>
   );
 }

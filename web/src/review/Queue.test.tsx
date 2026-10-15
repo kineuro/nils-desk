@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The queue as it draws: the costliest first with the act each kind takes,
-// the three cards on top with the rules' guess accepted in bulk only for the
-// items triage says need no reading, and the items of one batch.
+// the three cards on top, and the items of one batch. Since Review round 1
+// (record 56 section 6.3, DR4) no card sorts or accepts in bulk.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type { ReviewItem } from "../ops/client";
 import { itemKey } from "./client";
-import { needsOf, ofBatch, ofRun, QueueTable } from "./Queue";
-import { bulkPlan } from "./triage";
+import { needsOf, ofBatch, ofRun, QueuePage, QueueTable } from "./Queue";
+import { capsWith } from "./caps.fixture";
+import { GRANTS, type Grant } from "../grants";
 
 function item(id: number, kind: string, scope: string, over: Partial<ReviewItem> = {}): ReviewItem {
   return { id, kind, scope, status: "open", created_at: `2026-09-0${(id % 9) + 1}T10:00:00Z`, ...over };
@@ -46,7 +47,7 @@ describe("the queue's table", () => {
 });
 
 describe("the three kinds on top", () => {
-  it("count stacks, subjects and sessions, and the rules' guess only where no reading is needed", () => {
+  it("count stacks, subjects and sessions", () => {
     const cards = needsOf(items);
     expect(cards.map((c) => [c.family, c.value, c.count])).toEqual([
       ["unsure", "36 stacks", 3],
@@ -56,11 +57,18 @@ describe("the three kinds on top", () => {
     expect(cards[0].meta).toBe("batches alpha-2026-08-20, 8 · mostly technique or base · 21 with no value");
     expect(cards[1].meta).toBe("the same identifier under two codes · from dataset alpha");
     expect(cards[2].meta).toBe("the scheme visits-90d read new dates · cards that pinned them are marked");
-    // the vote and the low-confidence items are read; the missing value is accepted in bulk, one audit row
-    expect(cards[0].bulk).toBe(1);
-    const plan = bulkPlan(items, [1, 3, 5, 6]);
-    expect(plan.accepts.map((i) => i.id)).toEqual([1]);
-    expect(plan.refused.map((r) => r.item.id)).toEqual([3, 5, 6]);
+  });
+  it("sorts nothing and accepts nothing in bulk, and shows only the cards it is asked for (DR4)", () => {
+    const caps = capsWith(["GET /api/review/summary"], [...GRANTS] as Grant[]);
+    const html = renderToStaticMarkup(<QueuePage caps={caps} items={items} summary={null} cohort="" onCohort={() => undefined} batch={null} onDecide={() => undefined} onExplain={() => undefined} onChanged={() => undefined} />);
+    expect(html).not.toContain("Sort them");
+    expect(html).not.toContain("Accept the rules");
+    expect(html).not.toContain('aria-label="Axis"');
+    expect(html).toContain("36 stacks");
+    const rest = renderToStaticMarkup(<QueuePage caps={caps} items={items} summary={null} cohort="" onCohort={() => undefined} batch={null} onDecide={() => undefined} onExplain={() => undefined} onChanged={() => undefined} families={["identity", "moved"]} title="Also waiting" />);
+    expect(rest).not.toContain("36 stacks");
+    expect(rest).toContain("1 subject");
+    expect(rest).toContain("<h2>Also waiting</h2>");
   });
   it("keeps the items of one batch when reached from its page", () => {
     expect(ofBatch(items, 7).map((i) => i.id)).toEqual([1, 3]);

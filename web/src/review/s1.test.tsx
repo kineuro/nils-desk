@@ -21,7 +21,7 @@ import { BothSides } from "./BothSides";
 import { DecideDialog } from "./Decide";
 import { RoundsBody } from "./RoundsPage";
 import { BlindShare, HeadersView, shareOf } from "./S1Settings";
-import { gradeWords, neverAskedHolds, owesBlind, pct, provisionalValue } from "./s1";
+import { gradeWords, neverAskedHolds, overriddenWords, owesBlind, pct, provisionalValue, rankWords } from "./s1";
 import { ROUND, SUGGESTIONS } from "./s1.fixture";
 import { jobOf, workList } from "./work";
 import { reviewPages } from "../home/placeholders";
@@ -47,6 +47,18 @@ describe("both suggestions and both reasons", () => {
     expect(html).toContain("no recorded certificate");
     expect(html).toContain('class="both-row differ"');
     expect(html).toContain('class="both-row agree"');
+    // record 56: the rule the answer was decided over shows beside the rule that decided, in words
+    expect(html).toContain("over physics/se_by_te (SE), by the pack&#x27;s order of rule sets");
+  });
+
+  it("names each rule an answer was decided over, and how it was ranked", () => {
+    expect(overriddenWords({ overridden: [{ rule_set: "base", rule: "t2", value: "T2w", rank: "rule_order" }, { rule_set: "modifier", rule: "fs", value: null, rank: "priority" }] })).toEqual([
+      "over base/t2 (T2w), by the rule set's order",
+      "over modifier/fs, by the group's priority",
+    ]);
+    expect(overriddenWords({})).toEqual([]);
+    expect(rankWords("answer")).toBe("an answer given before it");
+    expect(rankWords(undefined)).toBe("the pack's order");
   });
 
   it("with no model, one line and no column of values", () => {
@@ -113,16 +125,22 @@ describe("a blind-first question", () => {
     const decide = [...host.querySelectorAll("button")].find((b) => b.textContent === "Decide")!;
     await act(async () => decide.click());
     await flush();
-    expect(calls.find((c) => c.url.endsWith("/apply"))?.body).toMatchObject({ value: "FLAIR" });
-    expect(said[0]).toMatch(/^Given blind\. Decided base is FLAIR/u);
+    // Review round 1 (DR4): the scan's own scope always, and no why
+    expect(calls.find((c) => c.url.endsWith("/apply"))?.body).toEqual({ value: "FLAIR", scope: "stack" });
+    expect(said[0]).toBe("Given blind. Decided base is FLAIR.");
   });
 
-  it("a routine question shows both sides at once", async () => {
+  it("a routine question shows both sides at once, and asks for no scope and no why", async () => {
     await act(async () => root.render(<DecideDialog item={item({ mode: "routine" })} pack={null} onClose={() => undefined} onDone={() => undefined} />));
     await flush();
     expect(calls[0].url).toBe("/api/review/41/suggestions");
     expect(host.textContent).toContain("rules reliable 0.41");
     expect(provisionalValue({ answer: { nothing: true } })).toEqual({ value: "", nothing: true });
+    // DR4: the scope choice, the why field and the lecture on what a decision is worth are gone
+    expect(host.querySelector('[role="radiogroup"]')).toBeNull();
+    expect(host.querySelector('input[aria-label="Why"]')).toBeNull();
+    expect(host.textContent).not.toContain("What a decision is worth");
+    expect(host.textContent).not.toContain("this scanner");
   });
 });
 

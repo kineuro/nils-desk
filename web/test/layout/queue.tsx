@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Review queue's layout check (record 51, G4 and R5): the queue in the
-// desk's shell with its filter chips by axis and by reason, a pick border's
-// reasons, and a row that carries the badge of a model disagreeing with a
-// person's decision, whose Look shows the badge beside the viewer's boxes.
-// The filter is held here as the page holds it in its address.
+// desk's shell, narrowed by the filter its address names, and a row that
+// carries the badge of a model disagreeing with a person's decision, whose
+// Look shows the badge beside the viewer's boxes. Since Review round 1
+// (record 56 section 6.3, DR4) no chips choose the filter, and no card
+// sorts or accepts in bulk.
 
-import { StrictMode, useState } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../../src/shell.css";
 import type { Capabilities } from "../../src/capabilities";
 import type { ReviewItem } from "../../src/ops/client";
-import { NO_FILTER, type QueueFilter } from "../../src/review/filter";
+import { queueFilterOf, type QueueFilter } from "../../src/review/filter";
+import { parse } from "../../src/routes";
 import { QueuePage } from "../../src/review/Queue";
 
 const caps = {
@@ -45,8 +47,15 @@ for (const [k, borders] of [["too_close"], ["retake", "dixon_vs_plain"], ["slice
   items.push({ id: 950 + k, kind: "pick.border", scope: "subject", status: "open", created_at: "2026-09-30T09:00:00Z", ref: { subject_id: 20 + k, session_day: "2010-11-27", role: k % 2 ? "t2w" : "t1w" }, evidence: { borders } });
 }
 
+const filterOf = (): QueueFilter => queueFilterOf(parse(location.hash).query);
+
 function Page() {
-  const [filter, setFilter] = useState<QueueFilter>(NO_FILTER);
+  const [filter, setFilter] = useState<QueueFilter>(filterOf);
+  useEffect(() => {
+    const moved = () => setFilter(filterOf());
+    window.addEventListener("hashchange", moved);
+    return () => window.removeEventListener("hashchange", moved);
+  }, []);
   const [said, setSaid] = useState("");
   return (
     <section className="data review">
@@ -56,7 +65,7 @@ function Page() {
           <h1>What needs a person</h1>
         </div>
       </div>
-      <QueuePage caps={caps} items={items} summary={null} cohort="" onCohort={() => undefined} batch={null} onDecide={(i) => setSaid(`decide ${i.id}`)} onExplain={() => undefined} onChanged={setSaid} filter={filter} onFilter={setFilter} />
+      <QueuePage caps={caps} items={items} summary={null} cohort="" onCohort={() => undefined} batch={null} onDecide={(i) => setSaid(`decide ${i.id}`)} onExplain={() => undefined} onChanged={setSaid} filter={filter} />
       <p className="meta" data-said>
         {said}
       </p>

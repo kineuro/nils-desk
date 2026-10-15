@@ -13,7 +13,7 @@ import type { ReviewItem } from "../ops/client";
 import { parse } from "../routes";
 import { capsWith } from "./caps.fixture";
 import { DISAGREES, itemWords, modelDisagrees } from "./client";
-import { filterChoices, filterKind, NO_FILTER, passes, queueFilterOf, queueHref } from "./filter";
+import { filterKind, NO_FILTER, passes, queueFilterOf, queueHref } from "./filter";
 import { LookDialog, QueuePage, QueueTable } from "./Queue";
 
 function item(id: number, kind: string, over: Partial<ReviewItem> = {}): ReviewItem {
@@ -54,12 +54,6 @@ const BADGE = DISAGREES.replace(/'/gu, "&#x27;");
 const caps = capsWith(["POST /api/campaigns", "GET /api/campaigns", "GET /api/review/summary"], [...GRANTS] as Grant[]);
 
 describe("the queue's filter by axis and reason", () => {
-  it("offers the axes and reasons of the kinds the engine lists, and a pick border's reasons", () => {
-    const summary = { by_kind: { "base:conflict": 2, "base:low_confidence": 1, "technique:conflict": 1, "technique:missing": 1, "pick.border": 2, "identity.collision": 1, "pipeline:qc": 3 }, cohorts: [], none: 0 };
-    expect(filterChoices(summary, items)).toEqual({ axes: ["base", "technique"], reasons: ["missing", "conflict", "low_confidence", "pick.border"], borders: ["rare", "retake", "too_close"] });
-    expect(filterChoices(null, items).axes).toEqual(["base", "technique"]);
-  });
-
   it("keeps base:conflict through a reload, shows only those items, and hands --review-kind base:conflict to the maker", () => {
     const address = queueHref({ axis: "base", reason: "conflict", border: null }, "north");
     expect(address).toBe("#review/questions?cohort=north&axis=base&reason=conflict");
@@ -71,7 +65,7 @@ describe("the queue's filter by axis and reason", () => {
     expect(items.filter((i) => passes(i, filter)).map((i) => i.id)).toEqual([1, 2]);
     // the page drawn from that address lists the two and nothing else
     const html = renderToStaticMarkup(
-      <QueuePage caps={caps} items={items} summary={null} cohort="north" onCohort={() => undefined} batch={null} onDecide={() => undefined} onExplain={() => undefined} onChanged={() => undefined} filter={filter} onFilter={() => undefined} />,
+      <QueuePage caps={caps} items={items} summary={null} cohort="north" onCohort={() => undefined} batch={null} onDecide={() => undefined} onExplain={() => undefined} onChanged={() => undefined} filter={filter} />,
     );
     expect(html).toContain("base: rules conflict, 2 open");
     expect(html.match(/<tr class="">/gu)).toHaveLength(2);
@@ -79,7 +73,10 @@ describe("the queue's filter by axis and reason", () => {
     const body = /<tbody>(.*)<\/tbody>/su.exec(html)?.[1] ?? "";
     expect(body).not.toContain("technique");
     expect(body).not.toContain("not sure");
-    expect(html).toContain('aria-pressed="true">base</button>');
+    // Review round 1 (DR4): no axis or reason chips; the address narrows the list and says how to undo it
+    expect(html).not.toContain('aria-label="Axis"');
+    expect(html).not.toContain('aria-label="Reason"');
+    expect(html).toContain('<a href="#review/questions?cohort=north">every question</a>');
     // "Ask people about these" carries it to the maker as a kind, the source --review-kind makes
     expect(filterKind(filter)).toEqual({ kind: "base:conflict" });
     const ask = /href="(#review\/campaigns\?make=review[^"]*)">Ask people about these/u.exec(html);

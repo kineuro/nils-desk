@@ -3,16 +3,19 @@
 // top, the three kinds as cards, each a count, a phrase and the one act that
 // goes with it. Every row action stands: a row is decided, looked at in the
 // viewer with its evidence, or seen; held files are mapped on their dataset's
-// Pseudonymisation page and never decided here. The table filters by axis and
-// by reason (record 51, G4), in the page's address, and carries the filter to
-// the campaign maker; a model that disagrees with a person's decision carries
-// a badge (record 51 R5).
+// Pseudonymisation page and never decided here. The table keeps the filter an
+// address names (record 51, G4) and carries it to the campaign maker; a model
+// that disagrees with a person's decision carries a badge (record 51 R5).
+// Review round 1 (record 56 section 6.3, DR4): the sort's own questions are
+// answered as a grid of their scans above this list, so the unsure card
+// sorts nothing and accepts nothing in bulk (its bulk accept would have
+// closed rule conflicts unseen), and the axis and reason chips are gone.
 
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import type { Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
-import { ops, type ReviewItem } from "../ops/client";
+import type { ReviewItem } from "../ops/client";
 import { href, narrow } from "../routes";
 import { Dialog } from "../ui/Dialog";
 import { Says } from "../ui/Says";
@@ -22,9 +25,8 @@ import { stackReadingFor } from "../campaigns/readerDoors";
 import type { Reading } from "../campaigns/reader";
 import { askPeopleHref, asksPeople } from "./askPeople";
 import { acts, batchOf, DISAGREES, heldBy, isGrouped, itemKey, cohortChips, datasetOf, familyOf, identityActs, itemWords, kindTag, mapHref, membersOf, modelDisagrees, PAGED, stackOf, type CohortChip, type Family, type ReviewSummary } from "./client";
-import { filterChoices, filterKind, filterWords, NO_FILTER, passes, reasonWords, type QueueFilter } from "./filter";
-import { borderWords, PICK_BORDER } from "./picks";
-import { bulkPlan, kindOf, needsReading, sortByCost } from "./triage";
+import { filterKind, filterWords, NO_FILTER, passes, queueHref, type QueueFilter } from "./filter";
+import { kindOf, needsReading, sortByCost } from "./triage";
 import "./grown.css";
 import "../campaigns/campaigns.css";
 
@@ -39,7 +41,6 @@ export interface NeedCard {
   value: string;
   words: string;
   meta: string;
-  bulk: number;
   count: number;
   /** The identity card's act, by what waits: Decide, Map them or Merge, each a page. */
   act: { label: string; href: string } | null;
@@ -56,7 +57,7 @@ function identityCard(identity: ReviewItem[]): NeedCard {
   const heldWords = held.length > 0 ? `${n(files)} ${files === 1 ? "file" : "files"} held until mapped` : null;
   const provisionalWords = provisional.length > 0 ? `${n(provisional.length)} coded without a map` : null;
   const identifiers = href("review", "identifiers");
-  const base = { family: "identity" as const, bulk: 0, count: identity.length };
+  const base = { family: "identity" as const, count: identity.length };
   if (twice.length > 0) {
     return { ...base, value: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"}`, words: "may be one subject twice", meta: ["the same identifier under two codes", from, heldWords, provisionalWords].filter(Boolean).join(" · "), act: { label: "Decide", href: identifiers } };
   }
@@ -86,7 +87,12 @@ export interface QueueProps {
   onChanged: (words: string) => void;
   /** The axis and reason the table is narrowed to, from the page's address (record 51, G4). */
   filter?: QueueFilter;
-  onFilter?: (f: QueueFilter) => void;
+  /** The dataset the page was opened for, which the way back to the whole list keeps. */
+  dataset?: string;
+  /** The words on the list's head: the queue, or what waits beside the questions above it. */
+  title?: string;
+  /** The cards shown on top, of the three; every one where none is named. */
+  families?: Family[];
 }
 
 /** The three cards on top, from the open items: what each kind counts and says. */
@@ -100,7 +106,6 @@ export function needsOf(items: ReviewItem[]): NeedCard[] {
   for (const i of unsure) axes.set(kindOf(i.kind).area, (axes.get(kindOf(i.kind).area) ?? 0) + membersOf(i));
   const top = [...axes.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([a]) => a);
   const missing = unsure.filter((i) => kindOf(i.kind).what === "missing").reduce((s, i) => s + membersOf(i), 0);
-  const bulk = bulkPlan(unsure, unsure.map((i) => i.id)).accepts.length;
   const moved = of("moved");
   const schemes = [...new Set(moved.flatMap((i) => (typeof (i.evidence as Json | null)?.scheme === "string" ? [(i.evidence as Json).scheme as string] : [])))];
   return [
@@ -111,7 +116,6 @@ export function needsOf(items: ReviewItem[]): NeedCard[] {
       meta: [batches.length > 0 ? `${batches.length === 1 ? "batch" : "batches"} ${batches.slice(0, 3).join(", ")}${batches.length > 3 ? ` and ${batches.length - 3} more` : ""}` : null, top.length > 0 ? `mostly ${top.join(" or ")}` : null, missing > 0 ? `${n(missing)} with no value` : null]
         .filter(Boolean)
         .join(" · "),
-      bulk,
       count: unsure.length,
       act: null,
     },
@@ -121,7 +125,6 @@ export function needsOf(items: ReviewItem[]): NeedCard[] {
       value: `${n(moved.length)} ${moved.length === 1 ? "session" : "sessions"}`,
       words: "moved between visits",
       meta: [schemes.length > 0 ? `the scheme ${schemes.join(", ")} read new dates` : null, moved.length > 0 ? "cards that pinned them are marked" : null].filter(Boolean).join(" · "),
-      bulk: 0,
       count: moved.length,
       act: null,
     },
@@ -232,70 +235,21 @@ export function QueueTable({ items, may, onDecide, onLook, onSee }: { items: Rev
   );
 }
 
-/** The queue's filter chips: every axis the engine lists questions on, every reason, and a pick border's reasons. */
-export function FilterChips({ choices, filter, onFilter }: { choices: ReturnType<typeof filterChoices>; filter: QueueFilter; onFilter: (f: QueueFilter) => void }) {
-  if (choices.axes.length === 0 && choices.reasons.length === 0) return null;
-  const border = filter.reason === PICK_BORDER;
-  return (
-    <div className="stack tight queue-filter">
-      {choices.axes.length > 0 && (
-        <div className="chips" role="group" aria-label="Axis">
-          <span className="label">Axis</span>
-          <button type="button" className={filter.axis === null ? "opt on" : "opt"} aria-pressed={filter.axis === null} onClick={() => onFilter({ ...filter, axis: null })}>
-            every axis
-          </button>
-          {choices.axes.map((a) => (
-            <button key={a} type="button" className={filter.axis === a ? "opt on" : "opt"} aria-pressed={filter.axis === a} onClick={() => onFilter({ axis: a, reason: border ? null : filter.reason, border: null })}>
-              {a}
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="chips" role="group" aria-label="Reason">
-        <span className="label">Reason</span>
-        <button type="button" className={filter.reason === null ? "opt on" : "opt"} aria-pressed={filter.reason === null} onClick={() => onFilter({ ...filter, reason: null, border: null })}>
-          every reason
-        </button>
-        {choices.reasons.map((r) => (
-          <button key={r} type="button" className={filter.reason === r ? "opt on" : "opt"} aria-pressed={filter.reason === r} onClick={() => onFilter(r === PICK_BORDER ? { axis: null, reason: r, border: null } : { ...filter, reason: r, border: null })}>
-            {reasonWords(r)}
-          </button>
-        ))}
-      </div>
-      {border && choices.borders.length > 0 && (
-        <div className="chips" role="group" aria-label="Border">
-          <span className="label">Border</span>
-          <button type="button" className={filter.border === null ? "opt on" : "opt"} aria-pressed={filter.border === null} onClick={() => onFilter({ ...filter, border: null })}>
-            every border
-          </button>
-          {choices.borders.map((b) => (
-            <button key={b} type="button" className={filter.border === b ? "opt on" : "opt"} aria-pressed={filter.border === b} onClick={() => onFilter({ ...filter, border: b })}>
-              {borderWords({ borders: [b] })}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run = null, onDecide, onExplain, onChanged, filter = NO_FILTER, onFilter }: QueueProps) {
+export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run = null, onDecide, onExplain, filter = NO_FILTER, dataset = "", title: named, families }: QueueProps) {
   const may = acts(caps).decide;
   const [family, setFamily] = useState<Family | null>(null);
   const [look, setLook] = useState<{ item: ReviewItem; stack: number } | null>(null);
-  const [bulk, setBulk] = useState(false);
   const [all, setAll] = useState(false);
   const inBatch = useMemo(() => ofRun(ofBatch(items, batch), run), [items, batch, run]);
   const open = inBatch.filter((i) => i.status === "open");
   const chips: CohortChip[] = cohortChips(summary, items);
-  const cards = needsOf(inBatch);
-  const choices = filterChoices(summary, items);
+  const cards = needsOf(inBatch).filter((c) => !families || families.includes(c.family));
   const filtered = open.filter((i) => passes(i, filter));
   const shown = (family ? filtered.filter((i) => familyOf(i.kind) === family) : filtered).slice(0, all ? undefined : 50);
   const narrowed = filterWords(filter);
   const carried = filterKind(filter);
   const ask = asksPeople(caps) && filtered.length > 0 && carried !== null ? askPeopleHref({ ...carried, cohort: cohort === "" ? null : cohort }) : null;
-  const title = cohort === "" ? "The queue" : cohort === "none" ? "The queue of subjects in no cohort" : `The queue of ${cohort}`;
+  const title = named ?? (cohort === "" ? "The queue" : cohort === "none" ? "The queue of subjects in no cohort" : `The queue of ${cohort}`);
   return (
     <>
       <div className="chips cohorts">
@@ -306,7 +260,6 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
           </button>
         ))}
       </div>
-      {onFilter && <FilterChips choices={choices} filter={filter} onFilter={onFilter} />}
       {batch !== null && (
         <p className="meta">
           The items of batch {batch}. <a href={href("review", "questions")}>The whole queue</a>
@@ -324,18 +277,6 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
             <span>{c.words}</span>
             <span className="meta">{c.meta || (c.count === 0 ? "nothing waits" : "")}</span>
             <div className="row actions">
-              {c.family === "unsure" && (
-                <>
-                  <button type="button" className="button small" disabled={c.count === 0} onClick={() => setFamily("unsure")}>
-                    Sort them
-                  </button>
-                  {may && c.bulk > 0 && (
-                    <button type="button" className="button quiet small" onClick={() => setBulk(true)}>
-                      Accept the rules&apos; guess for {n(c.bulk)}
-                    </button>
-                  )}
-                </>
-              )}
               {c.family === "identity" && (
                 <a className="button small" aria-disabled={c.act === null} href={c.act?.href ?? href("review", "identifiers")}>
                   {c.act?.label ?? "Decide"}
@@ -355,6 +296,12 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
           <h2>{title}</h2>
           <span className="meta">
             the costliest first{narrowed ? ` · ${narrowed}, ${n(filtered.length)} open` : ""}
+            {narrowed && (
+              <>
+                {" · "}
+                <a href={queueHref(NO_FILTER, cohort, dataset)}>every question</a>
+              </>
+            )}
             {family ? ` · ${family === "unsure" ? "the unsure stacks" : family === "identity" ? "the identity questions" : "the sessions that moved"}` : ""}
           </span>
           {family && (
@@ -381,7 +328,6 @@ export function QueuePage({ caps, items, summary, cohort, onCohort, batch, run =
         </Says>
       </section>
       {look && <LookDialog caps={caps} item={look.item} stack={look.stack} onClose={() => setLook(null)} onExplain={() => { const l = look; setLook(null); onExplain(l.item, l.stack); }} onDecide={may ? () => { const l = look; setLook(null); onDecide(l.item); } : null} />}
-      {bulk && <BulkDialog items={open.filter((i) => familyOf(i.kind) === "unsure")} onClose={() => setBulk(false)} onDone={(words) => { setBulk(false); onChanged(words); }} />}
     </>
   );
 }
@@ -457,66 +403,6 @@ export function LookDialog({ caps, item, stack, onClose, onExplain, onDecide }: 
           {needsReading(item) && <p className="meta">{needsReading(item)}.</p>}
         </div>
       </div>
-    </Dialog>
-  );
-}
-
-/** The rules' guess accepted for every unsure item that needs no reading: one audit row each, the refused ones named with why. */
-export function BulkDialog({ items, onClose, onDone }: { items: ReviewItem[]; onClose: () => void; onDone: (words: string) => void }) {
-  const plan = bulkPlan(items, items.map((i) => i.id));
-  const [busy, setBusy] = useState<{ done: number } | null>(null);
-  const [why, setWhy] = useState<string | null>(null);
-  const [since] = useState(() => Date.now());
-  const go = async () => {
-    setBusy({ done: 0 });
-    setWhy(null);
-    let done = 0;
-    try {
-      for (const i of plan.accepts) {
-        await ops.reviewAccept(i.id, "accepted the rules' guess from the Review queue");
-        done += 1;
-        setBusy({ done });
-      }
-      onDone(`Accepted the rules' guess on ${n(done)} ${done === 1 ? "item" : "items"}, ${n(plan.stacks)} stacks.`);
-    } catch (e) {
-      setBusy(null);
-      setWhy(`${done} accepted, then: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  };
-  return (
-    <Dialog
-      title="Accept the rules' guess"
-      icon="review"
-      onClose={onClose}
-      foot={
-        <div className="row actions">
-          <button type="button" className="button" disabled={busy !== null || plan.accepts.length === 0} onClick={go}>
-            Accept {n(plan.accepts.length)}
-          </button>
-          <button type="button" className="button secondary" onClick={onClose}>
-            Cancel
-          </button>
-          {busy && <Wait phase={`accepting, ${busy.done} of ${plan.accepts.length}`} since={since} />}
-          {why && <span className="warn">{why}</span>}
-        </div>
-      }
-    >
-      <p className="lede">
-        {n(plan.accepts.length)} {plan.accepts.length === 1 ? "item" : "items"} about {n(plan.stacks)} stacks keep the value the rules guessed, each on its own audit row.
-      </p>
-      {plan.refused.length > 0 && (
-        <div className="field">
-          <span className="label">Not in bulk</span>
-          <ul className="tried-list">
-            {plan.refused.slice(0, 8).map((r) => (
-              <li key={r.item.id} className="meta">
-                {itemWords(r.item)}: {r.why}
-              </li>
-            ))}
-            {plan.refused.length > 8 && <li className="meta">and {plan.refused.length - 8} more</li>}
-          </ul>
-        </div>
-      )}
     </Dialog>
   );
 }

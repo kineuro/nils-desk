@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Why is this a T2w (record 27, R5d): the explain door read for one stack,
 // axis by axis with how sure the pack was and because of what, the whole
-// evidence kept. A decision otherwise at a scope goes through the stack's
+// evidence kept. A decision otherwise is the scan's own (Review round 1,
+// record 56 section 6.3: no scope to choose) and goes through the stack's
 // review item; the way to teach the rules instead is a word for the site,
 // tried on the batch first. On an engine without the door, the item's own
 // evidence stands in.
@@ -16,7 +17,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { acts, batchOf, becauseWords, membersOf, refusalWords, review, SCOPES, type Explain, type ExplainAxis, type Scope } from "./client";
+import { acts, batchOf, becauseWords, membersOf, refusalWords, review, type Explain, type ExplainAxis, type Scope } from "./client";
 import { kindOf } from "./triage";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -111,7 +112,6 @@ export function ExplainDialog({ caps, stack, item, onClose, onLook, onAddWord, o
   const [axis, setAxis] = useState<string | null>(null);
   const chosen = axes.find((a) => a.axis === axis) ?? unsureAxis;
   const [value, setValue] = useState("");
-  const [scope, setScope] = useState<(typeof SCOPES)[number]["scope"]>("stack");
   const [busy, setBusy] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   const title = (() => {
@@ -129,8 +129,8 @@ export function ExplainDialog({ caps, stack, item, onClose, onLook, onAddWord, o
     setBusy(true);
     setRefused(null);
     ops
-      .reviewApply(item.id, { value: value.trim(), scope, why: `decided otherwise from Why is this, on stack ${stack}` })
-      .then(() => onDecided(`Decided ${chosen.axis} is ${value.trim()} for ${SCOPES.find((s) => s.scope === scope)?.words ?? scope}.`))
+      .reviewApply(item.id, { value: value.trim(), scope: "stack", why: `decided otherwise from Why is this, on stack ${stack}` })
+      .then(() => onDecided(`Decided ${chosen.axis} is ${value.trim()}.`))
       .catch((e: unknown) => {
         setBusy(false);
         setRefused(refusalWords(e));
@@ -208,13 +208,6 @@ export function ExplainDialog({ caps, stack, item, onClose, onLook, onAddWord, o
             )}
             <span className="input">
               <input value={value} placeholder={chosen.value ? `${chosen.value}, or another value` : `a value of ${chosen.axis}`} aria-label={`The value of ${chosen.axis}`} onChange={(e) => setValue(e.target.value)} disabled={!may} />
-            </span>
-            <span className="seg" role="radiogroup" aria-label="The decision's scope">
-              {SCOPES.map((s) => (
-                <button key={s.scope} type="button" role="radio" aria-checked={scope === s.scope} className={scope === s.scope ? "on" : ""} disabled={!may} onClick={() => setScope(s.scope)}>
-                  {s.words}
-                </button>
-              ))}
             </span>
           </div>
           {item === null && <span className="meta">A decision goes through the stack&apos;s review item; none opened this.</span>}

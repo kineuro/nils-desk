@@ -27,7 +27,9 @@ const summary = { by_kind: { "base:missing": 7, "body_part:model": 40, "pick.bor
 
 describe("the machine's questions", () => {
   it("each kind is a row under its job, with where it is worked and its act", () => {
-    expect(machineRow("base:missing", 7)).toMatchObject({ job: "answer", title: "base: no value", count: 7, href: "#review/questions?axis=base&reason=missing", act: "Answer" });
+    expect(machineRow("base:missing", 7)).toMatchObject({ job: "answer", title: "base: no value", count: 7, href: "#review/questions", act: "Answer" });
+    // record 56: the gate's questions too are answered from the list of questions
+    expect(machineRow("base:disagree", 3)).toMatchObject({ job: "answer", title: "base: the rules and System 1 disagree", href: "#review/questions", act: "Answer" });
     expect(machineRow("body_part:model", 40)).toMatchObject({ job: "answer", href: "#review/proposals" });
     expect(machineRow("pick.border", 3)).toMatchObject({ job: "pick", href: "#review/picks?earlier=1" });
     expect(machineRow("identity.collision", 2)).toMatchObject({ job: "answer", title: "Subjects: collision", href: "#review/identifiers", act: "Decide" });
