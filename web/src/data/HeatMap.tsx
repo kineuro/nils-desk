@@ -33,6 +33,8 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
   // the pages read, with the layer they were asked for: cleared when the cohort or the layer changes
   const [shown, setShown] = useState<{ layer: Layer | null; page: HeatPage } | null>(null);
   const [why, setWhy] = useState<string | null>(null);
+  // a reading again that failed: the pages shown stay, and the error is said beside them
+  const [againWhy, setAgainWhy] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   const [layer, setLayerState] = useState<Layer | null>(() => keptLayer(LAYER_KEY));
@@ -54,12 +56,12 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
     keepLayer(LAYER_KEY, l);
   };
   // the subjects shown and what they were read for: a reading again of the same cohort and layer (the step over, a Run)
-  // reads as many again, so More's pages stay; another cohort or layer starts from the first page
-  const loaded = useRef<{ key: string; subjects: number; more: boolean }>({ key: "", subjects: 0, more: false });
+  // reads as many again, whether or not More was used, so the pages stay; another cohort or layer starts from the first page
+  const loaded = useRef<{ key: string; subjects: number }>({ key: "", subjects: 0 });
   useEffect(() => {
     const at = ++reading.current;
     const key = `${cohort}|${layer ?? ""}`;
-    const again = loaded.current.key === key && loaded.current.more;
+    const again = loaded.current.key === key && loaded.current.subjects > 0;
     // every subject shown is read again, in as many pages of at most HEAT_MOST as that takes
     const want = again ? loaded.current.subjects : HEAT_PAGE;
     if (!again) {
@@ -68,6 +70,7 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
     }
     setRereading(again);
     setWhy(null);
+    setAgainWhy(null);
     setMore(false);
     setStepFailed(false);
     setStepWhy(null);
@@ -81,14 +84,16 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
         read = read ? joined(read, p) : p;
         after = p.next;
       } while (again && read.subjects.length < want && after !== null);
-      loaded.current = { key, subjects: read.subjects.length, more: again };
+      loaded.current = { key, subjects: read.subjects.length };
       setShown({ layer, page: read });
       // the step the pages said is the one now
       setLiveStep(null);
       setRereading(false);
     })().catch((e: Error) => {
       if (at !== reading.current) return;
-      setWhy(e.message);
+      // a failed reading again keeps the pages shown and says the error beside them; a first reading has none to keep
+      if (again) setAgainWhy(e.message);
+      else setWhy(e.message);
       setRereading(false);
     });
   }, [cohort, layer, reload]);
@@ -162,7 +167,7 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
         setShown((was) => {
           if (!was || was.layer !== asked) return was;
           const page2 = joined(was.page, p);
-          loaded.current = { key: `${cohort}|${asked ?? ""}`, subjects: page2.subjects.length, more: true };
+          loaded.current = { key: `${cohort}|${asked ?? ""}`, subjects: page2.subjects.length };
           return { layer: asked, page: page2 };
         });
         setMore(false);
@@ -176,6 +181,7 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
   };
   return (
     <div className="heat">
+      {againWhy && <p className="warn">The main scans could not be read again: {againWhy}</p>}
       <div className="heat-head">
         <span className="chips" role="group" aria-label="Role">
           {page.roles.map((r) => (

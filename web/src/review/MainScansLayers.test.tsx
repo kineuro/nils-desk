@@ -316,6 +316,36 @@ describe("Main scans' layers", () => {
     }
   });
 
+  it("remembers a layer's failed step with its note, so switching away and back shows the note and asks no more", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let reads = 0;
+      await open({ cohort: "ms-followup" }, (c) => {
+        if (c.method === "GET" && c.path === "/api/picks/layer-step") {
+          reads += 1;
+          return { status: 403, body: { error: "this account may not read it" } };
+        }
+        return layerDoors({ body_part: stepOf("body_part", { state: "running" }) })(c);
+      });
+      await choose("Body region");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      await settle();
+      expect(reads).toBe(1);
+      await choose("Kinds");
+      await choose("Body region");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      await settle();
+      expect(reads).toBe(1);
+      expect(box().textContent).toContain("The step could not be read again: this account may not read it.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says once on an engine without the step's door that progress is not shown, and offers a Reload, never asking", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

@@ -265,6 +265,41 @@ describe("the heatmap with a layer", () => {
     }
   });
 
+  it("keeps the pages shown and says the error inline when a reading again fails, with or without More used", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let polls = 0;
+      let layered = 0;
+      await drawn(
+        (u) => {
+          const layer = u.searchParams.get("layer");
+          const a = answer(layer);
+          if (!layer) return a;
+          layered += 1;
+          if (layered > 1) throw new Error("the registry is busy");
+          return { ...a, layer: { ...a.layer, step: { ...STEP, state: "running" } } };
+        },
+        () => {
+          polls += 1;
+          return { ...STEP, state: "done" };
+        },
+      );
+      const keys = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Layer"] button')];
+      await act(async () => keys[1].click());
+      for (let i = 0; i < 20 && !host.querySelector(".heat-cell.layered"); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      // the step is over without More having been used: the pages are read again, and that fails
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      for (let i = 0; i < 40 && !host.textContent?.includes("could not be read again"); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      expect(polls).toBe(1);
+      expect(host.textContent).toContain("The main scans could not be read again: the registry is busy");
+      expect(host.querySelectorAll(".heat-row")).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says it does not show the step's progress where it cannot ask for it, with a Reload", async () => {
     vi.stubGlobal("fetch", async (url: string) => {
       const u = new URL(url, "http://desk.test");

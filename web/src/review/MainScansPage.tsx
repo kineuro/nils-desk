@@ -328,9 +328,9 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   const [layerSaid, setLayerSaid] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   // the layer's step as its scope's own door said it last, while it waits or runs, for the layer and the map read it is about
-  const [stepFailed, setStepFailed] = useState<{ layer: Layer | null; reload: number } | null>(null);
-  // why the step could not be read again; it goes once the asking resumes (another layer, or the map read again)
-  const [stepWhy, setStepWhy] = useState<string | null>(null);
+  // the layers whose step could not be read again, each with the read it failed in and its note: switching back to one shows
+  // its own note, and the asking resumes where the map is read again
+  const [stepFailed, setStepFailed] = useState<Record<string, { reload: number; why: string }>>({});
   const [liveStep, setLiveStep] = useState<{ layer: Layer | null; reload: number; step: SummaryStep; at: number } | null>(null);
   const setLayer = (l: Layer | null) => {
     setLayerState(l);
@@ -553,10 +553,9 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   const liveNow = liveStep !== null && liveStep.layer === layer && liveStep.reload === reload ? liveStep.step : null;
   const stepState = (liveNow ?? mapStep)?.state ?? null;
   const engineName = doc.kind === "ready" ? doc.value.scope?.name || scope.name : scope.name;
-  const stepStopped = stepFailed !== null && stepFailed.layer === layer && stepFailed.reload === reload;
-  useEffect(() => {
-    if (!stepStopped) setStepWhy(null);
-  }, [stepStopped]);
+  const failedHere = stepFailed[layer ?? ""];
+  const stepStopped = failedHere !== undefined && failedHere.reload === reload;
+  const stepWhy = stepStopped ? failedHere.why : null;
   const stepServed = served(caps, LAYER_STEP_DOOR);
   useEffect(() => {
     if (layer === null || (stepState !== "queued" && stepState !== "running") || stepStopped || !stepServed) return;
@@ -571,8 +570,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
         },
         (e: unknown) => {
           if (!alive) return;
-          setStepFailed({ layer: l, reload });
-          setStepWhy(`The step could not be read again: ${messageOf(e)}.`);
+          setStepFailed((all) => ({ ...all, [l]: { reload, why: `The step could not be read again: ${messageOf(e)}.` } }));
         },
       );
     }, LAYER_POLL);
