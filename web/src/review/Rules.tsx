@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// How scans are sorted (record 27, R5a): every axis the pack declares, not
-// the four word lists the old page showed. The axes stand on one side and the
-// chosen one on the other, with its values and the words that reach each.
+// The Rules page's Words tab (record 27, R5a; a tab of the Rules page since
+// record 56): every axis the pack declares, not the four word lists the old
+// page showed. The axes stand on one side and the chosen one on the other,
+// with its values and the words that reach each.
 // Which values take a word is the pack's own answer, not a list fixed here,
 // so an axis reached by no word anywhere is shown, marked as such, and its
 // Add a word refused with the reason. A word the site added is drawn apart
@@ -16,6 +17,7 @@ import type { Verdict } from "../assistant/stations";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { data, ops, overlayScope, type Batch, type OverlayRow, type ReviewItem, type Signals } from "../ops/client";
+import { href } from "../routes";
 import { assistantOffered } from "../sections";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
@@ -54,7 +56,19 @@ import {
   type ValueWord,
 } from "./client";
 
+import { adoptsOverlaysByCard, overlayProposal } from "./rulesDoors";
+
 const n = (v: number) => v.toLocaleString("en-US");
+
+/** An overlay is adopted on its proposal's approval card (rehearse, the card, decide), never at its own door: open that card. */
+function openOverlayCard(caps: Capabilities, overlay: number): Promise<void> {
+  const pack = caps.engine?.packs[0]?.name;
+  if (!pack) return Promise.reject(new Error("no pack is loaded"));
+  return overlayProposal(pack, overlay).then((p) => {
+    if (!p) throw new Error("No rehearsal is kept for this overlay. Refuse it and propose it again.");
+    location.hash = href("review", "rules", "proposals", String(p.id));
+  });
+}
 
 /** What counts as a word, wherever a word is added or read. */
 const WORD_RULE = 'Matching ignores capitals. A word is a plain piece of text, not a pattern. Spaces at either end are part of it, so " -k" is not "-k".';
@@ -201,7 +215,7 @@ export function AxisValues({ pack, axis, signals, overlays, may, onAdd }: { pack
   );
 }
 
-export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: RulesProps) {
+export function WordsPage({ caps, items, wordAt, onWordClose, onChanged }: RulesProps) {
   const [pack, setPack] = useState<PackDoc | null>(null);
   const [packWhy, setPackWhy] = useState<string | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
@@ -363,7 +377,7 @@ export function RulesPage({ caps, items, wordAt, onWordClose, onChanged }: Rules
 
       <section className="stack roomy">
         <div className="section-head rule-top">
-          <h2>Proposals</h2>
+          <h2>Proposed words</h2>
           <span className="meta">tried on real stacks first</span>
           {tunable && (
             <button type="button" className="button secondary small" onClick={() => setTuning(true)}>
@@ -437,9 +451,15 @@ export function ProposalsTable({ caps, overlays, onChanged }: { caps: Capabiliti
     }
   }, [proposed, readsClosure]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const byCard = adoptsOverlaysByCard(caps);
   const adopt = (o: OverlayRow) => {
     setBusy(o.id);
     setWhy(null);
+    if (byCard) {
+      openOverlayCard(caps, o.id).catch((e: unknown) => setWhy(refusalWords(e)));
+      setBusy(null);
+      return;
+    }
     ops
       .overlayAdopt(o.id)
       .then((r) => {
@@ -514,7 +534,7 @@ export function ProposalsTable({ caps, overlays, onChanged }: { caps: Capabiliti
                     <span className="row-actions">
                       {may.adopt && (
                         <button type="button" className="button small" disabled={busy !== null} title={c ? closureWords(c).note : undefined} onClick={() => adopt(o)}>
-                          {c ? closureWords(c).act : "Adopt"}
+                          {byCard ? "Review" : c ? closureWords(c).act : "Adopt"}
                         </button>
                       )}
                       {may.decide && (
@@ -703,6 +723,10 @@ export function TuneDialog({ caps, scope, axis, onClose, onChanged }: { caps: Ca
   const adopt = (v: Verdict) => {
     const o = overlayOf(v);
     if (o.id === null) return;
+    if (adoptsOverlaysByCard(caps)) {
+      openOverlayCard(caps, o.id).then(onClose, (e: unknown) => setWhy(refusalWords(e)));
+      return;
+    }
     setBusy(true);
     ops
       .overlayAdopt(o.id)
@@ -757,7 +781,7 @@ export function TuneDialog({ caps, scope, axis, onClose, onChanged }: { caps: Ca
             <>
               {may.adopt && (
                 <button type="button" className="button" disabled={busy} title={closure ? closureWords(closure).note : undefined} onClick={() => adopt(v)}>
-                  {closure ? closureWords(closure).act : "Adopt"}
+                  {adoptsOverlaysByCard(caps) ? "Review" : closure ? closureWords(closure).act : "Adopt"}
                 </button>
               )}
               {may.decide && (

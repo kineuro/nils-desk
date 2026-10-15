@@ -825,3 +825,22 @@ describe("a new cohort", () => {
     expect(text()).toContain("fresh is made.");
   });
 });
+
+describe("a dataset's proposed rule fixes (record 56)", () => {
+  it("are one line on its detail, from its read, with the way to them on the Rules page", async () => {
+    await page({
+      list: [done],
+      doors: [...DOORS, "GET /api/packs/{name}/proposals"],
+      route: (c) => (c.method === "GET" && new URL(c.url, "http://x").pathname === `/api/datasets/${done.name}/summary` ? { status: 200, body: { ...summaryOf(done), proposals: { proposed: 3, adopted: 1, rejected: 0 } } } : undefined),
+    });
+    const line = host.querySelector<HTMLElement>(".dp-detail .fixes-line")!;
+    expect(line.textContent).toBe("3 proposed rule fixes from this read1 adoptedReview them");
+    expect(line.querySelector("a")?.getAttribute("href")).toBe(`#review/rules/proposals?dataset=${done.name}`);
+  });
+
+  it("are not said by an engine that does not count them", async () => {
+    await page({ list: [done] });
+    expect(host.querySelector(".dp-detail")).not.toBeNull();
+    expect(host.querySelector(".dp-detail .fixes-line")).toBeNull();
+  });
+});

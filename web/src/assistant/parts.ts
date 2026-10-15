@@ -100,6 +100,9 @@ export interface Change {
   lines: string[];
   turn: string;
   decided: null | "approved" | "declined";
+  /** A rule change: the engine's proposal it is, and its pack where the agent named one (record 56). */
+  proposal?: number;
+  pack?: string;
 }
 
 /** One step of an assistant's reply as it arrived: its words, and the reasoning its runtime separated. */
@@ -253,7 +256,23 @@ export function acceptPart(state: PaneState, turnId: string, raw: unknown): Pane
           return { ...state, proposals: [...state.proposals, { document, parent: one.ref.parent ?? null, sentence: one.sentence, turn: turnId, decided: null }] };
         }
         if (state.changes.some((x) => x.id === one.id)) return state;
-        return { ...state, changes: [...state.changes, { id: one.id, change: one.change, title: one.title, sentence: one.sentence, lines: one.lines, turn: turnId, decided: null }] };
+        return {
+          ...state,
+          changes: [
+            ...state.changes,
+            {
+              id: one.id,
+              change: one.change,
+              title: one.title,
+              sentence: one.sentence,
+              lines: one.lines,
+              turn: turnId,
+              decided: null,
+              ...(one.ref.proposal !== undefined ? { proposal: one.ref.proposal } : {}),
+              ...(one.ref.pack !== undefined ? { pack: one.ref.pack } : {}),
+            },
+          ],
+        };
       case "replaced":
         // it marks the steps it follows, which only the stream and the history know (reduce, fromHistory)
         return state;

@@ -50,6 +50,7 @@ import { stations } from "./stations";
 import { plansOffered } from "../ops/PlanPage";
 import { PLAN_STATION } from "../ops/runs";
 import { ApprovalCardView, PlanPanel, StatusLine } from "./Cards";
+import { RuleApprovalById } from "../review/RuleApproval";
 import { agentFor, cardOfPlan, planShown } from "./events";
 import { liveLine } from "./steps";
 import { askedBefore, COMMANDS, commandOf, commandsFor, lastAsked } from "./thread";
@@ -541,6 +542,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
                 proposals={pane.proposals.filter((p) => p.turn === t.id)}
                 queryCard={(p) => queryCard(p.document, stateOf(p))}
                 changes={pane.changes.filter((c) => c.turn === t.id)}
+                ruleCard={(c) => (c.proposal !== undefined ? <RuleApprovalById caps={caps} pack={c.pack ?? null} id={c.proposal} onChange={revise} /> : null)}
                 charts={pane.charts[t.id]}
                 files={pane.files[t.id]}
                 onChange={talk.decideChange}

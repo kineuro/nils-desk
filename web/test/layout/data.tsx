@@ -31,6 +31,8 @@ const DOORS = [
   "POST /api/jobs",
   "POST /api/jobs/{id}/cancel",
   "GET /api/picks/summary",
+  // record 56: a dataset's proposed rule fixes, and the Rules page they lead to
+  "GET /api/packs/{name}/proposals",
   "POST /api/cohorts",
   "PUT /api/cohorts/{name}",
   "POST /api/cohorts/{name}/members",
@@ -186,6 +188,8 @@ function summary(s: Spec) {
       held: 0,
     },
     pictures_place: "working",
+    // record 56: the proposed rule changes that touch it, three waiting on study-big
+    ...(read ? { proposals: { proposed: s.name === "study-big" ? 3 : 0, adopted: s.name === "study-big" ? 1 : 0, rejected: 0 } } : {}),
     steps,
   };
 }
