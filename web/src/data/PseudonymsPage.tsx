@@ -150,8 +150,9 @@ export function PseudonymsPage({ caps, onChanged }: { caps: Capabilities; onChan
 function TypeDialog({ onClose, onMade }: { onClose: () => void; onMade: (name: string) => void }) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  // record 55, ruling 24: does one of these lead to a person wherever it is met
-  const [identifying, setIdentifying] = useState(false);
+  // record 55, ruling 24: does one of these lead to a person wherever it is met; sent only once the person chose,
+  // so naming a type that exists again never changes what it is
+  const [identifying, setIdentifying] = useState<boolean | null>(null);
   const [why, setWhy] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const plain = typeName(name);
@@ -160,7 +161,7 @@ function TypeDialog({ onClose, onMade }: { onClose: () => void; onMade: (name: s
     setSaving(true);
     setWhy(null);
     linkage
-      .addType(plain, description.trim(), identifying)
+      .addType(plain, description.trim(), identifying ?? undefined)
       .then(() => onMade(plain))
       .catch((e: unknown) => {
         setSaving(false);
@@ -203,10 +204,10 @@ function TypeDialog({ onClose, onMade }: { onClose: () => void; onMade: (name: s
           <Hint text="A hospital's record number leads to a person anywhere: looking a subject up by one then needs every detail. A study's own ID does not." />
         </span>
         <div className="chips" role="group" aria-labelledby="type-kind">
-          <button type="button" className={identifying ? "opt" : "opt on"} aria-pressed={!identifying} disabled={saving} onClick={() => setIdentifying(false)}>
+          <button type="button" className={identifying ? "opt" : "opt on"} aria-pressed={!identifying} disabled={saving} onClick={() => identifying && setIdentifying(false)}>
             A study's subject
           </button>
-          <button type="button" className={identifying ? "opt on" : "opt"} aria-pressed={identifying} disabled={saving} onClick={() => setIdentifying(true)}>
+          <button type="button" className={identifying ? "opt on" : "opt"} aria-pressed={identifying === true} disabled={saving} onClick={() => setIdentifying(true)}>
             A person, anywhere
           </button>
         </div>
