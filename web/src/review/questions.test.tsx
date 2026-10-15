@@ -11,7 +11,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DoorError } from "../ask/client";
+import { DoorError, type Json } from "../ask/client";
 import { GRANTS, type Grant } from "../grants";
 import { capsWith } from "./caps.fixture";
 import { QuestionGrid, QuestionsList } from "./Questions";
@@ -64,6 +64,10 @@ describe("the doors' answers, read into one shape", () => {
     expect(l.vocabularies.base.find((v) => v.name === "T2starw")).toEqual({ value: "T2*w", name: "T2starw", label: "T2*w" });
     expect(l.elsewhere).toEqual([{ kind: "classify.asked", scans: 2, words: "System 1 asks about a whole scan", page: "asked" }]);
     expect(l.held).toEqual({ scans: 3, campaigns: [{ id: 6, name: "base-check" }] });
+    // read for one scan, each question says that scan's mode, and nothing else is one
+    const one = listOf({ ...LIST, questions: [{ ...(LIST.questions as Json[])[1], mode: "blind_first" }, { ...(LIST.questions as Json[])[0], mode: "maybe" }] });
+    expect(one.questions.map((q) => q.mode)).toEqual(["blind_first", undefined]);
+    expect(l.questions.every((q) => !("mode" in q))).toBe(true);
     // an engine that said less still reads
     expect(listOf({ questions: [{ key: "base:missing", axis: "base" }, { axis: "nokey" }] }).questions).toEqual([{ key: "base:missing", axis: "base", shape: "missing", values: [], words: "Which base?", reason: "", scans: 0, staged: 0, kinds: {} }]);
   });
@@ -388,6 +392,34 @@ describe("the question under an open scan", () => {
     expect(done).toEqual([["base", "PDw"]]);
     expect(host.textContent).toContain("base: PDw · sorted again");
     expect(marks.at(-1)).toBeNull();
+  });
+
+  it("says a blind-first question is not read blind beside NILS's answer, and still answers it", async () => {
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const body = init?.body ? JSON.parse(String(init.body)) : null;
+      calls.push({ method, url, body });
+      const reply = (doc: unknown) => new Response(JSON.stringify(doc), { status: 200 });
+      if (url.startsWith("/api/review/questions?")) return reply({ ...LIST, questions: [{ ...(LIST.questions as Json[])[1], mode: "blind_first" }] });
+      if (url.includes("/answer")) return reply(answered("base:missing", body.stacks, 12));
+      return new Response("{}", { status: 404 });
+    });
+    await act(async () => root.render(<ScanQuestion caps={caps} where={{ dataset: "ms-a" }} scan={{ id: 303, axes: {} }} looks onAnswered={() => undefined} />));
+    await settle();
+    expect(host.querySelector(".q-ask")?.textContent).toBe("Which base?");
+    expect(host.textContent).toContain("NILS: no value");
+    expect(host.querySelector(".q-seen")?.textContent).toBe("not blind here");
+    await press("1");
+    await press("Enter");
+    await settle();
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ value: "T1w", stacks: [303], except: [], dataset: "ms-a" });
+  });
+
+  it("says nothing of blindness for a routine question", async () => {
+    await act(async () => root.render(<ScanQuestion caps={caps} where={{ dataset: "ms-a" }} scan={{ id: 302, axes: { base: "T2w" } }} looks onAnswered={() => undefined} />));
+    await settle();
+    expect(host.querySelector(".q-ask")?.textContent).toBe("T2w or PDw?");
+    expect(host.querySelector(".q-seen")).toBeNull();
   });
 
   it("reads nothing for a scan that needs no look", async () => {

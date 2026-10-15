@@ -6,7 +6,9 @@
 // the picture in its value's colour (the caution colour, dashed, where it has
 // none); 1 and 2 give the question's two answers, 0 the axis's whole list,
 // - no value, and Enter applies to this scan alone. The viewer's own keys
-// (the arrows, j and k, 3, g, n, / and Esc) stay the viewer's.
+// (the arrows, j and k, 3, g, n, / and Esc) stay the viewer's. The viewer's
+// names say NILS's answer, so nothing here is read blind: a question drawn
+// blind first says so, and the engine keeps its answer as not blind.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -168,6 +170,11 @@ export function ScanQuestion({ caps, where, scan, looks, onMark, onAnswered }: S
         {q.words}
       </a>
       <span className="meta">NILS: {nils ?? "no value"}</span>
+      {q.mode === "blind_first" && (
+        <span className="meta q-seen" title="Drawn to be read blind, but NILS's answer is on screen here: the answer is kept as not blind.">
+          not blind here
+        </span>
+      )}
       {answering ? (
         <>
           <span className="q-keys">

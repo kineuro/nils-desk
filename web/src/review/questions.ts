@@ -60,6 +60,8 @@ export interface Question {
   scans: number;
   staged: number;
   kinds: Record<string, number>;
+  /** Read for one scan (the dataset viewer): that scan's mode on the question. A blind-first one read there is shown beside NILS's answer, so its answer is never a blind label. */
+  mode?: "routine" | "blind_first";
 }
 
 /** One value of an axis as a person chooses it: `value` is the form the axis stores. */
@@ -195,7 +197,8 @@ function questionOf(raw: Json): Question | null {
   const values = strings(raw.values).slice(0, 2);
   const kinds: Record<string, number> = {};
   for (const [k, n] of Object.entries(obj(raw.kinds) ?? {})) if (num(n) !== null) kinds[k] = n as number;
-  return { key, axis, shape, values, words: str(raw.words) ?? wordsOf(shape, axis, values), reason: str(raw.reason) ?? "", scans: num(raw.scans) ?? 0, staged: num(raw.staged) ?? 0, kinds };
+  const mode = raw.mode === "blind_first" || raw.mode === "routine" ? raw.mode : undefined;
+  return { key, axis, shape, values, words: str(raw.words) ?? wordsOf(shape, axis, values), reason: str(raw.reason) ?? "", scans: num(raw.scans) ?? 0, staged: num(raw.staged) ?? 0, kinds, ...(mode ? { mode } : {}) };
 }
 
 /** The list door's answer, read into one shape whatever it left out. */
