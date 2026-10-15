@@ -96,13 +96,13 @@ export function commandOf(job: Pick<JobRow, "args">): string[] {
 }
 
 /**
- * Whether a job row is a queue worker's own (the engine's `worker` and
- * `pipeline-worker` kinds, or a `serve --worker` line): how jobs run, never
+ * Whether a job row is a queue worker's own (the engine's `worker`,
+ * `picture-worker` and `pipeline-worker` kinds, or a `serve --worker` line): how jobs run, never
  * a job a person started. A restart of the engine ends it, so its ending is
  * no failure of anyone's work.
  */
 export function isWorker(job: Pick<JobRow, "args" | "kind">): boolean {
-  if (job.kind === "worker" || job.kind === "pipeline-worker") return true;
+  if (job.kind === "worker" || job.kind === "picture-worker" || job.kind === "pipeline-worker") return true;
   const c = commandOf(job);
   return c[0] === "serve" && c.includes("--worker");
 }

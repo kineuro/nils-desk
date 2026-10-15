@@ -40,6 +40,7 @@ import { runOfJob, viewActs } from "./results";
 import { RunResultPage } from "./RunResult";
 import { cardOf, countByFilter, FILTERS, filterJobs, needsALook, type ChainedJob, type JobCard, type StateFilter } from "./pipelines";
 import { isWorker, wordsOf } from "./verbs";
+import { WorkersReady } from "./WorkersReady";
 import { FailLine } from "./Reason";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -218,7 +219,7 @@ function JobsPage({ caps }: { caps: Capabilities; catalog?: boolean }) {
     );
   };
 
-  const nowJobs = (live.open ?? all?.filter((j) => j.state === "running" || j.state === "queued" || j.state === "cancelling") ?? []).filter((j) => !dismissed.has(j.id));
+  const nowJobs = (live.open ?? all?.filter((j) => j.state === "running" || j.state === "queued" || j.state === "cancelling") ?? []).filter((j) => !dismissed.has(j.id) && !isWorker(j));
   // a queue worker's own row ends when the engine restarts: never a failure of anyone's work, so it waits folded under All jobs;
   // a stopped run's job whose run a later job took up again needs no look, and a run's job that made nothing does
   const recentFailed = (all ?? []).filter((j) => !isWorker(j) && !dismissed.has(j.id) && needsALook(j, now)).slice(0, 5);
@@ -255,6 +256,7 @@ function JobsPage({ caps }: { caps: Capabilities; catalog?: boolean }) {
         <h2>Now</h2>
         <span className="meta">{nowWords(live.live, nowJobs.length)}</span>
       </div>
+      <WorkersReady jobs={live.open ?? all ?? []} now={now} />
       {live.open === null && all === null && lists && <Wait phase="reading the jobs" since={since} size="panel" />}
       {(live.open !== null || all !== null) && nowJobs.length === 0 && recentFailed.length === 0 && <p className="meta">Nothing runs and nothing waits.</p>}
       {(nowJobs.length > 0 || recentFailed.length > 0) && <div className="jobs-now">{[...nowJobs, ...recentFailed.filter((f) => !nowJobs.some((j) => j.id === f.id))].map(card)}</div>}

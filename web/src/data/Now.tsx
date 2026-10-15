@@ -13,6 +13,7 @@ import { href } from "../routes";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { jobs as jobsDoor, type ChainedJob } from "./datasets";
+import { WorkersReady } from "../ops/WorkersReady";
 import { backgroundWords, isOpen, jobCards, jobsWords, liveJobs, type JobCard, type Live } from "./now";
 import { plainError } from "./plain";
 
@@ -126,6 +127,7 @@ export function NowSection({ caps, jobs, onSaid, onFailed }: { caps: Capabilitie
           <Icon name="layers" /> {quiet}
         </p>
       )}
+      <WorkersReady jobs={jobs.open ?? []} now={now} />
       {cards.length > 0 && (
         <div className="jobs-now">
           {cards.map((c) => (

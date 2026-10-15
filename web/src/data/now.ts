@@ -51,6 +51,39 @@ export function backgroundWords(jobs: JobRow[], now: number): string | null {
   return left ? `${what} · ${left}` : what;
 }
 
+/** A standing worker that has not beat for this long does not answer. */
+export const WORKER_STALE_S = 120;
+
+export interface WorkerLine {
+  id: number;
+  kind: string;
+  /** "last heartbeat 12 s ago", or "no heartbeat yet". */
+  beat: string;
+  answering: boolean;
+}
+
+/** The standing workers, apart from the jobs: each with its kind and last heartbeat, and whether it still answers (a beat within two minutes). */
+export function workersOf(jobs: JobRow[], now: number): WorkerLine[] {
+  return jobs
+    .filter((j) => isWorker(j) && isOpen(j))
+    .sort((a, b) => a.id - b.id)
+    .map((j) => {
+      const at = j.heartbeat_at ?? j.started_at;
+      const t = Date.parse(at);
+      const s = Number.isFinite(t) ? Math.max(0, (now - t) / 1000) : Infinity;
+      const beat = j.heartbeat_at === null ? "no heartbeat yet" : s === Infinity ? "heartbeat unreadable" : s < 60 ? `last heartbeat ${Math.round(s)} s ago` : s < 3600 ? `last heartbeat ${Math.floor(s / 60)} min ago` : `last heartbeat ${Math.floor(s / 3600)} h ago`;
+      return { id: j.id, kind: j.kind, beat, answering: s <= WORKER_STALE_S };
+    });
+}
+
+/** The one line: "Workers: 3 ready", with " and 1 not answering" where one is silent; null when none stands. */
+export function workersWords(ws: WorkerLine[]): string | null {
+  if (ws.length === 0) return null;
+  const ready = ws.filter((w) => w.answering).length;
+  const silent = ws.length - ready;
+  return silent === 0 ? `Workers: ${n(ready)} ready` : ready === 0 ? `Workers: ${n(silent)} not answering` : `Workers: ${n(ready)} ready, ${n(silent)} not answering`;
+}
+
 const OPEN = new Set(["queued", "running", "cancelling"]);
 
 export function isOpen(j: JobRow): boolean {

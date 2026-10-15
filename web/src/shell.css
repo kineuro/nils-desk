@@ -1720,3 +1720,8 @@ table.run-files .run-file { max-width: min(28rem, 55vw); overflow: hidden; text-
 .restore-steps { margin: 0; padding-left: 1.2rem; display: grid; gap: 0.5rem; }
 .restore-steps li { display: grid; gap: 0.25rem; justify-items: start; }
 .restore-steps .chip.command { max-width: 100%; overflow-x: auto; }
+.workers-ready { border-left: 3px solid var(--n-brand-line, currentColor); padding-left: 0.5rem; }
+.workers-ready.silent { border-left-color: var(--n-caution-fg); }
+.workers-list { list-style: none; margin: 0.25rem 0 0; padding: 0; display: grid; gap: 0.25rem; font-size: var(--n-text-size-small); }
+.workers-list li { border-left: 3px solid var(--n-brand-line, currentColor); padding-left: 0.5rem; }
+.workers-list li.silent { border-left-color: var(--n-caution-fg); }

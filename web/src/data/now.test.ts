@@ -10,7 +10,7 @@ import chain from "../../test/fixtures/jobs_chain.json";
 import type { Capabilities } from "../capabilities";
 import { GRANTS, SETS } from "../grants";
 import type { ChainedJob } from "./datasets";
-import { backgroundWords, cancelRefusal, doingWords, jobCards, liveJobs, nowWords, progressOf, type EventSourceLike } from "./now";
+import { backgroundWords, cancelRefusal, doingWords, jobCards, liveJobs, nowWords, progressOf, workersOf, workersWords, type EventSourceLike } from "./now";
 
 const rows = (chain as { jobs: ChainedJob[] }).jobs;
 const open = rows.filter((j) => j.state !== "failed");
@@ -167,3 +167,38 @@ describe("the live feed", () => {
     stop();
   });
 });
+
+describe("standing workers", () => {
+  const at = (s: number) => new Date(now - s * 1000).toISOString();
+  const w = (id: number, kind: string, beat: number | null): ChainedJob => ({ ...open[0], id, kind, state: "running", args: {}, heartbeat_at: beat === null ? null : at(beat), started_at: at(3600) });
+
+  it("count none of the three kinds as a job of a person, and say them as ready", () => {
+    const ws = [w(1, "worker", 5), w(2, "picture-worker", 30), w(3, "pipeline-worker", 70)];
+    expect(jobCards(ws, [], caps(), now)).toEqual([]);
+    expect(jobsWordsOf(ws)).toBe("nothing runs");
+    const lines = workersOf(ws, now);
+    expect(lines.map((l) => [l.kind, l.beat, l.answering])).toEqual([
+      ["worker", "last heartbeat 5 s ago", true],
+      ["picture-worker", "last heartbeat 30 s ago", true],
+      ["pipeline-worker", "last heartbeat 1 min ago", true],
+    ]);
+    expect(workersWords(lines)).toBe("Workers: 3 ready");
+  });
+
+  it("show a worker silent for over two minutes as not answering", () => {
+    const lines = workersOf([w(1, "worker", 120), w(2, "picture-worker", 121), w(3, "pipeline-worker", null)], now);
+    expect(lines.map((l) => l.answering)).toEqual([true, false, false]);
+    expect(lines[2].beat).toBe("no heartbeat yet");
+    expect(workersWords(lines)).toBe("Workers: 1 ready, 2 not answering");
+    expect(workersWords(lines.slice(1))).toBe("Workers: 2 not answering");
+  });
+
+  it("leave out ended workers and say nothing where none stands", () => {
+    expect(workersOf([{ ...w(1, "worker", 5), state: "failed" }], now)).toEqual([]);
+    expect(workersWords([])).toBeNull();
+  });
+});
+
+function jobsWordsOf(jobs: ChainedJob[]): string {
+  return nowWords({ kind: "still" }, jobCards(jobs, [], caps(), now).filter((c) => c.kind !== "failed").length);
+}
