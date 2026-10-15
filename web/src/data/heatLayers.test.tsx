@@ -86,7 +86,7 @@ describe("the heatmap with a layer", () => {
       const layer = new URL(url, "http://desk.test").searchParams.get("layer");
       return new Response(JSON.stringify(answer(layer)), { status: 200 });
     });
-    const caps = capsWith(["GET /api/cohorts/{name}/picks", "POST /api/cohorts/{name}/steps/{step}/run"], [...GRANTS] as Grant[]);
+    const caps = capsWith(["GET /api/cohorts/{name}/picks", "POST /api/cohorts/{name}/steps/{step}/run", "GET /api/picks/layer-step"], [...GRANTS] as Grant[]);
     const r = createRoot(host);
     root = r;
     await act(async () => r.render(<HeatMap cohort="north" caps={caps} />));
@@ -134,10 +134,10 @@ describe("the heatmap with a layer", () => {
     vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
       asked.push(`${init?.method ?? "GET"} ${url}`);
       const u = new URL(url, "http://desk.test");
-      if (u.pathname === "/api/cohorts/north") return new Response(JSON.stringify({ name: "north", steps: [step?.()] }), { status: 200 });
+      if (u.pathname === "/api/picks/layer-step") return new Response(JSON.stringify({ layer: u.searchParams.get("layer"), operation: "body_part", step: step?.() }), { status: 200 });
       return new Response(JSON.stringify(await answer(u)), { status: 200 });
     });
-    const caps = capsWith(["GET /api/cohorts/{name}/picks", "POST /api/cohorts/{name}/steps/{step}/run"], [...GRANTS] as Grant[]);
+    const caps = capsWith(["GET /api/cohorts/{name}/picks", "POST /api/cohorts/{name}/steps/{step}/run", "GET /api/picks/layer-step"], [...GRANTS] as Grant[]);
     const r = createRoot(host);
     root = r;
     await act(async () => r.render(<HeatMap cohort="north" caps={caps} />));
@@ -212,13 +212,53 @@ describe("the heatmap with a layer", () => {
       await act(async () => more.click());
       for (let i = 0; i < 20 && host.querySelectorAll(".heat-row").length < 2; i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
       expect(host.querySelectorAll(".heat-row")).toHaveLength(2);
-      const pages = asked.filter((a) => a.includes("/picks")).length;
+      const pages = asked.filter((a) => a.includes("/picks?")).length;
       await act(async () => {
         await vi.advanceTimersByTimeAsync(15_000);
       });
-      for (let i = 0; i < 20 && !asked.some((a) => a.endsWith("/api/cohorts/north")); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
-      expect(asked.some((a) => a === "GET /api/cohorts/north")).toBe(true);
-      expect(asked.filter((a) => a.includes("/picks")).length).toBe(pages);
+      for (let i = 0; i < 20 && !asked.some((a) => a.includes("/api/picks/layer-step")); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      expect(asked.some((a) => a === "GET /api/picks/layer-step?cohort=north&layer=body_region")).toBe(true);
+      expect(asked.filter((a) => a.includes("/picks?")).length, asked.join("\n")).toBe(pages);
+      expect(host.querySelectorAll(".heat-row")).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the pages read with More when the step is over, and its key names the values of every page", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let polls = 0;
+      const step = () => {
+        polls += 1;
+        return polls === 1 ? { ...STEP, state: "done", answered: 40 } : STEP;
+      };
+      let firsts = 0;
+      const asked = await drawn((u) => {
+        const layer = u.searchParams.get("layer");
+        const a = answer(layer);
+        if (!layer) return a;
+        const first = { ...a, layer: { ...a.layer, values: ["head"], step: { ...STEP, state: "running" } } };
+        if (u.searchParams.get("after") !== null) return { ...a, subjects: a.subjects.slice(1), next: null, layer: { ...a.layer, values: ["spine"] } };
+        firsts += 1;
+        // the first reading answers one subject and more to come; a reading again, every subject shown
+        return firsts === 1 ? { ...first, subjects: first.subjects.slice(0, 1), next: 1 } : { ...first, next: null };
+      }, step);
+      const keys = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Layer"] button')];
+      await act(async () => keys[1].click());
+      for (let i = 0; i < 20 && !host.querySelector(".heat-cell.layered"); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      const more = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "More subjects")!;
+      await act(async () => more.click());
+      for (let i = 0; i < 20 && host.querySelectorAll(".heat-row").length < 2; i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      // the key names the values of both pages
+      expect([...host.querySelectorAll(".heat-value")].map((v) => v.textContent)).toEqual(["head", "spine"]);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      for (let i = 0; i < 40 && firsts < 2; i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      // the first page read again, as long as every subject shown
+      expect(asked.filter((a) => a === "GET /api/cohorts/north/picks?limit=24&layer=body_region")).toHaveLength(2);
+      for (let i = 0; i < 20 && host.querySelectorAll(".heat-row").length < 2; i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
       expect(host.querySelectorAll(".heat-row")).toHaveLength(2);
     } finally {
       vi.useRealTimers();

@@ -40,7 +40,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const ALL = capsWith([...MAIN_SCANS_DOORS, ...RUN_DOORS], [...GRANTS] as Grant[]);
+const ALL = capsWith([...MAIN_SCANS_DOORS, ...RUN_DOORS, "GET /api/picks/layer-step"], [...GRANTS] as Grant[]);
 
 async function open(query: Record<string, string>, over: (c: FakeCall) => FakeAnswer = layerDoors(), caps = ALL) {
   const engine = fakeEngine(mainScansDoors(over));
@@ -240,28 +240,30 @@ describe("Main scans' layers", () => {
     expect(counts).toEqual(["1,040 taken of 1,080 (was 1,028)", "2 taken of 30"]);
   });
 
-  it("reads the step alone again while it runs, from the cohort's own door, and the map once it is over", async () => {
+  /** The step polled alone while it runs, then the map once it is over, for a cohort's page and a dataset's. */
+  async function polled(query: Record<string, string>, scope: string) {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      let cohortReads = 0;
-      const engine = await open({ cohort: "ms-followup" }, (c) => {
-        if (c.method === "GET" && c.path === "/api/cohorts/ms-followup") {
-          cohortReads += 1;
-          const st = cohortReads === 1 ? stepOf("body_part", { state: "running", progress: { done: 50, total: 100 } }) : stepOf("body_part", { state: "done", answered: 1300, staged: 12 });
-          return { status: 200, body: { name: "ms-followup", steps: [st] } };
+      const reads: string[] = [];
+      const engine = await open(query, (c) => {
+        if (c.method === "GET" && c.path === "/api/picks/layer-step") {
+          reads.push(c.query.toString());
+          const st = reads.length === 1 ? stepOf("body_part", { state: "running", progress: { done: 50, total: 100 } }) : stepOf("body_part", { state: "done", answered: 1300, staged: 12 });
+          return { status: 200, body: { layer: c.query.get("layer"), operation: "body_part", step: st } };
         }
+        if (c.method === "GET" && c.path === "/api/picks/rules" && query.dataset) return { status: 200, body: { ...rulesAnswer(), scope: { kind: "dataset", id: 3, name: query.dataset } } };
         return layerDoors({ body_part: stepOf("body_part", { state: "running", progress: { done: 10, total: 100 } }) })(c);
       });
       await choose("Body region");
-      expect(box().querySelector(".ms-layer-said")?.textContent).toBe("Body part runs on this cohort now; the layer fills in as it answers.");
       const maps = engine.of("POST", "/api/picks/map").length;
       const subjects = engine.of("POST", "/api/picks/map/subjects").length;
       await act(async () => {
         await vi.advanceTimersByTimeAsync(15_000);
       });
       await settle();
-      // the step alone, not the map, its subjects or its strips
-      expect(cohortReads).toBe(1);
+      // the step alone, from its own door, not the map, its subjects or its strips, nor the scope's summary
+      expect(reads).toEqual([`${scope}&layer=body_region`]);
+      expect(engine.calls.some((c) => c.path.startsWith("/api/datasets/") || c.path.startsWith("/api/cohorts/"))).toBe(false);
       expect(engine.of("POST", "/api/picks/map")).toHaveLength(maps);
       expect(engine.of("POST", "/api/picks/map/subjects")).toHaveLength(subjects);
       // over: the map is read again, once
@@ -269,8 +271,40 @@ describe("Main scans' layers", () => {
         await vi.advanceTimersByTimeAsync(15_000);
       });
       await settle();
-      expect(cohortReads).toBe(2);
+      expect(reads).toHaveLength(2);
       expect(engine.of("POST", "/api/picks/map").length).toBe(maps + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  }
+
+  it("reads a cohort's step alone again while it runs, from the light door, and the map once it is over", async () => {
+    await polled({ cohort: "ms-followup" }, "cohort=ms-followup");
+  });
+
+  it("reads a dataset's step alone again while it runs, from the light door, and the map once it is over", async () => {
+    await polled({ dataset: "study-big" }, "dataset=study-big");
+  });
+
+  it("stops asking for the step and says so where the engine refuses it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let reads = 0;
+      await open({ cohort: "ms-followup" }, (c) => {
+        if (c.method === "GET" && c.path === "/api/picks/layer-step") {
+          reads += 1;
+          return { status: 403, body: { error: "this account may not read it" } };
+        }
+        return layerDoors({ body_part: stepOf("body_part", { state: "running" }) })(c);
+      });
+      await choose("Body region");
+      for (let i = 0; i < 3; i++)
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(15_000);
+        });
+      await settle();
+      expect(reads).toBe(1);
+      expect(box().textContent).toContain("The step could not be read again: this account may not read it. Reload the page to see how far it has come.");
     } finally {
       vi.useRealTimers();
     }

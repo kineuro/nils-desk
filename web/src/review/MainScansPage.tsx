@@ -36,6 +36,7 @@ import {
   MAP_DOOR,
   keepLayer,
   keptLayer,
+  LAYER_STEP_DOOR,
   layerStepWords,
   stepNow,
   mainScansMissing,
@@ -327,7 +328,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   const [layerSaid, setLayerSaid] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   // the layer's step as its scope's own door said it last, while it waits or runs, for the layer and the map read it is about
-  const [stepTick, setStepTick] = useState(0);
+  const [stepFailed, setStepFailed] = useState<{ layer: Layer | null; reload: number } | null>(null);
   const [liveStep, setLiveStep] = useState<{ layer: Layer | null; reload: number; step: SummaryStep; at: number } | null>(null);
   const setLayer = (l: Layer | null) => {
     setLayerState(l);
@@ -543,24 +544,31 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says
   }, [caps, scope, shownRole, columns, settledKey, pending, reload, version, view, grow, layer]);
 
-  // while the layer's step waits its turn or runs over the scope, the step alone is read again now and then, from the scope's own
-  // door; once it is over, the map, its subjects and its strips are read again, once
+  // while the layer's step waits its turn or runs over the scope, the step alone is read again now and then, from its own light
+  // door, which whoever reads the map may read; once it is over, the map, its subjects and its strips are read again, once. A
+  // refusal, or an engine without that door, ends the asking and says so, never a silent loop
   const mapStep = map.at === mapAt && map.load.kind === "ready" && map.load.value.layer?.layer === layer ? (map.load.value.layer?.step ?? null) : null;
   const liveNow = liveStep !== null && liveStep.layer === layer && liveStep.reload === reload ? liveStep.step : null;
   const stepState = (liveNow ?? mapStep)?.state ?? null;
   const engineName = doc.kind === "ready" ? doc.value.scope?.name || scope.name : scope.name;
+  const stepStopped = stepFailed !== null && stepFailed.layer === layer && stepFailed.reload === reload;
+  const stepServed = served(caps, LAYER_STEP_DOOR);
   useEffect(() => {
-    if (layer === null || (stepState !== "queued" && stepState !== "running")) return;
-    const operation = layer === "post_contrast" ? "post_contrast" : "body_part";
+    if (layer === null || (stepState !== "queued" && stepState !== "running") || stepStopped || !stepServed) return;
+    const l = layer;
     let alive = true;
     const t = setTimeout(() => {
-      stepNow({ kind: scope.kind, name: engineName }, operation).then(
+      stepNow({ kind: scope.kind, name: engineName }, l).then(
         (st) => {
-          if (!alive || st === null) return;
-          if (st.state === "queued" || st.state === "running") setLiveStep({ layer, reload, step: st, at: Date.now() });
+          if (!alive) return;
+          if (st.state === "queued" || st.state === "running") setLiveStep({ layer: l, reload, step: st, at: Date.now() });
           else setReload((x) => x + 1);
         },
-        () => alive && setStepTick((x) => x + 1),
+        (e: unknown) => {
+          if (!alive) return;
+          setStepFailed({ layer: l, reload });
+          setLayerSaid(`The step could not be read again: ${messageOf(e)}. Reload the page to see how far it has come.`);
+        },
       );
     }, LAYER_POLL);
     return () => {
@@ -568,7 +576,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
       clearTimeout(t);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read again on each answer, by the time it came
-  }, [layer, stepState, reload, liveStep?.at, stepTick, scope.kind, engineName]);
+  }, [layer, stepState, reload, liveStep?.at, stepStopped, stepServed, scope.kind, engineName]);
 
   if (doc.kind === "loading") return <Wait phase="reading the rules" since={doc.since} size="panel" />;
   if (doc.kind === "failed")

@@ -962,16 +962,19 @@ export function keepLayer(key: string, l: Layer | null) {
   }
 }
 
+/** The door that reads a layer's step alone (record 55, decision 6), for whoever reads the map or a cohort's heatmap. */
+export const LAYER_STEP_DOOR = "GET /api/picks/layer-step";
+
 /**
- * The step of a layer's operation over a dataset or cohort, read from the
- * scope's own door (a dataset's summary, a cohort's document), which is
- * light: while the step waits or runs a page asks this, not the map again.
+ * The step that answers a layer over a dataset or cohort, read alone from
+ * its own door while it waits or runs, instead of the whole map. A refusal
+ * or an answer with no step is thrown, so a page says so and stops asking.
  */
-export function stepNow(scope: Scope, operation: Operation): Promise<SummaryStep | null> {
-  const path = scope.kind === "cohort" ? `/api/cohorts/${encodeURIComponent(scope.name)}` : `/api/datasets/${encodeURIComponent(scope.name)}/summary`;
-  return door<unknown>("GET", path).then((a) => {
-    const steps = obj(a).steps;
-    return (Array.isArray(steps) ? steps : []).map(stepOf).find((st) => st?.step === operation) ?? null;
+export function stepNow(scope: Scope, layer: Layer): Promise<SummaryStep> {
+  return door<unknown>("GET", `/api/picks/layer-step?${scopeParam(scope)}&layer=${layer}`).then((a) => {
+    const st = stepOf(obj(a).step);
+    if (st === null) throw new Error("the engine said nothing of the step");
+    return st;
   });
 }
 
