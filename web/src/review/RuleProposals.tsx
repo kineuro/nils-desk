@@ -43,8 +43,16 @@ export function RuleProposals({ caps, pack, dataset, opened, onDecided, onSaid, 
   useEffect(() => {
     let alive = true;
     setLoad({ kind: "loading", since: Date.now() });
-    rulesDoors.proposals(pack.pack, { dataset }).then(
-      (r) => alive && setLoad({ kind: "ready", proposals: r.proposals }),
+    // the waiting ones read on their own, so older decided ones never push them past the list's end
+    Promise.all([
+      rulesDoors.proposals(pack.pack, { dataset, status: "proposed", limit: 500 }),
+      rulesDoors.proposals(pack.pack, { dataset }),
+    ]).then(
+      ([w, r]) => {
+        if (!alive) return;
+        const seen = new Set(w.proposals.map((p) => p.id));
+        setLoad({ kind: "ready", proposals: [...w.proposals, ...r.proposals.filter((p) => !seen.has(p.id))] });
+      },
       (e: unknown) => alive && setLoad({ kind: "failed", why: refusalWords(e) }),
     );
     return () => {

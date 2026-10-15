@@ -185,7 +185,7 @@ export function RuleApproval({ caps, pack, proposal, open = false, onChanged, on
             Adopt
           </button>
         )}
-        {proposed && p.stale && mayRehearse(caps) && (
+        {proposed && (p.stale || p.card === null) && mayRehearse(caps) && (
           <button type="button" className="button" disabled={busy !== null} onClick={again}>
             Rehearse again
           </button>
@@ -218,7 +218,7 @@ export function RuleApproval({ caps, pack, proposal, open = false, onChanged, on
           {details ? "Less" : "Details"}
         </button>
         {adoptable(p) && !decides && <span className="meta">Adopting needs work on Review and on Data.</span>}
-        {proposed && p.stale && !mayRehearse(caps) && <span className="meta">It waits for someone who may rehearse it again.</span>}
+        {proposed && (p.stale || p.card === null) && !mayRehearse(caps) && <span className="meta">It waits for someone who may rehearse it again.</span>}
         {busy && <Wait phase={busy.phase} since={busy.since} />}
         {why && <span className="warn">{why}</span>}
       </div>

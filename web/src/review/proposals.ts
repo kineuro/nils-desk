@@ -213,7 +213,8 @@ export function stateTag(p: Proposal): { words: string; tone: "caution" | "ok" |
 
 /** Whether a proposal is adoptable now: waiting, and rehearsed on the pack and the changes in force as they are. */
 export function adoptable(p: Proposal): boolean {
-  return p.status === "proposed" && !p.stale;
+  // never decided without its card: one kept without a card is rehearsed again first
+  return p.status === "proposed" && !p.stale && p.card !== null;
 }
 
 /** Whether the re-sort of an adopted proposal still runs. */

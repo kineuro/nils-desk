@@ -321,7 +321,8 @@ describe("the proposals", () => {
   it("are a dataset's alone where the page was opened for it, and so is the quality", async () => {
     const e = engine();
     await open(null, { query: { dataset: "ward-c" } });
-    expect(e.of("GET", P).map((c) => c.query.get("dataset"))).toEqual(["ward-c", "ward-c"]);
+    // the waiting proposals are read on their own, then the list, then the quality: each for the dataset alone
+    expect(e.of("GET", P).map((c) => c.query.get("dataset"))).toEqual(["ward-c", "ward-c", "ward-c"]);
     expect(tabs()).toEqual(["Proposals2 *", "Quality", "Change a rule", "Words"]);
     expect([...host.querySelectorAll(".rules-tabs a")].map((a) => a.getAttribute("href"))).toEqual(["#review/rules/proposals?dataset=ward-c", "#review/rules/quality?dataset=ward-c", "#review/rules/change?dataset=ward-c", "#review/rules/words?dataset=ward-c"]);
     expect(host.querySelector(".review-dataset .tag")?.textContent).toBe("ward-c");
