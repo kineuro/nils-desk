@@ -302,6 +302,21 @@ describe("a certificate that cites its graded run", () => {
 });
 
 describe("a certificate as the engine may send it", () => {
+  it("says what certified a model in its words even where the run is not text", async () => {
+    const said: string[] = [];
+    const sent = { ...CITED, evidence: { run: 7 } as unknown as Certificate["evidence"] };
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify(sent), { status: 201 })) as typeof fetch;
+    try {
+      const { models } = await import("./client");
+      const c = await models.certify({});
+      const run = textOf(c.evidence?.run);
+      said.push(run ? `by ${run}` : `: ${certifiedWords(c)}`);
+    } finally {
+      globalThis.fetch = original;
+    }
+    expect(said).toEqual([": 1 of 5,482 wrong · bound 0.087 %"]);
+  });
   it("draws a citation that lacks a field, or holds one that is not text, without failing", () => {
     const odd = { ...CITED, evidence: { run: 7, manifest_sha256: null, model_digest: D("9") } as unknown as Certificate["evidence"] };
     const html = renderToStaticMarkup(<CertificateFacts m={{ ...S1, certificate: odd }} />);

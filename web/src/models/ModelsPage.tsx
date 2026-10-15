@@ -538,7 +538,10 @@ export function CertifyDialog({ m, onClose, onDone }: { m: Model; onClose: () =>
     setBusy(true);
     setRefused(null);
     models.certify(built.body).then(
-      (c) => onDone(c.evidence ? `${label(m)} is certified by the graded run ${c.evidence.run}.` : `${label(m)} is certified: ${certifiedWords(c)}.`),
+      (c) => {
+        const run = textOf(c.evidence?.run);
+        onDone(run ? `${label(m)} is certified by the graded run ${run}.` : `${label(m)} is certified: ${certifiedWords(c)}.`);
+      },
       (e: unknown) => {
         setBusy(false);
         setRefused(engineWords(e));
