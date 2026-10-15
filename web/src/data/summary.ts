@@ -73,6 +73,8 @@ export interface SummaryStep {
   jobs?: number[];
   /** Body part and post-contrast: why a run of it would be refused now, none where its door would start one. */
   refusal?: StepRefusal | null;
+  /** Body part and post-contrast on a map's layer (record 55, decision 6): the scans whose model answers are staged and not yet put in force, which the layer does not show yet. */
+  staged?: number;
 }
 
 /** One kind of file the read set aside, not a scan: a stable key, its plural in plain words, and how many. */

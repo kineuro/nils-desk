@@ -356,6 +356,8 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
   if (!subjects) return <Wait phase="reading the subjects" since={subjectsSince ?? Date.now()} size="panel" />;
   if (subjects.subjects.length === 0) return <p className="ms-none">No subject in this group.</p>;
   const slots = Math.max(1, ...subjects.subjects.map((s) => s.visits.length));
+  // the layer, where one is on and this answer is of it, as the strips check theirs
+  const mine = layer !== null && subjects.layer?.layer === layer;
   // a cell's list is about its column: a card names it first, and a visit in another dataset too names that one
   const here = group.by === "cell" ? group.column : null;
   return (
@@ -383,7 +385,7 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
                 const others = othersOf(v, here);
                 const also = alsoWords(others);
                 // the layer, where one is on and this answer carries it
-                const on = layer !== null && v.layer !== null ? v.layer : null;
+                const on = mine && v.layer !== null ? v.layer : null;
                 const layered = on && layer ? `, ${layerName(layer).toLowerCase()} ${layerSaid(layer, on)}` : "";
                 return (
                   <button
@@ -542,6 +544,8 @@ export interface LayerBoxProps {
   run: LayerRun | null;
   /** One line once a run is asked for, or why it was refused. */
   said: string | null;
+  /** While the step waits or runs and its progress is not read again here: why, and a Reload. */
+  note?: { words: string; onReload: () => void } | null;
 }
 
 /**
@@ -551,7 +555,7 @@ export interface LayerBoxProps {
  * carries none, and whether the step that answers it has run over the
  * dataset or cohort, with a Run where it has not.
  */
-export function LayerBox({ layer, onLayer, answer, unanswered = false, since, step, run, said }: LayerBoxProps) {
+export function LayerBox({ layer, onLayer, answer, unanswered = false, since, step, run, said, note = null }: LayerBoxProps) {
   const most = Math.max(1, ...(answer?.values.map((v) => v.visits_with) ?? []));
   return (
     <section className="ms-box ms-layer" aria-label="Layer">
@@ -590,6 +594,14 @@ export function LayerBox({ layer, onLayer, answer, unanswered = false, since, st
             <p className="meta ms-said" role="status">
               {said}
             </p>
+          )}
+          {note && (
+            <div className="ms-layer-step">
+              <span className="ms-layer-said">{note.words}</span>
+              <button type="button" className="button quiet small" onClick={note.onReload}>
+                Reload
+              </button>
+            </div>
           )}
           {answer.values.length === 0 && <p className="ms-none">No scan of these visits carries a {layerName(layer).toLowerCase()} yet.</p>}
           {answer.values.map((v) => {
