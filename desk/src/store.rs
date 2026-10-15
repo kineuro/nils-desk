@@ -114,6 +114,13 @@ impl Book {
         if let Some(c) = claims {
             access.add(&grants::of_names(c.roles.iter().map(String::as_str)));
         }
+        // record 55, ruling 24: an admin, who may change people and groups,
+        // has full access to anything: every page, grant and detail, with
+        // nothing to grant to themselves (a sealed sample stays sealed: its
+        // grant is in no set)
+        if grants::is_admin(&access) {
+            access = Access::everything();
+        }
         Resolved {
             access,
             member,

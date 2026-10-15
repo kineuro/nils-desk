@@ -31,7 +31,10 @@ import {
   higher,
   highestDetail,
   identity,
+  isAdminLevels,
   levelsOf,
+  raiseArea,
+  topLevels,
   passwordRefusal,
   personRefusal,
   removedWords,
@@ -88,13 +91,19 @@ export interface LinesProps {
   groups?: readonly Group[];
   onLevel: (id: PageId, level: Level) => void;
   onDetail: (detail: Detail) => void;
+  /** Record 55, ruling 24: a whole area, or everything, given at once. */
+  onArea?: (area: "pages" | "settings" | "all") => void;
 }
 
 /** A line for each page with how far the person or the group goes there, and how much of a record they see. */
 export function AccessLines(props: LinesProps) {
-  const { kind, levels, detail, onLevel, onDetail } = props;
+  const { kind, levels: chosen, detail: chosenDetail, onLevel, onDetail, onArea } = props;
   const person = kind === "person";
   const groups = person ? (props.groups ?? []) : [];
+  // record 55, ruling 24: work on People makes an admin, who holds every page and every detail
+  const admin = isAdminLevels(chosen);
+  const levels = admin ? topLevels() : chosen;
+  const detail: Detail = admin ? "sensitive" : chosenDetail;
 
   const row = (line: PageLine) => {
     const given = givenBy(groups, line);
@@ -110,9 +119,9 @@ export function AccessLines(props: LinesProps) {
           label={line.title}
           choices={line.levels}
           words={(l) => LEVEL_WORDS[l]}
-          titles={(l) => (locked(line, l, given.level) ? `from ${andWords(given.from)}` : undefined)}
+          titles={(l) => (admin && line.id !== "identity" && l !== level ? "an admin holds everything" : locked(line, l, given.level) ? `from ${andWords(given.from)}` : undefined)}
           value={level}
-          isLocked={(l) => locked(line, l, given.level)}
+          isLocked={(l) => (admin && line.id !== "identity" ? l !== level : locked(line, l, given.level))}
           onPick={(l) => onLevel(line.id, l)}
         />
         <span className="what">
@@ -130,8 +139,28 @@ export function AccessLines(props: LinesProps) {
 
   const givenDetail = detailGivenBy(groups);
   const detailAbove = person && detailLocked(givenDetail.detail, detail);
+  const area = (which: "pages" | "settings" | "all", words: string) => (
+    <button type="button" className="button quiet small" onClick={() => onArea?.(which)}>
+      {words}
+    </button>
+  );
   return (
     <div className="alist">
+      {admin ? (
+        <div className="arow admin-row">
+          <Icon name="shield" />
+          <b>Admin</b>
+          <span className="what">Every page, every detail. Nothing to give.</span>
+        </div>
+      ) : (
+        onArea && (
+          <div className="row area-row" role="group" aria-label="Give at once">
+            {area("pages", "Every page")}
+            {area("settings", "Every setting")}
+            {area("all", "Everything")}
+          </div>
+        )
+      )}
       {PAGE_LINES.filter((l) => !l.settings).map(row)}
       <div className="arow">
         <Icon name="settings" />
@@ -141,7 +170,7 @@ export function AccessLines(props: LinesProps) {
       <div className="arow">
         <Icon name="shield" />
         <b>Records</b>
-        <Seg wide label="Records" choices={DETAILS} words={(d) => RECORD_WORDS[d].choice} titles={(d) => RECORD_WORDS[d].says} value={detail} isLocked={(d) => detailLocked(d, givenDetail.detail)} onPick={onDetail} />
+        <Seg wide label="Records" choices={DETAILS} words={(d) => RECORD_WORDS[d].choice} titles={(d) => (admin && d !== detail ? "an admin holds everything" : RECORD_WORDS[d].says)} value={detail} isLocked={(d) => (admin ? d !== detail : detailLocked(d, givenDetail.detail))} onPick={onDetail} />
         {person && (detailAbove || givenDetail.from.length > 0) && (
           <span className="what">
             <From shownAbove={detailAbove} from={givenDetail.from} />
@@ -348,7 +377,18 @@ export function PersonForm(props: PersonFormProps) {
         <div className="field alist-head">
           <span className="label">Pages</span>
         </div>
-        <AccessLines kind="person" levels={levels} detail={detail} groups={mine} onLevel={(id, level) => setOwn((o) => ({ ...o, [id]: level }))} onDetail={(d) => setOwnDetail(d)} />
+        <AccessLines
+          kind="person"
+          levels={levels}
+          detail={detail}
+          groups={mine}
+          onLevel={(id, level) => setOwn((o) => ({ ...o, [id]: level }))}
+          onDetail={(d) => setOwnDetail(d)}
+          onArea={(a) => {
+            setOwn((o) => raiseArea(o, a));
+            if (a === "all") setOwnDetail("sensitive");
+          }}
+        />
         <AccessNote words={words} />
       </Dialog>
       {making && all !== null && (
@@ -495,7 +535,17 @@ export function GroupForm(props: GroupFormProps) {
       <div className="field alist-head">
         <span className="label">Pages</span>
       </div>
-      <AccessLines kind="group" levels={levels} detail={detail} onLevel={(id, level) => setLevels((l) => ({ ...l, [id]: level }))} onDetail={setDetail} />
+      <AccessLines
+        kind="group"
+        levels={levels}
+        detail={detail}
+        onLevel={(id, level) => setLevels((l) => ({ ...l, [id]: level }))}
+        onDetail={setDetail}
+        onArea={(a) => {
+          setLevels((l) => raiseArea(l, a));
+          if (a === "all") setDetail("sensitive");
+        }}
+      />
       <AccessNote words={words} />
     </Dialog>
   );

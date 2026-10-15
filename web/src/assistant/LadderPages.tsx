@@ -14,8 +14,8 @@ import { jobLogHref, logsOffered } from "../ops/logs";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { assistant, type Grants, type Inbox, type Plan, type Step } from "./client";
-import { goingPlans, grantable, standing, stepWords, waitingPlans } from "./ladder";
+import { assistant, type Grant, type Grants, type Inbox, type Plan, type Step } from "./client";
+import { type ActionRow, grantPages, grantWords, pageTitle, plainReason, standing, stepWords, waitingPlans, goingPlans } from "./ladder";
 
 const iso = (v: string | number | null | undefined) => (v === null || v === undefined ? null : typeof v === "number" ? new Date(v).toISOString() : v);
 
@@ -171,8 +171,7 @@ function StepRow({ step: s, logs, plans = [] }: { step: Step; logs: boolean; pla
     <div className="chat-row plan-row">
       <div className="grow plan-what">
         <span className="chat-row-title">{s.words}</span>
-        {s.reason && <span className="warn">{s.reason}</span>}
-        <span className="meta path">{s.door}</span>
+        {s.reason && <span className="warn">{plainReason(s.reason)}</span>}
       </div>
       <div className="row plan-acts">
         {logs && typeof s.job === "number" && (
@@ -197,7 +196,6 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
   const [why, setWhy] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [door, setDoor] = useState("");
   const [asked, setAsked] = useState(0);
   const [since] = useState(() => Date.now());
 
@@ -217,7 +215,6 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
     setWhy(null);
     p.then(() => {
       setSaid(words);
-      setDoor("");
       setAsked((n) => n + 1);
     })
       .catch((e: Error) => setWhy(e.message))
@@ -225,9 +222,31 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
   };
 
   if (!g && !why) return <Wait phase="reading the standing grants" since={since} size="panel" />;
-  const { now, revoked } = standing(g?.grants ?? []);
-  const offer = grantable(g);
-  const chosen = offer.some((o) => o.door === door) ? door : (offer[0]?.door ?? "");
+  // record 55, ruling 24: an admin holds everything, and the assistant acts with it; nothing to give
+  const admin = g?.admin === true;
+  const { everything, pages } = grantPages(g);
+  const any = pages.some((p) => p.rows.some((r) => r.door !== null));
+  const revoke = (id: number, words: string) => act(assistant.revoke(id), `Revoked: ${words}`);
+
+  const actionRow = (r: ActionRow) => (
+    <div key={r.key} className="chat-row grant-row">
+      <div className="grow plan-what">
+        <span className="chat-row-title">{r.words}</span>
+        {r.grant && <span className="meta">given {whenWords(r.grant.created_at)}</span>}
+      </div>
+      {r.grant ? (
+        <button type="button" className="button secondary small" disabled={busy} aria-label={`Revoke ${r.words}`} onClick={() => r.grant && revoke(r.grant.id, r.words)}>
+          Revoke
+        </button>
+      ) : r.covered ? (
+        <span className="tag">Standing</span>
+      ) : r.door ? (
+        <button type="button" className="button secondary small" disabled={busy} aria-label={`Give ${r.words}`} onClick={() => r.door && act(assistant.grant({ door: r.door }), `Standing now: ${r.words}`)}>
+          Give
+        </button>
+      ) : null}
+    </div>
+  );
 
   return (
     <section className="chat-history ladder-page">
@@ -235,7 +254,7 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
         <div className="grow">
           <span className="eyebrow">Assistant</span>
           <h1>Standing grants</h1>
-          <p className="lede">The doors the assistant may take for you without asking each time. Revoke one and it asks again.</p>
+          <p className="lede">What the assistant may do for you without asking each time.</p>
         </div>
         {everyone && (
           <div className="chips" role="group" aria-label="whose grants">
@@ -251,73 +270,78 @@ export function GrantsPage({ caps }: { caps: Capabilities }) {
       {why && <p className="warn">{why}</p>}
       {said && <p className="ok-words">{said}</p>}
 
-      <section className="chat-group">
-        <h2 className="chat-group-label">Standing · {now.length}</h2>
-        {now.length === 0 ? (
-          <p className="meta">None. The assistant asks before each step it takes for you.</p>
-        ) : (
-          <div className="panel chat-rows">
-            {now.map((x) => (
-              <div key={x.id} className="chat-row grant-row">
-                <div className="grow plan-what">
-                  <span className="chat-row-title path">{x.door}</span>
-                  <span className="meta">{[all ? x.subject : null, `given ${whenWords(x.created_at)}`].filter(Boolean).join(" · ")}</span>
-                </div>
-                <button type="button" className="button secondary small" disabled={busy} aria-label={`Revoke ${x.door}`} onClick={() => act(assistant.revoke(x.id), `Revoked: ${x.door}`)}>
+      {all ? (
+        <EveryonesGrants grants={g?.grants ?? []} busy={busy} onRevoke={revoke} />
+      ) : admin ? (
+        <div className="note brand">
+          <Icon name="shield" />
+          <p>You are an admin. The assistant may do everything you may; nothing to give.</p>
+        </div>
+      ) : (
+        <>
+          <section className="chat-group">
+            <div className="row grant-head">
+              <h2 className="chat-group-label grow">Everything</h2>
+              {everything ? (
+                <button type="button" className="button secondary small" disabled={busy} aria-label="Revoke everything" onClick={() => revoke(everything.id, "everything")}>
                   Revoke
                 </button>
+              ) : (
+                any && (
+                  <button type="button" className="button small" disabled={busy} onClick={() => act(assistant.grant({ all: true }), "Standing now: everything")}>
+                    <Icon name="plus" />
+                    Give everything
+                  </button>
+                )
+              )}
+            </div>
+            {!any && pages.length === 0 && <p className="meta">Nothing the assistant may do for you here is open to your account.</p>}
+          </section>
+          {pages.map((p) => (
+            <section key={p.page} className="chat-group">
+              <div className="row grant-head">
+                <h2 className="chat-group-label grow">{p.title}</h2>
+                {p.whole ? (
+                  <button type="button" className="button secondary small" disabled={busy} aria-label={`Revoke all of ${p.title}`} onClick={() => p.whole && revoke(p.whole.id, `all of ${p.title}`)}>
+                    Revoke all
+                  </button>
+                ) : everything ? null : (
+                  p.rows.some((r) => r.door !== null) && (
+                    <button type="button" className="button quiet small" disabled={busy} aria-label={`Give all of ${p.title}`} onClick={() => act(assistant.grant({ page: p.page }), `Standing now: all of ${p.title}`)}>
+                      Give all
+                    </button>
+                  )
+                )}
               </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      {!all && (
-        <section className="chat-group">
-          <h2 className="chat-group-label">Give one</h2>
-          {offer.length === 0 ? (
-            <p className="meta">Every door the assistant may take for you stands already, or none is open to your grants.</p>
-          ) : (
-            <form
-              className="row wrap grant-add"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (chosen) act(assistant.grant(chosen), `Standing now: ${chosen}`);
-              }}
-            >
-              <span className="input grow">
-                <select value={chosen} aria-label="The door" onChange={(e) => setDoor(e.target.value)}>
-                  {offer.map((o) => (
-                    <option key={o.door} value={o.door}>
-                      {o.door} · {o.role}
-                    </option>
-                  ))}
-                </select>
-              </span>
-              <button type="submit" className="button small" disabled={busy || !chosen}>
-                <Icon name="plus" />
-                Give it
-              </button>
-            </form>
-          )}
-        </section>
-      )}
-
-      {revoked.length > 0 && (
-        <section className="chat-group">
-          <h2 className="chat-group-label">Revoked · {revoked.length}</h2>
-          <div className="panel chat-rows">
-            {revoked.map((x) => (
-              <div key={x.id} className="chat-row grant-row revoked">
-                <div className="grow plan-what">
-                  <span className="chat-row-title path">{x.door}</span>
-                  <span className="meta">{[all ? x.subject : null, `revoked ${whenWords(x.revoked_at ?? null)}`].filter(Boolean).join(" · ")}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              {p.rows.length > 0 && <div className="panel chat-rows">{p.rows.map(actionRow)}</div>}
+            </section>
+          ))}
+        </>
       )}
     </section>
+  );
+}
+
+/** Everyone's standing grants, for a person who holds the assistant's settings: each in words under its page, with whose it is. */
+function EveryonesGrants({ grants, busy, onRevoke }: { grants: Grant[]; busy: boolean; onRevoke: (id: number, words: string) => void }) {
+  const { now } = standing(grants);
+  if (now.length === 0) return <p className="meta">Nobody has given the assistant a standing grant.</p>;
+  return (
+    <div className="panel chat-rows">
+      {now.map((x) => {
+        const words = grantWords(x);
+        return (
+          <div key={x.id} className="chat-row grant-row">
+            <div className="grow plan-what">
+              <span className="chat-row-title">{words}</span>
+              <span className="meta">{[x.page ? pageTitle(x.page) : null, x.subject, `given ${whenWords(x.created_at)}`].filter(Boolean).join(" · ")}</span>
+            </div>
+            <button type="button" className="button secondary small" disabled={busy} aria-label={`Revoke ${words} for ${x.subject}`} onClick={() => onRevoke(x.id, words)}>
+              Revoke
+            </button>
+          </div>
+        );
+      })}
+    </div>
   );
 }

@@ -159,8 +159,8 @@ for (const vp of SIZES) {
     await shot(page, `plans-${vp.name}`);
     await page.goto("/round5.html#assistant/grants");
     await expect(page.getByRole("heading", { name: "Standing grants" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Revoke POST /api/ask/run" })).toBeVisible();
-    await inside(page, ".grant-row, .grant-add", vp.width);
+    await expect(page.getByRole("button", { name: "Revoke Run questions" })).toBeVisible();
+    await inside(page, ".grant-row", vp.width);
     await noSideways(page, vp.width);
     await shot(page, `grants-${vp.name}`);
     await openSide(page, vp);

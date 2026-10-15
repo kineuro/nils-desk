@@ -8,6 +8,7 @@
 
 import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
+import { PAGE_LINES } from "../settings/identity";
 import type { Grant, Grants, Inbox, Plan, Step } from "./client";
 
 /** Whether the assistant serves a route, as its capabilities list them; an assistant that lists none is taken to serve none of these. */
@@ -44,12 +45,92 @@ export function stepWords(s: Pick<Step, "words" | "state" | "rung" | "reason">):
   return `${s.words} (${s.rung === 3 ? "asks you" : "the assistant may"}; ${where})`;
 }
 
-/** The rung-two doors a person could still give a standing grant for: those the ladder names that no grant of theirs holds. */
-export function grantable(g: Grants | null): { door: string; role: string }[] {
-  if (!g) return [];
-  const held = new Set(g.grants.filter((x) => !x.revoked_at && x.subject === g.subject).map((x) => x.door));
-  return g.ladder.filter((r) => r.rung === 2 && !held.has(r.door)).map((r) => ({ door: r.door, role: r.role }));
+/** A kept scope that is a whole page, `page:<id>`, or everything, `*` (record 55, ruling 24). */
+export const EVERYTHING = "*";
+export const pageOfScope = (door: string): string | null => (door.startsWith("page:") ? door.slice("page:".length) : null);
+
+/** A page's name as the desk shows it. */
+export function pageTitle(page: string | null | undefined, fallback?: string): string {
+  return PAGE_LINES.find((l) => l.id === page)?.title ?? fallback ?? "Other";
 }
+
+/** What a standing grant lets the assistant do, in words: never its kept door. */
+export function grantWords(g: Pick<Grant, "door" | "words" | "page">): string {
+  if (g.words) return g.words;
+  if (g.door === EVERYTHING) return "Everything the assistant may do for you";
+  const page = pageOfScope(g.door);
+  if (page) return `Everything on ${pageTitle(page)}`;
+  return "An earlier grant";
+}
+
+/** One action of a page: what it lets the assistant do, and the grant that stands for it when one does. */
+export interface ActionRow {
+  key: string;
+  words: string;
+  /** The kept door to give it by; null for a grant whose action is no longer offered. */
+  door: string | null;
+  /** Its own standing grant. */
+  grant: Grant | null;
+  /** Standing through its page's grant or everything. */
+  covered: boolean;
+}
+
+/** A page's actions, with the grant for the whole page when one stands. */
+export interface PageGroup {
+  page: string;
+  title: string;
+  whole: Grant | null;
+  rows: ActionRow[];
+}
+
+/**
+ * The person's standing grants and what they may give, in words, grouped by page in the desk's order (record 55,
+ * ruling 24): everything when it stands, each page with its whole-page grant and its actions, each action standing on
+ * its own, through its page or everything, or not yet. No kept door is shown.
+ */
+export function grantPages(g: Grants | null): { everything: Grant | null; pages: PageGroup[] } {
+  if (!g) return { everything: null, pages: [] };
+  const mine = g.grants.filter((x) => !x.revoked_at && x.subject === g.subject);
+  const everything = mine.find((x) => x.door === EVERYTHING) ?? null;
+  const byPage = new Map<string, PageGroup>();
+  const group = (page: string, title?: string) => {
+    let pg = byPage.get(page);
+    if (!pg) {
+      pg = { page, title: pageTitle(page, title), whole: mine.find((x) => pageOfScope(x.door) === page) ?? null, rows: [] };
+      byPage.set(page, pg);
+    }
+    return pg;
+  };
+  for (const o of g.offer ?? []) {
+    const pg = group(o.page, o.title);
+    for (const a of o.actions) {
+      const own = mine.find((x) => x.door === a.door) ?? null;
+      pg.rows.push({ key: a.door, words: a.words, door: a.door, grant: own, covered: own === null && (everything !== null || pg.whole !== null) });
+    }
+  }
+  // a grant given before its action left the offer (or from an older assistant), kept under its page
+  for (const x of mine) {
+    if (x.door === EVERYTHING) continue;
+    const page = pageOfScope(x.door);
+    if (page) {
+      group(page);
+      continue;
+    }
+    const pg = group(x.page ?? "other");
+    if (!pg.rows.some((r) => r.door === x.door)) pg.rows.push({ key: `g${x.id}`, words: grantWords(x), door: null, grant: x, covered: false });
+  }
+  const order = (p: string) => {
+    const i = PAGE_LINES.findIndex((l) => l.id === p);
+    return i < 0 ? PAGE_LINES.length : i;
+  };
+  return { everything, pages: [...byPage.values()].sort((a, b) => order(a.page) - order(b.page)) };
+}
+
+/** A step's held reason in words: a door an older assistant named is not shown. */
+export function plainReason(reason: string): string {
+  return reason.replace(/\b(GET|POST|PUT|DELETE|PATCH) \/api\/[^\s:;,]+/gu, "this step");
+}
+
 
 /** The grants standing now, and those revoked, each newest first. */
 export function standing(list: readonly Grant[]): { now: Grant[]; revoked: Grant[] } {

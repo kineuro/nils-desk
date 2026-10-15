@@ -117,14 +117,18 @@ const INBOX = {
 const GRANTS_DOC = {
   subject: "astrid",
   grants: [
-    { id: 4, subject: "astrid", door: "POST /api/ask/run", created_at: ago(9000), revoked_at: null },
-    { id: 2, subject: "astrid", door: "POST /api/jobs", created_at: ago(20000), revoked_at: ago(15000) },
+    { id: 4, subject: "astrid", door: "POST /api/ask/run", page: "query", words: "Run questions", created_at: ago(9000), revoked_at: null },
+    { id: 2, subject: "astrid", door: "POST /api/jobs", page: "data", words: "Read, sort, pseudonymise and bring in data", created_at: ago(20000), revoked_at: ago(15000) },
   ],
   ladder: [
     { door: "POST /api/ask/run", rung: 2, role: "reader" },
     { door: "POST /api/jobs", rung: 2, role: "operator" },
     { door: "POST /api/select", rung: 2, role: "reader" },
     { door: "POST /api/linkage/merge", rung: 3, role: "admin" },
+  ],
+  offer: [
+    { page: "query", title: "Query", actions: [{ door: "POST /api/ask/run", words: "Run questions" }] },
+    { page: "data", title: "Data", actions: [{ door: "POST /api/jobs", words: "Read, sort, pseudonymise and bring in data" }] },
   ],
 };
 
