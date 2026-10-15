@@ -264,5 +264,64 @@ describe("the heatmap with a layer", () => {
       vi.useRealTimers();
     }
   });
+
+  it("says it does not show the step's progress where it cannot ask for it, with a Reload", async () => {
+    vi.stubGlobal("fetch", async (url: string) => {
+      const u = new URL(url, "http://desk.test");
+      const a = answer(u.searchParams.get("layer"));
+      return new Response(JSON.stringify("layer" in a && a.layer ? { ...a, layer: { ...a.layer, step: { ...STEP, state: "running" } } } : a), { status: 200 });
+    });
+    const r = createRoot(host);
+    root = r;
+    await act(async () => r.render(<HeatMap cohort="north" />));
+    for (let i = 0; i < 20 && !host.querySelector(".heat-row"); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+    const keys = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Layer"] button')];
+    await act(async () => keys[1].click());
+    for (let i = 0; i < 20 && !host.querySelector(".heat-cell.layered"); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+    expect(host.textContent).toContain("This page does not show the step's progress.");
+    expect([...host.querySelectorAll("button")].some((b) => b.textContent === "Reload")).toBe(true);
+  });
+
+  it("reads every page shown again when the step is over, in more than one request beyond the door's most", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const subject = (id: number) => ({ id, code: `c${id}`, sessions: [{ session: id, studies: [id], label: "ses-1", number: 1, roles: { t1w: cell("picked", id, "head") }, layer: { scans: { head: 1 }, none: 0 } }] });
+      const block = (from: number) => Array.from({ length: 150 }, (_, i) => subject(from + i));
+      let polls = 0;
+      const asked = await drawn(
+        (u) => {
+          const layer = u.searchParams.get("layer");
+          const a = answer(layer);
+          if (!layer) return a;
+          const after = u.searchParams.get("after");
+          const head = { ...a.layer, values: ["head"], step: after === null ? { ...STEP, state: "running" } : null };
+          return after === null ? { ...a, subjects: block(1000), next: 1149, layer: head } : { ...a, subjects: block(2000), next: null, layer: head };
+        },
+        () => {
+          polls += 1;
+          return { ...STEP, state: "done", answered: 40 };
+        },
+      );
+      const keys = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Layer"] button')];
+      await act(async () => keys[1].click());
+      for (let i = 0; i < 40 && host.querySelectorAll(".heat-row").length < 150; i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      const more = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "More subjects")!;
+      await act(async () => more.click());
+      for (let i = 0; i < 40 && host.querySelectorAll(".heat-row").length < 300; i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      expect(host.querySelectorAll(".heat-row")).toHaveLength(300);
+      const before = asked.length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      for (let i = 0; i < 60 && asked.slice(before).filter((a) => a.includes("/picks?")).length < 2; i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      expect(polls).toBe(1);
+      const again = asked.slice(before).filter((a) => a.includes("/picks?"));
+      expect(again).toEqual(["GET /api/cohorts/north/picks?limit=200&layer=body_region", "GET /api/cohorts/north/picks?limit=150&after=1149&layer=body_region"]);
+      for (let i = 0; i < 40 && host.querySelectorAll(".heat-row").length < 300; i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      expect(host.querySelectorAll(".heat-row")).toHaveLength(300);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 

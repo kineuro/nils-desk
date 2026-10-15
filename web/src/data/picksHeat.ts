@@ -11,7 +11,7 @@ import { door } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
-import { layerHeadOf, stepOf, visitLayerOf, type Layer, type LayerHead, type VisitLayer } from "../review/mainScans";
+import { layerHeadOf, layerOrder, stepOf, visitLayerOf, type Layer, type LayerHead, type VisitLayer } from "../review/mainScans";
 import type { SummaryStep } from "./summary";
 
 export const PICKS_DOOR = "GET /api/cohorts/{name}/picks";
@@ -56,8 +56,11 @@ export interface HeatPage {
   layer?: LayerHead & { step: SummaryStep | null };
 }
 
-/** The most subjects a page holds. */
+/** The subjects a page holds unless asked for more. */
 export const HEAT_PAGE = 24;
+
+/** The most subjects the picks door answers on one page (the engine's limit). */
+export const HEAT_MOST = 200;
 
 type Json = Record<string, unknown>;
 const obj = (v: unknown): Json => (v && typeof v === "object" && !Array.isArray(v) ? (v as Json) : {});
@@ -144,4 +147,10 @@ export function heatDrawn(s: HeatSession, role: string): { value: string; taken:
   if (picked !== null) return { value: picked, taken: true };
   const most = [...(s.layer?.scans ?? [])].sort((a, b) => b.count - a.count)[0];
   return most ? { value: most.value, taken: false } : null;
+}
+
+/** Two pages read one after the other, as one: the subjects of both, the later's next, and a key that names the values of both. */
+export function joined(a: HeatPage, b: HeatPage): HeatPage {
+  const layer = a.layer && b.layer ? { ...a.layer, values: layerOrder(a.layer.layer, [...a.layer.values, ...b.layer.values]) } : a.layer;
+  return { ...a, subjects: [...a.subjects, ...b.subjects], next: b.next, ...(layer ? { layer } : {}) };
 }

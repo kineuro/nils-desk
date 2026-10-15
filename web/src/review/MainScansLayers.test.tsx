@@ -290,7 +290,7 @@ describe("Main scans' layers", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       let reads = 0;
-      await open({ cohort: "ms-followup" }, (c) => {
+      const engine2 = await open({ cohort: "ms-followup" }, (c) => {
         if (c.method === "GET" && c.path === "/api/picks/layer-step") {
           reads += 1;
           return { status: 403, body: { error: "this account may not read it" } };
@@ -304,7 +304,34 @@ describe("Main scans' layers", () => {
         });
       await settle();
       expect(reads).toBe(1);
-      expect(box().textContent).toContain("The step could not be read again: this account may not read it. Reload the page to see how far it has come.");
+      expect(box().textContent).toContain("The step could not be read again: this account may not read it.");
+      // Reload reads the map again, and the asking resumes without the note
+      const maps = engine2.of("POST", "/api/picks/map").length;
+      act(() => button(box(), "Reload")!.click());
+      await settle();
+      expect(engine2.of("POST", "/api/picks/map").length).toBe(maps + 1);
+      expect(box().textContent).not.toContain("could not be read again");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says once on an engine without the step's door that progress is not shown, and offers a Reload, never asking", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const caps = capsWith([...MAIN_SCANS_DOORS, ...RUN_DOORS], [...GRANTS] as Grant[]);
+      const engine = await open({ cohort: "ms-followup" }, layerDoors({ body_part: stepOf("body_part", { state: "running" }) }), caps);
+      await choose("Body region");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(45_000);
+      });
+      await settle();
+      expect(engine.calls.some((c) => c.path === "/api/picks/layer-step")).toBe(false);
+      expect(box().textContent).toContain("This engine does not show the step's progress here.");
+      const maps = engine.of("POST", "/api/picks/map").length;
+      act(() => button(box(), "Reload")!.click());
+      await settle();
+      expect(engine.of("POST", "/api/picks/map").length).toBe(maps + 1);
     } finally {
       vi.useRealTimers();
     }

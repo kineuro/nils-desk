@@ -15,8 +15,8 @@ import type { Capabilities } from "../capabilities";
 import { messageOf } from "../settings/common";
 import { href, narrow } from "../routes";
 import { door as served } from "../deployment";
-import { keepLayer, keptLayer, LAYER_STEP_DOOR, LAYERS, layerName, layerOrder, layerSlot, layerStepWords, layerWord, stepNow, visitLayerWords, type Layer } from "../review/mainScans";
-import { cellWords, HEAT_PAGE, heatDrawn, picksDoors, totalsWords, type HeatPage } from "./picksHeat";
+import { keepLayer, keptLayer, LAYER_STEP_DOOR, LAYERS, layerName, layerSlot, layerStepWords, layerWord, stepNow, visitLayerWords, type Layer } from "../review/mainScans";
+import { cellWords, HEAT_MOST, HEAT_PAGE, heatDrawn, joined, picksDoors, totalsWords, type HeatPage } from "./picksHeat";
 import { runControl, startedWords, stepRuns } from "./stepRun";
 import { roleWord, type SummaryStep } from "./summary";
 import "./heat.css";
@@ -25,9 +25,6 @@ import "./heat.css";
 const HEAT_LAYERS: { key: Layer | null; words: string }[] = [{ key: null, words: "Picks" }, ...LAYERS.slice(1)];
 
 const LAYER_KEY = "nils.heat.layer";
-
-/** The most subjects the picks door answers on one page, which a reading again asks for at most. */
-const HEAT_MOST = 200;
 
 /** How often the layer's step is read again while it waits or runs, in milliseconds. */
 const STEP_POLL = 15_000;
@@ -45,6 +42,10 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
   // the layer's step as the cohort's door said it last, while it waits or runs
   const [liveStep, setLiveStep] = useState<{ layer: Layer; step: SummaryStep; at: number } | null>(null);
   const [stepFailed, setStepFailed] = useState(false);
+  // why the step could not be read again, shown until the asking resumes
+  const [stepWhy, setStepWhy] = useState<string | null>(null);
+  // the pages shown are being read again (the step over, a Run): the step they said stays, and is not asked meanwhile
+  const [rereading, setRereading] = useState(false);
   // which reading is current: an answer to an older one (another cohort, layer or reload) is dropped
   const reading = useRef(0);
   const setLayer = (l: Layer | null) => {
@@ -59,20 +60,37 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
     const at = ++reading.current;
     const key = `${cohort}|${layer ?? ""}`;
     const again = loaded.current.key === key && loaded.current.more;
-    const limit = again ? Math.min(HEAT_MOST, Math.max(HEAT_PAGE, loaded.current.subjects)) : HEAT_PAGE;
-    if (!again) setShown(null);
+    // every subject shown is read again, in as many pages of at most HEAT_MOST as that takes
+    const want = again ? loaded.current.subjects : HEAT_PAGE;
+    if (!again) {
+      setShown(null);
+      setLiveStep(null);
+    }
+    setRereading(again);
     setWhy(null);
     setMore(false);
-    setLiveStep(null);
     setStepFailed(false);
-    picksDoors.page(cohort, null, limit, layer).then(
-      (p) => {
+    setStepWhy(null);
+    (async () => {
+      let read: HeatPage | null = null;
+      let after: number | null = null;
+      do {
+        const got: number = read?.subjects.length ?? 0;
+        const p: HeatPage = await picksDoors.page(cohort, after, again ? Math.min(HEAT_MOST, Math.max(HEAT_PAGE, want - got)) : HEAT_PAGE, layer);
         if (at !== reading.current) return;
-        loaded.current = { key, subjects: p.subjects.length, more: again };
-        setShown({ layer, page: p });
-      },
-      (e: Error) => at === reading.current && setWhy(e.message),
-    );
+        read = read ? joined(read, p) : p;
+        after = p.next;
+      } while (again && read.subjects.length < want && after !== null);
+      loaded.current = { key, subjects: read.subjects.length, more: again };
+      setShown({ layer, page: read });
+      // the step the pages said is the one now
+      setLiveStep(null);
+      setRereading(false);
+    })().catch((e: Error) => {
+      if (at !== reading.current) return;
+      setWhy(e.message);
+      setRereading(false);
+    });
   }, [cohort, layer, reload]);
   // while the layer's step waits or runs, the step alone is read again from its own light door, which a reader of the heatmap
   // may read; once it is over the pages are read again. A refusal ends the asking and says so
@@ -81,7 +99,7 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
   const state = step0?.state ?? null;
   const polled = caps !== undefined && served(caps, LAYER_STEP_DOOR);
   useEffect(() => {
-    if (layer === null || (state !== "queued" && state !== "running") || stepFailed || !polled) return;
+    if (layer === null || (state !== "queued" && state !== "running") || stepFailed || !polled || rereading) return;
     const l = layer;
     let alive = true;
     const t = setTimeout(() => {
@@ -94,7 +112,7 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
         (e: unknown) => {
           if (!alive) return;
           setStepFailed(true);
-          setSaid(`The step could not be read again: ${messageOf(e)}. Reload the page to see how far it has come.`);
+          setStepWhy(`The step could not be read again: ${messageOf(e)}.`);
         },
       );
     }, STEP_POLL);
@@ -102,7 +120,7 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
       alive = false;
       clearTimeout(t);
     };
-  }, [cohort, layer, state, liveStep?.at, stepFailed, polled]);
+  }, [cohort, layer, state, liveStep?.at, stepFailed, polled, rereading]);
   if (why) return <p className="warn">The main scans could not be read: {why}</p>;
   if (!shown) return <p className="meta">Reading the main scans.</p>;
   const page = shown.page;
@@ -143,11 +161,9 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
         if (at !== reading.current) return;
         setShown((was) => {
           if (!was || was.layer !== asked) return was;
-          const subjects = [...was.page.subjects, ...p.subjects];
-          loaded.current = { key: `${cohort}|${asked ?? ""}`, subjects: subjects.length, more: true };
-          // the key names the values of every page read, not the first page's alone
-          const layered = was.page.layer && p.layer ? { ...was.page.layer, values: layerOrder(was.page.layer.layer, [...was.page.layer.values, ...p.layer.values]) } : was.page.layer;
-          return { layer: asked, page: { ...was.page, subjects, next: p.next, ...(layered ? { layer: layered } : {}) } };
+          const page2 = joined(was.page, p);
+          loaded.current = { key: `${cohort}|${asked ?? ""}`, subjects: page2.subjects.length, more: true };
+          return { layer: asked, page: page2 };
         });
         setMore(false);
       },
@@ -187,6 +203,14 @@ export function HeatMap({ cohort, caps }: { cohort: string; caps?: Capabilities 
             </button>
           )}
         </div>
+      )}
+      {head && (state === "queued" || state === "running") && (!polled || stepFailed) && (
+        <p className="meta heat-step">
+          {stepWhy ?? "This page does not show the step's progress."}
+          <button type="button" className="button quiet small" onClick={() => setReload((x) => x + 1)}>
+            Reload
+          </button>
+        </p>
       )}
       {said && (
         <p className="meta" role="status">

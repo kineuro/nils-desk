@@ -329,6 +329,8 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   const [running, setRunning] = useState(false);
   // the layer's step as its scope's own door said it last, while it waits or runs, for the layer and the map read it is about
   const [stepFailed, setStepFailed] = useState<{ layer: Layer | null; reload: number } | null>(null);
+  // why the step could not be read again; it goes once the asking resumes (another layer, or the map read again)
+  const [stepWhy, setStepWhy] = useState<string | null>(null);
   const [liveStep, setLiveStep] = useState<{ layer: Layer | null; reload: number; step: SummaryStep; at: number } | null>(null);
   const setLayer = (l: Layer | null) => {
     setLayerState(l);
@@ -552,6 +554,9 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   const stepState = (liveNow ?? mapStep)?.state ?? null;
   const engineName = doc.kind === "ready" ? doc.value.scope?.name || scope.name : scope.name;
   const stepStopped = stepFailed !== null && stepFailed.layer === layer && stepFailed.reload === reload;
+  useEffect(() => {
+    if (!stepStopped) setStepWhy(null);
+  }, [stepStopped]);
   const stepServed = served(caps, LAYER_STEP_DOOR);
   useEffect(() => {
     if (layer === null || (stepState !== "queued" && stepState !== "running") || stepStopped || !stepServed) return;
@@ -567,7 +572,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
         (e: unknown) => {
           if (!alive) return;
           setStepFailed({ layer: l, reload });
-          setLayerSaid(`The step could not be read again: ${messageOf(e)}. Reload the page to see how far it has come.`);
+          setStepWhy(`The step could not be read again: ${messageOf(e)}.`);
         },
       );
     }, LAYER_POLL);
@@ -722,6 +727,11 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
                 step={layer && layerAnswer ? layerStepWords(layer, scope, layerStep) : null}
                 run={layerRun}
                 said={layerSaid}
+                note={
+                  layerAnswer && (stepState === "queued" || stepState === "running") && (stepStopped || !stepServed)
+                    ? { words: stepWhy ?? "This engine does not show the step's progress here.", onReload: () => setReload((x) => x + 1) }
+                    : null
+                }
               />
               <GroupBox
                 layer={layer}
