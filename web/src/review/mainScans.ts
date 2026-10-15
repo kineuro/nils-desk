@@ -11,6 +11,7 @@
 
 import { door, DoorError, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
+import type { Operation, SummaryStep } from "../data/summary";
 import { may } from "../grants";
 
 // ---------------------------------------------------------------- the scope
@@ -371,6 +372,8 @@ export interface MapAnswer {
   by_visit: { visit: number; visits: number; kinds: { kind: string | null; visits: number }[] }[];
   /** With a draft: what saving it would change, against the saved version. */
   effect: { visits_changed: number; subjects_changed: number; before: Metrics } | null;
+  /** The layer asked for, where one was and the engine answers it. */
+  layer: MapLayer | null;
 }
 
 export function metricsOf(raw: unknown): Metrics {
@@ -419,6 +422,7 @@ export function mapOf(raw: unknown): MapAnswer {
       .map((r) => ({ visit: count(r.visit), visits: count(r.visits), kinds: (Array.isArray(r.kinds) ? r.kinds : []).map(obj).map((k) => ({ kind: kindOf(k.kind), visits: count(k.visits) })) }))
       .sort((x, y) => x.visit - y.visit),
     effect: e ? { visits_changed: count(e.visits_changed), subjects_changed: count(e.subjects_changed), before: metricsOf(e.before) } : null,
+    layer: mapLayerOf(a.layer),
   };
 }
 
@@ -435,6 +439,8 @@ export interface VisitCandidate {
   stacks: number[];
   kind: string | null;
   score: number | null;
+  /** Its value on the layer asked for: undefined where none was, null where it carries none. */
+  layer?: string | null;
 }
 
 export interface MapVisit {
@@ -458,6 +464,8 @@ export interface MapVisit {
   why: string | null;
   /** The visit's candidates for the role, where the engine names them; null where it does not. */
   candidates: VisitCandidate[] | null;
+  /** The visit's scans on the layer asked for; null where none was. */
+  layer: VisitLayer | null;
 }
 
 export interface MapSubject {
@@ -471,6 +479,8 @@ export interface SubjectsPage {
   page: number;
   per_page: number;
   subjects: MapSubject[];
+  /** The layer asked for and every value its visits hold, in order; null where none was. */
+  layer: LayerHead | null;
 }
 
 function visitOf(raw: unknown, i: number): MapVisit {
@@ -495,9 +505,15 @@ function visitOf(raw: unknown, i: number): MapVisit {
     candidates: Array.isArray(v.candidates)
       ? v.candidates
           .map(obj)
-          .map((c) => ({ stacks: ints(c.stacks).length > 0 ? ints(c.stacks) : num(c.stack) !== null ? [num(c.stack) as number] : [], kind: kindOf(c.kind), score: num(c.score) }))
+          .map((c) => ({
+            stacks: ints(c.stacks).length > 0 ? ints(c.stacks) : num(c.stack) !== null ? [num(c.stack) as number] : [],
+            kind: kindOf(c.kind),
+            score: num(c.score),
+            ...("layer" in c ? { layer: text(c.layer) } : {}),
+          }))
           .filter((c) => c.stacks.length > 0)
       : null,
+    layer: visitLayerOf(v.layer),
   };
 }
 
@@ -512,6 +528,7 @@ export function subjectsOf(raw: unknown): SubjectsPage {
       subject: text(s.subject) ?? String(count(s.subject_id)),
       visits: (Array.isArray(s.visits) ? s.visits : []).map(visitOf),
     })),
+    layer: layerHeadOf(a.layer),
   };
 }
 
@@ -522,8 +539,21 @@ export interface Strips {
   columns: MapColumn[];
   /** As the map's. */
   shared_visits: number;
-  subjects: { subject_id: number; column: number; visits: number[] }[];
+  subjects: StripSubject[];
+  /** The layer asked for and its values, which a strip's layer indexes; null where none was. */
+  layer: LayerHead | null;
 }
+
+export interface StripSubject {
+  subject_id: number;
+  column: number;
+  visits: number[];
+  /** Each visit on the layer, by an index into the layer's values, -1 for none: the value of the scan it takes, and the value most of its scans carry. Only where a layer was asked for. */
+  layer?: { taken: number[]; held: number[] };
+}
+
+/** A list of indexes as a door sends them, anything else -1. */
+const indexes = (v: unknown): number[] => (Array.isArray(v) ? v.map((x) => (typeof x === "number" && Number.isInteger(x) ? x : -1)) : []);
 
 export function stripsOf(raw: unknown): Strips {
   const a = obj(raw);
@@ -531,7 +561,11 @@ export function stripsOf(raw: unknown): Strips {
     kinds: texts(a.kinds),
     columns: columnsOf(a.columns),
     shared_visits: count(a.shared_visits),
-    subjects: (Array.isArray(a.subjects) ? a.subjects : []).map(obj).map((s) => ({ subject_id: count(s.subject_id), column: num(s.column) ?? -1, visits: (Array.isArray(s.visits) ? s.visits : []).map((v) => (typeof v === "number" && Number.isInteger(v) ? v : -1)) })),
+    subjects: (Array.isArray(a.subjects) ? a.subjects : []).map(obj).map((s) => {
+      const l = s.layer && typeof s.layer === "object" ? obj(s.layer) : null;
+      return { subject_id: count(s.subject_id), column: num(s.column) ?? -1, visits: indexes(s.visits), ...(l ? { layer: { taken: indexes(l.taken), held: indexes(l.held) } } : {}) };
+    }),
+    layer: layerHeadOf(a.layer),
   };
 }
 
@@ -700,6 +734,212 @@ export function paletteOf(was: readonly string[], saved: readonly string[], held
   return out;
 }
 
+// ---------------------------------------------------------------- the layers
+
+/**
+ * A layer over the map (record 55, decision 6: "the data map ... with layers
+ * such as body part and post-contrast"): what each visit's scans are by one
+ * operation's answers, beside the kinds the rules take. Body region and body
+ * part are the body-part step's two modes; post-contrast is the label's state.
+ */
+export type Layer = "body_region" | "body_part" | "post_contrast";
+
+/** The layer keys, the map's own kinds first (no layer). */
+export const LAYERS: { key: Layer | null; words: string }[] = [
+  { key: null, words: "Kinds" },
+  { key: "body_region", words: "Body region" },
+  { key: "body_part", words: "Body part" },
+  { key: "post_contrast", words: "Post-contrast" },
+];
+
+const isLayer = (v: unknown): v is Layer => v === "body_region" || v === "body_part" || v === "post_contrast";
+
+/** A layer's values in the order they are read, each with its words and its slot among the theme's value colours: the same value always the same colour (post-contrast as Data's grid colours contrast). */
+const LAYER_VALUES: Record<Layer, { value: string; words: string; slot: number }[]> = {
+  body_region: [
+    { value: "head", words: "head", slot: 1 },
+    { value: "spine", words: "spine", slot: 3 },
+    { value: "chest", words: "chest", slot: 4 },
+    { value: "other", words: "other", slot: 10 },
+  ],
+  body_part: [
+    { value: "brain", words: "brain", slot: 1 },
+    { value: "brain-neck", words: "brain and neck", slot: 6 },
+    { value: "neck", words: "neck", slot: 5 },
+    { value: "spine", words: "spine", slot: 3 },
+    { value: "chest", words: "chest", slot: 4 },
+    { value: "other", words: "other", slot: 10 },
+  ],
+  post_contrast: [
+    { value: "pre", words: "pre", slot: 1 },
+    { value: "post", words: "post", slot: 2 },
+    { value: "by_definition", words: "by definition", slot: 7 },
+    { value: "undetermined", words: "undetermined", slot: 5 },
+  ],
+};
+
+/** The slot a layer's value is coloured by; a value the desk does not know takes one of the slots no known value uses. */
+export function layerSlot(layer: Layer, value: string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const known = LAYER_VALUES[layer].find((v) => v.value === value);
+  if (known) return known.slot;
+  const free = [8, 9];
+  let h = 0;
+  for (const c of value) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return free[h % free.length];
+}
+
+/** A layer's value in words. */
+export function layerWord(layer: Layer, value: string): string {
+  return LAYER_VALUES[layer].find((v) => v.value === value)?.words ?? value.replace(/_/gu, " ");
+}
+
+/** A layer's name in words. */
+export const layerName = (layer: Layer): string => LAYERS.find((l) => l.key === layer)?.words ?? layer;
+
+/** Values in the layer's order, a value the desk does not know after them by name. */
+export function layerOrder(layer: Layer, values: readonly string[]): string[] {
+  const at = (v: string) => {
+    const i = LAYER_VALUES[layer].findIndex((x) => x.value === v);
+    return i < 0 ? 99 : i;
+  };
+  return [...new Set(values)].sort((a, b) => at(a) - at(b) || a.localeCompare(b));
+}
+
+/** The layer, the operation that answers it and every value the visits hold, as each map door says them. */
+export interface LayerHead {
+  layer: Layer;
+  operation: Operation;
+  values: string[];
+}
+
+/** One value of the layer on the map: the visits that hold a scan of it, the visits whose scan taken carries it (and, under a draft, under the saved rules), and its scans. */
+export interface LayerValue {
+  value: string;
+  visits_with: number;
+  visits_taken: number;
+  visits_taken_before: number | null;
+  scans: number;
+}
+
+/** The map's layer: each value, what carries none, the 72-hour flag's visits (post-contrast), and the step that answers it over the scope, as the scope's own page says it. */
+export interface MapLayer {
+  layer: Layer;
+  operation: Operation;
+  values: LayerValue[];
+  none: { visits: number; scans: number; taken: number; taken_before: number | null };
+  prior_72h: number | null;
+  step: SummaryStep | null;
+}
+
+/** One visit on the layer: the value of the scan it takes, its scans by value, those with none, and (post-contrast) those the 72-hour flag is up on. */
+export interface VisitLayer {
+  taken: string | null;
+  scans: { value: string; count: number }[];
+  none: number;
+  prior_72h: number;
+}
+
+const operationOf = (layer: Layer, v: unknown): Operation => (v === "body_part" || v === "post_contrast" ? v : layer === "post_contrast" ? "post_contrast" : "body_part");
+
+const STEP_STATES = ["done", "running", "queued", "waiting", "off", "failed"];
+
+/** The step as the dataset's summary carries it, its state checked; null where the engine said none. */
+function stepOf(raw: unknown): SummaryStep | null {
+  const s = obj(raw);
+  if (text(s.step) === null || !STEP_STATES.includes(text(s.state) ?? "")) return null;
+  return s as unknown as SummaryStep;
+}
+
+export function layerHeadOf(raw: unknown): LayerHead | null {
+  const a = obj(raw);
+  if (!isLayer(a.layer)) return null;
+  const values = (Array.isArray(a.values) ? a.values : []).map((v) => (typeof v === "string" ? v : text(obj(v).value))).filter((v): v is string => v !== null);
+  return { layer: a.layer, operation: operationOf(a.layer, a.operation), values };
+}
+
+export function mapLayerOf(raw: unknown): MapLayer | null {
+  const head = layerHeadOf(raw);
+  if (!head) return null;
+  const a = obj(raw);
+  const none = obj(a.none);
+  return {
+    layer: head.layer,
+    operation: head.operation,
+    values: (Array.isArray(a.values) ? a.values : [])
+      .map(obj)
+      .filter((v) => text(v.value) !== null)
+      .map((v) => ({ value: v.value as string, visits_with: count(v.visits_with), visits_taken: count(v.visits_taken), visits_taken_before: num(v.visits_taken_before), scans: count(v.scans) })),
+    none: { visits: count(none.visits), scans: count(none.scans), taken: count(none.taken), taken_before: num(none.taken_before) },
+    prior_72h: num(a.prior_72h),
+    step: stepOf(a.step),
+  };
+}
+
+export function visitLayerOf(raw: unknown): VisitLayer | null {
+  if (!raw || typeof raw !== "object") return null;
+  const l = obj(raw);
+  const scans = Object.entries(obj(l.scans))
+    .map(([value, n]) => ({ value, count: count(n) }))
+    .filter((x) => x.count > 0);
+  return { taken: text(l.taken), scans, none: count(l.none), prior_72h: count(l.prior_72h) };
+}
+
+/** A visit's scans on the layer in one line: "12 scans: head 10, spine 2; 1 with no answer". */
+export function visitLayerWords(layer: Layer, v: VisitLayer): string {
+  const all = v.scans.reduce((t, x) => t + x.count, 0) + v.none;
+  const order = layerOrder(
+    layer,
+    v.scans.map((x) => x.value),
+  );
+  const by = order.map((value) => `${layerWord(layer, value)} ${n(v.scans.find((x) => x.value === value)?.count ?? 0)}`).join(", ");
+  const parts = [`${n(all)} ${all === 1 ? "scan" : "scans"}${by ? `: ${by}` : ""}`];
+  if (v.none > 0) parts.push(`${n(v.none)} with no answer`);
+  if (v.prior_72h > 0) parts.push("contrast in the 72 hours before");
+  return parts.join("; ");
+}
+
+/** The value a visit is drawn with on the layer: the scan taken's, filled; else the value most of its scans carry, outlined; else none. */
+export function visitDrawn(v: VisitLayer): { value: string; taken: boolean } | null {
+  if (v.taken !== null) return { value: v.taken, taken: true };
+  const most = [...v.scans].sort((a, b) => b.count - a.count)[0];
+  return most ? { value: most.value, taken: false } : null;
+}
+
+/** A strip's visit on the layer, as the strips door indexes it: the value of the scan taken, filled; else the value most of its scans carry, outlined. */
+export function stripDrawn(head: LayerHead, l: { taken: number[]; held: number[] }, j: number): { value: string; taken: boolean } | null {
+  const at = (i: number | undefined) => (i !== undefined && i >= 0 && i < head.values.length ? head.values[i] : null);
+  const taken = at(l.taken[j]);
+  if (taken !== null) return { value: taken, taken: true };
+  const held = at(l.held[j]);
+  return held !== null ? { value: held, taken: false } : null;
+}
+
+/** What the layer's step says over the scope in one line, and whether it has run there. */
+export function layerStepWords(layer: Layer, scope: Scope, step: SummaryStep | null): { words: string; ran: boolean } {
+  const what = scope.kind === "cohort" ? "this cohort" : "this dataset";
+  const name = layer === "post_contrast" ? "Post-contrast" : "Body part";
+  if (!step) return { words: `${name}: whether it has run on ${what} is not known to this engine.`, ran: false };
+  switch (step.state) {
+    case "done": {
+      const answered = typeof step.answered === "number" ? step.answered : null;
+      const of = typeof step.of === "number" ? step.of : null;
+      const said = answered !== null && of !== null && of > 0 ? ` · ${n(answered)} of ${n(of)} answered` : "";
+      return { words: `${name} has run on ${what}${said}.`, ran: true };
+    }
+    case "running":
+      return { words: `${name} runs on ${what} now; the layer fills in as it answers.`, ran: false };
+    case "queued":
+      return { words: `${name} waits its turn on ${what}.`, ran: false };
+    case "failed":
+      return { words: `${name} failed on ${what} the last time it ran.`, ran: false };
+    case "off":
+      return { words: `${name} is not available here, so it has not run on ${what}.`, ran: false };
+    default:
+      return { words: `${name} has not run on ${what}.`, ran: false };
+  }
+}
+
 // ---------------------------------------------------------------- the doors
 
 export const RULES_DOOR = "GET /api/picks/rules";
@@ -735,13 +975,13 @@ export const mainScans = {
   text: (s: Scope, version: number) => textDoor(`/api/picks/rules/text?${scopeParam(s)}&version=${version}`),
   save: (s: Scope, rules: Rules, reason: string, basedOn: number) =>
     door<unknown>("POST", `/api/picks/rules?${scopeParam(s)}`, { rules, reason: reason.trim(), based_on: basedOn }).then((a): Saved => ({ version: count(obj(a).version), job: num(obj(a).job) })),
-  map: (s: Scope, role: string, columns: Columns, rules: Rules | null) =>
-    door<unknown>("POST", "/api/picks/map", { scope: scopeBody(s), role, columns, ...(rules ? { rules } : {}) }).then(mapOf),
+  map: (s: Scope, role: string, columns: Columns, rules: Rules | null, layer: Layer | null = null) =>
+    door<unknown>("POST", "/api/picks/map", { scope: scopeBody(s), role, columns, ...(rules ? { rules } : {}), ...(layer ? { layer } : {}) }).then(mapOf),
   /** A cell names its column in the columns asked by, so the subjects and the strips are asked by the same ones as the map. */
-  subjects: (s: Scope, role: string, columns: Columns, group: Group, order: Order, page: number, rules: Rules | null, perPage = PER_PAGE) =>
-    door<unknown>("POST", "/api/picks/map/subjects", { scope: scopeBody(s), role, columns, group, order, page, per_page: perPage, ...(rules ? { rules } : {}) }).then(subjectsOf),
-  strips: (s: Scope, role: string, columns: Columns, rules: Rules | null) =>
-    door<unknown>("POST", "/api/picks/map/strips", { scope: scopeBody(s), role, columns, ...(rules ? { rules } : {}) }).then(stripsOf),
+  subjects: (s: Scope, role: string, columns: Columns, group: Group, order: Order, page: number, rules: Rules | null, perPage = PER_PAGE, layer: Layer | null = null) =>
+    door<unknown>("POST", "/api/picks/map/subjects", { scope: scopeBody(s), role, columns, group, order, page, per_page: perPage, ...(rules ? { rules } : {}), ...(layer ? { layer } : {}) }).then(subjectsOf),
+  strips: (s: Scope, role: string, columns: Columns, rules: Rules | null, layer: Layer | null = null) =>
+    door<unknown>("POST", "/api/picks/map/strips", { scope: scopeBody(s), role, columns, ...(rules ? { rules } : {}), ...(layer ? { layer } : {}) }).then(stripsOf),
   /** A person's pick of one visit, in the scope: it stands through later runs of the scope's rules. No scans is "no scan for this visit". */
   pick: (s: Scope, role: string, visit: { subject_id: number; session_id: number | null }, stacks: number[], why: string) =>
     door<{ id: number; stacks: number[] }>("POST", "/api/picks", { role, stacks, why: why.trim(), subject_id: visit.subject_id, ...(visit.session_id !== null ? { session_id: visit.session_id } : {}), ...scopeBody(s) }),

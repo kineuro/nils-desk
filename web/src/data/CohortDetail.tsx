@@ -292,7 +292,7 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
       {mayHeat(caps) && (
         <div className="dp-sec">
           <h3 className="eyebrow">Main scans, visit by visit</h3>
-          <HeatMap cohort={row.name} />
+          <HeatMap cohort={row.name} caps={caps} />
         </div>
       )}
       {open === "members" && (

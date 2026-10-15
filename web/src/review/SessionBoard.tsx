@@ -19,6 +19,8 @@ export interface BoardCandidate {
   /** What the candidate is, framed in its value's colour where it has one (Main scans: the kind). */
   label?: string | null;
   slot?: number | null;
+  /** A second value beside it, framed in its own colour (Main scans: its value on the map's layer); dashed where it has none. */
+  extra?: { label: string; slot: number | null } | null;
 }
 
 const score = (v: number | null) => (v === null ? "no score" : `score ${v.toFixed(2)}`);
@@ -73,6 +75,11 @@ export function SessionBoard({ candidates, main, onMain, why, onWhy, pictures = 
             {c.label && (
               <span className="value-tag" {...(c.slot ? { "data-slot": c.slot } : {})}>
                 {c.label}
+              </span>
+            )}
+            {c.extra && (
+              <span className={c.extra.slot ? "value-tag" : "value-tag none"} {...(c.extra.slot ? { "data-slot": c.extra.slot } : {})}>
+                {c.extra.label}
               </span>
             )}
             <span className="meta num">{score(c.score)}</span>

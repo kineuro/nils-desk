@@ -10,8 +10,13 @@
 // visit's pick opens in the window. By dataset the subjects' scans are in
 // three datasets and about one visit in eight is copied into a second, as
 // the engine answers since 2026-10-12, so the check measures the line that
-// says so and a visit naming the other dataset it is in. Every name and
-// number here is made up.
+// says so and a visit naming the other dataset it is in. Asked for a layer
+// (record 55, decision 6: the data map's layers), the doors answer what each
+// visit's scans are by body region, body part or post-contrast, the value of
+// the scan each visit takes, and the step that answers the layer: body part
+// not yet run over the scope, post-contrast run, so maplayers.pw.ts measures
+// the layer's keys, its values, the cards and strips in its colours and the
+// Run. Every name and number here is made up.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -35,6 +40,8 @@ const DOORS = [
   "POST /api/picks",
   "POST /api/picks/{id}/withdraw",
   "GET /api/jobs/{id}",
+  "POST /api/cohorts/{name}/steps/{step}/run",
+  "POST /api/datasets/{name}/steps/{step}/run",
 ];
 
 const caps = {
@@ -220,6 +227,137 @@ function stripsOf(r: string, columns: string) {
   return { kinds, columns: map.columns.slice(0, 4), shared_visits: 0, subjects: cohortOf(r).map((s) => ({ subject_id: s.id, column: s.column, visits: s.visits.map(strip) })) };
 }
 
+// ------------------------------------------------------------ the layers
+
+const LAYER_VALUES: Record<string, string[]> = {
+  body_region: ["head", "spine", "chest", "other"],
+  body_part: ["brain", "brain-neck", "neck", "spine", "chest", "other"],
+  post_contrast: ["pre", "post", "by_definition", "undetermined"],
+};
+
+/** A visit's scans on a layer, made up from its subject and its place: mostly the head or the brain, about one visit in nine of the spine, some contrast. */
+function visitScans(layer: string, s: Subject, j: number): { scans: Record<string, number>; none: number; taken: string | null; flag: number } {
+  const next = rng(s.id * 31 + j * 7 + layer.length);
+  const kind = s.visits[j].kind;
+  const n = 8 + Math.floor(next() * 10);
+  if (layer === "post_contrast") {
+    const given = (kind ?? "").endsWith("+C") || next() < 0.3;
+    const post = given ? 2 + Math.floor(next() * 4) : 0;
+    const undetermined = next() < 0.2 ? 1 + Math.floor(next() * 3) : 0;
+    const pre = Math.max(0, n - post - undetermined);
+    const scans: Record<string, number> = { pre, post, undetermined, ...(next() < 0.1 ? { by_definition: 1 } : {}) };
+    const taken = kind === null ? null : kind.endsWith("+C") ? "post" : undetermined > 0 && next() < 0.3 ? "undetermined" : "pre";
+    return { scans, none: next() < 0.1 ? 1 : 0, taken, flag: next() < 0.04 ? 1 : 0 };
+  }
+  const head = layer === "body_part" ? (next() < 0.15 ? "brain-neck" : "brain") : "head";
+  const spineVisit = (s.id + j) % 9 === 0;
+  const scans: Record<string, number> = spineVisit ? { spine: n - 2, [head]: 2 } : { [head]: n - (next() < 0.2 ? 1 : 0) };
+  if (!spineVisit && next() < 0.1) scans.spine = 1;
+  const none = next() < 0.25 ? 1 + Math.floor(next() * 3) : 0;
+  const taken = kind === null ? null : spineVisit && next() < 0.3 ? "spine" : next() < 0.05 ? null : head;
+  return { scans, none, taken, flag: 0 };
+}
+
+/** The step that answers a layer over the scope: body part has not run on it, post-contrast has. */
+function layerStep(layer: string) {
+  const ran = layer === "post_contrast";
+  return {
+    step: ran ? "post_contrast" : "body_part",
+    state: ran ? "done" : "waiting",
+    job: ran ? 812 : null,
+    run: ran ? 77 : null,
+    started_at: ran ? "2026-10-14T08:00:00Z" : null,
+    finished_at: ran ? "2026-10-14T08:40:00Z" : null,
+    progress: null,
+    served: true,
+    answered: ran ? 11800 : 0,
+    look: 0,
+    of: 12600,
+    jobs: ran ? [812] : [],
+    refusal: null,
+    label: ran ? { rule: "time-rule-1", labelled: 12600, in_anchored_sessions: 9000, by_state: {} } : null,
+  };
+}
+
+function layerHead(layer: string, values: string[]) {
+  return { layer, operation: layer === "post_contrast" ? "post_contrast" : "body_part", values, step: layerStep(layer) };
+}
+
+/** The map's layer over the cohort: each value's visits that hold it and take it, its scans, what carries none. */
+function mapLayerOf(r: string, layer: string) {
+  const cohort = cohortOf(r);
+  const order = LAYER_VALUES[layer];
+  const rows = new Map<string, { visits_with: number; visits_taken: number; scans: number }>();
+  const none = { visits: 0, scans: 0, taken: 0 };
+  let flagged = 0;
+  for (const s of cohort)
+    s.visits.forEach((v, j) => {
+      const x = visitScans(layer, s, j);
+      const held = Object.entries(x.scans).filter(([, n]) => n > 0);
+      for (const [value, n] of held) {
+        const row = rows.get(value) ?? { visits_with: 0, visits_taken: 0, scans: 0 };
+        row.visits_with += 1;
+        row.scans += n;
+        rows.set(value, row);
+      }
+      if (held.length === 0) none.visits += 1;
+      none.scans += x.none;
+      if (v.kind !== null) {
+        if (x.taken === null) none.taken += 1;
+        else {
+          const row = rows.get(x.taken) ?? { visits_with: 0, visits_taken: 0, scans: 0 };
+          row.visits_taken += 1;
+          rows.set(x.taken, row);
+        }
+      }
+      flagged += x.flag;
+    });
+  const values = order.filter((v) => rows.has(v)).map((value) => ({ value, ...rows.get(value)! }));
+  return { ...layerHead(layer, values.map((v) => v.value)), values, none, ...(layer === "post_contrast" ? { prior_72h: flagged } : {}) };
+}
+
+/** Each visit of a page of subjects on the layer, with its candidates' values. */
+function withLayer(page: ReturnType<typeof subjectsOf>, r: string, layer: string) {
+  const cohort = new Map(cohortOf(r).map((s) => [s.id, s]));
+  const values = LAYER_VALUES[layer];
+  return {
+    ...page,
+    subjects: page.subjects.map((p) => {
+      const s = cohort.get(p.subject_id)!;
+      return {
+        ...p,
+        visits: p.visits.map((v, j) => {
+          const x = visitScans(layer, s, j);
+          const layered = { taken: x.taken, scans: x.scans, none: x.none, ...(layer === "post_contrast" ? { prior_72h: x.flag } : {}) };
+          return { ...v, layer: layered, candidates: v.candidates.map((c, i) => ({ ...c, layer: i === 0 ? x.taken : values[0] })) };
+        }),
+      };
+    }),
+    layer: layerHead(layer, values),
+  };
+}
+
+/** The strips on the layer: each visit's value taken and the value most of its scans carry, by index. */
+function stripsLayer(strips: ReturnType<typeof stripsOf>, r: string, layer: string) {
+  const cohort = new Map(cohortOf(r).map((s) => [s.id, s]));
+  const values = LAYER_VALUES[layer];
+  const index = (v: string | null) => (v === null ? -1 : values.indexOf(v));
+  return {
+    ...strips,
+    subjects: strips.subjects.map((st) => {
+      const s = cohort.get(st.subject_id)!;
+      const xs = s.visits.map((_, j) => visitScans(layer, s, j));
+      const most = (x: { scans: Record<string, number> }) => {
+        const held = Object.entries(x.scans).filter(([, n]) => n > 0);
+        held.sort((a, b) => b[1] - a[1] || values.indexOf(a[0]) - values.indexOf(b[0]));
+        return held[0]?.[0] ?? null;
+      };
+      return { ...st, layer: { taken: xs.map((x) => index(x.taken)), held: xs.map((x) => index(most(x))) } };
+    }),
+    layer: layerHead(layer, values),
+  };
+}
+
 const RULES_DOC = {
   scope: { kind: "cohort", id: 7, name: "ms-followup" },
   pack: { name: "mri", version: "1.1.0" },
@@ -236,7 +374,18 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const path = url.pathname;
   const body = typeof init?.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : {};
   if (path === "/desk/capabilities") return json(200, caps);
-  if (path === "/api/picks/rules" && (init?.method ?? "GET") === "GET") return json(200, RULES_DOC);
+  // a dataset's page is about the dataset, as the engine names it
+  if (path === "/api/picks/rules" && (init?.method ?? "GET") === "GET") return json(200, url.searchParams.get("dataset") ? { ...RULES_DOC, scope: { kind: "dataset", id: 3, name: url.searchParams.get("dataset") } } : RULES_DOC);
+  if (path.endsWith("/run") && path.includes("/steps/")) {
+    // the runs asked for, for the check to read: the fake engine answers in the page, where no request is seen
+    const w = window as unknown as { runs?: string[] };
+    w.runs = [...(w.runs ?? []), path];
+    return json(202, { job: 913, state: "queued", step: path.split("/")[5], for: "made-up", scans: 12600, handle: 51, command: [] });
+  }
+  const layer = typeof body.layer === "string" ? body.layer : null;
+  if (layer && path === "/api/picks/map") return json(200, { ...(body.columns === "dataset" ? datasetMapOf(String(body.role), body.rules !== undefined) : mapOf(String(body.role), body.rules !== undefined)), layer: mapLayerOf(String(body.role), layer) });
+  if (layer && path === "/api/picks/map/subjects") return json(200, withLayer(subjectsOf(String(body.role), Number(body.page ?? 0), String(body.order), String(body.columns)), String(body.role), layer));
+  if (layer && path === "/api/picks/map/strips") return json(200, stripsLayer(stripsOf(String(body.role), String(body.columns)), String(body.role), layer));
   if (path === "/api/picks/rules/text") return Promise.resolve(new Response(`# Main scans of ms-followup, version 2\nroles:\n  t1w:\n    keep_alike: balanced\n    kinds_in_order:\n${KINDS.t1w.map((k) => `      - ${k}`).join("\n")}\n`, { status: 200 }));
   if (path === "/api/picks/map") return json(200, body.columns === "dataset" ? datasetMapOf(String(body.role), body.rules !== undefined) : mapOf(String(body.role), body.rules !== undefined));
   if (path === "/api/picks/map/subjects") return json(200, subjectsOf(String(body.role), Number(body.page ?? 0), String(body.order), String(body.columns)));
