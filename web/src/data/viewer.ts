@@ -370,7 +370,11 @@ export const viewerDoors = {
     // the registry's session door names the session in its path, so only the studies go in the query
     const asked = scope.kind === "registry" && f.session ? {} : f;
     const q = new URLSearchParams({ ...asked, limit: "200" });
-    if (pictures) q.set("pictures", "1");
+    // each picture as the address of the preview door's middle plane, fetched beside the page and kept by the browser (the Data page's speed, 2026-10-15); an engine before it answers the bytes inline
+    if (pictures) {
+      q.set("pictures", "1");
+      q.set("links", "1");
+    }
     if (after !== null) q.set("after", String(after));
     return door<ScansAnswer>("GET", `${paths(scope).scans(f)}?${q}`).then((a) => ({
       total: a.total,
