@@ -25,7 +25,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { Says, Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
-import { certifiedWords, certifyAct, checkOf, choosable, chosenOf, chosenWords, citeBody, EMPTY_FORM, encodersOf, equivalenceWords, fittedBy, gpuOf, label, missingWords, modelActs, models, openActs, percentWords, rateWords, refusedModels, shortDigest, speedOf, stateTag, tasksOf, testedOf, trainedOn, type CertifyForm, type Model, type RunRow, type TaskEntry } from "./client";
+import { certifiedWords, certifyAct, checkOf, choosable, chosenOf, chosenWords, citeBody, EMPTY_FORM, encodersOf, equivalenceWords, fittedBy, gpuOf, label, missingWords, modelActs, models, openActs, percentWords, rateWords, textOf, refusedModels, shortDigest, speedOf, stateTag, tasksOf, testedOf, trainedOn, type CertifyForm, type Model, type RunRow, type TaskEntry } from "./client";
 import "../review/grown.css";
 import "./models.css";
 
@@ -460,25 +460,25 @@ export function CertificateFacts({ m }: { m: Model }) {
           <>
             <div className="facts-pair">
               <dt>graded run</dt>
-              <dd>{e.run}</dd>
+              <dd>{textOf(e.run) ?? "?"}</dd>
             </div>
             <div className="facts-pair">
               <dt>manifest</dt>
-              <dd title={e.manifest_sha256}>{shortDigest(e.manifest_sha256)}</dd>
+              <dd title={textOf(e.manifest_sha256) ?? undefined}>{shortDigest(textOf(e.manifest_sha256)) || "?"}</dd>
             </div>
             <div className="facts-pair">
               <dt>plan</dt>
-              <dd title={e.plan ?? undefined}>{e.plan_commit.slice(0, 12)}</dd>
+              <dd title={textOf(e.plan) ?? undefined}>{textOf(e.plan_commit)?.slice(0, 12) ?? "?"}</dd>
             </div>
             <div className="facts-pair">
               <dt>artifact</dt>
-              <dd title={e.model_digest}>{shortDigest(e.model_digest)}</dd>
+              <dd title={textOf(e.model_digest) ?? undefined}>{shortDigest(textOf(e.model_digest)) || "?"}</dd>
             </div>
-            {e.equivalence && (
+            {e.equivalence && typeof e.equivalence === "object" && (
               <div className="facts-pair">
                 <dt>served as</dt>
-                <dd title={e.equivalence.manifest_sha256}>
-                  {e.equivalence.run} · class {e.equivalence.class}
+                <dd title={textOf(e.equivalence.manifest_sha256) ?? undefined}>
+                  {textOf(e.equivalence.run) ?? "?"} · class {textOf(e.equivalence.class) ?? "?"}
                 </dd>
               </div>
             )}
@@ -538,7 +538,10 @@ export function CertifyDialog({ m, onClose, onDone }: { m: Model; onClose: () =>
     setBusy(true);
     setRefused(null);
     models.certify(built.body).then(
-      (c) => onDone(c.evidence ? `${label(m)} is certified by the graded run ${c.evidence.run}.` : `${label(m)} is certified: ${certifiedWords(c)}.`),
+      (c) => {
+        const run = textOf(c.evidence?.run);
+        onDone(run ? `${label(m)} is certified by the graded run ${run}.` : `${label(m)} is certified: ${certifiedWords(c)}.`);
+      },
       (e: unknown) => {
         setBusy(false);
         setRefused(engineWords(e));

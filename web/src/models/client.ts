@@ -72,12 +72,13 @@ export interface Model {
 
 /** The graded run a certificate cites instead of a sample sealed in the registry (record 55 ruling 22 b). */
 export interface Citation {
-  run: string;
-  manifest_sha256: string;
-  plan_commit: string;
-  model_digest: string;
-  plan?: string | null;
-  equivalence?: { run: string; manifest_sha256: string; class: string } | null;
+  // as the engine sent them: read each through textOf
+  run?: unknown;
+  manifest_sha256?: unknown;
+  plan_commit?: unknown;
+  model_digest?: unknown;
+  plan?: unknown;
+  equivalence?: { run?: unknown; manifest_sha256?: unknown; class?: unknown } | null;
 }
 
 /** A recorded certificate as the engine answers it (GET /api/certificates, and a model's `certificate`). */
@@ -209,15 +210,18 @@ export function citeBody(m: Pick<Model, "id" | "digest">, f: CertifyForm): { bod
   if (sha === null) wrong.push("manifest sha256");
   const commit = f.commit.trim().toLowerCase();
   if (commit.length < 7 || commit.length > 40 || !HEX.test(commit)) wrong.push("plan commit");
-  const num = (s: string) => (s.trim() === "" ? null : Number(s.trim()));
+  // a share is a plain decimal: digits, a point and digits, no sign, hex or exponent
+  const num = (s: string) => (s.trim() === "" ? null : /^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/u.test(s.trim()) ? Number(s.trim()) : Number.NaN);
   const bar = num(f.bar);
   if (bar === null || !Number.isFinite(bar) || bar <= 0 || bar >= 1) wrong.push("bar");
-  const n = num(f.n);
-  if (n === null || !Number.isInteger(n) || n <= 0) wrong.push("graded");
-  const errors = num(f.errors);
-  if (errors === null || !Number.isInteger(errors) || errors < 0 || (n !== null && errors > n)) wrong.push("wrong");
+  // a count is digits only: no sign, hex, exponent or point
+  const count = (s: string) => (/^[0-9]+$/u.test(s.trim()) ? Number(s.trim()) : null);
+  const n = count(f.n);
+  if (n === null || !Number.isSafeInteger(n) || n <= 0) wrong.push("graded");
+  const errors = count(f.errors);
+  if (errors === null || !Number.isSafeInteger(errors) || (n !== null && errors > n)) wrong.push("wrong");
   const bound = num(f.bound);
-  if (bound !== null && !Number.isFinite(bound)) wrong.push("bound");
+  if (bound !== null && (!Number.isFinite(bound) || bound < 0 || bound > 1)) wrong.push("bound");
   const coverage = num(f.coverage);
   if (coverage !== null && (!Number.isFinite(coverage) || coverage < 0 || coverage > 1)) wrong.push("coverage");
   const served = f.eqRun.trim() !== "" || f.eqManifest.trim() !== "" || f.eqClass.trim() !== "";
@@ -238,6 +242,11 @@ export function citeBody(m: Pick<Model, "id" | "digest">, f: CertifyForm): { bod
   return { body: { models: [m.id], evidence, result } };
 }
 
+/** A citation's field as text, whatever the engine sent: none where it is not a string. */
+export function textOf(v: unknown): string | null {
+  return typeof v === "string" && v !== "" ? v : null;
+}
+
 /** A share as a percentage for a line. */
 export function percentWords(share: unknown): string {
   if (typeof share !== "number" || !Number.isFinite(share)) return "?";
@@ -249,7 +258,7 @@ export function percentWords(share: unknown): string {
 export function certifiedWords(c: Certificate): string {
   const r = c.result ?? {};
   const counts = typeof r.errors === "number" && typeof r.n === "number" ? `${r.errors.toLocaleString("en-US")} of ${r.n.toLocaleString("en-US")} wrong` : "";
-  if (c.evidence) return [c.evidence.run, counts, typeof r.bound === "number" ? `bound ${percentWords(r.bound)}` : ""].filter(Boolean).join(" · ");
+  if (c.evidence) return [textOf(c.evidence.run), counts, typeof r.bound === "number" ? `bound ${percentWords(r.bound)}` : ""].filter(Boolean).join(" · ");
   return [c.sample, counts, typeof r.risk === "number" ? `risk ${percentWords(r.risk)}` : ""].filter(Boolean).join(" · ");
 }
 

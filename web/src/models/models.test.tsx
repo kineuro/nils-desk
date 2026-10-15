@@ -13,8 +13,8 @@ import { describe, expect, it } from "vitest";
 import { DoorError } from "../ask/client";
 import { capsWith } from "../review/caps.fixture";
 import { moved, parse } from "../routes";
-import { byTask, certifiedWords, certifyAct, checkOf, choosable, chosenOf, chosenWords, citeBody, EMPTY_FORM, encodersOf, equivalenceWords, fittedBy, gpuOf, missingWords, modelActs, openActs, percentWords, rateWords, refusedModels, speedOf, tasksOf, testedOf, trainedOn, type Certificate, type Model, type TaskEntry } from "./client";
-import { CertifyDialog, ChooseDialog, claimWords, engineWords, ModelBody, ModelCard, ModelsBody, MoveDialog, RunsFitted } from "./ModelsPage";
+import { byTask, certifiedWords, certifyAct, checkOf, choosable, chosenOf, chosenWords, citeBody, EMPTY_FORM, textOf, encodersOf, equivalenceWords, fittedBy, gpuOf, missingWords, modelActs, openActs, percentWords, rateWords, refusedModels, speedOf, tasksOf, testedOf, trainedOn, type Certificate, type Model, type TaskEntry } from "./client";
+import { CertificateFacts, CertifyDialog, ChooseDialog, claimWords, engineWords, ModelBody, ModelCard, ModelsBody, MoveDialog, RunsFitted } from "./ModelsPage";
 
 const D = (c: string) => `sha256:${c.repeat(64)}`;
 
@@ -298,5 +298,47 @@ describe("a certificate that cites its graded run", () => {
     expect(html).toContain("for artifact sha256:aaaaaaaaaaaa");
     expect(html).toContain("Yours alone, under your sign-in: it unseals nothing, so no second person is needed.");
     expect(html).toMatch(/<button type="button" class="button" disabled="">Record<\/button>/u);
+  });
+});
+
+describe("a certificate as the engine may send it", () => {
+  it("says what certified a model in its words even where the run is not text", async () => {
+    const said: string[] = [];
+    const sent = { ...CITED, evidence: { run: 7 } as unknown as Certificate["evidence"] };
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify(sent), { status: 201 })) as typeof fetch;
+    try {
+      const { models } = await import("./client");
+      const c = await models.certify({});
+      const run = textOf(c.evidence?.run);
+      said.push(run ? `by ${run}` : `: ${certifiedWords(c)}`);
+    } finally {
+      globalThis.fetch = original;
+    }
+    expect(said).toEqual([": 1 of 5,482 wrong · bound 0.087 %"]);
+  });
+  it("draws a citation that lacks a field, or holds one that is not text, without failing", () => {
+    const odd = { ...CITED, evidence: { run: 7, manifest_sha256: null, model_digest: D("9") } as unknown as Certificate["evidence"] };
+    const html = renderToStaticMarkup(<CertificateFacts m={{ ...S1, certificate: odd }} />);
+    expect(html).toContain("<h2>Certified</h2>");
+    expect(html).toContain("<dt>plan</dt><dd>?</dd>");
+    expect(html).toContain("<dt>graded run</dt><dd>?</dd>");
+    expect(certifiedWords(odd)).toBe("1 of 5,482 wrong · bound 0.087 %");
+    expect([textOf("a"), textOf(""), textOf(3), textOf(null)]).toEqual(["a", null, null, null]);
+  });
+  it("takes counts as digits only, and a bound between 0 and 1", () => {
+    const f = { ...EMPTY_FORM, run: "r1", manifest: "7".repeat(64), commit: "83a75e5", n: "5482", errors: "1" };
+    expect("body" in citeBody(S1_NEXT, f)).toBe(true);
+    for (const [n, errors] of [["0x10", "1"], ["1e3", "1"], ["5482", "-1"], ["5482", "1.0"], [" 54 82", "1"]]) {
+      expect(citeBody(S1_NEXT, { ...f, n, errors })).toHaveProperty("wrong");
+    }
+    expect(citeBody(S1_NEXT, { ...f, bound: "1.5" })).toEqual({ wrong: ["bound"] });
+    expect(citeBody(S1_NEXT, { ...f, bound: "-0.1" })).toEqual({ wrong: ["bound"] });
+    // shares are plain decimals: no exponent, hex, sign or Infinity
+    for (const v of ["8.65e-4", "0x1", "+0.5", "Infinity", "1.2.3"]) {
+      expect(citeBody(S1_NEXT, { ...f, bound: v, coverage: v })).toEqual({ wrong: ["bound", "coverage"] });
+    }
+    expect(citeBody(S1_NEXT, { ...f, bar: "1e-2" })).toEqual({ wrong: ["bar"] });
+    expect("body" in citeBody(S1_NEXT, { ...f, bound: ".000865", coverage: "0.892" })).toBe(true);
   });
 });
