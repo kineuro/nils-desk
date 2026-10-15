@@ -65,11 +65,13 @@ describe("Pseudonyms", () => {
     };
     act(() => set(name, "Site ID"));
     act(() => set(what, "the site's own number"));
+    // record 55, ruling 24: a site's number leads to a person anywhere, and the type says so
+    act(() => button(host.querySelector("dialog")!, "A person, anywhere")!.click());
     await act(async () => {
       button(host.querySelector("dialog")!, "Add")!.click();
     });
     await settle();
-    expect(e.of("POST", "/api/linkage/types")[0].body).toEqual({ name: "site-id", description: "the site's own number" });
+    expect(e.of("POST", "/api/linkage/types")[0].body).toEqual({ name: "site-id", description: "the site's own number", identifying: true });
     expect(host.textContent).toContain("site-id is an ID type.");
   });
 

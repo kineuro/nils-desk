@@ -146,12 +146,19 @@ describe("the Assistant's ladder", () => {
         { door: "POST /api/linkage/merge", rung: 3 as const, role: "admin" },
       ],
     };
-    expect(offerOfLadder(older).map((o) => [o.title, o.actions.map((a) => a.words)])).toEqual([
+    // offered only what the person's own grants open: an operator's step to an operator, a reader's to a reader
+    const operator = ["data:work", "data:see", "pipelines:work", "query:work", "query:see", "review:work", "review:see", "models:see", "pipelines:see", "release:work", "release:see", "places:work", "places:see", "install:see", "kvasir:see", "models:work", "assistant-settings:see"];
+    expect(offerOfLadder(older, operator).map((o) => [o.title, o.actions.map((a) => a.words)])).toEqual([
       ["Data", ["Read, sort, pseudonymise and bring in data"]],
       ["Query", ["Run questions"]],
       ["Other", ["Another step 1"]],
     ]);
-    const { pages } = grantPages(older);
+    expect(offerOfLadder(older, ["data:see", "query:see", "query:work"]).map((o) => o.title)).toEqual(["Query", "Other"]);
+    expect(offerOfLadder({ ...older, ladder: [{ door: "POST /api/jobs", rung: 2 as const, grant: "data:work" }] }, ["query:see"])).toEqual([]);
+    const { pages, scopes } = grantPages(older, operator);
+    // an older assistant takes no page or everything at once
+    expect(scopes).toBe(false);
+    expect(grantPages({ ...older, offer: [] }, operator).scopes).toBe(true);
     // the standing one stands by its door, and the others can be given
     expect(pages.find((p) => p.page === "data")?.rows[0].grant?.id).toBe(1);
     expect(pages.find((p) => p.page === "query")?.rows[0]).toMatchObject({ door: "POST /api/ask/run", grant: null });

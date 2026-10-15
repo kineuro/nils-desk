@@ -35,6 +35,8 @@ export interface IdType {
   /** What a person reads, where the engine gives it (2026-10-10). */
   label?: string;
   description: string | null;
+  /** Record 55, ruling 24: its IDs lead to a person wherever they are met; absent from an older engine. */
+  identifying?: boolean;
   /** Counts, where the engine reports them. */
   identifiers?: number;
   subjects?: number;
@@ -102,7 +104,8 @@ export interface ImportReport {
 
 export const linkage = {
   types: () => door<TypesDoc | IdType[]>("GET", "/api/linkage/types").then((r) => (Array.isArray(r) ? { types: r } : r)),
-  addType: (name: string, description: string) => door<IdType>("POST", "/api/linkage/types", { name, description }),
+  addType: (name: string, description: string, identifying?: boolean) =>
+    door<IdType>("POST", "/api/linkage/types", identifying === undefined ? { name, description } : { name, description, identifying }),
   /**
    * A map: rehearsed with `dry_run`, which answers the report at once; applied,
    * which answers the job whose result is the same report. `make_types` is sent

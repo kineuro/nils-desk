@@ -268,7 +268,7 @@ export interface Grants {
   /** Record 55, ruling 24: an admin holds everything and needs no standing grant. */
   admin?: boolean;
   grants: Grant[];
-  ladder: { door: string; rung: 1 | 2 | 3; role?: string | null; page?: string; words?: string }[];
+  ladder: { door: string; rung: 1 | 2 | 3; grant?: string | string[] | null; also?: string | null; role?: string | null; page?: string; words?: string }[];
   /** What this person may give, by page; absent from an older assistant. */
   offer?: Offer[];
 }

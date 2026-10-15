@@ -7,7 +7,7 @@
 // the person again and again, until it is revoked.
 
 import type { Capabilities } from "../capabilities";
-import { may } from "../grants";
+import { holdsGrant, isGrant, may, SETS, type Step as LadderStep } from "../grants";
 import { PAGE_LINES } from "../settings/identity";
 import type { Grant, Grants, Inbox, Offer, Plan, Step } from "./client";
 
@@ -88,8 +88,8 @@ export interface PageGroup {
  * ruling 24): everything when it stands, each page with its whole-page grant and its actions, each action standing on
  * its own, through its page or everything, or not yet. No kept door is shown.
  */
-export function grantPages(g: Grants | null): { everything: Grant | null; pages: PageGroup[] } {
-  if (!g) return { everything: null, pages: [] };
+export function grantPages(g: Grants | null, held: readonly string[] = []): { everything: Grant | null; pages: PageGroup[]; scopes: boolean } {
+  if (!g) return { everything: null, pages: [], scopes: false };
   const mine = g.grants.filter((x) => !x.revoked_at && x.subject === g.subject);
   const everything = mine.find((x) => x.door === EVERYTHING) ?? null;
   const byPage = new Map<string, PageGroup>();
@@ -101,7 +101,7 @@ export function grantPages(g: Grants | null): { everything: Grant | null; pages:
     }
     return pg;
   };
-  for (const o of g.offer ?? offerOfLadder(g)) {
+  for (const o of g.offer ?? offerOfLadder(g, held)) {
     const pg = group(o.page, o.title);
     for (const a of o.actions) {
       const own = mine.find((x) => x.door === a.door) ?? null;
@@ -123,7 +123,8 @@ export function grantPages(g: Grants | null): { everything: Grant | null; pages:
     const i = PAGE_LINES.findIndex((l) => l.id === p);
     return i < 0 ? PAGE_LINES.length : i;
   };
-  return { everything, pages: [...byPage.values()].sort((a, b) => order(a.page) - order(b.page)) };
+  // an assistant that sends no offer takes no page or everything at once
+  return { everything, pages: [...byPage.values()].sort((a, b) => order(a.page) - order(b.page)), scopes: g.offer !== undefined };
 }
 
 /** What the common doors let the assistant do, for an assistant that sends no words of its own. */
@@ -148,15 +149,25 @@ const OLDER_WORDS: Record<string, { page: string; words: string }> = {
   "PUT /api/backups/schedule": { page: "database", words: "Set the backup schedule" },
 };
 
+/** Whether a person's own grants open a ladder row: its grant, any of several, the second beside it, or an older row's whole ladder step. */
+export function opensFor(held: readonly string[], r: { grant?: string | string[] | null; also?: string | null; role?: string | null }): boolean {
+  const has = (x: string) => isGrant(x) && holdsGrant(held, x);
+  if (typeof r.also === "string" && r.also && !has(r.also)) return false;
+  if (typeof r.grant === "string") return has(r.grant);
+  if (Array.isArray(r.grant)) return r.grant.some(has);
+  const step = r.role as LadderStep | null | undefined;
+  return !!step && step in SETS && SETS[step].grants.every((x) => holdsGrant(held, x));
+}
+
 /**
  * What an assistant that sends no offer lets a person give (one before record 55's ruling 24): the rung-two doors of
  * its ladder, in words the desk knows or the ladder sent, never a door; one it has no words for is "Another step".
  */
-export function offerOfLadder(g: Grants): Offer[] {
+export function offerOfLadder(g: Grants, held: readonly string[]): Offer[] {
   const by = new Map<string, Offer>();
   let other = 0;
   for (const r of g.ladder) {
-    if (r.rung !== 2) continue;
+    if (r.rung !== 2 || !opensFor(held, r)) continue;
     const known = OLDER_WORDS[r.door];
     const page = r.page ?? known?.page ?? "other";
     const words = r.words ?? known?.words ?? `Another step ${++other}`;
