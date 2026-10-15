@@ -5,14 +5,16 @@
 // way back to the default after a panel, one model's card, encoders, label
 // set and history, the acts its state and the person's grants leave open, a
 // check whose passed its rows decide, and a refusal in the engine's words.
+// Record 55 ruling 22 (b): the certificate that names a model, and a
+// certificate that cites its graded run recorded by a person.
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DoorError } from "../ask/client";
 import { capsWith } from "../review/caps.fixture";
 import { moved, parse } from "../routes";
-import { byTask, checkOf, choosable, chosenOf, chosenWords, encodersOf, equivalenceWords, fittedBy, gpuOf, missingWords, modelActs, openActs, rateWords, refusedModels, speedOf, tasksOf, testedOf, trainedOn, type Model, type TaskEntry } from "./client";
-import { ChooseDialog, claimWords, engineWords, ModelBody, ModelCard, ModelsBody, MoveDialog, RunsFitted } from "./ModelsPage";
+import { byTask, certifiedWords, certifyAct, checkOf, choosable, chosenOf, chosenWords, citeBody, EMPTY_FORM, encodersOf, equivalenceWords, fittedBy, gpuOf, missingWords, modelActs, openActs, percentWords, rateWords, refusedModels, speedOf, tasksOf, testedOf, trainedOn, type Certificate, type Model, type TaskEntry } from "./client";
+import { CertifyDialog, ChooseDialog, claimWords, engineWords, ModelBody, ModelCard, ModelsBody, MoveDialog, RunsFitted } from "./ModelsPage";
 
 const D = (c: string) => `sha256:${c.repeat(64)}`;
 
@@ -220,5 +222,81 @@ describe("the lifecycle's words", () => {
     expect(html).toContain("run 12 · bodypart-train@1");
     expect(html).toContain("bodypart-head@3 registered");
     expect(html).toContain("extra: the run wrote no model");
+  });
+});
+
+// record 55 ruling 22 (b): a certificate that cites the graded run, as the engine answers it
+const CITED: Certificate = {
+  id: 4,
+  sample: "evidence:s1-grade-7",
+  model_ids: [9],
+  result: { bar: 0.01, n: 5482, errors: 1, confidence: 0.95, bound: 0.0008650574506395371, method: "exact one-sided Clopper-Pearson", passes: true, coverage: 0.892, test: "T19" },
+  created_by: "astrid",
+  created_at: "2026-10-14T18:00:00Z",
+  cites: "evidence",
+  evidence: { run: "s1-grade-7", manifest_sha256: D("7"), plan_commit: "83a75e5875ce", model_digest: D("9"), equivalence: { run: "s1-serve-2", manifest_sha256: D("6"), class: "I" } },
+  unseals: false,
+  words: "certificate 4 cites the graded run s1-grade-7 (manifest sha256:777777777777, plan 83a75e5875ce): 1 of 5482 wrong, bound 0.087 % at bar 1.00 %",
+};
+const S1 = model(9, "s1c", "admitted", { version: "allow-2", kind: "pass", task: "system1", digest: D("9"), certificate: CITED, card: { name: "s1c", gpu: "none" } });
+const S1_NEXT = model(10, "s1c", "admitted", { version: "allow-3", kind: "pass", task: "system1", digest: D("a"), card: { name: "s1c", gpu: "none" } });
+const CERT_DOORS = [...DOORS, "POST /api/certificates", "GET /api/models/{id}"];
+
+describe("a certificate that cites its graded run", () => {
+  it("builds the door's body from the fields, the digest the model's own, and names the fields still wrong", () => {
+    const f = { ...EMPTY_FORM, run: " s1-grade-7 ", manifest: `SHA256:${"7".repeat(64)}`, commit: "83A75E5", bar: "0.01", n: "5482", errors: "1", bound: "0.000865", coverage: "0.892", test: " T19 ", claim: "" };
+    expect(citeBody(S1_NEXT, f)).toEqual({
+      body: {
+        models: [10],
+        evidence: { run: "s1-grade-7", manifest_sha256: D("7"), plan_commit: "83a75e5", model_digest: D("a") },
+        result: { bar: 0.01, n: 5482, errors: 1, bound: 0.000865, coverage: 0.892, test: "T19" },
+      },
+    });
+    expect(citeBody(S1_NEXT, EMPTY_FORM)).toEqual({ wrong: ["run", "manifest sha256", "plan commit", "graded", "wrong"] });
+    expect(citeBody(S1_NEXT, { ...f, errors: "6000", coverage: "1.5", commit: "abc" })).toEqual({ wrong: ["plan commit", "wrong", "coverage"] });
+    // a repackaged artifact cites the run that showed it answers the same
+    const served = citeBody(S1_NEXT, { ...f, eqRun: "s1-serve-2", eqManifest: "6".repeat(64), eqClass: "I" });
+    expect("body" in served && served.body.evidence).toEqual({ run: "s1-grade-7", manifest_sha256: D("7"), plan_commit: "83a75e5", model_digest: D("a"), equivalence: { run: "s1-serve-2", manifest_sha256: D("6"), class: "I" } });
+    expect(citeBody(S1_NEXT, { ...f, eqRun: "s1-serve-2" })).toEqual({ wrong: ["served as sha256", "class"] });
+  });
+  it("says what a certificate certified, the graded run or the sealed sample", () => {
+    expect(certifiedWords(CITED)).toBe("s1-grade-7 · 1 of 5,482 wrong · bound 0.087 %");
+    expect(certifiedWords({ ...CITED, cites: "sample", evidence: null, sample: "selection:sealed@1", result: { sample: "selection:sealed@1", risk: 0.05, n: 300, errors: 0 } })).toBe("selection:sealed@1 · 0 of 300 wrong · risk 5 %");
+    expect(percentWords(0.01)).toBe("1 %");
+    expect(percentWords(undefined)).toBe("?");
+  });
+  it("shows a model as certified on its card, with the run it cites, and says where none names it", () => {
+    const on = renderToStaticMarkup(<ModelCard m={S1} chosen={true} />);
+    expect(on).toContain("<dt>certified</dt>");
+    expect(on).toContain("s1-grade-7 · 1 of 5,482 wrong · bound 0.087 %");
+    expect(renderToStaticMarkup(<ModelCard m={{ ...S1_NEXT, certificate: null }} chosen={false} />)).toContain("no certificate");
+    // an engine that does not say: no line at all
+    expect(renderToStaticMarkup(<ModelCard m={S1_NEXT} chosen={false} />)).not.toContain("<dt>certified</dt>");
+  });
+  it("draws the citation on the model's page: the run, its manifest, the plan's commit, the artifact and what it found", () => {
+    const html = renderToStaticMarkup(<ModelBody caps={capsWith(CERT_DOORS, [...WORK])} m={S1} onChanged={() => undefined} />);
+    expect(html).toContain("<h2>Certified</h2>");
+    expect(html).toContain("certificate 4 · astrid");
+    expect(html).toContain("<dd>s1-grade-7</dd>");
+    expect(html).toContain("sha256:777777777777");
+    expect(html).toContain("83a75e5875ce");
+    expect(html).toContain("s1-serve-2 · class I");
+    expect(html).toContain("1 of 5,482 wrong · bound 0.087 % · bar 1 % · coverage 89.2 %");
+    expect(html).toContain(">Record a certificate</button>");
+    expect(renderToStaticMarkup(<ModelBody caps={capsWith(CERT_DOORS, [...WORK])} m={S1_NEXT} onChanged={() => undefined} />)).not.toContain("<h2>Certified</h2>");
+  });
+  it("offers Record a certificate under models:work where the engine serves the door, never on a retired model", () => {
+    expect(certifyAct(capsWith(CERT_DOORS, [...WORK]))).toBe(true);
+    expect(certifyAct(capsWith(CERT_DOORS, ["models:see"]))).toBe(false);
+    expect(certifyAct(capsWith(DOORS, [...WORK]))).toBe(false);
+    expect(renderToStaticMarkup(<ModelBody caps={capsWith(CERT_DOORS, ["models:see"])} m={S1} onChanged={() => undefined} />)).not.toContain("Record a certificate");
+    expect(renderToStaticMarkup(<ModelBody caps={capsWith(CERT_DOORS, [...WORK])} m={{ ...S1, state: "retired" }} onChanged={() => undefined} />)).not.toContain("Record a certificate");
+  });
+  it("asks for the graded run's fields and says the person rule, recording nothing until they are right", () => {
+    const html = renderToStaticMarkup(<CertifyDialog m={S1_NEXT} onClose={() => undefined} onDone={() => undefined} />);
+    for (const field of ["Graded run", "Manifest sha256", "Plan commit", "Bar", "Graded", "Wrong", "Bound", "Coverage", "Test", "Claim", "Served as run", "Served as sha256", "Class"]) expect(html).toContain(`aria-label="${field}"`);
+    expect(html).toContain("for artifact sha256:aaaaaaaaaaaa");
+    expect(html).toContain("Yours alone, under your sign-in: it unseals nothing, so no second person is needed.");
+    expect(html).toMatch(/<button type="button" class="button" disabled="">Record<\/button>/u);
   });
 });

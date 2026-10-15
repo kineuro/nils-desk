@@ -7,7 +7,9 @@
 // slot, and one is chosen there, by the site's admin or by default (the model
 // a recorded certificate names, else the one promoted last, else the newest
 // admitted). The engine refuses what the lifecycle does not allow, and the
-// page shows its words.
+// page shows its words. Record 55 ruling 22 (b): a certificate may cite the
+// graded run that measured a model instead of a sample sealed in the
+// registry; a person records it here, and the model shows it as certified.
 
 import { door, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -64,6 +66,33 @@ export interface Model {
   chosen?: boolean;
   /** The CPU and GPU equivalence its admitting check measured (spec section 10.5). */
   equivalence_measured?: Measured | null;
+  /** Record 55 ruling 22 (b): the newest certificate naming it, on a sealed sample or citing its graded run. */
+  certificate?: Certificate | null;
+}
+
+/** The graded run a certificate cites instead of a sample sealed in the registry (record 55 ruling 22 b). */
+export interface Citation {
+  run: string;
+  manifest_sha256: string;
+  plan_commit: string;
+  model_digest: string;
+  plan?: string | null;
+  equivalence?: { run: string; manifest_sha256: string; class: string } | null;
+}
+
+/** A recorded certificate as the engine answers it (GET /api/certificates, and a model's `certificate`). */
+export interface Certificate {
+  id: number;
+  sample: string;
+  model_ids: number[];
+  result: Json;
+  created_by: string;
+  created_at: string;
+  cites?: "sample" | "evidence";
+  evidence?: Citation | null;
+  unseals?: boolean;
+  /** What it certified, in a line, as the engine says it. */
+  words?: string;
 }
 
 /** The CPU and GPU equivalence an admission measured. */
@@ -132,7 +161,97 @@ export const models = {
   /** Choose a model for its task and slot, or with model null go back to the default. */
   choose: (body: { model: number; why?: string } | { task: string; slot: string; model: null; why?: string }) => door<TaskEntry>("POST", "/api/models/choose", body),
   runs: (limit = 50) => door<{ runs: RunRow[] }>("GET", `/api/pipeline-runs?limit=${limit}`),
+  /** Record a certificate (record 48 R2; record 55 ruling 22 b): a person's act under their own sign-in. */
+  certify: (body: Json) => door<Certificate>("POST", "/api/certificates", body),
 };
+
+/** Whether a person may record a certificate here: models:work, where the engine serves the door. */
+export function certifyAct(caps: Capabilities): boolean {
+  return may(caps, "models:work") && served(caps, "POST /api/certificates");
+}
+
+/** The fields of Record a certificate, as typed. */
+export interface CertifyForm {
+  run: string;
+  manifest: string;
+  commit: string;
+  bar: string;
+  n: string;
+  errors: string;
+  bound: string;
+  coverage: string;
+  test: string;
+  claim: string;
+  /** The run that showed a repackaged artifact answers as the graded one did, where there is one. */
+  eqRun: string;
+  eqManifest: string;
+  eqClass: string;
+}
+
+export const EMPTY_FORM: CertifyForm = { run: "", manifest: "", commit: "", bar: "0.01", n: "", errors: "", bound: "", coverage: "", test: "", claim: "", eqRun: "", eqManifest: "", eqClass: "" };
+
+const HEX = /^[0-9a-f]+$/u;
+const RUN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
+
+/** A manifest's sha256 as the engine keeps it, or none where it is not one. */
+function manifestHash(text: string): string | null {
+  const sha = text.trim().toLowerCase().replace(/^sha256:/u, "");
+  return sha.length === 64 && HEX.test(sha) ? `sha256:${sha}` : null;
+}
+
+
+/** The door's body for a certificate citing a graded run of this model, or the fields still wrong. The engine checks the rest, the bound against the counts among them. */
+export function citeBody(m: Pick<Model, "id" | "digest">, f: CertifyForm): { body: Json } | { wrong: string[] } {
+  const wrong: string[] = [];
+  const run = f.run.trim();
+  if (!RUN.test(run)) wrong.push("run");
+  const sha = manifestHash(f.manifest);
+  if (sha === null) wrong.push("manifest sha256");
+  const commit = f.commit.trim().toLowerCase();
+  if (commit.length < 7 || commit.length > 40 || !HEX.test(commit)) wrong.push("plan commit");
+  const num = (s: string) => (s.trim() === "" ? null : Number(s.trim()));
+  const bar = num(f.bar);
+  if (bar === null || !Number.isFinite(bar) || bar <= 0 || bar >= 1) wrong.push("bar");
+  const n = num(f.n);
+  if (n === null || !Number.isInteger(n) || n <= 0) wrong.push("graded");
+  const errors = num(f.errors);
+  if (errors === null || !Number.isInteger(errors) || errors < 0 || (n !== null && errors > n)) wrong.push("wrong");
+  const bound = num(f.bound);
+  if (bound !== null && !Number.isFinite(bound)) wrong.push("bound");
+  const coverage = num(f.coverage);
+  if (coverage !== null && (!Number.isFinite(coverage) || coverage < 0 || coverage > 1)) wrong.push("coverage");
+  const served = f.eqRun.trim() !== "" || f.eqManifest.trim() !== "" || f.eqClass.trim() !== "";
+  const eqSha = manifestHash(f.eqManifest);
+  if (served) {
+    if (!RUN.test(f.eqRun.trim())) wrong.push("served as run");
+    if (eqSha === null) wrong.push("served as sha256");
+    if (!["I", "II", "III"].includes(f.eqClass.trim())) wrong.push("class");
+  }
+  if (wrong.length > 0) return { wrong };
+  const result: Json = { bar, n, errors };
+  if (bound !== null) result.bound = bound;
+  if (coverage !== null) result.coverage = coverage;
+  if (f.test.trim() !== "") result.test = f.test.trim();
+  if (f.claim.trim() !== "") result.claim = f.claim.trim();
+  const evidence: Json = { run, manifest_sha256: sha, plan_commit: commit, model_digest: m.digest };
+  if (served) evidence.equivalence = { run: f.eqRun.trim(), manifest_sha256: eqSha, class: f.eqClass.trim() };
+  return { body: { models: [m.id], evidence, result } };
+}
+
+/** A share as a percentage for a line. */
+export function percentWords(share: unknown): string {
+  if (typeof share !== "number" || !Number.isFinite(share)) return "?";
+  const p = share * 100;
+  return `${p.toLocaleString("en-US", { maximumFractionDigits: p >= 10 ? 1 : p >= 1 ? 2 : 3 })} %`;
+}
+
+/** What a certificate certified, in a few words for a card: the run it cites or the sample it measured, and its numbers. */
+export function certifiedWords(c: Certificate): string {
+  const r = c.result ?? {};
+  const counts = typeof r.errors === "number" && typeof r.n === "number" ? `${r.errors.toLocaleString("en-US")} of ${r.n.toLocaleString("en-US")} wrong` : "";
+  if (c.evidence) return [c.evidence.run, counts, typeof r.bound === "number" ? `bound ${percentWords(r.bound)}` : ""].filter(Boolean).join(" · ");
+  return [c.sample, counts, typeof r.risk === "number" ? `risk ${percentWords(r.risk)}` : ""].filter(Boolean).join(" · ");
+}
 
 const STATES: ModelState[] = ["promoted", "admitted", "registered", "retired"];
 

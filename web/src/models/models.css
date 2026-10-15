@@ -15,3 +15,6 @@ dl.facts.card-facts { gap: 0.2rem 0.8rem; font-size: var(--n-text-size-small); }
 .warn-text { color: var(--n-caution-fg); }
 .claims { display: grid; gap: 0.25rem; margin: 0; padding: 0; list-style: none; }
 .claims li { overflow-wrap: anywhere; }
+.cite-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 11rem), 1fr)); gap: 0.5rem 0.7rem; }
+.cite-fields .field { display: grid; gap: 0.2rem; min-width: 0; margin: 0; }
+.cite-fields .field.wide { grid-column: 1 / -1; }
