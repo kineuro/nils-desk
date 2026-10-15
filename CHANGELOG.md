@@ -9,6 +9,13 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 - Record a certificate (record 55, ruling 22 b). A model's page under Pipelines, Models, offers Record a certificate to a person with models:work where the engine serves `POST /api/certificates`: the graded run that measured the model (the run, the sha256 of its manifest, the commit that registered the plan, the bar, how many stacks it graded and how many were wrong, with the bound, the coverage, the test and the claim where known), for the model's own artifact digest. It is the person's own act under their sign-in and unseals nothing, so no second person is needed; the engine works the bound out again from the counts and its refusal shows in its words. A model's card says what certified it, the graded run or the sealed sample with its numbers, or that no certificate names it, and its page shows the certificate: the run, its manifest, the plan's commit, the artifact, the run that showed a repackaged artifact answers the same, and what it found. On an engine that does not say, the card leaves the line out.
 
+
+### Changed
+
+- An admin has full access to anything (record 55, ruling 24). Whoever may change people and groups (People at work) is resolved to every grant and every detail, campaigns and models included, whatever the group that made them an admin was made with, with nothing to grant to themselves; a sealed sample stays sealed, since its grant is in no set. The person's form draws an admin with every page at its top and every detail, nothing to choose, and says so in one line; People at work reads "admin: everything, every detail".
+- Every page, every setting or everything is given at once from a person's or a group's form.
+- Standing grants speak plain words, grouped by page (record 55, ruling 24): each says what it lets the assistant do ("Bring in identifier maps", "Change places", "Run pipelines on datasets"), under the page it belongs to, campaigns among them, with Give and Revoke per action, Give all per page and Give everything. No engine door reaches the screen, on Standing grants or on Plans waiting, where a held step's reason names no door either. An admin is told the assistant may do everything they may, with nothing to give.
+
 ## [1.0.0-alpha.64] - 2026-10-14
 
 Fixes found on the first dataset read on a site after the beta, for engine 1.0.0-alpha.81 (and older engines, which fall back): an acquisition's own images sit in its family's box, and a file count that stopped short says so.

@@ -283,7 +283,9 @@ describe("the Assistant's ladder pages", () => {
     act(() => root.render(<PlansPage caps={assistantCaps()} />));
     await settle();
     expect(host.textContent).toContain("To confirm · 1");
-    expect(host.textContent).toContain("no standing grant for POST /api/jobs");
+    // record 55, ruling 24: a held step says why in words; the door an older assistant named is not shown
+    expect(host.textContent).toContain("no standing grant for this step");
+    expect(host.textContent).not.toMatch(/\/api\//u);
     expect(host.querySelector('a[href="#assistant/c3"]')?.textContent).toBe("Decide in its conversation");
     click(button(host, "Confirm"));
     await settle();
@@ -291,31 +293,49 @@ describe("the Assistant's ladder pages", () => {
     expect(host.textContent).toContain("Confirmed: Every Monday, sort what came in");
   });
 
-  it("Standing grants revokes one and gives another from the doors the ladder offers", async () => {
+  it("Standing grants shows each grant in words under its page, revokes one, and gives one, a page or everything", async () => {
     const grants = {
       subject: "astrid",
-      grants: [{ id: 4, subject: "astrid", door: "POST /api/jobs", created_at: "2026-10-01T08:00:00Z", revoked_at: null }],
+      grants: [{ id: 4, subject: "astrid", door: "POST /api/jobs", page: "data", words: "Read, sort, pseudonymise and bring in data", created_at: "2026-10-01T08:00:00Z", revoked_at: null }],
       ladder: [
-        { door: "POST /api/jobs", rung: 2, role: "operator" },
-        { door: "POST /api/ask/run", rung: 2, role: "reader" },
-        { door: "POST /api/linkage/merge", rung: 3, role: "admin" },
+        { door: "POST /api/jobs", rung: 2, role: null, page: "data", words: "Read, sort, pseudonymise and bring in data" },
+        { door: "POST /api/linkage/merge", rung: 3, role: null, page: "data", words: "Merge two subjects" },
+      ],
+      offer: [
+        { page: "data", title: "Data", actions: [{ door: "POST /api/jobs", words: "Read, sort, pseudonymise and bring in data" }, { door: "POST /api/linkage/imports", words: "Bring in identifier maps" }] },
+        { page: "campaigns", title: "Campaigns", actions: [{ door: "POST /api/campaigns/{id}/raters", words: "Change a campaign's raters" }] },
       ],
     };
     const e = engine((c) => {
-      if (c.url === "/assistant/grants") return c.method === "POST" ? { status: 201, body: { id: 5, subject: "astrid", door: "POST /api/ask/run", created_at: "2026-10-13T09:00:00Z" } } : { status: 200, body: grants };
+      if (c.url === "/assistant/grants") return c.method === "POST" ? { status: 201, body: { id: 5, subject: "astrid", door: "x", created_at: "2026-10-13T09:00:00Z" } } : { status: 200, body: grants };
       if (c.url === "/assistant/grants/4") return { status: 200, body: { id: 4, door: "POST /api/jobs", revoked_at: "2026-10-13T09:00:00Z" } };
       return undefined;
     });
     act(() => root.render(<GrantsPage caps={assistantCaps()} />));
     await settle();
-    // a rung-three door is never offered, nor one that stands already
-    const offered = [...(host.querySelector("select")?.options ?? [])].map((o) => o.value);
-    expect(offered).toEqual(["POST /api/ask/run"]);
-    click(button(host, "Revoke POST /api/jobs"));
+    // in words, under its page; campaigns are a page like the others; no door, and no rung-three action offered
+    expect([...host.querySelectorAll("h2")].map((h) => h.textContent)).toEqual(["Everything", "Data", "Campaigns"]);
+    expect(host.textContent).toContain("Bring in identifier maps");
+    expect(host.textContent).toContain("Change a campaign's raters");
+    expect(host.textContent).not.toContain("Merge two subjects");
+    expect(host.textContent).not.toMatch(/\/api\/|POST|PUT/u);
+    click(button(host, "Revoke Read, sort, pseudonymise and bring in data"));
     await settle();
     expect(e.of("DELETE", "/assistant/grants/4")).toHaveLength(1);
-    click(button(host, "Give it"));
+    click(button(host, "Give Bring in identifier maps"));
     await settle();
-    expect(e.of("POST", "/assistant/grants")[0].body).toEqual({ door: "POST /api/ask/run" });
+    click(button(host, "Give all of Campaigns"));
+    await settle();
+    click(button(host, "Give everything"));
+    await settle();
+    expect(e.of("POST", "/assistant/grants").map((c) => c.body)).toEqual([{ door: "POST /api/linkage/imports" }, { page: "campaigns" }, { all: true }]);
+  });
+
+  it("Standing grants tells an admin there is nothing to give", async () => {
+    engine((c) => (c.url === "/assistant/grants" ? { status: 200, body: { subject: "astrid", admin: true, grants: [], ladder: [], offer: [{ page: "data", title: "Data", actions: [{ door: "POST /api/jobs", words: "Read, sort, pseudonymise and bring in data" }] }] } } : undefined));
+    act(() => root.render(<GrantsPage caps={assistantCaps()} />));
+    await settle();
+    expect(host.textContent).toContain("You are an admin. The assistant may do everything you may; nothing to give.");
+    expect(host.querySelectorAll("button.button").length).toBe(0);
   });
 });

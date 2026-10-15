@@ -74,6 +74,8 @@ describe("changing a person", () => {
     expect(lineOf(html, "Language models")).toContain('<span class="what">Stations and models · work: models, keys, stations · <span class="from own">own</span></span>');
     expect(lineOf(html, "Release")).toContain('<span class="what">Releases made · work: make and hand over</span>');
     expect(html).toContain('<b>Settings</b></div>');
+    // record 55, ruling 24: an area is given at once
+    expect(html).toContain('<div class="row area-row" role="group" aria-label="Give at once">');
   });
 
   it("locks the levels below what a group gives, and says on hover which group gives them", () => {
@@ -140,5 +142,30 @@ describe("a group", () => {
     expect(html).toContain("<p>People in Data team see Query, Data and Release, work in Query, Data and Release, without identifying details.</p>");
     expect(html).toMatch(/<button type="button" class="button">Save<\/button>/u);
     expect(html).toContain("Remove the group");
+  });
+});
+
+describe("an admin, and an area at once (record 55, ruling 24)", () => {
+  const admins: Group = { id: 3, name: "Old admins", grants: ["identity:see", "identity:work", "data:work"], detail: "quasi", follows: [], members: ["nima"] };
+  const nima: Person = { ...erik, subject: "nima", display: "Nima", groups: [3], grants: [], access: { grants: [], detail: "sensitive" } };
+
+  it("draws an admin with every page at its top and every detail, nothing to choose, whatever their group gave", () => {
+    const html = renderToStaticMarkup(<PersonForm mode="local" groups={[admins]} person={nima} taken={[]} onClose={none} onDone={none} />);
+    expect(html).toContain("<b>Admin</b>");
+    expect(html).toContain("Every page, every detail. Nothing to give.");
+    expect(html).toContain("<p>Nima is an admin: every page, every detail.</p>");
+    // campaigns at work, the records at Everything, and the levels below locked
+    expect(lineOf(html, "Campaigns")).toMatch(/<button type="button" class="on" aria-pressed="true">Work<\/button>/u);
+    expect(lineOf(html, "Campaigns")).toMatch(/<button type="button" class="locked" aria-pressed="false" disabled="" title="an admin holds everything">See<\/button>/u);
+    expect(html).toMatch(/aria-pressed="true"[^>]*>Everything<\/button>/u);
+    expect(html).not.toContain(">Every page<");
+  });
+
+  it("offers every page, every setting and everything at once to whoever is no admin", () => {
+    const html = renderToStaticMarkup(<GroupForm mode="local" group={null} groups={[]} members={0} onClose={none} onDone={none} />);
+    expect(html).toContain(">Every page</button>");
+    expect(html).toContain(">Everything</button>");
+    expect(html).toContain(">Every setting</button>");
+    expect(lineOf(html, "People")).toContain("work: admin: everything, every detail");
   });
 });

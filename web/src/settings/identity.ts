@@ -174,15 +174,15 @@ export const PAGE_LINES: readonly PageLine[] = [
   { id: "data", title: "Data", mark: "Data", named: "Data", settings: false, levels: SEE_WORK, see: "Datasets, cohorts and Browse", work: "add datasets, pseudonymise, read, sort" },
   { id: "review", title: "Review", mark: "Review", named: "Review", settings: false, levels: SEE_WORK, see: "What waits for a person", work: "decide, tune rules" },
   { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "Releases made", work: "make and hand over" },
-  { id: "pipelines", title: "Pipelines", mark: "Pipelines", named: "Pipelines", settings: false, levels: SEE_WORK, see: "Jobs, catalog, runs, logs", work: "start and cancel runs" },
+  { id: "pipelines", title: "Pipelines", mark: "Pipelines", named: "Pipelines", settings: false, levels: SEE_WORK, see: "Jobs, catalog, runs, logs", work: "run pipelines, cancel runs" },
   { id: "models", title: "Models", mark: "Models", named: "Models", settings: false, levels: SEE_WORK, see: "Models, under Pipelines", work: "register, admit, choose" },
   { id: "campaigns", title: "Campaigns", mark: "Campaigns", named: "Campaigns", settings: false, levels: SEE_WORK, see: "Campaigns, in Review", work: "claim, answer, export" },
   { id: "install", title: "The install", mark: "Install", named: "the install", settings: true, levels: SEE_WORK, see: "Overview, parts, setup", work: "restart, update" },
   { id: "kvasir", title: "Language models", mark: "Language models", named: "Language models", settings: true, levels: SEE_WORK, see: "Stations and models", work: "models, keys, stations" },
-  { id: "assistant-settings", title: "The assistant's settings", mark: "Assistant settings", named: "the assistant's settings", settings: true, levels: SEE_WORK, see: "Reach and memory", work: "instructions, standing grants" },
-  { id: "places", title: "Places", mark: "Places", named: "Places", settings: true, levels: SEE_WORK, see: "Scan and export places", work: "add, change" },
+  { id: "assistant-settings", title: "The assistant's settings", mark: "Assistant settings", named: "the assistant's settings", settings: true, levels: SEE_WORK, see: "Reach and memory", work: "instructions, everyone's standing grants" },
+  { id: "places", title: "Places", mark: "Places", named: "Places", settings: true, levels: SEE_WORK, see: "Scan and export places", work: "add and change places" },
   { id: "database", title: "Backups", mark: "Backups", named: "Backups", settings: true, levels: SEE_WORK, see: "Archives and schedule", work: "back up, check" },
-  { id: "identity", title: "People", mark: "People", named: "People", settings: true, levels: SEE_WORK, see: "People and groups", work: "add, change" },
+  { id: "identity", title: "People", mark: "People", named: "People", settings: true, levels: SEE_WORK, see: "People and groups", work: "admin: everything, every detail" },
   { id: "audit", title: "Audit", mark: "Audit", named: "Audit", settings: true, levels: ["hidden", "see"], see: "Who did what, when" },
 ];
 
@@ -194,6 +194,28 @@ export const RECORD_WORDS: Record<Detail, { choice: string; short: string; says:
   quasi: { choice: "With identifying details", short: "Identifying", says: "Dates, subject codes, sex and age, scanner names and series and protocol descriptions.", phrase: "with identifying details" },
   sensitive: { choice: "Everything", short: "Everything", says: "Identifying details, sensitive events, raw identifiers and burned-in annotation.", phrase: "with every detail" },
 };
+
+/**
+ * Record 55, ruling 24: an admin has full access to anything. Work on People (changing people and groups) makes a
+ * person an admin, who holds every page at its top and every detail, with nothing to grant to themselves; the desk
+ * resolves them so.
+ */
+export function isAdminLevels(levels: Partial<Levels>): boolean {
+  return levels.identity === "work";
+}
+
+/** Every page at its top: what an admin holds, and what "Everything" gives. */
+export function topLevels(only?: "pages" | "settings"): Levels {
+  return Object.fromEntries(
+    PAGE_LINES.map((l) => [l.id, only === undefined || l.settings === (only === "settings") ? l.levels[l.levels.length - 1] : "hidden"]),
+  ) as Levels;
+}
+
+/** Levels with one area (the pages, or the settings) raised to its top, the rest kept. */
+export function raiseArea(levels: Levels, area: "pages" | "settings" | "all"): Levels {
+  const top = topLevels();
+  return Object.fromEntries(PAGE_LINES.map((l) => [l.id, area === "all" || l.settings === (area === "settings") ? top[l.id] : levels[l.id]])) as Levels;
+}
 
 /** A page's words in the form: what seeing it opens, then what work adds. */
 export function lineWords(line: PageLine): string {
@@ -395,6 +417,8 @@ export function summaryWords(s: Summary): string {
   const person = s.kind === "person";
   const name = s.name.trim();
   const who = person ? name || "This person" : `People in ${name || "this group"}`;
+  // record 55, ruling 24: an admin holds everything
+  if (s.grants.includes("identity:work")) return `${who} ${person ? "is an admin" : "are admins"}: every page, every detail.`;
   const [sees, works] = person ? ["sees", "works"] : ["see", "work"];
   const open = PAGE_LINES.filter((l) => levelOf(s.grants, l) !== "hidden").map((l) => l.named);
   if (open.length === 0) return `${who} ${sees} no page yet.`;

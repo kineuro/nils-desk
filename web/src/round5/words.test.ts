@@ -10,7 +10,7 @@
 // them.
 
 import { describe, expect, it } from "vitest";
-import { ladderPages, grantable, standing, waitingCount, waitingPlans } from "../assistant/ladder";
+import { ladderPages, grantPages, grantWords, plainReason, standing, waitingCount, waitingPlans } from "../assistant/ladder";
 import type { Capabilities } from "../capabilities";
 import type { Release } from "../data/cohorts";
 import type { Place } from "../objects/client";
@@ -94,26 +94,44 @@ describe("the Assistant's ladder", () => {
     expect(assistantPages([], { plans: true, grants: true }).map((p) => p.title)).toEqual(["New conversation", "All conversations", "Shared", "Memory", "Plans waiting", "Standing grants"]);
     expect(assistantPages([]).map((p) => p.id)).toEqual(["new", "all", "shared", "memory"]);
   });
-  it("counts what waits, and offers only rung-two doors not standing", () => {
+  it("counts what waits, and shows standing grants and what may be given in words, by page, never a door", () => {
     const inbox = { subject: "a", jobs: { queued: [], running: [], finished: [], failed: [] }, waiting: [{}], plans: [{ state: "proposed" }, { state: "confirmed" }], proposals: [{}, {}], grants: [] } as never;
     expect(waitingPlans(inbox)).toHaveLength(1);
     expect(waitingCount(inbox)).toBe(4);
     const g = {
       subject: "a",
       grants: [
-        { id: 1, subject: "a", door: "POST /api/jobs", created_at: "2026-10-01", revoked_at: null },
-        { id: 2, subject: "a", door: "POST /api/ask/run", created_at: "2026-10-02", revoked_at: "2026-10-03" },
+        { id: 1, subject: "a", door: "POST /api/jobs", page: "data", words: "Read, sort, pseudonymise and bring in data", created_at: "2026-10-01", revoked_at: null },
+        { id: 2, subject: "a", door: "POST /api/ask/run", page: "query", words: "Run questions", created_at: "2026-10-02", revoked_at: "2026-10-03" },
         { id: 3, subject: "b", door: "POST /api/select", created_at: "2026-10-04", revoked_at: null },
+        { id: 5, subject: "a", door: "page:campaigns", page: "campaigns", words: "Everything on Campaigns", created_at: "2026-10-05", revoked_at: null },
+        // an older assistant's grant, kept by its door alone
+        { id: 6, subject: "a", door: "PUT /api/places/{id}", created_at: "2026-09-30", revoked_at: null },
       ],
-      ladder: [
-        { door: "POST /api/jobs", rung: 2 as const, role: "operator" },
-        { door: "POST /api/ask/run", rung: 2 as const, role: "reader" },
-        { door: "POST /api/select", rung: 2 as const, role: "reader" },
-        { door: "POST /api/linkage/merge", rung: 3 as const, role: "admin" },
+      ladder: [],
+      offer: [
+        { page: "campaigns", title: "Campaigns", actions: [{ door: "POST /api/campaigns/{id}/raters", words: "Change a campaign's raters" }] },
+        { page: "data", title: "Data", actions: [{ door: "POST /api/jobs", words: "Read, sort, pseudonymise and bring in data" }, { door: "POST /api/linkage/imports", words: "Bring in identifier maps" }] },
       ],
     };
-    expect(grantable(g).map((x) => x.door)).toEqual(["POST /api/ask/run", "POST /api/select"]);
-    expect(standing(g.grants).now.map((x) => x.id)).toEqual([3, 1]);
+    const { everything, pages } = grantPages(g);
+    expect(everything).toBeNull();
+    // in the desk's order: Data before Campaigns, and an older grant under Other
+    expect(pages.map((p) => p.title)).toEqual(["Data", "Campaigns", "Other"]);
+    const data = pages[0];
+    expect(data.rows.map((r) => [r.words, r.grant?.id ?? null])).toEqual([
+      ["Read, sort, pseudonymise and bring in data", 1],
+      ["Bring in identifier maps", null],
+    ]);
+    // a page given whole stands for each of its actions
+    expect(pages[1].whole?.id).toBe(5);
+    expect(pages[1].rows[0].covered).toBe(true);
+    expect(pages[2].rows[0].words).toBe("An earlier grant");
+    expect(JSON.stringify(pages.map((p) => [p.title, p.rows.map((r) => r.words)]))).not.toMatch(/\/api\//u);
+    expect(grantWords({ door: "*" })).toBe("Everything the assistant may do for you");
+    expect(grantWords({ door: "page:data" })).toBe("Everything on Data");
+    expect(plainReason("no standing grant for POST /api/jobs; give one")).toBe("no standing grant for this step; give one");
+    expect(standing(g.grants).now.map((x) => x.id)).toEqual([5, 3, 1, 6]);
     expect(standing(g.grants).revoked.map((x) => x.id)).toEqual([2]);
   });
 });

@@ -149,8 +149,9 @@ export const assistant = {
     if (!r.ok) await fail(r);
     return (await r.json()) as Grants;
   },
-  grant: async (door: string): Promise<Grant> => {
-    const r = await fetch("/assistant/grants", { method: "POST", headers: H, body: JSON.stringify({ door }) });
+  /** One action by its kept door, a whole page, or everything at once (record 55, ruling 24). */
+  grant: async (what: { door: string } | { page: string } | { all: true }): Promise<Grant> => {
+    const r = await fetch("/assistant/grants", { method: "POST", headers: H, body: JSON.stringify(what) });
     if (!r.ok) await fail(r);
     return (await r.json()) as Grant;
   },
@@ -245,15 +246,31 @@ export interface Inbox {
 export interface Grant {
   id: number;
   subject: string;
+  /** The kept form: an engine door, `page:<id>` or `*`. Never shown. */
   door: string;
+  /** The page it sits under, null for everything; absent from an older assistant. */
+  page?: string | null;
+  /** What it lets the assistant do, in the desk's words; absent from an older assistant. */
+  words?: string;
   created_at: string;
   revoked_at?: string | null;
 }
 
+/** The actions a person may give on one page, in words (record 55, ruling 24). */
+export interface Offer {
+  page: string;
+  title: string;
+  actions: { door: string; words: string }[];
+}
+
 export interface Grants {
   subject: string;
+  /** Record 55, ruling 24: an admin holds everything and needs no standing grant. */
+  admin?: boolean;
   grants: Grant[];
-  ladder: { door: string; rung: 1 | 2 | 3; role: string }[];
+  ladder: { door: string; rung: 1 | 2 | 3; role?: string | null; page?: string; words?: string }[];
+  /** What this person may give, by page; absent from an older assistant. */
+  offer?: Offer[];
 }
 
 export interface Delegation {

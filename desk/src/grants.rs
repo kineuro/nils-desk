@@ -181,6 +181,15 @@ impl Access {
     }
 }
 
+/// The grant that makes a person an admin: who may change people and groups
+/// holds everything (record 55, ruling 24).
+pub const ADMIN_GRANT: &str = "identity:work";
+
+/// Whether this access is an admin's.
+pub fn is_admin(access: &Access) -> bool {
+    access.holds(ADMIN_GRANT)
+}
+
 pub fn is_grant(s: &str) -> bool {
     GRANTS.contains(&s)
 }

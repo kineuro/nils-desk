@@ -412,3 +412,82 @@ fn no_change_leaves_nobody_who_may_change_people_and_groups() {
         Err(Refused::Nobody)
     );
 }
+
+/// Record 55, ruling 24: an admin has full access to anything. Whoever may
+/// change people and groups holds every page, grant and detail, campaigns
+/// and models included, whatever the group that made them an admin was made
+/// with (an Admins group from before campaigns were a page), with nothing to
+/// grant to themselves; the sealed grant stays in no set. Everyone else holds
+/// what their groups and their own grants add up to, and no more.
+#[test]
+fn an_admin_holds_everything_and_no_one_else_does() {
+    let (store, _dir) = fresh();
+    // an admins group frozen before campaigns and models were pages, at detail quasi
+    let old = store
+        .change(
+            false,
+            Change::GroupAdd {
+                name: "Old admins".into(),
+                access: Access::new(
+                    ["identity:work", "data:work", "assistant:use"],
+                    Detail::Quasi,
+                ),
+                follows: Vec::new(),
+            },
+        )
+        .unwrap()
+        .unwrap();
+    let readers = id_of(&store, "Readers");
+    store.user_add("nima", "not a hash", "Nima").unwrap();
+    store.user_add("erik", "not a hash", "Erik").unwrap();
+    store
+        .change(
+            false,
+            Change::Access {
+                subject: "nima".into(),
+                groups: vec![old],
+                grants: BTreeSet::new(),
+                detail: None,
+            },
+        )
+        .unwrap();
+    store
+        .change(
+            false,
+            Change::Access {
+                subject: "erik".into(),
+                groups: vec![readers],
+                grants: grant_set(&["campaigns:work"]),
+                detail: None,
+            },
+        )
+        .unwrap();
+    let book = store.book();
+    let admin = book.resolve("nima", None).access;
+    assert_eq!(admin, Access::everything());
+    for g in [
+        "campaigns:work",
+        "models:work",
+        "assistant:use",
+        "identity:work",
+        "audit:see",
+    ] {
+        assert!(admin.holds(g), "{g}");
+    }
+    assert_eq!(admin.detail, Detail::Sensitive);
+    assert!(!admin.holds("sealed:see"), "a sealed sample stays sealed");
+    // a person who is no admin holds what was given, and no more
+    let erik = book.resolve("erik", None).access;
+    assert!(erik.holds("campaigns:work") && erik.holds("query:work"));
+    assert!(!erik.holds("data:work") && !erik.holds("identity:work"));
+    assert_eq!(erik.detail, Detail::Plain);
+    // under oidc an admin role from the provider is an admin too
+    let claims = Claims {
+        roles: vec!["admin".into()],
+        ..Claims::default()
+    };
+    assert_eq!(
+        book.resolve("ola", Some(&claims)).access,
+        Access::everything()
+    );
+}
