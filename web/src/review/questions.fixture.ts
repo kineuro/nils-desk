@@ -32,7 +32,7 @@ export const LIST: Json = {
 export function picture(stack: number): string {
   const r = 30 + (stack * 7) % 30;
   const g = 90 + (stack * 37) % 120;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="black"/><ellipse cx="64" cy="64" rx="${r}" ry="${r + 14}" fill="rgb(${g},${g},${g})"/><ellipse cx="64" cy="60" rx="${Math.round(r / 3)}" ry="${Math.round(r / 2)}" fill="rgb(${g - 50},${g - 50},${g - 50})"/></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128"><rect width="128" height="128" fill="black"/><ellipse cx="64" cy="64" rx="${r}" ry="${r + 14}" fill="white" fill-opacity="${(g / 255).toFixed(3)}"/><ellipse cx="64" cy="60" rx="${Math.round(r / 3)}" ry="${Math.round(r / 2)}" fill="black" fill-opacity="${(50 / g).toFixed(3)}"/></svg>`;
   return `data:image/svg+xml;base64,${typeof btoa === "function" ? btoa(svg) : Buffer.from(svg).toString("base64")}`;
 }
 
