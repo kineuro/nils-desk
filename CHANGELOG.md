@@ -6,6 +6,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Fixed
 
+- The engine's standing workers (`worker`, `picture-worker`, `pipeline-worker`) no longer count as jobs in progress on Pipelines or Data; they show apart as one line, "Workers: 3 ready", that opens to each worker's kind and last heartbeat, and a worker silent for two minutes shows as not answering.
 - A model's Certified section draws a citation that lacks a field, or holds one that is not text, as `?` instead of failing the page; Record a certificate takes the graded and wrong counts as digits only (no sign, hex, exponent or point), and the bar, the bound and the coverage as plain decimals (no sign, exponent, hex or Infinity), the bound between 0 and 1; a citation's fields are read as whatever the engine sent. The line that says a model was certified reads the graded run the same way, so a run that is not text no longer shows as `[object Object]` or a number.
 
 ### Added
