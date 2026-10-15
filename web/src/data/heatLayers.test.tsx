@@ -127,4 +127,102 @@ describe("the heatmap with a layer", () => {
     expect(host.querySelectorAll(".heat-cell.layered")).toHaveLength(0);
     expect(host.querySelectorAll(".heat-cell.picked").length).toBeGreaterThan(0);
   });
+
+  /** A heatmap over a fetch that answers each picks page as `answer` says, the cohort's door with `step`, and keeps what it was asked. */
+  async function drawn(answer: (url: URL) => Promise<unknown> | unknown, step?: () => unknown) {
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+      asked.push(`${init?.method ?? "GET"} ${url}`);
+      const u = new URL(url, "http://desk.test");
+      if (u.pathname === "/api/cohorts/north") return new Response(JSON.stringify({ name: "north", steps: [step?.()] }), { status: 200 });
+      return new Response(JSON.stringify(await answer(u)), { status: 200 });
+    });
+    const caps = capsWith(["GET /api/cohorts/{name}/picks", "POST /api/cohorts/{name}/steps/{step}/run"], [...GRANTS] as Grant[]);
+    const r = createRoot(host);
+    root = r;
+    await act(async () => r.render(<HeatMap cohort="north" caps={caps} />));
+    for (let i = 0; i < 20 && !host.querySelector(".heat-row"); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+    return asked;
+  }
+
+  const paged = (layer: string | null, after: string | null) => {
+    const a = answer(layer);
+    return after === null ? { ...a, subjects: a.subjects.slice(0, 1), next: 1 } : { ...a, subjects: a.subjects.slice(1), next: null };
+  };
+
+  it("clears the page when the layer changes, so neither the last layer's rows nor a false note show while it is read", async () => {
+    let hold: (() => void) | null = null;
+    await drawn((u) => {
+      const layer = u.searchParams.get("layer");
+      if (layer === null) return answer(null);
+      return new Promise((res) => {
+        hold = () => res(answer(layer));
+      });
+    });
+    expect(host.querySelectorAll(".heat-row")).toHaveLength(2);
+    const keys = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Layer"] button')];
+    await act(async () => keys[1].click());
+    expect(host.querySelectorAll(".heat-row")).toHaveLength(0);
+    expect(host.textContent).not.toContain("does not draw layers");
+    expect(host.textContent).toContain("Reading the main scans.");
+    await act(async () => hold?.());
+    for (let i = 0; i < 20 && !host.querySelector(".heat-cell.layered"); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+    expect(host.querySelectorAll(".heat-row")).toHaveLength(2);
+  });
+
+  it("appends a later page only to the reading it was asked for, never another layer's", async () => {
+    let hold: (() => void) | null = null;
+    await drawn((u) => {
+      const layer = u.searchParams.get("layer");
+      const after = u.searchParams.get("after");
+      if (after !== null && layer === null)
+        return new Promise((res) => {
+          hold = () => res(paged(null, after));
+        });
+      return paged(layer, after);
+    });
+    expect(host.querySelectorAll(".heat-row")).toHaveLength(1);
+    const more = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "More subjects")!;
+    await act(async () => more.click());
+    // the layer changes while the picks' next page is on its way
+    const keys = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Layer"] button')];
+    await act(async () => keys[1].click());
+    for (let i = 0; i < 20 && !host.querySelector(".heat-cell.layered"); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+    await act(async () => hold?.());
+    await act(async () => new Promise((res) => setTimeout(res, 20)));
+    expect(host.querySelectorAll(".heat-row")).toHaveLength(1);
+    expect(host.querySelectorAll(".heat-cell:not(.layered)").length).toBe(0);
+  });
+
+  it("reads the step alone again while it runs, and keeps the pages read with More", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const running = { ...STEP, state: "running", progress: { done: 1, total: 4 } };
+      const asked = await drawn(
+        (u) => {
+          const a = paged(u.searchParams.get("layer"), u.searchParams.get("after"));
+          return "layer" in a && a.layer ? { ...a, layer: { ...a.layer, step: running } } : a;
+        },
+        () => running,
+      );
+      const keys = [...host.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Layer"] button')];
+      await act(async () => keys[1].click());
+      for (let i = 0; i < 20 && !host.querySelector(".heat-cell.layered"); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      const more = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "More subjects")!;
+      await act(async () => more.click());
+      for (let i = 0; i < 20 && host.querySelectorAll(".heat-row").length < 2; i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      expect(host.querySelectorAll(".heat-row")).toHaveLength(2);
+      const pages = asked.filter((a) => a.includes("/picks")).length;
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      for (let i = 0; i < 20 && !asked.some((a) => a.endsWith("/api/cohorts/north")); i++) await act(async () => new Promise((res) => setTimeout(res, 5)));
+      expect(asked.some((a) => a === "GET /api/cohorts/north")).toBe(true);
+      expect(asked.filter((a) => a.includes("/picks")).length).toBe(pages);
+      expect(host.querySelectorAll(".heat-row")).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
+

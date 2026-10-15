@@ -752,7 +752,7 @@ export const LAYERS: { key: Layer | null; words: string }[] = [
   { key: "post_contrast", words: "Post-contrast" },
 ];
 
-const isLayer = (v: unknown): v is Layer => v === "body_region" || v === "body_part" || v === "post_contrast";
+export const isLayer = (v: unknown): v is Layer => v === "body_region" || v === "body_part" || v === "post_contrast";
 
 /** A layer's values in the order they are read, each with its words and its slot among the theme's value colours: the same value always the same colour (post-contrast as Data's grid colours contrast). */
 const LAYER_VALUES: Record<Layer, { value: string; words: string; slot: number }[]> = {
@@ -845,7 +845,7 @@ const operationOf = (layer: Layer, v: unknown): Operation => (v === "body_part" 
 const STEP_STATES = ["done", "running", "queued", "waiting", "off", "failed"];
 
 /** The step as the dataset's summary carries it, its state checked; null where the engine said none. */
-function stepOf(raw: unknown): SummaryStep | null {
+export function stepOf(raw: unknown): SummaryStep | null {
   const s = obj(raw);
   if (text(s.step) === null || !STEP_STATES.includes(text(s.state) ?? "")) return null;
   return s as unknown as SummaryStep;
@@ -925,7 +925,9 @@ export function layerStepWords(layer: Layer, scope: Scope, step: SummaryStep | n
       const answered = typeof step.answered === "number" ? step.answered : null;
       const of = typeof step.of === "number" ? step.of : null;
       const said = answered !== null && of !== null && of > 0 ? ` · ${n(answered)} of ${n(of)} answered` : "";
-      return { words: `${name} has run on ${what}${said}.`, ran: true };
+      // answers staged and not yet put in force are counted as answered but are no part of the layer until they are
+      const staged = typeof step.staged === "number" && step.staged > 0 ? ` · ${n(step.staged)} ${step.staged === 1 ? "answer waits" : "answers wait"} to be committed` : "";
+      return { words: `${name} has run on ${what}${said}${staged}.`, ran: true };
     }
     case "running":
       return { words: `${name} runs on ${what} now; the layer fills in as it answers.`, ran: false };
@@ -938,6 +940,39 @@ export function layerStepWords(layer: Layer, scope: Scope, step: SummaryStep | n
     default:
       return { words: `${name} has not run on ${what}.`, ran: false };
   }
+}
+
+/** The layer a person chose last in this tab under `key`; none where nothing is kept, or the browser keeps nothing. */
+export function keptLayer(key: string): Layer | null {
+  try {
+    const v = sessionStorage.getItem(key);
+    return isLayer(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Keep the layer chosen in this tab under `key`; a browser that keeps nothing keeps it for the page only. */
+export function keepLayer(key: string, l: Layer | null) {
+  try {
+    if (l) sessionStorage.setItem(key, l);
+    else sessionStorage.removeItem(key);
+  } catch {
+    // nothing kept
+  }
+}
+
+/**
+ * The step of a layer's operation over a dataset or cohort, read from the
+ * scope's own door (a dataset's summary, a cohort's document), which is
+ * light: while the step waits or runs a page asks this, not the map again.
+ */
+export function stepNow(scope: Scope, operation: Operation): Promise<SummaryStep | null> {
+  const path = scope.kind === "cohort" ? `/api/cohorts/${encodeURIComponent(scope.name)}` : `/api/datasets/${encodeURIComponent(scope.name)}/summary`;
+  return door<unknown>("GET", path).then((a) => {
+    const steps = obj(a).steps;
+    return (Array.isArray(steps) ? steps : []).map(stepOf).find((st) => st?.step === operation) ?? null;
+  });
 }
 
 // ---------------------------------------------------------------- the doors

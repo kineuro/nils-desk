@@ -11,7 +11,7 @@ import { door } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
-import { layerHeadOf, visitLayerOf, type Layer, type LayerHead, type VisitLayer } from "../review/mainScans";
+import { layerHeadOf, stepOf, visitLayerOf, type Layer, type LayerHead, type VisitLayer } from "../review/mainScans";
 import type { SummaryStep } from "./summary";
 
 export const PICKS_DOOR = "GET /api/cohorts/{name}/picks";
@@ -104,14 +104,9 @@ export function heatOf(a: Json): HeatPage {
   };
 }
 
-const STEP_STATES = ["done", "running", "queued", "waiting", "off", "failed"];
-
 function layerOf(raw: unknown): Pick<HeatPage, "layer"> {
   const head = layerHeadOf(raw);
-  if (!head) return {};
-  const st = obj(obj(raw).step);
-  const step = typeof st.step === "string" && STEP_STATES.includes(String(st.state)) ? (st as unknown as SummaryStep) : null;
-  return { layer: { ...head, step } };
+  return head ? { layer: { ...head, step: stepOf(obj(raw).step) } } : {};
 }
 
 export const picksDoors = {

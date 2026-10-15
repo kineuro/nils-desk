@@ -356,6 +356,8 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
   if (!subjects) return <Wait phase="reading the subjects" since={subjectsSince ?? Date.now()} size="panel" />;
   if (subjects.subjects.length === 0) return <p className="ms-none">No subject in this group.</p>;
   const slots = Math.max(1, ...subjects.subjects.map((s) => s.visits.length));
+  // the layer, where one is on and this answer is of it, as the strips check theirs
+  const mine = layer !== null && subjects.layer?.layer === layer;
   // a cell's list is about its column: a card names it first, and a visit in another dataset too names that one
   const here = group.by === "cell" ? group.column : null;
   return (
@@ -383,7 +385,7 @@ function Cards({ subjects, subjectsSince, subjectsBusy = false, subjectsWhy, slo
                 const others = othersOf(v, here);
                 const also = alsoWords(others);
                 // the layer, where one is on and this answer carries it
-                const on = layer !== null && v.layer !== null ? v.layer : null;
+                const on = mine && v.layer !== null ? v.layer : null;
                 const layered = on && layer ? `, ${layerName(layer).toLowerCase()} ${layerSaid(layer, on)}` : "";
                 return (
                   <button

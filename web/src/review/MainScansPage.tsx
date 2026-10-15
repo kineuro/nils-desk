@@ -21,6 +21,7 @@ import { cohorts as cohortsDoor } from "../data/cohorts";
 import { isRoot } from "../data/layout";
 import { sources } from "../data/sources";
 import { runControl, startedWords, stepRuns } from "../data/stepRun";
+import type { SummaryStep } from "../data/summary";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { ops } from "../ops/client";
@@ -33,7 +34,10 @@ import { review } from "./client";
 import {
   KEEP_ALIKE,
   MAP_DOOR,
+  keepLayer,
+  keptLayer,
   layerStepWords,
+  stepNow,
   mainScansMissing,
   MAP_STRIPS_DOOR,
   MAP_SUBJECTS_DOOR,
@@ -159,26 +163,7 @@ function keepDraft(s: ScopeOf | null, d: Draft | null) {
 
 const LAYER_KEY = "nils.mainScans.layer";
 
-/** The layer the person chose last in this tab; none where nothing is kept, or the browser keeps nothing. */
-function keptLayer(): Layer | null {
-  try {
-    const v = sessionStorage.getItem(LAYER_KEY);
-    return v === "body_region" || v === "body_part" || v === "post_contrast" ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-function keepLayer(l: Layer | null) {
-  try {
-    if (l) sessionStorage.setItem(LAYER_KEY, l);
-    else sessionStorage.removeItem(LAYER_KEY);
-  } catch {
-    // a browser that keeps nothing keeps the layer for this page only
-  }
-}
-
-/** How often the map is read again while the layer's step waits or runs, in milliseconds. */
+/** How often the layer's step is read again while it waits or runs, in milliseconds. */
 export const LAYER_POLL = 15_000;
 
 // ------------------------------------------------------------------ the chooser
@@ -337,15 +322,18 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   const [palettes, setPalettes] = useState<Record<string, string[]>>({});
   const [visit, setVisit] = useState<{ role: string; subject: MapSubject; visit: MapVisit } | null>(null);
   const [said, setSaid] = useState<string | null>(null);
-  const [layer, setLayerState] = useState<Layer | null>(keptLayer);
+  const [layer, setLayerState] = useState<Layer | null>(() => keptLayer(LAYER_KEY));
   const [layerSince, setLayerSince] = useState(() => Date.now());
   const [layerSaid, setLayerSaid] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  // the layer's step as its scope's own door said it last, while it waits or runs, for the layer and the map read it is about
+  const [stepTick, setStepTick] = useState(0);
+  const [liveStep, setLiveStep] = useState<{ layer: Layer | null; reload: number; step: SummaryStep; at: number } | null>(null);
   const setLayer = (l: Layer | null) => {
     setLayerState(l);
     setLayerSince(Date.now());
     setLayerSaid(null);
-    keepLayer(l);
+    keepLayer(LAYER_KEY, l);
   };
 
   const readRules = useCallback(
@@ -555,13 +543,32 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the draft is asked by what it says
   }, [caps, scope, shownRole, columns, settledKey, pending, reload, version, view, grow, layer]);
 
-  // while the layer's step waits its turn or runs over the scope, the map is read again now and then, so the layer fills in
-  const layerState = map.at === mapAt && map.load.kind === "ready" && map.load.value.layer?.layer === layer ? (map.load.value.layer?.step?.state ?? null) : null;
+  // while the layer's step waits its turn or runs over the scope, the step alone is read again now and then, from the scope's own
+  // door; once it is over, the map, its subjects and its strips are read again, once
+  const mapStep = map.at === mapAt && map.load.kind === "ready" && map.load.value.layer?.layer === layer ? (map.load.value.layer?.step ?? null) : null;
+  const liveNow = liveStep !== null && liveStep.layer === layer && liveStep.reload === reload ? liveStep.step : null;
+  const stepState = (liveNow ?? mapStep)?.state ?? null;
+  const engineName = doc.kind === "ready" ? doc.value.scope?.name || scope.name : scope.name;
   useEffect(() => {
-    if (layerState !== "queued" && layerState !== "running") return;
-    const t = setTimeout(() => setReload((x) => x + 1), LAYER_POLL);
-    return () => clearTimeout(t);
-  }, [layerState, reload]);
+    if (layer === null || (stepState !== "queued" && stepState !== "running")) return;
+    const operation = layer === "post_contrast" ? "post_contrast" : "body_part";
+    let alive = true;
+    const t = setTimeout(() => {
+      stepNow({ kind: scope.kind, name: engineName }, operation).then(
+        (st) => {
+          if (!alive || st === null) return;
+          if (st.state === "queued" || st.state === "running") setLiveStep({ layer, reload, step: st, at: Date.now() });
+          else setReload((x) => x + 1);
+        },
+        () => alive && setStepTick((x) => x + 1),
+      );
+    }, LAYER_POLL);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read again on each answer, by the time it came
+  }, [layer, stepState, reload, liveStep?.at, stepTick, scope.kind, engineName]);
 
   if (doc.kind === "loading") return <Wait phase="reading the rules" since={doc.since} size="panel" />;
   if (doc.kind === "failed")
@@ -606,7 +613,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   // the map's layer, once its answer is of the layer chosen; an engine from before answers the layer's map without one
   const layerAnswer = layer !== null && map.layer === layer && mapValue?.layer?.layer === layer ? mapValue.layer : null;
   const layerUnanswered = layer !== null && map.layer === layer && m.kind === "ready" && !m.busy && m.value.layer === null;
-  const layerStep = layerAnswer?.step ?? null;
+  const layerStep = layerAnswer ? (liveNow ?? layerAnswer.step) : null;
   // a Run of the layer's step where it has not run over the scope, as the dataset's or cohort's own page offers it
   const runScope = scope.kind === "cohort" ? "cohorts" : "datasets";
   const control = layerStep && layerStep.state !== "done" ? runControl(caps, runScope, layerStep) : null;
@@ -704,7 +711,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
                 answer={layerAnswer}
                 unanswered={layerUnanswered}
                 since={layerSince}
-                step={layer && layerAnswer ? layerStepWords(layer, scope, layerAnswer.step) : null}
+                step={layer && layerAnswer ? layerStepWords(layer, scope, layerStep) : null}
                 run={layerRun}
                 said={layerSaid}
               />

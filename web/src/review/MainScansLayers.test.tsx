@@ -240,22 +240,56 @@ describe("Main scans' layers", () => {
     expect(counts).toEqual(["1,040 taken of 1,080 (was 1,028)", "2 taken of 30"]);
   });
 
-  it("reads the map again now and then while the layer's step runs", async () => {
+  it("reads the step alone again while it runs, from the cohort's own door, and the map once it is over", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      const engine = await open({ cohort: "ms-followup" }, layerDoors({ body_part: stepOf("body_part", { state: "running", progress: { done: 10, total: 100 } }) }));
+      let cohortReads = 0;
+      const engine = await open({ cohort: "ms-followup" }, (c) => {
+        if (c.method === "GET" && c.path === "/api/cohorts/ms-followup") {
+          cohortReads += 1;
+          const st = cohortReads === 1 ? stepOf("body_part", { state: "running", progress: { done: 50, total: 100 } }) : stepOf("body_part", { state: "done", answered: 1300, staged: 12 });
+          return { status: 200, body: { name: "ms-followup", steps: [st] } };
+        }
+        return layerDoors({ body_part: stepOf("body_part", { state: "running", progress: { done: 10, total: 100 } }) })(c);
+      });
       await choose("Body region");
       expect(box().querySelector(".ms-layer-said")?.textContent).toBe("Body part runs on this cohort now; the layer fills in as it answers.");
-      expect(button(box(), "Run")).toBeNull();
-      const asked = engine.of("POST", "/api/picks/map").length;
+      const maps = engine.of("POST", "/api/picks/map").length;
+      const subjects = engine.of("POST", "/api/picks/map/subjects").length;
       await act(async () => {
         await vi.advanceTimersByTimeAsync(15_000);
       });
       await settle();
-      expect(engine.of("POST", "/api/picks/map").length).toBeGreaterThan(asked);
+      // the step alone, not the map, its subjects or its strips
+      expect(cohortReads).toBe(1);
+      expect(engine.of("POST", "/api/picks/map")).toHaveLength(maps);
+      expect(engine.of("POST", "/api/picks/map/subjects")).toHaveLength(subjects);
+      // over: the map is read again, once
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(15_000);
+      });
+      await settle();
+      expect(cohortReads).toBe(2);
+      expect(engine.of("POST", "/api/picks/map").length).toBe(maps + 1);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("says how many answers wait to be committed once the step has run", async () => {
+    await open({ cohort: "ms-followup" }, layerDoors({ body_part: stepOf("body_part", { state: "done", answered: 1300, staged: 12 }) }));
+    await choose("Body region");
+    expect(box().querySelector(".ms-layer-said")?.textContent).toBe("Body part has run on this cohort · 1,300 of 1,300 answered · 12 answers wait to be committed.");
+  });
+
+  it("draws no card's mark from an answer of another layer", async () => {
+    await open({ cohort: "ms-followup" }, (c) => {
+      // the subjects door still answers the body region while post-contrast is chosen
+      if (c.method === "POST" && c.path === "/api/picks/map/subjects" && c.body?.layer === "post_contrast") return layerDoors()({ ...c, body: { ...c.body, layer: "body_region" } });
+      return layerDoors()(c);
+    });
+    await choose("Post-contrast");
+    expect(host.querySelectorAll(".ms-card .ms-visit-layer")).toHaveLength(0);
   });
 
   it("says so where an engine from before answers the map without the layer, and draws no layer", async () => {
