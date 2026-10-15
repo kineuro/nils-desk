@@ -9,7 +9,7 @@
 import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
 import { PAGE_LINES } from "../settings/identity";
-import type { Grant, Grants, Inbox, Plan, Step } from "./client";
+import type { Grant, Grants, Inbox, Offer, Plan, Step } from "./client";
 
 /** Whether the assistant serves a route, as its capabilities list them; an assistant that lists none is taken to serve none of these. */
 export function serves(caps: Capabilities, route: string): boolean {
@@ -101,7 +101,7 @@ export function grantPages(g: Grants | null): { everything: Grant | null; pages:
     }
     return pg;
   };
-  for (const o of g.offer ?? []) {
+  for (const o of g.offer ?? offerOfLadder(g)) {
     const pg = group(o.page, o.title);
     for (const a of o.actions) {
       const own = mine.find((x) => x.door === a.door) ?? null;
@@ -124,6 +124,47 @@ export function grantPages(g: Grants | null): { everything: Grant | null; pages:
     return i < 0 ? PAGE_LINES.length : i;
   };
   return { everything, pages: [...byPage.values()].sort((a, b) => order(a.page) - order(b.page)) };
+}
+
+/** What the common doors let the assistant do, for an assistant that sends no words of its own. */
+const OLDER_WORDS: Record<string, { page: string; words: string }> = {
+  "POST /api/jobs": { page: "data", words: "Read, sort, pseudonymise and bring in data" },
+  "POST /api/sessions/rebuild": { page: "data", words: "Rebuild the visits" },
+  "POST /api/linkage/types": { page: "data", words: "Add ID types" },
+  "POST /api/linkage/imports": { page: "data", words: "Bring in identifier maps" },
+  "POST /api/linkage/held/code": { page: "data", words: "Code held files anyway" },
+  "POST /api/linkage/merge": { page: "data", words: "Merge two subjects" },
+  "POST /api/places/{id}/originals": { page: "data", words: "Act on a dataset's originals" },
+  "POST /api/ask/run": { page: "query", words: "Run questions" },
+  "POST /api/ask/jobs": { page: "query", words: "Queue questions" },
+  "POST /api/ask/apply": { page: "query", words: "Apply a question's changes" },
+  "POST /api/review/{id}/let-go": { page: "review", words: "Let go of review items" },
+  "POST /api/jobs/{id}/cancel": { page: "pipelines", words: "Cancel jobs" },
+  "POST /api/picks/run": { page: "pipelines", words: "Pick main scans" },
+  "POST /api/datasets/{name}/steps/{step}/run": { page: "pipelines", words: "Run pipelines on datasets" },
+  "POST /api/cohorts/{name}/steps/{step}/run": { page: "pipelines", words: "Run pipelines on cohorts" },
+  "PUT /api/places/{id}": { page: "places", words: "Change places" },
+  "POST /api/places/explore": { page: "places", words: "Explore the sources" },
+  "PUT /api/backups/schedule": { page: "database", words: "Set the backup schedule" },
+};
+
+/**
+ * What an assistant that sends no offer lets a person give (one before record 55's ruling 24): the rung-two doors of
+ * its ladder, in words the desk knows or the ladder sent, never a door; one it has no words for is "Another step".
+ */
+export function offerOfLadder(g: Grants): Offer[] {
+  const by = new Map<string, Offer>();
+  let other = 0;
+  for (const r of g.ladder) {
+    if (r.rung !== 2) continue;
+    const known = OLDER_WORDS[r.door];
+    const page = r.page ?? known?.page ?? "other";
+    const words = r.words ?? known?.words ?? `Another step ${++other}`;
+    const o = by.get(page) ?? { page, title: pageTitle(page), actions: [] };
+    o.actions.push({ door: r.door, words });
+    by.set(page, o);
+  }
+  return [...by.values()];
 }
 
 /** A step's held reason in words: a door an older assistant named is not shown. */

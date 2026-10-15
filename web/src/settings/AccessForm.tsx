@@ -150,7 +150,7 @@ export function AccessLines(props: LinesProps) {
         <div className="arow admin-row">
           <Icon name="shield" />
           <b>Admin</b>
-          <span className="what">Every page, every detail. Nothing to give.</span>
+          <span className="what">Work on People makes an admin: every page, every detail. Nothing to give.</span>
         </div>
       ) : (
         onArea && (

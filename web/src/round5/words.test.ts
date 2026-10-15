@@ -10,7 +10,7 @@
 // them.
 
 import { describe, expect, it } from "vitest";
-import { ladderPages, grantPages, grantWords, plainReason, standing, waitingCount, waitingPlans } from "../assistant/ladder";
+import { ladderPages, grantPages, grantWords, offerOfLadder, plainReason, standing, waitingCount, waitingPlans } from "../assistant/ladder";
 import type { Capabilities } from "../capabilities";
 import type { Release } from "../data/cohorts";
 import type { Place } from "../objects/client";
@@ -133,6 +133,29 @@ describe("the Assistant's ladder", () => {
     expect(plainReason("no standing grant for POST /api/jobs; give one")).toBe("no standing grant for this step; give one");
     expect(standing(g.grants).now.map((x) => x.id)).toEqual([5, 3, 1, 6]);
     expect(standing(g.grants).revoked.map((x) => x.id)).toEqual([2]);
+  });
+
+  it("against an assistant that sends no offer, offers its ladder's rung-two doors in words, never a door", () => {
+    const older = {
+      subject: "a",
+      grants: [{ id: 1, subject: "a", door: "POST /api/jobs", created_at: "2026-10-01", revoked_at: null }],
+      ladder: [
+        { door: "POST /api/jobs", rung: 2 as const, role: "operator" },
+        { door: "POST /api/ask/run", rung: 2 as const, role: "reader" },
+        { door: "POST /api/select", rung: 2 as const, role: "reader" },
+        { door: "POST /api/linkage/merge", rung: 3 as const, role: "admin" },
+      ],
+    };
+    expect(offerOfLadder(older).map((o) => [o.title, o.actions.map((a) => a.words)])).toEqual([
+      ["Data", ["Read, sort, pseudonymise and bring in data"]],
+      ["Query", ["Run questions"]],
+      ["Other", ["Another step 1"]],
+    ]);
+    const { pages } = grantPages(older);
+    // the standing one stands by its door, and the others can be given
+    expect(pages.find((p) => p.page === "data")?.rows[0].grant?.id).toBe(1);
+    expect(pages.find((p) => p.page === "query")?.rows[0]).toMatchObject({ door: "POST /api/ask/run", grant: null });
+    expect(JSON.stringify(pages)).not.toMatch(/"words":"[^"]*\/api/u);
   });
 });
 

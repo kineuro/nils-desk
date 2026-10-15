@@ -54,9 +54,16 @@ for (const vp of SIZES) {
     await expect(dialog.getByRole("group", { name: "Places" }).getByRole("button", { name: "Hidden" })).toHaveAttribute("aria-pressed", "true");
     await noSideways(page, vp.width);
     await shot(page, `person-pages-${vp.name}`);
+    // everything at once never makes an admin: People stays at see
     await dialog.getByRole("button", { name: "Everything", exact: true }).first().click();
-    await expect(dialog.getByText("Erik Lund is an admin: every page, every detail.")).toBeVisible();
+    await expect(dialog.getByRole("group", { name: "People" }).getByRole("button", { name: "See" })).toHaveAttribute("aria-pressed", "true");
+    await expect(dialog.getByText("Erik Lund is an admin")).toHaveCount(0);
     await shot(page, `person-everything-${vp.name}`);
+    // work on People is chosen on its own line, and says it makes an admin
+    await dialog.getByRole("group", { name: "People" }).getByRole("button", { name: "Work" }).click();
+    await expect(dialog.getByText("Work on People makes an admin: every page, every detail.")).toBeVisible();
+    await expect(dialog.getByText("Erik Lund is an admin: every page, every detail.")).toBeVisible();
+    await shot(page, `person-admin-${vp.name}`);
   });
 
   test(`at ${vp.name} px Standing grants say what each lets the assistant do, under its page, with no door`, async ({ page }) => {
