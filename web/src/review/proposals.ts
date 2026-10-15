@@ -18,7 +18,7 @@ const str = (v: unknown): string => (typeof v === "string" ? v : "");
 const opt = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
 
-export type Status = "proposed" | "adopted" | "rejected";
+export type Status = "proposed" | "adopted" | "rejected" | "retired";
 
 /** What a person decides on: the proposal's effect, said short. */
 export interface Card {
@@ -76,6 +76,10 @@ export interface Proposal {
   job: { id: number; state: string } | null;
   /** What the re-sort is doing, and once it ended, what it did. */
   applied: { state: string; expected: { moved: number } | null; measured: Measured | null } | null;
+  /** The overlay a scoped change was made of (the overlays door marks it `overlay.adopt`), with its name and version. */
+  overlay: { id: number; name: string; version: string } | null;
+  /** Why an adopted scoped change no sort applies any more: a later version of its overlay replaced it, or the overlay was refused. */
+  retired_why: string | null;
   /** Only on one proposal's own read. */
   operations: Json[];
   report: Effect | null;
@@ -136,7 +140,9 @@ export function proposalOf(raw: unknown): Proposal {
   const job = isObj(p.job) ? p.job : typeof p.job === "number" ? { id: p.job, state: "" } : null;
   const applied = isObj(p.applied) ? p.applied : null;
   const expected = applied && isObj(applied.expected) ? applied.expected : null;
-  const status = p.status === "adopted" || p.status === "rejected" ? p.status : "proposed";
+  const status: Status = p.status === "adopted" || p.status === "rejected" || p.status === "retired" ? p.status : "proposed";
+  const ev = isObj(p.evidence) ? p.evidence : null;
+  const retired = applied && isObj(applied.retired) ? applied.retired : null;
   return {
     id: num(p.id),
     pack: str(p.pack),
@@ -161,6 +167,8 @@ export function proposalOf(raw: unknown): Proposal {
     version: version ? { pack: str(version.pack), version: str(version.version), from: str(version.from), tag: opt(version.tag), state: str(version.state) } : null,
     job: job ? { id: num(job.id), state: str(job.state) } : null,
     applied: applied ? { state: str(applied.state), expected: expected ? { moved: num(isObj(expected.moved) ? expected.moved.stacks : expected.moved) } : null, measured: measuredOf(applied.measured) } : null,
+    overlay: ev && ev.made_by === "overlay.adopt" ? { id: num(ev.overlay), name: str(ev.name), version: str(ev.version) } : null,
+    retired_why: retired ? opt(retired.why) : null,
     operations: arr(p.operations).filter(isObj),
     report: isObj(p.report) ? effectOf(p.report) : null,
   };
@@ -170,7 +178,7 @@ export function proposalOf(raw: unknown): Proposal {
 export function proposalsOf(raw: unknown): { counts: Record<Status, number>; proposals: Proposal[] } {
   const r = isObj(raw) ? raw : {};
   const c = isObj(r.counts) ? r.counts : {};
-  return { counts: { proposed: num(c.proposed), adopted: num(c.adopted), rejected: num(c.rejected) }, proposals: arr(r.proposals).map(proposalOf) };
+  return { counts: { proposed: num(c.proposed), adopted: num(c.adopted), rejected: num(c.rejected), retired: num(c.retired) }, proposals: arr(r.proposals).map(proposalOf) };
 }
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -198,7 +206,14 @@ export function landsWords(p: Proposal): string {
 export function stateTag(p: Proposal): { words: string; tone: "caution" | "ok" | "" } {
   if (p.status === "adopted") return { words: "adopted", tone: "ok" };
   if (p.status === "rejected") return { words: "not adopted", tone: "" };
+  if (p.status === "retired") return { words: "retired", tone: "" };
+  if (p.stale) return { words: "rehearse again", tone: "caution" };
   return { words: "waits for you", tone: "caution" };
+}
+
+/** Whether a proposal is adoptable now: waiting, and rehearsed on the pack and the changes in force as they are. */
+export function adoptable(p: Proposal): boolean {
+  return p.status === "proposed" && !p.stale;
 }
 
 /** Whether the re-sort of an adopted proposal still runs. */
@@ -209,6 +224,7 @@ export function resorting(p: Proposal): boolean {
 
 /** What the re-sort did, in a line, once it ended; or where it stands. */
 export function appliedWords(p: Proposal): string | null {
+  if (p.status === "retired") return p.retired_why ? `Retired: ${p.retired_why}` : "Retired: no sort applies it any more";
   if (p.status !== "adopted") return null;
   const written = p.version ? `Written as ${p.version.pack} ${p.version.version}${p.version.state === "to_release" ? ", to release" : ""}` : null;
   const a = p.applied;

@@ -363,7 +363,7 @@ export const listed = (p: Record<string, unknown>) => {
   return rest;
 };
 
-export const PROPOSALS_LIST = { pack: "mri", count: 3, counts: { proposed: 2, adopted: 1, rejected: 0 }, proposals: [PROPOSAL_SCOPED, PROPOSAL_FULL, PROPOSAL_ADOPTED].map(listed) };
+export const PROPOSALS_LIST = { pack: "mri", count: 3, counts: { proposed: 2, adopted: 1, rejected: 0, retired: 0 }, proposals: [PROPOSAL_SCOPED, PROPOSAL_FULL, PROPOSAL_ADOPTED].map(listed) };
 
 /** The doors of an engine that keeps proposals and gathers the pack's quality. */
 export const PROPOSAL_DOORS = [

@@ -87,6 +87,21 @@ export const rulesDoors = {
     door<{ proposal: number; status: Status; job?: number | { id: number; state?: string } | null; version?: unknown; scopes?: string[] }>("POST", `${base(pack)}/proposals/${id}/decide`, { decision, ...(why ? { why } : {}) }),
 };
 
+/**
+ * The proposal an overlay is adopted through: the scoped change the overlays door keeps beside it (its evidence names the overlay and is marked
+ * `overlay.adopt`), rehearsed, with its approval card. An overlay is never adopted at its own door from the desk; this card is where it is decided.
+ * Null where the engine kept none (an overlay proposed before it did).
+ */
+export async function overlayProposal(pack: string, overlay: number): Promise<Proposal | null> {
+  const r = await rulesDoors.proposals(pack, { limit: 500 });
+  return r.proposals.find((p) => p.overlay?.id === overlay && p.status !== "rejected" && p.status !== "retired") ?? null;
+}
+
+/** Whether the engine adopts overlays through the proposals' approval card, so the desk sends them there. */
+export function adoptsOverlaysByCard(caps: Capabilities): boolean {
+  return served(caps, DOORS.proposals) && served(caps, DOORS.decide);
+}
+
 /** Whether the engine keeps proposals and the person reads them. */
 export function readsProposals(caps: Capabilities): boolean {
   return served(caps, DOORS.proposals) && may(caps, "review:see");

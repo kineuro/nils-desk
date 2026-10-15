@@ -160,18 +160,81 @@ describe("the proposals", () => {
   it("are rehearsed again first where the pack moved on since", async () => {
     const stale = { ...PROPOSAL_FULL, stale: true, on: "1.1.0" };
     const e = engine((c) => {
-      if (c.method === "GET" && c.path === P) return { status: 200, body: { ...PROPOSALS_LIST, counts: { proposed: 1, adopted: 0, rejected: 0 }, proposals: [listed(stale)] } };
+      if (c.method === "GET" && c.path === P) return { status: 200, body: { ...PROPOSALS_LIST, counts: { proposed: 1, adopted: 0, rejected: 0, retired: 0 }, proposals: [listed(stale)] } };
       if (c.method === "POST" && c.path === `${P}/12/rehearse`) return { status: 200, body: PROPOSAL_FULL };
       return undefined;
     });
     await open();
     const card = cardOf(12);
-    expect([...card.querySelectorAll(".approval-kind .tag")].map((t) => t.textContent)).toEqual(["waits for you", "rehearsed on 1.1.0"]);
-    expect(foot(card)).toEqual(["Rehearse it again", "Reject", "Details"]);
-    press("Rehearse it again", card);
+    expect([...card.querySelectorAll(".approval-kind .tag")].map((t) => t.textContent)).toEqual(["rehearse again"]);
+    // one action: no Adopt, no Change, no Reject on a rehearsal that is out of date
+    expect(foot(card)).toEqual(["Rehearse again", "Details"]);
+    press("Rehearse again", card);
     await settle(4);
     expect(e.of("POST", `${P}/12/rehearse`)).toHaveLength(1);
     expect(foot(cardOf(12))).toEqual(["Adopt", "Change it", "Reject", "Details"]);
+  });
+
+  it("show a retired scoped change as retired, from its overlay, with why and no action", async () => {
+    const retired = {
+      ...PROPOSAL_SCOPED,
+      status: "retired",
+      evidence: { overlay: 5, made_by: "overlay.adopt", name: "ward-words", version: "1.0.0" },
+      applied: { state: "done", expected: null, measured: null, retired: { by: { proposal: 20 }, at: "2026-10-15T09:00:00Z", why: "the overlay ward-words 1.1.0 was adopted after it" } },
+    };
+    engine((c) => (c.method === "GET" && c.path === P ? { status: 200, body: { ...PROPOSALS_LIST, counts: { proposed: 0, adopted: 1, rejected: 0, retired: 1 }, proposals: [listed(retired), listed(PROPOSAL_ADOPTED)] } } : undefined));
+    await open("proposals");
+    const card = cardOf(13);
+    expect(card.querySelector(".approval-kind .tag")?.textContent).toBe("retired");
+    expect(card.querySelector(".rule-overlay")?.textContent).toBe("From the overlay ward-words 1.0.0");
+    expect(card.querySelector(".rule-applied")?.textContent).toBe("Retired: the overlay ward-words 1.1.0 was adopted after it");
+    expect(foot(card)).toEqual(["Details"]);
+    expect(host.querySelector(".rp-decided summary")?.textContent).toBe("Decided1 adopted · 0 not adopted · 1 retired");
+  });
+
+  it("shows the card's counts as the engine states them, not the length of the list", async () => {
+    const said = { ...PROPOSAL_FULL, card: { ...PROPOSAL_FULL.card, breaks: 5 } };
+    engine((c) => (c.method === "GET" && c.path === P ? { status: 200, body: { ...PROPOSALS_LIST, proposals: [listed(said)] } } : undefined));
+    await open();
+    expect(cardOf(12).querySelector(".rule-line")?.textContent).toContain("fixes 47, breaks 5");
+    expect(cardOf(12).querySelector(".rx-breaks-head")?.textContent).toBe("Breaks 5 answers people settled · the first 3 shown");
+  });
+
+  it("shows a proposal as to rehearse again where an adoption is refused because the changes in force moved", async () => {
+    let refused = false;
+    const e = engine((c) => {
+      if (c.method === "POST" && c.path === `${P}/12/decide`) {
+        refused = true;
+        return { status: 409, body: { error: "rehearsed before another change was adopted: rehearse it again" } };
+      }
+      if (c.method === "GET" && c.path === `${P}/12`) return { status: 200, body: refused ? { ...PROPOSAL_FULL, stale: true } : PROPOSAL_FULL };
+      return undefined;
+    });
+    await open();
+    press("Adopt", cardOf(12));
+    await settle(6);
+    expect(e.of("POST", `${P}/12/decide`)).toHaveLength(1);
+    expect(foot(cardOf(12))).toEqual(["Rehearse again", "Details"]);
+  });
+
+  it("send an overlay to its proposal's card and never adopt it at the overlays door", async () => {
+    const made = {
+      ...PROPOSAL_SCOPED,
+      id: 21,
+      evidence: { overlay: 5, made_by: "overlay.adopt", name: "ward-words", version: "1.0.0" },
+    };
+    const e = engine((c) => {
+      if (c.method === "GET" && c.path === "/api/overlays") return { status: 200, body: { overlays: [{ id: 5, name: "ward-words", version: "1.0.0", status: "proposed", scope: "dataset ward-c" }] } };
+      if (c.method === "GET" && c.path === "/api/overlays/5") return { status: 200, body: { id: 5, name: "ward-words", version: "1.0.0", status: "proposed", scope: "dataset ward-c", document: {} } };
+      if (c.method === "GET" && c.path === P) return { status: 200, body: { ...PROPOSALS_LIST, proposals: [listed(PROPOSAL_FULL), listed(made)] } };
+      if (c.method === "POST" && c.path === "/api/overlays/5/adopt") return { status: 202, body: { job: 1, overlay: 5, status: "adopted" } };
+      return undefined;
+    });
+    await open("words");
+    press("Review", host.querySelector(".proposals")!);
+    await settle(6);
+    expect(e.of("POST", "/api/overlays/5/adopt")).toHaveLength(0);
+    expect(location.hash).toBe("#review/rules/proposals/21");
   });
 
   it("are rejected with a why", async () => {

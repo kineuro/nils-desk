@@ -16,7 +16,7 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { refusalWords, type PackDoc } from "./client";
 import { BreaksBox, EffectReport } from "./EffectReport";
-import { appliedWords, axisCounts, cardLine, landsWords, resorting, stateTag, type Proposal } from "./proposals";
+import { adoptable, appliedWords, axisCounts, cardLine, landsWords, resorting, stateTag, type Proposal } from "./proposals";
 import { opWords } from "./ruleOps";
 import { door as served } from "../deployment";
 import { DOORS, mayDecide, mayRehearse, rulesDoors } from "./rulesDoors";
@@ -99,7 +99,17 @@ export function RuleApproval({ caps, pack, proposal, open = false, onChanged, on
         setP(next);
         onChanged?.(next, `Adopted ${p.title || `change ${p.id}`}; re-sorting.`);
       })
-      .catch((e: unknown) => setWhy(refusalWords(e)))
+      .catch((e: unknown) => {
+        setWhy(refusalWords(e));
+        // a refusal may be that the pack or the changes in force moved on: read it again, so it shows as to rehearse again
+        rulesDoors.proposal(packName, p.id).then(
+          (now) => {
+            setP(now);
+            setFull(now.report ? now : null);
+          },
+          () => undefined,
+        );
+      })
       .finally(() => setBusy(null));
   };
   const reject = () => {
@@ -143,9 +153,14 @@ export function RuleApproval({ caps, pack, proposal, open = false, onChanged, on
         <div className="approval-kind">
           <span className="eyebrow">Rule change</span>
           <span className={tag.tone ? `tag ${tag.tone}` : "tag"}>{tag.words}</span>
-          {p.stale && proposed && <span className="tag caution">rehearsed on {p.on || "an older pack"}</span>}
         </div>
         <p className="approval-title">{title}</p>
+        {p.overlay && (
+          <p className="meta rule-overlay">
+            From the overlay {p.overlay.name} {p.overlay.version}
+          </p>
+        )}
+        {p.stale && proposed && <p className="meta rule-stale">Rehearsed on {p.on || "an older pack"}; the pack or the changes in force have moved on since.</p>}
         {card && <p className="approval-sentence rule-line">{cardLine(card)}</p>}
         <p className="meta rule-lands">
           {landsWords(p)}
@@ -165,22 +180,22 @@ export function RuleApproval({ caps, pack, proposal, open = false, onChanged, on
         {details && full && !full.report && <p className="meta">No report is kept with it.</p>}
       </div>
       <div className="approval-foot">
-        {proposed && decides && !p.stale && (
+        {adoptable(p) && decides && (
           <button type="button" className="button" disabled={busy !== null} onClick={adopt}>
             Adopt
           </button>
         )}
         {proposed && p.stale && mayRehearse(caps) && (
           <button type="button" className="button" disabled={busy !== null} onClick={again}>
-            Rehearse it again
+            Rehearse again
           </button>
         )}
-        {proposed && onChange && changeable && (
+        {adoptable(p) && onChange && changeable && (
           <button type="button" className="button secondary" disabled={busy !== null} onClick={() => onChange(full ?? p)}>
             Change it
           </button>
         )}
-        {proposed && decides && !rejecting && (
+        {adoptable(p) && decides && !rejecting && (
           <button type="button" className="button quiet" disabled={busy !== null} onClick={() => setRejecting(true)}>
             Reject
           </button>
@@ -202,7 +217,8 @@ export function RuleApproval({ caps, pack, proposal, open = false, onChanged, on
           <Icon name={details ? "chevron-up" : "chevron-down"} />
           {details ? "Less" : "Details"}
         </button>
-        {proposed && !decides && <span className="meta">Adopting needs work on Review and on Data.</span>}
+        {adoptable(p) && !decides && <span className="meta">Adopting needs work on Review and on Data.</span>}
+        {proposed && p.stale && !mayRehearse(caps) && <span className="meta">It waits for someone who may rehearse it again.</span>}
         {busy && <Wait phase={busy.phase} since={busy.since} />}
         {why && <span className="warn">{why}</span>}
       </div>

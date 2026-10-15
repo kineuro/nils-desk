@@ -114,6 +114,7 @@ export function RuleProposals({ caps, pack, dataset, opened, onDecided, onSaid, 
             <span className="eyebrow">Decided</span>
             <span className="meta">
               {n(decided.filter((p) => p.status === "adopted").length)} adopted · {n(decided.filter((p) => p.status === "rejected").length)} not adopted
+              {decided.some((p) => p.status === "retired") ? ` · ${n(decided.filter((p) => p.status === "retired").length)} retired` : ""}
             </span>
           </summary>
           <div className="rp-list">{decided.map(card)}</div>

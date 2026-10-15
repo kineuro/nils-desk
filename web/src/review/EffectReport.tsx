@@ -79,7 +79,8 @@ export function Scans({ caps, stacks, titles, onOpen, limit = 5, named = false }
 /** The answers a change breaks, said with their scans, in the caution colour: never folded away (record 56, 5.6). */
 export function BreaksBox({ caps, pack = null, count: said, cases, onOpen }: { caps: Capabilities; pack?: PackDoc | null; count: number; cases: AnswerCase[]; onOpen?: (stack: number) => void }) {
   if (said === 0 && cases.length === 0) return null;
-  const count = Math.max(said, cases.length);
+  // the engine's own count; the list only stands in where it sent none
+  const count = said > 0 ? said : cases.length;
   return (
     <div className="rx-breaks" aria-label="The answers it breaks">
       <p className="rx-breaks-head">
