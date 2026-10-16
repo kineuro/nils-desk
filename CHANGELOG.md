@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- A campaign's page has a Results view beside its Items (record 55, ruling 35 (d)), read from the engine's `GET /api/campaigns/{id}/results`: the counts settled, adjudicated and written, exact agreement and kappa, the unsure count; a table by value (answers given and items settled, per axis on an axes question); a table by rater; a table by item with each rater's answer in a column of its own (marked `?` where unsure), the adjudication, the settled value and the decision or pick the close wrote; and the campaign's label sets, each downloaded as its labels.tsv. While the campaign is open the view is offered to its maker (unless the maker rates in it), its adjudicators and a Review worker, and to everyone in it once it closes; on an engine without the door it is not offered.
+
+### Changed
+
+- The raters are named to the campaign's maker and a Review worker alone. Anyone else reads each other person as "rater 1", "adjudicator 1" and so on, their own answers by their own name, on the Items table as in the Results view. The Items table now trusts the answers door's own word on whether it answered blind.
+
 ## [1.0.0-alpha.68] - 2026-10-16
 
 The map dialog shows no identifier's value, and never-kept ID types say they keep lookups only.

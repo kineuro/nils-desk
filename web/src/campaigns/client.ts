@@ -342,6 +342,9 @@ export const campaigns = {
   list: () => door<{ count: number; campaigns: Campaign[] }>("GET", "/api/campaigns").then((r) => r.campaigns),
   one: (c: number | string) => door<Campaign>("GET", `/api/campaigns/${id(c)}`),
   answers: (c: number | string) => door<{ campaign: number; count: number; answers: Answer[] }>("GET", `/api/campaigns/${id(c)}/answers`).then((r) => r.answers),
+  /** The answers with whether the door answered blind (the person's own alone); blind null where the engine does not say. */
+  answersRead: (c: number | string) =>
+    door<{ campaign: number; count: number; answers: Answer[]; blind?: boolean }>("GET", `/api/campaigns/${id(c)}/answers`).then((r) => ({ answers: r.answers, blind: typeof r.blind === "boolean" ? r.blind : null })),
   make: (body: MakeBody) => door<Campaign & { pictures?: Pictures }>("POST", "/api/campaigns", body),
   /** What a make would draw, written nowhere (a check's, and since Wave 7a a pair, anchored or A/B campaign's). */
   preview: (body: MakeBody) => door<Json>("POST", "/api/campaigns/preview", body),
