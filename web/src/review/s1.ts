@@ -147,12 +147,32 @@ export interface Rounds {
   rounds: RoundReport[];
 }
 
+/** One sign of the damaged-header flag: its share, the pack's threshold for it, and whether it flags. */
+export interface HeadersSign {
+  share: number | null;
+  threshold: number | null;
+  flags: boolean;
+}
+
 export interface HeadersFlag {
   dataset: string;
   damaged: boolean;
   by: "person" | "signs";
   flag: { damaged: boolean; why: string | null; by: string; at: string } | null;
-  signs: { scans: number; no_names: number; share: number; damaged: boolean; rule?: string };
+  signs: {
+    scans: number;
+    no_names: number;
+    share: number;
+    damaged: boolean;
+    rule?: string;
+    // Record 55, ruling 31 (c): the three signs, read at the end of a sort and kept, with the pack's thresholds and why
+    why?: string;
+    nameless?: HeadersSign & { scans: number };
+    unknown_words?: HeadersSign & { named: number | null; unread: number | null };
+    unseen_maker?: HeadersSign & { scans: number; makers: Record<string, number> };
+    pack?: string | null;
+    read?: string;
+  };
   gate: string;
 }
 
