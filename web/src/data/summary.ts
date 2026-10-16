@@ -30,6 +30,18 @@ export interface StepRefusal {
   error: string;
 }
 
+/**
+ * Body part and post-contrast (record 55, ruling 35 (b), 2026-10-16): they are
+ * optional models a person runs when the data need them, never at arrival, so
+ * each step says how many scans its model would add an answer to. `no_body_part`
+ * counts the scans with no body part; `t1_brain_contrast_unknown` those that can
+ * be T1 brain whose contrast nothing told. A count only.
+ */
+export interface StepHint {
+  kind: string;
+  scans: number;
+}
+
 /** One step of where a dataset is, as the summary door answers it: its state, the job that did it last and the counts the step has. */
 export interface SummaryStep {
   step: StepName;
@@ -73,6 +85,8 @@ export interface SummaryStep {
   jobs?: number[];
   /** Body part and post-contrast: why a run of it would be refused now, none where its door would start one. */
   refusal?: StepRefusal | null;
+  /** Body part and post-contrast (ruling 35 (b)): how many scans a run would add an answer to; an engine from before says nothing. */
+  hint?: StepHint | null;
   /** Body part and post-contrast on a map's layer (record 55, decision 6): the scans whose model answers are staged and not yet put in force, which the layer does not show yet. */
   staged?: number;
 }
@@ -329,6 +343,14 @@ const TITLE: Record<StepName, string> = {
   views: "3D views",
 };
 
+/** What a run of body part or post-contrast would add, in a few words, while the step waits; null where the engine says nothing. */
+export function addsWords(s: SummaryStep): string | null {
+  const scans = s.hint?.scans;
+  if (typeof scans !== "number") return null;
+  if (scans === 0) return "none needs it";
+  return s.step === "post_contrast" ? `${n(scans)} T1 brain, contrast unknown` : `${n(scans)} with no body part`;
+}
+
 /** A step of the detail's rail in three short lines: its name, what it did, and when. */
 export function stepWords(s: SummaryStep, now = new Date()): StepWords {
   const title = TITLE[s.step];
@@ -379,7 +401,11 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
         what = r.done !== null && r.of !== null ? `${n(r.done)} of ${n(r.of)}` : "running";
       } else if (queued) what = "waits its turn";
       else if (s.state === "failed") what = "failed";
-      else if (s.state === "waiting") what = "not run yet";
+      else if (s.state === "waiting") {
+        // ruling 35 (b): a person's run, never the arrival's
+        what = addsWords(s) ?? "not run yet";
+        hint = s.step === "body_part" ? "Body part runs when you start it." : "Post-contrast runs when you start it.";
+      }
       else what = v("answered") === 0 ? "none answered" : v("answered") >= v("of") ? `${n(v("answered"))} answered` : `${n(v("answered"))} of ${n(v("of"))} answered`;
       if (v("look") > 0) what += ` · ${n(v("look"))} to look at`;
       break;

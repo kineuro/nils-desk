@@ -7,6 +7,9 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Added
 
 - Settings has a Teaching page under the assistant (Wave 5 section 9.5, walkthrough step 17.4), for a person holding `assistant-settings:work` where the assistant answers. Four screens, one list and one action each: Corrections (the proposals people rejected and the review decisions that overturned a station or the pack; choose some and Make a set), Sets (Fine-tune one with a LoRA recipe: base model, steps, rank and learning rate, the base offered from Kvasir's models and a recipe the assistant would refuse refused in words), Jobs (every fine-tune job, read again every few seconds while one runs; an assistant before alpha.30 gives the person's own from the inbox) and Models (each candidate with its admission and bench side by side and its one next step: Admit, Bench, Promote once both gates are green, or Roll back for the promoted one). Promote and Roll back say what they change before they are done; rolling back retires the promoted model so its backend routes to its configured model again, and the model it replaced stays retired. Making a set needs `review:work` and the model steps `kvasir:work`; a button a person may not press says which grant it needs. Rolling back and the full job list need the assistant of the same wave (`POST /teaching/candidates/{id}/retire`, `GET /teaching/jobs`).
+### Changed
+
+- Body part and post-contrast are runs a person starts (record 55, ruling 35 (b)): the engine scores a dataset's arrival with System 1 alone, which needs no button. While either step waits, the dataset's rail says what its Run would add instead of "not run yet": "6 with no body part", "12 T1 brain, contrast unknown", or "none needs it", from the step's `hint` on the dataset's summary. An engine from before says "not run yet" as it did.
 
 ## [1.0.0-alpha.68] - 2026-10-16
 

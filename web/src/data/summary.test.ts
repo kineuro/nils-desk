@@ -13,6 +13,7 @@ import type { Cohort, Join } from "./cohorts";
 import type { Dataset } from "./datasets";
 import { nextStep } from "./steps";
 import {
+  addsWords,
   cardLine,
   clock,
   cohortLine,
@@ -220,6 +221,17 @@ describe("body part and post-contrast, steps of their own", () => {
     const failed = stepWords(step("body_part", { state: "failed", job: 14, finished_at: today("14:30"), answered: 0, look: 0, of: 3 }), NOW);
     expect(failed).toMatchObject({ what: "failed", now: false });
     expect(failed.when).toBe(new Date(today("14:30")).toTimeString().slice(0, 5));
+  });
+
+  it("say, while they wait for a person, what a run would add (ruling 35 (b))", () => {
+    const bp = stepWords(step("body_part", { state: "waiting", served: true, answered: 0, look: 0, of: 6, hint: { kind: "no_body_part", scans: 6 } }), NOW);
+    expect(bp).toMatchObject({ what: "6 with no body part", when: "", hint: "Body part runs when you start it." });
+    const pc = stepWords(step("post_contrast", { state: "waiting", served: true, answered: 0, look: 0, of: 6, hint: { kind: "t1_brain_contrast_unknown", scans: 1200 } }), NOW);
+    expect(pc).toMatchObject({ what: "1,200 T1 brain, contrast unknown", hint: "Post-contrast runs when you start it." });
+    expect(stepWords(step("post_contrast", { state: "waiting", served: true, of: 6, hint: { kind: "t1_brain_contrast_unknown", scans: 0 } }), NOW).what).toBe("none needs it");
+    // once it ran, it says what its model answered, not what it would add
+    expect(stepWords(step("body_part", { answered: 6, look: 0, of: 6, hint: { kind: "no_body_part", scans: 0 } }), NOW).what).toBe("6 answered");
+    expect(addsWords(step("body_part", { state: "waiting" }))).toBeNull();
   });
 
   it("count a model's run in its units over, of all of them", () => {
