@@ -129,6 +129,8 @@ export interface IdRow extends HeldId {
 export interface StepView {
   phase: Phase;
   originals: number | null;
+  /** The originals' count stopped short of a large tree (the engine's probe is bounded), so `originals` is a lower bound. */
+  originalsPartial: boolean;
   bytes: number | null;
   /** The files of the pseudonymised copy. */
   copy: number;
@@ -141,6 +143,8 @@ export interface StepView {
   without: { ids: number; files: number };
   /** The files the next run pseudonymises: the new ones, and the held ones whose ID has a code. */
   go: number;
+  /** `go` came from a count that stopped short of a large tree: the run does at least that many. */
+  goPartial: boolean;
   /** The subjects the pseudonymised copy carries, and how many were coded without a map. */
   subjects: HeldIds["subjects"];
 }
@@ -158,8 +162,12 @@ export function readsPersonnummer(d: Pick<Dataset, "identity">): boolean {
  */
 export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds | null, matched: readonly Matched[], running: boolean): StepView {
   const originals = typeof d.trees?.originals?.files === "number" ? d.trees.originals.files : null;
+  const originalsPartial = originals !== null && d.trees?.originals?.partial === true;
   const bytes = typeof d.trees?.originals?.bytes === "number" ? d.trees.originals.bytes : null;
-  const copy = typeof step?.files === "number" ? step.files : typeof d.trees?.anon?.files === "number" ? d.trees.anon.files : 0;
+  const fromStep = typeof step?.files === "number";
+  const copy = fromStep ? (step?.files as number) : typeof d.trees?.anon?.files === "number" ? d.trees.anon.files : 0;
+  // the copy's count stopped short of a large tree: how many originals it lacks is not known
+  const copyPartial = fromStep ? step?.partial === true : typeof d.trees?.anon?.files === "number" && d.trees.anon.partial === true;
   const heldFiles = heldIds?.files ?? d.held?.files ?? 0;
   const byId = new Map(matched.map((m) => [m.id, m]));
   const rows: IdRow[] = (heldIds?.ids ?? [])
@@ -172,12 +180,12 @@ export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds 
   const coded = rows.filter((r) => r.coded).length;
   const lacking = rows.filter((r) => !r.coded);
   const without = { ids: lacking.length, files: lacking.reduce((s, r) => s + r.files, 0) };
-  // never seen by a run: the originals less the copy and every held file
-  const unseen = originals === null ? 0 : Math.max(0, originals - copy - heldFiles);
+  // never seen by a run: the originals less the copy and every held file; none known where the copy's count stopped short
+  const unseen = originals === null || copyPartial ? 0 : Math.max(0, originals - copy - heldFiles);
   const go = unseen + rows.filter((r) => r.coded && r.state !== "waits").reduce((s, r) => s + r.files, 0);
   // a dataset whose held files the engine counts but does not list yet has IDs without a code all the same
   const unlisted = heldIds === null && (d.held?.identifiers ?? 0) > 0;
-  const waiting = typeof step?.waiting === "number" ? step.waiting : originals === null ? 0 : Math.max(0, originals - copy);
+  const waiting = typeof step?.waiting === "number" ? step.waiting : originals === null || copyPartial ? 0 : Math.max(0, originals - copy);
   const phase: Phase = running
     ? "running"
     : copy === 0 && heldFiles === 0 && rows.length === 0
@@ -190,6 +198,7 @@ export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds 
   return {
     phase,
     originals,
+    originalsPartial,
     bytes,
     copy,
     personnummer: readsPersonnummer(d),
@@ -197,8 +206,14 @@ export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds 
     coded,
     without: unlisted ? { ids: d.held?.identifiers ?? 0, files: d.held?.files ?? 0 } : without,
     go: phase === "fresh" ? (originals ?? 0) : go,
+    goPartial: phase === "fresh" ? originalsPartial : originalsPartial || copyPartial,
     subjects: heldIds?.subjects ?? { coded: 0, generated: 0 },
   };
+}
+
+/** The files the next run pseudonymises, in words: "at least" where a count behind them stopped short of a large tree. */
+export function goWords(v: Pick<StepView, "go" | "goPartial">): string {
+  return `${v.goPartial ? "at least " : ""}${files(v.go)}`;
 }
 
 /** What the step's one primary button does: run the dataset's thread, or open the IDs to give them codes. */
@@ -211,9 +226,9 @@ export type Act = "run" | "find" | "codes";
  * first finds them, holding what has no code.
  */
 export function primaryOf(v: StepView, generates: boolean, open: boolean): { label: string; act: Act } | null {
-  if (v.phase === "fresh") return v.personnummer || generates ? { label: `Pseudonymise and sort ${files(v.go)}`, act: "run" } : { label: "Find the IDs", act: "find" };
+  if (v.phase === "fresh") return v.personnummer || generates ? { label: `Pseudonymise and sort ${goWords(v)}`, act: "run" } : { label: "Find the IDs", act: "find" };
   if (v.phase === "codes" && !open) return { label: `Give the ${v.without.ids === 1 ? "ID" : `${n(v.without.ids)} IDs`} a subject code`, act: "codes" };
-  if ((v.phase === "codes" || v.phase === "ready") && v.go > 0) return { label: `Pseudonymise and sort ${files(v.go)}`, act: "run" };
+  if ((v.phase === "codes" || v.phase === "ready") && v.go > 0) return { label: `Pseudonymise and sort ${goWords(v)}`, act: "run" };
   return null;
 }
 
@@ -255,7 +270,7 @@ export function railWords(v: StepView): { what: string; when: string; next: bool
   if (v.phase === "running" || v.phase === "done") return null;
   if (v.phase === "fresh") return { what: "not yet", when: "next step", next: true };
   if (v.phase === "codes") return { what: v.coded > 0 ? `${n(v.coded)} of ${ids(v.rows.length)} have a subject code` : `${ids(v.without.ids)} ${v.without.ids === 1 ? "needs" : "need"} a subject code`, when: "next step", next: true };
-  return { what: `${files(v.go)} to go`, when: "next step", next: true };
+  return { what: `${goWords(v)} to go`, when: "next step", next: true };
 }
 
 /** The line under the IDs: the files still waiting for a code. */

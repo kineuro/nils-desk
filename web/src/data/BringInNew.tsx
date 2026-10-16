@@ -10,7 +10,7 @@ import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
-import { arrivesOf, bringInBody, bringInName, estimateWords, jobs, newInOriginals, packFor, record26, type Dataset, type Rates } from "./datasets";
+import { arrivesOf, bringInBody, bringInName, estimateWords, jobs, newCount, packFor, record26, type Dataset, type Rates } from "./datasets";
 
 export function BringInNew(props: { caps: Capabilities; dataset: Dataset; rates: Rates | null; onClose: () => void; onDone: (words: string) => void }) {
   const { caps, dataset: d, rates, onClose, onDone } = props;
@@ -20,8 +20,8 @@ export function BringInNew(props: { caps: Capabilities; dataset: Dataset; rates:
   const chains = record26(caps, d);
   const identified = arrivesOf(d) === "identified";
   const packs = caps.engine?.packs ?? [];
-  const fresh = newInOriginals(d);
-  const estimate = identified ? estimateWords(fresh, rates?.pseudonymize, "reading") : estimateWords(fresh, rates?.digest, "sorting");
+  const fresh = newCount(d);
+  const estimate = fresh === null ? null : identified ? estimateWords(fresh.files, rates?.pseudonymize, "reading", fresh.partial) : estimateWords(fresh.files, rates?.digest, "sorting", fresh.partial);
   // sorting needs work on Pipelines: without it the steps stop after reading
   const sorts = may(caps, "pipelines:work");
   const steps = chains ? [...(identified ? ["Pseudonymise"] : []), "Read", ...(sorts ? ["Sort"] : [])] : ["Read"];
@@ -57,7 +57,9 @@ export function BringInNew(props: { caps: Capabilities; dataset: Dataset; rates:
   return (
     <Dialog title={`Do all steps: ${d.name}`} icon="play" onClose={onClose} foot={foot}>
       <p className="steps-line">{steps.join(" → ")}</p>
-      {fresh !== null && <p className="meta">{fresh.toLocaleString("en-US")} new files</p>}
+      {fresh !== null && (
+        <p className="meta">{`${fresh.partial ? "at least " : ""}${fresh.files.toLocaleString("en-US")} new ${fresh.files === 1 ? "file" : "files"}`}</p>
+      )}
       {chains && packs.length > 1 && (
         <div className="field-row">
           <label className="meta" htmlFor="bring-in-pack">

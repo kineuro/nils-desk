@@ -56,6 +56,7 @@ import {
   codesWords,
   everyFile,
   held,
+  goWords,
   idsBox,
   idTypeOf,
   matchedOf,
@@ -173,7 +174,10 @@ function Boxes({ v, compact, codes, kept }: { v: StepView; compact: boolean; cod
           <Icon name="lock" />
           Originals
         </span>
-        <span className="ps-big">{originals}</span>
+        <span className="ps-big" title={v.originals !== null && v.originalsPartial ? `at least ${originals} files: counted until the count stopped; a run counts them all` : undefined}>
+          {v.originals !== null && v.originalsPartial && <small className="ps-least">at least </small>}
+          {originals}
+        </span>
         <span className="ps-box-words">{kept ?? `files${size} · locked`}</span>
       </div>
       {arrow}
@@ -533,7 +537,7 @@ function Codes(props: {
               </span>
               <span className="meta">
                 {heads}
-                {matched > 0 ? ` · ${n(v.go)} ${v.go === 1 ? "file" : "files"} can go now` : ""}
+                {matched > 0 ? ` · ${goWords(v)} can go now` : ""}
               </span>
             </span>
           )}

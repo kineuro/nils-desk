@@ -513,6 +513,30 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(e.of("POST", "/api/jobs")[0].body!.command).toEqual(["bring-in", "@study-identified", "--name", expect.stringMatching(/^study-identified-/), "--pack", "mri"]);
   });
 
+  it("says a count of the originals that stopped short as at least, on the box and the button, and a whole one as it is (2026-10-16)", async () => {
+    const partial = dataset({
+      held: { files: 0, identifiers: 0 },
+      identity: { id_type: "personnummer", from: [{ field: "PatientID" }] },
+      trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1_900_000_000, partial: true }, anon: { path: "/srv/x/derivatives/dcm-anon", files: 0, last_written: null } },
+    });
+    await page(partial, { held: 0, waiting_partial: true }, () => undefined, { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } });
+    const panel = host.querySelector(".ps-step")!;
+    const box = panel.querySelector(".ps-big")!;
+    expect(box.textContent).toBe("at least 7,544");
+    expect(box.getAttribute("title")).toBe("at least 7,544 files: counted until the count stopped; a run counts them all");
+    expect(button(panel, "Pseudonymise and sort at least 7,544 files")).not.toBeNull();
+    expect(button(panel, "Pseudonymise and sort 7,544 files")).toBeNull();
+    act(() => root.unmount());
+    root = createRoot(host);
+    // the same dataset counted whole says no "at least" anywhere
+    const whole = dataset({ ...partial, trees: { ...partial.trees!, originals: { ...partial.trees!.originals!, partial: false } } });
+    await page(whole, { held: 0 }, () => undefined, { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } });
+    const again = host.querySelector(".ps-step")!;
+    expect(again.querySelector(".ps-big")!.textContent).toBe("7,544");
+    expect(button(again, "Pseudonymise and sort 7,544 files")).not.toBeNull();
+    expect(host.querySelector(".dp-steps")!.textContent).not.toContain("at least");
+  });
+
   it("is opened by the old address of the dataset's Pseudonymisation page, and once done says what every file got", async () => {
     const done = dataset({ held: { files: 0, identifiers: 0 }, trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1_900_000_000 }, anon: { path: "/srv/x/derivatives/dcm-anon", files: ORIGINALS, last_written: AT } } });
     await page(done, { state: "done", files: ORIGINALS, waiting: 0, held: 0, started_at: "2026-10-09T19:43:19Z", finished_at: AT }, () => undefined, { step: "pseudonymisation", held: { ...heldIds({}, { coded: 8, generated: 2 }), files: 0, identifiers: 0, ids: [] } });

@@ -44,6 +44,7 @@ import {
   slotOf,
   stateOf,
   stateWord,
+  pseudonymisedWords,
   stepsOfSources,
   stepWords,
   took,
@@ -364,6 +365,22 @@ describe("a card's line", () => {
     // the found step says it in the same words
     expect(stepWords(step("found", { files: 49836, partial: true, counted_by: "probe", tree: "anon" }), NOW).what).toBe("at least 49,836 files");
     expect(stepWords(step("found", { files: 1112026, partial: false, counted_by: "read", tree: "anon" }), NOW).what).toBe("1,112,026 files");
+    // an engine with no summary door: the sources door's tree says it too
+    expect(stepsOfSources(big)[0]).toMatchObject({ step: "found", files: 49836, partial: true });
+    expect(stepsOfSources(dataset({ trees: { originals: null, anon: { path: "/x/derivatives/dcm-anon", files: 12, last_written: null } } }))[0]).toMatchObject({ files: 12, partial: false });
+  });
+
+  it("says the pseudonymised step's counts as at least where the probe stopped short, and as they are where it did not (2026-10-16)", () => {
+    // whole counts
+    expect(pseudonymisedWords({ files: 7000, waiting: 544 })).toBe("544 to do");
+    expect(pseudonymisedWords({ files: 7544, waiting: 0, partial: false, waiting_partial: false })).toBe("7,544 files");
+    // the originals' count stopped short: at least that many wait
+    expect(pseudonymisedWords({ files: 4, waiting: 199996, partial: false, waiting_partial: true })).toBe("at least 199,996 to do");
+    // the copy's stopped short: what waits is not known, the copy holds at least its count
+    expect(pseudonymisedWords({ files: 200000, waiting: 3, partial: true, waiting_partial: true })).toBe("at least 200,000 files");
+    expect(pseudonymisedWords({ files: 200000, waiting: 0, partial: true, waiting_partial: true })).toBe("at least 200,000 files");
+    expect(stepWords(step("pseudonymised", { files: 4, waiting: 199996, held: 0, partial: false, waiting_partial: true }), NOW).what).toBe("at least 199,996 to do");
+    expect(stepWords(step("pseudonymised", { files: 7000, waiting: 544, held: 0 }), NOW).what).toBe("544 to do");
   });
 });
 

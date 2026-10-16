@@ -84,9 +84,10 @@ export function lookNames(at: string, rows: FolderEntry[], visible: Iterable<str
     .map((r) => r.name);
 }
 
-/** How many files, and whether there may be more. */
+/** How many files: "800 files" where the look counted them all, "at least 800 files" where it stopped short and there may be more. */
 export function filesWords(files: { count: number; more: boolean }): string {
-  return `${n(files.count)}${files.more ? " or more" : ""} ${files.count === 1 && !files.more ? "file" : "files"}`;
+  const words = `${n(files.count)} ${files.count === 1 ? "file" : "files"}`;
+  return files.more ? `at least ${words}` : words;
 }
 
 export type LookTone = "dicom" | "other" | "quiet";

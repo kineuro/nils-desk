@@ -125,7 +125,7 @@ describe("what a look found", () => {
   it("says the modalities seen most first, the scanners and the files", () => {
     expect(lookWords(looked({ sampled: 16, dicom: 16, modalities: { CT: 4, MR: 12, unknown: 1 }, scanners: 2, files: { count: 800, more: true } }))).toEqual({
       tone: "dicom",
-      words: "MR, CT, 2 scanners · 800 or more files",
+      words: "MR, CT, 2 scanners · at least 800 files",
     });
     expect(lookWords(looked({ sampled: 1, dicom: 1, modalities: { unknown: 1 }, files: { count: 1, more: false } }))).toEqual({ tone: "dicom", words: "DICOM · 1 file" });
     expect(lookWords(looked({ sampled: 3, files: { count: 3, more: false } }))).toEqual({ tone: "other", words: "no DICOM found · 3 files" });
@@ -135,7 +135,11 @@ describe("what a look found", () => {
     expect(lookWords(looked({ directory: false })).words).toBe("no longer a folder here");
     expect(lookWords(undefined).words).toBe("");
     expect(filesWords({ count: 12345, more: false })).toBe("12,345 files");
-    expect(filesWords({ count: 1, more: true })).toBe("1 or more files");
+    // a look that stopped short of the folder's files says at least, and only then (2026-10-16)
+    expect(filesWords({ count: 1, more: true })).toBe("at least 1 file");
+    expect(filesWords({ count: 800, more: true })).toBe("at least 800 files");
+    expect(filesWords({ count: 1, more: false })).toBe("1 file");
+    expect(lookWords(looked({ sampled: 3, files: { count: 3, more: true } })).words).toBe("no DICOM found · at least 3 files");
   });
 });
 

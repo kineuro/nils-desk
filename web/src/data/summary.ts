@@ -57,6 +57,8 @@ export interface SummaryStep {
   partial?: boolean;
   counted_by?: "read" | "pseudonymise" | "probe";
   waiting?: number;
+  /** Pseudonymised (2026-10-16): `waiting` is no whole count, as `partial` says of its `files`: at least `waiting` where only the originals' count stopped short, unknown where the copy's did too. */
+  waiting_partial?: boolean;
   held?: number;
   /** The read: the files it refused, those set aside among them included. */
   refused?: number;
@@ -201,7 +203,7 @@ export function stepsOfSources(d: Dataset): SummaryStep[] {
   const at = { job: null, started_at: last?.started_at ?? null, finished_at: last?.finished_at ?? null, progress: null };
   const none = { job: null, started_at: null, finished_at: null, progress: null };
   return [
-    { step: "found", state: state(rail[0]), ...none, files: d.trees?.originals?.files ?? d.trees?.anon?.files ?? null },
+    { step: "found", state: state(rail[0]), ...none, ...foundOf(d, null) },
     { step: "read", state: state(rail[1]), ...at, files: last?.files.seen ?? 0, refused: d.totals.refused_files, reads: d.digests.count },
     { step: "sorted", state: state(rail[2]), ...none, scans: d.totals.stacks - (d.totals.unsorted ?? 0), of: d.totals.stacks, look: d.totals.to_sort, unsorted: d.totals.unsorted ?? 0 },
     { step: "main_scans", state: "waiting", ...none, picked: 0, borders: 0 },
@@ -373,7 +375,7 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
       if (s.tree === "originals" && typeof s.files === "number") what += ", with names";
       break;
     case "pseudonymised":
-      what = v("waiting") > 0 ? `${n(v("waiting"))} to do` : `${n(v("files"))} files`;
+      what = pseudonymisedWords(s);
       if (v("held") > 0) what += ` · ${n(v("held"))} held`;
       break;
     case "read":
@@ -473,6 +475,20 @@ export function foundOf(d: Pick<Dataset, "trees">, s: DatasetSummary | null): Fo
   if (typeof originals?.files === "number") return { files: originals.files, partial: originals.partial === true };
   const anon = d.trees?.anon;
   return typeof anon?.files === "number" ? { files: anon.files, partial: anon.partial === true } : { files: null, partial: false };
+}
+
+/**
+ * The pseudonymised step's count (2026-10-16): the files still to do, or the
+ * copy's files once none waits. Where a count stopped short of a large tree
+ * it says so: "at least 200,000 to do" where only the originals' count
+ * stopped short, and the copy's "at least" where its own did, since what
+ * waits is then not known.
+ */
+export function pseudonymisedWords(s: Pick<SummaryStep, "files" | "waiting" | "partial" | "waiting_partial">): string {
+  const files = typeof s.files === "number" ? s.files : 0;
+  const waiting = typeof s.waiting === "number" ? s.waiting : 0;
+  if (waiting > 0 && !s.partial) return `${s.waiting_partial ? "at least " : ""}${n(waiting)} to do`;
+  return filesWords({ files, partial: s.partial === true });
 }
 
 /** A count of files in words: "49,836 files", or "at least 49,836 files" where the count stopped short of the tree. */

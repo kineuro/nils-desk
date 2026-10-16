@@ -10,6 +10,9 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Changed
 
 - Body part and post-contrast are runs a person starts (record 55, ruling 35 (b)): the engine scores a dataset's arrival with System 1 alone, which needs no button. While either step waits, the dataset's rail says what its Run would add instead of "not run yet": "6 with no body part", "12 T1 brain, contrast unknown", or "none needs it", from the step's `hint` on the dataset's summary. An engine from before says "not run yet" as it did.
+### Fixed
+
+- A count of files that stopped short of a large folder says "at least" wherever it is shown, and a whole count says the number alone. The engine's probes are bounded and say where they stopped (`more`, `partial`); the pseudonymise step (the originals' box, "Pseudonymise and sort", "to go" and "can go now"), the summary's pseudonymised step (its new `partial` and `waiting_partial`), a dataset's tree lines, Do all steps' new files and estimate, the folder picker's look and the setup folder listing now read them. Where the copy's count stopped short, no count of files still to pseudonymise is given, since it is not known.
 
 ## [1.0.0-alpha.68] - 2026-10-16
 
