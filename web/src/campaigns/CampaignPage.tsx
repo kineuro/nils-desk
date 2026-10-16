@@ -59,6 +59,8 @@ import { anchoredServed, isAnchored } from "./anchored";
 import { AnchoredPanel } from "./AnchoredReader";
 import { checkAnswerLine, checkDecisionsWords, checkDoors, checkQuestionOf, checkServed, flagsParts, isCheck, type PartNames } from "./check";
 import { CheckPanel, checkActs } from "./CheckPanel";
+import { ratersRefusal, type RaterWarning } from "./raters";
+import { RatersDialog } from "./RatersDialog";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -67,8 +69,9 @@ type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string }
 
 export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities; id: string; missing?: number | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
-  const [acting, setActing] = useState<"close" | "export" | null>(null);
+  const [acting, setActing] = useState<"close" | "export" | "raters" | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  const [warned, setWarned] = useState<RaterWarning[]>([]);
   const readsSets = served(caps, "GET /api/label-sets") && mayAny(caps, "campaigns:see", "review:see");
   const read = useCallback(() => {
     const sets = readsSets ? campaigns.labelSets().catch(() => [] as LabelSet[]) : Promise.resolve([] as LabelSet[]);
@@ -82,7 +85,7 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   if (load.kind === "failed") return <p className="warn">The campaign could not be read: {load.why}</p>;
   const c = load.c;
   return (
-    <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} stats={load.stats} said={said} missing={missing} onAct={setActing}>
+    <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} stats={load.stats} said={said} warned={warned} missing={missing} onAct={setActing}>
       {isCheck(c) && checkServed(caps) ? null : isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : isAnchored(c) && anchoredServed(caps) ? <AnchoredPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
       {acting === "close" && (
         <CloseDialog
@@ -92,6 +95,19 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
           onDone={(w) => {
             setActing(null);
             setSaid(w);
+            read();
+          }}
+        />
+      )}
+      {acting === "raters" && (
+        <RatersDialog
+          caps={caps}
+          campaign={c}
+          onClose={() => setActing(null)}
+          onDone={(r, words) => {
+            setActing(null);
+            setSaid(words);
+            setWarned(r.warnings);
             read();
           }}
         />
@@ -119,16 +135,18 @@ export interface CampaignBodyProps {
   /** Each rater's pace, where the engine counts it (record 48 R1). */
   stats?: Pace | null;
   said?: string | null;
+  /** Raters just added who already read these stacks in other campaigns, in the engine's words. */
+  warned?: readonly RaterWarning[];
   /** The state the items table shows; all when null. */
   filter?: string | null;
   /** Stacks without their picture, as the make door counted them. */
   missing?: number | null;
-  onAct: (act: "close" | "export") => void;
+  onAct: (act: "close" | "export" | "raters") => void;
   children?: React.ReactNode;
 }
 
 /** One campaign as it draws from what it read. */
-export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, said = null, filter: initial = null, missing = null, onAct, children }: CampaignBodyProps) {
+export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, said = null, warned = [], filter: initial = null, missing = null, onAct, children }: CampaignBodyProps) {
   const [filter, setFilter] = useState<string | null>(initial);
   const items = c.items ?? [];
   const shown = filter ? items.filter((i) => i.state === filter) : items;
@@ -208,6 +226,11 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           {said}
         </p>
       )}
+      {warned.map((w) => (
+        <p key={w.principal} className="warn">
+          {w.why}
+        </p>
+      ))}
       <Values
         cells={[
           { k: "items", v: n(itemTotal(c.counts)) },
@@ -253,7 +276,14 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
         </div>
         <div className="facts-pair">
           <dt>raters</dt>
-          <dd>{c.rater_policy.raters.length > 0 ? c.rater_policy.raters.join(", ") : "anyone with work on Campaigns"}</dd>
+          <dd>
+            {c.rater_policy.raters.length > 0 ? c.rater_policy.raters.join(", ") : "anyone with work on Campaigns"}
+            {ratersRefusal(caps, c) === null && (
+              <button type="button" className="button quiet small raters-change" aria-label="Change the raters" onClick={() => onAct("raters")}>
+                Change
+              </button>
+            )}
+          </dd>
         </div>
         <div className="facts-pair">
           <dt>adjudicators</dt>
