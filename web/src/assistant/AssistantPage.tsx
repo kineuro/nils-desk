@@ -24,6 +24,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { keepingRefusal } from "../query/cards";
+import { mayKeep } from "../query/kept";
 import { href } from "../routes";
 import { assistantModel } from "../sections";
 import { admit } from "../ui/context";
@@ -66,8 +67,8 @@ const LEDE = "Ask about your data, or say what to do.";
 /** Under the input, always: what the assistant may do. */
 const PROMISE = "It reads what you may read, and proposes; you decide.";
 
-/** How the person left a proposed version, for its card. */
-const stateOf = (p: Proposal): VersionState => (p.stale ? "stale" : p.decided === "accepted" ? "kept" : p.decided === "rejected" ? "set aside" : "open");
+/** How the person left a proposed version, for its card: the engine's word on whether its card is kept where it has one, else what they decided. */
+const stateOf = (p: Proposal, kept: boolean | null): VersionState => (p.stale ? "stale" : (kept ?? p.decided === "accepted") ? "kept" : p.decided === "rejected" ? "set aside" : "open");
 
 /** The sentence for a turn that ended some other way than answering. */
 function ending(settled: PaneState["settled"]): string | null {
@@ -124,7 +125,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
   const epoch = caps.engine?.registry.epoch ?? null;
   const keeping = keepingRefusal(caps);
   // the query the conversation works on: the version on the panel goes with the next prompt
-  const play = useInPlay(talk, conv, meta?.document ?? null, keeping);
+  const play = useInPlay(talk, conv, meta?.document ?? null, keeping, mayKeep(caps));
   const [panel, setPanel] = useState(false);
   const panelOpen = panel && play.display !== null;
   // the conversation's name being typed, from the menu's Rename
@@ -540,7 +541,7 @@ function ChatPage({ caps, conversation }: { caps: Capabilities; conversation: st
                 open={unfolded.has(t.id)}
                 onToggle={() => toggle(t.id)}
                 proposals={pane.proposals.filter((p) => p.turn === t.id)}
-                queryCard={(p) => queryCard(p.document, stateOf(p))}
+                queryCard={(p) => queryCard(p.document, stateOf(p, play.kept(p.document)))}
                 changes={pane.changes.filter((c) => c.turn === t.id)}
                 ruleCard={(c) => (c.proposal !== undefined ? <RuleApprovalById caps={caps} pack={c.pack ?? null} id={c.proposal} onChange={revise} /> : null)}
                 charts={pane.charts[t.id]}

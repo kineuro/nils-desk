@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// The Query page: every query kept is a card. A card opens on a version: its
-// charts and the manual editor in the middle, and on the right the discussion
-// and the card's steps as a timeline from its start to its answer. Every change
-// is a move the engine offered, and applying one makes the next version, so a
-// person can go back to any version and start again from it. The charts count
-// what is under the step chosen on the timeline, each member once.
+// The Query page: every query kept is a card, and what the assistant drafted
+// is a draft until a person keeps it (record 55 K6). A card opens on a
+// version: its charts and the manual editor in the middle, and on the right
+// the discussion and the card's steps as a timeline from its start to its
+// answer. Every change is a move the engine offered, and applying one makes
+// the next version, so a person can go back to any version and start again
+// from it. The charts count what is under the step chosen on the timeline,
+// each member once.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type React from "react";
@@ -25,7 +27,7 @@ import type { Capabilities } from "../capabilities";
 import { PromoteDialog } from "../data/PromoteDialog";
 import { door as served } from "../deployment";
 import { may, sees } from "../grants";
-import { objects, type DocumentRow } from "../objects/client";
+import { objects, type DocumentRow, type Show } from "../objects/client";
 import { href } from "../routes";
 import { assistantModel, assistantOffered } from "../sections";
 import { admit } from "../ui/context";
@@ -35,6 +37,7 @@ import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
+import { keptWords, mayKeep } from "./kept";
 import { SaveSelection } from "./SaveSelection";
 import { Exports } from "./Exports";
 import { Selections } from "./Selections";
@@ -85,16 +88,45 @@ function SelectionsPage(_: { caps: Capabilities }) {
 }
 
 function Cards({ caps }: { caps: Capabilities }) {
+  const [show, setShow] = useState<Show>("yes");
   const [rows, setRows] = useState<DocumentRow[] | null>(null);
+  const [next, setNext] = useState<number | null>(null);
+  /** How many lines are kept and how many are drafts, where the engine counts them. */
+  const [counts, setCounts] = useState<{ cards?: number; drafts?: number }>({});
   const [why, setWhy] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
+  const [more, setMore] = useState(false);
   const [since] = useState(() => Date.now());
   useEffect(() => {
+    let alive = true;
+    setRows(null);
+    setNext(null);
+    setWhy(null);
     objects
-      .documents()
-      .then((r) => setRows(r.documents))
-      .catch((e: Error) => setWhy(e.message));
-  }, []);
+      .documents({ kept: show })
+      .then((r) => {
+        if (!alive) return;
+        setRows(r.documents);
+        setNext(r.next);
+        setCounts({ cards: r.cards, drafts: r.drafts });
+      })
+      .catch((e: Error) => alive && setWhy(e.message));
+    return () => {
+      alive = false;
+    };
+  }, [show]);
+  const readMore = () => {
+    if (next === null) return;
+    setMore(true);
+    objects
+      .documents({ kept: show, after: next })
+      .then((r) => {
+        setRows((was) => [...(was ?? []), ...r.documents]);
+        setNext(r.next);
+      })
+      .catch((e: Error) => setWhy(e.message))
+      .finally(() => setMore(false));
+  };
   return (
     <section className="query">
       <div className="data-head">
@@ -102,6 +134,16 @@ function Cards({ caps }: { caps: Capabilities }) {
           <span className="eyebrow">Query</span>
           <h1>Cards</h1>
         </div>
+        {counts.drafts !== undefined && (
+          <div className="chart-tabs" role="tablist" aria-label="Which cards">
+            <button type="button" role="tab" aria-selected={show === "yes"} className={show === "yes" ? "on" : ""} onClick={() => setShow("yes")}>
+              Cards
+            </button>
+            <button type="button" role="tab" aria-selected={show === "no"} className={show === "no" ? "on" : ""} onClick={() => setShow("no")}>
+              Drafts {counts.drafts.toLocaleString("en-US")}
+            </button>
+          </div>
+        )}
         <button type="button" className="button" onClick={() => setStarting(true)}>
           <Icon name="plus" />
           New card
@@ -109,7 +151,8 @@ function Cards({ caps }: { caps: Capabilities }) {
       </div>
       {rows === null && !why && <Wait phase="reading the cards" since={since} size="panel" />}
       {why && <p className="warn">The cards could not be read: {why}</p>}
-      {rows !== null && rows.length === 0 && <p className="lede">No card yet. New card starts one from everyone or from a cohort.</p>}
+      {rows !== null && rows.length === 0 && show === "yes" && <p className="lede">No card yet. New card starts one from everyone or from a cohort.</p>}
+      {rows !== null && rows.length === 0 && show === "no" && <p className="lede">No draft. What the assistant proposes waits here until you keep it.</p>}
       {rows !== null && rows.length > 0 && (
         <div className="query-cards">
           {rows.map((r) => (
@@ -128,6 +171,13 @@ function Cards({ caps }: { caps: Capabilities }) {
               </span>
             </a>
           ))}
+        </div>
+      )}
+      {next !== null && (
+        <div className="row">
+          <button type="button" className="button secondary" disabled={more} onClick={readMore}>
+            More
+          </button>
         </div>
       )}
       {starting && <StartDialog caps={caps} onClose={() => setStarting(false)} />}
@@ -242,6 +292,8 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   const [saving, setSaving] = useState(false);
   const [savedAs, setSavedAs] = useState<string | null>(null);
   const promotable = served(caps, "POST /api/ask/handles/{id}/promote") && may(caps, "data:work");
+  // record 55 K6: a card is on the Cards list once a person keeps it, and goes back among the drafts when they put it back
+  const keepable = mayKeep(caps);
   const [since] = useState(() => Date.now());
   const [profile, setProfile] = useState<{ set: string; field: string; value: Profile } | null>(null);
   const [profileWhy, setProfileWhy] = useState<string | null>(null);
@@ -387,6 +439,20 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
       });
   };
 
+  const keepCard = (keep: boolean) => {
+    setBusy({ phase: keep ? "keeping the card" : "putting the card back", since: Date.now() });
+    setWhy(null);
+    (keep ? ask.keep(id) : ask.unkeep(id))
+      .then(() => {
+        setBusy(null);
+        load();
+      })
+      .catch((e: Error) => {
+        setBusy(null);
+        setWhy(e.message);
+      });
+  };
+
   const branch = () => {
     setBusy({ phase: "starting a new card", since: Date.now() });
     ask
@@ -467,6 +533,16 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               </a>
             ))}
           </nav>
+        )}
+        {doc.kept !== undefined && (
+          <span className={doc.kept ? "tag ok" : "tag"} title={keptWords(doc.kept)}>
+            {doc.kept ? "kept" : "draft"}
+          </span>
+        )}
+        {keepable && doc.kept !== undefined && (
+          <button type="button" className={doc.kept ? "button quiet" : "button secondary"} disabled={busy !== null} onClick={() => keepCard(doc.kept === null)}>
+            {doc.kept ? "Unkeep" : "Keep"}
+          </button>
         )}
         {keeping === null && (
           <button type="button" className="button secondary" disabled={busy !== null} onClick={branch}>
