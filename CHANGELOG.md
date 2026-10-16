@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The Pseudonyms page's ID types table shows a type NILS never keeps (the ID that is the same everywhere, and a hospital's reserve number) with a "never kept" tag beside its name, and its count as lookups ("4,836 lookups"), with the reason on hover: no number is stored, only a keyed one-way lookup that recognises it when it arrives again. A count of kept IDs reads as before. The engine's types door names no flag for this, so the two built-in names are matched; a `never_kept` field is read where an engine gives one.
+
+### Fixed
+
+- The map dialog no longer shows any value of the file. Under each column's header it listed up to three of its cells beside the shape ("999999999999, 157 rows, 151 distinct"), so a column of personnummer put real numbers on the screen. A column is now its header, its shape and its counts, and nothing of a cell is kept for the screen. A header that is itself a number (a file with no header row has its first row read as one) is shown as "column 3" and makes no type name. The shape reads letters and digits of any script, where an accented letter was shown as it was. A number standing on its own in the engine's conflict words or an error is hidden in the dialog and in the pseudonymise step's conflict hint; row numbers stay.
+
 ## [1.0.0-alpha.67] - 2026-10-16
 
 For engine 1.0.0-alpha.87: a hospital's reserve number goes to the engine's own never-kept type in the map dialog.
