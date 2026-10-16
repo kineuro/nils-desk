@@ -31,6 +31,7 @@ import {
   lastLine,
   locationOf,
   look,
+  newCount,
   newInOriginals,
   parseCsv,
   places,
@@ -118,6 +119,27 @@ describe("a dataset's card", () => {
     const unprobed = { ...exchange, trees: { originals: null, anon: { path: exchange.trees!.anon!.path, files: null, last_written: null } } };
     expect(treeLines(unprobed)).toEqual([{ icon: "shield", path: "dcm-anon", words: "not counted yet · moved in, files as sent" }]);
     expect(newInOriginals({ ...incoming, trees: { ...incoming.trees!, anon: { ...incoming.trees!.anon!, files: null } } })).toBeNull();
+  });
+
+  it("says a tree's count that stopped short as at least, and a whole one as it is (2026-10-16)", () => {
+    const stopped = (o: boolean, a: boolean) => ({ ...incoming, trees: { originals: { ...incoming.trees!.originals!, partial: o }, anon: { ...incoming.trees!.anon!, partial: a } } });
+    expect(treeLines(stopped(true, false))).toEqual([
+      { icon: "lock", path: "dcm-original", words: "at least 18,420 · locked" },
+      { icon: "shield", path: "dcm-anon", words: "16,208 · the source" },
+    ]);
+    expect(treeLines(stopped(false, true))[1].words).toBe("at least 16,208 · the source");
+    expect(treeLines(stopped(false, false)).map((l) => l.words)).toEqual(["18,420 · locked", "16,208 · the source"]);
+    // the new files: whole, at least where the originals' count stopped short, and none to say where the copy's did
+    expect(newCount(incoming)).toEqual({ files: 2212, partial: false });
+    expect(newCount(stopped(true, false))).toEqual({ files: 2212, partial: true });
+    expect(newCount(stopped(true, true))).toBeNull();
+    expect(newCount(exchange)).toBeNull();
+    expect(estimateWords(2208, { files_per_s: 1400, files: 4430 }, "reading", true)).toBe("At least 2,208 files at 1,400 a second on this machine, measured over 4,430 files: at least 2 seconds, then reading.");
+    // a v0 folder whose count stopped short: at least, and no difference of the two
+    const v0 = v0Words({ v0: { original_files: 200000, raw_files: 199000, renamed: false, partial: true } })!;
+    expect(v0.detail).toContain("holds at least 200,000 files as they came");
+    expect(v0.detail).toContain("holds at least 199,000 files v0 pseudonymised");
+    expect(v0.skipped).toBe(0);
   });
 
   it("ends with its newest batch: what was pseudonymised, the new subjects, what is held", () => {

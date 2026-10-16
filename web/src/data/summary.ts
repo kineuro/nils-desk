@@ -30,6 +30,18 @@ export interface StepRefusal {
   error: string;
 }
 
+/**
+ * Body part and post-contrast (record 55, ruling 35 (b), 2026-10-16): they are
+ * optional models a person runs when the data need them, never at arrival, so
+ * each step says how many scans its model would add an answer to. `no_body_part`
+ * counts the scans with no body part; `t1_brain_contrast_unknown` those that can
+ * be T1 brain whose contrast nothing told. A count only.
+ */
+export interface StepHint {
+  kind: string;
+  scans: number;
+}
+
 /** One step of where a dataset is, as the summary door answers it: its state, the job that did it last and the counts the step has. */
 export interface SummaryStep {
   step: StepName;
@@ -45,6 +57,8 @@ export interface SummaryStep {
   partial?: boolean;
   counted_by?: "read" | "pseudonymise" | "probe";
   waiting?: number;
+  /** Pseudonymised (2026-10-16): `waiting` is no whole count, as `partial` says of its `files`: at least `waiting` where only the originals' count stopped short, unknown where the copy's did too. */
+  waiting_partial?: boolean;
   held?: number;
   /** The read: the files it refused, those set aside among them included. */
   refused?: number;
@@ -73,6 +87,8 @@ export interface SummaryStep {
   jobs?: number[];
   /** Body part and post-contrast: why a run of it would be refused now, none where its door would start one. */
   refusal?: StepRefusal | null;
+  /** Body part and post-contrast (ruling 35 (b)): how many scans a run would add an answer to; an engine from before says nothing. */
+  hint?: StepHint | null;
   /** Body part and post-contrast on a map's layer (record 55, decision 6): the scans whose model answers are staged and not yet put in force, which the layer does not show yet. */
   staged?: number;
 }
@@ -187,7 +203,7 @@ export function stepsOfSources(d: Dataset): SummaryStep[] {
   const at = { job: null, started_at: last?.started_at ?? null, finished_at: last?.finished_at ?? null, progress: null };
   const none = { job: null, started_at: null, finished_at: null, progress: null };
   return [
-    { step: "found", state: state(rail[0]), ...none, files: d.trees?.originals?.files ?? d.trees?.anon?.files ?? null },
+    { step: "found", state: state(rail[0]), ...none, ...foundOf(d, null) },
     { step: "read", state: state(rail[1]), ...at, files: last?.files.seen ?? 0, refused: d.totals.refused_files, reads: d.digests.count },
     { step: "sorted", state: state(rail[2]), ...none, scans: d.totals.stacks - (d.totals.unsorted ?? 0), of: d.totals.stacks, look: d.totals.to_sort, unsorted: d.totals.unsorted ?? 0 },
     { step: "main_scans", state: "waiting", ...none, picked: 0, borders: 0 },
@@ -329,6 +345,14 @@ const TITLE: Record<StepName, string> = {
   views: "3D views",
 };
 
+/** What a run of body part or post-contrast would add, in a few words, while the step waits; null where the engine says nothing. */
+export function addsWords(s: SummaryStep): string | null {
+  const scans = s.hint?.scans;
+  if (typeof scans !== "number") return null;
+  if (scans === 0) return "none needs it";
+  return s.step === "post_contrast" ? `${n(scans)} T1 brain, contrast unknown` : `${n(scans)} with no body part`;
+}
+
 /** A step of the detail's rail in three short lines: its name, what it did, and when. */
 export function stepWords(s: SummaryStep, now = new Date()): StepWords {
   const title = TITLE[s.step];
@@ -351,7 +375,7 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
       if (s.tree === "originals" && typeof s.files === "number") what += ", with names";
       break;
     case "pseudonymised":
-      what = v("waiting") > 0 ? `${n(v("waiting"))} to do` : `${n(v("files"))} files`;
+      what = pseudonymisedWords(s);
       if (v("held") > 0) what += ` · ${n(v("held"))} held`;
       break;
     case "read":
@@ -379,7 +403,11 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
         what = r.done !== null && r.of !== null ? `${n(r.done)} of ${n(r.of)}` : "running";
       } else if (queued) what = "waits its turn";
       else if (s.state === "failed") what = "failed";
-      else if (s.state === "waiting") what = "not run yet";
+      else if (s.state === "waiting") {
+        // ruling 35 (b): a person's run, never the arrival's
+        what = addsWords(s) ?? "not run yet";
+        hint = s.step === "body_part" ? "Body part runs when you start it." : "Post-contrast runs when you start it.";
+      }
       else what = v("answered") === 0 ? "none answered" : v("answered") >= v("of") ? `${n(v("answered"))} answered` : `${n(v("answered"))} of ${n(v("of"))} answered`;
       if (v("look") > 0) what += ` · ${n(v("look"))} to look at`;
       break;
@@ -447,6 +475,20 @@ export function foundOf(d: Pick<Dataset, "trees">, s: DatasetSummary | null): Fo
   if (typeof originals?.files === "number") return { files: originals.files, partial: originals.partial === true };
   const anon = d.trees?.anon;
   return typeof anon?.files === "number" ? { files: anon.files, partial: anon.partial === true } : { files: null, partial: false };
+}
+
+/**
+ * The pseudonymised step's count (2026-10-16): the files still to do, or the
+ * copy's files once none waits. Where a count stopped short of a large tree
+ * it says so: "at least 200,000 to do" where only the originals' count
+ * stopped short, and the copy's "at least" where its own did, since what
+ * waits is then not known.
+ */
+export function pseudonymisedWords(s: Pick<SummaryStep, "files" | "waiting" | "partial" | "waiting_partial">): string {
+  const files = typeof s.files === "number" ? s.files : 0;
+  const waiting = typeof s.waiting === "number" ? s.waiting : 0;
+  if (waiting > 0 && !s.partial) return `${s.waiting_partial ? "at least " : ""}${n(waiting)} to do`;
+  return filesWords({ files, partial: s.partial === true });
 }
 
 /** A count of files in words: "49,836 files", or "at least 49,836 files" where the count stopped short of the tree. */

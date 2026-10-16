@@ -67,6 +67,109 @@ export interface ReleaseForm {
   on_unknown?: string;
   pack?: string;
   scheme_name?: string;
+  /** The expert options (gate T31, step 13.8), sent only where the person changed one and the engine reads it. */
+  expert?: Expert;
+  /** The expert options the engine reads (`expertOffered`). */
+  offered?: readonly string[];
+}
+
+/**
+ * The release door's expert options (gate T31, step 13.8): where a
+ * localizer, a vendor's synthetic contrast and a DICOM copy go in a BIDS
+ * tree, the converter, uncompressed NIfTI, the authors, the categories of
+ * element removed, the UID root, only the picked stacks and only some roles.
+ * Each empty or default field is left for the engine's own default.
+ */
+export interface Expert {
+  localizers?: string;
+  synthetic?: string;
+  dicom?: string;
+  converter?: string;
+  /** False writes .nii; true or absent leaves the engine's .nii.gz. */
+  compress?: boolean;
+  /** Comma or newline separated. */
+  authors?: string;
+  /** The categories removed; absent or every one leaves the engine's own (all). */
+  categories?: string[];
+  uid_root?: string;
+  picked?: boolean;
+  /** Comma or newline separated. */
+  roles?: string;
+}
+
+/** The categories of element a release removes, all by default, in the engine's words. */
+export const CATEGORIES = ["patient", "trial", "provider", "institution", "times", "ids"] as const;
+
+/** The choices of the BIDS placements, each with the engine's default first. */
+export const PLACEMENTS = {
+  localizers: [
+    ["sourcedata", "Localizers in sourcedata"],
+    ["datatype", "Localizers in their datatype"],
+    ["anat", "Localizers in anat"],
+    ["drop", "Localizers left out"],
+  ],
+  synthetic: [
+    ["folder", "Synthetic contrasts in their folder"],
+    ["anat", "Synthetic contrasts in anat"],
+    ["derivatives", "Synthetic contrasts in derivatives"],
+  ],
+  dicom: [
+    ["all", "DICOM copy of every stack"],
+    ["folders", "DICOM copy of stacks in a folder"],
+    ["none", "No DICOM copy"],
+  ],
+} as const;
+
+/** The expert options this engine's release door reads, as its capabilities name them; none from an engine before them. */
+export function expertOffered(engine: Record<string, unknown> | null | undefined): string[] {
+  const r = engine?.["releases"] as { expert?: unknown } | undefined;
+  return Array.isArray(r?.expert) ? r.expert.filter((x): x is string => typeof x === "string") : [];
+}
+
+/**
+ * The expert options as the door's fields, only what differs from the
+ * engine's own default and only what `offered` names; the placements and the
+ * converter only beside BIDS, where the engine reads them. A field that is not
+ * well formed is the reason there is no body.
+ */
+export function expertBody(e: Expert | undefined, layout: string | undefined, offered: readonly string[]): { ok: true; body: Json } | { ok: false; why: string } {
+  const body: Json = {};
+  if (!e) return { ok: true, body };
+  const may = (k: string) => offered.includes(k);
+  const bids = layout?.trim() === "bids";
+  const defaults: Record<string, string> = { localizers: "sourcedata", synthetic: "folder", dicom: "all" };
+  for (const k of ["localizers", "synthetic", "dicom"] as const) {
+    const v = e[k]?.trim();
+    if (bids && v && v !== defaults[k] && may(k)) body[k] = v;
+  }
+  const converter = e.converter?.trim();
+  if (bids && converter && converter !== "dcm2niix" && may("converter")) {
+    const name = converter.split("/").pop() ?? "";
+    if (!converter.startsWith("/") || (name !== "dcm2niix" && name !== "dcm2niix.exe")) return { ok: false, why: "a converter that is the full path of a file named dcm2niix" };
+    body.converter = converter;
+  }
+  if (bids && e.compress === false && may("compress")) body.compress = false;
+  const authors = list(e.authors ?? "");
+  if (authors.length > 0 && may("authors")) body.authors = authors;
+  if (e.categories && e.categories.length < CATEGORIES.length && may("categories")) {
+    if (e.categories.length === 0) return { ok: false, why: "at least one category of element to remove" };
+    body.categories = CATEGORIES.filter((c) => e.categories?.includes(c));
+  }
+  const root = e.uid_root?.trim().replace(/\.$/, "");
+  if (root && may("uid_root")) {
+    if (!/^(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*$/.test(root) || root.length > 55) return { ok: false, why: "a UID root of numbers joined by dots, at most 55 characters, such as 1.2.826.0.1.3680043.10.543" };
+    body.uid_root = root;
+  }
+  if (e.picked === true && may("picked")) body.picked = true;
+  const roles = list(e.roles ?? "");
+  if (roles.length > 0 && may("roles")) body.roles = roles;
+  return { ok: true, body };
+}
+
+/** How many expert options differ from the engine's own, for the fold's summary. */
+export function expertCount(e: Expert | undefined, layout: string | undefined, offered: readonly string[]): number {
+  const b = expertBody(e, layout, offered);
+  return b.ok ? Object.keys(b.body).length : 0;
 }
 
 /**
@@ -98,6 +201,10 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
   if (uids && uids !== DATASETS_OWN) body.uids = uids;
   // record 55 C4: only the choice the engine does not make by itself is named, and only beside BIDS
   if (f.layout?.trim() === "bids" && f.naming?.trim() === "minimal") body.naming = "minimal";
+  // gate T31, step 13.8: the expert options the person changed, where the engine reads them
+  const expert = expertBody(f.expert, f.layout, f.offered ?? []);
+  if (!expert.ok) return { ok: false, why: expert.why };
+  Object.assign(body, expert.body);
   if (src.kind === "handle") {
     if (!src.handle) return { ok: false, why: "a handle" };
     if (src.handle.grain !== "stack") return { ok: false, why: `a release reads stacks; this handle is at the ${src.handle.grain} grain. Set the answer set to a stack set and run again` };

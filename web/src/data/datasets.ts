@@ -62,9 +62,10 @@ export interface Trees {
   anon: { path: string; files: number | null; last_written: string | null; partial?: boolean } | null;
 }
 
-/** A tree's file count in words, or that the engine has not counted it yet. */
-export function countWords(files: number | null | undefined): string {
-  return typeof files === "number" ? files.toLocaleString("en-US") : "not counted yet";
+/** A tree's file count in words, "at least" where the count stopped short of a large tree, or that the engine has not counted it yet. */
+export function countWords(files: number | null | undefined, partial = false): string {
+  if (typeof files !== "number") return "not counted yet";
+  return `${partial ? "at least " : ""}${files.toLocaleString("en-US")}`;
 }
 
 export interface Tags {
@@ -320,11 +321,11 @@ export function treeLines(d: Dataset): TreeLine[] {
   if (!d.trees) return [];
   const out: TreeLine[] = [];
   const last = (p: string) => p.replace(/\/+$/, "").split("/").pop() || p;
-  if (d.trees.originals) out.push({ icon: "lock", path: last(d.trees.originals.path), words: `${countWords(d.trees.originals.files)} · locked` });
+  if (d.trees.originals) out.push({ icon: "lock", path: last(d.trees.originals.path), words: `${countWords(d.trees.originals.files, d.trees.originals.partial === true)} · locked` });
   const anon = d.trees.anon;
   if (!anon) return out;
   const how = arrivesOf(d) === "identified" ? "the source" : arrivesOf(d) === "deidentified" ? "moved in, files as sent" : "subject codes taken verbatim";
-  out.push({ icon: "shield", path: last(anon.path), words: `${countWords(anon.files)} · ${how}` });
+  out.push({ icon: "shield", path: last(anon.path), words: `${countWords(anon.files, anon.partial === true)} · ${how}` });
   return out;
 }
 
@@ -426,6 +427,18 @@ export function newInOriginals(d: Dataset): number | null {
   return Math.max(0, d.trees.originals.files - d.trees.anon.files);
 }
 
+/**
+ * The new files of the originals as a count to say, and whether it is a
+ * lower bound (2026-10-16): at least that many where the originals' count
+ * stopped short of a large tree, and none to say where the copy's did, since
+ * how many it lacks is then not known.
+ */
+export function newCount(d: Dataset): { files: number; partial: boolean } | null {
+  const files = newInOriginals(d);
+  if (files === null || d.trees?.anon?.partial === true) return null;
+  return { files, partial: d.trees?.originals?.partial === true };
+}
+
 /** The pack the chain classifies with: the one named, else the first the engine loads. */
 export function packFor(caps: Capabilities, name?: string | null): string | null {
   const packs = caps.engine?.packs ?? [];
@@ -484,12 +497,14 @@ export function rateOf(rate: Rate | number | null | undefined): Rate | null {
 }
 
 /** About how long the first step takes at the machine's last measured rate, and what that rate was measured over; nothing where none was measured. */
-export function estimateWords(files: number | null, rate: Rate | number | null | undefined, thenWhat = "the digest"): string | null {
+export function estimateWords(files: number | null, rate: Rate | number | null | undefined, thenWhat = "the digest", partial = false): string | null {
   const measured = rateOf(rate);
   if (files === null || measured === null) return null;
   const seconds = Math.max(1, Math.round(files / measured.files_per_s));
   const span = seconds < 60 ? `${seconds} ${seconds === 1 ? "second" : "seconds"}` : seconds < 3600 ? `${Math.round(seconds / 60)} ${Math.round(seconds / 60) === 1 ? "minute" : "minutes"}` : `${(seconds / 3600).toFixed(1)} hours`;
   const over = typeof measured.files === "number" ? `, measured over ${n(measured.files)} files` : "";
+  // a count that stopped short of a large tree: at least that many files, and at least that long
+  if (partial) return `At least ${n(files)} files at ${n(Math.round(measured.files_per_s))} a second on this machine${over}: at least ${span}, then ${thenWhat}.`;
   return `About ${n(files)} files at ${n(Math.round(measured.files_per_s))} a second on this machine${over}: ${span}, then ${thenWhat}.`;
 }
 
@@ -504,8 +519,10 @@ export function v0Words(layout: Layout | null | undefined): { lead: string; deta
   if (!v0) return null;
   // the places door's listing leaves a v0 folder's files uncounted
   const counted = typeof v0.original_files === "number" && typeof v0.raw_files === "number";
-  const skipped = counted ? Math.max(0, (v0.original_files ?? 0) - (v0.raw_files ?? 0)) : 0;
-  const files = (k: number | null) => (typeof k === "number" ? `${n(k)} files` : "the files");
+  // a count that stopped short of a large tree is a lower bound, and the difference of two such counts says nothing
+  const partial = v0.partial === true;
+  const skipped = counted && !partial ? Math.max(0, (v0.original_files ?? 0) - (v0.raw_files ?? 0)) : 0;
+  const files = (k: number | null) => (typeof k === "number" ? `${partial ? "at least " : ""}${n(k)} files` : "the files");
   return {
     lead: "This is a NILS v0 cohort folder",
     detail: `derivatives/dcm-original holds ${files(v0.original_files)} as they came from the scanners, and derivatives/dcm-raw holds ${files(v0.raw_files)} v0 pseudonymised, with v0's codes in PatientID.`,

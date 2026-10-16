@@ -14,6 +14,7 @@ import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
 import { GRANTS, type Grant } from "../grants";
 import type { Access, Group, Person } from "./identity";
+import type { Install } from "./supervise";
 import { AddPerson, IdentityBody } from "./IdentityPage";
 
 const reviewers: Group = { id: 1, name: "Reviewers", grants: ["assistant:use", "data:see", "query:work", "review:work"], detail: "quasi", follows: ["lab-review"], members: ["erik"] };
@@ -81,7 +82,8 @@ describe("the People page when nobody signs in", () => {
     expect(html).toContain('<span class="path">http://127.0.0.1:7203</span>');
     expect(html).not.toContain("h sessions");
     expect(html).not.toContain("<summary>Details</summary>");
-    expect(html).toContain("<span>Change with</span>");
+    // no supervisor reached here, so the command stays, with the one line that says why (gate T31)
+    expect(html).toContain("This desk reaches no supervisor, so at the machine:");
     expect(html).toContain("<code>nils setup</code>");
     expect(html).not.toContain("To let people sign in");
     expect(html).not.toContain("chosen in setup");
@@ -235,5 +237,23 @@ describe("adding a person from Setup", () => {
     expect(given).toContain("Add a person");
     expect(given).toContain('<button type="button" class="opt" aria-pressed="false">Reviewers</button>');
     expect(renderToStaticMarkup(<AddPerson users={[]} onClose={none} onDone={none} />)).toContain("Reading the groups.");
+  });
+});
+
+describe("changing how people sign in (gate T31, step 1.6)", () => {
+  const served = { changes: { served: ["signin"], wait: null } } as unknown as Install;
+  const drawWith = (c: Capabilities, i: Install | null) => renderToStaticMarkup(<IdentityBody caps={c} install={i} groups={null} access={null} why={null} now={NOW} onOpen={none} />);
+
+  it("is a button where the supervisor changes it, with no command beside it", () => {
+    const html = drawWith(caps("off"), served);
+    expect(html).toContain("Change how people sign in");
+    expect(html).not.toContain("<code>nils setup</code>");
+  });
+
+  it("stays at the machine for a person who may not work on the install, and says so", () => {
+    const html = drawWith(caps("off", ["identity:see", "identity:work", "install:see"]), served);
+    expect(html).not.toContain("Change how people sign in");
+    expect(html).toContain("Changed by an administrator, at the machine:");
+    expect(html).toContain("<code>nils setup</code>");
   });
 });

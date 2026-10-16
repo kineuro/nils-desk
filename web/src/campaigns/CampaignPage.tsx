@@ -2,7 +2,9 @@
 // One campaign (record 45 S3, study A3): its source and question, who rates
 // and who adjudicates, how far it is, how well the raters agree, its items by
 // state, and its answers. Two acts: Close, which first shows what it will
-// write, and Export, which writes a label set.
+// write, and Export, which writes a label set. Its Results view (record 55,
+// ruling 35 (d)) is the maker's and an administrator's: the answers by rater,
+// what was settled and written, the counts by value and the labels.
 
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
@@ -30,6 +32,7 @@ import {
   KIND_WORDS,
   pct,
   picturesOnly,
+  principalOf,
   questionWords,
   rateRefusal,
   refused as refusedWords,
@@ -61,11 +64,13 @@ import { checkAnswerLine, checkDecisionsWords, checkDoors, checkQuestionOf, chec
 import { CheckPanel, checkActs } from "./CheckPanel";
 import { ratersRefusal, type RaterWarning } from "./raters";
 import { RatersDialog } from "./RatersDialog";
+import { namesRaters, raterNames, resultsRefusal } from "./results";
+import { ResultsView } from "./Results";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
 
-type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; c: Campaign; answers: Answer[] | null; sets: LabelSet[]; stats: Pace | null };
+type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; c: Campaign; answers: Answer[] | null; blind: boolean | null; sets: LabelSet[]; stats: Pace | null };
 
 export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities; id: string; missing?: number | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
@@ -76,8 +81,8 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   const read = useCallback(() => {
     const sets = readsSets ? campaigns.labelSets().catch(() => [] as LabelSet[]) : Promise.resolve([] as LabelSet[]);
     const stats = served(caps, R48.stats) ? statsFor(id).catch(() => null) : Promise.resolve(null);
-    Promise.all([campaigns.one(id), campaigns.answers(id).catch(() => null), sets, stats])
-      .then(([c, answers, all, pace]) => setLoad({ kind: "ready", c, answers, sets: all.filter((s) => s.campaign_id === c.id), stats: pace }))
+    Promise.all([campaigns.one(id), campaigns.answersRead(id).catch(() => null), sets, stats])
+      .then(([c, read, all, pace]) => setLoad({ kind: "ready", c, answers: read?.answers ?? null, blind: read?.blind ?? null, sets: all.filter((s) => s.campaign_id === c.id), stats: pace }))
       .catch((e: unknown) => setLoad({ kind: "failed", why: refusedWords(e) }));
   }, [readsSets, id, caps]);
   useEffect(() => read(), [read]);
@@ -85,7 +90,7 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   if (load.kind === "failed") return <p className="warn">The campaign could not be read: {load.why}</p>;
   const c = load.c;
   return (
-    <CampaignBody caps={caps} campaign={c} answers={load.answers} sets={load.sets} stats={load.stats} said={said} warned={warned} missing={missing} onAct={setActing}>
+    <CampaignBody caps={caps} campaign={c} answers={load.answers} answersBlind={load.blind} sets={load.sets} stats={load.stats} said={said} warned={warned} missing={missing} onAct={setActing}>
       {isCheck(c) && checkServed(caps) ? null : isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : isAnchored(c) && anchoredServed(caps) ? <AnchoredPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
       {acting === "close" && (
         <CloseDialog
@@ -131,6 +136,8 @@ export interface CampaignBodyProps {
   caps: Capabilities;
   campaign: Campaign;
   answers: Answer[] | null;
+  /** Whether the answers door answered blind (only the person's own), where it said. */
+  answersBlind?: boolean | null;
   sets: LabelSet[];
   /** Each rater's pace, where the engine counts it (record 48 R1). */
   stats?: Pace | null;
@@ -139,6 +146,8 @@ export interface CampaignBodyProps {
   warned?: readonly RaterWarning[];
   /** The state the items table shows; all when null. */
   filter?: string | null;
+  /** The view the page opens on: its items, or its results. */
+  view?: "items" | "results";
   /** Stacks without their picture, as the make door counted them. */
   missing?: number | null;
   onAct: (act: "close" | "export" | "raters") => void;
@@ -146,8 +155,11 @@ export interface CampaignBodyProps {
 }
 
 /** One campaign as it draws from what it read. */
-export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, said = null, warned = [], filter: initial = null, missing = null, onAct, children }: CampaignBodyProps) {
+export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, sets, stats = null, said = null, warned = [], filter: initial = null, view: opened = "items", missing = null, onAct, children }: CampaignBodyProps) {
   const [filter, setFilter] = useState<string | null>(initial);
+  // record 55, ruling 35 (d): the results, where the person may read them
+  const results = resultsRefusal(caps, c) === null;
+  const [view, setView] = useState<"items" | "results">(opened);
   const items = c.items ?? [];
   const shown = filter ? items.filter((i) => i.state === filter) : items;
   const rate = rateRefusal(caps, c) === null && (c.counts.items.open ?? 0) > 0;
@@ -161,7 +173,9 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
   const close = closeRefusal(caps, c);
   const exp = exportRefusal(caps);
   const a = c.agreement;
-  const blind = !seesAnswers(caps, c);
+  const blind = answersBlind ?? !seesAnswers(caps, c);
+  // the raters by name to the maker and a Review worker, by number to anyone else
+  const who = raterNames(answers ?? [], principalOf(caps), namesRaters(caps, c));
   // a check (job type 3) has one next action: go on checking while results are open, close and write the checks once none is
   const check = isCheck(c) && checkServed(caps) ? checkActs(caps, c) : null;
   const byItem = new Map<number, Answer[]>();
@@ -349,6 +363,20 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
         </p>
       )}
       {stats && stats.raters.length > 0 && <RaterStats stats={stats} />}
+      {results && (
+        <div className="chips" role="tablist">
+          <button type="button" role="tab" className={view === "items" ? "opt on" : "opt"} aria-selected={view === "items"} onClick={() => setView("items")}>
+            Items
+          </button>
+          <button type="button" role="tab" className={view === "results" ? "opt on" : "opt"} aria-selected={view === "results"} onClick={() => setView("results")}>
+            Results
+          </button>
+        </div>
+      )}
+      {results && view === "results" ? (
+        <ResultsView caps={caps} campaign={c} sets={sets} words={reasons ? words : undefined} />
+      ) : (
+        <>
       <h2>Items</h2>
       {refusedLine(c) && <p className="warn">{refusedLine(c)}</p>}
       <div className="chips">
@@ -374,7 +402,7 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
           </thead>
           <tbody>
             {rows.map((i) => (
-              <ItemRow key={i.id} item={i} answers={byItem.get(i.id) ?? []} blind={blind} words={words(i)} check={reasons !== null} />
+              <ItemRow key={i.id} item={i} answers={byItem.get(i.id) ?? []} blind={blind} words={words(i)} check={reasons !== null} who={who} />
             ))}
           </tbody>
         </table>
@@ -382,6 +410,8 @@ export function CampaignBody({ caps, campaign: c, answers, sets, stats = null, s
       {shown.length > ROWS && <p className="meta">The first {n(ROWS)} of {n(shown.length)} are listed.</p>}
       {answers === null && <p className="meta">The answers could not be read at this detail.</p>}
       {blind && <p className="meta">Raters rate blind: each answer shows here once the campaign closes, and to its adjudicators before.</p>}
+        </>
+      )}
       {check ? null : (
         <Says head="What closing does">
           Every agreed or adjudicated item becomes one decision through Review, {c.closes_into === "stage" ? "staged until a person commits it" : "in force"}; an item a model or an agent settled is staged
@@ -420,7 +450,7 @@ function useCheckNames(rows: Item[], byItem: Map<number, Answer[]>): Map<number,
   return names;
 }
 
-function ItemRow({ item: i, answers, blind, words = answerWords, check = false }: { item: Item; answers: Answer[]; blind: boolean; words?: (a: Pick<Answer, "value" | "form" | "derivative_id">) => string; check?: boolean }) {
+function ItemRow({ item: i, answers, blind, words = answerWords, check = false, who }: { item: Item; answers: Answer[]; blind: boolean; words?: (a: Pick<Answer, "value" | "form" | "derivative_id">) => string; check?: boolean; who: Map<string, string> }) {
   const tone = STATES.find((s) => s.state === i.state)?.tone ?? "";
   return (
     <tr>
@@ -439,7 +469,7 @@ function ItemRow({ item: i, answers, blind, words = answerWords, check = false }
             ? `${answers.length} ${answers.length === 1 ? "answer" : "answers"}`
             : answers.map((a) => (
               <span key={a.id} className={check ? "answer-chip is-check" : "answer-chip"} title={a.why ?? undefined}>
-                {a.principal.split("@")[0]}
+                {who.get(a.principal) ?? a.principal.split("@")[0]}
                 {a.role === "adjudicator" ? " (adj.)" : ""} {words(a)}
                 {a.unsure ? " · unsure" : ""}
               </span>

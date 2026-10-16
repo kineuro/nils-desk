@@ -13,6 +13,7 @@ import type { Cohort, Join } from "./cohorts";
 import type { Dataset } from "./datasets";
 import { nextStep } from "./steps";
 import {
+  addsWords,
   cardLine,
   clock,
   cohortLine,
@@ -43,6 +44,7 @@ import {
   slotOf,
   stateOf,
   stateWord,
+  pseudonymisedWords,
   stepsOfSources,
   stepWords,
   took,
@@ -222,6 +224,17 @@ describe("body part and post-contrast, steps of their own", () => {
     expect(failed.when).toBe(new Date(today("14:30")).toTimeString().slice(0, 5));
   });
 
+  it("say, while they wait for a person, what a run would add (ruling 35 (b))", () => {
+    const bp = stepWords(step("body_part", { state: "waiting", served: true, answered: 0, look: 0, of: 6, hint: { kind: "no_body_part", scans: 6 } }), NOW);
+    expect(bp).toMatchObject({ what: "6 with no body part", when: "", hint: "Body part runs when you start it." });
+    const pc = stepWords(step("post_contrast", { state: "waiting", served: true, answered: 0, look: 0, of: 6, hint: { kind: "t1_brain_contrast_unknown", scans: 1200 } }), NOW);
+    expect(pc).toMatchObject({ what: "1,200 T1 brain, contrast unknown", hint: "Post-contrast runs when you start it." });
+    expect(stepWords(step("post_contrast", { state: "waiting", served: true, of: 6, hint: { kind: "t1_brain_contrast_unknown", scans: 0 } }), NOW).what).toBe("none needs it");
+    // once it ran, it says what its model answered, not what it would add
+    expect(stepWords(step("body_part", { answered: 6, look: 0, of: 6, hint: { kind: "no_body_part", scans: 0 } }), NOW).what).toBe("6 answered");
+    expect(addsWords(step("body_part", { state: "waiting" }))).toBeNull();
+  });
+
   it("count a model's run in its units over, of all of them", () => {
     const started = new Date(NOW.getTime() - 60_000).toISOString();
     const progress = { run: 3, phase: "run", units: 40, over: 10, running: 30, queued: 0 };
@@ -352,6 +365,22 @@ describe("a card's line", () => {
     // the found step says it in the same words
     expect(stepWords(step("found", { files: 49836, partial: true, counted_by: "probe", tree: "anon" }), NOW).what).toBe("at least 49,836 files");
     expect(stepWords(step("found", { files: 1112026, partial: false, counted_by: "read", tree: "anon" }), NOW).what).toBe("1,112,026 files");
+    // an engine with no summary door: the sources door's tree says it too
+    expect(stepsOfSources(big)[0]).toMatchObject({ step: "found", files: 49836, partial: true });
+    expect(stepsOfSources(dataset({ trees: { originals: null, anon: { path: "/x/derivatives/dcm-anon", files: 12, last_written: null } } }))[0]).toMatchObject({ files: 12, partial: false });
+  });
+
+  it("says the pseudonymised step's counts as at least where the probe stopped short, and as they are where it did not (2026-10-16)", () => {
+    // whole counts
+    expect(pseudonymisedWords({ files: 7000, waiting: 544 })).toBe("544 to do");
+    expect(pseudonymisedWords({ files: 7544, waiting: 0, partial: false, waiting_partial: false })).toBe("7,544 files");
+    // the originals' count stopped short: at least that many wait
+    expect(pseudonymisedWords({ files: 4, waiting: 199996, partial: false, waiting_partial: true })).toBe("at least 199,996 to do");
+    // the copy's stopped short: what waits is not known, the copy holds at least its count
+    expect(pseudonymisedWords({ files: 200000, waiting: 3, partial: true, waiting_partial: true })).toBe("at least 200,000 files");
+    expect(pseudonymisedWords({ files: 200000, waiting: 0, partial: true, waiting_partial: true })).toBe("at least 200,000 files");
+    expect(stepWords(step("pseudonymised", { files: 4, waiting: 199996, held: 0, partial: false, waiting_partial: true }), NOW).what).toBe("at least 199,996 to do");
+    expect(stepWords(step("pseudonymised", { files: 7000, waiting: 544, held: 0 }), NOW).what).toBe("544 to do");
   });
 });
 

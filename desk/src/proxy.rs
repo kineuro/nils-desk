@@ -127,10 +127,14 @@ pub async fn assistant(
 
 /// The supervisor (Wave 5 §10.4): its own bearer from the config, and only
 /// a person holding `install:work` reaches it; in `off` mode everyone does.
+/// The supervisor knows the desk by its token alone, so the desk names the
+/// person it acts for in `X-Nils-Person`, as the engine would name them
+/// (`user@host`), and the supervisor audits a change under them (record 55,
+/// ruling 35 (c)). A browser's own `X-Nils-Person` never reaches it.
 pub async fn supervisor(
     State(desk): State<Shared>,
     Path(rest): Path<String>,
-    req: Request,
+    mut req: Request,
 ) -> Response {
     let Some(up) = desk.config.supervisor.clone() else {
         return absent("the supervisor");
@@ -138,7 +142,39 @@ pub async fn supervisor(
     if let Err(r) = gate(&desk, req.headers(), "install:work", "the supervisor") {
         return *r;
     }
+    let person = person_named(&desk, req.headers());
+    let headers = req.headers_mut();
+    headers.remove(PERSON);
+    if let Some(v) = person.and_then(|p| HeaderValue::from_str(&p).ok()) {
+        headers.insert(PERSON, v);
+    }
     forward(&desk, &up, &format!("/{rest}"), req, Bearer::Configured).await
+}
+
+/// The header the desk names the person in, to the supervisor.
+const PERSON: &str = "x-nils-person";
+
+/// Who a call to the supervisor is made for, as the engine names a person
+/// signed in at this desk: the provider's subject at the provider's host in
+/// `oidc` mode, a subject at the desk's own host where it holds no `@`, and
+/// the operator at the desk's host in `off` mode.
+pub(crate) fn person_named(desk: &Shared, headers: &HeaderMap) -> Option<String> {
+    let at_desk = |subject: &str| {
+        if subject.contains('@') {
+            subject.to_string()
+        } else {
+            crate::issuer::principal(&desk.config.origin, subject)
+        }
+    };
+    if desk.config.mode == Mode::Off {
+        return Some(at_desk("operator"));
+    }
+    let (s, _) = session::resolve(desk, headers);
+    let s = s?;
+    Some(match (desk.config.mode, desk.oidc.as_ref()) {
+        (Mode::Oidc, Some(client)) => crate::issuer::principal(&client.config.issuer, &s.subject),
+        _ => at_desk(&s.subject),
+    })
 }
 
 pub async fn app(

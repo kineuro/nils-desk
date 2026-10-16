@@ -18,6 +18,8 @@ import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
 import { BlindShare } from "../review/S1Settings";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
+import { atTheMachine, serves } from "./changes";
+import { AtTheMachine, BackupFolderDialog, RestoreDialog } from "./InstallChange";
 import { databaseStats } from "./stats";
 import {
   backupByHand,
@@ -93,6 +95,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
   const rehearsal = useActing();
   const schedule = useActing();
   const change = useActing();
+  const [giving, setGiving] = useState(false);
 
   const load = () => {
     if (served(caps, "GET /api/backups"))
@@ -263,9 +266,16 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                 <div className="note caution">
                   <Icon name="alert" />
                   <div className="note-body">
-                    <p className="note-lead">The engine has no backup directory, so a backup from the desk is refused.</p>
-                    <p className="note-detail">Running setup again gives the engine the backup place the registry names.</p>
-                    <Command text="nils setup" />
+                    <p className="note-lead">The engine has no backup folder, so a backup from the desk is refused.</p>
+                    {serves(caps, install, "backups") ? (
+                      <div className="row actions">
+                        <button type="button" className="button small" onClick={() => setGiving(true)}>
+                          Give the engine a folder
+                        </button>
+                      </div>
+                    ) : (
+                      <AtTheMachine caps={caps} install={install} change="backups" command="nils setup" />
+                    )}
                   </div>
                 </div>
               ) : (
@@ -278,6 +288,11 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                       </div>
                       <span className="meta">
                         <span className="path">{backups.dir}</span>
+                        {serves(caps, install, "backups") && (
+                          <button type="button" className="button quiet small" onClick={() => setGiving(true)}>
+                            Another folder
+                          </button>
+                        )}
                       </span>
                     </div>
                     <div className="field">
@@ -391,12 +406,14 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                   )}
                   <Acted acting={backup.acting} />
                   <Acted acting={rehearsal.acting} />
-                  <div className="row actions">
-                    <span className="meta">By hand</span>
-                    <Command text={backupByHand(backups.schedule.keep)} />
-                    {newest && <Command text={rehearseByHand(backups.dir, newest.name)} />}
-                  </div>
-                  {newest && <Restore install={install} home={status?.home ?? null} dir={backups.dir} archives={backups.archives.filter((x) => x.ours)} />}
+                  {install === null && (
+                    <div className="at-machine">
+                      <span className="meta">This desk reaches no supervisor; the same by hand:</span>
+                      <Command text={backupByHand(backups.schedule.keep)} />
+                      {newest && <Command text={rehearseByHand(backups.dir, newest.name)} />}
+                    </div>
+                  )}
+                  {newest && <Restore caps={caps} install={install} home={status?.home ?? null} dir={backups.dir} archives={backups.archives.filter((x) => x.ours)} onDone={load} />}
                 </>
               )}
             </section>
@@ -499,25 +516,41 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
           {served(caps, "GET /api/settings") && <BlindShare locked={calendarLocked} />}
         </div>
       </div>
+      {giving && (
+        <BackupFolderDialog
+          home={status?.home ?? null}
+          current={backups?.dir ?? null}
+          onClose={() => setGiving(false)}
+          onDone={() => {
+            onChanged();
+            load();
+          }}
+        />
+      )}
     </div>
   );
 }
 
 /**
- * Restore stays a printed command (D50; spec 13.1 round 5): the procedure in
- * three steps, each command ready to copy, for the archive chosen, newest
- * first. Nothing here acts: the engine is stopped while it runs.
+ * Restore, for the archive chosen, newest first. Where the supervisor puts an
+ * archive back (record 55 ruling 35 (c)), one button: it stops the engine,
+ * puts the archive back after archiving the registry as it stands, and
+ * starts the engine again. Where it does not, the procedure in three printed
+ * steps (D50), each ready to copy, under the line that says why.
  */
-function Restore({ install, home, dir, archives }: { install: Install | null; home: string | null; dir: string | null; archives: readonly Archive[] }) {
+function Restore(props: { caps: Capabilities; install: Install | null; home: string | null; dir: string | null; archives: readonly Archive[]; onDone: () => void }) {
+  const { caps, install, home, dir, archives, onDone } = props;
   const [chosen, setChosen] = useState(archives[0]?.name ?? "");
+  const [putting, setPutting] = useState(false);
   const archive = archives.find((a) => a.name === chosen) ?? archives[0] ?? null;
   if (!archive) return null;
+  const button = serves(caps, install, "restore");
+  const line = atTheMachine(caps, install, "restore");
   const steps = restoreSteps(install, home, dir, archive.name);
   return (
     <details className="restore">
       <summary>Restore an archive</summary>
       <div className="restore-body">
-        <p className="meta">A restore is done by hand, on the machine the engine runs on, with the engine stopped. The key store is not in the archive and stays as it is.</p>
         <div className="field">
           <label className="label" htmlFor="restore-archive">
             Archive
@@ -532,15 +565,29 @@ function Restore({ install, home, dir, archives }: { install: Install | null; ho
             </select>
           </div>
         </div>
-        <ol className="restore-steps">
-          {steps.map((s) => (
-            <li key={s.words}>
-              <span>{s.words}</span>
-              {s.command && <Command text={s.command} />}
-            </li>
-          ))}
-        </ol>
+        {button ? (
+          <div className="row actions">
+            <button type="button" className="button secondary" onClick={() => setPutting(true)}>
+              Put it back
+            </button>
+            <span className="meta">The registry as it stands is archived first. The key store stays as it is.</span>
+          </div>
+        ) : (
+          <>
+            <p className="meta">The key store is not in the archive and stays as it is.</p>
+            <p className="meta">{line}</p>
+            <ol className="restore-steps">
+              {steps.map((s) => (
+                <li key={s.words}>
+                  <span>{s.words}</span>
+                  {s.command && <Command text={s.command} />}
+                </li>
+              ))}
+            </ol>
+          </>
+        )}
       </div>
+      {putting && <RestoreDialog archive={archive.name} onClose={() => setPutting(false)} onDone={onDone} />}
     </details>
   );
 }
