@@ -37,6 +37,8 @@ export interface IdType {
   description: string | null;
   /** Record 55, ruling 24: its IDs lead to a person wherever they are met; absent from an older engine. */
   identifying?: boolean;
+  /** Where the engine says so: nothing of its IDs is stored but a keyed one-way lookup. An engine that says nothing is read by the two built-in names. */
+  never_kept?: boolean;
   /** Counts, where the engine reports them. */
   identifiers?: number;
   subjects?: number;
@@ -48,6 +50,19 @@ export interface IdType {
  * generator codes it with the key and no map, and NILS never keeps it.
  */
 export const SAME_EVERYWHERE = "personnummer";
+
+/** What the title of a never-kept type's count says. */
+export const NEVER_KEPT_WORDS = "No number is stored, only a keyed one-way lookup that recognises it when it arrives again.";
+
+/**
+ * Whether NILS keeps none of a type's IDs: the engine's own `NEVER_KEPT_ID_TYPES`
+ * are the same-everywhere type and the hospital's reserve number, and its types
+ * door names no flag for them, so the two built-in names are matched where it
+ * says nothing.
+ */
+export function neverKept(t: Pick<IdType, "name" | "never_kept">): boolean {
+  return t.never_kept ?? (t.name === SAME_EVERYWHERE || t.name === RESERVE_TYPE);
+}
 
 /** An ID type as a person reads it: the engine's label, else the same-everywhere type in words, else its name. */
 export function typeLabel(t: Pick<IdType, "name" | "label"> | string): string {
@@ -422,9 +437,40 @@ export function parseCsv(text: string): Csv {
   return { header, rows: body, delimiter };
 }
 
-/** A value's shape: every digit a 9, every capital an A, every small letter an a, everything else as it is. */
+/** A value's shape: every digit a 9, every capital an A, every other letter an a, everything else as it is. Never the value itself. */
 export function shapeOf(value: string): string {
-  return value.trim().replace(/[0-9]/g, "9").replace(/[A-Z]/g, "A").replace(/[a-z]/g, "a");
+  return value.trim().replace(/\p{Nd}|\p{Lu}|\p{L}/gu, (c) => (/\p{Nd}/u.test(c) ? "9" : /\p{Lu}/u.test(c) ? "A" : "a"));
+}
+
+/**
+ * A header that is a number: a file with no header row has its first row read
+ * as one, and a personnummer is no column's name. Six digits in a row is not
+ * how anyone names a column.
+ */
+export function headerIsValue(header: string): boolean {
+  return /\d{6,}/.test(header);
+}
+
+/** What a column is called on screen: its header, or its place where the header is a number. */
+export function columnLabel(header: string, index: number): string {
+  return headerIsValue(header) ? `column ${index + 1}` : header;
+}
+
+/** The registry type a header would make, named after it; none for a header that is a number, so no number is made a name. */
+export function typeFromHeader(header: string): string {
+  return headerIsValue(header) ? "" : typeName(header);
+}
+
+/**
+ * Text from the engine or the browser with any stray number hidden: a
+ * personnummer (ten or twelve digits, or six or eight, a dash and four) or
+ * any other run of eight digits or more standing on its own. The engine names
+ * a column and a subject code in its words and never a value; this keeps it so
+ * if a message ever carried one. A subject code is hexadecimal and stands
+ * inside letters, so it is left as it is.
+ */
+export function hideNumbers(text: string): string {
+  return text.replace(/(?<![0-9A-Za-z])(?:\d{6,8}[-+]\d{4}|\d{8,})(?![0-9A-Za-z])/g, "[number hidden]");
 }
 
 /** A shape in words: "12 digits" for digits alone, else the shape itself. */
@@ -519,7 +565,7 @@ export function typeName(header: string): string {
 function typedAs(header: string, h: string, types: IdType[]): { id_type: string | null; new_type: string | null } {
   const known = typeNamed(h, types);
   if (known) return { id_type: known.name, new_type: null };
-  return { id_type: null, new_type: typeName(header) || "identifier" };
+  return { id_type: null, new_type: typeFromHeader(header) || "identifier" };
 }
 
 /** What a column means, guessed from its header and what it holds: the person's number, the code, a type of the registry's, or a new type named after the header. */
@@ -539,7 +585,7 @@ export function guessRole(header: string, look: ColumnLook, types: IdType[]): Gu
 export function importColumns(header: string[], guesses: Guess[]): ImportColumn[] {
   return header.map((h, i) => {
     const g = guesses[i];
-    if (g.role === "identifier" || g.role === "canonical") return { header: h, role: g.role, id_type: g.id_type ?? g.new_type ?? typeName(h) };
+    if (g.role === "identifier" || g.role === "canonical") return { header: h, role: g.role, id_type: g.id_type ?? g.new_type ?? (typeFromHeader(h) || "identifier") };
     return { header: h, role: g.role };
   });
 }

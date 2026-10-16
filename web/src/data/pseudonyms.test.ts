@@ -32,6 +32,10 @@ import {
   reportLines,
   roleNamed,
   shapeOf,
+  hideNumbers,
+  columnLabel,
+  typeFromHeader,
+  neverKept,
   shapeWords,
   subjectsWords,
   typeName,
@@ -375,5 +379,35 @@ describe("an ID type as a person reads it", () => {
     expect(typeLabel("personnummer")).toBe("ID that is the same everywhere");
     expect(typeLabel({ name: "study-id" })).toBe("study-id");
     expect(typeLabel("study-id")).toBe("study-id");
+  });
+});
+
+describe("nothing of a cell is shown", () => {
+  it("reads a shape from letters of any alphabet and digits of any script, never a value", () => {
+    expect(shapeOf("Åsa Öberg")).toBe("Aaa Aaaaa");
+    expect(shapeOf("١٩٩٠")).toBe("9999");
+    expect(lookAt("pn", ["199001019999", "199002029999"]).words).toBe("12 digits, 2 rows");
+  });
+
+  it("hides a number standing on its own in the engine's or the browser's words, and leaves a subject code", () => {
+    expect(hideNumbers("line 4: 199001019999 is no ID")).toBe("line 4: [number hidden] is no ID");
+    expect(hideNumbers("900101-9999 and 19900101-9999")).toBe("[number hidden] and [number hidden]");
+    expect(hideNumbers("subject 12345678abcdef90 was merged into 3a4b5c6d7e8f9012")).toBe("subject 12345678abcdef90 was merged into 3a4b5c6d7e8f9012");
+    expect(hideNumbers("the first 50 of 100,000, line 12")).toBe("the first 50 of 100,000, line 12");
+  });
+
+  it("names a column whose header is a number by its place, and makes no type name from it", () => {
+    expect(columnLabel("pn", 0)).toBe("pn");
+    expect(columnLabel("199001019999", 2)).toBe("column 3");
+    expect(typeFromHeader("199001019999")).toBe("");
+    expect(typeFromHeader("Study ID")).toBe("study-id");
+  });
+
+  it("knows the two types NILS never keeps, by the engine's word where it gives one and by name where it does not", () => {
+    expect(neverKept({ name: "personnummer" })).toBe(true);
+    expect(neverKept({ name: "reserve-number" })).toBe(true);
+    expect(neverKept({ name: "study-id" })).toBe(false);
+    expect(neverKept({ name: "study-id", never_kept: true })).toBe(true);
+    expect(neverKept({ name: "personnummer", never_kept: false })).toBe(false);
   });
 });

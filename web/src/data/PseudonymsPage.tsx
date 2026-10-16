@@ -19,16 +19,21 @@ import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import {
+  columnLabel,
   csvRefusal,
   guessRole,
+  hideNumbers,
   importColumns,
   linkage,
   lookAt,
   mapRefusal,
   MAX_MAP_ROWS,
+  NEVER_KEPT_WORDS,
+  neverKept,
   reportOf,
   parseCsv,
   reportLines,
+  typeFromHeader,
   typeName,
   type ColumnLook,
   type ColumnRole,
@@ -119,6 +124,11 @@ export function PseudonymsPage({ caps, onChanged }: { caps: Capabilities; onChan
                 <tr key={t.name}>
                   <td className="path">
                     {typeLabel(t)}
+                    {neverKept(t) && (
+                      <span className="tag" title={NEVER_KEPT_WORDS}>
+                        never kept
+                      </span>
+                    )}
                     {t.identifying && (
                       <span className="tag caution" title="Looking a subject up by one of these needs every detail">
                         Leads to a person
@@ -126,7 +136,9 @@ export function PseudonymsPage({ caps, onChanged }: { caps: Capabilities; onChan
                     )}
                   </td>
                   <td className="meta">{t.description ?? ""}</td>
-                  <td className="num">{typeof t.identifiers === "number" ? n(t.identifiers) : ""}</td>
+                  <td className="num" title={neverKept(t) ? NEVER_KEPT_WORDS : undefined}>
+                    {typeof t.identifiers === "number" ? (neverKept(t) ? `${n(t.identifiers)} ${t.identifiers === 1 ? "lookup" : "lookups"}` : n(t.identifiers)) : ""}
+                  </td>
                   <td className="num">{typeof t.subjects === "number" ? n(t.subjects) : ""}</td>
                 </tr>
               ))}
@@ -225,8 +237,8 @@ interface Column {
   header: string;
   look: ColumnLook;
   guess: Guess;
-  /** The first values under the header, as the file has them. */
-  first: string[];
+  /** What the column is called on screen: its header, never a value of the file. */
+  label: string;
   /** The description of a new type, typed here. */
   description: string;
 }
@@ -278,11 +290,12 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
           csv.header.map((h, i) => {
             const values = csv.rows.map((r) => r[i] ?? "");
             const look = lookAt(h, values);
-            return { header: h, look, guess: guessRole(h, look, types), first: values.filter((v) => v.trim() !== "").slice(0, 3), description: "" };
+            // the column is shown by its header, its shape and its counts; no cell of the file is kept for the screen
+            return { header: h, label: columnLabel(h, i), look, guess: guessRole(h, look, types), description: "" };
           }),
         );
       })
-      .catch((err: unknown) => setWhy(messageOf(err)));
+      .catch((err: unknown) => setWhy(hideNumbers(messageOf(err))));
   };
 
   // a column changed, so what the rehearsal said no longer stands for these columns: it is asked again before anything can be filed
@@ -296,12 +309,12 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
       if (!typed(role)) return { ...c, guess: { role, id_type: null, new_type: null } };
       if (c.guess.id_type !== null || c.guess.new_type !== null) return { ...c, guess: { ...c.guess, role } };
       const g = guessRole(c.header, c.look, types);
-      return { ...c, guess: { role, id_type: g.id_type, new_type: g.new_type ?? (typeName(c.header) || "identifier") } };
+      return { ...c, guess: { role, id_type: g.id_type, new_type: g.new_type ?? (typeFromHeader(c.header) || "identifier") } };
     });
 
   const setType = (i: number, value: string) =>
     change(i, (c) =>
-      value === "new" ? { ...c, guess: { ...c.guess, id_type: null, new_type: typeName(c.header) || "identifier" } } : { ...c, guess: { ...c.guess, id_type: value.slice(5), new_type: null } },
+      value === "new" ? { ...c, guess: { ...c.guess, id_type: null, new_type: typeFromHeader(c.header) || "identifier" } } : { ...c, guess: { ...c.guess, id_type: value.slice(5), new_type: null } },
     );
 
   const guesses = columns.map((c) => c.guess);
@@ -329,7 +342,7 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
     linkage
       .import(body(true))
       .then((r) => setRehearsal({ kind: "report", report: reportOf(r) }))
-      .catch((e: unknown) => setRehearsal({ kind: "failed", why: messageOf(e) }));
+      .catch((e: unknown) => setRehearsal({ kind: "failed", why: hideNumbers(messageOf(e)) }));
   };
 
   const apply = async () => {
@@ -341,7 +354,7 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
       setRehearsal({ kind: "filed", job: job ?? 0 });
       onFiled(job !== null ? `The map is filed as job ${job}; held files it names are pseudonymised and brought in after.` : "The map is filed.");
     } catch (e) {
-      setRehearsal({ kind: "failed", why: messageOf(e) });
+      setRehearsal({ kind: "failed", why: hideNumbers(messageOf(e)) });
     }
   };
 
@@ -441,7 +454,7 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
                         {report.conflicts.slice(0, 50).map((c) => (
                           <tr key={`${c.row}-${c.why}`}>
                             <td className="num">{c.row}</td>
-                            <td>{c.why}</td>
+                            <td>{hideNumbers(c.why)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -474,8 +487,9 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
 }
 
 /**
- * The columns the file was found to have, each with the first values under it
- * and what it means. The roles are written out one by one rather than looped
+ * The columns the file was found to have, each with its shape and counts and
+ * what it means. No cell of the file is shown, under a header or anywhere
+ * else: a column of personnummer would put real numbers on the screen. The roles are written out one by one rather than looped
  * over: a select whose children come out of a loop as a fragment is not laid
  * out as options everywhere, and a role the engine does not take would be a
  * refusal of the whole file.
@@ -509,14 +523,13 @@ export function MapColumns({
           {columns.map((c, i) => (
             <tr key={c.header}>
               <td>
-                <span className="path">{c.header}</span>
-                <div className="col-first">{c.first.length > 0 ? c.first.join(", ") : "empty"}</div>
+                <span className="path">{c.label}</span>
               </td>
               <td className="meta col-look">{c.look.words}</td>
               <td>
                 <div className="column-role">
                   <div className="input">
-                    <select value={c.guess.role} disabled={working} onChange={(e) => onRole(i, e.target.value as ColumnRole)} aria-label={`What ${c.header} means`}>
+                    <select value={c.guess.role} disabled={working} onChange={(e) => onRole(i, e.target.value as ColumnRole)} aria-label={`What ${c.label} means`}>
                       <option value="identifier">{ROLES[0].words}</option>
                       <option value="canonical">{ROLES[1].words}</option>
                       <option value="code">{ROLES[2].words}</option>
@@ -525,13 +538,13 @@ export function MapColumns({
                   </div>
                   {typed(c.guess.role) && (
                     <div className="input">
-                      <select value={typeValue(c.guess)} disabled={working} onChange={(e) => onType(i, e.target.value)} aria-label={`The type of ${c.header}`}>
+                      <select value={typeValue(c.guess)} disabled={working} onChange={(e) => onType(i, e.target.value)} aria-label={`The type of ${c.label}`}>
                         {types.map((t) => (
                           <option key={t.name} value={`type:${t.name}`}>
                             of type {typeLabel(t)}
                           </option>
                         ))}
-                        <option value="new">a new type: {c.guess.new_type ?? (typeName(c.header) || "identifier")}</option>
+                        <option value="new">a new type: {c.guess.new_type ?? (typeFromHeader(c.header) || "identifier")}</option>
                       </select>
                     </div>
                   )}

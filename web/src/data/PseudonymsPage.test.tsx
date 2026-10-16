@@ -99,6 +99,84 @@ describe("Pseudonyms", () => {
     expect(e.of("POST", "/api/linkage/types")[0].body).toEqual({ name: "patient-id", description: "what PatientID held" });
   });
 
+  it("shows a never-kept type's count as lookups, with a tag and the reason, and a kept type's count as it was", async () => {
+    engine((c) =>
+      c.url === "/api/linkage/types"
+        ? {
+            status: 200,
+            body: [
+              { id: 1, name: "personnummer", label: "ID that is the same everywhere", description: "the national number", identifying: true, identifiers: 4836, subjects: 4836 },
+              { id: 2, name: "reserve-number", description: "a hospital's reserve number", identifying: true, identifiers: 1, subjects: 1 },
+              ...TYPES,
+            ],
+          }
+        : undefined,
+    );
+    act(() => root.render(<PseudonymsPage caps={caps7a(DOORS)} />));
+    await settle();
+    const rows = [...host.querySelectorAll("tbody tr")].map((r) => [...r.querySelectorAll("td")].map((c) => c.textContent));
+    expect(rows[0][0]).toContain("never kept");
+    expect(rows[0][0]).toContain("Leads to a person");
+    expect(rows[0][2]).toBe("4,836 lookups");
+    expect(rows[1][2]).toBe("1 lookup");
+    expect(rows[2]).toEqual(["patient-id", "what PatientID holds", "120", "118"]);
+    expect(rows[3][2]).toBe("8");
+    const why = "No number is stored, only a keyed one-way lookup that recognises it when it arrives again.";
+    expect(host.querySelectorAll("tbody tr")[0].querySelectorAll("td")[2].getAttribute("title")).toBe(why);
+    expect(host.querySelectorAll("tbody tr")[0].querySelector('[title="' + why + '"]')).not.toBeNull();
+    expect(host.querySelectorAll("tbody tr")[2].querySelector("[title]")).toBeNull();
+  });
+
+  it("never shows a cell of the map in the dialog, not under a header, in the rehearsal, nor in a conflict", async () => {
+    const PN = ["199001019999", "199002029999", "199003039999"];
+    const csv = `personnummer,code,19900101-9999\n${PN.map((p, i) => `${p},S-000${i},x${i}`).join("\n")}\n`;
+    const e = engine((c) => {
+      if (c.method === "GET" && c.url === "/api/linkage/types") return { status: 200, body: [{ id: 9, name: "personnummer", description: "the national number", identifiers: 3, subjects: 3 }, ...TYPES] };
+      if (c.method === "POST" && c.url === "/api/linkage/imports")
+        return {
+          status: 200,
+          body: {
+            rows: 3,
+            subjects: { named: 3, known: 0, new: 3 },
+            identifiers: { filed: 3, known: 0, new: 3, types_new: [] },
+            conflicts: [{ row: 3, why: "199002029999 appeared on line 2 with another code" }],
+          },
+        };
+      return undefined;
+    });
+    act(() => root.render(<PseudonymsPage caps={caps7a(DOORS)} />));
+    await settle();
+    act(() => button(host, "Give a map")!.click());
+    const input = host.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const file = new File([csv], "map.csv", { type: "text/csv" });
+    Object.defineProperty(file, "text", { value: () => Promise.resolve(csv) });
+    Object.defineProperty(input, "files", { value: [file] });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle();
+    const dialog = host.querySelector("dialog")!;
+    // the columns are listed, by header and shape; the third has a number for a header and is named by its place
+    const describe = dialog.querySelector<HTMLInputElement>('input[aria-label="Describe the type identifier"]')!;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(describe, "a made-up type");
+    await act(async () => {
+      describe.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(dialog.textContent).toContain("12 digits, 3 rows");
+    expect(dialog.textContent).toContain("column 3");
+    await act(async () => {
+      button(dialog, "See what it will do")!.click();
+    });
+    await settle();
+    expect(e.of("POST", "/api/linkage/imports")).toHaveLength(1);
+    expect(dialog.textContent).toContain("Conflict");
+    // row numbers stay; no value does, in any form
+    expect(dialog.textContent).toContain("appeared on line 2");
+    expect(dialog.textContent).not.toMatch(/\d{6,}/);
+    for (const p of PN) expect(dialog.textContent).not.toContain(p);
+    expect(dialog.innerHTML).not.toMatch(/\d{6,}/);
+  });
+
   it("offers no act to a person who may only read Data", async () => {
     engine((c) => (c.url === "/api/linkage/types" ? { status: 200, body: TYPES } : undefined));
     act(() => root.render(<PseudonymsPage caps={caps7a(DOORS, GRANTS.filter((g) => g !== "data:work"))} />));

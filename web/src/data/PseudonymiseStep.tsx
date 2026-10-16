@@ -32,6 +32,7 @@ import { plainError, type Plain } from "./plain";
 import { policyKept } from "./policy";
 import {
   bytesWords,
+  hideNumbers,
   linkage,
   NOTHING_ASKED,
   NOTHING_TYPED,
@@ -526,7 +527,7 @@ function Codes(props: {
                   <span className="warn">
                     {" "}
                     · {n(conflicts.length)} {conflicts.length === 1 ? "row conflicts" : "rows conflict"}; nothing of it is filed
-                    <Hint text={conflicts.slice(0, 20).map((c) => `row ${c.row}: ${c.why}`).join("; ")} />
+                    <Hint text={hideNumbers(conflicts.slice(0, 20).map((c) => `row ${c.row}: ${c.why}`).join("; "))} />
                   </span>
                 )}
               </span>
