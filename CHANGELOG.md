@@ -7,10 +7,12 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Added
 
 - The Parts page says when the supervisor last looked at the releases, and asks it to look again. The supervisor keeps what it looked at for a quarter of an hour, and the page said "checked just now" beside offers made from that look, which is only when the page itself was read: on 2026-10-16 it named 1.0.0-alpha.84 as the release to take a minute after 1.0.0-alpha.85 was published. With an engine that says `release.looked_at`, the page says "releases looked up 14 minutes ago" beside "checked just now", and Look again, for a person who may work on the install, asks the supervisor's door for a fresh look (`?fresh=1`, honoured once the look is a minute old) and reads the page once more. With an engine that says nothing of when it looked, the page reads as it did.
+- Keep and Unkeep: a draft the assistant proposed is a card on the Cards list once a person keeps it (record 55, K6, round 5 of the desk's layout). On the Assistant's panel, Keep records the version with the assistant, joins it to its card's line as before, and keeps the card on the engine (`PUT /api/ask/documents/{id}/kept`), so the cards in the thread and on the panel say kept as the engine does and not as the conversation decided; a kept version has Unkeep, which puts the card back among the drafts and deletes nothing (`DELETE`), and Keep again marks it anew without the assistant being told twice. A card's page says draft or kept in its head, with Keep or Unkeep for a person with work on the Query page. Where the engine has no such mark, none of it shows and Keep works as it did.
 
 ### Changed
 
 - The desk's tests name no cohort of the group (record 55, ruling 18): the assistant's question fixture offered one by its name, and offers a made-up one now.
+- The Cards list shows the kept cards, with a Drafts tab beside it that counts the cards nobody kept (record 55, K6): what the assistant proposes waits there, each draft opening on its card, where Keep is. The tab shows with a count of zero and says what would fill it. The list reads a page at a time and More reads the next. A card named with @ in the chat is a kept one.
 
 ## [1.0.0-alpha.65] - 2026-10-16
 

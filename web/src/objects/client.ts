@@ -3,7 +3,7 @@
 // timeline (12.2) and the document list (12.1). Each is optional to the
 // desk: a missing door removes the band or the panel that reads it.
 
-import { door } from "../ask/client";
+import { door, type Kept } from "../ask/client";
 import type { Layout } from "../data/datasets";
 
 export interface Summary {
@@ -50,6 +50,20 @@ export interface DocumentRow {
   last_used_at: string | null;
   hash: string;
   last_run: { handle: number; at: string } | null;
+  /** Who kept the card and when; null for a draft nobody kept. Absent from an engine that has no such mark, which lists every card. */
+  kept?: Kept | null;
+}
+
+/** Which documents the list answers (record 55 K6): the kept cards, by default, the drafts nobody kept, or both. */
+export type Show = "yes" | "no" | "all";
+
+export interface DocumentList {
+  count: number;
+  documents: DocumentRow[];
+  next: number | null;
+  /** How many lines are kept and how many are not, whatever the page and the filter; absent from an engine that has no such mark. */
+  cards?: number;
+  drafts?: number;
 }
 
 /** The cohort names a summary carries, from the by-cohort keys of its three counts. */
@@ -119,5 +133,11 @@ export const objects = {
   placeSet: (id: number, body: { path?: string; guarantees?: Record<string, unknown>; retired?: boolean }) => door<Place>("PUT", `/api/places/${id}`, body),
   summary: (since?: string | null) => door<Summary>("GET", `/api/summary${since ? `?since=${encodeURIComponent(since)}` : ""}`),
   timeline: (kind: string, id: string | number) => door<{ kind: string; id: string | number; events: Event[] }>("GET", `/api/timeline/${kind}/${id}`),
-  documents: (after?: string | null) => door<{ count: number; documents: DocumentRow[]; next: string | null }>("GET", `/api/ask/documents${after ? `?after=${encodeURIComponent(after)}` : ""}`),
+  documents: (opts: { after?: number | null; kept?: Show } = {}) => {
+    const q = new URLSearchParams();
+    if (opts.kept && opts.kept !== "yes") q.set("kept", opts.kept);
+    if (opts.after) q.set("after", String(opts.after));
+    const query = q.toString();
+    return door<DocumentList>("GET", `/api/ask/documents${query ? `?${query}` : ""}`);
+  },
 };

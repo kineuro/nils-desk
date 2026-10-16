@@ -27,6 +27,19 @@ export interface Options {
   presets: { name: string; days: number }[];
 }
 
+/** Who kept a card and when (record 55 K6): a person's act, which puts the card on the Cards list. */
+export interface Kept {
+  by: string;
+  at: string;
+}
+
+/** What keeping a card, or putting it back, answers: the document named, the first of its line, and the mark. */
+export interface KeptAnswer {
+  document: number;
+  first: number;
+  kept: Kept | null;
+}
+
 export interface DocumentHandle {
   document: number;
   hash: string;
@@ -35,6 +48,8 @@ export interface DocumentHandle {
   created_at?: string;
   parent: number | null;
   ask: Json;
+  /** Whether a person kept the card this document is a version of; absent from an engine that has no such mark. */
+  kept?: Kept | null;
 }
 
 export interface Applied {
@@ -218,6 +233,10 @@ export const ask = {
   /** A stored document kept under another as its next version: a draft the assistant proposed joins the card's line. */
   storeUnder: (document_id: number, parent: number) => door<DocumentHandle>("POST", "/api/ask/documents", { document_id, parent }),
   get: (id: number) => door<DocumentHandle>("GET", `/api/ask/documents/${id}`),
+  /** A person keeps the card a document is a version of (record 55 K6); a card already kept stays as it is. */
+  keep: (id: number) => door<KeptAnswer>("PUT", `/api/ask/documents/${id}/kept`),
+  /** The card goes back among the drafts: nothing is deleted, and keeping it again marks it anew. */
+  unkeep: (id: number) => door<KeptAnswer>("DELETE", `/api/ask/documents/${id}/kept`),
   options: (document_id: number, set: string) => door<Options>("POST", "/api/ask/options", { document_id, set }),
   apply: (document_id: number, o: Options, set: string, moves: { move_id: number; args: Json }[]) =>
     door<Applied>("POST", "/api/ask/apply", { document_id, epoch: o.epoch, token: o.token, set, moves }),

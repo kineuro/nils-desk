@@ -6,7 +6,9 @@
 // subjects, clinical, pictures) whose bars narrow the question when clicked,
 // the versions, Save as a selection and Keep. Every change here is a move the
 // engine offered and makes the next version; saying it in the chat makes one
-// too, and the panel follows the conversation's latest.
+// too, and the panel follows the conversation's latest. A version the
+// assistant proposed is a card on the Cards list once kept, and a kept one is
+// put back among the drafts with Unkeep (record 55 K6).
 
 import { Fragment, useEffect, useState } from "react";
 import { ask, type Json, type Profile } from "../ask/client";
@@ -16,6 +18,7 @@ import type { Capabilities } from "../capabilities";
 import { Thumb } from "../campaigns/Thumb";
 import { MoveForm, useProfile, useStackFields } from "../query/CardParts";
 import { argsOf, chartOf, tabsOf, type Bar } from "../query/cards";
+import { keptWords } from "../query/kept";
 import { SaveSelection } from "../query/SaveSelection";
 import { maySave } from "../query/selections";
 import { href } from "../routes";
@@ -93,8 +96,10 @@ export function QueryPanel({ play, caps, keeping, epoch, onClose }: { play: Play
   const narrow = (n: Narrowing | null) => (n && !play.busy ? () => void play.apply(n.set, n.move, n.args) : null);
   const pick = (chart: ChartKey, set: string | null) => (b: Bar) => narrow(narrowing(chart, b.value, set, set ? (card.options[set] ?? null) : null, field));
 
-  const kept = proposal?.decided === "accepted";
-  const keepable = proposal !== null && proposal.decided === null && !proposal.stale;
+  // the engine's word on the card where it has one, else what the person decided
+  const engineKept = display === null ? null : play.kept(display);
+  const kept = engineKept ?? proposal?.decided === "accepted";
+  const keepable = proposal !== null && !proposal.stale && proposal.decided !== "rejected" && !kept;
   const title = titleOfDocument(card.doc);
   return (
     <aside className="qpanel" aria-label="Query">
@@ -122,7 +127,16 @@ export function QueryPanel({ play, caps, keeping, epoch, onClose }: { play: Play
             Keep {label ?? "it"}
           </button>
         )}
-        {kept && <span className="tag ok">kept</span>}
+        {kept && proposal !== null && (
+          <span className="tag ok" title={keptWords(loaded?.kept)}>
+            kept
+          </span>
+        )}
+        {kept && proposal !== null && display !== null && play.mayUnkeep && (
+          <button type="button" className="button quiet" disabled={play.busy} title="Put the card back among the drafts" onClick={() => play.unkeep(display)}>
+            Unkeep
+          </button>
+        )}
         {proposal?.stale && <span className="tag">moved on</span>}
         {display !== null && (
           <a className="icon-button qpanel-quiet" href={href("query", String(display))} aria-label="Open on the Query page" title="Open on the Query page">
