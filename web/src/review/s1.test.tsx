@@ -20,7 +20,7 @@ import type { ReviewItem } from "../ops/client";
 import { BothSides } from "./BothSides";
 import { DecideDialog } from "./Decide";
 import { RoundsBody } from "./RoundsPage";
-import { BlindShare, HeadersView, shareOf } from "./S1Settings";
+import { BlindShare, HeadersView, headersBy, shareOf, signsTitle } from "./S1Settings";
 import { gradeWords, neverAskedHolds, overriddenWords, owesBlind, pct, provisionalValue, rankWords } from "./s1";
 import { ROUND, SUGGESTIONS } from "./s1.fixture";
 import { jobOf, workList } from "./work";
@@ -223,6 +223,41 @@ describe("the site's share and a dataset's headers", () => {
     const person = renderToStaticMarkup(<HeadersView flag={{ ...flag, by: "person", flag: { damaged: true, why: "anonymised export", by: "astrid", at: "" } }} may={false} asking={false} why="" said={null} onAsk={() => undefined} onWhy={() => undefined} onSet={() => undefined} />);
     expect(person).toContain("flagged by astrid");
     expect(person).not.toContain("<button");
+  });
+
+  it("the signs read at a sort say why, each beside its threshold, and a person's word says what the signs say where it differs", () => {
+    const why = "50 % of its named MR scans carry no word the rules know (flags at 2 %)";
+    const sign = { share: 0, threshold: 0.1, flags: false };
+    const flag = {
+      dataset: "study-export",
+      damaged: true,
+      by: "signs" as const,
+      flag: null,
+      signs: {
+        scans: 40,
+        no_names: 0,
+        share: 0,
+        damaged: true,
+        why,
+        nameless: { ...sign, scans: 0 },
+        unknown_words: { share: 0.5, threshold: 0.02, flags: true, named: 40, unread: 20 },
+        unseen_maker: { share: 0, threshold: null, flags: false, scans: 0, makers: {} },
+        read: "at the end of a sort",
+      },
+      gate: "the full gate",
+    };
+    expect(headersBy(flag)).toBe(`by its signs: ${why}`);
+    expect(signsTitle(flag)).toBe(
+      "unnamed scans 0 %, flags at 10 %; scans with no word the rules know 50 %, flags at 2.0 %; scans by a maker never seen 0 %, no threshold",
+    );
+    const html = renderToStaticMarkup(<HeadersView flag={flag} may={false} asking={false} why="" said={null} onAsk={() => undefined} onWhy={() => undefined} onSet={() => undefined} />);
+    expect(html).toContain(`by its signs: ${why}`);
+    const usual = { ...flag, damaged: false, by: "person" as const, flag: { damaged: false, why: "our own site's names", by: "astrid", at: "" } };
+    expect(headersBy(usual)).toBe(`marked as usual by astrid: our own site's names; its signs: ${why}`);
+    const agrees = { ...flag, by: "person" as const, flag: { damaged: true, why: "an export", by: "astrid", at: "" } };
+    expect(headersBy(agrees)).toBe("flagged by astrid: an export");
+    // an engine before the signs were kept
+    expect(signsTitle({ ...flag, signs: { scans: 4, no_names: 2, share: 0.5, damaged: true } })).toBeUndefined();
   });
 });
 
