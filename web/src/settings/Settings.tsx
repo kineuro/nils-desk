@@ -29,6 +29,7 @@ import { checkedWords, contractWords, keptByWords, newerWords, partName, partRow
 import { ReleasesLook } from "./ReleasesLook";
 import { SortAgainDialog } from "./SortAgain";
 import { TeachingPage } from "./TeachingPage";
+import { UninstallSection } from "./Uninstall";
 import { sortAgainRefusal, type SortUnder } from "./sorting";
 import { supervise, type Install } from "./supervise";
 import { ToolsSection } from "../ops/Install";
@@ -67,7 +68,13 @@ export function Settings(props: PageProps & { page: string | null }) {
     case "audit":
       return <AuditPage />;
     case "setup":
-      return <Setup caps={props.caps} install={props.install} onChanged={props.onChanged} />;
+      return (
+        <>
+          <Setup caps={props.caps} install={props.install} onChanged={props.onChanged} />
+          {/* gate T31, step 1.9: uninstall through the supervisor, where one keeps this install */}
+          <UninstallSection caps={props.caps} install={props.install} />
+        </>
+      );
     default:
       return null;
   }

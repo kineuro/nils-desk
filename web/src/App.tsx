@@ -16,6 +16,7 @@ import { DataPage } from "./data/DataPage";
 import { browsing as viewsBrowser, Viewer } from "./data/Viewer";
 import { REGISTRY, type Scope } from "./data/viewer";
 import { PseudonymsPage } from "./data/PseudonymsPage";
+import { ClinicalPage } from "./data/ClinicalPage";
 import { LogsPage } from "./ops/LogsPage";
 import { logsOffered } from "./ops/logs";
 import { PipelinesPage } from "./ops/PipelinesPage";
@@ -296,8 +297,9 @@ export function App() {
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
           {ready && active?.id === "data" && route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg) && <BatchPage caps={caps} id={Number(route.arg)} />}
           {ready && active?.id === "data" && route.page === "pseudonyms" && <PseudonymsPage caps={caps} onChanged={changed} />}
+          {ready && active?.id === "data" && route.page === "clinical" && <ClinicalPage caps={caps} onChanged={changed} />}
           {ready && active?.id === "data" && route.page === "cohorts" && route.arg && viewed === null && <CohortPage caps={caps} name={route.arg} />}
-          {ready && active?.id === "data" && viewed === null && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || route.page === "pseudonyms" || (route.page === "cohorts" && route.arg)) && (
+          {ready && active?.id === "data" && viewed === null && !((route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg)) || route.page === "pseudonyms" || route.page === "clinical" || (route.page === "cohorts" && route.arg)) && (
             <DataPage caps={caps} install={install} onChanged={changed} dataset={route.page === "datasets" ? route.arg : null} step={route.page === "datasets" ? route.sub : null} query={route.query} />
           )}
           {viewed !== null && <Viewer key={`${viewed.kind}/${viewed.name}`} caps={caps} scope={viewed} query={route.query} onSections={() => setMenu((m) => !m)} />}

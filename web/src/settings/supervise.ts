@@ -196,7 +196,24 @@ export const supervise = {
   model: (body: ModelBody) => door<Run>("POST", `${BASE}/model`, body),
   /** An archive of the backup folder put back: the engine stopped, restored, started again. */
   restore: (archive: string) => door<Run>("POST", `${BASE}/restore`, { archive }),
+  /** What an uninstall would remove and keep, both ways (gate T31, step 1.9); a supervisor older than this answers 404. */
+  uninstallPreview: () => door<UninstallPreview>("GET", `${BASE}/uninstall`),
+  /** The uninstall, apart from the call: NILS alone (the data stays) or everything, behind the directory's name typed. */
+  uninstall: (leave: "nils" | "everything", confirm: string) => door<Run>("POST", `${BASE}/uninstall`, { leave, confirm }),
 };
+
+/** What `nils uninstall --print` says each way, read from the record. */
+export interface UninstallPreview {
+  dir: string;
+  /** The word to type: the name of the install's directory. */
+  name: string;
+  install: string;
+  helper: boolean;
+  keep_data: string[];
+  everything: string[];
+  /** Why a purge would be refused, or null. */
+  everything_refused: string | null;
+}
 
 /**
  * Follow a run until it ends. A call that fails is asked again, since the
