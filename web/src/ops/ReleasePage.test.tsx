@@ -97,6 +97,24 @@ describe("the Release page", () => {
     expect(dialog).toContain("Dates stay real; a months scheme labels sessions M00, M06 instead.");
   });
 
+  it("offers the BIDS names with the BIDS layout, full by the engine's own default", () => {
+    const dialog = renderToStaticMarkup(<NewReleaseDialog caps={caps()} cohort="north" existing={rows} onClose={none} onDone={none} />);
+    expect(dialog).toContain("<dt>names</dt>");
+    expect(dialog).toContain('aria-label="BIDS names"');
+    expect(dialog).toMatch(/<option value="full"[^>]*>Full names<\/option><option value="minimal"[^>]*>Minimal names<\/option>/u);
+    expect(dialog).toContain('<option value="full" selected="">Full names</option>');
+  });
+
+  it("says in the table which releases were written under minimal names, and says nothing of the engine's own", () => {
+    const row = rows[1];
+    expect(draw(caps(), [{ ...row, naming: "minimal" }])).toContain("<td>bids<span class=\"meta\">minimal names</span></td>");
+    for (const naming of ["full", null, undefined]) {
+      const html = draw(caps(), [{ ...row, naming }]);
+      expect(html).toContain("<td>bids</td>");
+      expect(html).not.toContain("minimal names");
+    }
+  });
+
   it("offers as a card's answer only a complete stack answer the person may release", () => {
     const grants = ["release:work"];
     expect(releasableCards([handle()], record, 4, grants).map((c) => c.name)).toEqual(["north T1w and FLAIR"]);

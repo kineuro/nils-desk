@@ -59,6 +59,20 @@ describe("the release form", () => {
     expect(overrideNote("  ")).toBeNull();
     expect(overrideNote("remap")).toBe("An override sets the UID policy for every file of this release, so no dataset's own applies to its own files.");
   });
+  it("names the BIDS names only where the person chose minimal beside BIDS (record 55 C4)", () => {
+    // the engine writes full unless asked, so the default is not sent, and an engine from before the choice keeps working
+    const bodyOf = (layout: string | undefined, naming: string | undefined) => {
+      const r = releaseBody({ kind: "hand", cohorts: ["ms-a"] }, { name: "s", out: "/o", layout, naming }, []);
+      if (!r.ok) throw new Error(r.why);
+      return r.body;
+    };
+    expect(bodyOf("bids", "minimal")).toEqual({ name: "s", out: "/o", layout: "bids", naming: "minimal", cohorts: ["ms-a"] });
+    expect(bodyOf("bids", "full")).not.toHaveProperty("naming");
+    expect(bodyOf("bids", undefined)).not.toHaveProperty("naming");
+    // the descriptive tree is v0's grammar whatever is asked, and the engine refuses minimal beside it
+    expect(bodyOf("descriptive", "minimal")).not.toHaveProperty("naming");
+    expect(bodyOf(undefined, "minimal")).not.toHaveProperty("naming");
+  });
   it("a card's answer with no rows read here is sent as its handle, which the door reads itself", () => {
     const r = releaseBody({ kind: "handle", handle: stackHandle }, { name: "sept", out: "/srv/out/sept" }, []);
     expect(r).toEqual({ ok: true, body: { name: "sept", out: "/srv/out/sept", handle: 75 }, summary: "250 stacks of handle 75" });

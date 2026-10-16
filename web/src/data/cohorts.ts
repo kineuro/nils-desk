@@ -145,6 +145,8 @@ export interface Release extends ReleaseRow {
   sessions?: number | null;
   dates?: string | null;
   uids?: string | null;
+  /** Record 55 C4: the BIDS names the release was written under, `full` or `minimal`; the engine writes full unless asked. */
+  naming?: string | null;
   handed_over?: string | null;
   policies?: { dataset: string; dates: string; uids: string; from?: string }[];
   /**
