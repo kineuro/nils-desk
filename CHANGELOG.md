@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-alpha.68] - 2026-10-16
+
+The map dialog shows no identifier's value, and never-kept ID types say they keep lookups only.
+
 ### Changed
 
 - The Pseudonyms page's ID types table shows a type NILS never keeps (the ID that is the same everywhere, and a hospital's reserve number) with a "never kept" tag beside its name, and its count as lookups ("4,836 lookups"), with the reason on hover: no number is stored, only a keyed one-way lookup that recognises it when it arrives again. A count of kept IDs reads as before. The engine's types door names no flag for this, so the two built-in names are matched; a `never_kept` field is read where an engine gives one.
