@@ -4,6 +4,12 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Keys on Backups (record 55, ruling 35 (c); gate T31, steps 8.6 and 8.7). The note that printed `nils key add` is a Keys panel: every key by name, its length and fingerprint, and which one the pseudonyms come from, with a tag when that key is missing. An admin makes a key from its passphrase (the pseudonym key again after a restore, with its name filled in, or a handover's key), in a password field that is cleared the moment the call is sent; the engine tries the pseudonym key on the identifiers it keeps first and refuses a wrong passphrase, and the panel says the engine's words. A key not in use is removed with its name typed. The passphrase goes only in that one call's body: never in an address, the page, the browser's storage or a log. Needs engine `[Unreleased]` (`GET` and `POST /api/keys`); an older engine keeps the printed command.
+- The receiver's password in the Hand over dialog (gate T31, step 13.4). For a person with release work at every detail, Show the password reads it from the engine (`POST /api/handovers/password`) and shows it once in its own dialog, with a copy button; the dialog stays until the person ticks that they copied it, and the password is gone when it closes. Anyone else, and an older engine, still sees the command.
+- One subject's IDs on Pseudonyms, an admin's (gate T31, step 8.7). A subject code shows its IDs by type, where each came from and whether NILS keeps it; Show the values asks why, which the audit keeps, and shows the kept values, but never one that reads as a personnummer, which the engine sends as its shape alone. Its linkages are listed, each with Unlink; Link a subject records another subject as the same person with its evidence and merges it in; Purge counts what goes first and is sent only with the subject's code typed, and Purge every subject only with "every subject" typed. Shown values live in the panel alone and go when the code changes.
+
 ## [1.0.0-alpha.68] - 2026-10-16
 
 The map dialog shows no identifier's value, and never-kept ID types say they keep lookups only.

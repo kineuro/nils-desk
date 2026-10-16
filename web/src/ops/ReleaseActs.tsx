@@ -14,7 +14,9 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
+import { passwordSee } from "../settings/keys";
 import { ops } from "./client";
+import { PasswordOnce } from "./HandoverPassword";
 import { jobLogHref, logsOffered } from "./logs";
 import { exchangePlaces, handoverOut, keyRefusal, passwordCommand, withdrawCommand, withdrawRefusal } from "./releaseActs";
 
@@ -24,7 +26,7 @@ export interface Queued {
   job: number;
 }
 
-/** Hand over a release: the exchange place, the key, and the command that gives the receiver the password. */
+/** Hand over a release: the exchange place, the key, and the receiver's password, shown once (or the command that gives it, for an engine without its door or a person without release work at every detail). */
 export function HandoverDialog({ caps, release: r, onClose, onDone }: { caps: Capabilities; release: Release; onClose: () => void; onDone: (q: Queued) => void }) {
   const places = useKept(placesKept);
   useEffect(() => {
@@ -35,6 +37,7 @@ export function HandoverDialog({ caps, release: r, onClose, onDone }: { caps: Ca
   const [key, setKey] = useState("");
   const [busy, setBusy] = useState<number | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [showing, setShowing] = useState<string | null>(null);
   const ids = useId();
   const place = exchanges.find((p) => p.id === placeId) ?? exchanges[0] ?? null;
   const out = place ? handoverOut(place, r) : null;
@@ -105,11 +108,23 @@ export function HandoverDialog({ caps, release: r, onClose, onDone }: { caps: Ca
         <div className="note">
           <Icon name="key" />
           <div className="note-body">
-            <p className="note-detail">The person receiving it needs the password. It is never stored; an admin gives it to them apart, from:</p>
-            <Command text={passwordCommand(key)} />
+            {passwordSee(caps) ? (
+              <>
+                <p className="note-detail">The receiver needs its password. Never stored; shown once, given apart.</p>
+                <button type="button" className="button secondary small" onClick={() => setShowing(key.trim())}>
+                  Show the password
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="note-detail">The person receiving it needs the password. It is never stored; an admin gives it to them apart, from:</p>
+                <Command text={passwordCommand(key)} />
+              </>
+            )}
           </div>
         </div>
       )}
+      {showing && <PasswordOnce keyName={showing} onClose={() => setShowing(null)} />}
       {busy !== null && <Wait phase="queueing the handover" since={busy} />}
       {failed && <p className="warn">{failed}</p>}
     </Dialog>

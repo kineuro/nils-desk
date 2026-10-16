@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Database page (Wave 5 section 10.3), as the chosen design draws it:
 // where the registry is kept and whether it passes the rule, its backups with
-// the schedule and each archive's last check, the key that is in no backup,
+// the schedule and each archive's last check, the keys, which are in no
+// backup (made from a passphrase or taken away, record 55, ruling 35 (c)),
 // what was fixed when the registry was made, and its calendar. A backup and a
 // rehearsal are jobs the engine's queue runs; the page follows each until it
 // is over, with the command a person would run by hand beside the buttons.
@@ -18,6 +19,7 @@ import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
 import { BlindShare } from "../review/S1Settings";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
+import { KeysPanel } from "./KeysPanel";
 import { databaseStats } from "./stats";
 import {
   backupByHand,
@@ -404,19 +406,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
         </div>
 
         <div className="db-col">
-          {status && (
-            <section className="note caution db-key">
-              <Icon name="key" size="lg" />
-              <div className="note-body">
-                <p className="note-lead">The key is in no backup</p>
-                <p className="note-detail">
-                  The pseudonym key <span className="path">{status.pseudonym_key}</span> gives each subject the same code every time, and reads the identifiers the linkage store keeps; a registry restored without it can do neither. The key
-                  is the passphrase given when it was added. Keep that where you keep passwords, away from this machine, and this makes the key again from it:
-                </p>
-                <Command text={`nils key add ${status.pseudonym_key}`} />
-              </div>
-            </section>
-          )}
+          {status && <KeysPanel caps={caps} pseudonymKey={status.pseudonym_key} />}
 
           {status && (
             <section className="panel card">
