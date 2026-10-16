@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Expert options on the release form (gate T31, walkthrough step 13.8), folded under one line below the form: where localizers, a vendor's synthetic contrasts and the DICOM copies go in a BIDS tree, the converter, uncompressed NIfTI, the authors, the categories of element removed, the UID root, only the picked scans and only some roles. Each starts at the engine's own default and is sent only once changed; the fold says how many are changed. A field the engine would refuse (a converter not named dcm2niix, no category, a UID root that is not numbers joined by dots) holds Release with the reason. Only the options the engine names in `capabilities.releases.expert` are drawn, so an older engine shows no fold (engine `[Unreleased]`, 2026-10-16).
+
 ## [1.0.0-alpha.68] - 2026-10-16
 
 The map dialog shows no identifier's value, and never-kept ID types say they keep lookups only.
