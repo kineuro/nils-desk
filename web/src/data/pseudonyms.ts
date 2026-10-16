@@ -480,10 +480,25 @@ const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 /** Short headers a site writes for a national number, matched to a type named for one. */
 const NUMBER_HEADERS = new Set(["pn", "pnr", "personnr", "personnummer", "personalnumber", "personnumber", "ssn", "nationalid", "nationalnumber"]);
 
-/** The type a header names: by its plain name, or a national number's short header against a type named for one. */
+/** The engine's type of a hospital's reserve number, which it never keeps (2026-10-16). */
+export const RESERVE_TYPE = "reserve-number";
+
+/**
+ * Headers a site writes for a hospital's reserve number, in Swedish and in
+ * English, matched to the engine's own type: a new type made after such a
+ * header would keep the numbers, sealed, where the engine keeps nothing of a
+ * reserve number but its keyed lookup.
+ */
+const RESERVE_HEADERS = new Set(["reserve", "reservenumber", "reservenr", "reserveid", "reservnummer", "reservnr", "reservid", "reservpnr", "reservpersonnummer"]);
+
+/** The type a header names: by its plain name, a reserve number's header against the engine's type, or a national number's short header against a type named for one. */
 function typeNamed(h: string, types: IdType[]): IdType | undefined {
   const exact = types.find((t) => plain(t.name) === h);
   if (exact) return exact;
+  if (RESERVE_HEADERS.has(h)) {
+    const reserve = types.find((t) => t.name === RESERVE_TYPE);
+    if (reserve) return reserve;
+  }
   if (NUMBER_HEADERS.has(h)) {
     const number = types.find((t) => NUMBER_HEADERS.has(plain(t.name)) || /person|national|ssn/.test(plain(t.name)));
     if (number) return number;
@@ -532,9 +547,10 @@ export function importColumns(header: string[], guesses: Guess[]): ImportColumn[
 /**
  * Why the map cannot be filed as the columns stand, or null. The rules are
  * the engine's own: one column at most stands for the person and one at most
- * is the code, at least one column is an identifier of some kind, and every
- * identifier column names its type. Several identifier columns of one type
- * are several identifiers of one subject and are refused by nothing.
+ * is the code, at least one column is an identifier of some kind, every
+ * identifier column names its type, and a reserve number never stands for
+ * the person, since no code is made from one. Several identifier columns of
+ * one type are several identifiers of one subject and are refused by nothing.
  */
 export function mapRefusal(guesses: Guess[]): string | null {
   const ids = guesses.filter((g) => g.role === "identifier").length;
@@ -543,6 +559,8 @@ export function mapRefusal(guesses: Guess[]): string | null {
   if (ids === 0 && canonical === 0) return "At least one column is an identifier, or the number that stands for the person.";
   if (canonical > 1) return "One column stands for the person; two are chosen.";
   if (code > 1) return "One column is the subject code; two are chosen.";
+  if (guesses.some((g) => g.role === "canonical" && (g.id_type ?? g.new_type) === RESERVE_TYPE))
+    return "A reserve number never stands for the person: no code is made from one. Name the person's code, or their personnummer, beside it.";
   if (guesses.some((g) => (g.role === "identifier" || g.role === "canonical") && g.id_type === null && g.new_type === null)) return "Every identifier column names its type: pick one of the site's, or make a new one.";
   return null;
 }

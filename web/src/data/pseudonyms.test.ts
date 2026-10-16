@@ -112,6 +112,24 @@ describe("what a column looks like", () => {
     // several identifier columns of one type are several identifiers of one person, and are refused by nothing
     expect(mapRefusal([guesses[0], guesses[0], code])).toBeNull();
   });
+  it("reads a reserve number's header as the engine's own type, which never stands for the person", () => {
+    // 2026-10-16: a hospital's reserve number is a type of the engine's, never kept; a new type made after its header would keep the numbers
+    const withReserve: IdType[] = [...types, { name: "reserve-number", description: "a hospital's reserve number" }];
+    const look = lookAt("r", ["199913241234"]);
+    for (const header of ["Reservnummer", "reserve number", "reserv_nr", "Reserv-ID", "reserve"]) {
+      expect(guessRole(header, look, withReserve), header).toEqual({ role: "identifier", id_type: "reserve-number", new_type: null });
+    }
+    // an engine from before has no such type: the header names a new one, as it did
+    expect(guessRole("Reservnummer", look, types)).toEqual({ role: "identifier", id_type: null, new_type: "reservnummer" });
+    // the person's number still reads as theirs beside it
+    expect(guessRole("pnr", look, withReserve)).toEqual({ role: "identifier", id_type: "personnummer", new_type: null });
+    const code = guessRole("code", lookAt("c", ["S-1"]), withReserve);
+    const reserve = guessRole("Reservnummer", look, withReserve);
+    expect(mapRefusal([reserve, code])).toBeNull();
+    expect(mapRefusal([{ role: "canonical", id_type: "reserve-number", new_type: null }, code])).toBe(
+      "A reserve number never stands for the person: no code is made from one. Name the person's code, or their personnummer, beside it.",
+    );
+  });
 });
 
 describe("what the map's file must be, and what its report says in every branch", () => {
