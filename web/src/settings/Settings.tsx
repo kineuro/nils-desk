@@ -2,9 +2,10 @@
 // Settings (Wave 5 section 10), as the chosen design draws it: a nav of its
 // pages beside the side, and the page it opens. Every page reads the
 // capabilities document and, for a person who may see the install, the
-// supervisor on this host; a button that acts on the install, for a person
-// with work on it, has the command a person would run by hand beside it, and
-// what it does goes on apart from the call.
+// supervisor on this host; a button acts on the install for a person with
+// work on it, and what it does goes on apart from the call. The command a
+// person would run by hand is printed only where no supervisor does the work
+// (gate T31, step 19.3).
 
 import { useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -21,7 +22,7 @@ import { GatewayPage } from "./GatewayPage";
 import { IdentityPage } from "./IdentityPage";
 import { OverviewPage } from "./OverviewPage";
 import { PlacesPage } from "./PlacesPage";
-import { keptRunning, reapplyByHand } from "./install";
+import { keptRunning } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
 import { checkedWords, contractWords, keptByWords, newerWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
@@ -59,7 +60,7 @@ export function Settings(props: PageProps & { page: string | null }) {
     case "backups":
       return <DatabasePage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     case "people":
-      return <IdentityPage caps={props.caps} />;
+      return <IdentityPage caps={props.caps} install={props.install} />;
     case "audit":
       return <AuditPage />;
     case "setup":
@@ -71,7 +72,7 @@ export function Settings(props: PageProps & { page: string | null }) {
 
 type RestartPart = Parameters<typeof supervise.restart>[0];
 
-/** A part's restart: the button where the supervisor keeps the install running, and the command beside it either way. */
+/** A part's restart: the button where the supervisor keeps the install running. */
 function RestartPart({ caps, install, part, onChanged }: { caps: Capabilities; install: Install | null; part: RestartPart; onChanged: () => void }) {
   const restart = useRun();
   if (!install || !may(caps, "install:work") || !install.services.some((s) => s.part === part)) return null;
@@ -97,7 +98,6 @@ function RestartPart({ caps, install, part, onChanged }: { caps: Capabilities; i
               Restart {partName(part)}
             </button>
           )}
-          <Command text={restartByHand(install, part)} />
         </div>
         <Acted acting={restart.acting} />
       </div>
@@ -178,19 +178,21 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
             ))}
           </ul>
           <div className="update-foot">
-            {supervised && (
-              <button
-                type="button"
-                className="button"
-                disabled={update.working}
-                onClick={() => update.start("updating one part at a time", () => supervise.updateAll(), updated)}
-              >
-                Update everything
-              </button>
+            {supervised ? (
+              <>
+                <button
+                  type="button"
+                  className="button"
+                  disabled={update.working}
+                  onClick={() => update.start("updating one part at a time", () => supervise.updateAll(), updated)}
+                >
+                  Update everything
+                </button>
+                <span className="meta">one part at a time; this page loads again when the desk is back</span>
+              </>
+            ) : (
+              <span className="meta">An administrator updates it here.</span>
             )}
-            <span className="meta">one part at a time; this page loads again when the desk is back</span>
-            <span className="grow" />
-            <Command text={install.release.command} />
           </div>
           <Acted acting={update.acting} />
         </section>
@@ -347,12 +349,14 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
               </div>
             )}
             <Acted acting={restart.acting} />
-            <p className="meta">
-              {keptRunning(install)
-                ? "A restart keeps an order: Postgres, the engine, the desk, Kvasir, then the assistant. By hand:"
-                : "This install runs no services, so each part runs until whatever started it stops. To have them kept running, run setup again:"}
-            </p>
-            <Command text={restartByHand(install, keptRunning(install) ? chosen : "all")} />
+            {keptRunning(install) ? (
+              <p className="meta">A restart keeps an order: Postgres, the engine, the desk, Kvasir, then the assistant.</p>
+            ) : (
+              <>
+                <p className="meta">This install runs no services, so each part runs until whatever started it stops. To have them kept running, run setup again at the machine:</p>
+                <Command text={restartByHand(install, "all")} />
+              </>
+            )}
           </div>
           <div className="panel card">
             <h2>Addresses</h2>
@@ -467,7 +471,6 @@ function EnginePage({ caps, install, onChanged }: PageProps) {
               >
                 Start it again with the folders
               </button>
-              <Command text={reapplyByHand(install)} />
             </div>
             <Acted acting={reapply.acting} />
           </div>
