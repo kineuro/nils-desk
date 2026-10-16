@@ -2,8 +2,8 @@
 // The supervisor through the desk's proxy (Wave 5 section 10.4), admin only:
 // the install nils setup made and how it runs, the work that restarts or
 // updates it, which goes on apart from the call, and a look inside a folder
-// before it is added. Beside every button the desk shows the command a
-// person would run by hand.
+// before it is added. A button stands alone where the supervisor does the
+// work; the command is printed only where there is no supervisor to do it.
 
 import { door } from "../ask/client";
 import type { Installed } from "./console";
@@ -27,6 +27,32 @@ export interface Install {
   release: Release;
   /** The card setup found and what the machine can serve; `cards` lists every card, where the supervisor names them all. */
   machine: { card: { name: string; memory_gb: number } | null; cards?: { name: string; memory_gb: number }[]; advice: string[] };
+  /**
+   * The setup steps this supervisor makes at its doors (record 55 ruling 35 (c)): `signin`, `backups`, `model`, `restore`.
+   * `wait` says why none is made where the helper on the machine is older than them. A supervisor older than this sends none.
+   */
+  changes?: Changes;
+}
+
+export type Change = "signin" | "backups" | "model" | "restore";
+
+export interface Changes {
+  served: Change[];
+  wait: string | null;
+}
+
+/** How people sign in, as the supervisor's door takes it. */
+export interface SigninBody {
+  mode: "local" | "oidc";
+  first?: { name: string; password: string };
+  oidc?: { issuer: string; client_id: string; client_secret: string; roles_claim?: string };
+}
+
+/** The stations' model server, as the supervisor's door takes it. */
+export interface ModelBody {
+  server: string;
+  key: string;
+  model?: string;
 }
 
 /**
@@ -162,6 +188,14 @@ export const supervise = {
   updateAll: (part?: string) => door<Run>("POST", `${BASE}/update-all`, part ? { part } : {}),
   run: (id: string) => door<Run>("GET", `${BASE}/runs/${encodeURIComponent(id)}`),
   look: (path: string) => door<Look>("POST", `${BASE}/look`, { path }),
+  /** How people sign in, changed by the supervisor: the desk and every part written again and started. */
+  signin: (body: SigninBody) => door<Run>("POST", `${BASE}/signin`, body),
+  /** Another folder for the engine's archives: its service written again and the engine started again. */
+  backups: (dir: string) => door<Run>("POST", `${BASE}/backups`, { dir }),
+  /** The model server the stations use: Kvasir started again with it. */
+  model: (body: ModelBody) => door<Run>("POST", `${BASE}/model`, body),
+  /** An archive of the backup folder put back: the engine stopped, restored, started again. */
+  restore: (archive: string) => door<Run>("POST", `${BASE}/restore`, { archive }),
 };
 
 /**

@@ -18,6 +18,12 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Changed
 
 - The raters are named to the campaign's maker and a Review worker alone. Anyone else reads each other person as "rater 1", "adjudicator 1" and so on, their own answers by their own name, on the Items table as in the Results view. The Items table now trusts the answers door's own word on whether it answered blind.
+- The setup steps the desk printed as `nils setup` are buttons where the supervisor makes them (gate T31, record 55 ruling 35 (c)); each needs an engine whose supervisor serves the step (`changes` on the install door) and a person with work on the install. People and Setup: Change how people sign in, a dialog that moves the desk to passwords it keeps (with the first person where it keeps nobody yet) or to a provider it is registered at already (issuer, client id, secret, entitlements claim); every part starts again and the page loads again signed out, to sign in the new way. Backups and Setup: Give the engine a folder where it has none, and Another folder beside the one it has. Backups: Restore an archive is one button, Put it back, whose dialog says that the registry as it stands is archived first and the engine stops until it is done; the supervisor stops the engine, puts the archive back and starts it again. Setup, where the desk does not reach Kvasir: Start Kvasir again, and Use a model server (address, key, model), which starts every part again with Kvasir holding the server. Where the supervisor does not make a step (none is reached, it is older than the button, its helper waits to be written again, the install runs no services, or the person may not work on the install), the command stays under one line that says why.
+- The desk names the person it acts for to the supervisor, in `X-Nils-Person`, as the engine names them, so the supervisor audits a change under them; a browser's own header of that name is dropped.
+
+### Changed
+
+- The by-hand twins beside working buttons are gone where a supervisor does the work (gate T31, step 19.3): the update and restart commands on Parts and on each part's page, the reapply command on the Engine page, and the backup and rehearsal commands on Backups. They stay where the install runs no services (run setup again at the machine) and, for the backup and the rehearsal, where the desk reaches no supervisor.
 
 ## [1.0.0-alpha.68] - 2026-10-16
 

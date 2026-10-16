@@ -17,14 +17,16 @@ import { objects, type Place } from "../objects/client";
 import { placesKept } from "../objects/kept";
 import { data, ops } from "../ops/client";
 import { href } from "../routes";
-import { Acted, useActing } from "../settings/common";
+import { Acted, useActing, useRun } from "../settings/common";
 import { checkedTag, database, keptBy, scheduleWords, type Backups, type RegistryStatus } from "../settings/database";
 import { MODES } from "../settings/identity";
 import { AddPerson } from "../settings/IdentityPage";
 import { keptRunning, where } from "../settings/install";
+import { serves } from "../settings/changes";
+import { AtTheMachine, BackupFolderDialog, ModelServerDialog, SignInDialog } from "../settings/InstallChange";
 import { backupsKept, usersKept } from "../settings/kept";
 import { kvasir } from "../settings/kvasir";
-import type { Install } from "../settings/supervise";
+import { supervise, type Install } from "../settings/supervise";
 import { Command } from "../ui/Command";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
@@ -113,9 +115,9 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
       case "backups":
         return <BackupsBody caps={caps} install={install} places={known} archives={archives.value} status={extra.status} onDone={changed} />;
       case "signin":
-        return <SigninBody caps={caps} onDone={changed} />;
+        return <SigninBody caps={caps} install={install} onDone={changed} />;
       case "model":
-        return <ModelBody caps={caps} />;
+        return <ModelBody caps={caps} install={install} onDone={changed} />;
     }
   };
 
@@ -258,6 +260,7 @@ export function SourcesBody(props: { caps: Capabilities; install: Install | null
 function BackupsBody(props: { caps: Capabilities; install: Install | null; places: Place[]; archives: Backups | null; status: RegistryStatus | null; onDone: () => void }) {
   const { caps, install, places, archives, status, onDone } = props;
   const acting = useActing();
+  const [giving, setGiving] = useState(false);
   if (!may(caps, "database:see")) return <p className="meta">Where the registry's backups go, and when they run, are named on the Backups page.</p>;
   const changes = may(caps, "database:work");
   // naming the engine's folder adds or changes places too, so it asks for work on both pages
@@ -326,9 +329,15 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
       {archives !== null && dir === null && (
         <div className="row">
           <span className="warn">No backup folder yet.</span>
-          <Command text="nils setup" />
+          {serves(caps, install, "backups") && (
+            <button type="button" className="button small" onClick={() => setGiving(true)}>
+              Give the engine a folder
+            </button>
+          )}
         </div>
       )}
+      {archives !== null && dir === null && <AtTheMachine caps={caps} install={install} change="backups" command="nils setup" />}
+      {giving && <BackupFolderDialog home={status?.home ?? null} current={null} onClose={() => setGiving(false)} onDone={onDone} />}
       <div className="row actions">
         {refusal === null && !backup && dir && (
           <button type="button" className="button" disabled={acting.working} onClick={nameDir}>
@@ -355,11 +364,12 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
   );
 }
 
-function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }) {
+function SigninBody({ caps, install, onDone }: { caps: Capabilities; install: Install | null; onDone: () => void }) {
   const mode = caps.desk.mode;
   const changes = may(caps, "identity:work");
   const users = useKept(usersKept);
   const [adding, setAdding] = useState(false);
+  const [changing, setChanging] = useState(false);
 
   useEffect(() => {
     if (mode === "local" && changes) usersKept.ensure();
@@ -383,10 +393,16 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
           </a>
         </div>
       )}
-      <div className="row">
-        <span className="meta">Changed by:</span>
-        <Command text="nils setup" />
-      </div>
+      {serves(caps, install, "signin") ? (
+        <div className="row actions">
+          <button type="button" className="button secondary small" onClick={() => setChanging(true)}>
+            Change how people sign in
+          </button>
+        </div>
+      ) : (
+        <AtTheMachine caps={caps} install={install} change="signin" command="nils setup" />
+      )}
+      {changing && <SignInDialog caps={caps} onClose={() => setChanging(false)} />}
       {adding && users.value && (
         <AddPerson
           users={users.value.users}
@@ -402,21 +418,61 @@ function SigninBody({ caps, onDone }: { caps: Capabilities; onDone: () => void }
   );
 }
 
-function ModelBody({ caps }: { caps: Capabilities }) {
-  // Kvasir holds its models itself (record 23), so a model is added on its page; setup still can
+function ModelBody({ caps, install, onDone }: { caps: Capabilities; install: Install | null; onDone: () => void }) {
+  // Kvasir holds its models itself (record 23), so a model is added on its page
   const reaches = caps.kvasir !== null;
+  const restart = useRun();
+  const [naming, setNaming] = useState(false);
+  if (reaches) {
+    return (
+      <div className="row actions">
+        <a className="button small" href={href("settings", "language-models")}>
+          Language models
+        </a>
+      </div>
+    );
+  }
+  // the desk does not reach Kvasir: started again, or given a model server, by the supervisor
+  const hasKvasir = install !== null && "kvasir" in install.parts;
+  if (install !== null && !hasKvasir) {
+    return (
+      <div className="at-machine">
+        <span className="meta">This install has no assistant. Adding one installs it, at the machine:</span>
+        <Command text="nils setup" />
+      </div>
+    );
+  }
+  const restarts = hasKvasir && may(caps, "install:work") && keptRunning(install) && install.services.some((s) => s.part === "gateway");
   return (
     <>
-
-      <div className="row actions">
-        {reaches && (
-          <a className="button small" href={href("settings", "language-models")}>
-            Language models
-          </a>
-        )}
-        {/* the installer's own way stays only where the desk cannot reach the model gateway */}
-        {!reaches && <Command text="nils setup" />}
-      </div>
+      <p className="meta">The desk does not reach Kvasir.</p>
+      {(restarts || serves(caps, install, "model")) && (
+        <div className="row actions">
+          {restarts && (
+            <button
+              type="button"
+              className="button small"
+              disabled={restart.working}
+              onClick={() =>
+                restart.start("starting Kvasir again", () => supervise.restart("gateway"), () => {
+                  onDone();
+                  return "Kvasir is running again; Language models adds a model.";
+                })
+              }
+            >
+              Start Kvasir again
+            </button>
+          )}
+          {serves(caps, install, "model") && (
+            <button type="button" className="button secondary small" onClick={() => setNaming(true)}>
+              Use a model server
+            </button>
+          )}
+        </div>
+      )}
+      <Acted acting={restart.acting} />
+      <AtTheMachine caps={caps} install={install} change="model" command="nils setup" />
+      {naming && <ModelServerDialog onClose={() => setNaming(false)} onDone={onDone} />}
     </>
   );
 }

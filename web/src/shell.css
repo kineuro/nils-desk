@@ -497,6 +497,8 @@ table.thin.audit .audit-scope { display: none; }
 dl.facts.sign-facts { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); gap: 0.2rem 1rem; font-size: var(--n-text-size-small); }
 .setup-say { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; padding-top: 0.65rem; border-top: 1px solid var(--n-line); font-size: var(--n-text-size-small); color: var(--n-text-dim); }
 .setup-say > .i { color: var(--n-text-faint); }
+/* gate T31: a command that stays at the machine, under the one line that says why */
+.at-machine { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
 .subscription-line { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
 .ggrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.9rem; }
 .gcard { display: grid; gap: 0.55rem; align-content: start; min-width: 0; padding: 0.8rem 0.9rem 0.85rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }

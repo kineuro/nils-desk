@@ -2545,3 +2545,93 @@ async fn an_admin_removes_a_person_and_hands_their_work_over() {
     .unwrap();
     assert_eq!(r.status(), 404);
 }
+
+/// Record 55 ruling 35 (c): the supervisor knows the desk by its token
+/// alone, so the desk names the person it acts for in `X-Nils-Person`, as
+/// the engine names them, and a browser's own header never reaches it. A
+/// person without `install:work` does not reach the supervisor at all.
+#[tokio::test]
+async fn the_desk_names_the_person_to_the_supervisor_and_never_the_browsers_name() {
+    let engine = fake_engine().await;
+    let heard = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+    let log = heard.clone();
+    let app = Router::new().fallback(move |headers: HeaderMap| {
+        let log = log.clone();
+        async move {
+            let of = |name: &str| {
+                headers
+                    .get(name)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("")
+                    .to_string()
+            };
+            log.lock()
+                .unwrap()
+                .push((of("x-nils-person"), of("authorization")));
+            (
+                StatusCode::ACCEPTED,
+                axum::Json(json!({"id": "r1", "state": "running"})),
+            )
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let supervisor = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n[supervisor]\nurl = \"{supervisor}\"\ntoken = \"a-supervisor-token-of-length\"\n"
+    );
+    let (origin, shared, _) = desk(&text).await;
+    nils_desk::users::add(
+        &shared.store,
+        "anna",
+        "correct horse battery",
+        Some("Anna"),
+        &admin(),
+    )
+    .unwrap();
+    nils_desk::users::add(
+        &shared.store,
+        "bo",
+        "another long password",
+        Some("Bo"),
+        &Given::default(),
+    )
+    .unwrap();
+    let client = client();
+    let anna = login(&client, &origin, "anna", "correct horse battery").await;
+    let r = ours(
+        client.post(format!("{origin}/supervise/api/supervise/backups")),
+        &origin,
+    )
+    .header("cookie", &anna)
+    .header("x-nils-person", "mallory@elsewhere")
+    .json(&json!({"dir": "/data/archives"}))
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 202, "{}", r.text().await.unwrap());
+    let host = origin.trim_start_matches("http://");
+    {
+        let heard = heard.lock().unwrap();
+        assert_eq!(heard.len(), 1, "{heard:?}");
+        assert_eq!(
+            heard[0].0,
+            format!("anna@{host}"),
+            "the person, never the browser's name"
+        );
+        assert_eq!(heard[0].1, "Bearer a-supervisor-token-of-length");
+    }
+    // bo holds no install:work, so the supervisor never hears of him
+    let bo = login(&client, &origin, "bo", "another long password").await;
+    let r = ours(
+        client.post(format!("{origin}/supervise/api/supervise/backups")),
+        &origin,
+    )
+    .header("cookie", &bo)
+    .json(&json!({"dir": "/data/archives"}))
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 403);
+    assert_eq!(heard.lock().unwrap().len(), 1);
+}

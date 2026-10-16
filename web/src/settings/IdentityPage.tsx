@@ -10,10 +10,12 @@ import { useEffect, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
-import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
 import { GroupForm, PersonForm } from "./AccessForm";
 import { Head, Stats } from "./common";
+import { serves } from "./changes";
+import { AtTheMachine, SignInDialog } from "./InstallChange";
+import type { Install } from "./supervise";
 import { GroupCards, GroupTags, Marks, MarksLegend, RecordsTag } from "./GroupCards";
 import {
   SIGN_IN,
@@ -36,7 +38,7 @@ import {
 
 export type Opened = { kind: "add" } | { kind: "person"; person: Person } | { kind: "group"; group: Group | null };
 
-export function IdentityPage({ caps }: { caps: Capabilities }) {
+export function IdentityPage({ caps, install = null }: { caps: Capabilities; install?: Install | null }) {
   const mode = caps.desk.mode;
   const [groups, setGroups] = useState<Group[] | null>(null);
   const [access, setAccess] = useState<Access | null>(null);
@@ -69,6 +71,7 @@ export function IdentityPage({ caps }: { caps: Capabilities }) {
   return (
     <IdentityBody
       caps={caps}
+      install={install}
       groups={groups}
       access={access}
       why={why}
@@ -116,6 +119,8 @@ export interface Said {
 
 export interface BodyProps {
   caps: Capabilities;
+  /** The install as the supervisor reports it, which says whether it changes how people sign in. */
+  install?: Install | null;
   /** What the page read, or null while it reads. */
   groups: readonly Group[] | null;
   access: Access | null;
@@ -127,7 +132,7 @@ export interface BodyProps {
 }
 
 /** The page as it draws from what it read. */
-export function IdentityBody({ caps, groups, access, why, said = null, now = Date.now(), onOpen, children }: BodyProps) {
+export function IdentityBody({ caps, install = null, groups, access, why, said = null, now = Date.now(), onOpen, children }: BodyProps) {
   const mode = caps.desk.mode;
   const work = may(caps, "identity:work");
   return (
@@ -135,7 +140,7 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
       <Head title="People" lede={mode === "off" ? "Nobody signs in: whoever opens the desk may do everything." : "People, groups and what each may open."} />
       <Stats items={accessStats(caps, groups, access)} />
       {why && <p className="warn">{why}</p>}
-      <SignIn caps={caps} sessions={access?.sessions_open ?? null} />
+      <SignIn caps={caps} install={install} sessions={access?.sessions_open ?? null} />
       {mode !== "off" && (
         <>
           <section className="stack roomy">
@@ -182,9 +187,10 @@ export function IdentityBody({ caps, groups, access, why, said = null, now = Dat
   );
 }
 
-/** How people sign in, where the desk answers and how long a session lasts, as a row of values; the signing facts under Details; and the command that changes them. */
-function SignIn({ caps, sessions }: { caps: Capabilities; sessions: number | null }) {
+/** How people sign in, where the desk answers and how long a session lasts, as a row of values; the signing facts under Details; and the button that changes them, or the command where no supervisor does. */
+function SignIn({ caps, install, sessions }: { caps: Capabilities; install: Install | null; sessions: number | null }) {
   const mode = caps.desk.mode;
+  const [changing, setChanging] = useState(false);
   const s = caps.desk.settings;
   const reach = s ? reachWords(s.origin) : null;
   const signing = mode === "off" ? null : (s?.signing ?? null);
@@ -241,11 +247,17 @@ function SignIn({ caps, sessions }: { caps: Capabilities; sessions: number | nul
             </dl>
           </details>
         )}
-        <div className="setup-say">
-          <Icon name="restart" />
-          <span>Change with</span>
-          <Command text="nils setup" />
-        </div>
+        {serves(caps, install, "signin") ? (
+          <div className="setup-say">
+            <button type="button" className="button secondary small" onClick={() => setChanging(true)}>
+              <Icon name="restart" />
+              Change how people sign in
+            </button>
+          </div>
+        ) : (
+          <AtTheMachine caps={caps} install={install} change="signin" command="nils setup" />
+        )}
+        {changing && <SignInDialog caps={caps} onClose={() => setChanging(false)} />}
       </div>
     </section>
   );
