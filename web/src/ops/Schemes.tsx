@@ -11,7 +11,9 @@ import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { schemeActs, schemeOf, schemes, schemeWords, type KeptScheme, type SchemeForm } from "./schemes";
+import { ops } from "./client";
+import { QueuedWords, type Queued } from "./ReleaseActs";
+import { schemeActs, schemeOf, schemes, schemeWords, ownLabel, ownName, REBUILD_HINT, rebuildRefusal, rebuildWords, type KeptScheme, type OwnScheme, type SchemeForm } from "./schemes";
 
 const NEW = "\u0000new";
 
@@ -19,7 +21,7 @@ const NEW = "\u0000new";
 export function SchemePicker({ caps, value, onChange }: { caps: Capabilities; value: string; onChange: (name: string) => void }) {
   const acts = schemeActs(caps);
   const [kept, setKept] = useState<KeptScheme[] | null>(null);
-  const [fallback, setFallback] = useState<string | null>(null);
+  const [fallback, setFallback] = useState<OwnScheme>(null);
   const [making, setMaking] = useState(false);
   useEffect(() => {
     if (acts.see)
@@ -42,7 +44,7 @@ export function SchemePicker({ caps, value, onChange }: { caps: Capabilities; va
     <>
       <span className="input scheme">
         <select value={value} aria-label="Session scheme" onChange={(e) => (e.target.value === NEW ? setMaking(true) : onChange(e.target.value))}>
-          <option value="">{fallback ? `the registry's own, ${fallback}` : "the registry's own"}</option>
+          <option value="">{ownLabel(fallback)}</option>
           {(kept ?? []).map((s) => (
             <option key={s.name} value={s.name}>
               {s.name}: {schemeWords(s.scheme)}
@@ -155,10 +157,72 @@ export function NewSchemeDialog({ onClose, onDone }: { onClose: () => void; onDo
   );
 }
 
+/** Rebuild visits (gate T31, step 22.7): the session cache built again under a scheme, as a job. */
+export function RebuildDialog({ rows, fallback, onClose, onDone }: { rows: readonly KeptScheme[]; fallback: OwnScheme; onClose: () => void; onDone: (q: Queued) => void }) {
+  const [scheme, setScheme] = useState("");
+  const [busy, setBusy] = useState<number | null>(null);
+  const [why, setWhy] = useState<string | null>(null);
+  const chosen = rows.find((s) => s.name === scheme) ?? null;
+  const send = () => {
+    setBusy(Date.now());
+    setWhy(null);
+    ops
+      .rebuild(chosen ? chosen.name : undefined)
+      .then((j) => onDone({ job: j.job, words: `Rebuilding the visits under ${chosen ? chosen.name : "the registry's own scheme"} is queued as job ${j.job}.` }))
+      .catch((e: unknown) => {
+        setBusy(null);
+        setWhy(messageOf(e));
+      });
+  };
+  return (
+    <Dialog
+      title="Rebuild visits"
+      icon="calendar"
+      onClose={onClose}
+      foot={
+        <div className="row actions">
+          <span className="grow" />
+          <button type="button" className="button secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="button" disabled={busy !== null} onClick={send}>
+            Rebuild visits
+          </button>
+        </div>
+      }
+    >
+      <div className="field">
+        <label className="label" htmlFor="rebuild-scheme">
+          Under
+        </label>
+        <span className="input">
+          <select id="rebuild-scheme" value={scheme} onChange={(e) => setScheme(e.target.value)}>
+            <option value="">{ownLabel(fallback)}</option>
+            {rows.map((s) => (
+              <option key={s.name} value={s.name}>
+                {s.name}: {schemeWords(s.scheme)}
+              </option>
+            ))}
+          </select>
+        </span>
+      </div>
+      <p className="lede">
+        {rebuildWords(chosen)}
+        <Hint text={REBUILD_HINT} />
+      </p>
+      {busy !== null && <Wait phase="queueing the rebuild" since={busy} />}
+      {why && <p className="warn">{why}</p>}
+    </Dialog>
+  );
+}
+
 /** Release's Session schemes: the kept schemes, and New scheme. */
 export function SchemesPage({ caps }: { caps: Capabilities }) {
   const acts = schemeActs(caps);
-  const [load, setLoad] = useState<{ kind: "loading"; since: number } | { kind: "ready"; rows: KeptScheme[]; fallback: string | null } | { kind: "failed"; why: string }>(() => ({ kind: "loading", since: Date.now() }));
+  const rebuilds = rebuildRefusal(caps) === null;
+  const [rebuilding, setRebuilding] = useState(false);
+  const [queued, setQueued] = useState<Queued | null>(null);
+  const [load, setLoad] = useState<{ kind: "loading"; since: number } | { kind: "ready"; rows: KeptScheme[]; fallback: OwnScheme } | { kind: "failed"; why: string }>(() => ({ kind: "loading", since: Date.now() }));
   const [making, setMaking] = useState(false);
   const read = () => schemes.list().then((r) => setLoad({ kind: "ready", rows: r.schemes, fallback: r.default }), (e: unknown) => setLoad({ kind: "failed", why: messageOf(e) }));
   useEffect(() => {
@@ -173,6 +237,12 @@ export function SchemesPage({ caps }: { caps: Capabilities }) {
           <h1>Session schemes</h1>
           <p className="lede">How a subject&apos;s studies become sessions, and what each is called.</p>
         </div>
+        {rebuilds && load.kind === "ready" && (
+          <button type="button" className="button secondary" onClick={() => setRebuilding(true)}>
+            <Icon name="calendar" />
+            Rebuild visits
+          </button>
+        )}
         {acts.add && (
           <button type="button" className="button" onClick={() => setMaking(true)}>
             <Icon name="plus" />
@@ -180,6 +250,7 @@ export function SchemesPage({ caps }: { caps: Capabilities }) {
           </button>
         )}
       </div>
+      {queued && <QueuedWords caps={caps} queued={queued} />}
       {load.kind === "loading" && <Wait phase="reading the schemes" since={load.since} size="panel" />}
       {load.kind === "failed" && <p className="warn">The schemes could not be read: {load.why}</p>}
       {load.kind === "ready" && load.rows.length === 0 && <p className="meta">No scheme kept yet. Releases use the registry&apos;s own{acts.add ? "; New scheme makes one." : "."}</p>}
@@ -198,7 +269,7 @@ export function SchemesPage({ caps }: { caps: Capabilities }) {
                 <tr key={s.name}>
                   <td className="mono">
                     {s.name}
-                    {s.name === load.fallback && <span className="tag"> the registry&apos;s own</span>}
+                    {s.name === ownName(load.fallback) && <span className="tag"> the registry&apos;s own</span>}
                   </td>
                   <td>{schemeWords(s.scheme)}</td>
                   <td className="meta">{s.added_at ? whenWords(s.added_at) : ""}</td>
@@ -207,6 +278,17 @@ export function SchemesPage({ caps }: { caps: Capabilities }) {
             </tbody>
           </table>
         </div>
+      )}
+      {rebuilding && load.kind === "ready" && (
+        <RebuildDialog
+          rows={load.rows}
+          fallback={load.fallback}
+          onClose={() => setRebuilding(false)}
+          onDone={(q) => {
+            setRebuilding(false);
+            setQueued(q);
+          }}
+        />
       )}
       {making && (
         <NewSchemeDialog
