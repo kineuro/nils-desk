@@ -65,6 +65,8 @@ export interface Release {
   newer: string | null;
   error: string | null;
   command: string;
+  /** When the supervisor last looked at the releases, which it keeps for a quarter of an hour (UTC, to the second); an engine older than this says nothing. */
+  looked_at?: string | null;
   behind?: string[];
   parts?: PartRelease[];
   /** The rule packs where the engine reads them, beside the ones its release carries; an engine older than this, or one in a container, sends none. */
@@ -152,7 +154,8 @@ export const supervise = {
   capabilities: () => door<{ parts: Installed[]; channel?: string | null; trust?: string | null }>("GET", `${BASE}/capabilities`),
   update: (part: string, version: string) => door<{ applied: Applied; by: string }>("POST", `${BASE}/update`, { part, version }),
   log: () => door<{ rows: Applied[] }>("GET", `${BASE}/log`),
-  install: () => door<Install>("GET", `${BASE}/install`),
+  /** The install; with `fresh`, the releases are looked at again where the look the supervisor kept is a minute old. */
+  install: (fresh = false) => door<Install>("GET", `${BASE}/install${fresh ? "?fresh=1" : ""}`),
   restart: (part: "engine" | "desk" | "gateway" | "assistant" | "postgres" | "all") => door<Run>("POST", `${BASE}/restart`, { part }),
   reapply: (part: "engine" | "all") => door<Run>("POST", `${BASE}/reapply`, part === "engine" ? { part } : {}),
   /** Every part, or one part alone against its own releases. */

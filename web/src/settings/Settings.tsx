@@ -13,7 +13,7 @@ import { may } from "../grants";
 import { href } from "../routes";
 import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
-import { Acted, Head, Health, useRun } from "./common";
+import { Acted, Head, Health, useActing, useRun } from "./common";
 import { AuditPage } from "./AuditPage";
 import { DatabasePage } from "./DatabasePage";
 import { exportWords } from "./exporting";
@@ -25,6 +25,7 @@ import { keptRunning, reapplyByHand } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
 import { checkedWords, contractWords, keptByWords, newerWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
+import { ReleasesLook } from "./ReleasesLook";
 import { supervise, type Install } from "./supervise";
 import { ToolsSection } from "../ops/Install";
 
@@ -108,6 +109,7 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
   const [part, setPart] = useState<RestartPart>("engine");
   const update = useRun();
   const restart = useRun();
+  const look = useActing();
   const local = ((caps.kvasir?.["backends"] as { locality?: string }[] | undefined) ?? []).some((b) => b.locality === "local");
 
   useEffect(() => {
@@ -135,6 +137,15 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
     return "Updated. This page loads again in a moment.";
   };
   const checked = checkedWords(checkedAt, now);
+  // the supervisor keeps the releases it looked at for a quarter of an hour; asking again makes it look, and the page is read once more
+  const lookAgain = supervised
+    ? () =>
+        look.act("looking at the releases again", async () => {
+          await supervise.install(true);
+          onChanged();
+          return "Looked at the releases again.";
+        })
+    : null;
   const services = install?.services ?? [];
   const chosen = services.some((s) => s.part === part) ? part : ((services.find((s) => s.part === "engine")?.part ?? services[0]?.part ?? "engine") as RestartPart);
   const missing = !may(caps, "install:see")
@@ -183,7 +194,9 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
           <h2>Installed</h2>
           {install?.release.error && !out && <span className="meta">the newest release could not be read</span>}
           {checked && <span className="meta">{checked}</span>}
+          {install && <ReleasesLook looked={install.release.looked_at} now={now} working={look.working} onLook={lookAgain} />}
         </div>
+        <Acted acting={look.acting} />
         <div className="table-wrap">
           <table className="thin">
             <thead>
