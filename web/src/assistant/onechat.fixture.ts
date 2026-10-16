@@ -54,7 +54,7 @@ export const HISTORY = {
     {
       id: "a4",
       role: "assistant",
-      parts: [{ type: "data-clarification", data: { kind: "clarification", question: "There is no ALS cohort yet. Which did you mean?", options: [{ label: "Make an ALS cohort" }, { label: "nmosd", count: 17 }, { label: "All cohorts" }] } }],
+      parts: [{ type: "data-clarification", data: { kind: "clarification", question: "There is no ALS cohort yet. Which did you mean?", options: [{ label: "Make an ALS cohort" }, { label: "study-big", count: 17 }, { label: "All cohorts" }] } }],
     },
   ],
   settlements: [{ submissionId: "s4", outcome: "completed" }],
