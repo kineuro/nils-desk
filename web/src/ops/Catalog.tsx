@@ -39,6 +39,7 @@ import { PreflightPanel, Requirements } from "./Preflight";
 import { FailLine, FailNote } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
 import { LanePanel, SecretsPanel } from "./PipelineSetup";
+import { RuntimePanel, StartersPanel } from "./PipelineRuntime";
 import { setupActs } from "./pipelineSetup";
 import { runTag } from "./made";
 import { lastRunOf, lastRunWords } from "./results";
@@ -190,6 +191,8 @@ export function CatalogBody({ caps, part = "both", pipelines, capability, runs, 
       )}
       {acts.why && acts.see && capability?.enabled && <p className="meta">{acts.why}</p>}
       <LanePanel caps={caps} />
+      <RuntimePanel caps={caps} />
+      <StartersPanel caps={caps} />
       <SecretsPanel caps={caps} />
         </>
       )}

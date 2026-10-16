@@ -7,6 +7,8 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Added
 
 - Expert options on the release form (gate T31, walkthrough step 13.8), folded under one line below the form: where localizers, a vendor's synthetic contrasts and the DICOM copies go in a BIDS tree, the converter, uncompressed NIfTI, the authors, the categories of element removed, the UID root, only the picked scans and only some roles. Each starts at the engine's own default and is sent only once changed; the fold says how many are changed. A field the engine would refuse (a converter not named dcm2niix, no category, a UID root that is not numbers joined by dots) holds Release with the reason. Only the options the engine names in `capabilities.releases.expert` are drawn, so an older engine shows no fold (engine `[Unreleased]`, 2026-10-16).
+- The pipeline runtime and the starter catalog on Pipelines > Catalog (gate T31, walkthrough step 15.8), each a line beside Where they run: Runtime says what runs pipelines and which runtime is chosen, with Change (the runtime, and how apptainer keeps an image); Starters says whether the engine seeds its starter catalog at its start and how many it holds, with Seed now where one is lacking and the seeding turned off or on. A run that suggested scans to curate says so on its page, Suggested to curate, with the values by axis and Save as a selection, which a campaign starts from. Changing is install work; the lines are read with Pipelines: See (engine `[Unreleased]`, 2026-10-16).
+
 
 ## [1.0.0-alpha.68] - 2026-10-16
 

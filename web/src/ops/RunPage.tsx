@@ -32,6 +32,8 @@ import { InstallFor } from "./Install";
 import { FailLine, FailNote, KindTag } from "./Reason";
 import { madeOf, madeWords, runTag, unitsByWhy } from "./made";
 import { againOfRun, RunAgainDialog } from "./RunAgain";
+import { RunSeeds } from "./PipelineRuntime";
+import { seedsSuggested } from "./pipelineSetup";
 import { foundByWords } from "./tools";
 import { drawable, fileName, filesByUnit, shortName, sizeWords, viewActs } from "./results";
 import {
@@ -495,6 +497,8 @@ export function RunView(props: {
           {files.length > 0 && <FilesView files={files} units={unitNames} />}
         </>
       )}
+      {/* gate T31, step 15.8: what the run suggests curating, saved as a selection */}
+      <RunSeeds caps={caps} run={r.id} suggested={!running && seedsSuggested(s)} />
       {pipeline === null && <p className="meta">The catalog no longer lists this run&apos;s pipeline, so its table is not read.</p>}
       <Says head="Where the numbers come from">
         Each value is the unit&apos;s newest run of this pipeline&apos;s version; a row here is one this run measured and the ask still reads. Below detail quasi a measure is shown only as a total over a group of 5 scans or more; a smaller group&apos;s totals are withheld.
