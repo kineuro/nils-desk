@@ -131,6 +131,34 @@ describe("the item door, the answer and the words", () => {
     expect(buildAnswer({ ...accept(NO_MARKS), note: "x".repeat(2001) }, o)).toMatchObject({ ok: false });
   });
 
+  it("sends every field of the form as a list, so with no part flagged `parts` is [] on the wire (T33)", () => {
+    // The proof run's item 1: accepted by both raters, nothing flagged. The body that left the reader is the
+    // line of its network log, and the engine kept `parts` a list in the item's outcome; a refusal "form.parts
+    // is a list" came only from a string that run put there on purpose.
+    const o = { reasons: REASONS, grain: "result" as const, part: null };
+    const wire = (m: Parameters<typeof buildAnswer>[0]) => {
+      const b = buildAnswer(m, o);
+      if (!b.ok) throw new Error(b.needs);
+      return JSON.stringify(b.body);
+    };
+    expect(wire(accept(NO_MARKS))).toBe('{"value":"accepted","form":{"reasons":[],"parts":[],"points":[],"seen":[],"shown":[]}}');
+    expect(wire(reject(NO_MARKS))).toBe('{"value":"rejected","form":{"reasons":[],"parts":[],"points":[],"seen":[],"shown":[]}}');
+    // parts only seen are sent sorted, and none is flagged
+    expect(wire({ ...accept(NO_MARKS), seen: [3, 1] })).toBe('{"value":"accepted","form":{"reasons":[],"parts":[],"points":[],"seen":[1,3],"shown":[]}}');
+    // a flag on the whole result alone, and a rejection that keeps its reason, flag no part either
+    expect(wire(flag(NO_MARKS, "under", null))).toBe('{"value":"flagged","form":{"reasons":["under"],"parts":[],"points":[],"seen":[],"shown":[]}}');
+    expect(wire(reject(flag(NO_MARKS, "over", null)))).toBe('{"value":"rejected","form":{"reasons":["over"],"parts":[],"points":[],"seen":[],"shown":[]}}');
+    // whatever is marked, each of the five fields reaches the engine as an array
+    const marked = [accept(NO_MARKS), reject(NO_MARKS), flag(NO_MARKS, "under", null), flag(NO_MARKS, "under", 2), placePoint(flag(NO_MARKS, "under", 4), "missed", [1, 2, 3]), { ...accept(NO_MARKS), seen: [2] }];
+    for (const m of marked) {
+      const b = buildAnswer(m, o);
+      expect(b.ok).toBe(true);
+      const form = JSON.parse(JSON.stringify(b.ok ? b.body : {})).form as Record<string, unknown>;
+      expect(Object.keys(form)).toEqual(["reasons", "parts", "points", "seen", "shown"]);
+      for (const k of Object.keys(form)) expect(Array.isArray(form[k]), `${b.ok ? b.value : ""} ${k}`).toBe(true);
+    }
+  });
+
   it("flags toggle, take the place of 1 and 2, and Backspace takes the last mark back", () => {
     let m = accept(NO_MARKS);
     m = flag(m, "under", 2);
@@ -322,6 +350,14 @@ describe("the check reader drawn", () => {
     expect(answers()[0].body).toEqual({ value: "accepted", form: { reasons: [], parts: [], points: [], seen: [], shown: [] } });
     await until(() => host.querySelector(".rate-item > b")?.textContent === "result 13");
     await until(() => drawn.has(stackOf(CHECK_ITEM + 1, 0)));
+  });
+
+  it("2 rejects with the same all-empty form: no reason, part or point, and nothing seen (T33)", async () => {
+    await open();
+    await press("2");
+    await until(() => answers().length === 1);
+    expect(answers()[0].body).toEqual({ value: "rejected", form: { reasons: [], parts: [], points: [], seen: [], shown: [] } });
+    expect(JSON.stringify(answers()[0].body)).toBe('{"value":"rejected","form":{"reasons":[],"parts":[],"points":[],"seen":[],"shown":[]}}');
   });
 
   it("the band counts the reader's own reads against the results given to them, with a second rater ahead (T33)", async () => {
