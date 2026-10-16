@@ -13,6 +13,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Fixed
 
 - A count of files that stopped short of a large folder says "at least" wherever it is shown, and a whole count says the number alone. The engine's probes are bounded and say where they stopped (`more`, `partial`); the pseudonymise step (the originals' box, "Pseudonymise and sort", "to go" and "can go now"), the summary's pseudonymised step (its new `partial` and `waiting_partial`), a dataset's tree lines, Do all steps' new files and estimate, the folder picker's look and the setup folder listing now read them. Where the copy's count stopped short, no count of files still to pseudonymise is given, since it is not known.
+- A campaign's page has a Results view beside its Items (record 55, ruling 35 (d)), read from the engine's `GET /api/campaigns/{id}/results`: the counts settled, adjudicated and written, exact agreement and kappa, the unsure count; a table by value (answers given and items settled, per axis on an axes question); a table by rater; a table by item with each rater's answer in a column of its own (marked `?` where unsure), the adjudication, the settled value and the decision or pick the close wrote; and the campaign's label sets, each downloaded as its labels.tsv. While the campaign is open the view is offered to its maker (unless the maker rates in it), its adjudicators and a Review worker, and to everyone in it once it closes; on an engine without the door it is not offered.
+
+### Changed
+
+- The raters are named to the campaign's maker and a Review worker alone. Anyone else reads each other person as "rater 1", "adjudicator 1" and so on, their own answers by their own name, on the Items table as in the Results view. The Items table now trusts the answers door's own word on whether it answered blind.
 
 ## [1.0.0-alpha.68] - 2026-10-16
 
