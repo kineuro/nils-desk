@@ -67,6 +67,8 @@ export const PLACEHOLDERS: Placeholder[] = [
       page("datasets", "Datasets and cohorts"),
       ...(door(caps, "GET /api/subjects") && door(caps, "GET /api/scans") ? [page("browse", "Browse")] : []),
       ...(door(caps, "GET /api/linkage/types") ? [page("pseudonyms", "Pseudonyms")] : []),
+      // gate T31, step 22.8: the clinical vocabulary and its importer
+      ...(door(caps, "GET /api/clinical/vocabulary") ? [page("clinical", "Clinical")] : []),
     ],
   },
   {
