@@ -132,8 +132,8 @@ export function listingNote(l: Listing, unmounted: Unmounted | null): { tone: "c
   return null;
 }
 
-/** How much a folder holds beside its folders. */
+/** How much a folder holds beside its folders: "at least" where the listing stopped short and there may be more. */
 export function filesWords(l: Listing): string | null {
   if (l.files === 0) return l.folders.length === 0 && l.readable !== false && !l.timed_out ? "an empty folder" : null;
-  return `${l.files.toLocaleString("en-GB")}${l.partial ? " or more" : ""} ${l.files === 1 ? "file" : "files"} here too`;
+  return `${l.partial ? "at least " : ""}${l.files.toLocaleString("en-GB")} ${l.files === 1 ? "file" : "files"} here too`;
 }

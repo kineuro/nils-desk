@@ -71,7 +71,9 @@ describe("a listing", () => {
   it("says the files beside the folders, and an empty folder", () => {
     expect(filesWords(listing())).toBe("an empty folder");
     expect(filesWords(listing({ files: 1 }))).toBe("1 file here too");
-    expect(filesWords(listing({ files: 10000, partial: true }))).toBe("10,000 or more files here too");
+    // a listing that stopped short says at least, and only then (2026-10-16)
+    expect(filesWords(listing({ files: 10000, partial: true }))).toBe("at least 10,000 files here too");
+    expect(filesWords(listing({ files: 10000, partial: false }))).toBe("10,000 files here too");
     expect(filesWords(listing({ folders: [{ name: "a", readable: true, hidden: false, link: false, mount: null, unmounted: null }] }))).toBeNull();
   });
 });

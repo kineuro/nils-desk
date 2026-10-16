@@ -241,6 +241,7 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .ps-box.done .ps-box-label { color: var(--n-ok-fg); }
 .ps-big { font-family: var(--n-font-serif); font-size: 1.75rem; line-height: 1.2; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .ps-big.faint { color: var(--n-text-faint); }
+.ps-big .ps-least { font-family: var(--n-font-sans); font-size: 12px; color: var(--n-text-dim); }
 .ps-box-words { font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
 .ps-boxes.compact .ps-box { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.625rem; padding: 0.55rem 0.875rem; }
 .ps-boxes.compact .ps-big { font-size: 1.375rem; }

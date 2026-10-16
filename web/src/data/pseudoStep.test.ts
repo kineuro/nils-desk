@@ -18,6 +18,7 @@ import {
   codesBody,
   codesWords,
   everyFile,
+  goWords,
   heldIdsOf,
   idsBox,
   idTypeOf,
@@ -357,5 +358,39 @@ describe("what the originals' PatientID holds (2026-10-10)", () => {
     expect(holdsPatch({}, { holds: "same", type: "" })).toEqual({});
     // a subject code taken as written is no part of a rule for an identifying ID
     expect(holdsPatch({ identity: { id_type: "study-id", code: "verbatim", from: [{ field: "PatientID" }] } }, { holds: "same", type: "" })).toEqual({ identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+  });
+});
+
+describe("a count that stopped short of a large tree (2026-10-16)", () => {
+  const none: HeldIds = { files: 0, identifiers: 0, ids: [], subjects: { coded: 0, generated: 0 } };
+  const pn = { identity: { id_type: "personnummer", from: [{ field: "PatientID" }] }, held: { files: 0, identifiers: 0 } };
+  const at = (originals: Partial<typeof base.trees.originals> & { partial?: boolean }, anon: Partial<typeof base.trees.anon> & { partial?: boolean } = {}) =>
+    ({ ...d, ...pn, trees: { originals: { ...base.trees.originals, ...originals }, anon: { ...base.trees.anon, ...anon } } }) as unknown as Dataset;
+
+  it("says at least where the originals' count stopped short, on the button and the rail", () => {
+    const v = stepView(at({ partial: true }), step({ held: 0 }), none, [], false);
+    expect(v).toMatchObject({ phase: "fresh", originals: 7544, originalsPartial: true, go: 7544, goPartial: true });
+    expect(goWords(v)).toBe("at least 7,544 files");
+    expect(primaryOf(v, false, false)?.label).toBe("Pseudonymise and sort at least 7,544 files");
+  });
+
+  it("says the count as it is where it is whole", () => {
+    const v = stepView(at({ partial: false }), step({ held: 0 }), none, [], false);
+    expect(v).toMatchObject({ originalsPartial: false, goPartial: false });
+    expect(primaryOf(v, false, false)?.label).toBe("Pseudonymise and sort 7,544 files");
+    // an engine that says nothing of where its count stopped is read as whole
+    expect(stepView(d, step(), heldIds, matched, false).goPartial).toBe(false);
+  });
+
+  it("counts the new files at least where only the originals' count stopped short, and none it cannot know where the copy's did", () => {
+    const copied = (partial: boolean) => step({ state: "done", files: 7000, waiting: 544, held: 0, partial, waiting_partial: true });
+    const some = stepView(at({ partial: true }, { files: 7000 }), copied(false), none, [], false);
+    expect(some).toMatchObject({ phase: "ready", go: 544, goPartial: true });
+    expect(railWords(some)?.what).toBe("at least 544 files to go");
+    expect(primaryOf(some, false, false)?.label).toBe("Pseudonymise and sort at least 544 files");
+    // the copy's count stopped short too: how many it lacks is not known, so the run is offered on what is known, at least
+    const unknown = stepView(at({ partial: true }, { files: 7000, partial: true }), copied(true), none, [], false);
+    expect(unknown.go).toBe(0);
+    expect(unknown.goPartial).toBe(true);
   });
 });

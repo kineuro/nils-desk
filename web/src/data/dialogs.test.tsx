@@ -130,6 +130,20 @@ describe("Do all steps", () => {
     expect(html).not.toMatch(/digest|batch|thread|dcm-anon/i);
   });
 
+  it("says the new files as at least where the originals' count stopped short, and no count where the copy's did (2026-10-16)", () => {
+    const stopped = (o: boolean, a: boolean) => ({ ...incoming, trees: { originals: { ...incoming.trees!.originals!, partial: o }, anon: { ...incoming.trees!.anon!, partial: a } } });
+    const rates = { pseudonymize: { files_per_s: 1400, files: 4430 } };
+    const html = renderToStaticMarkup(<BringInNew caps={caps()} dataset={stopped(true, false)} rates={rates} onClose={none} onDone={none} />);
+    expect(html).toContain("at least 2,212 new files");
+    expect(html).toContain("At least 2,212 files at 1,400 a second on this machine, measured over 4,430 files: at least 2 seconds");
+    const unknown = renderToStaticMarkup(<BringInNew caps={caps()} dataset={stopped(true, true)} rates={rates} onClose={none} onDone={none} />);
+    expect(unknown).not.toContain("new file");
+    expect(unknown).not.toContain("a second on this machine");
+    const whole = renderToStaticMarkup(<BringInNew caps={caps()} dataset={stopped(false, false)} rates={rates} onClose={none} onDone={none} />);
+    expect(whole).toContain("2,212 new files");
+    expect(whole).not.toContain("at least");
+  });
+
   it("starts at reading for a dataset already anonymised, and omits the estimate where the engine measured no rate", () => {
     const html = renderToStaticMarkup(<BringInNew caps={caps()} dataset={exports} rates={null} onClose={none} onDone={none} />);
     expect(html).toContain("Read → Sort");
