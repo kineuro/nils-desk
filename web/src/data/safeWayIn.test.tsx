@@ -477,7 +477,8 @@ describe("Set the IDs", () => {
 
 describe("the pseudonymised copy's PatientID (2026-10-10)", () => {
   it("is asked apart from what the originals hold, the subject code first, an ID only behind a plain warning and never PatientID as written over an ID the same everywhere", async () => {
-    const types = { types: [{ name: "patient-id", description: "PatientID as written" }, ...TYPES.types] };
+    // nor a hospital's reserve number, which NILS never keeps and the engine refuses there (2026-10-16)
+    const types = { types: [{ name: "patient-id", description: "PatientID as written" }, ...TYPES.types, { name: "reserve-number", description: "a hospital's reserve number" }] };
     engine((c) => (c.url === "/api/linkage/types" ? { status: 200, body: types } : undefined));
     const identified = { kind: "dataset", state: "identified", arrives: "identified", patient_id: "subject-code", identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } };
     act(() =>

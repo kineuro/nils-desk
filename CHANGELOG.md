@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- A map's column headed for a hospital's reserve number (`reservnummer`, `reserve number`, `reserv_nr`, `reserve id` and the like) is read as the engine's `reserve-number` type, where the engine has it, instead of a new type named after the header: a type made that way would keep the numbers, sealed, and the engine keeps nothing of a reserve number but its keyed lookup (engine `[Unreleased]`, 2026-10-16). A map whose column standing for the person is a reserve number is refused before it is sent, in the engine's words: no code is made from a reserve number, so the person's code or their personnummer goes beside it. The IDs and Rules dialogs never offer the type for what PatientID holds or what the copy's PatientID gets, which the engine refuses: a reserve number is read beside an ID that is the same everywhere. An engine without the type is read as before.
+
 ## [1.0.0-alpha.66] - 2026-10-16
 
 Wave 7a's last desk, for engine 1.0.0-alpha.87 (older engines fall back): the assistant's drafts become cards when a person keeps them, the Parts page says when it looked at the releases and can look again, and six tasks gain a place (sort again after a rules update, raters on an open campaign, BIDS naming, a query from a selection, a kept result or a list of IDs, rebuild visits, a new label set).

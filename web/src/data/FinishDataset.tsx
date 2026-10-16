@@ -21,7 +21,7 @@ import { Hint } from "../ui/Hint";
 import { Wait } from "../ui/Wait";
 import { linkage, look as lookDoor, places as placesDoor, type DatasetFields, type FolderNaming, type Layout, type LinkageType, type PlaceAnswer, type Subjects } from "./datasets";
 import { dicomNamed, moveAskedOf, namesShown, patientIdOf, questionWords, stateOf, type MoveAsked } from "./layout";
-import { SAME_EVERYWHERE, typeLabel } from "./pseudonyms";
+import { RESERVE_TYPE, SAME_EVERYWHERE, typeLabel } from "./pseudonyms";
 
 /** A dataset place as the dialogs need it. */
 export type Finishing = Pick<Place, "id" | "name" | "path"> & { dataset?: Place["dataset"]; not_read?: string | null };
@@ -30,11 +30,13 @@ type Act = { kind: "idle" } | { kind: "working"; phase: string; since: number } 
 
 /**
  * The hospital or study IDs a pseudonymised file's PatientID may hold:
- * never an ID that is the same everywhere, which the engine refuses there
- * and NILS never keeps, and not the subject code, which is the other choice.
+ * never an ID that is the same everywhere or a hospital's reserve number,
+ * which the engine refuses there and NILS never keeps (a reserve number is
+ * read beside an ID that is the same everywhere, never as a dataset's own
+ * type), and not the subject code, which is the other choice.
  */
 export function writable(types: LinkageType[]): LinkageType[] {
-  return types.filter((t) => t.name !== SAME_EVERYWHERE && t.name !== "subject-code");
+  return types.filter((t) => t.name !== SAME_EVERYWHERE && t.name !== RESERVE_TYPE && t.name !== "subject-code");
 }
 
 /** What the pseudonymised copy's PatientID is asked as, apart from what the originals hold (2026-10-10: the two read alike). */
