@@ -194,8 +194,8 @@ describe("the side's pages", () => {
       ["Runs", "#pipelines/runs"],
       ["Models", "#pipelines/models"],
     ]);
-    // Settings keeps its pages as they were
-    expect(listed(foot(everything), "settings").map(([title]) => title)).toEqual(["Overview", "Parts", "Engine", "Desk", "Assistant", "People", "Setup"]);
+    // Settings keeps its pages as they were, with the assistant's teaching under it for an administrator
+    expect(listed(foot(everything), "settings").map(([title]) => title)).toEqual(["Overview", "Parts", "Engine", "Desk", "Assistant", "Teaching", "People", "Setup"]);
   });
   it("show a page only where the engine serves what it reads and the grants allow it", () => {
     const older = { ...everything, engine: { ...everything.engine!, doors: EVERY.filter((d) => !["GET /api/ask/selections", "GET /api/ask/handles", "GET /api/label-sets", "GET /api/pipelines"].includes(d)) } };

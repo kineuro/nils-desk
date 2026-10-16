@@ -27,6 +27,7 @@ import { settingsPage, settingsPages } from "./pages";
 import { checkedWords, contractWords, keptByWords, newerWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
 import { ReleasesLook } from "./ReleasesLook";
 import { SortAgainDialog } from "./SortAgain";
+import { TeachingPage } from "./TeachingPage";
 import { sortAgainRefusal, type SortUnder } from "./sorting";
 import { supervise, type Install } from "./supervise";
 import { ToolsSection } from "../ops/Install";
@@ -52,6 +53,8 @@ export function Settings(props: PageProps & { page: string | null }) {
       return <DeskPage {...props} />;
     case "assistant":
       return <AssistantPage {...props} />;
+    case "teaching":
+      return <TeachingPage caps={props.caps} />;
     case "language-models":
       return <GatewayPage caps={props.caps} install={props.install} />;
     case "places":

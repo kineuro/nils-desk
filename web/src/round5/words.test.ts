@@ -180,13 +180,13 @@ describe("people", () => {
 });
 
 describe("Settings' map (spec 18)", () => {
-  it("lands on Overview, and sets Engine, Desk, Language models and the Assistant under Parts", () => {
+  it("lands on Overview, and sets Engine, Desk, Language models, the Assistant and its Teaching under Parts", () => {
     const caps = { ...caps7a(["GET /api/places", "GET /api/backups", "GET /api/audit"]), kvasir: {}, assistant: {} } as Capabilities;
     const pages = settingsPages(caps);
     expect(pages[0].id).toBe("overview");
-    expect(pages.filter((p) => p.sub).map((p) => p.title)).toEqual(["Engine", "Desk", "Language models", "Assistant"]);
+    expect(pages.filter((p) => p.sub).map((p) => p.title)).toEqual(["Engine", "Desk", "Language models", "Assistant", "Teaching"]);
     const parts = pages.findIndex((p) => p.id === "parts");
-    expect(pages.slice(parts + 1, parts + 5).every((p) => p.sub)).toBe(true);
+    expect(pages.slice(parts + 1, parts + 6).every((p) => p.sub)).toBe(true);
     expect(pages.at(-1)?.id).toBe("setup");
   });
 });

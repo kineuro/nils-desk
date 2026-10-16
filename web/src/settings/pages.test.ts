@@ -50,7 +50,12 @@ describe("the settings pages", () => {
     // without the install's pages there are no parts to set them in under
     const answered = { kvasir: { models: [] }, assistant: { stations: [] } };
     expect(settingsPages(caps(["kvasir:see"], answered))).toEqual([{ id: "language-models", title: "Language models", sub: false }]);
-    expect(settingsPages(caps(["assistant-settings:work"], answered))).toEqual([{ id: "assistant", title: "Assistant", sub: false }]);
+    // the assistant's teaching is an administrator's: work on the assistant's settings opens it
+    expect(settingsPages(caps(["assistant-settings:work"], answered))).toEqual([
+      { id: "assistant", title: "Assistant", sub: false },
+      { id: "teaching", title: "Teaching", sub: false },
+    ]);
+    expect(ids(caps(["assistant-settings:see"], answered))).toEqual(["assistant"]);
     expect(ids(caps(["kvasir:work"]))).toEqual([]);
   });
 

@@ -60,7 +60,7 @@ const MAP: Record<string, string[]> = {
   Review: ["Work", "Main scans", "Subjects", "Rules", "Rounds", "Label sets"],
   Release: ["Releases", "New release", "Session schemes"],
   Pipelines: ["Jobs", "Catalog", "Runs", "Logs", "Models"],
-  Settings: ["Overview", "Parts", "Engine", "Desk", "Language models", "Assistant", "Places", "Backups", "People", "Audit", "Setup"],
+  Settings: ["Overview", "Parts", "Engine", "Desk", "Language models", "Assistant", "Teaching", "Places", "Backups", "People", "Audit", "Setup"],
 };
 
 test.describe.configure({ mode: "serial" });
