@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
 import { SETS } from "../grants";
 import type { AdmissionRecord } from "./kvasir";
-import { behindParts, checkedWords, contractWords, keptByWords, newerWords, partRows, restartByHand, runtimeName, updateWords, uptimeWords } from "./parts";
+import { behindParts, checkedWords, contractWords, keptByWords, lookedWords, newerWords, partRows, restartByHand, runtimeName, updateWords, uptimeWords } from "./parts";
 import type { Install, PartRelease, Release } from "./supervise";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
@@ -132,6 +132,18 @@ describe("the words", () => {
     expect(checkedWords(null, 0)).toBeNull();
     expect(checkedWords(1_000, 31_000)).toBe("checked just now");
     expect(checkedWords(0, 150_000)).toBe("checked 2 minutes ago");
+  });
+  it("say when the releases were looked up, which the supervisor keeps for a quarter of an hour, and nothing where an engine does not say", () => {
+    const at = Date.parse("2026-10-16T01:50:00Z");
+    expect(lookedWords(null, at)).toBeNull();
+    expect(lookedWords(undefined, at)).toBeNull();
+    expect(lookedWords("not a time", at)).toBeNull();
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 20_000)).toBe("releases looked up just now");
+    expect(lookedWords("2026-10-16T01:50:00Z", at - 5_000)).toBe("releases looked up just now");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 60_000)).toBe("releases looked up 1 minute ago");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 14 * 60_000 + 59_000)).toBe("releases looked up 14 minutes ago");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 3_600_000)).toBe("releases looked up 1 hour ago");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 5 * 3_600_000 + 1_000)).toBe("releases looked up 5 hours ago");
   });
   it("say what an update changes, and nothing when nothing is newer", () => {
     expect(updateWords(install())).toEqual([

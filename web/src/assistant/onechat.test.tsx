@@ -302,10 +302,10 @@ describe("what waits for the person", () => {
   it("is a question with its choices as outlined buttons, a click answering it", async () => {
     const e = await mount([{ type: "submission-settled", outcome: "completed" }]);
     const q = host.querySelector(".ask-choice")!;
-    expect(words(q.querySelector("p"))).toBe("There is no ALS cohort yet. Which did you mean?");
-    expect([...q.querySelectorAll(".ask-option")].map(words)).toEqual(["Make an ALS cohort", "nmosd 17", "All cohorts"]);
-    act(() => button(q, /^nmosd/)!.click());
+    expect(words(q.querySelector("p"))).toBe("There is no pilot cohort yet. Which did you mean?");
+    expect([...q.querySelectorAll(".ask-option")].map(words)).toEqual(["Make a pilot cohort", "study-big 17", "All cohorts"]);
+    act(() => button(q, /^study-big/)!.click());
     await settle(8);
-    expect(e.of("POST", "/assistant/agents/nils/c1")[0].body).toMatchObject({ kind: "user", body: "nmosd" });
+    expect(e.of("POST", "/assistant/agents/nils/c1")[0].body).toMatchObject({ kind: "user", body: "study-big" });
   });
 });

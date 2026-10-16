@@ -490,3 +490,19 @@ export function checkedWords(at: number | null, now: number): string | null {
   const minutes = Math.floor((now - at) / 60_000);
   return minutes < 1 ? "checked just now" : `checked ${count(minutes, "minute", "minutes")} ago`;
 }
+
+/**
+ * When the supervisor last looked at the releases, as a person says it. The
+ * supervisor keeps what it looked at for a quarter of an hour, so this is not
+ * when the page was read (`checkedWords`): a release published since is not
+ * on the page until a look is made again. Nothing from an engine that does
+ * not say when.
+ */
+export function lookedWords(at: string | null | undefined, now: number): string | null {
+  const when = at ? Date.parse(at) : Number.NaN;
+  if (!Number.isFinite(when)) return null;
+  const minutes = Math.floor((now - when) / 60_000);
+  if (minutes < 1) return "releases looked up just now";
+  if (minutes < 60) return `releases looked up ${count(minutes, "minute", "minutes")} ago`;
+  return `releases looked up ${count(Math.floor(minutes / 60), "hour", "hours")} ago`;
+}

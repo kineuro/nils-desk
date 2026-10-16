@@ -4,6 +4,14 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- The Parts page says when the supervisor last looked at the releases, and asks it to look again. The supervisor keeps what it looked at for a quarter of an hour, and the page said "checked just now" beside offers made from that look, which is only when the page itself was read: on 2026-10-16 it named 1.0.0-alpha.84 as the release to take a minute after 1.0.0-alpha.85 was published. With an engine that says `release.looked_at`, the page says "releases looked up 14 minutes ago" beside "checked just now", and Look again, for a person who may work on the install, asks the supervisor's door for a fresh look (`?fresh=1`, honoured once the look is a minute old) and reads the page once more. With an engine that says nothing of when it looked, the page reads as it did.
+
+### Changed
+
+- The desk's tests name no cohort of the group (record 55, ruling 18): the assistant's question fixture offered one by its name, and offers a made-up one now.
+
 ## [1.0.0-alpha.65] - 2026-10-16
 
 Wave 7a's desk after the beta, for engine 1.0.0-alpha.82 (and older engines, which fall back): layers on the Main scans map, Record a certificate, plain admin access and standing grants, a visit's page of scans that carries where each picture is, and standing workers shown apart as ready.
