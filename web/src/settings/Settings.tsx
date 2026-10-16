@@ -26,8 +26,11 @@ import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
 import { checkedWords, contractWords, keptByWords, newerWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
 import { ReleasesLook } from "./ReleasesLook";
+import { SortAgainDialog } from "./SortAgain";
+import { sortAgainRefusal, type SortUnder } from "./sorting";
 import { supervise, type Install } from "./supervise";
 import { ToolsSection } from "../ops/Install";
+import { QueuedWords, type Queued } from "../ops/ReleaseActs";
 
 interface PageProps {
   caps: Capabilities;
@@ -110,6 +113,10 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
   const update = useRun();
   const restart = useRun();
   const look = useActing();
+  // gate T31, step 9.5: the scans sorted under the rules before an update keep their answers until they are sorted again
+  const [sorting, setSorting] = useState<SortUnder | null>(null);
+  const [sortQueued, setSortQueued] = useState<Queued | null>(null);
+  const sortsAgain = sortAgainRefusal(caps) === null;
   const local = ((caps.kvasir?.["backends"] as { locality?: string }[] | undefined) ?? []).some((b) => b.locality === "local");
 
   useEffect(() => {
@@ -197,6 +204,7 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
           {install && <ReleasesLook looked={install.release.looked_at} now={now} working={look.working} onLook={lookAgain} />}
         </div>
         <Acted acting={look.acting} />
+        {sortQueued && <QueuedWords caps={caps} queued={sortQueued} />}
         <div className="table-wrap">
           <table className="thin">
             <thead>
@@ -223,6 +231,13 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
                   <td>
                     {r.mono ? <span className="path">{r.version}</span> : r.version}
                     {r.meta && <div className="meta">{r.meta}</div>}
+                    {sortsAgain && r.sort && (
+                      <div>
+                        <button type="button" className="button quiet small" aria-label={`Sort again under ${r.sort.title}`} onClick={() => setSorting(r.sort ?? null)}>
+                          Sort again
+                        </button>
+                      </div>
+                    )}
                   </td>
                   {install && <td>{r.runsAs && (r.runsAs.mono ? <span className="path">{r.runsAs.text}</span> : r.runsAs.text)}</td>}
                   <td>
@@ -261,6 +276,18 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
         </div>
         {!install && <p className="meta">{missing}</p>}
       </section>
+
+      {sorting && (
+        <SortAgainDialog
+          caps={caps}
+          under={sorting}
+          onClose={() => setSorting(null)}
+          onDone={(q) => {
+            setSorting(null);
+            setSortQueued(q);
+          }}
+        />
+      )}
 
       <ToolsSection caps={caps} onChanged={onChanged} />
 

@@ -305,12 +305,14 @@ describe("a row per rule pack (record 55 B5)", () => {
     const i = install({ release: { ...listed([at("engine"), at("desk"), mri, clinical]), packs, rules: [mri, clinical] } });
     const rows = partRows(caps(), i, null, []);
     expect(rows.map((r) => r.id)).toEqual(["engine", "rules-mri", "rules-clinical", "packs-own", "desk", "gateway", "postgres"]);
-    expect(rows[1]).toMatchObject({ title: "MRI rules", version: "mri 1.0.1", health: { tone: "ok", words: "in use" }, newer: { text: "1.0.2", tag: true }, update: "rules" });
+    expect(rows[1]).toMatchObject({ title: "MRI rules", version: "mri 1.0.1", health: { tone: "ok", words: "in use" }, newer: { text: "1.0.2", tag: true }, update: "rules", sort: { pack: "mri", title: "MRI rules", version: "1.0.1" } });
+    // only a rules row is what the scans are sorted under: Sort again is offered nowhere else (gate T31, step 9.5)
+    expect(rows.filter((r) => r.sort).map((r) => r.id)).toEqual(["rules-mri", "rules-clinical"]);
     expect(rows[2]).toMatchObject({ title: "Clinical rules", newer: { text: "0.4.0 waits for a newer engine", tag: false }, update: null });
     expect(rows[3]).toMatchObject({ title: "Site's packs", version: "site 2.0.0", newer: { text: "kept", tag: false } });
     expect(newerWords(i)).toBe("MRI rules 1.0.2 is out");
     expect(updateWords(i)).toEqual([
-      "The MRI rules move from 1.0.1 to 1.0.2, their own release; the engine reads them at its next look, and nothing is started again.",
+      "The MRI rules move from 1.0.1 to 1.0.2, their own release; the engine reads them at its next look, and nothing is started again. Scans already sorted keep their answers until Sort again.",
       "Postgres stays at 17, and its data is not touched.",
     ]);
   });
