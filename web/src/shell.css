@@ -934,8 +934,6 @@ button.steps-line:hover { background: var(--n-bg-hover); }
 .proposal { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 0.7rem; padding: 0.7rem 0.85rem; border: 1px solid var(--n-brand-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
 .proposal > .i { margin-top: 3px; color: var(--n-brand-icon); }
 .proposal-title { font-weight: 600; }
-.choice { display: grid; gap: 0.35rem; }
-.choice .button .meta { margin-left: 0.2rem; }
 /* one chat: the live line, the steps behind a "?", the plan panel and the cards */
 .status-line { margin: 0; color: var(--n-text-dim); font-size: var(--n-text-size-small); }
 .steps-help { position: relative; display: inline-flex; }
