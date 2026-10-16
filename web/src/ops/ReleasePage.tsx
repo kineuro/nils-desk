@@ -30,6 +30,8 @@ import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { DATASETS_OWN, NAMES_HINT, expertOffered, overrideNote, releaseBody, type Expert, type ReleaseSource } from "./release";
 import { ReleaseExpert } from "./ReleaseExpert";
+import { HandoversDialog } from "./HandoverPassword";
+import { ownPasswords } from "./handovers";
 import { HandoverDialog, QueuedWords, WithdrawDialog, type Queued } from "./ReleaseActs";
 import { handoverRows } from "./releaseActs";
 
@@ -153,6 +155,9 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, queue
   const handsOver = onHandover !== undefined && served(caps, "POST /api/handovers");
   const withdraws = onWithdraw !== undefined && served(caps, "POST /api/jobs");
   const newest = handoverRows(list ?? []);
+  // record 55, ruling 35 (c): a version's handovers, each with how it is kept closed and its password for who may show it
+  const [looking, setLooking] = useState<Release | null>(null);
+  const lookable = ownPasswords(caps);
   return (
     <section className="data releases">
       <div className="data-head">
@@ -221,7 +226,17 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, queue
                     </td>
                     <td className="nowrap">{whenWords(r.started_at, today)}</td>
                     <td>{r.actor ?? ""}</td>
-                    <td>{r.handed_over ? whenWords(r.handed_over, today) : "not yet"}</td>
+                    <td>
+                      {r.handed_over && lookable ? (
+                        <button type="button" className="button quiet small" aria-label={`Handovers of ${r.name} version ${r.version}`} onClick={() => setLooking(r)}>
+                          {whenWords(r.handed_over, today)}
+                        </button>
+                      ) : r.handed_over ? (
+                        whenWords(r.handed_over, today)
+                      ) : (
+                        "not yet"
+                      )}
+                    </td>
                     <td>{r.withdrawn_at ? [whenWords(r.withdrawn_at, today), r.withdrawn_by, r.withdrawn_why].filter(Boolean).join(" · ") : ""}</td>
                     {acts && (
                       <td className="acts release-acts">
@@ -244,6 +259,7 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, queue
           </table>
         </div>
       )}
+      {looking && <HandoversDialog release={looking} onClose={() => setLooking(null)} />}
       {children}
     </section>
   );

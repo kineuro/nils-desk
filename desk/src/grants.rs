@@ -25,6 +25,10 @@ pub const GRANTS: &[&str] = &[
     "data:work",
     "database:see",
     "database:work",
+    // record 55, ruling 35 (c): showing a handover's password, and typing
+    // one when handing over; the admin's set holds both
+    "handover-password:see",
+    "handover-password:work",
     "identity:see",
     "identity:work",
     "install:see",
@@ -57,6 +61,10 @@ pub const ASSIST: &str = "assist";
 const SINCE_V3: &[&str] = &[
     "campaigns:see",
     "campaigns:work",
+    // record 55, ruling 35 (c), added to version 3 in place: an Admins group
+    // made before keeps answering to admin
+    "handover-password:see",
+    "handover-password:work",
     "models:see",
     "models:work",
 ];
@@ -351,6 +359,12 @@ mod tests {
         for step in LADDER {
             let s = set(step).unwrap();
             assert_eq!(s.holds("campaigns:work"), *step == "admin", "{step}");
+            // record 55, ruling 35 (c): handover passwords are the admin's too
+            assert_eq!(
+                s.holds("handover-password:work"),
+                *step == "admin",
+                "{step}"
+            );
             assert_eq!(s.holds("models:see"), *step != "reader", "{step}");
             assert_eq!(
                 s.holds("models:work"),
@@ -358,6 +372,6 @@ mod tests {
                 "{step}"
             );
         }
-        assert_eq!(GRANTS.len(), 28);
+        assert_eq!(GRANTS.len(), 30);
     }
 }
