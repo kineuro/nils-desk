@@ -50,11 +50,11 @@ export const HISTORY = {
         }),
       ],
     },
-    { id: "u4", role: "user", parts: [text("How many scans are in the ALS cohort?")] },
+    { id: "u4", role: "user", parts: [text("How many scans are in the pilot cohort?")] },
     {
       id: "a4",
       role: "assistant",
-      parts: [{ type: "data-clarification", data: { kind: "clarification", question: "There is no ALS cohort yet. Which did you mean?", options: [{ label: "Make an ALS cohort" }, { label: "study-big", count: 17 }, { label: "All cohorts" }] } }],
+      parts: [{ type: "data-clarification", data: { kind: "clarification", question: "There is no pilot cohort yet. Which did you mean?", options: [{ label: "Make a pilot cohort" }, { label: "study-big", count: 17 }, { label: "All cohorts" }] } }],
     },
   ],
   settlements: [{ submissionId: "s4", outcome: "completed" }],
