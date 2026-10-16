@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- Body part and post-contrast are runs a person starts (record 55, ruling 35 (b)): the engine scores a dataset's arrival with System 1 alone, which needs no button. While either step waits, the dataset's rail says what its Run would add instead of "not run yet": "6 with no body part", "12 T1 brain, contrast unknown", or "none needs it", from the step's `hint` on the dataset's summary. An engine from before says "not run yet" as it did.
+
 ## [1.0.0-alpha.68] - 2026-10-16
 
 The map dialog shows no identifier's value, and never-kept ID types say they keep lookups only.
