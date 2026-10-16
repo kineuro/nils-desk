@@ -24,6 +24,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Fixed
 
 - The scheme choice in the release form read "the registry's own, [object Object]": the engine sends the registry's own scheme as its definition, not its name. It reads "the registry's own: named by date; studies within the same day are one session" now, and the Session schemes page marks a kept scheme as the registry's own only where the engine names it. Rebuild visits reads it the same way.
+- A checkbox or a radio stood above its words on the Admit panel of a model (passed), on a cohort's Add or remove (which way), on the Places panels (what a storage guarantees), on Review's Decide (no value here) and on the commit panel of a model's proposals (commit anyway), instead of beside them. The stylesheet had two rules for `.choice`: the row's, with the box and its words on one line, and one left from the first chat, which the chat stopped using when it got its own classes (`ask-choice`, `ask-option`) and which came later in the file, so it won and laid every row out as a grid. The leftover is gone, and the chat's question card is styled by its own classes as before. A layout check in chromium (`choice.pw.ts`) measures the box beside its words, level with them, on all five at a laptop's width and at a phone's; it failed on every one before the fix.
 
 ## [1.0.0-alpha.65] - 2026-10-16
 
