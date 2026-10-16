@@ -42,7 +42,7 @@ async function openSide(page: Page, vp: { width: number }) {
 }
 
 for (const vp of SIZES) {
-  test(`at ${vp.name} px Settings lands on Overview, with Engine, Desk, Language models and Assistant under Parts`, async ({ page }) => {
+  test(`at ${vp.name} px Settings lands on Overview, with Engine, Desk, Language models, Assistant and Teaching under Parts`, async ({ page }) => {
     await page.setViewportSize(vp);
     await page.goto("/round5.html#settings");
     await expect(page.locator(".settings-head h1")).toBeVisible();
@@ -51,7 +51,7 @@ for (const vp of SIZES) {
     // the landing page is Overview: the side marks it as the page open
     await expect(side.locator('.side-pages a[aria-current="page"]')).toHaveText("Overview");
     const deep = side.locator(".side-pages a.deep");
-    await expect(deep).toHaveText(["Engine", "Desk", "Language models", "Assistant"]);
+    await expect(deep).toHaveText(["Engine", "Desk", "Language models", "Assistant", "Teaching"]);
     await expect(side.getByRole("link", { name: "Kvasir" })).toHaveCount(0);
     await noSideways(page, vp.width);
     await shot(page, `settings-${vp.name}`);

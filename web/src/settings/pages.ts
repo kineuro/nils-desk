@@ -35,6 +35,8 @@ export function settingsPages(caps: Capabilities): SettingsPage[] {
   // A part's page is set in under the parts only where the parts are drawn
   if (caps.kvasir !== null && may(caps, "kvasir:see")) out.push({ id: "language-models", title: "Language models", sub: install });
   if (caps.assistant !== null && may(caps, "assistant-settings:see")) out.push({ id: "assistant", title: "Assistant", sub: install });
+  // the assistant's teaching (Wave 5 section 9.5), an administrator's page: its acts need review:work and kvasir:work
+  if (caps.assistant !== null && may(caps, "assistant-settings:work")) out.push({ id: "teaching", title: "Teaching", sub: install });
   // the places, where the engine serves them
   if (may(caps, "places:see") && door(caps, "GET /api/places")) out.push({ id: "places", title: "Places", sub: false });
   // Backups (spec 13.1, once "Database"), where the engine serves its doors
