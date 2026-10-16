@@ -22,23 +22,22 @@ import { useConversation, type Conversing } from "../assistant/useConversation";
 import { ask, catalogFields, chain, columnName, DoorError, type DocumentHandle, type Diagnosis, type Json, type Move, type Options, type Preview, type Profile } from "../ask/client";
 import { editor, setsOf } from "../ask/editor";
 import { countIn, countText, HELD, heldCell, heldColumns, heldList, HELD_WHY, LIST_WHY, LIST_WORDS } from "../ask/held";
-import { countWords, startBody, type From, type Started } from "../ask/start";
 import type { Capabilities } from "../capabilities";
 import { PromoteDialog } from "../data/PromoteDialog";
 import { door as served } from "../deployment";
-import { may, sees } from "../grants";
+import { may } from "../grants";
 import { objects, type DocumentRow, type Show } from "../objects/client";
 import { href } from "../routes";
 import { assistantModel, assistantOffered } from "../sections";
 import { admit } from "../ui/context";
 import { CountText } from "../ui/Count";
-import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { whenWords } from "../data/sources";
 import { keptWords, mayKeep } from "./kept";
 import { SaveSelection } from "./SaveSelection";
+import { StartDialog } from "./StartDialog";
 import { Exports } from "./Exports";
 import { Selections } from "./Selections";
 import { mayList, maySave } from "./selections";
@@ -151,7 +150,7 @@ function Cards({ caps }: { caps: Capabilities }) {
       </div>
       {rows === null && !why && <Wait phase="reading the cards" since={since} size="panel" />}
       {why && <p className="warn">The cards could not be read: {why}</p>}
-      {rows !== null && rows.length === 0 && show === "yes" && <p className="lede">No card yet. New card starts one from everyone or from a cohort.</p>}
+      {rows !== null && rows.length === 0 && show === "yes" && <p className="lede">No card yet. New card starts one from everyone, a cohort, a saved selection, a kept result or a list of IDs.</p>}
       {rows !== null && rows.length === 0 && show === "no" && <p className="lede">No draft. What the assistant proposes waits here until you keep it.</p>}
       {rows !== null && rows.length > 0 && (
         <div className="query-cards">
@@ -182,95 +181,6 @@ function Cards({ caps }: { caps: Capabilities }) {
       )}
       {starting && <StartDialog caps={caps} onClose={() => setStarting(false)} />}
     </section>
-  );
-}
-
-function StartDialog({ caps, onClose }: { caps: Capabilities; onClose: () => void }) {
-  const [kind, setKind] = useState<"nothing" | "cohorts">("nothing");
-  const [cohorts, setCohorts] = useState("");
-  const [started, setStarted] = useState<Started | null>(null);
-  const [why, setWhy] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  // counting is asking; opening what was counted as a card keeps it
-  const keeping = keepingRefusal(caps);
-  const from: From = kind === "cohorts" ? { kind: "cohorts", cohorts: cohorts.split(/[\s,]+/).filter(Boolean) } : { kind: "nothing" };
-  const look = () => {
-    setBusy(true);
-    setWhy(null);
-    ask
-      .start(startBody(from))
-      .then((s) => setStarted(s as Started))
-      .catch((e: Error) => setWhy(e.message))
-      .finally(() => setBusy(false));
-  };
-  const open = () => {
-    if (!started) return;
-    setBusy(true);
-    ask
-      .store(started.document as Json)
-      .then((d) => {
-        location.hash = href("query", String(d.document));
-      })
-      .catch((e: Error) => {
-        setBusy(false);
-        setWhy(e.message);
-      });
-  };
-  return (
-    <Dialog
-      title="Start a query"
-      icon="search"
-      onClose={onClose}
-      foot={
-        <div className="row actions">
-          {started ? (
-            keeping === null && (
-              <button type="button" className="button" disabled={busy} onClick={open}>
-                Open as a card
-              </button>
-            )
-          ) : (
-            <button type="button" className="button" disabled={busy || (kind === "cohorts" && cohorts.trim() === "")} onClick={look}>
-              Count it
-            </button>
-          )}
-          <button type="button" className="button secondary" onClick={onClose}>
-            Cancel
-          </button>
-          {why && <span className="warn">{why}</span>}
-        </div>
-      }
-    >
-      <div className="field">
-        <span className="label">Start from</span>
-        <label className="choice">
-          <input type="radio" name="from" checked={kind === "nothing"} onChange={() => { setKind("nothing"); setStarted(null); }} />
-          Everyone the registry holds
-        </label>
-        <label className="choice">
-          <input type="radio" name="from" checked={kind === "cohorts"} onChange={() => { setKind("cohorts"); setStarted(null); }} />
-          One or more cohorts
-        </label>
-        {kind === "cohorts" && (
-          <div className="input">
-            <input value={cohorts} placeholder="cohort names, separated by commas" onChange={(e) => { setCohorts(e.target.value); setStarted(null); }} />
-          </div>
-        )}
-      </div>
-      {started && (
-        <p className="lede" title={started.count === null ? HELD_WHY : undefined}>
-          {countWords(started)}
-        </p>
-      )}
-      {keeping !== null ? (
-        <p className="meta">{keeping} Counting here keeps nothing.</p>
-      ) : (
-        <p className="meta">
-          A saved card, a kept result and a list of identifiers are started from too: open a card and choose Start a new card from here
-          {sees(caps, "quasi") ? "." : "; a list of identifiers asks to see sex and age in records."}
-        </p>
-      )}
-    </Dialog>
   );
 }
 
@@ -331,8 +241,6 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
   // Download CSV beside the preview (2026-10-12): the answer's rows as a file, as the chat's card saves them
   const file = useAnswerFile(id, cardTitle((doc?.ask as Json | undefined)?.name as string | undefined, answer), versions.find((v) => v.id === id)?.label ?? null);
   const current = steps.find((s) => s.set === chosen) ?? steps.find((s) => s.answers) ?? steps[0] ?? null;
-  // a list of identifiers is started from with detail quasi (record 25)
-  const lists = sees(caps, "quasi");
   // a new card from this one, or a proposed version taken, is kept, which needs work on the Query page
   const keeping = keepingRefusal(caps);
   const profiled = current?.set ?? null;
@@ -758,7 +666,6 @@ function Card({ caps, id }: { caps: Capabilities; id: number }) {
               </span>
             </div>
           </section>
-          {keeping === null && !lists && <p className="meta">Starting from a list of identifiers asks to see sex and age in records.</p>}
         </aside>
       </div>
       {saving && (

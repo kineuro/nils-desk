@@ -228,6 +228,17 @@ export async function door<T>(method: "GET" | "POST" | "PUT" | "DELETE", path: s
   return json as T;
 }
 
+/** What an upload left: its id to start a question from, the counts, and the positions that matched no subject; never a value. */
+export interface Uploaded {
+  upload_id: string;
+  namespace: string;
+  n: number;
+  /** The places in the list (from 0) of the IDs that matched no subject. */
+  unresolved: number[];
+  /** The distinct subjects the list matched. */
+  subjects: number;
+}
+
 export const ask = {
   store: (document: Json) => door<DocumentHandle>("POST", "/api/ask/documents", { document }),
   /** A stored document kept under another as its next version: a draft the assistant proposed joins the card's line. */
@@ -255,8 +266,8 @@ export const ask = {
   diagnose: (document_id: number, by?: "set" | "clause") => door<Diagnosis>("POST", "/api/ask/diagnose", by ? { document_id, by } : { document_id }),
   /** Wave 5 section 12.1: the opening set of a new question, from anything a person may start from. */
   start: (body: { from: Record<string, unknown> }) => door<{ document: Json; set: string; grain: string; count: number | null; subjects: number | null; sessions: number | null; epoch: number }>("POST", "/api/ask/start", body),
-  /** An uploaded identifier list, resolved through the linkage store; reviewer and above. */
-  upload: (values: string[], namespace?: string) => door<{ upload: number; resolved?: number; unresolved?: number }>("POST", "/api/ask/values", namespace ? { values, namespace } : { values }),
+  /** An uploaded ID list, resolved through the linkage store on arrival (query:work, detail quasi); the ID type is the namespace the door needs. */
+  upload: (values: string[], namespace: string) => door<Uploaded>("POST", "/api/ask/values", { values, namespace }),
   diff: (a: Side, b: Side) => door<Diff>("POST", "/api/ask/diff", { a, b }),
   run: (document_id: number, name?: string) => door<Run>("POST", "/api/ask/run", name ? { document_id, name } : { document_id }),
   /** One page of a handle's rows at the caller's detail; with purpose `export`, refused (409) for an answer that no longer reproduces, and written so on the read's audit row. */
