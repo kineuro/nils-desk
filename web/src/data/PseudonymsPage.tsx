@@ -3,9 +3,11 @@
 // datasets, and nothing of one dataset alone. The ID types the site files its
 // IDs under, with how many IDs and subjects each holds; a map given for every
 // dataset at once, since a map once filed holds wherever the IDs arrive; and
-// the subjects that may be one subject twice, which wait on Review. A
-// dataset's own pseudonymisation is its step, opened in place on the Data
-// page, and the address that named a page of it opens that step.
+// the subjects that may be one subject twice, which wait on Review; and, for
+// an admin, one subject's IDs shown, linked, unlinked or purged (record 55,
+// ruling 35 (c)). A dataset's own pseudonymisation is its step, opened in
+// place on the Data page, and the address that named a page of it opens that
+// step.
 
 import { useCallback, useEffect, useState } from "react";
 import type React from "react";
@@ -18,6 +20,7 @@ import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { Identifiers } from "./Identifiers";
 import {
   columnLabel,
   csvRefusal,
@@ -152,6 +155,7 @@ export function PseudonymsPage({ caps, onChanged }: { caps: Capabilities; onChan
           <Icon name="chevron-right" />
         </a>
       )}
+      <Identifiers caps={caps} onChanged={read} />
       {opened === "map" && <MapDialog caps={caps} types={types} onClose={() => setOpened(null)} onFiled={done} />}
       {opened === "type" && <TypeDialog onClose={() => setOpened(null)} onMade={(name) => done(`${name} is an ID type.`)} />}
     </section>

@@ -164,10 +164,10 @@ describe("the marks", () => {
 
   it("collapse to Every page and Every setting when all of them are held at their top", () => {
     expect(marksOf(everything).map((m) => m.label)).toEqual(["Every page", "Every setting"]);
-    expect(marksOf(SETS.admin.grants).map((m) => m.label)).toEqual(["Query", "Data", "Review", "Release", "Pipelines", "Models", "Campaigns", "Every setting"]);
+    expect(marksOf(SETS.admin.grants).map((m) => m.label)).toEqual(["Query", "Data", "Review", "Release", "Handover passwords", "Pipelines", "Models", "Campaigns", "Every setting"]);
     // Models and Campaigns have their pages since record 45, so a group without either names its pages one by one
-    expect(marksOf(everything.filter((g) => !/^models:/u.test(g))).map((m) => m.label)).toEqual(["Assistant", "Query", "Data", "Review", "Release", "Pipelines", "Campaigns", "Every setting"]);
-    expect(marksOf(everything.filter((g) => !/^campaigns:/u.test(g))).map((m) => m.label)).toEqual(["Assistant", "Query", "Data", "Review", "Release", "Pipelines", "Models", "Every setting"]);
+    expect(marksOf(everything.filter((g) => !/^models:/u.test(g))).map((m) => m.label)).toEqual(["Assistant", "Query", "Data", "Review", "Release", "Handover passwords", "Pipelines", "Campaigns", "Every setting"]);
+    expect(marksOf(everything.filter((g) => !/^campaigns:/u.test(g))).map((m) => m.label)).toEqual(["Assistant", "Query", "Data", "Review", "Release", "Handover passwords", "Pipelines", "Models", "Every setting"]);
     expect(marksOf(everything.filter((g) => g !== "places:work")).map((m) => m.label)).toEqual(["Every page", "Install", "Language models", "Assistant settings", "Places", "Backups", "People", "Audit"]);
     expect(marksOf(everything, new Set<PageId>(["query"])).map((m) => m.label)).toContain("Query");
   });

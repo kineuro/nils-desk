@@ -143,7 +143,23 @@ export function removedWords(name: string, r: Removed, toName: string | null): s
 export type Level = "hidden" | "see" | "work" | "use";
 
 /** A page a grant names. */
-export type PageId = "assistant" | "query" | "data" | "review" | "release" | "pipelines" | "models" | "campaigns" | "install" | "kvasir" | "assistant-settings" | "places" | "database" | "identity" | "audit";
+export type PageId =
+  | "assistant"
+  | "query"
+  | "data"
+  | "review"
+  | "release"
+  | "handover-password"
+  | "pipelines"
+  | "models"
+  | "campaigns"
+  | "install"
+  | "kvasir"
+  | "assistant-settings"
+  | "places"
+  | "database"
+  | "identity"
+  | "audit";
 
 export interface PageLine {
   id: PageId;
@@ -174,6 +190,9 @@ export const PAGE_LINES: readonly PageLine[] = [
   { id: "data", title: "Data", mark: "Data", named: "Data", settings: false, levels: SEE_WORK, see: "Datasets, cohorts and Browse", work: "add datasets, pseudonymise, read, sort" },
   { id: "review", title: "Review", mark: "Review", named: "Review", settings: false, levels: SEE_WORK, see: "What waits for a person", work: "decide, tune rules" },
   { id: "release", title: "Release", mark: "Release", named: "Release", settings: false, levels: SEE_WORK, see: "Releases made", work: "make and hand over" },
+  // record 55, ruling 35 (c): a release's maker sees and types its handovers' passwords without it; not a page of its
+  // own, so never named hidden and not needed for Every page (as a page not built yet)
+  { id: "handover-password", title: "Handover passwords", mark: "Handover passwords", named: "handover passwords", settings: false, levels: SEE_WORK, see: "Show any handover's password", work: "type one when handing over", soon: true },
   { id: "pipelines", title: "Pipelines", mark: "Pipelines", named: "Pipelines", settings: false, levels: SEE_WORK, see: "Jobs, catalog, runs, logs", work: "run pipelines, cancel runs" },
   { id: "models", title: "Models", mark: "Models", named: "Models", settings: false, levels: SEE_WORK, see: "Models, under Pipelines", work: "register, admit, choose" },
   { id: "campaigns", title: "Campaigns", mark: "Campaigns", named: "Campaigns", settings: false, levels: SEE_WORK, see: "Campaigns, in Review", work: "claim, answer, export" },
