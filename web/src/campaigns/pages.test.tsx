@@ -19,6 +19,7 @@ import { CampaignBody, ClosurePanel } from "./CampaignPage";
 import { WorkBody } from "../review/WorkPage";
 import { closure, emptyDraft, type Answer, type Campaign, type LabelSet } from "./client";
 import { LabelSetBody, LabelSetsBody, tsvRows } from "./LabelSets";
+import { ratersRefusal } from "./raters";
 import { MakeForm } from "./MakeCampaign";
 
 const list = (listed as { campaigns: Campaign[] }).campaigns;
@@ -87,6 +88,46 @@ describe("one campaign", () => {
     expect(html).toContain("<dt>closes into</dt><dd>decisions in force</dd>");
     expect(html).toContain("<dt>lease</dt><dd>15 min</dd>");
     expect(html).toContain("selection probe@1 · handle 5 · stacks");
+  });
+
+  // record 48, after the first gold campaign (gate T31, step 11.8): people change while a round is open
+  it("offers Change beside the raters of an open campaign that names them, to its maker or a reviewer", () => {
+    const named = { ...open, rater_policy: { raters: ["alice@walk", "bob@walk"], adjudicators: ["carol@walk"] } };
+    const html = draw(capsFor({ grants: ADMIN }), named);
+    expect(html).toContain("<dt>raters</dt><dd>alice@walk, bob@walk<button");
+    expect(html).toContain('aria-label="Change the raters"');
+    expect(html).toContain(">Change</button>");
+    // its maker, with work on Campaigns, whatever else they hold
+    expect(draw(capsFor({ grants: ["campaigns:see", "campaigns:work"], principal: "carol@walk" }), named)).toContain('aria-label="Change the raters"');
+    // a reviewer who did not make it
+    expect(draw(capsFor({ grants: ADMIN, principal: "dave@walk" }), named)).toContain('aria-label="Change the raters"');
+  });
+
+  it("offers no Change where the engine would refuse it, and says why in words", () => {
+    const named = { ...open, rater_policy: { raters: ["alice@walk"], adjudicators: [] } };
+    const no = (html: string) => expect(html).not.toContain("Change the raters");
+    // it names no raters: anyone with work on Campaigns rates it, and naming one would shut out the rest
+    no(draw(capsFor({ grants: ADMIN }), open));
+    expect(ratersRefusal(capsFor({ grants: ADMIN }), open)).toBe("It names no raters, so anyone with work on Campaigns rates it.");
+    // not open
+    no(draw(capsFor({ grants: ADMIN }), { ...named, status: "closed" }));
+    expect(ratersRefusal(capsFor({ grants: ADMIN }), { ...named, status: "closed" })).toBe("The campaign is closed.");
+    // a rater who is neither its maker nor a reviewer, and one who only looks
+    no(draw(capsFor({ grants: ["campaigns:see", "campaigns:work", "data:see"], principal: "alice@walk" }), named));
+    expect(ratersRefusal(capsFor({ grants: ["campaigns:see", "campaigns:work"], principal: "alice@walk" }), named)).toBe("A campaign's raters are its maker's to change, or work on the Review page's.");
+    no(draw(capsFor({ grants: ["campaigns:see", "review:work"] }), named));
+    expect(ratersRefusal(capsFor({ grants: ["campaigns:see", "review:work"] }), named)).toBe("Changing raters needs work on the Campaigns page.");
+    // an engine from before the door
+    const old = capsFor({ grants: ADMIN, doors: DOORS.filter((d) => !d.endsWith("/raters")) });
+    no(draw(old, named));
+    expect(ratersRefusal(old, named)).toBe("This engine has no door for changing raters.");
+  });
+
+  it("names raters just added who already read these stacks elsewhere, in the engine's words", () => {
+    const warned = [{ principal: "bob@walk", stacks: 12, campaigns: [{ campaign: "earlier-read", stacks: 12 }], why: "bob@walk already answered 12 of the stacks campaign base-check asks, in other campaigns" }];
+    const html = renderToStaticMarkup(<CampaignBody caps={capsFor({ grants: ADMIN })} campaign={open} answers={answers} sets={[]} said="Bob added." warned={warned} onAct={none} />);
+    expect(html).toContain('<p class="warn">bob@walk already answered 12 of the stacks campaign base-check asks, in other campaigns</p>');
+    expect(draw()).not.toContain('class="warn">bob@walk');
   });
 
   it("says what the raters are shown beside each item: what the campaign was made with, the rules for an engine that does not say", () => {

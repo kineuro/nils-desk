@@ -31,8 +31,11 @@ export interface KeptScheme {
   digest?: string;
 }
 
+/** What a release, a pick or a question uses where it names no scheme: the engine sends the scheme's definition; one that sent its name is read as a name. */
+export type OwnScheme = Scheme | string | null;
+
 export const schemes = {
-  list: () => door<{ schemes: KeptScheme[]; default: string | null }>("GET", "/api/session-schemes"),
+  list: () => door<{ schemes: KeptScheme[]; default: OwnScheme }>("GET", "/api/session-schemes"),
   add: (name: string, scheme: Scheme, note?: string) => door<KeptScheme>("POST", "/api/session-schemes", note ? { name, scheme, note } : { name, scheme }),
 };
 
@@ -40,6 +43,31 @@ export const schemes = {
 export function schemeActs(caps: Capabilities): { see: boolean; add: boolean } {
   const see = may(caps, "release:see") && served(caps, "GET /api/session-schemes");
   return { see, add: see && may(caps, "release:work") && served(caps, "POST /api/session-schemes") };
+}
+
+/** Why the person may not rebuild the visits, in words, or null when they may: the engine queues the rebuild for work on Pipelines (gate T31, step 22.7). */
+export function rebuildRefusal(caps: Capabilities): string | null {
+  if (!served(caps, "POST /api/sessions/rebuild")) return "This engine has no door for rebuilding visits.";
+  return may(caps, "pipelines:work") ? null : "Rebuilding visits needs work on the Pipelines page.";
+}
+
+/** What a rebuild does, on hover: a pick follows a visit that moves, and one on a visit that goes is withdrawn and asked about. */
+export const REBUILD_HINT = "A pick on a visit that moves follows it. A pick on a visit that goes is withdrawn, and Review is asked about it.";
+
+/** What a rebuild will do, before it runs: under which scheme, for whom. */
+export function rebuildWords(scheme: KeptScheme | null): string {
+  return `Builds the visits again under ${scheme ? scheme.name : "the registry's own scheme"}, for every subject whose studies changed.`;
+}
+
+/** The registry's own scheme as a choice reads it: "the registry's own: named by date; studies within the same day are one session". */
+export function ownLabel(own: OwnScheme): string {
+  const words = typeof own === "string" ? own : own && typeof own === "object" ? schemeWords(own) : "";
+  return words ? `the registry's own: ${words}` : "the registry's own";
+}
+
+/** The kept scheme the registry's own is, where the engine names one. */
+export function ownName(own: OwnScheme): string | null {
+  return typeof own === "string" ? own : null;
 }
 
 /** A scheme in a few words: how sessions are named, and the window that joins studies into one. */

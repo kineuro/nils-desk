@@ -28,7 +28,7 @@ import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
-import { DATASETS_OWN, overrideNote, releaseBody, type ReleaseSource } from "./release";
+import { DATASETS_OWN, NAMES_HINT, overrideNote, releaseBody, type ReleaseSource } from "./release";
 import { HandoverDialog, QueuedWords, WithdrawDialog, type Queued } from "./ReleaseActs";
 import { handoverRows } from "./releaseActs";
 
@@ -207,7 +207,10 @@ export function ReleasesBody({ caps, list, since = null, why, said = null, queue
                       <b className="path">{r.name}</b>
                     </td>
                     <td className="num">{r.version}</td>
-                    <td>{r.layout ?? ""}</td>
+                    <td>
+                      {r.layout ?? ""}
+                      {r.naming === "minimal" && <span className="meta">minimal names</span>}
+                    </td>
                     <td>{policy.dates}</td>
                     <td>{policy.uids}</td>
                     <td className="num">{r.subjects !== null ? n(r.subjects) : ""}</td>
@@ -268,6 +271,8 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
   const [srcs, setSrcs] = useState<Source[] | null>(null);
   const [named, setNamed] = useState<string | null>(null);
   const [layout, setLayout] = useState("bids");
+  // record 55 C4: the engine's own naming is full; minimal is the one choice, beside BIDS alone
+  const [naming, setNaming] = useState("full");
   const [scheme, setScheme] = useState("");
   // record 26 section 13: the UIDs are each dataset's own until a person overrides them here, and nothing is sent for them until then.
   // The dates are no choice: every release keeps the real date (record 38 S3)
@@ -323,7 +328,7 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
   const place: Place | null = exports.find((p) => p.id === placeId) ?? exports[0] ?? null;
   const written = place ? `${place.path.replace(/\/+$/, "")}/${name}` : out.trim();
   const src: ReleaseSource = of === "cohort" ? { kind: "hand", cohorts: cohort ? [cohort] : [] } : { kind: "handle", handle: card?.handle };
-  const built = releaseBody(src, { name, out: written, layout, scheme_name: scheme || undefined, uids }, []);
+  const built = releaseBody(src, { name, out: written, layout, naming, scheme_name: scheme || undefined, uids }, []);
   const lines = srcs ? leavingLines(srcs, of === "cohort" ? (detail?.sources_holding ?? null) : null) : [];
   const override = overrideNote(uids);
   const waiting = of === "cohort" ? (detail?.waiting ?? list?.find((c) => c.name === cohort)?.waiting ?? 0) : 0;
@@ -465,6 +470,22 @@ export function NewReleaseDialog({ caps, cohort: chosen, existing, onClose, onDo
               </span>
             </dd>
           </div>
+          {layout === "bids" && (
+            <div className="facts-pair">
+              <dt>names</dt>
+              <dd>
+                <span className="row wrap">
+                  <span className="input">
+                    <select value={naming} onChange={(e) => setNaming(e.target.value)} aria-label="BIDS names">
+                      <option value="full">Full names</option>
+                      <option value="minimal">Minimal names</option>
+                    </select>
+                  </span>
+                  <Hint text={NAMES_HINT} />
+                </span>
+              </dd>
+            </div>
+          )}
           <div className="facts-pair">
             <dt>override</dt>
             <dd>

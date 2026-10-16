@@ -15,7 +15,7 @@ export type From =
   | { kind: "selection"; selection: string }
   | { kind: "handle"; handle: number }
   | { kind: "document"; document: number }
-  | { kind: "values"; upload: number };
+  | { kind: "values"; upload: string | number };
 
 /** The body of POST /api/ask/start. */
 export function startBody(from: From): { from: Record<string, unknown> } {
@@ -31,7 +31,7 @@ export function startBody(from: From): { from: Record<string, unknown> } {
     case "document":
       return { from: { document: from.document } };
     case "values":
-      // the engine reads the upload as the text of its id
+      // the engine reads the upload as the text of its id (u- and sixteen hex digits)
       return { from: { values: String(from.upload) } };
   }
 }

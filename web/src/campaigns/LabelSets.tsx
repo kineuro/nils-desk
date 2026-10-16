@@ -12,6 +12,8 @@ import { Icon } from "../ui/Icon";
 import { Says, Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { campaigns, refused as refusedWords, sourceWords, type LabelSet } from "./client";
+import { decisionSetRefusal } from "./decisionSet";
+import { DecisionSetDialog } from "./DecisionSetDialog";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -20,13 +22,40 @@ type Load<T> = { kind: "loading"; since: number } | { kind: "failed"; why: strin
 
 export function LabelSetsPage({ caps }: { caps: Capabilities }) {
   const [load, setLoad] = useState<Load<LabelSet[]>>(() => ({ kind: "loading", since: Date.now() }));
-  useEffect(() => {
+  const [making, setMaking] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+  const read = () =>
     campaigns
       .labelSets()
       .then((value) => setLoad({ kind: "ready", value }))
       .catch((e: unknown) => setLoad({ kind: "failed", why: refusedWords(e) }));
+  useEffect(() => {
+    read();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- read once
   }, []);
-  return <LabelSetsBody caps={caps} sets={load.kind === "ready" ? load.value : null} why={load.kind === "failed" ? load.why : null} since={load.kind === "loading" ? load.since : Date.now()} />;
+  return (
+    <>
+      <LabelSetsBody
+        caps={caps}
+        sets={load.kind === "ready" ? load.value : null}
+        why={load.kind === "failed" ? load.why : null}
+        since={load.kind === "loading" ? load.since : Date.now()}
+        said={said}
+        onMake={decisionSetRefusal(caps) === null ? () => setMaking(true) : undefined}
+      />
+      {making && (
+        <DecisionSetDialog
+          caps={caps}
+          onClose={() => setMaking(false)}
+          onDone={(_, words) => {
+            setMaking(false);
+            setSaid(words);
+            read();
+          }}
+        />
+      )}
+    </>
+  );
 }
 
 /** Where a set's labels came from, in a few words. */
@@ -37,7 +66,7 @@ export function setSource(s: LabelSet): string {
   return s.what ? `decisions on ${s.what}` : "decisions";
 }
 
-export function LabelSetsBody({ sets, why, since }: { caps?: Capabilities; sets: LabelSet[] | null; why: string | null; since: number }) {
+export function LabelSetsBody({ sets, why, since, said = null, onMake }: { caps?: Capabilities; sets: LabelSet[] | null; why: string | null; since: number; said?: string | null; onMake?: () => void }) {
   return (
     <section className="data label-sets">
       <div className="data-head">
@@ -46,10 +75,22 @@ export function LabelSetsBody({ sets, why, since }: { caps?: Capabilities; sets:
           <h1>Label sets</h1>
           <p className="lede">Labels with their provenance and a digest.</p>
         </div>
+        {onMake && (
+          <button type="button" className="button" onClick={onMake}>
+            <Icon name="plus" />
+            New label set
+          </button>
+        )}
       </div>
+      {said && (
+        <p className="meta said">
+          <Icon name="check" />
+          {said}
+        </p>
+      )}
       {sets === null && !why && <Wait phase="reading the label sets" since={since} size="panel" />}
       {why && <p className="warn">The label sets could not be read: {why}</p>}
-      {sets !== null && sets.length === 0 && <p className="empty">No label set yet. A campaign&apos;s Export writes one.</p>}
+      {sets !== null && sets.length === 0 && <p className="empty">{`No label set yet. A campaign's Export writes one${onMake ? ", and New label set writes the decisions in force" : ""}.`}</p>}
       {sets !== null && sets.length > 0 && (
         <div className="table-wrap">
           <table className="thin">

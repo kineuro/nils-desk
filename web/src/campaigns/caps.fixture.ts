@@ -20,6 +20,7 @@ export const DOORS = [
   "POST /api/campaigns/{id}/items/{item}/metric",
   "POST /api/campaigns/{id}/close",
   "POST /api/campaigns/{id}/export",
+  "POST /api/campaigns/{id}/raters",
   "GET /api/label-sets",
   "POST /api/label-sets",
   "GET /api/label-sets/{id}",

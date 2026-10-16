@@ -41,10 +41,20 @@ export function stackIds(columns: Column[], rows: unknown[][]): number[] {
 /** What the dialog's UID select holds while nothing is overridden: each dataset's own declared policy, which the body must not name. */
 export const DATASETS_OWN = "datasets";
 
+/** What the choice of BIDS names says on hover, in the engine's own terms (record 55 C4). The engine writes full unless asked. */
+export const NAMES_HINT = "Full spells in acq- every slot a BIDS entity has no place for: the body part, orientation, 2D or 3D, modifiers, technique and construct. Minimal spells 2D or 3D, the modifiers and the technique, and nothing else. Every axis is in the sidecar either way.";
+
 export interface ReleaseForm {
   name: string;
   out: string;
   layout?: string;
+  /**
+   * Which BIDS names the release writes, sent only where the person chose
+   * the other than the engine's own (minimal) and the layout is BIDS: the
+   * descriptive tree is v0's grammar whatever is asked, and the engine
+   * refuses minimal beside it. Absent, or full, leaves the engine's own.
+   */
+  naming?: string;
   /**
    * The run's UID policy, sent only where the person overrode each
    * dataset's own. Record 26 section 13: a body naming `uids` is a run under
@@ -86,6 +96,8 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
   // named: every release keeps the real date (record 38 S3).
   const uids = f.uids?.trim();
   if (uids && uids !== DATASETS_OWN) body.uids = uids;
+  // record 55 C4: only the choice the engine does not make by itself is named, and only beside BIDS
+  if (f.layout?.trim() === "bids" && f.naming?.trim() === "minimal") body.naming = "minimal";
   if (src.kind === "handle") {
     if (!src.handle) return { ok: false, why: "a handle" };
     if (src.handle.grain !== "stack") return { ok: false, why: `a release reads stacks; this handle is at the ${src.handle.grain} grain. Set the answer set to a stack set and run again` };

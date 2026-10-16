@@ -700,3 +700,5 @@ table.thin.header-table td:first-child { padding-left: 0; }
   .check-rows { grid-template-columns: minmax(0, 1fr); gap: 0.3rem; }
   .check-row-label { margin-top: 0.4rem; }
 }
+/* record 48, step 11.8: Change beside the raters a campaign names */
+dl.facts dd .raters-change { margin-left: 0.6rem; }

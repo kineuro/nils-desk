@@ -10,6 +10,7 @@ import type { Capabilities } from "../capabilities";
 import type { IconName } from "../ui/Icon";
 import { keptRunning } from "./install";
 import type { AdmissionRecord } from "./kvasir";
+import type { SortUnder } from "./sorting";
 import type { Install, Pack, PartRelease, Packs, Release } from "./supervise";
 
 export type Tone = "ok" | "caution" | "blocked";
@@ -30,6 +31,8 @@ export interface PartRow {
   update: string | null;
   /** The settings page that says more, where one is built. */
   page: string | null;
+  /** On a rules row, the rules the scans are sorted under: Sort again is offered here (gate T31, step 9.5). */
+  sort?: SortUnder | null;
 }
 
 interface GatewayDoc {
@@ -358,6 +361,7 @@ export function rulesRow(r: PartRelease, packs: Packs | undefined): PartRow {
     newer,
     update: offered ? "rules" : null,
     page: null,
+    sort: r.pack ? { pack: r.pack, title: `${packTitle(pack)} rules`, version: r.installed } : null,
   };
 }
 
@@ -439,7 +443,7 @@ export function updateWords(install: Install): string[] {
       }
       const from = p.installed ? ` from ${p.installed}` : "";
       if (p.part === "rules") {
-        out.push(`The ${releaseTitle(p)} move${from} to ${p.newer}, their own release; the engine reads them at its next look, and nothing is started again.`);
+        out.push(`The ${releaseTitle(p)} move${from} to ${p.newer}, their own release; the engine reads them at its next look, and nothing is started again. Scans already sorted keep their answers until Sort again.`);
         continue;
       }
       const built = all[p.part]?.kind === "node" ? ", fetched and built again" : "";
