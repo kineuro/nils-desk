@@ -127,6 +127,10 @@ pub async fn assistant(
 
 /// The supervisor (Wave 5 §10.4): its own bearer from the config, and only
 /// a person holding `install:work` reaches it; in `off` mode everyone does.
+/// The header that names, to the supervisor, the person the desk forwards
+/// for. A browser's own is dropped before the desk sets it.
+pub(crate) const PERSON_HEADER: &str = "x-nils-person";
+
 pub async fn supervisor(
     State(desk): State<Shared>,
     Path(rest): Path<String>,
@@ -135,8 +139,20 @@ pub async fn supervisor(
     let Some(up) = desk.config.supervisor.clone() else {
         return absent("the supervisor");
     };
-    if let Err(r) = gate(&desk, req.headers(), "install:work", "the supervisor") {
-        return *r;
+    let mut req = req;
+    // The person the supervisor records as asking (an uninstall's ask, gate
+    // T31 step 1.9): set here from the session, never taken from a browser.
+    req.headers_mut().remove(PERSON_HEADER);
+    if desk.config.mode == Mode::Off {
+        return forward(&desk, &up, &format!("/{rest}"), req, Bearer::Configured).await;
+    }
+    match session::holding(&desk, req.headers(), "install:work", "the supervisor") {
+        Ok(person) => {
+            if let Ok(v) = HeaderValue::from_str(&person.subject) {
+                req.headers_mut().insert(PERSON_HEADER, v);
+            }
+        }
+        Err(r) => return *r,
     }
     forward(&desk, &up, &format!("/{rest}"), req, Bearer::Configured).await
 }

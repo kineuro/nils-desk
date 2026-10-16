@@ -2545,3 +2545,67 @@ async fn an_admin_removes_a_person_and_hands_their_work_over() {
     .unwrap();
     assert_eq!(r.status(), 404);
 }
+
+/// Gate T31, step 1.9: the supervisor records who asked for an uninstall
+/// by the person the desk names on what it forwards, from the session; a
+/// name a browser sends is dropped first, so nobody can ask in another's
+/// name.
+#[tokio::test]
+async fn the_supervisor_hears_the_person_from_the_session_never_from_the_browser() {
+    let engine = fake_engine().await;
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let log = heard.clone();
+    let part = Router::new().fallback(move |headers: HeaderMap| {
+        let log = log.clone();
+        async move {
+            let person = headers
+                .get_all("x-nils-person")
+                .iter()
+                .map(|v| v.to_str().unwrap_or("").to_string())
+                .collect::<Vec<_>>();
+            log.lock().unwrap().push(person);
+            axum::Json(json!({}))
+        }
+    });
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let supervisor = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, part).await.unwrap() });
+    let text = format!(
+        "origin = \"{{origin}}\"\nmode = \"local\"\nstore = \"{{dir}}/desk.sqlite\"\n[local]\nkey = \"{{dir}}/desk.key\"\n[engine]\nurl = \"{engine}\"\n[supervisor]\nurl = \"{supervisor}\"\ntoken = \"the-supervisors-token\"\n"
+    );
+    let (origin, shared, _dir) = desk(&text).await;
+    nils_desk::users::add(
+        &shared.store,
+        "cy",
+        "a long enough password",
+        None,
+        &Given {
+            grants: vec!["install:work".into()],
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let client = client();
+    let cookie = login(&client, &origin, "cy", "a long enough password").await;
+    let r = client
+        .get(format!("{origin}/supervise/api/supervise/uninstall"))
+        .header("cookie", &cookie)
+        .header("x-nils-person", "mallory")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let r = ours(
+        client.post(format!("{origin}/supervise/api/supervise/uninstall")),
+        &origin,
+    )
+    .header("cookie", &cookie)
+    .header("x-nils-person", "mallory")
+    .body("{}")
+    .send()
+    .await
+    .unwrap();
+    assert_eq!(r.status(), 200);
+    let heard = heard.lock().unwrap().clone();
+    assert_eq!(heard, [vec!["cy".to_string()], vec!["cy".to_string()]]);
+}
