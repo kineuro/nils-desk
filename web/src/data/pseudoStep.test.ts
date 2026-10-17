@@ -394,3 +394,102 @@ describe("a count that stopped short of a large tree (2026-10-16)", () => {
     expect(unknown.goPartial).toBe(true);
   });
 });
+
+describe("a run that ran is never read as never run (2026-10-17)", () => {
+  // a dataset whose originals are read as an ID that is the same everywhere, so no ID waits for a code
+  const none: HeldIds = { files: 0, identifiers: 0, ids: [], subjects: { coded: 4399, generated: 0 } };
+  const pn = { identity: { id_type: "personnummer", from: [{ field: "PatientID" }] }, held: { files: 0, identifiers: 0 } };
+  const at = (originals: Partial<typeof base.trees.originals> & { partial?: boolean }, anon: Partial<typeof base.trees.anon> & { partial?: boolean } = {}) =>
+    ({ ...d, ...pn, trees: { originals: { ...base.trees.originals, ...originals }, anon: { ...base.trees.anon, ...anon } } }) as unknown as Dataset;
+  // the probe of each tree is bounded (2 s or 200,000 entries): on a large dataset it stops short of both
+  const probed = at({ files: 78570, bytes: 12_299_736_493, partial: true }, { files: 0, partial: true });
+  // the run walked every original: the summary's found step counts them whole
+  const found: SummaryStep = { step: "found", state: "done", job: null, started_at: null, finished_at: null, progress: null, files: 30_689_981, bytes: null, partial: false, counted_by: "pseudonymise", tree: "originals" };
+  const ran = { job: 69, started_at: "2026-10-16T18:44:00Z", finished_at: "2026-10-17T01:51:34Z" };
+
+  it("is done once the newest whole run wrote every copy it could: no button, the rail its own, the originals counted by the run", () => {
+    // engine 1.0.0-alpha.89: 30,689,981 seen, 30,654,432 written, 35,549 refused (not DICOM), none held
+    const s = step({ ...ran, state: "done", files: 30_654_432, waiting: 0, held: 0, partial: false, waiting_partial: false });
+    const v = stepView(probed, s, none, [], false, found);
+    expect(v).toMatchObject({ phase: "done", originals: 30_689_981, originalsPartial: false, bytes: null, copy: 30_654_432, copyPartial: false, go: 0 });
+    expect(primaryOf(v, false, false)).toBeNull();
+    expect(railWords(v)).toBeNull();
+    // where the found step says the bytes of every file, they are the run's, never the part the probe measured
+    expect(stepView(probed, s, none, [], false, { ...found, bytes: 4_915_477_070_489 }).bytes).toBe(4_915_477_070_489);
+  });
+
+  it("is never a dataset never run against an engine whose counts are the probe's, and offers the rest, never the probe's count as if nothing had run", () => {
+    // engine 1.0.0-alpha.88: the step counts the trees as the probe left them, but names the run
+    const old = step({ ...ran, state: "waiting", files: 0, waiting: 78570, held: 0, partial: true, waiting_partial: true });
+    const v = stepView(probed, old, none, [], false, found);
+    expect(v.phase).not.toBe("fresh");
+    expect(v).toMatchObject({ phase: "ready", originals: 30_689_981, originalsPartial: false, copy: 0, copyPartial: true, go: 0, goPartial: true });
+    expect(primaryOf(v, false, false)).toEqual({ label: "Pseudonymise and sort the rest", act: "run" });
+    expect(railWords(v)).toEqual({ what: "the rest to go", when: "next step", next: true });
+    expect(idsBox(v).words).not.toBe("found at the first run");
+    // with no whole count of the originals from the summary, the box keeps the probe's lower bound and none of its bytes
+    const bare = stepView(probed, old, none, [], false);
+    expect(bare).toMatchObject({ phase: "ready", originals: 78570, originalsPartial: true, bytes: null });
+    expect(primaryOf(bare, false, false)?.label).toBe("Pseudonymise and sort the rest");
+    for (const w of [primaryOf(v, false, false)?.label, primaryOf(bare, false, false)?.label, railWords(bare)?.what]) expect(w).not.toContain("78,570");
+  });
+
+  it("offers nothing for refused files where the counts are whole: no run ever writes them", () => {
+    // 7,544 originals, 7,444 written, 100 not DICOM; the originals less the copy would offer those 100 again
+    const s = step({ ...ran, state: "waiting", files: 7444, waiting: 0, held: 0, partial: false, waiting_partial: false });
+    const v = stepView(at({ partial: false }, { files: 7444 }), s, none, [], false);
+    expect(v).toMatchObject({ phase: "done", go: 0 });
+    expect(primaryOf(v, false, false)).toBeNull();
+    expect(railWords(v)).toBeNull();
+    // every file refused: nothing was written and nothing is left, never "not yet"
+    const refused = stepView(at({ partial: false }), step({ ...ran, state: "waiting", files: 0, waiting: 0, held: 0, partial: false, waiting_partial: false }), none, [], false);
+    expect(refused).toMatchObject({ phase: "done", copy: 0, go: 0 });
+    expect(primaryOf(refused, true, false)).toBeNull();
+  });
+
+  it("takes the engine's count of what no run has decided, never the originals less the copy and the held files", () => {
+    // 544 new files since the run, 30 refused by it: the engine counts the 544 alone
+    const s = step({ ...ran, state: "waiting", files: 6970, waiting: 544, held: 0, partial: false, waiting_partial: false });
+    const v = stepView(at({ partial: false }), s, none, [], false);
+    expect(v).toMatchObject({ phase: "ready", go: 544, goPartial: false });
+    expect(primaryOf(v, false, false)?.label).toBe("Pseudonymise and sort 544 files");
+  });
+
+  it("offers the rest of a run that was cut short, whose originals no run has decided are not known", () => {
+    // an update cancelled the run part way: the copy holds what it wrote, the originals' count is a lower bound
+    const s = step({ ...ran, state: "waiting", files: 120_000, waiting: 0, held: 0, partial: false, waiting_partial: true });
+    const v = stepView(at({ files: 200_000, partial: true }, { files: 120_000, partial: true }), s, none, [], false);
+    expect(v).toMatchObject({ phase: "ready", go: 0, goPartial: true });
+    expect(goWords(v)).toBe("the rest");
+    expect(primaryOf(v, false, false)).toEqual({ label: "Pseudonymise and sort the rest", act: "run" });
+    expect(railWords(v)?.what).toBe("the rest to go");
+    for (const w of [goWords(v), railWords(v)?.what]) expect(w).not.toContain("at least 0");
+  });
+
+  it("offers a run that stopped again, never as done", () => {
+    const s = step({ job: 154, state: "failed", files: 7544, waiting: 0, held: 0, partial: false, waiting_partial: false });
+    const v = stepView(at({ partial: false }, { files: 7544 }), s, none, [], false);
+    expect(v).toMatchObject({ phase: "ready", go: 0, goPartial: true });
+    expect(primaryOf(v, false, false)?.label).toBe("Pseudonymise and sort the rest");
+  });
+
+  it("leaves a dataset never run as it was: every original to go, the probe's count where the run has none", () => {
+    const fresh = stepView(at({ partial: false }), step({ held: 0 }), none, [], false);
+    expect(fresh).toMatchObject({ phase: "fresh", originals: 7544, go: 7544, goPartial: false });
+    expect(primaryOf(fresh, false, false)?.label).toBe("Pseudonymise and sort 7,544 files");
+    expect(railWords(fresh)).toEqual({ what: "not yet", when: "next step", next: true });
+    // a found step only the probe counted changes nothing
+    const probe: SummaryStep = { ...found, files: 7544, partial: true, counted_by: "probe" };
+    expect(stepView(at({ partial: true }), step({ held: 0 }), none, [], false, probe)).toMatchObject({ phase: "fresh", originals: 7544, originalsPartial: true, goPartial: true });
+    // a probe that counted nothing at all: every file, never "at least 0 files"
+    const nothing = stepView(at({ files: 0, partial: true }), step({ held: 0, waiting: 0 }), none, [], false);
+    expect(primaryOf(nothing, false, false)?.label).toBe("Pseudonymise and sort every file");
+  });
+
+  it("keeps the probe's count where it found more than an older run walked", () => {
+    // the run walked 1,000 originals; files came since, and the probe found at least 200,000
+    const older: SummaryStep = { ...found, files: 1000 };
+    const v = stepView(at({ files: 200_000, partial: true }), step({ ...ran, state: "waiting", files: 1000, waiting: 199_000, held: 0, partial: false, waiting_partial: true }), none, [], false, older);
+    expect(v).toMatchObject({ originals: 200_000, originalsPartial: true, phase: "ready", go: 199_000, goPartial: true });
+  });
+});

@@ -131,9 +131,12 @@ export interface StepView {
   originals: number | null;
   /** The originals' count stopped short of a large tree (the engine's probe is bounded), so `originals` is a lower bound. */
   originalsPartial: boolean;
+  /** The originals' bytes, where every file of them was counted: none while their count is a lower bound. */
   bytes: number | null;
   /** The files of the pseudonymised copy. */
   copy: number;
+  /** The copy's count stopped short of a large tree, so `copy` is a lower bound. */
+  copyPartial: boolean;
   /** PatientID holds an identifying ID that is the same everywhere, which the key codes: there is no mapping step. */
   personnummer: boolean;
   rows: IdRow[];
@@ -143,7 +146,7 @@ export interface StepView {
   without: { ids: number; files: number };
   /** The files the next run pseudonymises: the new ones, and the held ones whose ID has a code. */
   go: number;
-  /** `go` came from a count that stopped short of a large tree: the run does at least that many. */
+  /** `go` came from a count that stopped short of a large tree, or a run that was cut short: the run does at least that many, and with none counted, the rest. */
   goPartial: boolean;
   /** The subjects the pseudonymised copy carries, and how many were coded without a map. */
   subjects: HeldIds["subjects"];
@@ -155,20 +158,83 @@ export function readsPersonnummer(d: Pick<Dataset, "identity">): boolean {
 }
 
 /**
- * Where the step is, from the dataset, its summary's pseudonymised step, its
- * held IDs and the codes a map being rehearsed gives them. `running` is the
- * engine's word that a run of the dataset's goes now, or the desk's own act
- * on the way.
+ * What the pseudonymise step's counts say (2026-10-17): the engine's probe of
+ * a tree is bounded (2 s or 200,000 entries), and on a dataset of tens of
+ * millions of files a run that wrote every copy left a probe of the originals
+ * that stopped early and one of the copy that found no file, so the step said
+ * "not yet" and offered to pseudonymise everything again. A run counts what
+ * it walks: the summary's found step carries its whole count of the
+ * originals (`counted_by` pseudonymise), and from engine 1.0.0-alpha.89 the
+ * pseudonymised step counts the copy and what no run has decided yet from the
+ * newest whole run, the probe only before any.
  */
-export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds | null, matched: readonly Matched[], running: boolean): StepView {
-  const originals = typeof d.trees?.originals?.files === "number" ? d.trees.originals.files : null;
-  const originalsPartial = originals !== null && d.trees?.originals?.partial === true;
-  const bytes = typeof d.trees?.originals?.bytes === "number" ? d.trees.originals.bytes : null;
+export interface StepCounts {
+  originals: number | null;
+  originalsPartial: boolean;
+  bytes: number | null;
+  copy: number;
+  copyPartial: boolean;
+  /** The originals no run has seen yet; refused files, which no run ever writes, are not among them where the engine says so. */
+  unseen: number;
+  /** There may be more than `unseen`: a count stopped short of a large tree, or the newest run was cut short. */
+  unseenPartial: boolean;
+  /** A run of the step ran: the summary names its job or says the step is done, or, with no summary step, a batch of the sources door was pseudonymised. */
+  ran: boolean;
+  /** The step's newest run failed: it is offered again, never read as done. */
+  failed: boolean;
+  /** Nothing is left to do: the engine says the step is done, or its whole counts leave no file waiting and none held. */
+  done: boolean;
+}
+
+/**
+ * The step's counts from the dataset's trees, the summary's pseudonymised and
+ * found steps and the held files. The originals take the found step's whole
+ * count where the trees' stopped short, unless the probe has found more
+ * since. Never-seen files are the engine's `waiting` where the step counts
+ * the copy whole; an engine before 1.0.0-alpha.89 counted the held and
+ * refused files in it, so it is never taken above the originals less the copy
+ * and the held files. Where the step has no counts, that difference stands.
+ */
+export function countsOf(d: Pick<Dataset, "trees" | "digests">, step: SummaryStep | null, found: SummaryStep | null, heldFiles: number): StepCounts {
+  const tree = d.trees?.originals;
+  const probed = typeof tree?.files === "number" ? tree.files : null;
+  const probedPartial = probed !== null && tree?.partial === true;
+  const walked = found?.counted_by === "pseudonymise" && found.partial !== true && typeof found.files === "number" ? found.files : null;
+  const byRun = walked !== null && (probed === null || (probedPartial && walked >= probed));
+  const originals = byRun ? walked : probed;
+  const originalsPartial = byRun ? false : probedPartial;
+  // the bytes of a count that stopped short are the bytes of part of the tree: none until every file is counted
+  const bytes = byRun ? (typeof found?.bytes === "number" ? found.bytes : null) : !probedPartial && typeof tree?.bytes === "number" ? tree.bytes : null;
+  const anon = d.trees?.anon;
   const fromStep = typeof step?.files === "number";
-  const copy = fromStep ? (step?.files as number) : typeof d.trees?.anon?.files === "number" ? d.trees.anon.files : 0;
+  const copy = fromStep ? (step?.files as number) : typeof anon?.files === "number" ? anon.files : 0;
   // the copy's count stopped short of a large tree: how many originals it lacks is not known
-  const copyPartial = fromStep ? step?.partial === true : typeof d.trees?.anon?.files === "number" && d.trees.anon.partial === true;
+  const copyPartial = fromStep ? step?.partial === true : typeof anon?.files === "number" && anon.partial === true;
+  const whole = fromStep && typeof step?.waiting === "number" && step.partial !== true;
+  const left = originals === null ? null : Math.max(0, originals - copy - heldFiles);
+  const waiting = step?.waiting ?? 0;
+  const unseen = whole ? (left === null ? waiting : Math.min(waiting, left)) : copyPartial || left === null ? 0 : left;
+  const unseenPartial = whole ? (typeof step?.waiting_partial === "boolean" ? step.waiting_partial : originalsPartial) : originalsPartial || copyPartial;
+  // the summary's step says whether a run ran; without one (an engine before it, or the summary not read yet), the batches of the sources door
+  const ran = step ? (step.job ?? null) !== null || step.state === "done" : (d.digests?.recent ?? []).some((b) => (b.pseudonymised ?? null) !== null || (b.chain?.pseudonymize ?? null) !== null);
+  const failed = step?.state === "failed";
+  const held = typeof step?.held === "number" ? step.held : heldFiles;
+  const done = !failed && (step?.state === "done" || (whole && waiting === 0 && step?.waiting_partial !== true && held === 0));
+  return { originals, originalsPartial, bytes, copy, copyPartial, unseen, unseenPartial, ran, failed, done };
+}
+
+/**
+ * Where the step is, from the dataset, its summary's pseudonymised step, its
+ * held IDs and the codes a map being rehearsed gives them, and the summary's
+ * found step, which counts the originals whole once a run walked them.
+ * `running` is the engine's word that a run of the dataset's goes now, or the
+ * desk's own act on the way. It is never run only while no run ever ran: a
+ * finished or stopped run is never read as none, whatever a count that
+ * stopped short says.
+ */
+export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds | null, matched: readonly Matched[], running: boolean, found: SummaryStep | null = null): StepView {
   const heldFiles = heldIds?.files ?? d.held?.files ?? 0;
+  const c = countsOf(d, step, found, heldFiles);
   const byId = new Map(matched.map((m) => [m.id, m]));
   const rows: IdRow[] = (heldIds?.ids ?? [])
     .map((h): IdRow => {
@@ -180,39 +246,50 @@ export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds 
   const coded = rows.filter((r) => r.coded).length;
   const lacking = rows.filter((r) => !r.coded);
   const without = { ids: lacking.length, files: lacking.reduce((s, r) => s + r.files, 0) };
-  // never seen by a run: the originals less the copy and every held file; none known where the copy's count stopped short
-  const unseen = originals === null || copyPartial ? 0 : Math.max(0, originals - copy - heldFiles);
-  const go = unseen + rows.filter((r) => r.coded && r.state !== "waits").reduce((s, r) => s + r.files, 0);
+  // the never-seen files and the held ones whose ID has a code
+  const go = c.unseen + rows.filter((r) => r.coded && r.state !== "waits").reduce((s, r) => s + r.files, 0);
   // a dataset whose held files the engine counts but does not list yet has IDs without a code all the same
   const unlisted = heldIds === null && (d.held?.identifiers ?? 0) > 0;
-  const waiting = typeof step?.waiting === "number" ? step.waiting : originals === null || copyPartial ? 0 : Math.max(0, originals - copy);
+  // nothing counted to go, but the rest is not known (a count stopped short, a run cut short) or the run stopped: the rest is offered
+  const rest = c.unseenPartial || c.failed;
   const phase: Phase = running
     ? "running"
-    : copy === 0 && heldFiles === 0 && rows.length === 0
+    : !c.ran && c.copy === 0 && heldFiles === 0 && rows.length === 0
       ? "fresh"
       : without.ids > 0 || unlisted
         ? "codes"
-        : go > 0 || waiting > 0
+        : go > 0
           ? "ready"
-          : "done";
+          : c.done
+            ? "done"
+            : rest
+              ? "ready"
+              : "done";
   return {
     phase,
-    originals,
-    originalsPartial,
-    bytes,
-    copy,
+    originals: c.originals,
+    originalsPartial: c.originalsPartial,
+    bytes: c.bytes,
+    copy: c.copy,
+    copyPartial: c.copyPartial,
     personnummer: readsPersonnummer(d),
     rows,
     coded,
     without: unlisted ? { ids: d.held?.identifiers ?? 0, files: d.held?.files ?? 0 } : without,
-    go: phase === "fresh" ? (originals ?? 0) : go,
-    goPartial: phase === "fresh" ? originalsPartial : originalsPartial || copyPartial,
+    go: phase === "fresh" ? (c.originals ?? 0) : go,
+    goPartial: phase === "fresh" ? c.originalsPartial || c.originals === null : c.unseenPartial || (c.failed && go === 0),
     subjects: heldIds?.subjects ?? { coded: 0, generated: 0 },
   };
 }
 
-/** The files the next run pseudonymises, in words: "at least" where a count behind them stopped short of a large tree. */
-export function goWords(v: Pick<StepView, "go" | "goPartial">): string {
+/**
+ * The files the next run pseudonymises, in words: "at least" where a count
+ * behind them stopped short of a large tree, and where none was counted at
+ * all, every file of a dataset never run, or the rest of one run before,
+ * never "at least 0 files".
+ */
+export function goWords(v: Pick<StepView, "go" | "goPartial"> & Partial<Pick<StepView, "phase">>): string {
+  if (v.go === 0 && v.goPartial) return v.phase === "fresh" ? "every file" : "the rest";
   return `${v.goPartial ? "at least " : ""}${files(v.go)}`;
 }
 
@@ -223,12 +300,13 @@ export type Act = "run" | "find" | "codes";
  * The one next action, in the words that say exactly what will happen; none
  * while it runs or once it is done. A dataset never run whose IDs are coded
  * by the key, or get a generated code, goes at once; one whose IDs need a map
- * first finds them, holding what has no code.
+ * first finds them, holding what has no code. Where a run before left the
+ * rest not counted, the rest is offered: a run again skips what is done.
  */
 export function primaryOf(v: StepView, generates: boolean, open: boolean): { label: string; act: Act } | null {
   if (v.phase === "fresh") return v.personnummer || generates ? { label: `Pseudonymise and sort ${goWords(v)}`, act: "run" } : { label: "Find the IDs", act: "find" };
   if (v.phase === "codes" && !open) return { label: `Give the ${v.without.ids === 1 ? "ID" : `${n(v.without.ids)} IDs`} a subject code`, act: "codes" };
-  if ((v.phase === "codes" || v.phase === "ready") && v.go > 0) return { label: `Pseudonymise and sort ${goWords(v)}`, act: "run" };
+  if ((v.phase === "codes" && v.go > 0) || (v.phase === "ready" && (v.go > 0 || v.goPartial))) return { label: `Pseudonymise and sort ${goWords(v)}`, act: "run" };
   return null;
 }
 

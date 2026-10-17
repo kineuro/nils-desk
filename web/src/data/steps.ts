@@ -9,6 +9,8 @@ import { door } from "../ask/client";
 import type { Place } from "../objects/client";
 import { newInOriginals, type Dataset, type DatasetFields, type DatasetState, type Layout, type PlaceAnswer } from "./datasets";
 import { notReadOf } from "./layout";
+import { countsOf } from "./pseudoStep";
+import type { DatasetSummary } from "./summary";
 
 /** A folder under a root, as the engine lists it: whether it is a dataset yet. The list looks inside none of them. */
 export interface RootFolder {
@@ -99,7 +101,7 @@ export function dicomWord(f: Pick<FolderLook, "holds_dicom">): string {
 export type StateWord = "Unknown" | "Anonymised" | "Identified" | "Ready";
 
 /** What the card's one button does. */
-export type StepId = "running" | "sort-files" | "set-ids" | "pseudonymise" | "read" | "sort" | "review" | "read-new";
+export type StepId = "running" | "sort-files" | "set-ids" | "pseudonymise" | "read" | "read-again" | "sort" | "review" | "read-new";
 
 export interface NextStep {
   word: StateWord;
@@ -115,31 +117,67 @@ const LABEL: Record<StepId, string> = {
   "set-ids": "Set the IDs",
   pseudonymise: "Pseudonymise",
   read: "Read",
+  "read-again": "Read again",
   sort: "Sort",
   review: "Review",
   "read-new": "Read new files",
 };
 
 /**
+ * Whether the dataset's newest read stopped part way (2026-10-17): the newest
+ * digest of its tree, as the sources door lists them newest first, was
+ * cancelled or failed, or its summary's read step says the newest read
+ * failed. A read that runs has not stopped. The engine's summary counts a
+ * cancelled read among its reads and calls the step done, so the batch says
+ * it.
+ */
+export function readStopped(d: Pick<Dataset, "digests">, s: Pick<DatasetSummary, "steps"> | null = null): boolean {
+  const newest = d.digests.recent[0] ?? null;
+  if (newest?.state === "running") return false;
+  const read = s?.steps.find((x) => x.step === "read") ?? null;
+  return newest?.state === "cancelled" || newest?.state === "failed" || read?.state === "failed";
+}
+
+/**
+ * Whether an identified dataset's pseudonymise step has anything left. Once a
+ * run of it ran, its summary step says (2026-10-17): files no run has seen,
+ * the rest where a count stopped short or the run was cut short or stopped,
+ * or held files. The trees' originals less the copy would count the files a
+ * run refused, which no run writes, and trust a probe that stopped short of
+ * a large tree. Before any run, or with no summary, the trees say it as
+ * before.
+ */
+function pseudonymiseWaits(d: Dataset, s: Pick<DatasetSummary, "steps"> | null): boolean {
+  const step = s?.steps.find((x) => x.step === "pseudonymised") ?? null;
+  const found = s?.steps.find((x) => x.step === "found") ?? null;
+  const held = typeof step?.held === "number" ? step.held : (d.held?.files ?? 0);
+  const c = countsOf(d, step, found, held);
+  if (c.ran) return held > 0 || (!c.done && (c.unseen > 0 || c.unseenPartial || c.failed));
+  const waiting = newInOriginals(d);
+  // nothing read and nothing in the anonymised copy yet: it was never pseudonymised
+  const copied = d.trees?.anon?.files;
+  const never = d.digests.count === 0 && !(typeof copied === "number" && copied > 0);
+  return (waiting ?? (never ? 1 : 0)) > 0;
+}
+
+/**
  * A dataset's state word and its next step: unknown files are sorted into
  * their folder first, anonymised data says its IDs, identified data is
- * pseudonymised, what is ready is read, and what is read is sorted. `why` is
- * the reason it is not read, where the places door gave one.
+ * pseudonymised, what is ready is read, a read that stopped part way is read
+ * again, and what is read is sorted. `why` is the reason it is not read,
+ * where the places door gave one; `s` its summary, where read, whose
+ * pseudonymised step says what a run of it left.
  */
-export function nextStep(d: Dataset, why: string | null = notReadOf(d)): NextStep {
+export function nextStep(d: Dataset, why: string | null = notReadOf(d), s: Pick<DatasetSummary, "steps"> | null = null): NextStep {
   const running = d.digests.recent.some((b) => b.state === "running");
   const at = (word: StateWord, step: StepId): NextStep => ({ word, step: running ? "running" : step, label: LABEL[running ? "running" : step], busy: running });
   if (d.state === "unknown" || d.arrives === "undeclared") return at("Unknown", "sort-files");
   if (why !== null) return at("Anonymised", "set-ids");
   const identified = d.state === "identified" || d.state === "both" || (d.state === undefined && d.arrives === "identified");
-  if (identified) {
-    const waiting = newInOriginals(d);
-    // nothing read and nothing in the anonymised copy yet: it was never pseudonymised
-    const copied = d.trees?.anon?.files;
-    const never = d.digests.count === 0 && !(typeof copied === "number" && copied > 0);
-    if ((waiting ?? (never ? 1 : 0)) > 0) return at("Identified", "pseudonymise");
-  }
+  if (identified && pseudonymiseWaits(d, s)) return at("Identified", "pseudonymise");
   if (d.digests.count === 0) return at("Ready", "read");
+  // the newest read was cancelled or failed part way: its stacks are not all there to sort, and a read again skips what it read
+  if (readStopped(d, s)) return at("Ready", "read-again");
   const c = certainty(d);
   if (d.totals.stacks > 0 && c === null) return at("Ready", "sort");
   // sorted, and some scans need a look: Review is the next step
@@ -192,8 +230,19 @@ export function kindWords(kinds: Record<string, number>): string {
     .join("; ");
 }
 
-/** The command a step queues, and the name its job takes; null for a step that opens a dialog. */
-export function stepCommand(d: Pick<Dataset, "name">, step: StepId, pack: string | null, today = new Date()): { command: string[]; name: string; then?: string[][] } | null {
+/**
+ * The command a step queues, and the name its job takes; null for a step
+ * that opens a dialog. `picks`: the pack declares main scans to pick
+ * (`packPicks`), which a read again needs to name a pick run as a bring-in
+ * does.
+ */
+export function stepCommand(
+  d: Pick<Dataset, "name"> & Partial<Pick<Dataset, "digests" | "cohort" | "picks">>,
+  step: StepId,
+  pack: string | null,
+  today = new Date(),
+  picks = false,
+): { command: string[]; name: string; then?: string[][] } | null {
   const name = `${d.name}-${today.toISOString().slice(0, 10)}`;
   const at = `@${d.name}`;
   switch (step) {
@@ -201,6 +250,19 @@ export function stepCommand(d: Pick<Dataset, "name">, step: StepId, pack: string
       return { command: ["pseudonymize", at, "--name", name], name };
     case "read":
       return { command: ["digest", at, "--name", name], name };
+    case "read-again": {
+      // a bring-in's chain from its read on, in the engine's own words (chain::bring_in), without the pseudonymise step a bring-in
+      // of an identified dataset puts first, which walks every original again. The jobs door names the deployment's pack directory
+      // on the sort, the pick run and the score, as it does on a bring-in's. The read takes the stopped read's name: a score takes
+      // the stacks of every batch of its name, so it scores what both reads brought, as the stopped chain would have.
+      const newest = d.digests?.recent[0];
+      const named = newest && (newest.state === "cancelled" || newest.state === "failed") ? newest.name : name;
+      const packed = pack ? ["--pack", pack] : [];
+      // a bring-in names its pick run where the dataset feeds a cohort, picks after a sort and its pack declares picks; anywhere
+      // else the engine picks after the sort by itself
+      const pick = picks && typeof d.cohort === "string" && d.picks !== "off" ? [["pick", "run", "--dataset", d.name, ...packed]] : [];
+      return { command: ["digest", at, "--name", named], name: named, then: [["fingerprint"], ["classify", ...packed], ...pick, ["score", at, "--name", named]] };
+    }
     case "sort":
       return { command: ["fingerprint"], name, then: [["classify", ...(pack ? ["--pack", pack] : [])]] };
     case "read-new":

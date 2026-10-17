@@ -228,7 +228,7 @@ const jobsOfBig = [
 
 type Answer = { status: number; body?: unknown } | undefined;
 
-async function page(opts: { grants?: readonly Grant[]; doors?: string[]; list?: Dataset[]; query?: Record<string, string>; running?: boolean; route?: (c: Call, nth: number) => Answer } = {}) {
+async function page(opts: { grants?: readonly Grant[]; doors?: string[]; list?: Dataset[]; query?: Record<string, string>; running?: boolean; route?: (c: Call, nth: number) => Answer; packs?: { name: string; version: string; main_roles?: string[] }[] } = {}) {
   const list = opts.list ?? [done, looked, loose];
   const e = engine((c, nth) => {
     const routed = opts.route?.(c, nth);
@@ -254,7 +254,9 @@ async function page(opts: { grants?: readonly Grant[]; doors?: string[]; list?: 
     if (c.method === "GET" && url.pathname === "/api/cohorts/ms-followup") return { status: 200, body: detail };
     return undefined;
   });
-  act(() => root.render(<DataPage caps={caps7a(opts.doors ?? DOORS, opts.grants ?? GRANTS)} install={null} onChanged={() => undefined} query={opts.query} />));
+  const caps = caps7a(opts.doors ?? DOORS, opts.grants ?? GRANTS);
+  const served = opts.packs ? { ...caps, engine: { ...caps.engine!, packs: opts.packs } } : caps;
+  act(() => root.render(<DataPage caps={served} install={null} onChanged={() => undefined} query={opts.query} />));
   await settle(10);
   return e;
 }
@@ -788,12 +790,90 @@ describe("datasets and cohorts on one page", () => {
   });
 });
 
+describe("a dataset whose newest read stopped part way (2026-10-17)", () => {
+  // read once, cancelled part way, as an update cancels it: its stacks are not all there to sort, and nothing was sorted yet
+  const cut = { id: 91, name: "ward-s-2026-10-16", state: "cancelled", started_at: AT, finished_at: AT, job_id: 72, files: { seen: 100250, new: 100250, changed: 0, unchanged: 0, refused: 0 }, subjects_added: 12, stacks_added: 30, classified: 0, to_sort: 0 };
+  const stopped = ds("ward-s", 9, { digests: { count: 1, first: null, last: null, recent: [cut] }, totals: { subjects: 12, studies: 20, sessions: 20, stacks: 30, refused_files: 0, to_sort: 0, sure: 0, unsorted: 30 } });
+
+  it("offers Read again as its one primary button, which queues the read and the sort after it, never the sort alone", async () => {
+    const e = await page({ list: [stopped], route: (c) => (c.method === "POST" && c.url === "/api/jobs" ? { status: 202, body: { job: 73, state: "queued" } } : undefined) });
+    const c = card("ward-s");
+    expect(c.querySelector(".dp-card-head .tag")?.textContent).toBe("Ready");
+    expect(c.querySelector(".dp-line")?.textContent).toBe("The last read stopped part way");
+    expect(c.querySelectorAll(".dp-rail span")[1].className).toBe("wait");
+    const d = host.querySelector<HTMLElement>(".dp-detail")!;
+    const primary = [...d.querySelectorAll<HTMLButtonElement>(".dp-acts button.button")].filter((b) => !b.classList.contains("secondary"));
+    expect(primary.map((b) => b.textContent)).toEqual(["Read again"]);
+    // one way to read again: no Read new files beside it, no Read again in the menu
+    expect([...d.querySelectorAll(".dp-acts .button.secondary")].map((b) => b.textContent)).not.toContain("Read new files");
+    expect([...d.querySelectorAll(".more-list > *")].map((b) => b.textContent)).not.toContain("Read again");
+    // the rail: the summary counts the cut read among the reads; the desk draws it stopped, and next
+    const read = [...d.querySelectorAll<HTMLElement>(".dp-step")].find((x) => x.querySelector(".dp-step-title")?.textContent === "Read")!;
+    expect(read.querySelector(".dp-step-what")?.textContent).toBe("120 read · stopped");
+    expect(read.querySelector(".dp-step-when")?.textContent).toBe("next step");
+    expect(read.classList.contains("next")).toBe(true);
+    expect(read.classList.contains("done")).toBe(false);
+    await act(async () => {
+      primary[0].click();
+    });
+    await settle(6);
+    const queued = e.of("POST", "/api/jobs");
+    expect(queued).toHaveLength(1);
+    // a bring-in's chain from its read on, under the cut read's name: the read, the sort, and System 1's score of what both reads brought
+    expect(queued[0].body).toEqual({
+      command: ["digest", "@ward-s", "--name", "ward-s-2026-10-16"],
+      name: "ward-s-2026-10-16",
+      then: [["fingerprint"], ["classify", "--pack", "mri"], ["score", "@ward-s", "--name", "ward-s-2026-10-16"]],
+    });
+  });
+
+  it("names the bring-in's pick run where the dataset feeds a cohort and its pack declares picks", async () => {
+    const fed = ds("ward-s", 9, { ...stopped, cohort: "ms-followup" });
+    const e = await page({ list: [fed], packs: [{ name: "mri", version: "1.3.0", main_roles: ["t1w", "flair"] }], route: (c) => (c.method === "POST" && c.url === "/api/jobs" ? { status: 202, body: { job: 74, state: "queued" } } : undefined) });
+    const primary = [...host.querySelectorAll<HTMLButtonElement>(".dp-detail .dp-acts button.button")].find((b) => !b.classList.contains("secondary"))!;
+    expect(primary.textContent).toBe("Read again");
+    await act(async () => {
+      primary.click();
+    });
+    await settle(6);
+    expect(e.of("POST", "/api/jobs")[0].body!.then).toEqual([
+      ["fingerprint"],
+      ["classify", "--pack", "mri"],
+      ["pick", "run", "--dataset", "ward-s", "--pack", "mri"],
+      ["score", "@ward-s", "--name", "ward-s-2026-10-16"],
+    ]);
+  });
+
+  it("goes on to the sort once a later read finished, and says a read that runs", async () => {
+    const whole = ds("ward-s", 9, { ...stopped, digests: { count: 2, first: null, last: null, recent: [{ ...cut, id: 92, state: "done" }, cut] } });
+    await page({ list: [whole] });
+    const primary = () => [...host.querySelectorAll<HTMLButtonElement>(".dp-detail .dp-acts button.button")].filter((b) => !b.classList.contains("secondary"));
+    expect(primary().map((b) => b.textContent)).toEqual(["Sort"]);
+    expect(card("ward-s").querySelector(".dp-line")?.textContent).not.toBe("The last read stopped part way");
+    act(() => root.unmount());
+    root = createRoot(host);
+    const reading = ds("ward-s", 9, { ...stopped, digests: { count: 2, first: null, last: null, recent: [{ ...cut, id: 92, state: "running", finished_at: null }, cut] } });
+    await page({ list: [reading] });
+    expect(primary().map((b) => b.textContent)).toEqual(["Running"]);
+    expect(primary()[0].disabled).toBe(true);
+  });
+});
+
 describe("the first card chosen", () => {
   it("is the first dataset that needs a person, else the first dataset, else the first cohort", () => {
     expect(firstChoice([done, looked, loose], () => null, cohorts)).toEqual({ kind: "dataset", name: "study-big" });
     expect(firstChoice([done], () => null, cohorts)).toEqual({ kind: "dataset", name: "ward-f" });
     expect(firstChoice([], () => null, cohorts)).toEqual({ kind: "cohort", name: "ms-followup" });
     expect(firstChoice([], () => null, [])).toBeNull();
+  });
+
+  it("is not a dataset whose pseudonymise run left nothing, where its summary is read already (2026-10-17)", () => {
+    // the probe stopped short of both trees: alone, they say the originals wait
+    const trees = { originals: { path: "/srv/in/ward-p/derivatives/dcm-original", files: 78570, bytes: null, partial: true }, anon: { path: "/srv/in/ward-p/derivatives/dcm-anon", files: 0, last_written: null, partial: true } };
+    const ident = ds("ward-p", 8, { state: "identified", arrives: "identified", held: { files: 0, identifiers: 0 }, trees });
+    expect(firstChoice([done, ident, looked], () => null, cohorts)).toEqual({ kind: "dataset", name: "ward-p" });
+    const ran = { steps: [step("found", { files: 30_689_981, partial: false, counted_by: "pseudonymise", tree: "originals" }), step("pseudonymised", { job: 69, files: 30_654_432, waiting: 0, held: 0, partial: false, waiting_partial: false })] } as DatasetSummary;
+    expect(firstChoice([done, ident, looked], () => null, cohorts, { "ward-p": ran })).toEqual({ kind: "dataset", name: "study-big" });
   });
 });
 

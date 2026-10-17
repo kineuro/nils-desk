@@ -446,6 +446,17 @@ export function packFor(caps: Capabilities, name?: string | null): string | null
   return packs[0]?.name ?? null;
 }
 
+/**
+ * Whether the pack a chain sorts with declares main scans to pick, as the
+ * engine's capabilities list their roles: a bring-in then names a pick run
+ * for a dataset that feeds a cohort. With no pack named, the engine's own
+ * default, mri.
+ */
+export function packPicks(caps: Capabilities, pack: string | null): boolean {
+  const named = (caps.engine?.packs ?? []).find((p) => p.name === (pack ?? "mri"));
+  return (named?.main_roles?.length ?? 0) > 0;
+}
+
 export interface BringIn {
   command: string[];
   name: string;

@@ -35,6 +35,7 @@ import {
   partLabel,
   railOf,
   railSteps,
+  readAgainWords,
   refusedOnly,
   roleOrder,
   roleWord,
@@ -152,6 +153,13 @@ describe("a card's six steps", () => {
     // a dataset whose structure says nothing has found nothing it reads
     const loose = dataset({ arrives: "undeclared", trees: { originals: null, anon: null }, digests: { count: 0, first: null, last: null, recent: [] }, dataset: { state: "unknown" } });
     expect(railOf(loose, null)).toEqual(["wait", "wait", "wait", "wait", "wait", "wait"]);
+  });
+
+  it("find the originals where the copy's count stopped before it reached a file, which says nothing of the copy (2026-10-17)", () => {
+    const unread = { digests: { count: 0, first: null, last: null, recent: [] } };
+    const stopped = dataset({ ...unread, trees: { originals: { path: "/x/derivatives/dcm-original", files: 78570, bytes: null, partial: true }, anon: { path: "/x/derivatives/dcm-anon", files: 0, last_written: null, partial: true } } });
+    expect(railOf(stopped, null)[0]).toBe("done");
+    expect(railOf({ ...stopped, trees: { ...stopped.trees!, originals: null } } as Dataset, null)[0]).toBe("wait");
   });
 });
 
@@ -381,6 +389,75 @@ describe("a card's line", () => {
     expect(pseudonymisedWords({ files: 200000, waiting: 0, partial: true, waiting_partial: true })).toBe("at least 200,000 files");
     expect(stepWords(step("pseudonymised", { files: 4, waiting: 199996, held: 0, partial: false, waiting_partial: true }), NOW).what).toBe("at least 199,996 to do");
     expect(stepWords(step("pseudonymised", { files: 7000, waiting: 544, held: 0 }), NOW).what).toBe("544 to do");
+  });
+});
+
+describe("a dataset whose newest read stopped part way (2026-10-17)", () => {
+  // read twice: the newest read cancelled part way, after one that finished; the summary counts it among the reads and calls the step done
+  const d = dataset({ digests: { ...dataset().digests, count: 2, recent: [{ ...dataset().digests.recent[0], id: 2, state: "cancelled", classified: 0 }, dataset().digests.recent[0]] } });
+
+  it("says on the card that the last read stopped, and draws its read waiting", () => {
+    const next = nextStep(d, null, summary());
+    expect(next).toMatchObject({ word: "Ready", step: "read-again", label: "Read again" });
+    expect(cardLine(d, next, summary({ steps: summary().steps.filter((s) => s.step !== "views") }))).toBe("The last read stopped part way");
+    expect(railOf(d, summary())[1]).toBe("wait");
+    expect(railOf(d, null)[1]).toBe("wait");
+    // a read that finished is done, as before
+    expect(railOf(dataset(), summary())[1]).toBe("done");
+    expect(railOf(dataset(), null)[1]).toBe("done");
+  });
+
+  it("says on the rail what the reads read, that the last one stopped, and that reading again is next", () => {
+    expect(readAgainWords(step("read", { files: 100_250, reads: 1 }))).toEqual({ what: "100,250 read · stopped", when: "next step", next: true });
+    expect(readAgainWords(step("read", { files: 0 }))).toEqual({ what: "stopped", when: "next step", next: true });
+    expect(readAgainWords(null).what).toBe("stopped");
+  });
+});
+
+describe("a dataset whose pseudonymise step ran (2026-10-17)", () => {
+  // an identified dataset, read once already, whose probe stopped short of both trees: the originals early, the copy before it reached a file
+  const ident = dataset({
+    state: "identified",
+    arrives: "identified",
+    held: { files: 0, identifiers: 0 },
+    trees: { originals: { path: "/x/derivatives/dcm-original", files: 78570, bytes: 12_299_736_493, partial: true }, anon: { path: "/x/derivatives/dcm-anon", files: 0, last_written: null, partial: true } },
+  });
+  const found = step("found", { files: 30_689_981, partial: false, counted_by: "pseudonymise", tree: "originals" });
+  const ran = (p: Partial<SummaryStep>) => summary({ steps: [found, step("pseudonymised", { job: 69, ...p }), ...summary().steps.filter((x) => x.step !== "found")] });
+
+  it("goes on past the step once its newest whole run wrote every copy it could, whatever the probe says", () => {
+    // the probe alone: the originals less the copy wait
+    expect(nextStep(ident, null)).toMatchObject({ word: "Identified", step: "pseudonymise" });
+    const done = ran({ state: "done", files: 30_654_432, waiting: 0, held: 0, partial: false, waiting_partial: false });
+    expect(nextStep(ident, null, done)).toMatchObject({ word: "Ready", step: "review" });
+    expect(cardLine(ident, nextStep(ident, null, done), done)).not.toContain("pseudonymised");
+  });
+
+  it("takes no refused file for work: whole counts with nothing waiting are done, though the originals less the copy is not 0", () => {
+    const small = dataset({ ...ident, trees: { originals: { path: "/x/derivatives/dcm-original", files: 7544, bytes: null }, anon: { path: "/x/derivatives/dcm-anon", files: 7444, last_written: null } } });
+    expect(nextStep(small, null)).toMatchObject({ word: "Identified" });
+    expect(nextStep(small, null, ran({ state: "waiting", files: 7444, waiting: 0, held: 0, partial: false, waiting_partial: false }))).toMatchObject({ word: "Ready" });
+    // files no run has seen, and held files, are work still
+    expect(nextStep(small, null, ran({ state: "waiting", files: 7000, waiting: 444, held: 0, partial: false, waiting_partial: false }))).toMatchObject({ word: "Identified", step: "pseudonymise" });
+    expect(nextStep(small, null, ran({ state: "waiting", files: 7000, waiting: 0, held: 444, partial: false, waiting_partial: false }))).toMatchObject({ word: "Identified", step: "pseudonymise" });
+  });
+
+  it("says the rest waits where the counts stopped short or the run was cut short, never the whole dataset as if nothing had run", () => {
+    // an engine whose counts are the probe's names the run all the same
+    const old = ran({ state: "waiting", files: 0, waiting: 78570, held: 0, partial: true, waiting_partial: true });
+    const next = nextStep(ident, null, old);
+    expect(next).toMatchObject({ word: "Identified", step: "pseudonymise" });
+    expect(cardLine(ident, next, old)).toBe("The rest waits to be pseudonymised");
+    const cut = ran({ state: "waiting", files: 120_000, waiting: 0, held: 0, partial: false, waiting_partial: true });
+    expect(cardLine(ident, nextStep(ident, null, cut), cut)).toBe("The rest waits to be pseudonymised");
+    // never run: as before
+    const never = ran({ job: null, state: "waiting", files: 0, waiting: 78570, held: 0, partial: true, waiting_partial: true });
+    expect(cardLine(ident, nextStep(ident, null, never), never)).toBe("Waits to be pseudonymised");
+  });
+
+  it("says a copy whose count stopped before it reached a file as not counted, never at least 0 files", () => {
+    expect(pseudonymisedWords({ files: 0, waiting: 78570, partial: true, waiting_partial: true })).toBe("not counted yet");
+    expect(stepWords(step("pseudonymised", { state: "running", files: 0, waiting: 78570, held: 0, partial: true, waiting_partial: true }), NOW).what).toBe("not counted yet");
   });
 });
 

@@ -50,6 +50,7 @@ import {
   operationOf,
   originalIdWords,
   railSteps,
+  readAgainWords,
   refusedOnly,
   roleOrder,
   roleWord,
@@ -95,10 +96,10 @@ export interface DatasetDetailProps {
   onRemoved: (words: string) => void;
 }
 
-/** The secondary actions, the primary one and the menu of a dataset, as its head offers them. */
-export function datasetActions(caps: Capabilities, d: Dataset, why: string | null) {
+/** The secondary actions, the primary one and the menu of a dataset, as its head offers them; its summary, where read, says whether its pseudonymise step has anything left. */
+export function datasetActions(caps: Capabilities, d: Dataset, why: string | null, s: DatasetSummary | null = null) {
   const works = may(caps, "data:work");
-  const next = nextStep(d, why);
+  const next = nextStep(d, why, s);
   const review = next.step === "review" ? (may(caps, "review:see") ? narrow(href("review", "questions"), { dataset: d.name }) : null) : null;
   const primary: { label: string; step: StepId | null; href: string | null; busy: boolean } | null =
     next.step === "review"
@@ -109,12 +110,14 @@ export function datasetActions(caps: Capabilities, d: Dataset, why: string | nul
         ? { label: next.label, step: next.busy ? null : next.step, href: null, busy: next.busy }
         : null;
   const readable = works && why === null && next.word !== "Unknown" && !next.busy;
+  // a read that stopped part way is read again by the one primary button, which reads what is new as well
+  const again = next.step === "read-again";
   return {
     next,
     primary,
-    readNew: readable && next.step !== "read-new" && d.digests.count > 0,
+    readNew: readable && next.step !== "read-new" && !again && d.digests.count > 0,
     view: d.totals.stacks > 0 && mayBrowse(caps, { kind: "dataset", name: d.name }) ? viewHref({ kind: "dataset", name: d.name }) : null,
-    readAgain: readable && d.digests.count > 0,
+    readAgain: readable && !again && d.digests.count > 0,
     setIds: works && next.step !== "sort-files" && next.step !== "set-ids" && stateOf(d) !== "unknown" && d.arrives !== "undeclared",
     /** The cohort it feeds, among its settings: Data work and Places work, through its place. */
     settings: works && may(caps, "places:work") && served(caps, "PUT /api/places/{id}"),
@@ -140,7 +143,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const [pressed, setPressed] = useState(false);
   /** The next step's button, or Read new files or Read again, pressed until the engine answers: one press, one job. */
   const [asking, setAsking] = useState(false);
-  const acts = datasetActions(caps, d, why);
+  const acts = datasetActions(caps, d, why, s);
   /** Where its chain stopped, in the failed job's own words (2026-10-10). */
   const stopped = useStopped(caps, s);
   // the pseudonymise step: open by itself while it waits on a person or runs, or as the person or the address opened it
@@ -243,6 +246,19 @@ export function DatasetDetail(props: DatasetDetailProps) {
   // while the step is open before it is done, its own button is the one primary action
   const primary = open && view?.phase !== "done" && acts.primary?.step === "pseudonymise" ? null : acts.primary;
   const said = view ? railWords(view) : null;
+  // the newest read stopped part way, and reading again is the next step: the engine counts it among the reads and calls the step done
+  const againNext = acts.next.step === "read-again";
+  // a pseudonymise step the desk reads as done is drawn done, where the engine still says it waits: no file of it could be written (every one refused), or an older engine's counts stopped short;
+  // a read that stopped part way is drawn waiting
+  const rail = s
+    ? railSteps(s).map((st) =>
+        st.step === "pseudonymised" && view?.phase === "done" && st.state === "waiting"
+          ? { ...st, state: "done" as const }
+          : st.step === "read" && againNext && st.state === "done"
+            ? { ...st, state: "waiting" as const }
+            : st,
+      )
+    : [];
   const stepping = (id: StepId) => {
     if (id === "pseudonymise" && view !== null) return setStepOpen(true);
     const asked = onStep(id);
@@ -256,7 +272,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const busy = asking || chainRuns;
   // a step's Run on the rail: body part and post-contrast by their own door, main scans by the pick run, which waits on the chain
   const pickNow = s ? pickOffer(caps, stepOf(s, "main_scans"), s.scans, pressed || busy, runPick) : null;
-  const railRuns = s ? { ...runOffers(caps, "datasets", railSteps(s), pressed, runStep), ...(pickNow ? { main_scans: pickNow } : {}) } : undefined;
+  const railRuns = s ? { ...runOffers(caps, "datasets", rail, pressed, runStep), ...(pickNow ? { main_scans: pickNow } : {}) } : undefined;
   const logCol = (
     <div className="dp-col">
       <div className="dp-col-head">
@@ -344,9 +360,13 @@ export function DatasetDetail(props: DatasetDetailProps) {
         <h3 className="eyebrow">Where it is</h3>
         {s ? (
           <StepRail
-            steps={railSteps(s)}
+            steps={rail}
             now={now}
-            says={{ ...(said ? { pseudonymised: said } : {}), ...(stopped ? { [stopped.step]: { what: "stopped", when: "", next: true } } : {}) }}
+            says={{
+              ...(said ? { pseudonymised: said } : {}),
+              ...(againNext ? { read: readAgainWords(stepOf(s, "read")) } : {}),
+              ...(stopped ? { [stopped.step]: { what: "stopped", when: "", next: true } } : {}),
+            }}
             pick={view !== null && stepOf(s, "pseudonymised") !== null ? { step: "pseudonymised", open, controls: stepId, onPick: () => setStepOpen(!open) } : null}
             run={railRuns}
             more={{ main_scans: mainScansMore(caps, d.name) }}
