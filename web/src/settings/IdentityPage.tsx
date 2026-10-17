@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Identity page (Wave 5 section 10.5, record 25), kept terse: how people
 // sign in, where the desk answers and how long a session lasts as one row of
-// values, with the signing facts folded under Details and the command that
-// changes them; the groups as cards; and the people with their groups, what
-// those add up to and when each last signed in. A person's subject is a hover
-// title, never text. A change applies at the person's next click.
+// values, with the signing facts folded under Details and the button that
+// changes them where the supervisor does (gate T31); the groups as cards; and
+// the people with their groups, what those add up to and when each last
+// signed in. A person's subject is a hover title, never text. A change
+// applies at the person's next click.
 
 import { useEffect, useState } from "react";
 import type React from "react";
@@ -14,7 +15,7 @@ import { Icon } from "../ui/Icon";
 import { GroupForm, PersonForm } from "./AccessForm";
 import { Head, Stats } from "./common";
 import { serves } from "./changes";
-import { AtTheMachine, SignInDialog } from "./InstallChange";
+import { Instead, SignInDialog } from "./InstallChange";
 import type { Install } from "./supervise";
 import { GroupCards, GroupTags, Marks, MarksLegend, RecordsTag } from "./GroupCards";
 import {
@@ -255,7 +256,7 @@ function SignIn({ caps, install, sessions }: { caps: Capabilities; install: Inst
             </button>
           </div>
         ) : (
-          <AtTheMachine caps={caps} install={install} change="signin" command="nils setup" />
+          <Instead caps={caps} install={install} change="signin" command="nils setup" />
         )}
         {changing && <SignInDialog caps={caps} onClose={() => setChanging(false)} />}
       </div>

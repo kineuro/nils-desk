@@ -2,8 +2,9 @@
 // The setup steps the supervisor makes (record 55 ruling 35 (c), gate T31),
 // each a dialog with one action: how people sign in, another folder for the
 // engine's archives, the stations' model server, and an archive put back.
-// Where the supervisor does not make a step, the command stays, with one line
-// that says why.
+// Where the supervisor does not make a step, a person who may work on the
+// install reads the command under one line that says why; anyone else reads
+// who makes it, and no command.
 
 import { useId, useState } from "react";
 import { DoorError } from "../ask/client";
@@ -12,17 +13,18 @@ import { Command } from "../ui/Command";
 import { Dialog } from "../ui/Dialog";
 import { Wait } from "../ui/Wait";
 import { Acted, messageOf, useRun } from "./common";
-import { atTheMachine, folderRefusal, modelBody, modelRefusal, NO_SIGNIN, restoreWords, signinBody, signinRefusal, type ModelDraft, type SigninDraft } from "./changes";
+import { folderRefusal, instead, modelBody, modelRefusal, NO_SIGNIN, restoreWords, signinBody, signinRefusal, type ModelDraft, type SigninDraft } from "./changes";
 import { PathField } from "./PathField";
 import { supervise, type Change, type Install } from "./supervise";
 
-/** The command that stays where the supervisor does not make a step, under the one line that says why; nothing where it does. */
-export function AtTheMachine({ caps, install, change, command }: { caps: Capabilities; install: Install | null; change: Change; command: string }) {
-  const line = atTheMachine(caps, install, change);
-  if (line === null) return null;
+/** What stands where a step's button does not: who makes it, or the command under the one line that says why; nothing where the button stands. */
+export function Instead({ caps, install, change, command }: { caps: Capabilities; install: Install | null; change: Change; command: string }) {
+  const said = instead(caps, install, change);
+  if (said === null) return null;
+  if (!said.command) return <p className="meta">{said.line}</p>;
   return (
     <div className="at-machine">
-      <span className="meta">{line}</span>
+      <span className="meta">{said.line}</span>
       <Command text={command} />
     </div>
   );

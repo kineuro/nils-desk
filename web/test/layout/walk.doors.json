@@ -234,5 +234,8 @@
 "GET /api/certificates",
 "POST /api/certificates",
 "POST /api/certificates/{id}/unseal",
-"POST /api/decisions/commit"
+"POST /api/decisions/commit",
+"GET /api/clinical/vocabulary",
+"POST /api/clinical/vocabulary",
+"POST /api/clinical/import"
 ]

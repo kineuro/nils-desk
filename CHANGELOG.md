@@ -1,8 +1,27 @@
 # Changelog
 
-All notable changes to the NILS desk are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The first release will be 1.0.0; until then pre-releases are tagged `v1.0.0-alpha.N`.
+All notable changes to the NILS desk are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). The first release will be 1.0.0; until then pre-releases are tagged `v1.0.0-alpha.N`, then `v1.0.0-beta.N` from the first beta.
 
 ## [Unreleased]
+
+## [1.0.0-beta.1] - 2026-10-17
+
+The first beta (record 55, ruling 31 (g)).
+
+### Added
+
+- Install from a file beside Try again where Install dcm2niix failed because the engine could not reach the releases (gate T31, walkthrough step 15.7; record 55, ruling 35 (c)). A line under the engine's reason names the archive to fetch, linked to its release, with its sha256. The person picks the archive they fetched on another machine; the engine checks it against the pinned sha256 and installs it, and the place says the version as after the button. A file the engine refuses says why, with Try again and Install from a file still offered, and a file larger than the door takes is refused before it is sent. This works beside a failed run, a refused pre-flight or run, and on Settings, Parts. It needs an engine that serves `POST /api/tools/dcm2niix/install-file` and the install's grant; anyone else still reads "Ask an admin to install dcm2niix."
+
+### Changed
+
+- Where the supervisor makes a setup step and a person may not work on the install, the desk says who does it in one plain line, with no command and no "at the machine" (gate T31, G2): an administrator changes how people sign in, gives the engine a folder, starts Kvasir again or names a model server, or puts an archive back. A person with install work keeps the command, under the line that says why, only where no supervisor makes the step. A supervisor that is configured but did not answer is said as such, and "This desk reaches no supervisor" is said only where none is configured. On Backups, Back up now and Rehearse a restore are engine jobs that need no supervisor, so their commands are printed only where the engine queues no jobs. The side walk opens Clinical.
+- `nils tools install dcm2niix` is no longer printed under a failed install where the engine serves the install from a file, since it failed the same way as the button. A desk on an older engine keeps the line.
+- A running sort reads Sorting: since engine 1.0.0-beta.1 a sort judges the scans and ends, and the previews of what it judged are a job of their own on the pictures lane (Preparing pictures).
+
+### Fixed
+
+- The Data page reads each thing once at a time. A large dataset's summary that took tens of seconds was asked again every 5 s while one of its steps ran, whether or not the last read had answered, so many of the same request were out at once, the page lagged and its cards came in slowly, and an older answer could land after a newer one. Now nothing the page or a dataset's detail reads has two reads out at once: a read asked while one is out waits for its answer, a thing followed while a step runs is read again 5 s after its last answer, and the answer to a read the page let go of (a dataset gone from the list, the page closed) is let go too. This covers the lists of datasets and cohorts, each dataset's summary, a dataset's log, picks and held IDs, a cohort's own page and picks while its step runs, and the failed jobs.
+- No guess is drawn as a fact while a dataset's summary is read. After a run, the originals less the copy are the files the run refused as not DICOM, and before the summary answered, the pseudonymise step offered to pseudonymise exactly those again, the card said "Waits to be pseudonymised" and the IDs box said 0 subjects. Where a run ran and no summary says what it left, the step shows the counts it has, offers no button, says no next step and says "Counting what is left…" (or that it could not be counted, where the summary's read failed). The IDs box shows "…" until the held IDs answer, never 0, and a card whose summary is on its way draws the steps the list does not show as not known yet. A dataset never run is as before.
 
 ## [1.0.0-alpha.69] - 2026-10-17
 

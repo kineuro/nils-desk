@@ -6,8 +6,9 @@
 // to and a one-word legend; an identity provider, with the provider's host,
 // the groups each follows, one line on who appears, and the groups the
 // provider's groups reach; what a person who may only look is offered; the
-// page while it reads, when a door refuses, and with nobody in it yet; and
-// Add a person as Setup opens it.
+// page while it reads, when a door refuses, and with nobody in it yet; Add a
+// person as Setup opens it; and who reads what where the supervisor does not
+// change how people sign in for them (gate T31, G2).
 
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -250,10 +251,29 @@ describe("changing how people sign in (gate T31, step 1.6)", () => {
     expect(html).not.toContain("<code>nils setup</code>");
   });
 
-  it("stays at the machine for a person who may not work on the install, and says so", () => {
-    const html = drawWith(caps("off", ["identity:see", "identity:work", "install:see"]), served);
-    expect(html).not.toContain("Change how people sign in");
-    expect(html).toContain("Changed by an administrator, at the machine:");
-    expect(html).toContain("<code>nils setup</code>");
+  it("is one plain line saying who changes it for a person who may not work on the install, never a command or the machine (G2)", () => {
+    const who = "An administrator changes how people sign in.";
+    // the supervisor serves the step
+    const looks = drawWith(caps("off", ["identity:see", "identity:work", "install:see"]), served);
+    // the desk reads no install for a person who may not see it, though a supervisor keeps it
+    const unseen = drawWith(caps("local", ["identity:see", "identity:work"], { supervisor_url: "http://127.0.0.1:7300" }), null);
+    // no supervisor at all
+    const none = drawWith(caps("local", ["identity:see", "identity:work"]), null);
+    for (const html of [looks, unseen, none]) {
+      expect(html).not.toContain("Change how people sign in");
+      expect(html).toContain(who);
+      expect(html).not.toContain("at the machine");
+      expect(html).not.toContain("reaches no supervisor");
+      expect(html).not.toContain("<code>nils setup</code>");
+    }
+  });
+
+  it("keeps nils setup under the line that says why for a person who may work on the install, where no supervisor changes it (G2)", () => {
+    const none = drawWith(caps("local"), null);
+    expect(none).toContain("This desk reaches no supervisor, so at the machine:");
+    expect(none).toContain("<code>nils setup</code>");
+    const silent = drawWith(caps("local", [...GRANTS], { supervisor_url: "http://127.0.0.1:7300" }), null);
+    expect(silent).toContain("The supervisor did not answer, so at the machine:");
+    expect(silent).toContain("<code>nils setup</code>");
   });
 });

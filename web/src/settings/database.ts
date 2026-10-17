@@ -6,7 +6,11 @@
 // door; the page never says what the engine did not.
 
 import { door } from "../ask/client";
+import type { Capabilities } from "../capabilities";
+import { door as served } from "../deployment";
+import { may } from "../grants";
 import type { Place } from "../objects/client";
+import type { Said } from "./changes";
 import type { Install } from "./supervise";
 
 export interface Check {
@@ -185,7 +189,19 @@ export function draftChanged(d: ScheduleDraft, s: BackupSchedule): boolean {
   return a.every !== s.every || (a.every !== "off" && a.at !== s.at) || a.day !== (s.every === "week" ? s.day : null) || a.keep !== s.keep;
 }
 
-/** The commands a person runs by hand for the buttons. */
+/**
+ * What stands for Back up now and Rehearse a restore where no button can,
+ * the engine queuing no jobs, or null where the buttons do it, supervisor or
+ * none (gate T31, G2): for a person who may work on the install, the line
+ * above the commands; for anyone else, who does it.
+ */
+export function backupInstead(caps: Capabilities): Said | null {
+  if (served(caps, "POST /api/jobs")) return null;
+  if (!may(caps, "install:work")) return { line: "An administrator backs the registry up.", command: false };
+  return { line: "This engine queues no jobs, so at the machine:", command: true };
+}
+
+/** The commands a person runs by hand for the buttons, where the engine queues no jobs. */
 export function backupByHand(keep: number | null): string {
   return `nils backup --rehearse${keep !== null ? ` --keep ${keep}` : ""}`;
 }
@@ -195,9 +211,10 @@ export function rehearseByHand(dir: string | null, name: string): string {
 }
 
 /**
- * Restore stays a command a person runs (D50; spec 13.1 round 5): the engine
- * stopped, the archive put back with a pre-restore archive written first, the
- * engine started again. Each step's command, as this install runs its engine.
+ * Restore by hand, where the supervisor does not put an archive back (D50;
+ * spec 13.1 round 5): the engine stopped, the archive put back with a
+ * pre-restore archive written first, the engine started again. Each step's
+ * command, as this install runs its engine.
  */
 export function restoreSteps(install: Pick<Install, "services"> | null, home: string | null, dir: string | null, archive: string): { words: string; command: string | null }[] {
   const engine = install?.services.filter((s) => s.part === "engine") ?? [];

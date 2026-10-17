@@ -18,7 +18,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import servedPolicy from "../../test/fixtures/pseudonymize_tags.json";
-import { button, caps7a, dialogs, engine, settle, type Call } from "../../test/safeWayIn";
+import { button, caps7a, dialogs, engine, settle as settleReal, type Call } from "../../test/safeWayIn";
 import { placesKept } from "../objects/kept";
 import { DataPage } from "./DataPage";
 import type { Dataset } from "./datasets";
@@ -26,6 +26,16 @@ import { policyKept } from "./policy";
 import type { DatasetSummary, SummaryStep } from "./summary";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+/** Every promise the last act started, settled; under the test's own clock, by running its timers as far as now. */
+async function settle(times = 6) {
+  if (!vi.isFakeTimers()) return settleReal(times);
+  for (let i = 0; i < times; i++) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+}
 
 let host: HTMLDivElement;
 let root: Root;
@@ -157,7 +167,12 @@ const REHEARSED = {
 /** A map of ID and subject code; the IDs are made up and have the held shapes. */
 const MAP = "study ID,subject code\nABC123456,3e1b77c0a9d2f400\naBCD1234,3e1b77c0a9d2f411\naBCE1234,3e1b77c0a9d2f422\naBCF1234,3e1b77c0a9d2f433\naBCG1234,3e1b77c0a9d2f444\naBCI1234,3e1b77c0a9d2f455\n";
 
-async function page(d: Dataset, pseudonymised: Partial<SummaryStep>, route: (c: Call, nth: number) => { status: number; body?: unknown } | undefined = () => undefined, opts: { step?: string; held?: ReturnType<typeof heldIds> } = {}) {
+async function page(
+  d: Dataset,
+  pseudonymised: Partial<SummaryStep>,
+  route: (c: Call, nth: number) => { status: number; body?: unknown } | undefined = () => undefined,
+  opts: { step?: string; held?: ReturnType<typeof heldIds>; hold?: (url: string) => boolean } = {},
+) {
   const e = engine((c, nth) => {
     const r = route(c, nth);
     if (r) return r;
@@ -171,6 +186,12 @@ async function page(d: Dataset, pseudonymised: Partial<SummaryStep>, route: (c: 
     if (c.method === "GET" && c.url.startsWith("/api/jobs?")) return { status: 200, body: { count: 0, jobs: [] } };
     return undefined;
   });
+  // a door the test holds answers never, as one that takes longer than the test looks
+  const hold = opts.hold;
+  if (hold) {
+    const answered = globalThis.fetch;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => (hold(String(input)) ? new Promise<Response>(() => undefined) : answered(input, init)));
+  }
   await act(async () => {
     await placesKept.refresh().catch(() => undefined);
     await policyKept.refresh().catch(() => undefined);
@@ -582,7 +603,7 @@ describe("the pseudonymise step, in the dataset", () => {
   });
 
   it("says on the page that the run started while it goes, and lets the words go once it is over", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
     try {
       let phase: "before" | "running" | "over" = "before";
       const d = dataset({ held: { files: 0, identifiers: 0 }, identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
@@ -617,7 +638,35 @@ describe("the pseudonymise step, in the dataset", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 30_000);
+
+  it("asks the held IDs once while their door has not answered, however often the summary moves under a run (2026-10-17)", async () => {
+    // production: the held IDs door took 13 s on a large dataset, and each read of the summary asked it again
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      let files = 0;
+      const d = dataset();
+      await page(d, {}, (c) => (c.url === "/api/datasets/study-identified/summary" ? { status: 200, body: summaryOf(d, { state: "running", job: 60, files: (files += 1000) }) } : undefined));
+      const answered = globalThis.fetch;
+      let reads = 0;
+      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+        if (!String(input).startsWith("/api/linkage/held/ids")) return answered(input, init);
+        reads += 1;
+        return new Promise<Response>(() => undefined);
+      });
+      for (let i = 0; i < 4; i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5_000);
+        });
+        await settle(6);
+      }
+      // the summary moved on each of its reads; the held IDs were asked once, and that read is still out
+      expect(files).toBeGreaterThan(4_000);
+      expect(reads).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 30_000);
 
   it("stays closed on a done dataset unless asked, and offers the dataset's settings and its originals in its menu", async () => {
     const done = dataset({ held: { files: 0, identifiers: 0 }, trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1 }, anon: { path: "/srv/x/derivatives/dcm-anon", files: ORIGINALS, last_written: AT } } });
@@ -760,6 +809,112 @@ describe("the pseudonymise step after a run, where the probe stopped short (2026
     await page(d, { held: 0 }, () => undefined, { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } });
     expect(offers()).toEqual(["Pseudonymise and sort 7,544 files"]);
     expect(railStep("Pseudonymised").textContent).toContain("not yet");
+    expect(host.querySelector(".dp-card .dp-line")?.textContent).toBe("Waits to be pseudonymised");
+  });
+});
+
+describe("the pseudonymise step while the dataset's summary is not read yet (2026-10-17)", () => {
+  // production: the summary of a dataset of 30.65M files took tens of seconds; meanwhile the step offered to pseudonymise exactly the files
+  // its run had refused, the card said it waited to be pseudonymised, and the IDs box said 0 subjects until the held IDs door answered
+  const SHAPES = [
+    { originals: 30_689_981, copy: 30_654_432, refused: 35_549 },
+    { originals: 3_173_424, copy: 3_172_225, refused: 1_199 },
+  ];
+  const n = (v: number) => v.toLocaleString("en-US");
+  const batch = {
+    id: 9,
+    name: "study-identified-2026-10-16",
+    state: "done",
+    started_at: AT,
+    finished_at: AT,
+    job_id: 70,
+    files: { seen: 12, new: 12, changed: 0, unchanged: 0, refused: 0 },
+    subjects_added: 3,
+    stacks_added: 12,
+    classified: 12,
+    to_sort: 2,
+    pseudonymised: { files: 0, changed: 0, held: 0, job: 69 },
+    chain: { pseudonymize: 69, digest: 70, classify: [71] },
+  };
+  /** An identified dataset whose run finished: the sources door's trees whole, its batch pseudonymised, its read sorted. */
+  const finished = (originals: number, copy: number) =>
+    dataset({
+      held: { files: 0, identifiers: 0 },
+      identity: { id_type: "personnummer", from: [{ field: "PatientID" }] },
+      trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: originals, bytes: null }, anon: { path: "/srv/x/derivatives/dcm-anon", files: copy, last_written: AT } },
+      digests: { count: 1, first: null, last: null, recent: [batch] } as Dataset["digests"],
+      totals: { subjects: 3, studies: 3, sessions: 3, stacks: 12, refused_files: 0, to_sort: 2, sure: 10, unsorted: 0 },
+    });
+  const SUBJECTS = { ...heldIds({}, { coded: 4399, generated: 0 }), files: 0, identifiers: 0, ids: [] };
+  const summaryDoor = (url: string) => url === "/api/datasets/study-identified/summary";
+  const offers = () => [...host.querySelectorAll("button")].map((b) => b.textContent ?? "").filter((t) => t.startsWith("Pseudonymise and sort"));
+  const again = () => {
+    act(() => root.unmount());
+    root = createRoot(host);
+  };
+
+  it("draws the counts it has, offers nothing, says no next step and that it counts what is left, and the card waits on nothing", async () => {
+    for (const { originals, copy, refused } of SHAPES) {
+      await page(finished(originals, copy), {}, () => undefined, { step: "pseudonymisation", held: SUBJECTS, hold: summaryDoor });
+      const panel = host.querySelector(".ps-step")!;
+      expect([...panel.querySelectorAll(".ps-big")].map((b) => b.textContent)).toEqual([n(originals), "4,399", n(copy)]);
+      expect(offers()).toEqual([]);
+      expect(panel.querySelector(".ps-counting")?.textContent).toBe("Counting what is left…");
+      expect(panel.querySelector(".tag")).toBeNull();
+      expect(panel.textContent).not.toMatch(/next step|not yet|wait/i);
+      expect(text()).not.toContain(n(refused));
+      // the rail is still being read: nothing on it is guessed
+      expect(host.querySelector(".dp-detail")!.textContent).toContain("Reading where it is.");
+      // the card and the head: the run finished, so nothing waits to be pseudonymised
+      const card = host.querySelector(".dp-card")!;
+      expect(card.querySelector(".dp-card-head .tag")?.textContent).toBe("Ready");
+      expect(card.querySelector(".dp-line")?.textContent).toBe("10 sure · 2 need a look");
+      expect(card.querySelector(".dp-line")?.textContent).not.toMatch(/wait/i);
+      expect(host.querySelector(".dp-detail-where")?.textContent).not.toContain("the files carry names");
+      // what the sources door does not show is not known yet on the card, never not yet
+      expect([...card.querySelectorAll(".dp-rail > span")].map((x) => x.className).slice(3)).toEqual(["unknown", "unknown", "unknown"]);
+      expect(card.querySelector(".dp-rail")?.getAttribute("aria-label")).toContain("main scans not known yet");
+      again();
+    }
+  });
+
+  it("keeps the done view once the summary says the run left nothing", async () => {
+    for (const { originals, copy } of SHAPES) {
+      const d = finished(originals, copy);
+      const s = summaryOf(d, { job: 69, state: "done", files: copy, waiting: 0, held: 0, partial: false, waiting_partial: false, started_at: "2026-10-16T18:44:00Z", finished_at: "2026-10-17T01:51:34Z" });
+      await page(d, {}, (c) => (summaryDoor(c.url) ? { status: 200, body: s } : undefined), { step: "pseudonymisation", held: SUBJECTS });
+      expect(offers()).toEqual([]);
+      expect(host.querySelector(".ps-step")).toBeNull();
+      const done = host.querySelector(".ps-done")!;
+      expect(done.querySelector(".tag.ok")?.textContent).toBe(`${n(copy)} files · 4,399 subjects`);
+      expect(host.querySelector(".dp-card .dp-line")?.textContent).not.toMatch(/wait/i);
+      again();
+    }
+  });
+
+  it("says the subjects are on their way until the held IDs door answers, never 0", async () => {
+    const d = finished(30_689_981, 30_654_432);
+    const s = summaryOf(d, { job: 69, state: "done", files: 30_654_432, waiting: 0, held: 0, partial: false, waiting_partial: false });
+    await page(d, {}, (c) => (summaryDoor(c.url) ? { status: 200, body: s } : undefined), { step: "pseudonymisation", hold: (url) => url.startsWith("/api/linkage/held/ids") });
+    const done = host.querySelector(".ps-done")!;
+    expect([...done.querySelectorAll(".ps-big")].map((b) => b.textContent)).toEqual(["30,689,981", "…", "30,654,432"]);
+    expect(done.querySelector(".tag.ok")?.textContent).toBe("30,654,432 files");
+    expect(done.textContent).not.toMatch(/\b0 subjects/);
+    // and the step of a dataset with IDs of a type, opened while the door is out: the IDs on their way
+    again();
+    const typed = dataset({ ...finished(3_173_424, 3_172_225), identity: { id_type: "study-id", from: [{ field: "PatientID" }] } });
+    await page(typed, {}, () => undefined, { step: "pseudonymisation", hold: (url) => url.startsWith("/api/linkage/held/ids") || summaryDoor(url) });
+    const panel = host.querySelector(".ps-step")!;
+    expect([...panel.querySelectorAll(".ps-big")].map((b) => b.textContent)).toEqual(["3,173,424", "…", "3,172,225"]);
+    expect(panel.textContent).not.toContain("none held");
+  });
+
+  it("leaves a dataset never run as it was: every original to go, and the card says it waits", async () => {
+    const never = dataset({ held: { files: 0, identifiers: 0 }, identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
+    await page(never, {}, () => undefined, { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] }, hold: summaryDoor });
+    expect(offers()).toEqual(["Pseudonymise and sort 7,544 files"]);
+    expect(host.querySelector(".ps-counting")).toBeNull();
+    expect(host.querySelector(".dp-card .dp-card-head .tag")?.textContent).toBe("Identified");
     expect(host.querySelector(".dp-card .dp-line")?.textContent).toBe("Waits to be pseudonymised");
   });
 });

@@ -13,7 +13,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { caps7a, dialogs, engine, settle, type Call } from "../../test/safeWayIn";
+import { caps7a, dialogs, engine, settle as settleReal, type Call } from "../../test/safeWayIn";
 import { GRANTS, type Grant } from "../grants";
 import type { Cohort, CohortDetail } from "./cohorts";
 import { DataPage, chosenOf, firstChoice } from "./DataPage";
@@ -23,6 +23,32 @@ import { STEP_RUN_DOORS } from "./stepRun";
 import type { DatasetSummary, SummaryStep } from "./summary";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+/** Every promise the last act started, settled; under the test's own clock, by running its timers as far as now. */
+async function settle(times = 6) {
+  if (!vi.isFakeTimers()) return settleReal(times);
+  for (let i = 0; i < times; i++) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+}
+
+/** The test's own clock: a wait for a timeout or an interval ends only when the test moves the clock. */
+function ownClock() {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+}
+
+/** How long a test on its own clock may take: it draws the page once per tick, which a busy machine slows. */
+const CLOCKED = 30_000;
+
+/** The clock moved on by `ms`, and what the timers it ran started, settled. */
+async function after(ms: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+  await settle(6);
+}
 
 let host: HTMLDivElement;
 let root: Root;
@@ -549,6 +575,45 @@ describe("datasets and cohorts on one page", () => {
     expect(d.querySelector(".dp-said")?.textContent).toBe("Finding the body part: stopping.");
   });
 
+  it("reads a cohort whose step runs again a while after each answer, never while a read of it is out, and stops once the run is over (2026-10-17)", async () => {
+    ownClock();
+    let over = false;
+    const running = (x: SummaryStep): SummaryStep => (x.step === "body_part" ? { ...x, state: "running", job: 22, finished_at: null, progress: { done: 13, total: 52 } } : x);
+    await page({
+      query: { cohort: "ms-followup" },
+      doors: [...DOORS, STEP_RUN_DOORS.datasets, STEP_RUN_DOORS.cohorts],
+      route: (c) => (c.method === "GET" && c.url === "/api/cohorts/ms-followup" ? { status: 200, body: { ...detail, steps: over ? detail.steps : detail.steps!.map(running) } } : undefined),
+    });
+    expect(host.querySelector(".dp-detail .dp-running")).not.toBeNull();
+    const answered = globalThis.fetch;
+    let reads = 0;
+    let hold = false;
+    let late: ((r: Response) => void) | null = null;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== "/api/cohorts/ms-followup") return answered(input, init);
+      reads += 1;
+      return hold ? new Promise<Response>((answer) => (late = answer)) : answered(input, init);
+    });
+    await after(5_000);
+    expect(reads).toBe(1);
+    // the cohort's door takes longer than any tick
+    hold = true;
+    await after(5_000);
+    expect(reads).toBe(2);
+    for (let i = 0; i < 3; i++) await after(5_000);
+    expect(reads).toBe(2);
+    // it answers that the run is over: nothing is read again
+    over = true;
+    const answer = await answered("/api/cohorts/ms-followup");
+    await act(async () => {
+      late!(answer);
+    });
+    await settle(6);
+    expect(host.querySelector(".dp-detail .dp-running")).toBeNull();
+    for (let i = 0; i < 2; i++) await after(5_000);
+    expect(reads).toBe(2);
+  }, CLOCKED);
+
   it("shows a body-part run started from its step in the dataset's log, its progress in scans and Stop (record 56)", async () => {
     const run = {
       id: 21,
@@ -658,7 +723,7 @@ describe("datasets and cohorts on one page", () => {
   });
 
   it("stops following a dataset that left the list while one of its steps ran", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    ownClock();
     let gone = false;
     const e = await page({
       running: true,
@@ -672,21 +737,91 @@ describe("datasets and cohorts on one page", () => {
     const reads = () => e.of("GET", "/api/datasets/study-big/summary").length;
     gone = true;
     // the next round reads the list without it
-    await act(async () => {
-      vi.advanceTimersByTime(5_000);
-    });
-    await settle(10);
+    await after(5_000);
     expect(card("study-big")).toBeUndefined();
-    const after = reads();
+    const was = reads();
     // and no round reads its summary again
-    for (let i = 0; i < 3; i++) {
-      await act(async () => {
-        vi.advanceTimersByTime(5_000);
-      });
-      await settle(4);
-    }
-    expect(reads()).toBe(after);
-  });
+    for (let i = 0; i < 3; i++) await after(5_000);
+    expect(reads()).toBe(was);
+  }, CLOCKED);
+
+  it("asks a summary that has not answered once, never again on each 5 s tick or when a job ends, and the list likewise (2026-10-17)", async () => {
+    // production, 2026-10-17: a summary took 30 to 40 s and was asked again every 5 s, about ten of them out at once
+    ownClock();
+    let ended = false;
+    const e = await page({
+      running: true,
+      route: (c) => (ended && c.method === "GET" && c.url.startsWith("/api/jobs?") && !c.url.includes("dataset=") ? { status: 200, body: { count: 0, jobs: [] } } : undefined),
+    });
+    // from now on the engine answers neither the running dataset's summary nor the list: each takes longer than any tick
+    const answered = globalThis.fetch;
+    const out: string[] = [];
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://x").pathname;
+      if ((init?.method ?? "GET") === "GET" && (url === "/api/datasets/study-big/summary" || url === "/api/sources")) {
+        out.push(url);
+        return new Promise<Response>(() => undefined);
+      }
+      return answered(input, init);
+    });
+    const asked = (url: string) => out.filter((u) => u === url).length;
+    await after(5_000);
+    // each was read again 5 s after its last answer, once
+    expect(asked("/api/datasets/study-big/summary")).toBe(1);
+    expect(asked("/api/sources")).toBe(1);
+    for (let i = 0; i < 3; i++) await after(5_000);
+    // the job ends while both are out: what answers is read again at once, the two that are out only once they answer
+    const others = () => e.of("GET", "/api/datasets/ward-f/summary").length;
+    const before = others();
+    ended = true;
+    for (let i = 0; i < 2; i++) await after(5_000);
+    expect(others()).toBe(before + 1);
+    expect(asked("/api/datasets/study-big/summary")).toBe(1);
+    expect(asked("/api/sources")).toBe(1);
+  }, CLOCKED);
+
+  it("never lets an answer that comes late land over a newer one (2026-10-17)", async () => {
+    ownClock();
+    // ward-f runs too, so the list is read again while study-big is away; study-big's summary runs, then, read again, is done
+    let gone = false;
+    let late: ((r: Response) => void) | null = null;
+    let phase: "running" | "held" | "done" = "running";
+    await page({
+      running: true,
+      route: (c) => {
+        const url = new URL(c.url, "http://x");
+        if (c.method !== "GET") return undefined;
+        if (url.pathname === "/api/sources" && gone) return { status: 200, body: { count: 2, window_days: 30, sources: [done, loose], rates: null } };
+        if (url.pathname === "/api/datasets/ward-f/summary") return { status: 200, body: summaryOf(done, true) };
+        if (url.pathname === "/api/datasets/study-big/summary" && phase === "done") return { status: 200, body: summaryOf(looked, false) };
+        return undefined;
+      },
+    });
+    const views = () => [...card("study-big").querySelectorAll(".dp-rail > span")].map((s) => s.className)[5];
+    expect(views()).toBe("run");
+    // study-big's next read is held by the engine: it answers, late, that the views still run
+    const answered = globalThis.fetch;
+    vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+      phase === "held" && String(input) === "/api/datasets/study-big/summary" ? new Promise<Response>((answer) => (late = answer)) : answered(input, init),
+    );
+    phase = "held";
+    await after(5_000);
+    expect(late).not.toBeNull();
+    // it leaves the list while that read is out, and comes back: its summary is read again and says the views are made
+    gone = true;
+    await after(5_000);
+    expect(card("study-big")).toBeUndefined();
+    gone = false;
+    phase = "done";
+    await after(5_000);
+    expect(views()).toBe("done");
+    // the read that was out answers now, older than what the page shows: it is let go
+    await act(async () => {
+      late!(new Response(JSON.stringify(summaryOf(looked, true)), { status: 200 }));
+    });
+    await settle(6);
+    expect(views()).toBe("done");
+  }, CLOCKED);
 
   it("shows the running job of a dataset with its progress and Stop, which asks the engine to stop it", async () => {
     const e = await page({ running: true, route: (c) => (c.method === "POST" && c.url === "/api/jobs/9/cancel" ? { status: 200, body: { job: 9, state: "cancelling" } } : undefined) });

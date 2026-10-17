@@ -13,6 +13,7 @@ import { may } from "../grants";
 import type { Cohort, Join, CohortRelease } from "./cohorts";
 import type { Dataset } from "./datasets";
 import { declared } from "./layout";
+import { ranOf } from "./pseudoStep";
 import { readStopped, type NextStep } from "./steps";
 
 export const SUMMARY_DOOR = "GET /api/datasets/{name}/summary";
@@ -164,8 +165,8 @@ export const TONE: Record<string, string> = { Unknown: "tag caution", Anonymised
 
 // ---------------------------------------------------------------- the rail of a card
 
-/** A segment of a card's six-step bar. */
-export type Segment = "done" | "run" | "wait";
+/** A segment of a card's six-step bar; `unknown` while the summary that says it is on its way. */
+export type Segment = "done" | "run" | "wait" | "unknown";
 
 /** The six steps a card shows, in order: the pseudonymisation is the detail's alone. */
 export const CARD_STEPS: StepName[] = ["found", "read", "sorted", "main_scans", "pictures", "views"];
@@ -180,9 +181,12 @@ function segmentOf(state: StepState | undefined): Segment {
  * A card's six segments: from the summary where it was read, else what the
  * sources door already says (found, read and sorted), the rest waiting. A
  * read that stopped part way waits to be read again, though the summary
- * counts it among the reads (2026-10-17).
+ * counts it among the reads (2026-10-17). While the summary is on its way
+ * (`pending`), a segment the sources door does not show done or running is
+ * not known yet, never "not yet"; a dataset never read has read nothing to
+ * sort, pick or picture.
  */
-export function railOf(d: Dataset, s: DatasetSummary | null): Segment[] {
+export function railOf(d: Dataset, s: DatasetSummary | null, pending = false): Segment[] {
   if (s) return CARD_STEPS.map((name) => (name === "read" && readStopped(d, s) ? "wait" : segmentOf(s.steps.find((x) => x.step === name)?.state)));
   const unknown = stateOf(d) === "unknown" || d.arrives === "undeclared";
   // a tree's count that stopped short before it reached a file counted nothing, and says nothing of the tree (2026-10-17)
@@ -193,7 +197,10 @@ export function railOf(d: Dataset, s: DatasetSummary | null): Segment[] {
   const read: Segment = reading ? "run" : d.digests.count > 0 && !readStopped(d) ? "done" : "wait";
   const t = d.totals;
   const sorted: Segment = t.stacks > 0 && (t.unsorted ?? 0) === 0 && d.digests.recent.some((b) => (b.classified ?? 0) > 0) ? "done" : "wait";
-  return [found, read, sorted, "wait", "wait", "wait"];
+  if (!pending) return [found, read, sorted, "wait", "wait", "wait"];
+  const known = (seg: Segment): Segment => (seg === "wait" ? "unknown" : seg);
+  if (d.digests.count === 0) return [known(found), read, sorted, "wait", "wait", "wait"];
+  return [known(found), read, known(sorted), "unknown", "unknown", "unknown"];
 }
 
 /**
@@ -516,8 +523,8 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
   if (next.word === "Identified" && next.step === "pseudonymise") {
     const held = d.held?.identifiers ?? 0;
     if (held > 0) return `${n(held)} ${held === 1 ? "ID needs" : "IDs need"} a subject code`;
-    // a run of it ran: what it left waits, never the whole dataset as if nothing had run (2026-10-17)
-    return (stepOf(s, "pseudonymised")?.job ?? null) !== null ? "The rest waits to be pseudonymised" : "Waits to be pseudonymised";
+    // a run of it ran, by the summary or, before it is read, the sources door's batches: what it left waits, never the whole dataset as if nothing had run (2026-10-17)
+    return ranOf(d, stepOf(s, "pseudonymised")) ? "The rest waits to be pseudonymised" : "Waits to be pseudonymised";
   }
   const running = s?.steps.find((x) => x.state === "running");
   if (running) return `${TITLE[running.step]}: running now`;
@@ -827,7 +834,8 @@ export function doingTitle(j: Pick<JobRow, "kind" | "state">, op?: Operation | n
     ingest: "Reading",
     pseudonymize: "Pseudonymising",
     fingerprint: "Preparing to sort",
-    classify: "Sorting and making pictures",
+    // a sort is the registry's work alone; its pictures are a job of their own (2026-10-17)
+    classify: "Sorting",
     pick: "Picking main scans",
     pyramid: "Preparing 3D views",
     preview: "Preparing pictures",
