@@ -8,7 +8,10 @@
 // engine's reason whole, which says the way by hand; a refused pre-flight
 // asks again once it is installed; a run the jobs door refused says why with
 // its checks; Settings, Parts lists the tools as GET /api/tools answers them.
-// Against a fake engine, in the engine's shapes.
+// Gate T31, step 15.7: where the install could not reach the releases, Install
+// from a file beside Try again sends the archive the person fetched, with the
+// archive to fetch shown and the command line's twin gone; an engine without
+// that door keeps the line. Against a fake engine, in the engine's shapes.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -21,7 +24,8 @@ import type { Pipeline, Run } from "./catalog";
 import { ADVICE, DCM2NIIX_FIX, failed, NO_CONVERTER, RUNTIME_OK } from "./failure.fixture";
 import { forgetInstalled, ToolsSection } from "./Install";
 import { RunView } from "./RunPage";
-import { mayInstall, toolStatus } from "./tools";
+import { fileOfRefusal, mayInstall, mayInstallFile, toolOf, toolStatus } from "./tools";
+import { DoorError } from "../ask/client";
 import type { RunDetail } from "./runs";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -32,6 +36,14 @@ const ERROR = "the release of the input failed: dcm2niix is not runnable (No suc
 const RUN: Run = failed({ id: 12, pipeline_id: 3, pipeline: "n4-bias-correction@1", job_id: 40, selection: "selection:3d-t1-siemens@1", status: "failed", started_at: null, finished_at: null, summary: { units: { total: 0 } }, error: ERROR }, "dependency", "dcm2niix", ADVICE, DCM2NIIX_FIX);
 const DOORS = ["GET /api/pipelines", "GET /api/pipeline-runs", "GET /api/pipeline-runs/{id}", "POST /api/jobs", "POST /api/pipelines/{name}/preflight", DOOR];
 const ADMIN: Grant[] = ["pipelines:see", "pipelines:work", "install:work"];
+/** The install from a file, as an engine with it names it. */
+const FILE_DOOR = "POST /api/tools/dcm2niix/install-file";
+const FILE_PATH = FILE_DOOR.split(" ")[1];
+const FILE = { door: FILE_DOOR, command: "nils tools install dcm2niix --from FILE", archive: "dcm2niix_lnx.zip", url: "https://github.com/rordenlab/dcm2niix/releases/download/v1.0.20260724/dcm2niix_lnx.zip", sha256: "cd".repeat(32), max_bytes: 4194304 };
+const WITH_FILE = [...DOORS, FILE_DOOR];
+const OFFLINE = "https://github.com/rordenlab/dcm2niix/releases/download/v1.0.20260724/dcm2niix_lnx.zip could not be reached (connection refused); by hand: download it on a machine that reaches it and give that file to the desk's Install from a file.";
+/** The install's refusal where the releases could not be reached: with the archive to fetch where the engine has the install from a file. */
+const offline = (file: unknown = FILE) => ({ status: 502, body: { error: OFFLINE, disclosure: "safe", offline: true, failure: { kind: "dependency", cause: "dcm2niix", advice: ADVICE, fix: DCM2NIIX_FIX }, ...(file ? { file } : {}) } });
 
 /** dcm2niix as GET /api/tools answers it: here, or missing with the pinned build offered. */
 const tool = (present: boolean, more: Record<string, unknown> = {}) => ({
@@ -43,7 +55,7 @@ const tool = (present: boolean, more: Record<string, unknown> = {}) => ({
   pinned: "v1.0.20260724",
   current: present ? true : null,
   problem: null,
-  install: { door: DOOR, command: DCM2NIIX_FIX.command, grant: "install:work", available: true, into: "/srv/registry/tools", source: "https://github.com/rordenlab/dcm2niix/releases", sha256: "ab".repeat(32), why: null },
+  install: { door: DOOR, command: DCM2NIIX_FIX.command, grant: "install:work", available: true, into: "/srv/registry/tools", source: "https://github.com/rordenlab/dcm2niix/releases", sha256: "ab".repeat(32), why: null, file: FILE },
   ...more,
 });
 
@@ -52,8 +64,9 @@ function capsOf(doors: string[], grants: Grant[], entry: unknown = undefined): C
   return entry === undefined ? c : { ...c, engine: { ...c.engine!, tools: { dcm2niix: entry } } };
 }
 
-/** A fake engine: what was asked, and an answer per `METHOD path`. */
+/** A fake engine: what was asked, and an answer per `METHOD path`; a file sent is kept as it stands, with the headers it went with. */
 let asked: { method: string; path: string; body: unknown }[] = [];
+let sentWith: Record<string, string>[] = [];
 let answers: Record<string, (body: unknown) => { status: number; body: unknown }> = {};
 let root: Root;
 let el: HTMLDivElement;
@@ -63,6 +76,7 @@ beforeEach(() => {
   if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
   if (!HTMLDialogElement.prototype.close) HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) { this.removeAttribute("open"); };
   asked = [];
+  sentWith = [];
   againOn = [];
   answers = {
     [`POST ${PATH}`]: () => ({ status: 200, body: { installed: true, source: "https://github.com/rordenlab/dcm2niix/releases", tool: tool(true) } }),
@@ -71,8 +85,9 @@ beforeEach(() => {
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), "http://desk.test");
     const method = init?.method ?? "GET";
-    const body = init?.body ? JSON.parse(String(init.body)) : null;
+    const body = init?.body instanceof Blob ? init.body : init?.body ? JSON.parse(String(init.body)) : null;
     asked.push({ method, path: url.pathname, body });
+    sentWith.push({ ...(init?.headers as Record<string, string> | undefined) });
     const a = answers[`${method} ${url.pathname}`]?.(body) ?? { status: 404, body: { error: `no ${url.pathname}` } };
     return new Response(JSON.stringify(a.body), { status: a.status });
   }) as typeof fetch;
@@ -97,6 +112,15 @@ const press = async (words: string) => {
   await act(async () => b!.click());
   await settle();
 };
+/** A file picked in a file field, as a person picks one. */
+async function pick(input: HTMLInputElement, file: File) {
+  Object.defineProperty(input, "files", { value: [file], configurable: true });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+}
+const fileField = () => el.querySelector<HTMLInputElement>('input[type="file"]');
+const label = (words: string) => [...el.querySelectorAll("label")].find((l) => l.textContent === words) ?? null;
+const ZIP = () => new File([new Uint8Array([80, 75, 3, 4, 1, 2, 3])], "dcm2niix_lnx.zip", { type: "application/zip" });
 /** Text typed into a field React holds, as a person types it. */
 async function typeInto(input: HTMLInputElement, text: string) {
   const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
@@ -147,7 +171,7 @@ describe("Install dcm2niix beside a failed run's reason", () => {
     expect(el.querySelectorAll(".fail-row")).toHaveLength(2);
     expect(button("Install dcm2niix")).toBeNull();
   });
-  it("says the engine's reason whole when the install fails offline, the way by hand in it, and the command", async () => {
+  it("says the engine's reason whole when the install fails offline, the way by hand in it, and the command, on an engine without the install from a file", async () => {
     const offline = "The releases could not be reached (no route to host). By hand: fetch dcm2niix_lnx.zip from github.com/rordenlab/dcm2niix/releases/tag/v1.0.20260724, check its sha256 is abab, and put dcm2niix in /srv/registry/tools.";
     answers[`POST ${PATH}`] = () => ({ status: 502, body: { error: offline, offline: true, failure: { kind: "dependency", cause: "dcm2niix", advice: ADVICE, fix: DCM2NIIX_FIX } } });
     await act(async () => root.render(runs(capsOf(DOORS, ADMIN))));
@@ -171,6 +195,118 @@ describe("Install dcm2niix beside a failed run's reason", () => {
     await press("Run again");
     expect(again).toBe(1);
     expect(asked.find((a) => a.path === "/api/jobs")).toBeUndefined();
+  });
+});
+
+describe("Install from a file, where the engine could not reach the releases (gate T31, step 15.7)", () => {
+  it("offers it beside Try again with the archive to fetch, drops the command line, and installs the file picked", async () => {
+    answers[`POST ${PATH}`] = () => offline();
+    answers[`POST ${FILE_PATH}`] = () => ({ status: 200, body: { installed: true, source: "the archive uploaded", tool: tool(true) } });
+    await act(async () => root.render(runs(capsOf(WITH_FILE, ADMIN))));
+    await press("Install dcm2niix");
+    const said = el.querySelector(".tool-said")!;
+    expect(said.querySelector(".warn")?.textContent).toBe(`dcm2niix was not installed: ${OFFLINE}`);
+    expect(said.querySelector(".tool-file")?.textContent).toBe(`Fetch dcm2niix_lnx.zip on a machine that reaches it, and give it here with Install from a file; its sha256 is ${FILE.sha256}.`);
+    expect(said.querySelector<HTMLAnchorElement>(".tool-file a")?.href).toBe(FILE.url);
+    expect(said.textContent).not.toContain("At the command line");
+    expect(said.textContent).not.toContain("nils tools install dcm2niix --from");
+    expect(button("Try again")).not.toBeNull();
+    expect(label("Install from a file")).not.toBeNull();
+    expect(fileField()?.accept).toBe(".zip,application/zip");
+    const archive = ZIP();
+    await pick(fileField()!, archive);
+    const sent = asked.filter((a) => a.path === FILE_PATH);
+    expect(sent).toEqual([{ method: "POST", path: FILE_PATH, body: archive }]);
+    expect(sentWith[asked.findIndex((a) => a.path === FILE_PATH)]).toMatchObject({ "content-type": "application/zip", "X-Nils-Desk": "1" });
+    expect(el.querySelector(".tool-said")?.textContent).toBe("dcm2niix v1.0.20260724 is installed at /srv/registry/tools/dcm2niix.Run again");
+    expect(label("Install from a file")).toBeNull();
+  });
+  it("says why the engine refused the file, and offers Try again and Install from a file again", async () => {
+    const wrong = "the archive uploaded is not dcm2niix_lnx.zip of dcm2niix v1.0.20260724, the archive this version of nils pins: its sha256 is 00, and this version of nils takes only cd; nothing was unpacked or written";
+    answers[`POST ${PATH}`] = () => offline();
+    answers[`POST ${FILE_PATH}`] = () => ({ status: 422, body: { error: wrong, disclosure: "safe", offline: false, failure: { kind: "dependency", cause: "dcm2niix", advice: ADVICE, fix: DCM2NIIX_FIX }, file: FILE } });
+    await act(async () => root.render(runs(capsOf(WITH_FILE, ADMIN))));
+    await press("Install dcm2niix");
+    await pick(fileField()!, ZIP());
+    expect(el.querySelector(".tool-said .warn")?.textContent).toBe(`dcm2niix was not installed: ${wrong}`);
+    expect(el.querySelector(".tool-file")?.textContent).toContain("Fetch dcm2niix_lnx.zip");
+    expect(button("Try again")).not.toBeNull();
+    expect(label("Install from a file")).not.toBeNull();
+    // Try again is the install from the releases, as before
+    answers[`POST ${PATH}`] = () => ({ status: 200, body: { installed: true, tool: tool(true) } });
+    await press("Try again");
+    expect(el.querySelector(".tool-said")?.textContent).toBe("dcm2niix v1.0.20260724 is installed at /srv/registry/tools/dcm2niix.Run again");
+  });
+  it("refuses a file larger than any archive before sending it", async () => {
+    answers[`POST ${PATH}`] = () => offline({ ...FILE, max_bytes: 4 });
+    await act(async () => root.render(runs(capsOf(WITH_FILE, ADMIN))));
+    await press("Install dcm2niix");
+    await pick(fileField()!, ZIP());
+    expect(asked.filter((a) => a.path === FILE_PATH)).toEqual([]);
+    expect(el.querySelector(".tool-said .warn")?.textContent).toBe("dcm2niix was not installed: dcm2niix_lnx.zip is 0.0 MB, larger than any dcm2niix_lnx.zip: pick the dcm2niix_lnx.zip fetched from its release");
+    expect(label("Install from a file")).not.toBeNull();
+  });
+  it("takes the archive to fetch from the tool's status where the refusal names none, and offers nothing an install from a file would not mend", async () => {
+    answers[`POST ${PATH}`] = () => offline(null);
+    await act(async () => root.render(runs(capsOf(WITH_FILE, ADMIN, tool(false)))));
+    await press("Install dcm2niix");
+    expect(label("Install from a file")).not.toBeNull();
+    expect(el.querySelector(".tool-file")?.textContent).toContain(FILE.sha256);
+    // not the releases out of reach: no file offered, and no command line on an engine with the door
+    answers[`POST ${PATH}`] = () => ({ status: 409, body: { error: "dcm2niix v1.0.20260724 was downloaded and does not run here, so it was taken away again", offline: false, failure: { kind: "dependency", cause: "dcm2niix", advice: ADVICE, fix: DCM2NIIX_FIX } } });
+    await press("Try again");
+    expect(el.querySelector(".tool-said .warn")?.textContent).toContain("does not run here");
+    expect(label("Install from a file")).toBeNull();
+    expect(el.querySelector(".tool-said")?.textContent).not.toContain("At the command line");
+  });
+  it("keeps today's command line where the engine names the file but does not serve its door", async () => {
+    answers[`POST ${PATH}`] = () => offline();
+    await act(async () => root.render(runs(capsOf(DOORS, ADMIN))));
+    await press("Install dcm2niix");
+    expect(label("Install from a file")).toBeNull();
+    expect(fileField()).toBeNull();
+    expect(el.querySelector(".tool-said")?.textContent).toContain("At the command line: nils tools install dcm2niix");
+  });
+  it("tells a person without the grant who installs it: never the command, the file or its archive", async () => {
+    await act(async () => root.render(runs(capsOf(WITH_FILE, ["pipelines:see", "pipelines:work"], tool(false)))));
+    expect(el.querySelector(".tool-said")?.textContent).toBe("Ask an admin to install dcm2niix.");
+    expect(button("Install dcm2niix")).toBeNull();
+    expect(fileField()).toBeNull();
+    // the run's own line is the engine's advice, said to everyone; the install's place says who installs it, and nothing more
+    expect(el.querySelector(".tool-file")).toBeNull();
+    expect(el.textContent).not.toContain("At the command line");
+    expect(el.textContent).not.toContain("dcm2niix_lnx.zip");
+    expect(mayInstallFile(capsOf(WITH_FILE, ["pipelines:work"]), DCM2NIIX_FIX, FILE)).toBe(false);
+    expect(mayInstallFile(capsOf(WITH_FILE, ADMIN), DCM2NIIX_FIX, FILE)).toBe(true);
+    expect(mayInstallFile(capsOf(DOORS, ADMIN), DCM2NIIX_FIX, FILE)).toBe(false);
+    expect(mayInstallFile(capsOf(WITH_FILE, ADMIN), DCM2NIIX_FIX, null)).toBe(false);
+  });
+  it("reads the file from a refusal or a status, and nothing from an older engine", () => {
+    expect(toolOf(tool(false))?.install?.file).toEqual(FILE);
+    expect(toolOf({ ...tool(false), install: { ...tool(false).install, file: undefined } })?.install?.file).toBeNull();
+    // an address that is not a web one is no link
+    expect(toolOf({ ...tool(false), install: { ...tool(false).install, file: { ...FILE, url: "javascript:void(0)" } } })?.install?.file?.url).toBeNull();
+    expect(fileOfRefusal(new DoorError(502, offline().body), null)).toEqual(FILE);
+    expect(fileOfRefusal(new DoorError(502, offline(null).body), FILE)).toEqual(FILE);
+    expect(fileOfRefusal(new DoorError(409, { error: "no build", offline: false }), FILE)).toBeNull();
+    expect(fileOfRefusal(new Error("the engine did not answer"), FILE)).toBeNull();
+  });
+  it("is beside Try again on Settings, Parts, and the row says the version once the file is installed", async () => {
+    let listed = 0;
+    answers["GET /api/tools"] = () => ({ status: 200, body: { tools: [tool(++listed > 1)] } });
+    answers[`POST ${PATH}`] = () => offline();
+    answers[`POST ${FILE_PATH}`] = () => ({ status: 200, body: { installed: true, source: "the archive uploaded", tool: tool(true) } });
+    await act(async () => root.render(<ToolsSection caps={capsOf([...WITH_FILE, "GET /api/tools"], ADMIN)} onChanged={() => undefined} />));
+    await settle();
+    await press("Install dcm2niix");
+    const acts = el.querySelector("table.tools td.acts")!;
+    expect([...acts.querySelectorAll("button, label")].map((b) => b.textContent)).toEqual(["Try again", "Install from a file"]);
+    expect(el.querySelector("table.tools .tool-file")?.textContent).toContain("Fetch dcm2niix_lnx.zip");
+    expect(el.querySelector("table.tools")?.textContent).not.toContain("At the command line");
+    await pick(fileField()!, ZIP());
+    expect(asked.filter((a) => a.path === FILE_PATH)).toHaveLength(1);
+    expect(el.querySelector("table.tools tbody")?.textContent).toContain("v1.0.20260724");
+    expect(fileField()).toBeNull();
   });
 });
 

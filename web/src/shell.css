@@ -1602,6 +1602,8 @@ table.thin tr.fail-row > td { padding-top: 0; }
 .tool-said { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.6rem; margin: 0.3rem 0 0; font-size: var(--n-text-size-small); color: var(--n-text); }
 td > .tool-said { width: 0; min-width: min(100%, calc(100vw - 3rem)); position: sticky; left: 0; padding-left: 0.55rem; }
 td > .fail-line + .tool-said { border-left: 2px solid var(--n-caution-line); margin-top: 0; padding-top: 0.25rem; }
+/* gate T31, step 15.7: the archive to fetch for Install from a file; its sha256 breaks anywhere on a narrow screen */
+.tool-file code { overflow-wrap: anywhere; }
 /* 2026-10-12: a run reads as its units summed; what it did not make is one line in caution's border, its units under each reason */
 .job.short { border-color: var(--n-caution-line); }
 .job .made-rest { padding-left: 0.55rem; border-left: 2px solid var(--n-caution-line); font-size: var(--n-text-size-small); color: var(--n-text); overflow-wrap: anywhere; }
