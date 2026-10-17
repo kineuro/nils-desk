@@ -379,6 +379,7 @@ export function DataPage({
               dataset={d}
               why={whyOf(d)}
               summary={sums[d.name] ?? null}
+              reading={summarises && !(d.name in sums)}
               on={chosenDataset?.id === d.id}
               relation={chosenCohort ? datasetRelation(d.name, chosenCohort) : null}
               feeds={feedsWords(d.name, d.cohort, allCohorts)}
@@ -532,17 +533,32 @@ function ViewLink({ to, label }: { to: View; label: string }) {
 /** The six segments of where a dataset is, in words for a screen reader. */
 const SEGMENT_WORDS = ["found", "read", "sorted", "main scans", "pictures", "3D views"];
 
-function DatasetCard(props: { dataset: Dataset; why: string | null; summary: DatasetSummary | null; on: boolean; relation: Relation | null; feeds: string; view: View; onPick: () => void }) {
-  const { dataset: d, why, summary, on, relation, feeds, view, onPick } = props;
+/** A segment of the rail in words, for a screen reader. */
+const segmentWords = (s: string) => (s === "done" ? "done" : s === "run" ? "running" : s === "unknown" ? "not known yet" : "not yet");
+
+function DatasetCard(props: {
+  dataset: Dataset;
+  why: string | null;
+  summary: DatasetSummary | null;
+  /** Its summary is served and not read: on its way, or its read failed. */
+  reading: boolean;
+  on: boolean;
+  relation: Relation | null;
+  feeds: string;
+  view: View;
+  onPick: () => void;
+}) {
+  const { dataset: d, why, summary, reading, on, relation, feeds, view, onPick } = props;
   const next = nextStep(d, why, summary);
   const found = foundOf(d, summary);
   const files = found.files;
-  const rail = railOf(d, summary);
+  // while its summary is on its way, what the sources door does not show is not known yet, never "not yet" (2026-10-17)
+  const rail = railOf(d, summary, reading);
   const line = cardLine(d, next, summary);
   // what the scans that need a look are asked, behind a hover
   const lookWords = kindWords(summary?.look_kinds ?? d.totals.need_a_look ?? {});
   const cls = ["dp-card", on ? "on" : relation ? (relation.related ? "rel" : "dim") : null].filter(Boolean).join(" ");
-  const said = rail.map((s, i) => `${SEGMENT_WORDS[i]} ${s === "done" ? "done" : s === "run" ? "running" : "not yet"}`).join(", ");
+  const said = rail.map((s, i) => `${SEGMENT_WORDS[i]} ${segmentWords(s)}`).join(", ");
   return (
     <div className={cls} onClick={onPick} aria-current={on ? "true" : undefined}>
       <div className="dp-card-head">

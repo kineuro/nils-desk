@@ -54,10 +54,12 @@ import {
   codePairs,
   codesBody,
   codesWords,
+  countingWords,
   everyFile,
   held,
   goWords,
   idsBox,
+  idsUnknown,
   idTypeOf,
   matchedOf,
   outcomeWords,
@@ -71,6 +73,7 @@ import {
   type IdRow,
   type Matched,
   type StepView,
+  type Unread,
 } from "./pseudoStep";
 import { RulesDialog } from "./RulesDialog";
 import { clock, stepOf, took, type DatasetSummary } from "./summary";
@@ -109,12 +112,15 @@ export interface Pseudonymise {
  * The step of a dataset with originals: its held IDs read from the engine
  * whenever its summary moves, the codes a map being rehearsed gives them, and
  * the view the rail and the step both draw. Nothing for a dataset without
- * originals, which has no step.
+ * originals, which has no step. `unread` says the summary is served and not
+ * read: on its way, or its read failed, so what a run left is not known.
  */
-export function usePseudonymise(caps: Capabilities, d: Dataset, s: DatasetSummary | null): Pseudonymise {
+export function usePseudonymise(caps: Capabilities, d: Dataset, s: DatasetSummary | null, unread?: Unread["summary"]): Pseudonymise {
   const has = Boolean(d.trees?.originals);
   const lists = has && served(caps, "GET /api/linkage/held/ids") && may(caps, "data:see");
   const [heldIds, setHeldIds] = useState<HeldIds | null>(null);
+  /** The held IDs door's last read failed: their counts are not known, rather than on their way. */
+  const [heldFailed, setHeldFailed] = useState(false);
   const [matched, setMatched] = useState<Matched[]>([]);
   const [acting, setActing] = useState<{ phase: string; since: number } | null>(null);
   const step = stepOf(s, "pseudonymised");
@@ -124,8 +130,14 @@ export function usePseudonymise(caps: Capabilities, d: Dataset, s: DatasetSummar
   // the held IDs door can take seconds on a large dataset: read once at a time, again after the read out answers (2026-10-17)
   const heldRead = useReads(
     (name) => held.ids(name),
-    (_, h) => setHeldIds(h),
-    () => setHeldIds(null),
+    (_, h) => {
+      setHeldIds(h);
+      setHeldFailed(false);
+    },
+    () => {
+      setHeldIds(null);
+      setHeldFailed(true);
+    },
   );
   const reload = useCallback(() => {
     if (lists) heldRead.fresh(d.name);
@@ -134,8 +146,13 @@ export function usePseudonymise(caps: Capabilities, d: Dataset, s: DatasetSummar
     reload();
   }, [reload, moved]);
   const running = acting !== null || step?.state === "running" || step?.state === "queued";
+  // the held IDs on their way while their door has not answered: never drawn as 0 (2026-10-17)
+  const idsReading = lists && heldIds === null && !heldFailed;
   // worked out again only when what it reads changes, not on the detail's every second
-  const view = useMemo(() => (has ? stepView(d, step, lists ? heldIds : null, matched, running, found) : null), [has, d, step, lists, heldIds, matched, running, found]);
+  const view = useMemo(
+    () => (has ? stepView(d, step, lists ? heldIds : null, matched, running, found, { summary: unread, ids: idsReading }) : null),
+    [has, d, step, lists, heldIds, matched, running, found, unread, idsReading],
+  );
   return {
     view,
     held: heldIds,
@@ -147,9 +164,9 @@ export function usePseudonymise(caps: Capabilities, d: Dataset, s: DatasetSummar
   };
 }
 
-/** Whether the step opens by itself: while it is the dataset's next step, or while it runs. */
+/** Whether the step opens by itself: while it is the dataset's next step, or while it runs; not while it counts what a run left. */
 export function opensItself(v: StepView | null): boolean {
-  return v !== null && v.phase !== "done";
+  return v !== null && v.phase !== "done" && v.phase !== "counting";
 }
 
 /** A job of the engine's, waited for until it ends; a failure or a stop is said in its own words. */
@@ -258,6 +275,8 @@ export function PseudonymiseStep(props: StepProps) {
   const waiting = works ? waitingLine(v) : null;
   const generatesHere = works && v.phase === "codes" && served(caps, "POST /api/linkage/held/code");
   const changes = works && may(caps, "places:work") && served(caps, "PUT /api/places/{id}");
+  // a run ran and what it left is still being counted: no next step, no button (2026-10-17)
+  const counting = countingWords(v);
 
   /**
    * The dataset's own thread, after the map is filed where one was given:
@@ -349,6 +368,11 @@ export function PseudonymiseStep(props: StepProps) {
         <Codes caps={caps} dataset={d} pseudo={pseudo} view={v} primary={primary} busy={pseudo.acting !== null} onRun={(map) => act(map)} onGenerate={generate} onFailed={onFailed} />
       ) : (
         <div className="ps-actions">
+          {counting && (
+            <p className="meta ps-counting" role="status">
+              {counting}
+            </p>
+          )}
           {waiting && <p className="ps-next">{waiting}</p>}
           {generatesHere ? (
             <>
@@ -621,7 +645,7 @@ function Codes(props: {
         {v.rows.length === 0 && (
           <div className="ps-row" role="row">
             <span role="cell" className="meta ps-none">
-              {v.without.ids > 0 ? `${n(v.without.ids)} IDs held; this engine does not list them one by one.` : "No ID is held."}
+              {v.idsReading ? "Reading the IDs…" : v.without.ids > 0 ? `${n(v.without.ids)} IDs held; this engine does not list them one by one.` : "No ID is held."}
             </span>
           </div>
         )}
@@ -717,7 +741,8 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
   const outcome = ran ? outcomeWords(ran.pseudonymise, ran.read, readStep?.refused ?? 0, readStep?.set_aside ?? 0) : null;
   const at = new Date();
   const when = [clock(step?.finished_at, at), took(step?.started_at, step?.finished_at)].filter(Boolean).join(" · ");
-  const subjects = v.subjects.coded;
+  // the subjects the copy carries, once the held IDs door has said them: never 0 for not read yet (2026-10-17)
+  const subjects = v.subjects?.coded ?? null;
   const kept = d.originals_kept ?? "kept";
   const keptWords = kept === "kept" ? "kept · locked" : originalsWords(kept, vaultedInto(d));
   const changes = may(caps, "data:work") && may(caps, "places:work") && served(caps, "PUT /api/places/{id}");
@@ -734,7 +759,7 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
         <span className="tag ok">
           {v.copyPartial ? "at least " : ""}
           {n(v.copy)} {v.copy === 1 ? "file" : "files"}
-          {subjects > 0 ? ` · ${n(subjects)} ${subjects === 1 ? "subject" : "subjects"}` : ""}
+          {subjects !== null && subjects > 0 ? ` · ${n(subjects)} ${subjects === 1 ? "subject" : "subjects"}` : ""}
         </span>
         <span className="grow" />
         {when && <span className="ps-when">{when}</span>}
@@ -745,7 +770,7 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
           <span>{outcome}</span>
         </p>
       )}
-      <Boxes v={v} compact codes={{ big: n(subjects), words: codesWords(v.subjects, v.personnummer), caution: false }} kept={keptWords} />
+      <Boxes v={v} compact codes={{ big: subjects === null ? idsUnknown(v) : n(subjects), words: codesWords(v.subjects, v.personnummer), caution: false }} kept={keptWords} />
       <div className="ps-every">
         <h4 className="eyebrow">In every file</h4>
         {lines.map((l) => (
@@ -766,7 +791,7 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
         ))}
       </div>
       <div className="ps-quiet">
-        {v.subjects.generated > 0 && (
+        {v.subjects !== null && v.subjects.generated > 0 && (
           <div className="ps-quiet-line">
             <span className="dot caution" aria-hidden="true" />
             <span>

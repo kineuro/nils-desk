@@ -147,8 +147,10 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const acts = datasetActions(caps, d, why, s);
   /** Where its chain stopped, in the failed job's own words (2026-10-10). */
   const stopped = useStopped(caps, s);
-  // the pseudonymise step: open by itself while it waits on a person or runs, or as the person or the address opened it
-  const pseudo = usePseudonymise(caps, d, s);
+  // the pseudonymise step: open by itself while it waits on a person or runs, or as the person or the address opened it;
+  // while the summary is on its way (or its read failed), what a run left is not known, and the step says so (2026-10-17)
+  const unread = s === null && maySummarise(caps) ? (props.summaryWhy ? "failed" : "reading") : undefined;
+  const pseudo = usePseudonymise(caps, d, s, unread);
   const view = pseudo.view;
   const [stepOpen, setStepOpen] = useState<boolean | null>(props.openStep ? true : null);
   useEffect(() => {
@@ -231,9 +233,14 @@ export function DatasetDetail(props: DatasetDetailProps) {
   // record 56: the files set aside by policy are not scans and ask nobody anything; only the rest has a page to look at
   const refused = refusedOnly({ refused: s?.files.refused ?? d.totals.refused_files, set_aside: s?.files.set_aside });
   const ids = idsWords(d);
-  // an identified dataset says what its files carry until they are pseudonymised, and then what the copy NILS reads holds
+  // an identified dataset says what its files carry until they are pseudonymised, and then what the copy NILS reads holds;
+  // while what a run left is counted, its structure alone
   const where = (
-    view === null ? [whereWords(d), stateWord(s?.state ?? stateOf(d)), ids] : view.phase === "done" ? [whereWords(d), "pseudonymised", ids] : [whereWords(d), "the files carry names"]
+    view === null || view.phase === "counting"
+      ? [whereWords(d), stateWord(s?.state ?? stateOf(d)), ids]
+      : view.phase === "done"
+        ? [whereWords(d), "pseudonymised", ids]
+        : [whereWords(d), "the files carry names"]
   )
     .filter(Boolean)
     .join(" · ");

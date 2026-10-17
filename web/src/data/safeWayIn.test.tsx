@@ -99,9 +99,10 @@ describe("a dataset's one next step", () => {
     // the summary says the newest read failed where no batch of it says so
     const failed = { steps: [{ step: "read" as const, state: "failed" as const, job: 77, started_at: null, finished_at: null, progress: null }] };
     expect(nextStep(toSort, null, failed)).toMatchObject({ step: "read-again" });
-    // a dataset whose pseudonymise step waits does that first
+    // a dataset whose pseudonymise step waits does that first; its batches say a run ran, so its summary says what the run left (2026-10-17)
     const ident = { ...newest("cancelled"), state: "identified", arrives: "identified", trees: identified.trees } as Dataset;
-    expect(nextStep(ident)).toMatchObject({ word: "Identified", step: "pseudonymise" });
+    const left = { steps: [{ step: "pseudonymised" as const, state: "waiting" as const, job: 120, started_at: null, finished_at: null, progress: null, files: 0, waiting: 40, held: 0, partial: false, waiting_partial: false }] };
+    expect(nextStep(ident, null, left)).toMatchObject({ word: "Identified", step: "pseudonymise" });
   });
 
   it("queues a bring-in's chain from its read on, under the stopped read's name: never the sort alone nor a pseudonymise step", () => {

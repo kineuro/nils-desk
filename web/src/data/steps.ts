@@ -144,15 +144,18 @@ export function readStopped(d: Pick<Dataset, "digests">, s: Pick<DatasetSummary,
  * the rest where a count stopped short or the run was cut short or stopped,
  * or held files. The trees' originals less the copy would count the files a
  * run refused, which no run writes, and trust a probe that stopped short of
- * a large tree. Before any run, or with no summary, the trees say it as
- * before.
+ * a large tree. Where a run ran and no summary step says what it left (the
+ * summary not read yet), only held files are known to wait: a dataset whose
+ * run finished is never said to wait on the sources door's numbers alone.
+ * Before any run the trees say it as before.
  */
 function pseudonymiseWaits(d: Dataset, s: Pick<DatasetSummary, "steps"> | null): boolean {
   const step = s?.steps.find((x) => x.step === "pseudonymised") ?? null;
   const found = s?.steps.find((x) => x.step === "found") ?? null;
   const held = typeof step?.held === "number" ? step.held : (d.held?.files ?? 0);
   const c = countsOf(d, step, found, held);
-  if (c.ran) return held > 0 || (!c.done && (c.unseen > 0 || c.unseenPartial || c.failed));
+  if (c.ran && step === null) return held > 0;
+  if (c.ran) return held > 0 || (!c.done && ((c.unseen ?? 0) > 0 || c.unseenPartial || c.failed));
   const waiting = newInOriginals(d);
   // nothing read and nothing in the anonymised copy yet: it was never pseudonymised
   const copied = d.trees?.anon?.files;

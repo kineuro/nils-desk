@@ -17,6 +17,8 @@ import {
   codePairs,
   codesBody,
   codesWords,
+  countingWords,
+  countsOf,
   everyFile,
   goWords,
   heldIdsOf,
@@ -303,7 +305,9 @@ describe("what every file got", () => {
     expect(codesWords({ coded: 8, generated: 2 }, false)).toBe("6 from a map · 2 generated");
     expect(codesWords({ coded: 8, generated: 0 }, false)).toBe("8 from a map");
     expect(codesWords({ coded: 8, generated: 0 }, true)).toBe("coded by the key");
-    expect(codesWords(null, false)).toBe("none yet");
+    expect(codesWords({ coded: 0, generated: 0 }, false)).toBe("none yet");
+    // the held IDs not read yet: nothing is said of the codes, never "none yet" (2026-10-17)
+    expect(codesWords(null, false)).toBe("subjects");
   });
 });
 
@@ -491,5 +495,94 @@ describe("a run that ran is never read as never run (2026-10-17)", () => {
     const older: SummaryStep = { ...found, files: 1000 };
     const v = stepView(at({ files: 200_000, partial: true }), step({ ...ran, state: "waiting", files: 1000, waiting: 199_000, held: 0, partial: false, waiting_partial: true }), none, [], false, older);
     expect(v).toMatchObject({ originals: 200_000, originalsPartial: true, phase: "ready", go: 199_000, goPartial: true });
+  });
+});
+
+describe("a dataset whose summary is not read yet (2026-10-17)", () => {
+  // production: two datasets whose run had finished offered "Pseudonymise and sort" for exactly the files their run refused as not DICOM,
+  // read off the sources door's trees while their summaries, which took tens of seconds, were not read yet
+  const SHAPES = [
+    { originals: 30_689_981, copy: 30_654_432, refused: 35_549 },
+    { originals: 3_173_424, copy: 3_172_225, refused: 1_199 },
+  ];
+  const pn = { identity: { id_type: "personnummer", from: [{ field: "PatientID" }] }, held: { files: 0, identifiers: 0 } };
+  const batch = { id: 9, name: "study-identified-2026-10-16", state: "done", started_at: null, finished_at: null, job_id: 70, files: { seen: 0, new: 0, changed: 0, unchanged: 0, refused: 0 }, subjects_added: 0, stacks_added: 0, classified: 0, to_sort: 0, pseudonymised: { files: 0, changed: 0, held: 0, job: 69 }, chain: { pseudonymize: 69, digest: 70, classify: [] } };
+  const at = (originals: number, copy: number, over: Partial<Dataset> = {}) =>
+    ({ ...d, ...pn, trees: { originals: { ...base.trees.originals, files: originals, bytes: null }, anon: { ...base.trees.anon, files: copy } }, digests: { count: 1, first: null, last: null, recent: [batch] }, ...over }) as unknown as Dataset;
+  const subjects = (coded: number): HeldIds => ({ files: 0, identifiers: 0, ids: [], subjects: { coded, generated: 0 } });
+
+  it("counts what a run left as not known, never the originals less the copy, which are the files it refused", () => {
+    for (const { originals, copy, refused } of SHAPES) {
+      const c = countsOf(at(originals, copy), null, null, 0);
+      expect(c.ran).toBe(true);
+      expect(c.unseen).toBeNull();
+      expect(c.unseen).not.toBe(refused);
+      // a dataset never run still counts every original as to go
+      expect(countsOf(at(originals, 0, { digests: { count: 0, first: null, last: null, recent: [] } } as Partial<Dataset>), null, null, 0)).toMatchObject({ ran: false, unseen: originals });
+    }
+  });
+
+  it("draws the counts it has and offers nothing while the summary is on its way: no button, no next step, no waiting", () => {
+    for (const { originals, copy, refused } of SHAPES) {
+      const v = stepView(at(originals, copy), null, subjects(4399), [], false, null, { summary: "reading", ids: false });
+      expect(v).toMatchObject({ phase: "counting", originals, copy, counting: "reading" });
+      for (const generates of [false, true]) for (const open of [false, true]) expect(primaryOf(v, generates, open)).toBeNull();
+      expect(chipOf(v, false)).toBeNull();
+      expect(railWords(v)).toBeNull();
+      expect(waitingLine(v)).toBeNull();
+      expect(waitWords(v)).toBeNull();
+      expect(countingWords(v)).toBe("Counting what is left…");
+      expect(goWords(v)).not.toContain(refused.toLocaleString("en-US"));
+      // the summary's read failed: still nothing guessed, and said so
+      const failed = stepView(at(originals, copy), null, subjects(4399), [], false, null, { summary: "failed" });
+      expect(failed.phase).toBe("counting");
+      expect(primaryOf(failed, true, false)).toBeNull();
+      expect(countingWords(failed)).toBe("What is left could not be counted.");
+    }
+  });
+
+  it("keeps the done view once the summary says the run left nothing", () => {
+    for (const { originals, copy } of SHAPES) {
+      const found: SummaryStep = { step: "found", state: "done", job: null, started_at: null, finished_at: null, progress: null, files: originals, bytes: null, partial: false, counted_by: "pseudonymise", tree: "originals" };
+      const s = step({ job: 69, state: "done", files: copy, waiting: 0, held: 0, partial: false, waiting_partial: false });
+      const v = stepView(at(originals, copy), s, subjects(4399), [], false, found);
+      expect(v).toMatchObject({ phase: "done", originals, copy, go: 0, counting: null });
+      expect(primaryOf(v, true, false)).toBeNull();
+      expect(railWords(v)).toBeNull();
+      expect(countingWords(v)).toBeNull();
+      expect(idsBox(v).big).toBe("4,399");
+    }
+  });
+
+  it("says the IDs box is on its way until the held IDs door answers, never 0", () => {
+    const s = step({ job: 69, state: "done", files: 30_654_432, waiting: 0, held: 0, partial: false, waiting_partial: false });
+    const reading = stepView(at(30_689_981, 30_654_432), s, null, [], false, null, { ids: true });
+    expect(reading.subjects).toBeNull();
+    expect(idsBox(reading)).toEqual({ big: "…", words: "subjects · coded by the key from an ID that is the same everywhere", caution: false });
+    // IDs of a type: their count on its way too, never "0 · none held"
+    const typed = stepView(at(3_173_424, 3_172_225, { identity: { id_type: "study-id", from: [{ field: "PatientID" }] } } as Partial<Dataset>), s, null, [], false, null, { ids: true });
+    expect(idsBox(typed)).toEqual({ big: "…", words: "IDs", caution: false });
+    // answered, the count
+    expect(idsBox(stepView(at(3_173_424, 3_172_225), s, subjects(388), [], false)).big).toBe("388");
+    // a door that does not answer here: not known, never 0
+    expect(idsBox(stepView(at(30_689_981, 30_654_432), s, null, [], false)).big).toBe("?");
+  });
+
+  it("leaves a dataset never run as it was while its summary is on its way", () => {
+    const never = at(7544, 0, { digests: { count: 0, first: null, last: null, recent: [] } } as Partial<Dataset>);
+    const v = stepView(never, null, subjects(0), [], false, null, { summary: "reading", ids: false });
+    expect(v).toMatchObject({ phase: "fresh", go: 7544, counting: null });
+    expect(primaryOf(v, false, false)?.label).toBe("Pseudonymise and sort 7,544 files");
+    expect(railWords(v)).toEqual({ what: "not yet", when: "next step", next: true });
+    expect(countingWords(v)).toBeNull();
+  });
+
+  it("keeps what an engine with no summary door gives, without the refused files as work", () => {
+    // no summary will come: the step offers the rest, as where a count stopped short, never the files the run refused
+    const v = stepView(at(30_689_981, 30_654_432), null, subjects(4399), [], false);
+    expect(v.phase).toBe("ready");
+    expect(primaryOf(v, false, false)?.label).toBe("Pseudonymise and sort the rest");
+    // whole counts that leave no file without its copy are done
+    expect(stepView(at(7544, 7544), null, subjects(10), [], false).phase).toBe("done");
   });
 });

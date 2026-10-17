@@ -435,7 +435,8 @@ describe("a dataset whose pseudonymise step ran (2026-10-17)", () => {
 
   it("takes no refused file for work: whole counts with nothing waiting are done, though the originals less the copy is not 0", () => {
     const small = dataset({ ...ident, trees: { originals: { path: "/x/derivatives/dcm-original", files: 7544, bytes: null }, anon: { path: "/x/derivatives/dcm-anon", files: 7444, last_written: null } } });
-    expect(nextStep(small, null)).toMatchObject({ word: "Identified" });
+    // a copy that holds files says a run ran: with no summary, the 100 the trees lack are never said to wait (2026-10-17)
+    expect(nextStep(small, null)).toMatchObject({ word: "Ready" });
     expect(nextStep(small, null, ran({ state: "waiting", files: 7444, waiting: 0, held: 0, partial: false, waiting_partial: false }))).toMatchObject({ word: "Ready" });
     // files no run has seen, and held files, are work still
     expect(nextStep(small, null, ran({ state: "waiting", files: 7000, waiting: 444, held: 0, partial: false, waiting_partial: false }))).toMatchObject({ word: "Identified", step: "pseudonymise" });
@@ -458,6 +459,73 @@ describe("a dataset whose pseudonymise step ran (2026-10-17)", () => {
   it("says a copy whose count stopped before it reached a file as not counted, never at least 0 files", () => {
     expect(pseudonymisedWords({ files: 0, waiting: 78570, partial: true, waiting_partial: true })).toBe("not counted yet");
     expect(stepWords(step("pseudonymised", { state: "running", files: 0, waiting: 78570, held: 0, partial: true, waiting_partial: true }), NOW).what).toBe("not counted yet");
+  });
+});
+
+describe("a dataset whose summary is not read yet (2026-10-17)", () => {
+  // production: two identified datasets whose pseudonymise run had finished said "Waits to be pseudonymised" on their cards,
+  // from the sources door's numbers alone, while their summaries took tens of seconds to read
+  const ran = { ...dataset().digests.recent[0], id: 9, pseudonymised: { files: 0, changed: 0, held: 0, job: 69 }, chain: { pseudonymize: 69, digest: 70, classify: [71] } };
+  const shape = (originals: number, copy: number, over: Partial<Dataset> = {}) =>
+    dataset({
+      state: "identified",
+      arrives: "identified",
+      held: { files: 0, identifiers: 0 },
+      trees: { originals: { path: "/x/derivatives/dcm-original", files: originals, bytes: null }, anon: { path: "/x/derivatives/dcm-anon", files: copy, last_written: null } },
+      digests: { count: 1, first: null, last: null, recent: [ran] },
+      ...over,
+    });
+  const SHAPES = [shape(30_689_981, 30_654_432), shape(3_173_424, 3_172_225)];
+
+  it("never says a dataset whose run finished waits to be pseudonymised", () => {
+    for (const d of SHAPES) {
+      const next = nextStep(d, null, null);
+      expect(next.word).not.toBe("Identified");
+      expect(next.step).not.toBe("pseudonymise");
+      expect(next).toMatchObject({ word: "Ready", step: "review", label: "Review 203" });
+      const line = cardLine(d, next, null);
+      expect(line).not.toBe("Waits to be pseudonymised");
+      expect(line).not.toContain("waits");
+      expect(line).toBe("788 sure · 203 need a look · 12 not sorted");
+    }
+  });
+
+  it("goes on as before once the summary says the run left nothing", () => {
+    for (const d of SHAPES) {
+      const copy = d.trees!.anon!.files!;
+      const s = summary({ steps: [step("pseudonymised", { job: 69, files: copy, waiting: 0, held: 0, partial: false, waiting_partial: false }), ...summary().steps] });
+      const next = nextStep(d, null, s);
+      expect(next).toMatchObject({ word: "Ready", step: "review" });
+      expect(cardLine(d, next, s)).not.toContain("pseudonymised");
+    }
+  });
+
+  it("says held IDs, which the sources door counts, and leaves a dataset never run waiting as before", () => {
+    const held = shape(30_689_981, 30_654_432, { held: { files: 516, identifiers: 4 } } as Partial<Dataset>);
+    const next = nextStep(held, null, null);
+    expect(next).toMatchObject({ word: "Identified", step: "pseudonymise" });
+    expect(cardLine(held, next, null)).toBe("4 IDs need a subject code");
+    const never = shape(7544, 0, { digests: { count: 0, first: null, last: null, recent: [] }, totals: { ...dataset().totals, stacks: 0, subjects: 0 } } as Partial<Dataset>);
+    const first = nextStep(never, null, null);
+    expect(first).toMatchObject({ word: "Identified", step: "pseudonymise" });
+    expect(cardLine(never, first, null)).toBe("Waits to be pseudonymised");
+  });
+
+  it("draws on the card what the sources door shows, and what it does not as not known yet, never as not yet", () => {
+    for (const d of SHAPES) {
+      // read and sorted the sources door shows; main scans, pictures and 3D views it does not
+      expect(railOf(d, null, true)).toEqual(["done", "done", "unknown", "unknown", "unknown", "unknown"]);
+      const sorted = { ...d, totals: { ...d.totals, unsorted: 0 } } as Dataset;
+      expect(railOf(sorted, null, true)).toEqual(["done", "done", "done", "unknown", "unknown", "unknown"]);
+      // read once the summary answers
+      expect(railOf(d, summary())).toEqual(["done", "done", "done", "done", "done", "run"]);
+    }
+    // a dataset never read has read nothing to sort, pick or picture
+    const never = dataset({ digests: { count: 0, first: null, last: null, recent: [] }, trees: { originals: null, anon: { path: "/x", files: 12, last_written: null } } });
+    expect(railOf(never, null, true)).toEqual(["done", "wait", "wait", "wait", "wait", "wait"]);
+    // an engine without the summary door says found, read and sorted, the rest waiting, as before
+    expect(railOf(SHAPES[0], null)).toEqual(["done", "done", "wait", "wait", "wait", "wait"]);
+    expect(stepsOfSources(SHAPES[0]).map((x) => x.state)).toEqual(["done", "done", "waiting", "waiting", "waiting", "waiting"]);
   });
 });
 

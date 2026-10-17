@@ -114,8 +114,12 @@ export const held = {
 
 /* ---------------------------------------------------------------- where the step is */
 
-/** The step's phase: never run, IDs without a code, ready to go, running, or done. */
-export type Phase = "fresh" | "codes" | "ready" | "running" | "done";
+/**
+ * The step's phase: never run, IDs without a code, ready to go, running, or
+ * done; or counting, while a run ran and the summary that says what it left
+ * is not read (2026-10-17), when the step offers nothing and says no next step.
+ */
+export type Phase = "fresh" | "codes" | "ready" | "running" | "done" | "counting";
 
 /** One held ID as a row of the step: its code now, or the one the map being rehearsed gives it. */
 export interface IdRow extends HeldId {
@@ -148,8 +152,20 @@ export interface StepView {
   go: number;
   /** `go` came from a count that stopped short of a large tree, or a run that was cut short: the run does at least that many, and with none counted, the rest. */
   goPartial: boolean;
-  /** The subjects the pseudonymised copy carries, and how many were coded without a map. */
-  subjects: HeldIds["subjects"];
+  /** The subjects the pseudonymised copy carries, and how many were coded without a map; null until the held IDs door answers, or where it does not. */
+  subjects: HeldIds["subjects"] | null;
+  /** The held IDs door is asked and has not answered yet: their counts are on their way, never 0. */
+  idsReading: boolean;
+  /** Why the step is counting: the summary is on its way, or its read failed; null in any other phase. */
+  counting: Unread["summary"] | null;
+}
+
+/** What the step has not read yet (2026-10-17): the dataset's summary, which says what a run left, and its held IDs. */
+export interface Unread {
+  /** The summary is served and has not been read: still on its way, or its read failed. */
+  summary?: "reading" | "failed";
+  /** The held IDs door is asked and has not answered yet. */
+  ids?: boolean;
 }
 
 /** Whether the dataset's originals are read as an ID that is the same everywhere: their subject codes come from the key and no map. */
@@ -174,16 +190,32 @@ export interface StepCounts {
   bytes: number | null;
   copy: number;
   copyPartial: boolean;
-  /** The originals no run has seen yet; refused files, which no run ever writes, are not among them where the engine says so. */
-  unseen: number;
+  /**
+   * The originals no run has seen yet; refused files, which no run ever writes, are not among them where the engine says so.
+   * Null where it is not known: a run ran, and no summary step says what it left (2026-10-17). It is never then the originals
+   * less the copy, which counts the files the run refused.
+   */
+  unseen: number | null;
   /** There may be more than `unseen`: a count stopped short of a large tree, or the newest run was cut short. */
   unseenPartial: boolean;
-  /** A run of the step ran: the summary names its job or says the step is done, or, with no summary step, a batch of the sources door was pseudonymised. */
+  /** A run of the step ran: the summary names its job or says the step is done, or, with no summary step, a batch of the sources door was pseudonymised or the copy holds files. */
   ran: boolean;
   /** The step's newest run failed: it is offered again, never read as done. */
   failed: boolean;
   /** Nothing is left to do: the engine says the step is done, or its whole counts leave no file waiting and none held. */
   done: boolean;
+}
+
+/**
+ * Whether a run of the step ran: the summary's step names its job or says it
+ * is done; with no summary step (the summary not read yet, or an engine with
+ * none), a batch of the sources door was pseudonymised, or the copy holds
+ * files already.
+ */
+export function ranOf(d: Pick<Dataset, "digests" | "trees">, step: SummaryStep | null): boolean {
+  if (step) return (step.job ?? null) !== null || step.state === "done";
+  const copied = d.trees?.anon?.files;
+  return (typeof copied === "number" && copied > 0) || (d.digests?.recent ?? []).some((b) => (b.pseudonymised ?? null) !== null || (b.chain?.pseudonymize ?? null) !== null);
 }
 
 /**
@@ -193,7 +225,10 @@ export interface StepCounts {
  * since. Never-seen files are the engine's `waiting` where the step counts
  * the copy whole; an engine before 1.0.0-alpha.89 counted the held and
  * refused files in it, so it is never taken above the originals less the copy
- * and the held files. Where the step has no counts, that difference stands.
+ * and the held files. Where the step has no counts, that difference stands
+ * for a dataset never run; once a run ran, it counts the files the run
+ * refused, so what is left is not known (2026-10-17), unless whole counts
+ * leave no file without its copy.
  */
 export function countsOf(d: Pick<Dataset, "trees" | "digests">, step: SummaryStep | null, found: SummaryStep | null, heldFiles: number): StepCounts {
   const tree = d.trees?.originals;
@@ -213,10 +248,12 @@ export function countsOf(d: Pick<Dataset, "trees" | "digests">, step: SummarySte
   const whole = fromStep && typeof step?.waiting === "number" && step.partial !== true;
   const left = originals === null ? null : Math.max(0, originals - copy - heldFiles);
   const waiting = step?.waiting ?? 0;
-  const unseen = whole ? (left === null ? waiting : Math.min(waiting, left)) : copyPartial || left === null ? 0 : left;
-  const unseenPartial = whole ? (typeof step?.waiting_partial === "boolean" ? step.waiting_partial : originalsPartial) : originalsPartial || copyPartial;
   // the summary's step says whether a run ran; without one (an engine before it, or the summary not read yet), the batches of the sources door
-  const ran = step ? (step.job ?? null) !== null || step.state === "done" : (d.digests?.recent ?? []).some((b) => (b.pseudonymised ?? null) !== null || (b.chain?.pseudonymize ?? null) !== null);
+  const ran = ranOf(d, step);
+  // a run ran and no step counts what it left: the trees' difference holds the files it refused, so only whole counts that leave none say none is left
+  const unknown = step === null && ran && !(left === 0 && !originalsPartial && !copyPartial);
+  const unseen = unknown ? null : whole ? (left === null ? waiting : Math.min(waiting, left)) : copyPartial || left === null ? 0 : left;
+  const unseenPartial = whole ? (typeof step?.waiting_partial === "boolean" ? step.waiting_partial : originalsPartial) : originalsPartial || copyPartial;
   const failed = step?.state === "failed";
   const held = typeof step?.held === "number" ? step.held : heldFiles;
   const done = !failed && (step?.state === "done" || (whole && waiting === 0 && step?.waiting_partial !== true && held === 0));
@@ -230,9 +267,12 @@ export function countsOf(d: Pick<Dataset, "trees" | "digests">, step: SummarySte
  * `running` is the engine's word that a run of the dataset's goes now, or the
  * desk's own act on the way. It is never run only while no run ever ran: a
  * finished or stopped run is never read as none, whatever a count that
- * stopped short says.
+ * stopped short says. `unread` says what is still on its way: while the
+ * summary is (2026-10-17), a dataset that is not plainly never run is
+ * counting, with no guess at what is left; and the held IDs' counts are said
+ * on their way, never 0.
  */
-export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds | null, matched: readonly Matched[], running: boolean, found: SummaryStep | null = null): StepView {
+export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds | null, matched: readonly Matched[], running: boolean, found: SummaryStep | null = null, unread: Unread = {}): StepView {
   const heldFiles = heldIds?.files ?? d.held?.files ?? 0;
   const c = countsOf(d, step, found, heldFiles);
   const byId = new Map(matched.map((m) => [m.id, m]));
@@ -247,24 +287,26 @@ export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds 
   const lacking = rows.filter((r) => !r.coded);
   const without = { ids: lacking.length, files: lacking.reduce((s, r) => s + r.files, 0) };
   // the never-seen files and the held ones whose ID has a code
-  const go = c.unseen + rows.filter((r) => r.coded && r.state !== "waits").reduce((s, r) => s + r.files, 0);
+  const go = (c.unseen ?? 0) + rows.filter((r) => r.coded && r.state !== "waits").reduce((s, r) => s + r.files, 0);
   // a dataset whose held files the engine counts but does not list yet has IDs without a code all the same
   const unlisted = heldIds === null && (d.held?.identifiers ?? 0) > 0;
-  // nothing counted to go, but the rest is not known (a count stopped short, a run cut short) or the run stopped: the rest is offered
-  const rest = c.unseenPartial || c.failed;
+  // nothing counted to go, but the rest is not known (a count stopped short, a run cut short, no step to say what a run left) or the run stopped: the rest is offered
+  const rest = c.unseen === null || c.unseenPartial || c.failed;
   const phase: Phase = running
     ? "running"
     : !c.ran && c.copy === 0 && heldFiles === 0 && rows.length === 0
       ? "fresh"
-      : without.ids > 0 || unlisted
-        ? "codes"
-        : go > 0
-          ? "ready"
-          : c.done
-            ? "done"
-            : rest
-              ? "ready"
-              : "done";
+      : unread.summary
+        ? "counting"
+        : without.ids > 0 || unlisted
+          ? "codes"
+          : go > 0
+            ? "ready"
+            : c.done
+              ? "done"
+              : rest
+                ? "ready"
+                : "done";
   return {
     phase,
     originals: c.originals,
@@ -277,9 +319,17 @@ export function stepView(d: Dataset, step: SummaryStep | null, heldIds: HeldIds 
     coded,
     without: unlisted ? { ids: d.held?.identifiers ?? 0, files: d.held?.files ?? 0 } : without,
     go: phase === "fresh" ? (c.originals ?? 0) : go,
-    goPartial: phase === "fresh" ? c.originalsPartial || c.originals === null : c.unseenPartial || (c.failed && go === 0),
-    subjects: heldIds?.subjects ?? { coded: 0, generated: 0 },
+    goPartial: phase === "fresh" ? c.originalsPartial || c.originals === null : c.unseen === null || c.unseenPartial || (c.failed && go === 0),
+    subjects: heldIds?.subjects ?? null,
+    idsReading: heldIds === null && unread.ids === true,
+    counting: phase === "counting" ? (unread.summary ?? null) : null,
   };
+}
+
+/** The step's one quiet line while it counts: what is left is on its way, or could not be counted; null in any other phase. */
+export function countingWords(v: Pick<StepView, "phase" | "counting">): string | null {
+  if (v.phase !== "counting") return null;
+  return v.counting === "failed" ? "What is left could not be counted." : "Counting what is left…";
 }
 
 /**
@@ -332,10 +382,19 @@ export function chipOf(v: StepView, open: boolean): { words: string; tone: "caut
   return null;
 }
 
-/** The middle box: how many IDs there are and how many have a code. */
+/** A count the held IDs door has not given: on its way, or not known; never 0 (2026-10-17). */
+export function idsUnknown(v: Pick<StepView, "idsReading">): string {
+  return v.idsReading ? "…" : "?";
+}
+
+/** The middle box: how many IDs there are and how many have a code; while the held IDs door has not answered, their count is on its way. */
 export function idsBox(v: StepView): { big: string; words: string; caution: boolean } {
-  if (v.personnummer) return { big: n(v.subjects.coded), words: `${v.subjects.coded === 1 ? "subject" : "subjects"} · coded by the key from an ID that is the same everywhere`, caution: false };
+  if (v.personnummer) {
+    const coded = v.subjects?.coded ?? null;
+    return { big: coded === null ? idsUnknown(v) : n(coded), words: `${coded === 1 ? "subject" : "subjects"} · coded by the key from an ID that is the same everywhere`, caution: false };
+  }
   if (v.phase === "fresh") return { big: "?", words: "found at the first run", caution: false };
+  if (v.idsReading) return { big: idsUnknown(v), words: "IDs", caution: false };
   const all = v.rows.length > 0 ? v.rows.length : v.without.ids;
   if (all === 0) return { big: "0", words: "none held", caution: false };
   if (v.coded === 0) return { big: n(all), words: `${all === 1 ? "ID" : "IDs"} · none has a subject code yet`, caution: true };
@@ -343,9 +402,9 @@ export function idsBox(v: StepView): { big: string; words: string; caution: bool
   return { big: `${n(v.coded)} of ${n(all)}`, words: "have a subject code", caution: false };
 }
 
-/** The pseudonymised step on the rail while it waits on a person: what it needs, and that it is next. */
+/** The pseudonymised step on the rail while it waits on a person: what it needs, and that it is next; nothing while it counts. */
 export function railWords(v: StepView): { what: string; when: string; next: boolean } | null {
-  if (v.phase === "running" || v.phase === "done") return null;
+  if (v.phase === "running" || v.phase === "done" || v.phase === "counting") return null;
   if (v.phase === "fresh") return { what: "not yet", when: "next step", next: true };
   if (v.phase === "codes") return { what: v.coded > 0 ? `${n(v.coded)} of ${ids(v.rows.length)} have a subject code` : `${ids(v.without.ids)} ${v.without.ids === 1 ? "needs" : "need"} a subject code`, when: "next step", next: true };
   return { what: `${goWords(v)} to go`, when: "next step", next: true };
@@ -638,10 +697,11 @@ export function outcomeWords(pseudonymise: RanJob | null, read: RanJob | null, r
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
-/** Where the codes came from, for the done step's middle box. */
+/** Where the codes came from, for the done step's middle box; nothing of them while the held IDs are not read (2026-10-17). */
 export function codesWords(subjects: HeldIds["subjects"] | null, personnummer: boolean): string {
   if (personnummer) return "coded by the key";
-  if (!subjects || subjects.coded === 0) return "none yet";
+  if (!subjects) return "subjects";
+  if (subjects.coded === 0) return "none yet";
   const given = subjects.coded - subjects.generated;
   return [given > 0 ? `${n(given)} from a map` : null, subjects.generated > 0 ? `${n(subjects.generated)} generated` : null].filter(Boolean).join(" · ");
 }
