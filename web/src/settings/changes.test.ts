@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Gate T31 (record 55 ruling 35 (c)): which setup steps the supervisor makes
-// for this person, the one line said where a step stays at the machine, and
-// what each form must hold before it is sent, as the engine holds it again.
+// for this person; where it does not, who makes the step for a person who may
+// not work on the install, or the one line said where it stays at the machine
+// (G2); and what each form must hold before it is sent, as the engine holds
+// it again.
 
 import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
 import { GRANTS, type Grant } from "../grants";
-import { atTheMachine, firstRefusal, folderRefusal, modelBody, modelRefusal, NO_SIGNIN, serves, signinBody, signinRefusal } from "./changes";
+import { firstRefusal, folderRefusal, instead, modelBody, modelRefusal, NO_SIGNIN, serves, signinBody, signinRefusal } from "./changes";
 import type { Change, Install } from "./supervise";
 
-const caps = (grants: readonly Grant[] = GRANTS) => ({ person: { grants: [...grants] } }) as unknown as Capabilities;
+/** A person holding these grants, at a desk that names a supervisor or none. */
+const caps = (grants: readonly Grant[] = GRANTS, supervisor: string | null = null) => ({ person: { grants: [...grants] }, desk: { settings: { supervisor_url: supervisor } } }) as unknown as Capabilities;
+const SUPERVISOR = "http://127.0.0.1:7300";
 const install = (served: Change[], over: Partial<Install> = {}) => ({ service: "systemd user units", changes: { served, wait: null }, ...over }) as unknown as Install;
 
 describe("which steps the supervisor makes", () => {
@@ -22,14 +26,40 @@ describe("which steps the supervisor makes", () => {
     expect(serves(caps(), { service: "systemd user units" } as unknown as Install, "restore")).toBe(false);
   });
 
-  it("says in one line why a step stays at the machine, and nothing where it does not", () => {
-    expect(atTheMachine(caps(), install(["backups"]), "backups")).toBeNull();
-    expect(atTheMachine(caps(), null, "backups")).toBe("This desk reaches no supervisor, so at the machine:");
-    expect(atTheMachine(caps(["install:see"]), install(["backups"]), "backups")).toBe("Changed by an administrator, at the machine:");
-    expect(atTheMachine(caps(), install([], { service: "none" }), "backups")).toBe("This install runs no services, so at the machine:");
-    expect(atTheMachine(caps(), { service: "systemd" } as unknown as Install, "backups")).toBe("This supervisor is older than the button, so at the machine:");
+  it("stands nothing in the button's place where the supervisor makes the step for this person", () => {
+    expect(instead(caps(), install(["backups"]), "backups")).toBeNull();
+    expect(instead(caps(GRANTS, SUPERVISOR), install(["signin", "backups", "model", "restore"]), "restore")).toBeNull();
+  });
+
+  it("says why a step stays at the machine, above its command, to a person who may work on the install (G2)", () => {
+    const machine = (line: string) => ({ line, command: true });
+    expect(instead(caps(), null, "backups")).toEqual(machine("This desk reaches no supervisor, so at the machine:"));
+    // a supervisor is named and did not answer: the desk reaches one, so it never says it reaches none
+    expect(instead(caps(GRANTS, SUPERVISOR), null, "backups")).toEqual(machine("The supervisor did not answer, so at the machine:"));
+    expect(instead(caps(), install([], { service: "none" }), "backups")).toEqual(machine("This install runs no services, so at the machine:"));
+    expect(instead(caps(), { service: "systemd" } as unknown as Install, "backups")).toEqual(machine("This supervisor is older than the button, so at the machine:"));
     const waits = { service: "systemd", changes: { served: [], wait: "the helper on this machine was written before it could change the setup: update this install" } } as unknown as Install;
-    expect(atTheMachine(caps(), waits, "signin")).toBe("The helper on this machine was written before it could change the setup: update this install. Until then, at the machine:");
+    expect(instead(caps(), waits, "signin")).toEqual(machine("The helper on this machine was written before it could change the setup: update this install. Until then, at the machine:"));
+  });
+
+  it("says who makes a step, with no command and no place, to a person who may not work on the install, supervisor or none (G2)", () => {
+    const who = { line: "An administrator gives the engine a folder.", command: false };
+    const looks = ["install:see", "database:see", "database:work"] as const;
+    // the supervisor serves the step
+    expect(instead(caps(looks, SUPERVISOR), install(["backups"]), "backups")).toEqual(who);
+    // the desk reads no install for a person who may not work on it, though a supervisor keeps it
+    expect(instead(caps(["database:see", "database:work"], SUPERVISOR), null, "backups")).toEqual(who);
+    // no supervisor, or one that cannot make the step
+    expect(instead(caps(["database:see", "database:work"]), null, "backups")).toEqual(who);
+    expect(instead(caps(looks), install([], { service: "none" }), "backups")).toEqual(who);
+    expect(instead(caps(looks), { service: "systemd" } as unknown as Install, "backups")).toEqual(who);
+    const lines = (["signin", "backups", "model", "restore"] as const).map((c) => instead(caps([]), null, c));
+    expect(lines).toEqual([
+      { line: "An administrator changes how people sign in.", command: false },
+      { line: "An administrator gives the engine a folder.", command: false },
+      { line: "An administrator starts Kvasir again or names a model server.", command: false },
+      { line: "An administrator puts an archive back.", command: false },
+    ]);
   });
 });
 

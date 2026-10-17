@@ -23,7 +23,7 @@ import { MODES } from "../settings/identity";
 import { AddPerson } from "../settings/IdentityPage";
 import { keptRunning, where } from "../settings/install";
 import { serves } from "../settings/changes";
-import { AtTheMachine, BackupFolderDialog, ModelServerDialog, SignInDialog } from "../settings/InstallChange";
+import { BackupFolderDialog, Instead, ModelServerDialog, SignInDialog } from "../settings/InstallChange";
 import { backupsKept, usersKept } from "../settings/kept";
 import { kvasir } from "../settings/kvasir";
 import { supervise, type Install } from "../settings/supervise";
@@ -336,7 +336,7 @@ function BackupsBody(props: { caps: Capabilities; install: Install | null; place
           )}
         </div>
       )}
-      {archives !== null && dir === null && <AtTheMachine caps={caps} install={install} change="backups" command="nils setup" />}
+      {archives !== null && dir === null && <Instead caps={caps} install={install} change="backups" command="nils setup" />}
       {giving && <BackupFolderDialog home={status?.home ?? null} current={null} onClose={() => setGiving(false)} onDone={onDone} />}
       <div className="row actions">
         {refusal === null && !backup && dir && (
@@ -400,7 +400,7 @@ function SigninBody({ caps, install, onDone }: { caps: Capabilities; install: In
           </button>
         </div>
       ) : (
-        <AtTheMachine caps={caps} install={install} change="signin" command="nils setup" />
+        <Instead caps={caps} install={install} change="signin" command="nils setup" />
       )}
       {changing && <SignInDialog caps={caps} onClose={() => setChanging(false)} />}
       {adding && users.value && (
@@ -471,7 +471,7 @@ function ModelBody({ caps, install, onDone }: { caps: Capabilities; install: Ins
         </div>
       )}
       <Acted acting={restart.acting} />
-      <AtTheMachine caps={caps} install={install} change="model" command="nils setup" />
+      <Instead caps={caps} install={install} change="model" command="nils setup" />
       {naming && <ModelServerDialog onClose={() => setNaming(false)} onDone={onDone} />}
     </>
   );

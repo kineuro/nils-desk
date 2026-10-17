@@ -6,7 +6,10 @@
 // engine is given a folder; and with no supervisor, or one older than the
 // buttons, the command stays under one line that says why. On Parts and the
 // Engine page the by-hand twins are gone where a supervisor does the work,
-// and stay where the install runs no services (step 19.3).
+// and stay where the install runs no services (step 19.3). A person who may
+// not work on the install reads who makes a step, never a command or "at the
+// machine", supervisor or none; and Backups prints back up and rehearse only
+// where the engine queues no jobs, so no button can (G2).
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -36,12 +39,13 @@ afterEach(() => {
 
 const DOORS = ["GET /api/backups", "GET /api/status", "POST /api/jobs", "GET /api/jobs"];
 
-function caps(grants: readonly Grant[] = SETS.admin.grants): Capabilities {
+/** A person with these grants; `supervisor` names the one the desk is configured with, `assistant` an assistant that answers while Kvasir does not. */
+function caps(grants: readonly Grant[] = SETS.admin.grants, more: { doors?: string[]; supervisor?: string; assistant?: boolean } = {}): Capabilities {
   return {
     engine: {
       engine: { name: "nils", version: "1.0.0-alpha.88" },
       contracts: { openapi: "7", suite: "3" },
-      doors: DOORS,
+      doors: more.doors ?? DOORS,
       policy: [],
       auth: "oidc",
       principal: "astrid@desk",
@@ -53,10 +57,19 @@ function caps(grants: readonly Grant[] = SETS.admin.grants): Capabilities {
       ingest_roots: [],
     },
     kvasir: null,
-    assistant: null,
+    assistant: more.assistant ? { stations: [{ id: "concierge" }] } : null,
     apps: [],
     person: { subject: "astrid", display_name: "Astrid", grants: [...grants], detail: "sensitive", groups: ["Admins"] },
-    desk: { version: "1.0.0-alpha.69", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
+    desk: {
+      version: "1.0.0-alpha.69",
+      mode: "local",
+      contracts: {},
+      engine_reachable: true,
+      contract_mismatch: null,
+      login: null,
+      signed_in: true,
+      ...(more.supervisor ? { settings: { origin: "http://127.0.0.1:7200", supervisor_url: more.supervisor } } : {}),
+    },
   } as unknown as Capabilities;
 }
 
@@ -134,6 +147,8 @@ const draw = async (page: string, c: Capabilities, i: Install | null) => {
   await settle();
 };
 const codes = () => [...host.querySelectorAll("code")].map((c) => c.textContent ?? "");
+/** The commands the setup steps, back up, rehearse and restore print; the keys panel's own is another step's. */
+const commands = () => codes().filter((c) => /^(nils (setup|backup|verify|restore)|systemctl|docker|launchctl)\b/u.test(c));
 
 describe("a restore, on Backups", () => {
   it("is one button where the supervisor puts an archive back, and puts it back only once the dialog is pressed", async () => {
@@ -156,19 +171,23 @@ describe("a restore, on Backups", () => {
     await draw("backups", caps(), null);
     expect(host.textContent).toContain("This desk reaches no supervisor, so at the machine:");
     expect(codes().some((c) => c.startsWith(`nils restore /home/ada/nils/backups/${ARCHIVE} --yes`))).toBe(true);
-    // with no supervisor the backup's twin is printed, and said so
-    expect(host.textContent).toContain("This desk reaches no supervisor; the same by hand:");
+    // back up and rehearse are engine jobs, so their buttons stand with no supervisor and no twin is printed (G2)
+    expect(button(host, "Back up now")).not.toBeNull();
+    expect(codes().some((c) => c.startsWith("nils backup") || c.startsWith("nils verify"))).toBe(false);
     expect(button(host, "Put it back")).toBeNull();
     await draw("backups", caps(), install({}, [], "the helper on this machine was written before it could put an archive back: update this install"));
     expect(host.textContent).toContain("The helper on this machine was written before it could put an archive back: update this install. Until then, at the machine:");
     expect(button(host, "Put it back")).toBeNull();
   });
 
-  it("is not offered to a person without work on the install", async () => {
+  it("is not offered to a person without work on the install, who reads who puts an archive back and nothing to copy (G2)", async () => {
     doors(backups());
     await draw("backups", caps(["install:see", "database:see", "database:work"]), install());
     expect(button(host, "Put it back")).toBeNull();
-    expect(host.textContent).toContain("Changed by an administrator, at the machine:");
+    expect(host.textContent).toContain("An administrator puts an archive back.");
+    expect(host.querySelector("#restore-archive")).toBeNull();
+    expect(host.textContent).not.toContain("at the machine");
+    expect(commands()).toEqual([]);
   });
 });
 
@@ -227,5 +246,165 @@ describe("the by-hand twins (step 19.3)", () => {
     await draw("parts", caps(), install({ service: "none", services: [] }, []));
     expect(host.textContent).toContain("To have them kept running, run setup again at the machine:");
     expect(codes()).toEqual(["nils setup"]);
+  });
+});
+
+describe("who reads what where a step's button does not stand (G2)", () => {
+  // may see the install and do the pages' own work, but not work on the install
+  const LOOKS: Grant[] = ["install:see", "database:see", "database:work", "identity:see", "identity:work", "assistant:use"];
+  // may not see the install: the desk reads no install for this person, though a supervisor keeps it
+  const BACKUPS: Grant[] = ["database:see", "database:work"];
+  const SUPERVISOR = "http://127.0.0.1:7300";
+  /** An install with Kvasir, kept running beside the engine, which the desk does not reach. */
+  const withKvasir = (served?: Change[]) =>
+    install(
+      {
+        parts: {
+          engine: { version: "1.0.0-alpha.88", kind: "binary", path: "/home/ada/.local/bin/nils" },
+          kvasir: { version: "1.0.0-alpha.8", kind: "binary", path: "/home/ada/.local/bin/kvasir" },
+        },
+        services: [
+          { part: "engine", unit: "nils-engine", watcher: "systemd", running: true },
+          { part: "gateway", unit: "kvasir", watcher: "systemd", running: true },
+        ],
+      },
+      served,
+    );
+  const nowhere = () => {
+    expect(host.textContent).not.toContain("at the machine");
+    expect(host.textContent).not.toContain("reaches no supervisor");
+    expect(commands()).toEqual([]);
+  };
+  /** Each case drawn afresh, so a page keeps nothing it read for the case before. */
+  const fresh = async (page: string, c: Capabilities, i: Install | null) => {
+    act(() => root.unmount());
+    root = createRoot(host);
+    await draw(page, c, i);
+  };
+  const opened = async (card: RegExp) => {
+    act(() => button(host, card)!.click());
+    await settle();
+  };
+
+  describe("where the supervisor serves the step", () => {
+    it("is a button and no command, for a person with work on the install: a folder, a model, how people sign in", async () => {
+      doors(backups(null));
+      await fresh("backups", caps(), install());
+      expect(button(host, "Give the engine a folder")).not.toBeNull();
+      expect(commands()).toEqual([]);
+      engine(() => undefined);
+      await fresh("setup", caps(SETS.admin.grants, { assistant: true }), withKvasir());
+      expect(button(host, "Start Kvasir again")).not.toBeNull();
+      expect(button(host, "Use a model server")).not.toBeNull();
+      await opened(/Decide who signs in/u);
+      expect(button(host, "Change how people sign in")).not.toBeNull();
+      expect(commands()).toEqual([]);
+    });
+
+    it("is one plain line saying who does it, for a person without that work: no button, no command, no machine", async () => {
+      doors(backups(null));
+      await fresh("backups", caps(LOOKS), install());
+      expect(button(host, "Give the engine a folder")).toBeNull();
+      expect(host.textContent).toContain("An administrator gives the engine a folder.");
+      nowhere();
+      engine(() => undefined);
+      await fresh("setup", caps(LOOKS, { assistant: true }), withKvasir());
+      expect(button(host, "Start Kvasir again")).toBeNull();
+      expect(button(host, "Use a model server")).toBeNull();
+      expect(host.textContent).toContain("An administrator starts Kvasir again or names a model server.");
+      nowhere();
+      await opened(/Decide who signs in/u);
+      expect(button(host, "Change how people sign in")).toBeNull();
+      expect(host.textContent).toContain("An administrator changes how people sign in.");
+      nowhere();
+    });
+
+    it("is the same line for a person who may not see the install, and the desk never says it reaches no supervisor where one is named", async () => {
+      doors(backups(null));
+      await fresh("backups", caps(BACKUPS, { supervisor: SUPERVISOR }), null);
+      expect(host.textContent).toContain("An administrator gives the engine a folder.");
+      nowhere();
+      doors(backups());
+      await fresh("backups", caps(BACKUPS, { supervisor: SUPERVISOR }), null);
+      expect(host.textContent).toContain("An administrator puts an archive back.");
+      nowhere();
+      // a person with work on the install whose supervisor did not answer: the command, and the line that says so
+      doors(backups(null));
+      await fresh("backups", caps(SETS.admin.grants, { supervisor: SUPERVISOR }), null);
+      expect(host.textContent).toContain("The supervisor did not answer, so at the machine:");
+      expect(host.textContent).not.toContain("reaches no supervisor");
+      expect(commands()).toEqual(["nils setup"]);
+    });
+  });
+
+  describe("where no supervisor serves the install", () => {
+    it("keeps the command under the one line that says why, for a person with work on the install", async () => {
+      doors(backups(null));
+      await fresh("backups", caps(), null);
+      expect(host.textContent).toContain("This desk reaches no supervisor, so at the machine:");
+      expect(commands()).toEqual(["nils setup"]);
+      doors(backups());
+      await fresh("backups", caps(), install({ service: "none", services: [] }, []));
+      expect(host.textContent).toContain("This install runs no services, so at the machine:");
+      expect(commands()).toEqual([`nils restore /home/ada/nils/backups/${ARCHIVE} --yes --registry /home/ada/nils/registry`]);
+      engine(() => undefined);
+      await fresh("setup", caps(SETS.admin.grants, { assistant: true }), null);
+      expect(host.textContent).toContain("This desk reaches no supervisor, so at the machine:");
+      expect(commands()).toEqual(["nils setup"]);
+      await opened(/Decide who signs in/u);
+      expect(button(host, "Change how people sign in")).toBeNull();
+      expect(commands()).toEqual(["nils setup"]);
+    });
+
+    it("says who does it, and no command, to a person without that work", async () => {
+      doors(backups(null));
+      await fresh("backups", caps(BACKUPS), null);
+      expect(host.textContent).toContain("An administrator gives the engine a folder.");
+      nowhere();
+      doors(backups());
+      await fresh("backups", caps(LOOKS), install({ service: "none", services: [] }, []));
+      expect(host.textContent).toContain("An administrator puts an archive back.");
+      nowhere();
+      engine(() => undefined);
+      await fresh("setup", caps(LOOKS, { assistant: true }), null);
+      expect(host.textContent).toContain("An administrator starts Kvasir again or names a model server.");
+      nowhere();
+      await opened(/Decide who signs in/u);
+      expect(host.textContent).toContain("An administrator changes how people sign in.");
+      nowhere();
+    });
+  });
+
+  describe("back up and rehearse, on Backups", () => {
+    it("are buttons and never a printed command where the engine queues jobs, supervisor or none", async () => {
+      const cases: [Capabilities, Install | null][] = [
+        [caps(), null],
+        [caps(), install()],
+        [caps(SETS.admin.grants, { supervisor: SUPERVISOR }), null],
+        [caps(BACKUPS), null],
+      ];
+      for (const [c, i] of cases) {
+        doors(backups());
+        await fresh("backups", c, i);
+        expect(button(host, "Back up now")).not.toBeNull();
+        expect(button(host, "Rehearse a restore")).not.toBeNull();
+        expect(codes().some((x) => x.startsWith("nils backup") || x.startsWith("nils verify"))).toBe(false);
+      }
+    });
+
+    it("are printed only where the engine queues no jobs, so no button can: for a person with work on the install, under the line that says why; for anyone else, who does it", async () => {
+      const queueless = DOORS.filter((d) => d !== "POST /api/jobs");
+      doors(backups());
+      await fresh("backups", caps(SETS.admin.grants, { doors: queueless }), null);
+      expect(button(host, "Back up now")).toBeNull();
+      expect(button(host, "Rehearse a restore")).toBeNull();
+      expect(host.textContent).toContain("This engine queues no jobs, so at the machine:");
+      expect(codes()).toEqual(expect.arrayContaining(["nils backup --rehearse --keep 14", `nils verify /home/ada/nils/backups/${ARCHIVE} --rehearse`]));
+      doors(backups());
+      await fresh("backups", caps(BACKUPS, { doors: queueless }), null);
+      expect(button(host, "Back up now")).toBeNull();
+      expect(host.textContent).toContain("An administrator backs the registry up.");
+      nowhere();
+    });
   });
 });

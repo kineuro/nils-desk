@@ -1,11 +1,15 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The Database page's words: an archive, the backups and their schedule, and
-// where the registry lives.
+// where the registry lives; and where back up and rehearse are printed by
+// hand (gate T31, G2).
 
 import { describe, expect, it } from "vitest";
+import type { Capabilities } from "../capabilities";
+import { GRANTS, type Grant } from "../grants";
 import type { Place } from "../objects/client";
 import {
   backupByHand,
+  backupInstead,
   backupsTag,
   checkedTag,
   draftBody,
@@ -107,6 +111,15 @@ describe("the backups", () => {
     expect(backupByHand(14)).toBe("nils backup --rehearse --keep 14");
     expect(backupByHand(null)).toBe("nils backup --rehearse");
     expect(rehearseByHand("/srv/backup/nils", "78195d1d-20260913013736")).toBe("nils verify /srv/backup/nils/78195d1d-20260913013736 --rehearse");
+  });
+
+  it("are printed by hand only where the engine queues no jobs, so no button can, and then only to a person who may work on the install (G2)", () => {
+    const caps = (doors: string[], grants: readonly Grant[] = GRANTS) => ({ engine: { doors }, person: { grants: [...grants] } }) as unknown as Capabilities;
+    // the buttons queue engine jobs, which need no supervisor
+    expect(backupInstead(caps(["POST /api/jobs"]))).toBeNull();
+    expect(backupInstead(caps(["POST /api/jobs"], ["database:see", "database:work"]))).toBeNull();
+    expect(backupInstead(caps([]))).toEqual({ line: "This engine queues no jobs, so at the machine:", command: true });
+    expect(backupInstead(caps([], ["database:see", "database:work"]))).toEqual({ line: "An administrator backs the registry up.", command: false });
   });
 
   it("check a schedule before the door does, and send only what the door takes", () => {

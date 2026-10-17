@@ -4,8 +4,9 @@
 // the schedule and each archive's last check, the keys, which are in no
 // backup (made from a passphrase or taken away, record 55, ruling 35 (c)),
 // what was fixed when the registry was made, and its calendar. A backup and a
-// rehearsal are jobs the engine's queue runs; the page follows each until it
-// is over, with the command a person would run by hand beside the buttons.
+// rehearsal are jobs the engine's queue runs, with or without a supervisor;
+// the page follows each until it is over. Their commands are printed only
+// where the engine queues no jobs, so no button can (gate T31, G2).
 
 import { useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
@@ -19,12 +20,13 @@ import { Command } from "../ui/Command";
 import { Icon } from "../ui/Icon";
 import { BlindShare } from "../review/S1Settings";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
-import { atTheMachine, serves } from "./changes";
-import { AtTheMachine, BackupFolderDialog, RestoreDialog } from "./InstallChange";
+import { instead, serves } from "./changes";
+import { BackupFolderDialog, Instead, RestoreDialog } from "./InstallChange";
 import { KeysPanel } from "./KeysPanel";
 import { databaseStats } from "./stats";
 import {
   backupByHand,
+  backupInstead,
   backupsTag,
   checkedTag,
   database,
@@ -150,6 +152,9 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
   const refused = draft ? draftRule(draft) : null;
   // a person who may see the database reads it; every change asks for work on it
   const backupsLocked = needsWork(caps, "Changing the schedule, backing up or rehearsing a restore", [["database:work", "the Backups page"]]);
+  // the buttons queue engine jobs, which need no supervisor; by hand only where the engine queues none
+  const queues = served(caps, "POST /api/jobs");
+  const byHand = backupsLocked === null ? backupInstead(caps) : null;
   const calendarLocked = needsWork(caps, "Changing the calendar", [["database:work", "the Backups page"]]);
 
   const backUp = () =>
@@ -276,7 +281,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                         </button>
                       </div>
                     ) : (
-                      <AtTheMachine caps={caps} install={install} change="backups" command="nils setup" />
+                      <Instead caps={caps} install={install} change="backups" command="nils setup" />
                     )}
                   </div>
                 </div>
@@ -393,7 +398,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                     </table>
                   </div>
                   {backups.archives.length > SHOWN && <p className="meta">and {backups.archives.length - SHOWN} older</p>}
-                  {backupsLocked === null ? (
+                  {backupsLocked === null && queues && (
                     <div className="row actions">
                       <button type="button" className="button" disabled={backup.working} onClick={backUp}>
                         Back up now
@@ -403,18 +408,20 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                       </button>
                       <span className="meta">A rehearsal checks the newest archive and opens every store in it, without applying it.</span>
                     </div>
-                  ) : (
-                    <p className="meta">{backupsLocked}</p>
                   )}
+                  {backupsLocked !== null && <p className="meta">{backupsLocked}</p>}
                   <Acted acting={backup.acting} />
                   <Acted acting={rehearsal.acting} />
-                  {install === null && (
-                    <div className="at-machine">
-                      <span className="meta">This desk reaches no supervisor; the same by hand:</span>
-                      <Command text={backupByHand(backups.schedule.keep)} />
-                      {newest && <Command text={rehearseByHand(backups.dir, newest.name)} />}
-                    </div>
-                  )}
+                  {byHand &&
+                    (byHand.command ? (
+                      <div className="at-machine">
+                        <span className="meta">{byHand.line}</span>
+                        <Command text={backupByHand(backups.schedule.keep)} />
+                        {newest && <Command text={rehearseByHand(backups.dir, newest.name)} />}
+                      </div>
+                    ) : (
+                      <p className="meta">{byHand.line}</p>
+                    ))}
                   {newest && <Restore caps={caps} install={install} home={status?.home ?? null} dir={backups.dir} archives={backups.archives.filter((x) => x.ours)} onDone={load} />}
                 </>
               )}
@@ -526,7 +533,9 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
  * archive back (record 55 ruling 35 (c)), one button: it stops the engine,
  * puts the archive back after archiving the registry as it stands, and
  * starts the engine again. Where it does not, the procedure in three printed
- * steps (D50), each ready to copy, under the line that says why.
+ * steps (D50), each ready to copy, under the line that says why. A person who
+ * may not work on the install reads who puts an archive back, and nothing to
+ * choose or copy (gate T31, G2).
  */
 function Restore(props: { caps: Capabilities; install: Install | null; home: string | null; dir: string | null; archives: readonly Archive[]; onDone: () => void }) {
   const { caps, install, home, dir, archives, onDone } = props;
@@ -534,8 +543,17 @@ function Restore(props: { caps: Capabilities; install: Install | null; home: str
   const [putting, setPutting] = useState(false);
   const archive = archives.find((a) => a.name === chosen) ?? archives[0] ?? null;
   if (!archive) return null;
-  const button = serves(caps, install, "restore");
-  const line = atTheMachine(caps, install, "restore");
+  const said = instead(caps, install, "restore");
+  if (said !== null && !said.command) {
+    return (
+      <details className="restore">
+        <summary>Restore an archive</summary>
+        <div className="restore-body">
+          <p className="meta">{said.line}</p>
+        </div>
+      </details>
+    );
+  }
   const steps = restoreSteps(install, home, dir, archive.name);
   return (
     <details className="restore">
@@ -555,7 +573,7 @@ function Restore(props: { caps: Capabilities; install: Install | null; home: str
             </select>
           </div>
         </div>
-        {button ? (
+        {said === null ? (
           <div className="row actions">
             <button type="button" className="button secondary" onClick={() => setPutting(true)}>
               Put it back
@@ -565,7 +583,7 @@ function Restore(props: { caps: Capabilities; install: Install | null; home: str
         ) : (
           <>
             <p className="meta">The key store is not in the archive and stays as it is.</p>
-            <p className="meta">{line}</p>
+            <p className="meta">{said.line}</p>
             <ol className="restore-steps">
               {steps.map((s) => (
                 <li key={s.words}>

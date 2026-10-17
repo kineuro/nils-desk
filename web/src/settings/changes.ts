@@ -2,8 +2,9 @@
 // The setup steps the supervisor makes (record 55 ruling 35 (c), gate T31):
 // how people sign in, the engine's backup folder, the stations' model server,
 // and an archive put back. Whether this install's supervisor makes one for
-// this person, what a form must hold before it is sent, and the one line
-// said where the step stays at the machine.
+// this person, what a form must hold before it is sent, and what stands where
+// the button does not: who makes the step, or the one line said where it
+// stays at the machine.
 
 import type { Capabilities } from "../capabilities";
 import { may } from "../grants";
@@ -14,15 +15,40 @@ export function serves(caps: Capabilities, install: Install | null, change: Chan
   return install !== null && may(caps, "install:work") && (install.changes?.served ?? []).includes(change);
 }
 
+/** What a person reads where a button does not stand for them: one line, and whether a command follows it. */
+export interface Said {
+  line: string;
+  /** Only for a person who may work on the install, where the step stays at the machine. */
+  command: boolean;
+}
+
+/** Who makes each step, said to a person who may not: no command, and no place (gate T31, G2). */
+const WHO: Record<Change, string> = {
+  signin: "An administrator changes how people sign in.",
+  backups: "An administrator gives the engine a folder.",
+  model: "An administrator starts Kvasir again or names a model server.",
+  restore: "An administrator puts an archive back.",
+};
+
 /**
- * The one line said above a command that stays printed, or null where the
- * button stands instead. Where the supervisor waits for its helper to be
- * written again, that is the line.
+ * What stands where a step's button does not, or null where the button
+ * stands (gate T31, G2). A person who may not work on the install reads who
+ * makes the step, wherever it is made. One who may reads why it stays at the
+ * machine, above its command.
  */
-export function atTheMachine(caps: Capabilities, install: Install | null, change: Change): string | null {
+export function instead(caps: Capabilities, install: Install | null, change: Change): Said | null {
   if (serves(caps, install, change)) return null;
-  if (!install) return "This desk reaches no supervisor, so at the machine:";
-  if (!may(caps, "install:work")) return "Changed by an administrator, at the machine:";
+  if (!may(caps, "install:work")) return { line: WHO[change], command: false };
+  return { line: whyAtTheMachine(caps, install), command: true };
+}
+
+/**
+ * Why a step stays at the machine: no supervisor configured, or one that did
+ * not answer; its helper waiting to be written again; an install that runs
+ * no services; or a supervisor older than the button.
+ */
+function whyAtTheMachine(caps: Capabilities, install: Install | null): string {
+  if (!install) return caps.desk.settings?.supervisor_url ? "The supervisor did not answer, so at the machine:" : "This desk reaches no supervisor, so at the machine:";
   if (install.changes?.wait) return `${capital(install.changes.wait)}. Until then, at the machine:`;
   if (install.service === "" || install.service === "none") return "This install runs no services, so at the machine:";
   return "This supervisor is older than the button, so at the machine:";
