@@ -27,6 +27,7 @@ import { MoreMenu } from "../settings/cards";
 import { sizeWords } from "../settings/database";
 import { Dialog } from "../ui/Dialog";
 import { Icon } from "../ui/Icon";
+import { useReads } from "../ui/kept";
 import { jobs as jobsDoor, packFor, type ChainedJob, type Dataset } from "./datasets";
 import { cancelRefusal } from "./now";
 import type { LiveJobs } from "./Now";
@@ -166,36 +167,30 @@ export function DatasetDetail(props: DatasetDetailProps) {
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [runningNow]);
+  // the log and the picks are read again when the summary moves, once at a time (2026-10-17)
+  const logs = useReads(
+    (name) => jobsDoor.ofDataset(name, 10),
+    (_, r) => setLog(r.jobs),
+    () => setLog(null),
+  );
+  const picksRead = useReads(
+    (name) => picksSummary.dataset(name),
+    (_, p) => {
+      setPicks(p.lines);
+      setNothing(p.nothing);
+    },
+    () => {
+      setPicks(null);
+      setNothing(null);
+    },
+  );
+  const seesPicks = maySeePicks(caps);
   useEffect(() => {
-    if (!readsLog) return;
-    let alive = true;
-    jobsDoor
-      .ofDataset(d.name, 10)
-      .then((r) => alive && setLog(r.jobs))
-      .catch(() => alive && setLog(null));
-    return () => {
-      alive = false;
-    };
-  }, [d.name, readsLog, moved]);
+    if (readsLog) logs.fresh(d.name);
+  }, [logs, d.name, readsLog, moved]);
   useEffect(() => {
-    if (!maySeePicks(caps)) return;
-    let alive = true;
-    picksSummary
-      .dataset(d.name)
-      .then((p) => {
-        if (!alive) return;
-        setPicks(p.lines);
-        setNothing(p.nothing);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setPicks(null);
-        setNothing(null);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [caps, d.name, moved]);
+    if (seesPicks) picksRead.fresh(d.name);
+  }, [picksRead, seesPicks, d.name, moved]);
 
   const queue = (command: string[], name: string, words: string) => {
     setAsking(true);

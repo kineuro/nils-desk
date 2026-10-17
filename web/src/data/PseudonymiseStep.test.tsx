@@ -18,7 +18,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import servedPolicy from "../../test/fixtures/pseudonymize_tags.json";
-import { button, caps7a, dialogs, engine, settle, type Call } from "../../test/safeWayIn";
+import { button, caps7a, dialogs, engine, settle as settleReal, type Call } from "../../test/safeWayIn";
 import { placesKept } from "../objects/kept";
 import { DataPage } from "./DataPage";
 import type { Dataset } from "./datasets";
@@ -26,6 +26,16 @@ import { policyKept } from "./policy";
 import type { DatasetSummary, SummaryStep } from "./summary";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+/** Every promise the last act started, settled; under the test's own clock, by running its timers as far as now. */
+async function settle(times = 6) {
+  if (!vi.isFakeTimers()) return settleReal(times);
+  for (let i = 0; i < times; i++) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+}
 
 let host: HTMLDivElement;
 let root: Root;
@@ -582,7 +592,7 @@ describe("the pseudonymise step, in the dataset", () => {
   });
 
   it("says on the page that the run started while it goes, and lets the words go once it is over", async () => {
-    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
     try {
       let phase: "before" | "running" | "over" = "before";
       const d = dataset({ held: { files: 0, identifiers: 0 }, identity: { id_type: "personnummer", from: [{ field: "PatientID" }] } });
@@ -617,7 +627,35 @@ describe("the pseudonymise step, in the dataset", () => {
     } finally {
       vi.useRealTimers();
     }
-  });
+  }, 30_000);
+
+  it("asks the held IDs once while their door has not answered, however often the summary moves under a run (2026-10-17)", async () => {
+    // production: the held IDs door took 13 s on a large dataset, and each read of the summary asked it again
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval"] });
+    try {
+      let files = 0;
+      const d = dataset();
+      await page(d, {}, (c) => (c.url === "/api/datasets/study-identified/summary" ? { status: 200, body: summaryOf(d, { state: "running", job: 60, files: (files += 1000) }) } : undefined));
+      const answered = globalThis.fetch;
+      let reads = 0;
+      vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+        if (!String(input).startsWith("/api/linkage/held/ids")) return answered(input, init);
+        reads += 1;
+        return new Promise<Response>(() => undefined);
+      });
+      for (let i = 0; i < 4; i++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(5_000);
+        });
+        await settle(6);
+      }
+      // the summary moved on each of its reads; the held IDs were asked once, and that read is still out
+      expect(files).toBeGreaterThan(4_000);
+      expect(reads).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  }, 30_000);
 
   it("stays closed on a done dataset unless asked, and offers the dataset's settings and its originals in its menu", async () => {
     const done = dataset({ held: { files: 0, identifiers: 0 }, trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1 }, anon: { path: "/srv/x/derivatives/dcm-anon", files: ORIGINALS, last_written: AT } } });

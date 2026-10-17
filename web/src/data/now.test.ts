@@ -156,6 +156,34 @@ describe("the live feed", () => {
     expect(poll).toHaveBeenCalledTimes(2);
   });
 
+  it("reads at once when asked, never while a read is out but right after it answers, and leaves a live stream alone (2026-10-17)", async () => {
+    let answer: ((r: { jobs: ChainedJob[] }) => void) | null = null;
+    const poll = vi.fn(() => new Promise<{ jobs: ChainedJob[] }>((done) => (answer = done)));
+    const feed = liveJobs({ served: false, poll, onJobs: vi.fn(), onLive: vi.fn(), everyMs: 3000 });
+    expect(poll).toHaveBeenCalledTimes(1);
+    feed.now();
+    feed.now();
+    expect(poll).toHaveBeenCalledTimes(1);
+    answer!({ jobs: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    // the read asked meanwhile, once, right after the answer
+    expect(poll).toHaveBeenCalledTimes(2);
+    answer!({ jobs: [] });
+    await vi.advanceTimersByTimeAsync(0);
+    feed.now();
+    expect(poll).toHaveBeenCalledTimes(3);
+    feed();
+    feed.now();
+    expect(poll).toHaveBeenCalledTimes(3);
+    // a stream says each change by itself: asking reads nothing
+    const source = fakeStream();
+    const reads = vi.fn(async () => ({ jobs: [] }));
+    const live = liveJobs({ served: true, open: () => source, poll: reads, onJobs: vi.fn(), onLive: vi.fn() });
+    live.now();
+    expect(reads).not.toHaveBeenCalled();
+    live();
+  });
+
   it("reads every few seconds from the start where the engine serves no stream", async () => {
     const onLive = vi.fn();
     const poll = vi.fn(async () => ({ jobs: [] }));

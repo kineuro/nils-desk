@@ -20,6 +20,7 @@ import { MoreMenu } from "../settings/cards";
 import { messageOf } from "../settings/common";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
+import { useReads } from "../ui/kept";
 import { cohortActs, MembersDialog, RenameDialog, RetireDialog } from "./CohortPage";
 import { cohorts, type Cohort, type CohortDetail as Detail, type CohortRelease } from "./cohorts";
 import { jobs as jobsDoor } from "./datasets";
@@ -74,42 +75,36 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
   // what the list said of it: the cohort's own door is read again when it moves
   const moved = `${row.name}:${row.subjects}:${row.stacks}:${row.waiting}:${row.releases}:${row.last_joined ?? ""}`;
 
+  // its own door and its picks, each read once at a time (2026-10-17)
+  const docs = useReads(
+    (name) => cohorts.get(name),
+    (_, d) => {
+      setDoc(d);
+      setDocWhy(null);
+    },
+    (_, e) => {
+      setDoc(null);
+      setDocWhy(messageOf(e));
+    },
+  );
+  const picksRead = useReads(
+    (name) => picksSummary.cohort(name),
+    (_, p) => setPicks(p),
+    () => setPicks(null),
+  );
+  const seesPicks = maySeePicks(caps) && served(caps, PICKS_SUMMARY_DOOR);
   useEffect(() => {
-    let alive = true;
-    cohorts
-      .get(row.name)
-      .then((d) => {
-        if (!alive) return;
-        setDoc(d);
-        setDocWhy(null);
-      })
-      .catch((e: unknown) => {
-        if (!alive) return;
-        setDoc(null);
-        setDocWhy(messageOf(e));
-      });
-    return () => {
-      alive = false;
-    };
-  }, [row.name, moved, asked]);
+    docs.fresh(row.name);
+  }, [docs, row.name, moved, asked]);
   useEffect(() => {
-    if (!maySeePicks(caps) || !served(caps, PICKS_SUMMARY_DOOR)) return;
-    let alive = true;
-    picksSummary
-      .cohort(row.name)
-      .then((p) => alive && setPicks(p))
-      .catch(() => alive && setPicks(null));
-    return () => {
-      alive = false;
-    };
-  }, [caps, row.name, moved, asked]);
-  // while a step of it waits or runs, its document is read again every few seconds
+    if (seesPicks) picksRead.fresh(row.name);
+  }, [picksRead, seesPicks, row.name, moved, asked]);
+  // while a step of it waits or runs, its document and its picks are read again a while after each answer
   const busy = (doc?.steps ?? []).some((x) => x.state === "queued" || x.state === "running");
   useEffect(() => {
-    if (!busy) return;
-    const t = setInterval(() => setAsked((x) => x + 1), 5_000);
-    return () => clearInterval(t);
-  }, [busy]);
+    docs.follow(busy ? [row.name] : []);
+    picksRead.follow(busy && seesPicks ? [row.name] : []);
+  }, [docs, picksRead, busy, seesPicks, row.name]);
 
   const c = { ...row, ...(doc ?? {}) } as Cohort & Partial<Detail>;
   const a = cohortActions(caps, row);

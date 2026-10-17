@@ -11,7 +11,7 @@
 // one primary button. A card is chosen on arrival, the first that needs a
 // person, so the next step is always on screen.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -21,7 +21,7 @@ import { messageOf } from "../settings/common";
 import type { Install } from "../settings/supervise";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
-import { useKept } from "../ui/kept";
+import { useKept, useReads } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { AddDataset } from "./AddDataset";
 import { CohortDetail } from "./CohortDetail";
@@ -87,6 +87,9 @@ function without<T>(r: Record<string, T>, key: string): Record<string, T> {
 export type Chosen = { kind: "dataset"; name: string } | { kind: "cohort"; name: string } | null;
 
 const n = (v: number) => v.toLocaleString("en-US");
+
+/** The one key of a door that answers a whole list. */
+const LIST = "list";
 
 /** What the address chooses: a cohort or a dataset named after the question mark, or the dataset it names (#data/datasets/<name>, and its viewer's /view). */
 export function chosenOf(dataset: string | null | undefined, query: Record<string, string> | undefined): Chosen {
@@ -162,87 +165,86 @@ export function DataPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the address's own words
   }, [dataset, query?.cohort, query?.dataset]);
 
-  const read = useCallback(() => {
-    sources
-      .list()
-      .then((r) => setLoad({ kind: "ready", list: r.sources }))
-      .catch((e: Error) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: e.message })));
-  }, []);
-  const readCohorts = useCallback(() => {
-    if (!readsCohorts) return;
-    cohortDoors
-      .list()
-      .then((all) => {
-        setCohortList(all.filter((c) => !c.retired_at));
-        setCohortsWhy(null);
-      })
-      .catch((e: unknown) => {
-        // a list not read is said, never drawn as an empty one
-        setCohortList((was) => was ?? []);
-        setCohortsWhy(messageOf(e));
-      });
-  }, [readsCohorts]);
+  // 2026-10-17: each list and each dataset's summary is read once at a time; one asked while its read is out waits for that answer
+  // (a summary of 30 to 40 s was asked every 5 s, ten of them out at once), and an answer the page let go of never lands
+  const sourceReads = useReads(
+    () => sources.list(),
+    (_, r) => setLoad({ kind: "ready", list: r.sources }),
+    (_, e) => setLoad((was) => (was.kind === "ready" ? was : { kind: "failed", why: (e as Error).message })),
+  );
+  const cohortReads = useReads(
+    () => cohortDoors.list(),
+    (_, all) => {
+      setCohortList(all.filter((c) => !c.retired_at));
+      setCohortsWhy(null);
+    },
+    (_, e) => {
+      // a list not read is said, never drawn as an empty one
+      setCohortList((was) => was ?? []);
+      setCohortsWhy(messageOf(e));
+    },
+  );
+  // each dataset's summary, for the steps on its card and its detail; one that cannot be read is said so
+  const summaryReads = useReads(
+    (name) => summaries.read(name),
+    (name, s) => {
+      setSums((was) => ({ ...was, [name]: s }));
+      setSumsWhy((was) => (name in was ? without(was, name) : was));
+    },
+    (name, e) => {
+      setSums((was) => (name in was ? without(was, name) : was));
+      setSumsWhy((was) => ({ ...was, [name]: messageOf(e) }));
+    },
+  );
 
   useEffect(() => {
-    read();
-    readCohorts();
+    sourceReads.read(LIST);
+    if (readsCohorts) cohortReads.read(LIST);
     if (served(caps, "GET /api/places")) void placesKept.ensure();
-  }, [read, readCohorts, caps]);
+  }, [sourceReads, cohortReads, readsCohorts, caps]);
 
   // a root is where folders live, never a dataset
   const list = load.kind === "ready" ? load.list.filter((d) => !isRoot(d)) : [];
   const names = list.map((d) => d.name).join("\n");
 
-  // each dataset's summary, for the steps on its card and its detail; one that cannot be read is said so, and a dataset gone from the list takes its summary with it
-  const readSums = useCallback(
-    (only?: string[]) => {
-      if (!summarises) return;
-      for (const name of only ?? names.split("\n").filter(Boolean)) {
-        summaries
-          .read(name)
-          .then((s) => {
-            setSums((was) => ({ ...was, [name]: s }));
-            setSumsWhy((was) => (name in was ? without(was, name) : was));
-          })
-          .catch((e: unknown) => {
-            setSums((was) => (name in was ? without(was, name) : was));
-            setSumsWhy((was) => ({ ...was, [name]: messageOf(e) }));
-          });
-      }
-    },
-    [summarises, names],
-  );
+  // a listed dataset's summary is read once it is listed; a dataset gone from the list takes its summary with it, and a read of it still out answers to nobody
+  const listed = useRef<Set<string>>(new Set());
   useEffect(() => {
-    readSums();
-  }, [readSums]);
-  useEffect(() => {
-    const listed = new Set(names.split("\n").filter(Boolean));
-    setSums((was) => (Object.keys(was).every((k) => listed.has(k)) ? was : Object.fromEntries(Object.entries(was).filter(([k]) => listed.has(k)))));
-    setSumsWhy((was) => (Object.keys(was).every((k) => listed.has(k)) ? was : Object.fromEntries(Object.entries(was).filter(([k]) => listed.has(k)))));
-  }, [names]);
+    const now = new Set(names.split("\n").filter(Boolean));
+    for (const name of listed.current) if (!now.has(name)) summaryReads.drop(name);
+    listed.current = now;
+    if (summarises) for (const name of now) summaryReads.ensure(name);
+    setSums((was) => (Object.keys(was).every((k) => now.has(k)) ? was : Object.fromEntries(Object.entries(was).filter(([k]) => now.has(k)))));
+    setSumsWhy((was) => (Object.keys(was).every((k) => now.has(k)) ? was : Object.fromEntries(Object.entries(was).filter(([k]) => now.has(k)))));
+  }, [names, summarises, summaryReads]);
 
-  // what runs: read again when a job ends, and every few seconds while one of a dataset runs
-  const openIds = (jobs.open ?? []).filter((j) => j.state !== "done" && j.state !== "failed" && j.state !== "cancelled").map((j) => j.id);
-  const openKey = openIds.join(",");
+  /** Everything read again from now: a job started or ended, or the page did something. */
+  const readAgain = () => {
+    sourceReads.fresh(LIST);
+    if (readsCohorts) cohortReads.fresh(LIST);
+    if (summarises) for (const name of names.split("\n").filter(Boolean)) summaryReads.fresh(name);
+  };
+
+  // what runs: read again when a job starts or ends, and, while a step of a dataset runs, the list and its summary a while after each answer
+  const openKey = jobs.open === null ? null : jobs.open.filter((j) => j.state !== "done" && j.state !== "failed" && j.state !== "cancelled").map((j) => j.id).join(",");
+  const lastOpen = useRef<string | null>(null);
   const running = Object.values(sums)
     .filter((s) => names.split("\n").includes(s.dataset) && s.steps.some((x) => x.state === "running" || x.state === "queued"))
     .map((s) => s.dataset);
   const runningKey = running.join("\n");
   useEffect(() => {
-    if (load.kind !== "ready") return;
-    read();
-    readCohorts();
-    readSums();
+    const was = lastOpen.current;
+    lastOpen.current = openKey;
+    // the jobs' first answer changes nothing the page read
+    if (was === null || openKey === null || was === openKey || load.kind !== "ready") return;
+    readAgain();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a change in the open jobs is what reads again
   }, [openKey]);
   useEffect(() => {
-    if (runningKey === "") return;
-    const t = setInterval(() => {
-      read();
-      readSums(runningKey.split("\n"));
-    }, 5_000);
-    return () => clearInterval(t);
-  }, [runningKey, read, readSums]);
+    const following = runningKey === "" ? [] : runningKey.split("\n");
+    sourceReads.follow(following.length > 0 ? [LIST] : []);
+    summaryReads.follow(following);
+  }, [runningKey, sourceReads, summaryReads]);
 
   // words about a dataset's run go once it is over: seen running and now not, or a step of it finished since the words were said
   useEffect(() => {
@@ -295,9 +297,7 @@ export function DataPage({
     void placesKept.refresh().catch(() => undefined);
     onChanged();
     jobs.refresh();
-    read();
-    readCohorts();
-    readSums();
+    readAgain();
   };
 
   /** A dataset's step: a dialog for what it still needs, else its job queued; the promise ends once the engine answered. */

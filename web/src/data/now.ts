@@ -277,28 +277,45 @@ export interface LiveOptions {
   url?: string;
 }
 
+/** What `liveJobs` answers: a function that stops the feed, and `now`, which asks for the open jobs at once where they are read. */
+export type LiveFeed = (() => void) & { now: () => void };
+
 /**
  * The open jobs, live: from the engine's event stream where it serves one
  * and admits this reader, else read every few seconds from the jobs door.
  * The stream refuses with 503 once the engine's cap of open streams is
  * reached, which the browser reports as an error, so any error falls back to
- * reading. Answers a function that stops both.
+ * reading. Answers a function that stops both, whose `now` reads the jobs
+ * again at once (a job was queued or stopped): never while a read is out,
+ * but right after it answers (2026-10-17). The stream says a change by
+ * itself.
  */
-export function liveJobs(o: LiveOptions): () => void {
+export function liveJobs(o: LiveOptions): LiveFeed {
   const every = o.everyMs ?? 3000;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let source: EventSourceLike | null = null;
+  let polling = false;
+  /** A read is out, and one more is asked for once it answers. */
+  let out = false;
+  let again = false;
 
   const readAgain = () => {
     if (stopped) return;
+    if (timer) clearTimeout(timer);
+    timer = null;
+    out = true;
+    again = false;
     o.poll()
       .then((r) => {
         if (!stopped) o.onJobs(r.jobs);
       })
       .catch(() => undefined)
       .finally(() => {
-        if (!stopped) timer = setTimeout(readAgain, every);
+        out = false;
+        if (stopped) return;
+        if (again) readAgain();
+        else timer = setTimeout(readAgain, every);
       });
   };
   const fallBack = (why: string) => {
@@ -307,6 +324,7 @@ export function liveJobs(o: LiveOptions): () => void {
       source = null;
     }
     o.onLive({ kind: "polling", why });
+    polling = true;
     readAgain();
   };
 
@@ -338,10 +356,17 @@ export function liveJobs(o: LiveOptions): () => void {
       fallBack(heard ? "the stream closed" : "the stream refused");
     });
   }
-  return () => {
+  const stop = () => {
     stopped = true;
     if (timer) clearTimeout(timer);
     if (source) source.close();
     source = null;
   };
+  return Object.assign(stop, {
+    now: () => {
+      if (stopped || !polling) return;
+      if (out) again = true;
+      else readAgain();
+    },
+  });
 }

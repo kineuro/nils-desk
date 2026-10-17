@@ -12,9 +12,10 @@ import { may } from "../grants";
 import { href } from "../routes";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
+import { useReads } from "../ui/kept";
 import { jobs as jobsDoor, type ChainedJob } from "./datasets";
 import { WorkersReady } from "../ops/WorkersReady";
-import { backgroundWords, isOpen, jobCards, jobsWords, liveJobs, type JobCard, type Live } from "./now";
+import { backgroundWords, isOpen, jobCards, jobsWords, liveJobs, type JobCard, type Live, type LiveFeed } from "./now";
 import { plainError } from "./plain";
 
 export interface LiveJobs {
@@ -34,18 +35,20 @@ export function useLiveJobs(caps: Capabilities): LiveJobs {
   const [failed, setFailed] = useState<ChainedJob[]>([]);
   const [live, setLive] = useState<Live>({ kind: "still" });
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
-  const [asked, setAsked] = useState(0);
   const openIds = useRef<string>("");
+  /** The feed running now, which a refresh asks to read at once rather than starting it again (2026-10-17). */
+  const feed = useRef<LiveFeed | null>(null);
   const reads = served(caps, "GET /api/jobs");
   const streams = served(caps, "GET /api/events");
 
+  // the failed jobs, read once at a time, and again right after a read out answers
+  const failedRead = useReads(
+    () => jobsDoor.recent(50),
+    (_, r) => setFailed(r.jobs.filter((j) => j.state === "failed")),
+  );
   const readFailed = useCallback(() => {
-    if (!reads) return;
-    jobsDoor
-      .recent(50)
-      .then((r) => setFailed(r.jobs.filter((j) => j.state === "failed")))
-      .catch(() => undefined);
-  }, [reads]);
+    if (reads) failedRead.fresh("failed");
+  }, [reads, failedRead]);
 
   useEffect(() => {
     if (!reads) return;
@@ -66,15 +69,22 @@ export function useLiveJobs(caps: Capabilities): LiveJobs {
         setOpen(jobs);
       },
     });
-    return stop;
-  }, [reads, streams, readFailed, asked]);
+    feed.current = stop;
+    return () => {
+      feed.current = null;
+      stop();
+    };
+  }, [reads, streams, readFailed]);
 
   return {
     open,
     failed: failed.filter((j) => !dismissed.has(j.id)),
     live,
     dismiss: (id) => setDismissed((d) => new Set(d).add(id)),
-    refresh: () => setAsked((a) => a + 1),
+    refresh: () => {
+      readFailed();
+      feed.current?.now();
+    },
   };
 }
 

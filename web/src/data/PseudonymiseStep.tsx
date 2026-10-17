@@ -24,7 +24,7 @@ import { ops } from "../ops/client";
 import { href } from "../routes";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
-import { useKept } from "../ui/kept";
+import { useKept, useReads } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { bringInBody, bringInName, jobs, packFor, type Dataset } from "./datasets";
 import { PurgeDialog, VaultDialog } from "./Originals";
@@ -121,10 +121,15 @@ export function usePseudonymise(caps: Capabilities, d: Dataset, s: DatasetSummar
   // the found step counts the originals whole once a run walked them, where the probe stopped short
   const found = stepOf(s, "found");
   const moved = [step?.state, step?.files, step?.held, step?.job, d.held?.files, d.held?.identifiers, d.trees?.anon?.files].join(":");
+  // the held IDs door can take seconds on a large dataset: read once at a time, again after the read out answers (2026-10-17)
+  const heldRead = useReads(
+    (name) => held.ids(name),
+    (_, h) => setHeldIds(h),
+    () => setHeldIds(null),
+  );
   const reload = useCallback(() => {
-    if (!lists) return;
-    held.ids(d.name).then(setHeldIds, () => setHeldIds(null));
-  }, [lists, d.name]);
+    if (lists) heldRead.fresh(d.name);
+  }, [lists, d.name, heldRead]);
   useEffect(() => {
     reload();
   }, [reload, moved]);
@@ -806,20 +811,24 @@ export function StepDialogs(props: {
   const policy = useKept(policyKept);
   const places = useKept(placesKept);
   const open = opened?.kind ?? null;
-  // what an act on the originals would do, read when a dialog that offers one opens
+  const looks = Boolean(d.trees?.originals) && served(caps, "GET /api/places/{id}/originals");
+  const tags = served(caps, "GET /api/pseudonymize/tags");
+  const places_ = served(caps, "GET /api/places");
+  // what an act on the originals would do, read when a dialog that offers one opens; not again on each read of the capabilities, which
+  // answer anew every 15 s, as the look counts the originals and can take long on a large dataset (2026-10-17)
   useEffect(() => {
-    if (open === null || !d.trees?.originals || !served(caps, "GET /api/places/{id}/originals")) return;
+    if (open === null || !looks) return;
     let alive = true;
     originalsDoor.look(d.id).then(
       (l) => alive && setLook(l),
       () => alive && setLook(null),
     );
-    if (served(caps, "GET /api/pseudonymize/tags")) void policyKept.ensure();
-    if (served(caps, "GET /api/places")) void placesKept.ensure();
+    if (tags) void policyKept.ensure();
+    if (places_) void placesKept.ensure();
     return () => {
       alive = false;
     };
-  }, [open, caps, d.id, d.trees?.originals]);
+  }, [open, looks, tags, places_, d.id]);
   if (opened === null) return null;
   const done = (words: string) => {
     setOpened(null);
