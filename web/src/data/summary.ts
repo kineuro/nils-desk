@@ -13,7 +13,7 @@ import { may } from "../grants";
 import type { Cohort, Join, CohortRelease } from "./cohorts";
 import type { Dataset } from "./datasets";
 import { declared } from "./layout";
-import type { NextStep } from "./steps";
+import { readStopped, type NextStep } from "./steps";
 
 export const SUMMARY_DOOR = "GET /api/datasets/{name}/summary";
 
@@ -178,17 +178,19 @@ function segmentOf(state: StepState | undefined): Segment {
 
 /**
  * A card's six segments: from the summary where it was read, else what the
- * sources door already says (found, read and sorted), the rest waiting.
+ * sources door already says (found, read and sorted), the rest waiting. A
+ * read that stopped part way waits to be read again, though the summary
+ * counts it among the reads (2026-10-17).
  */
 export function railOf(d: Dataset, s: DatasetSummary | null): Segment[] {
-  if (s) return CARD_STEPS.map((name) => segmentOf(s.steps.find((x) => x.step === name)?.state));
+  if (s) return CARD_STEPS.map((name) => (name === "read" && readStopped(d, s) ? "wait" : segmentOf(s.steps.find((x) => x.step === name)?.state)));
   const unknown = stateOf(d) === "unknown" || d.arrives === "undeclared";
   // a tree's count that stopped short before it reached a file counted nothing, and says nothing of the tree (2026-10-17)
   const counted = (t: { files: number | null; partial?: boolean } | null | undefined) => (typeof t?.files === "number" && !(t.partial === true && t.files === 0) ? t.files : null);
   const files = counted(d.trees?.anon) ?? counted(d.trees?.originals) ?? 0;
   const reading = d.digests.recent.some((b) => b.state === "running");
   const found: Segment = !unknown && (files ?? 0) > 0 ? "done" : d.digests.count > 0 ? "done" : "wait";
-  const read: Segment = reading ? "run" : d.digests.count > 0 ? "done" : "wait";
+  const read: Segment = reading ? "run" : d.digests.count > 0 && !readStopped(d) ? "done" : "wait";
   const t = d.totals;
   const sorted: Segment = t.stacks > 0 && (t.unsorted ?? 0) === 0 && d.digests.recent.some((b) => (b.classified ?? 0) > 0) ? "done" : "wait";
   return [found, read, sorted, "wait", "wait", "wait"];
@@ -355,6 +357,12 @@ export function addsWords(s: SummaryStep): string | null {
   return s.step === "post_contrast" ? `${n(scans)} T1 brain, contrast unknown` : `${n(scans)} with no body part`;
 }
 
+/** The read step on the detail's rail once the newest read stopped part way (2026-10-17): what the reads read, that it stopped, and that reading again is next. */
+export function readAgainWords(s: SummaryStep | null): { what: string; when: string; next: boolean } {
+  const files = typeof s?.files === "number" ? s.files : 0;
+  return { what: files > 0 ? `${n(files)} read · stopped` : "stopped", when: "next step", next: true };
+}
+
 /** A step of the detail's rail in three short lines: its name, what it did, and when. */
 export function stepWords(s: SummaryStep, now = new Date()): StepWords {
   const title = TITLE[s.step];
@@ -514,6 +522,8 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
   const running = s?.steps.find((x) => x.state === "running");
   if (running) return `${TITLE[running.step]}: running now`;
   if (d.digests.count === 0) return "Not read yet";
+  // the newest read was cancelled or failed part way: reading again is next (2026-10-17)
+  if (next.step === "read-again") return "The last read stopped part way";
   const sure = s ? s.sure : (d.totals.sure ?? d.totals.stacks - d.totals.to_sort);
   const look = s ? s.need_a_look : d.totals.to_sort;
   const unsorted = s ? s.unsorted : (d.totals.unsorted ?? 0);

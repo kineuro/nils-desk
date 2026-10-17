@@ -18,7 +18,7 @@ import type { ChainedJob } from "../ask/client";
 import { DoorError } from "../ask/client";
 import { placesKept } from "../objects/kept";
 import { DataPage } from "./DataPage";
-import type { Dataset, SourcesAnswer } from "./datasets";
+import { packPicks, type Dataset, type SourcesAnswer } from "./datasets";
 import { SetIdsDialog, SortFilesDialog } from "./FinishDataset";
 import { moveAskedOf } from "./layout";
 import { jobCards, ofPeople } from "./now";
@@ -83,6 +83,60 @@ describe("a dataset's one next step", () => {
     // a dataset with a job running says so and takes no second press
     const running = { ...toSort, digests: { ...toSort.digests, recent: [{ ...readOnce, state: "running" }] } } as Dataset;
     expect(nextStep(running)).toMatchObject({ label: "Running", busy: true });
+  });
+
+  it("reads again where the newest read stopped part way, before any sort (2026-10-17)", () => {
+    // the sources door lists a dataset's reads newest first
+    const newest = (state: string) => ({ ...toSort, digests: { ...toSort.digests, count: 2, recent: [{ ...readOnce, id: 12, state }, { ...readOnce, id: 11 }] } }) as Dataset;
+    expect(nextStep(newest("cancelled"))).toMatchObject({ word: "Ready", step: "read-again", label: "Read again", busy: false });
+    expect(nextStep(newest("failed"))).toMatchObject({ word: "Ready", step: "read-again", label: "Read again" });
+    // a read that finished after the one that stopped: the sort, as before
+    expect(nextStep(newest("done"))).toMatchObject({ word: "Ready", step: "sort", label: "Sort" });
+    const later = { ...toSort, digests: { ...toSort.digests, count: 2, recent: [{ ...readOnce, id: 13 }, { ...readOnce, id: 12, state: "cancelled" }] } } as Dataset;
+    expect(nextStep(later)).toMatchObject({ step: "sort" });
+    // a read that runs: running, one press at a time
+    expect(nextStep(newest("running"))).toMatchObject({ step: "running", label: "Running", busy: true });
+    // the summary says the newest read failed where no batch of it says so
+    const failed = { steps: [{ step: "read" as const, state: "failed" as const, job: 77, started_at: null, finished_at: null, progress: null }] };
+    expect(nextStep(toSort, null, failed)).toMatchObject({ step: "read-again" });
+    // a dataset whose pseudonymise step waits does that first
+    const ident = { ...newest("cancelled"), state: "identified", arrives: "identified", trees: identified.trees } as Dataset;
+    expect(nextStep(ident)).toMatchObject({ word: "Identified", step: "pseudonymise" });
+  });
+
+  it("queues a bring-in's chain from its read on, under the stopped read's name: never the sort alone nor a pseudonymise step", () => {
+    const day = new Date("2026-10-17T12:00:00Z");
+    // the read cancelled part way was named as its bring-in: the read again and the score take that name, so the score takes the stacks of both reads
+    const cut = { ...toSort, cohort: null, digests: { ...toSort.digests, count: 1, recent: [{ ...readOnce, id: 12, name: "ward-e-2026-10-16", state: "cancelled" }] } } as Dataset;
+    expect(stepCommand(cut, "read-again", "mri", day)).toEqual({
+      command: ["digest", "@ward-e", "--name", "ward-e-2026-10-16"],
+      name: "ward-e-2026-10-16",
+      then: [["fingerprint"], ["classify", "--pack", "mri"], ["score", "@ward-e", "--name", "ward-e-2026-10-16"]],
+    });
+    // a dataset that feeds a cohort, with a pack that declares picks: the bring-in's own pick run, before the score
+    const fed = { ...cut, cohort: "ms-followup" } as Dataset;
+    expect(stepCommand(fed, "read-again", "mri", day, true)?.then).toEqual([
+      ["fingerprint"],
+      ["classify", "--pack", "mri"],
+      ["pick", "run", "--dataset", "ward-e", "--pack", "mri"],
+      ["score", "@ward-e", "--name", "ward-e-2026-10-16"],
+    ]);
+    // no pick run named where the pack declares none, the dataset feeds no cohort or picks nothing after a sort: the engine picks after the sort by itself
+    expect(stepCommand(fed, "read-again", "mri", day, false)?.then).toHaveLength(3);
+    expect(stepCommand(cut, "read-again", "mri", day, true)?.then).toHaveLength(3);
+    expect(stepCommand({ ...fed, picks: "off" } as Dataset, "read-again", "mri", day, true)?.then).toHaveLength(3);
+    // a read whose newest batch finished (the summary said the newest read failed) takes today's name; no pack named, none passed
+    expect(stepCommand(toSort, "read-again", null, day)).toEqual({ command: ["digest", "@ward-e", "--name", "ward-e-2026-10-17"], name: "ward-e-2026-10-17", then: [["fingerprint"], ["classify"], ["score", "@ward-e", "--name", "ward-e-2026-10-17"]] });
+  });
+
+  it("knows a pack that declares main scans to pick by the roles the engine lists for it", () => {
+    const with_ = (packs: { name: string; version: string; main_roles?: string[] }[]) => ({ ...caps7a([]), engine: { ...caps7a([]).engine!, packs } });
+    expect(packPicks(with_([{ name: "mri", version: "1.3.0", main_roles: ["t1w", "flair"] }]), "mri")).toBe(true);
+    expect(packPicks(with_([{ name: "mri", version: "1.3.0", main_roles: [] }]), "mri")).toBe(false);
+    expect(packPicks(with_([{ name: "mri", version: "1.3.0" }]), "mri")).toBe(false);
+    // no pack named: the engine's own default
+    expect(packPicks(with_([{ name: "mri", version: "1.3.0", main_roles: ["t1w"] }]), null)).toBe(true);
+    expect(packPicks(with_([{ name: "ct", version: "0.1.0", main_roles: ["head"] }]), "mri")).toBe(false);
   });
 
   it("queues the engine's own commands", () => {

@@ -35,6 +35,7 @@ import {
   partLabel,
   railOf,
   railSteps,
+  readAgainWords,
   refusedOnly,
   roleOrder,
   roleWord,
@@ -388,6 +389,28 @@ describe("a card's line", () => {
     expect(pseudonymisedWords({ files: 200000, waiting: 0, partial: true, waiting_partial: true })).toBe("at least 200,000 files");
     expect(stepWords(step("pseudonymised", { files: 4, waiting: 199996, held: 0, partial: false, waiting_partial: true }), NOW).what).toBe("at least 199,996 to do");
     expect(stepWords(step("pseudonymised", { files: 7000, waiting: 544, held: 0 }), NOW).what).toBe("544 to do");
+  });
+});
+
+describe("a dataset whose newest read stopped part way (2026-10-17)", () => {
+  // read twice: the newest read cancelled part way, after one that finished; the summary counts it among the reads and calls the step done
+  const d = dataset({ digests: { ...dataset().digests, count: 2, recent: [{ ...dataset().digests.recent[0], id: 2, state: "cancelled", classified: 0 }, dataset().digests.recent[0]] } });
+
+  it("says on the card that the last read stopped, and draws its read waiting", () => {
+    const next = nextStep(d, null, summary());
+    expect(next).toMatchObject({ word: "Ready", step: "read-again", label: "Read again" });
+    expect(cardLine(d, next, summary({ steps: summary().steps.filter((s) => s.step !== "views") }))).toBe("The last read stopped part way");
+    expect(railOf(d, summary())[1]).toBe("wait");
+    expect(railOf(d, null)[1]).toBe("wait");
+    // a read that finished is done, as before
+    expect(railOf(dataset(), summary())[1]).toBe("done");
+    expect(railOf(dataset(), null)[1]).toBe("done");
+  });
+
+  it("says on the rail what the reads read, that the last one stopped, and that reading again is next", () => {
+    expect(readAgainWords(step("read", { files: 100_250, reads: 1 }))).toEqual({ what: "100,250 read · stopped", when: "next step", next: true });
+    expect(readAgainWords(step("read", { files: 0 }))).toEqual({ what: "stopped", when: "next step", next: true });
+    expect(readAgainWords(null).what).toBe("stopped");
   });
 });
 

@@ -27,7 +27,7 @@ import { AddDataset } from "./AddDataset";
 import { CohortDetail } from "./CohortDetail";
 import { cohorts as cohortDoors, type Cohort } from "./cohorts";
 import { DatasetDetail } from "./DatasetDetail";
-import { jobs as jobsDoor, packFor, sources, type Dataset, type Layout } from "./datasets";
+import { jobs as jobsDoor, packFor, packPicks, sources, type Dataset, type Layout } from "./datasets";
 import { SetIdsDialog, SortFilesDialog, type Finishing } from "./FinishDataset";
 import { isRoot, notReadOf } from "./layout";
 import { NewCohortDialog, makingRefusal } from "./NewCohort";
@@ -306,7 +306,8 @@ export function DataPage({
       setOpened({ kind: id, dataset: d });
       return undefined;
     }
-    const c = stepCommand(d, id, packFor(caps));
+    const pack = packFor(caps);
+    const c = stepCommand(d, id, pack, new Date(), packPicks(caps, pack));
     if (!c) return undefined;
     setSaid(null);
     return jobsDoor
