@@ -183,7 +183,9 @@ function segmentOf(state: StepState | undefined): Segment {
 export function railOf(d: Dataset, s: DatasetSummary | null): Segment[] {
   if (s) return CARD_STEPS.map((name) => segmentOf(s.steps.find((x) => x.step === name)?.state));
   const unknown = stateOf(d) === "unknown" || d.arrives === "undeclared";
-  const files = d.trees?.anon?.files ?? d.trees?.originals?.files ?? 0;
+  // a tree's count that stopped short before it reached a file counted nothing, and says nothing of the tree (2026-10-17)
+  const counted = (t: { files: number | null; partial?: boolean } | null | undefined) => (typeof t?.files === "number" && !(t.partial === true && t.files === 0) ? t.files : null);
+  const files = counted(d.trees?.anon) ?? counted(d.trees?.originals) ?? 0;
   const reading = d.digests.recent.some((b) => b.state === "running");
   const found: Segment = !unknown && (files ?? 0) > 0 ? "done" : d.digests.count > 0 ? "done" : "wait";
   const read: Segment = reading ? "run" : d.digests.count > 0 ? "done" : "wait";
@@ -482,12 +484,14 @@ export function foundOf(d: Pick<Dataset, "trees">, s: DatasetSummary | null): Fo
  * copy's files once none waits. Where a count stopped short of a large tree
  * it says so: "at least 200,000 to do" where only the originals' count
  * stopped short, and the copy's "at least" where its own did, since what
- * waits is then not known.
+ * waits is then not known; a copy's count that stopped before it reached a
+ * file counted nothing, and says so, never "at least 0 files".
  */
 export function pseudonymisedWords(s: Pick<SummaryStep, "files" | "waiting" | "partial" | "waiting_partial">): string {
   const files = typeof s.files === "number" ? s.files : 0;
   const waiting = typeof s.waiting === "number" ? s.waiting : 0;
   if (waiting > 0 && !s.partial) return `${s.waiting_partial ? "at least " : ""}${n(waiting)} to do`;
+  if (s.partial === true && files === 0) return "not counted yet";
   return filesWords({ files, partial: s.partial === true });
 }
 
@@ -503,7 +507,9 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
   if (next.step === "set-ids") return "Needs its IDs before it is read";
   if (next.word === "Identified" && next.step === "pseudonymise") {
     const held = d.held?.identifiers ?? 0;
-    return held > 0 ? `${n(held)} ${held === 1 ? "ID needs" : "IDs need"} a subject code` : "Waits to be pseudonymised";
+    if (held > 0) return `${n(held)} ${held === 1 ? "ID needs" : "IDs need"} a subject code`;
+    // a run of it ran: what it left waits, never the whole dataset as if nothing had run (2026-10-17)
+    return (stepOf(s, "pseudonymised")?.job ?? null) !== null ? "The rest waits to be pseudonymised" : "Waits to be pseudonymised";
   }
   const running = s?.steps.find((x) => x.state === "running");
   if (running) return `${TITLE[running.step]}: running now`;

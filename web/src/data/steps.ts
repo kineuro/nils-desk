@@ -9,6 +9,8 @@ import { door } from "../ask/client";
 import type { Place } from "../objects/client";
 import { newInOriginals, type Dataset, type DatasetFields, type DatasetState, type Layout, type PlaceAnswer } from "./datasets";
 import { notReadOf } from "./layout";
+import { countsOf } from "./pseudoStep";
+import type { DatasetSummary } from "./summary";
 
 /** A folder under a root, as the engine lists it: whether it is a dataset yet. The list looks inside none of them. */
 export interface RootFolder {
@@ -121,24 +123,41 @@ const LABEL: Record<StepId, string> = {
 };
 
 /**
+ * Whether an identified dataset's pseudonymise step has anything left. Once a
+ * run of it ran, its summary step says (2026-10-17): files no run has seen,
+ * the rest where a count stopped short or the run was cut short or stopped,
+ * or held files. The trees' originals less the copy would count the files a
+ * run refused, which no run writes, and trust a probe that stopped short of
+ * a large tree. Before any run, or with no summary, the trees say it as
+ * before.
+ */
+function pseudonymiseWaits(d: Dataset, s: Pick<DatasetSummary, "steps"> | null): boolean {
+  const step = s?.steps.find((x) => x.step === "pseudonymised") ?? null;
+  const found = s?.steps.find((x) => x.step === "found") ?? null;
+  const held = typeof step?.held === "number" ? step.held : (d.held?.files ?? 0);
+  const c = countsOf(d, step, found, held);
+  if (c.ran) return held > 0 || (!c.done && (c.unseen > 0 || c.unseenPartial || c.failed));
+  const waiting = newInOriginals(d);
+  // nothing read and nothing in the anonymised copy yet: it was never pseudonymised
+  const copied = d.trees?.anon?.files;
+  const never = d.digests.count === 0 && !(typeof copied === "number" && copied > 0);
+  return (waiting ?? (never ? 1 : 0)) > 0;
+}
+
+/**
  * A dataset's state word and its next step: unknown files are sorted into
  * their folder first, anonymised data says its IDs, identified data is
  * pseudonymised, what is ready is read, and what is read is sorted. `why` is
- * the reason it is not read, where the places door gave one.
+ * the reason it is not read, where the places door gave one; `s` its summary,
+ * where read, whose pseudonymised step says what a run of it left.
  */
-export function nextStep(d: Dataset, why: string | null = notReadOf(d)): NextStep {
+export function nextStep(d: Dataset, why: string | null = notReadOf(d), s: Pick<DatasetSummary, "steps"> | null = null): NextStep {
   const running = d.digests.recent.some((b) => b.state === "running");
   const at = (word: StateWord, step: StepId): NextStep => ({ word, step: running ? "running" : step, label: LABEL[running ? "running" : step], busy: running });
   if (d.state === "unknown" || d.arrives === "undeclared") return at("Unknown", "sort-files");
   if (why !== null) return at("Anonymised", "set-ids");
   const identified = d.state === "identified" || d.state === "both" || (d.state === undefined && d.arrives === "identified");
-  if (identified) {
-    const waiting = newInOriginals(d);
-    // nothing read and nothing in the anonymised copy yet: it was never pseudonymised
-    const copied = d.trees?.anon?.files;
-    const never = d.digests.count === 0 && !(typeof copied === "number" && copied > 0);
-    if ((waiting ?? (never ? 1 : 0)) > 0) return at("Identified", "pseudonymise");
-  }
+  if (identified && pseudonymiseWaits(d, s)) return at("Identified", "pseudonymise");
   if (d.digests.count === 0) return at("Ready", "read");
   const c = certainty(d);
   if (d.totals.stacks > 0 && c === null) return at("Ready", "sort");

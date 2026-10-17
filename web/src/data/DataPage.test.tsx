@@ -795,6 +795,15 @@ describe("the first card chosen", () => {
     expect(firstChoice([], () => null, cohorts)).toEqual({ kind: "cohort", name: "ms-followup" });
     expect(firstChoice([], () => null, [])).toBeNull();
   });
+
+  it("is not a dataset whose pseudonymise run left nothing, where its summary is read already (2026-10-17)", () => {
+    // the probe stopped short of both trees: alone, they say the originals wait
+    const trees = { originals: { path: "/srv/in/ward-p/derivatives/dcm-original", files: 78570, bytes: null, partial: true }, anon: { path: "/srv/in/ward-p/derivatives/dcm-anon", files: 0, last_written: null, partial: true } };
+    const ident = ds("ward-p", 8, { state: "identified", arrives: "identified", held: { files: 0, identifiers: 0 }, trees });
+    expect(firstChoice([done, ident, looked], () => null, cohorts)).toEqual({ kind: "dataset", name: "ward-p" });
+    const ran = { steps: [step("found", { files: 30_689_981, partial: false, counted_by: "pseudonymise", tree: "originals" }), step("pseudonymised", { job: 69, files: 30_654_432, waiting: 0, held: 0, partial: false, waiting_partial: false })] } as DatasetSummary;
+    expect(firstChoice([done, ident, looked], () => null, cohorts, { "ward-p": ran })).toEqual({ kind: "dataset", name: "study-big" });
+  });
 });
 
 describe("a new cohort", () => {

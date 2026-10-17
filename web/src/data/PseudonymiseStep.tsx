@@ -118,6 +118,8 @@ export function usePseudonymise(caps: Capabilities, d: Dataset, s: DatasetSummar
   const [matched, setMatched] = useState<Matched[]>([]);
   const [acting, setActing] = useState<{ phase: string; since: number } | null>(null);
   const step = stepOf(s, "pseudonymised");
+  // the found step counts the originals whole once a run walked them, where the probe stopped short
+  const found = stepOf(s, "found");
   const moved = [step?.state, step?.files, step?.held, step?.job, d.held?.files, d.held?.identifiers, d.trees?.anon?.files].join(":");
   const reload = useCallback(() => {
     if (!lists) return;
@@ -128,7 +130,7 @@ export function usePseudonymise(caps: Capabilities, d: Dataset, s: DatasetSummar
   }, [reload, moved]);
   const running = acting !== null || step?.state === "running" || step?.state === "queued";
   // worked out again only when what it reads changes, not on the detail's every second
-  const view = useMemo(() => (has ? stepView(d, step, lists ? heldIds : null, matched, running) : null), [has, d, step, lists, heldIds, matched, running]);
+  const view = useMemo(() => (has ? stepView(d, step, lists ? heldIds : null, matched, running, found) : null), [has, d, step, lists, heldIds, matched, running, found]);
   return {
     view,
     held: heldIds,
@@ -157,6 +159,9 @@ async function ended(job: number): Promise<void> {
 
 /* ---------------------------------------------------------------- the three boxes */
 
+/** A box whose count stopped short of a large tree before it reached a file. */
+const NOT_COUNTED = "not counted: the count stopped before it reached a file";
+
 function Boxes({ v, compact, codes, kept }: { v: StepView; compact: boolean; codes?: { big: string; words: string; caution: boolean }; kept?: string }) {
   const box = idsBox(v);
   const mid = codes ?? box;
@@ -165,7 +170,11 @@ function Boxes({ v, compact, codes, kept }: { v: StepView; compact: boolean; cod
       <Icon name="arrow" />
     </span>
   );
-  const originals = v.originals === null ? "?" : n(v.originals);
+  // a count that stopped short before it reached a file counted nothing: never "at least 0"
+  const originalsLeast = v.originals !== null && v.originalsPartial && v.originals > 0;
+  const originals = v.originals === null || (v.originalsPartial && v.originals === 0) ? "?" : n(v.originals);
+  const copyLeast = v.copyPartial && v.copy > 0;
+  const copy = v.copyPartial && v.copy === 0 ? "?" : n(v.copy);
   const size = v.bytes !== null && v.bytes > 0 && !compact ? ` · ${bytesWords(v.bytes)}` : "";
   return (
     <div className={compact ? "ps-boxes compact" : "ps-boxes"}>
@@ -174,8 +183,8 @@ function Boxes({ v, compact, codes, kept }: { v: StepView; compact: boolean; cod
           <Icon name="lock" />
           Originals
         </span>
-        <span className="ps-big" title={v.originals !== null && v.originalsPartial ? `at least ${originals} files: counted until the count stopped; a run counts them all` : undefined}>
-          {v.originals !== null && v.originalsPartial && <small className="ps-least">at least </small>}
+        <span className="ps-big" title={originalsLeast ? `at least ${originals} files: counted until the count stopped; a run counts them all` : v.originalsPartial ? NOT_COUNTED : undefined}>
+          {originalsLeast && <small className="ps-least">at least </small>}
           {originals}
         </span>
         <span className="ps-box-words">{kept ?? `files${size} · locked`}</span>
@@ -195,7 +204,10 @@ function Boxes({ v, compact, codes, kept }: { v: StepView; compact: boolean; cod
           <Icon name="shield" />
           Pseudonymised copy
         </span>
-        <span className={v.copy === 0 ? "ps-big faint" : "ps-big"}>{n(v.copy)}</span>
+        <span className={v.copy === 0 ? "ps-big faint" : "ps-big"} title={copyLeast ? `at least ${copy} files: counted until the count stopped` : v.copyPartial ? NOT_COUNTED : undefined}>
+          {copyLeast && <small className="ps-least">at least </small>}
+          {copy}
+        </span>
         <span className="ps-box-words">{compact ? "files" : "files · what NILS reads"}</span>
       </div>
     </div>
@@ -705,7 +717,8 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
   const keptWords = kept === "kept" ? "kept · locked" : originalsWords(kept, vaultedInto(d));
   const changes = may(caps, "data:work") && may(caps, "places:work") && served(caps, "PUT /api/places/{id}");
   const lines = everyFile(policy.value ?? null, d);
-  const size = typeof d.trees?.originals?.bytes === "number" && d.trees.originals.bytes > 0 ? `, ${bytesWords(d.trees.originals.bytes)}` : "";
+  // the originals' size as the step counts them: a run's whole count, never the part a probe that stopped short measured
+  const size = v.bytes !== null && v.bytes > 0 ? `, ${bytesWords(v.bytes)}` : "";
   return (
     <div className="dp-col ps-done" aria-label="Pseudonymised">
       <div className="ps-head plain">
@@ -714,6 +727,7 @@ export function PseudonymisedSummary(props: { caps: Capabilities; dataset: Datas
         </span>
         <h3 className="ps-title">Pseudonymised</h3>
         <span className="tag ok">
+          {v.copyPartial ? "at least " : ""}
           {n(v.copy)} {v.copy === 1 ? "file" : "files"}
           {subjects > 0 ? ` · ${n(subjects)} ${subjects === 1 ? "subject" : "subjects"}` : ""}
         </span>
@@ -821,7 +835,8 @@ export function StepDialogs(props: {
           policy={policy.value ?? null}
           look={look}
           acts={originalsActs(caps, d)}
-          written={v?.copy ?? 0}
+          // a copy whose count stopped short of a large tree holds files all the same: what PatientID holds is not offered for change
+          written={v === null ? 0 : v.copyPartial ? Math.max(1, v.copy) : v.copy}
           onClose={() => setOpened(null)}
           onSaved={done}
           onTags={() => setOpened({ kind: "tags" })}

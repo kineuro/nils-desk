@@ -96,10 +96,10 @@ export function chosenOf(dataset: string | null | undefined, query: Record<strin
   return null;
 }
 
-/** The card chosen on arrival: the first dataset that needs a person, else the first dataset, else the first cohort. */
-export function firstChoice(list: readonly Dataset[], why: (d: Dataset) => string | null, cohortList: readonly Cohort[]): Chosen {
+/** The card chosen on arrival: the first dataset that needs a person, else the first dataset, else the first cohort; a dataset's summary, where read already, says what its runs left. */
+export function firstChoice(list: readonly Dataset[], why: (d: Dataset) => string | null, cohortList: readonly Cohort[], sums: Readonly<Record<string, DatasetSummary>> = {}): Chosen {
   const needs = list.find((d) => {
-    const s = nextStep(d, why(d));
+    const s = nextStep(d, why(d), sums[d.name] ?? null);
     return s.step !== "read-new" && s.step !== "running";
   });
   const d = needs ?? list[0];
@@ -269,7 +269,7 @@ export function DataPage({
   useEffect(() => {
     if (picked.current || load.kind !== "ready" || !cohortsRead) return;
     picked.current = true;
-    setChosen(firstChoice(list, whyOf, cohortList ?? []));
+    setChosen(firstChoice(list, whyOf, cohortList ?? [], sums));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- once, when both lists are read
   }, [load.kind, cohortsRead]);
 
@@ -533,7 +533,7 @@ const SEGMENT_WORDS = ["found", "read", "sorted", "main scans", "pictures", "3D 
 
 function DatasetCard(props: { dataset: Dataset; why: string | null; summary: DatasetSummary | null; on: boolean; relation: Relation | null; feeds: string; view: View; onPick: () => void }) {
   const { dataset: d, why, summary, on, relation, feeds, view, onPick } = props;
-  const next = nextStep(d, why);
+  const next = nextStep(d, why, summary);
   const found = foundOf(d, summary);
   const files = found.files;
   const rail = railOf(d, summary);

@@ -632,3 +632,134 @@ describe("the pseudonymise step, in the dataset", () => {
     expect(host.querySelector("dialog")!.textContent).toContain("Feeds a cohort");
   });
 });
+
+describe("the pseudonymise step after a run, where the probe stopped short (2026-10-17)", () => {
+  // the probe of each tree is bounded (2 s or 200,000 entries): on a large dataset it stops short of both
+  const big = () =>
+    dataset({
+      held: { files: 0, identifiers: 0 },
+      identity: { id_type: "personnummer", from: [{ field: "PatientID" }] },
+      trees: {
+        originals: { path: "/srv/x/derivatives/dcm-original", files: 78570, bytes: 12_299_736_493, partial: true },
+        anon: { path: "/srv/x/derivatives/dcm-anon", files: 0, last_written: null, partial: true },
+      },
+    });
+  const SUBJECTS = { ...heldIds({}, { coded: 4399, generated: 0 }), files: 0, identifiers: 0, ids: [] };
+  const RAN = { job: 69, started_at: "2026-10-16T18:44:00Z", finished_at: "2026-10-17T01:51:34Z" };
+  /** The summary as the engine answers it: the found step counts the originals the run walked, whole. */
+  function after(d: Dataset, pseudonymised: Partial<SummaryStep>, walked: number | null = 30_689_981): DatasetSummary {
+    const s = summaryOf(d, { held: 0, ...pseudonymised });
+    if (walked === null) return s;
+    return {
+      ...s,
+      files: { ...s.files, found: walked, bytes: null, found_partial: false },
+      steps: s.steps.map((x) => (x.step === "found" ? { ...x, files: walked, bytes: null, partial: false, counted_by: "pseudonymise" as const } : x)),
+    };
+  }
+  const offers = () => [...host.querySelectorAll("button")].map((b) => b.textContent ?? "").filter((t) => t.startsWith("Pseudonymise and sort"));
+  const railStep = (title: string) => [...host.querySelectorAll(".dp-steps .dp-step")].find((li) => li.querySelector(".dp-step-title")?.textContent === title)!;
+
+  it("is done once the run wrote every copy it could: no button, the rail done, the originals as the run counted them, the card past it", async () => {
+    // engine 1.0.0-alpha.89: counted from the newest whole run, 35,549 of the files refused as not DICOM
+    const d = big();
+    const s = after(d, { ...RAN, state: "done", files: 30_654_432, waiting: 0, partial: false, waiting_partial: false });
+    await page(d, {}, (c) => (c.url === "/api/datasets/study-identified/summary" ? { status: 200, body: s } : undefined), { step: "pseudonymisation", held: SUBJECTS });
+    expect(offers()).toEqual([]);
+    expect(host.querySelector(".ps-step")).toBeNull();
+    const done = host.querySelector(".ps-done")!;
+    expect(done.querySelector(".tag.ok")?.textContent).toBe("30,654,432 files · 4,399 subjects");
+    expect([...done.querySelectorAll(".ps-big")].map((b) => b.textContent)).toEqual(["30,689,981", "4,399", "30,654,432"]);
+    // no size from a probe that measured part of the tree
+    expect(done.textContent).toContain("The originals are kept, locked");
+    expect(done.textContent).not.toContain("GB");
+    const rail = railStep("Pseudonymised");
+    expect(rail.classList.contains("done")).toBe(true);
+    expect(rail.textContent).toContain("30,654,432 files");
+    expect(rail.textContent).not.toContain("not yet");
+    expect(rail.textContent).not.toContain("next step");
+    // the card and the dataset's head go on to the read, never back to pseudonymising
+    const card = host.querySelector(".dp-card")!;
+    expect(card.querySelector(".dp-card-head .tag")?.textContent).toBe("Ready");
+    expect(card.querySelector(".dp-line")?.textContent).toBe("Not read yet");
+    expect(card.querySelector(".dp-nums b")?.textContent).toBe("30,689,981");
+    expect(host.querySelector(".dp-detail .dp-acts .button:not(.secondary):not(.quiet)")?.textContent).toBe("Read");
+    expect(host.querySelector(".dp-detail-where")?.textContent).toContain("pseudonymised");
+  });
+
+  it("is never a dataset never run against an engine whose counts are the probe's: the rest is offered, never every file again", async () => {
+    // engine 1.0.0-alpha.88: the step's counts are the probe's (a copy of 0, stopped short), but it names the run
+    const d = big();
+    const s = after(d, { ...RAN, state: "waiting", files: 0, waiting: 78570, partial: true, waiting_partial: true });
+    const e = await page(
+      d,
+      {},
+      (c) => {
+        if (c.url === "/api/datasets/study-identified/summary") return { status: 200, body: s };
+        if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 73, state: "queued" } };
+        if (c.method === "PUT" && c.url === "/api/places/9") return { status: 200, body: {} };
+        return undefined;
+      },
+      { held: SUBJECTS },
+    );
+    const panel = host.querySelector(".ps-step")!;
+    // the originals as the run walked them; the copy's count stopped before it reached a file, so it is not said
+    const boxes = [...panel.querySelectorAll(".ps-big")];
+    expect(boxes.map((b) => b.textContent)).toEqual(["30,689,981", "4,399", "?"]);
+    expect(boxes[2].getAttribute("title")).toBe("not counted: the count stopped before it reached a file");
+    expect(panel.textContent).not.toContain("12.3 GB");
+    expect(offers()).toEqual(["Pseudonymise and sort the rest"]);
+    expect(text()).not.toContain("78,570");
+    const rail = railStep("Pseudonymised");
+    expect(rail.textContent).toContain("the rest to go");
+    expect(rail.textContent).not.toContain("not yet");
+    expect(host.querySelector(".dp-card .dp-line")?.textContent).toBe("The rest waits to be pseudonymised");
+    // what PatientID holds is not offered for change: the copy holds files, however its count stopped
+    act(() => button(panel, "Change")!.click());
+    await settle(4);
+    const dialog = host.querySelector("dialog")!;
+    expect([...dialog.querySelectorAll<HTMLButtonElement>("button")].filter((b) => b.textContent === "A hospital or study ID").every((b) => b.disabled)).toBe(true);
+    act(() => button(dialog, "Cancel")!.click());
+    // a run again skips what is done
+    await act(async () => {
+      button(panel, "Pseudonymise and sort the rest")!.click();
+    });
+    await settle(6);
+    expect(e.of("POST", "/api/jobs")[0].body!.command).toEqual(["bring-in", "@study-identified", "--name", expect.stringMatching(/^study-identified-/), "--pack", "mri"]);
+  });
+
+  it("offers nothing for files a run refused, where the counts are whole, and draws the step done though the engine says it waits", async () => {
+    // 7,544 originals, 7,444 written, 100 not DICOM: the originals less the copy would offer those 100 again
+    const d = dataset({ ...big(), trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1_900_000_000 }, anon: { path: "/srv/x/derivatives/dcm-anon", files: 7444, last_written: AT } } });
+    const s = after(d, { ...RAN, state: "waiting", files: 7444, waiting: 0, partial: false, waiting_partial: false }, null);
+    await page(d, {}, (c) => (c.url === "/api/datasets/study-identified/summary" ? { status: 200, body: s } : undefined), { held: SUBJECTS });
+    expect(offers()).toEqual([]);
+    // done, the step does not open by itself
+    expect(host.querySelector(".ps-step")).toBeNull();
+    const rail = railStep("Pseudonymised");
+    expect(rail.classList.contains("done")).toBe(true);
+    expect(rail.classList.contains("next")).toBe(false);
+    expect(rail.textContent).toContain("7,444 files");
+    expect(host.querySelector(".dp-card .dp-card-head .tag")?.textContent).toBe("Ready");
+  });
+
+  it("offers the rest of a run that was cut short, never at least 0 files", async () => {
+    // an update cancelled the run part way: what no run has decided is not known
+    const d = dataset({
+      ...big(),
+      trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: 200_000, bytes: 1, partial: true }, anon: { path: "/srv/x/derivatives/dcm-anon", files: 120_000, last_written: AT, partial: true } },
+    });
+    const s = after(d, { job: 71, state: "waiting", files: 120_000, waiting: 0, partial: false, waiting_partial: true }, null);
+    await page(d, {}, (c) => (c.url === "/api/datasets/study-identified/summary" ? { status: 200, body: s } : undefined), { held: SUBJECTS });
+    expect(offers()).toEqual(["Pseudonymise and sort the rest"]);
+    expect(railStep("Pseudonymised").textContent).toContain("the rest to go");
+    expect(text()).not.toContain("at least 0");
+  });
+
+  it("leaves a dataset never run as it was: every original to go, and the rail says not yet", async () => {
+    const d = dataset({ ...big(), trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1_900_000_000 }, anon: { path: "/srv/x/derivatives/dcm-anon", files: 0, last_written: null } } });
+    await page(d, { held: 0 }, () => undefined, { held: { ...heldIds(), files: 0, identifiers: 0, ids: [] } });
+    expect(offers()).toEqual(["Pseudonymise and sort 7,544 files"]);
+    expect(railStep("Pseudonymised").textContent).toContain("not yet");
+    expect(host.querySelector(".dp-card .dp-line")?.textContent).toBe("Waits to be pseudonymised");
+  });
+});
