@@ -834,7 +834,8 @@ export function doingTitle(j: Pick<JobRow, "kind" | "state">, op?: Operation | n
     ingest: "Reading",
     pseudonymize: "Pseudonymising",
     fingerprint: "Preparing to sort",
-    classify: "Sorting and making pictures",
+    // a sort is the registry's work alone; its pictures are a job of their own (2026-10-17)
+    classify: "Sorting",
     pick: "Picking main scans",
     pyramid: "Preparing 3D views",
     preview: "Preparing pictures",

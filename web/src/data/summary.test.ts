@@ -288,6 +288,8 @@ describe("body part and post-contrast, steps of their own", () => {
     expect(logLine(run, NOW)).toMatchObject({ what: "Model run" });
     expect(doingTitle({ kind: "pipeline", state: "running" }, "body_part")).toBe("Finding the body part");
     expect(doingTitle({ kind: "pipeline", state: "running" }, "post_contrast")).toBe("Finding post-contrast scans");
+    expect(doingTitle({ kind: "classify", state: "running" })).toBe("Sorting");
+    expect(doingTitle({ kind: "preview", state: "queued" })).toBe("Preparing pictures: next");
     expect(runningWords({ kind: "pipeline", state: "running", started_at: today("14:00"), progress: { done: 1, total: 3 } }, NOW.getTime()).words).toMatch(/^1 of 3 scans/);
   });
 });
