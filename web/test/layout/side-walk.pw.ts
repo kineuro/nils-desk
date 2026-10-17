@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Gate T31's "every section is reachable from the side" (record 55 H2, round
-// 4), walked in the real desk (walk.html: every grant, every door of the
-// engine's contract, an engine that holds nothing): every section of the side
+// 4), walked in the real desk (walk.html: every grant, every door in
+// walk.doors.json, an engine that holds nothing): every section of the side
 // opens, every page under it opens from its line, the line is marked as the
 // page open, and the page draws a heading and never stops. On a laptop the
 // side stands beside the page; on a phone it is the panel over the page,
-// opened from the top bar. WALK_SHOTS=<dir> keeps a picture of each page, in
-// the light and the dark theme. In chromium and, with LAYOUT_FIREFOX=1,
-// Firefox.
+// opened from the top bar. The map it expects is walk.map.ts, which
+// src/sideWalk.test.tsx also holds the side to. WALK_SHOTS=<dir> keeps a
+// picture of each page, in the light and the dark theme. In chromium and,
+// with LAYOUT_FIREFOX=1, Firefox.
 
 import { expect, test, type Page } from "@playwright/test";
+import { MAP } from "./walk.map";
 
 /** The sections down the side, and the foot's, as the side lists them: their titles and the addresses of their pages. */
 async function sideOf(page: Page): Promise<{ title: string; href: string; pages: { title: string; href: string }[] }[]> {
@@ -50,18 +52,6 @@ async function shoot(page: Page, width: number, section: string, title: string) 
   }
   await page.evaluate(() => document.documentElement.removeAttribute("data-theme"));
 }
-
-// what the walk expects the side to hold for a person who holds every grant (spec 13.1's map)
-const MAP: Record<string, string[]> = {
-  Home: [],
-  Assistant: ["New conversation", "All conversations", "Shared", "Memory"],
-  Query: ["Cards", "Selections", "Exports"],
-  Data: ["Datasets and cohorts", "Browse", "Pseudonyms"],
-  Review: ["Work", "Main scans", "Subjects", "Rules", "Rounds", "Label sets"],
-  Release: ["Releases", "New release", "Session schemes"],
-  Pipelines: ["Jobs", "Catalog", "Runs", "Logs", "Models"],
-  Settings: ["Overview", "Parts", "Engine", "Desk", "Language models", "Assistant", "Teaching", "Places", "Backups", "People", "Audit", "Setup"],
-};
 
 test.describe.configure({ mode: "serial" });
 
