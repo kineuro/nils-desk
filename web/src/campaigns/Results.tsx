@@ -10,7 +10,7 @@ import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { answerWords, campaigns, itemWords, kappa, pct, refused as refusedWords, stateWords, STATES, type Answer, type Campaign, type Item, type LabelSet } from "./client";
-import { answerOf, byAxis, downloads, raterColumns, resultsDoor, resultsRefusal, short, type ResultAnswer, type ResultItem, type Results } from "./results";
+import { answerOf, byAxis, catchWords, downloads, nameOf, raterColumns, resultsDoor, resultsRefusal, type ResultAnswer, type ResultItem, type Results } from "./results";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -64,6 +64,13 @@ export function ResultsBody({ results: r, sets, words, said = null, onDownload }
   const wordsOf = (i: ResultItem) => (x: ResultAnswer) => (words ? words(i) : answerWords)({ value: x.value, form: x.form ?? null, derivative_id: x.derivative_id ?? null });
   const groups = byAxis(r.values);
   const files = downloads(sets);
+  // record 58 P1: a verify campaign's catch rate beside the agreement, against the bar
+  const caught = r.catch ?? null;
+  const name = (rater: string) => nameOf(r, rater);
+  const caughtBy = (rater: string) => {
+    const p = caught?.per_rater.find((x) => x.rater === rater);
+    return p ? catchWords(p) : "";
+  };
   return (
     <div className="campaign-results">
       <Values
@@ -72,10 +79,16 @@ export function ResultsBody({ results: r, sets, words, said = null, onDownload }
           { k: "adjudicated", v: n(r.adjudicated) },
           { k: "exact", v: pct(a?.exact) },
           { k: "κ", v: kappa(a?.cohen_kappa ?? a?.fleiss_kappa), title: a?.cohen_kappa !== null && a?.cohen_kappa !== undefined ? "Cohen's kappa" : "Fleiss' kappa" },
+          ...(caught ? [{ k: "caught", v: catchWords(caught), title: `planted values the readers did not accept; the bar is ${pct(caught.bar)}` }] : []),
           { k: "unsure", v: n(r.unsure) },
           ...(closed ? [{ k: r.closes_into === "pick" ? "picks" : "decisions", v: n(r.closes_into === "pick" ? r.picks : r.decisions) }] : []),
         ]}
       />
+      {caught && r.below_bar && (
+        <p className="warn catch-bar">
+          <span className="tag caution">under the bar</span> Caught {pct(caught.rate)} of the planted values; the bar is {pct(caught.bar)}. This result does not stand alone.
+        </p>
+      )}
       {!r.named && <p className="meta">Raters by number.</p>}
       {groups.length > 0 && (
         <>
@@ -117,15 +130,17 @@ export function ResultsBody({ results: r, sets, words, said = null, onDownload }
                   <th className="num">Answers</th>
                   <th className="num">Adjudications</th>
                   <th className="num">Unsure</th>
+                  {caught && <th className="num">Caught</th>}
                 </tr>
               </thead>
               <tbody>
                 {r.raters.map((x) => (
                   <tr key={x.rater}>
-                    <td>{short(x.rater)}</td>
+                    <td title={x.rater}>{name(x.rater)}</td>
                     <td className="num">{n(x.answers)}</td>
                     <td className="num">{n(x.adjudications)}</td>
                     <td className="num">{n(x.unsure)}</td>
+                    {caught && <td className="num">{caughtBy(x.rater)}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -141,7 +156,9 @@ export function ResultsBody({ results: r, sets, words, said = null, onDownload }
               <th className="num">#</th>
               <th>Item</th>
               {cols.map((c) => (
-                <th key={c}>{short(c)}</th>
+                <th key={c} title={c}>
+                  {name(c)}
+                </th>
               ))}
               <th>Adjudication</th>
               <th>Settled</th>
@@ -150,7 +167,7 @@ export function ResultsBody({ results: r, sets, words, said = null, onDownload }
           </thead>
           <tbody>
             {rows.map((i) => (
-              <ResultRow key={i.id} item={i} cols={cols} words={wordsOf(i)} />
+              <ResultRow key={i.id} item={i} cols={cols} words={wordsOf(i)} name={name} />
             ))}
           </tbody>
         </table>
@@ -195,7 +212,7 @@ export function ResultsBody({ results: r, sets, words, said = null, onDownload }
   );
 }
 
-function ResultRow({ item: i, cols, words }: { item: ResultItem; cols: string[]; words: (a: ResultAnswer) => string }) {
+function ResultRow({ item: i, cols, words, name }: { item: ResultItem; cols: string[]; words: (a: ResultAnswer) => string; name: (rater: string) => string }) {
   const tone = STATES.find((s) => s.state === i.state)?.tone ?? "";
   const judged = i.answers.filter((a) => a.role === "adjudicator");
   const settled = i.outcome && ["agreed", "adjudicated", "resolved"].includes(i.state);
@@ -212,7 +229,7 @@ function ResultRow({ item: i, cols, words }: { item: ResultItem; cols: string[];
           </td>
         );
       })}
-      <td>{judged.map((x) => `${short(x.rater)}: ${words(x)}`).join(" · ")}</td>
+      <td>{judged.map((x) => `${name(x.rater)}: ${words(x)}`).join(" · ")}</td>
       <td>{settled ? words({ id: 0, rater: "", role: "rater", round: 0, value: i.outcome?.value, form: i.outcome?.form ?? null, derivative_id: i.outcome?.derivative_id ?? null }) : ""}</td>
       <td>
         {i.state === "refused" ? (

@@ -130,13 +130,14 @@ export function namesRaters(caps: Capabilities, c: Campaign): boolean {
  * answered: their own name to the maker and a Review worker, and to anyone
  * else "rater N" or "adjudicator N", their own answers by their own name.
  */
-export function raterNames(answers: readonly Pick<Answer, "principal" | "role" | "id">[], me: string, named: boolean): Map<string, string> {
+export function raterNames(answers: readonly Pick<Answer, "principal" | "role" | "id">[], me: string, named: boolean, names: Map<string, string> = new Map()): Map<string, string> {
   const out = new Map<string, string>();
   const n = { rater: 0, adjudicator: 0 };
   for (const a of [...answers].sort((x, y) => x.id - y.id)) {
     if (out.has(a.principal)) continue;
     if (named || a.principal === me) {
-      out.set(a.principal, a.principal.split("@")[0]);
+      // the account's name where a door gave it (record 58 P1), never the sign-in subject whole
+      out.set(a.principal, names.get(a.principal) ?? a.principal.split("@")[0]);
       continue;
     }
     const word = a.role === "adjudicator" ? "adjudicator" : "rater";
