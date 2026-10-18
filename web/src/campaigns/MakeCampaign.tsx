@@ -26,6 +26,8 @@ import {
   campaigns,
   CLOSES_WORDS,
   closesFor,
+  confusionRows,
+  confusionWords,
   drawnCountsWords,
   emptyDraft,
   freshSeed,
@@ -128,7 +130,8 @@ export function MakeDialog({ caps, prefill, taken, onClose, onCheck }: { caps: C
     if (readsPack && packName) review.pack(packName).then(setPack, () => undefined);
   }, [readsPack, packName]);
   // a drawn campaign's seed is made once, shown, and the person may write their own
-  const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p, ...(p.kind && isDrawn(p.kind) && !x.seed ? { seed: freshSeed() } : {}) }));
+  // a verify campaign's planted draw has a seed the same way (record 58 P1)
+  const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p, ...((p.kind && isDrawn(p.kind)) || p.purpose === "verify" ? (x.seed ? {} : { seed: freshSeed() }) : {}) }));
   const preview = usePreview(caps, d);
   const body = makeBody(d);
   const needs = !body.ok ? body.needs : taken.includes(d.name.trim()) ? "another name; that one is taken" : null;
@@ -420,7 +423,7 @@ export function MakeForm({ caps, draft: d, pack, lists = NO_LISTS, onChange: set
           <legend className="label">Shown beside each item</legend>
           <span className="chips">
             {(["none", "rules", "imported"] as SuggestMode[]).map((m) => (
-              <button key={m} type="button" className={d.suggest === m ? "opt on" : "opt"} aria-pressed={d.suggest === m} onClick={() => set({ suggest: m })}>
+              <button key={m} type="button" className={d.suggest === m ? "opt on" : "opt"} aria-pressed={d.suggest === m} disabled={m === "none" && d.purpose === "verify"} title={m === "none" && d.purpose === "verify" ? "a verify campaign shows its proposal first" : undefined} onClick={() => set({ suggest: m })}>
                 {SUGGEST_WORDS[m].words}
               </button>
             ))}
@@ -440,8 +443,8 @@ export function MakeForm({ caps, draft: d, pack, lists = NO_LISTS, onChange: set
         <fieldset className="field">
           <legend className="label">Its answers are for</legend>
           <span className="chips">
-            {(["decide", "train", "measure", "audit"] as Purpose[]).map((p) => (
-              <button key={p} type="button" className={d.purpose === p ? "opt on" : "opt"} aria-pressed={d.purpose === p} onClick={() => set({ purpose: p })}>
+            {(["decide", "train", "measure", "audit", "verify"] as Purpose[]).map((p) => (
+              <button key={p} type="button" className={d.purpose === p ? "opt on" : "opt"} aria-pressed={d.purpose === p} onClick={() => set({ purpose: p, ...(p === "verify" && d.suggest === "none" ? { suggest: "rules" } : {}) })}>
                 {PURPOSE_WORDS[p].words}
               </button>
             ))}
@@ -449,6 +452,7 @@ export function MakeForm({ caps, draft: d, pack, lists = NO_LISTS, onChange: set
           <span className="meta">{PURPOSE_WORDS[d.purpose].says}</span>
         </fieldset>
       )}
+      {(d.kind === "axis" || d.kind === "axes") && d.purpose === "verify" && <VerifyFields draft={d} onChange={set} />}
       {d.kind === "pick" && roles.length > 0 && (
         <fieldset className="field">
           <legend className="label">Role</legend>
@@ -591,6 +595,55 @@ function ValuesField({ values, chosen, onChange }: { values: string[]; chosen: s
         ))}
       </span>
       <span className="meta">{on.length === 0 ? "None chosen: every value the pack has." : `${on.length} of ${values.length}.`}</span>
+    </fieldset>
+  );
+}
+
+/**
+ * A verify campaign's planted values (record 58 P1, spec 12.3): the share of
+ * its items planted with a plausible wrong value, the seed of the draw, and
+ * the confusion table (true value, wrong value, count) pasted or read from a
+ * file, or none, which plants a random other legal value.
+ */
+function VerifyFields({ draft: d, onChange: set }: { draft: Draft; onChange: (p: Partial<Draft>) => void }) {
+  const table = confusionRows(d.plantedFrom);
+  const readFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    f.text().then((text) => set({ plantedFrom: text }));
+  };
+  return (
+    <fieldset className="field verify-fields">
+      <legend className="label">Planted values</legend>
+      <div className="fields2">
+        <label className="field">
+          <span className="label">Share</span>
+          <span className="input">
+            <input aria-label="Planted share" value={d.plantedShare} onChange={(e) => set({ plantedShare: e.target.value })} />
+          </span>
+          <span className="meta">Of the items, each with one axis set to a plausible wrong value. 0.1 is one in ten.</span>
+        </label>
+        <label className="field">
+          <span className="label">Seed</span>
+          <span className="input mono">
+            <input aria-label="Seed" value={d.seed} onChange={(e) => set({ seed: e.target.value })} />
+          </span>
+          <span className="meta">Draws which items. Write it down; the list stays sealed until the close.</span>
+        </label>
+      </div>
+      <label className="field">
+        <span className="label">Confusion table · optional</span>
+        <span className="input mono">
+          <textarea aria-label="Confusion table" rows={4} value={d.plantedFrom} onChange={(e) => set({ plantedFrom: e.target.value })} placeholder={"true value\twrong value\tcount"} spellCheck={false} />
+        </span>
+        <span className="meta">{confusionWords(table, d.plantedFrom)}</span>
+      </label>
+      <label className="button secondary small file-pick">
+        Read a file
+        {/* a TSV or CSV of true value, wrong value and count, made on the research side; no stack identities */}
+        <input type="file" accept=".tsv,.csv,.txt,text/tab-separated-values,text/csv,text/plain" onChange={readFile} hidden />
+      </label>
     </fieldset>
   );
 }

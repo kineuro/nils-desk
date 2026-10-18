@@ -1128,6 +1128,14 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
   };
 }
 
+/** The confusion table in words under the field: none, nothing read, or the rows, confusions and lines skipped. */
+export function confusionWords(t: { rows: ConfusionRow[]; skipped: number }, text: string): string {
+  if (text.trim() === "") return "None: a random other legal value is planted.";
+  if (t.rows.length === 0) return "No row read: true value, wrong value, count, one row a line.";
+  const n = t.rows.reduce((a, r) => a + r.count, 0);
+  return `${t.rows.length} ${t.rows.length === 1 ? "row" : "rows"} · ${n.toLocaleString("en-US")} confusions${t.skipped > 0 ? ` · ${t.skipped} ${t.skipped === 1 ? "line" : "lines"} skipped` : ""}. The commonest wrong value for each true value is planted.`;
+}
+
 /** A verify campaign's planted values from the draft (record 58 P1), or what it still needs. */
 export function plantedBody(d: Pick<Draft, "plantedShare" | "seed" | "plantedFrom">): { ok: true; body: PlantedBody } | { ok: false; needs: string } {
   const share = Number(d.plantedShare);
