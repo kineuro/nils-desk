@@ -22,7 +22,7 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { Identifiers } from "./Identifiers";
 import {
-  columnLabel,
+  columnLabels,
   csvRefusal,
   guessRole,
   hideNumbers,
@@ -238,11 +238,10 @@ function TypeDialog({ onClose, onMade }: { onClose: () => void; onMade: (name: s
 type Rehearsal = { kind: "idle" } | { kind: "working"; phase: string; since: number } | { kind: "report"; report: ImportReport } | { kind: "filed"; job: number } | { kind: "failed"; why: string };
 
 interface Column {
+  /** What the column is called, on screen and to the engine: its header, or its place where the header is a value of the file. */
   header: string;
   look: ColumnLook;
   guess: Guess;
-  /** What the column is called on screen: its header, never a value of the file. */
-  label: string;
   /** The description of a new type, typed here. */
   description: string;
 }
@@ -290,14 +289,16 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
           return;
         }
         setFile({ name: f.name, csv });
-        setColumns(
-          csv.header.map((h, i) => {
-            const values = csv.rows.map((r) => r[i] ?? "");
-            const look = lookAt(h, values);
-            // the column is shown by its header, its shape and its counts; no cell of the file is kept for the screen
-            return { header: h, label: columnLabel(h, i), look, guess: guessRole(h, look, types), description: "" };
-          }),
+        // a column is its header and its shape (what its values read as, how long they are, how many rows hold one and how many differ);
+        // no cell of the file is kept for the screen, and a header that is a value, or a first line that is a row of them, is named by its place
+        const looks = csv.header.map((h, i) =>
+          lookAt(
+            h,
+            csv.rows.map((r) => r[i] ?? ""),
+          ),
         );
+        const names = columnLabels(csv.header, looks);
+        setColumns(names.map((name, i) => ({ header: name, look: { ...looks[i], header: name }, guess: guessRole(name, looks[i], types), description: "" })));
       })
       .catch((err: unknown) => setWhy(hideNumbers(messageOf(err))));
   };
@@ -491,12 +492,15 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
 }
 
 /**
- * The columns the file was found to have, each with its shape and counts and
- * what it means. No cell of the file is shown, under a header or anywhere
- * else: a column of personnummer would put real numbers on the screen. The roles are written out one by one rather than looped
- * over: a select whose children come out of a loop as a fragment is not laid
- * out as options everywhere, and a role the engine does not take would be a
- * refusal of the whole file.
+ * The columns the file was found to have, each with its shape and what it
+ * means. The shape is what the values read as, how long they are, how many
+ * rows hold one and how many differ (Wave 7b, section 18); no cell of the
+ * file is shown, nor a pattern made from one, nor the first row, under a
+ * header or anywhere else: a column of personnummer would put real numbers on
+ * the screen. The roles are written out one by one rather than looped over: a
+ * select whose children come out of a loop as a fragment is not laid out as
+ * options everywhere, and a role the engine does not take would be a refusal
+ * of the whole file.
  */
 export function MapColumns({
   columns,
@@ -519,21 +523,21 @@ export function MapColumns({
         <thead>
           <tr>
             <th>Column</th>
-            <th className="col-look">Looks like</th>
             <th>Means</th>
           </tr>
         </thead>
         <tbody>
           {columns.map((c, i) => (
-            <tr key={c.header}>
-              <td>
-                <span className="path">{c.label}</span>
+            <tr key={`${i}:${c.header}`}>
+              <td className="col-name">
+                <span className="path">{c.header}</span>
+                <span className="meta col-shape">{c.look.what}</span>
+                {c.look.counts !== "" && <span className="meta col-shape">{c.look.counts}</span>}
               </td>
-              <td className="meta col-look">{c.look.words}</td>
               <td>
                 <div className="column-role">
                   <div className="input">
-                    <select value={c.guess.role} disabled={working} onChange={(e) => onRole(i, e.target.value as ColumnRole)} aria-label={`What ${c.label} means`}>
+                    <select value={c.guess.role} disabled={working} onChange={(e) => onRole(i, e.target.value as ColumnRole)} aria-label={`What ${c.header} means`}>
                       <option value="identifier">{ROLES[0].words}</option>
                       <option value="canonical">{ROLES[1].words}</option>
                       <option value="code">{ROLES[2].words}</option>
@@ -542,7 +546,7 @@ export function MapColumns({
                   </div>
                   {typed(c.guess.role) && (
                     <div className="input">
-                      <select value={typeValue(c.guess)} disabled={working} onChange={(e) => onType(i, e.target.value)} aria-label={`The type of ${c.label}`}>
+                      <select value={typeValue(c.guess)} disabled={working} onChange={(e) => onType(i, e.target.value)} aria-label={`The type of ${c.header}`}>
                         {types.map((t) => (
                           <option key={t.name} value={`type:${t.name}`}>
                             of type {typeLabel(t)}

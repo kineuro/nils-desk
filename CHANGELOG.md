@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- The import map dialog shows each column's shape and never a value (Wave 7b, section 18). Give a map, under Data > Pseudonyms, lists a column by its header and four facts: what its values read as (integer, decimal, date, identifier-like or text, or empty), the shortest and longest value in characters, how many rows hold a value and how many differ. It no longer draws a pattern made from the values, which put a personnummer's shape on the screen, and a file with no header line, or a header with five digits in it, is named by place (column 3) on screen and to the engine. On a phone the shape stays under the header, where it used to be hidden. Under Data > Clinical the preview's refused rows no longer print the engine's own words, which name the cell that did not read and the cohort, disease or kind a row gave: each reason is a field and a fault, rows with one fault are one line, and a reason the desk does not know reads as another reason. The pseudonymise step's map names its headers the same way.
+
 ## [1.0.0-beta.1] - 2026-10-17
 
 The first beta (record 55, ruling 31 (g)).

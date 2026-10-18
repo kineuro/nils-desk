@@ -32,6 +32,7 @@ import { plainError, type Plain } from "./plain";
 import { policyKept } from "./policy";
 import {
   bytesWords,
+  csvLabels,
   hideNumbers,
   linkage,
   NOTHING_ASKED,
@@ -89,7 +90,7 @@ export type Opened = { kind: "rules" } | { kind: "tags" } | { kind: "vault"; ask
 interface GivenMap {
   name: string;
   pairs: string[][];
-  /** The two headers as the file has them, ID first; null where it has none, its first row a row of the map. */
+  /** The two headers, ID first, each as the file names it or by its place where the header is a value; null where the file has none, its first row a row of the map. */
   heads: [string, string] | null;
 }
 
@@ -475,7 +476,9 @@ function Codes(props: {
     if ("refusal" in cols) return setRefused(cols.refusal);
     const pairs = codePairs(csv, cols);
     if (pairs.length === 0) return setRefused("No row has both an ID and a subject code.");
-    const next = [...maps, { name, pairs, heads: cols.headerless ? null : ([csv.header[cols.id], csv.header[cols.code]] as [string, string]) }];
+    // the header line is printed only as names: a header that is a value, or a first line that is a row of them, is named by its place
+    const labels = cols.headerless ? [] : csvLabels(csv);
+    const next = [...maps, { name, pairs, heads: cols.headerless ? null : ([labels[cols.id], labels[cols.code]] as [string, string]) }];
     setMaps(next);
     rehearse(next);
   };

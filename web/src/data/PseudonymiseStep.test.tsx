@@ -412,6 +412,23 @@ describe("the pseudonymise step, in the dataset", () => {
     for (const value of ["ABC123456", "aBCD1234"]) expect(text()).not.toContain(value);
   });
 
+  it("names a map's header that is a value by its place, and prints no value of the file (Wave 7b, section 18)", async () => {
+    const e = await page(dataset(), {}, (c) => (c.method === "POST" && c.url === "/api/linkage/imports" ? { status: 200, body: REHEARSED } : undefined));
+    act(() => button(host, "Give them from a map")!.click());
+    const input = host.querySelector<HTMLInputElement>(".ps-file input")!;
+    // a header with the digits of a number in it is a value and no name: its place stands for it, and the other header is still its own
+    const csv = MAP.replace("study ID,subject code", "ABC12345,subject code");
+    Object.defineProperty(input, "files", { value: [new File([csv], "map.csv", { type: "text/csv" })], configurable: true });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await settle(8);
+    expect(e.of("POST", "/api/linkage/imports")).toHaveLength(1);
+    expect(text()).toContain("column 1, subject code");
+    // no value of the file is drawn: not the header that was one, not an ID (the subject codes a match fills in are the table's own, by design)
+    for (const value of ["ABC12345", "ABC123456", "aBCD1234", "aBCE1234"]) expect(text()).not.toContain(value);
+  });
+
   it("gives one ID a generated code, marked for the next run and nothing queued", async () => {
     let marked = false;
     const e = await page(dataset(), {}, (c) => {

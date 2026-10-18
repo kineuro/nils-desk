@@ -1558,9 +1558,12 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
 /* a tag of this dataset's own, typed as gggg,eeee beside the button that adds it */
 .tagpick-add { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .tagpick-add .input { flex: 1 1 9rem; min-width: 0; }
-/* the map, step by step: the file, the columns with the first values under each, the rehearsal */
+/* the map, step by step: the file, the columns each with its shape under its header (never a value), the rehearsal */
 .mapsteps { display: grid; gap: 1rem; min-width: 0; }
 .map-cols .column-role { min-width: 12rem; }
+.map-cols .col-name { min-width: 0; }
+.map-cols .col-name .path { display: block; overflow-wrap: anywhere; }
+.map-cols .col-shape { display: block; }
 @media (min-width: 641px) {
   .dialog:has(.tagpick) { width: min(50rem, calc(100vw - 2rem)); }
   .dialog:has(.mapsteps) { width: min(46rem, calc(100vw - 2rem)); }
@@ -1568,8 +1571,10 @@ table.thin.tagpick-table .icon-button { width: 1.4rem; height: 1.4rem; }
 @media (max-width: 640px) {
   /* on a phone a tag keeps its number, its name and what happens to it; the group is in those words already */
   table.thin.tagpick-table th.tag-group, table.thin.tagpick-table td.tag-group { display: none; }
-  /* and a column keeps its header, its first values and what it means; the shape is a second reading of those values */
-  table.thin.map-cols th.col-look, table.thin.map-cols td.col-look { display: none; }
+  /* and a column keeps its header with its shape under it, and what it means beneath, one above the other: the shape is all a phone has of the column */
+  table.thin.map-cols thead { display: none; }
+  table.thin.map-cols tr { display: grid; gap: 0.45rem; padding: 0.6rem 0; border-bottom: 1px solid var(--n-line); }
+  table.thin.map-cols td { display: block; padding: 0; border: 0; }
   .map-cols .column-role { min-width: 0; }
 }
 /* ---------------------------------------------------------------- end of record 27, R3 and R4 */

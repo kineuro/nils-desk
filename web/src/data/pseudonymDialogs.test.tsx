@@ -133,7 +133,7 @@ describe("the tag chooser", () => {
 describe("the map's columns", () => {
   const column = (header: string, values: string[]) => {
     const look = lookAt(header, values);
-    return { header, label: header, look, guess: guessRole(header, look, types), description: "" };
+    return { header, look, guess: guessRole(header, look, types), description: "" };
   };
   it("writes every role and every type out as an option, and shows each header with its shape and counts, never a value", () => {
     const columns = [column("personnummer", ["199001019999", "199002029999"]), column("radiology_accession", ["REG1234", "REG1235"]), column("subject_code", ["S-0001", "S-0002"])];
@@ -145,7 +145,10 @@ describe("the map's columns", () => {
     expect(html).toContain("a new type: radiology-accession</option>");
     expect(html).toContain('<option value="new"');
     expect(html).toContain('aria-label="Describe the type radiology-accession"');
-    expect(html).toContain("12 digits, 2 rows");
+    expect(html).toContain('<span class="meta col-shape">identifier-like · 12 characters</span>');
+    expect(html).toContain('<span class="meta col-shape">2 rows filled · 2 distinct</span>');
+    expect(html).toContain('<span class="meta col-shape">identifier-like · 7 characters</span>');
+    expect(html).toContain('<span class="meta col-shape">identifier-like · 6 characters</span>');
     for (const value of ["199001019999", "199002029999", "REG1234", "REG1235", "S-0001", "S-0002"]) expect(html).not.toContain(value);
     // the code column files under no type, so it is offered none
     expect(html.match(/<select/gu) ?? []).toHaveLength(3 + 2);
