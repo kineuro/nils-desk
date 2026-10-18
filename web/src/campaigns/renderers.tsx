@@ -21,6 +21,8 @@ export interface Row {
   multi?: boolean;
   /** The names each value goes by (record 48, the question's vocabulary), for the row's find. */
   names?: Record<string, ValueNames>;
+  /** Record 58 P1, a verify item: the values the pack forbids beside the proposal's other axes, each with the reason; drawn after the legal ones, dimmed. */
+  unfit?: Record<string, string>;
 }
 
 /** Who among the raters gave a value, for the adjudicator: value to principals. */
@@ -68,7 +70,7 @@ export function AxisRows({
                     const picked = Array.isArray(on) ? on.includes(value) : on === value;
                     const who = marks[r.axis]?.[value] ?? [];
                     return (
-                      <button key={value} type="button" className={picked ? "opt on" : "opt"} aria-pressed={picked} onClick={() => onChoose(r.axis, value)} title={who.length > 0 ? `given by ${who.join(", ")}` : undefined} {...chosenTone(r.values, value, picked)}>
+                      <button key={value} type="button" className={picked ? "opt on" : r.unfit?.[value] ? "opt unfit" : "opt"} aria-pressed={picked} onClick={() => onChoose(r.axis, value)} title={who.length > 0 ? `given by ${who.join(", ")}` : r.unfit?.[value]} {...chosenTone(r.values, value, picked)}>
                         {key && <kbd>{key}</kbd>}
                         {value}
                         {who.length > 0 && <span className="said-by">{who.length}</span>}

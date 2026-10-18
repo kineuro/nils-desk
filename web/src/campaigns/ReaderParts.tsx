@@ -5,24 +5,57 @@
 // (record 27), theme tokens only, every act a key.
 
 import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import type { Asked, AskedCandidate } from "../review/asked";
+import { valueWords, type Asked, type AskedCandidate } from "../review/asked";
 import { CandidateList } from "../review/CandidateList";
 import type { ReviewItem } from "../ops/client";
 import type { HeaderDoc } from "./client";
 import { comboWords, findCombos, hitWords, type Combination, type Vocabulary } from "./lookup";
-import { CANDIDATE_KEYS, consensusOf, headerLines, lineWords, paceWords, suggestionWords, type AxisLine, type HeaderLine, type Order, type Pace, type RaterStats as RaterStatsDoc, type Suggestion } from "./reader";
+import { CANDIDATE_KEYS, consensusOf, headerLines, lineWords, paceWords, suggestionWords, verifyWords, type AxisLine, type HeaderLine, type Order, type Pace, type RaterStats as RaterStatsDoc, type Suggestion } from "./reader";
 
 /** The suggestion as a line, and the legal candidates, each with its key, where the systems differ. */
-export function SuggestionBar({ s, chosen, onChoose, busy }: { s: Suggestion; chosen: AskedCandidate | null; onChoose: (c: AskedCandidate) => void; busy: boolean }) {
+export function SuggestionBar({ s, chosen, onChoose, busy, words = null }: { s: Suggestion; chosen: AskedCandidate | null; onChoose: (c: AskedCandidate) => void; busy: boolean; words?: string | null }) {
   // who suggested it (record 50): "agreed" only where two voices or more say it and none differs
   const stand = s.by ? (s.differ.length > 0 ? "differ" : consensusOf(s)) : s.differ.length === 0 ? "agree" : "differ";
-  const tag = stand === "agree" ? ["tag ok", "agreed"] : stand === "differ" ? ["tag caution", "differ"] : ["tag", "suggested"];
+  // a verify item (record 58 P1) says what to do, not who proposed it
+  const tag = words !== null ? ["tag", "filled in"] : stand === "agree" ? ["tag ok", "agreed"] : stand === "differ" ? ["tag caution", "differ"] : ["tag", "suggested"];
+  const said = words ?? suggestionWords(s);
   return (
-    <div className={`suggest ${stand}`} role="status" aria-live="polite" title={suggestionWords(s)}>
+    <div className={`suggest ${stand}`} role="status" aria-live="polite" title={said}>
       <p className="suggest-words">
-        <span className={tag[0]}>{tag[1]}</span> {suggestionWords(s)}
+        <span className={tag[0]}>{tag[1]}</span> {said}
       </p>
       {s.differ.length > 0 && s.offered.length > 0 && <CandidateList asked={askedOf(s)} chosen={chosen} keys={CANDIDATE_KEYS} onChoose={onChoose} onNone={null} busy={busy} bare />}
+    </div>
+  );
+}
+
+/**
+ * Two sources' answers on a verify item where they differ (record 58 P1), as
+ * A and B, unlabelled: no author, no probability, only the values of the
+ * axes they differ on; the rest is filled in on the rows. The reader picks
+ * one (z, x) or neither and chooses on the rows.
+ */
+export function AbBar({ s, chosen, onChoose, busy }: { s: Suggestion; chosen: 0 | 1 | null; onChoose: (i: 0 | 1) => void; busy: boolean }) {
+  if (!s.sides) return null;
+  const words = verifyWords(s);
+  return (
+    <div className="suggest differ ab-bar" role="status" aria-live="polite" title={words}>
+      <p className="suggest-words">
+        <span className="tag caution">A or B</span> {words}
+      </p>
+      <div className="ab-sides" role="group" aria-label="A or B">
+        {s.sides.map((side, i) => (
+          <button key={i} type="button" className={chosen === i ? "opt on ab-side" : "opt ab-side"} aria-pressed={chosen === i} disabled={busy} onClick={() => onChoose(i === 0 ? 0 : 1)}>
+            <kbd>{CANDIDATE_KEYS[i]}</kbd>
+            <b>{i === 0 ? "A" : "B"}</b>
+            {Object.entries(side).map(([axis, v]) => (
+              <span key={axis} className="ab-value">
+                {axis} {valueWords(v)}
+              </span>
+            ))}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -155,7 +188,7 @@ export function RaterStats({ stats }: { stats: RaterStatsDoc }) {
           <tbody>
             {stats.raters.map((r) => (
               <tr key={r.principal}>
-                {!stats.blind && <td>{r.principal}</td>}
+                {!stats.blind && <td title={r.principal}>{r.name ?? r.principal}</td>}
                 <td className="num">{r.decisions.toLocaleString("en-US")}</td>
                 <td className="num">{secs(r.median_seconds)}</td>
                 <td className="num">{secs(r.p90_seconds)}</td>

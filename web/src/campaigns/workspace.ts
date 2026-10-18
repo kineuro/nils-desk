@@ -8,7 +8,7 @@
 import type { PackDoc } from "../review/client";
 import type { BoardCandidate } from "../review/SessionBoard";
 import { answerBody, answeredAxes, answerWords, axisValues, CANDIDATE_KEYS, CANT_TELL, CANT_TELL_KEYS, cantTellOf, itemWords, jointOf, jointValue, hintsFor, keyValue, legalProblem, ROW_KEYS, stateWords, UNSURE_KEY, unsureOf, type Answer, type Answered, type Assignment, type Candidates, type Claimed, type Given, type Hint, type Item, type MyAnswer, type Question } from "./client";
-import { fold, hitWords, nameHit, vocabularyOf } from "./lookup";
+import { fold, hitWords, nameHit, settle, vocabularyOf } from "./lookup";
 import { choose, type Marks, type Row } from "./renderers";
 
 export type Seat =
@@ -83,6 +83,23 @@ export function rowsOf(q: Question, pack: PackDoc | null): Row[] {
     const multi = q.constraints?.multi ? q.constraints.multi.includes(axis) : p?.multi === true;
     const names = vocab[axis];
     return { axis, values, ...(any ? { families } : {}), ...(multi ? { multi: true } : {}), ...(names && Object.keys(names).length > 0 ? { names } : {}) };
+  });
+}
+
+/**
+ * The rows of a verify item (record 58 P1, spec 12.2): each row's values
+ * ordered once per item, those the pack allows beside the proposal's other
+ * axes first and those it forbids after them with the reason, so changing an
+ * axis offers the other legal values first and the keys stay put while the
+ * item is read. The rows of a question without constraints are as they are.
+ */
+export function verifyRows(q: Question, rows: Row[], proposal: Record<string, string | string[] | null>): Row[] {
+  if (q.kind !== "axes" || !q.constraints) return rows;
+  const s = settle(q, { kind: "values", values: proposal }, rows);
+  return rows.map((r) => {
+    const unfit = s.excluded[r.axis] ?? {};
+    if (Object.keys(unfit).length === 0) return r;
+    return { ...r, values: [...r.values.filter((v) => !(v in unfit)), ...r.values.filter((v) => v in unfit)], unfit };
   });
 }
 

@@ -490,8 +490,8 @@ describe("the reader's parts", () => {
     const all = statsOf({ all: { answers: 123 }, raters: [{ principal: "alice@walk", answers: 120, median_seconds: 3.4, p90_seconds: 7.2, suggested: 100, changed: 7, share_changed: 0.07, batched: 40 }, { rater: "bob@walk", answers: 3 }, { nobody: 1 }] });
     expect(all).toEqual({
       raters: [
-        { principal: "alice@walk", decisions: 120, median_seconds: 3.4, p90_seconds: 7.2, changed: 0.07, batched: 40 },
-        { principal: "bob@walk", decisions: 3, median_seconds: null, p90_seconds: null, changed: null, batched: null },
+        { principal: "alice@walk", name: null, decisions: 120, median_seconds: 3.4, p90_seconds: 7.2, changed: 0.07, batched: 40 },
+        { principal: "bob@walk", name: null, decisions: 3, median_seconds: null, p90_seconds: null, changed: null, batched: null },
       ],
       blind: false,
     });

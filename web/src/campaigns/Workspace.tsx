@@ -49,21 +49,22 @@ import {
   type MyAnswer,
   givenOfMine,
   mineWords,
+  purposeOf,
 } from "./client";
 import { amendRefusal, MyAnswers } from "./MyAnswers";
 import { AxisRows, blank, CompactRows, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
 import { BatchView, type BatchViewProps } from "./Batches";
 import type { AskedCandidate } from "../review/asked";
-import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, deriveValue, derivedWords, givenOf, givenOfCandidate, NO_PACE, paced, Prefetcher, suggestionOf, upcoming, type AxisLine, type Batch, type HeaderLine, type Order, type Pace, type Reading, type Suggestion } from "./reader";
+import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, deriveValue, derivedWords, givenOf, NO_PACE, paced, Prefetcher, suggestionOf, takeCandidate, upcoming, verifySuggestionOf, verifyWords, chosenSide, PLANTED_WORDS, type AxisLine, type Batch, type HeaderLine, type Order, type Pace, type Reading, type Suggestion } from "./reader";
 import { acceptBatch, batchesFor, claimIn, deriveAsked, deriveDoor, Deriver, headerDoorOf, headerFor, hintOf, nextOf, prefetchOn, R48, readingFor, valueOrderServed } from "./readerDoors";
-import { ComboSearch, DerivedLine, EvidenceLines, HeaderBlock, HeaderDoors, HeaderDrawer, headerLinesOf, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
+import { AbBar, ComboSearch, DerivedLine, EvidenceLines, HeaderBlock, HeaderDoors, HeaderDrawer, headerLinesOf, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { combinationsOf, seedsOf, settle, takeCombo, vocabularyOf, type Combination, type Settled } from "./lookup";
 import { StackView } from "./StackView";
 import { abServed, isAb } from "./ab";
 import { isPair, pairServed } from "./pair";
 import { anchoredServed, isAnchored } from "./anchored";
 import { warmStack } from "../viewer/prefetch";
-import { amendSeat, answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, hintsNow, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, type Seat } from "./workspace";
+import { amendSeat, answeredWords, beatSeat, boardOf, bodyOf, chosenOf, compactRows, disagreementWords, enterOwnedBy, findKeyOf, given as choose, givenCantTell, givenNone, hintsNow, illegal, keyAct, marksOf, pendingWords, rowsOf, seatOf, verifyRows, type Seat } from "./workspace";
 
 type Role = "rater" | "adjudicator";
 
@@ -241,13 +242,17 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
 
   // the pack's families and multi-valued axes, where the person may read the pack
   const q = campaign?.question ?? null;
+  // record 58 P1: a verify campaign shows its proposal first, one key accepts it
+  const verify = campaign !== null && purposeOf(campaign) === "verify";
   const packName = caps.engine?.packs[0]?.name ?? null;
   const readsPack = q !== null && (q.kind === "axis" || q.kind === "axes") && packName !== null && may(caps, "data:see");
   useEffect(() => {
     if (readsPack && packName) review.pack(packName).then(setPack, () => undefined);
   }, [readsPack, packName]);
 
-  const rows = useMemo(() => (q ? rowsOf(q, pack) : []), [q, pack]);
+  const baseRows = useMemo(() => (q ? rowsOf(q, pack) : []), [q, pack]);
+  // on a verify item the values the pack allows beside the proposal come first on every row, once per item (spec 12.2)
+  const rows = useMemo(() => (verify && q && suggestion ? verifyRows(q, baseRows, suggestion.values) : baseRows), [verify, q, baseRows, suggestion]);
   // what the choices settle on the other rows (record 48, the second real read); the answer sent is the settled one
   const settled = useMemo<Settled>(() => settle(q, g, rows), [q, g, rows]);
   const combos = useMemo(() => (q && q.kind === "axes" ? [...(counted ?? []), ...seedsOf(q, rows)] : []), [q, rows, counted]);
@@ -300,7 +305,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       // the suggestion filled in, unless a key was pressed before it came
       readingFor(capsNow.current, id, q, unled ? { ...item, blind: true } : item).then((r) => {
         if (currentItem.current !== item.id) return;
-        const s = suggestionOf(q, r);
+        const s = verify ? verifySuggestionOf(q, r) : suggestionOf(q, r);
         const g0 = givenOf(q, s);
         setReading(r);
         setSuggestion(s);
@@ -532,8 +537,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
 
   // the keys
   const offered = suggestion?.differ.length ? suggestion.offered : [];
-  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleView, header: headerDoor !== null, openHeader, undo, mineOpen });
-  keyed.current = { q, rows, candidates, board, g, answer, giveBack, offered, suggested, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleView, header: headerDoor !== null, openHeader, undo, mineOpen };
+  const keyed = useRef({ q, rows, candidates, board, g, answer, giveBack, offered, suggested, suggestion, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleView, header: headerDoor !== null, openHeader, undo, mineOpen });
+  keyed.current = { q, rows, candidates, board, g, answer, giveBack, offered, suggested, suggestion, mode, batchesOffered, openBatches, acceptNow, batchCount: batches?.length ?? 0, toggleView, header: headerDoor !== null, openHeader, undo, mineOpen };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const k = keyed.current;
@@ -558,8 +563,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       e.preventDefault();
       if (act.kind === "candidate") {
         const c = k.offered[act.index];
-        const cg = c ? givenOfCandidate(k.q, c) : null;
-        if (cg) setG(cg);
+        if (c) setG((was) => takeCandidate(k.q!, was, c, k.suggestion));
       } else if (act.kind === "view") k.toggleView();
       else if (act.kind === "header") k.openHeader();
       else if (act.kind === "combo") combo.current?.focus();
@@ -630,6 +634,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       lines={reading?.lines ?? null}
       pack={reading?.pack ?? null}
       suggestion={suggestion}
+      verify={verify}
+      accept={verify && q && suggested && changesOf(q, suggested, settled.given) === 0 ? "accept" : "answer"}
       blind={reading?.blind === true || item?.blind === true}
       header={picturesAlone ? null : (reading?.header ?? null)}
       headerLines={picturesAlone ? [] : headerLinesOf(reading)}
@@ -638,10 +644,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       headerDrawer={headerOpen ? { doc: headerDoc, failed: headerFailed } : null}
       onHeaderClose={() => setHeaderOpen(false)}
       derived={deriver.current && !deriveGone ? (derived ? derivedWords(derived, q) : null) : undefined}
-      onCandidate={(c) => {
-        const cg = givenOfCandidate(q!, c);
-        if (cg) setG(cg);
-      }}
+      onCandidate={(c) => setG((was) => takeCandidate(q!, was, c, suggestion))}
       pace={pace}
       shownAt={holding ? clock.current.since(holding.item.id) : null}
       order={valueOrderServed(caps) ? order : null}
@@ -722,6 +725,10 @@ export interface WorkspaceBodyProps {
   pack?: string | null;
   /** The answer filled in and the candidates where the systems differ. */
   suggestion?: Suggestion | null;
+  /** Record 58 P1: a verify campaign's item, the proposal filled in on every asked axis and one key accepting it. */
+  verify?: boolean;
+  /** Verify: the answer button reads Accept while the proposal stands whole, Answer once an axis moved. */
+  accept?: "accept" | "answer";
   /** The item is of a sealed sample, read blind (record 48): no classification shown, only the pictures and the raw header. */
   blind?: boolean;
   /** The stack's raw header values, shown for a blind item. */
@@ -917,7 +924,13 @@ function ReaderOne(p: Drawn) {
               <HeaderDoors whole={p.headerWhole ?? false} onWhole={p.onHeader} />
             </ItemLine>
             {holding.note && <p className="note-lead">{holding.note}</p>}
-            {!blind && p.suggestion && <SuggestionBar s={p.suggestion} chosen={chosenCandidate(q, p.suggestion.offered, p.given)} onChoose={(x) => p.onCandidate?.(x)} busy={p.busy} />}
+            {p.verify && (
+              <p className="meta one-line verify-note" title={PLANTED_WORDS}>
+                {PLANTED_WORDS}
+              </p>
+            )}
+            {!blind && p.suggestion && p.suggestion.sides && <AbBar s={p.suggestion} chosen={chosenSide(p.suggestion, p.given)} onChoose={(i) => p.onCandidate?.(p.suggestion!.offered[i])} busy={p.busy} />}
+            {!blind && p.suggestion && !p.suggestion.sides && <SuggestionBar s={p.suggestion} chosen={chosenCandidate(q, p.suggestion.offered, p.given)} onChoose={(x) => p.onCandidate?.(x)} busy={p.busy} words={p.verify ? verifyWords(p.suggestion) : null} />}
             <HeaderBlock lines={p.headerLines ?? []} flat={p.header ?? []} brief={size === "compact" || (!blind && (p.suggestion?.offered.length ?? 0) > 0)} />
             {evidence && <EvidenceLines lines={lines} full={size === "expanded"} pack={p.pack ?? null} />}
             <Adjudicate {...p} />
@@ -938,7 +951,7 @@ function ReaderOne(p: Drawn) {
             <Actions {...p} withWhy />
             {p.keys && (
               <div className="drawer keys-drawer" role="dialog" aria-label="keys">
-                <KeyList rows={p.rows.length} compact={compact} combos={q.kind === "axes" && compact} reader candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} cantTell={cantTellOf(q) !== null ? p.rows.length : 0} unsure={unsureOf(q)} header={p.headerWhole ?? false} view />
+                <KeyList rows={p.rows.length} compact={compact} combos={q.kind === "axes" && compact} reader verify={p.verify ?? false} candidates={(p.suggestion?.differ.length ?? 0) > 0 ? (p.suggestion?.offered.length ?? 0) : 0} batches={p.batchesOffered ?? false} cantTell={cantTellOf(q) !== null ? p.rows.length : 0} unsure={unsureOf(q)} header={p.headerWhole ?? false} view />
               </div>
             )}
             {p.headerDrawer && <HeaderDrawer doc={p.headerDrawer.doc} failed={p.headerDrawer.failed} onClose={() => p.onHeaderClose?.()} />}
@@ -1065,7 +1078,7 @@ function Actions(p: WorkspaceBodyProps & { withWhy?: boolean }) {
     <div className="row actions">
       <span className="act-main" role="group" aria-label="the answer">
         <button type="button" className="button act-answer" disabled={p.busy} onClick={p.onAnswer}>
-          {p.amending ? "Correct" : "Answer"} <kbd>Enter</kbd>
+          {p.accept === "accept" ? "Accept" : p.amending ? "Correct" : "Answer"} <kbd>Enter</kbd>
         </button>
         {unsureOf(q) && (
           <button type="button" className={p.unsure ? "opt on act-unsure" : "opt act-unsure"} aria-pressed={p.unsure ?? false} disabled={p.busy} onClick={p.onUnsure} title="Answered, and wants a second look">
@@ -1181,7 +1194,7 @@ function Renderer(p: WorkspaceBodyProps & { item: Item; assignment: number }) {
   }
 }
 
-function KeyList({ rows, compact = false, combos = false, reader = false, candidates = 0, batches = false, cantTell = 0, unsure = false, header = false, view = false }: { rows: number; compact?: boolean; combos?: boolean; reader?: boolean; candidates?: number; batches?: boolean; cantTell?: number; unsure?: boolean; header?: boolean; view?: boolean }) {
+function KeyList({ rows, compact = false, combos = false, reader = false, verify = false, candidates = 0, batches = false, cantTell = 0, unsure = false, header = false, view = false }: { rows: number; compact?: boolean; combos?: boolean; reader?: boolean; verify?: boolean; candidates?: number; batches?: boolean; cantTell?: number; unsure?: boolean; header?: boolean; view?: boolean }) {
   const pair = (k: string, d: string) => (
     <div className="facts-pair" key={k + d}>
       <dt>{k}</dt>
@@ -1190,7 +1203,7 @@ function KeyList({ rows, compact = false, combos = false, reader = false, candid
   );
   return (
     <dl className="facts keys">
-      {reader && pair("Enter", "confirm the answer filled in")}
+      {reader && pair("Enter", verify ? "accept the item as filled in; once an axis is changed, answer" : "confirm the answer filled in")}
       {reader && pair("Space", "enlarge the plane under the pointer (else the lead one) to the whole side; Space again or Esc for the three; a double click or the corner button does the same")}
       {reader && pair("↑ ↓", "page the stack, or the plane under the pointer, a plane at a time; Page Up and Page Down ten; the wheel too")}
       {candidates > 0 && pair(CANDIDATE_KEYS.slice(0, candidates).split("").join(" "), "choose a candidate")}
