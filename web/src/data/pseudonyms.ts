@@ -397,10 +397,10 @@ export interface Csv {
   delimiter: string;
 }
 
-/** A CSV as the browser reads it: comma, semicolon or tab, quotes honoured, a trailing empty line dropped. */
-export function parseCsv(text: string): Csv {
+/** A CSV as the browser reads it: comma, semicolon or tab (the one the first line uses most, or the one asked for), quotes honoured, a trailing empty line dropped. */
+export function parseCsv(text: string, separator?: string): Csv {
   const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
-  const delimiter = [",", ";", "\t"].map((d) => [d, firstLine.split(d).length] as const).sort((a, b) => b[1] - a[1])[0][0];
+  const delimiter = separator ?? [",", ";", "\t"].map((d) => [d, firstLine.split(d).length] as const).sort((a, b) => b[1] - a[1])[0][0];
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -437,29 +437,25 @@ export function parseCsv(text: string): Csv {
   return { header, rows: body, delimiter };
 }
 
-/** A value's shape: every digit a 9, every capital an A, every other letter an a, everything else as it is. Never the value itself. */
+/**
+ * A value's shape: every digit a 9, every capital an A, every other letter an a, everything else as it is. Matches a value against the shapes the
+ * engine lists for the held IDs; it is not drawn for a column of a file, whose marks and spaces it keeps.
+ */
 export function shapeOf(value: string): string {
   return value.trim().replace(/\p{Nd}|\p{Lu}|\p{L}/gu, (c) => (/\p{Nd}/u.test(c) ? "9" : /\p{Lu}/u.test(c) ? "A" : "a"));
 }
 
 /**
- * A header that is a number: a file with no header row has its first row read
- * as one, and a personnummer is no column's name. Six digits in a row is not
- * how anyone names a column.
+ * A header that is a value: a file with no header row has its first row read
+ * as one, and a personnummer, a hospital's number or a hashed code is no
+ * column's name. Five digits, in any script, is not how anyone names a
+ * column; a name wrongly taken for a value is shown by its place, which is
+ * the safe way to be wrong.
  */
 export function headerIsValue(header: string): boolean {
-  return /\d{6,}/.test(header);
+  return (header.match(/\p{Nd}/gu) ?? []).length >= 5;
 }
 
-/** What a column is called on screen: its header, or its place where the header is a number. */
-export function columnLabel(header: string, index: number): string {
-  return headerIsValue(header) ? `column ${index + 1}` : header;
-}
-
-/** The registry type a header would make, named after it; none for a header that is a number, so no number is made a name. */
-export function typeFromHeader(header: string): string {
-  return headerIsValue(header) ? "" : typeName(header);
-}
 
 /**
  * Text from the engine or the browser with any stray number hidden: a
@@ -473,38 +469,175 @@ export function hideNumbers(text: string): string {
   return text.replace(/(?<![0-9A-Za-z])(?:\d{6,8}[-+]\d{4}|\d{8,})(?![0-9A-Za-z])/g, "[number hidden]");
 }
 
-/** A shape in words: "12 digits" for digits alone, else the shape itself. */
-export function shapeWords(shape: string): string {
-  if (/^9+$/.test(shape)) return `${shape.length} digits`;
-  return shape;
-}
+/**
+ * What a column's values read as: the five kinds the screen names, and the
+ * empty column. The screen says which kind a column is, how long its values
+ * are and how many there are, and never one of them (Wave 7b, section 18).
+ */
+export type ColumnKind = "empty" | "integer" | "decimal" | "date" | "identifier-like" | "text";
 
 export interface ColumnLook {
   header: string;
-  /** The most common shape, in words. */
-  shape: string | null;
-  /** How many rows hold a value. */
+  /** What the values read as; text where they do not agree. */
+  kind: ColumnKind;
+  /** The kind holds for nine in ten of the values and not for all of them. */
+  mostly: boolean;
+  /** The shortest and the longest value, in characters; 0 for an empty column. */
+  shortest: number;
+  longest: number;
+  /** How many rows hold a value, how many rows the file has, and how many different values there are. */
   filled: number;
+  rows: number;
   distinct: number;
-  /** "12 digits, 1,244 rows, 212 distinct". */
-  words: string;
+  /** The column's kind and the length of its values: "identifier-like · 12 characters". */
+  what: string;
+  /** How much of it there is: "1,244 of 1,300 rows filled · 212 distinct"; nothing for an empty column. */
+  counts: string;
 }
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-/** What a column looks like from its values. */
+const leap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+
+/** Whether year, month and day name a day of the calendar. */
+function dayOf(y: number, m: number, d: number): boolean {
+  if (y < 1800 || y > 2200 || m < 1 || m > 12 || d < 1) return false;
+  return d <= [31, leap(y) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1];
+}
+
+/** Whether a value is a day, with a time after it or not: 2022-01-15, 2022/01/15, 15.01.2022, 01/15/2022, 2022-01. */
+function isDate(v: string): boolean {
+  const iso = /^(\d{4})([-/.])(\d{1,2})\2(\d{1,2})(?:[T ]\d{1,2}:\d{2}(?::\d{2}(?:[.,]\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/u.exec(v);
+  if (iso) return dayOf(Number(iso[1]), Number(iso[3]), Number(iso[4]));
+  const dmy = /^(\d{1,2})([-/.])(\d{1,2})\2(\d{4})$/u.exec(v);
+  if (dmy) return dayOf(Number(dmy[4]), Number(dmy[3]), Number(dmy[1])) || dayOf(Number(dmy[4]), Number(dmy[1]), Number(dmy[3]));
+  const month = /^(\d{4})-(\d{2})$/u.exec(v);
+  return month !== null && dayOf(Number(month[1]), Number(month[2]), 1);
+}
+
+type Reads = Exclude<ColumnKind, "empty">;
+
+/**
+ * What one value reads as. A number of ten digits or more, a number with a
+ * separator in the place of a personnummer's, and a code (no spaces, a digit
+ * in it, a letter or a mark beside the digits) read as identifier-like.
+ */
+function readsAs(v: string): Reads {
+  if (isDate(v)) return "date";
+  if (/^(\p{Nd}{6}|\p{Nd}{8})[-+]\p{Nd}{4}$/u.test(v)) return "identifier-like";
+  if (/^[+-]?\p{Nd}+$/u.test(v)) return /\p{Nd}{10}/u.test(v) ? "identifier-like" : "integer";
+  if (/^[+-]?\p{Nd}+[.,]\p{Nd}+$/u.test(v)) return "decimal";
+  // a time of day is no code
+  if (/^\p{Nd}{1,2}:\p{Nd}{2}(:\p{Nd}{2})?$/u.test(v)) return "text";
+  if (/^\S{4,64}$/u.test(v) && /\p{Nd}/u.test(v) && /[\p{L}_/.:#+-]/u.test(v)) return "identifier-like";
+  return "text";
+}
+
+/**
+ * What a column looks like from its values: what they read as, how long they
+ * are, how many rows hold one and how many differ. The look keeps no value,
+ * no pattern made from one and no first row: it is the one thing the map
+ * dialog draws of a column besides its header.
+ */
 export function lookAt(header: string, values: string[]): ColumnLook {
-  const filled = values.filter((v) => v.trim() !== "");
-  const shapes = new Map<string, number>();
-  for (const v of filled) shapes.set(shapeOf(v), (shapes.get(shapeOf(v)) ?? 0) + 1);
-  const ranked = [...shapes.entries()].sort((a, b) => b[1] - a[1]);
-  const distinct = new Set(filled.map((v) => v.trim())).size;
-  if (filled.length === 0) return { header, shape: null, filled: 0, distinct: 0, words: "empty" };
-  const shape = ranked.length > 1 && ranked[1][1] * 10 >= filled.length ? `${ranked.length} shapes: ${ranked.slice(0, 2).map(([s]) => shapeWords(s)).join(", ")}` : shapeWords(ranked[0][0]);
-  const parts = [shape, `${n(filled.length)} ${filled.length === 1 ? "row" : "rows"}`];
-  if (filled.length < values.length) parts.push("rest empty");
-  if (distinct < filled.length) parts.push(`${n(distinct)} distinct`);
-  return { header, shape, filled: filled.length, distinct, words: parts.join(", ") };
+  const seen = new Map<string, number>();
+  for (const raw of values) {
+    const v = raw.trim();
+    if (v !== "") seen.set(v, (seen.get(v) ?? 0) + 1);
+  }
+  const rows = values.length;
+  if (seen.size === 0) return { header, kind: "empty", mostly: false, shortest: 0, longest: 0, filled: 0, rows, distinct: 0, what: "empty", counts: "" };
+  const reads: Record<Reads, number> = { integer: 0, decimal: 0, date: 0, "identifier-like": 0, text: 0 };
+  let filled = 0;
+  let shortest = Infinity;
+  let longest = 0;
+  // each different value is read once, and counts as often as it stands
+  for (const [v, times] of seen) {
+    filled += times;
+    reads[readsAs(v)] += times;
+    const length = [...v].length;
+    shortest = Math.min(shortest, length);
+    longest = Math.max(longest, length);
+  }
+  // whole numbers and decimals read as numbers together: a column of whole numbers with one 2.5 among them is decimal
+  const groups: [Reads, number][] = [
+    [reads.decimal > 0 ? "decimal" : "integer", reads.integer + reads.decimal],
+    ["date", reads.date],
+    ["identifier-like", reads["identifier-like"]],
+    ["text", reads.text],
+  ];
+  const [top, held] = groups.reduce((a, b) => (b[1] > a[1] ? b : a));
+  const agrees = held === filled;
+  const kind: Reads = agrees || held * 10 >= filled * 9 ? top : "text";
+  const mostly = kind !== "text" && !agrees;
+  const length = shortest === longest ? `${n(longest)} ${longest === 1 ? "character" : "characters"}` : `${n(shortest)} to ${n(longest)} characters`;
+  const rowsWords = filled === rows ? `${n(rows)} ${rows === 1 ? "row" : "rows"}` : `${n(filled)} of ${n(rows)} rows`;
+  return {
+    header,
+    kind,
+    mostly,
+    shortest,
+    longest,
+    filled,
+    rows,
+    distinct: seen.size,
+    what: `${mostly ? "mostly " : ""}${kind} · ${length}`,
+    counts: `${rowsWords} filled · ${n(seen.size)} distinct`,
+  };
+}
+
+/** A column's place as its name: what stands for a header that is a value, and is never made into a type's name. */
+const PLACE = /^column \d+$/;
+
+/** What a column is called on screen: its header, or its place where the header is a number. */
+export function columnLabel(header: string, index: number): string {
+  return headerIsValue(header) ? `column ${index + 1}` : header;
+}
+
+const NUMBERS: readonly ColumnKind[] = ["integer", "decimal"];
+
+/**
+ * Whether the file's first line is a row of values and not a header. A header
+ * names the columns in words; a first line that reads as the values under it,
+ * a number over numbers, a code over codes, a date over dates, in three of
+ * every four of the columns that are not text and have a cell there, is a row
+ * of them, as a file with no header line has. A file all of text cannot be
+ * told either way and is taken as it says.
+ */
+export function firstLineIsValues(header: string[], looks: Pick<ColumnLook, "kind">[]): boolean {
+  const cells = looks
+    .map((l, i) => [l.kind, (header[i] ?? "").trim()] as const)
+    .filter(([kind, cell]) => kind !== "text" && kind !== "empty" && cell !== "");
+  if (cells.length === 0) return false;
+  const alike = cells.filter(([kind, cell]) => {
+    const reads = readsAs(cell);
+    return reads === kind || (NUMBERS.includes(reads) && NUMBERS.includes(kind));
+  });
+  return alike.length * 4 >= cells.length * 3;
+}
+
+/**
+ * The names a file's columns go by on screen and to the engine: each header,
+ * except that a header which is a value is named by its place, and so is every
+ * column of a file whose first line is a row of values. The first line of a
+ * file with no header is never printed.
+ */
+export function columnLabels(header: string[], looks: Pick<ColumnLook, "kind">[]): string[] {
+  const values = firstLineIsValues(header, looks);
+  return header.map((h, i) => (values ? `column ${i + 1}` : columnLabel(h, i)));
+}
+
+/** The names a CSV's columns go by, read from the file itself. */
+export function csvLabels(csv: Pick<Csv, "header" | "rows">): string[] {
+  return columnLabels(
+    csv.header,
+    csv.header.map((h, i) => lookAt(h, csv.rows.map((r) => r[i] ?? ""))),
+  );
+}
+
+/** The registry type a header would make, named after it; none for a header that is a value or a place, so no value is made a name. */
+export function typeFromHeader(header: string): string {
+  return headerIsValue(header) || PLACE.test(header) ? "" : typeName(header);
 }
 
 /**

@@ -5,6 +5,7 @@
 // numbers and names here are made up.
 
 import { describe, expect, it } from "vitest";
+import { mapTable } from "../../test/mapFixture";
 import type { Capabilities } from "../capabilities";
 import {
   arrivesWords,
@@ -34,9 +35,12 @@ import {
   shapeOf,
   hideNumbers,
   columnLabel,
+  columnLabels,
+  csvLabels,
+  firstLineIsValues,
+  headerIsValue,
   typeFromHeader,
   neverKept,
-  shapeWords,
   subjectsWords,
   typeName,
   vaultAsked,
@@ -75,15 +79,80 @@ describe("a CSV read on this machine", () => {
 });
 
 describe("what a column looks like", () => {
-  it("is its shape: digits as 9, capitals as A, and how many rows hold it", () => {
-    expect(shapeOf("REG1234")).toBe("AAA9999");
-    expect(shapeOf("19900101-9999")).toBe("99999999-9999");
-    expect(shapeWords("999999999999")).toBe("12 digits");
-    expect(shapeWords("AAA999")).toBe("AAA999");
+  it("is its shape: what the values read as, how long they are, how many rows hold one and how many differ", () => {
     const look = lookAt("pn", ["199001019999", "199002029999", "199001019999", ""]);
-    expect(look.words).toBe("12 digits, 3 rows, rest empty, 2 distinct");
-    expect(lookAt("blank", ["", ""]).words).toBe("empty");
-    expect(lookAt("mixed", ["REG1234", "199001019999", "REG9999", "AB12"]).words).toBe("3 shapes: AAA9999, 12 digits, 4 rows");
+    expect(look).toMatchObject({ kind: "identifier-like", mostly: false, shortest: 12, longest: 12, filled: 3, rows: 4, distinct: 2 });
+    expect(look.what).toBe("identifier-like · 12 characters");
+    expect(look.counts).toBe("3 of 4 rows filled · 2 distinct");
+    // an empty column says so and has nothing else to say
+    const blank = lookAt("blank", ["", " ", ""]);
+    expect(blank).toMatchObject({ kind: "empty", filled: 0, distinct: 0, shortest: 0, longest: 0, rows: 3, what: "empty", counts: "" });
+    expect(lookAt("mixed", ["REG1234", "199001019999", "REG9999", "AB12"]).what).toBe("identifier-like · 4 to 12 characters");
+    expect(lookAt("one", ["x"]).counts).toBe("1 row filled · 1 distinct");
+    expect(lookAt("all", ["a1", "a1", "b2"]).counts).toBe("3 rows filled · 2 distinct");
+  });
+  it("reads a value as an integer, a decimal, a date, an identifier-like code or text", () => {
+    const what = (values: string[]) => lookAt("x", values).what;
+    expect(what(["1", "2", "10", "-3"])).toBe("integer · 1 to 2 characters");
+    expect(what(["2.5", "3", "4,5"])).toBe("decimal · 1 to 3 characters");
+    expect(what(["2022-01-15", "15.01.2022", "01/15/2022", "2022/01/15"])).toBe("date · 10 characters");
+    expect(what(["2022-01-15 10:30", "2022-01-15T10:30:00Z"])).toBe("date · 16 to 20 characters");
+    expect(what(["2022-01"])).toBe("date · 7 characters");
+    // no such day: a code with marks in it
+    expect(what(["2022-13-45"])).toBe("identifier-like · 10 characters");
+    expect(what(["S-0001", "REG1234", "3e1b77c0a9d2f400"])).toBe("identifier-like · 6 to 16 characters");
+    expect(what(["900101-9999", "19900101-9999", "9001019999"])).toBe("identifier-like · 10 to 13 characters");
+    expect(what(["M", "F", "M"])).toBe("text · 1 character");
+    expect(what(["left hand", "right hand"])).toBe("text · 9 to 10 characters");
+    // a time of day and a number of eight digits are not codes
+    expect(what(["10:30", "9:05:12"])).toBe("text · 5 to 7 characters");
+    expect(what(["20220115", "12345678"])).toBe("integer · 8 characters");
+    expect(lookAt("x", ["١٩٩٠"]).what).toBe("integer · 4 characters");
+  });
+  it("says mostly where nine in ten of the values agree, and text where they do not", () => {
+    const mostly = [...Array.from({ length: 19 }, (_, i) => String(10 + i)), "n/a"];
+    expect(lookAt("x", mostly)).toMatchObject({ kind: "integer", mostly: true, what: "mostly integer · 2 to 3 characters" });
+    expect(lookAt("x", ["1", "2", "n/a"]).what).toBe("text · 1 to 3 characters");
+    expect(lookAt("x", ["abc", "12", "2022-01-01", "x y"])).toMatchObject({ kind: "text", mostly: false });
+    // whole numbers beside one decimal are decimal
+    expect(lookAt("x", ["1", "2", "3.5"]).kind).toBe("decimal");
+  });
+  it("keeps no value: its object holds counts and words, and a column of made-up values leaves none behind", () => {
+    const table = mapTable();
+    const looks = table.header.map((h, c) =>
+      lookAt(
+        h,
+        table.rows.map((r) => r[c]),
+      ),
+    );
+    const kept = JSON.stringify(looks);
+    for (const value of table.values.filter((v) => v.length >= 4)) expect(kept, value).not.toContain(value);
+    // each column is what the table was made to be, and counts what the table holds
+    looks.forEach((look, c) => {
+      const fact = table.facts[c];
+      expect(look.kind, fact.name).toBe(fact.kind);
+      expect(look.mostly, fact.name).toBe(fact.mostly);
+      expect([look.filled, look.distinct, look.shortest, look.longest], fact.name).toEqual([fact.filled, fact.distinct, fact.shortest, fact.longest]);
+      expect(look.rows).toBe(1300);
+    });
+  });
+  it("tells a first line that is a row of values from a header", () => {
+    const looks = (columns: string[][]) => columns.map((values) => lookAt("x", values));
+    const body = [["199001019999", "199002029999"], ["S-0001", "S-0002"], ["note", "other note"]];
+    // names in words over values: a header
+    expect(firstLineIsValues(["personnummer", "code", "note"], looks(body))).toBe(false);
+    // the values themselves, kind for kind in every column that is not text: no header line
+    expect(firstLineIsValues(["199003039999", "S-0003", "a note"], looks(body))).toBe(true);
+    expect(columnLabels(["199003039999", "S-0003", "a note"], looks(body))).toEqual(["column 1", "column 2", "column 3"]);
+    expect(columnLabels(["personnummer", "code", "note"], looks(body))).toEqual(["personnummer", "code", "note"]);
+    // a file all of text cannot be told either way
+    expect(firstLineIsValues(["name", "ward"], looks([["Zephyr"], ["Q7"]]))).toBe(false);
+    // numbers over numbers, a date over dates
+    expect(firstLineIsValues(["6.5", "2021-03-17"], looks([["7.5", "3"], ["2022-01-02", "2020-11-30"]]))).toBe(true);
+    // a header with the digits of a number is named by its place on its own
+    expect(columnLabels(["personnummer", "9001019999", "code"], looks([["a"], ["b"], ["c"]]))).toEqual(["personnummer", "column 2", "code"]);
+    expect(csvLabels(parseCsv("id,code\nS-0001,3e1b77c0a9d2f400\n"))).toEqual(["id", "code"]);
+    expect(csvLabels(parseCsv("S-0000,3e1b77c0a9d2f401\nS-0001,3e1b77c0a9d2f400\n"))).toEqual(["column 1", "column 2"]);
   });
   it("means the person's number, the code, a type of the registry's, or a new type named after the header", () => {
     const look = lookAt("x", ["1"]);
@@ -386,7 +455,7 @@ describe("nothing of a cell is shown", () => {
   it("reads a shape from letters of any alphabet and digits of any script, never a value", () => {
     expect(shapeOf("Åsa Öberg")).toBe("Aaa Aaaaa");
     expect(shapeOf("١٩٩٠")).toBe("9999");
-    expect(lookAt("pn", ["199001019999", "199002029999"]).words).toBe("12 digits, 2 rows");
+    expect(lookAt("pn", ["199001019999", "199002029999"]).what).toBe("identifier-like · 12 characters");
   });
 
   it("hides a number standing on its own in the engine's or the browser's words, and leaves a subject code", () => {
@@ -401,6 +470,18 @@ describe("nothing of a cell is shown", () => {
     expect(columnLabel("199001019999", 2)).toBe("column 3");
     expect(typeFromHeader("199001019999")).toBe("");
     expect(typeFromHeader("Study ID")).toBe("study-id");
+    // five digits, anywhere and in any script, is a value and no name; a name may end in a digit or two
+    expect(headerIsValue("3e1b77c0a9d2f400")).toBe(true);
+    expect(headerIsValue("ABC12345")).toBe(true);
+    expect(headerIsValue("١٢٣٤٥")).toBe(true);
+    expect(headerIsValue("visit_2")).toBe(false);
+    expect(headerIsValue("T2 FLAIR")).toBe(false);
+    expect(typeFromHeader("column 3")).toBe("");
+  });
+
+  it("reads a file by the separator it is told, and by its first line otherwise", () => {
+    expect(parseCsv("a;b\n1;2\n").header).toEqual(["a", "b"]);
+    expect(parseCsv("a;b\n1;2\n", ",").header).toEqual(["a;b"]);
   });
 
   it("knows the two types NILS never keeps, by the engine's word where it gives one and by name where it does not", () => {

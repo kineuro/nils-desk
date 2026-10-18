@@ -162,7 +162,8 @@ describe("Pseudonyms", () => {
     await act(async () => {
       describe.dispatchEvent(new Event("input", { bubbles: true }));
     });
-    expect(dialog.textContent).toContain("12 digits, 3 rows");
+    expect(dialog.textContent).toContain("identifier-like · 12 characters");
+    expect(dialog.textContent).toContain("3 rows filled · 3 distinct");
     expect(dialog.textContent).toContain("column 3");
     await act(async () => {
       button(dialog, "See what it will do")!.click();

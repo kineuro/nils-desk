@@ -11,7 +11,7 @@ import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
-import { clinical, clinicalActs, identifierRefusal, loadedWords, reportWords, vocabularyWords, type ImportReport, type Vocabulary } from "./clinical";
+import { clinical, clinicalActs, identifierRefusal, importFailure, loadedWords, reportWords, vocabularyWords, type ImportReport, type Vocabulary } from "./clinical";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; v: Vocabulary };
 
@@ -165,6 +165,9 @@ function LoadDialog({ onClose, onDone }: { onClose: () => void; onDone: (words: 
   );
 }
 
+/** How many reasons for refused rows the preview lists; the rest are counted. */
+const REASONS = 8;
+
 /** Import a file: the mapping and the CSV, previewed, then applied from the preview. */
 function ImportDialog({ caps, onClose, onDone }: { caps: Capabilities; onClose: () => void; onDone: (words: string) => void }) {
   const [mapping, setMapping] = useState<{ name: string; text: string } | null>(null);
@@ -185,7 +188,8 @@ function ImportDialog({ caps, onClose, onDone }: { caps: Capabilities; onClose: 
       },
       (e: unknown) => {
         setBusy(null);
-        setWhy(messageOf(e));
+        // the engine's refusal may list the file's first line; only names and places are printed
+        setWhy(importFailure(messageOf(e), csv.text));
       },
     );
   };
@@ -193,6 +197,7 @@ function ImportDialog({ caps, onClose, onDone }: { caps: Capabilities; onClose: 
     set(f);
     setPreview(null);
   };
+  // the reasons come in words that carry nothing of the file (clinical.ts), merged and the most rows first
   const refused = preview ? Object.entries(preview.refused) : [];
   const foot = (
     <div className="row actions">
@@ -221,11 +226,12 @@ function ImportDialog({ caps, onClose, onDone }: { caps: Capabilities; onClose: 
           <p className="lede">{reportWords(preview)}</p>
           {refused.length > 0 && (
             <ul className="preflight-missing" aria-label="refused rows">
-              {refused.map(([w, c]) => (
+              {refused.slice(0, REASONS).map(([w, c]) => (
                 <li key={w}>
                   <b className="num">{c.toLocaleString("en-US")}</b> {w}
                 </li>
               ))}
+              {refused.length > REASONS && <li className="meta">and {(refused.length - REASONS).toLocaleString("en-US")} more reasons</li>}
             </ul>
           )}
         </>
