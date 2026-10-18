@@ -149,6 +149,12 @@ describe("what a column looks like", () => {
     expect(firstLineIsValues(["name", "ward"], looks([["Zephyr"], ["Q7"]]))).toBe(false);
     // numbers over numbers, a date over dates
     expect(firstLineIsValues(["6.5", "2021-03-17"], looks([["7.5", "3"], ["2022-01-02", "2020-11-30"]]))).toBe(true);
+    // a header that reads as a code but is not the length of the codes under it is a header: id_1 over codes of seven characters
+    expect(firstLineIsValues(["id_1", "id_2"], looks([["KQ-1000", "KQ-1001"], ["KQ-2000", "KQ-2001"]]))).toBe(false);
+    expect(firstLineIsValues(["KQ-0999", "KQ-1999"], looks([["KQ-1000", "KQ-1001"], ["KQ-2000", "KQ-2001"]]))).toBe(true);
+    // a stray cell does not undo it: three of four columns read as their values
+    expect(firstLineIsValues(["199003039999", "S-0003", "2021-03-17", "n/a"], looks([["199001019999"], ["S-0001"], ["2022-01-02"], ["5"]]))).toBe(true);
+    expect(firstLineIsValues(["personnummer", "S-0003", "date", "n/a"], looks([["199001019999"], ["S-0001"], ["2022-01-02"], ["5"]]))).toBe(false);
     // a header with the digits of a number is named by its place on its own
     expect(columnLabels(["personnummer", "9001019999", "code"], looks([["a"], ["b"], ["c"]]))).toEqual(["personnummer", "column 2", "code"]);
     expect(csvLabels(parseCsv("id,code\nS-0001,3e1b77c0a9d2f400\n"))).toEqual(["id", "code"]);

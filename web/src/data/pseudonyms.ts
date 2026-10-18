@@ -598,20 +598,21 @@ const NUMBERS: readonly ColumnKind[] = ["integer", "decimal"];
 
 /**
  * Whether the file's first line is a row of values and not a header. A header
- * names the columns in words; a first line that reads as the values under it,
- * a number over numbers, a code over codes, a date over dates, in three of
- * every four of the columns that are not text and have a cell there, is a row
- * of them, as a file with no header line has. A file all of text cannot be
- * told either way and is taken as it says.
+ * names the columns in words; a first line that reads as the values under it
+ * (a number over numbers, a code of the length of the codes under it, a date
+ * over dates), in three of every four of the columns that are not text and
+ * have a cell there, is a row of them, as a file with no header line has. A
+ * file all of text cannot be told either way and is taken as it says.
  */
-export function firstLineIsValues(header: string[], looks: Pick<ColumnLook, "kind">[]): boolean {
+export function firstLineIsValues(header: string[], looks: Pick<ColumnLook, "kind" | "shortest" | "longest">[]): boolean {
   const cells = looks
-    .map((l, i) => [l.kind, (header[i] ?? "").trim()] as const)
-    .filter(([kind, cell]) => kind !== "text" && kind !== "empty" && cell !== "");
+    .map((l, i) => ({ look: l, cell: (header[i] ?? "").trim() }))
+    .filter(({ look, cell }) => look.kind !== "text" && look.kind !== "empty" && cell !== "");
   if (cells.length === 0) return false;
-  const alike = cells.filter(([kind, cell]) => {
+  const alike = cells.filter(({ look, cell }) => {
     const reads = readsAs(cell);
-    return reads === kind || (NUMBERS.includes(reads) && NUMBERS.includes(kind));
+    const length = [...cell].length;
+    return (reads === look.kind || (NUMBERS.includes(reads) && NUMBERS.includes(look.kind))) && length >= look.shortest && length <= look.longest;
   });
   return alike.length * 4 >= cells.length * 3;
 }
@@ -622,7 +623,7 @@ export function firstLineIsValues(header: string[], looks: Pick<ColumnLook, "kin
  * column of a file whose first line is a row of values. The first line of a
  * file with no header is never printed.
  */
-export function columnLabels(header: string[], looks: Pick<ColumnLook, "kind">[]): string[] {
+export function columnLabels(header: string[], looks: Pick<ColumnLook, "kind" | "shortest" | "longest">[]): string[] {
   const values = firstLineIsValues(header, looks);
   return header.map((h, i) => (values ? `column ${i + 1}` : columnLabel(h, i)));
 }
