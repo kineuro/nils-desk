@@ -72,6 +72,8 @@ export interface Reading {
   physics?: Record<string, string | number | (string | number)[]>;
   /** The path of the whole-header door for this item, where the engine names it. */
   headerDoor?: string | null;
+  /** Record 58 P1: two sources' answers where they disagree on a verify item, unlabelled, each by axis; the reader picks one or neither. */
+  ab?: Record<string, AxisValue>[] | null;
 }
 
 /** One outside suggestion for an item, as the evidence door lists it (record 50 R3). */
@@ -269,6 +271,18 @@ export function readingOf(raw: Json): Reading {
     }
   }
   const worth = obj(raw.worth);
+  // record 58 P1: A and B, two sources' answers on the axes they disagree on, never saying whose
+  const ab =
+    Array.isArray(raw.ab) && raw.ab.length === 2
+      ? raw.ab.map((side) => {
+          const v: Record<string, AxisValue> = {};
+          for (const [axis, x] of Object.entries(obj(obj(side).values ?? side))) {
+            const y = axisValue(x);
+            if (y !== undefined) v[axis] = y;
+          }
+          return v;
+        })
+      : null;
   const header = pairs(raw.header).map(([k, v]) => [HEADER_WORDS[k] ?? k.replace(/_/g, " "), v] as [string, string]);
   const file = fileOf(raw);
   // a sealed sample's item is read blind: no classification at all, whatever came with it; the pictures, the header and its text stay
@@ -289,6 +303,7 @@ export function readingOf(raw: Json): Reading {
     pack: text(raw.pack) ? `${raw.pack as string}${text(raw.version) ? ` ${raw.version as string}` : ""}` : null,
     value: num(raw.value) ?? (num(worth.confidence) !== null ? 1 - (worth.confidence as number) + (worth.disagree === true ? 1 : 0) : null),
     batch: text(raw.batch) ?? (num(raw.batch) !== null ? String(raw.batch) : null),
+    ...(ab ? { ab } : {}),
   };
 }
 
@@ -595,6 +610,8 @@ export interface Suggestion {
   by?: string | null;
   confidence?: number | null;
   voices?: Voice[];
+  /** Record 58 P1: the two sides A and B on the axes they differ on, unlabelled; the offered candidates are the proposal with each side. */
+  sides?: [Record<string, AxisValue>, Record<string, AxisValue>];
 }
 
 /** One system's word on an item's answer, as the suggestion line says it. */
@@ -764,6 +781,8 @@ export function changesOf(q: Question, suggested: Given | null, final: Given): n
  */
 export function suggestedValue(q: Question, s: Suggestion | null): string | Record<string, AxisValue> | null {
   if (!s) return null;
+  // an A/B item (record 58 P1) suggests nothing whole: the sides are the reader's to pick
+  if (s.sides) return null;
   const axes = askedAxes(q);
   const whole = s.differ.length === 0 ? s.values : (s.offered[0]?.values ?? null);
   if (!whole || axes.some((a) => !(a in whole))) return null;
@@ -784,6 +803,61 @@ export function baselineOf(q: Question, s: Suggestion | null): Given | null {
 export function chosenCandidate(q: Question, offered: AskedCandidate[], g: Given): AskedCandidate | null {
   return offered.find((c) => changesOf(q, givenOfCandidate(q, c), g) === 0) ?? null;
 }
+
+// ---------------------------------------------------------------- verify mode (record 58 P1)
+
+/**
+ * The suggestion on a verify item (spec 12.2): every asked axis filled in
+ * with its proposal, as suggestionOf fills it; where the door hands two
+ * sources' answers as A and B, the axes they differ on are left open and the
+ * two are offered unlabelled (keys z and x), so nothing says which side the
+ * proposal was. Who suggested it is not said either.
+ */
+export function verifySuggestionOf(q: Question, r: Reading | null): Suggestion | null {
+  const s = suggestionOf(q, r);
+  if (!s || !r?.ab) return s;
+  const axes = askedAxes(q);
+  const [a, b] = r.ab;
+  const split = axes.filter((axis) => (axis in a || axis in b) && !same(a[axis], b[axis]));
+  if (split.length === 0) return s;
+  const values: Record<string, AxisValue> = {};
+  for (const axis of axes) if (!split.includes(axis) && axis in s.values) values[axis] = s.values[axis];
+  const pick = (side: Record<string, AxisValue>): Record<string, AxisValue> => Object.fromEntries(split.map((axis) => [axis, side[axis] ?? null]));
+  const whole = (side: Record<string, AxisValue>): AskedCandidate => ({ values: { ...Object.fromEntries(axes.map((axis) => [axis, values[axis] ?? null])), ...pick(side) }, p: 0 });
+  return { values, agreed: Object.keys(values), differ: split, offered: [whole(a), whole(b)], p: null, sides: [pick(a), pick(b)] };
+}
+
+/** The answer after a side of an A/B item is taken: only the split axes change; any other candidate replaces the whole answer as today. */
+export function takeCandidate(q: Question, was: Given, c: AskedCandidate, s: Suggestion | null): Given {
+  const i = s?.sides ? s.offered.indexOf(c) : -1;
+  if (!s?.sides || i < 0) return givenOfCandidate(q, c) ?? was;
+  const side = s.sides[i];
+  if (q.kind === "axis" && q.axis) {
+    const v = side[q.axis];
+    return { kind: "value", value: typeof v === "string" ? v : "" };
+  }
+  const values = { ...(was.kind === "values" ? was.values : {}) };
+  for (const [axis, v] of Object.entries(side)) values[axis] = Array.isArray(v) && v.length === 0 ? null : v;
+  return { kind: "values", values };
+}
+
+/** Which side of an A/B item the answer holds now, 0 for A, 1 for B, null for neither. */
+export function chosenSide(s: Suggestion, g: Given): 0 | 1 | null {
+  if (!s.sides) return null;
+  const at = (axis: string): AxisValue | undefined => (g.kind === "value" ? g.value || undefined : g.kind === "values" ? (g.values[axis] === "" ? undefined : g.values[axis]) : undefined);
+  const holds = (side: Record<string, AxisValue>) => Object.entries(side).every(([axis, v]) => same(at(axis), v));
+  return holds(s.sides[0]) ? 0 : holds(s.sides[1]) ? 1 : null;
+}
+
+/** The line over the rows on a verify item: what to do, in a few words. */
+export function verifyWords(s: Suggestion): string {
+  if (s.sides) return `A and B differ on ${s.differ.join(", ")}: pick one, or choose below.`;
+  if (s.differ.length > 0) return suggestionWords(s);
+  return "Filled in: Enter accepts, or change an axis.";
+}
+
+/** The one line a verify screen says of the planted values (spec 12.3): that they exist, never where or how many. */
+export const PLANTED_WORDS = "Some items carry a planted wrong value: check each axis.";
 
 /** Whether every asked axis is filled in, so Enter alone answers. */
 export function complete(q: Question, g: Given): boolean {
@@ -1091,6 +1165,8 @@ export function acceptedOf(raw: Json): { accepted: number; held: number[]; refus
 
 export interface RaterStat {
   principal: string;
+  /** The account's name (record 58 P1), where the engine gives it; the principal is then only a hover title. */
+  name: string | null;
   decisions: number;
   median_seconds: number | null;
   /** The ninetieth percentile, where the engine gives it. */
@@ -1117,7 +1193,7 @@ export function statsOf(raw: Json): RaterStats {
     const suggested = num(r.suggested);
     const changedN = num(r.changed);
     const changed = num(r.share_changed) ?? num(r.changed_share) ?? num(r.change_rate) ?? (changedN !== null && suggested ? changedN / suggested : null);
-    return [{ principal: who, decisions, median_seconds: num(r.median_seconds) ?? num(r.seconds_median) ?? num(r.median), p90_seconds: num(r.p90_seconds), changed, batched: num(r.batched) }];
+    return [{ principal: who, name: text(r.name), decisions, median_seconds: num(r.median_seconds) ?? num(r.seconds_median) ?? num(r.median), p90_seconds: num(r.p90_seconds), changed, batched: num(r.batched) }];
   });
   return { raters, blind: raw.blind === true };
 }
