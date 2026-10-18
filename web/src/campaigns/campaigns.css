@@ -710,3 +710,5 @@ dl.facts dd .raters-change { margin-left: 0.6rem; }
 .ab-side b { min-width: 1rem; }
 .ab-side .ab-value { padding: 0 0.35rem; border: 1px dashed var(--n-caution-line); border-radius: var(--n-radius); font-size: 11.5px; font-weight: 400; }
 .axis-rows .opt.unfit { opacity: 0.55; border-style: dashed; }
+/* a campaign's tables scroll inside their wrap on a narrow screen, never the page: the wrap is a grid item that may shrink */
+.campaign > .table-wrap, .campaign-results { min-width: 0; }

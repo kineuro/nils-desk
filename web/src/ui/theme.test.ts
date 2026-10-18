@@ -70,6 +70,12 @@ describe("theme", () => {
     }
   });
 
+  // record 58 P1 (the verify screen): the campaigns' rules speak in the theme's tokens as well, no literal colour
+  it("the campaigns' rules name no colour of their own", () => {
+    const text = readFileSync(new URL("../campaigns/campaigns.css", import.meta.url), "utf8");
+    expect(text.match(/#[0-9a-fA-F]{3,8}\b|rgba?\(\s*\d|hsla?\(\s*\d/g)).toBeNull();
+  });
+
   // record 55 K5b (round 4): what fills a bar or marks a step must show on the ground in both themes
   it("a mark and a bar's fill stand out from the page and the sunken ground, and a selected row from the page, in both themes", () => {
     const values = (b: string) => Object.fromEntries([...b.matchAll(/(--n-[a-z0-9-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));

@@ -1121,7 +1121,8 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
       lease_seconds: Math.max(60, Math.round(d.leaseMinutes * 60)),
       // record 58 P1: a verify campaign shows its proposal first, so it suggests the rules where nothing was chosen
       ...(d.kind === "axis" || d.kind === "axes" ? { suggest: d.purpose === "audit" ? "none" : d.purpose === "verify" && d.suggest === "none" ? "rules" : d.suggest } : {}),
-      ...((d.kind === "axis" || d.kind === "axes") && (d.suggest === "none" || d.purpose === "audit") && d.hideHeader ? { hide_header: true } : {}),
+      // a verify screen keeps the header text (spec 12.2), so pictures only is never sent with it
+      ...((d.kind === "axis" || d.kind === "axes") && d.purpose !== "verify" && (d.suggest === "none" || d.purpose === "audit") && d.hideHeader ? { hide_header: true } : {}),
       ...(d.purpose !== "decide" ? { purpose: d.purpose } : {}),
       ...(planted ? { planted } : {}),
     },

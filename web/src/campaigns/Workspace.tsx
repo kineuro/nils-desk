@@ -635,7 +635,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       pack={reading?.pack ?? null}
       suggestion={suggestion}
       verify={verify}
-      accept={verify && q && suggested && changesOf(q, suggested, settled.given) === 0 ? "accept" : "answer"}
+      accept={verify && q && suggestion && !suggestion.sides && suggestion.differ.length === 0 && suggested && changesOf(q, suggested, settled.given) === 0 ? "accept" : "answer"}
       blind={reading?.blind === true || item?.blind === true}
       header={picturesAlone ? null : (reading?.header ?? null)}
       headerLines={picturesAlone ? [] : headerLinesOf(reading)}
