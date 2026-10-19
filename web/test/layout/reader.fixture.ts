@@ -206,6 +206,100 @@ export const WHY_SEEN = {
   worth: { confidence: 0.61, disagree: true },
 };
 
+// ---------------------------------------------------------------- verify mode (record 58 P1)
+
+/** The proposal a verify item comes filled in with: every asked axis. */
+export const PROPOSAL: Record<string, string | string[]> = { provenance: "RawRecon", technique: "MPRAGE", modifier: [], construct: [], base: "T1w", body_part: "brain", post_contrast: "not_given" };
+
+/** What the campaign door says of the planted values: the share, the count, and that the list is still sealed. */
+export const PLANTED = { share: 0.1, count: 25, opened: false };
+
+/** A verify item's why door: the item read in the open, with the proposal on every asked axis. */
+export const WHY_VERIFY = { ...WHY_SEEN, suggested: PROPOSAL };
+
+/** The same, where two sources disagree on the technique: A and B, unlabelled, on that axis alone. */
+export const WHY_VERIFY_AB = { ...WHY_VERIFY, ab: [{ technique: "MPRAGE" }, { technique: "MEMPRAGE" }] };
+
+/** Two readers' sign-in subjects, long codes as a provider gives them, and the account names the doors give beside them. Made up. */
+export const READER_A = "7f3a9c2e-0b1d-4e6f-8a21-5c9d3e7b1a40";
+export const READER_B = "c41d2b7a-9e30-4f58-b6a2-0d7e1f9c3b85";
+
+/** The pace door of a verify campaign: each reader's row with the account's name. */
+export const STATS_VERIFY = {
+  campaign: CAMPAIGN_ID,
+  blind: false,
+  all: { answers: 300, timed: 300, median_seconds: 4.4, p90_seconds: 9.6 },
+  raters: [
+    { principal: READER_A, name: "Astrid", answers: 250, read: 250, batched: 0, amended: 1, timed: 250, median_seconds: 4.2, p90_seconds: 9.1, suggested: 250, changed: 19, share_changed: 0.076 },
+    { principal: READER_B, name: "Bo", answers: 50, read: 50, batched: 0, amended: 0, timed: 50, median_seconds: 5.1, p90_seconds: 11.8, suggested: 50, changed: 6, share_changed: 0.12 },
+  ],
+};
+
+const vItem = (i: number, state: string, a: string, b: string | null, settled: string) => ({
+  id: ITEM_ID + i,
+  campaign_id: CAMPAIGN_ID,
+  position: i,
+  review_item_id: null,
+  stack_id: STACK_ID + i,
+  subject_id: null,
+  session_day: null,
+  key: `stack:${STACK_ID + i}`,
+  input_derivative_ids: null,
+  state,
+  round: 1,
+  agreement: b === null ? null : a === b ? 1 : 0,
+  metric: null,
+  outcome: state === "agreed" || state === "resolved" ? { value: { ...PROPOSAL, technique: settled }, form: null, answers: [i * 2 + 1] } : null,
+  decision_id: null,
+  pick_id: null,
+  resolved_at: state === "open" ? null : "2026-12-02T10:00:00Z",
+  blind: false,
+  adjudicated: false,
+  answers: [
+    { id: i * 2 + 1, rater: READER_A, role: "rater", round: 1, author_kind: "person", value: { ...PROPOSAL, technique: a }, form: null, derivative_id: null, why: null, unsure: false, answered_at: "2026-12-02T09:00:00Z" },
+    ...(b === null ? [] : [{ id: i * 2 + 2, rater: READER_B, role: "rater", round: 1, author_kind: "person", value: { ...PROPOSAL, technique: b }, form: null, derivative_id: null, why: null, unsure: false, answered_at: "2026-12-02T09:30:00Z" }]),
+  ],
+});
+
+/** The results door of a closed verify campaign: the agreement, the catch against the bar (under it), and the readers by name. */
+export const RESULTS_VERIFY = {
+  campaign: CAMPAIGN_ID,
+  name: "audit-december",
+  status: "closed",
+  owner: "nima@site",
+  closes_into: "none",
+  closed_at: "2026-12-02T12:00:00Z",
+  named: true,
+  agreement: { items: 50, raters_per_item: 2, exact: 0.94, fleiss_kappa: 0.91, cohen_kappa: 0.91, unsure: 2, per_axis: { technique: { exact: 0.94, cant_tell: 0 } } },
+  unsure: 2,
+  settled: 250,
+  adjudicated: 0,
+  decisions: 0,
+  picks: 0,
+  raters: [
+    { rater: READER_A, name: "Astrid", answers: 250, adjudications: 0, unsure: 2 },
+    { rater: READER_B, name: "Bo", answers: 50, adjudications: 0, unsure: 0 },
+  ],
+  values: [
+    { axis: "technique", value: "MPRAGE", answers: 180, settled: 150 },
+    { axis: "technique", value: "MEMPRAGE", answers: 70, settled: 60 },
+    { axis: "technique", value: "TSE", answers: 50, settled: 40 },
+  ],
+  count: 250,
+  items: [vItem(0, "agreed", "MPRAGE", "MPRAGE", "MPRAGE"), vItem(1, "agreed", "MEMPRAGE", "MEMPRAGE", "MEMPRAGE"), vItem(2, "resolved", "TSE", null, "TSE")],
+  catch: {
+    planted: 25,
+    caught: 21,
+    rate: 0.84,
+    bar: 0.9,
+    per_rater: [
+      { rater: READER_A, name: "Astrid", planted: 25, caught: 21, rate: 0.84 },
+      { rater: READER_B, name: "Bo", planted: 5, caught: 5, rate: 1 },
+    ],
+  },
+  below_bar: true,
+};
+
 /** The whole-header door's answer: many fields of one instance, direct identifiers left out. */
 export const HEADER_DOC: HeaderDoc = {
   stack: STACK_ID,
@@ -259,8 +353,10 @@ export interface Asked {
  * reader's tests. `derive` and `header` false answer 404, as an engine
  * before them; `why` false serves no text or physics.
  */
-export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; combos?: boolean; axis?: boolean; suggest?: string; hideHeader?: boolean; log?: Asked[] } = {}): typeof fetch {
-  const { derive = true, header = true, texts = true, seen = false, combos = true, axis = false, suggest, hideHeader = false, log = [] } = opts;
+export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: boolean; seen?: boolean; combos?: boolean; axis?: boolean; suggest?: string; hideHeader?: boolean; purpose?: string; verify?: boolean | "ab"; closed?: boolean; log?: Asked[] } = {}): typeof fetch {
+  const { derive = true, header = true, texts = true, combos = true, axis = false, suggest, hideHeader = false, purpose, verify = false, closed = false, log = [] } = opts;
+  // a verify campaign's items are read in the open, the proposal first (record 58 P1)
+  const seen = opts.seen || verify !== false;
   const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://desk.test");
@@ -275,7 +371,14 @@ export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: b
     const said = suggest ? { ...shown, suggest } : shown;
     // a campaign made to show the pictures alone; its doors here still send the header, which the reader must not draw
     const campaign = hideHeader ? { ...said, hide_header: true } : said;
-    if (method === "GET" && path === c) return json(200, campaign);
+    // what the answers are for (record 55 D6, record 58 P1), and a verify campaign's planted values
+    const made = verify ? { ...campaign, purpose: "verify", suggest: "rules", planted: PLANTED } : purpose ? { ...campaign, purpose } : campaign;
+    const standing = closed ? { ...made, name: "audit-december", handle_id: null, created_at: "2026-12-01T09:00:00Z", status: "closed", closed_at: "2026-12-02T12:00:00Z", closed_by: "nima@site", counts: { items: { agreed: 250 }, assignments: {}, answers: 300 } } : made;
+    if (method === "GET" && path === c) return json(200, standing);
+    if (method === "GET" && path === `${c}/results`) return json(200, RESULTS_VERIFY);
+    if (method === "GET" && path === `${c}/stats`) return json(200, STATS_VERIFY);
+    if (method === "GET" && path === `${c}/answers`) return json(200, { campaign: CAMPAIGN_ID, count: 0, answers: [], blind: false });
+    if (method === "GET" && path === "/api/label-sets") return json(200, { count: 0, label_sets: [] });
     if (method === "GET" && path === "/api/campaigns") return json(200, { count: 1, campaigns: [CAMPAIGN] });
     if (method === "POST" && path === `${c}/claim`) {
       const cl = claimed();
@@ -287,6 +390,7 @@ export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: b
       return json(200, { answer: 1, item: ITEM_ID, state: "agreed", adjudication: null, derived: deriveOf(v) });
     }
     if (method === "GET" && path === `${c}/items/${ITEM_ID}/why`) {
+      if (verify) return json(200, verify === "ab" ? WHY_VERIFY_AB : WHY_VERIFY);
       if (seen) return json(200, WHY_SEEN);
       if (texts) return json(200, WHY_BLIND);
       const { texts: _t, physics: _p, header_door: _h, ...older } = WHY_BLIND;
@@ -304,9 +408,11 @@ export function fakeEngine(opts: { derive?: boolean; header?: boolean; texts?: b
 }
 
 /** The doors the fake engine lists, record 48's new ones among them where asked. */
-export function doorsOf(opts: { derive?: boolean; header?: boolean; combos?: boolean } = {}): string[] {
-  const { derive = true, header = true, combos = true } = opts;
+export function doorsOf(opts: { derive?: boolean; header?: boolean; combos?: boolean; results?: boolean } = {}): string[] {
+  const { derive = true, header = true, combos = true, results = false } = opts;
   return [
+    // a campaign's results and pace (record 55, ruling 35 (d); record 48 R1), where a page asks for them
+    ...(results ? ["GET /api/campaigns/{id}/results", "GET /api/campaigns/{id}/stats"] : []),
     "GET /api/campaigns",
     "GET /api/campaigns/{id}",
     "GET /api/campaigns/{id}/answers",

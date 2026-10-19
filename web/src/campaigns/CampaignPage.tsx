@@ -33,6 +33,8 @@ import {
   pct,
   picturesOnly,
   principalOf,
+  PURPOSE_WORDS,
+  purposeOf,
   questionWords,
   rateRefusal,
   refused as refusedWords,
@@ -174,8 +176,9 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
   const exp = exportRefusal(caps);
   const a = c.agreement;
   const blind = answersBlind ?? !seesAnswers(caps, c);
-  // the raters by name to the maker and a Review worker, by number to anyone else
-  const who = raterNames(answers ?? [], principalOf(caps), namesRaters(caps, c));
+  // the raters by name to the maker and a Review worker, by number to anyone else; the account's name where the pace door gives it (record 58 P1)
+  const accountNames = new Map((stats?.raters ?? []).flatMap((r) => (r.name ? [[r.principal, r.name] as [string, string]] : [])));
+  const who = raterNames(answers ?? [], principalOf(caps), namesRaters(caps, c), accountNames);
   // a check (job type 3) has one next action: go on checking while results are open, close and write the checks once none is
   const check = isCheck(c) && checkServed(caps) ? checkActs(caps, c) : null;
   const byItem = new Map<number, Answer[]>();
@@ -315,6 +318,22 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
             <dt>suggests</dt>
             <dd>
               {SUGGEST_WORDS[suggestOf(c)].words} · {SUGGEST_WORDS[suggestOf(c)].says}
+            </dd>
+          </div>
+        )}
+        {purposeOf(c) !== "decide" && (
+          <div className="facts-pair">
+            <dt>for</dt>
+            <dd>
+              {PURPOSE_WORDS[purposeOf(c)].words} · {PURPOSE_WORDS[purposeOf(c)].says}
+            </dd>
+          </div>
+        )}
+        {c.planted && (
+          <div className="facts-pair">
+            <dt>planted</dt>
+            <dd>
+              {Math.round(c.planted.share * 100)} % of the items · {n(c.planted.count)} planted · {c.planted.opened ? "the list opened at the close" : "the list stays sealed until the close"}
             </dd>
           </div>
         )}
@@ -571,7 +590,7 @@ function CloseDialog({ campaign: c, plan, onClose, onDone }: { campaign: Campaig
 }
 
 function ExportDialog({ campaign: c, onClose, onDone }: { campaign: Campaign; onClose: () => void; onDone: (set: LabelSet) => void }) {
-  const [of, setOf] = useState<"outcomes" | "answers">("outcomes");
+  const [of, setOf] = useState<"outcomes" | "answers" | "counts">("outcomes");
   const [name, setName] = useState(c.name);
   const [place, setPlace] = useState("");
   const [busy, setBusy] = useState(false);
@@ -611,8 +630,13 @@ function ExportDialog({ campaign: c, onClose, onDone }: { campaign: Campaign; on
         <button type="button" className={of === "answers" ? "opt on" : "opt"} aria-pressed={of === "answers"} onClick={() => setOf("answers")}>
           Every answer
         </button>
+        {purposeOf(c) === "verify" && (
+          <button type="button" className={of === "counts" ? "opt on" : "opt"} aria-pressed={of === "counts"} onClick={() => setOf("counts")}>
+            Counts
+          </button>
+        )}
       </div>
-      <p className="meta">{of === "outcomes" ? "A row per resolved item: the decision it became, or the answer that settled it." : "A row per answer, for an agreement study or a two-rater reference."}</p>
+      <p className="meta">{of === "outcomes" ? "A row per resolved item: the decision it became, or the answer that settled it." : of === "answers" ? "A row per answer, for an agreement study or a two-rater reference." : "Counts, digests, the agreement and the catch rate, for a paper: no header text, no path, no subject code."}</p>
       <div className="fields2">
         <label className="field">
           <span className="label">Name</span>

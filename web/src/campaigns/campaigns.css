@@ -702,3 +702,13 @@ table.thin.header-table td:first-child { padding-left: 0; }
 }
 /* record 48, step 11.8: Change beside the raters a campaign names */
 dl.facts dd .raters-change { margin-left: 0.6rem; }
+
+/* verify mode (record 58 P1): the one line on planted values, A and B unlabelled, a value the pack forbids beside the proposal after the legal ones and dimmed */
+.reader-one .verify-note { color: var(--n-caution-fg); }
+.ab-sides { display: grid; gap: 0.25rem; }
+.ab-side { justify-content: flex-start; gap: 0.4rem; min-height: 1.6rem; }
+.ab-side b { min-width: 1rem; }
+.ab-side .ab-value { padding: 0 0.35rem; border: 1px dashed var(--n-caution-line); border-radius: var(--n-radius); font-size: 11.5px; font-weight: 400; }
+.axis-rows .opt.unfit { opacity: 0.55; border-style: dashed; }
+/* a campaign's tables scroll inside their wrap on a narrow screen, never the page: the wrap is a grid item that may shrink */
+.campaign > .table-wrap, .campaign-results { min-width: 0; }

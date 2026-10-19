@@ -70,7 +70,8 @@ describe("the results as they draw", () => {
 
   it("puts each rater's answer in a column, the adjudication and the decision beside", () => {
     expect(raterColumns(results)).toEqual(["alice@walk", "bob@walk"]);
-    expect(html).toContain("<th>alice</th><th>bob</th><th>Adjudication</th><th>Settled</th><th>Written</th>");
+    // the sign-in subject is only a hover title (record 58 P1)
+    expect(html).toContain('<th title="alice@walk">alice</th><th title="bob@walk">bob</th><th>Adjudication</th><th>Settled</th><th>Written</th>');
     expect(answerOf(results.items[0], "bob@walk")?.value).toBe("T2w");
     expect(html).toContain('title="marked unsure">T2w ?</td>');
     expect(html).toContain("<td>carol: T1w</td><td>T1w</td><td>decision 1</td>");
@@ -80,7 +81,7 @@ describe("the results as they draw", () => {
     expect(byAxis(results.values)).toHaveLength(1);
     expect(html).toContain("<td>T1w</td><td class=\"num\">1</td><td class=\"num\">1</td>");
     expect(html).toContain("<td>T2w</td><td class=\"num\">1</td><td class=\"num\">0</td>");
-    expect(html).toContain("<td>carol</td><td class=\"num\">0</td><td class=\"num\">1</td>");
+    expect(html).toContain('<td title="carol@walk">carol</td><td class="num">0</td><td class="num">1</td>');
   });
 
   it("offers each label set of the campaign to download, newest first", () => {

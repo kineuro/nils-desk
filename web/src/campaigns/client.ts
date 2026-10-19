@@ -160,19 +160,41 @@ export interface Counts {
   answers: number;
 }
 
-/** What a campaign's answers are for (record 55 D6, D7). */
-export type Purpose = "decide" | "train" | "measure" | "audit";
+/** What a campaign's answers are for (record 55 D6, D7; record 58 P1 adds verify). */
+export type Purpose = "decide" | "train" | "measure" | "audit" | "verify";
 
 export const PURPOSE_WORDS: Record<Purpose, { words: string; says: string }> = {
   decide: { words: "Decide", says: "Its answers become decisions." },
   train: { words: "Train", says: "Its answers train a model: each item is answered before any suggestion shows." },
   measure: { words: "Measure", says: "Its answers measure an error: each item is answered before any suggestion shows." },
   audit: { words: "Audit", says: "A blind read of accepted scans; its answers never train and become no decision." },
+  verify: { words: "Verify", says: "Each item comes filled in: one key accepts it, or an axis is corrected. A planted share of wrong values guards it; its answers never train." },
 };
 
 /** A campaign's purpose, decide where the engine says none. */
 export function purposeOf(c: Pick<Campaign, "purpose">): Purpose {
-  return c.purpose === "train" || c.purpose === "measure" || c.purpose === "audit" ? c.purpose : "decide";
+  return c.purpose === "train" || c.purpose === "measure" || c.purpose === "audit" || c.purpose === "verify" ? c.purpose : "decide";
+}
+
+/** Record 58 P1: a verify campaign's planted values as its door reports them: the share and count planted, and whether the list was opened at the close. */
+export interface Planted {
+  share: number;
+  count: number;
+  opened: boolean;
+}
+
+/** One row of a confusion table (record 58 P1): a true value, the wrong value a read confused it with, and how often. No stack identities. */
+export interface ConfusionRow extends Json {
+  true: string;
+  wrong: string;
+  count: number;
+}
+
+/** What a verify campaign plants with (spec 12.3): the share of its items, the seed of the draw, and the confusion table or none. */
+export interface PlantedBody extends Json {
+  share: number;
+  seed: string;
+  from: ConfusionRow[] | null;
 }
 
 export interface Campaign {
@@ -202,6 +224,8 @@ export interface Campaign {
   hide_header?: boolean;
   /** Record 55 D6 and D7: what its answers are for; decide where an engine before it says none. Train and measure are read blind first; an audit's answers never train. */
   purpose?: Purpose | string;
+  /** Record 58 P1: a verify campaign's planted values; absent elsewhere. */
+  planted?: Planted | null;
   counts: Counts;
   /** A closed check that holds an item its close refused, whose question is still open: a person may close it again. Absent from an engine before it. */
   close_again?: boolean;
@@ -324,6 +348,8 @@ export interface MakeBody extends Json {
   hide_header?: boolean;
   /** Record 55 D6 and D7: what its answers are for, where not decide. */
   purpose?: Purpose;
+  /** Record 58 P1: a verify campaign's planted share, seed and confusion table. */
+  planted?: PlantedBody;
 }
 
 /** The body of an answer: a value for an axis, a pick and a free question, a form for a form, a file for a derivative. */
@@ -370,7 +396,7 @@ export const campaigns = {
         )
       : campaigns.claim(c, role),
   close: (c: number | string) => door<Closed>("POST", `/api/campaigns/${id(c)}/close`, {}),
-  export: (c: number | string, body: { of: "outcomes" | "answers"; name?: string; place?: string }) => door<LabelSet>("POST", `/api/campaigns/${id(c)}/export`, body),
+  export: (c: number | string, body: { of: "outcomes" | "answers" | "counts"; name?: string; place?: string }) => door<LabelSet>("POST", `/api/campaigns/${id(c)}/export`, body),
   labelSets: () => door<{ count: number; label_sets: LabelSet[] }>("GET", "/api/label-sets").then((r) => r.label_sets),
   labelSet: (n: number) => door<LabelSet>("GET", `/api/label-sets/${n}`),
   /** The review item behind a campaign item, for its evidence; review:see, so a rater without it reads nothing here. */
@@ -928,6 +954,9 @@ export interface Draft {
   voters: Voter[];
   /** A/B: the share of the stacks the voters agree on that is audited, as written. */
   auditShare: string;
+  /** Verify (record 58 P1): the share of items planted with a wrong value, as written, and the confusion table pasted or read from a file, as its text. */
+  plantedShare: string;
+  plantedFrom: string;
 }
 
 /** One voter of an A/B campaign: its name and its reading of each stack, read in the browser from a folder of JSON files, one per stack. */
@@ -983,6 +1012,8 @@ export function emptyDraft(prefill: Partial<Prefill> = {}): Draft {
     rules: true,
     voters: [],
     auditShare: "0.1",
+    plantedShare: "0.1",
+    plantedFrom: "",
   };
 }
 
@@ -1068,6 +1099,13 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
   const closes = closesFor(d.kind).includes(d.closesInto) ? d.closesInto : closesFor(d.kind)[0];
   const raters = list(d.raters);
   const adjudicators = list(d.adjudicators);
+  // record 58 P1: a verify campaign plants a seeded share of its items
+  let planted: PlantedBody | null = null;
+  if (d.purpose === "verify" && (d.kind === "axis" || d.kind === "axes")) {
+    const p = plantedBody(d);
+    if (!p.ok) return p;
+    planted = p.body;
+  }
   return {
     ok: true,
     body: {
@@ -1081,11 +1119,65 @@ export function makeBody(d: Draft): { ok: true; body: MakeBody } | { ok: false; 
       // record 55 D7: an audit reads blind and closes into nothing
       closes_into: d.purpose === "audit" ? "none" : closes,
       lease_seconds: Math.max(60, Math.round(d.leaseMinutes * 60)),
-      ...(d.kind === "axis" || d.kind === "axes" ? { suggest: d.purpose === "audit" ? "none" : d.suggest } : {}),
-      ...((d.kind === "axis" || d.kind === "axes") && (d.suggest === "none" || d.purpose === "audit") && d.hideHeader ? { hide_header: true } : {}),
+      // record 58 P1: a verify campaign shows its proposal first, so it suggests the rules where nothing was chosen
+      ...(d.kind === "axis" || d.kind === "axes" ? { suggest: d.purpose === "audit" ? "none" : d.purpose === "verify" && d.suggest === "none" ? "rules" : d.suggest } : {}),
+      // a verify screen keeps the header text (spec 12.2), so pictures only is never sent with it
+      ...((d.kind === "axis" || d.kind === "axes") && d.purpose !== "verify" && (d.suggest === "none" || d.purpose === "audit") && d.hideHeader ? { hide_header: true } : {}),
       ...(d.purpose !== "decide" ? { purpose: d.purpose } : {}),
+      ...(planted ? { planted } : {}),
     },
   };
+}
+
+/** The confusion table in words under the field: none, nothing read, or the rows, confusions and lines skipped. */
+export function confusionWords(t: { rows: ConfusionRow[]; skipped: number }, text: string): string {
+  if (text.trim() === "") return "None: a random other legal value is planted.";
+  if (t.rows.length === 0) return "No row read: true value, wrong value, count, one row a line.";
+  const n = t.rows.reduce((a, r) => a + r.count, 0);
+  return `${t.rows.length} ${t.rows.length === 1 ? "row" : "rows"} · ${n.toLocaleString("en-US")} confusions${t.skipped > 0 ? ` · ${t.skipped} ${t.skipped === 1 ? "line" : "lines"} skipped` : ""}. The commonest wrong value for each true value is planted.`;
+}
+
+/** A verify campaign's planted values from the draft (record 58 P1), or what it still needs. */
+export function plantedBody(d: Pick<Draft, "plantedShare" | "seed" | "plantedFrom">): { ok: true; body: PlantedBody } | { ok: false; needs: string } {
+  const share = Number(d.plantedShare);
+  if (d.plantedShare.trim() === "" || !(share >= 0 && share <= 1)) return { ok: false, needs: "a planted share from 0 to 1" };
+  if (!d.seed.trim()) return { ok: false, needs: "a seed for the planted draw" };
+  const table = confusionRows(d.plantedFrom);
+  if (d.plantedFrom.trim() !== "" && table.rows.length === 0) return { ok: false, needs: "a confusion table of true value, wrong value and count, one row a line, or none" };
+  return { ok: true, body: { share, seed: d.seed.trim(), from: table.rows.length > 0 ? table.rows : null } };
+}
+
+/**
+ * A confusion table as pasted or read from a file (record 58 P1): one row a
+ * line, the true value, the wrong value and the count, the cells apart by
+ * tabs, or by commas or semicolons; a header row is skipped, so is a blank
+ * line or one starting with #. A row without a count, with a count that is
+ * not a whole number above zero, or with the same value twice is skipped and
+ * counted; the same pair twice is summed. Cells past the third are not read.
+ */
+export function confusionRows(text: string): { rows: ConfusionRow[]; skipped: number; header: boolean } {
+  const out = new Map<string, ConfusionRow>();
+  let skipped = 0;
+  let header = false;
+  const lines = text
+    .split(/\r?\n/u)
+    .map((l) => l.trim())
+    .filter((l) => l !== "" && !l.startsWith("#"));
+  lines.forEach((line, i) => {
+    const cells = (line.includes("\t") ? line.split("\t") : line.split(/[,;]/u)).map((c) => c.trim().replace(/^"(.*)"$/u, "$1"));
+    const [t, w, n] = cells;
+    const count = n !== undefined && /^\d+$/u.test(n) ? Number(n) : null;
+    if (!t || !w || count === null || count <= 0 || t === w) {
+      if (i === 0 && cells.length >= 3 && count === null) header = true;
+      else skipped += 1;
+      return;
+    }
+    const k = `${t}\u0000${w}`;
+    const had = out.get(k);
+    if (had) had.count += count;
+    else out.set(k, { true: t, wrong: w, count });
+  });
+  return { rows: [...out.values()], skipped, header };
 }
 
 const SPEC = /^[^@\s]+@\d+$/u;

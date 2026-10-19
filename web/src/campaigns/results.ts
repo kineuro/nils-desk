@@ -10,7 +10,7 @@ import { door, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
-import { principalOf, type Agreement, type Answer, type Campaign, type Item, type LabelSet } from "./client";
+import { pct, principalOf, type Agreement, type Answer, type Campaign, type Item, type LabelSet } from "./client";
 
 export const RESULTS = "GET /api/campaigns/{id}/results";
 
@@ -49,16 +49,60 @@ export interface Results {
   adjudicated: number;
   decisions: number;
   picks: number;
-  raters: { rater: string; answers: number; adjudications: number; unsure: number }[];
+  raters: { rater: string; name?: string | null; answers: number; adjudications: number; unsure: number }[];
   /** Raters' answers and settled items by value, per axis on an axes question; null for free text. */
   values: { axis: string | null; value: string; answers: number; settled: number }[] | null;
   count: number;
   items: ResultItem[];
+  /** Record 58 P1, a verify campaign: the planted values caught, against the bar; null or absent on another campaign or an older engine. */
+  catch?: Catch | null;
+  /** The catch rate is under the bar: the result does not stand alone. */
+  below_bar?: boolean;
 }
+
+/** Record 58 P1: how many planted values the readers caught (the planted axis not accepted), overall and per reader, against the registered bar. */
+export interface Catch {
+  planted: number;
+  caught: number;
+  /** Null where nothing was planted. */
+  rate: number | null;
+  bar: number;
+  per_rater: { rater: string; name?: string | null; planted: number; caught: number; rate: number | null }[];
+}
+
+/** The catch-rate bar a verify campaign is reported against where the engine names none (record 58, question 11). */
+export const CATCH_BAR = 0.9;
 
 const id = (c: number | string) => encodeURIComponent(String(c));
 
-export const resultsDoor = (c: number | string) => door<Results>("GET", `/api/campaigns/${id(c)}/results`);
+export const resultsDoor = (c: number | string) => door<Results>("GET", `/api/campaigns/${id(c)}/results`).then(resultsOf);
+
+const num = (v: unknown, d: number | null = null): number | null => (typeof v === "number" && Number.isFinite(v) ? v : d);
+
+/** The door's answer read leniently where record 58 added to it: the catch with its bar, and `below_bar` from the rate where the engine does not say it. */
+export function resultsOf(r: Results): Results {
+  const raw = (r as unknown as Json).catch;
+  const c = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Json) : null;
+  if (!c) return { ...r, catch: null, below_bar: r.below_bar === true };
+  const planted = num(c.planted, 0) as number;
+  const caught = num(c.caught, 0) as number;
+  const rate = num(c.rate) ?? (planted > 0 ? caught / planted : null);
+  const bar = num(c.bar) ?? CATCH_BAR;
+  const per_rater = (Array.isArray(c.per_rater) ? c.per_rater : []).flatMap((x) => {
+    const o = x && typeof x === "object" && !Array.isArray(x) ? (x as Json) : null;
+    if (!o || typeof o.rater !== "string") return [];
+    const p = num(o.planted, 0) as number;
+    const k = num(o.caught, 0) as number;
+    return [{ rater: o.rater, name: typeof o.name === "string" ? o.name : null, planted: p, caught: k, rate: num(o.rate) ?? (p > 0 ? k / p : null) }];
+  });
+  return { ...r, catch: { planted, caught, rate, bar, per_rater }, below_bar: typeof r.below_bar === "boolean" ? r.below_bar : rate !== null && rate < bar };
+}
+
+/** The catch in words: "18 of 20 · 90%", or that nothing was planted. */
+export function catchWords(c: Pick<Catch, "planted" | "caught" | "rate">): string {
+  if (c.planted === 0) return "nothing planted";
+  return `${c.caught.toLocaleString("en-US")} of ${c.planted.toLocaleString("en-US")} · ${pct(c.rate)}`;
+}
 
 /**
  * Why the person may not read the results, or null. Closed, they are every
@@ -86,13 +130,14 @@ export function namesRaters(caps: Capabilities, c: Campaign): boolean {
  * answered: their own name to the maker and a Review worker, and to anyone
  * else "rater N" or "adjudicator N", their own answers by their own name.
  */
-export function raterNames(answers: readonly Pick<Answer, "principal" | "role" | "id">[], me: string, named: boolean): Map<string, string> {
+export function raterNames(answers: readonly Pick<Answer, "principal" | "role" | "id">[], me: string, named: boolean, names: Map<string, string> = new Map()): Map<string, string> {
   const out = new Map<string, string>();
   const n = { rater: 0, adjudicator: 0 };
   for (const a of [...answers].sort((x, y) => x.id - y.id)) {
     if (out.has(a.principal)) continue;
     if (named || a.principal === me) {
-      out.set(a.principal, a.principal.split("@")[0]);
+      // the account's name where a door gave it (record 58 P1), never the sign-in subject whole
+      out.set(a.principal, names.get(a.principal) ?? a.principal.split("@")[0]);
       continue;
     }
     const word = a.role === "adjudicator" ? "adjudicator" : "rater";
@@ -109,6 +154,17 @@ export function raterColumns(r: Results): string[] {
 
 /** The short form of a rater's name the table shows: the part before the @. */
 export const short = (rater: string) => rater.split("@")[0];
+
+/**
+ * A rater as the tables name them (record 58 P1): the account's name where
+ * the door gives one, else the part before the @ as before; the sign-in
+ * subject itself is only ever a hover title, never a column.
+ */
+export function nameOf(r: Pick<Results, "raters" | "catch">, rater: string): string {
+  const row = r.raters.find((x) => x.rater === rater) ?? r.catch?.per_rater.find((x) => x.rater === rater) ?? null;
+  const name = row?.name?.trim();
+  return name ? name : short(rater);
+}
 
 /** One item's answer of one rater in its first round, or the latest where it was read again. */
 export function answerOf(i: ResultItem, rater: string): ResultAnswer | null {
