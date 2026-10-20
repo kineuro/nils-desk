@@ -27,6 +27,7 @@ import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
 import { checkedWords, contractWords, keptByWords, newerWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
 import { ReleasesLook } from "./ReleasesLook";
+import { SoftwarePage } from "./SoftwarePage";
 import { SortAgainDialog } from "./SortAgain";
 import { TeachingPage } from "./TeachingPage";
 import { UninstallSection } from "./Uninstall";
@@ -61,6 +62,8 @@ export function Settings(props: PageProps & { page: string | null }) {
       return <GatewayPage caps={props.caps} install={props.install} />;
     case "places":
       return <PlacesPage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
+    case "software":
+      return <SoftwarePage caps={props.caps} />;
     case "backups":
       return <DatabasePage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     case "people":
