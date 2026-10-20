@@ -35,7 +35,7 @@ import { Wait } from "../ui/Wait";
 import { DoorError } from "../ask/client";
 import { failureOf, refusalOf, requirementsOf, type Failure, type Requirement } from "./failure";
 import { OverPicker } from "./OverPicker";
-import { PreflightPanel, Requirements } from "./Preflight";
+import { PreflightPanel, Requirements, softwareCheck } from "./Preflight";
 import { FailLine, FailNote } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
 import { LanePanel, SecretsPanel } from "./PipelineSetup";
@@ -398,7 +398,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
       foot={
         <>
           {refused && (
-            <FailNote f={refused.f} lead="Not queued" software={softHref}>
+            <FailNote f={refused.f} lead="Not queued" software={refused.checks.some(softwareCheck) ? null : softHref}>
               <Requirements checks={refused.checks.filter((c) => !c.ok)} software={softHref} />
               <InstallFor caps={caps} f={refused.f} onInstalled={() => setRefused(null)} />
             </FailNote>

@@ -18,12 +18,13 @@ import { Dialog } from "../ui/Dialog";
 import type { Over } from "./catalog";
 import { refusalOf, requirementsOf, type Failure, type Requirement } from "./failure";
 import { InstallFor } from "./Install";
+import type { PersonAsk } from "./pack";
 import { CannotList, PreflightPanel, Requirements } from "./Preflight";
 import { FailNote } from "./Reason";
 import { preflightGate, resumeChecked, resumeCommand, runActs, runs, type Preflight } from "./runs";
 
 /** What Run again takes up: a run that stopped, by its id and its pipeline; or a job's command run again as a new run, over what it named. */
-export type Again = { kind: "resume"; run: number; pipeline: number | string; label: string } | { kind: "new"; pipeline: string; over: Over; params: Record<string, string>; command: string[] };
+export type Again = { kind: "resume"; run: number; pipeline: number | string; label: string } | { kind: "new"; pipeline: string; over: Over; params: Record<string, string>; person?: PersonAsk; command: string[] };
 
 /** Run again of a run that stopped: taken up where it stopped. */
 export function againOfRun(r: { id: number; pipeline_id: number; pipeline: string }): Again {
@@ -67,7 +68,7 @@ export function RunAgainDialog({ caps, again, onClose, onDone }: { caps: Capabil
     if (!checks) return;
     let alive = true;
     setPre(null);
-    const asked = again.kind === "resume" ? runs.preflightResume(again.pipeline, again.run) : runs.preflight(again.pipeline, again.over, again.params);
+    const asked = again.kind === "resume" ? runs.preflightResume(again.pipeline, again.run) : runs.preflight(again.pipeline, again.over, again.params, again.person ?? null);
     asked.then(
       (p) => alive && setPre({ p, why: null }),
       (e: unknown) => alive && setPre({ p: null, why: refusalOf(e) }),

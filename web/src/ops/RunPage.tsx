@@ -89,7 +89,8 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   const [again, setAgain] = useState(false);
   // Wave 7b: the pipeline version's pack (its rules' words), and the run's numbers per comparability key
   const [pack, setPack] = useState<PackView | null>(null);
-  const [numbers, setNumbers] = useState<RunNumbers | null | undefined>(undefined);
+  // the numbers answered for one run at one status; an answer for another is not this run's
+  const [answered, setAnswered] = useState<{ key: string; value: RunNumbers | null } | undefined>(undefined);
   const people = useKept(peopleKept);
   useEffect(() => peopleKept.ensure(), []);
 
@@ -106,6 +107,9 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   }, [id]);
 
   useEffect(() => {
+    // a new run starts from nothing: the last run's pack and numbers are not its own
+    setPack(null);
+    setAnswered(undefined);
     read();
   }, [read]);
   const status = load.kind === "ready" ? load.run.status : null;
@@ -118,21 +122,38 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   const run = load.kind === "ready" ? load.run : null;
   const pipeline = load.kind === "ready" ? load.pipeline : null;
   // the table is read once the run has loaded measures, and again when it ends or the grouping changes
+  const numbers = run && answered?.key.startsWith(`${run.id}:`) ? answered.value : null;
   const measures = run ? Number(((run.summary?.numbers ?? {}) as Record<string, unknown>).measures ?? 0) : 0;
   useEffect(() => {
     if (!pipeline || !served(caps, "GET /api/pipelines/{id}/pack")) return;
-    packs.of(pipeline.id).then((d) => setPack(packView(d)), () => setPack(null));
+    let alive = true;
+    packs.of(pipeline.id).then(
+      (d) => alive && setPack(packView(d)),
+      () => alive && setPack(null),
+    );
+    return () => {
+      alive = false;
+    };
   }, [pipeline?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!run) return;
-    if (measures === 0 || !served(caps, "GET /api/pipeline-runs/{id}/numbers")) return setNumbers(null);
-    packs.numbers(run.id).then(setNumbers, () => setNumbers(null));
+    const key = `${run.id}:${run.status}`;
+    if (measures === 0 || !served(caps, "GET /api/pipeline-runs/{id}/numbers")) return setAnswered({ key, value: null });
+    let alive = true;
+    packs.numbers(run.id).then(
+      (value) => alive && setAnswered({ key, value }),
+      () => alive && setAnswered({ key, value: null }),
+    );
+    return () => {
+      alive = false;
+    };
   }, [run?.id, run?.status, measures]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!run || !pipeline) return;
     // the numbers door is read first where the engine serves it, so the table asks only for the columns the run made
-    if (numbers === undefined && measures > 0 && served(caps, "GET /api/pipeline-runs/{id}/numbers")) return;
-    const cols = madeColumns(measureColumns(pipeline as Pipeline & { descriptor?: Record<string, unknown> | null }), run.summary, numbers ?? null);
+    // and once for a status: the table waits for the numbers of this run at this status
+    if (measures > 0 && served(caps, "GET /api/pipeline-runs/{id}/numbers") && answered?.key !== `${run.id}:${run.status}`) return;
+    const cols = madeColumns(measureColumns(pipeline as Pipeline & { descriptor?: Record<string, unknown> | null }), run.summary, numbers);
     if (cols.length === 0 || measures === 0) return setTable({ kind: "off", why: null });
     if (!acts.table) return setTable({ kind: "off", why: "Reading a run's numbers needs Query: Work." });
     setTable({ kind: "loading" });
@@ -144,7 +165,7 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
         const pooled = poolingOf(e);
         setTable(pooled ? { kind: "pooled", words: pooled } : { kind: "failed", why: engineWords(e) });
       });
-  }, [run?.id, run?.status, pipeline?.id, measures, by, acts.table, acts.perScan, numbers]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [run?.id, run?.status, pipeline?.id, measures, by, acts.table, acts.perScan, answered]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!run || !acts.files || OPEN.has(run.status)) return;
     runs.derivatives(run.id).then((r) => setFiles(r.derivatives), () => setFiles(null));
@@ -201,7 +222,7 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
         onAgain={goesOn}
         checkPrimary={masks.some((f) => !f.check)}
         pack={pack}
-        numbers={numbers ?? null}
+        numbers={numbers}
         people={people.value}
       />
     </>

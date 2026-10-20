@@ -261,11 +261,11 @@ export const software = {
   install: (a: SoftwareAsk) => typed<{ installed: boolean; why?: string; package: SoftwarePackage; needs?: SoftwareNeed[]; verified?: unknown }>("POST", "/api/software/install", a),
   register: (a: SoftwareAsk & { kind: "sif" | "sandbox" | "image"; path: string }) => typed<{ registered: boolean; package: SoftwarePackage; needs?: SoftwareNeed[]; verified?: unknown }>("POST", "/api/software/register", a),
   verify: (app: string, version: string) => typed<{ verified: boolean; verification: SoftwarePackage["verification"]; package: SoftwarePackage; needs?: SoftwareNeed[] }>("POST", `${softwarePath(app, version)}/verify`, {}),
-  accept: (app: string, version: string, file: { text: string; name: string } | null = null) =>
+  accept: (app: string, version: string, file: { text: string; name: string } | null = null, terms: { address: string } | null = null) =>
     typed<{ accepted: boolean; acceptance: { by: string; at: string; terms: { address: string | null; version: string | null } }; file: { sha256: string; name: string; under: string } | null }>(
       "POST",
       `${softwarePath(app, version)}/accept`,
-      file ? { file: file.text, file_name: file.name } : {},
+      { ...(file ? { file: file.text, file_name: file.name } : {}), ...(terms ? { terms: { address: terms.address } } : {}) },
     ),
   forget: (app: string, version: string) => typed<{ forgotten: boolean; app: string; version: string }>("POST", `${softwarePath(app, version)}/forget`, {}),
   remove: (app: string, version: string) => typed<{ removed: boolean; app: string; version: string }>("DELETE", softwarePath(app, version)),

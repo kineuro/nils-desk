@@ -47,6 +47,17 @@ describe("the pack, read", () => {
     expect(packView({ ...PACK_DOC, pack: { error: "a newer contract" } })).toBeNull();
   });
 
+  it("Run again asks the pre-flight with the goal, switches and let_run the command carries", async () => {
+    const parsed = overOfCommand(["run", "samseg-lesions@2", "--select", "selection:study@3", "--goal", "research", "--switch", "lesions=off", "--let-run"])!;
+    const asked: unknown[] = [];
+    globalThis.fetch = (async (_i: RequestInfo | URL, init?: RequestInit) => {
+      asked.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify(PRE_PACK), { status: 200 });
+    }) as typeof fetch;
+    await runs.preflight(parsed.pipeline, parsed.over, parsed.params, parsed.person ?? null);
+    expect(asked[0]).toMatchObject({ goal: "research", switches: { lesions: "off" }, let_run: true });
+  });
+
   it("sends only what the person changed from the pack's defaults, at the pre-flight and on the command line", () => {
     const same = personOf(VIEW, { goal: "standard", switches: { lesions: "on" }, let_run: false });
     expect(personBody(same)).toEqual({});
@@ -56,7 +67,9 @@ describe("the pack, read", () => {
     const cmd = runCommand({ pipeline: { label: "samseg-lesions@2" }, over: { selection: "study", version: 3 }, params: {}, models: [], labels: null, person: chosen });
     expect(cmd).toEqual(["run", "samseg-lesions@2", "--select", "selection:study@3", "--goal", "research", "--switch", "lesions=off", "--let-run"]);
     // a stopped run's command is read again whole: --let-run takes no value
-    expect(overOfCommand([...cmd, "--param", "threads=8"])).toEqual({ pipeline: "samseg-lesions@2", over: { selection: "study", version: 3 }, params: { threads: "8" } });
+    expect(overOfCommand([...cmd, "--param", "threads=8"])).toEqual({ pipeline: "samseg-lesions@2", over: { selection: "study", version: 3 }, params: { threads: "8" }, person: { goal: "research", switches: { lesions: "off" }, let_run: true } });
+    // taken again, the goal, the switches and let_run are the person's still (review fix 1)
+    expect(overOfCommand(["run", "samseg-lesions@2", "--select", "selection:study@3"])?.person).toBeUndefined();
   });
 
   it("says who chose: the person by name, a rule with its words, the default, fixed, and the assistant's proposal", () => {
@@ -163,6 +176,35 @@ describe("a refusal for software links to Settings > Software", () => {
     expect(isSoftwares({ check: "memory", ok: false, said: "a unit needs 16 GB" })).toBe(false);
     expect(isSoftwares({ check: "licence", ok: true, said: "" })).toBe(false);
     expect(isSoftwares({ advice: "Install dcm2niix where the engine runs: an admin can with nils software install dcm2niix" })).toBe(true);
+  });
+
+  it("knows them by structure, not by the engine's prose (review fix 7)", () => {
+    expect(isSoftwares({ fix: { door: "POST /api/software/install" }, error: "something else entirely" })).toBe(true);
+    expect(isSoftwares({ fix: { door: "POST /api/tools/dcm2niix/install" } })).toBe(false);
+    expect(isSoftwares({ check: "software", ok: false })).toBe(true);
+    expect(isSoftwares({ check: "image", ok: false, said: "pull failed" })).toBe(true);
+    // words alone no longer decide, but the converter's older message
+    expect(isSoftwares({ error: "the terms are not accepted" })).toBe(false);
+    expect(isSoftwares({ error: "failed verification" })).toBe(false);
+    expect(isSoftwares({ error: "nils software install dcm2niix" })).toBe(true);
+  });
+
+  it("draws one link a note, however many checks and notes would (review fixes 5 and 6)", () => {
+    const two = [
+      { check: "licence", ok: false, said: "not accepted", failure: null },
+      { check: "image", ok: false, said: "failed verification", failure: null },
+    ];
+    expect(renderToStaticMarkup(<Requirements checks={two} software="#settings/software" />).match(/href="#settings\/software"/gu)).toHaveLength(1);
+    const p = { ...PRE_PACK, requirements: two } as typeof PRE_PACK;
+    const blocked = { ...p, ready: false, blockers: ["licence: not accepted"], failure: { kind: "licence", cause: "licence", advice: null, error: "terms not accepted", line: "terms not accepted", fix: null } } as unknown as typeof PRE_PACK;
+    expect(renderToStaticMarkup(<PreflightPanel p={blocked} software="#settings/software" />).match(/href="#settings\/software"/gu)?.length ?? 0).toBeLessThanOrEqual(1);
+  });
+
+  it("prints 'All N can run' only when the pack judged some units not to run", () => {
+    const all = { ...PRE_PACK, cannot: [], units: { total: 4, ready: 4, missing: 0 }, units_judged: { units: [], ready: 4, with_caveats: 0, skipped: 0, routed: 0, cannot_tell: 0 } } as typeof PRE_PACK;
+    expect(renderToStaticMarkup(<PreflightPanel p={all} />)).not.toContain("can run.");
+    const none = { ...all, units_judged: undefined } as typeof PRE_PACK;
+    expect(renderToStaticMarkup(<PreflightPanel p={none} />)).toContain("All 4 sessions can run.");
   });
 
   it("draws the link beside a failing check and in a refusal's note, only where the person may open the page", () => {

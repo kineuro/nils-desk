@@ -69,6 +69,7 @@ export function SoftwareView({ caps, place, people = null, onChanged, now = new 
   const counts = softwareCounts(place.packages);
   const done = (words: string) => {
     setOpen(null);
+    row.say(words);
     onChanged();
     return words;
   };
@@ -492,13 +493,17 @@ export function AcceptDialog({ p, onClose, onDone }: { p: SoftwarePackage; onClo
   const { work, run, busy } = useWork();
   const big = file !== null && file.size > LICENCE_MAX;
   const needsFile = siteFile !== null && l?.file?.present !== true;
-  const ready = !busy && !big && (!needsFile || file !== null);
   const address = l?.terms?.address ?? null;
+  // the pack names no address: the administrator gives the one they accept, as the door takes it
+  const [given, setGiven] = useState("");
+  const givenOk = /^https?:\/\/\S+$/iu.test(given.trim());
+  const termsOk = address !== null || givenOk;
+  const ready = !busy && !big && termsOk && (!needsFile || file !== null);
   const go = () =>
     run(
       `accepting the terms of ${p.spec}`,
       async () => {
-        const r = await software.accept(p.app, p.version, file ? { text: file.text, name: file.name } : null);
+        const r = await software.accept(p.app, p.version, file ? { text: file.text, name: file.name } : null, address === null ? { address: given.trim() } : null);
         return r.file ? `Accepted for the site; ${r.file.name} is placed for ${p.app}'s runs.` : "Accepted for the site.";
       },
       onDone,
@@ -532,9 +537,14 @@ export function AcceptDialog({ p, onClose, onDone }: { p: SoftwarePackage; onClo
               {address}
             </a>
           ) : (
-            (address ?? "the pack names none")
+            (address ?? (
+              <span className="input">
+                <input value={given} placeholder="https://… the terms you accept" aria-label="The address of the terms" onChange={(e) => setGiven(e.target.value)} />
+              </span>
+            ))
           )}
           {l?.terms?.version ? <span className="meta"> · version {l.terms.version}</span> : null}
+          {address === null && given.trim() !== "" && !givenOk && <span className="warn"> The pack names no address; give a web address (https://…).</span>}
         </dd>
         {l?.redistributable === false && (
           <>

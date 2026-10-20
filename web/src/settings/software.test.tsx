@@ -240,4 +240,30 @@ describe("the doors", () => {
     const terms = el.ownerDocument.querySelector('a[href="https://surfer.nmr.mgh.harvard.edu/registration.html"]') as HTMLAnchorElement;
     expect(terms.rel).toContain("noopener");
   });
+
+  it("takes the terms' address from the administrator when the pack names none, and sends it (review fix 4)", async () => {
+    const bare = { ...SAMSEG, licence: { ...SAMSEG.licence!, terms: null, site_file: null, file: null } };
+    answers = { "POST /api/software/freesurfer/8.1.0/accept": () => ({ status: 200, body: { accepted: true, acceptance: { by: "astrid@site", at: "2026-10-20T09:00:00Z", terms: { address: "https://example.org/terms", version: null } }, file: null } }) };
+    act(() => root.render(<AcceptDialog p={bare} onClose={() => undefined} onDone={() => undefined} />));
+    expect(button("Accept in my name").disabled).toBe(true);
+    type("The address of the terms", "not an address");
+    expect(button("Accept in my name").disabled).toBe(true);
+    type("The address of the terms", "https://example.org/terms");
+    expect(button("Accept in my name").disabled).toBe(false);
+    act(() => button("Accept in my name").click());
+    await settle();
+    expect(asked[0].body).toEqual({ terms: { address: "https://example.org/terms" } });
+  });
+
+  it("shows the words of an outcome in the page's line after the reload (review fix 2)", async () => {
+    let changed = 0;
+    answers = { "POST /api/software/install": () => ({ status: 200, body: { installed: true, package: SYNTHSEG } }) };
+    act(() => root.render(<SoftwareView caps={ADMIN} place={PLACE} people={people} onChanged={() => changed++} now={FIXTURE_NOW} />));
+    act(() => button("Install").click());
+    const installs = [...el.ownerDocument.querySelectorAll("button")].filter((b) => b.textContent?.trim() === "Install");
+    act(() => installs[installs.length - 1].click());
+    await settle();
+    expect(changed).toBe(1);
+    expect(el.querySelector(".ok-words")?.textContent).toBe("Installed synthseg@2.0 and verified it.");
+  });
 });

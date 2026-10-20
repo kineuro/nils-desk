@@ -19,10 +19,9 @@ import type React from "react";
 import { roleWord } from "../review/mainScans";
 import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
-import { failureWords, type Failure, type Requirement } from "./failure";
+import { failureWords, isSoftwares, type Failure, type Requirement } from "./failure";
 import { judgedLines } from "./pack";
 import { FailNote, KindTag, SoftwareLink } from "./Reason";
-import { isSoftwares } from "./failure";
 import { blockedOf, cannotOf, mainReadOf, mainReadRoles, preflightCells, preflightChecks, preflightGate, unitWord, unitsWords, withoutByWhy, type MainRead, type Preflight } from "./runs";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -61,7 +60,7 @@ export function PreflightPanel({ p, checking = false, why = null, act = null, so
             <p className="fail-said">
               {blocked.kind && <KindTag kind={blocked.kind} cause={blocked.cause} />}
               <span>{blocked.line}</span>
-              {software && isSoftwares(blocked) && <SoftwareLink href={software} />}
+              {software && isSoftwares(blocked) && !preflightChecks(p).some(softwareCheck) && <SoftwareLink href={software} />}
             </p>
             {blocked.error !== blocked.line && <p className="note-detail">{blocked.error}</p>}
             {act?.(blocked)}
@@ -83,7 +82,7 @@ export function CannotList({ p }: { p: Preflight }) {
   if (cannot.length === 0) {
     const total = p.units.total;
     // Wave 7b: where the pack skips or routes units, its lines say what runs
-    if (total === 0 || p.units.missing > 0 || (p.units_judged && p.units_judged.ready < total)) return null;
+    if (total === 0 || p.units.missing > 0 || p.units_judged) return null;
     return <p className="note-detail can-run">{total === 1 ? `The one ${word} can run.` : `All ${unitsWords(total, word)} can run.`}</p>;
   }
   return (
@@ -173,9 +172,14 @@ export function JudgedList({ j, word }: { j: NonNullable<Preflight["units_judged
   );
 }
 
+/** Whether a failing check is the software place's to mend. */
+export const softwareCheck = (c: Requirement): boolean => !c.ok && isSoftwares({ check: c.check, ok: c.ok, said: c.said, cause: c.failure?.cause ?? null, advice: c.failure?.advice ?? null, fix: c.failure?.fix ?? null });
+
 /** What the run needs of this machine, one check a line: its border says whether it holds, its words are the engine's; a check the software place mends links there. */
 export function Requirements({ checks, software = null }: { checks: Requirement[]; software?: string | null }) {
   if (checks.length === 0) return null;
+  // one way in to the page for the whole list: beside the first check it mends
+  const first = software ? checks.findIndex((c) => softwareCheck(c)) : -1;
   return (
     <ul className="requirements" aria-label="what the run needs of this machine">
       {checks.map((c, i) => (
@@ -183,7 +187,7 @@ export function Requirements({ checks, software = null }: { checks: Requirement[
           <span className="req-check">{c.check}</span>
           <span className="req-said">
             {c.said}
-            {software && !c.ok && isSoftwares({ check: c.check, ok: c.ok, said: c.said, cause: c.failure?.cause ?? null, advice: c.failure?.advice ?? null }) && <SoftwareLink href={software} />}
+            {software && i === first && <SoftwareLink href={software} />}
           </span>
         </li>
       ))}

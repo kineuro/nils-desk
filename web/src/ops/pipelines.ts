@@ -145,7 +145,7 @@ export function againOfJob(job: JobRow): Again | null {
   if (run !== null && label !== "" && resumable) return { kind: "resume", run, pipeline: label, label };
   const command = nextOf(job)?.command;
   const parsed = command ? overOfCommand(command) : null;
-  return command && parsed ? { kind: "new", pipeline: parsed.pipeline, over: parsed.over, params: parsed.params, command: requeued(command) } : null;
+  return command && parsed ? { kind: "new", pipeline: parsed.pipeline, over: parsed.over, params: parsed.params, ...(parsed.person ? { person: parsed.person } : {}), command: requeued(command) } : null;
 }
 
 /** The card of one job. */
