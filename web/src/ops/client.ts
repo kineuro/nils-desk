@@ -302,7 +302,7 @@ export interface PackDoc {
 /** A run's numbers per comparability key, as `GET /api/pipeline-runs/{id}/numbers` answers them; never a total across keys. */
 export interface RunNumbers {
   run: number;
-  keys: { comparability_key: string; short: string; units: number; measures: Record<string, { count: number; sum: number; mean: number; unit: string | null }>; caveats?: { unit: string; caveats: unknown[] }[] }[];
+  keys: { comparability_key: string; short: string; units: number; measures: Record<string, { count: number; sum: number; mean: number | null; unit: string | null }>; caveats?: { unit: string; caveats: unknown[] }[] }[];
   pooled: boolean;
   words: string | null;
   unkeyed?: number;

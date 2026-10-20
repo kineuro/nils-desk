@@ -119,6 +119,26 @@ export const shares = {
 /** The people on this desk, kept between pages: the names a share's owner and readers are called by. */
 export const peopleKept = keeper(async () => (await shares.people()).people);
 
+let peopleRefused = false;
+
+/**
+ * The directory of people, asked once a session by every page that names
+ * people. Its door needs a grant most people lack, so a refusal (403 or 404)
+ * is remembered here and the door is not asked again: names fall back to the
+ * account, or "a person".
+ */
+export function ensurePeople(): void {
+  if (peopleRefused || peopleKept.get().value !== null) return;
+  peopleKept.refresh().catch((e: unknown) => {
+    if (e instanceof ShareRefused && (e.status === 403 || e.status === 404)) peopleRefused = true;
+  });
+}
+
+/** For the tests: a session afresh. */
+export function forgetPeopleRefusal(): void {
+  peopleRefused = false;
+}
+
 /** A person's name from the desk's directory, or the name the assistant gave, or their subject. */
 export function namesOf(people: DeskPerson[] | null | undefined): (subject: string, given?: string | null) => string {
   const by = new Map((people ?? []).map((p) => [p.subject, p.display]));

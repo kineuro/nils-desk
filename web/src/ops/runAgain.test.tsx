@@ -141,6 +141,22 @@ describe("Run again", () => {
     expect(el.querySelector(".dialog-foot .preflight-cannot li")?.textContent).toBe(`2 sessions cannot run: no FLAIR picked${SESSIONS.join(", ")}`);
     expect(said).toEqual([]);
   });
+  it("links a refusal the software place mends to Settings > Software, in the note and the checks (review fix 3)", async () => {
+    globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), "http://desk.test");
+      asked.push({ method: init?.method ?? "GET", path: url.pathname, body: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.pathname === "/api/jobs")
+        return Promise.resolve(new Response(JSON.stringify({ error: "refused before it started: the terms are not accepted", failure: { kind: "licence", cause: "licence", advice: "an admin accepts the terms", fix: null }, requirements: [{ check: "licence", ok: false, said: "terms not accepted" }] }), { status: 409 }));
+      return Promise.resolve(new Response(JSON.stringify(PRE(true)), { status: 200 }));
+    }) as typeof fetch;
+    const c = capsOf(true);
+    await draw({ ...c, engine: { ...c.engine!, doors: [...(c.engine!.doors ?? []), "GET /api/software"] } } as Capabilities);
+    await act(async () => start().click());
+    await settle();
+    const links = el.querySelectorAll('.dialog-foot a[href="#settings/software"]');
+    expect(links.length).toBeGreaterThan(0);
+    expect(el.querySelector(".dialog-foot .requirements a.soft-link")).not.toBeNull();
+  });
   it("says an engine from before does not check a run taken up again, and lets Start go", async () => {
     await draw(capsOf(false));
     expect(asked).toEqual([]);

@@ -26,7 +26,7 @@ import { Wait } from "../ui/Wait";
 import { checkTag, makeCheckRefusal } from "../campaigns/check";
 import { NewCheck, runChoiceOf } from "../campaigns/NewCheck";
 import { door as served } from "../deployment";
-import { peopleKept } from "../assistant/shares";
+import { ensurePeople, peopleKept } from "../assistant/shares";
 import { useKept } from "../ui/kept";
 import { softwareHrefFor } from "../settings/software";
 import { catalog, overWords, type Pipeline } from "./catalog";
@@ -92,7 +92,7 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   // the numbers answered for one run at one status; an answer for another is not this run's
   const [answered, setAnswered] = useState<{ key: string; value: RunNumbers | null } | undefined>(undefined);
   const people = useKept(peopleKept);
-  useEffect(() => peopleKept.ensure(), []);
+  useEffect(() => ensurePeople(), []);
 
   const read = useCallback(() => {
     runs
@@ -588,12 +588,12 @@ export function RunView(props: {
 }
 
 /** A unit as its pack judged it: the pack's words, each knob with who chose it, the caveats, the flags and the cohort checks. */
-function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; said: ReturnType<typeof packWords>; skippedShown: boolean; name: (p: string) => string; pack: PackView | null }) {
+export function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; said: ReturnType<typeof packWords>; skippedShown: boolean; name: (p: string) => string; pack: PackView | null }) {
   const knobs = Object.entries(u.knobs ?? {});
   const cohort = (u.cohort_checks ?? []).filter((c) => c.status === "flagged" || c.status === "not yet");
   return (
     <div className="unit-pack">
-      {said.words && !(said.status === "skipped" && skippedShown) && <span className={said.status === "routed" ? "meta" : "unit-flag"}>{said.status === "routed" ? `routed ${said.words}` : said.words}</span>}
+      {said.words && !(said.status === "skipped" && skippedShown) && <span className={said.status === "routed" ? "meta" : said.status === "dropped" ? "unit-flag drop" : "unit-flag"}>{said.status === "routed" ? `routed ${said.words}` : said.words}</span>}
       {knobs.map(([id, c]) => {
         const b = byWords(c, name, pack);
         return (
@@ -624,9 +624,9 @@ function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; said: Ret
   );
 }
 
-/** A run's numbers per comparability key, apart: the pooling words, and each key with its units and its measures' means, never one number across keys. Below detail quasi a key of fewer than 5 units reads withheld. */
-function KeysApart({ numbers, perScan, words }: { numbers: RunNumbers; perScan: boolean; words: string | null }) {
-  const names = [...new Set(numbers.keys.flatMap((k) => Object.keys(k.measures)))].slice(0, 6);
+/** A run's numbers per comparability key, apart: the pooling words, and each key with its units and every measure the numbers door gives, never one number across keys. Below detail quasi a key of fewer than 5 units reads withheld, as the page says; a mean the door withholds (null) reads withheld too. */
+export function KeysApart({ numbers, perScan, words }: { numbers: RunNumbers; perScan: boolean; words: string | null }) {
+  const names = [...new Set(numbers.keys.flatMap((k) => Object.keys(k.measures)))];
   return (
     <div className="keys-apart">
       {words && <p className="meta">{words}</p>}

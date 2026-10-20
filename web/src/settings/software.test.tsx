@@ -11,8 +11,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { capsWith } from "../review/caps.fixture";
 import { software } from "../ops/client";
+import { forgetInstalled } from "../ops/Install";
+import { tools } from "../ops/tools";
+import { shortPrint } from "../ops/text";
 import { settingsPages } from "./pages";
-import { failedChecks, kindWords, licenceState, nextAct, pinnedError, shortPrint, softwareActs, softwareCounts, softwareHrefFor, specError, statusTag, verifiedWords } from "./software";
+import { failedChecks, kindWords, licenceState, nextAct, pinnedError, softwareActs, softwareCounts, softwareHrefFor, specError, statusTag, verifiedWords } from "./software";
 import { DCM2NIIX, FIXTURE_NOW, PLACE, PYMENT, SAMSEG, SEGCSVD, SOFTWARE_DOORS, SYNTHSEG } from "./software.fixture";
 import { AcceptDialog, InstallDialog, RegisterDialog, SoftwareView } from "./SoftwarePage";
 
@@ -46,7 +49,7 @@ describe("the software place's words", () => {
     expect(licenceState(SAMSEG, name, (s) => s)).toMatchObject({ words: "LicenseRef-FreeSurfer: terms not accepted", tone: "caution", accept: true, file: true });
     expect(licenceState(PYMENT, name, () => "18 Oct").words).toBe("CC-BY-NC-4.0: accepted by Astrid, 18 Oct");
     const accepted = { ...SAMSEG, licence: { ...SAMSEG.licence!, accepted: { by: "astrid@site", at: "2026-10-19T10:00:00Z" } } };
-    expect(licenceState(accepted, name, (s) => s)).toMatchObject({ words: "LicenseRef-FreeSurfer: licence file missing", accept: true });
+    expect(licenceState(accepted, name, (s) => s)).toMatchObject({ words: "LicenseRef-FreeSurfer: accepted; licence file missing", accept: false, file: true });
     expect(licenceState(SEGCSVD, name, (s) => s)).toMatchObject({ words: "GPL-3.0-only", accept: false });
   });
 
@@ -265,5 +268,56 @@ describe("the doors", () => {
     await settle();
     expect(changed).toBe(1);
     expect(el.querySelector(".ok-words")?.textContent).toBe("Installed synthseg@2.0 and verified it.");
+  });
+  it("sends the converter's install the package it names when the door is the software door, and nothing for the old tools door (review fix 1)", async () => {
+    const missing = { ...DCM2NIIX, status: "missing" as const, path: null };
+    answers = { "POST /api/software/install": () => ({ status: 200, body: { installed: true, package: DCM2NIIX } }), "POST /api/tools/dcm2niix/install": () => ({ status: 200, body: { installed: true } }) };
+    const soft = { ...missing, install: { door: "POST /api/software/install", command: "nils software install dcm2niix", grant: "install:work" } };
+    act(() => root.render(<SoftwareView caps={ADMIN} place={{ ...PLACE, packages: [soft] }} people={people} onChanged={() => undefined} now={FIXTURE_NOW} />));
+    act(() => button("Install dcm2niix").click());
+    await settle();
+    expect(asked.find((a) => a.path === "/api/software/install")?.body).toEqual({ spec: `dcm2niix@${DCM2NIIX.version}` });
+    forgetInstalled();
+    asked.length = 0;
+    act(() => root.render(<SoftwareView caps={ADMIN} place={{ ...PLACE, packages: [{ ...missing, app: "dcm2niix", version: "v1.0.2" }] }} people={people} onChanged={() => undefined} now={FIXTURE_NOW} />));
+    act(() => button("Install dcm2niix").click());
+    await settle();
+    expect(asked.find((a) => a.path === "/api/tools/dcm2niix/install")?.body).toBeNull();
+  });
+
+  it("sends any fix aimed at the software door the package it names, as a run refusal's fix is (review fix 12)", async () => {
+    answers = { "POST /api/software/install": () => ({ status: 200, body: { installed: true, package: DCM2NIIX } }) };
+    await tools.install({ tool: "dcm2niix", door: "POST /api/software/install", command: null, grant: null });
+    expect(asked[0].body).toEqual({ app: "dcm2niix" });
+    await tools.install({ tool: "freesurfer", door: "POST /api/software/install", command: null, grant: null, version: "8.1.0" });
+    expect(asked[1].body).toEqual({ spec: "freesurfer@8.1.0" });
+  });
+
+  it("offers no Accept but Place the licence file, which sends the file alone to the door (review fixes 6 and 13)", async () => {
+    const accepted = { ...SAMSEG, licence: { ...SAMSEG.licence!, accepted: { by: "astrid@site", at: "2026-10-19T10:00:00Z" } } };
+    const acts = softwareActs(ADMIN);
+    expect(licenceState(accepted, (x) => x, (x) => x)).toMatchObject({ words: "LicenseRef-FreeSurfer: accepted; licence file missing", accept: false, file: true });
+    expect(nextAct(accepted, acts)).toBe("place");
+    const html = renderToStaticMarkup(<SoftwareView caps={ADMIN} place={{ ...PLACE, packages: [accepted] }} people={people} onChanged={() => undefined} now={FIXTURE_NOW} />);
+    expect(html).not.toContain(">Accept</button>");
+    expect(html).toContain(">Place the licence file</button>");
+    expect(html).toContain("accepted; licence file missing");
+    expect(html).toContain("nils software accept freesurfer@8.1.0 --file PATH");
+    expect(softwareCounts([accepted])).toEqual({ packages: 1, ready: 0, look: 1 });
+    answers = { "POST /api/software/freesurfer/8.1.0/accept": () => ({ status: 200, body: { accepted: true, acceptance: { by: "astrid@site", at: "2026-10-20T09:00:00Z", terms: { address: "https://x.org/t", version: null } }, file: { sha256: "ab", name: "license.txt", under: "licences/freesurfer" } } }) };
+    let said = "";
+    act(() => root.render(<AcceptDialog p={accepted} onClose={() => undefined} onDone={(w) => (said = w)} />));
+    const text = el.ownerDocument.body.textContent ?? "";
+    expect(text).toContain("Place the licence file of freesurfer@8.1.0");
+    expect(button("Place the file").disabled).toBe(true);
+    const input = el.ownerDocument.querySelector('input[aria-label="The licence file"]') as HTMLInputElement;
+    const f = new File(["key"], "license.txt");
+    Object.defineProperty(input, "files", { value: [f] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    await settle();
+    act(() => button("Place the file").click());
+    await settle();
+    expect(asked.find((a) => a.path.endsWith("/accept"))?.body).toMatchObject({ file: "key", file_name: "license.txt" });
+    expect(said).toBe("license.txt is placed for freesurfer's runs.");
   });
 });

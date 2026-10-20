@@ -119,7 +119,7 @@ export interface UnitsJudged {
   ready: number;
   skipped: number;
   routed: number;
-  cannot_tell: number;
+  cannot_tell?: number | null;
   with_caveats: number;
   skipped_by_why?: { why: string; units: number }[] | null;
   pack_digest?: string | null;

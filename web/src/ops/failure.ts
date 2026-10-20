@@ -40,6 +40,8 @@ export interface Fix {
   door: string;
   command: string | null;
   grant: string | null;
+  /** The package version, where the fix is a package's: the software door names `app@version`. */
+  version?: string;
 }
 
 export interface Failure {

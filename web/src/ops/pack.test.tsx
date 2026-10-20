@@ -22,9 +22,9 @@ import { packs } from "./client";
 import { isSoftwares, failureWords } from "./failure";
 import { byWords, flagWords, judgedLines, keyShort, madeColumns, packView, packWords, personBody, personFlags, personOf, poolingOf, setByWords } from "./pack";
 import { NUMBERS_TWO, PACK_DOC, PRE_PACK, RUN_PACK, SAMSEG_PIPELINE, SEGCSVD_NUMBERS, SEGCSVD_PIPELINE, SEGCSVD_SUMMARY } from "./pack.fixture";
-import { PreflightPanel, Requirements } from "./Preflight";
+import { JudgedList, PreflightPanel, Requirements } from "./Preflight";
 import { FailNote } from "./Reason";
-import { RunView } from "./RunPage";
+import { KeysApart, RunView, UnitPack } from "./RunPage";
 import { measureColumns, runs, tableAsk } from "./runs";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -103,6 +103,56 @@ describe("the pack, read", () => {
     expect(html).toContain('<li class="routed"><b class="num">1</b> session routed to samseg@2');
     expect(html).toContain("the registry cannot tell about");
   });
+
+  it("counts a unit the registry cannot tell about once, on its own line, so the lines add up to the total (review fix 2)", () => {
+    const j = { ready: 5, with_caveats: 0, skipped: 3, routed: 0, cannot_tell: 2, skipped_by_why: [{ why: "the T1 is 2D", units: 1 }, { why: "cannot tell: the grid", units: 2 }] };
+    expect(judgedLines(j).map((l) => [l.count, l.words])).toEqual([[5, "run"], [1, "skipped: the T1 is 2D"]]);
+    const only = { ...j, skipped: 2, skipped_by_why: [{ why: "cannot tell: the grid", units: 2 }] };
+    expect(judgedLines(only).map((l) => l.count)).toEqual([5]);
+    const bare = { ...j, skipped_by_why: null };
+    expect(judgedLines(bare).map((l) => [l.count, l.words])).toEqual([[5, "run"], [1, "skipped"]]);
+    const html = renderToStaticMarkup(<JudgedList j={{ ...j, units: [] }} word="session" />);
+    expect(html).toContain('<b class="num">2</b> sessions the registry cannot tell about');
+    expect(html).not.toContain("skipped: cannot tell");
+    // an answer without the field keeps its skipped line (review fix 16)
+    const noField = { ready: 3, with_caveats: 0, skipped: 2, routed: 0, skipped_by_why: null } as never;
+    expect(judgedLines(noField).map((l) => [l.count, l.words])).toEqual([[3, "run"], [2, "skipped"]]);
+    const total = judgedLines(j).reduce((s, l) => s + l.count, 0) + j.cannot_tell;
+    expect(total).toBe(j.ready + j.skipped);
+  });
+});
+
+describe("a dropped unit's words take the blocked colour (review fix 8)", () => {
+  it("adds the drop class to a dropped unit's flag, and not to a flagged one", () => {
+    const flag = { metric: "x", value: 2, check: "x < 1", action: "drop", words: "too far" };
+    const draw = (action: string) => {
+      const u = { unit: "u", status: "ok", pack_status: "ready", flags: [{ ...flag, action }] } as never;
+      return renderToStaticMarkup(<UnitPack u={u} said={packWords(u)} skippedShown={false} name={(p) => p} pack={null} />);
+    };
+    expect(draw("drop")).toContain('class="unit-flag drop"');
+    expect(draw("flag")).toContain('class="unit-flag"');
+    expect(draw("flag")).not.toContain("drop");
+  });
+});
+
+describe("a run's numbers per key (review fix 5)", () => {
+  it("shows every measure the door gives and says withheld only where the door withholds", () => {
+    const names = ["m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"];
+    const measures = Object.fromEntries(names.map((m, i) => [m, { count: 1, sum: i, mean: i === 7 ? null : i + 0.5, unit: null }]));
+    const numbers = { ...NUMBERS_TWO, keys: [{ comparability_key: "k", short: "kkkkkkkkkkkk", units: 1, measures, caveats: [] }] };
+    const html = renderToStaticMarkup(<KeysApart numbers={numbers} perScan words={null} />);
+    for (const m of names) expect(html).toContain(`mean ${m}`);
+    // one unit, yet its means show: the desk applies no detail rule of its own
+    expect(html).toContain("0.5");
+    expect(html.match(/withheld/gu)).toHaveLength(1);
+    // the detail guard: below detail quasi a key of fewer than 5 units reads withheld, every measure still shown (review fix 11)
+    const guarded = renderToStaticMarkup(<KeysApart numbers={numbers} perScan={false} words={null} />);
+    for (const m of names) expect(guarded).toContain(`mean ${m}`);
+    expect(guarded).not.toContain("0.5<");
+    expect(guarded.match(/withheld/gu)).toHaveLength(8);
+    const five = { ...numbers, keys: [{ ...numbers.keys[0], units: 5 }] };
+    expect(renderToStaticMarkup(<KeysApart numbers={five} perScan={false} words={null} />)).toContain("0.5");
+  });
 });
 
 describe("the table asks only for what the run made", () => {
@@ -159,9 +209,10 @@ describe("a run's units with who chose", () => {
     const refused = draw({ kind: "pooled", words: NUMBERS_TWO.words! });
     expect(refused).toContain("Not summed: several comparability keys");
     expect(refused).not.toContain("The table could not be read");
-    // below detail quasi a key of fewer than 5 units reads withheld
+    // the numbers door governs the detail: a mean it withholds (null) reads withheld, and the desk applies no rule of its own
+    const withheld = { ...NUMBERS_TWO, keys: NUMBERS_TWO.keys.map((k) => ({ ...k, measures: Object.fromEntries(Object.entries(k.measures).map(([m, v]) => [m, { ...v, mean: null }])) })) };
     const below = renderToStaticMarkup(
-      <RunView caps={{ ...CAPS, person: { ...CAPS.person, detail: "plain" } }} run={RUN_PACK} pipeline={SAMSEG_PIPELINE as unknown as Pipeline} resumedAt={null} jobAlive={false} table={{ kind: "off", why: null }} files={null} by="subject.sex" onBy={() => undefined} said={null} onCancel={null} onResume={null} pack={VIEW} numbers={NUMBERS_TWO} />,
+      <RunView caps={{ ...CAPS, person: { ...CAPS.person, detail: "plain" } }} run={RUN_PACK} pipeline={SAMSEG_PIPELINE as unknown as Pipeline} resumedAt={null} jobAlive={false} table={{ kind: "off", why: null }} files={null} by="subject.sex" onBy={() => undefined} said={null} onCancel={null} onResume={null} pack={VIEW} numbers={withheld} />,
     );
     expect(below).toContain(">withheld</td>");
     expect(below).not.toContain(">1,450,000</td>");
@@ -223,6 +274,8 @@ describe("a refusal for software links to Settings > Software", () => {
   });
 });
 
+let packDoc: typeof PACK_DOC = PACK_DOC;
+
 describe("the start of a run", () => {
   let asked: { method: string; path: string; body: unknown }[] = [];
   let root: Root;
@@ -231,6 +284,7 @@ describe("the start of a run", () => {
     if (!HTMLDialogElement.prototype.showModal) HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) { this.setAttribute("open", ""); };
     if (!HTMLDialogElement.prototype.close) HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) { this.removeAttribute("open"); };
     asked = [];
+    packDoc = PACK_DOC;
     globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(String(input), "http://desk.test");
       const method = init?.method ?? "GET";
@@ -238,7 +292,7 @@ describe("the start of a run", () => {
       asked.push({ method, path: url.pathname, body });
       const a =
         method === "GET" && url.pathname === "/api/pipelines/5/pack"
-          ? { status: 200, body: PACK_DOC }
+          ? { status: 200, body: packDoc }
           : method === "POST" && url.pathname === "/api/pipelines/5/preflight"
             ? { status: 200, body: PRE_PACK }
             : method === "POST" && url.pathname === "/api/jobs"
@@ -284,5 +338,18 @@ describe("the start of a run", () => {
     asked = [];
     await runs.preflight(5, { selection: "study", version: 3 }, { threads: "8" }, personOf(VIEW, { goal: "research", switches: { lesions: "off" }, let_run: false }));
     expect(asked[0]).toEqual({ method: "POST", path: "/api/pipelines/5/preflight", body: { select: "selection:study@3", params: { threads: "8" }, goal: "research", switches: { lesions: "off" } } });
+  });
+
+  it("draws no chip chosen for a switch the pack gives no default, and chooses only what the person clicks (review fix 7)", async () => {
+    packDoc = { ...PACK_DOC, goals: { ...PACK_DOC.goals, defaults: { goal: "standard" } } } as typeof PACK_DOC;
+    act(() => root.render(<RunDialog caps={CAPS} pipeline={SAMSEG_PIPELINE as unknown as Pipeline} onClose={() => undefined} onDone={() => undefined} />));
+    await settle();
+    const doc = el.ownerDocument;
+    expect(doc.querySelector('[aria-label="the switch lesions"] [aria-pressed="true"]')).toBeNull();
+    act(() => button("off").click());
+    expect(doc.querySelector('[aria-label="the switch lesions"] [aria-pressed="true"]')!.textContent).toBe("off");
+    // the chosen chip pressed again clears the switch: the engine decides once more (review fix 15)
+    act(() => button("off").click());
+    expect(doc.querySelector('[aria-label="the switch lesions"] [aria-pressed="true"]')).toBeNull();
   });
 });

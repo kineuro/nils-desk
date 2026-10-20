@@ -19,7 +19,8 @@ import type { Over } from "./catalog";
 import { refusalOf, requirementsOf, type Failure, type Requirement } from "./failure";
 import { InstallFor } from "./Install";
 import type { PersonAsk } from "./pack";
-import { CannotList, PreflightPanel, Requirements } from "./Preflight";
+import { softwareHrefFor } from "../settings/software";
+import { CannotList, PreflightPanel, Requirements, softwareCheck } from "./Preflight";
 import { FailNote } from "./Reason";
 import { preflightGate, resumeChecked, resumeCommand, runActs, runs, type Preflight } from "./runs";
 
@@ -91,6 +92,7 @@ export function RunAgainDialog({ caps, again, onClose, onDone }: { caps: Capabil
       },
     );
   };
+  const softHref = softwareHrefFor(caps);
   const title = again.kind === "resume" ? `Run ${again.run} again` : `Run ${again.pipeline} again`;
   return (
     <Dialog
@@ -101,8 +103,8 @@ export function RunAgainDialog({ caps, again, onClose, onDone }: { caps: Capabil
       foot={
         <>
           {refused && (
-            <FailNote f={refused.f} lead="Not queued">
-              <Requirements checks={refused.checks.filter((c) => !c.ok)} />
+            <FailNote f={refused.f} lead="Not queued" software={refused.checks.some(softwareCheck) ? null : softHref}>
+              <Requirements checks={refused.checks.filter((c) => !c.ok)} software={softHref} />
               {refused.pre && <CannotList p={refused.pre} />}
               <InstallFor caps={caps} f={refused.f} onInstalled={() => setRefused(null)} />
             </FailNote>
@@ -120,7 +122,7 @@ export function RunAgainDialog({ caps, again, onClose, onDone }: { caps: Capabil
     >
       <p className="meta">{again.kind === "resume" ? `${again.label}: goes on where it stopped, with every unit it finished kept.` : "Runs the same command again, as a new run."}</p>
       {checks ? (
-        <PreflightPanel p={pre?.p ?? null} checking={pre === null} why={pre?.why ?? null} act={(f) => <InstallFor caps={caps} f={f} onInstalled={() => setInstalls((k) => k + 1)} />} />
+        <PreflightPanel p={pre?.p ?? null} checking={pre === null} why={pre?.why ?? null} software={softHref} act={(f) => <InstallFor caps={caps} f={f} onInstalled={() => setInstalls((k) => k + 1)} />} />
       ) : (
         <p className="meta">This engine does not check a run taken up again before it goes.</p>
       )}
