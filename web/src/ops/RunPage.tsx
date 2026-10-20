@@ -25,8 +25,14 @@ import { Says, Values } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { checkTag, makeCheckRefusal } from "../campaigns/check";
 import { NewCheck, runChoiceOf } from "../campaigns/NewCheck";
+import { door as served } from "../deployment";
+import { peopleKept } from "../assistant/shares";
+import { useKept } from "../ui/kept";
+import { softwareHrefFor } from "../settings/software";
 import { catalog, overWords, type Pipeline } from "./catalog";
-import { ops } from "./client";
+import { ops, packs, type RunNumbers } from "./client";
+import { byWords, flagWords, keyShort, keyTitle, madeColumns, packView, packWords, poolingOf, valueWords, type PackView } from "./pack";
+import { namer } from "./who";
 import { failureOf } from "./failure";
 import { InstallFor } from "./Install";
 import { FailLine, FailNote, KindTag } from "./Reason";
@@ -60,12 +66,13 @@ import {
   unitTone,
   type Derivative,
   type RunDetail,
+  type UnitRun,
   type UnitTone,
 } from "./runs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-export type Table = { kind: "off"; why: string | null } | { kind: "loading" } | { kind: "failed"; why: string } | { kind: "ready"; perScan: boolean; columns: string[]; rows: unknown[][]; truncated: boolean };
+export type Table = { kind: "off"; why: string | null } | { kind: "loading" } | { kind: "failed"; why: string } | { kind: "pooled"; words: string } | { kind: "ready"; perScan: boolean; columns: string[]; rows: unknown[][]; truncated: boolean };
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; run: RunDetail; pipeline: Pipeline | null; resumedAt: string | null; jobAlive: boolean };
 
@@ -80,6 +87,11 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   const [said, setSaid] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   const [again, setAgain] = useState(false);
+  // Wave 7b: the pipeline version's pack (its rules' words), and the run's numbers per comparability key
+  const [pack, setPack] = useState<PackView | null>(null);
+  const [numbers, setNumbers] = useState<RunNumbers | null | undefined>(undefined);
+  const people = useKept(peopleKept);
+  useEffect(() => peopleKept.ensure(), []);
 
   const read = useCallback(() => {
     runs
@@ -108,16 +120,31 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   // the table is read once the run has loaded measures, and again when it ends or the grouping changes
   const measures = run ? Number(((run.summary?.numbers ?? {}) as Record<string, unknown>).measures ?? 0) : 0;
   useEffect(() => {
+    if (!pipeline || !served(caps, "GET /api/pipelines/{id}/pack")) return;
+    packs.of(pipeline.id).then((d) => setPack(packView(d)), () => setPack(null));
+  }, [pipeline?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!run) return;
+    if (measures === 0 || !served(caps, "GET /api/pipeline-runs/{id}/numbers")) return setNumbers(null);
+    packs.numbers(run.id).then(setNumbers, () => setNumbers(null));
+  }, [run?.id, run?.status, measures]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
     if (!run || !pipeline) return;
-    const cols = measureColumns(pipeline as Pipeline & { descriptor?: Record<string, unknown> | null });
+    // the numbers door is read first where the engine serves it, so the table asks only for the columns the run made
+    if (numbers === undefined && measures > 0 && served(caps, "GET /api/pipeline-runs/{id}/numbers")) return;
+    const cols = madeColumns(measureColumns(pipeline as Pipeline & { descriptor?: Record<string, unknown> | null }), run.summary, numbers ?? null);
     if (cols.length === 0 || measures === 0) return setTable({ kind: "off", why: null });
     if (!acts.table) return setTable({ kind: "off", why: "Reading a run's numbers needs Query: Work." });
     setTable({ kind: "loading" });
     runs
       .ask(tableAsk({ pipeline: pipeline.name, level: pipeline.level, run: run.id, columns: cols, perScan: acts.perScan, by }))
       .then((a) => setTable({ kind: "ready", perScan: acts.perScan, columns: a.columns, rows: a.rows, truncated: a.truncated }))
-      .catch((e: unknown) => setTable({ kind: "failed", why: engineWords(e) }));
-  }, [run?.id, run?.status, pipeline?.id, measures, by, acts.table, acts.perScan]); // eslint-disable-line react-hooks/exhaustive-deps
+      .catch((e: unknown) => {
+        // a total that would sum results of several comparability keys is refused: the words and the keys apart, never a merged number
+        const pooled = poolingOf(e);
+        setTable(pooled ? { kind: "pooled", words: pooled } : { kind: "failed", why: engineWords(e) });
+      });
+  }, [run?.id, run?.status, pipeline?.id, measures, by, acts.table, acts.perScan, numbers]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!run || !acts.files || OPEN.has(run.status)) return;
     runs.derivatives(run.id).then((r) => setFiles(r.derivatives), () => setFiles(null));
@@ -173,6 +200,9 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
         onCheck={checkable ? () => setChecking(true) : null}
         onAgain={goesOn}
         checkPrimary={masks.some((f) => !f.check)}
+        pack={pack}
+        numbers={numbers ?? null}
+        people={people.value}
       />
     </>
   );
@@ -201,8 +231,16 @@ export function RunView(props: {
   checkPrimary?: boolean;
   /** Run again, once a missing tool is installed: opens the run's pre-flight, which takes it up again. */
   onAgain?: (() => void) | null;
+  /** Wave 7b: the version's pack, whose rules' words say why a rule chose. */
+  pack?: PackView | null;
+  /** Wave 7b: the run's numbers per comparability key. */
+  numbers?: RunNumbers | null;
+  /** The desk's directory, for the names of the people who chose. */
+  people?: { subject: string; display: string }[] | null;
 }) {
-  const { caps, run: r, pipeline, resumedAt, table, files, by, onBy, said, onCancel, onResume, onCheck = null, checkPrimary = false, onAgain = null } = props;
+  const { caps, run: r, pipeline, resumedAt, table, files, by, onBy, said, onCancel, onResume, onCheck = null, checkPrimary = false, onAgain = null, pack = null, numbers = null, people = null } = props;
+  const name = namer(caps, people);
+  const softHref = softwareHrefFor(caps);
   const acts = runActs(caps);
   const units = r.units_run ?? [];
   const counts = unitCounts(units, resumedAt);
@@ -229,7 +267,9 @@ export function RunView(props: {
   const byUnit = files ? filesByUnit(files, unitNames).units : null;
   const views = viewActs(caps) && byUnit !== null && [...byUnit.values()].some((fs) => fs.some(drawable));
   const viewOf = (unit: string | null) => (views && unit && byUnit?.get(unit)?.some(drawable) ? narrow(href("pipelines", "runs", String(r.id)), { view: unit }) : null);
-  const cols = views ? 6 : 5;
+  // Wave 7b: units a pack judged carry their comparability key
+  const keyed = units.some((u) => u.keys?.comparability);
+  const cols = 5 + (views ? 1 : 0) + (keyed ? 1 : 0);
   const unitCells = totals
     ? [
         { k: "units", v: words && !running ? words.head : total > 0 ? `${n(totals.over)} of ${n(total)} over` : "none yet" },
@@ -281,7 +321,7 @@ export function RunView(props: {
       <Values cells={cells} />
       {said && <p className="meta">{said}</p>}
       {failed && (
-        <FailNote f={failed}>
+        <FailNote f={failed} software={softHref}>
           <InstallFor caps={caps} f={failed} again={onAgain} />
         </FailNote>
       )}
@@ -315,6 +355,7 @@ export function RunView(props: {
         {table.kind === "ready" && <span className="meta">{table.perScan ? `${n(table.rows.length)} ${table.rows.length === 1 ? "scan" : "scans"}` : "totals by group"}</span>}
       </div>
       <TableView table={table} by={by} onBy={onBy} choices={groupBy(pipeline?.level)} />
+      {numbers && (!numbers.pooled || table.kind === "pooled") && <KeysApart numbers={numbers} perScan={acts.perScan} words={table.kind === "pooled" ? null : numbers.words} />}
 
       <div className="section-head rule-top">
         <h2>Checks</h2>
@@ -430,6 +471,7 @@ export function RunView(props: {
                 <th className="num">Tries</th>
                 <th>On</th>
                 <th className="num">Ended</th>
+                {keyed && <th>Key</th>}
                 {views && <th className="acts" />}
               </tr>
             </thead>
@@ -440,17 +482,27 @@ export function RunView(props: {
                 // a skipped unit says what it lacked, in the engine's few words
                 const lacks = t === "skipped" ? (u.lacks && u.lacks.length > 0 ? u.lacks.join("; ") : (u.error ?? null)) : null;
                 const view = viewOf(u.unit);
+                // Wave 7b: the pack's status word and words, who chose each knob, the caveats, the flags
+                const said = packWords(u);
+                const knobs = Object.entries(u.knobs ?? {});
+                const extra = knobs.length > 0 || (u.caveats ?? []).length > 0 || said.words !== null || (u.cohort_checks ?? []).some((c) => c.status === "flagged" || c.status === "not yet");
                 return (
                   <Fragment key={u.unit ?? `u${i}`}>
-                    <tr className={f || lacks ? "has-fail" : undefined}>
+                    <tr className={f || lacks || said.status === "dropped" ? "has-fail" : undefined}>
                       <td className="path">{u.unit ?? `unit ${i + 1}`}</td>
                       <td>
                         <span className={TONE_TAG[t]}>{TONE_WORDS[t]}</span>
+                        {said.status && said.status !== "skipped" && <span className={said.status === "routed" ? "tag brand" : "tag caution"}>{said.status}</span>}
                         {u.exit_code !== null && u.exit_code !== undefined && u.exit_code !== 0 ? <span className="meta"> · exit {u.exit_code}</span> : null}
                       </td>
                       <td className="num">{u.attempts ?? ""}</td>
                       <td className="meta">{u.device ?? ""}</td>
                       <td className="num">{u.finished_at ? whenWords(u.finished_at) : ""}</td>
+                      {keyed && (
+                        <td className="unit-key" title={keyTitle(u.keys?.comparability, u.key_members)}>
+                          {keyShort(u.keys?.comparability)}
+                        </td>
+                      )}
                       {views && (
                         <td className="acts">
                           {view && (
@@ -465,6 +517,13 @@ export function RunView(props: {
                       <tr className="fail-row">
                         <td colSpan={cols}>
                           <FailLine f={f} />
+                        </td>
+                      </tr>
+                    )}
+                    {extra && !(lacks && said.status === "skipped" && knobs.length === 0) && (
+                      <tr className="made-row unit-pack-row">
+                        <td colSpan={cols}>
+                          <UnitPack u={u} said={said} skippedShown={lacks !== null} name={name} pack={pack} />
                         </td>
                       </tr>
                     )}
@@ -507,10 +566,98 @@ export function RunView(props: {
   );
 }
 
+/** A unit as its pack judged it: the pack's words, each knob with who chose it, the caveats, the flags and the cohort checks. */
+function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; said: ReturnType<typeof packWords>; skippedShown: boolean; name: (p: string) => string; pack: PackView | null }) {
+  const knobs = Object.entries(u.knobs ?? {});
+  const cohort = (u.cohort_checks ?? []).filter((c) => c.status === "flagged" || c.status === "not yet");
+  return (
+    <div className="unit-pack">
+      {said.words && !(said.status === "skipped" && skippedShown) && <span className={said.status === "routed" ? "meta" : "unit-flag"}>{said.status === "routed" ? `routed ${said.words}` : said.words}</span>}
+      {knobs.map(([id, c]) => {
+        const b = byWords(c, name, pack);
+        return (
+          <span key={id} className={`knob ${b.kind}`} title={b.title ?? pack?.knobs[id]?.what ?? undefined}>
+            <span className="knob-id">{id}</span>
+            <b>{valueWords(c.value)}</b>
+            <span className="knob-by">{b.words}</span>
+          </span>
+        );
+      })}
+      {(u.caveats ?? []).map((c, i) => (
+        <span key={`c${i}`} className="unit-caveat" title={c.source ?? undefined}>
+          {c.words}
+        </span>
+      ))}
+      {said.status !== "flagged" && said.status !== "dropped" &&
+        (u.flags ?? []).map((f, i) => (
+          <span key={`f${i}`} className="unit-flag" title={f.source ?? undefined}>
+            {flagWords(f)}
+          </span>
+        ))}
+      {cohort.map((c) => (
+        <span key={`k${c.metric}`} className={c.status === "flagged" ? "unit-flag" : "meta"} title={c.came_at ? `flagged ${whenWords(c.came_at)}${c.after_run_closed ? ", after the run closed" : ""}` : undefined}>
+          {c.status === "flagged" ? `${c.metric} against the cohort: ${c.words ?? `z ${c.z ?? "?"}`}` : `${c.metric} against the cohort: not yet, ${c.sessions ?? 0} of ${c.min_sessions ?? 30} sessions`}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** A run's numbers per comparability key, apart: the pooling words, and each key with its units and its measures' means, never one number across keys. Below detail quasi a key of fewer than 5 units reads withheld. */
+function KeysApart({ numbers, perScan, words }: { numbers: RunNumbers; perScan: boolean; words: string | null }) {
+  const names = [...new Set(numbers.keys.flatMap((k) => Object.keys(k.measures)))].slice(0, 6);
+  return (
+    <div className="keys-apart">
+      {words && <p className="meta">{words}</p>}
+      <div className="table-wrap">
+        <table className="thin">
+          <thead>
+            <tr>
+              <th>Key</th>
+              <th className="num">Units</th>
+              {names.map((m) => (
+                <th key={m} className="num">
+                  mean {m.replace(/_/gu, " ")}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {numbers.keys.map((k) => (
+              <tr key={k.comparability_key}>
+                <td className="unit-key" title={k.comparability_key}>
+                  {k.short || keyShort(k.comparability_key)}
+                </td>
+                <td className="num">{k.units.toLocaleString("en-US")}</td>
+                {names.map((m) => (
+                  <td key={m} className="num">
+                    {k.measures[m] ? (perScan || k.units >= 5 ? cellWords(k.measures[m].mean) : "withheld") : ""}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {(numbers.unkeyed ?? 0) > 0 && <p className="meta">{numbers.unkeyed!.toLocaleString("en-US")} units from before the pack carry no key and are counted apart.</p>}
+    </div>
+  );
+}
+
 function TableView({ table, by, onBy, choices }: { table: Table; by: string; onBy: (field: string) => void; choices: { field: string; label: string }[] }) {
   if (table.kind === "off") return <p className="meta">{table.why ?? "This run loaded no measures."}</p>;
   if (table.kind === "loading") return <p className="meta">Reading the table…</p>;
   if (table.kind === "failed") return <p className="warn">The table could not be read: {table.why}</p>;
+  if (table.kind === "pooled")
+    return (
+      <div className="note caution">
+        <Icon name="alert" />
+        <div className="note-body">
+          <p className="note-lead">Not summed: several comparability keys</p>
+          <p className="note-detail">{table.words}</p>
+        </div>
+      </div>
+    );
   const cols = shownColumns(table.columns);
   return (
     <>

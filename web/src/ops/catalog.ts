@@ -16,6 +16,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { roleWord } from "../review/mainScans";
+import { personFlags, type PersonAsk } from "./pack";
 
 export interface Param {
   id: string;
@@ -239,6 +240,8 @@ export interface RunAsk {
   params: Record<string, string>;
   models: string[];
   labels: number | null;
+  /** Wave 7b: the goal, switches and let_run a person chose, with a pack; only what differs from its defaults. */
+  person?: PersonAsk | null;
 }
 
 /** The command line the jobs door queues for a run. */
@@ -250,6 +253,7 @@ export function runCommand(a: RunAsk): string[] {
   for (const [id, v] of Object.entries(a.params)) if (v.trim() !== "") out.push("--param", `${id}=${v.trim()}`);
   for (const m of a.models) out.push("--model", m);
   if (a.labels !== null) out.push("--labels", String(a.labels));
+  out.push(...personFlags(a.person ?? null));
   return out;
 }
 
@@ -279,6 +283,8 @@ export function overOfCommand(command: string[]): { pipeline: string; over: Over
     const w = command[i];
     const v = command[i + 1];
     if (w === "--resume") return null;
+    // Wave 7b: a flag with no value of its own
+    if (w === "--let-run") continue;
     if (w.startsWith("--")) {
       if (v === undefined) return null;
       if (w === "--select") {

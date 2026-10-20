@@ -116,3 +116,19 @@ export function refusalOf(e: unknown): Failure {
 export function failureWords(words: string): Failure {
   return { error: words, kind: null, cause: null, advice: null, line: firstSentence(words), fix: null };
 }
+
+/**
+ * Whether a failure or a check is the software place's to mend (Wave 7b spec
+ * 6.6, 6.7): the converter is one package of it, a tool whose terms are not
+ * accepted or whose site file is missing, and an install that failed its
+ * verification. The engine's words say it ("nils software install
+ * dcm2niix", "failed verification", "not accepted"); the desk links them to
+ * Settings > Software.
+ */
+export function isSoftwares(x: { cause?: string | null; check?: string | null; ok?: boolean; error?: string | null; said?: string | null; advice?: string | null }): boolean {
+  if (x.ok === true) return false;
+  if (x.cause === "dcm2niix" || x.cause === "licence") return true;
+  if (x.check === "licence") return true;
+  const words = [x.error, x.said, x.advice].filter((w): w is string => typeof w === "string").join(" ");
+  return /failed verification|not accepted|nils software|software place|Settings, Software|licence file/iu.test(words);
+}

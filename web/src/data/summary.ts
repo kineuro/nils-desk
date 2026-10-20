@@ -144,7 +144,7 @@ export interface DatasetSummary {
   /** The open questions about the dataset's files filed already under another subject, visit or series, which its Review lists. */
   identity_questions?: number;
   /** Record 56 (2026-10-14): the proposed rule changes that touch the dataset, by status; an engine from before says nothing. */
-  proposals?: { proposed: number; adopted: number; rejected: number };
+  proposals?: { proposed: number; adopted: number; rejected: number; retired?: number };
   pictures_place: string | null;
   steps: SummaryStep[];
 }

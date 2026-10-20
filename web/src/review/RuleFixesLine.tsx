@@ -14,6 +14,8 @@ export interface FixCounts {
   proposed: number;
   adopted: number;
   rejected: number;
+  /** Since the rules engine's fixes (2026-10-15): an adopted scoped change a later version replaced, which no sort applies any more. */
+  retired?: number;
 }
 
 /** The line's words: how many wait, or that none does. */
@@ -28,6 +30,7 @@ export function RuleFixesLine({ dataset, counts, link }: { dataset: string; coun
     <div className={waiting ? "fixes-line waiting" : "fixes-line"} aria-label="Proposed rule fixes">
       <span>{fixesWords(counts)}</span>
       {counts.adopted > 0 && <span className="meta">{n(counts.adopted)} adopted</span>}
+      {(counts.retired ?? 0) > 0 && <span className="meta">{n(counts.retired ?? 0)} retired</span>}
       {link && (
         <a className="button quiet small" href={narrow(href("review", "rules", waiting ? "proposals" : "quality"), { dataset })}>
           {waiting ? "Review them" : "Rules"}
