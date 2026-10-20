@@ -116,3 +116,22 @@ export function refusalOf(e: unknown): Failure {
 export function failureWords(words: string): Failure {
   return { error: words, kind: null, cause: null, advice: null, line: firstSentence(words), fix: null };
 }
+
+/**
+ * Whether a failure or a check is the software place's to mend (Wave 7b spec
+ * 6.6, 6.7): the converter is one package of it, a tool whose terms are not
+ * accepted or whose site file is missing, and an install that failed its
+ * verification. It is told by structure: the install the engine offers (its
+ * door is under /api/software), the cause (dcm2niix, licence) or the check
+ * (licence, image, software). One prose fallback stays for the converter's
+ * older message, which names `nils software install dcm2niix` and nothing
+ * structured.
+ */
+export function isSoftwares(x: { cause?: string | null; check?: string | null; ok?: boolean; fix?: { door: string } | null; error?: string | null; said?: string | null; advice?: string | null }): boolean {
+  if (x.ok === true) return false;
+  if (x.fix && /(^|\s)\/api\/software(\/|$)/u.test(x.fix.door)) return true;
+  if (x.cause === "dcm2niix" || x.cause === "licence") return true;
+  if (x.check === "licence" || x.check === "image" || x.check === "software") return true;
+  const words = [x.error, x.said, x.advice].filter((w): w is string => typeof w === "string").join(" ");
+  return /nils software install dcm2niix/iu.test(words);
+}

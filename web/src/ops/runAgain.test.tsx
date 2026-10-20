@@ -14,6 +14,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
 import { capsWith } from "../review/caps.fixture";
+import { overOfCommand } from "./catalog";
 import { againOfRun, RunAgainDialog, type Again } from "./RunAgain";
 import type { Preflight } from "./runs";
 
@@ -97,6 +98,16 @@ describe("Run again", () => {
     await settle();
     expect(asked.find((a) => a.path === "/api/jobs")?.body).toEqual({ command: ["run", "--resume", "14"] });
     expect(said).toEqual(["Run 14 is queued again as job 51."]);
+  });
+  it("a job's command taken again keeps the goal, the switches and let_run, at the pre-flight and in the queued command", async () => {
+    const command = ["run", "samseg-lesions@1", "--select", "selection:study@3", "--goal", "research", "--switch", "lesions=off", "--let-run"];
+    answers["POST /api/pipelines/samseg-lesions@1/preflight"] = () => ({ status: 200, body: PRE(true) });
+    const parsed = overOfCommand(command)!;
+    await draw(capsOf(true), { kind: "new", pipeline: parsed.pipeline, over: parsed.over, params: parsed.params, person: parsed.person, command });
+    expect(asked[0].body).toMatchObject({ goal: "research", switches: { lesions: "off" }, let_run: true });
+    await act(async () => start().click());
+    await settle();
+    expect(asked.find((a) => a.path === "/api/jobs")?.body).toEqual({ command });
   });
   it("holds Start where no session it still has to run could run, naming them by why", async () => {
     answers["POST /api/pipelines/3/preflight"] = () => ({ status: 200, body: PRE(false) });

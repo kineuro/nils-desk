@@ -39,6 +39,8 @@ export function settingsPages(caps: Capabilities): SettingsPage[] {
   if (caps.assistant !== null && may(caps, "assistant-settings:work")) out.push({ id: "teaching", title: "Teaching", sub: install });
   // the places, where the engine serves them
   if (may(caps, "places:see") && door(caps, "GET /api/places")) out.push({ id: "places", title: "Places", sub: false });
+  // the software place (Wave 7b spec 6.7): the tools runs use, where the engine serves it
+  if ((may(caps, "install:see") || may(caps, "pipelines:see")) && door(caps, "GET /api/software")) out.push({ id: "software", title: "Software", sub: false });
   // Backups (spec 13.1, once "Database"), where the engine serves its doors
   if (may(caps, "database:see") && (door(caps, "GET /api/backups") || door(caps, "GET /api/settings"))) out.push({ id: "backups", title: "Backups", sub: false });
   // People (spec 13.1, once "Identity"): who signs in is the desk's

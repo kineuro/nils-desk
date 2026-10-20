@@ -14,6 +14,7 @@ import { door as served } from "../deployment";
 import { may, sees } from "../grants";
 import { roleWord } from "../review/mainScans";
 import { mainOfSpec, offered, selectOf, type Over, type Pipeline } from "./catalog";
+import { personBody, type PersonAsk } from "./pack";
 import { failureOf, firstSentence, requirementsOf, SLICE, type Failure, type Requirement } from "./failure";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -92,6 +93,36 @@ export interface Preflight {
   requirements?: unknown[] | null;
   /** The first check that fails, as a run's failure is named, or null. */
   failure?: unknown;
+  /** Wave 7b (record 57 P2 to P4): what the pipeline's pack judged of each unit, where it has a pack. */
+  units_judged?: UnitsJudged | null;
+  /** Wave 7b: the goal, the switches and let_run as the person asked them. */
+  person?: { goal?: string | null; switches?: Record<string, unknown> | null; let_run?: boolean } | null;
+}
+
+/** One unit as a pack judged it at the pre-flight. */
+export interface JudgedUnit {
+  unit: string | null;
+  /** ready, skipped or routed. */
+  status: string;
+  need?: string | null;
+  words?: string | null;
+  cannot_tell?: string | null;
+  let_run_by?: string | null;
+  variant?: { variant?: string | null; pipeline?: string | null; rule?: string | null; why?: string | null } | null;
+  caveats?: string[] | null;
+  knobs?: Record<string, { value: unknown; by: string; rule?: string | null }> | null;
+}
+
+/** The pre-flight's judgement of the units by the pack (Wave 7b spec 5.7). */
+export interface UnitsJudged {
+  units: JudgedUnit[];
+  ready: number;
+  skipped: number;
+  routed: number;
+  cannot_tell: number;
+  with_caveats: number;
+  skipped_by_why?: { why: string; units: number }[] | null;
+  pack_digest?: string | null;
 }
 
 export interface UnitRun {
@@ -111,6 +142,19 @@ export interface UnitRun {
   failure?: unknown;
   /** Since 2026-10-12: what a skipped unit lacked, in a few words ("no FLAIR picked"). */
   lacks?: string[] | null;
+  /** Wave 7b (record 57 P2 to P4): how the pack judged it (ready, skipped or routed), the need it lacks and the pack's words. */
+  pack_status?: string | null;
+  need?: string | null;
+  words?: string | null;
+  variant?: { variant?: string | null; pipeline?: string | null; rule?: string | null; why?: string | null } | null;
+  /** Each knob's value and who chose it: default, rule:<id>, person:<user> or fixed. */
+  knobs?: Record<string, { value: unknown; by: string; rule?: string | null; facts?: Json | null; proposed?: string | null }> | null;
+  caveats?: { role?: string | null; need?: string | null; words: string; source?: string | null; cannot_tell?: string | null }[] | null;
+  flags?: { metric: string; value: number | null; threshold?: number | null; op?: string | null; check?: string | null; action: string; words?: string | null; source?: string | null }[] | null;
+  cohort_checks?: { metric: string; status: string; words?: string | null; z?: number | null; stratum?: unknown; sessions?: number | null; min_sessions?: number | null; came_at?: string | null; after_run_closed?: boolean | null }[] | null;
+  keys?: { comparability: string | null; result: string | null } | null;
+  /** The facts each part of the comparability key was made of, where the engine gives them. */
+  key_members?: unknown;
 }
 
 export interface Breach {
@@ -173,8 +217,9 @@ export interface Derivative {
 
 export const runs = {
   /** The pipeline by its catalog id, or a name; the door reads its path as it stands, so a name@version is not sent encoded. */
-  preflight: (pipeline: number | string, over: Over, params: Record<string, string>) =>
-    door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { ...selectOf(over), params }),
+  /** Wave 7b: with a pack, the person's goal, switches and let_run ride along where they chose any. */
+  preflight: (pipeline: number | string, over: Over, params: Record<string, string>, person: PersonAsk | null = null) =>
+    door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { ...selectOf(over), params, ...personBody(person) }),
   /** Since 2026-10-12: the pre-flight of a run taken up again, for the units it still has to run. */
   preflightResume: (pipeline: number | string, run: number) => door<Preflight>("POST", `/api/pipelines/${typeof pipeline === "number" ? pipeline : encodeURIComponent(pipeline).replace(/%40/gu, "@")}/preflight`, { resume: run }),
   get: (id: number) => door<RunDetail>("GET", `/api/pipeline-runs/${id}`),

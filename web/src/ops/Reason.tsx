@@ -7,7 +7,16 @@
 
 import type React from "react";
 import { Icon } from "../ui/Icon";
-import type { Failure } from "./failure";
+import { isSoftwares, type Failure } from "./failure";
+
+/** The way to Settings > Software, where a failure is the software place's to mend (Wave 7b). */
+export function SoftwareLink({ href }: { href: string }) {
+  return (
+    <a className="soft-link" href={href}>
+      Settings › Software
+    </a>
+  );
+}
 
 /** The kind as a value tag: framed and barred in its own value's colour, as the desk draws a value. */
 export function KindTag({ kind, cause = null }: { kind: string; cause?: string | null }) {
@@ -32,7 +41,7 @@ export function FailLine({ f, children }: { f: Failure; children?: React.ReactNo
 }
 
 /** The whole of it: the line as the lead, the error under it where the line is not all of it. */
-export function FailNote({ f, lead = null, children }: { f: Failure; lead?: string | null; children?: React.ReactNode }) {
+export function FailNote({ f, lead = null, software = null, children }: { f: Failure; lead?: string | null; software?: string | null; children?: React.ReactNode }) {
   return (
     <div className="note caution fail-note">
       <Icon name="alert" />
@@ -41,6 +50,7 @@ export function FailNote({ f, lead = null, children }: { f: Failure; lead?: stri
         <p className={lead ? "fail-said" : "note-lead fail-said"}>
           {f.kind && <KindTag kind={f.kind} cause={f.cause} />}
           <span>{f.line}</span>
+          {software && isSoftwares(f) && <SoftwareLink href={software} />}
         </p>
         {f.error !== f.line && <p className="note-detail">{f.error}</p>}
         {children}

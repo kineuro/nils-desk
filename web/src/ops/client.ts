@@ -2,7 +2,7 @@
 // The operations and data doors (Wave 4c section 7.5), thin: each is one
 // engine door with its parameters, through the desk's proxy.
 
-import { type ChainedJob, type Json } from "../ask/client";
+import { door as typed, type ChainedJob, type Json } from "../ask/client";
 
 async function door<T>(method: "GET" | "POST" | "PUT", path: string, body?: unknown): Promise<T> {
   const r = await fetch(path, {
@@ -168,4 +168,151 @@ export const data = {
   batches: (limit = 50) => door<{ count: number; batches: Batch[] }>("GET", `/api/batches${q({ limit })}`),
   batch: (id: number) => door<Batch>("GET", `/api/batches/${id}`),
   quarantine: (batch?: number, cls?: string, limit = 100, cohort?: string) => door<{ count: number; files: Json[] }>("GET", `/api/quarantine${q({ batch, class: cls, limit, cohort })}`),
+};
+
+/* ---------------------------------------------------------------- Wave 7b: the software place and the pipeline pack */
+// The doors of record 57 P1 to P5 (Wave 7b spec 5.5 to 5.7 and 6.7), as the
+// engine's openapi v7 describes them. Each throws the ask client's DoorError,
+// so a refusal (409, 422) keeps its body for the page to say.
+
+
+/** One verification result: the probe, the fingerprint or the test run. */
+export interface SoftwareCheck {
+  ran: boolean;
+  passed: boolean | null;
+  said: string | null;
+}
+
+/** A tool's licence as the software place reads it from its pack. */
+export interface SoftwareLicence {
+  spdx: string | null;
+  redistributable: boolean | null;
+  terms: { address: string | null; version: string | null } | null;
+  /** An administrator must accept the terms before a run. */
+  accept: boolean;
+  accepted: { by: string; at: string; terms?: { address?: string | null; version?: string | null } | null; file?: { sha256: string; name: string } | null } | null;
+  site_file: { env: string | null; mount: string | null; name: string | null } | null;
+  file: { present: boolean; name: string | null } | null;
+}
+
+/** One dependency check of a package, as the pre-flight makes it. */
+export interface SoftwareNeed {
+  check: string;
+  ok: boolean;
+  /** ok, warn or missing. */
+  state: string;
+  said: string;
+  failure?: unknown;
+}
+
+/** One package of `GET /api/software`. */
+export interface SoftwarePackage {
+  app: string;
+  version: string;
+  spec: string;
+  /** sif, sandbox, image or binary. */
+  kind: string;
+  /** installed or registered. */
+  how: string | null;
+  /** False for a registered install, which the engine never updates or removes. */
+  managed: boolean;
+  /** installed, registered, missing, failed verification or update available. */
+  status: string;
+  place?: string | null;
+  path?: string | null;
+  image?: string | null;
+  source?: string | null;
+  digest?: string | null;
+  digest_asked?: string | null;
+  pinned?: string[] | null;
+  size_bytes?: number | null;
+  runtime?: string | null;
+  by?: string | null;
+  at?: string | null;
+  fingerprint?: string | null;
+  verified_at?: string | null;
+  verification?: { probe?: SoftwareCheck | null; fingerprint?: SoftwareCheck | null; test?: SoftwareCheck | null } | null;
+  commands?: string[] | null;
+  pack_sha256?: string | null;
+  licence?: SoftwareLicence | null;
+  /** The catalog's labels that use it. */
+  pipelines?: string[] | null;
+  needs?: SoftwareNeed[] | null;
+  install?: { door: string | null; command: string | null; grant: string | null } | null;
+  /** The converter's entry, as GET /api/tools answers it (kind binary). */
+  tool?: Json | null;
+}
+
+export interface SoftwarePlace {
+  place: { path: string | null; declared: string | null; read_only?: boolean | null; shared?: string | null } | null;
+  packages: SoftwarePackage[];
+  runtime: { name: string; version: string | null } | null;
+}
+
+/** The body that names a package: its spec, and the pack's text where the person gave one. */
+export interface SoftwareAsk {
+  spec: string;
+  pack?: string;
+  source?: string;
+}
+
+export const software = {
+  list: () => typed<SoftwarePlace>("GET", "/api/software"),
+  install: (a: SoftwareAsk) => typed<{ installed: boolean; why?: string; package: SoftwarePackage; needs?: SoftwareNeed[]; verified?: unknown }>("POST", "/api/software/install", a),
+  register: (a: SoftwareAsk & { kind: "sif" | "sandbox" | "image"; path: string }) => typed<{ registered: boolean; package: SoftwarePackage; needs?: SoftwareNeed[]; verified?: unknown }>("POST", "/api/software/register", a),
+  verify: (app: string, version: string) => typed<{ verified: boolean; verification: SoftwarePackage["verification"]; package: SoftwarePackage; needs?: SoftwareNeed[] }>("POST", `${softwarePath(app, version)}/verify`, {}),
+  accept: (app: string, version: string, file: { text: string; name: string } | null = null, terms: { address: string } | null = null) =>
+    typed<{ accepted: boolean; acceptance: { by: string; at: string; terms: { address: string | null; version: string | null } }; file: { sha256: string; name: string; under: string } | null }>(
+      "POST",
+      `${softwarePath(app, version)}/accept`,
+      { ...(file ? { file: file.text, file_name: file.name } : {}), ...(terms ? { terms: { address: terms.address } } : {}) },
+    ),
+  forget: (app: string, version: string) => typed<{ forgotten: boolean; app: string; version: string }>("POST", `${softwarePath(app, version)}/forget`, {}),
+  remove: (app: string, version: string) => typed<{ removed: boolean; app: string; version: string }>("DELETE", softwarePath(app, version)),
+};
+
+/** A package's own door, its app and version each one path segment. */
+export function softwarePath(app: string, version: string): string {
+  return `/api/software/${encodeURIComponent(app)}/${encodeURIComponent(version)}`;
+}
+
+/** Who chose a knob's value, as a unit records it: default, rule:<id>, person:<user> or fixed, with the assistant where it proposed it. */
+export interface KnobChoice {
+  value: unknown;
+  by: string;
+  rule?: string | null;
+  facts?: Json | null;
+  proposed?: string | null;
+}
+
+/** A pipeline version's pack as `GET /api/pipelines/{id}/pack` answers it; `pack` is "none" where the version has none. */
+export interface PackDoc {
+  pipeline: string;
+  pipeline_id: number;
+  pack: Json | "none" | { error: string };
+  pack_digest?: string | null;
+  version_digest?: string | null;
+  facts?: string[] | null;
+  breaking_knobs?: string[] | null;
+  goals?: { goal: string[]; switches: Record<string, unknown[]>; defaults: Record<string, unknown> } | null;
+  rules?: { id: string; when: string; set?: Record<string, unknown> | null; route?: string | null; why?: string | null; source?: string | null }[] | null;
+  checks?: { metric: string; check: string; action: string; cohort?: boolean; source?: string | null }[] | null;
+}
+
+/** A run's numbers per comparability key, as `GET /api/pipeline-runs/{id}/numbers` answers them; never a total across keys. */
+export interface RunNumbers {
+  run: number;
+  keys: { comparability_key: string; short: string; units: number; measures: Record<string, { count: number; sum: number; mean: number; unit: string | null }>; caveats?: { unit: string; caveats: unknown[] }[] }[];
+  pooled: boolean;
+  words: string | null;
+  unkeyed?: number;
+  unkeyed_measures?: number;
+  measures: number;
+}
+
+export const packs = {
+  /** A pipeline version's pack, its goals, rules and checks. */
+  of: (pipeline: number) => typed<PackDoc>("GET", `/api/pipelines/${pipeline}/pack`),
+  /** A run's numbers, grouped by comparability key. */
+  numbers: (run: number) => typed<RunNumbers>("GET", `/api/pipeline-runs/${run}/numbers`),
 };

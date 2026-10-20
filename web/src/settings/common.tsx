@@ -30,7 +30,9 @@ export function useActing() {
       .then((words) => setActing({ kind: "done", words }))
       .catch((e: unknown) => setActing({ kind: "failed", why: messageOf(e) }));
   };
-  return { acting, act, working: acting.kind === "working" };
+  /** Show the words of work that ended elsewhere (a dialog's outcome). */
+  const say = (words: string) => setActing({ kind: "done", words });
+  return { acting, act, say, working: acting.kind === "working" };
 }
 
 /** Work the supervisor goes on with apart from the call, followed until it ends. */

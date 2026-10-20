@@ -35,7 +35,7 @@ import { Wait } from "../ui/Wait";
 import { DoorError } from "../ask/client";
 import { failureOf, refusalOf, requirementsOf, type Failure, type Requirement } from "./failure";
 import { OverPicker } from "./OverPicker";
-import { PreflightPanel, Requirements } from "./Preflight";
+import { PreflightPanel, Requirements, softwareCheck } from "./Preflight";
 import { FailLine, FailNote } from "./Reason";
 import { InstallFor, useInstall } from "./Install";
 import { LanePanel, SecretsPanel } from "./PipelineSetup";
@@ -47,6 +47,9 @@ import { againOfRun, RunAgainDialog, type Again } from "./RunAgain";
 import { preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
 import { andWords, catalog, catalogActs, catalogRows, imageWords, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { roleWord } from "../review/mainScans";
+import { softwareHrefFor } from "../settings/software";
+import { packs } from "./client";
+import { packError, packView, personMaySet, personOf, setByWords, valueWords, type PackView } from "./pack";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -316,6 +319,20 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
   const [busy, setBusy] = useState(false);
   // a run the jobs door refused before queueing it (409): its failure, and the checks that fail, as the pre-flight says them
   const [refused, setRefused] = useState<{ f: Failure; checks: Requirement[] } | null>(null);
+  // Wave 7b (record 57 P2): the version's pack, its goal and switches, and the knobs a person may set
+  const [pack, setPack] = useState<{ view: PackView | null; error: string | null } | null>(null);
+  const [goal, setGoal] = useState<string | null>(null);
+  const [switches, setSwitches] = useState<Record<string, string>>({});
+  const [letRun, setLetRun] = useState(false);
+  useEffect(() => {
+    if (!served(caps, "GET /api/pipelines/{id}/pack")) return;
+    packs.of(pipeline.id).then(
+      (d) => setPack({ view: packView(d), error: packError(d) }),
+      () => setPack(null),
+    );
+  }, [pipeline.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const view = pack?.view ?? null;
+  const person = personOf(view, { goal, switches, let_run: letRun });
   useEffect(() => {
     if (needs.models.length > 0 && served(caps, "GET /api/models") && may(caps, "models:see")) catalog.models().then((r) => setModelList(r.models.filter((m) => m.state === "admitted" || m.state === "promoted")), () => undefined);
     if (needs.labels && served(caps, "GET /api/label-sets")) catalog.labelSets().then((r) => setLabelSets(r.label_sets.filter((s) => !s.sealed)), () => undefined);
@@ -323,18 +340,19 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
   }, []);
   const errors = params.map((p) => paramError(p, values[p.id] ?? "")).filter((e): e is string => e !== null);
   const missing = needs.models.some((m, i) => !m.optional && chosenModels[i] === "") || (needs.labels !== null && !needs.labels.optional && labels === "");
-  const changed = Object.fromEntries(Object.entries(values).filter(([id, v]) => v.trim() !== "" && String(params.find((p) => p.id === id)?.["default-value"] ?? "") !== v.trim()));
+  // a knob the pack's rules set or the pack fixes is never sent as the person's
+  const changed = Object.fromEntries(Object.entries(values).filter(([id, v]) => personMaySet(view, id) && v.trim() !== "" && String(params.find((p) => p.id === id)?.["default-value"] ?? "") !== v.trim()));
   // record 49 A7: the engine's pre-flight, asked again as the selection or a parameter changes
   const checks = runActs(caps).preflight;
   const [pre, setPre] = useState<{ key: string; p: Preflight | null; why: Failure | null } | null>(null);
   // a tool installed from the refusal asks the pre-flight again
   const [installs, setInstalls] = useState(0);
-  const preKey = over && errors.length === 0 ? JSON.stringify([over, changed, installs]) : null;
+  const preKey = over && errors.length === 0 ? JSON.stringify([over, changed, installs, person]) : null;
   useEffect(() => {
     if (!checks || preKey === null || over === null) return;
     let alive = true;
     const t = setTimeout(() => {
-      runDoors.preflight(pipeline.id, over, changed).then(
+      runDoors.preflight(pipeline.id, over, changed, person).then(
         (p) => alive && setPre({ key: preKey, p, why: null }),
         (e: unknown) => alive && setPre({ key: preKey, p: null, why: refusalOf(e) }),
       );
@@ -355,8 +373,11 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
         params: changed,
         models: chosenModels.filter((m) => m !== ""),
         labels: labels === "" ? null : Number(labels),
+        person,
       })
     : null;
+  const judged = current?.p?.units_judged ?? null;
+  const softHref = softwareHrefFor(caps);
   const go = () => {
     if (!command) return;
     setBusy(true);
@@ -377,8 +398,8 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
       foot={
         <>
           {refused && (
-            <FailNote f={refused.f} lead="Not queued">
-              <Requirements checks={refused.checks.filter((c) => !c.ok)} />
+            <FailNote f={refused.f} lead="Not queued" software={refused.checks.some(softwareCheck) ? null : softHref}>
+              <Requirements checks={refused.checks.filter((c) => !c.ok)} software={softHref} />
               <InstallFor caps={caps} f={refused.f} onInstalled={() => setRefused(null)} />
             </FailNote>
           )}
@@ -394,7 +415,45 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
       }
     >
       <OverPicker caps={caps} over={over} onOver={setOver} needs={pipelineRoles(pipeline)} />
-      {params.map((p) => (
+      {pack?.error && <p className="warn">This version&apos;s pack cannot be read here: {pack.error}</p>}
+      {view && view.goals.length > 0 && (
+        <div className="field">
+          <span className="label">Goal</span>
+          <div className="chips" role="group" aria-label="the run's goal">
+            {view.goals.map((g) => (
+              <button key={g} type="button" className={(goal ?? view.defaults.goal) === g ? "opt on" : "opt"} aria-pressed={(goal ?? view.defaults.goal) === g} onClick={() => setGoal(g)}>
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {view &&
+        Object.entries(view.switches).map(([k, vs]) => {
+          const on = switches[k] ?? view.defaults[k] ?? vs[0];
+          const what = view.knobs[k]?.what ?? null;
+          return (
+            <div key={k} className="field">
+              <span className="label" title={what ?? undefined}>
+                {k[0].toUpperCase() + k.slice(1).replace(/_/gu, " ")}
+              </span>
+              <div className="chips" role="group" aria-label={`the switch ${k}`}>
+                {vs.map((v) => (
+                  <button key={v} type="button" className={on === v ? "opt on" : "opt"} aria-pressed={on === v} onClick={() => setSwitches((was) => ({ ...was, [k]: v }))}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      {params.filter((p) => !personMaySet(view, p.id)).map((p) => (
+        <div key={p.id} className="field">
+          <span className="label">{p.name}</span>
+          <span className="knob-fixed">{view!.knobs[p.id].set_by === "fixed" ? `fixed at ${valueWords(view!.knobs[p.id].default ?? p["default-value"])}` : `per unit, ${setByWords(view!, p.id)}`}</span>
+        </div>
+      ))}
+      {params.filter((p) => personMaySet(view, p.id)).map((p) => (
         <div key={p.id} className="field">
           <span className="label">{p.name}</span>
           <span className="input">
@@ -445,7 +504,15 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
           </span>
         </div>
       )}
-      {checks && over !== null && <PreflightPanel p={current?.p ?? null} checking={current === null && errors.length === 0} why={current?.why ?? null} act={(f) => <InstallFor caps={caps} f={f} onInstalled={() => setInstalls((k) => k + 1)} />} />}
+      {checks && over !== null && <PreflightPanel p={current?.p ?? null} checking={current === null && errors.length === 0} why={current?.why ?? null} software={softHref} act={(f) => <InstallFor caps={caps} f={f} onInstalled={() => setInstalls((k) => k + 1)} />} />}
+      {view && ((judged?.cannot_tell ?? 0) > 0 || letRun) && (
+        <label className="check-row">
+          <input type="checkbox" checked={letRun} onChange={(e) => setLetRun(e.target.checked)} />
+          <span>
+            {judged && judged.cannot_tell === 1 ? "Run the unit the registry cannot tell about" : `Run the ${judged && judged.cannot_tell > 0 ? `${n(judged.cannot_tell)} ` : ""}units the registry cannot tell about`} <span className="meta">recorded as your choice</span>
+          </span>
+        </label>
+      )}
       <div className="note brand">
         <Icon name="info" />
         <div className="note-body">

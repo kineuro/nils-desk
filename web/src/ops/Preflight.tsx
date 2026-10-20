@@ -19,17 +19,18 @@ import type React from "react";
 import { roleWord } from "../review/mainScans";
 import { Icon } from "../ui/Icon";
 import { Values } from "../ui/Says";
-import { failureWords, type Failure, type Requirement } from "./failure";
-import { FailNote, KindTag } from "./Reason";
+import { failureWords, isSoftwares, type Failure, type Requirement } from "./failure";
+import { judgedLines } from "./pack";
+import { FailNote, KindTag, SoftwareLink } from "./Reason";
 import { blockedOf, cannotOf, mainReadOf, mainReadRoles, preflightCells, preflightChecks, preflightGate, unitWord, unitsWords, withoutByWhy, type MainRead, type Preflight } from "./runs";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-export function PreflightPanel({ p, checking = false, why = null, act = null }: { p: Preflight | null; checking?: boolean; why?: string | Failure | null; act?: ((f: Failure) => React.ReactNode) | null }) {
+export function PreflightPanel({ p, checking = false, why = null, act = null, software = null }: { p: Preflight | null; checking?: boolean; why?: string | Failure | null; act?: ((f: Failure) => React.ReactNode) | null; software?: string | null }) {
   if (why) {
     const f = typeof why === "string" ? failureWords(why) : why;
     return (
-      <FailNote f={f} lead="The pre-flight refused">
+      <FailNote f={f} lead="The pre-flight refused" software={software}>
         {act?.(f)}
       </FailNote>
     );
@@ -52,12 +53,14 @@ export function PreflightPanel({ p, checking = false, why = null, act = null }: 
         )}
         {main && <MainWithout m={main} />}
         <CannotList p={p} />
-        <Requirements checks={preflightChecks(p)} />
+        {p.units_judged && <JudgedList j={p.units_judged} word={unitWord(p)} />}
+        <Requirements checks={preflightChecks(p)} software={software} />
         {blocked && (
           <>
             <p className="fail-said">
               {blocked.kind && <KindTag kind={blocked.kind} cause={blocked.cause} />}
               <span>{blocked.line}</span>
+              {software && isSoftwares(blocked) && !preflightChecks(p).some(softwareCheck) && <SoftwareLink href={software} />}
             </p>
             {blocked.error !== blocked.line && <p className="note-detail">{blocked.error}</p>}
             {act?.(blocked)}
@@ -78,7 +81,8 @@ export function CannotList({ p }: { p: Preflight }) {
   const cannot = cannotOf(p);
   if (cannot.length === 0) {
     const total = p.units.total;
-    if (total === 0 || p.units.missing > 0) return null;
+    // Wave 7b: where the pack skips or routes units, its lines say what runs
+    if (total === 0 || p.units.missing > 0 || p.units_judged) return null;
     return <p className="note-detail can-run">{total === 1 ? `The one ${word} can run.` : `All ${unitsWords(total, word)} can run.`}</p>;
   }
   return (
@@ -149,15 +153,42 @@ export function MainWithout({ m }: { m: MainRead }) {
   );
 }
 
-/** What the run needs of this machine, one check a line: its border says whether it holds, its words are the engine's. */
-export function Requirements({ checks }: { checks: Requirement[] }) {
+/** The units the pipeline's pack judged (Wave 7b spec 5.7), one line a status: how many run, skipped by which need, routed and to what. */
+export function JudgedList({ j, word }: { j: NonNullable<Preflight["units_judged"]>; word: string }) {
+  const lines = judgedLines(j);
+  return (
+    <ul className="judged-list" aria-label={`the ${word}s as the pack judged them`}>
+      {lines.map((l) => (
+        <li key={l.key} className={l.tone}>
+          <b className="num">{n(l.count)}</b> {l.count === 1 ? word : `${word}s`} {l.words}
+        </li>
+      ))}
+      {j.cannot_tell > 0 && (
+        <li className="skipped">
+          <b className="num">{n(j.cannot_tell)}</b> {j.cannot_tell === 1 ? word : `${word}s`} the registry cannot tell about
+        </li>
+      )}
+    </ul>
+  );
+}
+
+/** Whether a failing check is the software place's to mend. */
+export const softwareCheck = (c: Requirement): boolean => !c.ok && isSoftwares({ check: c.check, ok: c.ok, said: c.said, cause: c.failure?.cause ?? null, advice: c.failure?.advice ?? null, fix: c.failure?.fix ?? null });
+
+/** What the run needs of this machine, one check a line: its border says whether it holds, its words are the engine's; a check the software place mends links there. */
+export function Requirements({ checks, software = null }: { checks: Requirement[]; software?: string | null }) {
   if (checks.length === 0) return null;
+  // one way in to the page for the whole list: beside the first check it mends
+  const first = software ? checks.findIndex((c) => softwareCheck(c)) : -1;
   return (
     <ul className="requirements" aria-label="what the run needs of this machine">
       {checks.map((c, i) => (
         <li key={`${c.check}${i}`} className={c.ok ? "req ok" : "req not"}>
           <span className="req-check">{c.check}</span>
-          <span className="req-said">{c.said}</span>
+          <span className="req-said">
+            {c.said}
+            {software && i === first && <SoftwareLink href={software} />}
+          </span>
         </li>
       ))}
     </ul>
