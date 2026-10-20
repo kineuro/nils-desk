@@ -32,7 +32,7 @@ import { softwareHrefFor } from "../settings/software";
 import { catalog, overWords, type Pipeline } from "./catalog";
 import { ops, packs, type RunNumbers } from "./client";
 import { byWords, flagWords, keyShort, keyTitle, madeColumns, packView, packWords, poolingOf, valueWords, type PackView } from "./pack";
-import { namer } from "./who";
+import { ensurePeople, namer } from "./who";
 import { failureOf } from "./failure";
 import { InstallFor } from "./Install";
 import { FailLine, FailNote, KindTag } from "./Reason";
@@ -92,7 +92,7 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
   // the numbers answered for one run at one status; an answer for another is not this run's
   const [answered, setAnswered] = useState<{ key: string; value: RunNumbers | null } | undefined>(undefined);
   const people = useKept(peopleKept);
-  useEffect(() => peopleKept.ensure(), []);
+  useEffect(() => ensurePeople(), []);
 
   const read = useCallback(() => {
     runs
@@ -376,7 +376,7 @@ export function RunView(props: {
         {table.kind === "ready" && <span className="meta">{table.perScan ? `${n(table.rows.length)} ${table.rows.length === 1 ? "scan" : "scans"}` : "totals by group"}</span>}
       </div>
       <TableView table={table} by={by} onBy={onBy} choices={groupBy(pipeline?.level)} />
-      {numbers && (!numbers.pooled || table.kind === "pooled") && <KeysApart numbers={numbers} perScan={acts.perScan} words={table.kind === "pooled" ? null : numbers.words} />}
+      {numbers && (!numbers.pooled || table.kind === "pooled") && <KeysApart numbers={numbers} words={table.kind === "pooled" ? null : numbers.words} />}
 
       <div className="section-head rule-top">
         <h2>Checks</h2>
@@ -588,12 +588,12 @@ export function RunView(props: {
 }
 
 /** A unit as its pack judged it: the pack's words, each knob with who chose it, the caveats, the flags and the cohort checks. */
-function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; said: ReturnType<typeof packWords>; skippedShown: boolean; name: (p: string) => string; pack: PackView | null }) {
+export function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; said: ReturnType<typeof packWords>; skippedShown: boolean; name: (p: string) => string; pack: PackView | null }) {
   const knobs = Object.entries(u.knobs ?? {});
   const cohort = (u.cohort_checks ?? []).filter((c) => c.status === "flagged" || c.status === "not yet");
   return (
     <div className="unit-pack">
-      {said.words && !(said.status === "skipped" && skippedShown) && <span className={said.status === "routed" ? "meta" : "unit-flag"}>{said.status === "routed" ? `routed ${said.words}` : said.words}</span>}
+      {said.words && !(said.status === "skipped" && skippedShown) && <span className={said.status === "routed" ? "meta" : said.status === "dropped" ? "unit-flag drop" : "unit-flag"}>{said.status === "routed" ? `routed ${said.words}` : said.words}</span>}
       {knobs.map(([id, c]) => {
         const b = byWords(c, name, pack);
         return (
@@ -624,9 +624,9 @@ function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; said: Ret
   );
 }
 
-/** A run's numbers per comparability key, apart: the pooling words, and each key with its units and its measures' means, never one number across keys. Below detail quasi a key of fewer than 5 units reads withheld. */
-function KeysApart({ numbers, perScan, words }: { numbers: RunNumbers; perScan: boolean; words: string | null }) {
-  const names = [...new Set(numbers.keys.flatMap((k) => Object.keys(k.measures)))].slice(0, 6);
+/** A run's numbers per comparability key, apart: the pooling words, and each key with its units and every measure the numbers door gives, never one number across keys. The door governs the detail: a mean it withholds (null) reads withheld, and nothing else does. */
+export function KeysApart({ numbers, words }: { numbers: RunNumbers; words: string | null }) {
+  const names = [...new Set(numbers.keys.flatMap((k) => Object.keys(k.measures)))];
   return (
     <div className="keys-apart">
       {words && <p className="meta">{words}</p>}
@@ -652,7 +652,7 @@ function KeysApart({ numbers, perScan, words }: { numbers: RunNumbers; perScan: 
                 <td className="num">{k.units.toLocaleString("en-US")}</td>
                 {names.map((m) => (
                   <td key={m} className="num">
-                    {k.measures[m] ? (perScan || k.units >= 5 ? cellWords(k.measures[m].mean) : "withheld") : ""}
+                    {k.measures[m] ? cellWords(k.measures[m].mean) : ""}
                   </td>
                 ))}
               </tr>

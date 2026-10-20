@@ -11,6 +11,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { capsWith } from "../review/caps.fixture";
 import { software } from "../ops/client";
+import { forgetInstalled } from "../ops/Install";
 import { settingsPages } from "./pages";
 import { failedChecks, kindWords, licenceState, nextAct, pinnedError, shortPrint, softwareActs, softwareCounts, softwareHrefFor, specError, statusTag, verifiedWords } from "./software";
 import { DCM2NIIX, FIXTURE_NOW, PLACE, PYMENT, SAMSEG, SEGCSVD, SOFTWARE_DOORS, SYNTHSEG } from "./software.fixture";
@@ -46,7 +47,7 @@ describe("the software place's words", () => {
     expect(licenceState(SAMSEG, name, (s) => s)).toMatchObject({ words: "LicenseRef-FreeSurfer: terms not accepted", tone: "caution", accept: true, file: true });
     expect(licenceState(PYMENT, name, () => "18 Oct").words).toBe("CC-BY-NC-4.0: accepted by Astrid, 18 Oct");
     const accepted = { ...SAMSEG, licence: { ...SAMSEG.licence!, accepted: { by: "astrid@site", at: "2026-10-19T10:00:00Z" } } };
-    expect(licenceState(accepted, name, (s) => s)).toMatchObject({ words: "LicenseRef-FreeSurfer: licence file missing", accept: true });
+    expect(licenceState(accepted, name, (s) => s)).toMatchObject({ words: "LicenseRef-FreeSurfer: accepted; licence file missing", accept: false, file: true });
     expect(licenceState(SEGCSVD, name, (s) => s)).toMatchObject({ words: "GPL-3.0-only", accept: false });
   });
 
@@ -265,5 +266,32 @@ describe("the doors", () => {
     await settle();
     expect(changed).toBe(1);
     expect(el.querySelector(".ok-words")?.textContent).toBe("Installed synthseg@2.0 and verified it.");
+  });
+  it("sends the converter's install the package it names when the door is the software door, and nothing for the old tools door (review fix 1)", async () => {
+    const missing = { ...DCM2NIIX, status: "missing" as const, path: null };
+    answers = { "POST /api/software/install": () => ({ status: 200, body: { installed: true, package: DCM2NIIX } }), "POST /api/tools/dcm2niix/install": () => ({ status: 200, body: { installed: true } }) };
+    const soft = { ...missing, install: { door: "POST /api/software/install", command: "nils software install dcm2niix", grant: "install:work" } };
+    act(() => root.render(<SoftwareView caps={ADMIN} place={{ ...PLACE, packages: [soft] }} people={people} onChanged={() => undefined} now={FIXTURE_NOW} />));
+    act(() => button("Install dcm2niix").click());
+    await settle();
+    expect(asked.find((a) => a.path === "/api/software/install")?.body).toEqual({ app: "dcm2niix", version: DCM2NIIX.version });
+    forgetInstalled();
+    asked.length = 0;
+    act(() => root.render(<SoftwareView caps={ADMIN} place={{ ...PLACE, packages: [{ ...missing, app: "dcm2niix", version: "v1.0.2" }] }} people={people} onChanged={() => undefined} now={FIXTURE_NOW} />));
+    act(() => button("Install dcm2niix").click());
+    await settle();
+    expect(asked.find((a) => a.path === "/api/tools/dcm2niix/install")?.body).toBeNull();
+  });
+
+  it("offers no second acceptance for a package whose terms are accepted and whose site file is missing (review fix 6)", () => {
+    const accepted = { ...SAMSEG, licence: { ...SAMSEG.licence!, accepted: { by: "astrid@site", at: "2026-10-19T10:00:00Z" } } };
+    const acts = softwareActs(ADMIN);
+    expect(licenceState(accepted, (x) => x, (x) => x)).toMatchObject({ words: "LicenseRef-FreeSurfer: accepted; licence file missing", accept: false, file: true });
+    expect(nextAct(accepted, acts)).toBeNull();
+    const html = renderToStaticMarkup(<SoftwareView caps={ADMIN} place={{ ...PLACE, packages: [accepted] }} people={people} onChanged={() => undefined} now={FIXTURE_NOW} />);
+    expect(html).not.toContain(">Accept</button>");
+    expect(html).toContain("accepted; licence file missing");
+    expect(html).toContain("nils software accept freesurfer@8.1.0 --file PATH");
+    expect(softwareCounts([accepted])).toEqual({ packages: 1, ready: 0, look: 1 });
   });
 });

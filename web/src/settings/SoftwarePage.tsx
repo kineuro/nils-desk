@@ -19,14 +19,14 @@ import { whenWords } from "../data/sources";
 import { software, type SoftwarePackage, type SoftwarePlace, type SoftwareNeed } from "../ops/client";
 import { useInstall } from "../ops/Install";
 import { sizeWords } from "../ops/results";
-import { namer } from "../ops/who";
+import { ensurePeople, namer } from "../ops/who";
 import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
-import { failedChecks, kindWords, LICENCE_MAX, licenceState, needsAmiss, nextAct, pinnedError, shortPrint, softwareActs, softwareCounts, specError, statusTag, verifiedWords, type Tone } from "./software";
+import { failedChecks, kindWords, LICENCE_MAX, licenceState, needsAmiss, nextAct, pinnedError, placeFileCommand, shortPrint, softwareActs, softwareCounts, specError, statusTag, verifiedWords, type Tone } from "./software";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; place: SoftwarePlace };
 
@@ -45,7 +45,7 @@ export function SoftwarePage({ caps }: { caps: Capabilities }) {
   }, []);
   useEffect(read, [read]);
   const people = useKept(peopleKept);
-  useEffect(() => peopleKept.ensure(), []);
+  useEffect(() => ensurePeople(), []);
   if (load.kind === "loading") return <Wait phase="reading the software place" since={load.since} size="panel" />;
   if (load.kind === "failed")
     return (
@@ -169,7 +169,7 @@ function PackageRow(props: {
   const amiss = needsAmiss(p);
   const site = p.managed === false;
   // the converter installs as it did from Parts: by its pinned build, or from a file where the engine cannot reach the releases
-  const converter = useInstall(caps, p.kind === "binary" && p.status === "missing" && p.install?.door ? { tool: p.app, door: p.install.door, command: p.install.command, grant: p.install.grant } : null, null, () => onChanged(), true);
+  const converter = useInstall(caps, p.kind === "binary" && p.status === "missing" && p.install?.door ? { tool: p.app, door: p.install.door, command: p.install.command, grant: p.install.grant, ...(p.install.door.endsWith("/api/software/install") ? { body: { app: p.app, version: p.version } } : {}) } : null, null, () => onChanged(), true);
   const tone = tag.tone === "caution" || lic.tone === "caution" ? "caution" : tag.tone === "ok" ? "ok" : "neutral";
   const under = failed.length > 0 || amiss.length > 0 || converter.said !== null;
   return (
@@ -201,6 +201,7 @@ function PackageRow(props: {
         <td className={ver.failed ? "warn" : undefined}>{ver.words}</td>
         <td>
           {lic.words && (lic.tone === "caution" ? <span className="tag caution">{lic.words}</span> : <span title={p.licence?.terms?.address ?? undefined}>{lic.words}</span>)}
+          {lic.file && !lic.accept && <div className="meta path">{placeFileCommand(p)}</div>}
         </td>
         <td className="path" title={p.fingerprint ?? undefined}>
           {shortPrint(p.fingerprint)}

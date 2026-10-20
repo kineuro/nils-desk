@@ -9,6 +9,7 @@
 // The desk judges nothing itself: every word is the engine's or the pack's.
 
 import { DoorError, type Json } from "../ask/client";
+import { shortPrint } from "../settings/software";
 import type { MeasureColumn } from "./runs";
 import type { PackDoc, RunNumbers } from "./client";
 
@@ -171,11 +172,8 @@ export function flagWords(f: { metric: string; value: number | null; check?: str
   return f.words ? `${head}: ${f.words}` : head;
 }
 
-/** A comparability key as a person compares it: its first 12 hex digits. */
-export function keyShort(key: string | null | undefined): string {
-  if (!key) return "";
-  return key.replace(/^sha256:/u, "").slice(0, 12);
-}
+/** A comparability key as a person compares it: its first 12 hex digits (the same short print a package's fingerprint has). */
+export const keyShort = shortPrint;
 
 /** The key's members as hover text, where the engine gives them; else the whole key. */
 export function keyTitle(key: string | null | undefined, members: unknown): string | undefined {
@@ -185,13 +183,16 @@ export function keyTitle(key: string | null | undefined, members: unknown): stri
   return parts.length > 0 ? parts.join("\n") : key;
 }
 
+const CANNOT_TELL = /^cannot tell\b/iu;
+
 /** The pre-flight's judgement as lines: how many run, skipped by which need, routed, let run though the registry cannot tell. */
 export function judgedLines(j: { ready: number; skipped: number; routed: number; cannot_tell: number; with_caveats: number; skipped_by_why?: { why: string; units: number }[] | null; units?: { status: string; variant?: { pipeline?: string | null; variant?: string | null; why?: string | null } | null }[] | null }): { key: string; tone: "ready" | "skipped" | "routed"; count: number; words: string }[] {
   const out: { key: string; tone: "ready" | "skipped" | "routed"; count: number; words: string }[] = [];
   out.push({ key: "ready", tone: "ready", count: j.ready, words: j.with_caveats > 0 ? `run, ${j.with_caveats} with a caveat` : "run" });
-  const byWhy = j.skipped_by_why ?? [];
+  // a unit the registry cannot tell about is skipped too, but it is counted once: on the cannot-tell line, not among the skipped
+  const byWhy = (j.skipped_by_why ?? []).filter((w) => !CANNOT_TELL.test(w.why));
   if (byWhy.length > 0) for (const w of byWhy) out.push({ key: `skip:${w.why}`, tone: "skipped", count: w.units, words: `skipped: ${w.why}` });
-  else if (j.skipped > 0) out.push({ key: "skipped", tone: "skipped", count: j.skipped, words: "skipped" });
+  else if (j.skipped - j.cannot_tell > 0 && (j.skipped_by_why ?? []).length === 0) out.push({ key: "skipped", tone: "skipped", count: j.skipped - j.cannot_tell, words: "skipped" });
   if (j.routed > 0) {
     const to = new Map<string, number>();
     for (const u of j.units ?? []) if (u.status === "routed") {

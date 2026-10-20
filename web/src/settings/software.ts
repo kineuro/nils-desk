@@ -95,9 +95,15 @@ export function licenceState(p: Pick<SoftwarePackage, "licence">, name: (princip
   const spdx = l.spdx ?? "licence";
   const needsFile = l.site_file !== null && l.site_file !== undefined && l.file?.present !== true;
   if (l.accept && !l.accepted) return { words: `${spdx}: terms not accepted`, tone: "caution", accept: true, file: needsFile };
-  if (needsFile) return { words: `${spdx}: licence file missing`, tone: "caution", accept: true, file: true };
+  // the terms are accepted and only the file is missing: the accept door records an acceptance on every call, so the desk offers no second one and names the command line
+  if (needsFile) return { words: `${spdx}: accepted; licence file missing`, tone: "caution", accept: false, file: true };
   if (l.accepted) return { words: `${spdx}: accepted by ${name(l.accepted.by)}, ${when(l.accepted.at)}`, tone: "ok", accept: false, file: false };
   return { words: spdx, tone: "neutral", accept: false, file: false };
+}
+
+/** The command line that places the missing site file, for a package whose terms are accepted already. */
+export function placeFileCommand(p: Pick<SoftwarePackage, "spec">): string {
+  return `nils software accept ${p.spec} --file PATH`;
 }
 
 export type Act = "install" | "accept" | "verify";
@@ -122,7 +128,7 @@ export function softwareCounts(packages: SoftwarePackage[]): { packages: number;
   for (const p of packages) {
     const t = statusTag(p).tone;
     const lic = licenceState(p, (s) => s, (s) => s);
-    if (t === "ok" && !lic.accept) ready++;
+    if (t === "ok" && !lic.accept && !lic.file) ready++;
     else look++;
   }
   return { packages: packages.length, ready, look };

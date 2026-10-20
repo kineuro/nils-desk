@@ -136,7 +136,7 @@ export const tools = {
   /** The fix's door, as the engine names it: `POST /api/tools/dcm2niix/install`. */
   install: (fix: Fix): Promise<Installed> => {
     const [method, path] = fix.door.split(/\s+/u);
-    return door<Json>(method === "PUT" ? "PUT" : "POST", path).then((a) => ({ installed: a.installed === true, tool: toolOf(a.tool, fix.tool), why: text(a.why) }));
+    return door<Json>(method === "PUT" ? "PUT" : "POST", path, fix.body).then((a) => ({ installed: a.installed === true, tool: toolOf(a.tool, fix.tool), why: text(a.why) }));
   },
   /** The install from a file: the archive the person picked, sent as it stands to the door the status names. */
   installFile: async (file: ToolFile, tool: string, archive: Blob): Promise<Installed> => {

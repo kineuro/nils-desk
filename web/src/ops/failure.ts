@@ -40,6 +40,8 @@ export interface Fix {
   door: string;
   command: string | null;
   grant: string | null;
+  /** The body the door takes, where it takes one: the software door names the package. */
+  body?: Record<string, unknown>;
 }
 
 export interface Failure {

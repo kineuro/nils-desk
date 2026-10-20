@@ -430,7 +430,8 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
       )}
       {view &&
         Object.entries(view.switches).map(([k, vs]) => {
-          const on = switches[k] ?? view.defaults[k] ?? vs[0];
+          // a switch the pack gives no default is drawn with nothing chosen, and only what the person picks is sent: the engine decides the rest
+          const on = switches[k] ?? view.defaults[k] ?? null;
           const what = view.knobs[k]?.what ?? null;
           return (
             <div key={k} className="field">
