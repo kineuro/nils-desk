@@ -440,7 +440,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
               </span>
               <div className="chips" role="group" aria-label={`the switch ${k}`}>
                 {vs.map((v) => (
-                  <button key={v} type="button" className={on === v ? "opt on" : "opt"} aria-pressed={on === v} onClick={() => setSwitches((was) => ({ ...was, [k]: v }))}>
+                  <button key={v} type="button" className={on === v ? "opt on" : "opt"} aria-pressed={on === v} onClick={() => setSwitches((was) => (was[k] === v ? Object.fromEntries(Object.entries(was).filter(([id]) => id !== k)) : { ...was, [k]: v }))}>
                     {v}
                   </button>
                 ))}
@@ -510,7 +510,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
         <label className="check-row">
           <input type="checkbox" checked={letRun} onChange={(e) => setLetRun(e.target.checked)} />
           <span>
-            {judged && judged.cannot_tell === 1 ? "Run the unit the registry cannot tell about" : `Run the ${judged && judged.cannot_tell > 0 ? `${n(judged.cannot_tell)} ` : ""}units the registry cannot tell about`} <span className="meta">recorded as your choice</span>
+            {judged && judged.cannot_tell === 1 ? "Run the unit the registry cannot tell about" : `Run the ${judged && (judged.cannot_tell ?? 0) > 0 ? `${n(judged.cannot_tell ?? 0)} ` : ""}units the registry cannot tell about`} <span className="meta">recorded as your choice</span>
           </span>
         </label>
       )}

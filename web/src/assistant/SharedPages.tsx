@@ -12,7 +12,7 @@ import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { chatsKept } from "./chats";
-import { audienceWords, guardWords, namesOf, peopleKept, readsWords, type Share, type SharedWithMe, type ShareOpened, ShareRefused, shares, turnsOf } from "./shares";
+import { audienceWords, ensurePeople, guardWords, namesOf, peopleKept, readsWords, type Share, type SharedWithMe, type ShareOpened, ShareRefused, shares, turnsOf } from "./shares";
 import { TurnView } from "./TurnView";
 
 const titleOf = (s: { title: string | null }) => s.title?.trim() || "A conversation";
@@ -26,7 +26,7 @@ export function SharedList() {
   // people are named from the desk's own directory
   const directory = useKept(peopleKept);
   const name = namesOf(directory.value);
-  useEffect(() => peopleKept.ensure(), []);
+  useEffect(() => ensurePeople(), []);
 
   useEffect(() => {
     let alive = true;
@@ -125,7 +125,7 @@ export function SharedPage({ id }: { id: string }) {
   const [since] = useState(() => Date.now());
   const directory = useKept(peopleKept);
   const name = namesOf(directory.value);
-  useEffect(() => peopleKept.ensure(), []);
+  useEffect(() => ensurePeople(), []);
 
   useEffect(() => {
     let alive = true;

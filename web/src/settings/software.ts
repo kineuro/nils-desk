@@ -81,13 +81,6 @@ export function verifiedWords(p: Pick<SoftwarePackage, "verified_at" | "verifica
   return { words: when(p.verified_at), failed: false };
 }
 
-/** A fingerprint as a person compares it: its first 12 hex digits. */
-export function shortPrint(fingerprint: string | null | undefined): string {
-  if (!fingerprint) return "";
-  const hex = fingerprint.replace(/^sha256:/u, "");
-  return hex.slice(0, 12);
-}
-
 /** The licence as a line: what it is, and whether a run may use it yet. */
 export function licenceState(p: Pick<SoftwarePackage, "licence">, name: (principal: string) => string, when: (iso: string) => string): { words: string; tone: Tone; accept: boolean; file: boolean } {
   const l = p.licence;
@@ -106,12 +99,15 @@ export function placeFileCommand(p: Pick<SoftwarePackage, "spec">): string {
   return `nils software accept ${p.spec} --file PATH`;
 }
 
-export type Act = "install" | "accept" | "verify";
+export type Act = "install" | "accept" | "place" | "verify";
 
 /** The one act a package needs next, where the person may do it; null where it needs none. */
 export function nextAct(p: SoftwarePackage, acts: ReturnType<typeof softwareActs>): Act | null {
   if (p.status === "missing") return acts.install && p.kind !== "binary" ? "install" : null;
-  if (licenceState(p, (s) => s, (s) => s).accept) return acts.accept ? "accept" : null;
+  const lic = licenceState(p, (s) => s, (s) => s);
+  if (lic.accept) return acts.accept ? "accept" : null;
+  // the terms are accepted and only the site file is missing: the dialog places the file alone
+  if (lic.file) return acts.accept ? "place" : null;
   if (p.status === "failed verification") return acts.verify ? "verify" : null;
   return null;
 }

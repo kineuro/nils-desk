@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ensurePeople, forgetRefusal, namer } from "./who";
+import { ensurePeople, forgetPeopleRefusal as forgetRefusal } from "../assistant/shares";
+import { namer } from "./who";
 
 let asked: string[] = [];
 const real = globalThis.fetch;

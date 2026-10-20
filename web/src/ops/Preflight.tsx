@@ -163,9 +163,9 @@ export function JudgedList({ j, word }: { j: NonNullable<Preflight["units_judged
           <b className="num">{n(l.count)}</b> {l.count === 1 ? word : `${word}s`} {l.words}
         </li>
       ))}
-      {j.cannot_tell > 0 && (
+      {(j.cannot_tell ?? 0) > 0 && (
         <li className="skipped">
-          <b className="num">{n(j.cannot_tell)}</b> {j.cannot_tell === 1 ? word : `${word}s`} the registry cannot tell about
+          <b className="num">{n(j.cannot_tell ?? 0)}</b> {j.cannot_tell === 1 ? word : `${word}s`} the registry cannot tell about
         </li>
       )}
     </ul>

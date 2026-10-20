@@ -14,19 +14,20 @@
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { DoorError } from "../ask/client";
-import { peopleKept } from "../assistant/shares";
+import { ensurePeople, peopleKept } from "../assistant/shares";
 import { whenWords } from "../data/sources";
 import { software, type SoftwarePackage, type SoftwarePlace, type SoftwareNeed } from "../ops/client";
 import { useInstall } from "../ops/Install";
 import { sizeWords } from "../ops/results";
-import { ensurePeople, namer } from "../ops/who";
+import { shortPrint } from "../ops/text";
+import { namer } from "../ops/who";
 import { Dialog } from "../ui/Dialog";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
-import { failedChecks, kindWords, LICENCE_MAX, licenceState, needsAmiss, nextAct, pinnedError, placeFileCommand, shortPrint, softwareActs, softwareCounts, specError, statusTag, verifiedWords, type Tone } from "./software";
+import { failedChecks, kindWords, LICENCE_MAX, licenceState, needsAmiss, nextAct, pinnedError, placeFileCommand, softwareActs, softwareCounts, specError, statusTag, verifiedWords, type Tone } from "./software";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; place: SoftwarePlace };
 
@@ -132,7 +133,7 @@ export function SoftwareView({ caps, place, people = null, onChanged, now = new 
             </thead>
             <tbody>
               {place.packages.map((p) => (
-                <PackageRow key={p.spec} caps={caps} p={p} acts={may} name={name} when={when} busy={row.working} onAct={(a) => (a === "install" ? setOpen({ kind: "install", spec: p.spec }) : a === "accept" ? setOpen({ kind: "accept", p }) : verify(p))} onVerify={() => verify(p)} onRemove={() => setOpen({ kind: "remove", p })} onChanged={onChanged} />
+                <PackageRow key={p.spec} caps={caps} p={p} acts={may} name={name} when={when} busy={row.working} onAct={(a) => (a === "install" ? setOpen({ kind: "install", spec: p.spec }) : a === "accept" || a === "place" ? setOpen({ kind: "accept", p }) : verify(p))} onVerify={() => verify(p)} onRemove={() => setOpen({ kind: "remove", p })} onChanged={onChanged} />
               ))}
             </tbody>
           </table>
@@ -146,7 +147,7 @@ export function SoftwareView({ caps, place, people = null, onChanged, now = new 
   );
 }
 
-const ACT_WORDS = { install: "Install", accept: "Accept", verify: "Verify again" } as const;
+const ACT_WORDS = { install: "Install", accept: "Accept", place: "Place the licence file", verify: "Verify again" } as const;
 
 function PackageRow(props: {
   caps: Capabilities;
@@ -155,7 +156,7 @@ function PackageRow(props: {
   name: (principal: string) => string;
   when: (iso: string) => string;
   busy: boolean;
-  onAct: (a: "install" | "accept" | "verify") => void;
+  onAct: (a: "install" | "accept" | "place" | "verify") => void;
   onVerify: () => void;
   onRemove: () => void;
   onChanged: () => void;
@@ -169,7 +170,7 @@ function PackageRow(props: {
   const amiss = needsAmiss(p);
   const site = p.managed === false;
   // the converter installs as it did from Parts: by its pinned build, or from a file where the engine cannot reach the releases
-  const converter = useInstall(caps, p.kind === "binary" && p.status === "missing" && p.install?.door ? { tool: p.app, door: p.install.door, command: p.install.command, grant: p.install.grant, ...(p.install.door.endsWith("/api/software/install") ? { body: { app: p.app, version: p.version } } : {}) } : null, null, () => onChanged(), true);
+  const converter = useInstall(caps, p.kind === "binary" && p.status === "missing" && p.install?.door ? { tool: p.app, door: p.install.door, command: p.install.command, grant: p.install.grant, version: p.version } : null, null, () => onChanged(), true);
   const tone = tag.tone === "caution" || lic.tone === "caution" ? "caution" : tag.tone === "ok" ? "ok" : "neutral";
   const under = failed.length > 0 || amiss.length > 0 || converter.said !== null;
   return (
@@ -494,7 +495,9 @@ export function AcceptDialog({ p, onClose, onDone }: { p: SoftwarePackage; onClo
   const { work, run, busy } = useWork();
   const big = file !== null && file.size > LICENCE_MAX;
   const needsFile = siteFile !== null && l?.file?.present !== true;
-  const address = l?.terms?.address ?? null;
+  // the terms are accepted already and only the file is missing: the dialog places the file alone
+  const fileOnly = l?.accepted != null && needsFile;
+  const address = l?.terms?.address ?? (fileOnly ? (l?.accepted?.terms?.address ?? null) : null);
   // the pack names no address: the administrator gives the one they accept, as the door takes it
   const [given, setGiven] = useState("");
   const givenOk = /^https?:\/\/\S+$/iu.test(given.trim());
@@ -502,16 +505,16 @@ export function AcceptDialog({ p, onClose, onDone }: { p: SoftwarePackage; onClo
   const ready = !busy && !big && termsOk && (!needsFile || file !== null);
   const go = () =>
     run(
-      `accepting the terms of ${p.spec}`,
+      fileOnly ? `placing the licence file of ${p.spec}` : `accepting the terms of ${p.spec}`,
       async () => {
         const r = await software.accept(p.app, p.version, file ? { text: file.text, name: file.name } : null, address === null ? { address: given.trim() } : null);
-        return r.file ? `Accepted for the site; ${r.file.name} is placed for ${p.app}'s runs.` : "Accepted for the site.";
+        return r.file ? (fileOnly ? `${r.file.name} is placed for ${p.app}'s runs.` : `Accepted for the site; ${r.file.name} is placed for ${p.app}'s runs.`) : "Accepted for the site.";
       },
       onDone,
     );
   return (
     <Dialog
-      title={`Accept the terms of ${p.spec}`}
+      title={fileOnly ? `Place the licence file of ${p.spec}` : `Accept the terms of ${p.spec}`}
       icon="shield"
       onClose={onClose}
       foot={
@@ -519,7 +522,7 @@ export function AcceptDialog({ p, onClose, onDone }: { p: SoftwarePackage; onClo
           <Working work={work} />
           <div className="row actions">
             <button type="button" className="button" disabled={!ready} onClick={go}>
-              Accept in my name
+              {fileOnly ? "Place the file" : "Accept in my name"}
             </button>
             <button type="button" className="button secondary" onClick={onClose}>
               Cancel
@@ -554,7 +557,7 @@ export function AcceptDialog({ p, onClose, onDone }: { p: SoftwarePackage; onClo
           </>
         )}
       </dl>
-      <p className="meta">Read the terms, then accept them once for this site, in your own name.</p>
+      <p className="meta">{fileOnly ? "The terms are accepted already; this places the file for the runs. The engine notes it under your name, with the file's digest." : "Read the terms, then accept them once for this site, in your own name."}</p>
       {siteFile && (
         <div className="field">
           <span className="label">

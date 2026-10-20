@@ -26,13 +26,13 @@ import { Wait } from "../ui/Wait";
 import { checkTag, makeCheckRefusal } from "../campaigns/check";
 import { NewCheck, runChoiceOf } from "../campaigns/NewCheck";
 import { door as served } from "../deployment";
-import { peopleKept } from "../assistant/shares";
+import { ensurePeople, peopleKept } from "../assistant/shares";
 import { useKept } from "../ui/kept";
 import { softwareHrefFor } from "../settings/software";
 import { catalog, overWords, type Pipeline } from "./catalog";
 import { ops, packs, type RunNumbers } from "./client";
 import { byWords, flagWords, keyShort, keyTitle, madeColumns, packView, packWords, poolingOf, valueWords, type PackView } from "./pack";
-import { ensurePeople, namer } from "./who";
+import { namer } from "./who";
 import { failureOf } from "./failure";
 import { InstallFor } from "./Install";
 import { FailLine, FailNote, KindTag } from "./Reason";
@@ -376,7 +376,7 @@ export function RunView(props: {
         {table.kind === "ready" && <span className="meta">{table.perScan ? `${n(table.rows.length)} ${table.rows.length === 1 ? "scan" : "scans"}` : "totals by group"}</span>}
       </div>
       <TableView table={table} by={by} onBy={onBy} choices={groupBy(pipeline?.level)} />
-      {numbers && (!numbers.pooled || table.kind === "pooled") && <KeysApart numbers={numbers} words={table.kind === "pooled" ? null : numbers.words} />}
+      {numbers && (!numbers.pooled || table.kind === "pooled") && <KeysApart numbers={numbers} perScan={acts.perScan} words={table.kind === "pooled" ? null : numbers.words} />}
 
       <div className="section-head rule-top">
         <h2>Checks</h2>
@@ -624,8 +624,8 @@ export function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; sa
   );
 }
 
-/** A run's numbers per comparability key, apart: the pooling words, and each key with its units and every measure the numbers door gives, never one number across keys. The door governs the detail: a mean it withholds (null) reads withheld, and nothing else does. */
-export function KeysApart({ numbers, words }: { numbers: RunNumbers; words: string | null }) {
+/** A run's numbers per comparability key, apart: the pooling words, and each key with its units and every measure the numbers door gives, never one number across keys. Below detail quasi a key of fewer than 5 units reads withheld, as the page says; a mean the door withholds (null) reads withheld too. */
+export function KeysApart({ numbers, perScan, words }: { numbers: RunNumbers; perScan: boolean; words: string | null }) {
   const names = [...new Set(numbers.keys.flatMap((k) => Object.keys(k.measures)))];
   return (
     <div className="keys-apart">
@@ -652,7 +652,7 @@ export function KeysApart({ numbers, words }: { numbers: RunNumbers; words: stri
                 <td className="num">{k.units.toLocaleString("en-US")}</td>
                 {names.map((m) => (
                   <td key={m} className="num">
-                    {k.measures[m] ? cellWords(k.measures[m].mean) : ""}
+                    {k.measures[m] ? (perScan || k.units >= 5 ? cellWords(k.measures[m].mean) : "withheld") : ""}
                   </td>
                 ))}
               </tr>

@@ -114,6 +114,9 @@ describe("the pack, read", () => {
     const html = renderToStaticMarkup(<JudgedList j={{ ...j, units: [] }} word="session" />);
     expect(html).toContain('<b class="num">2</b> sessions the registry cannot tell about');
     expect(html).not.toContain("skipped: cannot tell");
+    // an answer without the field keeps its skipped line (review fix 16)
+    const noField = { ready: 3, with_caveats: 0, skipped: 2, routed: 0, skipped_by_why: null } as never;
+    expect(judgedLines(noField).map((l) => [l.count, l.words])).toEqual([[3, "run"], [2, "skipped"]]);
     const total = judgedLines(j).reduce((s, l) => s + l.count, 0) + j.cannot_tell;
     expect(total).toBe(j.ready + j.skipped);
   });
@@ -137,11 +140,18 @@ describe("a run's numbers per key (review fix 5)", () => {
     const names = ["m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8"];
     const measures = Object.fromEntries(names.map((m, i) => [m, { count: 1, sum: i, mean: i === 7 ? null : i + 0.5, unit: null }]));
     const numbers = { ...NUMBERS_TWO, keys: [{ comparability_key: "k", short: "kkkkkkkkkkkk", units: 1, measures, caveats: [] }] };
-    const html = renderToStaticMarkup(<KeysApart numbers={numbers} words={null} />);
+    const html = renderToStaticMarkup(<KeysApart numbers={numbers} perScan words={null} />);
     for (const m of names) expect(html).toContain(`mean ${m}`);
     // one unit, yet its means show: the desk applies no detail rule of its own
     expect(html).toContain("0.5");
     expect(html.match(/withheld/gu)).toHaveLength(1);
+    // the detail guard: below detail quasi a key of fewer than 5 units reads withheld, every measure still shown (review fix 11)
+    const guarded = renderToStaticMarkup(<KeysApart numbers={numbers} perScan={false} words={null} />);
+    for (const m of names) expect(guarded).toContain(`mean ${m}`);
+    expect(guarded).not.toContain("0.5<");
+    expect(guarded.match(/withheld/gu)).toHaveLength(8);
+    const five = { ...numbers, keys: [{ ...numbers.keys[0], units: 5 }] };
+    expect(renderToStaticMarkup(<KeysApart numbers={five} perScan={false} words={null} />)).toContain("0.5");
   });
 });
 
@@ -338,5 +348,8 @@ describe("the start of a run", () => {
     expect(doc.querySelector('[aria-label="the switch lesions"] [aria-pressed="true"]')).toBeNull();
     act(() => button("off").click());
     expect(doc.querySelector('[aria-label="the switch lesions"] [aria-pressed="true"]')!.textContent).toBe("off");
+    // the chosen chip pressed again clears the switch: the engine decides once more (review fix 15)
+    act(() => button("off").click());
+    expect(doc.querySelector('[aria-label="the switch lesions"] [aria-pressed="true"]')).toBeNull();
   });
 });
