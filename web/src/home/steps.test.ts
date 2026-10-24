@@ -121,6 +121,14 @@ describe("the band as the install moves on", () => {
     expect(all.find((s) => s.id === "dicom")).toMatchObject({ state: "done", words: "incoming" });
     expect(lede(all)).toBe("Five steps make this install ready for real work. Two are done.");
   });
+  it("is done once the registry holds stacks digested from the command line, with no root folder named", () => {
+    expect(steps({ ...fresh, stacks: 12480 }).find((s) => s.id === "dicom")).toMatchObject({ state: "done", words: "12,480 stacks came in from the command line. A root folder can still be added." });
+    expect(steps({ ...fresh, stacks: 1 }).find((s) => s.id === "dicom")?.words).toBe("1 stack came in from the command line. A root folder can still be added.");
+    expect(steps({ ...fresh, stacks: 0 }).find((s) => s.id === "dicom")?.state).toBe("now");
+    // a named root says its name, whatever came in before it
+    const f = { ...fresh, stacks: 12480, places: [...fresh.places!, place("incoming", "source", "/srv/imaging/incoming", "/srv")] };
+    expect(steps(f).find((s) => s.id === "dicom")?.words).toBe("incoming");
+  });
   it("is done when every step is, and then has no headline", () => {
     const backup: JobRow = { id: 9, kind: "backup", name: null, state: "done", started_at: "", heartbeat_at: null, finished_at: "2026-09-13T02:00:00Z", progress: null, error: null, args: {}, result: null };
     const f: Facts = {

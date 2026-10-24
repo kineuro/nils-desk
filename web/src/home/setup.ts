@@ -40,7 +40,8 @@ export function setupSteps(f: Facts, now: number = Date.now()): SetupStep[] {
 
   const dicom = said("dicom");
   if (dicom) {
-    const met = live.some((p) => p.role === "source");
+    // a source place, or stacks already in the registry: a command-line install digests without naming a place (agenda 3.8)
+    const met = live.some((p) => p.role === "source") || (f.stacks ?? 0) > 0;
     out.push({ id: "sources", title: "Add a root folder", required: true, met, tone: met ? "ok" : "neutral", words: dicom.words, tags: dicom.tags });
   }
 
@@ -77,15 +78,20 @@ export function minimumMet(all: SetupStep[]): boolean {
   return all.every((s) => !s.required || s.met);
 }
 
+/** Whether the registry holds data: stacks digested, from a root folder or the command line. */
+export function dataIn(stacks: number | null | undefined): boolean {
+  return (stacks ?? 0) > 0;
+}
+
 /**
  * Whether an install is ready to start, as far as the shell can tell from the
- * places and the backups it keeps: always for a person who may not see the
- * install, and null while the places are not read yet.
+ * places, the backups and the summary it keeps: always for a person who may
+ * not see the install, and null while the places are not read yet.
  */
-export function ready(caps: Capabilities, install: Install | null, places: Place[] | null, archives: Backups | null): boolean | null {
+export function ready(caps: Capabilities, install: Install | null, places: Place[] | null, archives: Backups | null, stacks: number | null = null): boolean | null {
   if (!may(caps, "install:see")) return true;
   if (places === null) return null;
-  return minimumMet(setupSteps({ caps, install, places, batches: null, backups: null, archives, purposes: null }));
+  return minimumMet(setupSteps({ caps, install, places, batches: null, backups: null, archives, purposes: null, stacks }));
 }
 
 /**
@@ -108,4 +114,10 @@ export function progressWords(all: SetupStep[]): string {
   const later = all.filter((s) => !s.required && !s.met).length;
   if (later === 0) return "Every step is done.";
   return `Every step the desk needs is done, and ${later === 1 ? "one more is" : `${later} more are`} worth doing.`;
+}
+
+/** The line that says the desk is open while steps are left: with data in and a step the desk needs still open, else null. */
+export function openWords(all: SetupStep[], stacks: number | null | undefined): string | null {
+  if (!dataIn(stacks) || minimumMet(all)) return null;
+  return "Your data is in. Review, Browse and the viewer are open.";
 }

@@ -28,9 +28,9 @@ import { may } from "./grants";
 import { Home } from "./home/Home";
 import { PlaceholderPage } from "./home/Placeholder";
 import { PLACEHOLDERS } from "./home/placeholders";
-import { ready as readyToStart } from "./home/setup";
+import { dataIn, ready as readyToStart } from "./home/setup";
 import { Setup } from "./home/Setup";
-import { placesKept } from "./objects/kept";
+import { placesKept, summaryKept } from "./objects/kept";
 import { ProfilePage } from "./profile/ProfilePage";
 import { PersonMenu } from "./ui/PersonMenu";
 import { ReviewPage } from "./review/ReviewPage";
@@ -128,17 +128,21 @@ export function App() {
     };
   }, [supervised, asked]);
 
-  // whether the install is set up, for a person who may see it, from the places and the backups every page keeps
+  // whether the install is set up, for a person who may see it, from the places, the backups and the summary every page keeps
   const places = useKept(placesKept);
   const archives = useKept(backupsKept);
+  const summary = useKept(summaryKept);
   const known = load.kind === "ready" ? load.caps : null;
   const setsUp = known !== null && usable(known) && may(known, "install:see");
   const readsPlaces = setsUp && may(known, "places:see") && door(known, "GET /api/places");
   const readsBackups = setsUp && may(known, "database:see") && door(known, "GET /api/backups");
+  // the stacks the registry holds: data digested from the command line counts without a source place (agenda 3.8)
+  const readsSummary = setsUp && door(known, "GET /api/summary");
   useEffect(() => {
     if (readsPlaces) placesKept.ensure();
     if (readsBackups) backupsKept.ensure();
-  }, [readsPlaces, readsBackups]);
+    if (readsSummary) summaryKept.ensure();
+  }, [readsPlaces, readsBackups, readsSummary]);
   const talking = known !== null && assistantOffered(known);
   useEffect(() => {
     if (!talking) return;
@@ -151,13 +155,18 @@ export function App() {
     return () => clearInterval(t);
   }, [talking]);
   // a read that failed does not hold the desk back
-  const setupReady: boolean | null =
+  const stacks = readsSummary ? (summary.value?.stacks.total ?? null) : null;
+  const stepsSay: boolean | null =
     known === null || !readsPlaces || (places.error !== null && places.value === null)
       ? true
       : readsBackups && archives.value === null && archives.error === null
         ? null
-        : readyToStart(known, install, places.value?.places ?? null, readsBackups ? archives.value : null);
-  // a person who landed on setup stays there until they open Home
+        : readyToStart(known, install, places.value?.places ?? null, readsBackups ? archives.value : null, stacks);
+  // the summary is waited for only where it can change the answer: an install short of a step may hold data from the command line
+  const setupReady: boolean | null = stepsSay === false && readsSummary && summary.value === null && summary.error === null ? null : stepsSay;
+  // the rest of the desk opens once setup is done, or as soon as data is in: Review, Browse and the viewer work on it
+  const deskOpen: boolean | null = setupReady !== false ? setupReady : dataIn(stacks);
+  // a person who landed on setup stays there until they open Home; the page itself offers Home once the desk is open
   const [landed, setLanded] = useState(false);
   const [left, setLeft] = useState(false);
   useEffect(() => {
@@ -174,7 +183,7 @@ export function App() {
   const ready = usable(caps);
   const side = sections(
     caps,
-    setupReady,
+    deskOpen,
     sidePages(talks.value?.conversations ?? []),
   );
   const kept = foot(caps);
@@ -292,7 +301,7 @@ export function App() {
             </section>
           )}
           {ready && active?.id === "home" && setsUp && setupReady === null && <p className="meta">Reading the install.</p>}
-          {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={setupReady ? () => setLeft(true) : undefined} />}
+          {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={deskOpen ? () => setLeft(true) : undefined} />}
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
           {ready && active?.id === "data" && route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg) && <BatchPage caps={caps} id={Number(route.arg)} />}

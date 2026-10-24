@@ -44,6 +44,8 @@ export interface Facts {
   /** Null where the places door is not served or not open to this person. */
   places: Place[] | null;
   batches: number | null;
+  /** The stacks the registry holds (the summary's total), where it was read; data brought in from the command line counts without a source place. */
+  stacks?: number | null;
   /** Finished backup jobs, newest first. */
   backups: JobRow[] | null;
   /** The archives and the schedule, where the engine serves them to this person; they say more than the jobs do. */
@@ -100,8 +102,11 @@ function dicom(f: Facts): Step | null {
   const title = "Add a root folder";
   // Wave 7a: a root is where the dataset folders live; its folders become datasets on the Data page
   const roots = f.places.filter((p) => p.role === "source" && p.retired_at === null && (isRoot(p) || !p.dataset?.root));
-  if (roots.length === 0) return { id: "dicom", title, state: "now", words: "Where your dataset folders live.", tags: [], halfway: false };
-  return { id: "dicom", title, state: "done", words: roots.map((r) => r.name).join(", "), tags: [], halfway: false };
+  if (roots.length > 0) return { id: "dicom", title, state: "done", words: roots.map((r) => r.name).join(", "), tags: [], halfway: false };
+  // a registry digested from the command line (nils digest) holds stacks and names no root: the step holds, and a root can still be added
+  const stacks = f.stacks ?? 0;
+  if (stacks > 0) return { id: "dicom", title, state: "done", words: `${stacks.toLocaleString("en-GB")} ${stacks === 1 ? "stack" : "stacks"} came in from the command line. A root folder can still be added.`, tags: [], halfway: false };
+  return { id: "dicom", title, state: "now", words: "Where your dataset folders live.", tags: [], halfway: false };
 }
 
 const WEEK = 7 * 24 * 3600 * 1000;

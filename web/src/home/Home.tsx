@@ -85,7 +85,7 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
   // how far setup is, for a person who may see the install, while a step is left
   const setup =
     may(caps, "install:see") && served(caps, "GET /api/places") && places.value
-      ? setupSteps({ caps, install, places: places.value.places, batches: loaded.batches, backups: loaded.backups, archives: archives.value, purposes: loaded.purposes })
+      ? setupSteps({ caps, install, places: places.value.places, batches: loaded.batches, backups: loaded.backups, archives: archives.value, purposes: loaded.purposes, stacks: loaded.summary?.stacks.total ?? null })
       : [];
   const left = setup.filter((s) => !s.met);
   const needed = left.some((s) => s.required);
