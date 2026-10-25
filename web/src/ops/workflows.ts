@@ -16,7 +16,9 @@ import { may } from "../grants";
 import { href } from "../routes";
 import { catalogRows, type CatalogRow, type Pipeline, type Run } from "./catalog";
 import type { Curation, Family, LinkType, PlanLink, PlanStep, StepUnits, WorkflowDoc, WorkflowRow, WorkflowRun } from "./client";
+import { lastRunOf } from "./results";
 import { runActs, type UnitRun } from "./runs";
+import type { JobRow } from "../ask/client";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
@@ -67,11 +69,10 @@ export function pageRows(pipelines: Pipeline[], families: Family[] | null | unde
 
 /** The newest run of any of a family's members. */
 export function familyLastRun(members: CatalogRow[], runs: Run[], pipelines: Pipeline[]): Run | null {
-  const names = new Set(members.map((m) => m.name));
   let last: Run | null = null;
-  for (const r of runs) {
-    const of = pipelines.find((p) => p.id === r.pipeline_id)?.name ?? r.pipeline.replace(/@.*$/u, "");
-    if (names.has(of) && (last === null || r.id > last.id)) last = r;
+  for (const m of members) {
+    const r = lastRunOf(m.name, runs, pipelines);
+    if (r && (last === null || r.id > last.id)) last = r;
   }
   return last;
 }
@@ -79,13 +80,26 @@ export function familyLastRun(members: CatalogRow[], runs: Run[], pipelines: Pip
 /** A run of the page's table: a pipeline run or a workflow run. */
 export type PageRun = { kind: "pipeline"; run: Run } | { kind: "workflow"; run: WorkflowRun };
 
-const when = (r: { started_at: string | null }): number => (r.started_at ? Date.parse(r.started_at) : 0);
+const when = (r: { started_at: string | null }): number | null => {
+  const t = r.started_at ? Date.parse(r.started_at) : NaN;
+  return Number.isFinite(t) ? t : null;
+};
+
+/** Newest first: a run with no start time yet (queued) is the newest of all and goes by id among its kind, never as the epoch. */
+function newer(a: PageRun, b: PageRun): number {
+  const ta = when(a.run);
+  const tb = when(b.run);
+  if (ta !== null && tb !== null && ta !== tb) return tb - ta;
+  if (ta === null && tb !== null) return -1;
+  if (ta !== null && tb === null) return 1;
+  return a.kind === b.kind ? b.run.id - a.run.id : a.kind === "workflow" ? -1 : 1;
+}
 
 /** The runs going and done, pipeline and workflow runs together, newest first; a pipeline run of a workflow's step stays in the list, its row naming the workflow run. */
 export function runsTogether(runs: Run[], workflowRuns: WorkflowRun[] | null | undefined): PageRun[] {
   const out: PageRun[] = [...runs.map((run): PageRun => ({ kind: "pipeline", run })), ...(workflowRuns ?? []).map((run): PageRun => ({ kind: "workflow", run }))];
   // a workflow run and its first step's run start together: the workflow run reads first
-  return out.sort((a, b) => when(b.run) - when(a.run) || (a.kind === b.kind ? b.run.id - a.run.id : a.kind === "workflow" ? -1 : 1));
+  return out.sort(newer);
 }
 
 /** The workflow run a pipeline run is a step of, where the workflow runs name it. */
@@ -221,7 +235,7 @@ const sum = (steps: WorkflowRunStep0[], k: keyof StepUnits): number => steps.red
 type WorkflowRunStep0 = WorkflowRun["steps"][number];
 
 /** A workflow run's units summed over its steps (the engine's summary where it has one), and the line a person reads: "3 steps · 12 units: 8 made, 2 reused, 1 failed, 1 skipped". */
-export function runSums(r: WorkflowRun): { steps: number; stepsDone: number; total: number; succeeded: number; failed: number; skipped: number; reused: number; unreported: number; line: string } {
+export function runSums(r: WorkflowRun): { steps: number; stepsDone: number; total: number; succeeded: number; failed: number; skipped: number; reused: number; unreported: number; stepsWords: string; unitsWords: string; line: string } {
   const s = r.summary?.units ?? null;
   const steps = r.steps ?? [];
   const total = num(s?.total) ?? sum(steps, "total");
@@ -238,8 +252,9 @@ export function runSums(r: WorkflowRun): { steps: number; stepsDone: number; tot
     failed + unreported > 0 ? `${n(failed + unreported)} failed` : null,
     skipped > 0 ? `${n(skipped)} skipped` : null,
   ].filter((x): x is string => x !== null);
-  const line = `${n(stepsTotal)} ${stepsTotal === 1 ? "step" : "steps"} · ${n(total)} ${total === 1 ? "unit" : "units"}${parts.length > 0 ? `: ${parts.join(", ")}` : ""}`;
-  return { steps: stepsTotal, stepsDone, total, succeeded, failed, skipped, reused, unreported, line };
+  const stepsWords = `${n(stepsTotal)} ${stepsTotal === 1 ? "step" : "steps"}`;
+  const unitsWords = `${n(total)} ${total === 1 ? "unit" : "units"}${parts.length > 0 ? `: ${parts.join(", ")}` : ""}`;
+  return { steps: stepsTotal, stepsDone, total, succeeded, failed, skipped, reused, unreported, stepsWords, unitsWords, line: `${stepsWords} · ${unitsWords}` };
 }
 
 /** A step's units in one cell: "4 · 3 made · 1 reused". */
@@ -256,14 +271,25 @@ export function stepUnitsWords(u: StepUnits | null | undefined): string {
 }
 
 /** The tag a workflow run reads as: its status, or its units summed once it ended. */
-export function workflowRunTag(r: WorkflowRun): { className: string; words: string } {
+export function workflowRunTag(r: WorkflowRun): { className: string; words: string; tone: "ok" | "brand" | "caution" | "blocked" | "neutral" } {
   const tone = statusTone(r.status);
-  const cls = tone === "neutral" ? "tag" : `tag ${tone}`;
   if (r.status === "done" || r.status === "partial") {
     const s = runSums(r);
-    if (s.total > 0) return { className: s.succeeded + s.reused === s.total ? "tag ok" : "tag caution", words: `${n(s.succeeded + s.reused)} of ${n(s.total)} made` };
+    if (s.total > 0) {
+      const all = s.succeeded + s.reused === s.total ? "ok" : "caution";
+      return { className: `tag ${all}`, words: `${n(s.succeeded + s.reused)} of ${n(s.total)} made`, tone: all };
+    }
   }
-  return { className: cls, words: r.status };
+  return { className: tone === "neutral" ? "tag" : `tag ${tone}`, words: r.status, tone };
+}
+
+/** The workflow run a job made, where the job's result, progress or arguments name it. */
+export function workflowRunOfJob(job: Pick<JobRow, "result" | "progress" | "args">): number | null {
+  for (const v of [job.result, job.progress, job.args]) {
+    const id = obj(v).workflow_run;
+    if (typeof id === "number" && Number.isInteger(id)) return id;
+  }
+  return null;
 }
 
 /** Whether a cancel is offered: the run's job is open. */

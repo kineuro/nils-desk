@@ -21,7 +21,7 @@ import { filesWords, ProvenanceView } from "./Provenance";
 import { UnitPack } from "./RunPage";
 import { packWords } from "./pack";
 import { PlanLine, StepPreflight, WorkflowRunView, WorkflowSteps, overOfQuery } from "./Workflows";
-import { curationTone, familyLastRun, forecastDiffers, linkWords, pageRows, planBody, provenanceOf, runSums, runsTogether, scanProvenance, stepOf, stepPreflight, stepsLine, typeWords, unitNotes, verdictCounts, verdictTone, workflowActs, workflowRows, workflowRunTag } from "./workflows";
+import { curationTone, familyLastRun, forecastDiffers, linkWords, pageRows, planBody, provenanceOf, runSums, runsTogether, scanProvenance, stepOf, stepPreflight, stepsLine, typeWords, unitNotes, workflowRunOfJob, verdictCounts, verdictTone, workflowActs, workflowRows, workflowRunTag } from "./workflows";
 import { FAMILIES, FAMILY_UNITS, PIPELINES, PLAN, PLAN_ALL, PROVENANCE, RUNS, UNITS, WORKFLOW_DOORS, WORKFLOW_RUN, WORKFLOW_RUN_GOING, WORKFLOW_RUNS, WORKFLOWS } from "./workflows.fixture";
 
 const SEE = capsWith(WORKFLOW_DOORS, ["pipelines:see"]);
@@ -177,14 +177,21 @@ describe("a workflow's plan (8.3)", () => {
 });
 
 describe("a workflow run (8.4)", () => {
+  it("puts a run with no start time first, by id, and finds a job's workflow run", () => {
+    const queued = { ...RUNS[0], id: 90, started_at: null };
+    const queued2 = { ...RUNS[0], id: 91, started_at: null };
+    expect(runsTogether([...RUNS, queued, queued2], WORKFLOW_RUNS).slice(0, 3).map((r) => `${r.kind[0]}${r.run.id}`)).toEqual(["p91", "p90", "w13"]);
+    expect(workflowRunOfJob({ result: null, progress: { workflow_run: 7 }, args: {} })).toBe(7);
+    expect(workflowRunOfJob({ result: null, progress: null, args: {} })).toBeNull();
+  });
   it("sums each step's units and reads its state", () => {
-    expect(runSums(WORKFLOW_RUN)).toMatchObject({ steps: 4, stepsDone: 3, total: 16, succeeded: 13, failed: 1, reused: 2, skipped: 0, line: "4 steps · 16 units: 13 made, 2 reused, 1 failed" });
+    expect(runSums(WORKFLOW_RUN)).toMatchObject({ steps: 4, stepsDone: 3, total: 16, succeeded: 13, failed: 1, reused: 2, skipped: 0, stepsWords: "4 steps", unitsWords: "16 units: 13 made, 2 reused, 1 failed", line: "4 steps · 16 units: 13 made, 2 reused, 1 failed" });
     // without a summary the steps are summed
     expect(runSums({ ...WORKFLOW_RUN, summary: null })).toMatchObject({ total: 16, succeeded: 13, reused: 2, failed: 1, stepsDone: 3 });
     expect(runSums(WORKFLOW_RUN_GOING)).toMatchObject({ total: 4, succeeded: 1, line: "4 steps · 4 units: 1 made" });
-    expect(workflowRunTag(WORKFLOW_RUN)).toEqual({ className: "tag caution", words: "15 of 16 made" });
-    expect(workflowRunTag(WORKFLOW_RUN_GOING)).toEqual({ className: "tag brand", words: "running" });
-    expect(workflowRunTag({ ...WORKFLOW_RUN, status: "cancelled" })).toEqual({ className: "tag", words: "cancelled" });
+    expect(workflowRunTag(WORKFLOW_RUN)).toEqual({ className: "tag caution", words: "15 of 16 made", tone: "caution" });
+    expect(workflowRunTag(WORKFLOW_RUN_GOING)).toEqual({ className: "tag brand", words: "running", tone: "brand" });
+    expect(workflowRunTag({ ...WORKFLOW_RUN, status: "cancelled" })).toEqual({ className: "tag", words: "cancelled", tone: "neutral" });
   });
   it("draws the steps with their status, unit counts and runs, the sum line, and Cancel where the job is open", () => {
     const html = renderToStaticMarkup(<WorkflowRunView caps={WORK} run={WORKFLOW_RUN} onCancel={null} />);

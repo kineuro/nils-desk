@@ -43,7 +43,7 @@ import { seedsSuggested } from "./pipelineSetup";
 import { foundByWords } from "./tools";
 import { drawable, fileName, filesByUnit, shortName, sizeWords, viewActs } from "./results";
 import { ProvenanceButton } from "./Provenance";
-import { provenanceOf, unitNotes, workflowActs } from "./workflows";
+import { provenanceOf, unitNotes, workflowActs, type UnitNote } from "./workflows";
 import {
   allPassed,
   breachesByCheck,
@@ -511,7 +511,8 @@ export function RunView(props: {
                 // Wave 7b: the pack's status word and words, who chose each knob, the caveats, the flags
                 const said = packWords(u);
                 const knobs = Object.entries(u.knobs ?? {});
-                const extra = knobs.length > 0 || (u.caveats ?? []).length > 0 || said.words !== null || (u.cohort_checks ?? []).some((c) => c.status === "flagged" || c.status === "not yet") || unitNotes(u).length > 0;
+                const notes = unitNotes(u);
+                const extra = knobs.length > 0 || (u.caveats ?? []).length > 0 || said.words !== null || (u.cohort_checks ?? []).some((c) => c.status === "flagged" || c.status === "not yet") || notes.length > 0;
                 const of = prov ? provenanceOf(u.unit) : null;
                 return (
                   <Fragment key={u.unit ?? `u${i}`}>
@@ -548,10 +549,10 @@ export function RunView(props: {
                         </td>
                       </tr>
                     )}
-                    {extra && !(lacks && said.status === "skipped" && knobs.length === 0 && unitNotes(u).length === 0) && (
+                    {extra && !(lacks && said.status === "skipped" && knobs.length === 0 && notes.length === 0) && (
                       <tr className="made-row unit-pack-row">
                         <td colSpan={cols}>
-                          <UnitPack u={u} said={said} skippedShown={lacks !== null} name={name} pack={pack} />
+                          <UnitPack u={u} said={said} skippedShown={lacks !== null} name={name} pack={pack} notes={notes} />
                         </td>
                       </tr>
                     )}
@@ -595,7 +596,7 @@ export function RunView(props: {
 }
 
 /** A unit as its pack judged it: the pack's words, each knob with who chose it, the caveats, the notes of Wave 7b sections 8.4 to 8.6 (the member and rule of a family run, a result reused from another run, a judgement made as the unit started against its forecast, inputs fed by no step, why nothing was reused, the curation state), the flags and the cohort checks. */
-export function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; said: ReturnType<typeof packWords>; skippedShown: boolean; name: (p: string) => string; pack: PackView | null }) {
+export function UnitPack({ u, said, skippedShown, name, pack, notes = unitNotes(u) }: { u: UnitRun; said: ReturnType<typeof packWords>; skippedShown: boolean; name: (p: string) => string; pack: PackView | null; /** The unit's notes, computed once by the row. */ notes?: UnitNote[] }) {
   const knobs = Object.entries(u.knobs ?? {});
   const cohort = (u.cohort_checks ?? []).filter((c) => c.status === "flagged" || c.status === "not yet");
   return (
@@ -616,7 +617,7 @@ export function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; sa
           {c.words}
         </span>
       ))}
-      {unitNotes(u).map((note, i) =>
+      {notes.map((note, i) =>
         note.href ? (
           <a key={`n${i}`} className={`unit-note ${note.tone} ${note.kind}`} href={note.href} title={note.title ?? undefined}>
             {note.words}

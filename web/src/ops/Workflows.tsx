@@ -15,7 +15,7 @@
 // carry the scope (?select=main@dataset:<name>) and the goal, and the plan is
 // asked at once.
 
-import { Fragment, useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
 import { door as served } from "../deployment";
@@ -30,7 +30,7 @@ import { catalog, mainOfSpec, overWords, pipelineRoles, selectOf, type Over, typ
 import { ops, workflows, type PlanLink, type PlanStep, type WorkflowDoc, type WorkflowPlan, type WorkflowRow, type WorkflowRun } from "./client";
 import { OverPicker } from "./OverPicker";
 import { TextOrFile } from "./PipelineSetup";
-import { cancellable, knobIds, linkWords, planBody, runSums, statusTone, stepPreflight, stepRuns, stepUnitsWords, typeWords, verdictCounts, verdictTone, workflowActs, workflowHref, workflowRunHref, workflowRunTag } from "./workflows";
+import { cancellable, workflowRunOfJob, knobIds, linkWords, planBody, runSums, statusTone, stepPreflight, stepRuns, stepUnitsWords, typeWords, verdictCounts, verdictTone, workflowActs, workflowHref, workflowRunHref, workflowRunTag } from "./workflows";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const GOALS = ["fast", "standard", "research"];
@@ -187,6 +187,14 @@ export function WorkflowView({ caps, w, pipelines, acts, prefilled = null, goalA
   const [plan, setPlan] = useState<{ key: string; p: WorkflowPlan | null; why: string | null; since: number } | null>(null);
   const [starting, setStarting] = useState<{ since: number; words: string } | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  // Start waits for its run; once the page is left it neither sets state nor navigates
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   const body = over ? planBody(selectOf(over), goal, knobs) : null;
   const key = body ? JSON.stringify(body) : null;
   const askPlan = useCallback(() => {
@@ -212,21 +220,44 @@ export function WorkflowView({ caps, w, pipelines, acts, prefilled = null, goalA
     workflows
       .run(w.id, body)
       .then(async (a) => {
+        const queuedOnly = `Queued as job ${a.job}. Its run appears on the Pipelines page once the job starts.`;
+        if (!alive.current) return;
+        // without the door that lists workflow runs there is nothing to wait for
+        if (!acts.runs) {
+          setStarting(null);
+          setSaid(queuedOnly);
+          return;
+        }
         setStarting({ since: Date.now(), words: `queued as job ${a.job}; waiting for the run to start` });
-        // the run's row is made when its job starts: the page opens it once it is there
+        // the run's row is made when its job starts: the job is read, and the run's list only a few times once the job has left the queue
+        let lists = 0;
         for (let i = 0; i < 20; i++) {
           await new Promise((r) => setTimeout(r, 1000));
-          const runs = acts.runs ? await workflows.runs().catch(() => ({ runs: [] as WorkflowRun[] })) : { runs: [] as WorkflowRun[] };
-          const mine = runs.runs.find((r) => r.job === a.job);
-          if (mine) {
-            location.hash = workflowRunHref(mine.id);
+          if (!alive.current) return;
+          const job = await ops.job(a.job).catch(() => null);
+          if (!alive.current) return;
+          let id = job ? workflowRunOfJob(job) : null;
+          if (id === null && (job === null || job.state !== "queued") && lists < 3) {
+            lists += 1;
+            const runs = await workflows.runs().catch(() => ({ runs: [] as WorkflowRun[] }));
+            if (!alive.current) return;
+            id = runs.runs.find((r) => r.job === a.job)?.id ?? null;
+          }
+          if (id !== null) {
+            location.hash = workflowRunHref(id);
+            return;
+          }
+          if (job && (job.state === "failed" || job.state === "cancelled")) {
+            setStarting(null);
+            setSaid(`Job ${a.job} ${job.state}${job.error ? `: ${job.error}` : ""}.`);
             return;
           }
         }
         setStarting(null);
-        setSaid(`Queued as job ${a.job}. Its run appears on the Pipelines page once the job starts.`);
+        setSaid(queuedOnly);
       })
       .catch((e: unknown) => {
+        if (!alive.current) return;
         setStarting(null);
         setSaid(messageOf(e));
       });
@@ -379,7 +410,7 @@ export function WorkflowRunView({ caps, run: r, onCancel, said = null }: { caps:
         cells={[
           { k: "status", v: r.status },
           { k: "steps", v: `${n(sums.stepsDone)} of ${n(sums.steps)} done` },
-          { k: "units", v: sums.line.replace(/^[^·]*· /u, "") },
+          { k: "units", v: sums.unitsWords },
           { k: "over", v: r.selection ? overWords(r.selection) : r.handle != null ? `handle ${r.handle}` : "", title: r.selection ?? undefined },
           { k: running ? "since" : "ran", v: whenWords(r.started_at ?? "") },
         ]}

@@ -61,11 +61,12 @@ const n = (v: number) => v.toLocaleString("en-US");
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; pipelines: Pipeline[]; families: Family[]; capability: Capability | null; runs: Run[]; workflows: WorkflowRow[]; workflowRuns: WorkflowRun[] };
 
 /** The one Pipelines page (Wave 7b section 8.1): the pipelines and families, the workflows and the runs, read together; a run or a workflow added reads them again. */
-export function CatalogPage({ caps, onQueued, part }: { caps: Capabilities; onQueued: (words: string) => void; /** Kept for callers of the pages before; the page draws everything. */ part?: string }) {
-  void part;
+export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: (words: string) => void }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [running, setRunning] = useState<Pipeline | null>(null);
   const [again, setAgain] = useState<Again | null>(null);
+  // a read of the runs that failed while the page stands: said in its meta line, the page kept
+  const [slow, setSlow] = useState<string | null>(null);
   const wf = workflowActs(caps);
   const read = useCallback(() => {
     Promise.all([
@@ -81,16 +82,29 @@ export function CatalogPage({ caps, onQueued, part }: { caps: Capabilities; onQu
   useEffect(read, [read]);
   // the runs going are read again every few seconds
   const going = load.kind === "ready" && (load.runs.some((r) => r.status === "running" || r.status === "queued") || load.workflowRuns.some((r) => r.status === "running" || r.status === "queued"));
+  // only the runs are read again, and merged into what the page shows; a failed read keeps the page and the polling
+  const poll = useCallback(() => {
+    Promise.all([
+      served(caps, "GET /api/pipeline-runs") ? catalog.runs(50) : Promise.resolve({ runs: [] as Run[] }),
+      wf.runs ? workflows.runs() : Promise.resolve({ runs: [] as WorkflowRun[] }),
+    ]).then(
+      ([r, wr]) => {
+        setSlow(null);
+        setLoad((was) => (was.kind === "ready" ? { ...was, runs: r.runs, workflowRuns: wr.runs } : was));
+      },
+      (e: unknown) => setSlow(`The runs could not be read just now (${engineWords(e)}); trying again.`),
+    );
+  }, [caps]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!going) return;
-    const t = setInterval(read, 5000);
+    const t = setInterval(poll, 5000);
     return () => clearInterval(t);
-  }, [going, read]);
+  }, [going, poll]);
   if (load.kind === "loading") return <Wait phase="reading the catalog" since={load.since} size="panel" />;
   if (load.kind === "failed") return <p className="warn">The catalog could not be read: {load.why}</p>;
   return (
     <>
-      <CatalogBody caps={caps} pipelines={load.pipelines} families={load.families} capability={load.capability} runs={load.runs} workflows={load.workflows} workflowRuns={load.workflowRuns} onRun={setRunning} onAgain={runActs(caps).queue ? (r) => setAgain(againOfRun(r)) : null} />
+      <CatalogBody caps={caps} pipelines={load.pipelines} families={load.families} capability={load.capability} runs={load.runs} workflows={load.workflows} workflowRuns={load.workflowRuns} note={slow} onRun={setRunning} onAgain={runActs(caps).queue ? (r) => setAgain(againOfRun(r)) : null} />
       {again && (
         <RunAgainDialog
           caps={caps}
@@ -119,16 +133,29 @@ export function CatalogPage({ caps, onQueued, part }: { caps: Capabilities; onQu
   );
 }
 
-/** A click anywhere on a row but on a link, a button or a field inside it opens an address. */
-function opener(opens: boolean, to: string) {
-  return (e: { target: EventTarget | null }) => {
-    if (!opens || (e.target instanceof Element && e.target.closest("a, button, input, select, summary, label"))) return;
-    location.hash = to;
+/** What inside a row keeps its own click and key. */
+const INNER = "a, button, input, select, summary, label";
+const inner = (e: { target: EventTarget | null }): boolean => e.target instanceof Element && e.target.closest(INNER) !== null;
+
+/** A click anywhere on a row but on a link, a button or a field inside it does `act`, and so does one of `keys` on the row itself. */
+function opener(opens: boolean, act: () => void, keys: string[] = ["Enter"]) {
+  return {
+    onClick: (e: { target: EventTarget | null }) => {
+      if (opens && !inner(e)) act();
+    },
+    onKeyDown: (e: { target: EventTarget | null; key: string; preventDefault: () => void }) => {
+      if (!opens || inner(e) || !keys.includes(e.key)) return;
+      e.preventDefault();
+      act();
+    },
   };
 }
+const goTo = (to: string) => () => {
+  location.hash = to;
+};
 
 /** The pipelines and families, the workflows and the runs, as the page draws them from what it read; no tabs. */
-export function CatalogBody({ caps, pipelines, families = [], capability, runs, workflows: wfRows = [], workflowRuns = [], onRun, onAgain = null }: { caps: Capabilities; /** Kept for callers of the pages before; the page draws everything. */ part?: string; pipelines: Pipeline[]; families?: Family[] | null; capability: Capability | null; runs: Run[]; workflows?: WorkflowRow[] | null; workflowRuns?: WorkflowRun[] | null; onRun: (p: Pipeline) => void; onAgain?: ((r: Run) => void) | null }) {
+export function CatalogBody({ caps, pipelines, families = [], capability, runs, workflows: wfRows = [], workflowRuns = [], note = null, onRun, onAgain = null }: { caps: Capabilities; /** A read of the runs that failed, said in the meta line. */ note?: string | null; pipelines: Pipeline[]; families?: Family[] | null; capability: Capability | null; runs: Run[]; workflows?: WorkflowRow[] | null; workflowRuns?: WorkflowRun[] | null; onRun: (p: Pipeline) => void; onAgain?: ((r: Run) => void) | null }) {
   const acts = catalogActs(caps, capability);
   const wf = workflowActs(caps);
   const rows = pageRows(pipelines, families);
@@ -202,16 +229,7 @@ export function CatalogBody({ caps, pipelines, families = [], capability, runs, 
           className="family openable"
           tabIndex={0}
           aria-expanded={open}
-          onClick={(e) => {
-            if (e.target instanceof Element && e.target.closest("a, button, select, input")) return;
-            toggle();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              toggle();
-            }
-          }}
+          {...opener(true, toggle, ["Enter", " "])}
         >
           <td>
             <div className="catalog-name">
@@ -269,6 +287,7 @@ export function CatalogBody({ caps, pipelines, families = [], capability, runs, 
           {n(rows.filter((r) => r.kind === "pipeline").length)} {rows.filter((r) => r.kind === "pipeline").length === 1 ? "pipeline" : "pipelines"}
           {families && families.length > 0 ? ` · ${n(families.length)} ${families.length === 1 ? "family" : "families"}` : ""}
           {capability?.runtime ? ` · ${capability.runtime.name}${capability.runtime.gpu ? " with a GPU" : ""}` : ""}
+          {note ? ` · ${note}` : ""}
         </span>
       </div>
       {rows.length === 0 && <p className="meta">Nothing in the catalog yet. {setupActs(caps).add ? "Add a pipeline from its nils.job.yml." : "Someone with work on the install adds one."}</p>}
@@ -319,9 +338,9 @@ export function CatalogBody({ caps, pipelines, families = [], capability, runs, 
                     const to = workflowHref(w.id);
                     const lastRun = (workflowRuns ?? []).filter((r) => r.workflow_id === w.id || r.workflow.replace(/@.*$/u, "") === w.name).sort((a, b) => b.id - a.id)[0] ?? null;
                     const lt = lastRun ? workflowRunTag(lastRun) : null;
-                    const tone = lt ? (lt.className.includes("ok") ? "ok" : lt.className.includes("caution") ? "caution" : lt.className.includes("brand") ? "brand" : "neutral") : null;
+                    const tone = lt ? (lt.tone === "blocked" ? "neutral" : lt.tone) : null;
                     return (
-                      <tr key={w.id} className="openable" tabIndex={0} onClick={opener(true, to)} onKeyDown={(e) => { if (e.key === "Enter") location.hash = to; }}>
+                      <tr key={w.id} className="openable" tabIndex={0} {...opener(true, goTo(to))}>
                         <td>
                           <div className="catalog-name">
                             <a href={to}><b>{w.workflow.title ?? w.name}</b></a>
@@ -383,7 +402,7 @@ export function CatalogBody({ caps, pipelines, families = [], capability, runs, 
                   const to = workflowRunHref(r.id);
                   const can = wf.openRun;
                   return (
-                    <tr key={`w${r.id}`} className={can ? "openable workflow-run" : "workflow-run"} tabIndex={can ? 0 : undefined} onClick={opener(can, to)} onKeyDown={(e) => { if (e.key === "Enter" && can) location.hash = to; }}>
+                    <tr key={`w${r.id}`} className={can ? "openable workflow-run" : "workflow-run"} tabIndex={can ? 0 : undefined} {...opener(can, goTo(to))}>
                       <td className="num">{can ? <a href={to}>W{r.id}</a> : `W${r.id}`}</td>
                       <td>
                         {r.workflow} <span className="tag">workflow</span>
@@ -391,7 +410,7 @@ export function CatalogBody({ caps, pipelines, families = [], capability, runs, 
                       <td className="path" title={r.selection ?? undefined}>{r.selection ? overWords(r.selection) : r.handle != null ? `handle ${r.handle}` : ""}</td>
                       <td>
                         <span className={tag.className}>{tag.words}</span>
-                        <span className="meta"> · {n(sums.stepsDone)} of {n(sums.steps)} steps</span>
+                        <span className="meta"> · {n(sums.stepsDone)} of {sums.stepsWords}</span>
                       </td>
                       <td className="num">
                         {n(sums.total)}
@@ -418,10 +437,7 @@ export function CatalogBody({ caps, pipelines, families = [], capability, runs, 
                     <tr
                       className={[f || rest ? "has-fail" : "", opens ? "openable" : ""].filter(Boolean).join(" ") || undefined}
                       tabIndex={opens ? 0 : undefined}
-                      onClick={opener(opens, to)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && opens) location.hash = to;
-                      }}
+                      {...opener(opens, goTo(to))}
                     >
                       <td className="num">{opens ? <a href={to}>{r.id}</a> : r.id}</td>
                       <td>
