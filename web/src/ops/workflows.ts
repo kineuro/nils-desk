@@ -354,15 +354,21 @@ export function unitNotes(u: UnitRun): UnitNote[] {
   return out;
 }
 
-/** The provenance a unit's name opens: a session `sub-<s>_ses-<label>` as <s>@<label>, a subject `sub-<s>`, or a stack by its id; null where the name is withheld or of another form. */
+/** The provenance a unit's name opens: a session `sub-<s>_ses-<label>` as <s>@<label>, a subject `sub-<s>`, or a stack by its id, where <s> is a subject id or a subject code (lower-case letters and digits); null where the name is withheld or of another form. */
 export function provenanceOf(unit: string | null | undefined): { kind: "subject" | "session" | "stack"; id: string } | null {
   if (!unit) return null;
-  const ses = /^sub-(\d+)_ses-([^/\s]+)$/u.exec(unit);
+  const ses = /^sub-([0-9a-z]+)_ses-([^/\s]+)$/u.exec(unit);
   if (ses) return { kind: "session", id: `${ses[1]}@${ses[2]}` };
-  const sub = /^sub-(\d+)$/u.exec(unit);
+  const sub = /^sub-([0-9a-z]+)$/u.exec(unit);
   if (sub) return { kind: "subject", id: sub[1] };
   if (/^\d+$/u.test(unit)) return { kind: "stack", id: unit };
   return null;
+}
+
+/** The provenance a run's unit opens: the engine's `provenance` where it gives the field (null there means none), else what the unit's name tells. */
+export function unitProvenance(u: UnitRun): { kind: "subject" | "session" | "stack"; id: string } | null {
+  if (u.provenance !== undefined) return u.provenance && u.provenance.kind && u.provenance.id ? u.provenance : null;
+  return provenanceOf(u.unit);
 }
 
 /** The provenance of a scan in the viewer: the stack's, and its session's as the runs name it. */

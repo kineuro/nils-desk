@@ -21,8 +21,8 @@ import { filesWords, ProvenanceView } from "./Provenance";
 import { UnitPack } from "./RunPage";
 import { packWords } from "./pack";
 import { PlanLine, StepPreflight, WorkflowRunView, WorkflowSteps, overOfQuery } from "./Workflows";
-import { curationTone, familyLastRun, forecastDiffers, linkWords, pageRows, planBody, provenanceOf, runSums, runsTogether, scanProvenance, stepOf, stepPreflight, stepsLine, typeWords, unitNotes, workflowRunOfJob, verdictCounts, verdictTone, workflowActs, workflowRows, workflowRunTag } from "./workflows";
-import { FAMILIES, FAMILY_UNITS, PIPELINES, PLAN, PLAN_ALL, PROVENANCE, RUNS, UNITS, WORKFLOW_DOORS, WORKFLOW_RUN, WORKFLOW_RUN_GOING, WORKFLOW_RUNS, WORKFLOWS } from "./workflows.fixture";
+import { curationTone, familyLastRun, forecastDiffers, linkWords, pageRows, planBody, provenanceOf, runSums, runsTogether, scanProvenance, stepOf, stepPreflight, stepsLine, typeWords, unitNotes, unitProvenance, workflowRunOfJob, verdictCounts, verdictTone, workflowActs, workflowRows, workflowRunTag } from "./workflows";
+import { FAMILIES, FAMILY_UNITS, PIPELINES, PLAN, PLAN_ALL, CODE_UNITS, PROVENANCE, RUNS, UNITS, WORKFLOW_DOORS, WORKFLOW_RUN, WORKFLOW_RUN_GOING, WORKFLOW_RUNS, WORKFLOWS } from "./workflows.fixture";
 
 const SEE = capsWith(WORKFLOW_DOORS, ["pipelines:see"]);
 const WORK = capsWith(WORKFLOW_DOORS, ["pipelines:see", "pipelines:work", "install:work"]);
@@ -249,6 +249,12 @@ describe("a run's units (8.4 to 8.6)", () => {
     expect(provenanceOf("sub-13_ses-20260113")).toEqual({ kind: "session", id: "13@20260113" });
     expect(provenanceOf("sub-13")).toEqual({ kind: "subject", id: "13" });
     expect(provenanceOf("1041")).toEqual({ kind: "stack", id: "1041" });
+    expect(provenanceOf("sub-1a9c46b76b0aa6e4_ses-20241119")).toEqual({ kind: "session", id: "1a9c46b76b0aa6e4@20241119" });
+    expect(provenanceOf("sub-1a9c46b76b0aa6e4")).toEqual({ kind: "subject", id: "1a9c46b76b0aa6e4" });
+    expect(provenanceOf("sub-1A9C")).toBeNull();
+    expect(unitProvenance(CODE_UNITS[0])).toEqual({ kind: "session", id: "1a9c46b76b0aa6e4@20241119" });
+    expect(unitProvenance({ ...CODE_UNITS[0], provenance: { kind: "subject", id: "1a9c46b76b0aa6e4" } })).toEqual({ kind: "subject", id: "1a9c46b76b0aa6e4" });
+    expect(unitProvenance({ ...CODE_UNITS[0], provenance: null })).toBeNull();
     expect(provenanceOf(null)).toBeNull();
     expect(provenanceOf("unit 3")).toBeNull();
     expect(scanProvenance({ id: 1041, subjectId: 13, label: "20260113", day: "2026-01-13" })).toEqual({ stack: { kind: "stack", id: "1041" }, session: { kind: "session", id: "13@20260113" } });

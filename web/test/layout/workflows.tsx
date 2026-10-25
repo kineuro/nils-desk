@@ -12,7 +12,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "../../src/App";
 import "../../src/shell.css";
 import { GRANTS } from "../../src/grants";
-import { FAMILIES, FAMILY_UNITS, PIPELINES, PLAN, PROVENANCE, RUN_41, RUNS, WORKFLOW_DOORS, WORKFLOW_RUN, WORKFLOW_RUN_GOING, WORKFLOW_RUNS, WORKFLOWS } from "../../src/ops/workflows.fixture";
+import { FAMILIES, FAMILY_UNITS, PIPELINES, PLAN, PROVENANCE, RUN_41, RUN_43, RUNS, WORKFLOW_DOORS, WORKFLOW_RUN, WORKFLOW_RUN_GOING, WORKFLOW_RUNS, WORKFLOWS } from "../../src/ops/workflows.fixture";
 
 const DOORS = ["GET /api/capabilities", "GET /api/pipelines/{id}", "GET /api/derivatives", "GET /api/ask/selections", "GET /api/ask/selections/{name}", "GET /api/sources", "GET /api/cohorts", "GET /api/jobs/{id}", ...WORKFLOW_DOORS];
 
@@ -54,6 +54,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (path === "/api/pipelines/family/registration") return json(200, FAMILIES[0]);
   if (path === "/api/pipeline-runs") return json(200, { runs: RUNS, limit: 50 });
   if (path === "/api/pipeline-runs/41") return json(200, RUN_41);
+  if (path === "/api/pipeline-runs/43") return json(200, RUN_43);
   if (path === "/api/pipeline-runs/40") return json(200, RUN_40);
   if (path === "/api/workflows") return json(200, { workflows: WORKFLOWS });
   if (path === "/api/workflows/1") return json(200, WORKFLOWS[0]);

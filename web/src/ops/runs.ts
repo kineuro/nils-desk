@@ -170,6 +170,8 @@ export interface UnitRun {
   reuse?: { considered?: { run?: number | null; unit?: string | null; reused?: boolean | null; why?: string | null }[] | null } | null;
   /** Record 58 P5: the curation state of the unit's result at detail quasi and above; null below. */
   curation?: Curation | null;
+  /** The provenance the unit opens, as the engine names it; null where it has none. Engines before it omit the field and the desk reads the unit's name. */
+  provenance?: { kind: "subject" | "session" | "stack"; id: string } | null;
 }
 
 export interface Breach {

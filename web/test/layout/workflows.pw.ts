@@ -92,4 +92,13 @@ for (const vp of SIZES) {
     expect(box!.x + box!.width).toBeLessThanOrEqual(vp.width);
     await shot(page, `provenance-${vp.name}`);
   });
+
+  test(`at ${vp.name} px units named by subject code open their provenance`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/workflows.html#pipelines/runs/43");
+    await expect(page.locator("h1")).toHaveText("Run 43");
+    await expect(page.getByRole("button", { name: "Provenance of session 1a9c46b76b0aa6e4@20241119" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Provenance of subject 0f3e22d9c1b47a85" })).toBeVisible();
+    await noSideways(page, vp.width);
+  });
 }
