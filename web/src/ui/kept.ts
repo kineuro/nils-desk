@@ -31,6 +31,8 @@ export interface Keeper<T> {
   put(value: T): void;
   /** Read once, when nothing was read yet. */
   ensure(): void;
+  /** Forget the value and any read under way; for tests. */
+  reset(): void;
 }
 
 export function keeper<T>(read: () => Promise<T>): Keeper<T> {
@@ -73,6 +75,10 @@ export function keeper<T>(read: () => Promise<T>): Keeper<T> {
     },
     refresh,
     put: (value) => set({ value, at: Date.now(), error: null, reading: state.reading }),
+    reset: () => {
+      under = null;
+      set({ value: null, at: null, error: null, reading: false });
+    },
     ensure: () => {
       if (state.value === null && under === null) refresh().catch(() => undefined);
     },

@@ -12,6 +12,7 @@ import { may } from "../grants";
 import { href } from "../routes";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
+import { summaryKept } from "../objects/kept";
 import { useReads } from "../ui/kept";
 import { jobs as jobsDoor, type ChainedJob } from "./datasets";
 import { WorkersReady } from "../ops/WorkersReady";
@@ -36,10 +37,13 @@ export function useLiveJobs(caps: Capabilities): LiveJobs {
   const [live, setLive] = useState<Live>({ kind: "still" });
   const [dismissed, setDismissed] = useState<Set<number>>(new Set());
   const openIds = useRef<string>("");
+  /** The kind of each job on the last open list, so an ended job's kind is known when it leaves. */
+  const kinds = useRef<Map<number, string>>(new Map());
   /** The feed running now, which a refresh asks to read at once rather than starting it again (2026-10-17). */
   const feed = useRef<LiveFeed | null>(null);
   const reads = served(caps, "GET /api/jobs");
   const streams = served(caps, "GET /api/events");
+  const summaryServed = served(caps, "GET /api/summary");
 
   // the failed jobs, read once at a time, and again right after a read out answers
   const failedRead = useReads(
@@ -64,8 +68,14 @@ export function useLiveJobs(caps: Capabilities): LiveJobs {
           .sort((a, b) => a - b)
           .join(",");
         // a job that left the open list may have failed: the failed ones are read again
-        if (openIds.current !== "" && openIds.current !== now) readFailed();
+        if (openIds.current !== "" && openIds.current !== now) {
+          readFailed();
+          // a digest or a bring-in that ended changed what the registry holds: the shell's summary is read again
+          const ended = [...kinds.current].some(([id, kind]) => (kind === "digest" || kind === "bring-in") && !jobs.some((j) => isOpen(j) && j.id === id));
+          if (ended && summaryServed) void summaryKept.refresh().catch(() => undefined);
+        }
         openIds.current = now;
+        kinds.current = new Map(jobs.filter(isOpen).map((j) => [j.id, j.kind]));
         setOpen(jobs);
       },
     });
@@ -74,7 +84,7 @@ export function useLiveJobs(caps: Capabilities): LiveJobs {
       feed.current = null;
       stop();
     };
-  }, [reads, streams, readFailed]);
+  }, [reads, streams, readFailed, summaryServed]);
 
   return {
     open,

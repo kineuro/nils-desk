@@ -8,8 +8,8 @@ import { SETS, type Grant } from "../grants";
 import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
 import type { Install } from "../settings/supervise";
-import { backupFolderRefusal, minimumMet, progressWords, ready, setupSteps } from "./setup";
-import type { Facts } from "./steps";
+import { backupFolderRefusal, dataIn, minimumMet, openWords, progressWords, ready, setupSteps } from "./setup";
+import { steps, type Facts } from "./steps";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
   return {
@@ -70,6 +70,23 @@ describe("setup's steps", () => {
     expect(by(facts({ places: [...registryAndBackups, place(3, "incoming", "source", "/srv/incoming")] }), "sources").met).toBe(true);
   });
 
+  it("hold DICOM once the registry holds stacks, digested from the command line with no source place, and not an empty registry without one", () => {
+    expect(by(facts({ stacks: 3200 }), "sources")).toMatchObject({ met: true, tone: "ok", words: "3,200 stacks are in the registry. A root folder can still be added." });
+    expect(by(facts({ stacks: 0 }), "sources").met).toBe(false);
+    expect(by(facts({ stacks: null }), "sources").met).toBe(false);
+    // a dataset place under a root is not a root: with no stacks both models read it as no root folder yet, with stacks both as data in
+    const under = { ...place(3, "under", "source", "/srv/incoming/one"), dataset: { kind: "dataset" as const, root: "/srv/incoming" } } as Place;
+    const withUnder = [...registryAndBackups, under];
+    expect(by(facts({ places: withUnder }), "sources").met).toBe(false);
+    expect(steps(facts({ places: withUnder }), now).find((s) => s.id === "dicom")?.state).toBe("now");
+    expect(by(facts({ places: withUnder, stacks: 0 }), "sources").met).toBe(false);
+    expect(by(facts({ places: withUnder, stacks: 7 }), "sources")).toMatchObject({ met: true, words: "7 stacks are in the registry. A root folder can still be added." });
+    expect(dataIn(3200)).toBe(true);
+    expect(dataIn(0)).toBe(false);
+    expect(dataIn(null)).toBe(false);
+    expect(dataIn(undefined)).toBe(false);
+  });
+
   it("hold the backups once the registry names a backup place and a backup is scheduled or recent, and not after a failed check", () => {
     expect(by(facts({ archives: archives("off", null) }), "backups").met).toBe(false);
     expect(by(facts({ archives: archives("day", null) }), "backups").met).toBe(true);
@@ -107,6 +124,20 @@ describe("the rest of the desk", () => {
     expect(ready(caps(), install, null, null)).toBeNull();
     expect(ready(caps(), install, registryAndBackups, archives("day", null))).toBe(false);
     expect(ready(caps(), install, [...registryAndBackups, place(3, "incoming", "source", "/srv/incoming")], archives("day", null))).toBe(true);
+  });
+
+  it("says on the setup page that the desk is open while data is in and a needed step is left, and not otherwise", () => {
+    // the command-line install: stacks in, no backup schedule, nobody signs in on a desk open to the network
+    const open = caps({ desk: { ...caps().desk, settings: { ...caps().desk.settings!, origin: "https://desk.example.org" } } });
+    const cli = setupSteps(facts({ caps: open, stacks: 3200, archives: archives("off", null) }), now);
+    expect(minimumMet(cli)).toBe(false);
+    expect(cli.filter((s) => s.required && !s.met).map((s) => s.id)).toEqual(["backups", "signin"]);
+    expect(openWords(cli, 3200)).toBe("Your data is in. Review, Browse and the viewer are open.");
+    // the same install with nothing digested yet stays closed
+    expect(openWords(setupSteps(facts({ caps: open, archives: archives("off", null) }), now), 0)).toBeNull();
+    expect(openWords(setupSteps(facts({ caps: open, archives: archives("off", null) }), now), null)).toBeNull();
+    // once every needed step holds the page says NILS is ready instead
+    expect(openWords(setupSteps(facts({ stacks: 3200, archives: archives("day", null) }), now), 3200)).toBeNull();
   });
 
   it("offers the engine's backup folder only with work on the Database and the Places pages, and says in words what is missing", () => {

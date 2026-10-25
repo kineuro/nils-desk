@@ -15,7 +15,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
-import { placesKept } from "../objects/kept";
+import { placesKept, summaryKept } from "../objects/kept";
 import { href, narrow } from "../routes";
 import { messageOf } from "../settings/common";
 import type { Install } from "../settings/supervise";
@@ -295,6 +295,7 @@ export function DataPage({
   const changed = (words: string, running?: string) => {
     setSaid(running ? { words, until: { dataset: running, since: Date.now(), seen: false } } : { words });
     void placesKept.refresh().catch(() => undefined);
+    if (served(caps, "GET /api/summary")) void summaryKept.refresh().catch(() => undefined);
     onChanged();
     jobs.refresh();
     readAgain();

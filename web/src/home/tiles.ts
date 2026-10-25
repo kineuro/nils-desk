@@ -33,8 +33,8 @@ export function tilesOffered(caps: Capabilities): TileId[] {
   return OFFERED.filter(([, d, g]) => door(caps, d) && may(caps, g)).map(([id]) => id);
 }
 
-const count = (x: number) => x.toLocaleString("en-GB");
-const of = (x: number, one: string, many: string) => `${count(x)} ${x === 1 ? one : many}`;
+export const count = (x: number) => x.toLocaleString("en-GB");
+export const of = (x: number, one: string, many: string) => `${count(x)} ${x === 1 ? one : many}`;
 
 /** The day a visit was, as a person reads it. */
 export function day(iso: string): string {

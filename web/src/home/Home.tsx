@@ -6,13 +6,13 @@
 // opens it. Every line is read from a door; a door this deployment does not
 // serve, or that this person may not open, takes its part of the page with it.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JobRow } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { objects, type Summary } from "../objects/client";
-import { placesKept } from "../objects/kept";
+import { placesKept, summaryKept } from "../objects/kept";
 import { data, ops } from "../ops/client";
 import { href } from "../routes";
 import { backupsKept } from "../settings/kept";
@@ -25,7 +25,6 @@ import type { Purpose } from "./steps";
 import { holdsTile, lastVisit, markVisit, needsTile, runningTile, sinceTile, tileHref, tilesOffered, type Tile, type TileId } from "./tiles";
 
 interface Loaded {
-  summary: Summary | null;
   since: Summary | null;
   open: number | null;
   jobs: JobRow[] | null;
@@ -34,7 +33,7 @@ interface Loaded {
   purposes: Purpose[] | null;
 }
 
-const NOTHING: Loaded = { summary: null, since: null, open: null, jobs: null, batches: null, backups: null, purposes: null };
+const NOTHING: Loaded = { since: null, open: null, jobs: null, batches: null, backups: null, purposes: null };
 
 /** A door's answer, or null where it failed: Home shows what it could read. */
 function quietly<T>(p: Promise<T>): Promise<T | null> {
@@ -46,14 +45,19 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
   const [last] = useState<string | null>(() => lastVisit());
   const places = useKept(placesKept);
   const archives = useKept(backupsKept);
+  // the registry's summary is the shell's: Home draws what it holds from the first frame and reads it again through the keeper
+  const kept = useKept(summaryKept);
 
-  const load = useCallback(() => {
+  const load = useCallback((again: boolean) => {
     const has = (d: string) => served(caps, d);
     // the places and the backups are kept for every page that reads them
     if (has("GET /api/places")) void placesKept.refresh().catch(() => undefined);
     if (has("GET /api/backups") && may(caps, "database:see")) void backupsKept.refresh().catch(() => undefined);
+    if (has("GET /api/summary")) {
+      if (again) void summaryKept.refresh().catch(() => undefined);
+      else summaryKept.ensure();
+    }
     void Promise.all([
-      has("GET /api/summary") ? quietly(objects.summary()) : null,
       has("GET /api/summary") && last ? quietly(objects.summary(last)) : null,
       has("GET /api/review") && may(caps, "review:see") ? quietly(ops.review("open", undefined, 500)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs") ? quietly(ops.jobs(false, 50)).then((r) => r?.jobs ?? null) : null,
@@ -64,14 +68,16 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
           )
         : null,
       caps.kvasir !== null ? quietly(kvasir.purposes()).then((r) => r?.purposes.map((p) => ({ purpose: p.purpose, content: p.content, backend: p.backend })) ?? null) : null,
-    ]).then(([summary, since, open, jobs, batches, backups, purposes]) => setLoaded({ summary, since, open, jobs, batches, backups, purposes }));
+    ]).then(([since, open, jobs, batches, backups, purposes]) => setLoaded((was) => ({ ...was, since, open, jobs, batches, backups, purposes })));
   }, [caps, last]);
 
   // read again when the registry moves, and every half minute for what runs
   const epoch = caps.engine?.registry.epoch ?? null;
+  const mounted = useRef(false);
   useEffect(() => {
-    load();
-    const t = setInterval(load, 30_000);
+    load(mounted.current);
+    mounted.current = true;
+    const t = setInterval(() => load(true), 30_000);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the epoch is what moves
   }, [epoch]);
@@ -85,12 +91,12 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
   // how far setup is, for a person who may see the install, while a step is left
   const setup =
     may(caps, "install:see") && served(caps, "GET /api/places") && places.value
-      ? setupSteps({ caps, install, places: places.value.places, batches: loaded.batches, backups: loaded.backups, archives: archives.value, purposes: loaded.purposes })
+      ? setupSteps({ caps, install, places: places.value.places, batches: loaded.batches, backups: loaded.backups, archives: archives.value, purposes: loaded.purposes, stacks: kept.value?.stacks.total ?? null })
       : [];
   const left = setup.filter((s) => !s.met);
   const needed = left.some((s) => s.required);
   const tiles = tilesOffered(caps)
-    .map((id) => tile(id, loaded, caps, last))
+    .map((id) => tile(id, loaded, kept.value, caps, last))
     .filter((t): t is Tile => t !== null);
 
   return (
@@ -135,16 +141,16 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
   );
 }
 
-function tile(id: TileId, l: Loaded, caps: Capabilities, last: string | null): Tile | null {
+function tile(id: TileId, l: Loaded, summary: Summary | null, caps: Capabilities, last: string | null): Tile | null {
   switch (id) {
     case "holds":
-      return l.summary ? holdsTile(l.summary, caps.engine?.registry.schema_version) : null;
+      return summary ? holdsTile(summary, caps.engine?.registry.schema_version) : null;
     case "needs":
       return l.open !== null ? needsTile(l.open) : null;
     case "running":
       return l.jobs !== null ? runningTile(l.jobs) : null;
     case "since":
-      return l.summary || last === null ? sinceTile(last, l.since) : null;
+      return summary || last === null ? sinceTile(last, l.since) : null;
   }
 }
 

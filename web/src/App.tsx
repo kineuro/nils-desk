@@ -5,7 +5,7 @@
 // deliberately. Until the install is set up, Home is the page of its steps
 // for a person who may see the install, and the rest of the desk waits.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { AssistantPage } from "./assistant/AssistantPage";
 import { chatsKept, importHere, sidePages } from "./assistant/chats";
@@ -28,9 +28,9 @@ import { may } from "./grants";
 import { Home } from "./home/Home";
 import { PlaceholderPage } from "./home/Placeholder";
 import { PLACEHOLDERS } from "./home/placeholders";
-import { ready as readyToStart } from "./home/setup";
+import { dataIn, ready as readyToStart, signinOpen } from "./home/setup";
 import { Setup } from "./home/Setup";
-import { placesKept } from "./objects/kept";
+import { placesKept, summaryKept } from "./objects/kept";
 import { ProfilePage } from "./profile/ProfilePage";
 import { PersonMenu } from "./ui/PersonMenu";
 import { ReviewPage } from "./review/ReviewPage";
@@ -128,17 +128,29 @@ export function App() {
     };
   }, [supervised, asked]);
 
-  // whether the install is set up, for a person who may see it, from the places and the backups every page keeps
+  // whether the install is set up, for a person who may see it, from the places, the backups and the summary every page keeps
   const places = useKept(placesKept);
   const archives = useKept(backupsKept);
+  const summary = useKept(summaryKept);
   const known = load.kind === "ready" ? load.caps : null;
   const setsUp = known !== null && usable(known) && may(known, "install:see");
   const readsPlaces = setsUp && may(known, "places:see") && door(known, "GET /api/places");
   const readsBackups = setsUp && may(known, "database:see") && door(known, "GET /api/backups");
+  // the stacks the registry holds: data digested from the command line counts without a source place (agenda 3.8)
+  const readsSummary = setsUp && door(known, "GET /api/summary");
   useEffect(() => {
     if (readsPlaces) placesKept.ensure();
     if (readsBackups) backupsKept.ensure();
-  }, [readsPlaces, readsBackups]);
+    if (readsSummary) summaryKept.ensure();
+  }, [readsPlaces, readsBackups, readsSummary]);
+  // the registry moved (a digest from the command line, a bring-in): the summary is read again, on Setup too
+  const epoch = known?.engine?.registry.epoch ?? null;
+  const epochSeen = useRef(epoch);
+  useEffect(() => {
+    if (epochSeen.current === epoch) return;
+    epochSeen.current = epoch;
+    if (readsSummary) void summaryKept.refresh().catch(() => undefined);
+  }, [epoch, readsSummary]);
   const talking = known !== null && assistantOffered(known);
   useEffect(() => {
     if (!talking) return;
@@ -150,19 +162,18 @@ export function App() {
     const t = setInterval(() => chatsKept.refresh().catch(() => undefined), 60_000);
     return () => clearInterval(t);
   }, [talking]);
-  // a read that failed does not hold the desk back
-  const setupReady: boolean | null =
+  // a read that failed does not hold the desk back; Home never waits for the summary
+  const stacks = readsSummary ? (summary.value?.stacks.total ?? null) : null;
+  const stepsSay: boolean | null =
     known === null || !readsPlaces || (places.error !== null && places.value === null)
       ? true
       : readsBackups && archives.value === null && archives.error === null
         ? null
         : readyToStart(known, install, places.value?.places ?? null, readsBackups ? archives.value : null);
-  // a person who landed on setup stays there until they open Home
-  const [landed, setLanded] = useState(false);
-  const [left, setLeft] = useState(false);
-  useEffect(() => {
-    if (setupReady === false) setLanded(true);
-  }, [setupReady]);
+  // the rest of the desk opens once setup is done, or as soon as the summary says data is in: Review, Browse and the viewer work on it
+  // (a set-up install opens at once and never waits; only a setup that is not done waits for the summary's first answer, so the setup page does not flash)
+  const summaryPending = readsSummary && summary.value === null && summary.error === null;
+  const deskOpen: boolean | null = stepsSay !== false ? stepsSay : summaryPending ? null : dataIn(stacks);
 
   if (load.kind === "loading") return <main className="state lone">Reaching the desk</main>;
   if (load.kind === "failed") return <main className="state lone">The desk did not answer: {load.why}</main>;
@@ -174,7 +185,7 @@ export function App() {
   const ready = usable(caps);
   const side = sections(
     caps,
-    setupReady,
+    deskOpen,
     sidePages(talks.value?.conversations ?? []),
   );
   const kept = foot(caps);
@@ -183,7 +194,10 @@ export function App() {
   const onProfile = ready && route.section === "profile";
   const active = onProfile ? null : ([...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null);
   const inSettings = ready && active?.id === "settings";
-  const onSetup = ready && setsUp && !left && (setupReady === false || landed);
+  // the setup page lands the person only while data is not in; after that Home is Home, and Settings > Setup keeps the page
+  const onSetup = ready && setsUp && deskOpen === false;
+  // nobody signs in on an address the network reaches: said on every page, not only on setup
+  const openDoor = ready && setsUp && signinOpen(caps);
   const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id && !p.built);
   const who = caps.person.display_name || caps.person.subject;
   // the dataset viewer (#data/datasets/NAME/view, #data/cohorts/NAME/view): the browser folds the side away
@@ -248,6 +262,11 @@ export function App() {
           The engine is ahead of this desk. Everything here still works; update the desk to see what the engine added.
         </div>
       )}
+      {openDoor && (
+        <div className="banner" role="note">
+          Nobody signs in: anyone who reaches this address can do everything. <a href={href("settings", "people")}>Decide who signs in.</a>
+        </div>
+      )}
       {slow !== null && (
         <div className="banner" role="status">
           The engine is slow to answer: nothing has come back since {new Date(slow).toLocaleTimeString()}. The page stays as it was and catches up when
@@ -291,9 +310,9 @@ export function App() {
               </p>
             </section>
           )}
-          {ready && active?.id === "home" && setsUp && setupReady === null && <p className="meta">Reading the install.</p>}
-          {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={setupReady ? () => setLeft(true) : undefined} />}
-          {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
+          {ready && active?.id === "home" && setsUp && deskOpen === null && <p className="meta">Reading the install.</p>}
+          {ready && active?.id === "home" && deskOpen !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} />}
+          {ready && active?.id === "home" && deskOpen !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
           {ready && active?.id === "data" && route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg) && <BatchPage caps={caps} id={Number(route.arg)} />}
           {ready && active?.id === "data" && route.page === "pseudonyms" && <PseudonymsPage caps={caps} onChanged={changed} />}

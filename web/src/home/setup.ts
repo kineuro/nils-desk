@@ -11,7 +11,9 @@ import { may } from "../grants";
 import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
 import type { Install } from "../settings/supervise";
-import { steps, type Facts, type StepId, type Tag } from "./steps";
+import { dataIn, steps, type Facts, type StepId, type Tag } from "./steps";
+
+export { dataIn };
 
 export type SetupId = "installed" | "sources" | "backups" | "signin" | "model";
 
@@ -31,6 +33,12 @@ export interface SetupStep {
 const WEEK = 7 * 24 * 3600 * 1000;
 const LOOPBACK = /^[a-z]+:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i;
 
+/** Whether nobody signs in on an address the network reaches: anyone who finds the desk can do everything. */
+export function signinOpen(caps: Capabilities): boolean {
+  const origin = caps.desk.settings?.origin ?? "";
+  return caps.desk.mode === "off" && origin !== "" && !LOOPBACK.test(origin);
+}
+
 /** The steps of setup, in order, from what the parts report. */
 export function setupSteps(f: Facts, now: number = Date.now()): SetupStep[] {
   const band = steps(f, now);
@@ -40,7 +48,8 @@ export function setupSteps(f: Facts, now: number = Date.now()): SetupStep[] {
 
   const dicom = said("dicom");
   if (dicom) {
-    const met = live.some((p) => p.role === "source");
+    // the steps model decides: a live root, or stacks already in the registry (agenda 3.8)
+    const met = dicom.state === "done";
     out.push({ id: "sources", title: "Add a root folder", required: true, met, tone: met ? "ok" : "neutral", words: dicom.words, tags: dicom.tags });
   }
 
@@ -62,8 +71,7 @@ export function setupSteps(f: Facts, now: number = Date.now()): SetupStep[] {
 
   const signin = said("signin");
   if (signin) {
-    const origin = f.caps.desk.settings?.origin ?? "";
-    const met = f.caps.desk.mode !== "off" || origin === "" || LOOPBACK.test(origin);
+    const met = !signinOpen(f.caps);
     out.push({ id: "signin", title: "Decide who signs in", required: true, met, tone: met ? "ok" : "caution", words: signin.words, tags: signin.tags });
   }
 
@@ -79,8 +87,8 @@ export function minimumMet(all: SetupStep[]): boolean {
 
 /**
  * Whether an install is ready to start, as far as the shell can tell from the
- * places and the backups it keeps: always for a person who may not see the
- * install, and null while the places are not read yet.
+ * places and the backups it keeps: always for a person who may
+ * not see the install, and null while the places are not read yet.
  */
 export function ready(caps: Capabilities, install: Install | null, places: Place[] | null, archives: Backups | null): boolean | null {
   if (!may(caps, "install:see")) return true;
@@ -108,4 +116,10 @@ export function progressWords(all: SetupStep[]): string {
   const later = all.filter((s) => !s.required && !s.met).length;
   if (later === 0) return "Every step is done.";
   return `Every step the desk needs is done, and ${later === 1 ? "one more is" : `${later} more are`} worth doing.`;
+}
+
+/** The line that says the desk is open while steps are left: with data in and a step the desk needs still open, else null. */
+export function openWords(all: SetupStep[], stacks: number | null | undefined): string | null {
+  if (!dataIn(stacks) || minimumMet(all)) return null;
+  return "Your data is in. Review, Browse and the viewer are open.";
 }

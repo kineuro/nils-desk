@@ -14,7 +14,7 @@ import { rootsOf } from "../data/steps";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { objects, type Place } from "../objects/client";
-import { placesKept } from "../objects/kept";
+import { placesKept, summaryKept } from "../objects/kept";
 import { data, ops } from "../ops/client";
 import { href } from "../routes";
 import { Acted, useActing, useRun } from "../settings/common";
@@ -32,7 +32,7 @@ import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { placeName, type Pack } from "./look";
-import { backupFolderRefusal, minimumMet, progressWords, setupSteps, type SetupId, type SetupStep } from "./setup";
+import { backupFolderRefusal, minimumMet, openWords, progressWords, setupSteps, type SetupId, type SetupStep } from "./setup";
 import type { Purpose } from "./steps";
 import { day } from "./tiles";
 
@@ -66,18 +66,24 @@ async function finished(id: number, limitMs = 60 * 60_000): Promise<JobRow> {
   throw new Error("It is still running; the Backups page shows its archive once it is done.");
 }
 
-export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities; install: Install | null; onChanged: () => void; onHome?: () => void }) {
+export function Setup({ caps, install, onChanged }: { caps: Capabilities; install: Install | null; onChanged: () => void }) {
   const places = useKept(placesKept);
   const archives = useKept(backupsKept);
+  const summary = useKept(summaryKept);
   const [extra, setExtra] = useState<Extra>(NONE);
   const [open, setOpen] = useState<SetupId | "none" | null>(null);
   const readsBackups = may(caps, "database:see");
   const placesServed = served(caps, "GET /api/places");
 
-  const load = useCallback(() => {
+  const load = useCallback((again: boolean) => {
     const has = (d: string) => served(caps, d);
     if (has("GET /api/places")) void placesKept.refresh().catch(() => undefined);
     if (readsBackups && has("GET /api/backups")) void backupsKept.refresh().catch(() => undefined);
+    // the stacks the registry holds (agenda 3.8): the shell keeps them and reads them again when the registry moves; an action here reads them again at once
+    if (has("GET /api/summary")) {
+      if (again) void summaryKept.refresh().catch(() => undefined);
+      else summaryKept.ensure();
+    }
     void Promise.all([
       has("GET /api/batches") ? quietly(data.batches(1000)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs")
@@ -90,18 +96,21 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
   }, [caps, readsBackups]);
 
   useEffect(() => {
-    load();
+    load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once when the page opens; each action reads again
   }, []);
 
-  const all = setupSteps({ caps, install, places: placesServed ? (places.value?.places ?? null) : null, batches: extra.batches, backups: extra.jobs, archives: archives.value, purposes: extra.purposes });
+  const stacks = summary.value?.stacks.total ?? null;
+  const all = setupSteps({ caps, install, places: placesServed ? (places.value?.places ?? null) : null, batches: extra.batches, backups: extra.jobs, archives: archives.value, purposes: extra.purposes, stacks });
+  const openLine = openWords(all, stacks);
   const next = all.find((s) => s.required && !s.met) ?? all.find((s) => !s.met) ?? null;
   const shown = open === null ? (next?.id ?? null) : open === "none" ? null : open;
   const done = minimumMet(all);
   const needed = all.filter((s) => s.required);
-  const reading = placesServed && places.value === null && !places.error;
+  const summaryServed = served(caps, "GET /api/summary");
+  const reading = (placesServed && places.value === null && !places.error) || (summaryServed && summary.value === null && !summary.error);
   const changed = () => {
-    load();
+    load(true);
     onChanged();
   };
 
@@ -127,13 +136,15 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
         <span className="eyebrow">Get started</span>
         <div className="row setup-title">
           <h1>{done ? "NILS is ready" : "Set up NILS"}</h1>
-          {done && onHome && (
-            <button type="button" className="button" onClick={onHome}>
-              Open Home
-              <Icon name="arrow" />
-            </button>
-          )}
         </div>
+        {openLine !== null && !reading && (
+          <a className="setup-line" href={href("home")}>
+            <Icon name="check" />
+            <span className="grow">{openLine}</span>
+            <span className="setup-line-go">Home</span>
+            <Icon name="chevron-right" />
+          </a>
+        )}
         {needed.length > 1 && !reading && (
           <div className="progress-row">
             <span className="progress" role="img" aria-label={progressWords(all)}>

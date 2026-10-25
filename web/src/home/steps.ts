@@ -10,7 +10,7 @@ import type { Backups } from "../settings/database";
 import { isRoot } from "../data/layout";
 import { keptRunning, where } from "../settings/install";
 import type { Install } from "../settings/supervise";
-import { day } from "./tiles";
+import { day, of } from "./tiles";
 
 export type StepId = "installed" | "model" | "dicom" | "safe" | "signin";
 /** done; attention, which works but needs a decision; now, begun; todo, not begun. */
@@ -44,6 +44,8 @@ export interface Facts {
   /** Null where the places door is not served or not open to this person. */
   places: Place[] | null;
   batches: number | null;
+  /** The stacks the registry holds (the summary's total), where it was read; data brought in from the command line counts without a source place. */
+  stacks?: number | null;
   /** Finished backup jobs, newest first. */
   backups: JobRow[] | null;
   /** The archives and the schedule, where the engine serves them to this person; they say more than the jobs do. */
@@ -95,13 +97,21 @@ function model(f: Facts): Step | null {
   return { id: "model", title, state: "attention", words: `Kvasir lists no model yet.${serve || " A model on another machine of yours, or a provider, can answer instead."}`, tags: [], halfway: false };
 }
 
+/** Whether the registry holds data: stacks digested, from a root folder or the command line. The one copy of this test. */
+export function dataIn(stacks: number | null | undefined): boolean {
+  return (stacks ?? 0) > 0;
+}
+
 function dicom(f: Facts): Step | null {
   if (f.places === null) return null;
   const title = "Add a root folder";
   // Wave 7a: a root is where the dataset folders live; its folders become datasets on the Data page
   const roots = f.places.filter((p) => p.role === "source" && p.retired_at === null && (isRoot(p) || !p.dataset?.root));
-  if (roots.length === 0) return { id: "dicom", title, state: "now", words: "Where your dataset folders live.", tags: [], halfway: false };
-  return { id: "dicom", title, state: "done", words: roots.map((r) => r.name).join(", "), tags: [], halfway: false };
+  if (roots.length > 0) return { id: "dicom", title, state: "done", words: roots.map((r) => r.name).join(", "), tags: [], halfway: false };
+  // stacks in the registry and no live root (none named, one retired, or a place the roots filter leaves out): the step holds, and a root can still be added
+  const stacks = f.stacks ?? 0;
+  if (dataIn(stacks)) return { id: "dicom", title, state: "done", words: `${of(stacks, "stack is", "stacks are")} in the registry. A root folder can still be added.`, tags: [], halfway: false };
+  return { id: "dicom", title, state: "now", words: "Where your dataset folders live.", tags: [], halfway: false };
 }
 
 const WEEK = 7 * 24 * 3600 * 1000;
