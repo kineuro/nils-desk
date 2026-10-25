@@ -162,7 +162,7 @@ describe("the shell of an install whose data came in from the command line", () 
     });
   }
   const resetKept = () => {
-    for (const k of [summaryKept, placesKept, backupsKept]) k.put(null as never);
+    for (const k of [summaryKept, placesKept, backupsKept]) k.reset();
   };
 
   beforeEach(() => resetKept());

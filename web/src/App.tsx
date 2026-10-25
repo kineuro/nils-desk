@@ -5,7 +5,7 @@
 // deliberately. Until the install is set up, Home is the page of its steps
 // for a person who may see the install, and the rest of the desk waits.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { AssistantPage } from "./assistant/AssistantPage";
 import { chatsKept, importHere, sidePages } from "./assistant/chats";
@@ -143,6 +143,14 @@ export function App() {
     if (readsBackups) backupsKept.ensure();
     if (readsSummary) summaryKept.ensure();
   }, [readsPlaces, readsBackups, readsSummary]);
+  // the registry moved (a digest from the command line, a bring-in): the summary is read again, on Setup too
+  const epoch = known?.engine?.registry.epoch ?? null;
+  const epochSeen = useRef(epoch);
+  useEffect(() => {
+    if (epochSeen.current === epoch) return;
+    epochSeen.current = epoch;
+    if (readsSummary) void summaryKept.refresh().catch(() => undefined);
+  }, [epoch, readsSummary]);
   const talking = known !== null && assistantOffered(known);
   useEffect(() => {
     if (!talking) return;
@@ -162,10 +170,10 @@ export function App() {
       : readsBackups && archives.value === null && archives.error === null
         ? null
         : readyToStart(known, install, places.value?.places ?? null, readsBackups ? archives.value : null);
-  const setupReady: boolean | null = stepsSay;
   // the rest of the desk opens once setup is done, or as soon as the summary says data is in: Review, Browse and the viewer work on it
-  // (the summary is read beside the page and flips this; nothing waits for it)
-  const deskOpen: boolean | null = setupReady !== false ? setupReady : dataIn(stacks);
+  // (a set-up install opens at once and never waits; only a setup that is not done waits for the summary's first answer, so the setup page does not flash)
+  const summaryPending = readsSummary && summary.value === null && summary.error === null;
+  const deskOpen: boolean | null = stepsSay !== false ? stepsSay : summaryPending ? null : dataIn(stacks);
 
   if (load.kind === "loading") return <main className="state lone">Reaching the desk</main>;
   if (load.kind === "failed") return <main className="state lone">The desk did not answer: {load.why}</main>;
@@ -302,9 +310,9 @@ export function App() {
               </p>
             </section>
           )}
-          {ready && active?.id === "home" && setsUp && setupReady === null && <p className="meta">Reading the install.</p>}
-          {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} />}
-          {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
+          {ready && active?.id === "home" && setsUp && deskOpen === null && <p className="meta">Reading the install.</p>}
+          {ready && active?.id === "home" && deskOpen !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} />}
+          {ready && active?.id === "home" && deskOpen !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
           {ready && active?.id === "data" && route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg) && <BatchPage caps={caps} id={Number(route.arg)} />}
           {ready && active?.id === "data" && route.page === "pseudonyms" && <PseudonymsPage caps={caps} onChanged={changed} />}

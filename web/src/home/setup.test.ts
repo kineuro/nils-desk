@@ -124,9 +124,6 @@ describe("the rest of the desk", () => {
     expect(ready(caps(), install, null, null)).toBeNull();
     expect(ready(caps(), install, registryAndBackups, archives("day", null))).toBe(false);
     expect(ready(caps(), install, [...registryAndBackups, place(3, "incoming", "source", "/srv/incoming")], archives("day", null))).toBe(true);
-    // a registry with stacks and no source place is set up as far as the folder goes; an empty one is not
-    expect(ready(caps(), install, registryAndBackups, archives("day", null), 3200)).toBe(true);
-    expect(ready(caps(), install, registryAndBackups, archives("day", null), 0)).toBe(false);
   });
 
   it("says on the setup page that the desk is open while data is in and a needed step is left, and not otherwise", () => {

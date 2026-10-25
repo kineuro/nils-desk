@@ -87,13 +87,13 @@ export function minimumMet(all: SetupStep[]): boolean {
 
 /**
  * Whether an install is ready to start, as far as the shell can tell from the
- * places, the backups and the summary it keeps: always for a person who may
+ * places and the backups it keeps: always for a person who may
  * not see the install, and null while the places are not read yet.
  */
-export function ready(caps: Capabilities, install: Install | null, places: Place[] | null, archives: Backups | null, stacks: number | null = null): boolean | null {
+export function ready(caps: Capabilities, install: Install | null, places: Place[] | null, archives: Backups | null): boolean | null {
   if (!may(caps, "install:see")) return true;
   if (places === null) return null;
-  return minimumMet(setupSteps({ caps, install, places, batches: null, backups: null, archives, purposes: null, stacks }));
+  return minimumMet(setupSteps({ caps, install, places, batches: null, backups: null, archives, purposes: null }));
 }
 
 /**

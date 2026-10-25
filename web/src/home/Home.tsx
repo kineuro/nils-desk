@@ -25,7 +25,6 @@ import type { Purpose } from "./steps";
 import { holdsTile, lastVisit, markVisit, needsTile, runningTile, sinceTile, tileHref, tilesOffered, type Tile, type TileId } from "./tiles";
 
 interface Loaded {
-  summary: Summary | null;
   since: Summary | null;
   open: number | null;
   jobs: JobRow[] | null;
@@ -34,7 +33,7 @@ interface Loaded {
   purposes: Purpose[] | null;
 }
 
-const NOTHING: Loaded = { summary: null, since: null, open: null, jobs: null, batches: null, backups: null, purposes: null };
+const NOTHING: Loaded = { since: null, open: null, jobs: null, batches: null, backups: null, purposes: null };
 
 /** A door's answer, or null where it failed: Home shows what it could read. */
 function quietly<T>(p: Promise<T>): Promise<T | null> {
@@ -90,7 +89,6 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
   }, []);
 
   // how far setup is, for a person who may see the install, while a step is left
-  const loadedNow: Loaded = { ...loaded, summary: kept.value };
   const setup =
     may(caps, "install:see") && served(caps, "GET /api/places") && places.value
       ? setupSteps({ caps, install, places: places.value.places, batches: loaded.batches, backups: loaded.backups, archives: archives.value, purposes: loaded.purposes, stacks: kept.value?.stacks.total ?? null })
@@ -98,7 +96,7 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
   const left = setup.filter((s) => !s.met);
   const needed = left.some((s) => s.required);
   const tiles = tilesOffered(caps)
-    .map((id) => tile(id, loadedNow, caps, last))
+    .map((id) => tile(id, loaded, kept.value, caps, last))
     .filter((t): t is Tile => t !== null);
 
   return (
@@ -143,16 +141,16 @@ export function Home({ caps, install }: { caps: Capabilities; install: Install |
   );
 }
 
-function tile(id: TileId, l: Loaded, caps: Capabilities, last: string | null): Tile | null {
+function tile(id: TileId, l: Loaded, summary: Summary | null, caps: Capabilities, last: string | null): Tile | null {
   switch (id) {
     case "holds":
-      return l.summary ? holdsTile(l.summary, caps.engine?.registry.schema_version) : null;
+      return summary ? holdsTile(summary, caps.engine?.registry.schema_version) : null;
     case "needs":
       return l.open !== null ? needsTile(l.open) : null;
     case "running":
       return l.jobs !== null ? runningTile(l.jobs) : null;
     case "since":
-      return l.summary || last === null ? sinceTile(last, l.since) : null;
+      return summary || last === null ? sinceTile(last, l.since) : null;
   }
 }
 

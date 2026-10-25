@@ -10,7 +10,7 @@ import type { Backups } from "../settings/database";
 import { isRoot } from "../data/layout";
 import { keptRunning, where } from "../settings/install";
 import type { Install } from "../settings/supervise";
-import { day } from "./tiles";
+import { day, of } from "./tiles";
 
 export type StepId = "installed" | "model" | "dicom" | "safe" | "signin";
 /** done; attention, which works but needs a decision; now, begun; todo, not begun. */
@@ -110,7 +110,7 @@ function dicom(f: Facts): Step | null {
   if (roots.length > 0) return { id: "dicom", title, state: "done", words: roots.map((r) => r.name).join(", "), tags: [], halfway: false };
   // stacks in the registry and no live root (none named, one retired, or a place the roots filter leaves out): the step holds, and a root can still be added
   const stacks = f.stacks ?? 0;
-  if (dataIn(stacks)) return { id: "dicom", title, state: "done", words: `${stacks.toLocaleString("en-GB")} ${stacks === 1 ? "stack is" : "stacks are"} in the registry. A root folder can still be added.`, tags: [], halfway: false };
+  if (dataIn(stacks)) return { id: "dicom", title, state: "done", words: `${of(stacks, "stack is", "stacks are")} in the registry. A root folder can still be added.`, tags: [], halfway: false };
   return { id: "dicom", title, state: "now", words: "Where your dataset folders live.", tags: [], halfway: false };
 }
 

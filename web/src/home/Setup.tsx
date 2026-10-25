@@ -79,7 +79,7 @@ export function Setup({ caps, install, onChanged }: { caps: Capabilities; instal
     const has = (d: string) => served(caps, d);
     if (has("GET /api/places")) void placesKept.refresh().catch(() => undefined);
     if (readsBackups && has("GET /api/backups")) void backupsKept.refresh().catch(() => undefined);
-    // the stacks the registry holds (agenda 3.8): the shell reads them once, and only an action can change them
+    // the stacks the registry holds (agenda 3.8): the shell keeps them and reads them again when the registry moves; an action here reads them again at once
     if (has("GET /api/summary")) {
       if (again) void summaryKept.refresh().catch(() => undefined);
       else summaryKept.ensure();
@@ -107,7 +107,8 @@ export function Setup({ caps, install, onChanged }: { caps: Capabilities; instal
   const shown = open === null ? (next?.id ?? null) : open === "none" ? null : open;
   const done = minimumMet(all);
   const needed = all.filter((s) => s.required);
-  const reading = placesServed && places.value === null && !places.error;
+  const summaryServed = served(caps, "GET /api/summary");
+  const reading = (placesServed && places.value === null && !places.error) || (summaryServed && summary.value === null && !summary.error);
   const changed = () => {
     load(true);
     onChanged();
