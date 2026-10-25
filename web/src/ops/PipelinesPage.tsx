@@ -14,7 +14,12 @@
 // on its card, or Open run.
 // Since Wave 7a Models is a page here
 // (#pipelines/models, spec section 13.1), and a person who may see models
-// and not the jobs opens it first.
+// and not the jobs opens it first. Wave 7b (section 8.1): Catalog and Runs
+// are one Pipelines page with no tabs, which the section opens on
+// (#pipelines); the jobs are a page beside it (#pipelines/jobs); a workflow's
+// page is #pipelines/workflows/<id> and a workflow run's
+// #pipelines/workflow-runs/<id>; the old #pipelines/catalog and
+// #pipelines/runs lead to the page (routes.ts).
 
 import { useCallback, useEffect, useState } from "react";
 import type { JobRow } from "../ask/client";
@@ -29,6 +34,8 @@ import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
 import { ModelsPage } from "../models/ModelsPage";
 import { CatalogPage } from "./Catalog";
+import { AddWorkflowButton, WorkflowPage, WorkflowRunPage } from "./Workflows";
+import { workflowActs } from "./workflows";
 import { AddPipelineDialog } from "./PipelineSetup";
 import { setupActs } from "./pipelineSetup";
 import { ops } from "./client";
@@ -46,7 +53,7 @@ import { FailLine } from "./Reason";
 const n = (v: number) => v.toLocaleString("en-US");
 
 
-/** The Pipelines page's two pages: the jobs, and since record 45 the catalog where the engine serves it; since record 49 a run's own page and the assistant's plan; since 2026-10-13 a unit's result on its run. */
+/** The Pipelines section's pages: the one Pipelines page (Wave 7b section 8.1) where the engine serves the catalog, else the jobs; the jobs beside it; a run's, a workflow's and a workflow run's own pages; the assistant's plan; a unit's result on its run. */
 export function PipelinesPage({ caps, page = null, arg = null, query }: { caps: Capabilities; page?: string | null; arg?: string | null; query?: Record<string, string> }) {
   const catalog = may(caps, "pipelines:see") && served(caps, "GET /api/pipelines");
   const [said, setSaid] = useState<string | null>(null);
@@ -97,15 +104,51 @@ export function PipelinesPage({ caps, page = null, arg = null, query }: { caps: 
       </section>
     );
   }
-  if (page === "catalog" && catalog) {
+  const wf = workflowActs(caps);
+  if (page === "workflows" && arg !== null && catalog && wf.see) {
     return (
       <section className="pipelines">
         <div className="data-head">
           <div className="grow">
             <span className="eyebrow">Pipelines</span>
-            <h1>Catalog</h1>
-            <p className="lede">What this engine can run, each pinned by its image.</p>
+            <h1>Workflow</h1>
           </div>
+        </div>
+        <WorkflowPage caps={caps} id={arg} query={query} />
+      </section>
+    );
+  }
+  if (page === "workflow-runs" && arg !== null && /^\d+$/.test(arg) && catalog && wf.openRun) {
+    return (
+      <section className="pipelines">
+        <div className="data-head">
+          <div className="grow">
+            <span className="eyebrow">Pipelines</span>
+            <h1>Workflow run {arg}</h1>
+          </div>
+        </div>
+        <WorkflowRunPage caps={caps} id={Number(arg)} />
+      </section>
+    );
+  }
+  if (page === "jobs" || !catalog) return <JobsPage caps={caps} catalog={catalog} />;
+  // Wave 7b section 8.1: the one Pipelines page, which the section opens on; the old Catalog and Runs addresses draw it too
+  return (
+    <section className="pipelines">
+      <div className="data-head">
+        <div className="grow">
+          <span className="eyebrow">Pipelines</span>
+          <h1>Pipelines</h1>
+          <p className="lede">What this engine can run, the workflows that chain it, and every run.</p>
+        </div>
+        <div className="row">
+          <AddWorkflowButton
+            caps={caps}
+            onDone={(w) => {
+              setAdded((n) => n + 1);
+              setSaid(w);
+            }}
+          />
           {setupActs(caps).add && (
             <button type="button" className="button" onClick={() => setAdding(true)}>
               <Icon name="plus" />
@@ -113,37 +156,21 @@ export function PipelinesPage({ caps, page = null, arg = null, query }: { caps: 
             </button>
           )}
         </div>
-        {said && <p className="meta">{said}</p>}
-        <CatalogPage key={added} caps={caps} onQueued={setSaid} part="catalog" />
-        {adding && (
-          <AddPipelineDialog
-            onClose={() => setAdding(false)}
-            onDone={(w) => {
-              setAdding(false);
-              setAdded((n) => n + 1);
-              setSaid(w);
-            }}
-          />
-        )}
-      </section>
-    );
-  }
-  // spec 13.1: the runs are a page of their own in the side
-  if (page === "runs" && arg === null && catalog) {
-    return (
-      <section className="pipelines">
-        <div className="data-head">
-          <div className="grow">
-            <span className="eyebrow">Pipelines</span>
-            <h1>Runs</h1>
-          </div>
-        </div>
-        {said && <p className="meta">{said}</p>}
-        <CatalogPage caps={caps} onQueued={setSaid} part="runs" />
-      </section>
-    );
-  }
-  return <JobsPage caps={caps} catalog={catalog} />;
+      </div>
+      {said && <p className="meta">{said}</p>}
+      <CatalogPage key={added} caps={caps} onQueued={setSaid} />
+      {adding && (
+        <AddPipelineDialog
+          onClose={() => setAdding(false)}
+          onDone={(w) => {
+            setAdding(false);
+            setAdded((n) => n + 1);
+            setSaid(w);
+          }}
+        />
+      )}
+    </section>
+  );
 }
 
 

@@ -14,7 +14,10 @@
 // Under the filter, how many scans it leaves, and keeping them as a
 // selection or a cohort (Keep.tsx). Review round 1 (record 56 section 6.3,
 // DR3): under a scan that needs a look, its question with the grid's mark
-// and keys (1, 2, 0, - and Enter), answered for this scan alone.
+// and keys (1, 2, 0, - and Enter), answered for this scan alone. Wave 7b
+// (section 8.6): under the scan, Provenance opens the panel of the stack's
+// steps and results with their curation state, and Session provenance its
+// session's.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -27,6 +30,8 @@ import type { Where } from "../review/questions";
 import { ModeSwitch, NamesSwitch, type Go } from "./Grid";
 import { KeepActions } from "./Keep";
 import { browserKept } from "./keep";
+import { ProvenanceButton } from "../ops/Provenance";
+import { scanProvenance } from "../ops/workflows";
 import { markOpen, ScanViewer } from "./ScanViewer";
 import { needsLook, questionWords, type Scan, type ScanPage } from "./scans";
 import "./datasetView.css";
@@ -497,6 +502,8 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
                     needs a look
                   </a>
                 )}
+                {caps && <ProvenanceButton caps={caps} kind="stack" id={scanProvenance(scan).stack.id} className="dview-fact dview-prov" />}
+                {caps && scanProvenance(scan).session && <ProvenanceButton caps={caps} kind="session" id={scanProvenance(scan).session!.id} label="Session provenance" className="dview-fact dview-prov" />}
                 <span className="grow" />
                 <span className="dview-keys" aria-hidden="true">
                   ↑↓ images · ←→ scans · 3 three planes{grid ? " · g grid" : ""} · Esc back

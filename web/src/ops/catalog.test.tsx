@@ -149,12 +149,14 @@ describe("the catalog page", () => {
     expect(html).toContain("proposals on body_part");
     expect(html).toMatch(/<button type="button" class="button" disabled="">Run<\/button>/u);
   });
-  // record 55 H2, round 4: the side carries Jobs, Catalog and Runs (sections.test.ts); the page draws no tabs of them
-  it("opens the Catalog and the Runs as pages of their own only where the engine serves the catalog", () => {
-    const jobs = renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} />);
-    expect(jobs).not.toContain('class="chips pages"');
-    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} page="catalog" />)).toContain("<h1>Catalog</h1>");
-    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} page="runs" />)).toContain("<h1>Runs</h1>");
+  // Wave 7b section 8.1: Catalog and Runs are one Pipelines page with no tabs, which the section opens on where the engine serves the catalog; the jobs are a page beside it
+  it("opens the one Pipelines page where the engine serves the catalog, and the jobs otherwise", () => {
+    const home = renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} />);
+    expect(home).toContain("<h1>Pipelines</h1>");
+    expect(home).not.toContain('class="chips pages"');
+    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} page="jobs" />)).toContain("<h1>Jobs</h1>");
+    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} page="catalog" />)).toContain("<h1>Pipelines</h1>");
+    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(DOORS, ["pipelines:see"])} page="runs" />)).toContain("<h1>Pipelines</h1>");
     expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(["GET /api/jobs"], ["pipelines:see"])} page="runs" />)).toContain("<h1>Jobs</h1>");
     // an address to the catalog on an engine without it opens the jobs
     expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(["GET /api/jobs"], ["pipelines:see"])} page="catalog" />)).toContain("<h1>Jobs</h1>");

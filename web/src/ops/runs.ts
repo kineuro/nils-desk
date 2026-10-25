@@ -14,6 +14,7 @@ import { door as served } from "../deployment";
 import { may, sees } from "../grants";
 import { roleWord } from "../review/mainScans";
 import { mainOfSpec, offered, selectOf, type Over, type Pipeline } from "./catalog";
+import type { Curation } from "./client";
 import { personBody, type PersonAsk } from "./pack";
 import { failureOf, firstSentence, requirementsOf, SLICE, type Failure, type Requirement } from "./failure";
 
@@ -155,6 +156,20 @@ export interface UnitRun {
   keys?: { comparability: string | null; result: string | null } | null;
   /** The facts each part of the comparability key was made of, where the engine gives them. */
   key_members?: unknown;
+  /** Wave 7b section 7: the family a family run routed the unit under, with its digest. */
+  family?: { name?: string | null; digest?: string | null } | null;
+  /** Wave 7b section 8.5: the run whose kept result this unit took instead of running, and the engine's words for it. */
+  reused_from?: number | null;
+  words_reused?: string | null;
+  /** Wave 7b section 8.4: `run`, judged at the run's start; `start`, a chained unit judged again as the step before released it, `forecast` keeping the judgement it replaced. */
+  judged_at?: string | null;
+  forecast?: { judged_at?: string | null; status?: string | null; words?: string | null; caveats?: unknown[] | null; knobs?: unknown; facts?: unknown } | null;
+  /** The optional typed inputs a workflow's link fed nothing for, each with why. */
+  fed?: Record<string, string> | null;
+  /** Why no kept result was reused where one was looked for. */
+  reuse?: { considered?: { run?: number | null; unit?: string | null; reused?: boolean | null; why?: string | null }[] | null } | null;
+  /** Record 58 P5: the curation state of the unit's result at detail quasi and above; null below. */
+  curation?: Curation | null;
 }
 
 export interface Breach {

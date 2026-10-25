@@ -42,6 +42,8 @@ import { RunSeeds } from "./PipelineRuntime";
 import { seedsSuggested } from "./pipelineSetup";
 import { foundByWords } from "./tools";
 import { drawable, fileName, filesByUnit, shortName, sizeWords, viewActs } from "./results";
+import { ProvenanceButton } from "./Provenance";
+import { provenanceOf, unitNotes, workflowActs } from "./workflows";
 import {
   allPassed,
   breachesByCheck,
@@ -290,7 +292,10 @@ export function RunView(props: {
   const viewOf = (unit: string | null) => (views && unit && byUnit?.get(unit)?.some(drawable) ? narrow(href("pipelines", "runs", String(r.id)), { view: unit }) : null);
   // Wave 7b: units a pack judged carry their comparability key
   const keyed = units.some((u) => u.keys?.comparability);
-  const cols = 5 + (views ? 1 : 0) + (keyed ? 1 : 0);
+  // Wave 7b section 8.6: Provenance on a unit the engine names
+  const prov = workflowActs(caps).provenance && units.some((u) => provenanceOf(u.unit) !== null);
+  const actsCol = views || prov;
+  const cols = 5 + (actsCol ? 1 : 0) + (keyed ? 1 : 0);
   const unitCells = totals
     ? [
         { k: "units", v: words && !running ? words.head : total > 0 ? `${n(totals.over)} of ${n(total)} over` : "none yet" },
@@ -493,7 +498,7 @@ export function RunView(props: {
                 <th>On</th>
                 <th className="num">Ended</th>
                 {keyed && <th>Key</th>}
-                {views && <th className="acts" />}
+                {actsCol && <th className="acts" />}
               </tr>
             </thead>
             <tbody>
@@ -506,7 +511,8 @@ export function RunView(props: {
                 // Wave 7b: the pack's status word and words, who chose each knob, the caveats, the flags
                 const said = packWords(u);
                 const knobs = Object.entries(u.knobs ?? {});
-                const extra = knobs.length > 0 || (u.caveats ?? []).length > 0 || said.words !== null || (u.cohort_checks ?? []).some((c) => c.status === "flagged" || c.status === "not yet");
+                const extra = knobs.length > 0 || (u.caveats ?? []).length > 0 || said.words !== null || (u.cohort_checks ?? []).some((c) => c.status === "flagged" || c.status === "not yet") || unitNotes(u).length > 0;
+                const of = prov ? provenanceOf(u.unit) : null;
                 return (
                   <Fragment key={u.unit ?? `u${i}`}>
                     <tr className={f || lacks || said.status === "dropped" ? "has-fail" : undefined}>
@@ -524,13 +530,14 @@ export function RunView(props: {
                           {keyShort(u.keys?.comparability)}
                         </td>
                       )}
-                      {views && (
+                      {actsCol && (
                         <td className="acts">
                           {view && (
                             <a className="button secondary small" href={view} aria-label={`View ${u.unit}`}>
                               View
                             </a>
                           )}
+                          {of && <ProvenanceButton caps={caps} kind={of.kind} id={of.id} />}
                         </td>
                       )}
                     </tr>
@@ -541,7 +548,7 @@ export function RunView(props: {
                         </td>
                       </tr>
                     )}
-                    {extra && !(lacks && said.status === "skipped" && knobs.length === 0) && (
+                    {extra && !(lacks && said.status === "skipped" && knobs.length === 0 && unitNotes(u).length === 0) && (
                       <tr className="made-row unit-pack-row">
                         <td colSpan={cols}>
                           <UnitPack u={u} said={said} skippedShown={lacks !== null} name={name} pack={pack} />
@@ -587,7 +594,7 @@ export function RunView(props: {
   );
 }
 
-/** A unit as its pack judged it: the pack's words, each knob with who chose it, the caveats, the flags and the cohort checks. */
+/** A unit as its pack judged it: the pack's words, each knob with who chose it, the caveats, the notes of Wave 7b sections 8.4 to 8.6 (the member and rule of a family run, a result reused from another run, a judgement made as the unit started against its forecast, inputs fed by no step, why nothing was reused, the curation state), the flags and the cohort checks. */
 export function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; said: ReturnType<typeof packWords>; skippedShown: boolean; name: (p: string) => string; pack: PackView | null }) {
   const knobs = Object.entries(u.knobs ?? {});
   const cohort = (u.cohort_checks ?? []).filter((c) => c.status === "flagged" || c.status === "not yet");
@@ -609,6 +616,17 @@ export function UnitPack({ u, said, skippedShown, name, pack }: { u: UnitRun; sa
           {c.words}
         </span>
       ))}
+      {unitNotes(u).map((note, i) =>
+        note.href ? (
+          <a key={`n${i}`} className={`unit-note ${note.tone} ${note.kind}`} href={note.href} title={note.title ?? undefined}>
+            {note.words}
+          </a>
+        ) : (
+          <span key={`n${i}`} className={`unit-note ${note.tone} ${note.kind}`} title={note.title ?? undefined}>
+            {note.words}
+          </span>
+        ),
+      )}
       {said.status !== "flagged" && said.status !== "dropped" &&
         (u.flags ?? []).map((f, i) => (
           <span key={`f${i}`} className="unit-flag" title={f.source ?? undefined}>

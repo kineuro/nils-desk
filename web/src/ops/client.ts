@@ -316,3 +316,261 @@ export const packs = {
   /** A run's numbers, grouped by comparability key. */
   numbers: (run: number) => typed<RunNumbers>("GET", `/api/pipeline-runs/${run}/numbers`),
 };
+
+/* ---------------------------------------------------------------- Wave 7b: families, workflows and provenance */
+// The doors of record 57 P6 to P8 and record 58 P5 (Wave 7b spec, sections 7
+// and 8), as the engine's openapi v7 describes them: a family as one catalog
+// row that opens to its members, the workflow catalog, a workflow's plan and
+// run, the workflow runs, and the provenance of a subject, a session or a
+// stack with each result's curation state.
+
+/** One member of a family: a pipeline of its own behind the family's row. */
+export interface FamilyMember {
+  member: string;
+  pipeline: string;
+  method?: string | null;
+  words?: string | null;
+  pipeline_id: number | null;
+  label?: string | null;
+  level?: string | null;
+  standing?: string | null;
+  tasks?: string[] | null;
+}
+
+/** A family as `GET /api/pipelines/family/{name}` answers it, and as `GET /api/pipelines` lists it under `families`. */
+export interface Family {
+  family: true;
+  name: string;
+  version?: string | null;
+  words?: string | null;
+  digest?: string | null;
+  roles?: string[] | null;
+  goals?: { goal?: string[] | null; switches?: Record<string, unknown[]> | null } | null;
+  tasks?: Record<string, { level?: string | null; words?: string | null; members?: string[] | null }> | null;
+  members: FamilyMember[];
+  rules?: { id: string; when?: string | null; route?: string | null; why?: string | null; source?: string | null }[] | null;
+  added_by?: string | null;
+  added_at?: string | null;
+}
+
+/** One step of a workflow document: a pipeline or a family, its version, goal, the knobs a person may set and its switches. */
+export interface WorkflowStepDoc {
+  id: string;
+  of?: string | null;
+  name?: string | null;
+  version?: string | null;
+  reference?: string | null;
+  pipeline?: string | null;
+  family?: string | null;
+  goal?: string | null;
+  knobs?: string[] | null;
+  switches?: Record<string, unknown> | null;
+}
+
+/** The workflow document as the catalog holds it (contracts/workflow/v1). */
+export interface WorkflowDoc {
+  name: string;
+  title?: string | null;
+  what?: string | null;
+  replaces?: unknown;
+  steps: WorkflowStepDoc[];
+  links: { from: string; to: string }[];
+}
+
+/** One workflow version of `GET /api/workflows`. */
+export interface WorkflowRow {
+  id: number;
+  name: string;
+  version: string;
+  label: string;
+  digest?: string | null;
+  state?: string | null;
+  added_by?: string | null;
+  added_at?: string | null;
+  /** starter for a shipped one. */
+  origin?: string | null;
+  contract?: string | null;
+  workflow: WorkflowDoc;
+}
+
+/** The verdicts a plan gives each link (spec 8.3). */
+export type LinkVerdict = "satisfied" | "missing" | "redundant" | "refused" | "fed";
+
+/** An output's or an input's type: its derivative kind, the role and contrast it stands for, and the grid or space it is on. */
+export interface LinkType {
+  kind?: string | null;
+  role?: string | null;
+  contrast?: string | null;
+  grid?: string | null;
+  space?: string | null;
+}
+
+export interface PlanLink {
+  link?: string | null;
+  /** Null for an implicit link: a need no step feeds. */
+  from: { step?: string | null; output?: string | null; pipeline?: string | null; type?: LinkType | null } | null;
+  to: { step: string; input?: string | null; pipeline?: string | null; type?: LinkType | null };
+  verdict: LinkVerdict | string;
+  words?: string | null;
+  implicit?: boolean | null;
+}
+
+export interface PlanStep {
+  step: string;
+  of?: string | null;
+  name?: string | null;
+  reference?: string | null;
+  /** The pipeline's label, or the family's name for a family step. */
+  pipeline?: string | null;
+  pipeline_id?: number | null;
+  goal?: string | null;
+  switches?: Record<string, unknown> | null;
+  knobs?: Record<string, unknown> | string[] | null;
+  /** Why the step cannot run: a family or a pipeline the catalog lacks, a goal or switch the family does not offer. */
+  refused?: string | null;
+  waits_for?: string[] | null;
+  /** The steps it waits for whole: those whose link feeds a typed input or a role of it. */
+  waits_whole?: string[] | null;
+  /** The pre-flight door's answer for the step, or a family step's routing. */
+  preflight?: Json | null;
+  family?: string | null;
+  members?: { member: string; pipeline: string; pipeline_id?: number | null }[] | null;
+}
+
+/** `POST /api/workflows/{id}/plan`'s answer. */
+export interface WorkflowPlan {
+  workflow: string;
+  workflow_id: number;
+  name?: string | null;
+  version?: string | null;
+  handle?: number | null;
+  selection?: string | null;
+  main?: Json | null;
+  person?: Json | null;
+  steps: PlanStep[];
+  links: PlanLink[];
+  verdicts?: Record<string, number> | null;
+  runnable: boolean;
+  words?: string | null;
+}
+
+/** The body a plan and a run take: the scope as the pipelines door takes it, the goal, and the knobs per step. */
+export interface PlanBody {
+  select?: string;
+  handle?: number;
+  pack?: string;
+  goal?: string;
+  knobs?: Record<string, Record<string, string>>;
+}
+
+/** A step's unit counts, as a workflow run sums them. */
+export interface StepUnits {
+  total?: number | null;
+  succeeded?: number | null;
+  failed?: number | null;
+  skipped?: number | null;
+  reused?: number | null;
+  unreported?: number | null;
+}
+
+export interface WorkflowRunStep {
+  step: string;
+  id?: string | null;
+  of?: string | null;
+  name?: string | null;
+  reference?: string | null;
+  pipeline?: string | null;
+  pipeline_id?: number | null;
+  /** The step's pipeline run, once it claimed one. */
+  run: number | null;
+  /** queued, running, done, partial, failed, cancelled, interrupted, refused or skipped. */
+  status: string;
+  units?: StepUnits | null;
+  error?: string | null;
+  finished_at?: string | null;
+  waits_for?: string[] | null;
+  waits_whole?: string[] | null;
+}
+
+/** One workflow run of `GET /api/workflow-runs`. */
+export interface WorkflowRun {
+  id: number;
+  workflow: string;
+  workflow_id: number;
+  job: number | null;
+  handle?: number | null;
+  selection?: string | null;
+  person?: Json | null;
+  /** running, done, partial, failed, cancelled or interrupted. */
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  steps: WorkflowRunStep[];
+  summary?: { steps?: number | null; units?: StepUnits | null; steps_done?: number | null; steps_total?: number | null } | null;
+  principal?: string | null;
+  error?: string | null;
+}
+
+/** A result's curation state (record 58 P5): current, stale with the words every door says, or unknown. */
+export interface Curation {
+  state: "current" | "stale" | "unknown" | string;
+  words?: string | null;
+  recorded?: Json | null;
+  changes?: { pack?: string | null; was?: string | null; now?: string | null }[] | null;
+  overrides_now?: unknown;
+}
+
+export interface ProvenanceStep {
+  run: number;
+  pipeline: string;
+  pipeline_id?: number | null;
+  run_status?: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  workflow_run?: number | null;
+  step?: string | null;
+  /** Null below detail quasi. */
+  unit: string | null;
+  state?: string | null;
+  status?: string | null;
+  reused_from?: number | null;
+  keys?: { comparability?: string | null; result?: string | null; short?: string | null; members?: unknown } | null;
+  knobs?: Record<string, { value: unknown; by: string; rule?: string | null }> | null;
+  caveats?: unknown[] | null;
+  flags?: unknown[] | null;
+  pack_status?: string | null;
+  words?: string | null;
+  results?: {
+    derivatives?: { id: number; kind: string; path?: string | null; sha256?: string | null; check?: string | null; run?: number | null; created_at?: string | null }[] | null;
+    measures?: unknown;
+    /** The run the files and measures were read from, where this unit reused them. */
+    from_run?: number | null;
+  } | null;
+  stacks?: number[] | null;
+  curation?: Curation | null;
+}
+
+/** `GET /api/provenance/{kind}/{id}`'s answer. */
+export interface Provenance {
+  of: { kind: string; id: string | number; subject?: number | null; session?: string | null };
+  stacks?: number[] | null;
+  steps: ProvenanceStep[];
+  counts?: { steps?: number | null; stale?: number | null; unknown?: number | null } | null;
+  stale_words?: string | null;
+  withheld?: { steps?: number | null; why?: string | null } | null;
+}
+
+export const workflows = {
+  list: () => typed<{ workflows: WorkflowRow[]; names?: unknown[] }>("GET", "/api/workflows"),
+  of: (id: number | string) => typed<WorkflowRow>("GET", `/api/workflows/${encodeURIComponent(String(id))}`),
+  /** The document's text or JSON; install:work. */
+  add: (document: string) => typed<WorkflowRow & { added: boolean }>("POST", "/api/workflows", { document }),
+  plan: (id: number | string, body: PlanBody) => typed<WorkflowPlan>("POST", `/api/workflows/${encodeURIComponent(String(id))}/plan`, body),
+  run: (id: number | string, body: PlanBody) =>
+    typed<{ job: number; state: string; workflow: string; workflow_id: number; handle?: number | null; plan?: Record<string, number> | null; message?: string | null }>("POST", `/api/workflows/${encodeURIComponent(String(id))}/run`, body),
+  runs: () => typed<{ runs: WorkflowRun[] }>("GET", "/api/workflow-runs"),
+  runOf: (id: number) => typed<WorkflowRun>("GET", `/api/workflow-runs/${id}`),
+  family: (name: string) => typed<Family>("GET", `/api/pipelines/family/${encodeURIComponent(name)}`),
+  /** kind is subject, session or stack; a session's id is <subject id>@<session label>. */
+  provenance: (kind: "subject" | "session" | "stack", id: string) => typed<Provenance>("GET", `/api/provenance/${kind}/${encodeURIComponent(id)}`),
+};
