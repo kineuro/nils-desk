@@ -9,7 +9,7 @@ import type { Place } from "../objects/client";
 import type { Backups } from "../settings/database";
 import type { Install } from "../settings/supervise";
 import { backupFolderRefusal, dataIn, minimumMet, openWords, progressWords, ready, setupSteps } from "./setup";
-import type { Facts } from "./steps";
+import { steps, type Facts } from "./steps";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
   return {
@@ -71,9 +71,16 @@ describe("setup's steps", () => {
   });
 
   it("hold DICOM once the registry holds stacks, digested from the command line with no source place, and not an empty registry without one", () => {
-    expect(by(facts({ stacks: 3200 }), "sources")).toMatchObject({ met: true, tone: "ok", words: "3,200 stacks came in from the command line. A root folder can still be added." });
+    expect(by(facts({ stacks: 3200 }), "sources")).toMatchObject({ met: true, tone: "ok", words: "3,200 stacks are in the registry. A root folder can still be added." });
     expect(by(facts({ stacks: 0 }), "sources").met).toBe(false);
     expect(by(facts({ stacks: null }), "sources").met).toBe(false);
+    // a dataset place under a root is not a root: with no stacks both models read it as no root folder yet, with stacks both as data in
+    const under = { ...place(3, "under", "source", "/srv/incoming/one"), dataset: { kind: "dataset" as const, root: "/srv/incoming" } } as Place;
+    const withUnder = [...registryAndBackups, under];
+    expect(by(facts({ places: withUnder }), "sources").met).toBe(false);
+    expect(steps(facts({ places: withUnder }), now).find((s) => s.id === "dicom")?.state).toBe("now");
+    expect(by(facts({ places: withUnder, stacks: 0 }), "sources").met).toBe(false);
+    expect(by(facts({ places: withUnder, stacks: 7 }), "sources")).toMatchObject({ met: true, words: "7 stacks are in the registry. A root folder can still be added." });
     expect(dataIn(3200)).toBe(true);
     expect(dataIn(0)).toBe(false);
     expect(dataIn(null)).toBe(false);

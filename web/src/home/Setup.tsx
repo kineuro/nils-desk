@@ -66,7 +66,7 @@ async function finished(id: number, limitMs = 60 * 60_000): Promise<JobRow> {
   throw new Error("It is still running; the Backups page shows its archive once it is done.");
 }
 
-export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities; install: Install | null; onChanged: () => void; onHome?: () => void }) {
+export function Setup({ caps, install, onChanged }: { caps: Capabilities; install: Install | null; onChanged: () => void }) {
   const places = useKept(placesKept);
   const archives = useKept(backupsKept);
   const summary = useKept(summaryKept);
@@ -75,12 +75,15 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
   const readsBackups = may(caps, "database:see");
   const placesServed = served(caps, "GET /api/places");
 
-  const load = useCallback(() => {
+  const load = useCallback((again: boolean) => {
     const has = (d: string) => served(caps, d);
     if (has("GET /api/places")) void placesKept.refresh().catch(() => undefined);
     if (readsBackups && has("GET /api/backups")) void backupsKept.refresh().catch(() => undefined);
-    // the stacks the registry holds: brought in from the command line, they count without a source place (agenda 3.8)
-    if (has("GET /api/summary")) void summaryKept.refresh().catch(() => undefined);
+    // the stacks the registry holds (agenda 3.8): the shell reads them once, and only an action can change them
+    if (has("GET /api/summary")) {
+      if (again) void summaryKept.refresh().catch(() => undefined);
+      else summaryKept.ensure();
+    }
     void Promise.all([
       has("GET /api/batches") ? quietly(data.batches(1000)).then((r) => r?.count ?? null) : null,
       has("GET /api/jobs")
@@ -93,7 +96,7 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
   }, [caps, readsBackups]);
 
   useEffect(() => {
-    load();
+    load(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- read once when the page opens; each action reads again
   }, []);
 
@@ -106,7 +109,7 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
   const needed = all.filter((s) => s.required);
   const reading = placesServed && places.value === null && !places.error;
   const changed = () => {
-    load();
+    load(true);
     onChanged();
   };
 
@@ -132,15 +135,9 @@ export function Setup({ caps, install, onChanged, onHome }: { caps: Capabilities
         <span className="eyebrow">Get started</span>
         <div className="row setup-title">
           <h1>{done ? "NILS is ready" : "Set up NILS"}</h1>
-          {done && onHome && (
-            <button type="button" className="button" onClick={onHome}>
-              Open Home
-              <Icon name="arrow" />
-            </button>
-          )}
         </div>
         {openLine !== null && !reading && (
-          <a className="setup-line" href={href("home")} onClick={onHome}>
+          <a className="setup-line" href={href("home")}>
             <Icon name="check" />
             <span className="grow">{openLine}</span>
             <span className="setup-line-go">Home</span>

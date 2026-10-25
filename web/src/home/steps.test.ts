@@ -122,9 +122,12 @@ describe("the band as the install moves on", () => {
     expect(lede(all)).toBe("Five steps make this install ready for real work. Two are done.");
   });
   it("is done once the registry holds stacks digested from the command line, with no root folder named", () => {
-    expect(steps({ ...fresh, stacks: 12480 }).find((s) => s.id === "dicom")).toMatchObject({ state: "done", words: "12,480 stacks came in from the command line. A root folder can still be added." });
-    expect(steps({ ...fresh, stacks: 1 }).find((s) => s.id === "dicom")?.words).toBe("1 stack came in from the command line. A root folder can still be added.");
+    expect(steps({ ...fresh, stacks: 12480 }).find((s) => s.id === "dicom")).toMatchObject({ state: "done", words: "12,480 stacks are in the registry. A root folder can still be added." });
+    expect(steps({ ...fresh, stacks: 1 }).find((s) => s.id === "dicom")?.words).toBe("1 stack is in the registry. A root folder can still be added.");
     expect(steps({ ...fresh, stacks: 0 }).find((s) => s.id === "dicom")?.state).toBe("now");
+    // a retired root says nothing of how the data came in
+    const retired = { ...place("old", "source", "/srv/old", "/srv"), retired_at: "2026-09-01T00:00:00Z" };
+    expect(steps({ ...fresh, stacks: 40, places: [...fresh.places!, retired] }).find((s) => s.id === "dicom")?.words).toBe("40 stacks are in the registry. A root folder can still be added.");
     // a named root says its name, whatever came in before it
     const f = { ...fresh, stacks: 12480, places: [...fresh.places!, place("incoming", "source", "/srv/imaging/incoming", "/srv")] };
     expect(steps(f).find((s) => s.id === "dicom")?.words).toBe("incoming");

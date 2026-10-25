@@ -28,27 +28,42 @@ const card = (page: Page, title: string) => page.locator("li.setup-card").filter
 const side = (page: Page, title: string) => page.locator("#side").getByText(title, { exact: true });
 
 for (const vp of SIZES) {
-  test(`at ${vp.name} px a registry digested from the command line holds the root-folder step, lists the two steps left and opens Home`, async ({ page }) => {
+  test(`at ${vp.name} px a registry digested from the command line opens on Home, keeps Setup in Settings and says nobody signs in`, async ({ page }) => {
     await page.setViewportSize(vp);
     await page.goto("/setup.html#home");
+    await expect(page.locator("h1")).toHaveText("What NILS holds, and what needs you");
+    const banner = page.locator(".banner");
+    await expect(banner).toContainText("Nobody signs in: anyone who reaches this address can do everything.");
+    await expect(banner.locator('a[href$="settings/people"]')).toHaveText("Decide who signs in.");
+    // the side is the whole desk's and its Home opens Home
+    await expect(side(page, "Review")).toBeAttached();
+    await expect(side(page, "Data")).toBeAttached();
+    await expect(side(page, "Get started")).toHaveCount(0);
+    await shot(page, `setup-data-home-${vp.name}`);
+    await noSideways(page, vp.width);
+    // Settings > Setup keeps the page
+    await page.goto("/setup.html#settings/setup");
     await expect(page.locator("h1")).toHaveText("Set up NILS");
     const folder = card(page, "Add a root folder");
     await expect(folder).toContainText("done");
-    await expect(folder).toContainText("12,480 stacks came in from the command line. A root folder can still be added.");
+    await expect(folder).toContainText("12,480 stacks are in the registry. A root folder can still be added.");
     await expect(card(page, "Keep the registry safe")).toContainText("needed");
     await expect(card(page, "Decide who signs in")).toContainText("needed");
     await expect(page.locator(".progress-row .meta")).toHaveText("2 of the 4 steps the desk needs are done.");
+    await expect(page.locator(".banner")).toContainText("Nobody signs in");
     const line = page.locator("a.setup-line");
     await expect(line).toContainText("Your data is in. Review, Browse and the viewer are open.");
-    await expect(line).toContainText("Home");
-    // the side is the whole desk's
-    await expect(side(page, "Review")).toBeAttached();
-    await expect(side(page, "Data")).toBeAttached();
     await shot(page, `setup-data-${vp.name}`);
     await noSideways(page, vp.width);
+    // the in-page line lands on Home
     await line.click();
     await expect(page.locator("h1")).toHaveText("What NILS holds, and what needs you");
-    await shot(page, `setup-data-home-${vp.name}`);
+    // and so does the side's Home, from the setup page
+    await page.goto("/setup.html#settings/setup");
+    await expect(page.locator("h1")).toHaveText("Set up NILS");
+    if (vp.width < 700) await page.getByRole("button", { name: "Sections" }).click();
+    await page.locator("#side").getByRole("link", { name: "Home", exact: true }).click();
+    await expect(page.locator("h1")).toHaveText("What NILS holds, and what needs you");
   });
 
   test(`at ${vp.name} px an empty registry with no source place needs the root folder and holds the desk`, async ({ page }) => {
@@ -62,6 +77,7 @@ for (const vp of SIZES) {
     await expect(page.locator("a.setup-line")).toHaveCount(0);
     await expect(side(page, "Review")).toHaveCount(0);
     await expect(side(page, "Get started")).toBeAttached();
+    await expect(page.locator(".banner")).toContainText("Nobody signs in");
     await shot(page, `setup-empty-${vp.name}`);
     await noSideways(page, vp.width);
   });

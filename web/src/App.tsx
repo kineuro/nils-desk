@@ -28,7 +28,7 @@ import { may } from "./grants";
 import { Home } from "./home/Home";
 import { PlaceholderPage } from "./home/Placeholder";
 import { PLACEHOLDERS } from "./home/placeholders";
-import { dataIn, ready as readyToStart } from "./home/setup";
+import { dataIn, ready as readyToStart, signinOpen } from "./home/setup";
 import { Setup } from "./home/Setup";
 import { placesKept, summaryKept } from "./objects/kept";
 import { ProfilePage } from "./profile/ProfilePage";
@@ -154,24 +154,18 @@ export function App() {
     const t = setInterval(() => chatsKept.refresh().catch(() => undefined), 60_000);
     return () => clearInterval(t);
   }, [talking]);
-  // a read that failed does not hold the desk back
+  // a read that failed does not hold the desk back; Home never waits for the summary
   const stacks = readsSummary ? (summary.value?.stacks.total ?? null) : null;
   const stepsSay: boolean | null =
     known === null || !readsPlaces || (places.error !== null && places.value === null)
       ? true
       : readsBackups && archives.value === null && archives.error === null
         ? null
-        : readyToStart(known, install, places.value?.places ?? null, readsBackups ? archives.value : null, stacks);
-  // the summary is waited for only where it can change the answer: an install short of a step may hold data from the command line
-  const setupReady: boolean | null = stepsSay === false && readsSummary && summary.value === null && summary.error === null ? null : stepsSay;
-  // the rest of the desk opens once setup is done, or as soon as data is in: Review, Browse and the viewer work on it
+        : readyToStart(known, install, places.value?.places ?? null, readsBackups ? archives.value : null);
+  const setupReady: boolean | null = stepsSay;
+  // the rest of the desk opens once setup is done, or as soon as the summary says data is in: Review, Browse and the viewer work on it
+  // (the summary is read beside the page and flips this; nothing waits for it)
   const deskOpen: boolean | null = setupReady !== false ? setupReady : dataIn(stacks);
-  // a person who landed on setup stays there until they open Home; the page itself offers Home once the desk is open
-  const [landed, setLanded] = useState(false);
-  const [left, setLeft] = useState(false);
-  useEffect(() => {
-    if (setupReady === false) setLanded(true);
-  }, [setupReady]);
 
   if (load.kind === "loading") return <main className="state lone">Reaching the desk</main>;
   if (load.kind === "failed") return <main className="state lone">The desk did not answer: {load.why}</main>;
@@ -192,7 +186,10 @@ export function App() {
   const onProfile = ready && route.section === "profile";
   const active = onProfile ? null : ([...side, ...kept].find((s) => s.id === route.section) ?? side[0] ?? null);
   const inSettings = ready && active?.id === "settings";
-  const onSetup = ready && setsUp && !left && (setupReady === false || landed);
+  // the setup page lands the person only while data is not in; after that Home is Home, and Settings > Setup keeps the page
+  const onSetup = ready && setsUp && deskOpen === false;
+  // nobody signs in on an address the network reaches: said on every page, not only on setup
+  const openDoor = ready && setsUp && signinOpen(caps);
   const placeholder = active !== null && PLACEHOLDERS.some((p) => p.id === active.id && !p.built);
   const who = caps.person.display_name || caps.person.subject;
   // the dataset viewer (#data/datasets/NAME/view, #data/cohorts/NAME/view): the browser folds the side away
@@ -257,6 +254,11 @@ export function App() {
           The engine is ahead of this desk. Everything here still works; update the desk to see what the engine added.
         </div>
       )}
+      {openDoor && (
+        <div className="banner" role="note">
+          Nobody signs in: anyone who reaches this address can do everything. <a href={href("settings", "people")}>Decide who signs in.</a>
+        </div>
+      )}
       {slow !== null && (
         <div className="banner" role="status">
           The engine is slow to answer: nothing has come back since {new Date(slow).toLocaleTimeString()}. The page stays as it was and catches up when
@@ -301,7 +303,7 @@ export function App() {
             </section>
           )}
           {ready && active?.id === "home" && setsUp && setupReady === null && <p className="meta">Reading the install.</p>}
-          {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} onHome={deskOpen ? () => setLeft(true) : undefined} />}
+          {ready && active?.id === "home" && setupReady !== null && onSetup && <Setup caps={caps} install={install} onChanged={changed} />}
           {ready && active?.id === "home" && setupReady !== null && !onSetup && <Home caps={caps} install={install} />}
           {ready && active?.id === "assistant" && <AssistantPage caps={caps} conversation={route.page} />}
           {ready && active?.id === "data" && route.page === "batch" && route.arg !== null && /^\d+$/.test(route.arg) && <BatchPage caps={caps} id={Number(route.arg)} />}

@@ -97,15 +97,20 @@ function model(f: Facts): Step | null {
   return { id: "model", title, state: "attention", words: `Kvasir lists no model yet.${serve || " A model on another machine of yours, or a provider, can answer instead."}`, tags: [], halfway: false };
 }
 
+/** Whether the registry holds data: stacks digested, from a root folder or the command line. The one copy of this test. */
+export function dataIn(stacks: number | null | undefined): boolean {
+  return (stacks ?? 0) > 0;
+}
+
 function dicom(f: Facts): Step | null {
   if (f.places === null) return null;
   const title = "Add a root folder";
   // Wave 7a: a root is where the dataset folders live; its folders become datasets on the Data page
   const roots = f.places.filter((p) => p.role === "source" && p.retired_at === null && (isRoot(p) || !p.dataset?.root));
   if (roots.length > 0) return { id: "dicom", title, state: "done", words: roots.map((r) => r.name).join(", "), tags: [], halfway: false };
-  // a registry digested from the command line (nils digest) holds stacks and names no root: the step holds, and a root can still be added
+  // stacks in the registry and no live root (none named, one retired, or a place the roots filter leaves out): the step holds, and a root can still be added
   const stacks = f.stacks ?? 0;
-  if (stacks > 0) return { id: "dicom", title, state: "done", words: `${stacks.toLocaleString("en-GB")} ${stacks === 1 ? "stack" : "stacks"} came in from the command line. A root folder can still be added.`, tags: [], halfway: false };
+  if (dataIn(stacks)) return { id: "dicom", title, state: "done", words: `${stacks.toLocaleString("en-GB")} ${stacks === 1 ? "stack is" : "stacks are"} in the registry. A root folder can still be added.`, tags: [], halfway: false };
   return { id: "dicom", title, state: "now", words: "Where your dataset folders live.", tags: [], halfway: false };
 }
 

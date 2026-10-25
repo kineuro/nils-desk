@@ -12,6 +12,7 @@ import { may } from "../grants";
 import { href } from "../routes";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
+import { summaryKept } from "../objects/kept";
 import { useReads } from "../ui/kept";
 import { jobs as jobsDoor, type ChainedJob } from "./datasets";
 import { WorkersReady } from "../ops/WorkersReady";
@@ -40,6 +41,7 @@ export function useLiveJobs(caps: Capabilities): LiveJobs {
   const feed = useRef<LiveFeed | null>(null);
   const reads = served(caps, "GET /api/jobs");
   const streams = served(caps, "GET /api/events");
+  const summaryServed = served(caps, "GET /api/summary");
 
   // the failed jobs, read once at a time, and again right after a read out answers
   const failedRead = useReads(
@@ -64,7 +66,11 @@ export function useLiveJobs(caps: Capabilities): LiveJobs {
           .sort((a, b) => a - b)
           .join(",");
         // a job that left the open list may have failed: the failed ones are read again
-        if (openIds.current !== "" && openIds.current !== now) readFailed();
+        if (openIds.current !== "" && openIds.current !== now) {
+          readFailed();
+          // a digest or a bring-in that ended changed what the registry holds: the shell's summary is read again
+          if (openIds.current.split(",").some((id) => !now.split(",").includes(id)) && summaryServed) void summaryKept.refresh().catch(() => undefined);
+        }
         openIds.current = now;
         setOpen(jobs);
       },
