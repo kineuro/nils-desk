@@ -43,7 +43,7 @@ import { seedsSuggested } from "./pipelineSetup";
 import { foundByWords } from "./tools";
 import { drawable, fileName, filesByUnit, shortName, sizeWords, viewActs } from "./results";
 import { ProvenanceButton } from "./Provenance";
-import { provenanceOf, unitNotes, workflowActs, type UnitNote } from "./workflows";
+import { unitProvenance, unitNotes, workflowActs, type UnitNote } from "./workflows";
 import {
   allPassed,
   breachesByCheck,
@@ -293,7 +293,7 @@ export function RunView(props: {
   // Wave 7b: units a pack judged carry their comparability key
   const keyed = units.some((u) => u.keys?.comparability);
   // Wave 7b section 8.6: Provenance on a unit the engine names
-  const prov = workflowActs(caps).provenance && units.some((u) => provenanceOf(u.unit) !== null);
+  const prov = workflowActs(caps).provenance && units.some((u) => unitProvenance(u) !== null);
   const actsCol = views || prov;
   const cols = 5 + (actsCol ? 1 : 0) + (keyed ? 1 : 0);
   const unitCells = totals
@@ -513,7 +513,7 @@ export function RunView(props: {
                 const knobs = Object.entries(u.knobs ?? {});
                 const notes = unitNotes(u);
                 const extra = knobs.length > 0 || (u.caveats ?? []).length > 0 || said.words !== null || (u.cohort_checks ?? []).some((c) => c.status === "flagged" || c.status === "not yet") || notes.length > 0;
-                const of = prov ? provenanceOf(u.unit) : null;
+                const of = prov ? unitProvenance(u) : null;
                 return (
                   <Fragment key={u.unit ?? `u${i}`}>
                     <tr className={f || lacks || said.status === "dropped" ? "has-fail" : undefined}>

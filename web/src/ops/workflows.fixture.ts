@@ -232,6 +232,12 @@ export const FAMILY_UNITS: UnitRun[] = [
   unit("sub-13_ses-20260113", { pack_status: "routed", variant: { variant: "synthmorph", pipeline: "synthmorph@1", rule: "r2", why: "2D or slices over 2.5 mm" }, family: { name: "registration", digest: "a".repeat(64) }, curation: { state: "current" } }),
 ];
 
+/** A real run's units: named by subject code (hex) and session day, as the registry names them. */
+export const CODE_UNITS: UnitRun[] = [
+  unit("sub-1a9c46b76b0aa6e4_ses-20241119", { curation: { state: "current" } }),
+  unit("sub-0f3e22d9c1b47a85", { curation: { state: "current" } }),
+];
+
 export const RUN_41: RunDetail = {
   id: 41,
   pipeline_id: 5,
@@ -249,6 +255,9 @@ export const RUN_41: RunDetail = {
   summary: { units: { total: 4, succeeded: 3, failed: 0, skipped: 1 }, derivatives: 6, numbers: { checks: { declared: 0, breaches: 0, unchecked: 0 } } },
   made: { units: 4, made: 3, failed: 0, skipped: 1, left: 0, nothing: false, why: [{ status: "skipped", why: "no aligned FLAIR", units: 1 }], line: "3 of 4 made · 1 skipped: no aligned FLAIR" },
 } as unknown as RunDetail;
+
+/** Run 43: the samseg step over units named by subject code, as a real run's are. */
+export const RUN_43: RunDetail = { ...RUN_41, id: 43, units_run: CODE_UNITS, summary: { units: { total: 2, succeeded: 2 }, derivatives: 2 }, made: { units: 2, made: 2, failed: 0, skipped: 0, left: 0, nothing: false, why: [] } } as unknown as RunDetail;
 
 /** The provenance of one session: the four steps of workflow run 12, one stale, one reused, and one step withheld. */
 export const PROVENANCE: Provenance = {
