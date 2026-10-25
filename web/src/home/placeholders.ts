@@ -112,10 +112,9 @@ export const PLACEHOLDERS: Placeholder[] = [
     // record 55 H2, round 5: the jobs' logs where the engine keeps them (ops/logs.ts);
     // Models where the engine lists models (spec section 13.1), each page by its own grant
     pages: (caps) => [
-      ...(may(caps, "pipelines:see") && door(caps, "GET /api/jobs") ? [page("jobs", "Jobs", { to: href("pipelines") })] : []),
-      ...(may(caps, "pipelines:see") && door(caps, "GET /api/pipelines") ? [page("catalog", "Catalog", { also: ["plan"] })] : []),
-      // spec 13.1: the runs are a page of their own, and a run's page keeps it marked
-      ...(may(caps, "pipelines:see") && door(caps, "GET /api/pipelines") && door(caps, "GET /api/pipeline-runs") ? [page("runs", "Runs")] : []),
+      // Wave 7b section 8.1: one Pipelines page with no tabs, which the section opens on; a run's, a plan's, a workflow's and a workflow run's page keep it marked, and the old Catalog and Runs addresses lead to it
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/pipelines") ? [page("pipelines", "Pipelines", { to: href("pipelines"), also: ["catalog", "runs", "plan", "workflows", "workflow-runs"] })] : []),
+      ...(may(caps, "pipelines:see") && door(caps, "GET /api/jobs") ? [page("jobs", "Jobs", door(caps, "GET /api/pipelines") ? {} : { to: href("pipelines") })] : []),
       ...(may(caps, "pipelines:see") && logsOffered(caps) ? [page("logs", "Logs")] : []),
       ...(may(caps, "models:see") && door(caps, "GET /api/models") ? [page("models", "Models")] : []),
     ],

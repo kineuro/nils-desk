@@ -188,10 +188,10 @@ describe("the side's pages", () => {
       ["Releases", "#release"],
       ["New release", "#release/new"],
     ]);
+    // Wave 7b section 8.1: one Pipelines page, which the section opens on, with the jobs beside it
     expect(listed(side, "pipelines")).toEqual([
-      ["Jobs", "#pipelines"],
-      ["Catalog", "#pipelines/catalog"],
-      ["Runs", "#pipelines/runs"],
+      ["Pipelines", "#pipelines"],
+      ["Jobs", "#pipelines/jobs"],
       ["Models", "#pipelines/models"],
     ]);
     // Settings keeps its pages as they were, with the assistant's teaching under it for an administrator
@@ -236,12 +236,15 @@ describe("the page an address marks", () => {
     expect(mark("#pipelines/models")).toBe("Models");
     expect(mark("#pipelines/models/3")).toBe("Models");
     expect(mark("#release/new/spring")).toBe("New release");
-    expect(mark("#pipelines")).toBe("Jobs");
-    // a run's own page marks the runs, and a plan's the catalog it is opened from
-    expect(mark("#pipelines/runs")).toBe("Runs");
-    expect(mark("#pipelines/runs/3")).toBe("Runs");
+    expect(mark("#pipelines")).toBe("Pipelines");
+    expect(mark("#pipelines/jobs")).toBe("Jobs");
+    // a run's, a plan's, a workflow's and a workflow run's own page mark the Pipelines page they are opened from
+    expect(mark("#pipelines/runs")).toBe("Pipelines");
+    expect(mark("#pipelines/runs/3")).toBe("Pipelines");
+    expect(mark("#pipelines/workflows/1")).toBe("Pipelines");
+    expect(mark("#pipelines/workflow-runs/12")).toBe("Pipelines");
     expect(mark("#query/exports")).toBe("Exports");
-    expect(mark("#pipelines/plan/p-1")).toBe("Catalog");
+    expect(mark("#pipelines/plan/p-1")).toBe("Pipelines");
     expect(mark("#settings")).toBe("Overview");
     expect(mark("#settings/people")).toBe("People");
   });

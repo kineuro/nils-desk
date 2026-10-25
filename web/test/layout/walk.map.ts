@@ -11,6 +11,6 @@ export const MAP: Record<string, string[]> = {
   Data: ["Datasets and cohorts", "Browse", "Pseudonyms", "Clinical"],
   Review: ["Work", "Main scans", "Subjects", "Rules", "Rounds", "Label sets"],
   Release: ["Releases", "New release", "Session schemes"],
-  Pipelines: ["Jobs", "Catalog", "Runs", "Logs", "Models"],
+  Pipelines: ["Pipelines", "Jobs", "Logs", "Models"],
   Settings: ["Overview", "Parts", "Engine", "Desk", "Language models", "Assistant", "Teaching", "Places", "Backups", "People", "Audit", "Setup"],
 };

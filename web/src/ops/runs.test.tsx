@@ -371,8 +371,9 @@ describe("a run's page", () => {
     expect(on).toContain('<a href="#pipelines/runs/1">1</a>');
     const off = renderToStaticMarkup(<CatalogBody caps={capsWith(["GET /api/pipelines", "GET /api/pipeline-runs"], ["pipelines:see"])} pipelines={[VOLUMES]} capability={{ enabled: true }} runs={[row]} onRun={() => undefined} />);
     expect(off).not.toContain("#pipelines/runs/");
-    // an address to a run on an engine without the door opens the jobs
-    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(["GET /api/jobs", "GET /api/pipelines"], ["pipelines:see"])} page="runs" arg="1" />)).toContain("<h1>Jobs</h1>");
+    // an address to a run on an engine without the door opens the Pipelines page (Wave 7b section 8.1), and the jobs where there is no catalog
+    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(["GET /api/jobs", "GET /api/pipelines"], ["pipelines:see"])} page="runs" arg="1" />)).toContain("<h1>Pipelines</h1>");
+    expect(renderToStaticMarkup(<PipelinesPage caps={capsWith(["GET /api/jobs"], ["pipelines:see"])} page="runs" arg="1" />)).toContain("<h1>Jobs</h1>");
   });
   it("narrows the review queue to one run's items", () => {
     const items = [{ id: 1, kind: "pipeline:qc", ref: { run_id: 1 } }, { id: 2, kind: "pipeline:qc", ref: { run_id: 2 } }, { id: 3, kind: "classify.unsure", ref: {} }] as unknown as ReviewItem[];
@@ -476,7 +477,7 @@ describe("the assistant's plan", () => {
     const caps = capsWith(DOORS, [...WORK]);
     expect(plansOffered(caps)).toBe(false);
     expect(plansOffered({ ...caps, assistant: { stations: [{ id: "analysis-plan" }] } })).toBe(true);
-    expect(renderToStaticMarkup(<PipelinesPage caps={caps} page="plan" arg="r1" />)).toContain("<h1>Jobs</h1>");
+    expect(renderToStaticMarkup(<PipelinesPage caps={caps} page="plan" arg="r1" />)).toContain("<h1>Pipelines</h1>");
   });
 });
 

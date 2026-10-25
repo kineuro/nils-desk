@@ -14,7 +14,7 @@ import { Wait } from "../ui/Wait";
 import { addedWords, laneChange, laneWords, setup, setupActs, type Lane, type Secret } from "./pipelineSetup";
 
 /** Text typed, pasted or read from a file the person picks. */
-function TextOrFile({ id, value, placeholder, accept, onChange }: { id: string; value: string; placeholder: string; accept: string; onChange: (text: string) => void }) {
+export function TextOrFile({ id, value, placeholder, accept, onChange }: { id: string; value: string; placeholder: string; accept: string; onChange: (text: string) => void }) {
   return (
     <>
       <div className="input mono">

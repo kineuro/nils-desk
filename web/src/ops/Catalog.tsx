@@ -19,7 +19,11 @@
 // row says its newest run on one line, which opens it, and a run's whole row
 // in the Runs table opens its page. The assistant's plan is asked on the
 // Assistant page since (Nima: "the pipeline page should make user able to do
-// this manually"); its run still opens here filled in.
+// this manually"); its run still opens here filled in. Wave 7b (section
+// 8.1): Catalog and Runs are one Pipelines page with no tabs, the pipelines
+// and families (a family one row that opens to its members), the workflows,
+// and the runs going and done, pipeline and workflow runs together, newest
+// first; every row opens its own page by a click anywhere on it.
 
 import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -45,35 +49,62 @@ import { runTag } from "./made";
 import { lastRunOf, lastRunWords } from "./results";
 import { againOfRun, RunAgainDialog, type Again } from "./RunAgain";
 import { preflightGate, rangeWords, runActs, runs as runDoors, type Preflight } from "./runs";
-import { andWords, catalog, catalogActs, catalogRows, imageWords, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
+import { andWords, catalog, catalogActs, imageWords, type CatalogRow, needsOf, overWords, paramError, pipelineRoles, runCommand, runCounts, writesWords, type Capability, type LabelSet, type Over, type Pipeline, type Run } from "./catalog";
 import { roleWord } from "../review/mainScans";
 import { softwareHrefFor } from "../settings/software";
-import { packs } from "./client";
+import { packs, workflows, type Family, type WorkflowRow, type WorkflowRun } from "./client";
+import { familyLastRun, pageRows, runsTogether, runSums, stepOf, stepsLine, workflowActs, workflowHref, workflowRows, workflowRunHref, workflowRunTag } from "./workflows";
 import { packError, packView, personMaySet, personOf, setByWords, valueWords, type PackView } from "./pack";
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; pipelines: Pipeline[]; capability: Capability | null; runs: Run[] };
+type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; pipelines: Pipeline[]; families: Family[]; capability: Capability | null; runs: Run[]; workflows: WorkflowRow[]; workflowRuns: WorkflowRun[] };
 
-/** Which of the page's two lists is drawn: the catalog, the runs (spec 13.1: each its own page in the side), or both. */
-export type CatalogPart = "catalog" | "runs" | "both";
-
-export function CatalogPage({ caps, onQueued, part = "both" }: { caps: Capabilities; onQueued: (words: string) => void; part?: CatalogPart }) {
+/** The one Pipelines page (Wave 7b section 8.1): the pipelines and families, the workflows and the runs, read together; a run or a workflow added reads them again. */
+export function CatalogPage({ caps, onQueued }: { caps: Capabilities; onQueued: (words: string) => void }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const [running, setRunning] = useState<Pipeline | null>(null);
   const [again, setAgain] = useState<Again | null>(null);
+  // a read of the runs that failed while the page stands: said in its meta line, the page kept
+  const [slow, setSlow] = useState<string | null>(null);
+  const wf = workflowActs(caps);
   const read = useCallback(() => {
-    Promise.all([catalog.list(), served(caps, "GET /api/pipeline-runs") ? catalog.runs(50).catch(() => ({ runs: [] as Run[] })) : Promise.resolve({ runs: [] as Run[] })]).then(
-      ([c, r]) => setLoad({ kind: "ready", pipelines: c.pipelines, capability: c.capability ?? null, runs: r.runs }),
+    Promise.all([
+      catalog.list(),
+      served(caps, "GET /api/pipeline-runs") ? catalog.runs(50).catch(() => ({ runs: [] as Run[] })) : Promise.resolve({ runs: [] as Run[] }),
+      wf.see ? workflows.list().catch(() => ({ workflows: [] as WorkflowRow[] })) : Promise.resolve({ workflows: [] as WorkflowRow[] }),
+      wf.runs ? workflows.runs().catch(() => ({ runs: [] as WorkflowRun[] })) : Promise.resolve({ runs: [] as WorkflowRun[] }),
+    ]).then(
+      ([c, r, w, wr]) => setLoad({ kind: "ready", pipelines: c.pipelines, families: c.families ?? [], capability: c.capability ?? null, runs: r.runs, workflows: w.workflows, workflowRuns: wr.runs }),
       (e: unknown) => setLoad({ kind: "failed", why: engineWords(e) }),
     );
-  }, [caps]);
+  }, [caps]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(read, [read]);
+  // the runs going are read again every few seconds
+  const going = load.kind === "ready" && (load.runs.some((r) => r.status === "running" || r.status === "queued") || load.workflowRuns.some((r) => r.status === "running" || r.status === "queued"));
+  // only the runs are read again, and merged into what the page shows; a failed read keeps the page and the polling
+  const poll = useCallback(() => {
+    Promise.all([
+      served(caps, "GET /api/pipeline-runs") ? catalog.runs(50) : Promise.resolve({ runs: [] as Run[] }),
+      wf.runs ? workflows.runs() : Promise.resolve({ runs: [] as WorkflowRun[] }),
+    ]).then(
+      ([r, wr]) => {
+        setSlow(null);
+        setLoad((was) => (was.kind === "ready" ? { ...was, runs: r.runs, workflowRuns: wr.runs } : was));
+      },
+      (e: unknown) => setSlow(`The runs could not be read just now (${engineWords(e)}); trying again.`),
+    );
+  }, [caps]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!going) return;
+    const t = setInterval(poll, 5000);
+    return () => clearInterval(t);
+  }, [going, poll]);
   if (load.kind === "loading") return <Wait phase="reading the catalog" since={load.since} size="panel" />;
   if (load.kind === "failed") return <p className="warn">The catalog could not be read: {load.why}</p>;
   return (
     <>
-      <CatalogBody caps={caps} part={part} pipelines={load.pipelines} capability={load.capability} runs={load.runs} onRun={setRunning} onAgain={runActs(caps).queue ? (r) => setAgain(againOfRun(r)) : null} />
+      <CatalogBody caps={caps} pipelines={load.pipelines} families={load.families} capability={load.capability} runs={load.runs} workflows={load.workflows} workflowRuns={load.workflowRuns} note={slow} onRun={setRunning} onAgain={runActs(caps).queue ? (r) => setAgain(againOfRun(r)) : null} />
       {again && (
         <RunAgainDialog
           caps={caps}
@@ -102,18 +133,145 @@ export function CatalogPage({ caps, onQueued, part = "both" }: { caps: Capabilit
   );
 }
 
-/** The catalog and the runs, as the page draws them from what it read. */
-export function CatalogBody({ caps, part = "both", pipelines, capability, runs, onRun, onAgain = null }: { caps: Capabilities; part?: CatalogPart; pipelines: Pipeline[]; capability: Capability | null; runs: Run[]; onRun: (p: Pipeline) => void; onAgain?: ((r: Run) => void) | null }) {
+/** What inside a row keeps its own click and key. */
+const INNER = "a, button, input, select, summary, label";
+const inner = (e: { target: EventTarget | null }): boolean => e.target instanceof Element && e.target.closest(INNER) !== null;
+
+/** A click anywhere on a row but on a link, a button or a field inside it does `act`, and so does one of `keys` on the row itself. */
+function opener(opens: boolean, act: () => void, keys: string[] = ["Enter"]) {
+  return {
+    onClick: (e: { target: EventTarget | null }) => {
+      if (opens && !inner(e)) act();
+    },
+    onKeyDown: (e: { target: EventTarget | null; key: string; preventDefault: () => void }) => {
+      if (!opens || inner(e) || !keys.includes(e.key)) return;
+      e.preventDefault();
+      act();
+    },
+  };
+}
+const goTo = (to: string) => () => {
+  location.hash = to;
+};
+
+/** The pipelines and families, the workflows and the runs, as the page draws them from what it read; no tabs. */
+export function CatalogBody({ caps, pipelines, families = [], capability, runs, workflows: wfRows = [], workflowRuns = [], note = null, onRun, onAgain = null }: { caps: Capabilities; /** A read of the runs that failed, said in the meta line. */ note?: string | null; pipelines: Pipeline[]; families?: Family[] | null; capability: Capability | null; runs: Run[]; workflows?: WorkflowRow[] | null; workflowRuns?: WorkflowRun[] | null; onRun: (p: Pipeline) => void; onAgain?: ((r: Run) => void) | null }) {
   const acts = catalogActs(caps, capability);
-  const rows = catalogRows(pipelines);
+  const wf = workflowActs(caps);
+  const rows = pageRows(pipelines, families);
   // the version chosen of each name, by id; the newest until one is chosen
   const [chosen, setChosen] = useState<Record<string, number>>({});
+  // the families opened to their members
+  const [opened, setOpened] = useState<Set<string>>(new Set());
   const proposals = may(caps, "review:see") && served(caps, "GET /api/review");
   const opens = runActs(caps).open;
+  const names = workflowRows(wfRows ?? []);
+  const together = runsTogether(runs, workflowRuns);
+  const pipelineRow = (row: CatalogRow, member: boolean) => {
+    const p = row.versions.find((v) => v.id === chosen[row.name]) ?? row.versions[0];
+    const last = lastRunOf(row.name, runs, pipelines);
+    const lastWords = last ? lastRunWords(last) : null;
+    return (
+      <tr key={row.name} className={member ? "member" : undefined}>
+        <td>
+          <div className="catalog-name">
+            {member && <span className="meta member-mark" aria-hidden="true">·</span>}
+            <b>{row.name}</b>
+            {row.versions.length > 1 ? (
+              <span className="input select catalog-version">
+                <select value={p.id} aria-label={`The version of ${row.name}`} onChange={(e) => setChosen((was) => ({ ...was, [row.name]: Number(e.target.value) }))}>
+                  {row.versions.map((v, i) => (
+                    <option key={v.id} value={v.id}>
+                      v{v.version}
+                      {i === 0 ? ", newest" : ""}
+                    </option>
+                  ))}
+                </select>
+              </span>
+            ) : (
+              <span className="meta">v{p.version}</span>
+            )}
+          </div>
+          {p.description && <div className="meta">{p.description}</div>}
+          {last && lastWords && (opens ? (
+            <a className={`catalog-last ${lastWords.tone}`} href={href("pipelines", "runs", String(last.id))}>
+              {lastWords.words}
+            </a>
+          ) : (
+            <span className={`catalog-last ${lastWords.tone}`}>{lastWords.words}</span>
+          ))}
+        </td>
+        <td>
+          {p.level} · {p.layout}
+        </td>
+        <td className="path" title={p.image}>
+          {imageWords(p)}
+        </td>
+        <td className="meta">{writesWords(p)}</td>
+        <td className="acts">{acts.run && <button type="button" className="button small" onClick={() => onRun(p)}>Run on a selection</button>}</td>
+      </tr>
+    );
+  };
+  const familyRow = (f: Family, members: CatalogRow[]) => {
+    const open = opened.has(f.name);
+    const last = familyLastRun(members, runs, pipelines);
+    const lastWords = last ? lastRunWords(last) : null;
+    const toggle = () => setOpened((was) => {
+      const next = new Set(was);
+      if (next.has(f.name)) next.delete(f.name);
+      else next.add(f.name);
+      return next;
+    });
+    const tasks = Object.keys(f.tasks ?? {});
+    return (
+      <Fragment key={`family:${f.name}`}>
+        <tr
+          className="family openable"
+          tabIndex={0}
+          aria-expanded={open}
+          {...opener(true, toggle, ["Enter", " "])}
+        >
+          <td>
+            <div className="catalog-name">
+              <Icon name={open ? "shrink" : "grow"} />
+              <b>{f.name}</b>
+              <span className="tag brand">family</span>
+              {f.version && <span className="meta">v{f.version}</span>}
+            </div>
+            {f.words && <div className="meta">{f.words}</div>}
+            {last && lastWords && (opens ? (
+              <a className={`catalog-last ${lastWords.tone}`} href={href("pipelines", "runs", String(last.id))}>
+                {lastWords.words}
+              </a>
+            ) : (
+              <span className={`catalog-last ${lastWords.tone}`}>{lastWords.words}</span>
+            ))}
+          </td>
+          <td>{tasks.length > 0 ? tasks.map((t) => `${t} (${f.tasks![t].level ?? "?"})`).join(", ") : ""}</td>
+          <td className="meta">
+            {n(members.length)} {members.length === 1 ? "member" : "members"}
+            {(f.members ?? []).length > members.length ? ` of ${n((f.members ?? []).length)}` : ""}
+          </td>
+          <td className="meta">{(f.members ?? []).map((m) => m.method ?? m.member).filter(Boolean).join(", ")}</td>
+          <td className="acts">
+            <button type="button" className="button quiet small" onClick={toggle} aria-label={`${open ? "Close" : "Open"} the members of ${f.name}`}>
+              {open ? "Close" : "Members"}
+            </button>
+          </td>
+        </tr>
+        {open && members.map((m) => pipelineRow(m, true))}
+        {open && members.length === 0 && (
+          <tr className="member">
+            <td colSpan={5} className="meta">
+              None of its members is in the catalog.
+            </td>
+          </tr>
+        )}
+      </Fragment>
+    );
+  };
   return (
     <section className="stack roomy">
-      {part !== "runs" && (
-        <>
       {capability && !capability.enabled && (
         <div className="note gated">
           <Icon name="lock" />
@@ -123,17 +281,19 @@ export function CatalogBody({ caps, part = "both", pipelines, capability, runs, 
           </div>
         </div>
       )}
-      <div className={part === "both" ? "section-head rule-top" : "section-head"}>
-        {part === "both" && <h2>Catalog</h2>}
+      <div className="section-head">
+        <h2>Pipelines</h2>
         <span className="meta">
-          {n(rows.length)} {rows.length === 1 ? "pipeline" : "pipelines"}
+          {n(rows.filter((r) => r.kind === "pipeline").length)} {rows.filter((r) => r.kind === "pipeline").length === 1 ? "pipeline" : "pipelines"}
+          {families && families.length > 0 ? ` · ${n(families.length)} ${families.length === 1 ? "family" : "families"}` : ""}
           {capability?.runtime ? ` · ${capability.runtime.name}${capability.runtime.gpu ? " with a GPU" : ""}` : ""}
+          {note ? ` · ${note}` : ""}
         </span>
       </div>
       {rows.length === 0 && <p className="meta">Nothing in the catalog yet. {setupActs(caps).add ? "Add a pipeline from its nils.job.yml." : "Someone with work on the install adds one."}</p>}
       {rows.length > 0 && (
         <div className="table-wrap">
-          <table className="thin">
+          <table className="thin catalog">
             <thead>
               <tr>
                 <th>Pipeline</th>
@@ -143,52 +303,7 @@ export function CatalogBody({ caps, part = "both", pipelines, capability, runs, 
                 <th className="acts" />
               </tr>
             </thead>
-            <tbody>
-              {rows.map((row) => {
-                const p = row.versions.find((v) => v.id === chosen[row.name]) ?? row.versions[0];
-                const last = lastRunOf(row.name, runs, pipelines);
-                const lastWords = last ? lastRunWords(last) : null;
-                return (
-                  <tr key={row.name}>
-                    <td>
-                      <div className="catalog-name">
-                        <b>{row.name}</b>
-                        {row.versions.length > 1 ? (
-                          <span className="input select catalog-version">
-                            <select value={p.id} aria-label={`The version of ${row.name}`} onChange={(e) => setChosen((was) => ({ ...was, [row.name]: Number(e.target.value) }))}>
-                              {row.versions.map((v, i) => (
-                                <option key={v.id} value={v.id}>
-                                  v{v.version}
-                                  {i === 0 ? ", newest" : ""}
-                                </option>
-                              ))}
-                            </select>
-                          </span>
-                        ) : (
-                          <span className="meta">v{p.version}</span>
-                        )}
-                      </div>
-                      {p.description && <div className="meta">{p.description}</div>}
-                      {last && lastWords && (opens ? (
-                        <a className={`catalog-last ${lastWords.tone}`} href={href("pipelines", "runs", String(last.id))}>
-                          {lastWords.words}
-                        </a>
-                      ) : (
-                        <span className={`catalog-last ${lastWords.tone}`}>{lastWords.words}</span>
-                      ))}
-                    </td>
-                    <td>
-                      {p.level} · {p.layout}
-                    </td>
-                    <td className="path" title={p.image}>
-                      {imageWords(p)}
-                    </td>
-                    <td className="meta">{writesWords(p)}</td>
-                    <td className="acts">{acts.run && <button type="button" className="button small" onClick={() => onRun(p)}>Run on a selection</button>}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
+            <tbody>{rows.map((row) => (row.kind === "family" ? familyRow(row.family, row.members) : pipelineRow(row.row, false)))}</tbody>
           </table>
         </div>
       )}
@@ -197,24 +312,75 @@ export function CatalogBody({ caps, part = "both", pipelines, capability, runs, 
       <RuntimePanel caps={caps} />
       <StartersPanel caps={caps} />
       <SecretsPanel caps={caps} />
+
+      {wf.see && (
+        <>
+          <div className="section-head rule-top">
+            <h2>Workflows</h2>
+            <span className="meta">
+              {n(names.length)} {names.length === 1 ? "workflow" : "workflows"} · steps chained, each a pipeline or a family
+            </span>
+          </div>
+          {names.length === 0 && <p className="meta">No workflow yet. {wf.add ? "Add one from its nils.workflow.yml." : "Someone with work on the install adds one."}</p>}
+          {names.length > 0 && (
+            <div className="table-wrap">
+              <table className="thin workflows">
+                <thead>
+                  <tr>
+                    <th>Workflow</th>
+                    <th>Steps</th>
+                    <th className="num">Version</th>
+                    <th className="acts" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {names.map((w) => {
+                    const to = workflowHref(w.id);
+                    const lastRun = (workflowRuns ?? []).filter((r) => r.workflow_id === w.id || r.workflow.replace(/@.*$/u, "") === w.name).sort((a, b) => b.id - a.id)[0] ?? null;
+                    const lt = lastRun ? workflowRunTag(lastRun) : null;
+                    const tone = lt ? (lt.tone === "blocked" ? "neutral" : lt.tone) : null;
+                    return (
+                      <tr key={w.id} className="openable" tabIndex={0} {...opener(true, goTo(to))}>
+                        <td>
+                          <div className="catalog-name">
+                            <a href={to}><b>{w.workflow.title ?? w.name}</b></a>
+                            <span className="meta">{w.name}</span>
+                            {w.origin === "starter" && <span className="tag">shipped</span>}
+                          </div>
+                          {w.workflow.what && <div className="meta">{w.workflow.what}</div>}
+                          {lastRun && lt && (wf.openRun ? (
+                            <a className={`catalog-last ${tone}`} href={workflowRunHref(lastRun.id)}>
+                              last run {n(lastRun.id)} · {lt.words} · {whenWords(lastRun.started_at ?? "")}
+                            </a>
+                          ) : (
+                            <span className={`catalog-last ${tone}`}>last run {n(lastRun.id)} · {lt.words}</span>
+                          ))}
+                        </td>
+                        <td className="wf-steps-cell">{stepsLine(w.workflow)}</td>
+                        <td className="num">v{w.version}</td>
+                        <td className="acts">
+                          <a className="button secondary small" href={to}>
+                            Open
+                          </a>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
-      {part !== "catalog" && (
-        <>
-      {part === "both" && (
-        <div className="section-head rule-top">
-          <h2>Runs</h2>
-          <span className="meta">newest first</span>
-        </div>
-      )}
-      {runs.length === 0 && (
-        <p className="meta">
-          No run yet. {part === "runs" ? <a href={href("pipelines", "catalog")}>Run a pipeline from the Catalog.</a> : "Run a pipeline above."}
-        </p>
-      )}
-      {runs.length > 0 && (
+
+      <div className="section-head rule-top">
+        <h2>Runs</h2>
+        <span className="meta">going and done, newest first</span>
+      </div>
+      {together.length === 0 && <p className="meta">No run yet. Run a pipeline above{names.length > 0 ? ", or open a workflow and plan one" : ""}.</p>}
+      {together.length > 0 && (
         <div className="table-wrap">
-          <table className="thin">
+          <table className="thin runs">
             <thead>
               <tr>
                 <th>Run</th>
@@ -228,30 +394,60 @@ export function CatalogBody({ caps, part = "both", pipelines, capability, runs, 
               </tr>
             </thead>
             <tbody>
-              {runs.map((r) => {
+              {together.map((pr) => {
+                if (pr.kind === "workflow") {
+                  const r = pr.run;
+                  const tag = workflowRunTag(r);
+                  const sums = runSums(r);
+                  const to = workflowRunHref(r.id);
+                  const can = wf.openRun;
+                  return (
+                    <tr key={`w${r.id}`} className={can ? "openable workflow-run" : "workflow-run"} tabIndex={can ? 0 : undefined} {...opener(can, goTo(to))}>
+                      <td className="num">{can ? <a href={to}>W{r.id}</a> : `W${r.id}`}</td>
+                      <td>
+                        {r.workflow} <span className="tag">workflow</span>
+                      </td>
+                      <td className="path" title={r.selection ?? undefined}>{r.selection ? overWords(r.selection) : r.handle != null ? `handle ${r.handle}` : ""}</td>
+                      <td>
+                        <span className={tag.className}>{tag.words}</span>
+                        <span className="meta"> · {n(sums.stepsDone)} of {sums.stepsWords}</span>
+                      </td>
+                      <td className="num">
+                        {n(sums.total)}
+                        {sums.reused > 0 ? ` · ${n(sums.reused)} reused` : ""}
+                        {sums.failed + sums.unreported > 0 ? ` · ${n(sums.failed + sums.unreported)} failed` : ""}
+                      </td>
+                      <td className="num" />
+                      <td className="num" />
+                      <td className="num">{whenWords(r.started_at ?? "")}</td>
+                    </tr>
+                  );
+                }
+                const r = pr.run;
                 const c = runCounts(r);
                 // a failed run says why on one line under its row (2026-10-12)
                 const f = r.status === "failed" || r.status === "partial" ? failureOf(r) : null;
                 // a run that ended reads as its units summed, never a bare done, the rest on one line under its row
                 const tag = runTag(r);
                 const rest = f ? null : tag.rest;
-                // the whole row opens the run; a link or a button inside it keeps its own
-                const open = (e: { target: EventTarget | null }) => {
-                  if (!opens || (e.target instanceof Element && e.target.closest("a, button"))) return;
-                  location.hash = href("pipelines", "runs", String(r.id));
-                };
+                const step = stepOf(r, workflowRuns);
+                const to = href("pipelines", "runs", String(r.id));
                 return (
                   <Fragment key={r.id}>
                     <tr
                       className={[f || rest ? "has-fail" : "", opens ? "openable" : ""].filter(Boolean).join(" ") || undefined}
                       tabIndex={opens ? 0 : undefined}
-                      onClick={open}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") open(e);
-                      }}
+                      {...opener(opens, goTo(to))}
                     >
-                      <td className="num">{opens ? <a href={href("pipelines", "runs", String(r.id))}>{r.id}</a> : r.id}</td>
-                      <td>{r.pipeline}</td>
+                      <td className="num">{opens ? <a href={to}>{r.id}</a> : r.id}</td>
+                      <td>
+                        {r.pipeline}
+                        {step && (
+                          <span className="meta">
+                            {" "}· step {step.step} of {wf.openRun ? <a href={workflowRunHref(step.workflowRun.id)}>W{step.workflowRun.id}</a> : `W${step.workflowRun.id}`}
+                          </span>
+                        )}
+                      </td>
                       <td className="path" title={r.selection ?? undefined}>
                         {overWords(r.selection, pipelineRoles(pipelines.find((p) => p.id === r.pipeline_id) ?? {}))}
                       </td>
@@ -285,8 +481,6 @@ export function CatalogBody({ caps, part = "both", pipelines, capability, runs, 
             </tbody>
           </table>
         </div>
-      )}
-        </>
       )}
     </section>
   );

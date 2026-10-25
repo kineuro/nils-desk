@@ -279,7 +279,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
     <div className="dp-col">
       <div className="dp-col-head">
         <h3 className="eyebrow">Its log</h3>
-        {may(caps, "pipelines:see") && <a href={href("pipelines")}>All on Pipelines</a>}
+        {may(caps, "pipelines:see") && <a href={href("pipelines", "jobs")}>All on Pipelines</a>}
       </div>
       <Log caps={caps} dataset={d} summary={s} log={readsLog ? log : null} live={jobs} now={now} onSaid={onSaid} onFailed={onFailed} />
     </div>

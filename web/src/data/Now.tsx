@@ -137,7 +137,7 @@ export function NowSection({ caps, jobs, onSaid, onFailed }: { caps: Capabilitie
         <h2>Now</h2>
         {(count > 0 || !quiet) && <span className="meta">{jobsWords(count)}</span>}
         {may(caps, "pipelines:see") && (
-          <a className="button quiet small" href={href("pipelines")}>
+          <a className="button quiet small" href={href("pipelines", "jobs")}>
             All jobs on Pipelines
           </a>
         )}

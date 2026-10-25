@@ -16,6 +16,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { roleWord } from "../review/mainScans";
+import type { Family } from "./client";
 import { personFlags, type PersonAsk } from "./pack";
 
 export interface Param {
@@ -69,6 +70,8 @@ export interface Pipeline {
   /** The version that replaces it, as name@version, and why. */
   replaced_by?: string | null;
   replaced_why?: string | null;
+  /** Wave 7b section 7: the family this version is a member of, where it is one; the family's row opens to its members. */
+  family?: string | null;
 }
 
 /** The runtime as the catalog door answers it: whether this engine can run anything, and why not. */
@@ -107,7 +110,8 @@ export interface LabelSet {
 }
 
 export const catalog = {
-  list: () => door<{ pipelines: Pipeline[]; capability: Capability | null }>("GET", "/api/pipelines"),
+  /** Since Wave 7b section 7 the answer also lists `families`, each one row that opens to its members; an engine before lists none. */
+  list: () => door<{ pipelines: Pipeline[]; capability: Capability | null; families?: Family[] | null }>("GET", "/api/pipelines"),
   runs: (limit = 50) => door<{ runs: Run[] }>("GET", `/api/pipeline-runs?limit=${limit}`),
   selection: (name: string) => door<{ name: string; version: number }>("GET", `/api/ask/selections/${encodeURIComponent(name)}`),
   labelSets: () => door<{ label_sets: LabelSet[] }>("GET", "/api/label-sets"),
