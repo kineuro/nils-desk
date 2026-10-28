@@ -28,6 +28,9 @@
 // plain select of the versions a new run may take, newest first, a replaced
 // one not among them; the row and the run follow the version chosen, and the
 // runs keep the version each ran, inside the window at both widths.
+// Since Wave 7b (section 8.1) Catalog and Runs are one Pipelines page,
+// #pipelines, which the old #pipelines/catalog and #pipelines/runs lead to,
+// and the jobs are a page beside it, #pipelines/jobs.
 // SHOTS=<dir> keeps a screenshot of each.
 
 import { expect, test, type Page } from "@playwright/test";
@@ -51,7 +54,7 @@ async function noSideways(page: Page, width: number) {
 for (const vp of SIZES) {
   test(`at ${vp.name} px a failed run's reason is one line under its row, inside the window`, async ({ page }) => {
     await page.setViewportSize(vp);
-    // the runs are a page of their own since record 55 H2, round 4
+    // the runs, under the pipelines on the one Pipelines page since Wave 7b; the old address leads there
     await page.goto("/runs.html#pipelines/runs");
     const lines = page.locator("tr.fail-row .fail-line");
     await expect(lines).toHaveCount(2);
@@ -245,7 +248,7 @@ for (const vp of SIZES) {
 
 test("a failed job says why on the Jobs page, its kind beside the line", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/runs.html#pipelines");
+  await page.goto("/runs.html#pipelines/jobs");
   const line = page.locator(".fail-line").first();
   await expect(line.locator(".kind-tag")).toHaveText("dependency");
   await expect(line.locator(".fail-words")).toHaveText(ADVICE);
@@ -276,7 +279,7 @@ for (const vp of SIZES) {
 
   test(`at ${vp.name} px a stopped run's job taken up again leaves Now and says which job, and the job that made nothing waits there`, async ({ page }) => {
     await page.setViewportSize(vp);
-    await page.goto("/runs.html#pipelines");
+    await page.goto("/runs.html#pipelines/jobs");
     const now = page.locator(".jobs-now").first();
     const nothing = now.locator(".job", { hasText: "Pipeline run of samseg-lesions@1: nothing made" });
     await expect(nothing).toHaveCount(1);
@@ -342,7 +345,7 @@ for (const vp of SIZES) {
   test(`at ${vp.name} px the catalog is one row a name, its versions in a select, and the run follows the version chosen`, async ({ page }) => {
     await page.setViewportSize(vp);
     await page.goto("/runs.html?installed#pipelines/catalog");
-    const catalog = page.locator("table.thin").first();
+    const catalog = page.locator("table.thin.catalog");
     await expect(catalog.locator("tbody > tr")).toHaveCount(2);
     await expect(page.locator(".section-head .meta").first()).toContainText("2 pipelines");
     // samseg-lesions@1 is replaced, so its row offers @2 alone, with no select
@@ -377,10 +380,10 @@ for (const vp of SIZES) {
     await expect(dialog.locator(".note-body code")).toHaveText("nils run n4-bias-correction@1 --select selection:t1-3d-stacks@1");
     await shot(page, `versions-run-${vp.name}`);
     await noSideways(page, vp.width);
-    // the runs, a page of their own since record 55 H2, round 4, keep the version each ran, the replaced one too
+    // the runs, under the pipelines on the one page since Wave 7b, keep the version each ran, the replaced one too
     await page.keyboard.press("Escape");
     await page.goto("/runs.html?installed#pipelines/runs");
-    await expect(page.locator("table.thin").first().locator("tbody td", { hasText: /^samseg-lesions@1$/u }).first()).toBeVisible();
+    await expect(page.locator("table.thin.runs").locator("tbody td", { hasText: /^samseg-lesions@1$/u }).first()).toBeVisible();
   });
 }
 
