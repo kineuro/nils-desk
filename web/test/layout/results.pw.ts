@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // A finished run and what it made (2026-10-13), in a real browser in the
 // desk's own shell (results.html), at a laptop's width and at a phone's: a
-// pipeline run's job, in Now and in All jobs, opens its run on a click
-// anywhere on its card and by Open run from the keyboard; the Catalog's
+// pipeline run's job, in Now and in All jobs on the Jobs page
+// (#pipelines/jobs since Wave 7b, section 8.1), opens its run on a click
+// anywhere on its card and by Open run from the keyboard; the catalog's
 // row says its newest run on one line, inside its cell, and the line opens
-// the run, as does a Runs table row anywhere but its links; the run's page
+// the run, as does a Runs table row anywhere but its links, both on the one
+// Pipelines page, which the old Catalog and Runs addresses lead to; the run's page
 // lists the files by session and offers View on each session with a mask;
 // View draws the session's scan with its chips, the mask's switch and the
 // way through the sessions, and nothing scrolls sideways. SHOTS=<dir> keeps a
@@ -29,7 +31,8 @@ async function noSideways(page: Page, width: number) {
 for (const vp of SIZES) {
   test(`at ${vp.name} px a pipeline run's job opens its run, in Now and in All jobs`, async ({ page }) => {
     await page.setViewportSize(vp);
-    await page.goto("/results.html#pipelines");
+    // the jobs are a page beside the Pipelines page since Wave 7b (section 8.1)
+    await page.goto("/results.html#pipelines/jobs");
     const running = page.locator(".job", { hasText: "job 74" }).first();
     await expect(running.getByRole("link", { name: "Open run" })).toHaveAttribute("href", "#pipelines/runs/17");
     const done = page.locator(".job", { hasText: "3 of 3 made" });
@@ -43,7 +46,7 @@ for (const vp of SIZES) {
     await done.locator(".what b").click();
     await expect(page).toHaveURL(/#pipelines\/runs\/16$/u);
     await expect(page.locator("h1")).toHaveText("Run 16");
-    await page.goto("/results.html#pipelines");
+    await page.goto("/results.html#pipelines/jobs");
     await page.locator(".job", { hasText: "3 of 3 made" }).getByRole("link", { name: "Open run" }).focus();
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(/#pipelines\/runs\/16$/u);
@@ -51,6 +54,7 @@ for (const vp of SIZES) {
 
   test(`at ${vp.name} px a catalog row says its newest run on one line, which opens it, and a Runs row opens its run`, async ({ page }) => {
     await page.setViewportSize(vp);
+    // the old Catalog address leads to the one Pipelines page (Wave 7b, section 8.1)
     await page.goto("/results.html#pipelines/catalog");
     const last = page.locator("a.catalog-last");
     await expect(last).toHaveCount(2);
@@ -66,9 +70,9 @@ for (const vp of SIZES) {
     await shot(page, `results-catalog-${vp.name}`);
     await last.first().click();
     await expect(page).toHaveURL(/#pipelines\/runs\/16$/u);
-    // the Runs table, a page of its own since record 55 H2, round 4: a click anywhere on the row but its links opens the run
+    // the Runs table, under the pipelines on the one page since Wave 7b (its old address leads there): a click anywhere on the row but its links opens the run
     await page.goto("/results.html#pipelines/runs");
-    const row = page.locator("tr.openable", { hasText: "n4-bias-correction@1" }).first();
+    const row = page.locator("table.runs tr.openable", { hasText: "n4-bias-correction@1" }).first();
     await row.locator("td").nth(1).click();
     await expect(page).toHaveURL(/#pipelines\/runs\/12$/u);
   });
