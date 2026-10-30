@@ -72,7 +72,7 @@ function ExportsPage(_: { caps: Capabilities }) {
   );
 }
 
-function SelectionsPage(_: { caps: Capabilities }) {
+function SelectionsPage({ caps }: { caps: Capabilities }) {
   return (
     <section className="query">
       <div className="data-head">
@@ -81,7 +81,7 @@ function SelectionsPage(_: { caps: Capabilities }) {
           <h1>Selections</h1>
         </div>
       </div>
-      <Selections />
+      <Selections caps={caps} />
     </section>
   );
 }

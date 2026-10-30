@@ -7,6 +7,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Added
 
 - The Rules page lists, above the proposals, each graded audit round that found a wrong scan, with Review: it follows the round's rule review where one is open, and opens it first where none is (needs work on Review and Campaigns and an engine with the rule review door).
+- A saved selection opens its yield funnel on the Query page's Selections list (record 58 P4): Funnel asks which pipeline or family, then shows the subjects, sessions and stacks left after each filter and each hard need with what each dropped, a row opens to its years, bases and 2D or 3D, and the error-budget line follows. The numbers are the engine's `GET /api/funnel`; shown only where the engine serves it and the person may read the Pipelines page.
 
 ### Fixed
 
