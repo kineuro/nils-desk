@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
 import { SETS } from "../grants";
 import type { AdmissionRecord } from "./kvasir";
-import { behindParts, checkedWords, contractWords, keptByWords, lookedWords, newerWords, partRows, restartByHand, runtimeName, updateWords, uptimeWords } from "./parts";
+import { behindParts, checkedWords, contractWords, keptByWords, lookedWords, newerWords, partRows, restartByHand, runtimeName, modelRuntimeWords, updateWords, uptimeWords } from "./parts";
 import type { Install, PartRelease, Release } from "./supervise";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
@@ -127,6 +127,15 @@ describe("the words", () => {
     expect(contractWords({})).toBe("");
     expect(runtimeName("vllm")).toBe("vLLM");
     expect(runtimeName("a-runtime")).toBe("a-runtime");
+  });
+
+  it("never write unknown for the model runtime", () => {
+    const r = (name: string, version: string) => ({ runtime: { name, version } });
+    expect(modelRuntimeWords([r("sglang", "0.5.2")])).toBe("SGLang 0.5.2");
+    expect(modelRuntimeWords([r("unknown", "unknown")])).toBe("llama.cpp");
+    expect(modelRuntimeWords([r("", "")])).toBe("llama.cpp");
+    expect(modelRuntimeWords([r("unknown", ""), r("vllm", "0.9")])).toBe("vLLM 0.9");
+    expect(modelRuntimeWords([r("llama.cpp", "unknown")])).toBe("llama.cpp");
   });
   it("say when the install was read", () => {
     expect(checkedWords(null, 0)).toBeNull();

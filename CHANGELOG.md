@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Fixed
+
+- The Parts page names the model runtime behind Kvasir as the engine reports it, or llama.cpp with no version when it reports none, and no longer shows the word unknown twice.
+
 ## [1.0.0-beta.2] - 2026-10-28
 
 The second beta, beside engine 1.0.0-beta.2: one Pipelines page with families, workflows and provenance, Settings > Software, a run's units in the pack's words, verify mode in campaigns, and the fixes from the first partner site's report on the first beta. An engine before 1.0.0-beta.2 shows the pages with what it serves; the floors are unchanged.
