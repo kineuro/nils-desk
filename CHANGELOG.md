@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- The Rules page lists, above the proposals, each graded audit round that found a wrong scan, with Review: it follows the round's rule review where one is open, and opens it first where none is (needs work on Review and Campaigns and an engine with the rule review door).
+
 ### Fixed
 
 - The Parts page names the model runtime behind Kvasir as the engine reports it, or llama.cpp with no version when it reports none, and no longer shows the word unknown twice.

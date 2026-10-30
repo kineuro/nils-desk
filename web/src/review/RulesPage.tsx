@@ -30,6 +30,7 @@ import { WordsPage, type WordAt } from "./Rules";
 import { RuleForm, type ScopeOptions } from "./RuleForm";
 import { RuleProposals } from "./RuleProposals";
 import { RuleQuality } from "./RuleQuality";
+import { RuleReviews } from "./RuleReviews";
 import { mayPropose, mayRehearse, readsProposals, rulesDoors, type PackChoices } from "./rulesDoors";
 import "./rules.css";
 
@@ -200,6 +201,7 @@ export function RulesPage({ caps, items, tab, opened = null, dataset = null, wor
       {!pack && !packWhy && shown !== "words" && <Wait phase="reading the pack" since={since} size="panel" />}
       {packWhy && shown !== "words" && <p className="warn">The pack could not be read: {packWhy}</p>}
       {shown === null && pack && <Wait phase="reading the proposals" since={since} size="panel" />}
+      {shown === "proposals" && <RuleReviews caps={caps} onSaid={onChanged} />}
       {shown === "proposals" && pack && (
         <RuleProposals
           caps={caps}
