@@ -115,6 +115,18 @@ export interface Draw {
   created_at: string;
   grade: DrawGrade | null;
   graded_at: string | null;
+  /** The campaigns a draw made: its raters', its settle and its rule review (record 58 P2; absent on an engine before it). */
+  campaigns?: { raters: number | null; settle: number | null; rule_review: number | null };
+}
+
+/** A round's rule review, as `/api/audit/draws/{id}/rule-review` answers it: the campaign over the grade's wrong stacks, or null where none is open. */
+export interface RuleReview {
+  draw: number;
+  round_id: number;
+  graded: boolean;
+  wrong: number | null;
+  passed: boolean | null;
+  rule_review: { campaign_id: number; name: string; status: string; counts: Json; opened: boolean } | null;
 }
 
 export interface Round {
@@ -201,6 +213,8 @@ export const s1 = {
     door<{ draw: Draw; round: Round; campaign: { id: number; name: string } }>("POST", "/api/audit/draws", body),
   draws: (round?: number) => door<{ draws: Draw[] }>("GET", `/api/audit/draws${round ? `?round=${round}` : ""}`),
   grade: (id: number) => door<{ draw: number; grade: DrawGrade }>("POST", `/api/audit/draws/${id}/grade`, {}),
+  /** Opens a graded round's rule review over its wrong stacks, once: a second call answers the same campaign. */
+  ruleReview: (id: number) => door<RuleReview>("POST", `/api/audit/draws/${id}/rule-review`, {}),
 };
 
 /** An item's mode, routine where an engine before it says none. */
