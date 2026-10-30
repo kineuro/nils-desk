@@ -1,18 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // The saved selections (Wave 7a, H2 round 3), in the Query section: found by
 // part of a name, fifty at a time, each with its size, its version and who
-// saved it last.
+// saved it last. Since Wave 7b (record 58 P4) a selection opens its yield
+// funnel through a pipeline beside it, where the engine serves the funnel.
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import type { Capabilities } from "../capabilities";
 import { whenWords } from "../data/sources";
 import { messageOf } from "../settings/common";
 import { Wait } from "../ui/Wait";
+import { Funnel } from "./Funnel";
+import { mayFunnel } from "./funnel";
 import { selections, sizeWords, type SelectionRow } from "./selections";
 
 type Load = { kind: "loading"; since: number } | { kind: "ready"; rows: SelectionRow[]; matching: number; next: string | null } | { kind: "failed"; why: string };
 
-export function Selections() {
+export function Selections({ caps }: { caps?: Capabilities } = {}) {
   const [q, setQ] = useState("");
+  const [funnelOf, setFunnelOf] = useState<number | null>(null);
+  const funnels = mayFunnel(caps);
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
   const asked = useRef(0);
 
@@ -55,11 +61,13 @@ export function Selections() {
                 <th className="num">Size</th>
                 <th>Version</th>
                 <th>Saved</th>
+                {funnels && <th />}
               </tr>
             </thead>
             <tbody>
               {load.rows.map((s) => (
-                <tr key={s.id}>
+                <Fragment key={s.id}>
+                <tr>
                   <td>
                     <b>{s.name}</b>
                     {s.note && <div className="meta">{s.note}</div>}
@@ -70,7 +78,22 @@ export function Selections() {
                     {whenWords(s.updated_at ?? s.created_at)}
                     {s.updated_by ?? s.owner ? ` · ${s.updated_by ?? s.owner}` : ""}
                   </td>
+                  {funnels && (
+                    <td>
+                      <button type="button" className="button quiet small" aria-expanded={funnelOf === s.id} onClick={() => setFunnelOf(funnelOf === s.id ? null : s.id)}>
+                        Funnel
+                      </button>
+                    </td>
+                  )}
                 </tr>
+                {funnels && funnelOf === s.id && (
+                  <tr>
+                    <td colSpan={5}>
+                      <Funnel spec={s.spec} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
