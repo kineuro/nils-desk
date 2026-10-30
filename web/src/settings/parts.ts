@@ -77,6 +77,22 @@ export function runtimeName(name: string): string {
   return ({ sglang: "SGLang", vllm: "vLLM", "llama.cpp": "llama.cpp", llamacpp: "llama.cpp", ollama: "Ollama" } as Record<string, string>)[name.toLowerCase()] ?? name;
 }
 
+const known = (v: string | undefined | null): string => {
+  const t = (v ?? "").trim();
+  return t.toLowerCase() === "unknown" ? "" : t;
+};
+
+/**
+ * The model runtime behind Kvasir in a row: the newest admission record that names one, else llama.cpp, with
+ * the version only where one is reported; never the word unknown.
+ */
+export function modelRuntimeWords(records: { runtime: { name: string; version: string } }[]): string {
+  const named = records.find((r) => known(r.runtime.name) !== "");
+  const name = named ? runtimeName(known(named.runtime.name)) : "llama.cpp";
+  const version = known((named ?? records[0])?.runtime.version);
+  return version ? `${name} ${version}` : name;
+}
+
 /** A part's name at the head of a row. */
 export function partTitle(part: string): string {
   return ({ engine: "Engine", desk: "Desk", gateway: "Kvasir", kvasir: "Kvasir", assistant: "Assistant", postgres: "Postgres", packs: "Rule packs", rules: "Rules" } as Record<string, string>)[part] ?? part;
@@ -189,14 +205,15 @@ export function partRows(caps: Capabilities, install: Install | null, admissions
     });
     const local = backends.find((b) => b.locality === "local");
     if (local) {
-      const record = (admissions ?? []).filter((r) => r.backend === local.id).sort((a, b) => b.at - a.at)[0];
+      const records = (admissions ?? []).filter((r) => r.backend === local.id).sort((a, b) => b.at - a.at);
+      const record = records[0];
       const serving = (gateway?.models ?? []).filter((m) => m.backend === local.id && m.admitted === true).map((m) => m.id);
       const card = install?.machine.card ?? null;
       rows.push({
         id: "runtime",
         title: "Model runtime",
         icon: "chip",
-        version: record ? `${runtimeName(record.runtime.name)} ${record.runtime.version}`.trim() : "a model server",
+        version: record ? modelRuntimeWords(records) : "a model server",
         mono: false,
         meta: card ? `${card.name}, ${card.memory_gb} GB` : null,
         runsAs: { text: "outside NILS", mono: false },
