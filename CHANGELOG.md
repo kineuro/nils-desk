@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.3] - 2026-10-31
+
+The third beta, beside engine 1.0.0-beta.4: the Rules page opens a graded audit round's rule review, a saved selection opens its yield funnel with the error-budget line, and the Parts page names the model runtime plainly. An engine before 1.0.0-beta.4 shows the pages without the review and the funnel; the floors are unchanged.
+
 ### Added
 
 - The Rules page lists, above the proposals, each graded audit round that found a wrong scan, with Review: it follows the round's rule review where one is open, and opens it first where none is (needs work on Review and Campaigns and an engine with the rule review door).
