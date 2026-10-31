@@ -20,7 +20,7 @@ import { DataPage, chosenOf, firstChoice } from "./DataPage";
 import type { Dataset } from "./datasets";
 import { makingRefusal, nameRefusal } from "./NewCohort";
 import { STEP_RUN_DOORS } from "./stepRun";
-import type { DatasetSummary, SummaryStep } from "./summary";
+import { clock, type DatasetSummary, type SummaryStep } from "./summary";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -778,6 +778,33 @@ describe("datasets and cohorts on one page", () => {
     expect(others()).toBe(before + 1);
     expect(asked("/api/datasets/study-big/summary")).toBe(1);
     expect(asked("/api/sources")).toBe(1);
+  }, CLOCKED);
+
+  it("says counts the engine reads again as counts from when, counting again, and reads the summary again a while after each answer until the fresh ones land (2026-10-31)", async () => {
+    // production, 2026-10-31: the kept counts answer at once while a reading of 20 s runs in the engine
+    ownClock();
+    let counting = true;
+    const e = await page({
+      route: (c) => (c.method === "GET" && c.url === "/api/datasets/study-big/summary" ? { status: 200, body: { ...summaryOf(looked), counts_as_of: AT, counting } } : undefined),
+    });
+    const d = () => host.querySelector<HTMLElement>(".dp-detail")!;
+    // where it is and what it holds are drawn from the first answer, with the line under the counts
+    expect(d().querySelectorAll(".dp-step-title").length).toBe(8);
+    expect(d().querySelector(".dp-funnel")?.textContent).toContain("40 scans");
+    expect(d().querySelector(".dp-counting")?.textContent).toBe(`counts from ${clock(AT)}, counting again`);
+    const reads = () => e.of("GET", "/api/datasets/study-big/summary").length;
+    const before = reads();
+    // read again a while after each answer, as a dataset whose step runs is, while nothing runs
+    await after(5_000);
+    expect(reads()).toBe(before + 1);
+    expect(e.of("GET", "/api/datasets/ward-f/summary").length).toBe(1);
+    // the fresh counts land: the line goes, and nothing is read again
+    counting = false;
+    await after(5_000);
+    expect(reads()).toBe(before + 2);
+    expect(d().querySelector(".dp-counting")).toBeNull();
+    for (let i = 0; i < 2; i++) await after(5_000);
+    expect(reads()).toBe(before + 2);
   }, CLOCKED);
 
   it("never lets an answer that comes late land over a newer one (2026-10-17)", async () => {

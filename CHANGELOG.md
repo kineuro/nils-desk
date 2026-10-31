@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- The Data page shows a dataset's "Where it is" and "What it holds" from the summary's first answer, and while the engine counts again (engine 1.0.0-beta.5, `counting`) a line under the counts says when the ones shown were read ("counts from 14:50, counting again"); the summary is read again a while after each answer until the fresh counts land, as it is while a step runs. An engine from before shows no line.
+
 ## [1.0.0-beta.3] - 2026-10-31
 
 The third beta, beside engine 1.0.0-beta.4: the Rules page opens a graded audit round's rule review, a saved selection opens its yield funnel with the error-budget line, and the Parts page names the model runtime plainly. An engine before 1.0.0-beta.4 shows the pages without the review and the funnel; the floors are unchanged.
