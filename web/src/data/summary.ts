@@ -146,6 +146,9 @@ export interface DatasetSummary {
   /** Record 56 (2026-10-14): the proposed rule changes that touch the dataset, by status; an engine from before says nothing. */
   proposals?: { proposed: number; adopted: number; rejected: number; retired?: number };
   pictures_place: string | null;
+  /** 2026-10-31: when the counts were read, and whether the engine reads them again now, the kept ones answering at once meanwhile; an engine from before says neither. */
+  counts_as_of?: string;
+  counting?: boolean;
   steps: SummaryStep[];
 }
 
@@ -299,6 +302,13 @@ export function clock(iso: string | null | undefined, now = new Date()): string 
   if (t.toDateString() === now.toDateString()) return t.toTimeString().slice(0, 5);
   const day = `${MONTHS[t.getMonth()]} ${String(t.getDate()).padStart(2, "0")}`;
   return t.getFullYear() === now.getFullYear() ? day : `${day} ${t.getFullYear()}`;
+}
+
+/** The line under a dataset's counts while the engine reads them again (2026-10-31): when the ones shown were read; nothing once they are fresh. */
+export function countingWords(s: Pick<DatasetSummary, "counts_as_of" | "counting"> | null | undefined, now = new Date()): string | null {
+  if (!s?.counting) return null;
+  const when = clock(s.counts_as_of, now);
+  return when ? `counts from ${when}, counting again` : "counting again";
 }
 
 /** How long something took, briefly: "4 s", "3 min", "1.5 h"; nothing where it cannot be told. */

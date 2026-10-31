@@ -19,6 +19,7 @@ import {
   cohortLine,
   cohortRail,
   cohortRelation,
+  countingWords,
   datasetRelation,
   fedWords,
   feedsWords,
@@ -160,6 +161,16 @@ describe("a card's six steps", () => {
     const stopped = dataset({ ...unread, trees: { originals: { path: "/x/derivatives/dcm-original", files: 78570, bytes: null, partial: true }, anon: { path: "/x/derivatives/dcm-anon", files: 0, last_written: null, partial: true } } });
     expect(railOf(stopped, null)[0]).toBe("done");
     expect(railOf({ ...stopped, trees: { ...stopped.trees!, originals: null } } as Dataset, null)[0]).toBe("wait");
+  });
+});
+
+describe("the line under the counts while the engine counts again (2026-10-31)", () => {
+  it("says when the counts shown were read, and nothing once they are fresh or the engine is from before", () => {
+    expect(countingWords({ counts_as_of: today("14:50"), counting: true }, NOW)).toBe(`counts from ${clock(today("14:50"), NOW)}, counting again`);
+    expect(countingWords({ counting: true }, NOW)).toBe("counting again");
+    expect(countingWords({ counts_as_of: today("14:50"), counting: false }, NOW)).toBeNull();
+    expect(countingWords({}, NOW)).toBeNull();
+    expect(countingWords(null, NOW)).toBeNull();
   });
 });
 

@@ -42,6 +42,7 @@ import { mainScansMore, pickOffer, runOffers, startedWords, stepRuns } from "./s
 import { nextStep, stepCommand, type StepId } from "./steps";
 import {
   clock,
+  countingWords,
   doingTitle,
   filesWords,
   foundOf,
@@ -417,7 +418,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
         <div className="dp-cols">
           <div className="dp-col">
             <h3 className="eyebrow">What it holds</h3>
-            <Holds dataset={d} summary={s} reviews={may(caps, "review:see")} />
+            <Holds dataset={d} summary={s} reviews={may(caps, "review:see")} now={now} />
           </div>
           <div className="dp-col">
             <h3 className="eyebrow">Main scans</h3>
@@ -456,8 +457,9 @@ export function DatasetDetail(props: DatasetDetailProps) {
   );
 }
 
-/** What a dataset holds: the funnel, how sure the sort is, its kinds of scan and its files. */
-function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; summary: DatasetSummary | null; reviews?: boolean }) {
+/** What a dataset holds: the funnel, how sure the sort is, its kinds of scan and its files; while the engine counts them again, when the ones shown were read (2026-10-31). */
+function Holds({ dataset: d, summary: s, reviews = false, now }: { dataset: Dataset; summary: DatasetSummary | null; reviews?: boolean; now?: number }) {
+  const counting = countingWords(s, now === undefined ? undefined : new Date(now));
   const subjects = s?.subjects ?? d.totals.subjects;
   const visits = s ? (s.sessions ?? s.studies) : d.totals.sessions || d.totals.studies;
   const scans = s?.scans ?? d.totals.stacks;
@@ -487,6 +489,11 @@ function Holds({ dataset: d, summary: s, reviews = false }: { dataset: Dataset; 
   const nothing = scans === 0 && subjects === 0;
   return (
     <>
+      {counting && (
+        <p className="meta dp-counting" role="status">
+          {counting}
+        </p>
+      )}
       {!nothing && (
         <div className="dp-funnel" aria-label="subjects, visits and scans">
           <span>

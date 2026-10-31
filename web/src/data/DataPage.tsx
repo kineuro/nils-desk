@@ -232,6 +232,12 @@ export function DataPage({
     .filter((s) => names.split("\n").includes(s.dataset) && s.steps.some((x) => x.state === "running" || x.state === "queued"))
     .map((s) => s.dataset);
   const runningKey = running.join("\n");
+  // 2026-10-31: a summary whose counts the engine reads again now answers the kept ones at once, and is read again a
+  // while after each answer until the fresh ones land
+  const counting = Object.values(sums)
+    .filter((s) => names.split("\n").includes(s.dataset) && s.counting === true && !running.includes(s.dataset))
+    .map((s) => s.dataset);
+  const followKey = [...running, ...counting].join("\n");
   useEffect(() => {
     const was = lastOpen.current;
     lastOpen.current = openKey;
@@ -241,10 +247,9 @@ export function DataPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- a change in the open jobs is what reads again
   }, [openKey]);
   useEffect(() => {
-    const following = runningKey === "" ? [] : runningKey.split("\n");
-    sourceReads.follow(following.length > 0 ? [LIST] : []);
-    summaryReads.follow(following);
-  }, [runningKey, sourceReads, summaryReads]);
+    sourceReads.follow(runningKey === "" ? [] : [LIST]);
+    summaryReads.follow(followKey === "" ? [] : followKey.split("\n"));
+  }, [runningKey, followKey, sourceReads, summaryReads]);
 
   // words about a dataset's run go once it is over: seen running and now not, or a step of it finished since the words were said
   useEffect(() => {
