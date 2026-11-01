@@ -37,6 +37,20 @@ export interface Explain {
   axes: ExplainAxis[];
 }
 
+/** `GET /api/stacks/{stack}/header`: the header facts the rules read; a sealed stack answers `blind` and `sealed` alone. */
+export interface StackHeader {
+  stack: number;
+  blind?: boolean;
+  sealed?: boolean;
+  detail?: string;
+  files?: number | null;
+  fingerprint?: Record<string, string | number | null>;
+  texts?: Record<string, string | number | null>;
+  physics?: Record<string, string | number | null>;
+  private?: Record<string, string | number | null>;
+  private_withheld?: number;
+}
+
 export interface ExplainAxis {
   axis: string;
   value: string | null;
@@ -140,6 +154,12 @@ export const review = {
   /** `dataset` narrows both to one dataset's scans (record 55 H2, the card's Review button). */
   summary: (cohort?: string, dataset?: string) => door<ReviewSummary>("GET", `/api/review/summary${q({ cohort, dataset })}`),
   explain: (stack: number) => door<Explain>("GET", `/api/explain/${stack}`),
+  /** The header facts of a stack, or null on an engine without the door. */
+  header: (stack: number): Promise<StackHeader | null> =>
+    door<StackHeader>("GET", `/api/stacks/${stack}/header`).catch((e: unknown) => {
+      if (e instanceof DoorError && e.status === 404) return null;
+      throw e;
+    }),
   pack: (name: string) => door<Json>("GET", `/api/packs/${encodeURIComponent(name)}`).then(packDoc),
   try: (overlay: OverlayDoc, scope: string, sample?: number) => door<TryResult>("POST", "/api/classify/try", sample ? { overlay, scope, sample } : { overlay, scope }),
   propose: (name: string, overlay: OverlayDoc, scope: string, why: string, try_ref?: string) =>

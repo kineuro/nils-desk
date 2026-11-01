@@ -18,6 +18,7 @@ import { Icon } from "../ui/Icon";
 import { Says } from "../ui/Says";
 import { Wait } from "../ui/Wait";
 import { acts, batchOf, becauseWords, membersOf, refusalWords, review, type Explain, type ExplainAxis, type Scope } from "./client";
+import { HeaderFold } from "./HeaderFacts";
 import { kindOf } from "./triage";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -187,6 +188,7 @@ export function ExplainDialog({ caps, stack, item, onClose, onLook, onAddWord, o
           {item ? ` · ${whenWords(item.created_at)}` : ""}
         </dd>
       </dl>
+      <HeaderFold stack={stack} />
       {!explain && !why && <Wait phase="reading why" since={since} size="panel" />}
       {why && <p className="warn">{why}</p>}
       {explain && axes.length === 0 && <p className="meta">The engine keeps no axis on this stack.</p>}

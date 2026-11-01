@@ -264,7 +264,13 @@ describe("each part beside its own newest release", () => {
     expect(newerWords(current)).toBeNull();
     expect(partRows(caps(), current, null, [])[1]).toMatchObject({ health: { tone: "caution", words: "mri changed on this machine, kept" }, newer: { text: "moves with the engine", tag: false } });
     const read = install({ release: { ...release, newer: null, behind: [], packs: { dir: "/p", release: "1.0.0-alpha.53", error: "no packs.tar.gz", command: "nils update --all" } } });
-    expect(partRows(caps(), read, null, [])[1]).toMatchObject({ version: "none", newer: { text: "not checked", tag: false } });
+    expect(partRows(caps(), read, null, [])[1]).toMatchObject({ version: "none", health: { tone: "caution", words: "the release's packs could not be read" }, newer: { text: "not checked", tag: false } });
+  });
+  it("lists the packs on disk and says only that the comparison is not possible where the door answers so", () => {
+    const unread = { dir: "/p", release: "1.0.0-alpha.53", installed: [{ name: "mri", version: "0.7.0", digest: "m1" }], pinned: ["mri"], comparison: "not possible", error: "no packs.tar.gz", command: "nils update --all" };
+    const row = partRows(caps(), install({ release: { ...listed([own("engine", "1.0.0-alpha.53", "1.0.0-alpha.53", null), own("desk", "1.0.0-alpha.53", "1.0.0-alpha.53", null)]), newer: null, behind: [], packs: unread } }), null, [])[1];
+    expect(row).toMatchObject({ version: "mri 0.7.0", health: { tone: "caution", words: "comparison with the release not possible" }, newer: { text: "comparison not possible", tag: false } });
+    expect(JSON.stringify(row)).not.toContain("could not be read");
   });
   it("reads an engine older than the list as it always did", () => {
     expect(newerWords(install())).toBe("1.0.0-alpha.15 is out");
