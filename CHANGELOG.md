@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- Settings > Participation (the site participation design of 2026-11-01): what this site shares, as a file it reads first. Off by default, nothing leaves the install. Take part names the site, the receiver, the key file on the engine's machine and the tiers as two switches, counts and a sealed read, with auto for counts and the model server note for the sealed read's model-first path. Preview draws the file as tables of its sections with the raw JSON under a fold; Send shows the digest and the receiver first, then the receipt or the error's words, with the sends listed under it. The sealed read's card drives the draw (1,000 stacks, the seed marked as the sealed read's with the site and the date, the path model first or people, the share 20 %, never a localizer in the frame), the rater's run through the assistant's rater door with its counts, started only by the person the draw named, Settle at 20 % of the agreements with the settlers named to the engine and the link to the verify campaign (never for the person who read as the rater), Close, then Preview and Send of the sealed read for the draw, each step enabled once the one before is done. Needs an engine with the participation doors and the assistant's rater door; the page is offered where the engine serves `GET /api/participation`.
+
 ## [1.0.0-beta.4] - 2026-11-01
 
 The fourth beta, beside engine 1.0.0-beta.5: the Data page shows a dataset's counts at once and says when they were read while the engine counts again. An engine from before shows no line; the floors are unchanged.

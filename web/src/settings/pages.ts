@@ -9,6 +9,7 @@
 import type { Capabilities } from "../capabilities";
 import { door } from "../deployment";
 import { may } from "../grants";
+import { participates } from "./participation";
 
 export interface SettingsPage {
   id: string;
@@ -41,6 +42,8 @@ export function settingsPages(caps: Capabilities): SettingsPage[] {
   if (may(caps, "places:see") && door(caps, "GET /api/places")) out.push({ id: "places", title: "Places", sub: false });
   // the software place (Wave 7b spec 6.7): the tools runs use, where the engine serves it
   if ((may(caps, "install:see") || may(caps, "pipelines:see")) && door(caps, "GET /api/software")) out.push({ id: "software", title: "Software", sub: false });
+  // Participation (Wave 7b step 5): what the site shares, beside Parts, where the engine serves its status door
+  if (participates(caps)) out.push({ id: "participation", title: "Participation", sub: false });
   // Backups (spec 13.1, once "Database"), where the engine serves its doors
   if (may(caps, "database:see") && (door(caps, "GET /api/backups") || door(caps, "GET /api/settings"))) out.push({ id: "backups", title: "Backups", sub: false });
   // People (spec 13.1, once "Identity"): who signs in is the desk's

@@ -21,6 +21,7 @@ import { exportWords } from "./exporting";
 import { GatewayPage } from "./GatewayPage";
 import { IdentityPage } from "./IdentityPage";
 import { OverviewPage } from "./OverviewPage";
+import { ParticipationPage } from "./ParticipationPage";
 import { PlacesPage } from "./PlacesPage";
 import { keptRunning } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
@@ -64,6 +65,8 @@ export function Settings(props: PageProps & { page: string | null }) {
       return <PlacesPage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     case "software":
       return <SoftwarePage caps={props.caps} />;
+    case "participation":
+      return <ParticipationPage caps={props.caps} />;
     case "backups":
       return <DatabasePage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     case "people":
