@@ -9,12 +9,12 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { capsWith } from "../review/caps.fixture";
-import { changeOf, changeRefusal, defaultSeed, done, DOORS, DRAW_COUNT, mayChange, mayDrive, nextStep, participates, participation, pathOf, PATHS, pct, previewOf, printWords, raterOf, readCampaignOf, readDoneOf, runWords, sealedDraw, sections, sendWords, settleRefusal, SHARE, startable, statusWords, stepsFor, TIER_WORDS, type Draw, type SealedState, type Send, type Status } from "./participation";
+import { AssistantRefused, changeOf, changeRefusal, defaultSeed, done, DOORS, DRAW_COUNT, mayChange, mayDrive, nextStep, participates, participation, pathOf, PATHS, pct, previewOf, printWords, raterOf, raterOfDraw, readCampaignOf, readDoneOf, runWords, sealedDraw, sealedSeed, sections, SEED_PREFIX, sendWords, settleRefusal, settlersOf, SHARE, startable, startRefusal, statusWords, stepsFor, TIER_WORDS, type Draw, type SealedState, type Send, type Status } from "./participation";
 
 const OFF: Status = { enabled: false, tiers: [], note: "Nothing leaves this install.", assistant_rater_door: null };
 const ON: Status = { enabled: true, site: "ki", tiers: [1, 3], receiver: "https://participation.example.org", key_file: "/etc/nils/participation.key", key_fingerprint: "0123456789abcdef0123", public_key: "cHVi", auto: true, enabled_at: "2026-11-01T09:00:00Z", enabled_by: "astrid", previewed: {}, last_send: {}, receiver_reachable: true, assistant_rater_door: true };
 const SENT: Send = { id: 1, tier: 1, digest: "ab".repeat(32), bytes: 2048, sent_at: "2026-11-01T10:00:00Z", sent_by: "astrid", receiver: ON.receiver!, receipt: "cd".repeat(32), error: null, previewed_at: "2026-11-01T09:59:00Z", draw: null, ok: true };
-const DRAW: Draw = { id: 7, round_id: 2, seed: "ki-2026-11-01", share: null, count: 1000, frame: { stacks: 12_480, digest: "ef".repeat(32) }, drawn: 1000, campaign_id: 31, campaigns: { raters: 31, settle: null, rule_review: null }, settle: null, grade: null };
+const DRAW: Draw = { id: 7, round_id: 2, seed: "participation-ki-2026-11-01", share: null, count: 1000, created_by: "someone", frame: { stacks: 12_480, digest: "ef".repeat(32) }, drawn: 1000, campaign_id: 31, campaigns: { raters: 31, settle: null, rule_review: null }, settle: null, grade: null };
 /** A draw of the people path: the verify campaign made at the draw stands as its settle, with no raters' campaign. */
 const PEOPLE: Draw = { ...DRAW, id: 8, campaign_id: 41, campaigns: { raters: null, settle: 41, rule_review: null }, settle: { seed: "ki-2026-11-01", share: 1 } };
 
@@ -65,7 +65,7 @@ describe("the participation doors", () => {
     await participation.change({ tiers: [1], site: "ki" });
     await participation.send(1);
     await participation.send(3, 7);
-    await participation.draw({ count: DRAW_COUNT, seed: "ki-2026-11-01", raters: ["nils-assistant"] });
+    await participation.draw({ count: DRAW_COUNT, seed: "participation-ki-2026-11-01", raters: ["someone"], raters_per_item: 1 });
     await participation.draw({ count: DRAW_COUNT, seed: "ki-2026-11-01", readers: [], double_read_share: SHARE });
     await participation.settle(7, { share: SHARE });
     await participation.close(32);
@@ -74,7 +74,7 @@ describe("the participation doors", () => {
       ["POST", "/api/participation", { tiers: [1], site: "ki" }],
       ["POST", "/api/participation/send", { tier: 1 }],
       ["POST", "/api/participation/send", { tier: 3, draw: 7 }],
-      ["POST", "/api/audit/draws", { count: 1000, seed: "ki-2026-11-01", raters: ["nils-assistant"], localizers: false }],
+      ["POST", "/api/audit/draws", { count: 1000, seed: "participation-ki-2026-11-01", raters: ["someone"], raters_per_item: 1, localizers: false }],
       ["POST", "/api/audit/draws", { count: 1000, seed: "ki-2026-11-01", readers: [], double_read_share: 0.2, localizers: false }],
       ["POST", "/api/audit/draws/7/settle", { share: 0.2 }],
       ["POST", "/api/campaigns/32/close", {}],
@@ -98,7 +98,10 @@ describe("the participation doors", () => {
     expect(startable({ ...r, state: "refused", done: true })).toBe(true);
     await participation.freshen("rater-c1");
     expect(asked.at(-1)).toEqual({ method: "POST", path: "/desk/assistant/conversations/rater-c1/token", body: null });
-    await expect(participation.rater("r2")).rejects.toThrow("no GET /assistant/raters/runs/r2");
+    const lost = await participation.rater("r2").then(() => null, (e: unknown) => e);
+    expect(lost).toBeInstanceOf(AssistantRefused);
+    expect((lost as AssistantRefused).status).toBe(404);
+    expect((lost as AssistantRefused).message).toBe("no GET /assistant/raters/runs/r2");
   });
 });
 
@@ -167,10 +170,20 @@ describe("what the page says", () => {
     ]);
   });
 
-  it("seeds the draw from the site's name and the date", () => {
-    expect(defaultSeed("ki", new Date("2026-11-01T12:00:00Z"))).toBe("ki-2026-11-01");
-    expect(defaultSeed("Karolinska MS", new Date("2026-11-01T12:00:00Z"))).toBe("Karolinska-MS-2026-11-01");
-    expect(defaultSeed(null, new Date("2026-11-01T12:00:00Z"))).toBe("site-2026-11-01");
+  it("seeds the draw with the mark, the site's name and the date, and puts the mark back where it was edited away", () => {
+    expect(defaultSeed("ki", new Date("2026-11-01T12:00:00Z"))).toBe("participation-ki-2026-11-01");
+    expect(defaultSeed("Karolinska MS", new Date("2026-11-01T12:00:00Z"))).toBe("participation-Karolinska-MS-2026-11-01");
+    expect(defaultSeed(null, new Date("2026-11-01T12:00:00Z"))).toBe("participation-site-2026-11-01");
+    expect(sealedSeed(" participation-ki-2026-11-01 ")).toBe("participation-ki-2026-11-01");
+    expect(sealedSeed("ki-2026-11-01")).toBe("participation-ki-2026-11-01");
+    expect(SEED_PREFIX).toBe("participation-");
+  });
+
+  it("asks the desk's people with work on campaigns, and takes an empty list where the desk refuses", async () => {
+    fake({ "GET /desk/people": { people: [{ subject: "astrid", display: "Astrid", holds: true }, { subject: "bo", display: "Bo", holds: false }, { subject: "cy", display: "Cy" }] } });
+    expect(await participation.people()).toEqual(["astrid", "cy"]);
+    fake({});
+    expect(await participation.people()).toEqual([]);
   });
 });
 
@@ -216,9 +229,12 @@ describe("the sealed read's steps", () => {
     expect(readDoneOf({ id: 31, status: "open", counts: { items: { open: 900, settled: 100 } } }, { run: "r1", conversation: "c", principal: "astrid", state: "failed", claimed: 0, answered: 100, refused: 0, cant_tell: 0, errors: 1, done: true })).toBe(false);
   });
 
-  it("continue the newest draw by count and know its path from its campaigns, else from what the browser kept", () => {
+  it("continue the newest marked draw by count, never the monthly audit's, and know the path from the campaigns, else from what the browser kept", () => {
     expect(sealedDraw([])).toBeNull();
     expect(sealedDraw([{ ...DRAW, id: 3, count: null, share: 0.01 }, DRAW, { ...DRAW, id: 9 }])?.id).toBe(9);
+    // a monthly audit draw by count made after the sealed read's is not taken, nor a draw by share with the mark
+    expect(sealedDraw([DRAW, { ...DRAW, id: 12, count: 150, seed: "2026-11" }])?.id).toBe(7);
+    expect(sealedDraw([{ ...DRAW, count: null, share: 0.01 }])).toBeNull();
     // a raters' campaign is the model-first path, whatever the browser kept
     expect(pathOf(DRAW, { path: "people" }, "people")).toBe("model-first");
     expect(pathOf(PEOPLE, { path: "model-first" }, "model-first")).toBe("people");
@@ -231,14 +247,23 @@ describe("the sealed read's steps", () => {
     expect(readCampaignOf(null, "people")).toBeNull();
   });
 
-  it("name the rater: the person who starts the run, by the engine's name for them (the assistant holds no identity of its own), who then may not settle", () => {
+  it("name the rater: the person who drew, by the engine's name for them (the page names the drawer as the rater), who then may not settle nor be a settler", () => {
     expect(raterOf(capsWith([], ["review:work"]))).toBe("someone");
     const caps = capsWith([], ["review:work"]);
     expect(raterOf({ ...caps, engine: { ...caps.engine!, principal: "" } })).toBe("astrid");
+    // the engine's fact first, the browser's copy second
+    expect(raterOfDraw(DRAW, null)).toBe("someone");
+    expect(raterOfDraw({ ...DRAW, created_by: undefined }, { path: "model-first", run: { id: "r1", conversation: "c", rater: "bo" } })).toBe("bo");
+    expect(raterOfDraw({ ...DRAW, created_by: undefined }, null)).toBeNull();
     const s = { ...base, draw: DRAW, readDone: true };
     expect(settleRefusal(s, "astrid", "astrid")).toBe("You read as the rater, so another person settles.");
     expect(settleRefusal(s, "astrid", "bo")).toBeNull();
-    expect(settleRefusal(s, "nils-assistant", "astrid")).toBeNull();
     expect(settleRefusal({ ...s, path: "people" }, "astrid", "astrid")).toBeNull();
+    expect(settlersOf("bo", "astrid", ["astrid", "bo", "cy"])).toEqual(["bo", "cy"]);
+    expect(settlersOf("bo", "astrid", [])).toEqual(["bo"]);
+    expect(settlersOf("bo", null, ["cy"])).toEqual(["bo", "cy"]);
+    expect(startRefusal("astrid", "astrid")).toBeNull();
+    expect(startRefusal(null, "astrid")).toBeNull();
+    expect(startRefusal("astrid", "bo")).toBe("Only astrid starts the rater: the draw named them.");
   });
 });

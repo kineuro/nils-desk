@@ -28,7 +28,8 @@ const DIGEST = "ab".repeat(32);
 const RECEIPT = "cd".repeat(32);
 const COUNTS = { kind: "nils participation counts", site: "ki", registry_id: "0123abcd", made_at: "2026-11-01T10:00:00Z", versions: { engine: "1.0.0-beta.5" }, archive: { stacks_by_modality: { MR: 12_480 } }, trains: false };
 const SENT: Send = { id: 1, tier: 1, digest: DIGEST, bytes: 2048, sent_at: "2026-10-30T10:00:00Z", sent_by: "astrid", receiver: ON.receiver!, receipt: RECEIPT, error: null, previewed_at: "2026-11-01T09:59:00Z", draw: null, ok: true };
-const DRAW: Draw = { id: 7, round_id: 2, seed: "ki-2026-11-01", share: null, count: 1000, frame: { stacks: 12_480, digest: "ef".repeat(32) }, drawn: 1000, campaign_id: 31, campaigns: { raters: 31, settle: null, rule_review: null }, settle: null, grade: null };
+const SEED = "participation-ki-2026-11-01";
+const DRAW: Draw = { id: 7, round_id: 2, seed: SEED, share: null, count: 1000, created_by: "someone", frame: { stacks: 12_480, digest: "ef".repeat(32) }, drawn: 1000, campaign_id: 31, campaigns: { raters: 31, settle: null, rule_review: null }, settle: null, grade: null };
 const PEOPLE: Draw = { ...DRAW, id: 8, campaign_id: 41, campaigns: { raters: null, settle: 41, rule_review: null }, settle: { seed: "ki-2026-11-01", share: 1 } };
 // the engine's name for the person, as the raters' campaign and the assistant's run name them
 const ME = "someone";
@@ -181,6 +182,13 @@ describe("preview and send of the counts", () => {
     expect(el.querySelector('[aria-label="what the send posts"]')).toBeNull();
   });
 
+  it("offers a person who may only see the database no preview and no send", async () => {
+    await view({ ...ON, tiers: [1] }, [SENT], [], ["database:see"]);
+    expect(button("Preview")).toBeNull();
+    expect(button("Send")).toBeNull();
+    expect(text()).toContain("An administrator previews and sends.");
+  });
+
   it("says the error's words where the receiver refused, and lists the sends", async () => {
     answers["GET /api/participation/preview"] = () => ({ document: COUNTS, digest: DIGEST, previewed_at: "now" });
     answers["POST /api/participation/send"] = () => ({ ...SENT, id: 2, receipt: null, error: "the receiver answered 401" });
@@ -204,7 +212,7 @@ describe("the sealed read", () => {
     expect(card.textContent).toContain("Model first");
     expect(card.textContent).toContain("your people settle every difference and a seeded 20 % of the agreements");
     expect(card.querySelector<HTMLInputElement>("input[inputmode=numeric]")!.value).toBe("1000");
-    expect(card.querySelector<HTMLInputElement>("input.mono, .input.mono input")!.value).toBe("ki-2026-11-01");
+    expect(card.querySelector<HTMLInputElement>("input.mono, .input.mono input")!.value).toBe(SEED);
     expect([...card.querySelectorAll("button")].map((b) => b.textContent?.trim())).toEqual(["Draw"]);
     expect(card.querySelector(".stepno.now")?.parentElement?.textContent).toContain("Draw");
     expect([...card.querySelectorAll(".step-body > b")].map((b) => b.textContent)).toEqual(["Draw", "Read", "Settle", "Close", "Preview", "Send"]);
@@ -218,12 +226,12 @@ describe("the sealed read", () => {
     answers["POST /desk/assistant/conversations/rater-c1/token"] = () => ({});
     await view({ ...ON, tiers: [3] });
     await press("Draw");
-    expect(asked.find((a) => a.method === "POST")).toEqual({ method: "POST", path: "/api/audit/draws", body: { count: 1000, seed: "ki-2026-11-01", raters: [ME], localizers: false } });
+    expect(asked.find((a) => a.method === "POST")).toEqual({ method: "POST", path: "/api/audit/draws", body: { count: 1000, seed: SEED, raters: [ME], raters_per_item: 1, localizers: false } });
     expect(text()).toContain("Drew 1,000 stacks; the blind campaign is sealed read ki-2026-11-01.");
     // the page reads again with the draw
     await view({ ...ON, tiers: [3] }, [], [DRAW]);
     const card = () => el.querySelector('[aria-label="the sealed read"]')!;
-    expect(card().textContent).toContain("draw 7: 1,000 stacks, seed ki-2026-11-01");
+    expect(card().textContent).toContain(`draw 7: 1,000 stacks, seed ${SEED}`);
     expect([...card().querySelectorAll("button")].map((b) => b.textContent?.trim())).toEqual(["Start the rater"]);
     expect(card().querySelector('a[href="#review/campaigns/31"]')?.textContent).toBe("the blind campaign");
     const before = asked.length;
@@ -243,18 +251,20 @@ describe("the sealed read", () => {
     localStorage.setItem("nils-participation-sealed:7", JSON.stringify({ path: "model-first", run: { id: "r1", conversation: "rater-c1", rater: "bo" } }));
     answers["GET /api/campaigns/31"] = () => ({ id: 31, status: "open", counts: { items: { open: 0, settled: 1000 } } });
     answers["GET /assistant/raters/runs/r1"] = () => ({ ...RUN, principal: "bo", answered: 1000, state: "done", done: true });
+    answers["GET /desk/people"] = () => ({ people: [{ subject: "bo", display: "Bo", holds: true }, { subject: "cy", display: "Cy", holds: true }, { subject: "di", display: "Di", holds: false }] });
     answers["POST /api/audit/draws/7/settle"] = () => ({ draw: 7, settle: { campaign: { id: 32, name: "settle" }, items: 40, differences: 30, agreements: 970, agreements_settled: 194, seed: "ki-2026-11-01", share: 0.2, planted: 4, proposals: 40 } });
     answers["GET /api/campaigns/32"] = () => ({ id: 32, status: "open", counts: { items: { open: 0, settled: 40 } } });
     answers["POST /api/campaigns/32/close"] = () => ({ campaign: 32 });
     answers["GET /api/participation/preview"] = () => ({ document: { ...COUNTS, kind: "nils participation sealed read", protocol: { path: "model-first", share: 0.2 } }, digest: DIGEST, previewed_at: "now" });
     answers["POST /api/participation/send"] = () => ({ ...SENT, tier: 3, draw: 7 });
-    await view({ ...ON, tiers: [3] }, [], [DRAW]);
+    await view({ ...ON, tiers: [3] }, [], [{ ...DRAW, created_by: "bo" }]);
     const card = () => el.querySelector('[aria-label="the sealed read"]')!;
     expect(card().textContent).toContain("rater bo: done: 1,000 answered");
     expect([...card().querySelectorAll("button")].map((b) => b.textContent?.trim())).toEqual(["Settle"]);
     await press("Settle");
     // the one post to the engine is the settle; the run's conversation got its fresh token apart
-    expect(asked.filter((a) => a.method === "POST" && a.path.startsWith("/api/"))).toEqual([{ method: "POST", path: "/api/audit/draws/7/settle", body: { share: 0.2 } }]);
+    // the settlers are told to the engine: this person and the desk's people with work on campaigns, never bo, the rater
+    expect(asked.filter((a) => a.method === "POST" && a.path.startsWith("/api/"))).toEqual([{ method: "POST", path: "/api/audit/draws/7/settle", body: { share: 0.2, settlers: [ME, "cy"] } }]);
     expect(asked.some((a) => a.path === "/desk/assistant/conversations/rater-c1/token")).toBe(true);
     // the verify campaign is read for its state once it exists
     expect(asked.at(-1)?.path).toBe("/api/campaigns/32");
@@ -275,13 +285,31 @@ describe("the sealed read", () => {
     expect(text()).toContain(`Sent. The receiver's receipt is ${"cd".repeat(8)}…`);
   });
 
-  it("refuses the settle to the person who read as the rater", async () => {
-    localStorage.setItem("nils-participation-sealed:7", JSON.stringify({ path: "model-first", run: { id: "r1", conversation: "rater-c1", rater: ME } }));
+  it("refuses the settle to the person who drew and read as the rater, by the draw's own record, on any browser", async () => {
+    // nothing kept in this browser: the draw's created_by is the rater
     answers["GET /api/campaigns/31"] = () => ({ id: 31, status: "open", counts: { items: { open: 0, settled: 1000 } } });
-    answers["GET /assistant/raters/runs/r1"] = () => ({ ...RUN, answered: 1000, state: "done", done: true });
     await view({ ...ON, tiers: [3] }, [], [DRAW]);
     expect(button("Settle")?.disabled).toBe(true);
     expect(text()).toContain("You read as the rater, so another person settles.");
+  });
+
+  it("offers Start the rater only to the person the draw named, and tells anyone else who that is", async () => {
+    answers["GET /api/campaigns/31"] = () => ({ id: 31, status: "open", counts: { items: { open: 1000 } } });
+    await view({ ...ON, tiers: [3] }, [], [{ ...DRAW, created_by: "bo" }]);
+    expect(button("Start the rater")).toBeNull();
+    expect(text()).toContain("Only bo starts the rater: the draw named them.");
+    expect(text()).toContain("rater bo: not started");
+  });
+
+  it("drops a run the assistant no longer holds and offers the start again", async () => {
+    localStorage.setItem("nils-participation-sealed:7", JSON.stringify({ path: "model-first", run: { id: "r1", conversation: "rater-c1", rater: ME } }));
+    answers["GET /api/campaigns/31"] = () => ({ id: 31, status: "open", counts: { items: { open: 1000 } } });
+    // no answer for GET /assistant/raters/runs/r1: the assistant restarted and answers 404
+    await view({ ...ON, tiers: [3] }, [], [DRAW]);
+    expect(JSON.parse(localStorage.getItem("nils-participation-sealed:7")!)).toEqual({ path: "model-first" });
+    expect(button("Start the rater")?.disabled).toBe(false);
+    expect(text()).toContain(`rater ${ME}: not started`);
+    expect(asked.filter((a) => a.path === "/assistant/raters/runs/r1")).toHaveLength(1);
   });
 
   it("offers the rater again where the run failed, with its reason", async () => {
@@ -306,7 +334,7 @@ describe("the sealed read", () => {
     ]);
     expect([...card().querySelectorAll(".step-body > b")].map((b) => b.textContent)).toEqual(["Draw", "Read", "Close", "Preview", "Send"]);
     await press("Draw");
-    expect(asked.find((a) => a.method === "POST")).toEqual({ method: "POST", path: "/api/audit/draws", body: { count: 1000, seed: "ki-2026-11-01", readers: [], double_read_share: 0.2, localizers: false } });
+    expect(asked.find((a) => a.method === "POST")).toEqual({ method: "POST", path: "/api/audit/draws", body: { count: 1000, seed: SEED, readers: [], double_read_share: 0.2, localizers: false } });
     expect(JSON.parse(localStorage.getItem("nils-participation-sealed:8")!)).toEqual({ path: "people" });
     // the draw's campaigns tell the path on their own: the verify campaign made at the draw, no raters' campaign
     localStorage.clear();

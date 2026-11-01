@@ -53,7 +53,7 @@ for (const vp of SIZES) {
     await counts.getByRole("button", { name: "Send it" }).click();
     await expect(counts.getByText(/^Sent\. The receiver's receipt is /)).toBeVisible();
     const sealed = page.locator('[aria-label="the sealed read"]');
-    await expect(sealed).toContainText("draw 7: 1,000 stacks, seed example-site-2026-11-01");
+    await expect(sealed).toContainText("draw 7: 1,000 stacks, seed participation-example-site-2026-11-01");
     await expect(sealed).toContainText("share 20 %");
     await expect(sealed).toContainText("rater astrid@site: 488 answered, 2 refused");
     await expect(sealed.locator("button")).toHaveCount(0);

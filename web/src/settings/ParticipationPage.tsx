@@ -17,8 +17,10 @@ import { href } from "../routes";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { principalFor } from "../campaigns/NewCheck";
 import { Acted, Head, Health, messageOf, useActing } from "./common";
 import {
+  AssistantRefused,
   campaignHref,
   changeOf,
   changeRefusal,
@@ -41,11 +43,15 @@ import {
   printWords,
   type RaterRun,
   raterOf,
+  raterOfDraw,
   readCampaignOf,
   readDoneOf,
   runWords,
   type SealedState,
+  sealedSeed,
+  settlersOf,
   startable,
+  startRefusal,
   sealedDraw,
   sections,
   type Send,
@@ -100,7 +106,7 @@ export function ParticipationView({ caps, status, sends, draws, onChanged, now =
       </Head>
       <StatusCard status={status} now={now} />
       <TakePart caps={caps} status={status} onChanged={onChanged} />
-      {on(status, 1) && <TierBlock tier={1} status={status} sends={sends} now={now} onChanged={onChanged} />}
+      {on(status, 1) && <TierBlock caps={caps} tier={1} status={status} sends={sends} now={now} onChanged={onChanged} />}
       {on(status, 3) && <SealedRead caps={caps} status={status} sends={sends} draws={draws} now={now} onChanged={onChanged} />}
     </div>
   );
@@ -280,7 +286,8 @@ function PreviewBlock({ preview }: { preview: Preview }) {
 }
 
 /** Preview and Send of one tier (counts here; the sealed read's card drives tier 3 with its draw). */
-function TierBlock({ tier, status, sends, now, onChanged }: { tier: Tier; status: Status; sends: Send[]; now: Date; onChanged: () => void }) {
+function TierBlock({ caps, tier, status, sends, now, onChanged }: { caps: Capabilities; tier: Tier; status: Status; sends: Send[]; now: Date; onChanged: () => void }) {
+  const may = mayChange(caps);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [sent, setSent] = useState<Send | null>(null);
   const look = useActing();
@@ -309,12 +316,18 @@ function TierBlock({ tier, status, sends, now, onChanged }: { tier: Tier; status
       <div className="row card-head">
         <h2>{TIER_WORDS[tier].name}</h2>
         <span className="grow" />
-        <button type="button" className="button secondary" disabled={look.working} onClick={show}>
-          Preview
-        </button>
-        <button type="button" className="button" disabled={preview === null || send.working || confirm} onClick={() => setConfirm(true)}>
-          Send
-        </button>
+        {may ? (
+          <>
+            <button type="button" className="button secondary" disabled={look.working} onClick={show}>
+              Preview
+            </button>
+            <button type="button" className="button" disabled={preview === null || send.working || confirm} onClick={() => setConfirm(true)}>
+              Send
+            </button>
+          </>
+        ) : (
+          <span className="meta">An administrator previews and sends.</span>
+        )}
       </div>
       <Acted acting={look.acting} />
       {preview && <PreviewBlock preview={preview} />}
@@ -402,7 +415,8 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
   const settleCampaign = path === "model-first" ? (draw?.campaigns?.settle ?? settled) : null;
   // the campaign the close step closes: the verify campaign on the model-first path, the one the people read on the people path
   const toClose = path === "people" ? ratersCampaign : settleCampaign;
-  const rater = raterOf(caps);
+  // the rater of a model-first draw, by the engine's facts: the page names the drawer as the rater
+  const namedRater = draw ? raterOfDraw(draw, kept) : null;
   const sent = sends.find((s) => s.tier === 3 && draw !== null && s.draw === draw.id && s.receipt !== null) ?? null;
   const keep = (k: KeptSealed) => {
     if (draw) keepSealed(draw.id, k);
@@ -438,7 +452,13 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
       participation
         .rater(runId)
         .then((r) => alive && setRun(r))
-        .catch(() => undefined);
+        .catch((e: unknown) => {
+          // the assistant no longer holds the run (it keeps runs in memory; a restart forgets them): the kept run goes, and the start is offered again
+          if (alive && e instanceof AssistantRefused && e.status === 404) {
+            setRun(null);
+            keep({ path });
+          }
+        });
     look();
     const t = setInterval(look, 15_000);
     return () => {
@@ -466,14 +486,17 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
   };
   const done = doneOf(state);
   const next = nextStep(state);
-  const cannotSettle = settleRefusal(state, kept?.run?.rater ?? null, me);
+  const cannotSettle = settleRefusal(state, namedRater, me);
+  const cannotStart = startRefusal(namedRater, me);
 
   const drawIt = () =>
     act.act("drawing the sealed read", async () => {
       const n = Number(count);
       if (!Number.isInteger(n) || n < 1) throw new Error("the count is a whole number of stacks");
       if (!seed.trim()) throw new Error("the draw has a seed");
-      const body = chosen === "model-first" ? { count: n, seed: seed.trim(), raters: [rater] } : { count: n, seed: seed.trim(), readers: [], double_read_share: SHARE };
+      // the mark on the seed keeps this draw apart from the monthly audit's; one rater reads each stack once on the model-first path
+      const marked = sealedSeed(seed);
+      const body = chosen === "model-first" ? { count: n, seed: marked, raters: [me], raters_per_item: 1 } : { count: n, seed: marked, readers: [], double_read_share: SHARE };
       const r = await participation.draw(body);
       keepSealed(r.draw.id, { path: chosen });
       setKept({ path: chosen });
@@ -490,7 +513,9 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
     });
   const settleIt = () =>
     act.act("opening the settle", async () => {
-      const r = await participation.settle(draw!.id, { share: SHARE });
+      // the engine is told who settles: this person and the desk's people with work on campaigns, never the rater
+      const people = (await participation.people()).map((subject) => principalFor(caps, subject));
+      const r = await participation.settle(draw!.id, { share: SHARE, settlers: settlersOf(me, namedRater, people) });
       setSettled(r.settle.campaign?.id ?? null);
       onChanged();
       return r.settle.campaign ? `${r.settle.items.toLocaleString("en-GB")} items to settle: ${r.settle.differences.toLocaleString("en-GB")} differences and ${r.settle.agreements_settled.toLocaleString("en-GB")} of the agreements.` : (r.settle.note ?? "Nothing is left to settle.");
@@ -586,7 +611,7 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
               )}
               {step.id === "read" && draw && (
                 <span className="meta">
-                  {path === "model-first" ? `rater ${kept?.run?.rater ?? rater}: ${runWords(run)}` : `by your people; ${pct(SHARE)} of the stacks read by two`}
+                  {path === "model-first" ? `rater ${namedRater ?? me}: ${runWords(run)}` : `by your people; ${pct(SHARE)} of the stacks read by two`}
                   {ratersCampaign !== null && (
                     <>
                       {" · "}
@@ -601,6 +626,7 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
                   {closedStatus ? ` · ${closedStatus}` : ""}
                 </span>
               )}
+              {step.id === "read" && path === "model-first" && next === "read" && cannotStart && <span className="meta">{cannotStart}</span>}
               {step.id === "settle" && cannotSettle && <span className="warn">{cannotSettle}</span>}
               {step.id === "preview" && preview && <PreviewBlock preview={preview} />}
               {step.id === "send" && confirm && preview && draw && (
@@ -620,7 +646,7 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
                   Draw
                 </button>
               )}
-              {step.id === "read" && path === "model-first" && next === "read" && startable(run) && (runId === null || run !== null) && (
+              {step.id === "read" && path === "model-first" && next === "read" && cannotStart === null && startable(run) && (runId === null || run !== null) && (
                 <button type="button" className="button small" disabled={act.working || status.assistant_rater_door === false} onClick={startRead}>
                   Start the rater
                 </button>

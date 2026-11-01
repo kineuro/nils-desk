@@ -152,6 +152,16 @@ interface CampaignCounts {
 const H = { "content-type": "application/json", "X-Nils-Desk": "1" };
 
 /** The assistant's doors, through the desk's proxy, in the stations' way: the person's own bearer goes with the call. */
+/** The assistant's refusal, with its status: a 404 on a run means the assistant no longer holds it (it keeps runs in memory, so a restart forgets them). */
+export class AssistantRefused extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 async function assistant<T>(method: "GET" | "POST", path: string, body?: unknown): Promise<T> {
   const r = await fetch(`/assistant${path}`, { method, headers: H, body: body === undefined ? undefined : JSON.stringify(body) });
   const text = await r.text();
@@ -161,7 +171,7 @@ async function assistant<T>(method: "GET" | "POST", path: string, body?: unknown
   } catch {
     json = {};
   }
-  if (!r.ok) throw new Error(typeof json.error === "string" ? json.error : `the assistant answered ${r.status}`);
+  if (!r.ok) throw new AssistantRefused(r.status, typeof json.error === "string" ? json.error : `the assistant answered ${r.status}`);
   return json as T;
 }
 
@@ -179,9 +189,15 @@ export const participation = {
   send: (tier: Tier, draw?: number | null) => door<Send>("POST", "/api/participation/send", draw ? { tier, draw } : { tier }),
   sends: () => door<{ sends: Send[] }>("GET", "/api/participation/sends").then((r) => r.sends ?? []),
   /** The sealed read's draw, by count, never with localizers in the frame (the dated change of 2026-11-01). With `raters` (the model-first path) the engine makes the blind raters' campaign; with `readers` (the people path, an empty list for anyone with work on campaigns) it makes the verify campaign at once, a seeded share of the items read by two. */
-  draw: (body: { count: number; seed: string; raters?: string[]; readers?: string[]; double_read_share?: number; name?: string }) => door<{ draw: Draw; campaign: { id: number; name: string; purpose?: string } }>("POST", "/api/audit/draws", { ...body, localizers: false }),
+  draw: (body: { count: number; seed: string; raters?: string[]; raters_per_item?: number; readers?: string[]; double_read_share?: number; name?: string }) => door<{ draw: Draw; campaign: { id: number; name: string; purpose?: string } }>("POST", "/api/audit/draws", { ...body, localizers: false }),
   draws: () => door<{ draws: Draw[] }>("GET", "/api/audit/draws").then((r) => r.draws ?? []),
   settle: (draw: number, body: { share: number; settlers?: string[] }) => door<Settled>("POST", `/api/audit/draws/${draw}/settle`, body),
+  /** The desk's people who hold work on campaigns, as subjects: who may settle. A desk that refuses the directory answers an empty list. */
+  people: () =>
+    fetch("/desk/people?holding=campaigns:work")
+      .then((r) => (r.ok ? (r.json() as Promise<{ people?: { subject: string; holds?: boolean }[] }>) : { people: [] }))
+      .then((r) => (r.people ?? []).filter((p) => p.holds !== false).map((p) => p.subject))
+      .catch(() => [] as string[]),
   campaign: (id: number) => door<CampaignCounts>("GET", `/api/campaigns/${id}`),
   close: (id: number) => door<{ campaign: number }>("POST", `/api/campaigns/${id}/close`, {}),
   startRater: (campaign: number) => assistant<RaterRun>("POST", "/raters/runs", { campaign, thinking: true }),
@@ -234,10 +250,19 @@ export function pct(share: number): string {
   return `${Math.round(share * 100)} %`;
 }
 
-/** The seed the protocol gives a draw: the site's name and the date, which a person may edit. */
+/** What marks a draw as the sealed read's, apart from the monthly audit's draws by count: its seed starts with this. */
+export const SEED_PREFIX = "participation-";
+
+/** The seed the protocol gives a draw: the mark, the site's name and the date, which a person may edit. */
 export function defaultSeed(site: string | null, now = new Date()): string {
   const day = now.toISOString().slice(0, 10);
-  return `${(site ?? "site").trim().replace(/\s+/g, "-") || "site"}-${day}`;
+  return `${SEED_PREFIX}${(site ?? "site").trim().replace(/\s+/g, "-") || "site"}-${day}`;
+}
+
+/** A seed as the draw takes it: the mark put back where a person edited it away, so the card finds the draw again. */
+export function sealedSeed(seed: string): string {
+  const s = seed.trim();
+  return s.startsWith(SEED_PREFIX) ? s : `${SEED_PREFIX}${s}`;
 }
 
 /** The key's fingerprint as shown: the first 16 of its sha256, as the document's signed_by names it. */
@@ -377,10 +402,10 @@ export function readDoneOf(c: CampaignCounts | null, run: RaterRun | null): bool
   return (items.open ?? 0) + (items.claimed ?? 0) === 0 && Object.values(items).some((n) => (n ?? 0) > 0);
 }
 
-/** The draw the sealed read continues: the newest draw by count. */
+/** The draw the sealed read continues: the newest draw by count whose seed carries the mark; the monthly audit's draws by count are never taken. */
 export function sealedDraw(draws: Draw[]): Draw | null {
-  const byCount = draws.filter((d) => typeof d.count === "number" && d.count > 0);
-  return byCount.sort((a, b) => b.id - a.id)[0] ?? null;
+  const marked = draws.filter((d) => typeof d.count === "number" && d.count > 0 && typeof d.seed === "string" && d.seed.startsWith(SEED_PREFIX));
+  return marked.sort((a, b) => b.id - a.id)[0] ?? null;
 }
 
 /** A rater run's progress in a line; a run that refused or failed says its reason. */
@@ -411,10 +436,25 @@ export function raterOf(caps: Capabilities): string {
   return principalOf(caps);
 }
 
+/** The rater of a model-first draw, from the engine's facts first: the page names the drawer as the rater, so the draw's `created_by` is the rater; what this browser kept of the run is a second source. */
+export function raterOfDraw(draw: Draw | null, kept: KeptSealed | null): string | null {
+  return draw?.created_by ?? kept?.run?.rater ?? null;
+}
+
 /** Why this person may not settle this draw, or null: on the model-first path the person who read as the rater settles nothing. */
 export function settleRefusal(s: SealedState, rater: string | null, me: string): string | null {
   if (s.path !== "model-first" || rater === null) return null;
   return rater === me ? "You read as the rater, so another person settles." : null;
+}
+
+/** Who may settle, told to the engine: the person settling and the desk's people with work on campaigns, never the rater. An empty list would let anyone settle, the rater included, so the settler is always named. */
+export function settlersOf(me: string, rater: string | null, people: string[]): string[] {
+  return [...new Set([me, ...people])].filter((p) => p !== rater);
+}
+
+/** Why this person may not start the rater, or null: the draw named its rater, and the run reads with the starter's token, so only that person's run is admitted. */
+export function startRefusal(rater: string | null, me: string): string | null {
+  return rater === null || rater === me ? null : `Only ${rater} starts the rater: the draw named them.`;
 }
 
 /** The link to a campaign in Review. */
