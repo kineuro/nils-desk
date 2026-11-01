@@ -177,7 +177,7 @@ describe("preview and send of the counts", () => {
     expect(what).toContain("goes to https://participation.example.org");
     await press("Send it");
     expect(asked.at(-1)).toEqual({ method: "POST", path: "/api/participation/send", body: { tier: 1 } });
-    expect(text()).toContain(`Sent. The receiver's receipt is ${RECEIPT}.`);
+    expect(text()).toContain(`Sent. The receiver's receipt is ${"cd".repeat(8)}…`);
     expect(el.querySelector('[aria-label="what the send posts"]')).toBeNull();
   });
 
@@ -272,7 +272,7 @@ describe("the sealed read", () => {
     expect(card().textContent).toContain(`File ${"ab".repeat(8)}… goes to https://participation.example.org.`);
     await press("Send it");
     expect(asked.at(-1)).toEqual({ method: "POST", path: "/api/participation/send", body: { tier: 3, draw: 7 } });
-    expect(text()).toContain(`Sent. The receiver's receipt is ${RECEIPT}.`);
+    expect(text()).toContain(`Sent. The receiver's receipt is ${"cd".repeat(8)}…`);
   });
 
   it("refuses the settle to the person who read as the rater", async () => {

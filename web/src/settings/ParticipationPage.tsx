@@ -301,7 +301,7 @@ function TierBlock({ tier, status, sends, now, onChanged }: { tier: Tier; status
       setConfirm(false);
       onChanged();
       if (r.error) throw new Error(r.error);
-      return `Sent. The receiver's receipt is ${r.receipt ?? "missing"}.`;
+      return `Sent. The receiver's receipt is ${shortDigest(r.receipt)}`;
     });
   const mine = sends.filter((s) => s.tier === tier);
   return (
@@ -339,7 +339,7 @@ function TierBlock({ tier, status, sends, now, onChanged }: { tier: Tier; status
       <Acted acting={send.acting} />
       {sent?.receipt && (
         <p className="ok-words">
-          receipt <span className="path">{sent.receipt}</span>
+          receipt <span className="path" title={sent.receipt}>{shortDigest(sent.receipt)}</span>
         </p>
       )}
       <SendsList sends={mine} now={now} />
@@ -515,7 +515,7 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
       setConfirm(false);
       onChanged();
       if (r.error) throw new Error(r.error);
-      return `Sent. The receiver's receipt is ${r.receipt ?? "missing"}.`;
+      return `Sent. The receiver's receipt is ${shortDigest(r.receipt)}`;
     });
 
   const n = (x: number | null | undefined) => (typeof x === "number" ? x.toLocaleString("en-GB") : "");
@@ -610,7 +610,7 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
               )}
               {step.id === "send" && sent && (
                 <span className="ok-words">
-                  receipt <span className="path">{sent.receipt}</span>
+                  receipt <span className="path" title={sent.receipt ?? undefined}>{shortDigest(sent.receipt)}</span>
                 </span>
               )}
             </div>

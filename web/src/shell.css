@@ -1810,3 +1810,5 @@ table.thin tr.member td:first-child { padding-left: 1.6rem; }
 .participation .auto-row { margin-left: 1.6rem; }
 .participation .preview h3 { margin: 0; font-size: var(--n-text-size-small); text-transform: capitalize; color: var(--n-text-dim); }
 .participation .step .actions { justify-content: flex-end; }
+/* a receiver's address, a digest or a seed never widens a phone's screen */
+.participation .path, .participation .ok-words, .participation .note-lead, .participation .card-head .meta { white-space: normal; overflow-wrap: anywhere; }
