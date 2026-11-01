@@ -128,6 +128,8 @@ export interface Packs {
   pinned?: string[];
   behind?: boolean;
   error?: string;
+  /** "not possible" where the release's packs could not be read, beside `installed`. */
+  comparison?: string;
   command: string;
 }
 

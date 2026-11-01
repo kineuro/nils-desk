@@ -6,7 +6,12 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Added
 
+- The stack page (Why is this) has a Header fold with the header facts the rules read, from the engine's `GET /api/stacks/{stack}/header`: the fingerprint, the text, the physics and the private elements as tables of name and value, with the count of withheld private elements in one line; a stack of a sealed sample shows "Sealed: the header is not shown". An engine without the door shows the page as before.
 - Settings > Participation (the site participation design of 2026-11-01): what this site shares, as a file it reads first. Off by default, nothing leaves the install. Take part names the site, the receiver, the key file on the engine's machine and the tiers as two switches, counts and a sealed read, with auto for counts and the model server note for the sealed read's model-first path. Preview draws the file as tables of its sections with the raw JSON under a fold; Send shows the digest and the receiver first, then the receipt or the error's words, with the sends listed under it. The sealed read's card drives the draw (1,000 stacks, the seed marked as the sealed read's with the site and the date, the path model first or people, the share 20 %, never a localizer in the frame), the rater's run through the assistant's rater door with its counts, started only by the person the draw named, Settle at 20 % of the agreements with the settlers named to the engine and the link to the verify campaign (never for the person who read as the rater), Close, then Preview and Send of the sealed read for the draw, each step enabled once the one before is done. Needs an engine with the participation doors and the assistant's rater door; the page is offered where the engine serves `GET /api/participation`.
+
+### Fixed
+
+- The Parts page lists the rule packs installed on disk where the engine cannot read the release's packs, and says "comparison with the release not possible" in place of "none, the release's packs could not be read". An engine from before still shows the old words.
 
 ## [1.0.0-beta.4] - 2026-11-01
 

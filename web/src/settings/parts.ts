@@ -302,14 +302,14 @@ export function packRow(packs: Packs): PartRow {
   const installed = (packs.installed ?? []).map(packWords).join(" · ");
   const edited = packs.edited ?? [];
   const health: PartRow["health"] = packs.error
-    ? { tone: "caution", words: "the release's packs could not be read" }
+    ? { tone: "caution", words: packs.installed ? "comparison with the release not possible" : "the release's packs could not be read" }
     : packs.behind
       ? { tone: "caution", words: `older than engine ${packs.release}'s` }
       : edited.length > 0
         ? { tone: "caution", words: `${edited.join(", ")} changed on this machine, kept` }
         : { tone: "ok", words: `engine ${packs.release}'s` };
   const newer: PartRow["newer"] = packs.error
-    ? { text: "not checked", tag: false }
+    ? { text: packs.installed ? "comparison not possible" : "not checked", tag: false }
     : packs.behind
       ? { text: packsNamed(packs.bundled, packs.stale), tag: true }
       : { text: "moves with the engine", tag: false };
