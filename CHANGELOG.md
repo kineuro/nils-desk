@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.4] - 2026-11-01
+
+The fourth beta, beside engine 1.0.0-beta.5: the Data page shows a dataset's counts at once and says when they were read while the engine counts again. An engine from before shows no line; the floors are unchanged.
+
 ### Changed
 
 - The Data page shows a dataset's "Where it is" and "What it holds" from the summary's first answer, and while the engine counts again (engine 1.0.0-beta.5, `counting`) a line under the counts says when the ones shown were read ("counts from 14:50, counting again"); the summary is read again a while after each answer until the fresh counts land, as it is while a step runs. An engine from before shows no line.
