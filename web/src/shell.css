@@ -1802,3 +1802,11 @@ table.thin tr.member td:first-child { padding-left: 1.6rem; }
 .provenance-head { display: flex; flex-wrap: wrap; gap: 0.3rem 0.6rem; align-items: baseline; min-width: 0; }
 .provenance-step .unit-pack { margin-top: 0.2rem; }
 .dview-fact.dview-prov { border: 0; background: transparent; font: inherit; color: var(--n-brand-text); cursor: pointer; padding: 0; }
+
+/* Settings > Participation (Wave 7b step 5): the sealed read's steps in a list, the raw JSON under its fold, the auto switch set in under counts */
+.participation .steps-list { display: grid; }
+.participation .steps-list .step:first-child { border-top: 0; }
+.participation .raw { margin: 0.4rem 0 0; padding: 0.6rem 0.8rem; max-height: 24rem; overflow: auto; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-sunken); font-family: var(--n-font-mono); font-size: 12px; white-space: pre; }
+.participation .auto-row { margin-left: 1.6rem; }
+.participation .preview h3 { margin: 0; font-size: var(--n-text-size-small); text-transform: capitalize; color: var(--n-text-dim); }
+.participation .step .actions { justify-content: flex-end; }
