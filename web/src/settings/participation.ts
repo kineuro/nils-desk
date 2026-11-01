@@ -10,6 +10,7 @@
 
 import { door, DoorError } from "../ask/client";
 import type { Capabilities } from "../capabilities";
+import { principalOf } from "../campaigns/client";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href } from "../routes";
@@ -40,38 +41,42 @@ export interface Send {
   digest: string;
   bytes: number;
   sent_at: string;
-  by: string | null;
+  sent_by: string | null;
   receiver: string;
   receipt: string | null;
   error: string | null;
   previewed_at: string | null;
   draw?: number | null;
+  ok?: boolean;
+  stored_as?: string | null;
 }
 
-/** What GET /api/participation answers: off, or the site, the tiers, the receiver, the key's fingerprint, auto, the last send per tier, and whether the receiver and the assistant's rater door answer. */
+/** What GET /api/participation answers: off ({enabled: false, tiers: []}), or the site, the tiers, the receiver, the key file's path (never the key), the signing key's fingerprint, auto, who enabled it when, the last send that went through per tier, and whether the receiver and the assistant's rater door answer. */
 export interface Status {
-  site: string | null;
-  registry_id?: string | null;
+  enabled: boolean;
   tiers: number[];
-  receiver: string | null;
-  key_file: string | null;
-  key_fingerprint: string | null;
-  auto: boolean;
+  note?: string;
+  site?: string | null;
+  receiver?: string | null;
+  key_file?: string | null;
+  key_fingerprint?: string | null;
+  public_key?: string | null;
+  auto?: boolean;
   enabled_at?: string | null;
   enabled_by?: string | null;
+  /** The newest preview per tier, by the tier's number as a key. */
+  previewed?: Partial<Record<string, unknown>> | null;
   /** The last send per tier, by the tier's number as a key. */
-  last_send: Partial<Record<string, Send | null>>;
-  receiver_reachable: boolean | null;
-  /** The assistant's rater door (`POST /raters/runs`), as the engine probed it. */
-  rater_door_reachable: boolean | null;
-  /** The identity the assistant's rater reads as, where it holds one of its own (the rater slice's decision); null where the run reads as the person who starts it. */
-  rater_principal?: string | null;
+  last_send?: Partial<Record<string, Send | null>>;
+  receiver_reachable?: boolean | null;
+  /** The assistant's rater door (`POST /raters/runs`), as the engine probed it: null where there is no assistant or it was not probed. */
+  assistant_rater_door?: boolean | null;
 }
 
-/** What POST /api/participation takes: the tiers to turn on or off, and the site's words. A field left out is kept as it is. */
+/** What POST /api/participation takes: `tiers` replaces the set shared, `disable` true turns participation off whole, and the site's words; a field left out is kept as it is. */
 export interface Change {
-  enable?: Tier[];
-  disable?: Tier[];
+  tiers?: Tier[];
+  disable?: true | Tier[];
   site?: string;
   receiver?: string;
   key_file?: string;
@@ -120,16 +125,22 @@ export interface Settled {
   };
 }
 
-/** The counts a rater run answers, and nothing of the items. */
+/** What the assistant's rater doors answer: the run, its conversation (the desk keeps a fresh token on it), who it reads as, its state and counts, and nothing of the items. */
 export interface RaterRun {
-  id: string;
+  run: string;
+  conversation: string;
+  principal: string;
+  state: "queued" | "running" | "done" | "refused" | "failed" | string;
+  done: boolean;
+  /** Why the run refused or failed: a reason, never an item. */
+  error?: string | null;
   claimed: number;
   answered: number;
   refused: number;
   cant_tell: number;
   errors: number;
-  done: boolean;
-  error?: string | null;
+  /** Whether the run still holds a token of the person's; the desk pushes a fresh one as it does for a conversation. */
+  token?: "held" | "missing";
 }
 
 interface CampaignCounts {
@@ -167,24 +178,29 @@ export const participation = {
   preview: (tier: Tier, draw?: number | null) => door<Record<string, unknown>>("GET", `/api/participation/preview?tier=${tier}${draw ? `&draw=${draw}` : ""}`).then(previewOf),
   send: (tier: Tier, draw?: number | null) => door<Send>("POST", "/api/participation/send", draw ? { tier, draw } : { tier }),
   sends: () => door<{ sends: Send[] }>("GET", "/api/participation/sends").then((r) => r.sends ?? []),
-  /** The sealed read's draw, by count, never with localizers in the frame (the dated change of 2026-11-01); on the people path a seeded share of the items goes to two readers. */
-  draw: (body: { count: number; seed: string; raters?: string[]; double_read_share?: number; name?: string }) => door<{ draw: Draw; campaign: { id: number; name: string } }>("POST", "/api/audit/draws", { ...body, localizers: false }),
+  /** The sealed read's draw, by count, never with localizers in the frame (the dated change of 2026-11-01). With `raters` (the model-first path) the engine makes the blind raters' campaign; with `readers` (the people path, an empty list for anyone with work on campaigns) it makes the verify campaign at once, a seeded share of the items read by two. */
+  draw: (body: { count: number; seed: string; raters?: string[]; readers?: string[]; double_read_share?: number; name?: string }) => door<{ draw: Draw; campaign: { id: number; name: string; purpose?: string } }>("POST", "/api/audit/draws", { ...body, localizers: false }),
   draws: () => door<{ draws: Draw[] }>("GET", "/api/audit/draws").then((r) => r.draws ?? []),
   settle: (draw: number, body: { share: number; settlers?: string[] }) => door<Settled>("POST", `/api/audit/draws/${draw}/settle`, body),
   campaign: (id: number) => door<CampaignCounts>("GET", `/api/campaigns/${id}`),
   close: (id: number) => door<{ campaign: number }>("POST", `/api/campaigns/${id}/close`, {}),
   startRater: (campaign: number) => assistant<RaterRun>("POST", "/raters/runs", { campaign, thinking: true }),
   rater: (id: string) => assistant<RaterRun>("GET", `/raters/runs/${encodeURIComponent(id)}`),
+  /** A fresh token of the person's, pushed to the run's conversation, as the desk does for a conversation's turn (every five minutes while the page is open). */
+  freshen: (conversation: string) => fetch(`/desk/assistant/conversations/${encodeURIComponent(conversation)}/token`, { method: "POST", headers: H }).then(() => undefined),
 };
 
-/** Whether the page is offered: the engine serves the status door, to a person who may see the install. */
+/** How often the rater run's conversation gets a fresh token while the page is open: the conversation page's cadence. */
+export const TOKEN_PUSH_MS = 5 * 60_000;
+
+/** Whether the page is offered: the engine serves the status door, to a person who may see the database (the grant the engine guards it with, as the settings doors). */
 export function participates(caps: Capabilities): boolean {
-  return may(caps, "install:see") && served(caps, DOORS.status);
+  return may(caps, "database:see") && served(caps, DOORS.status);
 }
 
-/** Whether this person changes what the site shares: the grant the settings doors take for an administrator's change. */
+/** Whether this person changes what the site shares, previews and sends: database work, as the engine guards those doors. */
 export function mayChange(caps: Capabilities): boolean {
-  return may(caps, "install:work");
+  return may(caps, "database:work");
 }
 
 /** Whether the sealed read's steps may be driven from here: the draw and the settle are review and campaign work. */
@@ -199,7 +215,7 @@ export function on(s: Status | null, tier: Tier): boolean {
 
 /** Whether the site takes part at all. */
 export function takesPart(s: Status | null): boolean {
-  return s !== null && s.tiers.length > 0;
+  return s !== null && s.enabled && (s.tiers ?? []).length > 0;
 }
 
 export const TIER_WORDS: Record<Tier, { name: string; shares: string; line: string }> = {
@@ -258,13 +274,13 @@ export function changeRefusal(d: { site: string; receiver: string; keyFile: stri
   return null;
 }
 
-/** The change a draft makes against what is on now; null where it changes nothing. */
+/** The change a draft makes against what is on now; null where it changes nothing. Every tier off turns participation off whole. */
 export function changeOf(s: Status | null, d: { site: string; receiver: string; keyFile: string; tiers: Tier[]; auto: boolean }): Change | null {
   const c: Change = {};
-  const enable = d.tiers.filter((t) => !on(s, t));
-  const disable = TIERS.filter((t) => on(s, t) && !d.tiers.includes(t));
-  if (enable.length > 0) c.enable = enable;
-  if (disable.length > 0) c.disable = disable;
+  const was = TIERS.filter((t) => on(s, t));
+  // every tier off: participation goes off whole, and nothing else is sent
+  if (d.tiers.length === 0) return was.length > 0 ? { disable: true } : null;
+  if (d.tiers.length !== was.length || d.tiers.some((t) => !was.includes(t))) c.tiers = [...d.tiers];
   if (d.site.trim() && d.site.trim() !== (s?.site ?? "")) c.site = d.site.trim();
   if (d.receiver.trim() && d.receiver.trim() !== (s?.receiver ?? "")) c.receiver = d.receiver.trim();
   if (d.keyFile.trim() && d.keyFile.trim() !== (s?.key_file ?? "")) c.key_file = d.keyFile.trim();
@@ -353,9 +369,9 @@ export function nextStep(s: SealedState): StepId | null {
   return null;
 }
 
-/** Whether a campaign's items are all read: none open and none claimed. */
+/** Whether a campaign's items are all read: the rater run ended well, or the campaign counts none open and none claimed (a run that refused or failed proves nothing). */
 export function readDoneOf(c: CampaignCounts | null, run: RaterRun | null): boolean {
-  if (run?.done) return true;
+  if (run?.state === "done") return true;
   const items = c?.counts?.items;
   if (!items) return false;
   return (items.open ?? 0) + (items.claimed ?? 0) === 0 && Object.values(items).some((n) => (n ?? 0) > 0);
@@ -367,9 +383,10 @@ export function sealedDraw(draws: Draw[]): Draw | null {
   return byCount.sort((a, b) => b.id - a.id)[0] ?? null;
 }
 
-/** A rater run's progress in a line. */
+/** A rater run's progress in a line; a run that refused or failed says its reason. */
 export function runWords(r: RaterRun | null): string {
   if (!r) return "not started";
+  if (r.state === "refused" || r.state === "failed") return `${r.state}: ${r.error ?? "no reason given"}`;
   const n = (x: number) => x.toLocaleString("en-GB");
   const parts = [`${n(r.answered)} answered`];
   if (r.refused > 0) parts.push(`${n(r.refused)} refused`);
@@ -378,15 +395,20 @@ export function runWords(r: RaterRun | null): string {
   return `${r.done ? "done: " : ""}${parts.join(", ")}`;
 }
 
+/** Whether a run may be started (again): none yet, or the last one refused or failed. */
+export function startable(r: RaterRun | null): boolean {
+  return r === null || r.state === "refused" || r.state === "failed";
+}
+
 /**
- * Who reads as the rater on the model-first path (the rater slice's
- * decision, pending): the assistant's own identity where the engine's status
- * names one, else the person who starts the run, who then may not settle.
- * Both cases pass through here, so the decision lands in one place.
+ * Who reads as the rater on the model-first path (the rater slice's decision
+ * of 2026-11-01): the assistant holds no identity of its own against the
+ * engine and reads with the token of the person who starts the run, so that
+ * person is the draw's rater and may not settle. One place, should an own
+ * identity come.
  */
-export function raterOf(s: Status | null, caps: Capabilities): { principal: string; own: boolean } {
-  const own = s?.rater_principal ?? null;
-  return own ? { principal: own, own: true } : { principal: caps.person.subject, own: false };
+export function raterOf(caps: Capabilities): string {
+  return principalOf(caps);
 }
 
 /** Why this person may not settle this draw, or null: on the model-first path the person who read as the rater settles nothing. */
@@ -403,7 +425,7 @@ export function campaignHref(id: number): string {
 /** What this browser keeps of a draw between visits: its path, which the draw record does not say, and the rater run, which the assistant does not list. */
 export interface KeptSealed {
   path: Path;
-  run?: { id: string; rater: string };
+  run?: { id: string; conversation: string; rater: string };
 }
 const KEY = (draw: number) => `nils-participation-sealed:${draw}`;
 export function keptSealed(draw: number): KeptSealed | null {
@@ -422,11 +444,18 @@ export function keepSealed(draw: number, kept: KeptSealed) {
   }
 }
 
-/** The path of a draw made before: what this browser kept, else model-first where the draw was settled, else what the page's switch says. */
+/** The path of a draw made before: a raters' campaign means model first; a settle campaign with no raters' campaign is the people path's verify campaign, made at the draw; else what this browser kept or the page's switch says. */
 export function pathOf(draw: Draw | null, kept: KeptSealed | null, chosen: Path): Path {
-  if (kept) return kept.path;
-  if (draw?.settle || draw?.campaigns?.settle) return "model-first";
-  return chosen;
+  if (draw?.campaigns?.raters) return "model-first";
+  if (draw?.campaigns && !draw.campaigns.raters && draw.campaigns.settle) return "people";
+  return kept?.path ?? chosen;
+}
+
+/** The campaign the drawn stacks are read in: the raters' campaign on the model-first path, the verify campaign made at the draw on the people path. */
+export function readCampaignOf(draw: Draw | null, path: Path): number | null {
+  if (!draw) return null;
+  if (path === "people") return draw.campaigns?.settle ?? draw.campaign_id ?? null;
+  return draw.campaigns?.raters ?? draw.campaign_id ?? null;
 }
 
 /** The error's words for the page: the engine's, or the assistant's. */

@@ -41,9 +41,11 @@ import {
   printWords,
   type RaterRun,
   raterOf,
+  readCampaignOf,
   readDoneOf,
   runWords,
   type SealedState,
+  startable,
   sealedDraw,
   sections,
   type Send,
@@ -55,6 +57,7 @@ import {
   statusWords,
   stepsFor,
   takesPart,
+  TOKEN_PUSH_MS,
   type Tier,
   TIER_WORDS,
   TIERS,
@@ -122,7 +125,7 @@ function StatusCard({ status, now }: { status: Status; now: Date }) {
           </dd>
           <dt>key</dt>
           <dd>
-            <span className="path">{printWords(status.key_fingerprint)}</span>
+            <span className="path">{printWords(status.key_fingerprint ?? null)}</span>
           </dd>
           {TIERS.filter((t) => on(status, t)).map((t) => (
             <LastSend key={t} tier={t} send={status.last_send?.[String(t)] ?? null} now={now} />
@@ -130,7 +133,7 @@ function StatusCard({ status, now }: { status: Status; now: Date }) {
           {on(status, 3) && (
             <>
               <dt>rater</dt>
-              <dd>{status.rater_door_reachable === false ? <span className="warn">the assistant&apos;s rater door did not answer</span> : status.rater_door_reachable === true ? "the assistant answers" : "not probed"}</dd>
+              <dd>{status.assistant_rater_door === false ? <span className="warn">the assistant&apos;s rater door did not answer</span> : status.assistant_rater_door === true ? "the assistant answers" : "not probed"}</dd>
             </>
           )}
         </dl>
@@ -158,7 +161,7 @@ function TakePart({ caps, status, onChanged }: { caps: Capabilities; status: Sta
   const [receiver, setReceiver] = useState(status.receiver ?? "");
   const [keyFile, setKeyFile] = useState(status.key_file ?? "");
   const [tiers, setTiers] = useState<Tier[]>(TIERS.filter((t) => on(status, t)));
-  const [auto, setAuto] = useState(status.auto);
+  const [auto, setAuto] = useState(status.auto ?? false);
   const act = useActing();
   const draft = { site, receiver, keyFile, tiers, auto };
   const refused = changeRefusal(draft);
@@ -362,7 +365,7 @@ function SendsList({ sends, now }: { sends: Send[]; now: Date }) {
           {sends.map((s) => (
             <tr key={s.id}>
               <td>{whenWords(s.sent_at, now)}</td>
-              <td>{s.by ?? ""}</td>
+              <td>{s.sent_by ?? ""}</td>
               <td>
                 <span className="path">{s.digest.slice(0, 16)}</span>
               </td>
@@ -380,12 +383,12 @@ function SendsList({ sends, now }: { sends: Send[]; now: Date }) {
 function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capabilities; status: Status; sends: Send[]; draws: Draw[]; now: Date; onChanged: () => void }) {
   const ids = useId();
   const drives = mayDrive(caps);
-  const me = caps.person.subject;
+  const me = raterOf(caps);
   const draw = sealedDraw(draws);
   const [kept, setKept] = useState<KeptSealed | null>(() => (draw ? keptSealed(draw.id) : null));
-  const [chosen, setChosen] = useState<Path>(status.rater_door_reachable === false ? "people" : "model-first");
+  const [chosen, setChosen] = useState<Path>(status.assistant_rater_door === false ? "people" : "model-first");
   const [count, setCount] = useState(String(DRAW_COUNT));
-  const [seed, setSeed] = useState(() => defaultSeed(status.site, now));
+  const [seed, setSeed] = useState(() => defaultSeed(status.site ?? null, now));
   const [run, setRun] = useState<RaterRun | null>(null);
   const [items, setItems] = useState<Partial<Record<string, number>> | null>(null);
   const [closedStatus, setClosedStatus] = useState<string | null>(null);
@@ -394,11 +397,12 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
   const [confirm, setConfirm] = useState(false);
   const act = useActing();
   const path = pathOf(draw, kept, chosen);
-  const ratersCampaign = draw?.campaigns?.raters ?? draw?.campaign_id ?? null;
-  const settleCampaign = draw?.campaigns?.settle ?? settled;
-  // the campaign the close step closes: the verify campaign on the model-first path, the blind one on the people path
+  const ratersCampaign = readCampaignOf(draw, path);
+  // the settle is the model-first path's; the people path's verify campaign is made at the draw
+  const settleCampaign = path === "model-first" ? (draw?.campaigns?.settle ?? settled) : null;
+  // the campaign the close step closes: the verify campaign on the model-first path, the one the people read on the people path
   const toClose = path === "people" ? ratersCampaign : settleCampaign;
-  const rater = raterOf(status, caps);
+  const rater = raterOf(caps);
   const sent = sends.find((s) => s.tier === 3 && draw !== null && s.draw === draw.id && s.receipt !== null) ?? null;
   const keep = (k: KeptSealed) => {
     if (draw) keepSealed(draw.id, k);
@@ -423,8 +427,9 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
     };
   }, [ratersCampaign, toClose]);
 
-  // the rater run kept for this draw, followed while it runs
-  const runId = run?.id ?? kept?.run?.id ?? null;
+  // the rater run kept for this draw, followed while it runs, and its conversation kept in a fresh token of the person's
+  const runId = run?.run ?? kept?.run?.id ?? null;
+  const conversation = run?.conversation ?? kept?.run?.conversation ?? null;
   const runDone = run?.done ?? false;
   useEffect(() => {
     if (!runId || runDone) return;
@@ -432,7 +437,7 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
     const look = () =>
       participation
         .rater(runId)
-        .then((r) => alive && setRun({ ...r, id: runId }))
+        .then((r) => alive && setRun(r))
         .catch(() => undefined);
     look();
     const t = setInterval(look, 15_000);
@@ -441,6 +446,13 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
       clearInterval(t);
     };
   }, [runId, runDone]);
+  useEffect(() => {
+    if (!conversation || runDone) return;
+    const push = () => participation.freshen(conversation).catch(() => undefined);
+    push();
+    const t = setInterval(push, TOKEN_PUSH_MS);
+    return () => clearInterval(t);
+  }, [conversation, runDone]);
 
   const state: SealedState = {
     draw,
@@ -461,7 +473,7 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
       const n = Number(count);
       if (!Number.isInteger(n) || n < 1) throw new Error("the count is a whole number of stacks");
       if (!seed.trim()) throw new Error("the draw has a seed");
-      const body = chosen === "model-first" ? { count: n, seed: seed.trim(), raters: [rater.principal] } : { count: n, seed: seed.trim(), double_read_share: SHARE };
+      const body = chosen === "model-first" ? { count: n, seed: seed.trim(), raters: [rater] } : { count: n, seed: seed.trim(), readers: [], double_read_share: SHARE };
       const r = await participation.draw(body);
       keepSealed(r.draw.id, { path: chosen });
       setKept({ path: chosen });
@@ -472,9 +484,9 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
     act.act("starting the rater", async () => {
       if (ratersCampaign === null) throw new Error("the draw has no campaign");
       const r = await participation.startRater(ratersCampaign);
-      keep({ path, run: { id: r.id, rater: rater.principal } });
+      keep({ path, run: { id: r.run, conversation: r.conversation, rater: r.principal } });
       setRun(r);
-      return `The rater reads campaign ${ratersCampaign} as ${rater.principal}.`;
+      return `The rater reads campaign ${ratersCampaign} as ${r.principal}.`;
     });
   const settleIt = () =>
     act.act("opening the settle", async () => {
@@ -511,7 +523,7 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
     <div className="row actions" role="radiogroup" aria-label="the path">
       {(Object.keys(PATHS) as Path[]).map((p) => (
         <label key={p} className="check-row">
-          <input type="radio" name={`${ids}-path`} checked={chosen === p} onChange={() => setChosen(p)} disabled={p === "model-first" && status.rater_door_reachable === false} />
+          <input type="radio" name={`${ids}-path`} checked={chosen === p} onChange={() => setChosen(p)} disabled={p === "model-first" && status.assistant_rater_door === false} />
           <span>{PATHS[p].words}</span>
         </label>
       ))}
@@ -532,7 +544,7 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
       </div>
       <p className="meta">{PATHS[path].line}</p>
       {!drives && <p className="meta">Drawing and settling are review and campaign work.</p>}
-      {draw && !kept && draw.settle === undefined && !draw.campaigns?.settle && (
+      {draw && !kept && !draw.campaigns && (
         <div className="row actions">
           <span className="meta">This browser does not know the draw&apos;s path:</span>
           {pathSwitch}
@@ -574,11 +586,11 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
               )}
               {step.id === "read" && draw && (
                 <span className="meta">
-                  {path === "model-first" ? `rater ${kept?.run?.rater ?? rater.principal}: ${runWords(run)}` : `by your people; ${pct(SHARE)} of the stacks read by two`}
+                  {path === "model-first" ? `rater ${kept?.run?.rater ?? rater}: ${runWords(run)}` : `by your people; ${pct(SHARE)} of the stacks read by two`}
                   {ratersCampaign !== null && (
                     <>
                       {" · "}
-                      <a href={campaignHref(ratersCampaign)}>the blind campaign</a>
+                      <a href={campaignHref(ratersCampaign)}>{path === "model-first" ? "the blind campaign" : "the verify campaign"}</a>
                     </>
                   )}
                 </span>
@@ -608,8 +620,8 @@ function SealedRead({ caps, status, sends, draws, now, onChanged }: { caps: Capa
                   Draw
                 </button>
               )}
-              {step.id === "read" && path === "model-first" && next === "read" && runId === null && (
-                <button type="button" className="button small" disabled={act.working || status.rater_door_reachable === false} onClick={startRead}>
+              {step.id === "read" && path === "model-first" && next === "read" && startable(run) && (runId === null || run !== null) && (
+                <button type="button" className="button small" disabled={act.working || status.assistant_rater_door === false} onClick={startRead}>
                   Start the rater
                 </button>
               )}
