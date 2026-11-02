@@ -332,6 +332,12 @@ describe("a row per rule pack (record 55 B5)", () => {
     ]);
   });
 
+  it("says another build where a pack's own release has the version in place", () => {
+    const mri = rules("mri", "1.4.0", "1.4.0", "1.4.0");
+    const i = install({ release: { ...listed([at("engine"), at("desk"), mri]), packs, rules: [mri] } });
+    expect(updateWords(i)[0]).toBe("Another build of the MRI rules 1.4.0 replaces the one in place, their own release; the engine reads them at its next look, and nothing is started again. Scans already sorted keep their answers until Sort again.");
+  });
+
   it("says a pinned pack, and offers nothing for it", () => {
     const mri = rules("mri", "1.0.0", "1.0.2", null, { pinned: "1.0.0" });
     const i = install({ release: { ...listed([at("engine"), at("desk"), mri]), packs: { ...packs, pinned: ["mri"] }, rules: [mri] } });
