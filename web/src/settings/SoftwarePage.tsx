@@ -17,7 +17,7 @@ import { DoorError } from "../ask/client";
 import { ensurePeople, peopleKept } from "../assistant/shares";
 import { may as granted } from "../grants";
 import { whenWords } from "../data/sources";
-import { software, type SoftwarePackage, type SoftwarePlace, type SoftwareNeed } from "../ops/client";
+import { software, type SoftwareFound, type SoftwarePackage, type SoftwarePlace, type SoftwareNeed } from "../ops/client";
 import { useInstall } from "../ops/Install";
 import { sizeWords } from "../ops/results";
 import { shortPrint } from "../ops/text";
@@ -28,7 +28,7 @@ import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
-import { failedChecks, kindWords, LICENCE_MAX, licenceState, needsAmiss, nextAct, pinnedError, PLACES_HREF, placeFileCommand, placeLine, softwareActs, softwareCounts, specError, statusTag, verifiedWords, type Tone } from "./software";
+import { copyFor, failedChecks, kindWords, LICENCE_MAX, licenceState, needsAmiss, nextAct, packFrom, pinnedError, PLACES_HREF, placeFileCommand, placeLine, softwareActs, softwareCounts, specError, statusTag, suggestedVersion, unmatched, verifiedWords, type Tone } from "./software";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; place: SoftwarePlace };
 
@@ -83,6 +83,15 @@ export function SoftwareView({ caps, place, people = null, onChanged, now = new 
       return r.verified ? `${p.spec} verified.` : `${p.spec} did not pass: ${failedChecks({ verification: r.verification }).map((f) => f.said).join("; ") || "see its row"}.`;
     });
   const missing = place.packages.filter((p) => p.status === "missing" && p.kind !== "binary");
+  // select = register (record 57 P5): the site's copy in the declared place is registered for the package, with the catalog pipeline's pack
+  const useCopy = (p: SoftwarePackage, f: SoftwareFound) =>
+    row.act(`registering the copy at ${f.path} as ${p.spec}`, async () => {
+      const r = await registerCopy(p, f);
+      onChanged();
+      const failed = failedChecks(r.package);
+      return failed.length > 0 ? `Registered ${r.package.spec} from ${f.path}; ${failed.map((x) => `${x.check}: ${x.said}`).join("; ")}.` : `Registered ${r.package.spec} from ${f.path} and verified it.`;
+    });
+  const rest = unmatched(place.found);
   return (
     <div className="settings software">
       <Head title="Software" lede="The tools runs use, and whether they check out.">
@@ -146,12 +155,14 @@ export function SoftwareView({ caps, place, people = null, onChanged, now = new 
             </thead>
             <tbody>
               {place.packages.map((p) => (
-                <PackageRow key={p.spec} caps={caps} p={p} acts={may} name={name} when={when} busy={row.working} onAct={(a) => (a === "install" ? setOpen({ kind: "install", spec: p.spec }) : a === "accept" || a === "place" ? setOpen({ kind: "accept", p }) : verify(p))} onVerify={() => verify(p)} onRemove={() => setOpen({ kind: "remove", p })} onChanged={onChanged} />
+                <PackageRow key={p.spec} caps={caps} p={p} acts={may} copy={may.register ? copyFor(p, place.found) : null} name={name} when={when} busy={row.working} onAct={(a) => (a === "install" ? setOpen({ kind: "install", spec: p.spec }) : a === "accept" || a === "place" ? setOpen({ kind: "accept", p }) : verify(p))} onUseCopy={(f) => useCopy(p, f)} onVerify={() => verify(p)} onRemove={() => setOpen({ kind: "remove", p })} onChanged={onChanged} />
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {rest.length > 0 && <FoundSection found={rest} errors={place.found_errors ?? 0} register={may.register} busy={row.working} onRegistered={(w) => done(w)} />}
+      {rest.length === 0 && (place.found_errors ?? 0) > 0 && <p className="meta software-found-errors">{foundErrorsWords(place.found_errors ?? 0)}</p>}
       {open?.kind === "install" && <InstallDialog spec={open.spec} offered={missing.map((p) => p.spec)} onClose={() => setOpen(null)} onDone={(w) => done(w)} />}
       {open?.kind === "register" && <RegisterDialog onClose={() => setOpen(null)} onDone={(w) => done(w)} />}
       {open?.kind === "accept" && <AcceptDialog p={open.p} onClose={() => setOpen(null)} onDone={(w) => done(w)} />}
@@ -166,15 +177,18 @@ function PackageRow(props: {
   caps: Capabilities;
   p: SoftwarePackage;
   acts: ReturnType<typeof softwareActs>;
+  /** The site's copy of this package in the declared place, offered before an install. */
+  copy: SoftwareFound | null;
   name: (principal: string) => string;
   when: (iso: string) => string;
   busy: boolean;
   onAct: (a: "install" | "accept" | "place" | "verify") => void;
+  onUseCopy: (f: SoftwareFound) => void;
   onVerify: () => void;
   onRemove: () => void;
   onChanged: () => void;
 }) {
-  const { caps, p, acts, name, when, busy, onAct, onVerify, onRemove, onChanged } = props;
+  const { caps, p, acts, copy, name, when, busy, onAct, onUseCopy, onVerify, onRemove, onChanged } = props;
   const tag = statusTag(p);
   const ver = verifiedWords(p, when);
   const lic = licenceState(p, name, when);
@@ -192,9 +206,14 @@ function PackageRow(props: {
         <td>
           <b className="path">{p.spec}</b>
           {(p.pipelines ?? []).length > 0 && <div className="meta">{(p.pipelines ?? []).join(", ")}</div>}
-          {/* on a phone the row's one act sits under its name, where the eye is */}
+          {/* on a phone the row's one act sits under its name, where the eye is; the site's copy comes before an install */}
+          {copy && (
+            <button type="button" className="button small software-next-narrow" disabled={busy} title={copy.path} onClick={() => onUseCopy(copy)}>
+              Use the copy at {copy.path}
+            </button>
+          )}
           {next && (
-            <button type="button" className="button small software-next-narrow" disabled={busy} onClick={() => onAct(next)}>
+            <button type="button" className={`button small software-next-narrow${copy ? " secondary" : ""}`} disabled={busy} onClick={() => onAct(next)}>
               {ACT_WORDS[next]}
             </button>
           )}
@@ -210,6 +229,7 @@ function PackageRow(props: {
         </td>
         <td>
           <span className={TAG[tag.tone]}>{tag.words}</span>
+          {tag.note && <div className="meta">{tag.note}</div>}
           {p.at && p.by && <div className="meta">{`${p.how === "registered" ? "registered" : "installed"} by ${name(p.by)}, ${when(p.at)}`}</div>}
         </td>
         <td className={ver.failed ? "warn" : undefined}>{ver.words}</td>
@@ -222,8 +242,13 @@ function PackageRow(props: {
         </td>
         <td className="acts">
           <span className="row-acts">
+            {copy && (
+              <button type="button" className="button small software-next-wide" disabled={busy} title={copy.path} onClick={() => onUseCopy(copy)}>
+                Use the copy at {copy.path}
+              </button>
+            )}
             {next && (
-              <button type="button" className="button small software-next-wide" disabled={busy} onClick={() => onAct(next)}>
+              <button type="button" className={`button small software-next-wide${copy ? " secondary" : ""}`} disabled={busy} onClick={() => onAct(next)}>
                 {ACT_WORDS[next]}
               </button>
             )}
@@ -256,6 +281,100 @@ function PackageRow(props: {
         </tr>
       )}
     </Fragment>
+  );
+}
+
+/**
+ * Register the site's copy for a package: with the catalog pipeline's pack (`pack_from`) where the package names a
+ * pipeline, and without it where the engine says that pipeline has no pack (422), since the row's spec alone names
+ * the package then.
+ */
+export async function registerCopy(p: SoftwarePackage, f: SoftwareFound) {
+  const kind = f.kind === "sandbox" ? ("sandbox" as const) : ("sif" as const);
+  const from = packFrom(p);
+  if (from === undefined) return software.register({ spec: p.spec, kind, path: f.path });
+  try {
+    return await software.register({ spec: p.spec, kind, path: f.path, pack_from: from });
+  } catch (e) {
+    if (e instanceof DoorError && e.status === 422 && /pack/u.test(e.message)) return software.register({ spec: p.spec, kind, path: f.path });
+    throw e;
+  }
+}
+
+/**
+ * Found in the place (record 57 P5): what the declared place holds that no package of the catalog matches, a
+ * sandbox folder or a SIF by its path and base image. Each registers under a name the person gives, the version
+ * suggested from the base; one registered already says so and offers nothing.
+ */
+export function FoundSection({ found, errors = 0, register, busy, onRegistered }: { found: SoftwareFound[]; errors?: number; register: boolean; busy: boolean; onRegistered: (words: string) => void }) {
+  return (
+    <section className="software-found" aria-label="Found in the place">
+      <h3>Found in the place</h3>
+      <p className="meta">
+        Not installs of the engine&apos;s; no pipeline pins them. Register one to run it by name.
+        {errors > 0 ? ` ${foundErrorsWords(errors)}` : ""}
+      </p>
+      <ul className="software-found-list">
+        {found.map((f) => (
+          <FoundRow key={f.path} f={f} register={register} busy={busy} onRegistered={onRegistered} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+const FOUND_KIND: Record<string, string> = { sif: "SIF", sandbox: "sandbox folder" };
+
+/** The entries of the place the engine could not read, counted. */
+function foundErrorsWords(n: number): string {
+  return n === 1 ? "One entry of the place could not be read." : `${n.toLocaleString("en-US")} entries of the place could not be read.`;
+}
+
+function FoundRow({ f, register, busy, onRegistered }: { f: SoftwareFound; register: boolean; busy: boolean; onRegistered: (words: string) => void }) {
+  const [app, setApp] = useState("");
+  const [version, setVersion] = useState(() => suggestedVersion(f.base));
+  const { work, run, busy: working } = useWork();
+  const spec = `${app.trim()}@${version.trim()}`;
+  const ready = app.trim() !== "" && version.trim() !== "" && specError(spec) === null && !busy && !working;
+  const go = () =>
+    run(
+      `registering ${spec} from ${f.path}`,
+      async () => {
+        const r = await software.register({ spec, kind: f.kind === "sandbox" ? "sandbox" : "sif", path: f.path });
+        const failed = failedChecks(r.package);
+        return failed.length > 0 ? `Registered ${r.package.spec} from ${f.path}; ${failed.map((x) => `${x.check}: ${x.said}`).join("; ")}.` : `Registered ${r.package.spec} from ${f.path} and verified it.`;
+      },
+      onRegistered,
+    );
+  return (
+    <li className="software-found-row">
+      <div>
+        <span className="path">{f.path}</span>
+        <div className="meta">
+          {FOUND_KIND[f.kind] ?? f.kind}
+          {f.base ? ` · from ${f.base}` : ""}
+        </div>
+      </div>
+      {f.registered ? (
+        <span className="tag ok">registered already</span>
+      ) : register ? (
+        <div className="row software-found-register">
+          <span className="label">Register as</span>
+          <span className="input mono">
+            <input value={app} placeholder="app" aria-label={`The app name for ${f.path}`} disabled={working} onChange={(e) => setApp(e.target.value)} />
+          </span>
+          <span>@</span>
+          <span className="input mono">
+            <input value={version} placeholder="version" aria-label={`The version for ${f.path}`} disabled={working} onChange={(e) => setVersion(e.target.value)} />
+          </span>
+          <button type="button" className="button small" disabled={!ready} onClick={go} aria-label={`Register ${f.path}`}>
+            Register
+          </button>
+          {app.trim() !== "" && version.trim() !== "" && specError(spec) && <span className="warn">{specError(spec)}</span>}
+          <Working work={work} />
+        </div>
+      ) : null}
+    </li>
   );
 }
 

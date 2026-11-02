@@ -241,6 +241,22 @@ export interface SoftwarePackage {
   install?: { door: string | null; command: string | null; grant: string | null } | null;
   /** The converter's entry, as GET /api/tools answers it (kind binary). */
   tool?: Json | null;
+  /** The pinned image is in the runtime's cache already: a run adopts it, though nothing is installed in the place. */
+  image_cached?: boolean | null;
+}
+
+/** What the declared software place holds that is not an install of the engine's layout: a sandbox folder or a SIF, with the catalog's packages whose pinned digest it carries. */
+export interface SoftwareFound {
+  path: string;
+  /** sif or sandbox. */
+  kind: string;
+  /** The image it was built from, as its labels say it (repository:tag). */
+  base?: string | null;
+  base_digest?: string | null;
+  /** The catalog's packages (app@version) whose pinned image digest equals base_digest. */
+  matches: string[];
+  /** An install in the layout names this path already. */
+  registered: boolean;
 }
 
 export interface SoftwarePlace {
@@ -256,7 +272,14 @@ export interface SoftwarePlace {
   } | null;
   packages: SoftwarePackage[];
   runtime: { name: string; version: string | null } | null;
+  /** The candidates in the declared place (record 57 P5); absent from an engine before, or where no place is declared. */
+  found?: SoftwareFound[] | null;
+  /** Entries of the declared place the walk could not read; counted, never raised. */
+  found_errors?: number | null;
 }
+
+/** The catalog pipeline whose pack the register door reads in place of the pack's text (`pack_from`). */
+export type PackFrom = string | number;
 
 /** The body that names a package: its spec, and the pack's text where the person gave one. */
 export interface SoftwareAsk {
@@ -268,7 +291,7 @@ export interface SoftwareAsk {
 export const software = {
   list: () => typed<SoftwarePlace>("GET", "/api/software"),
   install: (a: SoftwareAsk) => typed<{ installed: boolean; why?: string; package: SoftwarePackage; needs?: SoftwareNeed[]; verified?: unknown }>("POST", "/api/software/install", a),
-  register: (a: SoftwareAsk & { kind: "sif" | "sandbox" | "image"; path: string }) => typed<{ registered: boolean; package: SoftwarePackage; needs?: SoftwareNeed[]; verified?: unknown }>("POST", "/api/software/register", a),
+  register: (a: SoftwareAsk & { kind: "sif" | "sandbox" | "image"; path: string; pack_from?: PackFrom }) => typed<{ registered: boolean; package: SoftwarePackage; needs?: SoftwareNeed[]; verified?: unknown }>("POST", "/api/software/register", a),
   verify: (app: string, version: string) => typed<{ verified: boolean; verification: SoftwarePackage["verification"]; package: SoftwarePackage; needs?: SoftwareNeed[] }>("POST", `${softwarePath(app, version)}/verify`, {}),
   accept: (app: string, version: string, file: { text: string; name: string } | null = null, terms: { address: string } | null = null) =>
     typed<{ accepted: boolean; acceptance: { by: string; at: string; terms: { address: string | null; version: string | null } }; file: { sha256: string; name: string; under: string } | null }>(

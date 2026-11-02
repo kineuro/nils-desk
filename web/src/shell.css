@@ -1736,6 +1736,12 @@ table.run-files .run-file { max-width: min(28rem, 55vw); overflow: hidden; text-
 /* Wave 7b: Settings > Software, a run's units with who chose, the goal and switches at a run's start */
 .req.warn { border-left-color: var(--n-brand-line); }
 .software-place { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; margin: 0; }
+.software-found { margin-top: 1.2rem; }
+.software-found h3 { margin: 0 0 0.2rem; font-size: 1rem; }
+.software-found-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.6rem; }
+.software-found-row { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; align-items: center; justify-content: space-between; padding: 0.5rem 0; border-top: 1px solid var(--line); }
+.software-found-register { flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.software-found-register .input input { width: 9rem; }
 .software-table td { vertical-align: top; }
 .software-row > td:first-child { border-left: 3px solid transparent; padding-left: 0.5rem; }
 .software-row.ok > td:first-child { border-left-color: var(--n-ok-line); }

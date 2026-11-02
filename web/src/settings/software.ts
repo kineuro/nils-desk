@@ -11,7 +11,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href } from "../routes";
-import type { SoftwareCheck, SoftwarePackage, SoftwarePlace } from "../ops/client";
+import type { PackFrom, SoftwareCheck, SoftwareFound, SoftwarePackage, SoftwarePlace } from "../ops/client";
 
 /** The page's address: where a refusal for software points. */
 export const SOFTWARE_HREF = href("settings", "software");
@@ -60,14 +60,14 @@ export function kindWords(p: Pick<SoftwarePackage, "kind" | "managed" | "how">):
 
 export type Tone = "ok" | "caution" | "brand" | "neutral";
 
-/** The status as a tag: its words and its tone. */
-export function statusTag(p: Pick<SoftwarePackage, "status">): { words: string; tone: Tone } {
+/** The status as a tag: its words and its tone; a missing package whose image is in the runtime's cache says so, since a run adopts it. */
+export function statusTag(p: Pick<SoftwarePackage, "status" | "image_cached">): { words: string; tone: Tone; note?: string } {
   switch (p.status) {
     case "installed":
     case "registered":
       return { words: p.status, tone: "ok" };
     case "missing":
-      return { words: "not installed", tone: "caution" };
+      return p.image_cached === true ? { words: "image cached", tone: "ok", note: "adopted at the next run" } : { words: "not installed", tone: "caution" };
     case "failed verification":
       return { words: "failed verification", tone: "caution" };
     case "update available":
@@ -162,6 +162,38 @@ export function pinnedError(ref: string): string | null {
   const s = ref.trim();
   if (s === "") return null;
   return /^[^\s@]+@sha256:[0-9a-f]{64}$/u.test(s) ? null : "pin it by its digest: repository@sha256:…";
+}
+
+/** The candidate in the declared place that carries a missing package's pinned image, where one does and no install names it yet: the row offers its copy before an install. */
+export function copyFor(p: Pick<SoftwarePackage, "spec" | "status">, found: SoftwareFound[] | null | undefined): SoftwareFound | null {
+  if (p.status !== "missing") return null;
+  return (found ?? []).find((f) => !f.registered && f.matches.includes(p.spec)) ?? null;
+}
+
+/** The catalog pipeline whose pack the register door reads for a package (`pack_from`), where the package names one; undefined where none does. */
+export function packFrom(p: Pick<SoftwarePackage, "pipelines">): PackFrom | undefined {
+  const first = (p.pipelines ?? [])[0];
+  return first ?? undefined;
+}
+
+/** The candidates no package of the catalog matches: the Found section lists them, each to register under a name of the person's, or said as registered already. */
+export function unmatched(found: SoftwareFound[] | null | undefined): SoftwareFound[] {
+  return (found ?? []).filter((f) => f.matches.length === 0);
+}
+
+/**
+ * A version suggested from a candidate's base image, `freesurfer/freesurfer:8.2.0` to `freesurfer-8.2.0`: the
+ * image's last name and its tag, so the site's copy is told from an install of the engine's at the bare version.
+ * The app is the person's to name.
+ */
+export function suggestedVersion(base: string | null | undefined): string {
+  if (!base) return "";
+  const noDigest = base.split("@")[0];
+  const last = noDigest.split("/").pop() ?? "";
+  const [name, tag] = last.split(":");
+  const clean = (s: string) => s.replace(/[^A-Za-z0-9._+-]/gu, "-").replace(/^[^A-Za-z0-9_+-]+/u, "");
+  if (!name) return "";
+  return tag ? clean(`${name}-${tag}`) : clean(name);
 }
 
 /** The most bytes the accept door takes of a licence file. */
