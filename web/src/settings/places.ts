@@ -16,7 +16,7 @@ import { followRun, supervise } from "./supervise";
 export type Tone = "ok" | "caution" | "blocked" | "neutral";
 export type Role = Place["role"];
 
-export const ROLES: Role[] = ["source", "registry", "working", "export", "share", "exchange", "backup"];
+export const ROLES: Role[] = ["source", "registry", "working", "export", "share", "exchange", "backup", "software"];
 
 /** What each role holds and what it must have, as the engine lists them. */
 export const ROLE_WORDS: Record<Role, { holds: string; must: string }> = {
@@ -27,6 +27,8 @@ export const ROLE_WORDS: Record<Role, { holds: string; must: string }> = {
   share: { holds: "subsets a question wrote out, results handed to a colleague", must: "reachable by the group" },
   exchange: { holds: "what leaves or arrives through a bridge", must: "its own rules" },
   backup: { holds: "the engine's archives", must: "protected, elsewhere from the registry" },
+  // record 57 P5, spec 6.8: the tools the engine installs and the site's own installs it finds there; one place of the role
+  software: { holds: "the tools the engine installs and runs, and the site's own installs, found there", must: "one place of this role; a shared folder gets the engine's own subfolder" },
 };
 
 const live = (places: Place[]) => places.filter((p) => p.retired_at === null);

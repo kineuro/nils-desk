@@ -15,8 +15,8 @@ import { forgetInstalled } from "../ops/Install";
 import { tools } from "../ops/tools";
 import { shortPrint } from "../ops/text";
 import { settingsPages } from "./pages";
-import { failedChecks, kindWords, licenceState, nextAct, pinnedError, softwareActs, softwareCounts, softwareHrefFor, specError, statusTag, verifiedWords } from "./software";
-import { DCM2NIIX, FIXTURE_NOW, PLACE, PYMENT, SAMSEG, SEGCSVD, SOFTWARE_DOORS, SYNTHSEG } from "./software.fixture";
+import { copyFor, failedChecks, kindWords, licenceState, nextAct, packFrom, pinnedError, placeLine, softwareActs, softwareCounts, softwareHrefFor, specError, statusTag, suggestedVersion, unmatched, verifiedWords } from "./software";
+import { DCM2NIIX, FIXTURE_NOW, FREESURFER_COPY, PLACE, PYMENT, SAMSEG, SEGCSVD, SHARED_PLACE, SOFTWARE_DOORS, STRAY_SIF, SYNTHSEG, SYNTHSEG_COPY } from "./software.fixture";
 import { AcceptDialog, InstallDialog, RegisterDialog, SoftwareView } from "./SoftwarePage";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -76,6 +76,29 @@ describe("the software place's words", () => {
     expect(pinnedError("docker.io/x/y:latest")).toMatch(/digest/u);
   });
 
+  it("finds a missing package's copy in the declared place, the candidates no package matches, and a version from a base image (record 57 P5)", () => {
+    const found = SHARED_PLACE.found!;
+    expect(copyFor(SYNTHSEG, found)).toBe(SYNTHSEG_COPY);
+    expect(copyFor(SAMSEG, found)).toBeNull();
+    expect(copyFor(SYNTHSEG, [{ ...SYNTHSEG_COPY, registered: true }])).toBeNull();
+    expect(copyFor(SYNTHSEG, undefined)).toBeNull();
+    expect(unmatched(found)).toEqual([FREESURFER_COPY, STRAY_SIF]);
+    expect(unmatched(null)).toEqual([]);
+    expect(suggestedVersion("freesurfer/freesurfer:8.2.0")).toBe("freesurfer-8.2.0");
+    expect(suggestedVersion("docker.io/example/synthseg:2.0")).toBe("synthseg-2.0");
+    expect(suggestedVersion("example/tool")).toBe("tool");
+    expect(suggestedVersion(`freesurfer/freesurfer:8.2.0@sha256:${"0".repeat(64)}`)).toBe("freesurfer-8.2.0");
+    expect(suggestedVersion(null)).toBe("");
+    expect(specError(`x@${suggestedVersion("freesurfer/freesurfer:8.2.0")}`)).toBeNull();
+    // the register door reads the catalog pipeline's pack by its label, as pipelines lists it
+    expect(packFrom(SYNTHSEG)).toBe("synthseg@2");
+    expect(packFrom({ pipelines: [] })).toBeUndefined();
+    // a missing package whose image is in the runtime's cache is adopted at the next run, and counts as ready
+    expect(statusTag({ ...SYNTHSEG, image_cached: true })).toEqual({ words: "image cached", tone: "ok", note: "adopted at the next run" });
+    expect(statusTag({ ...SYNTHSEG, image_cached: false })).toEqual({ words: "not installed", tone: "caution" });
+    expect(softwareCounts([{ ...SYNTHSEG, image_cached: true }])).toEqual({ packages: 1, ready: 1, look: 0 });
+  });
+
   it("is a Settings page for a person who may see the install or the pipelines, where the engine serves the door", () => {
     expect(settingsPages(ADMIN).map((p) => p.id)).toContain("software");
     expect(settingsPages(SEER).map((p) => p.id)).toContain("software");
@@ -126,6 +149,57 @@ describe("the page", () => {
     expect(ro).not.toContain(">Forget</button>");
     // verifying reads, and changes nothing of the place
     expect(ro).toContain(">Verify again</button>");
+  });
+
+  it("says which place this is: the default under the working place with the way to Places, a shared folder with where the engine writes, or the declared place", () => {
+    expect(placeLine({ path: "/srv/nils/working/software", declared: null })).toEqual({ kind: "default", words: "the default place under the working place; choose one in Places", into: null });
+    expect(placeLine({ path: "/srv/shared/software", declared: "tools", shared: true, writes_into: "/srv/shared/software/nils" })).toEqual({ kind: "shared", words: "shared, the engine writes into /srv/shared/software/nils", into: "/srv/shared/software/nils" });
+    expect(placeLine({ path: "/srv/nils/software", declared: "software" })).toEqual({ kind: "declared", words: "the place software", into: null });
+    expect(placeLine(null)).toBeNull();
+    const dflt = draw(capsWith([...SOFTWARE_DOORS, "GET /api/places"], ["install:see", "install:work", "places:see"]), { ...PLACE, place: { path: "/srv/nils/working/software", declared: null } });
+    expect(dflt).toContain("the default place under the working place; choose one in <a href=\"#settings/places\">Places</a>");
+    // a person without the Places page gets the words, not a link to a page they cannot open
+    expect(draw(ADMIN, { ...PLACE, place: { path: "/srv/nils/working/software", declared: null } })).toContain("choose one in Places</span>");
+    const shared = draw(ADMIN, { ...PLACE, place: { path: "/srv/shared/software", declared: "tools", shared: true, writes_into: "/srv/shared/software/nils" } });
+    expect(shared).toContain("shared, the engine writes into <span class=\"path\">/srv/shared/software/nils</span>");
+    expect(draw()).toContain("the place software");
+  });
+
+  it("offers a missing package the site's copy before an install, lists what no package matches under Found in the place, and says a registered candidate as such", () => {
+    const html = draw(ADMIN, SHARED_PLACE);
+    expect(html).toContain("Use the copy at /srv/shared/software/synthseg/2.0/image");
+    // the copy comes first; the row's Install stays, second and quieter
+    expect(html).toContain('class="button small software-next-wide secondary"');
+    expect(html.indexOf("Use the copy at")).toBeLessThan(html.indexOf('class="button small software-next-wide secondary"'));
+    expect(html).toContain('aria-label="Found in the place"');
+    expect(html).toContain("/srv/shared/software/freesurfer/8.2.0/image");
+    expect(html).toContain("sandbox folder · from freesurfer/freesurfer:8.2.0");
+    expect(html).toContain('value="freesurfer-8.2.0"');
+    expect(html).toContain('aria-label="Register /srv/shared/software/freesurfer/8.2.0/image"');
+    // the synthseg copy is the row's offer, never a Found entry
+    expect(html).not.toContain('aria-label="Register /srv/shared/software/synthseg/2.0/image"');
+    expect(html).toContain("/srv/shared/software/segcsvd/segcsvd_rc03.sif");
+    expect(html).toContain("registered already");
+    expect(html).not.toContain('aria-label="Register /srv/shared/software/segcsvd/segcsvd_rc03.sif"');
+    expect(html).toContain("shared, the engine writes into");
+    // a person who may only see gets the list, no offer and no field; a read-only place offers no register either
+    const seen = draw(SEER, SHARED_PLACE);
+    expect(seen).not.toContain("Use the copy at");
+    expect(seen).toContain("/srv/shared/software/freesurfer/8.2.0/image");
+    expect(seen).not.toContain('aria-label="Register /srv/shared/software/freesurfer/8.2.0/image"');
+    const ro = draw(ADMIN, { ...SHARED_PLACE, place: { ...SHARED_PLACE.place!, read_only: true } });
+    expect(ro).not.toContain("Use the copy at");
+    // nothing found: no section; errors counted are said
+    expect(draw(ADMIN, { ...SHARED_PLACE, found: [] })).not.toContain("Found in the place");
+    expect(draw(ADMIN, { ...SHARED_PLACE, found: [], found_errors: 2 })).toContain("2 entries of the place could not be read.");
+    expect(draw(ADMIN, { ...SHARED_PLACE, found_errors: 1 })).toContain("One entry of the place could not be read.");
+  });
+
+  it("shows a missing package whose image is cached as such, with the next run adopting it, in place of not installed", () => {
+    const html = draw(ADMIN, { ...PLACE, packages: [{ ...SYNTHSEG, image_cached: true }] });
+    expect(html).toContain('<span class="tag ok">image cached</span>');
+    expect(html).toContain("adopted at the next run");
+    expect(html).not.toContain("not installed");
   });
 
   it("says a code it does not know as a person, never the code", () => {
@@ -231,6 +305,61 @@ describe("the doors", () => {
     await settle();
     expect(asked[0].body).toEqual({ spec: "pyment@5.1.0", kind: "sandbox", path: "/srv/shared/software/pyment/5.1.0" });
     expect(done).toBe("Registered pyment@5.1.0 and verified it.");
+  });
+
+  it("registers the site's copy for the row with its kind, path and the pipeline's pack_from, and says so in the page's line", async () => {
+    let changed = 0;
+    answers = { "POST /api/software/register": (b) => ({ status: 200, body: { registered: true, package: { ...SYNTHSEG, spec: (b as { spec: string }).spec, status: "registered", how: "registered", managed: false, verification: { probe: { ran: true, passed: true, said: "2.0" } } } } }) };
+    act(() => root.render(<SoftwareView caps={ADMIN} place={SHARED_PLACE} people={people} onChanged={() => changed++} now={FIXTURE_NOW} />));
+    const offers = [...el.ownerDocument.querySelectorAll("button")].filter((b) => b.textContent?.startsWith("Use the copy at"));
+    expect(offers.length).toBeGreaterThan(0);
+    act(() => offers[0].click());
+    await settle();
+    expect(asked).toEqual([{ method: "POST", path: "/api/software/register", body: { spec: "synthseg@2.0", kind: "sandbox", path: "/srv/shared/software/synthseg/2.0/image", pack_from: "synthseg@2" } }]);
+    expect(changed).toBe(1);
+    expect(el.querySelector(".ok-words")?.textContent).toBe("Registered synthseg@2.0 from /srv/shared/software/synthseg/2.0/image and verified it.");
+  });
+
+  it("registers the copy without pack_from where the engine says the pipeline has no pack, and shows any other refusal", async () => {
+    let tries = 0;
+    answers = {
+      "POST /api/software/register": (b) => {
+        tries++;
+        return (b as { pack_from?: string }).pack_from ? { status: 422, body: { error: "synthseg@2 has no pack" } } : { status: 200, body: { registered: true, package: { ...SYNTHSEG, status: "registered" } } };
+      },
+    };
+    act(() => root.render(<SoftwareView caps={ADMIN} place={SHARED_PLACE} people={people} onChanged={() => undefined} now={FIXTURE_NOW} />));
+    act(() => [...el.ownerDocument.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Use the copy at"))!.click());
+    await settle();
+    expect(tries).toBe(2);
+    expect(asked[1].body).toEqual({ spec: "synthseg@2.0", kind: "sandbox", path: "/srv/shared/software/synthseg/2.0/image" });
+    expect(el.querySelector(".ok-words")?.textContent).toContain("Registered synthseg@2.0");
+    asked.length = 0;
+    answers = { "POST /api/software/register": () => ({ status: 409, body: { error: "the place is read only" } }) };
+    act(() => root.render(<SoftwareView caps={ADMIN} place={{ ...SHARED_PLACE, packages: [SYNTHSEG] }} people={people} onChanged={() => undefined} now={FIXTURE_NOW} />));
+    act(() => [...el.ownerDocument.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Use the copy at"))!.click());
+    await settle();
+    expect(asked).toHaveLength(1);
+    expect(el.ownerDocument.body.textContent).toContain("the place is read only");
+  });
+
+  it("registers a candidate from Found in the place under the name the person gives, the version suggested from its base, with no pack", async () => {
+    let said: string | null = null;
+    answers = { "POST /api/software/register": (b) => ({ status: 200, body: { registered: true, package: { ...PYMENT, spec: (b as { spec: string }).spec, path: (b as { path: string }).path } } }) };
+    act(() => root.render(<SoftwareView caps={ADMIN} place={SHARED_PLACE} people={people} onChanged={() => (said = el.querySelector(".ok-words")?.textContent ?? "changed")} now={FIXTURE_NOW} />));
+    const register = () => el.ownerDocument.querySelector('[aria-label="Register /srv/shared/software/freesurfer/8.2.0/image"]') as HTMLButtonElement;
+    expect(register().disabled).toBe(true);
+    expect((el.ownerDocument.querySelector('[aria-label="The version for /srv/shared/software/freesurfer/8.2.0/image"]') as HTMLInputElement).value).toBe("freesurfer-8.2.0");
+    type("The app name for /srv/shared/software/freesurfer/8.2.0/image", "free surfer");
+    expect(register().disabled).toBe(true);
+    expect(el.ownerDocument.body.textContent).toContain("name it as app@version");
+    type("The app name for /srv/shared/software/freesurfer/8.2.0/image", "freesurfer");
+    expect(register().disabled).toBe(false);
+    act(() => register().click());
+    await settle();
+    expect(asked).toEqual([{ method: "POST", path: "/api/software/register", body: { spec: "freesurfer@freesurfer-8.2.0", kind: "sandbox", path: "/srv/shared/software/freesurfer/8.2.0/image" } }]);
+    expect(said).not.toBeNull();
+    expect(el.querySelector(".ok-words")?.textContent).toBe("Registered freesurfer@freesurfer-8.2.0 from /srv/shared/software/freesurfer/8.2.0/image and verified it.");
   });
 
   it("shows the terms to accept, and waits for the site file the pack names", async () => {

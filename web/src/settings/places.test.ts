@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { day } from "../home/tiles";
 import type { Place } from "../objects/client";
-import { EMPTY, draftRefusal, freeWords, guaranteeLine, guaranteesOf, pathNote, placeState, roleCounts, wholeDigest } from "./places";
+import { EMPTY, ROLE_WORDS, ROLES, draftRefusal, freeWords, guaranteeLine, guaranteesOf, pathNote, placeState, roleCounts, wholeDigest } from "./places";
 
 const place = (over: Partial<Place>): Place => ({
   id: 1,
@@ -21,6 +21,7 @@ const place = (over: Partial<Place>): Place => ({
 
 const registry = place({ id: 2, name: "registry", role: "registry", path: "/home/ada/nils/registry", guarantees: { backup: "backup-disk" }, probed: { exists: true, directory: true, mount: "/" } });
 const backupDisk = place({ id: 3, name: "backup-disk", role: "backup", path: "/srv/backup/nils", guarantees: { protected: true }, probed: { exists: true, directory: true, mount: "/srv/backup" } });
+const tools = place({ id: 5, name: "tools", role: "software", path: "/srv/shared/software", guarantees: {}, probed: { exists: true, directory: true, mount: "/srv" } });
 
 describe("a place", () => {
   it("says what was declared of it", () => {
@@ -57,11 +58,12 @@ describe("a place", () => {
     expect(freeWords(place({ probed: null }))).toBe("");
   });
 
-  it("counts the places of each role", () => {
-    expect(roleCounts([place({}), place({ id: 4, name: "legacy" }), registry, backupDisk])).toEqual([
+  it("counts the places of each role, the software place with them", () => {
+    expect(roleCounts([place({}), place({ id: 4, name: "legacy" }), registry, backupDisk, tools])).toEqual([
       { role: "source", count: 2 },
       { role: "registry", count: 1 },
       { role: "backup", count: 1 },
+      { role: "software", count: 1 },
     ]);
   });
 });
@@ -74,6 +76,16 @@ describe("a place being added", () => {
     expect(draftRefusal({ ...EMPTY, name: "registry", path: "/srv/x" }, all)).toBe("a place named registry exists");
     expect(draftRefusal({ ...EMPTY, role: "registry", name: "second", path: "/srv/second", backup: null }, all)).toBe("the registry role is refused on a place without a backup");
     expect(draftRefusal({ ...EMPTY, name: "cohort2026", path: "/srv/imaging/2026-cohort" }, all)).toBeNull();
+    // one software place (record 57 P5): a second is refused naming the first; a retired one stands in nobody's way
+    expect(draftRefusal({ ...EMPTY, role: "software", name: "more-tools", path: "/srv/more" }, [...all, tools])).toBe("one place of the software role: tools is it; retire it first, or move it");
+    expect(draftRefusal({ ...EMPTY, role: "software", name: "more-tools", path: "/srv/more" }, [...all, { ...tools, retired_at: "2026-10-01T00:00:00Z" }])).toBeNull();
+    expect(draftRefusal({ ...EMPTY, role: "software", name: "tools", path: "/srv/shared/software" }, all)).toBeNull();
+  });
+
+  it("says what a software place holds and must have, in the add dialog's words", () => {
+    expect(ROLE_WORDS.software.holds).toBe("the tools the engine installs and runs, and the site's own installs, found there");
+    expect(ROLE_WORDS.software.must).toBe("one place of this role; a shared folder gets the engine's own subfolder");
+    expect(ROLES).toContain("software");
   });
 
   it("sends the guarantees the door takes, and names a whole folder's digest after it", () => {

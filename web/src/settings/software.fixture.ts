@@ -3,7 +3,7 @@
 // 57 P5, Wave 7b spec 6.7), for the tests and the layout check. Every name,
 // path and number here is made up.
 
-import type { SoftwarePackage, SoftwarePlace } from "../ops/client";
+import type { SoftwareFound, SoftwarePackage, SoftwarePlace } from "../ops/client";
 
 const NOW = new Date("2026-10-20T09:30:00Z");
 export const FIXTURE_NOW = NOW;
@@ -141,6 +141,44 @@ export const PLACE: SoftwarePlace = {
   place: { path: "/srv/nils/software", declared: "software" },
   packages: [SAMSEG, SEGCSVD, SYNTHSEG, PYMENT, DCM2NIIX],
   runtime: { name: "podman", version: "5.4.2" },
+};
+
+/** The site's copy of synthseg's pinned image, a sandbox folder in the declared place: the synthseg row offers it before an install. */
+export const SYNTHSEG_COPY: SoftwareFound = {
+  path: "/srv/shared/software/synthseg/2.0/image",
+  kind: "sandbox",
+  base: "example/synthseg:2.0",
+  base_digest: `sha256:${"4c".repeat(32)}`,
+  matches: ["synthseg@2.0"],
+  registered: false,
+};
+
+/** A sandbox no package of the catalog matches: the Found section offers to register it, the version suggested from its base. */
+export const FREESURFER_COPY: SoftwareFound = {
+  path: "/srv/shared/software/freesurfer/8.2.0/image",
+  kind: "sandbox",
+  base: "freesurfer/freesurfer:8.2.0",
+  base_digest: `sha256:${"8f".repeat(32)}`,
+  matches: [],
+  registered: false,
+};
+
+/** A SIF without readable labels, registered already: said so, nothing offered. */
+export const STRAY_SIF: SoftwareFound = {
+  path: "/srv/shared/software/segcsvd/segcsvd_rc03.sif",
+  kind: "sif",
+  base: null,
+  base_digest: null,
+  matches: [],
+  registered: true,
+};
+
+/** The shared place declared, with what the walk found in it. */
+export const SHARED_PLACE: SoftwarePlace = {
+  ...PLACE,
+  place: { path: "/srv/shared/software", declared: "tools", read_only: false, shared: true, writes_into: "/srv/shared/software/nils" },
+  found: [SYNTHSEG_COPY, FREESURFER_COPY, STRAY_SIF],
+  found_errors: 0,
 };
 
 export const SOFTWARE_DOORS = [

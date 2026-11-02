@@ -46,9 +46,10 @@ const ROLE_PLURAL: Record<Place["role"], string> = {
   share: "shares",
   exchange: "exchanges",
   backup: "backups",
+  software: "software places",
 };
 
-const ROLE_ONE: Record<Place["role"], string> = { ...ROLE_PLURAL, source: "source", registry: "registry", working: "working place", export: "export", share: "share", exchange: "exchange", backup: "backup" };
+const ROLE_ONE: Record<Place["role"], string> = { ...ROLE_PLURAL, source: "source", registry: "registry", working: "working place", export: "export", share: "share", exchange: "exchange", backup: "backup", software: "software place" };
 
 /** Every part and whether it answers, the newest release, and how the install runs. */
 export function partsCard(caps: Capabilities, install: Install | null): Card {

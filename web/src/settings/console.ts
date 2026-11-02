@@ -59,7 +59,7 @@ export function updateWords(part: Part, newer: { version: string; contracts?: Re
   return lines;
 }
 
-export const ROLES: Place["role"][] = ["source", "registry", "working", "export", "share", "exchange", "backup"];
+export const ROLES: Place["role"][] = ["source", "registry", "working", "export", "share", "exchange", "backup", "software"];
 
 /** The rules of section 10.2, checked before the door is asked so the refusal is one sentence on the form; the engine checks them again. */
 export function placeRule(draft: { name: string; role: Place["role"]; path: string; backup: string | null }, existing: Place[]): string | null {
@@ -72,6 +72,11 @@ export function placeRule(draft: { name: string; role: Place["role"]; path: stri
     if (!b) return `no place named ${draft.backup}`;
     if (b.role !== "backup") return `${draft.backup} is a ${b.role} place, not a backup`;
     if (b.path === draft.path.trim()) return "a backup elsewhere: the same path is not elsewhere";
+  }
+  // one software place: the engine installs into it and finds the site's installs there (record 57 P5)
+  if (draft.role === "software") {
+    const first = existing.find((p) => p.role === "software" && p.retired_at === null);
+    if (first) return `one place of the software role: ${first.name} is it; retire it first, or move it`;
   }
   return null;
 }
