@@ -11,6 +11,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Fixed
 
+- The Parts page says "Another build of the MRI rules 1.4.0 replaces the one in place" where a pack's own release has the version installed with other files, instead of "1.4.0 to 1.4.0".
 - The Parts page lists the rule packs installed on disk where the engine cannot read the release's packs, and says "comparison with the release not possible" in place of "none, the release's packs could not be read". An engine from before still shows the old words.
 
 ## [1.0.0-beta.4] - 2026-11-01

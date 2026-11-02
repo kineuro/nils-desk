@@ -460,7 +460,9 @@ export function updateWords(install: Install): string[] {
       }
       const from = p.installed ? ` from ${p.installed}` : "";
       if (p.part === "rules") {
-        out.push(`The ${releaseTitle(p)} move${from} to ${p.newer}, their own release; the engine reads them at its next look, and nothing is started again. Scans already sorted keep their answers until Sort again.`);
+        // the same version with other files: another build of it (a channel's beside the public release), never "1.4.0 to 1.4.0"
+        const move = p.installed === p.newer ? `Another build of the ${releaseTitle(p)} ${p.newer} replaces the one in place` : `The ${releaseTitle(p)} move${from} to ${p.newer}`;
+        out.push(`${move}, their own release; the engine reads them at its next look, and nothing is started again. Scans already sorted keep their answers until Sort again.`);
         continue;
       }
       const built = all[p.part]?.kind === "node" ? ", fetched and built again" : "";
