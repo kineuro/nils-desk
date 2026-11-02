@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.5] - 2026-11-02
+
+The fifth beta of the desk: Settings > Participation, what this site shares as a file it reads first; the software place chosen on Settings > Places and the place's own copies offered on Settings > Software; the stack page's header facts; and the Parts page's words for another build of the same rules and for a development install. The new pages need engine 1.0.0-beta.6; an older engine is shown the pages as before.
+
 ### Added
 
 - The software place is chosen on Settings > Places (record 57 P5; the Wave 7b spec, section 6.8): the role `software` in Add a place, with what it holds (the tools the engine installs and runs, and the site's own installs found there) and what it must have (one place of this role; a shared folder gets the engine's own subfolder); a second place of the role is refused on the form naming the first; the chips count it. Settings > Software says under its head which place this is: the default under the working place, with the way to Places, a shared folder with the subfolder the engine writes into (engine `shared` and `writes_into`), or the declared place by name.
