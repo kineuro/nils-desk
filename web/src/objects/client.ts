@@ -87,7 +87,7 @@ export interface Closure {
 export interface Place {
   id: number;
   name: string;
-  role: "source" | "registry" | "working" | "export" | "share" | "exchange" | "backup";
+  role: "source" | "registry" | "working" | "export" | "share" | "exchange" | "backup" | "software";
   path: string;
   guarantees: Record<string, unknown>;
   probed: Record<string, unknown> | null;

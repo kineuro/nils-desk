@@ -15,7 +15,7 @@ import { forgetInstalled } from "../ops/Install";
 import { tools } from "../ops/tools";
 import { shortPrint } from "../ops/text";
 import { settingsPages } from "./pages";
-import { failedChecks, kindWords, licenceState, nextAct, pinnedError, softwareActs, softwareCounts, softwareHrefFor, specError, statusTag, verifiedWords } from "./software";
+import { failedChecks, kindWords, licenceState, nextAct, pinnedError, placeLine, softwareActs, softwareCounts, softwareHrefFor, specError, statusTag, verifiedWords } from "./software";
 import { DCM2NIIX, FIXTURE_NOW, PLACE, PYMENT, SAMSEG, SEGCSVD, SOFTWARE_DOORS, SYNTHSEG } from "./software.fixture";
 import { AcceptDialog, InstallDialog, RegisterDialog, SoftwareView } from "./SoftwarePage";
 
@@ -126,6 +126,20 @@ describe("the page", () => {
     expect(ro).not.toContain(">Forget</button>");
     // verifying reads, and changes nothing of the place
     expect(ro).toContain(">Verify again</button>");
+  });
+
+  it("says which place this is: the default under the working place with the way to Places, a shared folder with where the engine writes, or the declared place", () => {
+    expect(placeLine({ path: "/srv/nils/working/software", declared: null })).toEqual({ kind: "default", words: "the default place under the working place; choose one in Places", into: null });
+    expect(placeLine({ path: "/srv/shared/software", declared: "tools", shared: true, writes_into: "/srv/shared/software/nils" })).toEqual({ kind: "shared", words: "shared, the engine writes into /srv/shared/software/nils", into: "/srv/shared/software/nils" });
+    expect(placeLine({ path: "/srv/nils/software", declared: "software" })).toEqual({ kind: "declared", words: "the place software", into: null });
+    expect(placeLine(null)).toBeNull();
+    const dflt = draw(capsWith([...SOFTWARE_DOORS, "GET /api/places"], ["install:see", "install:work", "places:see"]), { ...PLACE, place: { path: "/srv/nils/working/software", declared: null } });
+    expect(dflt).toContain("the default place under the working place; choose one in <a href=\"#settings/places\">Places</a>");
+    // a person without the Places page gets the words, not a link to a page they cannot open
+    expect(draw(ADMIN, { ...PLACE, place: { path: "/srv/nils/working/software", declared: null } })).toContain("choose one in Places</span>");
+    const shared = draw(ADMIN, { ...PLACE, place: { path: "/srv/shared/software", declared: "tools", shared: true, writes_into: "/srv/shared/software/nils" } });
+    expect(shared).toContain("shared, the engine writes into <span class=\"path\">/srv/shared/software/nils</span>");
+    expect(draw()).toContain("the place software");
   });
 
   it("says a code it does not know as a person, never the code", () => {

@@ -11,10 +11,29 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href } from "../routes";
-import type { SoftwareCheck, SoftwarePackage } from "../ops/client";
+import type { SoftwareCheck, SoftwarePackage, SoftwarePlace } from "../ops/client";
 
 /** The page's address: where a refusal for software points. */
 export const SOFTWARE_HREF = href("settings", "software");
+
+/** The Places page, where a software place is chosen. */
+export const PLACES_HREF = href("settings", "places");
+
+/**
+ * The line under the head that says which place this is: the default under
+ * the working place, with the way to choose one in Places; a shared folder,
+ * with the subfolder the engine writes into (spec 6.8); or the declared
+ * place by name.
+ */
+export function placeLine(place: SoftwarePlace["place"]): { kind: "default" | "shared" | "declared"; words: string; into: string | null } | null {
+  if (!place) return null;
+  if (place.declared === null || place.declared === undefined) return { kind: "default", words: "the default place under the working place; choose one in Places", into: null };
+  if (place.shared === true) {
+    const into = place.writes_into ?? null;
+    return { kind: "shared", words: `shared, the engine writes into ${into ?? "its own subfolder"}`, into };
+  }
+  return { kind: "declared", words: `the place ${place.declared}`, into: null };
+}
 
 /** What a person may do on the page, by grant and door; a door the engine lacks offers nothing. */
 export function softwareActs(caps: Capabilities): { see: boolean; install: boolean; register: boolean; verify: boolean; accept: boolean; forget: boolean; remove: boolean } {

@@ -15,6 +15,7 @@ import { Fragment, useCallback, useEffect, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { DoorError } from "../ask/client";
 import { ensurePeople, peopleKept } from "../assistant/shares";
+import { may as granted } from "../grants";
 import { whenWords } from "../data/sources";
 import { software, type SoftwarePackage, type SoftwarePlace, type SoftwareNeed } from "../ops/client";
 import { useInstall } from "../ops/Install";
@@ -27,7 +28,7 @@ import { Icon } from "../ui/Icon";
 import { useKept } from "../ui/kept";
 import { Wait } from "../ui/Wait";
 import { Acted, Head, messageOf, Stats, useActing } from "./common";
-import { failedChecks, kindWords, LICENCE_MAX, licenceState, needsAmiss, nextAct, pinnedError, placeFileCommand, softwareActs, softwareCounts, specError, statusTag, verifiedWords, type Tone } from "./software";
+import { failedChecks, kindWords, LICENCE_MAX, licenceState, needsAmiss, nextAct, pinnedError, PLACES_HREF, placeFileCommand, placeLine, softwareActs, softwareCounts, specError, statusTag, verifiedWords, type Tone } from "./software";
 
 type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; place: SoftwarePlace };
 
@@ -68,6 +69,7 @@ export function SoftwareView({ caps, place, people = null, onChanged, now = new 
   const name = namer(caps, people);
   const when = (iso: string) => whenWords(iso, now);
   const counts = softwareCounts(place.packages);
+  const line = placeLine(place.place);
   const done = (words: string) => {
     setOpen(null);
     row.say(words);
@@ -105,13 +107,24 @@ export function SoftwareView({ caps, place, people = null, onChanged, now = new 
           ...(place.runtime ? [{ label: "runtime", value: [place.runtime.name, place.runtime.version].filter(Boolean).join(" ") }] : []),
         ]}
       />
-      {place.place && (
+      {place.place && line && (
         <p className="meta software-place">
-          <span className="path" title={place.place.declared ? `the place ${place.place.declared}` : "the default place, under the pipelines' working place"}>
+          <span className="path" title={line.words}>
             {place.place.path ?? "no place yet"}
           </span>
           {readOnly && <span className="tag">read only</span>}
-          {place.place.shared && <span className="meta"> · beside the site&apos;s shared folder {place.place.shared}</span>}
+          <span className="meta software-place-line">
+            {" · "}
+            {line.kind === "default" ? (
+              <>the default place under the working place; choose one in {granted(caps, "places:see") ? <a href={PLACES_HREF}>Places</a> : "Places"}</>
+            ) : line.kind === "shared" ? (
+              <>
+                shared, the engine writes into <span className="path">{line.into ?? "its own subfolder"}</span>
+              </>
+            ) : (
+              line.words
+            )}
+          </span>
         </p>
       )}
       <Acted acting={row.acting} />

@@ -244,7 +244,16 @@ export interface SoftwarePackage {
 }
 
 export interface SoftwarePlace {
-  place: { path: string | null; declared: string | null; read_only?: boolean | null; shared?: string | null } | null;
+  place: {
+    path: string | null;
+    /** The declared place's name; null for the default under the working place. */
+    declared: string | null;
+    read_only?: boolean | null;
+    /** Declared and not under the working place: a folder the site shares, where the engine writes only its own subfolder. */
+    shared?: boolean | null;
+    /** Where the engine installs: the place, or its own subfolder of a shared one. */
+    writes_into?: string | null;
+  } | null;
   packages: SoftwarePackage[];
   runtime: { name: string; version: string | null } | null;
 }
