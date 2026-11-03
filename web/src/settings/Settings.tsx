@@ -64,7 +64,7 @@ export function Settings(props: PageProps & { page: string | null }) {
     case "places":
       return <PlacesPage caps={props.caps} install={props.install} onChanged={props.onChanged} />;
     case "software":
-      return <SoftwarePage caps={props.caps} />;
+      return <SoftwarePage caps={props.caps} install={props.install} />;
     case "participation":
       return <ParticipationPage caps={props.caps} />;
     case "backups":

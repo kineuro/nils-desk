@@ -1735,7 +1735,6 @@ table.run-files .run-file { max-width: min(28rem, 55vw); overflow: hidden; text-
 
 /* Wave 7b: Settings > Software, a run's units with who chose, the goal and switches at a run's start */
 .req.warn { border-left-color: var(--n-brand-line); }
-.software-place { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; margin: 0; }
 .software-found { margin-top: 1.2rem; }
 .software-found h3 { margin: 0 0 0.2rem; font-size: 1rem; }
 .software-found-list { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.6rem; }
@@ -1766,10 +1765,25 @@ table.run-files .run-file { max-width: min(28rem, 55vw); overflow: hidden; text-
 .judged-list li { padding-left: 0.55rem; border-left: 2px solid var(--n-ok-line); }
 .judged-list li.skipped { border-left-color: var(--n-caution-line); }
 .judged-list li.routed { border-left-color: var(--n-brand-line); }
-.software-next-narrow { display: none; margin-top: 0.3rem; }
-@media (max-width: 700px) {
-  .software-next-narrow { display: inline-flex; }
-  .software-next-wide { display: none; }
+/* Settings > Software as a person reads it (2026-11-03): where tools live, then one card a tool, its state as its border */
+.software-where { display: flex; flex-wrap: wrap; gap: 0.6rem 1.2rem; align-items: center; justify-content: space-between; margin: 0 0 0.9rem; padding: 0.7rem 0.9rem; border: 1px solid var(--n-line); border-left: 3px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.software-where.ok { border-left-color: var(--n-ok-line); }
+.software-where.caution { border-left-color: var(--n-caution-line); }
+.software-where-text { display: grid; gap: 0.2rem; min-width: 0; }
+.software-where-text p { margin: 0; }
+.software-where-line { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline; overflow-wrap: anywhere; }
+.software-tools { list-style: none; margin: 0.6rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+.software-tool { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 13rem; gap: 0.3rem 1rem; align-items: start; padding: 0.55rem 0.8rem; border: 1px solid var(--n-line); border-left: 3px solid var(--n-neutral-line); border-radius: var(--n-radius); background: var(--n-bg-raised); }
+.software-tool.ok { border-left-color: var(--n-ok-line); }
+.software-tool.caution { border-left-color: var(--n-caution-line); }
+.software-tool.brand { border-left-color: var(--n-brand-line); }
+.software-tool .meta { overflow-wrap: anywhere; }
+.software-tool-act { justify-content: flex-end; }
+.software-tool-under, .software-tool-details { grid-column: 1 / -1; }
+.software-tool-details .table-wrap { margin-top: 0.3rem; }
+@media (max-width: 40rem) {
+  .software-tool { grid-template-columns: minmax(0, 1fr); }
+  .software-tool-act { justify-content: flex-start; }
 }
 
 /* Wave 7b: the Pipelines page without tabs, workflows and provenance (spec sections 8.1 to 8.6) */
