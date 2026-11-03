@@ -7,7 +7,7 @@
 // (#pipelines/runs/41), and the start of a run with the pack's goal and
 // switches and the pre-flight's judged units (#pipelines/catalog, then Run).
 // ?pooled makes the table's ask refused for pooling, as the engine refuses a
-// total across keys. Every name and number here is made up.
+// total across keys; ?fresh and ?shared draw other software places. Every name and number here is made up.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -15,9 +15,11 @@ import { App } from "../../src/App";
 import "../../src/shell.css";
 import { GRANTS } from "../../src/grants";
 import { NUMBERS_TWO, PACK_DOC, PRE_PACK, RUN_PACK, SAMSEG_PIPELINE } from "../../src/ops/pack.fixture";
-import { PLACE, SOFTWARE_DOORS } from "../../src/settings/software.fixture";
+import { PLACE, PLACE_DOORS, PRODUCTION, SHARED_TOOLS, SOFTWARE_DOORS } from "../../src/settings/software.fixture";
 
 const POOLED = new URLSearchParams(location.search).has("pooled");
+// ?fresh draws Settings > Software as a fresh install lists it, ?shared with a shared folder of tools chosen
+const SOFTWARE = new URLSearchParams(location.search).has("fresh") ? PRODUCTION : new URLSearchParams(location.search).has("shared") ? SHARED_TOOLS : PLACE;
 
 const DOORS = [
   "GET /api/capabilities",
@@ -38,6 +40,7 @@ const DOORS = [
   "GET /api/jobs/{id}",
   "POST /api/jobs",
   ...SOFTWARE_DOORS,
+  ...PLACE_DOORS,
 ];
 
 const engine = {
@@ -73,7 +76,7 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (path === "/api/capabilities") return json(200, engine);
   if (path === "/desk/people") return json(200, { people: [{ subject: "bo@site", display: "Bo" }] });
   if (path.startsWith("/desk/")) return json(404, { error: `the layout check's desk has no ${path}` });
-  if (path === "/api/software") return json(200, PLACE);
+  if (path === "/api/software") return json(200, SOFTWARE);
   if (path === "/api/pipelines") return json(200, { pipelines: PIPELINES, capability: { enabled: true, runtime: { name: "podman", version: "5.4" } } });
   if (path === "/api/pipelines/5/pack") return json(200, PACK_DOC);
   if (path === "/api/pipelines/5/preflight") return json(200, PRE_PACK);

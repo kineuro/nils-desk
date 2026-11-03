@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Settings > Software (record 57 P5, Wave 7b spec 6.7): the software place as
-// a person reads it. Each package with its install (the version, how it came,
-// the kind, a short fingerprint), whether it was verified and what the probe
-// or the test said where it failed, and its licence: accepted by whom and
-// when, or waiting for an administrator. The acts follow the grant and the
-// doors the engine serves; each row offers the one act it needs next. The
-// desk counts nothing itself: every word is the engine's or read from it.
+// a person reads it. The packages are grouped into tools by the image they
+// pin, each tool named as people know it (FreeSurfer 8.2.0) with the
+// pipelines that use it and its state in plain words, in an order of
+// precedence: a check failed, a licence waits, an older converter, ready, a
+// copy in the folder, fetched already, not here yet. Each package keeps its
+// install (the version, how it came, the kind, a short fingerprint), whether
+// it was verified and what failed, and its licence. The acts follow the grant
+// and the doors the engine serves.
 
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
@@ -15,25 +17,6 @@ import type { PackFrom, SoftwareCheck, SoftwareFound, SoftwarePackage, SoftwareP
 
 /** The page's address: where a refusal for software points. */
 export const SOFTWARE_HREF = href("settings", "software");
-
-/** The Places page, where a software place is chosen. */
-export const PLACES_HREF = href("settings", "places");
-
-/**
- * The line under the head that says which place this is: the default under
- * the working place, with the way to choose one in Places; a shared folder,
- * with the subfolder the engine writes into (spec 6.8); or the declared
- * place by name.
- */
-export function placeLine(place: SoftwarePlace["place"]): { kind: "default" | "shared" | "declared"; words: string; into: string | null } | null {
-  if (!place) return null;
-  if (place.declared === null || place.declared === undefined) return { kind: "default", words: "the default place under the working place; choose one in Places", into: null };
-  if (place.shared === true) {
-    const into = place.writes_into ?? null;
-    return { kind: "shared", words: `shared, the engine writes into ${into ?? "its own subfolder"}`, into };
-  }
-  return { kind: "declared", words: `the place ${place.declared}`, into: null };
-}
 
 /** What a person may do on the page, by grant and door; a door the engine lacks offers nothing. */
 export function softwareActs(caps: Capabilities): { see: boolean; install: boolean; register: boolean; verify: boolean; accept: boolean; forget: boolean; remove: boolean } {
@@ -118,35 +101,9 @@ export function placeFileCommand(p: Pick<SoftwarePackage, "spec">): string {
   return `nils software accept ${p.spec} --file PATH`;
 }
 
-export type Act = "install" | "accept" | "place" | "verify";
-
-/** The one act a package needs next, where the person may do it; null where it needs none. */
-export function nextAct(p: SoftwarePackage, acts: ReturnType<typeof softwareActs>): Act | null {
-  if (p.status === "missing") return acts.install && p.kind !== "binary" ? "install" : null;
-  const lic = licenceState(p, (s) => s, (s) => s);
-  if (lic.accept) return acts.accept ? "accept" : null;
-  // the terms are accepted and only the site file is missing: the dialog places the file alone
-  if (lic.file) return acts.accept ? "place" : null;
-  if (p.status === "failed verification") return acts.verify ? "verify" : null;
-  return null;
-}
-
 /** The dependency checks of a package that are not ok, warn first-class: a person sees what keeps a run from it. */
 export function needsAmiss(p: Pick<SoftwarePackage, "needs">): { check: string; state: string; said: string }[] {
   return (p.needs ?? []).filter((c) => (c.state ? c.state !== "ok" : c.ok !== true)).map((c) => ({ check: c.check, state: c.state || "missing", said: c.said }));
-}
-
-/** The page's few numbers: the packages, those ready, those needing a look. */
-export function softwareCounts(packages: SoftwarePackage[]): { packages: number; ready: number; look: number } {
-  let ready = 0;
-  let look = 0;
-  for (const p of packages) {
-    const t = statusTag(p).tone;
-    const lic = licenceState(p, (s) => s, (s) => s);
-    if (t === "ok" && !lic.accept && !lic.file) ready++;
-    else look++;
-  }
-  return { packages: packages.length, ready, look };
 }
 
 /** A package spec a person typed: app@version, each a package name (letters, digits, '.', '-', '_' and '+'). */
@@ -191,9 +148,213 @@ export function suggestedVersion(base: string | null | undefined): string {
   const noDigest = base.split("@")[0];
   const last = noDigest.split("/").pop() ?? "";
   const [name, tag] = last.split(":");
-  const clean = (s: string) => s.replace(/[^A-Za-z0-9._+-]/gu, "-").replace(/^[^A-Za-z0-9_+-]+/u, "");
   if (!name) return "";
   return tag ? clean(`${name}-${tag}`) : clean(name);
+}
+
+/**
+ * The app suggested from a candidate's base image, `freesurfer/freesurfer:7.4.1` to `freesurfer`: the repository's
+ * last name, with any character a package name cannot hold made a dash.
+ */
+export function suggestedApp(base: string | null | undefined): string {
+  if (!base) return "";
+  const last = base.split("@")[0].split("/").pop() ?? "";
+  return clean(last.split(":")[0] ?? "");
+}
+
+/** The tag of a candidate's base image as a version, `freesurfer/freesurfer:7.4.1` to `7.4.1`; empty where the base names no tag. */
+export function suggestedTag(base: string | null | undefined): string {
+  if (!base) return "";
+  const last = base.split("@")[0].split("/").pop() ?? "";
+  return clean(last.split(":")[1] ?? "");
+}
+
+/** The name a candidate is added under, `app@version` from its base image; empty where the base names no app. */
+export function suggestedSpec(base: string | null | undefined): string {
+  const app = suggestedApp(base);
+  const tag = suggestedTag(base);
+  return app === "" ? "" : `${app}@${tag || "1"}`;
+}
+
+const clean = (s: string) => s.replace(/[^A-Za-z0-9._+-]/gu, "-").replace(/^[^A-Za-z0-9_+-]+/u, "");
+
+/** What a path a person gave is, read from its shape: an image pinned by its digest, a `.sif` file, else a folder. */
+export function inferKind(path: string): "sif" | "sandbox" | "image" {
+  const s = path.trim();
+  if (/@sha256:/u.test(s)) return "image";
+  if (/\.sif$/iu.test(s)) return "sif";
+  return "sandbox";
+}
+
+/* ------------------------------------------------ tools: the packages grouped by the image they pin */
+
+/** One tool as a person installs it: the packages that pin one image (FreeSurfer is one tool for seven pipelines), or the converter. */
+export interface ToolGroup {
+  key: string;
+  /** The friendly name: "FreeSurfer", "dcm2niix (the converter)". */
+  name: string;
+  /** The version with the tool's name in front stripped: "8.2.0". */
+  version: string;
+  /** The pipelines that use it, by name, without the label's @N. */
+  pipelines: string[];
+  packages: SoftwarePackage[];
+  converter: boolean;
+}
+
+/** The friendly names of the tools the catalog pins, by repository (or its last name). */
+const TOOL_NAMES: Record<string, string> = {
+  "freesurfer/freesurfer": "FreeSurfer",
+  "antsx/ants": "ANTs",
+  "nipreps/mriqc": "MRIQC",
+  "kineuro/nils-lst-ai": "LST-AI",
+  "sf-lesionflow-segcsvd": "segcsvd",
+  "kineuro/nils-bodypart": "NILS body part model",
+  "kineuro/nils-postcontrast": "NILS post-contrast model",
+  "kineuro/nils-postcontrast-full": "NILS post-contrast model (full)",
+  "kineuro/nils-system1": "NILS System 1 model",
+};
+
+/** The repository of an image reference, its registry host, tag and digest left out: `docker.io/antsx/ants@sha256:…` to `antsx/ants`. */
+export function repositoryOf(ref: string | null | undefined): string | null {
+  if (!ref) return null;
+  const parts = ref.split("@")[0].split("/");
+  // a first part with a dot or a port, or localhost, is the registry's host
+  if (parts.length > 1 && (/[.:]/u.test(parts[0]) || parts[0] === "localhost")) parts.shift();
+  const last = parts.pop()?.split(":")[0] ?? "";
+  const repo = [...parts, last].join("/");
+  return repo === "" ? null : repo;
+}
+
+/** A tool's friendly name from its package: the converter by its role, else the table's name for its repository, else the repository's last name, else the app. */
+export function toolName(p: Pick<SoftwarePackage, "kind" | "app" | "source" | "image" | "pinned">): string {
+  if (p.kind === "binary") return `${p.app} (the converter)`;
+  const ref = p.source ?? p.image ?? (p.pinned ?? []).find((x) => x.includes("/")) ?? null;
+  const repo = repositoryOf(ref);
+  if (repo === null) return p.app;
+  const last = repo.split("/").pop() ?? repo;
+  return TOOL_NAMES[repo] ?? TOOL_NAMES[last] ?? last;
+}
+
+/** A version with the tool's name in front stripped, `freesurfer-8.2.0` to `8.2.0`; one that starts with its number stays as it is. */
+export function bareVersion(v: string): string {
+  return v.replace(/^[A-Za-z][A-Za-z0-9_.+-]*?-(?=v?\d)/u, "");
+}
+
+/** The version of a group: its packages' versions, each bare; where they disagree, the shortest. */
+export function toolVersion(packages: Pick<SoftwarePackage, "version">[]): string {
+  const vs = [...new Set(packages.map((p) => bareVersion(p.version)))];
+  return vs.sort((a, b) => a.length - b.length || a.localeCompare(b))[0] ?? "";
+}
+
+/** The digest an image reference pins, where it pins one. */
+const digestOf = (ref: string | null | undefined) => (ref && ref.includes("@") ? ref.slice(ref.indexOf("@") + 1) : null);
+
+/** The packages grouped by the image they pin, in the order the engine lists them; the converter is its own group. */
+export function groupTools(packages: SoftwarePackage[]): ToolGroup[] {
+  const groups = new Map<string, SoftwarePackage[]>();
+  for (const p of packages) {
+    const key = p.kind === "binary" ? `binary:${p.app}` : (p.pinned?.[0] ?? p.digest ?? digestOf(p.source) ?? p.spec);
+    groups.set(key, [...(groups.get(key) ?? []), p]);
+  }
+  return [...groups.entries()].map(([key, ps]) => {
+    const names = ps.flatMap((p) => ((p.pipelines ?? []).length > 0 ? (p.pipelines ?? []).map((l) => l.replace(/@[^@]*$/u, "")) : [p.app]));
+    return { key, name: toolName(ps[0]), version: toolVersion(ps), pipelines: [...new Set(names)], packages: ps, converter: ps[0].kind === "binary" };
+  });
+}
+
+/** A tool's title: "FreeSurfer 8.2.0". */
+export function toolTitle(g: Pick<ToolGroup, "name" | "version" | "converter">): string {
+  return g.converter ? g.name : `${g.name} ${g.version}`.trim();
+}
+
+/** The line under a tool's name: the pipelines that use it, counted and named; the converter serves every pipeline that reads DICOM. */
+export function pipelinesLine(g: Pick<ToolGroup, "pipelines" | "converter">): string {
+  if (g.converter) return "every pipeline that reads DICOM";
+  const n = g.pipelines.length;
+  return `${n} ${n === 1 ? "pipeline" : "pipelines"}: ${g.pipelines.join(", ")}`;
+}
+
+export type ToolStateKind = "failed" | "licence" | "licence-file" | "update" | "ready" | "copy" | "cached" | "missing";
+
+/** How a tool stands, in plain words, with the package its one act is for and, for a copy in the folder, that copy. */
+export interface ToolState {
+  kind: ToolStateKind;
+  tone: Tone;
+  words: string;
+  /** The package the act is for: the failed one, the one whose licence waits, the first one the copy matches. */
+  p: SoftwarePackage;
+  copy: SoftwareFound | null;
+}
+
+const ready = (p: Pick<SoftwarePackage, "status">) => p.status === "installed" || p.status === "registered";
+
+/**
+ * How a tool stands, by precedence: a check failed, a licence waits (its terms, or only its file), an older
+ * converter is here, all ready, a copy is in the folder, the image fetched already, or not here yet.
+ */
+export function toolState(g: Pick<ToolGroup, "packages" | "converter">, found: SoftwareFound[] | null | undefined): ToolState {
+  const ps = g.packages;
+  const failed = ps.find((p) => p.status === "failed verification");
+  if (failed) return { kind: "failed", tone: "caution", words: "Did not pass its check", p: failed, copy: null };
+  const lic = (p: SoftwarePackage) => licenceState(p, (s) => s, (s) => s);
+  const terms = ps.find((p) => lic(p).accept);
+  if (terms) return { kind: "licence", tone: "caution", words: "Needs its licence", p: terms, copy: null };
+  const file = ps.find((p) => lic(p).file);
+  if (file) return { kind: "licence-file", tone: "caution", words: "Needs its licence file", p: file, copy: null };
+  const old = ps.find((p) => p.status === "update available");
+  if (old) {
+    const v = (old.tool as { version?: unknown } | null | undefined)?.version;
+    const here = typeof v === "string" && v !== "" ? v : null;
+    return { kind: "update", tone: "brand", words: `Older version on this machine${here ? `: ${here}` : ""}; pipelines pin ${old.version}`, p: old, copy: null };
+  }
+  if (ps.every(ready)) return { kind: "ready", tone: "ok", words: "Ready", p: ps[0], copy: null };
+  for (const p of ps) {
+    const copy = copyFor(p, found);
+    if (copy) return { kind: "copy", tone: "neutral", words: "A copy is in the folder", p, copy };
+  }
+  const waiting = ps.filter((p) => !ready(p));
+  if (!g.converter && waiting.every((p) => p.image_cached === true)) return { kind: "cached", tone: "ok", words: "Ready, fetched already", p: ps[0], copy: null };
+  return { kind: "missing", tone: "neutral", words: g.converter ? "Not here yet" : "Not here yet; a first run fetches it", p: waiting[0] ?? ps[0], copy: null };
+}
+
+/** The line under a ready tool: the site's copy where NILS never changes it, else who installed it and when. */
+export function readyMeta(p: SoftwarePackage, name: (principal: string) => string, when: (iso: string) => string): string {
+  if (p.managed === false) return p.path ? `the site's copy at ${p.path}` : "the site's copy";
+  if (p.by && p.at) return `installed by ${name(p.by)}, ${when(p.at)}`;
+  return "";
+}
+
+/** The page's few numbers, by tool: the tools, those ready, those needing a look (a check, a licence, an older converter). */
+export function toolCounts(groups: ToolGroup[], found: SoftwareFound[] | null | undefined): { tools: number; ready: number; look: number } {
+  let ok = 0;
+  let look = 0;
+  for (const g of groups) {
+    const s = toolState(g, found);
+    if (s.tone === "ok") ok++;
+    else if (s.tone === "caution" || s.tone === "brand") look++;
+  }
+  return { tools: groups.length, ready: ok, look };
+}
+
+/** What a folder holds that NILS recognises, said after the folder is chosen: each tool with a copy there and its pipelines. */
+export function foundWords(place: Pick<SoftwarePlace, "packages" | "found">): string {
+  const hits = groupTools(place.packages)
+    .map((g) => ({ g, s: toolState(g, place.found) }))
+    .filter((x) => x.s.kind === "copy")
+    .map(({ g }) => `${toolTitle(g)} for ${g.pipelines.length} ${g.pipelines.length === 1 ? "pipeline" : "pipelines"}`);
+  if (hits.length === 0) return "Nothing NILS recognises there yet.";
+  return `Found ${hits.length === 1 ? hits[0] : `${hits.slice(0, -1).join(", ")} and ${hits[hits.length - 1]}`}.`;
+}
+
+/**
+ * The software place as the page's card says it: the default under the working place, a folder the site shares
+ * (where NILS writes only its own subfolder), or a declared folder; read only where the engine cannot install there.
+ */
+export function placeCard(place: SoftwarePlace["place"]): { kind: "default" | "shared" | "declared"; path: string | null; into: string | null; readOnly: boolean } | null {
+  if (!place) return null;
+  const readOnly = place.read_only === true;
+  if (place.declared === null || place.declared === undefined) return { kind: "default", path: place.path, into: place.writes_into ?? place.path, readOnly };
+  return { kind: place.shared === true ? "shared" : "declared", path: place.path, into: place.writes_into ?? place.path, readOnly };
 }
 
 /** The most bytes the accept door takes of a licence file. */

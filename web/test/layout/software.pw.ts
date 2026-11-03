@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Wave 7b's screens (spec 17) in a real browser, in the desk's shell
 // (software.html), at a laptop's width and at a phone's: Settings > Software
-// with its packages, a run's units with who chose each knob and the numbers
-// per comparability key, a refused total that says its pooling words, and
-// the start of a run with the pack's goal, switches and judged units.
+// with where tools live and its tools, a run's units with who chose each
+// knob and the numbers per comparability key, a refused total that says its
+// pooling words, and the start of a run with the pack's goal, switches and
+// judged units.
 // Nothing scrolls sideways. SHOTS=<dir> keeps a screenshot of each.
 
 import { expect, test, type Page } from "@playwright/test";
@@ -24,22 +25,51 @@ async function noSideways(page: Page, width: number) {
 test.setTimeout(90_000);
 
 for (const vp of SIZES) {
-  test(`at ${vp.name} px Settings > Software lists each package with its next act`, async ({ page }) => {
+  test(`at ${vp.name} px Settings > Software says where tools live and lists each tool with its state and next act`, async ({ page }) => {
     await page.setViewportSize(vp);
     await page.goto("/software.html#settings/software");
-    const table = page.locator("table.software-table");
-    await expect(table.locator("tbody tr.software-row")).toHaveCount(5);
-    await expect(table).toContainText("LicenseRef-FreeSurfer: terms not accepted");
-    await expect(table).toContainText("the image changed since it was installed");
-    await expect(table).toContainText("CC-BY-NC-4.0: accepted by Astrid");
-    await expect(table.getByRole("button", { name: "Accept", exact: true })).toBeVisible();
+    await expect(page.locator(".software-where")).toContainText("Tools live in");
+    const list = page.locator("ul.software-tools");
+    await expect(list.locator("li.software-tool")).toHaveCount(5);
+    await expect(list).toContainText("Needs its licence");
+    await expect(list).toContainText("Did not pass its check");
+    await expect(list).toContainText("the image changed since it was installed");
+    await expect(list).toContainText("the site's copy at /srv/shared/software/pyment/5.1.0");
+    await expect(list.getByRole("button", { name: "Accept the terms", exact: true })).toBeVisible();
     await noSideways(page, vp.width);
     await shot(page, `software-${vp.name}`);
-    await table.getByRole("button", { name: "Accept", exact: true }).click();
+    // the packages as the engine lists them stay under each tool's Details
+    await list.locator("li.software-tool").first().locator("summary").click();
+    await expect(list.locator("table.software-table").first()).toContainText("LicenseRef-FreeSurfer: terms not accepted");
+    await noSideways(page, vp.width);
+    await list.getByRole("button", { name: "Accept the terms", exact: true }).click();
     const dialog = page.locator("dialog[open]");
     await expect(dialog).toContainText("https://surfer.nmr.mgh.harvard.edu/registration.html");
     await noSideways(page, vp.width);
     await shot(page, `software-accept-${vp.name}`);
+  });
+
+  test(`at ${vp.name} px a fresh install offers a folder of tools first and lists ten tools`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/software.html?fresh#settings/software");
+    await expect(page.locator("li.software-tool")).toHaveCount(10);
+    await expect(page.getByRole("button", { name: "Use a folder of tools" })).toBeVisible();
+    await expect(page.locator("ul.software-tools")).toContainText("Not here yet; a first run fetches it");
+    await noSideways(page, vp.width);
+    await shot(page, `software-fresh-${vp.name}`);
+  });
+
+  test(`at ${vp.name} px a shared folder offers its FreeSurfer copy and the folder's other tools`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/software.html?shared#settings/software");
+    await expect(page.getByRole("button", { name: /Use the copy at/u })).toBeVisible();
+    await expect(page.locator(".software-found")).toContainText("Not used by any pipeline");
+    await noSideways(page, vp.width);
+    await shot(page, `software-shared-${vp.name}`);
+    await page.getByRole("button", { name: "Change folder" }).click();
+    await expect(page.locator("dialog[open]")).toContainText("It installs into /srv/shared/tools/nils and changes nothing else.");
+    await noSideways(page, vp.width);
+    await shot(page, `software-place-${vp.name}`);
   });
 
   test(`at ${vp.name} px a run's units say who chose each knob, with caveats, flags and keys`, async ({ page }) => {
