@@ -83,7 +83,7 @@ test("a cohort chosen draws how it grew, no event over another", async ({ page }
   await page.screenshot({ path: "test-results/data-cohort.png", fullPage: true });
 });
 
-test("body part, post-contrast and main scans carry their Run inside their steps, post-contrast's held with its reason", async ({ page }) => {
+test("sort, body part, post-contrast and main scans carry their Run inside their steps, post-contrast's held with its reason", async ({ page }) => {
   // four widths, each a page of its own
   test.setTimeout(120_000);
   for (const [width, rows] of [
@@ -96,19 +96,22 @@ test("body part, post-contrast and main scans carry their Run inside their steps
     await page.goto("/data.html#data/datasets");
     await expect(page.locator(".dp-detail")).toHaveAttribute("aria-label", "study-big");
     const runs = page.locator(".dp-detail .dp-step-run");
-    await expect(runs).toHaveCount(3);
+    // 2026-11-05: the sort's Run again stands first, since the sort runs from the card too
+    await expect(runs).toHaveCount(4);
     await expect(runs.nth(0).locator("button")).toHaveText("Run again");
     await expect(runs.nth(0).locator("button")).toBeEnabled();
-    await expect(runs.nth(1).locator("button")).toHaveText("Run");
-    await expect(runs.nth(1).locator("button")).toBeDisabled();
-    await expect(runs.nth(1).locator(".hint")).toHaveAttribute("title", "no post-contrast model is installed");
+    await expect(runs.nth(1).locator("button")).toHaveText("Run again");
+    await expect(runs.nth(1).locator("button")).toBeEnabled();
+    await expect(runs.nth(2).locator("button")).toHaveText("Run");
+    await expect(runs.nth(2).locator("button")).toBeDisabled();
+    await expect(runs.nth(2).locator(".hint")).toHaveAttribute("title", "no post-contrast model is installed");
     // main scans: picked again by the dataset's rules, the 3D views running beside it, and the way to their page
-    await expect(runs.nth(2).locator("button")).toHaveText("Run again");
-    await expect(runs.nth(2).locator("button")).toBeEnabled();
-    await expect(runs.nth(2).locator("a")).toHaveText("Rules");
+    await expect(runs.nth(3).locator("button")).toHaveText("Run again");
+    await expect(runs.nth(3).locator("button")).toBeEnabled();
+    await expect(runs.nth(3).locator("a")).toHaveText("Rules");
     // each Run on one line inside its step, the rail as it was; main scans' Rules and "?" beside their Run
     // on the same line (Nima, 2026-10-11: the "?" fell under them on a 1440 screen)
-    for (const i of [3, 4, 5]) {
+    for (const i of [2, 3, 4, 5]) {
       const step = page.locator(".dp-detail .dp-step").nth(i);
       const cell = (await step.boundingBox())!;
       const run = (await step.locator(".dp-step-run").boundingBox())!;
