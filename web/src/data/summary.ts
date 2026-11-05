@@ -14,7 +14,7 @@ import type { Cohort, Join, CohortRelease } from "./cohorts";
 import type { Dataset } from "./datasets";
 import { declared } from "./layout";
 import { ranOf } from "./pseudoStep";
-import { readStopped, type NextStep } from "./steps";
+import { outsideWords, readStopped, type NextStep } from "./steps";
 
 export const SUMMARY_DOOR = "GET /api/datasets/{name}/summary";
 
@@ -77,6 +77,8 @@ export interface SummaryStep {
   of?: number;
   look?: number;
   unsorted?: number;
+  outside?: number;
+  outside_by?: Record<string, number>;
   picked?: number;
   borders?: number;
   made?: number;
@@ -117,6 +119,9 @@ export interface DatasetSummary {
   sure: number;
   need_a_look: number;
   unsorted: number;
+  /** Engine 1.0.0-beta.8: the scans outside the rules, and by modality; an older engine leaves them out. */
+  outside?: number;
+  outside_by?: Record<string, number>;
   look_kinds: Record<string, number>;
   kinds: { kind: string; scans: number }[];
   body_regions: { region: string; scans: number }[];
@@ -219,7 +224,7 @@ export function stepsOfSources(d: Dataset): SummaryStep[] {
   return [
     { step: "found", state: state(rail[0]), ...none, ...foundOf(d, null) },
     { step: "read", state: state(rail[1]), ...at, files: last?.files.seen ?? 0, refused: d.totals.refused_files, reads: d.digests.count },
-    { step: "sorted", state: state(rail[2]), ...none, scans: d.totals.stacks - (d.totals.unsorted ?? 0), of: d.totals.stacks, look: d.totals.to_sort, unsorted: d.totals.unsorted ?? 0 },
+    { step: "sorted", state: state(rail[2]), ...none, scans: d.totals.stacks - (d.totals.unsorted ?? 0) - (d.totals.outside ?? 0), of: d.totals.stacks, look: d.totals.to_sort, unsorted: d.totals.unsorted ?? 0, outside: d.totals.outside ?? 0, outside_by: d.totals.outside_by ?? {} },
     { step: "main_scans", state: "waiting", ...none, picked: 0, borders: 0 },
     { step: "pictures", state: "waiting", ...none, made: 0, of: d.totals.stacks },
     { step: "views", state: "waiting", ...none, made: 0, of: d.totals.stacks },
@@ -416,6 +421,7 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
       what = v("of") === 0 ? (s.state === "waiting" ? "not yet" : "nothing to sort") : `${n(v("scans"))} scans`;
       if (v("look") > 0) what += ` · ${n(v("look"))} to look at`;
       if (v("unsorted") > 0) what += ` · ${n(v("unsorted"))} not sorted`;
+      if (v("outside") > 0) what += ` · ${outsideWords(v("outside"), s.outside_by ?? {})}`;
       break;
     case "body_part":
     case "post_contrast":
@@ -544,12 +550,15 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
   const sure = s ? s.sure : (d.totals.sure ?? d.totals.stacks - d.totals.to_sort);
   const look = s ? s.need_a_look : d.totals.to_sort;
   const unsorted = s ? s.unsorted : (d.totals.unsorted ?? 0);
+  const outside = (s ? s.outside : d.totals.outside) ?? 0;
+  const outsideBy = (s ? s.outside_by : d.totals.outside_by) ?? {};
   const scans = s ? s.scans : d.totals.stacks;
   if (scans === 0) return "No scans found";
   if (sure === 0 && look === 0) return "Not sorted yet";
   const parts = [`${n(sure)} sure`];
   if (look > 0) parts.push(`${n(look)} need a look`);
   if (unsorted > 0) parts.push(`${n(unsorted)} not sorted`);
+  if (outside > 0) parts.push(outsideWords(outside, outsideBy));
   return parts.join(" · ");
 }
 

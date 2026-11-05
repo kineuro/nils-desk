@@ -117,11 +117,13 @@ a.dp-view:hover { background: var(--n-bg-hover); }
 .dp-sure > .ok, .dp-bar3 > .ok { background: var(--n-ok-line); }
 .dp-sure > .look, .dp-bar3 > .look { background: var(--n-caution-line); }
 .dp-sure > .none { background: var(--n-neutral-line); }
+.dp-sure > .outside { background: repeating-linear-gradient(135deg, var(--n-neutral-line) 0 3px, transparent 3px 6px); }
 .dp-bar3 > .none { background: var(--n-neutral-bg); }
 .dp-sure-words { display: flex; flex-wrap: wrap; gap: 0.25rem 0.875rem; font-size: var(--n-text-size-small); }
 .dp-sure-words .ok { color: var(--n-ok-fg); }
 .dp-sure-words .look { color: var(--n-caution-fg); }
 .dp-sure-words .none { color: var(--n-text-faint); }
+.dp-sure-words .outside { color: var(--n-text-faint); }
 .dp-kinds { display: flex; flex-direction: column; gap: 5px; font-size: var(--n-text-size-small); }
 .dp-kind { display: grid; grid-template-columns: 4rem minmax(0, 1fr) 3.4rem; align-items: center; gap: 0.5rem; }
 .dp-kind.wide { grid-template-columns: 4rem minmax(0, 1fr) 4.4rem; }

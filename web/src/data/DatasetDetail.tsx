@@ -39,7 +39,7 @@ import { STOPPED_NEXT, useStopped } from "./stopped";
 import { StepRail } from "./StepRail";
 import { pickRun } from "./pickRun";
 import { mainScansMore, pickOffer, runOffers, startedWords, stepRuns } from "./stepRun";
-import { nextStep, stepCommand, type StepId } from "./steps";
+import { nextStep, outsideWords, stepCommand, type StepId } from "./steps";
 import {
   clock,
   countingWords,
@@ -466,6 +466,8 @@ function Holds({ dataset: d, summary: s, reviews = false, now }: { dataset: Data
   const sure = s?.sure ?? d.totals.sure ?? Math.max(0, d.totals.stacks - d.totals.to_sort);
   const look = s?.need_a_look ?? d.totals.to_sort;
   const unsorted = s?.unsorted ?? d.totals.unsorted ?? 0;
+  const outside = s?.outside ?? d.totals.outside ?? 0;
+  const outsideBy = s?.outside_by ?? d.totals.outside_by ?? {};
   const kinds = (s?.kinds ?? []).slice(0, 6);
   const most = Math.max(1, ...kinds.map((k) => k.scans));
   const found = foundOf(d, s);
@@ -511,10 +513,11 @@ function Holds({ dataset: d, summary: s, reviews = false, now }: { dataset: Data
       )}
       {scans > 0 && (
         <>
-          <div className="dp-sure" role="img" aria-label={`${n(sure)} sure, ${n(look)} need a look, ${n(unsorted)} not sorted`}>
+          <div className="dp-sure" role="img" aria-label={`${n(sure)} sure, ${n(look)} need a look, ${n(unsorted)} not sorted${outside > 0 ? `, ${outsideWords(outside, outsideBy)}` : ""}`}>
             {sure > 0 && <span className="ok" style={{ flex: sure }} />}
             {look > 0 && <span className="look" style={{ flex: look }} />}
             {unsorted > 0 && <span className="none" style={{ flex: unsorted }} />}
+            {outside > 0 && <span className="outside" style={{ flex: outside }} />}
           </div>
           <div className="dp-sure-words">
             <span>
@@ -528,6 +531,7 @@ function Holds({ dataset: d, summary: s, reviews = false, now }: { dataset: Data
                 <span className="none">{n(unsorted)}</span> not sorted
               </span>
             )}
+            {outside > 0 && <span className="outside">{outsideWords(outside, outsideBy)}</span>}
           </div>
         </>
       )}

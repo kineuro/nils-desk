@@ -72,8 +72,12 @@ export interface Source {
     to_sort: number;
     /** Record 55 H2: the scans the sort is sure of; an older engine leaves it out, and stacks minus to_sort stands in. */
     sure?: number;
-    /** Record 55 H2: the stacks no sort has judged; stacks = sure + to_sort + unsorted. */
+    /** Record 55 H2: the stacks no sort has judged, of a modality a sort judges; stacks = sure + to_sort + unsorted + outside. */
     unsorted?: number;
+    /** The stacks outside the rules (engine 1.0.0-beta.8): no sort judges their modality, as CT under the MRI pack; an older engine leaves them out. */
+    outside?: number;
+    /** The same, by modality. */
+    outside_by?: Record<string, number>;
     /** Record 55 H2: the open questions by kind, for the hover of "need a look". */
     need_a_look?: Record<string, number>;
   };
