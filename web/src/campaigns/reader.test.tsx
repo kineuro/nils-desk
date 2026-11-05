@@ -335,6 +335,7 @@ describe("batches of like stacks", () => {
     open: 40,
     sealed: 2,
     unsuggested: 3,
+    accepts_value: true,
     count: 2,
     groups: [
       { key: "a1b2c3", count: 30, suggested: "T1w", signature: { rules: { base: "base/technique:MPRAGE" }, header: { text_sequence_name: "*tfl3d1_16ns", repetition_time: 2300 } }, sample: [1, 2, 3, 4, 5] },
@@ -380,6 +381,15 @@ describe("batches of like stacks", () => {
     expect(all).toContain("<b>27</b> take the suggestion · <b>3</b> held back (3 at random for the draw)");
     expect(all).toContain("Accept for 30");
     const empty = renderToStaticMarkup(<BatchView batches={[]} at={0} mine={new Set()} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} />);
+    // engine 1.0.0-beta.9: the batch accepted as another value, chosen among the question's
+    const question = { kind: "axis", axis: "base", values: ["T1w", "T2w"] };
+    const asOther = renderToStaticMarkup(<BatchView batches={batches} at={0} mine={new Set()} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} question={question} value={{ base: "T2w" }} onValue={() => undefined} />);
+    expect(asOther).toContain("Accept for 30 as T2w");
+    expect(asOther).toContain("<b>27</b> take T2w");
+    expect(asOther).toContain("aria-pressed=\"true\"");
+    const asSame = renderToStaticMarkup(<BatchView batches={batches} at={0} mine={new Set()} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} question={question} value={{ base: "T1w" }} onValue={() => undefined} />);
+    expect(asSame).toContain("take the suggestion");
+    expect(asSame).not.toContain(" as T1w");
     expect(empty).toContain("No batch of like stacks is left here.");
   });
 });
@@ -623,10 +633,12 @@ describe("accepting a batch", () => {
       const batch = { key: "a1" } as Parameters<typeof acceptBatch>[1];
       expect(await acceptBatch(7, batch, { items: null })).toEqual({ accepted: 1, held: [2], refused: 0 });
       await acceptBatch(7, batch, { items: [1, 3] });
+      // engine 1.0.0-beta.9: accepted as another value than the suggestion
+      await acceptBatch(7, batch, { items: [1] }, "T2w");
     } finally {
       vi.unstubAllGlobals();
     }
-    expect(sent.map((x) => x.path)).toEqual(["/api/campaigns/7/batches/a1/accept", "/api/campaigns/7/batches/a1/accept"]);
-    expect(sent.map((x) => x.body)).toEqual([{}, { items: [1, 3] }]);
+    expect(sent.map((x) => x.path)).toEqual(["/api/campaigns/7/batches/a1/accept", "/api/campaigns/7/batches/a1/accept", "/api/campaigns/7/batches/a1/accept"]);
+    expect(sent.map((x) => x.body)).toEqual([{}, { items: [1, 3] }, { items: [1], value: "T2w" }]);
   });
 });

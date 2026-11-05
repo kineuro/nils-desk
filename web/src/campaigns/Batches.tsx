@@ -8,8 +8,10 @@
 // batch, `b` back to one by one.
 
 import { useMemo, useState } from "react";
+import type { AxisValue } from "../review/asked";
 import { Tile, TileSync } from "../viewer/Tile";
-import { acceptPlan, planWords, type Batch } from "./reader";
+import { axisValues, type Question } from "./client";
+import { acceptPlan, batchValueWords, planWords, type Batch } from "./reader";
 
 const valueWords = (v: string | string[] | null) => (v === null ? "none" : Array.isArray(v) ? (v.length > 0 ? v.join("+") : "none") : v);
 
@@ -24,9 +26,22 @@ export interface BatchViewProps {
   onAccept: () => void;
   onNext: () => void;
   onBack: () => void;
+  /** The campaign's question, for the values a batch may be accepted as (engine 1.0.0-beta.9, where the listing says the door takes one). */
+  question?: Question | null;
+  /** The value the person chose for the batch, by axis; the suggestion where none. */
+  value?: Record<string, AxisValue> | null;
+  onValue?: (axis: string, value: string) => void;
 }
 
-export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onNext, onBack }: BatchViewProps) {
+/** The value a batch is accepted as where the person changed it, else null. */
+function chosenValue(b: Batch, value: Record<string, AxisValue> | null | undefined): Record<string, AxisValue> | null {
+  if (!value) return null;
+  const merged: Record<string, AxisValue> = { ...b.values, ...value };
+  const changed = Object.keys(merged).some((a) => JSON.stringify(merged[a]) !== JSON.stringify(b.values[a]));
+  return changed ? merged : null;
+}
+
+export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onNext, onBack, question = null, value = null, onValue }: BatchViewProps) {
   const sync = useMemo(() => new TileSync(), []);
   const [size] = useState(112);
   if (batches === null) return <p className="meta">Reading the batches…</p>;
@@ -44,6 +59,10 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
     );
   const plan = acceptPlan(b, mine);
   const shown = b.items.length;
+  const chosen = chosenValue(b, value);
+  const taking = chosen ? batchValueWords(chosen) : null;
+  // the values the batch may be accepted as, by axis, where the engine takes one
+  const choices = b.acceptsValue && question && onValue ? Object.keys(b.values).map((axis) => ({ axis, values: axisValues(question, axis) })).filter((c) => c.values.length > 0) : [];
   return (
     <div className="batch" aria-label={`batch ${at + 1} of ${batches.length}`}>
       <div className="batch-head">
@@ -60,9 +79,26 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
         </span>
         <span className="meta batch-words">{b.words}</span>
       </div>
+      {choices.length > 0 && (
+        <div className="batch-choice">
+          {choices.map((c) => {
+            const now = (value && c.axis in value ? value[c.axis] : b.values[c.axis]) ?? null;
+            return (
+              <div key={c.axis} className="chips" role="group" aria-label={`accept the batch as, ${c.axis}`}>
+                <span className="meta">{c.axis} as</span>
+                {c.values.map((v) => (
+                  <button key={v} type="button" className={now === v ? "opt on" : "opt"} aria-pressed={now === v} onClick={() => onValue!(c.axis, v)} title={JSON.stringify(b.values[c.axis]) === JSON.stringify(v) ? "the suggestion" : `accept the batch as ${v}`}>
+                    {v}
+                  </button>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
       {said && <p className="meta said">{said}</p>}
       <p className="batch-counts" role="status" aria-live="polite">
-        <b>{plan.n - plan.drawn}</b> take the suggestion · <b>{plan.drawn + plan.read.length}</b> held back
+        <b>{plan.n - plan.drawn}</b> take {taking ?? "the suggestion"} · <b>{plan.drawn + plan.read.length}</b> held back
         {plan.drawn > 0 ? ` (${plan.drawn} at random for the draw${plan.read.length > 0 ? `, ${plan.read.length} by you` : ""})` : ""}
         {plan.items !== null && shown < b.count ? `; the ${b.count - shown} not shown wait for a later move` : ""}
       </p>
@@ -94,7 +130,8 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
       </div>
       <div className="row actions">
         <button type="button" className="button" disabled={busy || plan.n === 0} onClick={onAccept} title={planWords(plan)}>
-          Accept for {plan.n} <kbd>Enter</kbd>
+          Accept for {plan.n}
+          {taking ? ` as ${taking}` : ""} <kbd>Enter</kbd>
         </button>
         <button type="button" className="button secondary" disabled={busy || batches.length < 2} onClick={onNext}>
           Next batch <kbd>n</kbd>

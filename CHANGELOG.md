@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- A batch of like stacks can be accepted as another value than the one suggested. Where the engine takes one (1.0.0-beta.9), the batch view offers the question's values as chips above the grid; the chosen value reads in the counts and on the button ("Accept for 57 as neck"), and the held-back stacks still go one by one. Until now a person who saw neck where the rules said spine had to hold every stack back.
+
 ### Changed
 
 - A scan the rules never judge (a CT scan under the MRI pack) is said as such: "31 CT outside the rules" on the card, the detail's bar and the Sorted step, from the engine's `outside` and `outside_by` (engine 1.0.0-beta.8), and never counted as not sorted or as a look. An older engine's totals read as before.
