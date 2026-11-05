@@ -22,9 +22,11 @@ const ds = (totals: Partial<Dataset["totals"]>, classified: number | null = 10, 
 
 describe("a dataset's certainty", () => {
   it("is the engine's sure count, else the stacks less those to sort", () => {
-    expect(certainty(ds({ stacks: 120, to_sort: 8, sure: 112 }))).toEqual({ scans: 120, sure: 112, look: 8, unsorted: 0, kinds: {} });
+    expect(certainty(ds({ stacks: 120, to_sort: 8, sure: 112 }))).toEqual({ scans: 120, sure: 112, look: 8, unsorted: 0, outside: 0, outsideBy: {}, kinds: {} });
     // the engine's split: sure + to_sort + unsorted; the unsorted never need a look
-    expect(certainty(ds({ stacks: 120, to_sort: 5, sure: 112, unsorted: 3, need_a_look: { "body_part:low_confidence": 5 } }))).toEqual({ scans: 120, sure: 112, look: 5, unsorted: 3, kinds: { "body_part:low_confidence": 5 } });
+    expect(certainty(ds({ stacks: 120, to_sort: 5, sure: 112, unsorted: 3, need_a_look: { "body_part:low_confidence": 5 } }))).toEqual({ scans: 120, sure: 112, look: 5, unsorted: 3, outside: 0, outsideBy: {}, kinds: { "body_part:low_confidence": 5 } });
+    // engine 1.0.0-beta.8: the scans outside the rules (CT under the MRI pack) are neither a look nor unsorted
+    expect(certainty(ds({ stacks: 120, to_sort: 5, sure: 112, unsorted: 0, outside: 3, outside_by: { CT: 3 } }))).toEqual({ scans: 120, sure: 112, look: 5, unsorted: 0, outside: 3, outsideBy: { CT: 3 }, kinds: {} });
     expect(certainty(ds({ stacks: 120, to_sort: 8 }))).toMatchObject({ sure: 112, look: 8 });
     expect(certainty(ds({ stacks: 120, to_sort: 0 }))).toMatchObject({ sure: 120, look: 0 });
   });
@@ -35,9 +37,11 @@ describe("a dataset's certainty", () => {
   });
 
   it("says itself in one line, and its kinds behind a hover", () => {
-    expect(certaintyWords({ scans: 120, sure: 112, look: 8, unsorted: 0, kinds: {} })).toBe("120 scans · 112 sure · 8 need a look");
-    expect(certaintyWords({ scans: 120, sure: 112, look: 5, unsorted: 3, kinds: {} })).toBe("120 scans · 112 sure · 5 need a look · 3 not sorted");
-    expect(certaintyWords({ scans: 1, sure: 1, look: 0, unsorted: 0, kinds: {} })).toBe("1 scan · 1 sure");
+    expect(certaintyWords({ scans: 120, sure: 112, look: 8, unsorted: 0, outside: 0, outsideBy: {}, kinds: {} })).toBe("120 scans · 112 sure · 8 need a look");
+    expect(certaintyWords({ scans: 120, sure: 112, look: 5, unsorted: 3, outside: 0, outsideBy: {}, kinds: {} })).toBe("120 scans · 112 sure · 5 need a look · 3 not sorted");
+    expect(certaintyWords({ scans: 1, sure: 1, look: 0, unsorted: 0, outside: 0, outsideBy: {}, kinds: {} })).toBe("1 scan · 1 sure");
+    expect(certaintyWords({ scans: 120, sure: 112, look: 5, unsorted: 0, outside: 3, outsideBy: { CT: 2, PT: 1 }, kinds: {} })).toBe("120 scans · 112 sure · 5 need a look · 2 CT, 1 PT outside the rules");
+    expect(certaintyWords({ scans: 120, sure: 117, look: 0, unsorted: 0, outside: 3, outsideBy: {}, kinds: {} })).toBe("120 scans · 117 sure · 3 outside the rules");
     expect(kindWords({ "orientation:missing": 3, "body_part:low_confidence": 5, axis_conflict: 0 })).toBe("body part, low confidence: 5; orientation, missing: 3");
   });
 

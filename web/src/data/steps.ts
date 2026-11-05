@@ -195,6 +195,9 @@ export interface Certainty {
   look: number;
   /** Scans no sort has judged yet: neither sure nor a question. */
   unsorted: number;
+  /** Scans outside the rules: of a modality no sort judges (CT under the MRI pack); never sorted, never a question. */
+  outside: number;
+  outsideBy: Record<string, number>;
   kinds: Record<string, number>;
 }
 
@@ -211,8 +214,17 @@ export function certainty(d: Pick<Dataset, "totals" | "digests">): Certainty | n
   const recent = d.digests.recent;
   if (recent.length > 0 && recent.every((b) => (b.classified ?? 0) === 0)) return null;
   const sure = Math.max(0, Math.min(t.stacks, t.sure ?? t.stacks - t.to_sort));
-  const unsorted = t.sure === undefined ? 0 : Math.max(0, Math.min(t.stacks - sure, t.unsorted ?? 0));
-  return { scans: t.stacks, sure, look: t.stacks - sure - unsorted, unsorted, kinds: t.need_a_look ?? {} };
+  const outside = t.sure === undefined ? 0 : Math.max(0, Math.min(t.stacks - sure, t.outside ?? 0));
+  const unsorted = t.sure === undefined ? 0 : Math.max(0, Math.min(t.stacks - sure - outside, t.unsorted ?? 0));
+  return { scans: t.stacks, sure, look: t.stacks - sure - unsorted - outside, unsorted, outside, outsideBy: t.outside_by ?? {}, kinds: t.need_a_look ?? {} };
+}
+
+/** The scans outside the rules in words: "31 CT outside the rules", "31 CT, 2 PT outside the rules", or without the modalities where the engine names none. */
+export function outsideWords(outside: number, by: Record<string, number>): string {
+  const n = (v: number) => v.toLocaleString("en-US");
+  const named = Object.entries(by).filter(([, v]) => v > 0);
+  if (named.length === 0) return `${n(outside)} outside the rules`;
+  return `${named.map(([m, v]) => `${n(v)} ${m}`).join(", ")} outside the rules`;
 }
 
 /** A dataset's certainty in one line: "120 scans · 112 sure · 8 need a look". */
@@ -221,6 +233,7 @@ export function certaintyWords(c: Certainty): string {
   const parts = [`${n(c.scans)} ${c.scans === 1 ? "scan" : "scans"}`, `${n(c.sure)} sure`];
   if (c.look > 0) parts.push(`${n(c.look)} need a look`);
   if (c.unsorted > 0) parts.push(`${n(c.unsorted)} not sorted`);
+  if (c.outside > 0) parts.push(outsideWords(c.outside, c.outsideBy));
   return parts.join(" · ");
 }
 
