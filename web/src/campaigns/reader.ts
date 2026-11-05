@@ -1076,6 +1076,16 @@ export interface Batch {
   count: number;
   /** The items the door named, with their stacks where the campaign's items say them. */
   items: { item: number; stack: number | null }[];
+  /** Engine 1.0.0-beta.9: the accept door takes a value other than the one suggested (`accepts_value` on the listing). */
+  acceptsValue: boolean;
+}
+
+/** The answer a batch is accepted as, in words: "neck", or "body_part neck · body_region spine" for an axes question. */
+export function batchValueWords(values: Record<string, AxisValue>): string {
+  const words = (v: AxisValue) => (v === null ? "none" : Array.isArray(v) ? (v.length > 0 ? v.join("+") : "none") : v);
+  const entries = Object.entries(values);
+  if (entries.length === 1) return words(entries[0][1]);
+  return entries.map(([a, v]) => `${a} ${words(v)}`).join(" · ");
 }
 
 /** The share of an accepted batch the engine holds back at random to be read alone (the door's default). */
@@ -1116,7 +1126,7 @@ export function batchesOf(raw: Json, stackOf: (item: number) => number | null = 
       }
     const key = text(b.key) ?? (num(b.key) !== null ? String(b.key) : `batch ${i + 1}`);
     const words = text(b.words) ?? (b.signature ? signatureWords(obj(b.signature)) : "") ?? key;
-    return [{ key, words: words || key, values, count, items: ids.map((item) => ({ item, stack: stackOf(item) })) }];
+    return [{ key, words: words || key, values, count, items: ids.map((item) => ({ item, stack: stackOf(item) })), acceptsValue: raw.accepts_value === true }];
   });
 }
 

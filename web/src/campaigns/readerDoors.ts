@@ -154,8 +154,10 @@ export function batchesFor(c: number | string, q: Question, items: Pick<Item, "i
  * the campaign's, and the engine refuses a body that says either, so none is
  * sent. Where the person held some back, only the others shown are named.
  */
-export function acceptBatch(c: number | string, b: Batch, plan: { items: number[] | null }): Promise<{ accepted: number; held: number[]; refused: number }> {
+export function acceptBatch(c: number | string, b: Batch, plan: { items: number[] | null }, value?: unknown): Promise<{ accepted: number; held: number[]; refused: number }> {
   const body: Json = plan.items ? { items: plan.items } : {};
+  // engine 1.0.0-beta.9: the batch accepted as another value than the suggestion
+  if (value !== undefined && value !== null) body.value = value as Json[string];
   return door<Json>("POST", `/api/campaigns/${id(c)}/batches/${encodeURIComponent(b.key)}/accept`, body).then(acceptedOf);
 }
 

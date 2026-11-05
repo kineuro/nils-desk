@@ -54,8 +54,9 @@ import {
 import { amendRefusal, MyAnswers } from "./MyAnswers";
 import { AxisRows, blank, CompactRows, FormFields, FreeText, Handoff, PickStacks, type Marks, type Row } from "./renderers";
 import { BatchView, type BatchViewProps } from "./Batches";
+import type { AxisValue as BatchAxisValue } from "../review/asked";
 import type { AskedCandidate } from "../review/asked";
-import { acceptPlan, baselineOf, batchKey, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, deriveValue, derivedWords, givenOf, NO_PACE, paced, Prefetcher, suggestionOf, takeCandidate, upcoming, verifySuggestionOf, verifyWords, chosenSide, PLANTED_WORDS, type AxisLine, type Batch, type HeaderLine, type Order, type Pace, type Reading, type Suggestion } from "./reader";
+import { acceptPlan, baselineOf, batchKey, batchValueWords, CANDIDATE_KEYS, changesOf, chosenCandidate, Clock, deriveValue, derivedWords, givenOf, NO_PACE, paced, Prefetcher, suggestionOf, takeCandidate, upcoming, verifySuggestionOf, verifyWords, chosenSide, PLANTED_WORDS, type AxisLine, type Batch, type HeaderLine, type Order, type Pace, type Reading, type Suggestion } from "./reader";
 import { acceptBatch, batchesFor, claimIn, deriveAsked, deriveDoor, Deriver, headerDoorOf, headerFor, hintOf, nextOf, prefetchOn, R48, readingFor, valueOrderServed } from "./readerDoors";
 import { AbBar, ComboSearch, DerivedLine, EvidenceLines, HeaderBlock, HeaderDoors, HeaderDrawer, headerLinesOf, OrderToggle, PaceCount, SuggestionBar } from "./ReaderParts";
 import { combinationsOf, seedsOf, settle, takeCombo, vocabularyOf, type Combination, type Settled } from "./lookup";
@@ -127,6 +128,8 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
   const [mode, setMode] = useState<"one" | "batch">("one");
   const [batches, setBatches] = useState<Batch[] | null>(null);
   const [batchAt, setBatchAt] = useState(0);
+  // the value the person accepts the current batch as, by axis, where the engine takes one (null: the suggestion)
+  const [batchValue, setBatchValue] = useState<Record<string, BatchAxisValue> | null>(null);
   const [mine, setMine] = useState<Set<number>>(() => new Set());
   const [batchSaid, setBatchSaid] = useState<string | null>(null);
   // the derived axes of the answer as it stands (record 48); gone where the engine has no derive door
@@ -457,6 +460,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
     setBatches(null);
     setBatchAt(0);
     setMine(new Set());
+    setBatchValue(null);
     setBatchSaid(null);
     batchShown.current = Date.now();
     batchesFor(id, q!, campaign?.items ?? []).then(setBatches, (e: unknown) => {
@@ -470,17 +474,23 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
     const plan = acceptPlan(b, mine);
     if (plan.n === 0) return;
     const seconds = batchShown.current === null ? null : (Date.now() - batchShown.current) / 1000;
+    // the value the batch is accepted as: the person's where they chose one and the engine takes it, else the suggestion
+    const merged = batchValue && b.acceptsValue ? { ...b.values, ...batchValue } : null;
+    const changed = merged !== null && Object.keys(merged).some((a) => JSON.stringify(merged[a]) !== JSON.stringify(b.values[a]));
+    const value = !changed || merged === null ? undefined : q?.kind === "axis" && q.axis ? merged[q.axis] : merged;
+    const asWords = changed && merged ? ` as ${batchValueWords(merged)}` : "";
     setBusy(true);
-    acceptBatch(id, b, plan)
+    acceptBatch(id, b, plan, value)
       .then((r) => {
         setPace((p) => paced(p, seconds, 0, r.accepted));
         setDone((d) => d + r.accepted);
         setOpen((o) => (o === null ? o : Math.max(0, o - r.accepted)));
         const held = r.held.length + plan.read.length;
-        const words = `Accepted ${r.accepted} like stacks; ${held} held back to read one by one${r.refused > 0 ? `; ${r.refused} refused` : ""}.`;
+        const words = `Accepted ${r.accepted} like stacks${asWords}; ${held} held back to read one by one${r.refused > 0 ? `; ${r.refused} refused` : ""}.`;
         setSaid(words);
         setBatchSaid(words);
         setMine(new Set());
+        setBatchValue(null);
         batchShown.current = Date.now();
         // the batches again: what is left open to this person now
         batchesFor(id, q!, campaign?.items ?? []).then((rest) => {
@@ -492,7 +502,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
       })
       .catch((e: unknown) => setBatchSaid(refusedWords(e)))
       .finally(() => setBusy(false));
-  }, [batches, batchAt, busy, mine, id, claim, q, campaign]);
+  }, [batches, batchAt, busy, mine, batchValue, id, claim, q, campaign]);
   const hold = useCallback((i: number) => setMine((m) => {
     const n = new Set(m);
     if (n.has(i)) n.delete(i);
@@ -661,8 +671,14 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
               said: batchSaid,
               onHold: hold,
               onAccept: acceptNow,
-              onNext: () => setBatchAt((a) => (batches && batches.length > 0 ? (a + 1) % batches.length : 0)),
+              onNext: () => {
+                setBatchValue(null);
+                setBatchAt((a) => (batches && batches.length > 0 ? (a + 1) % batches.length : 0));
+              },
               onBack: () => setMode("one"),
+              question: q,
+              value: batchValue,
+              onValue: (axis: string, v: string) => setBatchValue((cur) => ({ ...(cur ?? {}), [axis]: v })),
             }
           : null
       }
