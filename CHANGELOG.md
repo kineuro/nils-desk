@@ -4,18 +4,18 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.6] - 2026-11-05
+
+The sixth desk beta reads without being explained where an administrator installs tools, and gives the reviewer the moves the day asked for. Settings > Software leads with where tools live and shows one row a tool in plain words; a scan the rules never judge is said as such instead of "not sorted"; a batch of like stacks can be accepted as another value than the one suggested; and a cohort's card runs the sort and the main scans from its steps. The two last ones show where the engine is 1.0.0-beta.9 or later; the engine floor is unchanged.
+
 ### Added
 
 - A cohort's card runs the sort and the main scans from its steps, as a dataset's does: Sort (engine 1.0.0-beta.9) queues a sort over the cohort's scans alone, Main scans the pick run over the cohort; a dataset's card gains Sort beside its Main scans. Until now a cohort ran only body part and post-contrast from its card.
-
 - A batch of like stacks can be accepted as another value than the one suggested. Where the engine takes one (1.0.0-beta.9), the batch view offers the question's values as chips above the grid; the chosen value reads in the counts and on the button ("Accept for 57 as neck"), and the held-back stacks still go one by one. Until now a person who saw neck where the rules said spine had to hold every stack back.
 
 ### Changed
 
 - A scan the rules never judge (a CT scan under the MRI pack) is said as such: "31 CT outside the rules" on the card, the detail's bar and the Sorted step, from the engine's `outside` and `outside_by` (engine 1.0.0-beta.8), and never counted as not sorted or as a look. An older engine's totals read as before.
-
-### Changed
-
 - Settings > Software reads without being explained. Where tools live comes first, as a card with its one act: under the working place it offers Use a folder of tools ("Have FreeSurfer or other tools on this machine already? Point NILS at their folder."); a chosen folder says what NILS writes there (only its own subfolder of a shared folder) and offers Change folder, which adds or moves the software place and says what NILS found in the folder ("Found FreeSurfer 8.2.0 for 7 pipelines."); Back to the default retires it. The packages are grouped into tools by the image they pin, so FreeSurfer is one row for its seven pipelines, each named as people know it (FreeSurfer 8.2.0, ANTs, MRIQC, LST-AI, segcsvd, the NILS models, dcm2niix the converter) with the pipelines that use it and its state in plain words with a colour border: Did not pass its check (Check again), Needs its licence (Accept the terms) or its licence file, Older version on this machine (Install the pinned build), Ready (who installed it, or the site's copy), A copy is in the folder (Use this copy, once for every pipeline), Ready, fetched already, or Not here yet; a first run fetches it (Install). The engine's packages, with their kind, check, licence and fingerprint and the acts Verify again and Remove or Forget, sit under each tool's Details. The count is by tool. Found in the place is now Also in the folder, each entry added in one click under `app@version` read from its image (`freesurfer@7.4.1`) and editable in place. Install chooses a tool by its name, with the name, image and pack of something else under More; Register a path is now Add a tool you already have, which reads the kind from the path and takes the tool it is for from a list. The rows stack at phone width. The engine is unchanged (1.0.0-beta.6).
 
 ## [1.0.0-beta.5] - 2026-11-02
