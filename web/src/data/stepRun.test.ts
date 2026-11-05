@@ -14,7 +14,7 @@ import { caps7a } from "../../test/safeWayIn";
 import { DoorError } from "../ask/client";
 import { GRANTS, type Grant } from "../grants";
 import { plainError } from "./plain";
-import { MAIN_SCANS_HELP, mainScansMore, pickControl, pickOffer, runControl, runOffers, startedWords, STEP_RUN_DOORS } from "./stepRun";
+import { actsWords, choosingOffers, MAIN_SCANS_HELP, mainScansMore, pickControl, pickOffer, runActs, runControl, runOffers, startedWords, STEP_RUN_DOORS } from "./stepRun";
 import type { SummaryStep } from "./summary";
 
 const DOORS = [STEP_RUN_DOORS.datasets, STEP_RUN_DOORS.cohorts];
@@ -146,5 +146,43 @@ describe("a step's run refused at its door", () => {
     expect(plainError(refused("no_scans", "body_part", "there are no scans to run it over yet")).words).toBe("There are no scans to run it over yet.");
     // a reason the desk does not know is said as any refusal is
     expect(plainError(refused("new_reason", "body_part", "something new")).words).toBe("That did not work.");
+  });
+});
+
+// 2026-11-05: a dataset's body part said "135 with no body part", and its Run
+// went over all 456,132 scans in 23 parts; nothing said what it would cover.
+describe("what a step's Run would go over, said before it starts", () => {
+  const runs = (all: number, without: number, parts = 1) => ({ all: { scans: all, parts }, without: { scans: without, parts: without > 0 ? 1 : 0 } });
+
+  it("offers a model step's scans without its answer first, then every scan with the parts it takes", () => {
+    const acts = runActs(step({ state: "done", answered: 455997, of: 456132, runs: runs(456132, 135, 23) }));
+    expect(acts).toEqual([
+      { over: "without", label: "Run on the 135 without a body part", scans: 135, parts: 1, primary: true },
+      { over: "all", label: "Run again on all 456,132", scans: 456132, parts: 23, primary: false },
+    ]);
+    expect(actsWords(acts)).toBe("Run on the 135 without a body part, or run again on all 456,132 in 23 parts");
+    expect(runActs(step({ step: "post_contrast", state: "done", runs: runs(900, 40) }))[0].label).toBe("Run on the 40 T1 brain, contrast unknown");
+  });
+
+  it("offers every scan alone where none has its answer yet, or every one has", () => {
+    expect(runActs(step({ runs: runs(3, 3) }))).toEqual([{ over: "all", label: "Run on all 3", scans: 3, parts: 1, primary: true }]);
+    expect(runActs(step({ state: "done", runs: runs(3, 0) }))).toEqual([{ over: "all", label: "Run again on all 3", scans: 3, parts: 1, primary: true }]);
+  });
+
+  it("says the sort's every scan and main scans' every subject; an engine from before, the step's count", () => {
+    expect(runActs(step({ step: "sorted", state: "done", of: 456132 }))).toEqual([{ over: "all", label: "Run again on all 456,132", scans: 456132, parts: 1, primary: true }]);
+    expect(runActs(step({ step: "main_scans", state: "done" }), 89)[0].label).toBe("Run again for all 89 subjects");
+    expect(runActs(step({ step: "main_scans", state: "waiting" }), 1)[0].label).toBe("Run for its 1 subject");
+    expect(runActs(step({ of: 40 }))).toEqual([{ over: "all", label: "Run on all 40", scans: 40, parts: 1, primary: true }]);
+  });
+
+  it("marks the Run whose acts are open, and says what was queued", () => {
+    const caps = caps7a(DOORS);
+    const offers = choosingOffers(runOffers(caps, "datasets", [step(), step({ step: "sorted" })], false, () => undefined), "body_part");
+    expect(offers.body_part?.open).toBe(true);
+    expect(offers.sorted?.open).toBe(false);
+    expect(startedWords("study-big", "body_part", { scans: 135, parts: 1 })).toBe("study-big: body part queued on 135 scans.");
+    expect(startedWords("study-big", "body_part", { scans: 456132, parts: 23 })).toBe("study-big: body part queued on 456,132 scans, in 23 parts.");
+    expect(startedWords("study-big", "body_part")).toBe("study-big: body part queued.");
   });
 });

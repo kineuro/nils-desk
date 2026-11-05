@@ -30,8 +30,9 @@ import { StepRail } from "./StepRail";
 import { HeatMap } from "./HeatMap";
 import { mayHeat } from "./picksHeat";
 import { mayPick, pickRun } from "./pickRun";
-import { pickOffer, runOffers, startedWords, stepRuns, type Runnable } from "./stepRun";
-import { clock, cohortRail, doingTitle, fedWords, growth, joinTitle, OPERATIONS, roleOrder, roleWord, runningWords, slotOf, type Holding, type Operation, type SummaryStep } from "./summary";
+import { choosingOffers, pickOffer, runActs, runOffers, startedWords, stepRuns, type Over, type Runnable } from "./stepRun";
+import { RunChoice } from "./RunChoice";
+import { clock, cohortRail, doingTitle, fedWords, growth, joinTitle, OPERATIONS, roleOrder, roleWord, runningWords, slotOf, stepWords, type Holding, type Operation, type StepName, type SummaryStep } from "./summary";
 import { mayBrowse, viewHref } from "./viewer";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -72,6 +73,8 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
   const [refused, setRefused] = useState<Plain | null>(null);
   /** A step's Run pressed, until the engine answers. */
   const [pressed, setPressed] = useState(false);
+  /** The step whose Run says what it would go over, under the rail, before it starts (2026-11-05). */
+  const [choosing, setChoosing] = useState<StepName | null>(null);
   const [asked, setAsked] = useState(0);
   // what the list said of it: the cohort's own door is read again when it moves
   const moved = `${row.name}:${row.subjects}:${row.stacks}:${row.waiting}:${row.releases}:${row.last_joined ?? ""}`;
@@ -122,6 +125,7 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
     pickRun
       .start({ cohort: row.name })
       .then(() => {
+        setChoosing(null);
         const words = startedWords(row.name, "main_scans");
         setSaid(words);
         setAsked((x) => x + 1);
@@ -130,15 +134,18 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
       .catch((e: unknown) => setRefused(plainError(e)))
       .finally(() => setPressed(false));
   };
-  const pickNow = pickOffer(caps, rail.find((x) => x.step === "main_scans") ?? null, row.stacks, pressed || busy, runPick);
+  // 2026-11-05: a press opens what the run would go over, under the rail, and an act there starts it
+  const choose = (step: StepName) => setChoosing((was) => (was === step ? null : step));
+  const pickNow = pickOffer(caps, rail.find((x) => x.step === "main_scans") ?? null, row.stacks, pressed || busy, () => choose("main_scans"));
   // body part or post-contrast over its members' scans: its model's run queued, or the engine's refusal said plainly
-  const runStep = (step: Runnable) => {
+  const runStep = (step: Runnable, over: Over = "all") => {
     setPressed(true);
     setRefused(null);
     stepRuns
-      .start("cohorts", row.name, step)
-      .then(() => {
-        const words = startedWords(row.name, step);
+      .start("cohorts", row.name, step, over)
+      .then((started) => {
+        setChoosing(null);
+        const words = startedWords(row.name, step, started);
         setSaid(words);
         setAsked((x) => x + 1);
         onChanged(words);
@@ -146,6 +153,10 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
       .catch((e: unknown) => setRefused(plainError(e)))
       .finally(() => setPressed(false));
   };
+
+  const railRuns = choosingOffers({ ...runOffers(caps, "cohorts", rail, pressed, choose), ...(pickNow ? { main_scans: pickNow } : {}) }, choosing);
+  const chosenOffer = choosing ? (railRuns[choosing] ?? null) : null;
+  const chosenStep = choosing ? (rail.find((x) => x.step === choosing) ?? null) : null;
 
   const secondary = [
     a.query && a.primary !== "query" ? (
@@ -222,7 +233,17 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
       {rail.length > 0 && (
         <div className="dp-sec">
           <h3 className="eyebrow">Where it is</h3>
-          <StepRail steps={rail} now={today.getTime()} run={{ ...runOffers(caps, "cohorts", rail, pressed, runStep), ...(pickNow ? { main_scans: pickNow } : {}) }} />
+          <StepRail steps={rail} now={today.getTime()} run={railRuns} />
+          {chosenOffer && chosenStep && (
+            <RunChoice
+              title={stepWords(chosenStep).title}
+              acts={runActs(chosenStep, members)}
+              held={chosenOffer.disabled}
+              why={chosenOffer.why}
+              onRun={(over) => (chosenStep.step === "main_scans" ? runPick() : runStep(chosenStep.step as Runnable, over))}
+              onClose={() => setChoosing(null)}
+            />
+          )}
           {refused && (
             <p className="warn" role="alert">
               {refused.words}

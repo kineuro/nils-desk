@@ -287,6 +287,16 @@ async function page(opts: { grants?: readonly Grant[]; doors?: string[]; list?: 
   return e;
 }
 
+/** The acts a step's Run offers under the rail, once pressed (2026-11-05). */
+const acts = (d: HTMLElement) => [...d.querySelectorAll<HTMLButtonElement>(".dp-run-choice .dp-run-act button")].map((b) => b.textContent);
+/** One of those acts pressed, and the engine's answer awaited. */
+async function press(d: HTMLElement, label: string | null) {
+  const b = [...d.querySelectorAll<HTMLButtonElement>(".dp-run-choice .dp-run-act button")].find((x) => x.textContent === label);
+  expect(b, `no act ${label}: ${acts(d).join(" | ")}`).toBeDefined();
+  act(() => b!.click());
+  await settle();
+}
+
 const card = (name: string) => [...host.querySelectorAll<HTMLElement>(".dp-card")].find((c) => c.querySelector(".dp-pick")?.textContent === name)!;
 const text = () => host.querySelector("section.dp")!.textContent ?? "";
 
@@ -488,14 +498,22 @@ describe("datasets and cohorts on one page", () => {
     expect(pc.disabled).toBe(true);
     expect(runs()[2].querySelector(".dp-step-run .hint")?.getAttribute("title")).toBe("no post-contrast model is installed");
     expect(runs()[1].querySelector(".dp-step-run .hint")).toBeNull();
+    // 2026-11-05: a press says what the run would go over, under the rail, and nothing is queued until an act there
     act(() => bp.click());
     await settle();
+    expect(bp.getAttribute("aria-expanded")).toBe("true");
+    expect(e.of("POST", door)).toHaveLength(0);
+    expect(acts(d)).toEqual(["Run again on all 40"]);
+    await press(d, "Run again on all 40");
     expect(e.of("POST", door)).toHaveLength(1);
+    expect(e.of("POST", door)[0].body ?? null).toBeNull();
     expect(e.of("POST", "/api/jobs")).toHaveLength(0);
-    expect(text()).toContain("study-big: body part queued.");
+    expect(text()).toContain("study-big: body part queued on 40 scans.");
+    expect(d.querySelector(".dp-run-choice")).toBeNull();
     // pressed again while it is queued elsewhere: the engine refuses, said plainly with its words behind the "?"
     act(() => runs()[1].querySelector<HTMLButtonElement>(".dp-step-run button")!.click());
     await settle();
+    await press(d, "Run again on all 40");
     expect(e.of("POST", door)).toHaveLength(2);
     const said = host.querySelector<HTMLElement>("section.dp > p.warn")!;
     expect(said.textContent).toBe("Body part runs already.?");
@@ -516,6 +534,8 @@ describe("datasets and cohorts on one page", () => {
     expect(ms().querySelector(".dp-step-run .hint")?.getAttribute("title")).toBe("Picks each visit's main scan per role, by this dataset's rules.");
     act(() => run.click());
     await settle();
+    expect(e.of("POST", "/api/picks/run")).toHaveLength(0);
+    await press(d, `Run again for all ${summaryOf(looked).subjects} subjects`);
     expect(e.of("POST", "/api/picks/run").map((c) => c.body)).toEqual([{ dataset: "study-big" }]);
     expect(e.of("POST", "/api/jobs")).toHaveLength(0);
     expect(text()).toContain("study-big: main scans queued.");
@@ -544,8 +564,10 @@ describe("datasets and cohorts on one page", () => {
     expect(offered[2].querySelector<HTMLButtonElement>(".dp-step-run button")!.disabled).toBe(true);
     act(() => offered[1].querySelector<HTMLButtonElement>(".dp-step-run button")!.click());
     await settle();
+    expect(e.of("POST", door)).toHaveLength(0);
+    await press(d, acts(d)[0]);
     expect(e.of("POST", door)).toHaveLength(1);
-    expect(d.querySelector(".dp-said")?.textContent).toBe("ms-followup: body part queued.");
+    expect(d.querySelector(".dp-said")?.textContent).toBe("ms-followup: body part queued on 52 scans.");
   });
 
   it("shows a cohort's running body part beside its log, with its progress and Stop (record 56)", async () => {
@@ -715,6 +737,31 @@ describe("datasets and cohorts on one page", () => {
     expect(d.querySelectorAll(".dp-step").length).toBeGreaterThan(0);
   });
 
+  it("says what a first count counts and how far, on the card and under Where it is, and reads it again until it lands (2026-11-05)", async () => {
+    // production, 2026-11-05: "Reading where it is" and nothing else for 25 minutes, a first count looking at 912,000 files on a share
+    ownClock();
+    let first = true;
+    const e = await page({
+      route: (c) =>
+        first && c.method === "GET" && new URL(c.url, "http://x").pathname === "/api/datasets/study-big/summary"
+          ? { status: 200, body: { dataset: "study-big", counted: false, counting: true, count: { what: "files", place: "results", done: 412000, since: AT } } }
+          : undefined,
+    });
+    // asked at once, never waiting for the count
+    expect(e.of("GET", "/api/datasets/study-big/summary?at_once=1").length).toBe(1);
+    const d = () => host.querySelector<HTMLElement>(".dp-detail")!;
+    expect(d().querySelector(".dp-first")?.textContent).toBe("Counting files in results: 412,000 so far.");
+    expect(d().textContent).not.toContain("Reading where it is.");
+    expect(card("study-big")?.querySelector(".dp-first")?.textContent).toBe("Counting files in results: 412,000 so far");
+    // read again a while after, and the counts land: the rail, and the card's own line
+    first = false;
+    await after(5_000);
+    expect(e.of("GET", "/api/datasets/study-big/summary?at_once=1").length).toBe(2);
+    expect(d().querySelector(".dp-first")).toBeNull();
+    expect(d().querySelectorAll(".dp-step-title").length).toBe(8);
+    expect(card("study-big")?.querySelector(".dp-first")).toBeNull();
+  }, CLOCKED);
+
   it("says a cohort whose own door could not be read, never leaving it as reading", async () => {
     await page({ query: { cohort: "ms-followup" }, route: (c) => (c.method === "GET" && c.url === "/api/cohorts/ms-followup" ? { status: 500, body: { error: "the registry is busy" } } : undefined) });
     const d = host.querySelector<HTMLElement>(".dp-detail")!;
@@ -734,7 +781,7 @@ describe("datasets and cohorts on one page", () => {
         return undefined;
       },
     });
-    const reads = () => e.of("GET", "/api/datasets/study-big/summary").length;
+    const reads = () => e.of("GET", "/api/datasets/study-big/summary?at_once=1").length;
     gone = true;
     // the next round reads the list without it
     await after(5_000);
@@ -771,7 +818,7 @@ describe("datasets and cohorts on one page", () => {
     expect(asked("/api/sources")).toBe(1);
     for (let i = 0; i < 3; i++) await after(5_000);
     // the job ends while both are out: what answers is read again at once, the two that are out only once they answer
-    const others = () => e.of("GET", "/api/datasets/ward-f/summary").length;
+    const others = () => e.of("GET", "/api/datasets/ward-f/summary?at_once=1").length;
     const before = others();
     ended = true;
     for (let i = 0; i < 2; i++) await after(5_000);
@@ -780,24 +827,25 @@ describe("datasets and cohorts on one page", () => {
     expect(asked("/api/sources")).toBe(1);
   }, CLOCKED);
 
-  it("says counts the engine reads again as counts from when, counting again, and reads the summary again a while after each answer until the fresh ones land (2026-10-31)", async () => {
+  it("says counts the engine reads again with their age, counting again, and reads the summary again a while after each answer until the fresh ones land (2026-10-31)", async () => {
     // production, 2026-10-31: the kept counts answer at once while a reading of 20 s runs in the engine
     ownClock();
     let counting = true;
     const e = await page({
-      route: (c) => (c.method === "GET" && c.url === "/api/datasets/study-big/summary" ? { status: 200, body: { ...summaryOf(looked), counts_as_of: AT, counting } } : undefined),
+      route: (c) => (c.method === "GET" && new URL(c.url, "http://x").pathname === "/api/datasets/study-big/summary" ? { status: 200, body: { ...summaryOf(looked), counts_as_of: AT, counting } } : undefined),
     });
     const d = () => host.querySelector<HTMLElement>(".dp-detail")!;
     // where it is and what it holds are drawn from the first answer, with the line under the counts
     expect(d().querySelectorAll(".dp-step-title").length).toBe(8);
     expect(d().querySelector(".dp-funnel")?.textContent).toContain("40 scans");
-    expect(d().querySelector(".dp-counting")?.textContent).toBe(`counts from ${clock(AT)}, counting again`);
-    const reads = () => e.of("GET", "/api/datasets/study-big/summary").length;
+    // 2026-11-05: with their age, older than a day here, so by the day
+    expect(d().querySelector(".dp-counting")?.textContent).toBe(`counted ${clock(AT)} · counting again`);
+    const reads = () => e.of("GET", "/api/datasets/study-big/summary?at_once=1").length;
     const before = reads();
     // read again a while after each answer, as a dataset whose step runs is, while nothing runs
     await after(5_000);
     expect(reads()).toBe(before + 1);
-    expect(e.of("GET", "/api/datasets/ward-f/summary").length).toBe(1);
+    expect(e.of("GET", "/api/datasets/ward-f/summary?at_once=1").length).toBe(1);
     // the fresh counts land: the line goes, and nothing is read again
     counting = false;
     await after(5_000);
@@ -829,7 +877,7 @@ describe("datasets and cohorts on one page", () => {
     // study-big's next read is held by the engine: it answers, late, that the views still run
     const answered = globalThis.fetch;
     vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
-      phase === "held" && String(input) === "/api/datasets/study-big/summary" ? new Promise<Response>((answer) => (late = answer)) : answered(input, init),
+      phase === "held" && String(input) === "/api/datasets/study-big/summary?at_once=1" ? new Promise<Response>((answer) => (late = answer)) : answered(input, init),
     );
     phase = "held";
     await after(5_000);

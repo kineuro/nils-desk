@@ -31,6 +31,8 @@ export interface StepRunOffer {
   disabled: boolean;
   why: string | null;
   onRun: () => void;
+  /** 2026-11-05: a press opens what the run would go over under the rail; whether that is open now. */
+  open?: boolean;
 }
 
 /** What else a step offers beside its Run: a link to its own page, and one line of help behind a "?". */
@@ -84,7 +86,7 @@ export function StepRail({
             {(offer || also?.link) && (
               <span className="dp-step-run">
                 {offer && (
-                  <button type="button" className="button secondary small" disabled={offer.disabled} onClick={offer.onRun}>
+                  <button type="button" className="button secondary small" disabled={offer.disabled} aria-expanded={offer.open} onClick={offer.onRun}>
                     {offer.label}
                   </button>
                 )}

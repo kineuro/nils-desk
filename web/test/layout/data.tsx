@@ -62,6 +62,8 @@ const READ = new URLSearchParams(location.search).has("read");
 const DONE = READ || new URLSearchParams(location.search).has("done");
 /** ?partial draws the big dataset before its read, its tree counted by a probe that stopped short (2026-10-14): at least so many files. */
 const PARTIAL = new URLSearchParams(location.search).has("partial");
+/** ?first draws the big dataset never counted (2026-11-05): its summary answered at once with no counts, its first count looking at the working place's files. */
+const FIRST = new URLSearchParams(location.search).has("first");
 const SHORT = 49836;
 const ago = (minutes: number) => new Date(NOW - minutes * 60_000).toISOString().replace(/\.\d+Z$/u, "Z");
 
@@ -143,7 +145,23 @@ function summary(s: Spec) {
     step("read", read ? "done" : "waiting", { files: read ? s.files : 0, refused: read ? 216 + setAside(s) : 0, set_aside: setAside(s), reads: read ? 1 : 0 }, read ? 69 : null, 4),
     step("sorted", read ? "done" : "waiting", { scans: s.scans, of: s.scans, look: s.look, unsorted: 0 }, read ? 66 : null, 6),
     // record 56: body part and post-contrast, steps of their own; a body-part model is served here, a post-contrast one is not
-    step("body_part", read ? "done" : "waiting", { run: read ? 2 : null, served: true, answered: read ? s.scans - 12 : 0, look: read ? 12 : 0, of: s.scans, jobs: read ? [11] : [] }, read ? 62 : null, read ? 11 : null),
+    // 2026-11-05: what a run would go over before it starts, every scan in parts of 400 or the 12 without a body part
+    step(
+      "body_part",
+      read ? "done" : "waiting",
+      {
+        run: read ? 2 : null,
+        served: true,
+        answered: read ? s.scans - 12 : 0,
+        look: read ? 12 : 0,
+        of: s.scans,
+        jobs: read ? [11] : [],
+        hint: { kind: "no_body_part", scans: read ? 12 : s.scans },
+        runs: { all: { scans: s.scans, parts: Math.ceil(s.scans / 400) }, without: { scans: read ? 12 : s.scans, parts: s.scans > 0 ? 1 : 0 } },
+      },
+      read ? 62 : null,
+      read ? 11 : null,
+    ),
     step("post_contrast", "off", { run: null, served: false, answered: 0, look: 0, of: s.scans, jobs: [], refusal: NO_MODEL }, null),
     step("main_scans", read ? "done" : "waiting", { picked: read ? 97 : 0, borders: read ? 76 : 0 }, read ? 64 : null, 8),
     step("pictures", read ? "done" : "waiting", { made: s.scans, of: s.scans, in_sort: true }, read ? 63 : null, 6),
@@ -292,7 +310,17 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const sum = /^\/api\/datasets\/([^/]+)\/summary$/u.exec(path);
   if (sum) {
     const s = SPECS.find((x) => x.name === decodeURIComponent(sum[1]));
+    // 2026-11-05: a dataset never counted, answered at once while its first count looks at the working place's files
+    if (FIRST && s?.name === "study-big" && url.searchParams.get("at_once") === "1")
+      return json(200, { dataset: s.name, dataset_id: 2, detail: "sensitive", state: s.state, added_at: ago(72), pictures_place: "working", counted: false, counts_as_of: null, counting: true, count: { what: "files", place: "working", done: 412000, since: ago(3) } });
     return s ? json(200, summary(s)) : json(404, { error: "no such dataset" });
+  }
+  // a step's run queued (2026-11-05: over every scan, or those without its answer)
+  const run = /^\/api\/(datasets|cohorts)\/([^/]+)\/steps\/([^/]+)\/run$/u.exec(path);
+  if (run && init?.method === "POST") {
+    const over = (JSON.parse(typeof init.body === "string" && init.body ? init.body : "{}") as { scans?: string }).scans === "without" ? "without" : "all";
+    const scans = over === "without" ? 12 : 1003;
+    return json(202, { job: 70, state: "queued", step: run[3], for: `${run[1].slice(0, -1)}:${decodeURIComponent(run[2])}`, scans, over, parts: over === "all" ? 3 : 1, handle: 5, command: ["run"] });
   }
   if (path === "/api/linkage/held/ids") return json(200, DONE ? { place: "study-identified", files: 0, identifiers: 0, ids: [], subjects: { coded: 4, generated: 1 } } : { place: "study-identified", files: 213, identifiers: HELD.length, ids: HELD, subjects: { coded: 0, generated: 0 } });
   if (path === "/api/linkage/types") return json(200, [{ name: "study-id", description: "the study's own number" }]);

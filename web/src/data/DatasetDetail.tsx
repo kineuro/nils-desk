@@ -38,11 +38,13 @@ import { railWords } from "./pseudoStep";
 import { STOPPED_NEXT, useStopped } from "./stopped";
 import { StepRail } from "./StepRail";
 import { pickRun } from "./pickRun";
-import { mainScansMore, pickOffer, runOffers, startedWords, stepRuns, type Runnable } from "./stepRun";
+import { choosingOffers, mainScansMore, pickOffer, runActs, runOffers, startedWords, stepRuns, type Over, type Runnable } from "./stepRun";
+import { RunChoice } from "./RunChoice";
 import { nextStep, outsideWords, stepCommand, type StepId } from "./steps";
 import {
   clock,
   countingWords,
+  countWords,
   doingTitle,
   filesWords,
   foundOf,
@@ -66,8 +68,10 @@ import {
   stepWords,
   TONE,
   whereWords,
+  type CountProgress,
   type DatasetSummary,
   type LogLine,
+  type StepName,
   
   type SummaryStep,
 } from "./summary";
@@ -81,6 +85,8 @@ export interface DatasetDetailProps {
   summary: DatasetSummary | null;
   /** Why the summary could not be read, where it could not: the rail then stands on what the list knows. */
   summaryWhy?: string | null;
+  /** 2026-11-05: how far the first count of a dataset never counted has got, while the engine counts it. */
+  first?: CountProgress | null;
   why: string | null;
   jobs: LiveJobs;
   /** Every dataset of the page, which a vault of the originals stays out of. */
@@ -143,6 +149,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const [settings, setSettings] = useState(false);
   /** A step's Run pressed, until the engine answers. */
   const [pressed, setPressed] = useState(false);
+  /** The step whose Run says what it would go over, under the rail, before it starts (2026-11-05). */
+  const [choosing, setChoosing] = useState<StepName | null>(null);
   /** The next step's button, or Read new files or Read again, pressed until the engine answers: one press, one job. */
   const [asking, setAsking] = useState(false);
   const acts = datasetActions(caps, d, why, s);
@@ -212,11 +220,14 @@ export function DatasetDetail(props: DatasetDetailProps) {
     if (c) queue(c.command, c.name, `${d.name} is read again.`);
   };
   // body part or post-contrast over the dataset's scans: its model's run queued, or the engine's refusal said plainly
-  const runStep = (step: Runnable) => {
+  const runStep = (step: Runnable, over: Over = "all") => {
     setPressed(true);
     stepRuns
-      .start("datasets", d.name, step)
-      .then(() => onChanged(startedWords(d.name, step)))
+      .start("datasets", d.name, step, over)
+      .then((started) => {
+        setChoosing(null);
+        onChanged(startedWords(d.name, step, started));
+      })
       .catch(onFailed)
       .finally(() => setPressed(false));
   };
@@ -225,7 +236,10 @@ export function DatasetDetail(props: DatasetDetailProps) {
     setPressed(true);
     pickRun
       .start({ dataset: d.name })
-      .then(() => onChanged(startedWords(d.name, "main_scans")))
+      .then(() => {
+        setChoosing(null);
+        onChanged(startedWords(d.name, "main_scans"));
+      })
       .catch(onFailed)
       .finally(() => setPressed(false));
   };
@@ -274,8 +288,12 @@ export function DatasetDetail(props: DatasetDetailProps) {
   const chainRuns = s?.steps.some((x) => CHAIN.has(x.step) && (x.state === "running" || x.state === "queued")) ?? false;
   const busy = asking || chainRuns;
   // a step's Run on the rail: body part and post-contrast by their own door, main scans by the pick run, which waits on the chain
-  const pickNow = s ? pickOffer(caps, stepOf(s, "main_scans"), s.scans, pressed || busy, runPick) : null;
-  const railRuns = s ? { ...runOffers(caps, "datasets", rail, pressed, runStep), ...(pickNow ? { main_scans: pickNow } : {}) } : undefined;
+  // 2026-11-05: a press opens what the run would go over, under the rail, and an act there starts it
+  const choose = (step: StepName) => setChoosing((was) => (was === step ? null : step));
+  const pickNow = s ? pickOffer(caps, stepOf(s, "main_scans"), s.scans, pressed || busy, () => choose("main_scans")) : null;
+  const railRuns = s ? choosingOffers({ ...runOffers(caps, "datasets", rail, pressed, choose), ...(pickNow ? { main_scans: pickNow } : {}) }, choosing) : undefined;
+  const chosenOffer = choosing ? (railRuns?.[choosing] ?? null) : null;
+  const chosenStep = choosing && s ? (rail.find((x) => x.step === choosing) ?? null) : null;
   const logCol = (
     <div className="dp-col">
       <div className="dp-col-head">
@@ -375,7 +393,10 @@ export function DatasetDetail(props: DatasetDetailProps) {
             more={{ main_scans: mainScansMore(caps, d.name) }}
           />
         ) : maySummarise(caps) && !props.summaryWhy ? (
-          <p className="meta">Reading where it is.</p>
+          // 2026-11-05: what the first count counts and how far, never a wait without words
+          <p className="meta dp-first" role="status">
+            {props.first ? `${countWords(props.first)}.` : "Reading where it is."}
+          </p>
         ) : props.summaryWhy ? (
           <>
             <StepRail steps={stepsOfSources(d)} now={now} />
@@ -383,6 +404,16 @@ export function DatasetDetail(props: DatasetDetailProps) {
           </>
         ) : (
           <StepRail steps={stepsOfSources(d)} now={now} />
+        )}
+        {s && chosenOffer && chosenStep && (
+          <RunChoice
+            title={stepWords(chosenStep).title}
+            acts={runActs(chosenStep, s.subjects)}
+            held={chosenOffer.disabled}
+            why={chosenOffer.why}
+            onRun={(over) => (chosenStep.step === "main_scans" ? runPick() : runStep(chosenStep.step as Runnable, over))}
+            onClose={() => setChoosing(null)}
+          />
         )}
         {stopped && !(open && view && view.phase !== "done") && (
           <p className="ps-stopped dp-stopped" role="status">

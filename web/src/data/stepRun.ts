@@ -28,20 +28,26 @@ export const STEP_RUN_DOORS = {
 
 export type RunScope = keyof typeof STEP_RUN_DOORS;
 
-/** What the door answers: the job queued, what it is for and how many scans it runs over. */
+/** Which of a step's scans a run goes over (engine, 2026-11-05): every one it counts, or only those without its answer. */
+export type Over = "all" | "without";
+
+/** What the door answers: the job queued, what it is for and how many scans it runs over, which, and in how many parts. */
 export interface StepStarted {
   job: number;
   state: "queued";
   step: Operation;
   for: string;
   scans: number;
+  over?: Over;
+  parts?: number;
   handle: number;
   command: string[];
 }
 
 export const stepRuns = {
-  /** A step's run over a dataset's or a cohort's scans, queued. */
-  start: (scope: RunScope, name: string, step: Runnable) => door<StepStarted>("POST", `/api/${scope}/${encodeURIComponent(name)}/steps/${step}/run`),
+  /** A step's run over a dataset's or a cohort's scans, queued: every one, or only those without its answer. */
+  start: (scope: RunScope, name: string, step: Runnable, over: Over = "all") =>
+    door<StepStarted>("POST", `/api/${scope}/${encodeURIComponent(name)}/steps/${step}/run`, over === "without" ? { scans: "without" } : undefined),
 };
 
 /** The steps the door runs: the operations, and the sort (engine 1.0.0-beta.9, from a dataset's and a cohort's card). */
@@ -90,10 +96,63 @@ export function runOffers(caps: Capabilities, scope: RunScope, steps: SummarySte
   return out;
 }
 
-/** What a page says once a step's run is queued. */
-export function startedWords(name: string, step: Runnable | "main_scans"): string {
+/** The rail's Run offers with the one whose acts are open marked so (2026-11-05). */
+export function choosingOffers(offers: Partial<Record<StepName, StepRunOffer>>, choosing: StepName | null): Partial<Record<StepName, StepRunOffer>> {
+  const out: Partial<Record<StepName, StepRunOffer>> = {};
+  for (const [step, offer] of Object.entries(offers) as [StepName, StepRunOffer][]) out[step] = { ...offer, open: choosing === step };
+  return out;
+}
+
+/** What a page says once a step's run is queued: over how many scans, where the engine says it (2026-11-05). */
+export function startedWords(name: string, step: Runnable | "main_scans", started?: Pick<StepStarted, "scans" | "parts"> | null): string {
   const words = { body_part: "body part", post_contrast: "post-contrast", main_scans: "main scans", sorted: "sort" };
-  return `${name}: ${words[step]} queued.`;
+  if (typeof started?.scans !== "number") return `${name}: ${words[step]} queued.`;
+  const parts = (started.parts ?? 1) > 1 ? `, in ${n(started.parts ?? 1)} parts` : "";
+  return `${name}: ${words[step]} queued on ${n(started.scans)} ${started.scans === 1 ? "scan" : "scans"}${parts}.`;
+}
+
+const n = (v: number) => v.toLocaleString("en-US");
+
+/** One act of a step's Run (2026-11-05): what it runs over in words, how many, the parts it takes, and whether it is the first act. */
+export interface RunAct {
+  over: Over;
+  label: string;
+  scans: number;
+  parts: number;
+  primary: boolean;
+}
+
+/** The scans a model step's "N without" counts, in the words its Run says them. */
+const WITHOUT: Record<Operation, string> = { body_part: "without a body part", post_contrast: "T1 brain, contrast unknown" };
+
+/**
+ * What a step's Run offers before it starts (2026-11-05: production's body
+ * part said "135 with no body part", and its Run went over all 456,132 scans
+ * in 23 parts, saying neither): a model step its scans without its answer
+ * first, "Run on the 135 without a body part", where they are some of its
+ * scans and not all, then every scan, "Run again on all 456,132", each with
+ * its count and parts; the sort every scan; main scans every subject. An
+ * engine from before says only how many scans the step counts.
+ */
+export function runActs(st: SummaryStep, subjects: number | null = null): RunAct[] {
+  const verb = st.state === "done" || st.state === "failed" ? "Run again" : "Run";
+  if (st.step === "main_scans") {
+    const label = typeof subjects === "number" && subjects > 0 ? `${verb} for ${subjects === 1 ? "its 1 subject" : `all ${n(subjects)} subjects`}` : verb;
+    return [{ over: "all", label, scans: subjects ?? 0, parts: 1, primary: true }];
+  }
+  const all = st.runs?.all ?? (typeof st.of === "number" ? { scans: st.of, parts: 1 } : null);
+  const out: RunAct[] = [];
+  const without = isOperation(st.step) ? (st.runs?.without ?? null) : null;
+  const some = without !== null && all !== null && without.scans > 0 && without.scans < all.scans;
+  if (some && isOperation(st.step)) out.push({ over: "without", label: `Run on the ${n(without.scans)} ${WITHOUT[st.step]}`, scans: without.scans, parts: without.parts, primary: true });
+  if (all) out.push({ over: "all", label: `${verb} on all ${n(all.scans)}`, scans: all.scans, parts: all.parts, primary: !some });
+  else out.push({ over: "all", label: verb, scans: 0, parts: 1, primary: true });
+  return out;
+}
+
+/** A step's acts in a line for a screen reader or a title: "Run on the 135 without a body part, or run again on all 456,132 in 23 parts". */
+export function actsWords(acts: RunAct[]): string {
+  return acts.map((a, i) => `${i > 0 ? a.label.replace(/^R/, "r") : a.label}${a.parts > 1 ? ` in ${n(a.parts)} parts` : ""}`).join(", or ");
 }
 
 /** Main scans' one line of help, behind its "?". */

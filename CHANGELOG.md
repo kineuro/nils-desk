@@ -22,6 +22,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 ### Fixed
 
 - Arriving at a page of Review from a card further down Work, or from a link, shows the page's head and its tabs; the page kept the scroll the last one left, so the Proposals tab sat out of view.
+### Changed
+
+- A step's Run on a dataset's or a cohort's card says what it would go over before it starts: a press opens one line under the rail with the step's acts, each with its count and, for a large run, the parts it takes. Body part offers "Run on the 135 without a body part" first and "Run again on all 456,132", in 23 parts, second (engine with `runs` and the door's `scans: without`); post-contrast its T1 brain whose contrast is unknown; the sort its every scan, main scans every subject. What was queued says how many scans and parts.
+- The Data page never waits without words: a dataset never counted says what its first count counts and how far, on its card and under Where it is ("Counting files in results: 412,000 so far"), asking the engine's summary at once and again every few seconds until the counts land; counts the engine reads again say their age ("counted 25 min ago · counting files in results: 412,000 so far").
 
 ## [1.0.0-beta.6] - 2026-11-05
 

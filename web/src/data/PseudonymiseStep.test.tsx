@@ -178,7 +178,7 @@ async function page(
     if (r) return r;
     if (c.url.startsWith("/api/sources")) return { status: 200, body: { count: 1, window_days: 30, sources: [d], rates: null } };
     if (c.method === "GET" && /^\/api\/places(\?|$)/.test(c.url)) return { status: 200, body: { places: [{ id: 30, name: "cold-store", role: "backup", path: "/vault/cold", retired_at: null }], enforced: true } };
-    if (c.url === "/api/datasets/study-identified/summary") return { status: 200, body: summaryOf(d, pseudonymised) };
+    if (c.url.split("?")[0] === "/api/datasets/study-identified/summary") return { status: 200, body: summaryOf(d, pseudonymised) };
     if (c.url.startsWith("/api/linkage/held/ids?place=study-identified")) return { status: 200, body: opts.held ?? heldIds() };
     if (c.url === "/api/linkage/types") return { status: 200, body: [{ name: "study-id", description: "the study's own number" }] };
     if (c.url === "/api/pseudonymize/tags") return { status: 200, body: servedPolicy };
@@ -606,7 +606,7 @@ describe("the pseudonymise step, in the dataset", () => {
       done,
       {},
       (c) => {
-        if (c.url === "/api/datasets/study-identified/summary") return { status: 200, body: summary };
+        if (c.url.split("?")[0] === "/api/datasets/study-identified/summary") return { status: 200, body: summary };
         if (c.method === "GET" && c.url === "/api/jobs/127") return job(127, "pseudonymize", { files: { seen: ORIGINALS, written: ORIGINALS, unchanged: 0, held: 0 }, subjects: { new: 8 } });
         if (c.method === "GET" && c.url === "/api/jobs/128") return job(128, "digest", null, { ingested: 0, duplicate: 7328, changed: 0, held: 0, gone: 0, stacks_created: 0 });
         return undefined;
@@ -632,7 +632,7 @@ describe("the pseudonymise step, in the dataset", () => {
             phase = "running";
             return { status: 202, body: { job: 60, state: "queued" } };
           }
-          if (c.url === "/api/datasets/study-identified/summary" && phase !== "before")
+          if (c.url.split("?")[0] === "/api/datasets/study-identified/summary" && phase !== "before")
             return { status: 200, body: summaryOf(d, phase === "running" ? { state: "running", job: 60, held: 0 } : { state: "done", job: 60, files: ORIGINALS, waiting: 0, held: 0, finished_at: new Date().toISOString() }) };
           return undefined;
         },
@@ -663,7 +663,7 @@ describe("the pseudonymise step, in the dataset", () => {
     try {
       let files = 0;
       const d = dataset();
-      await page(d, {}, (c) => (c.url === "/api/datasets/study-identified/summary" ? { status: 200, body: summaryOf(d, { state: "running", job: 60, files: (files += 1000) }) } : undefined));
+      await page(d, {}, (c) => (c.url.split("?")[0] === "/api/datasets/study-identified/summary" ? { status: 200, body: summaryOf(d, { state: "running", job: 60, files: (files += 1000) }) } : undefined));
       const answered = globalThis.fetch;
       let reads = 0;
       vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
@@ -729,7 +729,7 @@ describe("the pseudonymise step after a run, where the probe stopped short (2026
     // engine 1.0.0-alpha.89: counted from the newest whole run, 35,549 of the files refused as not DICOM
     const d = big();
     const s = after(d, { ...RAN, state: "done", files: 30_654_432, waiting: 0, partial: false, waiting_partial: false });
-    await page(d, {}, (c) => (c.url === "/api/datasets/study-identified/summary" ? { status: 200, body: s } : undefined), { step: "pseudonymisation", held: SUBJECTS });
+    await page(d, {}, (c) => (c.url.split("?")[0] === "/api/datasets/study-identified/summary" ? { status: 200, body: s } : undefined), { step: "pseudonymisation", held: SUBJECTS });
     expect(offers()).toEqual([]);
     expect(host.querySelector(".ps-step")).toBeNull();
     const done = host.querySelector(".ps-done")!;
@@ -760,7 +760,7 @@ describe("the pseudonymise step after a run, where the probe stopped short (2026
       d,
       {},
       (c) => {
-        if (c.url === "/api/datasets/study-identified/summary") return { status: 200, body: s };
+        if (c.url.split("?")[0] === "/api/datasets/study-identified/summary") return { status: 200, body: s };
         if (c.method === "POST" && c.url === "/api/jobs") return { status: 202, body: { job: 73, state: "queued" } };
         if (c.method === "PUT" && c.url === "/api/places/9") return { status: 200, body: {} };
         return undefined;
@@ -797,7 +797,7 @@ describe("the pseudonymise step after a run, where the probe stopped short (2026
     // 7,544 originals, 7,444 written, 100 not DICOM: the originals less the copy would offer those 100 again
     const d = dataset({ ...big(), trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: ORIGINALS, bytes: 1_900_000_000 }, anon: { path: "/srv/x/derivatives/dcm-anon", files: 7444, last_written: AT } } });
     const s = after(d, { ...RAN, state: "waiting", files: 7444, waiting: 0, partial: false, waiting_partial: false }, null);
-    await page(d, {}, (c) => (c.url === "/api/datasets/study-identified/summary" ? { status: 200, body: s } : undefined), { held: SUBJECTS });
+    await page(d, {}, (c) => (c.url.split("?")[0] === "/api/datasets/study-identified/summary" ? { status: 200, body: s } : undefined), { held: SUBJECTS });
     expect(offers()).toEqual([]);
     // done, the step does not open by itself
     expect(host.querySelector(".ps-step")).toBeNull();
@@ -815,7 +815,7 @@ describe("the pseudonymise step after a run, where the probe stopped short (2026
       trees: { originals: { path: "/srv/x/derivatives/dcm-original", files: 200_000, bytes: 1, partial: true }, anon: { path: "/srv/x/derivatives/dcm-anon", files: 120_000, last_written: AT, partial: true } },
     });
     const s = after(d, { job: 71, state: "waiting", files: 120_000, waiting: 0, partial: false, waiting_partial: true }, null);
-    await page(d, {}, (c) => (c.url === "/api/datasets/study-identified/summary" ? { status: 200, body: s } : undefined), { held: SUBJECTS });
+    await page(d, {}, (c) => (c.url.split("?")[0] === "/api/datasets/study-identified/summary" ? { status: 200, body: s } : undefined), { held: SUBJECTS });
     expect(offers()).toEqual(["Pseudonymise and sort the rest"]);
     expect(railStep("Pseudonymised").textContent).toContain("the rest to go");
     expect(text()).not.toContain("at least 0");
@@ -863,7 +863,7 @@ describe("the pseudonymise step while the dataset's summary is not read yet (202
       totals: { subjects: 3, studies: 3, sessions: 3, stacks: 12, refused_files: 0, to_sort: 2, sure: 10, unsorted: 0 },
     });
   const SUBJECTS = { ...heldIds({}, { coded: 4399, generated: 0 }), files: 0, identifiers: 0, ids: [] };
-  const summaryDoor = (url: string) => url === "/api/datasets/study-identified/summary";
+  const summaryDoor = (url: string) => url.split("?")[0] === "/api/datasets/study-identified/summary";
   const offers = () => [...host.querySelectorAll("button")].map((b) => b.textContent ?? "").filter((t) => t.startsWith("Pseudonymise and sort"));
   const again = () => {
     act(() => root.unmount());
