@@ -11,6 +11,7 @@ import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow } from "../routes";
+import type { CloseJob } from "./upkeep";
 
 /** A small JSON Schema, as a form question and a derivative's form carry it. */
 export interface FormSchema {
@@ -232,6 +233,12 @@ export interface Campaign {
   /** One campaign's read carries its items and assignments; the list leaves them out. */
   items?: Item[];
   assignments?: Assignment[];
+  /** Record 48 R1: the share of each batch and gallery page set aside to be read one by one. */
+  hold_back?: number;
+  /** Whether its maker may set that share to none: a campaign that decides, never one that trains, measures, audits or verifies. Absent from an engine before it. */
+  hold_back_none?: boolean;
+  /** The close it runs or ran as a job (2026-11-05); null where none ran so, absent from an engine before it. */
+  close_job?: CloseJob | null;
 }
 
 export interface Answer {
@@ -396,6 +403,14 @@ export const campaigns = {
         )
       : campaigns.claim(c, role),
   close: (c: number | string) => door<Closed>("POST", `/api/campaigns/${id(c)}/close`, {}),
+  /**
+   * Starts the close as a job and answers at once (2026-11-05), the page then
+   * following the campaign until it is closed. An engine before it closes in
+   * the one answer and sends what the close did.
+   */
+  closeInBackground: (c: number | string) => door<Closed | { job: number; campaign: number; state: string }>("POST", `/api/campaigns/${id(c)}/close`, { background: true }),
+  /** Sets the share of each batch read one by one: 0 for none, where the campaign's purpose allows it. */
+  holdBack: (c: number | string, share: number) => door<{ campaign: number; hold_back: number; freed: number }>("POST", `/api/campaigns/${id(c)}/hold-back`, { share }),
   export: (c: number | string, body: { of: "outcomes" | "answers" | "counts"; name?: string; place?: string }) => door<LabelSet>("POST", `/api/campaigns/${id(c)}/export`, body),
   labelSets: () => door<{ count: number; label_sets: LabelSet[] }>("GET", "/api/label-sets").then((r) => r.label_sets),
   labelSet: (n: number) => door<LabelSet>("GET", `/api/label-sets/${n}`),

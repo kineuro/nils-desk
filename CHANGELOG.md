@@ -4,6 +4,18 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Added
+
+- A campaign's close is followed: the dialog shows the close running and how far it is, then what it wrote and each item it refused with why, and the page stands closed behind it. A close already running shows on the page and offers no second close; one that stopped part way offers to run it again. With an engine before the close job the dialog closes in one answer as before.
+- An open item says who holds it and until when, with Release for its rater, the campaign's maker, an adjudicator it names or a Review worker; a lease that ran out says the item is free and needs no release.
+- A campaign's page says in one line why it offers no gallery (one axis at a time) or no batches (no rules' suggestion), and a verify or study campaign why it is read one stack at a time.
+- The items read one by one are counted with why, and the maker of a campaign that decides may have every item read in batches again ("Read all in batches").
+
+### Changed
+
+- The campaign pages speak plainly: a batch's stacks are "accepted as suggested" and the rest "left to read one by one", items are "set aside" rather than held back, and items an earlier close wrote are "written already".
+- The pace says its pause bound in its heading and counts breaks; a claim left open is no longer read as reading time.
+
 ## [1.0.0-beta.6] - 2026-11-05
 
 The sixth desk beta reads without being explained where an administrator installs tools, and gives the reviewer the moves the day asked for. Settings > Software leads with where tools live and shows one row a tool in plain words; a scan the rules never judge is said as such instead of "not sorted"; a batch of like stacks can be accepted as another value than the one suggested; and a cohort's card runs the sort and the main scans from its steps. The two last ones show where the engine is 1.0.0-beta.9 or later; the engine floor is unchanged.
