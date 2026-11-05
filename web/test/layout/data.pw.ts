@@ -360,3 +360,40 @@ for (const [device, width, height] of [
     await page.screenshot({ path: `test-results/data-partial-${device}.png` });
   });
 }
+
+// ux-progress (2026-11-06): a model's step that runs says how far under the rail, in the engine's count with its part and
+// how long; one that failed says why with its kind and the way to its run; on a laptop and a phone, nothing goes sideways
+for (const [device, width, height] of [
+  ["laptop", 1440, 900],
+  ["phone", 390, 844],
+] as const) {
+  test(`on a ${device} a model's step says how far it is and why it failed, under the rail`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/data.html?progress#data/datasets?dataset=study-big");
+    // the dataset's card says it too, in a few words
+    await expect(page.locator(".dp-card").filter({ has: page.locator(".dp-pick", { hasText: "study-big" }) })).toContainText("Body part: 312 of 870 scans in part 4 of 23");
+    const notes = page.locator(".dp-detail .dp-step-note");
+    await expect(notes).toHaveCount(2);
+    await expect(notes.nth(0)).toContainText(/^Body part: 312 of 870 scans in part 4 of 23 · 4[78] min/u);
+    await expect(notes.nth(1)).toHaveClass(/failed/u);
+    await expect(notes.nth(1)).toContainText("Post-contrast failed: killed at its memory cap of 16 GB");
+    await expect(notes.nth(1).locator(".kind-tag")).toHaveText("resource");
+    await expect(notes.nth(1).getByRole("link", { name: "Run 158" })).toHaveAttribute("href", "#pipelines/runs/158");
+    await expect(page.locator(".dp-detail .dp-step").nth(3)).toContainText("312 of 870");
+    // each line within the detail's width, and nothing goes sideways
+    const detail = (await page.locator(".dp-detail").boundingBox())!;
+    for (const n of await notes.all()) {
+      const b = (await n.boundingBox())!;
+      expect(b.x + b.width).toBeLessThanOrEqual(detail.x + detail.width + 1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.locator(".dp-detail .dp-step-notes").evaluate((e) => e.scrollIntoView({ block: "end" }));
+    await page.screenshot({ path: `test-results/data-step-notes-${device}.png` });
+    // the cohort's card says the same of its steps
+    await page.goto("/data.html?progress#data/datasets?cohort=ms-followup");
+    await expect(page.locator(".dp-step-note")).toHaveCount(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.locator(".dp-step-notes").evaluate((e) => e.scrollIntoView({ block: "end" }));
+    await page.screenshot({ path: `test-results/data-step-notes-cohort-${device}.png` });
+  });
+}

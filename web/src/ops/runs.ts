@@ -209,6 +209,8 @@ export interface RunDetail {
   derivatives?: number[] | null;
   /** Since 2026-10-12: its units summed, what a person reads of it beside its status (./made). */
   made?: unknown;
+  /** Since 2026-11-05, while it runs: how far it is, as its job's last beat said it (./progress); null once it ended. */
+  progress?: unknown;
 }
 
 export interface Derivative {

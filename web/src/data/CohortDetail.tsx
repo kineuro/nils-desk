@@ -26,6 +26,7 @@ import { cohorts, type Cohort, type CohortDetail as Detail, type CohortRelease }
 import { jobs as jobsDoor } from "./datasets";
 import { maySeePicks, picksSummary, PICKS_SUMMARY_DOOR, type PickLine } from "./picks";
 import { plainError, type Plain } from "./plain";
+import { StepNotes } from "./StepNotes";
 import { StepRail } from "./StepRail";
 import { HeatMap } from "./HeatMap";
 import { mayHeat } from "./picksHeat";
@@ -244,6 +245,7 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
               onClose={() => setChoosing(null)}
             />
           )}
+          <StepNotes caps={caps} steps={rail} now={today.getTime()} />
           {refused && (
             <p className="warn" role="alert">
               {refused.words}

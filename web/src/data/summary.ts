@@ -12,6 +12,7 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import type { Cohort, Join, CohortRelease } from "./cohorts";
 import type { Dataset } from "./datasets";
+import { liveOf, liveWords, whatWords } from "../ops/progress";
 import { declared } from "./layout";
 import { ranOf } from "./pseudoStep";
 import { outsideWords, readStopped, type NextStep } from "./steps";
@@ -96,6 +97,8 @@ export interface SummaryStep {
   staged?: number;
   /** Body part and post-contrast (engine, 2026-11-05): what a run would go over before it starts, every scan or those without its answer, each with the parts it takes; an engine from before says nothing. */
   runs?: StepRuns | null;
+  /** Body part and post-contrast, a failed step (2026-11-05): why, in the engine's words, {kind, cause, advice, said, cap_gb}; an engine from before says nothing. */
+  failure?: unknown;
 }
 
 /** What a run of a model step would go over: every scan it counts, and those without its answer (its hint's), each with how many parts the run takes. */
@@ -609,7 +612,9 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
     return ranOf(d, stepOf(s, "pseudonymised")) ? "The rest waits to be pseudonymised" : "Waits to be pseudonymised";
   }
   const running = s?.steps.find((x) => x.state === "running");
-  if (running) return `${TITLE[running.step]}: running now`;
+  // a model's run says how far it is in the engine's count (2026-11-05), where its run's beat says it
+  const live = running && (OPERATIONS as StepName[]).includes(running.step) ? liveWords(liveOf(running.progress)) : null;
+  if (running) return `${TITLE[running.step]}: ${live ?? "running now"}`;
   if (d.digests.count === 0) return "Not read yet";
   // the newest read was cancelled or failed part way: reading again is next (2026-10-17)
   if (next.step === "read-again") return "The last read stopped part way";
@@ -941,8 +946,12 @@ export function unitOf(kind: string): string {
 /** The words under a running job's bar: "57 of 1,001 scans · about 11 min left · in the background". */
 export function runningWords(j: Pick<JobRow, "kind" | "progress" | "started_at" | "state">, now: number): { fraction: number | null; words: string } {
   const r = runningOf(j.progress as Record<string, unknown> | null, j.started_at, now);
+  // a model's run says what it counts and which part of a split run it is (2026-11-05)
+  const live = j.kind === "pipeline" ? liveOf(j.progress) : null;
+  const unit = live?.what ? whatWords(live.what, r.of ?? r.done ?? 0) : unitOf(j.kind);
   const parts: string[] = [];
-  if (r.done !== null) parts.push(r.of !== null ? `${n(r.done)} of ${n(r.of)} ${unitOf(j.kind)}` : `${n(r.done)} ${unitOf(j.kind)}`);
+  if (r.done !== null) parts.push(r.of !== null ? `${n(r.done)} of ${n(r.of)} ${unit}` : `${n(r.done)} ${unit}`);
+  if (live?.part) parts.push(`part ${n(live.part.at)} of ${n(live.part.of)}`);
   if (r.left) parts.push(r.left);
   if (j.kind === "pyramid" || j.kind === "preview") parts.push("in the background");
   if (j.state === "queued") parts.push("waits its turn");

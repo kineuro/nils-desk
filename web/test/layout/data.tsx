@@ -45,6 +45,9 @@ const DOORS = [
   "POST /api/linkage/held/reveal",
   "POST /api/picks/run",
 ];
+/** ?progress (ux-progress, 2026-11-06): the big dataset's and the cohort's body part running in part 4 of 23 with its container's own count, and post-contrast failed at its memory cap, each said under the rail with the way to its run. */
+const PROGRESS = new URLSearchParams(location.search).has("progress");
+if (PROGRESS) DOORS.push("GET /api/pipeline-runs/{id}");
 
 const caps = {
   engine: { engine: { name: "nils", version: "1.0.0-alpha.80" }, contracts: { openapi: "7" }, doors: DOORS, policy: [], auth: "token", principal: "astrid@site", roles: [], registry: { epoch: 4 }, packs: [{ name: "mri", version: "0.25.0" }] },
@@ -129,6 +132,26 @@ const NO_MODEL = { reason: "no_model", error: "no post-contrast model is install
 
 const step = (name: string, state: string, counts: Record<string, unknown>, minutes: number | null, job: number | null = null) => ({ step: name, state, job, started_at: minutes === null ? null : ago(minutes + 1), finished_at: minutes === null ? null : ago(minutes), progress: null, ...counts });
 
+/** Under ?progress: body part running, its one container having answered 312 of the 870 scans of part 4 of 23, and post-contrast killed at its 16 GB cap. */
+const BEAT = { run: 162, phase: "run", units: 870, over: 0, running: 870, queued: 0, done: 312, total: 870, what: "stacks", together: true, reported: { done: 312, of: 870, what: "stacks", units: 1 }, part: { at: 4, of: 23 }, since: ago(47) };
+const CAP = {
+  kind: "resource",
+  cause: "memory",
+  said: "killed at its memory cap of 16 GB",
+  cap_gb: 16,
+  fix: null,
+  advice:
+    "a container was killed at its memory cap, the memory its pipeline declares for a unit of the cores it took: run it with fewer threads where its memory grows with them, or add a version of the pipeline that declares more memory (nils pipeline add) within what the lane holds (nils pipeline lane --memory-gb)",
+};
+const progressing = (steps: ReturnType<typeof step>[], scans: number) =>
+  steps.map((st) =>
+    st.step === "body_part"
+      ? { ...st, state: "running", run: 162, job: 41, started_at: ago(12), finished_at: null, progress: BEAT, refusal: { reason: "running", error: "Body part runs already over these scans, as job 41" } }
+      : st.step === "post_contrast"
+        ? { ...st, state: "failed", served: true, run: 158, job: 37, started_at: ago(130), finished_at: ago(124), refusal: null, failure: CAP, of: scans }
+        : st,
+  );
+
 function summary(s: Spec) {
   const read = s.scans > 0;
   const short = PARTIAL && s.name === "study-big";
@@ -168,6 +191,7 @@ function summary(s: Spec) {
   );
   const views = s.name === "study-big" ? { ...step("views", "running", { made: 57, of: s.scans }, null, 9), started_at: ago(1), progress: { done: 57, total: 1001 } } : step("views", read ? "done" : "waiting", { made: s.scans, of: s.scans }, read ? 60 : null, 9);
   steps.push(views);
+  const shown = PROGRESS && s.name === "study-big" ? progressing(steps, s.scans) : steps;
   return {
     dataset: s.name,
     dataset_id: SPECS.indexOf(s) + 2,
@@ -208,7 +232,7 @@ function summary(s: Spec) {
     pictures_place: "working",
     // record 56: the proposed rule changes that touch it, three waiting on study-big
     ...(read ? { proposals: { proposed: s.name === "study-big" ? 3 : 0, adopted: s.name === "study-big" ? 1 : 0, rejected: 0 } } : {}),
-    steps,
+    steps: shown,
   };
 }
 
@@ -274,11 +298,11 @@ const DETAIL = {
     { id: 1, name: "ms-followup-r1", layout: "bids", subjects: 40, finished_at: "2026-09-20T10:00:00Z", handed_over: true },
   ],
   clinical: [{ kind: "EDSS", primary: true, subjects: 41 }],
-  steps: [
+  steps: ((all) => (PROGRESS ? progressing(all, 108) : all))([
     step("sorted", "done", { scans: 108, of: 108, look: 9, unsorted: 0 }, null),
     step("body_part", "done", { run: 2, served: true, answered: 96, look: 12, of: 108, jobs: [11] }, 62, 11),
     step("post_contrast", "off", { run: null, served: false, answered: 0, look: 0, of: 108, jobs: [], refusal: NO_MODEL }, null),
-  ],
+  ]),
 };
 
 const JOBS = [

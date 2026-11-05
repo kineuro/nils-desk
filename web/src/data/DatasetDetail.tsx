@@ -36,6 +36,7 @@ import { maySeePicks, picksSummary, type PickLine } from "./picks";
 import { opensItself, PseudonymisedSummary, PseudonymiseStep, StepDialogs, usePseudonymise, type Opened } from "./PseudonymiseStep";
 import { railWords } from "./pseudoStep";
 import { STOPPED_NEXT, useStopped } from "./stopped";
+import { StepNotes } from "./StepNotes";
 import { StepRail } from "./StepRail";
 import { pickRun } from "./pickRun";
 import { choosingOffers, mainScansMore, pickOffer, runActs, runOffers, startedWords, stepRuns, type Over, type Runnable } from "./stepRun";
@@ -415,6 +416,8 @@ export function DatasetDetail(props: DatasetDetailProps) {
             onClose={() => setChoosing(null)}
           />
         )}
+        {/* a model's step: how far it is while it runs, why it failed once it has (2026-11-05) */}
+        {s && <StepNotes caps={caps} steps={rail} now={now} />}
         {stopped && !(open && view && view.phase !== "done") && (
           <p className="ps-stopped dp-stopped" role="status">
             Stopped: {stopped.words} <span className="meta">{STOPPED_NEXT}</span>
