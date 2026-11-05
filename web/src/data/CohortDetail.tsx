@@ -29,7 +29,8 @@ import { plainError, type Plain } from "./plain";
 import { StepRail } from "./StepRail";
 import { HeatMap } from "./HeatMap";
 import { mayHeat } from "./picksHeat";
-import { runOffers, startedWords, stepRuns } from "./stepRun";
+import { mayPick, pickRun } from "./pickRun";
+import { pickOffer, runOffers, startedWords, stepRuns, type Runnable } from "./stepRun";
 import { clock, cohortRail, doingTitle, fedWords, growth, joinTitle, OPERATIONS, roleOrder, roleWord, runningWords, slotOf, type Holding, type Operation, type SummaryStep } from "./summary";
 import { mayBrowse, viewHref } from "./viewer";
 
@@ -113,8 +114,25 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
   const releases: CohortRelease[] = Array.isArray(doc?.releases) ? doc.releases : [];
   const today = new Date();
   const rail = cohortRail(doc?.steps, picks?.lines ?? null);
+  // 2026-11-05 (Nima): the main scans run from the cohort's card too, by the pick run door with the cohort named
+  const runPick = () => {
+    if (!mayPick(caps)) return;
+    setPressed(true);
+    setRefused(null);
+    pickRun
+      .start({ cohort: row.name })
+      .then(() => {
+        const words = startedWords(row.name, "main_scans");
+        setSaid(words);
+        setAsked((x) => x + 1);
+        onChanged(words);
+      })
+      .catch((e: unknown) => setRefused(plainError(e)))
+      .finally(() => setPressed(false));
+  };
+  const pickNow = pickOffer(caps, rail.find((x) => x.step === "main_scans") ?? null, row.stacks, pressed || busy, runPick);
   // body part or post-contrast over its members' scans: its model's run queued, or the engine's refusal said plainly
-  const runStep = (step: Operation) => {
+  const runStep = (step: Runnable) => {
     setPressed(true);
     setRefused(null);
     stepRuns
@@ -204,7 +222,7 @@ export function CohortDetail({ caps, cohort: row, datasets, onChanged, onRenamed
       {rail.length > 0 && (
         <div className="dp-sec">
           <h3 className="eyebrow">Where it is</h3>
-          <StepRail steps={rail} now={today.getTime()} run={runOffers(caps, "cohorts", rail, pressed, runStep)} />
+          <StepRail steps={rail} now={today.getTime()} run={{ ...runOffers(caps, "cohorts", rail, pressed, runStep), ...(pickNow ? { main_scans: pickNow } : {}) }} />
           {refused && (
             <p className="warn" role="alert">
               {refused.words}

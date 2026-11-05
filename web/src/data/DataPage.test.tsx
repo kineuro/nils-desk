@@ -479,22 +479,22 @@ describe("datasets and cohorts on one page", () => {
     });
     const d = host.querySelector<HTMLElement>(".dp-detail")!;
     const runs = () => [...d.querySelectorAll<HTMLElement>(".dp-step")].filter((x) => x.querySelector(".dp-step-run button"));
-    expect(runs().map((x) => x.querySelector(".dp-step-title")?.textContent)).toEqual(["Body part", "Post-contrast"]);
-    const [bp, pc] = runs().map((x) => x.querySelector<HTMLButtonElement>(".dp-step-run button")!);
+    expect(runs().map((x) => x.querySelector(".dp-step-title")?.textContent)).toEqual(["Sorted", "Body part", "Post-contrast"]);
+    const [, bp, pc] = runs().map((x) => x.querySelector<HTMLButtonElement>(".dp-step-run button")!);
     // body part ran before; post-contrast has no model, its reason behind the "?"
     expect(bp.textContent).toBe("Run again");
     expect(bp.disabled).toBe(false);
     expect(pc.textContent).toBe("Run");
     expect(pc.disabled).toBe(true);
-    expect(runs()[1].querySelector(".dp-step-run .hint")?.getAttribute("title")).toBe("no post-contrast model is installed");
-    expect(runs()[0].querySelector(".dp-step-run .hint")).toBeNull();
+    expect(runs()[2].querySelector(".dp-step-run .hint")?.getAttribute("title")).toBe("no post-contrast model is installed");
+    expect(runs()[1].querySelector(".dp-step-run .hint")).toBeNull();
     act(() => bp.click());
     await settle();
     expect(e.of("POST", door)).toHaveLength(1);
     expect(e.of("POST", "/api/jobs")).toHaveLength(0);
     expect(text()).toContain("study-big: body part queued.");
     // pressed again while it is queued elsewhere: the engine refuses, said plainly with its words behind the "?"
-    act(() => runs()[0].querySelector<HTMLButtonElement>(".dp-step-run button")!.click());
+    act(() => runs()[1].querySelector<HTMLButtonElement>(".dp-step-run button")!.click());
     await settle();
     expect(e.of("POST", door)).toHaveLength(2);
     const said = host.querySelector<HTMLElement>("section.dp > p.warn")!;
@@ -540,9 +540,9 @@ describe("datasets and cohorts on one page", () => {
     const d = host.querySelector<HTMLElement>(".dp-detail")!;
     expect(d.getAttribute("aria-label")).toBe("ms-followup");
     const offered = [...d.querySelectorAll<HTMLElement>(".dp-step")].filter((x) => x.querySelector(".dp-step-run"));
-    expect(offered.map((x) => x.querySelector(".dp-step-title")?.textContent)).toEqual(["Body part", "Post-contrast"]);
-    expect(offered[1].querySelector<HTMLButtonElement>(".dp-step-run button")!.disabled).toBe(true);
-    act(() => offered[0].querySelector<HTMLButtonElement>(".dp-step-run button")!.click());
+    expect(offered.map((x) => x.querySelector(".dp-step-title")?.textContent)).toEqual(["Sorted", "Body part", "Post-contrast"]);
+    expect(offered[2].querySelector<HTMLButtonElement>(".dp-step-run button")!.disabled).toBe(true);
+    act(() => offered[1].querySelector<HTMLButtonElement>(".dp-step-run button")!.click());
     await settle();
     expect(e.of("POST", door)).toHaveLength(1);
     expect(d.querySelector(".dp-said")?.textContent).toBe("ms-followup: body part queued.");
@@ -563,8 +563,8 @@ describe("datasets and cohorts on one page", () => {
     act(() => (card("ms-followup").querySelector(".dp-big") as HTMLElement).click());
     await settle(8);
     const d = host.querySelector<HTMLElement>(".dp-detail")!;
-    // no Run on a step that runs; post-contrast's still held
-    expect([...d.querySelectorAll(".dp-step-run button")].map((b) => b.textContent)).toEqual(["Run"]);
+    // no Run on a step that runs; the sort's Run again before it, post-contrast's still held
+    expect([...d.querySelectorAll(".dp-step-run button")].map((b) => b.textContent)).toEqual(["Run again", "Run"]);
     const box = d.querySelector<HTMLElement>(".dp-running")!;
     expect(box.querySelector(".dp-running-head .grow")?.textContent).toBe("Finding the body part");
     expect(box.querySelector(".dp-progress")?.getAttribute("aria-valuenow")).toBe("25");
