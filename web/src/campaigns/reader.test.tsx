@@ -359,10 +359,10 @@ describe("batches of like stacks", () => {
   it("accepts the whole batch with a tenth held back, or only the shown others where the person held some", () => {
     const whole = acceptPlan(b, new Set());
     expect(whole).toEqual({ items: null, n: 30, drawn: 3, read: [] });
-    expect(planWords(whole)).toBe("27 stacks take the suggestion; 3 held back to read one by one.");
+    expect(planWords(whole)).toBe("27 stacks are accepted as suggested; 3 left to read one by one.");
     const some = acceptPlan(b, new Set([4]));
     expect(some).toEqual({ items: [1, 2, 3, 5], n: 4, drawn: 1, read: [4] });
-    expect(planWords(some)).toBe("3 stacks take the suggestion; 2 held back to read one by one.");
+    expect(planWords(some)).toBe("3 stacks are accepted as suggested; 2 left to read one by one.");
     // a batch of one holds none back
     expect(acceptPlan({ ...b, count: 1, items: [b.items[0]] }, new Set()).drawn).toBe(0);
     expect(acceptedOf({ campaign: 7, batch: "a1b2c3", hold_back: 0.1, accepted: [{ item: 1, answer: 5, state: "agreed" }, { item: 2, answer: 6, state: "agreed" }], held_back: [3], refused: [] })).toEqual({ accepted: 2, held: [3], refused: 0 });
@@ -372,23 +372,23 @@ describe("batches of like stacks", () => {
     const none = () => undefined;
     const html = renderToStaticMarkup(<BatchView batches={batches} at={0} mine={new Set([4])} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} />);
     expect(html).toContain("batch 1 of 1 · 30 like stacks · 5 shown");
-    expect(html).toContain("<b>3</b> take the suggestion · <b>2</b> held back");
+    expect(html).toContain("<b>3</b> accepted as suggested · <b>2</b> left to read one by one");
     expect(html).toContain("the 25 not shown wait for a later move");
     expect(html).toContain("Accept for 4");
-    expect(html).toContain("held back by you");
+    expect(html).toContain("left by you to read one by one");
     expect((html.match(/aria-pressed="true"/g) ?? []).length).toBe(1);
     const all = renderToStaticMarkup(<BatchView batches={batches} at={0} mine={new Set()} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} />);
-    expect(all).toContain("<b>27</b> take the suggestion · <b>3</b> held back (3 at random for the draw)");
+    expect(all).toContain("<b>27</b> accepted as suggested · <b>3</b> left to read one by one (3 set aside at random)");
     expect(all).toContain("Accept for 30");
     const empty = renderToStaticMarkup(<BatchView batches={[]} at={0} mine={new Set()} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} />);
     // engine 1.0.0-beta.9: the batch accepted as another value, chosen among the question's
     const question = { kind: "axis", axis: "base", values: ["T1w", "T2w"] };
     const asOther = renderToStaticMarkup(<BatchView batches={batches} at={0} mine={new Set()} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} question={question} value={{ base: "T2w" }} onValue={() => undefined} />);
     expect(asOther).toContain("Accept for 30 as T2w");
-    expect(asOther).toContain("<b>27</b> take T2w");
+    expect(asOther).toContain("<b>27</b> accepted as T2w");
     expect(asOther).toContain("aria-pressed=\"true\"");
     const asSame = renderToStaticMarkup(<BatchView batches={batches} at={0} mine={new Set()} busy={false} said={null} onHold={none} onAccept={none} onNext={none} onBack={none} question={question} value={{ base: "T1w" }} onValue={() => undefined} />);
-    expect(asSame).toContain("take the suggestion");
+    expect(asSame).toContain("accepted as suggested");
     expect(asSame).not.toContain(" as T1w");
     expect(empty).toContain("No batch of like stacks is left here.");
   });

@@ -321,7 +321,7 @@ export function pageWords(p: GalleryPage, shownCount: number): string {
   const rest = Math.max(0, p.left - shownCount);
   const parts = [`${shownCount} of ${p.left} to check`];
   if (rest > 0) parts.push(`${rest} after these`);
-  if (p.held_back_open === null && p.held_back > 0) parts.push(`${p.held_back} held back to read alone`);
+  if (p.held_back_open === null && p.held_back > 0) parts.push(`${p.held_back} set aside to read one by one`);
   if (p.held_back_open === null && p.sealed > 0) parts.push(`${p.sealed} sealed, read blind one by one`);
   return parts.join(" · ");
 }
@@ -338,7 +338,7 @@ export function aloneWords(p: GalleryPage): string | null {
   const sealed = p.sealed;
   if (held + sealed === 0) return null;
   const parts: string[] = [];
-  if (held > 0) parts.push(`${held} ${held === 1 ? "item is" : "items are"} held back to be read one by one: the campaign holds back ${Math.round(p.hold_back * 100)} % of what is accepted in batches, chosen at random, so the engine can check how often a batch answer is right`);
+  if (held > 0) parts.push(`${held} ${held === 1 ? "item is" : "items are"} set aside to read one by one: the campaign sets aside ${Math.round(p.hold_back * 100)} % of every page accepted at once, at random, to check how often such an answer is right`);
   if (sealed > 0) parts.push(`${sealed} ${sealed === 1 ? "is" : "are"} of a sealed sample, read blind with nothing suggested`);
   return `${parts.join("; ")}.`;
 }

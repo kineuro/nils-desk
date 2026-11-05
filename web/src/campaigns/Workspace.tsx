@@ -486,7 +486,7 @@ export function Workspace({ caps, id, role, query }: { caps: Capabilities; id: s
         setDone((d) => d + r.accepted);
         setOpen((o) => (o === null ? o : Math.max(0, o - r.accepted)));
         const held = r.held.length + plan.read.length;
-        const words = `Accepted ${r.accepted} like stacks${asWords}; ${held} held back to read one by one${r.refused > 0 ? `; ${r.refused} refused` : ""}.`;
+        const words = `Accepted ${r.accepted} like stacks${asWords}; ${held} left to read one by one${r.refused > 0 ? `; ${r.refused} refused` : ""}.`;
         setSaid(words);
         setBatchSaid(words);
         setMine(new Set());

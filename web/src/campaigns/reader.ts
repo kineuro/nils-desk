@@ -1146,9 +1146,9 @@ export function acceptPlan(b: Batch, mine: Set<number>, share = HOLD_BACK): { it
 
 export function planWords(p: { n: number; drawn: number; read: number[] }): string {
   const taking = p.n - p.drawn;
-  const a = `${taking} ${taking === 1 ? "stack takes" : "stacks take"} the suggestion`;
+  const a = `${taking} ${taking === 1 ? "stack is" : "stacks are"} accepted as suggested`;
   const held = p.drawn + p.read.length;
-  return held === 0 ? `${a}.` : `${a}; ${held} held back to read one by one.`;
+  return held === 0 ? `${a}.` : `${a}; ${held} left to read one by one.`;
 }
 
 export type BatchAct = { kind: "accept" } | { kind: "back" } | { kind: "next" } | { kind: "keys" };
@@ -1184,6 +1184,8 @@ export interface RaterStat {
   /** Share of suggestions the rater changed, where the engine counts them. */
   changed: number | null;
   batched: number | null;
+  /** Answers whose claim stayed open past the pause bound: a break, left out of the times (2026-11-05); null from an engine before it. */
+  paused?: number | null;
 }
 
 /** The stats door's answer: each rater's row, or the caller's own alone where the answers are blind to them. */
@@ -1191,6 +1193,8 @@ export interface RaterStats {
   raters: RaterStat[];
   /** Blind as the answers are: a rater reads their own row and no one else's, and no totals. */
   blind: boolean;
+  /** The pause bound in seconds: a claim open longer is a break, not reading (2026-11-05); null from an engine before it. */
+  pause_seconds?: number | null;
 }
 
 /** The stats door's per-rater rows, read leniently; the door's totals over every rater are never read. */
@@ -1203,7 +1207,8 @@ export function statsOf(raw: Json): RaterStats {
     const suggested = num(r.suggested);
     const changedN = num(r.changed);
     const changed = num(r.share_changed) ?? num(r.changed_share) ?? num(r.change_rate) ?? (changedN !== null && suggested ? changedN / suggested : null);
-    return [{ principal: who, name: text(r.name), decisions, median_seconds: num(r.median_seconds) ?? num(r.seconds_median) ?? num(r.median), p90_seconds: num(r.p90_seconds), changed, batched: num(r.batched) }];
+    return [{ principal: who, name: text(r.name), decisions, median_seconds: num(r.median_seconds) ?? num(r.seconds_median) ?? num(r.median), p90_seconds: num(r.p90_seconds), changed, batched: num(r.batched), ...(num(r.paused) !== null ? { paused: num(r.paused) } : {}) }];
   });
-  return { raters, blind: raw.blind === true };
+  const bound = num(raw.pause_seconds);
+  return { raters, blind: raw.blind === true, ...(bound !== null ? { pause_seconds: bound } : {}) };
 }

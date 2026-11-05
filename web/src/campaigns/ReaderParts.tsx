@@ -170,9 +170,15 @@ const secs = (v: number | null) => (v === null ? "none" : v < 10 ? v.toFixed(1) 
  */
 export function RaterStats({ stats }: { stats: RaterStatsDoc }) {
   const pct = (v: number | null) => (v === null ? "none" : `${Math.round(v * 100)}%`);
+  // 2026-11-05: a claim left open is a break, not reading, and the heading says the bound
+  const bound = stats.pause_seconds ?? null;
+  const breaks = stats.raters.some((r) => (r.paused ?? 0) > 0);
   return (
     <>
-      <h2>{stats.blind ? "Your pace" : "Pace"}</h2>
+      <h2>
+        {stats.blind ? "Your pace" : "Pace"}
+        {bound !== null && <span className="meta"> · seconds per answer read one by one; a claim open over {bound % 60 === 0 ? `${bound / 60} min` : `${bound} s`} is a break, not reading</span>}
+      </h2>
       <div className="table-wrap">
         <table className="thin rater-stats">
           <thead>
@@ -183,6 +189,7 @@ export function RaterStats({ stats }: { stats: RaterStatsDoc }) {
               <th className="num">90% within s</th>
               <th className="num">Suggestions changed</th>
               <th className="num">In batches</th>
+              {breaks && <th className="num">Breaks</th>}
             </tr>
           </thead>
           <tbody>
@@ -194,6 +201,7 @@ export function RaterStats({ stats }: { stats: RaterStatsDoc }) {
                 <td className="num">{secs(r.p90_seconds)}</td>
                 <td className="num">{pct(r.changed)}</td>
                 <td className="num">{r.batched === null ? "none" : r.batched.toLocaleString("en-US")}</td>
+                {breaks && <td className="num">{(r.paused ?? 0).toLocaleString("en-US")}</td>}
               </tr>
             ))}
           </tbody>
