@@ -221,3 +221,130 @@ export function fromOfRow(row: string): string | null | undefined {
   if (row === NOW_UNKNOWN) return undefined;
   return row === NO_VALUE ? null : row;
 }
+
+// ------------------------------------------------ per model and axis
+// UX round 1 (2026-11-05): a model's proposals on one axis as two acts,
+// commit the ones at or above its threshold and make the rest a campaign
+// for oneself, read from the engine's counts rather than a page of groups.
+
+/** A count of review groups and the scans they hold. */
+export interface Part {
+  groups: number;
+  stacks: number;
+}
+
+/** One model's proposals on one axis that still wait, as `GET /api/review/proposals` counts them. */
+export interface Standing {
+  model: { id: number; name: string; version: string };
+  /** name@version. */
+  label: string;
+  axis: string;
+  /** The lowest threshold its runs staged at. */
+  threshold: number | null;
+  /** At or above the threshold, staged. */
+  staged: Part;
+  /** Of those, on scans an open campaign asks: a commit leaves them staged. */
+  held: Part;
+  /** What a commit by the model and the axis puts in force. */
+  commit: Part;
+  /** Staged decisions staged before the registry moved on. */
+  drifted: number;
+  /** Below the threshold, asked by no campaign: what a campaign of the rest asks. */
+  below: Part;
+  /** Below the threshold and asked by an open campaign already. */
+  asked: Part;
+  campaigns: { id: number; name: string }[];
+  /** A free campaign name for a campaign of the rest. */
+  name: string;
+}
+
+const isObj = (v: unknown): v is Json => typeof v === "object" && v !== null && !Array.isArray(v);
+const count = (v: unknown): number => num(v) ?? 0;
+const partOf = (v: unknown): Part => (isObj(v) ? { groups: count(v.groups), stacks: count(v.stacks) } : { groups: 0, stacks: 0 });
+
+/** One row of the door, read evenly: a field an engine does not send reads as nothing. */
+export function standingOf(v: unknown): Standing | null {
+  if (!isObj(v) || !isObj(v.model) || typeof v.axis !== "string") return null;
+  const id = num(v.model.id);
+  if (id === null) return null;
+  const name = text(v.model.name) ?? String(id);
+  const version = text(v.model.version) ?? "";
+  const staged = partOf(v.staged);
+  const held = partOf(v.held);
+  return {
+    model: { id, name, version },
+    label: text(v.label) ?? (version ? `${name}@${version}` : name),
+    axis: v.axis,
+    threshold: num(v.threshold),
+    staged,
+    held,
+    commit: isObj(v.commit) ? partOf(v.commit) : { groups: staged.groups - held.groups, stacks: staged.stacks - held.stacks },
+    drifted: count(v.drifted),
+    below: partOf(v.below),
+    asked: partOf(v.asked),
+    campaigns: Array.isArray(v.campaigns) ? v.campaigns.filter(isObj).map((c) => ({ id: count(c.id), name: text(c.name) ?? "" })) : [],
+    name: text(v.name) ?? `${name}-${v.axis}-unsure`,
+  };
+}
+
+export const STANDING_DOORS = {
+  list: "GET /api/review/proposals",
+  commit: "POST /api/decisions/commit",
+  campaign: "POST /api/review/proposals/campaign",
+} as const;
+
+/** What a person may do with a model's proposals per model and axis, by grant and door; `reads` false keeps the page of groups alone. */
+export function standingActs(caps: Capabilities): { reads: boolean; commit: boolean; campaign: boolean } {
+  const work = may(caps, "review:work");
+  return {
+    reads: may(caps, "review:see") && served(caps, STANDING_DOORS.list),
+    commit: work && served(caps, STANDING_DOORS.commit),
+    campaign: work && may(caps, "campaigns:work") && served(caps, STANDING_DOORS.campaign),
+  };
+}
+
+/** The commit's body: the model and the axis, nothing narrower, so every staged answer at or above its threshold goes; anyway where some were staged before the registry moved on, which the confirm says. */
+export function commitStandingBody(s: Standing): Json {
+  return { model: String(s.model.id), axis: s.axis, ...(s.drifted > 0 ? { anyway: true } : {}) };
+}
+
+/** What a commit answered, with the re-sort's words. */
+export interface CommitAnswer extends CommittedPart {
+  resort?: { state?: string; words?: string } | null;
+}
+
+/** What a campaign of the rest answered. */
+export interface RestAnswer {
+  campaign: { id: number; name: string };
+  adopted: number;
+  suggestions: { suggestions: number };
+}
+
+export const standingDoors = {
+  list: () => door<Json>("GET", "/api/review/proposals").then((r) => (Array.isArray(r.proposals) ? r.proposals.map(standingOf).filter((s): s is Standing => s !== null) : [])),
+  commit: (s: Standing) => door<CommitAnswer>("POST", "/api/decisions/commit", commitStandingBody(s)),
+  campaign: (s: Standing, name: string) => door<RestAnswer>("POST", "/api/review/proposals/campaign", { model: String(s.model.id), axis: s.axis, ...(name.trim() ? { name: name.trim() } : {}) }),
+};
+
+const nf = (v: number) => v.toLocaleString("en-US");
+
+/** The threshold as a person reads it. */
+export function thresholdWords(t: number | null): string {
+  return t === null ? "no threshold" : `threshold ${t.toFixed(2)}`;
+}
+
+/** The commit's button. */
+export function commitWords(s: Standing): string {
+  return `Commit the ${nf(s.commit.stacks)} at or above the threshold`;
+}
+
+/** The campaign's button. */
+export function campaignWords(s: Standing): string {
+  return `Make a campaign of the other ${nf(s.below.stacks)} for me`;
+}
+
+/** What a commit did, said after it. */
+export function committedStandingWords(s: Standing, r: CommitAnswer): string {
+  const resort = r.resort?.words ? ` ${r.resort.words.charAt(0).toUpperCase()}${r.resort.words.slice(1)}.` : "";
+  return `Committed ${nf(s.commit.stacks)} ${s.axis} answers of ${s.label}.${resort}`;
+}

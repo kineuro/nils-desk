@@ -15,6 +15,13 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 - The campaign pages speak plainly: a batch's stacks are "accepted as suggested" and the rest "left to read one by one", items are "set aside" rather than held back, and items an earlier close wrote are "written already".
 - The pace says its pause bound in its heading and counts breaks; a claim left open is no longer read as reading time.
+### Changed
+
+- Review > Proposals is one card per model and axis with its two acts, where the engine counts them (engine `GET /api/review/proposals`): Commit the N at or above the threshold, after a confirm that counts them and says the scans re-sort, and Make a campaign of the other M for me, which asks only the campaign's name, prefilled, and lands on the new campaign: you its one rater, the model's answer filled in, closing into decisions in force. The change matrix stays one open away (Value by value). Until now each cell of the matrix was opened and committed by hand.
+
+### Fixed
+
+- Arriving at a page of Review from a card further down Work, or from a link, shows the page's head and its tabs; the page kept the scroll the last one left, so the Proposals tab sat out of view.
 
 ## [1.0.0-beta.6] - 2026-11-05
 

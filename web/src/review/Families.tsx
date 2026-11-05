@@ -16,8 +16,9 @@ import { askedOf, chooseBody, valueWords, type Asked, type AskedCandidate } from
 import { askPeopleHref, asksPeople } from "./askPeople";
 import { CandidateList } from "./CandidateList";
 import { packRoles, refusalWords, review, type PackDoc } from "./client";
-import { modelGroups } from "./modelFamily";
+import { modelGroups, standingActs, standingDoors, type Standing } from "./modelFamily";
 import { ModelFamily } from "./ModelFamily";
+import { CommitStandingDialog, RestCampaignDialog, StandingCard } from "./ModelStanding";
 import { PickDialog } from "./PickDialog";
 import { borderOf, borderWords, occasionWords, PICK_BORDER, rolesOffered, type Border } from "./picks";
 
@@ -155,7 +156,65 @@ export function PicksFamily({ caps, packName = null, dataset, onChanged }: { cap
 
 // ------------------------------------------------------------ proposals
 
+/**
+ * What models proposed (UX round 1): on an engine that counts them, one card per model and axis with its two acts,
+ * commit the ones at or above the threshold and make the rest a campaign for oneself; the change matrix stays one
+ * open away for a look value by value. On an older engine, the matrix alone.
+ */
 export function ProposalsFamily({ caps, onChanged }: { caps: Capabilities; onChanged: (words: string) => void }) {
+  const acts = standingActs(caps);
+  if (!acts.reads) return <ProposalGroups caps={caps} onChanged={onChanged} />;
+  return <ProposalStandings caps={caps} acts={acts} onChanged={onChanged} />;
+}
+
+function ProposalStandings({ caps, acts, onChanged }: { caps: Capabilities; acts: { commit: boolean; campaign: boolean }; onChanged: (words: string) => void }) {
+  const [load, again] = useRead(() => standingDoors.list());
+  const [committing, setCommitting] = useState<Standing | null>(null);
+  const [making, setMaking] = useState<Standing | null>(null);
+  const [groups, setGroups] = useState(false);
+  const [seen, setSeen] = useState(0);
+  const list = load.kind === "ready" ? load.value : [];
+  return (
+    <section className="stack roomy">
+      <Reading load={load} what="the proposals" />
+      {load.kind === "ready" && list.length === 0 && <p className="meta">Nothing proposed. A model run from Pipelines proposes its values here.</p>}
+      {list.map((s) => (
+        <StandingCard key={`${s.model.id}|${s.axis}`} s={s} acts={acts} onCommit={() => setCommitting(s)} onCampaign={() => setMaking(s)} />
+      ))}
+      {load.kind === "ready" && list.length > 0 && (
+        <details className="proposal-groups" onToggle={(e) => setGroups((e.target as HTMLDetailsElement).open)}>
+          <summary>Value by value</summary>
+          {groups && (
+            <ProposalGroups
+              key={seen}
+              caps={caps}
+              onChanged={(w) => {
+                again();
+                onChanged(w);
+              }}
+            />
+          )}
+        </details>
+      )}
+      {committing && (
+        <CommitStandingDialog
+          s={committing}
+          onClose={() => setCommitting(null)}
+          onDone={(w) => {
+            setCommitting(null);
+            again();
+            setSeen((x) => x + 1);
+            onChanged(w);
+          }}
+        />
+      )}
+      {making && <RestCampaignDialog s={making} onClose={() => setMaking(null)} />}
+    </section>
+  );
+}
+
+/** The change matrix of the groups waiting (record 45 S7), each cell opened and committed by hand. */
+function ProposalGroups({ caps, onChanged }: { caps: Capabilities; onChanged: (words: string) => void }) {
   const [load, again] = useRead(() => Promise.all([review.list({ status: "open", limit: 500 }), review.list({ status: "staged", limit: 500 })]).then(([o, s]) => modelGroups([...o.items, ...s.items])));
   const ask = asksPeople(caps) ? (kind: string) => askPeopleHref({ kind }) : null;
   return (

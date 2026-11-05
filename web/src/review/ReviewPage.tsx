@@ -11,7 +11,7 @@
 // words, each answered as a grid of its scans at #review/questions/<key>,
 // with what else waits under them.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -73,7 +73,7 @@ const HEAD: Record<ReviewSub, { title: string; lede: string }> = {
   rules: { title: "Rules", lede: "The pack decides every answer. One fix to a rule mends every scan it touches." },
   identifiers: { title: "Who a file is about", lede: "What the map does not settle, and what two codes share." },
   picks: { title: "Which scan stands for a role", lede: "Occasions a pick run doubts. A person's pick stands through every later run." },
-  proposals: { title: "What models proposed", lede: "Staged until a person commits them. From the value held now to the value proposed." },
+  proposals: { title: "What models proposed", lede: "Commit what each model is sure of; read the rest in a campaign of your own." },
   asked: { title: "What System 1 asks", lede: "Legal candidates for a whole stack, most probable first." },
 };
 
@@ -135,6 +135,12 @@ function ReviewPages({ caps, page, arg = null, sub: opens = null, query }: { cap
   const whereKey = `${where.dataset ?? ""}|${where.cohort ?? ""}`;
   const [qlist, setQlist] = useState<{ list: QuestionList | null; failed: string | null; since: number }>(() => ({ list: null, failed: null, since: Date.now() }));
   const [tick, setTick] = useState(0);
+  // UX round 1: arriving at a page of Review from anywhere (a card further down Work, a link) shows its head and its
+  // tabs, never the scroll the last page left
+  const top = useRef<HTMLElement>(null);
+  useEffect(() => {
+    top.current?.scrollIntoView?.({ block: "start" });
+  }, [sub]);
   useEffect(() => {
     if (!listed) return;
     let alive = true;
@@ -189,7 +195,7 @@ function ReviewPages({ caps, page, arg = null, sub: opens = null, query }: { cap
   const grown = familyCounts(items, load.kind === "ready" ? load.summary : null);
 
   return (
-    <section className={sub === "rules" ? "data review rules-scale" : "data review"}>
+    <section ref={top} className={sub === "rules" ? "data review rules-scale" : "data review"}>
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">Review</span>

@@ -36,3 +36,11 @@
 @media (max-width: 860px) {
   .look-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* UX round 1 (ux-proposals): a model's proposals on an axis as a card with its two acts */
+.proposal-card .card-head h2 { flex: 0 1 auto; }
+.proposal-card .card-head .path { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.proposal-acts { flex-wrap: wrap; }
+.proposal-acts .button { white-space: normal; text-align: left; }
+.proposal-groups > summary { cursor: pointer; font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.proposal-groups[open] > summary { margin-bottom: 0.6rem; }
