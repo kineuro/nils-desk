@@ -43,7 +43,10 @@ describe("a step's Run", () => {
     expect(runControl(caps, "datasets", step())).toEqual({ label: "Run", disabled: false, why: null });
     expect(runControl(caps, "cohorts", step({ state: "done", answered: 36 }))?.label).toBe("Run again");
     expect(runControl(caps, "datasets", step({ state: "failed" }))?.label).toBe("Run again");
-    expect(runControl(caps, "datasets", step({ step: "sorted" }))).toBeNull();
+    // 2026-11-05: the sort runs from the card too, and asks no quasi detail
+    expect(runControl(caps, "datasets", step({ step: "sorted", state: "done" }))?.label).toBe("Run again");
+    expect(runControl(caps, "cohorts", step({ step: "sorted" }))).toEqual({ label: "Run", disabled: false, why: null });
+    expect(startedWords("combat", "sorted")).toBe("combat: sort queued.");
   });
 
   it("is held with the engine's reason where a run would be refused", () => {
@@ -75,7 +78,9 @@ describe("a step's Run", () => {
     const ran: string[] = [];
     const steps = [step({ step: "sorted", state: "done" }), step(), step({ step: "post_contrast", state: "off", refusal: NONE })];
     const offers = runOffers(caps, "datasets", steps, false, (s) => ran.push(s));
-    expect(Object.keys(offers)).toEqual(["body_part", "post_contrast"]);
+    // 2026-11-05: the sort's Run again stands beside the operations'
+    expect(Object.keys(offers)).toEqual(["sorted", "body_part", "post_contrast"]);
+    expect(offers.sorted?.label).toBe("Run again");
     expect(offers.body_part?.disabled).toBe(false);
     expect(offers.post_contrast?.disabled).toBe(true);
     offers.body_part?.onRun();

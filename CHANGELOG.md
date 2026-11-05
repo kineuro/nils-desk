@@ -6,6 +6,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Added
 
+- A cohort's card runs the sort and the main scans from its steps, as a dataset's does: Sort (engine 1.0.0-beta.9) queues a sort over the cohort's scans alone, Main scans the pick run over the cohort; a dataset's card gains Sort beside its Main scans. Until now a cohort ran only body part and post-contrast from its card.
+
+### Added
+
 - A batch of like stacks can be accepted as another value than the one suggested. Where the engine takes one (1.0.0-beta.9), the batch view offers the question's values as chips above the grid; the chosen value reads in the counts and on the button ("Accept for 57 as neck"), and the held-back stacks still go one by one. Until now a person who saw neck where the rules said spine had to hold every stack back.
 
 ### Changed

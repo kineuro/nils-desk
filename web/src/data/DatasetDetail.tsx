@@ -38,7 +38,7 @@ import { railWords } from "./pseudoStep";
 import { STOPPED_NEXT, useStopped } from "./stopped";
 import { StepRail } from "./StepRail";
 import { pickRun } from "./pickRun";
-import { mainScansMore, pickOffer, runOffers, startedWords, stepRuns } from "./stepRun";
+import { mainScansMore, pickOffer, runOffers, startedWords, stepRuns, type Runnable } from "./stepRun";
 import { nextStep, outsideWords, stepCommand, type StepId } from "./steps";
 import {
   clock,
@@ -68,7 +68,7 @@ import {
   whereWords,
   type DatasetSummary,
   type LogLine,
-  type Operation,
+  
   type SummaryStep,
 } from "./summary";
 import { mayBrowse, viewHref } from "./viewer";
@@ -212,7 +212,7 @@ export function DatasetDetail(props: DatasetDetailProps) {
     if (c) queue(c.command, c.name, `${d.name} is read again.`);
   };
   // body part or post-contrast over the dataset's scans: its model's run queued, or the engine's refusal said plainly
-  const runStep = (step: Operation) => {
+  const runStep = (step: Runnable) => {
     setPressed(true);
     stepRuns
       .start("datasets", d.name, step)

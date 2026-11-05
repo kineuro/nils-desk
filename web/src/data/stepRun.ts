@@ -41,8 +41,14 @@ export interface StepStarted {
 
 export const stepRuns = {
   /** A step's run over a dataset's or a cohort's scans, queued. */
-  start: (scope: RunScope, name: string, step: Operation) => door<StepStarted>("POST", `/api/${scope}/${encodeURIComponent(name)}/steps/${step}/run`),
+  start: (scope: RunScope, name: string, step: Runnable) => door<StepStarted>("POST", `/api/${scope}/${encodeURIComponent(name)}/steps/${step}/run`),
 };
+
+/** The steps the door runs: the operations, and the sort (engine 1.0.0-beta.9, from a dataset's and a cohort's card). */
+export type Runnable = Operation | "sorted";
+function isRunnable(step: StepName): step is Runnable {
+  return isOperation(step) || step === "sorted";
+}
 
 function isOperation(step: StepName): step is Operation {
   return (OPERATIONS as StepName[]).includes(step);
@@ -63,20 +69,21 @@ export interface RunControl {
  * images the person may not see, or the engine would refuse it, saying why.
  */
 export function runControl(caps: Capabilities, scope: RunScope, st: SummaryStep): RunControl | null {
-  if (!isOperation(st.step) || !served(caps, STEP_RUN_DOORS[scope]) || !may(caps, "pipelines:work")) return null;
+  if (!isRunnable(st.step) || !served(caps, STEP_RUN_DOORS[scope]) || !may(caps, "pipelines:work")) return null;
   if (st.state === "queued" || st.state === "running") return null;
   const label = st.state === "done" || st.state === "failed" ? "Run again" : "Run";
-  if (!sees(caps, "quasi")) return { label, disabled: true, why: "A model reads the scans' images, which needs quasi detail." };
+  // the sort reads headers, never an image (2026-11-05: Sort runs from the card too)
+  if (isOperation(st.step) && !sees(caps, "quasi")) return { label, disabled: true, why: "A model reads the scans' images, which needs quasi detail." };
   if (st.refusal) return { label, disabled: true, why: st.refusal.error };
   return { label, disabled: false, why: null };
 }
 
 /** The Run of each step of a rail that offers one; every one held while a press is answered. */
-export function runOffers(caps: Capabilities, scope: RunScope, steps: SummaryStep[], pressed: boolean, onRun: (step: Operation) => void): Partial<Record<StepName, StepRunOffer>> {
+export function runOffers(caps: Capabilities, scope: RunScope, steps: SummaryStep[], pressed: boolean, onRun: (step: Runnable) => void): Partial<Record<StepName, StepRunOffer>> {
   const out: Partial<Record<StepName, StepRunOffer>> = {};
   for (const st of steps) {
     const c = runControl(caps, scope, st);
-    if (!c || !isOperation(st.step)) continue;
+    if (!c || !isRunnable(st.step)) continue;
     const step = st.step;
     out[step] = { ...c, disabled: c.disabled || pressed, onRun: () => onRun(step) };
   }
@@ -84,8 +91,8 @@ export function runOffers(caps: Capabilities, scope: RunScope, steps: SummarySte
 }
 
 /** What a page says once a step's run is queued. */
-export function startedWords(name: string, step: Operation | "main_scans"): string {
-  const words = { body_part: "body part", post_contrast: "post-contrast", main_scans: "main scans" };
+export function startedWords(name: string, step: Runnable | "main_scans"): string {
+  const words = { body_part: "body part", post_contrast: "post-contrast", main_scans: "main scans", sorted: "sort" };
   return `${name}: ${words[step]} queued.`;
 }
 
