@@ -15,19 +15,15 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 - The campaign pages speak plainly: a batch's stacks are "accepted as suggested" and the rest "left to read one by one", items are "set aside" rather than held back, and items an earlier close wrote are "written already".
 - The pace says its pause bound in its heading and counts breaks; a claim left open is no longer read as reading time.
-### Changed
-
 - Review > Proposals is one card per model and axis with its two acts, where the engine counts them (engine `GET /api/review/proposals`): Commit the N at or above the threshold, after a confirm that counts them and says the scans re-sort, and Make a campaign of the other M for me, which asks only the campaign's name, prefilled, and lands on the new campaign: you its one rater, the model's answer filled in, closing into decisions in force. The change matrix stays one open away (Value by value). Until now each cell of the matrix was opened and committed by hand.
-
-### Fixed
-
-- Arriving at a page of Review from a card further down Work, or from a link, shows the page's head and its tabs; the page kept the scroll the last one left, so the Proposals tab sat out of view.
-### Changed
-
 - A step's Run on a dataset's or a cohort's card says what it would go over before it starts: a press opens one line under the rail with the step's acts, each with its count and, for a large run, the parts it takes. Body part offers "Run on the 135 without a body part" first and "Run again on all 456,132", in 23 parts, second (engine with `runs` and the door's `scans: without`); post-contrast its T1 brain whose contrast is unknown; the sort its every scan, main scans every subject. What was queued says how many scans and parts.
 - The Data page never waits without words: a dataset never counted says what its first count counts and how far, on its card and under Where it is ("Counting files in results: 412,000 so far"), asking the engine's summary at once and again every few seconds until the counts land; counts the engine reads again say their age ("counted 25 min ago · counting files in results: 412,000 so far").
 - A running body-part or post-contrast step says how far it is under the rail of a dataset and a cohort, in the engine's count, with the part of a split run and how long it has run: `Body part: 312 of 870 scans in part 4 of 23 · 47 min`. Where the run's one container says how far it is (the engine's next release reads it), the count moves while it works; before, a run over a cohort stood at 0 of 20,000 until its first part ended. The run page says the same in a `now` cell, and the dataset's log and the cohort's running box name the part.
 - A failed body-part or post-contrast step says why under the rail, in the engine's words with its kind, and opens its run: `Body part failed: killed at its memory cap of 16 GB · Run 162`, what to do a hover away. Before, the step and its log said only that the run failed.
+
+### Fixed
+
+- Arriving at a page of Review from a card further down Work, or from a link, shows the page's head and its tabs; the page kept the scroll the last one left, so the Proposals tab sat out of view.
 
 ## [1.0.0-beta.6] - 2026-11-05
 
