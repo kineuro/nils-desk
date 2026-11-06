@@ -9,7 +9,10 @@
 // a level, / searches, g turns to the browser at the same place. Every
 // level's place is in the address, so back and forward work. Each level's
 // bar ends in Save as a selection and Make a cohort, over what it shows
-// (Keep.tsx).
+// (Keep.tsx). UX round 2: a visit's scans say where their labels came from
+// on a card's hover, read once for the visit; a card whose label a decision
+// was not sorted into yet carries what was decided, and the visit's bar
+// offers its re-sort to who may run a sort.
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type React from "react";
@@ -21,6 +24,8 @@ import { KeepActions } from "./Keep";
 import { scansKept, subjectsKept, visitsKept } from "./keep";
 import { pictures as sharedPictures } from "./pictures";
 import { markOpen } from "./ScanViewer";
+import { useOrigins } from "./OriginFact";
+import { byStack, forgetOrigins, mayReadOrigins, mayResort, originDoors, originsFor, originTitle, sortedOf, staleAxes, staleTail, targetOfVisit } from "./origins";
 import { needsLook, questionWords, type Scan, type ScanPage } from "./scans";
 import { compareScans, FAMILY_SLOT, FAMILY_WORD, sessionLabel } from "./tree";
 import {
@@ -40,6 +45,7 @@ import {
   KEPT,
   keptText,
   kindsLine,
+  letGo,
   lastAt,
   lastScanKey,
   lastSubjectKey,
@@ -894,6 +900,30 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
   }, [key]);
   const page = load.key === key ? load.page : null;
 
+  // UX round 2: where each scan's labels came from, one read for the visit
+  const originTarget = mayReadOrigins(caps) ? targetOfVisit(visit) : null;
+  const { origins, keep: keepOrigins } = useOrigins(originTarget);
+  const perScan = useMemo(() => byStack(origins), [origins]);
+  const [sorting, setSorting] = useState<{ busy: boolean; failed: string | null }>({ busy: false, failed: null });
+  const resortVisit =
+    originTarget && mayResort(caps)
+      ? () => {
+          setSorting({ busy: true, failed: null });
+          originDoors
+            .resort(originTarget)
+            .then(async () => {
+              forgetOrigins();
+              letGo(key);
+              const [fresh, again] = await Promise.all([visitAll(scope, visit), originsFor(originTarget)]);
+              hold(key, fresh);
+              setLoad({ key, page: fresh, failed: null, since: Date.now() });
+              keepOrigins(again);
+              setSorting({ busy: false, failed: null });
+            })
+            .catch((e: unknown) => setSorting({ busy: false, failed: messageOf(e) }));
+        }
+      : null;
+
   // pictures still being made: the page asked again after short and then longer pauses, each picture that came filled in
   const latest = useRef(page);
   latest.current = page;
@@ -1084,6 +1114,19 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
           }
         />
       </div>
+      {origins && origins.unsorted > 0 && (
+        <div className="vw-stale" role="status">
+          <span>
+            {origins.unsorted === 1 ? "1 scan was sorted before its decision" : `${n(origins.unsorted)} scans were sorted before their decisions`}
+          </span>
+          {resortVisit && (
+            <button type="button" className="button small secondary" disabled={sorting.busy} onClick={resortVisit}>
+              {sorting.busy ? "Sorting…" : "Sort the visit again"}
+            </button>
+          )}
+          {sorting.failed && <span className="warn">Not sorted: {sorting.failed}</span>}
+        </div>
+      )}
       {legend.length > 0 && (
         <div className="vw-legend" aria-label={`Coloured by ${colour}`}>
           {legend.map((l) => (
@@ -1137,6 +1180,9 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
                           const looks = needsLook(s);
                           const shown = names === "bids" && s.bids ? s.bids : s.name;
                           const hint = scanHint(s);
+                          const labels = perScan.get(s.id);
+                          const stale = staleAxes(labels);
+                          const where = originTitle(labels, sortedOf(origins, s.id));
                           return (
                             <a
                               key={s.id}
@@ -1146,7 +1192,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
                               className={i === cursor ? "vw-card vw-scan at" : "vw-card vw-scan"}
                               href={viewHref(scope, { ...view, mode: "browser", scan: s.id })}
                               tabIndex={i === cursor ? 0 : -1}
-                              title={[s.description, value?.word, looks ? `needs a look: ${questionWords(s)}` : ""].filter(Boolean).join(" · ") || undefined}
+                              title={[[s.description, value?.word, looks ? `needs a look: ${questionWords(s)}` : ""].filter(Boolean).join(" · "), where].filter(Boolean).join("\n") || undefined}
                               onFocus={() => setCursor(i)}
                               onMouseEnter={() => readAhead(s)}
                               onClick={(e) => {
@@ -1163,6 +1209,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
                                   </span>
                                 )}
                                 {looks && <span className="vw-tag look">look</span>}
+                                {stale.length > 0 && <span className="vw-tag stale">{stale.length === 1 ? staleTail(stale[0]) : `${stale.length} decided`}</span>}
                                 {s.images !== null && <span className="vw-slices">{n(s.images)}</span>}
                               </div>
                               <div className="vw-scan-words">

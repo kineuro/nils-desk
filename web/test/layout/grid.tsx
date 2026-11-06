@@ -146,6 +146,22 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const count = out === "subjects" ? subjects.length : out === "visits" ? visits.length : rows.length;
     return json({ valid: true, issues: [], funnel: [{ set: out, grain: "subject", stage: "where", rows: count, subjects: out === "subjects" ? count : 1 }] });
   }
+  // UX round 2: where each label came from; the first spine scan's body part a decision not sorted yet
+  if (u.pathname === "/api/origins") {
+    const sorted = { pack: "mri", version: "1.4.0", overlay: null, job: 3, at: "2026-11-01T08:00:00Z" };
+    const stacks = rows.map((r) => ({
+      stack: r.stack,
+      sorted,
+      unsorted: r.name === "SC_Sag_T2w_2D_TSE_ND",
+      axes: Object.entries(r.axes).map(([axis, value]) => {
+        const plain = { axis, values: value.split(","), confidence: 0.9, tier: "keyword", origin: "rules", line: "", state: "current", words: null, rules: [{ rule_set: axis, rule: `${axis}_words` }], decided: null };
+        return r.name === "SC_Sag_T2w_2D_TSE_ND" && axis === "body_part"
+          ? { ...plain, state: "unsorted", words: "decided neck; sorted before the decision", decided: { id: 77, kind: "person", value: "neck", values: ["neck"], by: "anna@site", campaign: { id: 6, name: "curate", status: "closed", item: 412 } } }
+          : plain;
+      }),
+    }));
+    return json({ count: stacks.length, unsorted: 1, stacks });
+  }
   if (u.pathname === "/api/cohorts") return json([{ name: "ms-all", subjects: 120, retired_at: null }]);
   return json({ error: `no door ${u.pathname}` }, 404);
 }) as typeof fetch;
@@ -164,6 +180,8 @@ const caps = {
       "PUT /api/ask/selections/{name}",
       "POST /api/ask/handles/{id}/promote",
       "GET /api/cohorts",
+      "GET /api/origins",
+      "POST /api/origins/resort",
     ],
     policy: [],
     auth: "token",
@@ -175,7 +193,7 @@ const caps = {
   kvasir: null,
   assistant: null,
   apps: [],
-  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work"], detail: "quasi", groups: [] },
+  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work", "pipelines:work"], detail: "quasi", groups: [] },
   desk: { version: "1.0.0", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
 } as unknown as Capabilities;
 

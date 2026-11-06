@@ -1,0 +1,61 @@
+/* SPDX-License-Identifier: AGPL-3.0-only
+   Where a label came from (UX round 2, 2026-11-06). A fact of the browser's
+   footer framed by its origin, as a value is framed in the desk: a thin
+   border and a 3px left bar in one colour. The rules' labels stay neutral; a
+   decision takes the brand's frame, a model a value colour, and a decision
+   the sort has not applied yet the caution frame, with what was decided after
+   the value. The details open above the footer on a press. On the grid, a
+   card whose label waits for a sort carries one caution tag. */
+
+.origin-fact { position: relative; display: inline-flex; }
+.dview-fact.origin { gap: calc(6 * var(--p)); font-family: inherit; cursor: pointer; }
+.dview-fact.origin:hover { background: var(--n-bg-hover); }
+.dview-fact.origin:focus-visible { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.dview-fact.origin[data-tone="decision"] { border-color: var(--n-brand-icon); box-shadow: inset 3px 0 0 var(--n-brand-icon); padding-left: calc(9 * var(--p)); }
+.dview-fact.origin[data-tone="model"] { border-color: var(--n-value-6); box-shadow: inset 3px 0 0 var(--n-value-6); padding-left: calc(9 * var(--p)); }
+.dview-fact.origin[data-tone="stale"] { border-color: var(--n-caution-icon); box-shadow: inset 3px 0 0 var(--n-caution-icon); padding-left: calc(9 * var(--p)); }
+.dview-fact.origin[aria-expanded="true"] { background: var(--n-bg-selected); }
+.origin-tail { color: var(--n-caution-fg); font-weight: 400; }
+
+.origin-pop {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: max-content;
+  min-width: 15rem;
+  max-width: min(24rem, calc(100vw - 32px));
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--n-line);
+  border-radius: var(--n-radius);
+  background: var(--n-bg-raised);
+  color: var(--n-text);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.4;
+  white-space: normal;
+  box-shadow: 0 8px 24px var(--n-scrim);
+}
+.origin-pop[data-tone="decision"] { border-left: 3px solid var(--n-brand-icon); }
+.origin-pop[data-tone="model"] { border-left: 3px solid var(--n-value-6); }
+.origin-pop[data-tone="stale"] { border-left: 3px solid var(--n-caution-icon); }
+.origin-head { color: var(--n-text-dim); }
+.origin-head b { margin-right: 0.35em; color: var(--n-text); font-weight: 600; }
+.origin-line { display: block; overflow-wrap: anywhere; }
+.origin-line.meta { color: var(--n-text-faint); }
+.origin-stale { color: var(--n-caution-fg); font-weight: 500; }
+.origin-line .button { margin-top: 2px; }
+
+/* the footer near the right edge on a phone: the details over the footer's width */
+@media (max-width: 560px) {
+  .origin-fact { position: static; }
+  .origin-pop { position: fixed; left: 16px; right: 16px; bottom: 5.5rem; width: auto; min-width: 0; max-width: none; }
+}
+
+/* the grid: a card whose label a decision was not sorted into yet */
+.vw-pic .vw-tag.stale { top: auto; bottom: calc(6 * var(--p)); left: calc(6 * var(--p)); border-color: var(--n-caution-line); background: var(--n-caution-bg); color: var(--n-caution-fg); }
+.vw-stale { display: inline-flex; align-items: center; gap: calc(8 * var(--p)); font-size: calc(13 * var(--p)); color: var(--n-caution-fg); }
+.vw-stale .button { min-height: calc(28 * var(--p)); padding: 0 calc(8 * var(--p)); font-size: calc(13 * var(--p)); }
