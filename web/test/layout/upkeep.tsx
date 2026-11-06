@@ -7,6 +7,7 @@
 //
 //   upkeep.html            the open campaign, its maker signed in
 //   upkeep.html?closing=1  a close running as a job, seen on the page
+//   upkeep.html?leased=1   asking one axis refused while an item is read
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -28,6 +29,7 @@ const DOORS = [
   "POST /api/campaigns/{id}/close",
   "POST /api/campaigns/{id}/export",
   "POST /api/campaigns/{id}/hold-back",
+  "POST /api/campaigns/{id}/requestion",
   "GET /api/campaigns/{id}/gallery",
   "POST /api/campaigns/{id}/gallery/accept",
   "GET /api/campaigns/{id}/batches",
@@ -94,6 +96,8 @@ const stats = { campaign: ID, pause_seconds: 300, raters: [{ principal: "rune@si
 
 // the close as a job: started, read twice closing, then closed with what it wrote
 let closeAsked = q.get("closing") === "1";
+// asking one axis: the dry run says what changes, the move asks body_part alone (2026-11-06)
+let asksOne = false;
 let reads = 0;
 const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -102,13 +106,23 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const method = init?.method ?? "GET";
   if (path === "/desk/capabilities") return json(caps);
   if (path === `/api/campaigns/${ID}` && method === "GET") {
-    if (!closeAsked) return json(campaign("open", null));
+    if (!closeAsked) {
+      const c = campaign("open", null);
+      return json(asksOne ? { ...c, question: { ...c.question, axes: ["body_part"], derive: ["body_region"] } } : c);
+    }
     reads += 1;
     return json(reads <= 2 || q.get("closing") === "1" ? campaign("closing", closeJob("running", true)) : campaign("closed", closeJob("done", false)));
   }
   if (path === `/api/campaigns/${ID}/close` && method === "POST") {
     closeAsked = true;
     return json({ job: 88, campaign: ID, state: "running" }, 202);
+  }
+  if (path === `/api/campaigns/${ID}/requestion` && method === "POST") {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { axes: string[]; dry_run?: boolean };
+    if (q.get("leased") === "1") return json({ error: "1 item(s) of body-part-curation are leased under the question as it stands; wait for them to be answered or released (nils campaign release <assignment>)" }, 409);
+    const one = body.axes[0];
+    if (!body.dry_run) asksOne = true;
+    return json({ campaign: ID, name: "body-part-curation", asked_before: AXES, asked: body.axes, derive: one === "body_part" ? ["body_region"] : [], answers_kept: 3, answers_derived: body.dry_run ? 0 : 3, dry_run: body.dry_run === true });
   }
   if (path === `/api/campaigns/${ID}/answers`) return json({ campaign: ID, count: 0, answers: [], blind: false });
   if (path === `/api/campaigns/${ID}/stats`) return json(stats);

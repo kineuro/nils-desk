@@ -16,7 +16,8 @@ import openCampaign from "../../test/fixtures/campaigns/campaign_open.json";
 import { ADMIN, DOORS, RATER, capsFor } from "./caps.fixture";
 import { CampaignBody, CloseDialog } from "./CampaignPage";
 import { closure, type Assignment, type Campaign, type Item } from "./client";
-import { aloneWords, closeStage, closingWords, leaseLine, mayReadAllInBatches, missingModes, type CloseJob } from "./upkeep";
+import { AskOneDialog } from "./AskOneDialog";
+import { aloneWords, askOnePlan, askOneRefused, askOneSaid, closeStage, closingWords, leaseLine, mayAskOneAxis, mayReadAllInBatches, missingModes, REQUESTION, type CloseJob } from "./upkeep";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -96,6 +97,93 @@ describe("the ways of reading not offered", () => {
     const c = axes({ counts: { items: { open: 2 }, assignments: {}, answers: 0 } });
     const html = renderToStaticMarkup(<CampaignBody caps={owner} campaign={c} answers={[]} answersBlind={false} sets={[]} onAct={() => undefined} />);
     expect(html).toContain("No gallery: it shows one axis at a time");
+  });
+});
+
+describe("asking one axis, which brings the gallery", () => {
+  const two = (over: Partial<Campaign> = {}) => campaign({ question: { kind: "axes", axes: ["body_part", "body_region"] }, suggest: "rules", counts: { items: { open: 2 }, assignments: {}, answers: 3 }, ...over });
+  const asks = capsFor({ grants: ADMIN, principal: "carol@walk", doors: [...DOORS_NOW, REQUESTION] });
+  const plan = { campaign: base.id, name: base.name, asked_before: ["body_part", "body_region", "technique"], asked: ["body_part"], derive: ["body_region"], answers_kept: 1204, answers_derived: 0, dry_run: true };
+  it("is the maker's or a Review worker's, on an open campaign asking two axes or more, where the engine has the door", () => {
+    expect(mayAskOneAxis(asks, two())).toBe(true);
+    expect(mayAskOneAxis(owner, two())).toBe(false);
+    expect(mayAskOneAxis(capsFor({ grants: RATER.filter((g) => g !== "review:work"), principal: "rune@walk", doors: [...DOORS_NOW, REQUESTION] }), two())).toBe(false);
+    expect(mayAskOneAxis(asks, two({ status: "closed" }))).toBe(false);
+    expect(mayAskOneAxis(asks, two({ question: { kind: "axes", axes: ["body_part", "body_region"], derive: ["body_region"] } }))).toBe(false);
+  });
+  it("puts the button on the No gallery line, named for the first axis", () => {
+    const html = renderToStaticMarkup(<CampaignBody caps={asks} campaign={two()} answers={[]} answersBlind={false} sets={[]} onAct={() => undefined} onAskOne={() => undefined} />);
+    expect(html).toMatch(/No gallery: it shows one axis at a time[^<]*<button[^>]*>Ask body_part alone<\/button>/);
+    const without = renderToStaticMarkup(<CampaignBody caps={owner} campaign={two()} answers={[]} answersBlind={false} sets={[]} onAct={() => undefined} onAskOne={() => undefined} />);
+    expect(without).not.toContain("alone</button>");
+  });
+  it("says what changes: asked, derived, no longer asked, and the answers kept", () => {
+    expect(askOnePlan(plan)).toEqual([
+      { k: "Asked", v: "body_part" },
+      { k: "Derived from it", v: "body_region" },
+      { k: "Not asked any more", v: "technique" },
+      { k: "Answers given", v: "1,204 kept, read on body_part" },
+    ]);
+    expect(askOnePlan({ ...plan, asked_before: ["body_part", "body_region"], derive: [], answers_kept: 0 })).toEqual([
+      { k: "Asked", v: "body_part" },
+      { k: "Not asked any more", v: "body_region" },
+      { k: "Answers given", v: "none yet" },
+    ]);
+    expect(askOneSaid({ ...plan, dry_run: false, answers_derived: 1204 })).toBe("Asks body_part alone now; body_region derived from it. 1,204 answers kept.");
+  });
+  it("says a leased item holds it back in the page's words", () => {
+    expect(askOneRefused("2 item(s) of body-part-curation are leased under the question as it stands; wait for them to be answered or released (nils campaign release <assignment>)")).toBe("2 items are being read now. Ask again once they are answered or given back.");
+    expect(askOneRefused("campaign x is closed")).toBe("Refused: campaign x is closed.");
+  });
+});
+
+describe("the ask-one confirm", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    dialogs();
+    host = document.createElement("div");
+    document.body.appendChild(host);
+    root = createRoot(host);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  });
+  const c = campaign({ question: { kind: "axes", axes: ["body_part", "body_region"] } });
+  const answer = (axes: string[], dry: boolean) => ({ campaign: c.id, name: c.name, asked_before: ["body_part", "body_region"], asked: axes, derive: axes[0] === "body_part" ? ["body_region"] : [], answers_kept: 3, answers_derived: dry ? 0 : 3, dry_run: dry });
+
+  it("reads the dry run first, moves only on the press, and says what it did", async () => {
+    const door = engine((call) => {
+      if (call.method !== "POST" || call.url !== `/api/campaigns/${c.id}/requestion`) return undefined;
+      const body = call.body as { axes: string[]; dry_run?: boolean };
+      return { status: 200, body: answer(body.axes, body.dry_run === true) };
+    });
+    const onDone = vi.fn();
+    act(() => root.render(<AskOneDialog campaign={c} onClose={() => undefined} onDone={onDone} />));
+    await settle();
+    expect(door.of("POST", `/api/campaigns/${c.id}/requestion`).map((x) => x.body)).toEqual([{ axes: ["body_part"], dry_run: true }]);
+    expect(host.textContent).toContain("Derived from itbody_region");
+    expect(host.textContent).toContain("Answers given3 kept, read on body_part");
+    // another axis is read again before anything moves
+    act(() => button(host, "body_region")!.click());
+    await settle();
+    expect(door.of("POST", `/api/campaigns/${c.id}/requestion`).at(-1)!.body).toEqual({ axes: ["body_region"], dry_run: true });
+    act(() => button(host, "body_part")!.click());
+    await settle();
+    act(() => button(host, "Ask body_part alone")!.click());
+    await settle();
+    expect(door.of("POST", `/api/campaigns/${c.id}/requestion`).at(-1)!.body).toEqual({ axes: ["body_part"] });
+    expect(onDone).toHaveBeenCalledWith("Asks body_part alone now; body_region derived from it. 3 answers kept.");
+  });
+
+  it("offers no press while an item is leased, and says so", async () => {
+    engine((call) => (call.method === "POST" ? { status: 409, body: { error: "1 item(s) of base-check are leased under the question as it stands; wait for them to be answered or released (nils campaign release <assignment>)" } } : undefined));
+    act(() => root.render(<AskOneDialog campaign={c} onClose={() => undefined} onDone={() => undefined} />));
+    await settle();
+    expect(host.textContent).toContain("1 item is being read now. Ask again once it is answered or given back.");
+    expect((button(host, "Ask body_part alone") as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

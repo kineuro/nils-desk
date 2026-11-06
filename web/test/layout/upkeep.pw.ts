@@ -59,6 +59,30 @@ for (const vp of [
     expect(await sideways(page)).toBeLessThanOrEqual(0);
   });
 
+  test(`asking one axis at ${vp.width} by ${vp.height}: the button on the No gallery line, the confirm says what changes, then the line is gone`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/upkeep.html");
+    await page.locator(".mode-missing").getByRole("button", { name: "Ask body_part alone" }).click();
+    const dialog = page.locator("dialog");
+    await expect(dialog.locator(".ask-one-plan")).toContainText("Derived from it");
+    await expect(dialog.locator(".ask-one-plan")).toContainText("body_region");
+    await expect(dialog.locator(".ask-one-plan")).toContainText("3 kept, read on body_part");
+    expect(await sideways(page)).toBeLessThanOrEqual(0);
+    await shot(page, `upkeep-ask-one-${vp.width}x${vp.height}`);
+    await dialog.getByRole("button", { name: "Ask body_part alone" }).click();
+    await expect(page.locator("p.said")).toContainText("Asks body_part alone now; body_region derived from it. 3 answers kept.");
+    await expect(page.locator(".mode-missing")).toHaveCount(0);
+    await shot(page, `upkeep-ask-one-done-${vp.width}x${vp.height}`);
+  });
+
+  test(`asking one axis while an item is read at ${vp.width} by ${vp.height}: no press, and why`, async ({ page }) => {
+    await page.setViewportSize(vp);
+    await page.goto("/upkeep.html?leased=1");
+    await page.locator(".mode-missing").getByRole("button", { name: "Ask body_part alone" }).click();
+    await expect(page.locator("dialog .warn")).toHaveText("1 item is being read now. Ask again once it is answered or given back.");
+    await expect(page.locator("dialog").getByRole("button", { name: "Ask body_part alone" })).toBeDisabled();
+  });
+
   test(`a close running seen on the page at ${vp.width} by ${vp.height}: how far, and no second close`, async ({ page }) => {
     await page.setViewportSize(vp);
     await page.goto("/upkeep.html?closing=1");
