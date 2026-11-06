@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import type { Capabilities } from "../capabilities";
 import { SETS } from "../grants";
 import type { AdmissionRecord } from "./kvasir";
-import { behindParts, checkedWords, contractWords, keptByWords, lookedWords, newerWords, partRows, restartByHand, runtimeName, modelRuntimeWords, updateWords, uptimeWords } from "./parts";
+import { behindParts, checkedWords, contractWords, keptByWords, lookedWords, newerWords, nextLookWords, orderWords, partRows, restartByHand, runtimeName, modelRuntimeWords, updateWords, uptimeWords, withEngine } from "./parts";
 import type { Install, PartRelease, Release } from "./supervise";
 
 function caps(over: Partial<Capabilities> = {}): Capabilities {
@@ -142,17 +142,23 @@ describe("the words", () => {
     expect(checkedWords(1_000, 31_000)).toBe("checked just now");
     expect(checkedWords(0, 150_000)).toBe("checked 2 minutes ago");
   });
-  it("say when the releases were looked up, which the supervisor keeps for a quarter of an hour, and nothing where an engine does not say", () => {
+  it("say when the releases were looked for, to the ten seconds under a minute, and nothing where an engine does not say", () => {
     const at = Date.parse("2026-10-16T01:50:00Z");
     expect(lookedWords(null, at)).toBeNull();
     expect(lookedWords(undefined, at)).toBeNull();
     expect(lookedWords("not a time", at)).toBeNull();
-    expect(lookedWords("2026-10-16T01:50:00Z", at + 20_000)).toBe("releases looked up just now");
-    expect(lookedWords("2026-10-16T01:50:00Z", at - 5_000)).toBe("releases looked up just now");
-    expect(lookedWords("2026-10-16T01:50:00Z", at + 60_000)).toBe("releases looked up 1 minute ago");
-    expect(lookedWords("2026-10-16T01:50:00Z", at + 14 * 60_000 + 59_000)).toBe("releases looked up 14 minutes ago");
-    expect(lookedWords("2026-10-16T01:50:00Z", at + 3_600_000)).toBe("releases looked up 1 hour ago");
-    expect(lookedWords("2026-10-16T01:50:00Z", at + 5 * 3_600_000 + 1_000)).toBe("releases looked up 5 hours ago");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 5_000)).toBe("looked for releases just now");
+    expect(lookedWords("2026-10-16T01:50:00Z", at - 5_000)).toBe("looked for releases just now");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 43_000)).toBe("looked for releases 40 s ago");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 60_000)).toBe("looked for releases 1 min ago");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 14 * 60_000 + 59_000)).toBe("looked for releases 14 min ago");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 3_600_000)).toBe("looked for releases 1 h ago");
+    expect(lookedWords("2026-10-16T01:50:00Z", at + 5 * 3_600_000 + 1_000)).toBe("looked for releases 5 h ago");
+  });
+  it("say when the next full look is where GitHub's requests an hour are spent", () => {
+    const release: Release = { installed: null, newest: null, newer: null, error: null, command: "nils update --all", next_look: "2026-10-16T13:05:00Z", allowance: "GitHub has 0 of this hour's requests left for this address" };
+    expect(nextLookWords(release, "UTC")).toBe("next full look at 13:05: GitHub has 0 of this hour's requests left for this address");
+    expect(nextLookWords({ ...release, next_look: null }, "UTC")).toBeNull();
   });
   it("say what an update changes, and nothing when nothing is newer", () => {
     expect(updateWords(install())).toEqual([
@@ -245,6 +251,42 @@ describe("each part beside its own newest release", () => {
     expect(partRows(caps(), i, null, [])[1]).toMatchObject({ newer: { text: "1.0.0-alpha.52 waits for the engine", tag: false }, update: null });
     const both = install({ release: listed([own("engine", "1.0.0-alpha.48", "1.0.0-alpha.49", "1.0.0-alpha.49"), own("desk", "1.0.0-alpha.49", "1.0.0-alpha.52", "1.0.0-alpha.52", held)]) });
     expect(updateWords(both)).toContain("Desk 1.0.0-alpha.52 needs HTTP contract 8 (the engine speaks 7); it waits for an engine release that speaks it.");
+  });
+  it("says a release being built where nothing newer is out, and a desk that goes with the engine", () => {
+    const engine = { ...own("engine", "1.0.0-alpha.49", "1.0.0-alpha.49", null), coming: "1.0.0-alpha.50" };
+    const i = install({ release: listed([engine, own("desk", "1.0.0-alpha.51", "1.0.0-alpha.51", null)]) });
+    expect(partRows(caps(), i, null, [])[0]).toMatchObject({ newer: { text: "1.0.0-alpha.50 being released", tag: false }, update: null });
+    const desk = { ...own("desk", "1.0.0-alpha.51", "1.0.0-alpha.52", "1.0.0-alpha.52"), needs: "HTTP contract 8", after: "engine" };
+    expect(withEngine(desk)).toBe(true);
+    expect(withEngine(own("desk", "1.0.0-alpha.51", "1.0.0-alpha.52", "1.0.0-alpha.52"))).toBe(false);
+    expect(withEngine({ ...desk, held: "waits" })).toBe(false);
+  });
+  it("say the order before it starts, part by part with why, what stays out, and nothing of an order from an engine that sends none", () => {
+    const i = install({
+      release: {
+        ...listed([own("engine", "1.0.0-alpha.49", "1.0.0-alpha.50", "1.0.0-alpha.50"), own("desk", "1.0.0-alpha.51", "1.0.0-alpha.52", "1.0.0-alpha.52"), own("kvasir", "1.0.0-alpha.2", "1.0.0-alpha.3", "1.0.0-alpha.3")]),
+        order: [
+          { part: "engine", from: "1.0.0-alpha.49", to: "1.0.0-alpha.50", why: "first: desk 1.0.0-alpha.52 needs its HTTP contract 8" },
+          { part: "desk", from: "1.0.0-alpha.51", to: "1.0.0-alpha.52", why: "after the engine: it needs HTTP contract 8" },
+          { part: "kvasir", from: "1.0.0-alpha.2", to: "1.0.0-alpha.3", why: null },
+          { part: "rules", pack: "mri", from: "1.4.0", to: "1.4.1", why: "after the engine: read against engine 1.0.0-alpha.50" },
+        ],
+        stays: [
+          { part: "rules", pack: "clinical", version: "0.4.0", why: "clinical 0.4.0 needs pack contract 11" },
+          { part: "kvasir", version: "1.0.0-alpha.4", why: "it needs a newer Node" },
+        ],
+      },
+    });
+    expect(orderWords(i)).toEqual({
+      steps: [
+        "The engine moves from 1.0.0-alpha.49 to 1.0.0-alpha.50, first: desk 1.0.0-alpha.52 needs its HTTP contract 8.",
+        "The desk moves from 1.0.0-alpha.51 to 1.0.0-alpha.52, after the engine: it needs HTTP contract 8.",
+        "Kvasir moves from 1.0.0-alpha.2 to 1.0.0-alpha.3, fetched and built again.",
+        "The MRI rules move from 1.4.0 to 1.4.1, their own release, after the engine: read against engine 1.0.0-alpha.50; the engine reads them at its next look, and nothing is started again. Scans already sorted keep their answers until Sort again.",
+      ],
+      after: ["Clinical 0.4.0 needs pack contract 11.", "Kvasir 1.0.0-alpha.4 stays out: it needs a newer Node.", "Postgres stays at 17, and its data is not touched.", "Every part starts again, in order, once it is replaced."],
+    });
+    expect(orderWords(install())).toBeNull();
   });
   it("says the rule packs beside the engine's release, and offers the update where only they are behind", () => {
     const mri = (version: string, digest: string) => ({ name: "mri", version, digest });

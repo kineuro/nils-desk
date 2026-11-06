@@ -26,7 +26,7 @@ import { PlacesPage } from "./PlacesPage";
 import { keptRunning } from "./install";
 import { kvasir, type AdmissionRecord } from "./kvasir";
 import { settingsPage, settingsPages } from "./pages";
-import { checkedWords, contractWords, keptByWords, newerWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords } from "./parts";
+import { checkedWords, contractWords, keptByWords, newerWords, nextLookWords, orderWords, partName, partRows, partTitle, restartByHand, runtimeWords, updateWords, uptimeWords, withEngine } from "./parts";
 import { ReleasesLook } from "./ReleasesLook";
 import { SoftwarePage } from "./SoftwarePage";
 import { SortAgainDialog } from "./SortAgain";
@@ -121,6 +121,27 @@ function RestartPart({ caps, install, part, onChanged }: { caps: Capabilities; i
   );
 }
 
+/**
+ * A part's own Update. A part whose newer release needs the engine's next contract goes with the engine, first,
+ * as the update says, and the button says so (2026-11-06: a desk whose floor needs a newer engine waits for it).
+ */
+function UpdateOne({ part, install, working, onUpdate }: { part: string; install: Install | null; working: boolean; onUpdate: (label: string, parts: string | string[]) => void }) {
+  const row = install?.release.parts?.find((p) => p.part === part);
+  const engineFirst = withEngine(row);
+  const parts = engineFirst ? ["engine", part] : part;
+  return (
+    <button
+      type="button"
+      className="button secondary small"
+      disabled={working}
+      title={engineFirst ? `nils update --part engine --part ${part}` : `nils update --part ${part}`}
+      onClick={() => onUpdate(engineFirst ? `updating the engine, then ${partName(part)}` : `updating ${partName(part)}`, parts)}
+    >
+      {engineFirst ? "Update with the engine" : "Update"}
+    </button>
+  );
+}
+
 function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & { built: string[] }) {
   const supervised = may(caps, "install:work") && install !== null;
   const [admissions, setAdmissions] = useState<AdmissionRecord[] | null>(null);
@@ -147,13 +168,15 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
     };
   }, [local]);
 
+  // the look's age is said to the ten seconds, so the clock the words are read against moves every five
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 30_000);
+    const t = setInterval(() => setNow(Date.now()), 5_000);
     return () => clearInterval(t);
   }, []);
 
   const rows = partRows(caps, install, admissions, built);
   const out = install ? newerWords(install) : null;
+  const order = install ? orderWords(install) : null;
   // the desk that drew this page may be replaced, so the page is drawn again by the one that runs now
   const updated = () => {
     setTimeout(() => location.reload(), 1500);
@@ -188,11 +211,28 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
             <h2>{out}</h2>
             {!install.release.parts && install.release.installed && <span className="meta">you run {install.release.installed}</span>}
           </div>
-          <ul>
-            {updateWords(install).map((w) => (
-              <li key={w}>{w}</li>
-            ))}
-          </ul>
+          {order ? (
+            <>
+              <ol className="update-order" aria-label="the order">
+                {order.steps.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ol>
+              {order.after.length > 0 && (
+                <ul>
+                  {order.after.map((w) => (
+                    <li key={w}>{w}</li>
+                  ))}
+                </ul>
+              )}
+            </>
+          ) : (
+            <ul>
+              {updateWords(install).map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
           <div className="update-foot">
             {supervised ? (
               <>
@@ -204,7 +244,7 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
                 >
                   Update everything
                 </button>
-                <span className="meta">one part at a time; this page loads again when the desk is back</span>
+                <span className="meta">{order ? "in this order, one part at a time" : "one part at a time"}; this page loads again when the desk is back</span>
               </>
             ) : (
               <span className="meta">An administrator updates it here.</span>
@@ -218,8 +258,17 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
         <div className="section-head rule-top">
           <h2>Installed</h2>
           {install?.release.error && !out && <span className="meta">the newest release could not be read</span>}
-          {checked && <span className="meta">{checked}</span>}
-          {install && <ReleasesLook looked={install.release.looked_at} now={now} working={look.working} onLook={lookAgain} />}
+          {checked && !install?.release.looked_at && <span className="meta">{checked}</span>}
+          {install && (
+            <ReleasesLook
+              looked={install.release.looked_at}
+              now={now}
+              working={look.working}
+              onLook={lookAgain}
+              waits={nextLookWords(install.release)}
+              failed={install.release.watch_error ?? null}
+            />
+          )}
         </div>
         <Acted acting={look.acting} />
         {sortQueued && <QueuedWords caps={caps} queued={sortQueued} />}
@@ -265,18 +314,7 @@ function PartsPage({ caps, install, checkedAt, onChanged, built }: PageProps & {
                     <td>
                       {r.newer && (r.newer.tag ? <span className="tag brand">{r.newer.text}</span> : <span className="meta">{r.newer.text}</span>)}
                       {supervised && r.update && (
-                        <button
-                          type="button"
-                          className="button secondary small"
-                          disabled={update.working}
-                          title={`nils update --part ${r.update}`}
-                          onClick={() => {
-                            const part = r.update ?? "";
-                            update.start(`updating ${partName(part)}`, () => supervise.updateAll(part), updated);
-                          }}
-                        >
-                          Update
-                        </button>
+                        <UpdateOne part={r.update} install={install} working={update.working} onUpdate={(label, parts) => update.start(label, () => supervise.updateAll(parts), updated)} />
                       )}
                     </td>
                   )}
