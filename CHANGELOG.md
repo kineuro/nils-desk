@@ -17,6 +17,7 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ### Changed
 
+- Review, Data, Pipelines and Settings say the person's words for the engine's states: files "held until mapped" or "held" now "need a subject code", a scan filed under another subject is "kept apart", a model's "staged" answers are "proposed" or "waiting to be confirmed", a question "held by" a campaign is "in" it, a bare "code" is a "subject code", "personnummer" alone is an "identifying ID", and the registry's epoch and a run's "units" are left out of sentences that did not need them.
 - The campaign pages speak plainly: a batch's stacks are "accepted as suggested" and the rest "left to read one by one", items are "set aside" rather than held back, and items an earlier close wrote are "written already".
 - The pace says its pause bound in its heading and counts breaks; a claim left open is no longer read as reading time.
 - Review > Proposals is one card per model and axis with its two acts, where the engine counts them (engine `GET /api/review/proposals`): Commit the N at or above the threshold, after a confirm that counts them and says the scans re-sort, and Make a campaign of the other M for me, which asks only the campaign's name, prefilled, and lands on the new campaign: you its one rater, the model's answer filled in, closing into decisions in force. The change matrix stays one open away (Value by value). Until now each cell of the matrix was opened and committed by hand.

@@ -54,17 +54,17 @@ function identityCard(identity: ReviewItem[]): NeedCard {
   const files = held.reduce((s, i) => s + (typeof (i.evidence as Json | null)?.files === "number" ? ((i.evidence as Json).files as number) : membersOf(i)), 0);
   const sources = [...new Set(identity.map(datasetOf).filter((d): d is string => d !== null))];
   const from = sources.length > 0 ? `from ${sources.length === 1 ? "dataset" : "datasets"} ${sources.join(" and ")}` : null;
-  const heldWords = held.length > 0 ? `${n(files)} ${files === 1 ? "file" : "files"} held until mapped` : null;
+  const heldWords = held.length > 0 ? `${n(files)} ${files === 1 ? "file needs" : "files need"} a subject code` : null;
   const provisionalWords = provisional.length > 0 ? `${n(provisional.length)} coded without a map` : null;
   const identifiers = href("review", "identifiers");
   const base = { family: "identity" as const, count: identity.length };
   if (twice.length > 0) {
-    return { ...base, value: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"}`, words: "may be one subject twice", meta: ["the same identifier under two codes", from, heldWords, provisionalWords].filter(Boolean).join(" · "), act: { label: "Decide", href: identifiers } };
+    return { ...base, value: `${n(twice.length)} ${twice.length === 1 ? "subject" : "subjects"}`, words: "may be one subject twice", meta: ["the same identifier under two subject codes", from, heldWords, provisionalWords].filter(Boolean).join(" · "), act: { label: "Decide", href: identifiers } };
   }
   if (held.length > 0) {
     // one dataset's held files are mapped on its own page; several are named on the Identifiers page
     const heldSources = [...new Set(held.map(datasetOf).filter((d): d is string => d !== null))];
-    return { ...base, value: `${n(files)} ${files === 1 ? "file" : "files"}`, words: "held until mapped", meta: ["an identifier the map does not know", from, provisionalWords].filter(Boolean).join(" · "), act: { label: "Map them", href: heldSources.length === 1 ? mapHref(held[0]) : identifiers } };
+    return { ...base, value: `${n(files)} ${files === 1 ? "file" : "files"}`, words: "need a subject code", meta: ["an identifier the map does not know", from, provisionalWords].filter(Boolean).join(" · "), act: { label: "Map them", href: heldSources.length === 1 ? mapHref(held[0]) : identifiers } };
   }
   if (provisional.length > 0) {
     return { ...base, value: `${n(provisional.length)} ${provisional.length === 1 ? "subject" : "subjects"}`, words: "coded without a map", meta: ["merged into the person it stands for by a merge, or by a map that names the identifier", from].filter(Boolean).join(" · "), act: { label: "Merge", href: identifiers } };

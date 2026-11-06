@@ -548,7 +548,7 @@ export function answeredWords(a: Answered, s: GridState | null = null): string {
   const apart = t ? t.apart - t.skip : 0;
   if (apart > 0) parts.push(`${n(apart)} set apart`);
   if (a.skipped.length > 0) parts.push(`${n(a.skipped.length)} left for later`);
-  if (a.staged) parts.push("staged for a person to confirm");
+  if (a.staged) parts.push("waiting for a person to confirm");
   if (a.resort?.state === "done") parts.push("sorted again");
   else if (a.resort?.why) parts.push(a.resort.why);
   return parts.join(" · ");

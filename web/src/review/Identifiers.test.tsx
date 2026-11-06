@@ -61,14 +61,14 @@ describe("the identity questions as they draw", () => {
       />,
     );
     const rows = html.split("<tr>").slice(1);
-    const heldRow = rows.find((r) => r.includes("held until the map names"))!;
+    const heldRow = rows.find((r) => r.includes("wait until the map names"))!;
     expect(heldRow).toContain("Map them</a>");
     expect(heldRow).not.toContain(">Decide</button>");
     expect(heldRow).not.toContain(">Merge</button>");
     const codedRow = rows.find((r) => r.includes("coded from an identifier"))!;
     expect(codedRow).toContain(">Merge</button>");
     expect(codedRow).not.toContain(">Decide</button>");
-    const twiceRow = rows.find((r) => r.includes("two codes share one identifier"))!;
+    const twiceRow = rows.find((r) => r.includes("two subject codes share one identifier"))!;
     expect(twiceRow).toContain(">Merge</button>");
     expect(twiceRow).toContain(">Decide</button>");
     expect(html).toContain("Nothing is decided here");

@@ -357,7 +357,7 @@ export function preflightCells(p: Preflight): { k: string; v: string; title?: st
   if (g) cells.push({ k: "GPU", v: g.need === "none" ? "none" : g.available ? `${g.need}, ${g.device ?? "free"}` : g.need === "optional" ? "optional, runs on the CPU" : "needed, none free" });
   const b = p.budget;
   if (b) {
-    const unit = p.needs ? `${p.needs.cores ?? "?"} cores, ${p.needs.memory_gb ?? "?"} GB a unit` : null;
+    const unit = p.needs ? `${p.needs.cores ?? "?"} cores, ${p.needs.memory_gb ?? "?"} GB each` : null;
     const gb = b.memory_gb === null ? "?" : n(Math.round(b.memory_gb));
     cells.push({ k: "budget", v: b.fits === false ? "does not fit" : `${b.cores ?? "?"} cores, ${gb} GB`, title: [unit, b.why ?? null].filter(Boolean).join("; ") || undefined });
   }

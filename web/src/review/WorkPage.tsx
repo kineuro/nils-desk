@@ -210,7 +210,7 @@ export function WorkBody({ caps, summary, list, mine = {}, since = null, why = [
             {g.rows.length === 0 ? <p className="meta work-empty">Nothing waits.</p> : <WorkRows rows={g.rows} mine={mine} />}
             {g.job === "answer" && held > 0 && (
               <p className="meta work-held">
-                {n(held)} {held === 1 ? "question is" : "questions are"} held by campaigns, answered there.
+                {n(held)} {held === 1 ? "question is" : "questions are"} in campaigns, answered there.
               </p>
             )}
           </section>

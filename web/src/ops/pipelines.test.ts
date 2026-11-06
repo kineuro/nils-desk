@@ -35,7 +35,7 @@ describe("a job's card", () => {
     expect(c.icon).toBe("shield");
     expect(c.meta).toMatch(/^job 120 · astrid · since /);
     expect(c.progress?.fraction).toBeCloseTo(0.8, 2);
-    expect(c.progress?.words).toBe("1,766 of 2,208 files · 1,358 a second · under 2 min left · 4 held until mapped");
+    expect(c.progress?.words).toBe("1,766 of 2,208 files · 1,358 a second · under 2 min left · 4 need a subject code");
     expect(c.cancel).toBe("data:work");
   });
   it("reads a digest's own counters when the whole is not known", () => {

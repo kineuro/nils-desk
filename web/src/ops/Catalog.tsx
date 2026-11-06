@@ -713,7 +713,7 @@ export function RunDialog({ caps, pipeline, onClose, onDone }: { caps: Capabilit
         <div className="note-body">
           <p className="note-lead">What the run writes</p>
           <p className="note-detail">
-            {writesWords(pipeline) || "files per unit"}, under the working place. Each {pipeline.level} of the selection is one unit; a unit that fails is one item in Review.
+            {writesWords(pipeline) || `files per ${pipeline.level}`}, under the working place. Each {pipeline.level} of the selection runs apart; one that fails is one item in Review.
             {pipeline.needs?.gpu === "required" ? " It needs a GPU." : pipeline.needs?.gpu === "optional" ? " It uses a GPU where there is one." : ""}
           </p>
           {command && <code>nils {command.join(" ")}</code>}

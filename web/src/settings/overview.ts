@@ -121,7 +121,7 @@ export function registryCard(caps: Capabilities, install: Install | null, backen
   const value = kind === null ? "kept by the engine" : kind.startsWith("postgres") ? `Postgres${version ? ` ${version}` : ""}` : "SQLite";
   const r = caps.engine?.registry;
   const facts: string[] = [];
-  if (r) facts.push(`epoch ${r.epoch.toLocaleString("en-GB")}${r.schema_version !== undefined ? ` · schema ${r.schema_version}` : ""}`);
+  if (r?.schema_version !== undefined) facts.push(`schema ${r.schema_version}`);
   if (timezone) facts.push(`dates read in ${timezone}`);
   return { page: "backups", title: "Registry", icon: "data", state: places ? registryRule(places) : null, value, facts };
 }

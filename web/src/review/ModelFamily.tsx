@@ -43,7 +43,7 @@ export function ChangeMatrix({ groups, axis, on, onCell }: { groups: ModelGroup[
                 return (
                   <td key={t} className={here ? "num on" : "num"}>
                     {c ? (
-                      <button type="button" aria-pressed={here} title={`${n(c.staged)} staged`} onClick={() => onCell(f, t)}>
+                      <button type="button" aria-pressed={here} title={`${n(c.staged)} waiting to be confirmed`} onClick={() => onCell(f, t)}>
                         {n(c.stacks)}
                       </button>
                     ) : (

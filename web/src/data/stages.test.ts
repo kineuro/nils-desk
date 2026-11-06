@@ -53,7 +53,7 @@ describe("the stage strip of an engine that reports the stages", () => {
       ["classified", 474, "of 486", "done", [120, 119]],
       ["reviewed", 0, "of 12", "wait", []],
     ]);
-    expect(s[0].words).toBe("14 changed · 0 held");
+    expect(s[0].words).toBe("14 changed · 0 need a subject code");
     expect(s[1].words).toBe("2,208 new · 14 changed · 9,102 unchanged · 3 refused");
     expect(s[2].words).toBe("41 sessions · 38 subjects · 2 sessions moved");
     expect(s[3].words).toBe("by mri 0.1.1 · 12 unsure");

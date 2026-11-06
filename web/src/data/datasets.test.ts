@@ -87,7 +87,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("a dataset's card", () => {
   it("leads with reading, then what is held, what waits, not read, not sorted, then up to date", () => {
-    expect(datasetState(incoming)).toEqual({ words: "4 held", tone: "caution" });
+    expect(datasetState(incoming)).toEqual({ words: "4 need a subject code", tone: "caution" });
     expect(datasetState({ ...incoming, held: { files: 0, identifiers: 0 } })).toEqual({ words: "12 to sort", tone: "caution" });
     expect(datasetState({ ...incoming, digests: { ...incoming.digests, recent: [{ ...incoming.digests.recent[0], state: "running" }] } })).toEqual({ words: "reading now", tone: "brand" });
     expect(datasetState(exchange)).toEqual({ words: "not sorted", tone: "neutral" });
@@ -144,7 +144,7 @@ describe("a dataset's card", () => {
 
   it("ends with its newest batch: what was pseudonymised, the new subjects, what is held", () => {
     // the newest batch started today, at a time the browser's own clock draws
-    expect(lastLine(incoming, now)).toMatch(/^today \d\d:\d\d: 2,208 files pseudonymised · 38 new subjects · 4 files held until mapped$/u);
+    expect(lastLine(incoming, now)).toMatch(/^today \d\d:\d\d: 2,208 files pseudonymised · 38 new subjects · 4 files need a subject code$/u);
     expect(batchLine(incoming.digests.recent[1], now)).toBe("20 Aug: 2,208 files pseudonymised · 41 new subjects");
     expect(batchLine({ ...incoming.digests.recent[1], pseudonymised: { files: 0, changed: 14, held: 0, job: 76 } }, now)).toBe("20 Aug: 14 files changed, pseudonymised again · 41 new subjects");
     // an older engine's batch counts its files as before
@@ -158,7 +158,7 @@ describe("the five marks of a batch", () => {
   it("read the batch's stages when the engine gives them", () => {
     const stages = (stagesFixture as { stages: BatchStages }).stages;
     expect(stripMarks(newest, stages).map((m) => [m.name, m.mark, m.words])).toEqual([
-      ["pseudonymised", "wait", "4 held"],
+      ["pseudonymised", "wait", "4 need a subject code"],
       ["walked", "done", "2,208 files"],
       ["digested", "done", "412 stacks"],
       ["classified", "wait", "400 of 412"],
@@ -192,7 +192,7 @@ describe("the five marks of a batch", () => {
     expect(chainJobs(null)).toEqual([]);
   });
   it("offer the held files, what to sort, a read again, or say it is sorted", () => {
-    expect(batchTail(newest)).toEqual({ kind: "held", words: "4 held: map them", count: 4 });
+    expect(batchTail(newest)).toEqual({ kind: "held", words: "4 need a subject code: map them", count: 4 });
     expect(batchTail(earlier)).toEqual({ kind: "look", words: "12 need a look", count: 12 });
     expect(batchTail({ ...earlier, to_sort: 0 }).kind).toBe("sorted");
     expect(batchTail({ ...earlier, state: "failed", pseudonymised: null } as Batch).words).toBe("Read again");
@@ -266,7 +266,7 @@ describe("a v0 cohort folder", () => {
   it("is named as one, with what its two trees hold and what v0 skipped", () => {
     const words = v0Words({ v0: { original_files: 41806, raw_files: 41790, renamed: false } });
     expect(words?.lead).toBe("This is a NILS v0 cohort folder");
-    expect(words?.detail).toBe("derivatives/dcm-original holds 41,806 files as they came from the scanners, and derivatives/dcm-raw holds 41,790 files v0 pseudonymised, with v0's codes in PatientID.");
+    expect(words?.detail).toBe("derivatives/dcm-original holds 41,806 files as they came from the scanners, and derivatives/dcm-raw holds 41,790 files v0 pseudonymised, with v0's subject codes in PatientID.");
     expect(words?.skipped).toBe(16);
     expect(v0Words({ v0: null })).toBeNull();
     expect(v0Words(null)).toBeNull();
@@ -361,7 +361,7 @@ describe("the map", () => {
     expect(reportLines(report as ImportReport).map((l) => l.words)).toEqual([
       "38 subjects named: 30 known, 8 new",
       "42 identifiers filed: 30 known, 12 new; new types: site-id",
-      "4 held files are released",
+      "4 files have a subject code now",
       "1 subject merges into another: S-0412 into S-0007",
     ]);
     const conflicts = reportLines({ ...(report as ImportReport), merges: [], conflicts: [{ row: 12, why: "the identifier is on another subject" }] });

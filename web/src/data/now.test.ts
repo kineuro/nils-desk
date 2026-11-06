@@ -40,7 +40,7 @@ describe("the job cards", () => {
     const [pseud, then, digest] = cards;
     // since a time today, as the browser's own clock draws it
     expect(pseud.line).toMatch(/^since \d\d:\d\d · then read, then sort$/u);
-    expect(pseud.progress?.words).toBe("1,766 of 2,208 files · 24 a second · under a minute left · 4 held until mapped");
+    expect(pseud.progress?.words).toBe("1,766 of 2,208 files · 24 a second · under a minute left · 4 need a subject code");
     expect(Math.round((pseud.progress?.fraction ?? 0) * 100)).toBe(80);
     expect(pseud.cancel).toEqual({ label: "Cancel", refusal: null });
     // the queued digest waits for job 120, so it is the chain's card, dropped by its own id

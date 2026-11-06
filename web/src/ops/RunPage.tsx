@@ -219,7 +219,7 @@ export function RunPage({ caps, id }: { caps: Capabilities; id: number }) {
         by={by}
         onBy={setBy}
         said={said}
-        onCancel={r.job_id !== null && acts.cancel && load.jobAlive ? () => act(`Run ${r.id} stops at its next heartbeat; the units it finished are kept.`, ops.cancel(r.job_id!)) : null}
+        onCancel={r.job_id !== null && acts.cancel && load.jobAlive ? () => act(`Run ${r.id} stops in a moment; what it finished is kept.`, ops.cancel(r.job_id!)) : null}
         onResume={goesOn}
         onCheck={checkable ? () => setChecking(true) : null}
         onAgain={goesOn}
@@ -362,7 +362,7 @@ export function RunView(props: {
             <p className="note-lead">{words.head[0].toUpperCase() + words.head.slice(1)}</p>
             {words.rest && reasons.length === 0 && <p className="note-detail">{words.rest}</p>}
             {reasons.length > 0 && (
-              <ul className="preflight-missing made-why" aria-label="why units made nothing">
+              <ul className="preflight-missing made-why" aria-label="why some made nothing">
                 {reasons.map((w) => (
                   <li key={w.why}>
                     <b className="num">{heldWords(w.count)}</b> {w.why}
@@ -393,7 +393,7 @@ export function RunView(props: {
           {checks.declared === 0 ? "none declared" : `${n(checks.declared)} declared · ${heldWords(checks.breaches)} ${checks.breaches === 1 ? "breach" : "breaches"}${checks.unchecked > 0 ? ` · ${n(checks.unchecked)} unchecked` : ""}`}
         </span>
       </div>
-      {allPassed(r) && !running && (made === null || (made.made ?? 1) > 0) && <p className="meta">Every unit that finished passed its checks.</p>}
+      {allPassed(r) && !running && (made === null || (made.made ?? 1) > 0) && <p className="meta">Everything that finished passed its checks.</p>}
       {checks.totals && <p className="meta">Counted by check at your detail; a count under five scans reads fewer than five.</p>}
       {byCheck.length > 0 && (
         <div className="table-wrap">
@@ -490,7 +490,7 @@ export function RunView(props: {
           </table>
         </div>
       )}
-      {totals && <p className="meta">At your detail a run names no unit; its units are counted by state and reason.</p>}
+      {totals && <p className="meta">At your detail a run names no scan; its work is counted by state and reason.</p>}
       {units.length > 0 && (
         <div className="table-wrap">
           <table className="thin">
@@ -521,7 +521,7 @@ export function RunView(props: {
                 return (
                   <Fragment key={u.unit ?? `u${i}`}>
                     <tr className={f || lacks || said.status === "dropped" ? "has-fail" : undefined}>
-                      <td className="path">{u.unit ?? `unit ${i + 1}`}</td>
+                      <td className="path">{u.unit ?? `#${i + 1}`}</td>
                       <td>
                         <span className={TONE_TAG[t]}>{TONE_WORDS[t]}</span>
                         {said.status && said.status !== "skipped" && <span className={said.status === "routed" ? "tag brand" : "tag caution"}>{said.status}</span>}
@@ -726,7 +726,7 @@ function TableView({ table, by, onBy, choices }: { table: Table; by: string; onB
         </div>
       )}
       {table.rows.length === 0 ? (
-        <p className="meta">No row: the ask reads a newer run for these units, or none was measured.</p>
+        <p className="meta">No row: a newer run measured these, or none did.</p>
       ) : (
         <div className="table-wrap">
           <table className="thin">

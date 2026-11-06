@@ -63,7 +63,7 @@ describe("Review's Questions page", () => {
     expect(el.querySelector(".chips.pages a.on b")?.textContent).toBe("21");
     // what else waits: the identity question and a pass's, never the questions answered above
     const rows = [...el.querySelectorAll("table.queue tbody tr")].map((r) => r.textContent ?? "");
-    expect(rows.some((r) => r.includes("two codes share one identifier"))).toBe(true);
+    expect(rows.some((r) => r.includes("two subject codes share one identifier"))).toBe(true);
     expect(rows.some((r) => r.includes("modifier"))).toBe(true);
     expect(rows.some((r) => r.includes("no base fits"))).toBe(false);
     expect(el.querySelector("h2")?.textContent).toBe("Also waiting");

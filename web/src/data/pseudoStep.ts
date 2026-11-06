@@ -396,7 +396,7 @@ export function idsBox(v: StepView): { big: string; words: string; caution: bool
   if (v.phase === "fresh") return { big: "?", words: "found at the first run", caution: false };
   if (v.idsReading) return { big: idsUnknown(v), words: "IDs", caution: false };
   const all = v.rows.length > 0 ? v.rows.length : v.without.ids;
-  if (all === 0) return { big: "0", words: "none held", caution: false };
+  if (all === 0) return { big: "0", words: "none waiting", caution: false };
   if (v.coded === 0) return { big: n(all), words: `${all === 1 ? "ID" : "IDs"} · none has a subject code yet`, caution: true };
   if (v.coded === all) return { big: n(all), words: `${all === 1 ? "ID" : "IDs"} · every one has a subject code`, caution: false };
   return { big: `${n(v.coded)} of ${n(all)}`, words: "have a subject code", caution: false };
@@ -667,7 +667,7 @@ export function outcomeWords(pseudonymise: RanJob | null, read: RanJob | null, r
   if (written > 0) parts.push(`${files(written)} pseudonymised`);
   else if (unchanged > 0) parts.push(`${files(unchanged)} pseudonymised already`);
   const heldFiles = num(field(p, "held"));
-  if (heldFiles > 0) parts.push(`${files(heldFiles)} held for a subject code`);
+  if (heldFiles > 0) parts.push(`${files(heldFiles)} waiting for a subject code`);
   const made = num(field(field(pseudonymise?.result, "subjects"), "new"));
   if (made > 0) parts.push(`${n(made)} new ${made === 1 ? "subject code" : "subject codes"}`);
   // a read keeps its counts as its progress, and a result only where one was written
@@ -688,8 +688,8 @@ export function outcomeWords(pseudonymise: RanJob | null, read: RanJob | null, r
     if (known > 0) parts.push(`${files(known)} already in the registry`);
   }
   const same = num(field(counts, "same_instance"));
-  if (same > 0) parts.push(`${files(same)} held: their scan is filed under another subject or visit`);
-  if (readHeld > 0) parts.push(`${files(readHeld)} held at the read`);
+  if (same > 0) parts.push(`${files(same)} kept apart: their scan is filed under another subject or visit`);
+  if (readHeld > 0) parts.push(`${files(readHeld)} waiting at the read`);
   if (setAside > 0) parts.push(`${files(setAside)} set aside: not scans`);
   const rest = Math.max(0, refused - setAside);
   if (rest > 0) parts.push(`${files(rest)} refused`);

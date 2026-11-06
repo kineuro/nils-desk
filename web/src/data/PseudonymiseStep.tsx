@@ -648,7 +648,7 @@ function Codes(props: {
         {v.rows.length === 0 && (
           <div className="ps-row" role="row">
             <span role="cell" className="meta ps-none">
-              {v.idsReading ? "Reading the IDs…" : v.without.ids > 0 ? `${n(v.without.ids)} IDs held; this engine does not list them one by one.` : "No ID is held."}
+              {v.idsReading ? "Reading the IDs…" : v.without.ids > 0 ? `${n(v.without.ids)} IDs wait for a subject code; this engine does not list them.` : "No ID waits for a subject code."}
             </span>
           </div>
         )}

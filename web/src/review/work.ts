@@ -63,6 +63,14 @@ export function queuedCount(summary: ReviewSummary | null): number {
 /** The reasons of the sort's own questions about one axis (record 56), each answered in a question's grid. */
 const SORT_WHY: readonly string[] = ["missing", "disagree", "unsure", "decision", "conflict", "low_confidence"];
 
+/** A subject question's kind in a person's words, as the Identifiers page names it (2026-11-06: "unmapped" was the engine's). */
+const SUBJECT_WORDS: Record<string, string> = {
+  collision: "may be one subject twice",
+  unmapped: "files need a subject code",
+  provisional: "coded without a map",
+  same_instance: "the same scan filed twice",
+};
+
 /** The row of one kind of the machine's open questions: its job, its words and where it is worked. */
 export function machineRow(kind: string, count: number): WorkRow | null {
   if (heldKind(kind) || count <= 0) return null;
@@ -70,12 +78,12 @@ export function machineRow(kind: string, count: number): WorkRow | null {
   const base = { key: `kind:${kind}`, from: "machine" as const, count };
   if (kind === PICK_BORDER) return { ...base, job: "pick", title: "Pick borders", what: "Occasions a pick run doubts.", href: narrow(href("review", "picks"), { earlier: 1 }), act: "Open" };
   if (kind === "classify.asked") return { ...base, job: "answer", title: "System 1 asks", what: "Legal candidates for a whole stack.", href: href("review", "asked"), act: "Open" };
-  if (kind === "pipeline:qc") return { ...base, job: "check", title: "A run's checks", what: "Units a pipeline's own checks flagged.", href: href("review", "questions"), act: "Open" };
-  if (k.classifier && k.what === "model") return { ...base, job: "answer", title: `${k.area}: a model proposes`, what: "Staged until a person commits them.", href: href("review", "proposals"), act: "Open" };
+  if (kind === "pipeline:qc") return { ...base, job: "check", title: "A run's checks", what: "What a run's own checks flagged.", href: href("review", "questions"), act: "Open" };
+  if (k.classifier && k.what === "model") return { ...base, job: "answer", title: `${k.area}: a model proposes`, what: "Waiting for a person to commit them.", href: href("review", "proposals"), act: "Open" };
   // record 56 section 6.3: the sort's own questions are answered as a question's grid, from the list of them
   if (k.classifier && SORT_WHY.includes(k.what)) return { ...base, job: "answer", title: `${k.area}: ${reasonWords(k.what)}`, what: "Scans the rules left to a person.", href: href("review", "questions"), act: "Answer" };
   if (k.classifier && (REASONS as readonly string[]).includes(k.what)) return { ...base, job: "answer", title: `${k.area}: ${reasonWords(k.what)}`, what: "Scans the rules left to a person.", href: queueHref({ axis: k.area, reason: k.what, border: null }), act: "Answer" };
-  if (k.area === "identity" || k.area === "linkage") return { ...base, job: "answer", title: `Subjects: ${k.what.replace(/_/gu, " ")}`, what: "Who a file is about.", href: href("review", "identifiers"), act: "Decide" };
+  if (k.area === "identity" || k.area === "linkage") return { ...base, job: "answer", title: `Subjects: ${SUBJECT_WORDS[k.what] ?? k.what.replace(/_/gu, " ")}`, what: "Who a file is about.", href: href("review", "identifiers"), act: "Decide" };
   if (k.area === "session") return { ...base, job: "answer", title: `Sessions: ${k.what.replace(/_/gu, " ")}`, what: "Sessions that moved between visits.", href: href("review", "questions"), act: "See" };
   return { ...base, job: "answer", title: kindWords(kind), what: "Waiting in the queue.", href: href("review", "questions"), act: "Open" };
 }

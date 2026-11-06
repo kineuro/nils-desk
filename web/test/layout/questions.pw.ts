@@ -39,7 +39,7 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator(".q-row").nth(1)).toContainText("The rules found no base for these scans.");
       await expect(page.locator(".q-row").nth(1).locator(".q-count")).toContainText("7 scans");
       await expect(page.locator(".q-else")).toContainText("System 1 asks about a whole scan: 2 scans");
-      await expect(page.locator(".q-held")).toContainText("held by campaign base-check");
+      await expect(page.locator(".q-held")).toContainText("in campaign base-check");
       // the Questions chip counts the distinct scans; what else waits sits under the list
       await expect(page.locator(".chips.pages a.on b")).toHaveText("21");
       await expect(page.locator("h2", { hasText: "Also waiting" })).toBeVisible();
@@ -61,7 +61,7 @@ for (const vp of VIEWPORTS) {
       // NILS has no base on these: dashed in the caution colour; the blind one neutral, with none of NILS's marks
       await expect(page.locator(".q-tile.none")).toHaveCount(6);
       await expect(page.locator('.q-tile[data-stack="205"] .q-blind')).toHaveText("blind");
-      await expect(page.locator('.q-tile[data-stack="203"] .q-staged')).toHaveText("staged T2w");
+      await expect(page.locator('.q-tile[data-stack="203"] .q-staged')).toHaveText("proposed T2w");
       await page.locator("body").click({ position: { x: 2, y: 2 } });
       await page.keyboard.press("1");
       await expect(page.locator(".q-keys .opt.on")).toHaveText("1T1w");

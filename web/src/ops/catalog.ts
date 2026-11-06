@@ -324,7 +324,7 @@ export function needsOf(p: Pipeline): { models: TypedInput[]; labels: TypedInput
 export function writesWords(p: Pipeline): string {
   const outs = (p.outputs ?? []).map((o) => (o.level === "run" ? `one ${o.kind} for the run` : `${/^[aeiou]/u.test(o.kind) ? "an" : "a"} ${o.kind} per ${p.level}`));
   const axes = (p.proposals ?? []).map((x) => x.axis);
-  return [...outs, axes.length > 0 ? `proposals on ${axes.join(", ")}, staged at the model's threshold for a person to commit` : null].filter(Boolean).join("; ");
+  return [...outs, axes.length > 0 ? `proposals on ${axes.join(", ")} at the model's threshold, for a person to commit` : null].filter(Boolean).join("; ");
 }
 
 const num = (v: unknown): number => (typeof v === "number" && Number.isFinite(v) ? v : 0);

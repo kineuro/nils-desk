@@ -31,7 +31,7 @@ for (const vp of VIEWPORTS) {
       await expect(page.locator(".work-group h2")).toHaveText(["Answer a question", "Pick a main scan", "Check a result", "Settle a disagreement"]);
       await expect(page.locator(".work-row.from-campaign")).toHaveCount(6);
       await expect(page.locator(".work-row.from-adjudication")).toHaveCount(1);
-      await expect(page.getByText("219 questions are held by campaigns, answered there.")).toBeVisible();
+      await expect(page.getByText("219 questions are in campaigns, answered there.")).toBeVisible();
       // the side carries Review's pages (record 55 H2, round 4): no tabs in the page
       await expect(page.locator(".chips.pages")).toHaveCount(0);
       // a row's kind is the colour of its left border: three kinds, three colours, and no glyph before the title

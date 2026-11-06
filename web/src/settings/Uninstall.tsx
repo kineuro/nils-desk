@@ -104,7 +104,7 @@ export function UninstallDialog({ onClose }: { onClose: () => void }) {
             <div className="note caution">
               <Icon name="alert" />
               <div className="note-body">
-                <p className="note-detail">This cannot be undone. Without the registry&apos;s key the same subject can never be given the same code again.</p>
+                <p className="note-detail">This cannot be undone. Without the registry&apos;s key the same subject can never be given the same subject code again.</p>
               </div>
             </div>
           )}

@@ -213,7 +213,7 @@ export function committedWords(r: CommittedPart): string {
   const n = (v: number) => v.toLocaleString("en-US");
   const c = Array.isArray(r.committed) ? r.committed.length : Number(r.committed) || 0;
   const split = r.split?.length ?? 0;
-  return `Committed ${n(c)} ${c === 1 ? "decision" : "decisions"} on ${n(r.items)} ${r.items === 1 ? "item" : "items"}; ${n(r.left)} left staged${split > 0 ? `; ${n(split)} ${split === 1 ? "group was" : "groups were"} split, the rest of each left staged` : ""}.`;
+  return `Committed ${n(c)} ${c === 1 ? "decision" : "decisions"} on ${n(r.items)} ${r.items === 1 ? "item" : "items"}; ${n(r.left)} left waiting${split > 0 ? `; ${n(split)} ${split === 1 ? "group was" : "groups were"} split, the rest of each left waiting` : ""}.`;
 }
 
 /** A matrix row as a commit filter's from: not named where the evidence does not say, null for no value. */

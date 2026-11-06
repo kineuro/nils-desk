@@ -477,11 +477,11 @@ export function stepWords(s: SummaryStep, now = new Date()): StepWords {
       break;
     case "pseudonymised":
       what = pseudonymisedWords(s);
-      if (v("held") > 0) what += ` · ${n(v("held"))} held`;
+      if (v("held") > 0) what += ` · ${n(v("held"))} need a subject code`;
       break;
     case "read":
       what = s.state === "waiting" && v("reads") === 0 ? "not yet" : `${n(v("files"))} read`;
-      if (v("same_instance") > 0) what += ` · ${n(v("same_instance"))} held`;
+      if (v("same_instance") > 0) what += ` · ${n(v("same_instance"))} kept apart`;
       if (v("set_aside") > 0) what += ` · ${n(v("set_aside"))} set aside`;
       if (refusedOnly(s) > 0) what += ` · ${n(refusedOnly(s))} refused`;
       hint = readWords(s) ?? undefined;
@@ -551,7 +551,7 @@ export function readWords(s: Pick<SummaryStep, "new" | "known" | "twice" | "same
   add(s.new, "new");
   add(s.known, "already in another dataset");
   add(s.twice, "twice in this dataset");
-  add(s.same_instance, "held: the scan is filed under another subject, visit or series");
+  add(s.same_instance, "kept apart: the scan is filed under another subject, visit or series");
   add(s.left_out, "left out of the read by a person");
   add(s.gone, "gone from the folder");
   add(s.set_aside, "set aside: not scans");
@@ -639,7 +639,7 @@ export function idsWords(d: Pick<Dataset, "patient_id" | "subjects">): string | 
   if (!pid) return null;
   const holds = pid === "subject-code" ? "PatientID holds the subject code" : pid.startsWith("id-type:") ? `PatientID holds the ${pid.slice("id-type:".length)}` : `PatientID holds ${pid}`;
   if (pid === "subject-code" || !d.subjects) return holds;
-  return `${holds}, codes ${d.subjects === "map" ? "from a map" : "made from it"}`;
+  return `${holds}, subject codes ${d.subjects === "map" ? "from a map" : "made from it"}`;
 }
 
 /** What an identified dataset's originals carry in PatientID, as the rule they are read under says it; nothing where no rule says. */

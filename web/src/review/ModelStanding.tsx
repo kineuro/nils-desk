@@ -98,7 +98,7 @@ export function CommitStandingDialog({ s, onClose, onDone }: { s: Standing; onCl
       </p>
       <p className="meta">
         In force under your name, and re-sorted, so every page shows the new {s.axis}.
-        {s.drifted > 0 && " Staged before the registry changed; committed as proposed."}
+        {s.drifted > 0 && " Some were proposed before the data changed; committed as proposed."}
         {s.held.stacks > 0 && ` ${n(s.held.stacks)} more wait for their campaign.`}
         {s.below.stacks > 0 && ` The ${n(s.below.stacks)} below stay asked.`}
       </p>

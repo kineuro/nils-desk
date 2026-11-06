@@ -147,10 +147,10 @@ function LaneDialog({ lane, onClose, onDone }: { lane: Lane; onClose: () => void
   return (
     <Dialog title="Where pipelines run" icon="sliders" onClose={onClose} foot={foot}>
       <div className="fields2">
-        {field("cores", "Cores", "The cores the units of every run hold together.")}
-        {field("memory", "Memory, GB", "The memory they hold together; never more than this machine offers.")}
+        {field("cores", "Cores", "The cores all runs use together.")}
+        {field("memory", "Memory, GB", "The memory all runs use together; never more than this machine has.")}
       </div>
-      {field("card", "GPU card", "The card a GPU unit leases, by its index, or none.", "none")}
+      {field("card", "GPU card", "The GPU card runs use, by its index, or none.", "none")}
       <div className="fields2">
         {field("output", "Outputs to", "A working place by name; empty for the first one.", "the first working place")}
         {field("scratch", "Scratch to", "A working place by name; empty for the first one.", "the first working place")}

@@ -206,7 +206,7 @@ describe("View draws a unit's mask over its scan", () => {
     expect(html).toContain(">acq-T1w_desc-samseg_dseg.nii.gz</td><td>mask</td><td class=\"num\">101 KB</td>");
     // a unit that made no mask says so, and still lists what it made
     const none = renderToStaticMarkup(<ResultView run={RUN} files={FILES} unit={UNITS[2]} />);
-    expect(none).toContain("This unit made no mask to draw.");
+    expect(none).toContain("No mask was made here.");
     expect(none).toContain(">acq-T1w_desc-samseg_volumes.json</td>");
   });
 });

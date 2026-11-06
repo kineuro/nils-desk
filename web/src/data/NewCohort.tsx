@@ -95,7 +95,7 @@ export function NewCohortDialog({ caps, taken, onClose, onMade }: { caps: Capabi
           <summary>Subjects to add now, from a list</summary>
           <div className="more-body">
             <label className="field">
-              <span className="label">Codes, one per line</span>
+              <span className="label">Subject codes, one per line</span>
               <span className="input mono">
                 <textarea value={codes} rows={5} onChange={(e) => setCodes(e.target.value)} />
               </span>
