@@ -68,6 +68,8 @@ for (const vp of [
     await expect(dialog.locator(".ask-one-plan")).toContainText("body_region");
     await expect(dialog.locator(".ask-one-plan")).toContainText("3 kept, read on body_part");
     expect(await sideways(page)).toBeLessThanOrEqual(0);
+    // the sheet rises on a phone; the picture waits for it to stand
+    await page.waitForTimeout(600);
     await shot(page, `upkeep-ask-one-${vp.width}x${vp.height}`);
     await dialog.getByRole("button", { name: "Ask body_part alone" }).click();
     await expect(page.locator("p.said")).toContainText("Asks body_part alone now; body_region derived from it. 3 answers kept.");
