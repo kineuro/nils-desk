@@ -72,7 +72,7 @@ export function identifiersWork(caps: Capabilities): boolean {
 /** What an identifier's value cell says. */
 export function valueWords(i: ShownIdentifier, values: boolean): string {
   if (!i.kept) return "never kept";
-  if (i.withheld) return `${i.shape ?? ""} · not shown, reads as a personnummer`.trim();
+  if (i.withheld) return `${i.shape ?? ""} · not shown, reads as an identifying ID`.trim();
   if (i.value !== undefined) return i.value;
   return values ? "" : "kept";
 }

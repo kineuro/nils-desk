@@ -67,7 +67,7 @@ describe("Vault it", () => {
     const html = vault();
     expect(html).toContain("Vault the originals of incoming</h2>");
     expect(html).toContain("18,420 files · 2.4 GB");
-    expect(html).toContain(">held until mapped</span><span class=\"v\">4 move with them<");
+    expect(html).toContain(">need a subject code</span><span class=\"v\">4 move with them<");
     expect(html).toContain("/srv/imaging/incoming/derivatives/dcm-original");
     expect(html).toContain('<option value="cold-store">cold-store · backup · /vault/cold</option>');
     expect(html).toContain("The pseudonymised tree, the registry and every person's code are untouched".replace("'", "&#x27;"));
@@ -153,7 +153,7 @@ describe("Purge it", () => {
     expect(html).toContain('<span class="k">files</span><span class="v">18,420</span>');
     expect(html).toContain('<span class="k">size</span><span class="v">2.4 GB</span>');
     expect(html).toContain('<span class="k">copy checked</span><span class="v">18,402</span>');
-    expect(html).toContain('<span class="k">held until mapped</span><span class="v">4</span>');
+    expect(html).toContain('<span class="k">need a subject code</span><span class="v">4</span>');
     expect(html).toContain("What the engine last saw: a forecast, not a promise.");
     // and each reason a purge can be held back on, with its own count
     expect(html).toContain("<b class=\"num\">4</b><span>files wait for a map</span>");

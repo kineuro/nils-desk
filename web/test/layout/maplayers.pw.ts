@@ -155,10 +155,22 @@ test("a dataset's page has its layers too, and its Run is the dataset's", async 
     await page.evaluate(() => {
       (window as unknown as { runs?: string[] }).runs = [];
     });
-    await page.locator(".ms-layer").getByRole("button", { name: "Run", exact: true }).click();
-    await expect(page.locator(".ms-layer .ms-said")).toHaveText("study-big: body part queued.");
+    // ux-runscope (2026-11-06): a press opens the dataset rail's choice, the scans without a body part first, then every one
+    const run = page.locator(".ms-layer").getByRole("button", { name: "Run", exact: true });
+    await run.click();
+    await expect(run).toHaveAttribute("aria-expanded", "true");
+    const choice = page.locator(".ms-layer .dp-run-choice");
+    await expect(choice.locator(".dp-run-title")).toHaveText("Body part");
+    await expect(choice.locator(".dp-run-act .button")).toHaveText(["Run on the 2,400 without a body part", "Run on all 12,600"]);
+    await expect(choice.locator(".dp-run-act .meta")).toHaveText(["in 2 parts", "in 6 parts"]);
+    await noSidewaysScroll(page, width);
+    await choice.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `test-results/maplayers-run-choice-${width}.png` });
+    await choice.getByRole("button", { name: "Run on the 2,400 without a body part" }).click();
+    await expect(page.locator(".ms-layer .ms-said")).toHaveText("study-big: body part queued on 2,400 scans, in 2 parts.");
+    await expect(choice).toHaveCount(0);
     // the fake engine answers in the page, so the run it was asked for is read from there
-    expect(await page.evaluate(() => (window as unknown as { runs?: string[] }).runs)).toEqual(["/api/datasets/study-big/steps/body_part/run"]);
+    expect(await page.evaluate(() => (window as unknown as { runs?: string[] }).runs)).toEqual(["/api/datasets/study-big/steps/body_part/run without"]);
     await noSidewaysScroll(page, width);
     await page.locator(".ms-layer").scrollIntoViewIfNeeded();
     await page.screenshot({ path: `test-results/maplayers-dataset-${width}.png`, fullPage: true });

@@ -88,7 +88,7 @@ describe("one subject's IDs", () => {
     await settle();
     expect(e.of("POST", "/api/linkage/show")[1].body).toEqual({ subject: CODE, values: true, why: "checking the study's own ID" });
     expect(host.textContent).toContain("STUDY-0042");
-    expect(host.textContent).toContain("999999999999 · not shown, reads as a personnummer");
+    expect(host.textContent).toContain("999999999999 · not shown, reads as an identifying ID");
     // the values go when the subject changes
     await typeInto(input("Subject code"), "S-OTHER");
     expect(host.textContent).not.toContain("STUDY-0042");
@@ -139,9 +139,9 @@ describe("one subject's IDs", () => {
     const d = document.querySelector("dialog[open]")!;
     expect(d.textContent).toContain("3 IDs and 1 linkage.");
     expect(button(d, "Purge")!.disabled).toBe(true);
-    await typeInto(input("Type the code"), "yes");
+    await typeInto(input("Type the subject code"), "yes");
     expect(button(d, "Purge")!.disabled).toBe(true);
-    await typeInto(input("Type the code"), CODE);
+    await typeInto(input("Type the subject code"), CODE);
     click(button(d, "Purge"));
     await settle();
     expect(e.of("POST", "/api/linkage/purge").map((c) => c.body)).toEqual([
@@ -184,6 +184,6 @@ describe("one subject's IDs", () => {
   it("words a value by what the engine said of it", () => {
     expect(valueWords({ identity: 1, id_type: "personnummer", label: "", source: "", kept: false }, true)).toBe("never kept");
     expect(valueWords({ identity: 1, id_type: "patient-id", label: "", source: "", kept: true }, false)).toBe("kept");
-    expect(valueWords({ identity: 1, id_type: "patient-id", label: "", source: "", kept: true, shape: "999999999999", withheld: "x" }, true)).toBe("999999999999 · not shown, reads as a personnummer");
+    expect(valueWords({ identity: 1, id_type: "patient-id", label: "", source: "", kept: true, shape: "999999999999", withheld: "x" }, true)).toBe("999999999999 · not shown, reads as an identifying ID");
   });
 });

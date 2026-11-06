@@ -32,7 +32,7 @@ describe("the machine's questions", () => {
     expect(machineRow("base:disagree", 3)).toMatchObject({ job: "answer", title: "base: the rules and System 1 disagree", href: "#review/questions", act: "Answer" });
     expect(machineRow("body_part:model", 40)).toMatchObject({ job: "answer", href: "#review/proposals" });
     expect(machineRow("pick.border", 3)).toMatchObject({ job: "pick", href: "#review/picks?earlier=1" });
-    expect(machineRow("identity.collision", 2)).toMatchObject({ job: "answer", title: "Subjects: collision", href: "#review/identifiers", act: "Decide" });
+    expect(machineRow("identity.collision", 2)).toMatchObject({ job: "answer", title: "Subjects: may be one subject twice", href: "#review/identifiers", act: "Decide" });
     expect(machineRow("pipeline:qc", 4)).toMatchObject({ job: "check" });
     // a campaign's items are answered there, never a row of the queue's
     expect(machineRow("campaign.axis", 12)).toBeNull();
@@ -49,7 +49,7 @@ describe("the machine's questions", () => {
     expect(familyOf("campaign.axis")).toBe("campaigns");
     expect(kindTag("campaign.pair").words).toBe("campaign");
     const item = { id: 1, kind: "campaign.axis", scope: "stack", status: "open", ref: { stack_id: 4 }, evidence: { campaign: 6, campaign_name: "base-check" }, created_at: "" } as never;
-    expect(itemWords(item)).toBe("held by campaign base-check, answered there");
+    expect(itemWords(item)).toBe("in campaign base-check, answered there");
   });
 });
 
@@ -69,7 +69,7 @@ describe("the campaigns", () => {
     const groups = workList(caps, summary, list);
     expect(groups.map((g) => g.job)).toEqual(["answer", "pick", "check", "settle"]);
     const titles = (job: string) => groups.find((g) => g.job === job)!.rows.map((r) => r.title);
-    expect(titles("answer").slice(0, 4)).toEqual(["body_part: a model proposes", "base: no value", "System 1 asks", "Subjects: collision"]);
+    expect(titles("answer").slice(0, 4)).toEqual(["body_part: a model proposes", "base: no value", "System 1 asks", "Subjects: may be one subject twice"]);
     expect(titles("pick")).toEqual(["Pick borders", "Main scans", "probe-pick"]);
     expect(titles("settle")).toEqual(["base-check"]);
     // the closed campaign is not on the list
@@ -102,7 +102,7 @@ describe("the page", () => {
     expect(html).not.toContain("Draw");
     // the side carries Review's pages (record 55 H2, round 4): no tabs here
     expect(html).not.toContain('class="chips pages"');
-    expect(html).toContain("12 questions are held by campaigns, answered there.");
+    expect(html).toContain("12 questions are in campaigns, answered there.");
     expect(html).toContain("base · 11 values · 2 of 6 yours");
     // a row's kind is its border's colour, never a glyph
     expect(html).toContain('class="work-row from-campaign"');

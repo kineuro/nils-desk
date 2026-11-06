@@ -10,7 +10,7 @@ import { may } from "../grants";
 import { abServed, isAb } from "./ab";
 import { anchoredServed, isAnchored } from "./anchored";
 import { isCheck } from "./check";
-import { principalOf, purposeOf, suggestOf, type Assignment, type Campaign, type Closed, type Item } from "./client";
+import { answeredAxes, principalOf, purposeOf, suggestOf, type Assignment, type Campaign, type Closed, type Item, type Requestioned } from "./client";
 import { isPair, pairServed } from "./pair";
 import { R48 } from "./readerDoors";
 
@@ -132,6 +132,51 @@ export function missingModes(caps: Capabilities, c: Campaign): string[] {
     out.push(`No batches: a batch groups stacks by the rules' answer, and this campaign ${suggest === "none" ? "shows no suggestion" : "shows only imported suggestions"}, as it was made.`);
   }
   return out;
+}
+
+// ---------------------------------------------------------------- ask one axis
+
+/** The door that moves an open campaign to fewer asked axes (2026-11-06). */
+export const REQUESTION = "POST /api/campaigns/{id}/requestion";
+
+/** The line of {@link missingModes} that a campaign asking one axis would not have. */
+export const isAxesGalleryLine = (w: string): boolean => w.startsWith("No gallery: it shows one axis at a time");
+
+/**
+ * Whether the person may ask one axis alone in this campaign, which brings
+ * the gallery: an open axes campaign asking more than one, its maker or a
+ * Review worker, and an engine with the door.
+ */
+export function mayAskOneAxis(caps: Capabilities, c: Campaign): boolean {
+  if (c.status !== "open" || c.question.kind !== "axes" || answeredAxes(c.question).length < 2) return false;
+  if (!served(caps, REQUESTION) || !may(caps, "campaigns:work")) return false;
+  return c.owner === principalOf(caps) || may(caps, "review:work");
+}
+
+/** What asking fewer axes changes, as the confirm lists it, from the engine's dry run. */
+export function askOnePlan(r: Requestioned): { k: string; v: string }[] {
+  const dropped = r.asked_before.filter((a) => !r.asked.includes(a) && !r.derive.includes(a));
+  const n = r.answers_kept;
+  return [
+    { k: "Asked", v: r.asked.join(", ") },
+    ...(r.derive.length > 0 ? [{ k: "Derived from it", v: r.derive.join(", ") }] : []),
+    ...(dropped.length > 0 ? [{ k: "Not asked any more", v: dropped.join(", ") }] : []),
+    { k: "Answers given", v: n === 0 ? "none yet" : `${n.toLocaleString("en-US")} kept, read on ${r.asked.join(", ")}` },
+  ];
+}
+
+/** The page's line once the campaign asks fewer axes. */
+export function askOneSaid(r: Requestioned): string {
+  const derived = r.derive.length > 0 ? `; ${r.derive.join(", ")} derived from it` : "";
+  const kept = r.answers_kept > 0 ? ` ${r.answers_kept.toLocaleString("en-US")} ${r.answers_kept === 1 ? "answer" : "answers"} kept.` : "";
+  return `Asks ${r.asked.join(", ")} alone now${derived}.${kept}`;
+}
+
+/** The engine's refusal of a move, in the page's words where it names leased items. */
+export function askOneRefused(why: string): string {
+  const m = /(\d+) item\(s\) of .* are leased/u.exec(why);
+  if (m) return `${m[1]} ${m[1] === "1" ? "item is" : "items are"} being read now. Ask again once ${m[1] === "1" ? "it is" : "they are"} answered or given back.`;
+  return `Refused: ${why.replace(/\.$/u, "")}.`;
 }
 
 // ---------------------------------------------------------------- read one by one

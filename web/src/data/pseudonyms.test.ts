@@ -206,7 +206,7 @@ describe("what a column looks like", () => {
     const reserve = guessRole("Reservnummer", look, withReserve);
     expect(mapRefusal([reserve, code])).toBeNull();
     expect(mapRefusal([{ role: "canonical", id_type: "reserve-number", new_type: null }, code])).toBe(
-      "A reserve number never stands for the person: no code is made from one. Name the person's code, or their personnummer, beside it.",
+      "A reserve number never stands for the person: no subject code is made from one. Name the person's subject code, or their identifying ID, beside it.",
     );
   });
 });

@@ -14,7 +14,12 @@ import "../../src/shell.css";
 import { GRANTS } from "../../src/grants";
 
 const PINNED = new URLSearchParams(location.search).has("pinned");
+// ?order: the engine and the desk are behind, the new desk needs the new engine's contract, and Update everything says its order (2026-11-06)
+const ORDER = new URLSearchParams(location.search).has("order");
+// ?coming: every part at its newest, and the engine's next release tagged and still being built
+const COMING = new URLSearchParams(location.search).has("coming");
 const ENGINE = "1.0.0-alpha.80";
+const NEXT = "1.0.0-alpha.81";
 
 const engine = {
   engine: { name: "nils", version: ENGINE },
@@ -78,7 +83,32 @@ const rules = (pack: string, installed: string, newest: string, newer: string | 
 });
 const mri = PINNED ? rules("mri", "1.0.0", "1.1.0", null, { pinned: "1.0.0" }) : rules("mri", "1.0.3", "1.1.0", "1.1.0");
 const clinical = rules("clinical", "0.3.0", "0.4.0", null, { waits: "clinical 0.4.0 works with engines >=1.0.0-alpha.82, <2.0.0, and this engine is 1.0.0-alpha.80" });
-const parts = [own("engine", ENGINE, ENGINE), own("desk", ENGINE, ENGINE), mri, clinical];
+const deskWaits = `desk 1.0.0-alpha.82 needs suite contract 4, which neither engine ${ENGINE} nor ${NEXT} speaks; it waits for an engine release that speaks it`;
+const parts = ORDER
+  ? [
+      { ...own("engine", ENGINE, NEXT), newer: NEXT },
+      { ...own("desk", ENGINE, "1.0.0-alpha.82"), newer: NEXT, takes: NEXT, waits: deskWaits, needs: "HTTP contract 8", after: "engine", command: "nils update --part engine --part desk" },
+      mri,
+      clinical,
+    ]
+  : COMING
+    ? [{ ...own("engine", ENGINE, ENGINE), coming: NEXT }, own("desk", ENGINE, ENGINE), mri, clinical]
+    : [own("engine", ENGINE, ENGINE), own("desk", ENGINE, ENGINE), mri, clinical];
+// the order Update everything takes, from an engine that says it
+const ordered = ORDER
+  ? {
+      order: [
+        { part: "engine", pack: null, from: ENGINE, to: NEXT, why: `first: desk ${NEXT} needs its HTTP contract 8` },
+        { part: "desk", pack: null, from: ENGINE, to: NEXT, why: "after the engine: it needs HTTP contract 8" },
+        { part: "rules", pack: "mri", from: "1.0.3", to: "1.1.0", why: `after the engine: read against engine ${NEXT}` },
+      ],
+      stays: [
+        { part: "desk", pack: null, version: "1.0.0-alpha.82", why: deskWaits },
+        { part: "rules", pack: "clinical", version: "0.4.0", why: "clinical 0.4.0 works with engines >=1.0.0-alpha.82, <2.0.0, and this engine is 1.0.0-alpha.80" },
+      ],
+    }
+  : {};
+const looked = new Date(Date.now() - 40_000).toISOString().replace(/\.\d+Z$/u, "Z");
 
 const install = {
   record: "/home/astrid/.config/nils/setup.toml",
@@ -104,11 +134,13 @@ const install = {
   unfinished: false,
   release: {
     installed: ENGINE,
-    newest: ENGINE,
-    newer: PINNED ? null : "rules mri 1.1.0",
+    newest: ORDER ? NEXT : ENGINE,
+    newer: ORDER ? NEXT : PINNED ? null : "rules mri 1.1.0",
     error: null,
     command: "nils update --all",
-    behind: PINNED ? [] : ["rules"],
+    behind: ORDER ? ["engine", "desk", "rules"] : PINNED ? [] : ["rules"],
+    ...(ORDER || COMING ? { looked_at: looked, listed_at: looked, watched_at: looked, watch_error: null, watch_seconds: 60 } : {}),
+    ...ordered,
     parts,
     rules: [mri, clinical],
     packs: {
@@ -135,9 +167,11 @@ const install = {
 };
 
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
-/** What the page asked the supervisor to update, for the check to read. */
+/** What the page asked the supervisor to update, and how it read the install, for the check to read. */
 const updates: unknown[] = [];
 (window as unknown as { updates: unknown[] }).updates = updates;
+const reads: string[] = [];
+(window as unknown as { reads: string[] }).reads = reads;
 
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
@@ -149,7 +183,10 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (path === "/supervise/api/supervise/runs/r1") return json(200, { id: "r1", what: "update", command: ["update", "--part", "rules"], state: "running", pid: 1, started_at: "2026-10-13T08:00:00Z", finished_at: null, exit: null });
   if (path === "/desk/capabilities") return json(200, caps);
   if (path === "/api/capabilities") return json(200, engine);
-  if (path === "/supervise/api/supervise/install") return json(200, install);
+  if (path === "/supervise/api/supervise/install") {
+    reads.push(new URL(url, location.origin).search);
+    return json(200, install);
+  }
   if (path === "/api/jobs") return json(200, { jobs: [] });
   return json(404, { error: `the layout check's engine has no ${path}` });
 }) as typeof fetch;

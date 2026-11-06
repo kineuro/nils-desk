@@ -9,6 +9,7 @@
 import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "../../src/shell.css";
+import "../../src/data/data.css";
 import type { Capabilities } from "../../src/capabilities";
 import { Viewer } from "../../src/data/Viewer";
 import { parse } from "../../src/routes";
@@ -146,9 +147,37 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const count = out === "subjects" ? subjects.length : out === "visits" ? visits.length : rows.length;
     return json({ valid: true, issues: [], funnel: [{ set: out, grain: "subject", stage: "where", rows: count, subjects: out === "subjects" ? count : 1 }] });
   }
+  // UX round 2: where each label came from; the first spine scan's body part a decision not sorted yet
+  if (u.pathname === "/api/origins") {
+    const sorted = { pack: "mri", version: "1.4.0", overlay: null, job: 3, at: "2026-11-01T08:00:00Z" };
+    const stacks = rows.map((r) => ({
+      stack: r.stack,
+      sorted,
+      unsorted: r.name === "SC_Sag_T2w_2D_TSE_ND",
+      axes: Object.entries(r.axes).map(([axis, value]) => {
+        const plain = { axis, values: value.split(","), confidence: 0.9, tier: "keyword", origin: "rules", line: "", state: "current", words: null, rules: [{ rule_set: axis, rule: `${axis}_words` }], decided: null };
+        return r.name === "SC_Sag_T2w_2D_TSE_ND" && axis === "body_part"
+          ? { ...plain, state: "unsorted", words: "decided neck; sorted before the decision", decided: { id: 77, kind: "person", value: "neck", values: ["neck"], by: "anna@site", campaign: { id: 6, name: "curate", status: "closed", item: 412 } } }
+          : plain;
+      }),
+    }));
+    return json({ count: stacks.length, unsorted: 1, stacks });
+  }
   if (u.pathname === "/api/cohorts") return json([{ name: "ms-all", subjects: 120, retired_at: null }]);
+  // ux-runscope (2026-11-06), with ?runs: a step over the scans shown, saved as a selection on the way
+  if (u.pathname === "/api/ask/documents") return json({ document: 41, hash: "h", parent: null });
+  if (u.pathname.startsWith("/api/ask/selections/")) return json({ id: 1, name: decodeURIComponent(u.pathname.split("/").pop() ?? ""), version: 1, hash: "h" });
+  if (u.pathname.startsWith("/api/selections/") && u.pathname.endsWith("/steps")) {
+    const [name, version] = decodeURIComponent(u.pathname.split("/")[3]).split("@");
+    const step = (name: string, without: number, extra: Record<string, unknown> = {}) => ({ step: name, state: "done", job: null, started_at: null, finished_at: null, progress: null, of: rows.length, refusal: null, runs: { all: { scans: rows.length, parts: 1 }, without: { scans: without, parts: without > 0 ? 1 : 0 } }, ...extra });
+    return json({ selection: { name, version: Number(version) }, for: `selection:${name}@${version}`, scans: rows.length, steps: [step("sorted", 2, { unsorted: 2 }), step("body_part", 4, { served: true }), step("post_contrast", 3, { served: true, state: "waiting" })] });
+  }
+  if (u.pathname.startsWith("/api/selections/") && u.pathname.endsWith("/run")) return json({ job: 31, state: "queued", step: "body_part", for: "selection:x@1", scans: 4, over: "without", parts: 1, handle: 90, command: ["run"] }, 202);
   return json({ error: `no door ${u.pathname}` }, 404);
 }) as typeof fetch;
+
+/** ux-runscope: `?runs` gives the person work on Pipelines and the engine the selection's step doors. */
+const runs = new URLSearchParams(location.search).has("runs");
 
 const caps = {
   engine: {
@@ -164,6 +193,9 @@ const caps = {
       "PUT /api/ask/selections/{name}",
       "POST /api/ask/handles/{id}/promote",
       "GET /api/cohorts",
+      "GET /api/origins",
+      "POST /api/origins/resort",
+      ...(runs ? ["POST /api/selections/{name}/steps/{step}/run", "GET /api/selections/{name}/steps"] : []),
     ],
     policy: [],
     auth: "token",
@@ -175,7 +207,7 @@ const caps = {
   kvasir: null,
   assistant: null,
   apps: [],
-  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work"], detail: "quasi", groups: [] },
+  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work", "pipelines:work"], detail: "quasi", groups: [] },
   desk: { version: "1.0.0", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
 } as unknown as Capabilities;
 

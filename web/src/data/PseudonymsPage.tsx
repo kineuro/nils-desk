@@ -357,7 +357,7 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
       const r = await linkage.import(body(false));
       const job = typeof r.job === "number" ? r.job : null;
       setRehearsal({ kind: "filed", job: job ?? 0 });
-      onFiled(job !== null ? `The map is filed as job ${job}; held files it names are pseudonymised and brought in after.` : "The map is filed.");
+      onFiled(job !== null ? `The map is filed as job ${job}; the waiting files it names are pseudonymised and brought in after.` : "The map is filed.");
     } catch (e) {
       setRehearsal({ kind: "failed", why: hideNumbers(messageOf(e)) });
     }
@@ -470,7 +470,7 @@ export function MapDialog({ caps, dataset, types, onClose, onFiled }: { caps: Ca
                 <span className="meta">
                   {conflicts > 0
                     ? "The map is read whole and applied whole: while one conflict stands, nothing at all is written. Mend those rows and rehearse it again."
-                    : "The map is read whole and applied whole, so what is above is what will happen. Filing it queues the work; held files it names are pseudonymised and brought in after."}
+                    : "The map is read whole and applied whole, so what is above is what will happen. Filing it queues the work; the waiting files it names are pseudonymised and brought in after."}
                 </span>
               </>
             )}

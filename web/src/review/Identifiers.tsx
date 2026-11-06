@@ -30,7 +30,7 @@ export interface IdentifiersProps {
 
 const KINDS: { what: string; title: string; remedy: string }[] = [
   { what: "collision", title: "may be one subject twice", remedy: "merge them, or decide they are two" },
-  { what: "unmapped", title: "held until mapped", remedy: "map them on the dataset" },
+  { what: "unmapped", title: "need a subject code", remedy: "map them on the dataset" },
   { what: "provisional", title: "coded without a map", remedy: "merge into the subject it stands for" },
   { what: "same_instance", title: "the same scan filed twice", remedy: "merge the two subjects, or let it go" },
 ];
@@ -214,13 +214,13 @@ export function MergeDialog({ item, onClose, onDone }: { item: ReviewItem; onClo
         <div className="field">
           <span className="label">The subject that stays</span>
           <span className="input mono">
-            <input value={canonical} placeholder="canonical code" aria-label="The canonical subject" onChange={(e) => setCanonical(e.target.value)} />
+            <input value={canonical} placeholder="subject code that stays" aria-label="The canonical subject" onChange={(e) => setCanonical(e.target.value)} />
           </span>
         </div>
         <div className="field">
           <span className="label">The alias merged into it</span>
           <span className="input mono">
-            <input value={alias} placeholder="alias code" aria-label="The alias" onChange={(e) => setAlias(e.target.value)} />
+            <input value={alias} placeholder="subject code merged into it" aria-label="The alias" onChange={(e) => setAlias(e.target.value)} />
           </span>
         </div>
       </div>

@@ -302,7 +302,7 @@ export function datasetState(d: Dataset): { words: string; tone: "brand" | "caut
   if (d.arrives === "undeclared" || d.state === "unknown") return { words: "not read", tone: "caution" };
   if (reading(d)) return { words: "reading now", tone: "brand" };
   const held = d.held?.files ?? 0;
-  if (held > 0) return { words: `${n(held)} held`, tone: "caution" };
+  if (held > 0) return { words: `${n(held)} need a subject code`, tone: "caution" };
   if (d.totals.to_sort > 0) return { words: `${n(d.totals.to_sort)} to sort`, tone: "caution" };
   if (d.digests.count === 0) return { words: "not read yet", tone: "neutral" };
   // digested, and nothing was ever classified: no pack reads it
@@ -349,7 +349,7 @@ export function batchLine(b: Batch, now = new Date()): string {
     parts.push(fileWords(b));
   }
   parts.push(`${n(b.subjects_added)} new ${b.subjects_added === 1 ? "subject" : "subjects"}`);
-  if (p && p.held > 0) parts.push(`${n(p.held)} ${p.held === 1 ? "file" : "files"} held until mapped`);
+  if (p && p.held > 0) parts.push(`${n(p.held)} ${p.held === 1 ? "file needs" : "files need"} a subject code`);
   return `${when}: ${parts.join(" · ")}`;
 }
 
@@ -383,7 +383,7 @@ export function stripMarks(b: Batch, stages?: BatchStages | null): StripMark[] {
 function pseudonymisedMark(p: Pseudonymised | null, state: string): StripMark {
   const name = "pseudonymised" as const;
   if (!p) return { name, mark: "none", words: "not said" };
-  if (p.held > 0) return { name, mark: "wait", words: `${n(p.held)} held` };
+  if (p.held > 0) return { name, mark: "wait", words: `${n(p.held)} need a subject code` };
   if (state === "running" && p.files === 0) return { name, mark: "now", words: "writing" };
   if (p.files === 0 && p.changed === 0) return { name, mark: "done", words: "nothing new" };
   return { name, mark: "done", words: `${n(p.files + p.changed)} files` };
@@ -396,7 +396,7 @@ function marksOfStages(s: BatchStages): StripMark[] {
   const c = s.classified;
   const r = s.reviewed;
   return [
-    ps === null ? { name: "pseudonymised", mark: "none", words: "not needed" } : ps.held > 0 ? { name: "pseudonymised", mark: "wait", words: `${n(ps.held)} held` } : ps.refused > 0 ? { name: "pseudonymised", mark: "failed", words: `${n(ps.refused)} refused` } : { name: "pseudonymised", mark: ps.job !== null || ps.files + ps.changed > 0 ? "done" : "none", words: `${n(ps.files + ps.changed)} files` },
+    ps === null ? { name: "pseudonymised", mark: "none", words: "not needed" } : ps.held > 0 ? { name: "pseudonymised", mark: "wait", words: `${n(ps.held)} need a subject code` } : ps.refused > 0 ? { name: "pseudonymised", mark: "failed", words: `${n(ps.refused)} refused` } : { name: "pseudonymised", mark: ps.job !== null || ps.files + ps.changed > 0 ? "done" : "none", words: `${n(ps.files + ps.changed)} files` },
     w === null ? { name: "walked", mark: "none", words: "not yet" } : { name: "walked", mark: w.job !== null || w.files > 0 ? "done" : "none", words: `${n(w.files)} files` },
     dg === null ? { name: "digested", mark: "none", words: "not yet" } : { name: "digested", mark: "done", words: `${n(dg.stacks)} stacks` },
     c === null ? { name: "classified", mark: "none", words: "not yet" } : { name: "classified", mark: c.stacks >= c.of && c.of > 0 ? "done" : c.of === 0 ? "none" : "wait", words: c.of === 0 ? "nothing new" : `${n(c.stacks)} of ${n(c.of)}` },
@@ -408,7 +408,7 @@ function marksOfStages(s: BatchStages): StripMark[] {
 export function batchTail(b: Batch): { kind: "held" | "look" | "again" | "sorted" | "reading"; words: string; count: number } {
   if (b.state === "running") return { kind: "reading", words: `reading · ${n(b.files.seen)} files so far`, count: 0 };
   const held = b.pseudonymised?.held ?? 0;
-  if (held > 0) return { kind: "held", words: `${n(held)} held: map them`, count: held };
+  if (held > 0) return { kind: "held", words: `${n(held)} need a subject code: map them`, count: held };
   if (b.state === "failed" || b.state === "cancelled") return { kind: "again", words: "Read again", count: 0 };
   const toSort = b.to_sort ?? 0;
   if (toSort > 0) return { kind: "look", words: `${n(toSort)} need a look`, count: toSort };
@@ -481,7 +481,7 @@ export function bringInBody(d: Pick<Dataset, "name" | "arrives" | "handling">, n
 export function bringInSteps(d: Pick<Dataset, "name" | "arrives" | "handling" | "cohort">, pack: string | null, packVersion?: string | null): { title: string; words: string }[] {
   const out: { title: string; words: string }[] = [];
   const cohort = d.cohort ? `; new subjects join the cohort ${d.cohort}` : "";
-  if (arrivesOf(d) === "identified") out.push({ title: "Pseudonymise", words: "The new files of the originals into dcm-anon: subject codes in, names and private tags out, dates and UIDs kept. A file whose identifier the map does not know is held." });
+  if (arrivesOf(d) === "identified") out.push({ title: "Pseudonymise", words: "The new files of the originals into dcm-anon: subject codes in, names and private tags out, dates and UIDs kept. A file whose identifier the map does not know waits for a subject code." });
   out.push({ title: "Digest", words: `Read what is new in ${arrivesOf(d) === "identified" ? "dcm-anon" : "the dataset"} into the registry${cohort}.` });
   out.push({ title: "Sort", words: pack ? `Fingerprint, then classify with ${pack}${packVersion ? ` ${packVersion}` : ""}. What the rules cannot place goes to Review.` : "Fingerprint. No pack is loaded, so nothing is classified until one is." });
   return out;
@@ -536,7 +536,7 @@ export function v0Words(layout: Layout | null | undefined): { lead: string; deta
   const files = (k: number | null) => (typeof k === "number" ? `${partial ? "at least " : ""}${n(k)} files` : "the files");
   return {
     lead: "This is a NILS v0 cohort folder",
-    detail: `derivatives/dcm-original holds ${files(v0.original_files)} as they came from the scanners, and derivatives/dcm-raw holds ${files(v0.raw_files)} v0 pseudonymised, with v0's codes in PatientID.`,
+    detail: `derivatives/dcm-original holds ${files(v0.original_files)} as they came from the scanners, and derivatives/dcm-raw holds ${files(v0.raw_files)} v0 pseudonymised, with v0's subject codes in PatientID.`,
     skipped,
   };
 }
@@ -622,7 +622,7 @@ export function reportLines(r: ImportReport): { tone: "ok" | "caution" | "neutra
   const types = Array.isArray(typesNew) ? (typesNew.length > 0 ? `; new types: ${typesNew.join(", ")}` : "") : typesNew > 0 ? `; ${n(typesNew)} new ${typesNew === 1 ? "type" : "types"}` : "";
   out.push({ tone: "neutral", words: `${n(r.identifiers.filed)} identifiers filed: ${n(r.identifiers.known)} known, ${n(r.identifiers.new)} new${types}` });
   const released = typeof r.held_released === "number" ? r.held_released : r.held_released.released;
-  if (released > 0) out.push({ tone: "ok", words: `${n(released)} held ${released === 1 ? "file is" : "files are"} released` });
+  if (released > 0) out.push({ tone: "ok", words: `${n(released)} ${released === 1 ? "file has" : "files have"} a subject code now` });
   if (r.merges.length > 0) out.push({ tone: "caution", words: `${n(r.merges.length)} ${r.merges.length === 1 ? "subject merges" : "subjects merge"} into another: ${r.merges.map((m) => `${m.alias} into ${m.canonical}`).join(", ")}` });
   if (r.conflicts.length > 0) out.push({ tone: "caution", words: `${n(r.conflicts.length)} ${r.conflicts.length === 1 ? "conflict" : "conflicts"}, on which nothing is written: ${r.conflicts.map((c) => `row ${c.row}, ${c.why}`).join("; ")}` });
   return out;

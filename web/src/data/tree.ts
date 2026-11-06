@@ -259,6 +259,13 @@ const VALUE_WORD: Record<string, Record<string, string>> = {
 export interface Fact {
   what: string;
   value: string;
+  /** The axis it says, where it is one (UX round 2: its label says where it came from). */
+  axis?: string;
+}
+
+/** One value of an axis as the facts say it: their word, or the value with commas as spaces; empty where the facts leave it unsaid. */
+export function valueWord(axis: string, v: string): string {
+  return VALUE_WORD[axis]?.[v] ?? v.replaceAll(",", " ");
 }
 
 /** What NILS says a scan is, as short values in a fixed order; the plane and the image count after. */
@@ -267,8 +274,8 @@ export function factsOf(s: Pick<Scan, "axes" | "orientation" | "images">): Fact[
   for (const [axis, what] of FACT_ORDER) {
     const v = s.axes[axis];
     if (v === undefined || v === "") continue;
-    const word = VALUE_WORD[axis]?.[v] ?? v.replaceAll(",", " ");
-    if (word !== "") out.push({ what, value: word });
+    const word = valueWord(axis, v);
+    if (word !== "") out.push({ what, value: word, axis });
   }
   if (s.orientation) out.push({ what: "Plane", value: s.orientation.toLowerCase() });
   if (s.images !== null) out.push({ what: "Images", value: `${s.images.toLocaleString("en-US")} ${s.images === 1 ? "image" : "images"}` });

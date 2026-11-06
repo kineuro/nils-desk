@@ -78,6 +78,29 @@ export interface PartRelease {
   edited?: boolean;
   /** The version the install pins the pack to, or none (2026-10-10). */
   pinned?: string | null;
+  /** What of the engine's contracts the version offered needs that the installed engine lacks (`HTTP contract 8`): the engine's update goes first. */
+  needs?: string | null;
+  /** The part that goes first where `needs` says (`engine`). */
+  after?: string | null;
+  /** A version tagged and newer than the newest release, whose release is being built. */
+  coming?: string | null;
+}
+
+/** One part Update everything moves, in its place in the order, and why it is there where that matters. */
+export interface OrderStep {
+  part: string;
+  pack?: string | null;
+  from: string | null;
+  to: string;
+  why: string | null;
+}
+
+/** A newer release Update everything leaves out, and why. */
+export interface Stay {
+  part: string;
+  pack?: string | null;
+  version: string;
+  why: string;
 }
 
 /**
@@ -91,8 +114,19 @@ export interface Release {
   newer: string | null;
   error: string | null;
   command: string;
-  /** When the supervisor last looked at the releases, which it keeps for a quarter of an hour (UTC, to the second); an engine older than this says nothing. */
+  /** When the supervisor last looked for releases (UTC, to the second): its listing, or its watch of each part's tags while this page is open; an engine older than this says nothing. */
   looked_at?: string | null;
+  /** The last full listing, which it keeps for a quarter of an hour, and the last watch of the tags. */
+  listed_at?: string | null;
+  watched_at?: string | null;
+  /** Why the last watch failed, where it did. */
+  watch_error?: string | null;
+  /** Where a look waits for GitHub's requests an hour, until when (UTC) and why. */
+  next_look?: string | null;
+  allowance?: string | null;
+  /** The order Update everything takes the parts in, and the newer releases it leaves out; an engine older than this sends neither. */
+  order?: OrderStep[];
+  stays?: Stay[];
   behind?: string[];
   parts?: PartRelease[];
   /** The rule packs where the engine reads them, beside the ones its release carries; an engine older than this, or one in a container, sends none. */
@@ -182,12 +216,18 @@ export const supervise = {
   capabilities: () => door<{ parts: Installed[]; channel?: string | null; trust?: string | null }>("GET", `${BASE}/capabilities`),
   update: (part: string, version: string) => door<{ applied: Applied; by: string }>("POST", `${BASE}/update`, { part, version }),
   log: () => door<{ rows: Applied[] }>("GET", `${BASE}/log`),
-  /** The install; with `fresh`, the releases are looked at again where the look the supervisor kept is a minute old. */
-  install: (fresh = false) => door<Install>("GET", `${BASE}/install${fresh ? "?fresh=1" : ""}`),
+  /**
+   * The install; with `fresh`, the releases are looked at again where the look the supervisor kept is a minute old;
+   * with `watch`, as the Parts page asks while it is open, the supervisor looks for new tags at most once a minute.
+   */
+  install: (fresh = false, watch = false) => {
+    const query = [fresh ? "fresh=1" : null, watch ? "watch=1" : null].filter(Boolean).join("&");
+    return door<Install>("GET", `${BASE}/install${query ? `?${query}` : ""}`);
+  },
   restart: (part: "engine" | "desk" | "gateway" | "assistant" | "postgres" | "all") => door<Run>("POST", `${BASE}/restart`, { part }),
   reapply: (part: "engine" | "all") => door<Run>("POST", `${BASE}/reapply`, part === "engine" ? { part } : {}),
-  /** Every part, or one part alone against its own releases. */
-  updateAll: (part?: string) => door<Run>("POST", `${BASE}/update-all`, part ? { part } : {}),
+  /** Every part, one part alone against its own releases, or several in order (a desk with the engine whose contract it needs). */
+  updateAll: (part?: string | string[]) => door<Run>("POST", `${BASE}/update-all`, part === undefined ? {} : Array.isArray(part) ? { parts: part } : { part }),
   run: (id: string) => door<Run>("GET", `${BASE}/runs/${encodeURIComponent(id)}`),
   look: (path: string) => door<Look>("POST", `${BASE}/look`, { path }),
   /** How people sign in, changed by the supervisor: the desk and every part written again and started. */

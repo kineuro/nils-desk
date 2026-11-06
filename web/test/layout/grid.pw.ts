@@ -141,3 +141,45 @@ for (const [device, width, height] of [
     expect(new URL(page.url()).hash).toBe("#data/datasets/ms-a/view?mode=grid&filter=look,main:t1w");
   });
 }
+
+// ux-runscope (2026-11-06): where scans are shown, a step runs over them without a cohort, saved as a selection on the way
+for (const [device, width, height] of [
+  ["laptop", 1440, 900],
+  ["phone", 390, 844],
+] as const) {
+  test(`on a ${device} a visit's scans run a step: three actions in view, and each step's choice fits its dialog`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/grid.html?runs#data/datasets/ms-a/view?mode=grid&subject=1&visit=s30");
+    await expect(page.locator(".vw-scan").first()).toBeVisible();
+    const buttons = page.locator(".vw-keep > button");
+    await expect(buttons).toHaveText(["Save as a selection", "Make a cohort", "Run a step"]);
+    for (const b of await buttons.all()) {
+      await expect(b).toBeVisible();
+      const box = (await b.boundingBox())!;
+      expect(box.x).toBeGreaterThanOrEqual(width < 500 ? 15 : 216);
+      expect(box.x + box.width).toBeLessThanOrEqual(width - (width < 500 ? 15 : 31) + 1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.getByRole("button", { name: "Run a step" }).click();
+    const dialog = page.locator("dialog[open]");
+    await expect(dialog.locator("h2")).toHaveText("Run a step");
+    await dialog.getByRole("button", { name: "Save and go on" }).click();
+    const choices = dialog.locator(".dp-run-choice");
+    await expect(choices).toHaveCount(3);
+    await expect(choices.nth(1).getByRole("button")).toHaveText(["Run on the 4 without a body part", /^Run again on all \d+$/]);
+    await dialog.evaluate((d) => Promise.all(d.getAnimations().map((a) => a.finished)));
+    const box = (await dialog.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(width + 1);
+    for (const b of await dialog.locator(".dp-run-choice button").all()) {
+      const r = (await b.boundingBox())!;
+      expect(r.x).toBeGreaterThanOrEqual(box.x);
+      expect(r.x + r.width).toBeLessThanOrEqual(box.x + box.width + 1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.screenshot({ path: `test-results/grid-run-a-step-${device}.png` });
+    await choices.nth(1).getByRole("button", { name: "Run on the 4 without a body part" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.locator(".vw-said")).toHaveText(/body part queued on 4 scans\. Jobs$/);
+  });
+}

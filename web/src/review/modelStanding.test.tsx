@@ -137,7 +137,7 @@ describe("the Proposals page", () => {
     expect(d.querySelector(".lede")?.textContent).toBe("1,204 scans take bp-head@1's body_part, each at or above 0.90.");
     const meta = d.querySelector(".dialog-body .meta")?.textContent ?? "";
     expect(meta).toContain("In force under your name, and re-sorted, so every page shows the new body_part.");
-    expect(meta).toContain("Staged before the registry changed; committed as proposed.");
+    expect(meta).toContain("Some were proposed before the data changed; committed as proposed.");
     expect(meta).toContain("46 more wait for their campaign.");
     expect(meta).toContain("The 4,838 below stay asked.");
     press("Commit 1,204", d);

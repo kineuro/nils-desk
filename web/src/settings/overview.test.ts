@@ -98,11 +98,11 @@ describe("the backups card", () => {
 });
 
 describe("the registry card", () => {
-  it("says what keeps it, its epoch and its calendar", () => {
+  it("says what keeps it, its schema and its calendar", () => {
     const card = registryCard(caps(), null, "sqlite", null, "Europe/Stockholm");
     expect(card.value).toBe("SQLite");
     expect(card.state).toBeNull();
-    expect(card.facts).toEqual(["epoch 1,234 · schema 37", "dates read in Europe/Stockholm"]);
+    expect(card.facts).toEqual(["schema 37", "dates read in Europe/Stockholm"]);
     expect(registryCard(caps(), null, null, null, null).value).toBe("kept by the engine");
   });
 });

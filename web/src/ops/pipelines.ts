@@ -111,7 +111,7 @@ export function progressOf(job: JobRow, now = Date.now()): Progress | null {
   const refused = num("quarantined") ?? num("refused");
   if (refused) words.push(`${n(refused)} refused`);
   const held = num("held");
-  if (held) words.push(`${n(held)} held until mapped`);
+  if (held) words.push(`${n(held)} need a subject code`);
   return { fraction: total !== null && total > 0 ? Math.min(1, done / total) : null, words: words.join(" · ") };
 }
 

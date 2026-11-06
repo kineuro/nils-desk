@@ -106,7 +106,7 @@ export function ResultView({ run, files, unit }: { run: RunDetail; files: Deriva
         </a>
       </div>
       {l === null ? (
-        <p className="meta">This unit made no mask to draw.</p>
+        <p className="meta">No mask was made here.</p>
       ) : (
         <>
           <div className="row result-tools">

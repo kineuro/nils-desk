@@ -25,14 +25,23 @@ const minutesAgo = (n: number) => new Date(Date.now() - n * 60_000).toISOString(
 describe("the look at the releases, beside the table", () => {
   it("says how old the look is, with Look again where the person may act, disabled while it is made", () => {
     const html = renderToStaticMarkup(<ReleasesLook looked={minutesAgo(20)} now={Date.now()} working={false} onLook={() => undefined} />);
-    expect(html).toContain('<span class="meta">releases looked up 20 minutes ago</span>');
+    expect(html).toContain('<span class="meta" role="status">looked for releases 20 min ago</span>');
     expect(html).toContain(">Look again</button>");
     expect(html).not.toContain("disabled");
     const busy = renderToStaticMarkup(<ReleasesLook looked={minutesAgo(1)} now={Date.now()} working={true} onLook={() => undefined} />);
     expect(busy).toContain("disabled");
     const others = renderToStaticMarkup(<ReleasesLook looked={minutesAgo(3)} now={Date.now()} working={false} onLook={null} />);
-    expect(others).toContain("releases looked up 3 minutes ago");
+    expect(others).toContain("looked for releases 3 min ago");
     expect(others).not.toContain("<button");
+  });
+
+  it("says when the next full look is where GitHub's requests an hour are spent, and why the last look failed", () => {
+    const html = renderToStaticMarkup(
+      <ReleasesLook looked={minutesAgo(1)} now={Date.now()} working={false} onLook={() => undefined} waits="next full look at 14:05: the 30 requests an hour this install spends at GitHub are spent" failed="git: not found" />,
+    );
+    expect(html).toContain("looked for releases 1 min ago");
+    expect(html).toContain("next full look at 14:05: the 30 requests an hour this install spends at GitHub are spent");
+    expect(html).toContain("the last look failed: git: not found");
   });
 
   it("says nothing from an engine that does not say when it looked", () => {
@@ -117,10 +126,17 @@ afterEach(() => {
 });
 
 describe("the supervisor's install door", () => {
-  it("is read as it was, and with ?fresh=1 where the look is asked for again", async () => {
+  it("is read as it was, with ?fresh=1 where the look is asked for again, and with ?watch=1 while the Parts page is open", async () => {
     await supervise.install();
     await supervise.install(true);
-    expect(asked).toEqual(["/supervise/api/supervise/install", "/supervise/api/supervise/install?fresh=1"]);
+    await supervise.install(false, true);
+    await supervise.install(true, true);
+    expect(asked).toEqual([
+      "/supervise/api/supervise/install",
+      "/supervise/api/supervise/install?fresh=1",
+      "/supervise/api/supervise/install?watch=1",
+      "/supervise/api/supervise/install?fresh=1&watch=1",
+    ]);
   });
 });
 
@@ -133,8 +149,9 @@ describe("the Parts page", () => {
   it("says when the releases were looked up beside the install's own read, and asks for a look again, then reads the page once more", async () => {
     const onChanged = vi.fn();
     await draw(install({ looked_at: minutesAgo(14) }), onChanged);
-    expect(host.textContent).toContain("checked just now");
-    expect(host.textContent).toContain("releases looked up 14 minutes ago");
+    // the look's own age stands alone: the page's read is not a look
+    expect(host.textContent).not.toContain("checked just now");
+    expect(host.textContent).toContain("looked for releases 14 min ago");
     expect(host.textContent).toContain("Engine 1.0.0-alpha.84 is out");
     expect(host.textContent).toContain("The engine moves from 1.0.0-alpha.83 to 1.0.0-alpha.84.");
     expect(buttons()).toHaveLength(1);
@@ -148,7 +165,7 @@ describe("the Parts page", () => {
   it("says nothing of a look, and offers none, for an engine that does not say when it looked", async () => {
     await draw(install(), vi.fn());
     expect(host.textContent).toContain("checked just now");
-    expect(host.textContent).not.toContain("releases looked up");
+    expect(host.textContent).not.toContain("looked for releases");
     expect(buttons()).toHaveLength(0);
   });
 
@@ -160,5 +177,58 @@ describe("the Parts page", () => {
     await act(async () => undefined);
     expect(host.textContent).toContain("the release listing was refused");
     expect(onChanged).not.toHaveBeenCalled();
+  });
+});
+
+describe("Update everything's order (2026-11-06)", () => {
+  const draw = async (i: Install) => {
+    await act(async () => root.render(<Settings caps={caps()} install={i} checkedAt={Date.now()} page="parts" onChanged={vi.fn()} />));
+  };
+  const ordered = (): Install => {
+    const i = install({
+      looked_at: new Date(Date.now() - 40_000).toISOString(),
+      newer: "1.0.0-alpha.84",
+      behind: ["engine", "desk"],
+      order: [
+        { part: "engine", from: "1.0.0-alpha.83", to: "1.0.0-alpha.84", why: "first: desk 1.0.0-alpha.66 needs its HTTP contract 8" },
+        { part: "desk", from: "1.0.0-alpha.65", to: "1.0.0-alpha.66", why: "after the engine: it needs HTTP contract 8" },
+      ],
+      stays: [{ part: "desk", version: "1.0.0-alpha.67", why: "desk 1.0.0-alpha.67 needs suite contract 4, which neither engine 1.0.0-alpha.83 nor 1.0.0-alpha.84 speaks; it waits for an engine release that speaks it" }],
+    });
+    i.parts["desk"] = { version: "1.0.0-alpha.65", kind: "binary", path: "/home/ada/.local/bin/nils-desk" };
+    i.release.parts = [
+      ...(i.release.parts ?? []),
+      { part: "desk", installed: "1.0.0-alpha.65", newest: "1.0.0-alpha.67", newer: "1.0.0-alpha.66", held: null, follows: null, error: null, command: "nils update --part engine --part desk", needs: "HTTP contract 8", after: "engine" },
+    ];
+    return i;
+  };
+
+  it("numbers the steps with why each is in its place, says what stays out, and the look's age to the ten seconds", async () => {
+    await draw(ordered());
+    const steps = [...host.querySelectorAll("ol.update-order li")].map((li) => li.textContent);
+    expect(steps).toEqual([
+      "The engine moves from 1.0.0-alpha.83 to 1.0.0-alpha.84, first: desk 1.0.0-alpha.66 needs its HTTP contract 8.",
+      "The desk moves from 1.0.0-alpha.65 to 1.0.0-alpha.66, after the engine: it needs HTTP contract 8.",
+    ]);
+    expect(host.textContent).toContain("Desk 1.0.0-alpha.67 needs suite contract 4, which neither engine 1.0.0-alpha.83 nor 1.0.0-alpha.84 speaks; it waits for an engine release that speaks it.");
+    expect(host.textContent).toContain("in this order, one part at a time");
+    expect(host.textContent).toMatch(/looked for releases [45]0 s ago/u);
+  });
+
+  it("takes a desk that needs the engine's next contract with the engine, first, from the desk's own Update", async () => {
+    await draw(ordered());
+    const own = [...host.querySelectorAll("button")].find((b) => b.textContent === "Update with the engine");
+    expect(own?.getAttribute("title")).toBe("nils update --part engine --part desk");
+    let body: unknown = null;
+    vi.stubGlobal("fetch", (url: string, init?: RequestInit) => {
+      const started = String(url).endsWith("/update-all");
+      if (started) body = JSON.parse(String(init?.body ?? "null"));
+      // the stand-in run ends at its first read, so nothing is followed past the test
+      const run = { id: "r1", what: "update", command: [], state: started ? "running" : "failed", pid: 1, started_at: "", finished_at: null, exit: started ? null : 1, tail: ["a stand-in run"] };
+      return Promise.resolve(new Response(JSON.stringify(run), { status: started ? 202 : 200, headers: { "Content-Type": "application/json" } }));
+    });
+    await act(async () => own?.click());
+    await act(async () => undefined);
+    expect(body).toEqual({ parts: ["engine", "desk"] });
   });
 });

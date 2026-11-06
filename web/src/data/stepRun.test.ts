@@ -176,6 +176,16 @@ describe("what a step's Run would go over, said before it starts", () => {
     expect(runActs(step({ of: 40 }))).toEqual([{ over: "all", label: "Run on all 40", scans: 40, parts: 1, primary: true }]);
   });
 
+  // engine 2026-11-06: the sort's "N not sorted" is a run of its own
+  it("offers the sort's scans not sorted first, then every scan", () => {
+    const acts = runActs(step({ step: "sorted", state: "done", of: 456132, unsorted: 812, runs: runs(456132, 812) }));
+    expect(acts).toEqual([
+      { over: "without", label: "Run on the 812 not sorted", scans: 812, parts: 1, primary: true },
+      { over: "all", label: "Run again on all 456,132", scans: 456132, parts: 1, primary: false },
+    ]);
+    expect(runActs(step({ step: "sorted", state: "done", runs: runs(30, 0) }))).toEqual([{ over: "all", label: "Run again on all 30", scans: 30, parts: 1, primary: true }]);
+  });
+
   it("marks the Run whose acts are open, and says what was queued", () => {
     const caps = caps7a(DOORS);
     const offers = choosingOffers(runOffers(caps, "datasets", [step(), step({ step: "sorted" })], false, () => undefined), "body_part");

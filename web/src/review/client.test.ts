@@ -77,8 +77,8 @@ describe("what an item says", () => {
   it("says what it is about from its evidence, never a value the registry keeps in confidence", () => {
     expect(itemWords(item(1, "base:vote", "group", { members: 14, evidence: { values: ["T1w", "T2w"] } }))).toBe("T1w or T2w, the vote split · 14 stacks alike");
     expect(itemWords(item(2, "base:missing", "group", { members: 21 }))).toBe("no base fits · 21 stacks alike");
-    expect(itemWords(item(3, "identity.collision", "subject", { evidence: { sessions: 6 } }))).toBe("two codes share one identifier · 6 sessions between them");
-    expect(itemWords(item(4, "identity.unmapped", "batch", { evidence: { files: 18, shape: "AAA999" } }))).toBe("18 files held until the map names an identifier shaped AAA999");
+    expect(itemWords(item(3, "identity.collision", "subject", { evidence: { sessions: 6 } }))).toBe("two subject codes share one identifier · 6 sessions between them");
+    expect(itemWords(item(4, "identity.unmapped", "batch", { evidence: { files: 18, shape: "AAA999" } }))).toBe("18 files wait until the map names an identifier shaped AAA999");
     expect(itemWords(item(5, "session.moved", "subject", { evidence: { from: 2, to: 3, scheme: "visits-90d" } }))).toBe("a session moved from visit 2 to visit 3 under visits-90d");
     expect(itemWords(item(6, "identity.provisional", "subject"))).toBe("a subject coded from an identifier the map does not know");
   });

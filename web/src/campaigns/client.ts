@@ -411,6 +411,12 @@ export const campaigns = {
   closeInBackground: (c: number | string) => door<Closed | { job: number; campaign: number; state: string }>("POST", `/api/campaigns/${id(c)}/close`, { background: true }),
   /** Sets the share of each batch read one by one: 0 for none, where the campaign's purpose allows it. */
   holdBack: (c: number | string, share: number) => door<{ campaign: number; hold_back: number; freed: number }>("POST", `/api/campaigns/${id(c)}/hold-back`, { share }),
+  /**
+   * Asks fewer axes in an open campaign, the rest derived from each answer
+   * (2026-11-06, as `nils campaign requestion`): `dryRun` says what would
+   * change and writes nothing. The campaign's maker or a Review worker.
+   */
+  requestion: (c: number | string, axes: string[], dryRun = false) => door<Requestioned>("POST", `/api/campaigns/${id(c)}/requestion`, dryRun ? { axes, dry_run: true } : { axes }),
   export: (c: number | string, body: { of: "outcomes" | "answers" | "counts"; name?: string; place?: string }) => door<LabelSet>("POST", `/api/campaigns/${id(c)}/export`, body),
   labelSets: () => door<{ count: number; label_sets: LabelSet[] }>("GET", "/api/label-sets").then((r) => r.label_sets),
   labelSet: (n: number) => door<LabelSet>("GET", `/api/label-sets/${n}`),
@@ -554,6 +560,18 @@ export function singleValueOf(q: Question, value: unknown): string | null {
   const v = g.values[axes[0]];
   return typeof v === "string" ? v : null;
 }
+
+/** What asking fewer axes did, or would do: the axes asked before and now, those derived, and the answers kept. */
+export type Requestioned = {
+  campaign: number;
+  name: string;
+  asked_before: string[];
+  asked: string[];
+  derive: string[];
+  answers_kept: number;
+  answers_derived: number;
+  dry_run: boolean;
+};
 
 /** The doors record 48's first real read added: the derived axes of an answer, and an item's whole header. */
 export const DERIVE = "POST /api/campaigns/{id}/items/{item}/derive";

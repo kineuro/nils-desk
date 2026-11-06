@@ -791,6 +791,11 @@ export function hold(key: string, value: unknown): void {
   while (held.size > 64) held.delete(held.keys().next().value as string);
 }
 
+/** One list let go, so it is read anew when a person comes back to it: a visit sorted again (UX round 2). */
+export function letGo(key: string): void {
+  held.delete(key);
+}
+
 /** Everything let go (a test). */
 export function forgetHeld(): void {
   held.clear();

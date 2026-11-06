@@ -9,7 +9,7 @@
 // their scans are, in the same language: the scan taken's value filled, the
 // value most of a visit's scans carry outlined where it takes none.
 
-import { Fragment, type CSSProperties } from "react";
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 import { Hint } from "../ui/Hint";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -521,11 +521,13 @@ function VisitLayerMark({ layer, v }: { layer: Layer; v: VisitLayer }) {
   );
 }
 
-/** A Run of the layer's step where it has not run over the scope, as the dataset's own page offers it. */
+/** A Run of the layer's step where it has not run over the scope, as the dataset's own page offers it; a press opens what it would go over (2026-11-06). */
 export interface LayerRun {
   label: string;
   disabled: boolean;
   why: string | null;
+  /** Its choice is open under the line. */
+  open?: boolean;
   onRun: () => void;
 }
 
@@ -542,6 +544,8 @@ export interface LayerBoxProps {
   /** The layer's step over the scope in one line, and whether it has run there. */
   step: { words: string; ran: boolean } | null;
   run: LayerRun | null;
+  /** What the Run would go over, open under its line once pressed: its scans without the step's answer first, then every one. */
+  choice?: ReactNode;
   /** One line once a run is asked for, or why it was refused. */
   said: string | null;
   /** While the step waits or runs and its progress is not read again here: why, and a Reload. */
@@ -555,7 +559,7 @@ export interface LayerBoxProps {
  * carries none, and whether the step that answers it has run over the
  * dataset or cohort, with a Run where it has not.
  */
-export function LayerBox({ layer, onLayer, answer, unanswered = false, since, step, run, said, note = null }: LayerBoxProps) {
+export function LayerBox({ layer, onLayer, answer, unanswered = false, since, step, run, choice = null, said, note = null }: LayerBoxProps) {
   const most = Math.max(1, ...(answer?.values.map((v) => v.visits_with) ?? []));
   return (
     <section className="ms-box ms-layer" aria-label="Layer">
@@ -582,7 +586,7 @@ export function LayerBox({ layer, onLayer, answer, unanswered = false, since, st
               <span className={step.ran ? "ms-layer-said" : "ms-layer-said not-run"}>{step.words}</span>
               {run && (
                 <>
-                  <button type="button" className="button secondary small" disabled={run.disabled} onClick={run.onRun}>
+                  <button type="button" className="button secondary small" disabled={run.disabled} aria-expanded={run.open ?? false} onClick={run.onRun}>
                     {run.label}
                   </button>
                   {run.why && <Hint text={run.why} />}
@@ -590,6 +594,7 @@ export function LayerBox({ layer, onLayer, answer, unanswered = false, since, st
               )}
             </div>
           )}
+          {choice}
           {said && (
             <p className="meta ms-said" role="status">
               {said}

@@ -24,12 +24,14 @@ const KNOWN: { test: RegExp; words: string }[] = [
 
 /** A step's run refused at its door (record 56), by the engine's reason and the step: the line shown. */
 const STEP_REFUSED: Record<string, (step: string) => string> = {
-  running: (step) => (step === "post_contrast" ? "Post-contrast runs already." : "Body part runs already."),
+  running: (step) => (step === "post_contrast" ? "Post-contrast runs already." : step === "sorted" ? "A sort runs already." : "Body part runs already."),
   no_model: (step) => (step === "post_contrast" ? "No post-contrast model is installed." : "No body-part model is installed."),
   no_pipeline: () => "No body-part model is installed.",
   no_runtime: () => "Models cannot run on this machine.",
   no_place: () => "There is no place for a model's results.",
   no_scans: () => "There are no scans to run it over yet.",
+  // engine 2026-11-06: a run over the scans without its answer, where none is without it
+  none_without: (step) => (step === "sorted" ? "Every scan is sorted already." : "Every scan has its answer already."),
 };
 
 /** A refusal, an error or the engine's words, as the Data page says it; `otherwise` where the desk does not know it. */

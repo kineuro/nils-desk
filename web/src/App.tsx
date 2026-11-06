@@ -105,6 +105,8 @@ export function App() {
   const [installAt, setInstallAt] = useState<number | null>(null);
   const [asked, setAsked] = useState(0);
   const supervised = load.kind === "ready" && may(load.caps, "install:see") && Boolean(load.caps.desk.settings?.supervisor_url);
+  // while the Parts page is open the supervisor watches for new releases, at most once a minute, and the page reads it twice a minute
+  const watching = route.section === "settings" && route.page === "parts";
   useEffect(() => {
     if (!supervised) {
       setInstall(null);
@@ -113,7 +115,7 @@ export function App() {
     let alive = true;
     const read = () =>
       supervise
-        .install()
+        .install(false, watching)
         .then((i) => {
           if (!alive) return;
           setInstall(i);
@@ -121,12 +123,12 @@ export function App() {
         })
         .catch(() => alive && setInstall(null));
     read();
-    const t = setInterval(read, 60_000);
+    const t = setInterval(read, watching ? 30_000 : 60_000);
     return () => {
       alive = false;
       clearInterval(t);
     };
-  }, [supervised, asked]);
+  }, [supervised, asked, watching]);
 
   // whether the install is set up, for a person who may see it, from the places, the backups and the summary every page keeps
   const places = useKept(placesKept);

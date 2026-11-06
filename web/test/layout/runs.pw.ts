@@ -337,7 +337,7 @@ test("a run's page says each session skipped and why, and that the run made noth
   await expect(page.locator("table.thin .tag.caution", { hasText: "skipped" })).toHaveCount(4);
   await expect(page.locator("tr.made-row .made-line")).toHaveCount(4);
   await expect(page.locator("tr.made-row .made-line").first()).toHaveText("no FLAIR picked");
-  await expect(page.locator(".run-page")).not.toContainText("Every unit that finished passed its checks.");
+  await expect(page.locator(".run-page")).not.toContainText("Everything that finished passed its checks.");
   await shot(page, "run-nothing-1440");
 });
 

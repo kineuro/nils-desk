@@ -215,9 +215,9 @@ describe("the detail's rail", () => {
     expect(stepWords(step("sorted", { state: "waiting", scans: 0, of: 0 }), NOW).what).toBe("not yet");
     // the duplicate policy (2026-10-10): the read's own words, the held ones in the line and the rest behind its hint
     const copies = stepWords(step("read", { files: 7330, new: 0, known: 7328, twice: 2, same_instance: 3, left_out: 1, gone: 4, refused: 216, set_aside: 210, reads: 2 }), NOW);
-    expect(copies.what).toBe("7,330 read · 3 held · 210 set aside · 6 refused");
+    expect(copies.what).toBe("7,330 read · 3 kept apart · 210 set aside · 6 refused");
     expect(copies.hint).toBe(
-      "7,328 already in another dataset · 2 twice in this dataset · 3 held: the scan is filed under another subject, visit or series · 1 left out of the read by a person · 4 gone from the folder · 210 set aside: not scans · 6 refused",
+      "7,328 already in another dataset · 2 twice in this dataset · 3 kept apart: the scan is filed under another subject, visit or series · 1 left out of the read by a person · 4 gone from the folder · 210 set aside: not scans · 6 refused",
     );
     // an engine from before gives none of these words, and no hint
     expect(stepWords(step("read", { files: 10, refused: 0, reads: 1 }), NOW).hint).toBeUndefined();
@@ -560,7 +560,7 @@ describe("a dataset's head", () => {
     expect(stateWord("anonymised")).toBe("anonymised");
     expect(stateWord("unknown")).toBe("loose files");
     expect(idsWords(d)).toBe("PatientID holds the subject code");
-    expect(idsWords(dataset({ patient_id: "id-type:study-id", subjects: "map" }))).toBe("PatientID holds the study-id, codes from a map");
+    expect(idsWords(dataset({ patient_id: "id-type:study-id", subjects: "map" }))).toBe("PatientID holds the study-id, subject codes from a map");
   });
 });
 

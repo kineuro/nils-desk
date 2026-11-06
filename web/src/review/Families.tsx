@@ -341,7 +341,7 @@ export function AskedDialog({ caps, asked, onClose, onNone, onDone }: { caps: Ca
       const said = Object.entries(c.values)
         .map(([axis, v]) => `${axis} ${valueWords(v)}`)
         .join(", ");
-      onDone(`Decided ${said || "nothing"} for stack ${asked.stack ?? ""}${r.staged ? ", staged for a person to commit" : ""}.`);
+      onDone(`Decided ${said || "nothing"} for stack ${asked.stack ?? ""}${r.staged ? ", waiting for a person to confirm" : ""}.`);
     } catch (e) {
       setBusy(false);
       setRefused(refusalWords(e));

@@ -17,7 +17,10 @@
 // and keys (1, 2, 0, - and Enter), answered for this scan alone. Wave 7b
 // (section 8.6): under the scan, Provenance opens the panel of the stack's
 // steps and results with their curation state, and Session provenance its
-// session's.
+// session's. UX round 2: each fact says where it came from (the rules, a
+// model or a decision), framed by it, with the details on a press; a fact a
+// decision was not sorted into yet says what was decided, and offers the
+// scan's re-sort to who may run a sort (OriginFact.tsx).
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -33,6 +36,8 @@ import { browserKept } from "./keep";
 import { ProvenanceButton } from "../ops/Provenance";
 import { scanProvenance } from "../ops/workflows";
 import { markOpen, ScanViewer } from "./ScanViewer";
+import { OriginFact, useOrigins } from "./OriginFact";
+import { axisWord, byStack, forgetOrigins, heldAxes, mayReadOrigins, mayResort, originDoors, originsFor, sortedOf, staleAxes, targetOfScan } from "./origins";
 import { needsLook, questionWords, type Scan, type ScanPage } from "./scans";
 import "./datasetView.css";
 import { buildTree, factsOf, filterTree, filterWords, folderOf, matches, pathOf, rowsOf, sessionLabel, treeOrder, type Row } from "./tree";
@@ -45,6 +50,7 @@ import {
   KEPT,
   keptText,
   lastScanKey,
+  letGo,
   paramsWords,
   scansKey,
   scopeHome,
@@ -403,6 +409,34 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
     setSeed((was) => was.map(fix));
   }, []);
 
+  // UX round 2: where each fact came from, read once for the scan's visit
+  const originTarget = caps && scan && mayReadOrigins(caps) ? targetOfScan(scan) : null;
+  const { origins, keep: keepOrigins } = useOrigins(originTarget);
+  const scanOrigins = scan ? byStack(origins).get(scan.id) : undefined;
+  const scanSorted = scan ? sortedOf(origins, scan.id) : null;
+  // a decision the sort has not applied, on an axis the facts do not show yet
+  const unshown = staleAxes(scanOrigins)
+    .filter((a) => !facts.some((f) => f.axis === a.axis))
+    .map((a) => ({ what: axisWord(a.axis), value: "none", axis: a.axis }));
+  const resortScan =
+    caps && scan && originTarget && mayResort(caps)
+      ? async () => {
+          const id = scan.id;
+          await originDoors.resort({ stack: id });
+          forgetOrigins();
+          const visit = visitOf(scan);
+          if (visit !== null) letGo(scansKey(scope, visit));
+          const fresh = await originsFor(originTarget);
+          keepOrigins(fresh);
+          const axes = heldAxes(fresh, id);
+          if (axes) {
+            const fix = (s: Scan) => (s.id === id ? { ...s, axes } : s);
+            setScans((was) => was.map(fix));
+            setSeed((was) => was.map(fix));
+          }
+        }
+      : null;
+
   return (
     <div className="dview" aria-label={scope.name}>
       <header className="dview-top">
@@ -438,7 +472,7 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
               <span className="meta num" aria-label={`${filtering ? `${n(order.length)} of ${n(all.length)}` : n(total)} scans`}>
                 {filtering ? `${n(order.length)} of ${n(all.length)}` : n(total)}
               </span>
-              <KeepActions caps={caps} ready={!failed && order.length > 0} kept={() => browserKept(scope, words, order, { read: all.length, total })} />
+              <KeepActions caps={caps} ready={!failed && order.length > 0} runs kept={() => browserKept(scope, words, order, { read: all.length, total })} />
             </div>
           )}
           {failed && <p className="warn">The scans could not be read: {failed}</p>}
@@ -486,10 +520,8 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
               </div>
               {caps && <ScanQuestion caps={caps} where={whereOfScope(scope)} scan={scan} looks={looks} onMark={setMark} onAnswered={(axis, value) => answered(scan.id, axis, value)} />}
               <footer className="dview-facts">
-                {facts.map((f) => (
-                  <span key={f.what} className="dview-fact" title={f.what}>
-                    {f.value}
-                  </span>
+                {[...facts, ...unshown].map((f) => (
+                  <OriginFact key={f.what} fact={f} origin={f.axis ? (scanOrigins?.get(f.axis) ?? null) : null} sorted={scanSorted} resort={resortScan} />
                 ))}
                 {timing !== "" && <span className="dview-timing">{timing}</span>}
                 {looks && scope.kind === "dataset" && (

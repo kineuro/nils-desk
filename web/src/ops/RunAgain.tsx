@@ -120,7 +120,7 @@ export function RunAgainDialog({ caps, again, onClose, onDone }: { caps: Capabil
         </>
       }
     >
-      <p className="meta">{again.kind === "resume" ? `${again.label}: goes on where it stopped, with every unit it finished kept.` : "Runs the same command again, as a new run."}</p>
+      <p className="meta">{again.kind === "resume" ? `${again.label}: goes on where it stopped; what it finished is kept.` : "Runs the same command again, as a new run."}</p>
       {checks ? (
         <PreflightPanel p={pre?.p ?? null} checking={pre === null} why={pre?.why ?? null} software={softHref} act={(f) => <InstallFor caps={caps} f={f} onInstalled={() => setInstalls((k) => k + 1)} />} />
       ) : (

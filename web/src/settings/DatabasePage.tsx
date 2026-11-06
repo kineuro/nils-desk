@@ -445,12 +445,12 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
                 <dd>
                   {status.pseudonym_scheme}, key <span className="path">{status.pseudonym_key}</span>
                 </dd>
-                <dt>codes shown</dt>
+                <dt>subject codes shown</dt>
                 <dd>{status.display_length} characters</dd>
                 <dt>made</dt>
                 <dd>{madeWords(status.created_at)}</dd>
               </dl>
-              <p className="meta">These keep every code the same for the life of the registry.</p>
+              <p className="meta">These keep every subject code the same for the life of the registry.</p>
             </section>
           )}
 
@@ -507,7 +507,7 @@ export function DatabasePage({ caps, install, onChanged }: { caps: Capabilities;
               )}
               <Acted acting={change.acting} />
               {calendarLocked !== null && <p className="meta">{calendarLocked}</p>}
-              <p className="meta">Every answer's dates use these, never the browser's. A change moves the registry's epoch.</p>
+              <p className="meta">Every answer's dates use these, never the browser's.</p>
             </section>
           )}
           {served(caps, "GET /api/settings") && <BlindShare locked={calendarLocked} />}

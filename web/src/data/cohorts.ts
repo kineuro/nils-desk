@@ -269,7 +269,7 @@ export function ledeWords(c: CohortHead, now = new Date()): string {
     case "source":
       return `Fed by the dataset ${d.place ?? c.feeds[0] ?? "it names"} since ${when}.${owner} Every subject a digest of that folder brings in joins here.${retired}`;
     case "promotion":
-      return `Promoted from the card ${d.card ?? "it names"}${d.version !== undefined ? ` v${d.version}` : ""} on ${when}.${owner} The card keeps its version and epoch on every membership.${retired}`;
+      return `Promoted from the card ${d.card ?? "it names"}${d.version !== undefined ? ` v${d.version}` : ""} on ${when}.${owner} Each membership keeps the card's version.${retired}`;
     case "manual":
       return `Made by hand${d.by ? ` by ${d.by}` : ""} on ${when}.${owner} Members are added and taken out with a reason.${retired}`;
     case "import":

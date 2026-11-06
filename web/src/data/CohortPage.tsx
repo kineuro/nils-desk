@@ -436,7 +436,7 @@ export function MembersDialog({ cohort: c, onClose, onDone }: { cohort: Pick<Coh
         </label>
       </div>
       <label className="field">
-        <span className="label">Codes, one per line</span>
+        <span className="label">Subject codes, one per line</span>
         <span className="input mono">
           <textarea value={codes} rows={6} autoFocus onChange={(e) => setCodes(e.target.value)} />
         </span>

@@ -125,9 +125,28 @@ function route(c: Call) {
   if (u.pathname === "/api/ask/run") return json({ handle: 77, hash: "h", grain: "subject", row_count: found.rows, declaration: {}, content_hash: "c", truncated, columns: [], rows: [], pages: 1 });
   if (u.pathname === "/api/ask/handles/77/promote") return json({ job: 9, state: "queued", handle: 77, cohort: (c.body as { cohort: string }).cohort }, 202);
   if (u.pathname === "/api/cohorts") return json([{ name: "ms", owner: null, description: null, subjects: 8, sessions: null, stacks: 40, feeds: [], from: { kind: "manual", detail: null }, waiting: 0, releases: 0, created_at: "2026-10-01T10:00:00Z", last_joined: null, retired_at: null }]);
+  // 2026-11-06: a saved selection's steps, and a step's run over it
+  if (u.pathname.startsWith("/api/selections/")) {
+    const [, , , spec, , step] = u.pathname.split("/");
+    const [name, version] = decodeURIComponent(spec).split("@");
+    if (c.method === "GET") return json(selectionSteps(name, Number(version)));
+    const without = (c.body as { scans?: string } | undefined)?.scans === "without";
+    return json({ job: 31, state: "queued", step, for: `selection:${name}@${version}`, scans: without ? 1 : 3, over: without ? "without" : "all", parts: 1, handle: 90, command: ["run"] }, 202);
+  }
   if (u.pathname === "/api/jobs/9") return json({ id: 9, kind: "ask", name: "x", state: "done", started_at: "", heartbeat_at: null, finished_at: "", progress: null, error: null, args: {}, result: { added: found.subjects, already: 0 } });
   return undefined;
 }
+
+/** What the engine counts of each step over a saved selection of three scans: one of them without a body part, every one sorted. */
+const selectionSteps = (name: string, version: number) => {
+  const st = (step: string, without: number, extra: Record<string, unknown> = {}) => ({ step, state: "waiting", job: null, started_at: null, finished_at: null, progress: null, of: 3, refusal: null, runs: { all: { scans: 3, parts: 1 }, without: { scans: without, parts: without > 0 ? 1 : 0 } }, ...extra });
+  return {
+    selection: { name, version },
+    for: `selection:${name}@${version}`,
+    scans: 3,
+    steps: [st("sorted", 0, { state: "done", scans: 3, unsorted: 0 }), st("body_part", 1, { served: true }), st("post_contrast", 0, { state: "off", refusal: { reason: "no_pipeline", error: "no post-contrast pipeline postcontrast-cascade is installed" } })],
+  };
+};
 
 describe("keeping what the dataset viewer shows", () => {
   let root: Root;
@@ -382,6 +401,49 @@ describe("keeping what the dataset viewer shows", () => {
     });
     expect(dialog()).toBeNull();
     expect(location.hash).toBe(before);
+  });
+
+  // 2026-11-06: a step over the scans shown, without a cohort
+  it("runs a step over the scans shown: saved as a selection on the way, then each step's run over it chosen as on a rail", async () => {
+    const runs = caps7a([...DOORS, "POST /api/selections/{name}/steps/{step}/run", "GET /api/selections/{name}/steps"], [...KEEPS, "pipelines:work"]);
+    // where scans are shown, and only there
+    for (const hash of ["#data/datasets/ms-a/view", "#data/datasets/ms-a/view?mode=grid&subject=1"]) {
+      await open(hash, runs);
+      expect(keepButtons(), hash).toEqual(["Save as a selection", "Make a cohort"]);
+    }
+    await open("#data/datasets/ms-a/view?mode=browser", runs);
+    expect(keepButtons()).toEqual(["Save as a selection", "Make a cohort", "Run a step"]);
+    // not without work on Pipelines, nor where the engine has no such door
+    await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34");
+    expect(keepButtons()).toEqual(["Save as a selection", "Make a cohort"]);
+    await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34", runs);
+    expect(keepButtons()).toEqual(["Save as a selection", "Make a cohort", "Run a step"]);
+    act(() => button(el, "Run a step")!.click());
+    await settle();
+    expect(dialog()?.querySelector("h2")?.textContent).toBe("Run a step");
+    expect(values()).toEqual({ from: "ms-a · sub-a1 · ses-20190914", "it runs on": "3 scans of 3 subjects" });
+    expect(asked("/api/ask/selections/", "PUT")).toHaveLength(0);
+    act(() => button(dialog()!, "Save and go on")!.click());
+    await settle();
+    // saved on the way, then each step over it, as the engine counts it
+    expect(asked("/api/ask/selections/", "PUT")).toHaveLength(1);
+    expect(asked("/api/selections/ms-a-subject-1-visit-1%402/steps", "GET")).toHaveLength(1);
+    expect(values()).toEqual({ selection: "ms-a-subject-1-visit-1, version 2", scans: "3" });
+    const choices = [...dialog()!.querySelectorAll(".dp-run-choice")];
+    expect(choices.map((x) => x.querySelector(".dp-run-title")?.textContent)).toEqual(["Sorted", "Body part", "Post-contrast"]);
+    expect([...choices[1].querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Run on the 1 without a body part", "Run on all 3"]);
+    expect([...choices[0].querySelectorAll("button")].map((b) => b.textContent)).toEqual(["Run again on all 3"]);
+    expect(choices[2].querySelector("button")!.disabled).toBe(true);
+    expect(dialog()!.querySelector(".row.actions .meta")?.textContent).toBe("Saved as ms-a-subject-1-visit-1, version 2.");
+    act(() => button(dialog()!, "Run on the 1 without a body part")!.click());
+    await settle();
+    const started = asked("/api/selections/ms-a-subject-1-visit-1%402/steps/body_part/run");
+    expect(started).toHaveLength(1);
+    expect(started[0].body).toEqual({ scans: "without" });
+    expect(dialog()).toBeNull();
+    const said = el.querySelector(".vw-said")!;
+    expect(said.textContent).toBe("ms-a-subject-1-visit-1: body part queued on 1 scan. Jobs");
+    expect(said.querySelector("a")?.getAttribute("href")).toBe("#pipelines/jobs");
   });
 
   it("keeps one visit's scans by its studies, and the scans the browser's words leave one by one", async () => {

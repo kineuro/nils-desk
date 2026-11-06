@@ -138,7 +138,7 @@ export function VaultBody(props: {
         cells={[
           { k: "what moves", v: movingWords(look) },
           { k: "from", v: d.trees?.originals?.path ?? "derivatives/dcm-original" },
-          ...(look !== null && look.held > 0 ? [{ k: "held until mapped", v: `${n(look.held)} move with them` }] : []),
+          ...(look !== null && look.held > 0 ? [{ k: "need a subject code", v: `${n(look.held)} move with them` }] : []),
         ]}
       />
       <div className="field">
@@ -249,7 +249,7 @@ export function PurgeBody(props: {
               { k: "files", v: n(look.files) },
               { k: "size", v: bytesWords(look.bytes) },
               { k: "copy checked", v: n(look.verified) },
-              { k: "held until mapped", v: n(look.held) },
+              { k: "need a subject code", v: n(look.held) },
             ]}
           />
           <span className="meta">What the engine last saw: a forecast, not a promise.</span>

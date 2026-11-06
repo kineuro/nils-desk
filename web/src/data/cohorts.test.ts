@@ -147,7 +147,7 @@ describe("a cohort's card", () => {
   it("has a lede on its own page", () => {
     expect(ledeWords(list[0], NOW)).toBe("Fed by the dataset north-3t since 11 May. Owner astrid. Every subject a digest of that folder brings in joins here.");
     expect(ledeWords(list[2], NOW)).toBe("Made by hand by astrid on 3 Sept. Owner erik. Members are added and taken out with a reason.");
-    expect(ledeWords({ ...list[1], retired_at: "2026-09-15T13:00:00Z" }, NOW)).toMatch(/^Promoted from the card north at 7T v2 on today .*The card keeps its version and epoch on every membership\. Retired today .*: its members and history stay\.$/);
+    expect(ledeWords({ ...list[1], retired_at: "2026-09-15T13:00:00Z" }, NOW)).toMatch(/^Promoted from the card north at 7T v2 on today .*Each membership keeps the card's version\. Retired today .*: its members and history stay\.$/);
   });
 });
 

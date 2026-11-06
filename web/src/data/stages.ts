@@ -79,7 +79,7 @@ function fromStages(s: BatchStages, jobs: JobRow[], batchState: string): Stage[]
   const out: Stage[] = [];
   const p = s.pseudonymised;
   if (p) {
-    const parts = [`${n(p.changed)} changed`, `${n(p.held)} held`];
+    const parts = [`${n(p.changed)} changed`, `${n(p.held)} need a subject code`];
     if (p.refused > 0) parts.push(`${n(p.refused)} refused`);
     out.push({ name: "pseudonymised", count: p.files, unit: "files", words: parts.join(" · "), jobs: p.job !== null ? [p.job] : [], mark: markOfJobs(p.job !== null ? [p.job] : [], jobs, "done") });
   } else {

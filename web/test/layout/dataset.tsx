@@ -8,7 +8,10 @@
 // what the filter leaves sits under it within the tree's width. Review round
 // 1 (record 56 section 6.3, DR3): a scan whose rules and System 1 disagree
 // carries its question under it, answered with the grid's keys; what the
-// answer door was sent is kept on the window.
+// answer door was sent is kept on the window. UX round 2: each fact says
+// where it came from (the origins door): the first scan's weighting a
+// decision not sorted yet, the second's a person's decision from a
+// campaign, the contrast of the third a model's, the rest the rules'.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -96,6 +99,31 @@ window.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const ids = where.find((c) => c[0] === "in")?.[3] as number[] | undefined;
     return json({ valid: true, issues: [], funnel: [{ set: "scans", grain: "stack", stage: "where", rows: ids?.length ?? rows.length, subjects: 6 }] });
   }
+  // UX round 2: where each label came from, for the visit asked
+  if (u.pathname === "/api/origins") {
+    const session = Number(u.searchParams.get("session"));
+    const sorted = { pack: "mri", version: "1.4.0", overlay: null, job: 3, at: "2026-11-01T08:00:00Z" };
+    const decided = { id: 77, kind: "person", value: "T2w", values: ["T2w"], by: "anna@site", at: "2026-11-05T14:02:00Z", campaign: { id: 6, name: "curate", status: "closed", item: 412, position: 3 } };
+    const stacks = (rows as { stack: number; session: { id: number }; series_number: number; axes: Record<string, string> }[])
+      .filter((r) => r.session.id === session)
+      .map((r) => ({
+        stack: r.stack,
+        sorted,
+        unsorted: r.series_number === 1,
+        axes: Object.entries(r.axes).map(([axis, value]) => {
+          const plain = { axis, values: value.split(","), confidence: 0.9, tier: "keyword", origin: "rules", line: "", state: "current", words: null, rules: [{ rule_set: axis, rule: `${axis}_words`, source: "series_description", matched: value }], decided: null };
+          if (r.series_number === 1 && axis === "base") return { ...plain, state: "unsorted", words: "decided T2w; sorted before the decision", decided };
+          if (r.series_number === 2 && axis === "base") return { ...plain, tier: "decision", origin: "decision", rules: [], from: { kind: "person", by: "anna@site", campaign: 6, scope: "stack" }, decided: { ...decided, value: value, values: [value] } };
+          if (r.series_number === 3 && axis === "post_contrast") return { ...plain, tier: "decision", origin: "model", rules: [], from: { kind: "model", by: "post-contrast@1.2", model: { id: 4, name: "post-contrast", version: "1.2", label: "post-contrast@1.2" } }, decided: { id: 90, kind: "model", value, values: [value], by: "post-contrast@1.2", committed_by: "astrid@site", model: { id: 4, label: "post-contrast@1.2", p: 0.94, run: 31 } } };
+          return plain;
+        }),
+      }));
+    return json({ count: stacks.length, unsorted: stacks.filter((s) => s.unsorted).length, stacks });
+  }
+  if (u.pathname === "/api/origins/resort") {
+    posted.push(JSON.parse(String(init?.body)));
+    return json({ resort: { state: "done", stacks: 1, sorted: 1, jobs: [9], words: "1 of 1 scan(s) re-sorted" }, origins: { count: 0, unsorted: 0, stacks: [] } });
+  }
   if (u.pathname === "/api/cohorts") return json([]);
   if (u.pathname === "/api/picks/summary") return json({});
   const pv = /^\/api\/instances\/(\d+)\/preview$/.exec(u.pathname);
@@ -118,7 +146,7 @@ const caps = {
   engine: {
     engine: { name: "nils", version: "1.0.0-alpha.80" },
     contracts: { openapi: "7" },
-    doors: ["GET /api/datasets/{name}/scans", "POST /api/ask/diagnose", "POST /api/ask/documents", "POST /api/ask/run", "PUT /api/ask/selections/{name}", "POST /api/ask/handles/{id}/promote", "GET /api/cohorts", "GET /api/review/questions", "GET /api/review/questions/{key}/scans", "POST /api/review/questions/{key}/answer"],
+    doors: ["GET /api/datasets/{name}/scans", "POST /api/ask/diagnose", "POST /api/ask/documents", "POST /api/ask/run", "PUT /api/ask/selections/{name}", "POST /api/ask/handles/{id}/promote", "GET /api/cohorts", "GET /api/review/questions", "GET /api/review/questions/{key}/scans", "POST /api/review/questions/{key}/answer", "GET /api/origins", "POST /api/origins/resort"],
     policy: [],
     auth: "token",
     principal: "astrid@site",
@@ -129,7 +157,7 @@ const caps = {
   kvasir: null,
   assistant: null,
   apps: [],
-  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work", "review:see", "review:work"], detail: "quasi", groups: [] },
+  person: { subject: "astrid@site", display_name: "Astrid", grants: ["data:see", "data:work", "query:see", "query:work", "review:see", "review:work", "pipelines:work"], detail: "quasi", groups: [] },
   desk: { version: "1.0.0", mode: "local", contracts: {}, engine_reachable: true, contract_mismatch: null, login: null, signed_in: true },
 } as unknown as Capabilities;
 

@@ -740,7 +740,7 @@ export function mapRefusal(guesses: Guess[]): string | null {
   if (canonical > 1) return "One column stands for the person; two are chosen.";
   if (code > 1) return "One column is the subject code; two are chosen.";
   if (guesses.some((g) => g.role === "canonical" && (g.id_type ?? g.new_type) === RESERVE_TYPE))
-    return "A reserve number never stands for the person: no code is made from one. Name the person's code, or their personnummer, beside it.";
+    return "A reserve number never stands for the person: no subject code is made from one. Name the person's subject code, or their identifying ID, beside it.";
   if (guesses.some((g) => (g.role === "identifier" || g.role === "canonical") && g.id_type === null && g.new_type === null)) return "Every identifier column names its type: pick one of the site's, or make a new one.";
   return null;
 }

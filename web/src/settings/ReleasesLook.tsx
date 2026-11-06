@@ -10,19 +10,39 @@ import { lookedWords } from "./parts";
 /**
  * The look's age, and Look again where the person may act on the install
  * (`onLook` is null where not). Nothing from an engine that does not say when
- * it looked, so the page reads as it did.
+ * it looked, so the page reads as it did. `waits` says when the next full look
+ * is where GitHub's requests an hour are spent, and `failed` why the last look
+ * for new tags failed.
  */
-export function ReleasesLook({ looked, now, working, onLook }: { looked: string | null | undefined; now: number; working: boolean; onLook: (() => void) | null }) {
+export function ReleasesLook({
+  looked,
+  now,
+  working,
+  onLook,
+  waits = null,
+  failed = null,
+}: {
+  looked: string | null | undefined;
+  now: number;
+  working: boolean;
+  onLook: (() => void) | null;
+  waits?: string | null;
+  failed?: string | null;
+}) {
   const words = lookedWords(looked, now);
   if (words === null) return null;
   return (
     <>
-      <span className="meta">{words}</span>
+      <span className="meta" role="status">
+        {words}
+      </span>
       {onLook && (
         <button type="button" className="button secondary small" disabled={working} onClick={onLook}>
           Look again
         </button>
       )}
+      {waits && <span className="meta">{waits}</span>}
+      {failed && <span className="meta">the last look failed: {failed}</span>}
     </>
   );
 }

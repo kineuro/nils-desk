@@ -62,6 +62,14 @@ describe("how far a run is", () => {
     expect(stepProgressWords(BEAT, null, NOW)).toBe("312 of 870 scans in part 4 of 23 · 47 min");
   });
 
+  // engine 2026-11-06: parts that run at once beat their job summed
+  it("says the parts running at once and their counts summed", () => {
+    const p = liveOf({ ...BEAT, done: 1200, total: 2610, part: { at: 3, to: 5, of: 23 } });
+    expect(p.part).toEqual({ at: 3, to: 5, of: 23 });
+    expect(liveWords(p)).toBe("1,200 of 2,610 scans in parts 3 to 5 of 23");
+    expect(liveOf({ ...BEAT, part: { at: 4, to: 4, of: 23 } }).part).toEqual({ at: 4, of: 23 });
+  });
+
   it("says the engine's words in the desk's", () => {
     expect([whatWords("stacks", 2), whatWords("stacks", 1), whatWords("sessions", 3), whatWords("subjects", 1), whatWords("slices", 1), whatWords(null, 4)]).toEqual([
       "scans",

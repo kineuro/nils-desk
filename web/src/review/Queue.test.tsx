@@ -30,7 +30,7 @@ describe("the queue's table", () => {
     // an identity question first, then a session that moved (a subject-wide question), then the classifier's, the decided one last
     const order = [...html.matchAll(/<span class="tag ?([a-z]*)">([a-z]+)<\/span>/gu)].map((m) => m[2]);
     expect(order).toEqual(["identity", "moved", "unsure", "unsure", "unsure", "unsure"]);
-    expect(html).toContain("two codes share one identifier · 6 sessions between them");
+    expect(html).toContain("two subject codes share one identifier · 6 sessions between them");
     expect(html).toContain("T1w or T2w, the vote split · 14 stacks alike");
     expect(html).toContain("scheme visits-90d");
     expect(html).toContain("alpha-2026-08-20");
@@ -55,7 +55,7 @@ describe("the three kinds on top", () => {
       ["moved", "1 session", 1],
     ]);
     expect(cards[0].meta).toBe("batches alpha-2026-08-20, 8 · mostly technique or base · 21 with no value");
-    expect(cards[1].meta).toBe("the same identifier under two codes · from dataset alpha");
+    expect(cards[1].meta).toBe("the same identifier under two subject codes · from dataset alpha");
     expect(cards[2].meta).toBe("the scheme visits-90d read new dates · cards that pinned them are marked");
   });
   it("sorts nothing and accepts nothing in bulk, and shows only the cards it is asked for (DR4)", () => {
@@ -81,7 +81,7 @@ describe("the identity questions on the queue", () => {
   const provisional = item(8, "identity.provisional", "subject", { evidence: { place: "north" } });
   it("count held files as what they are, with Map them to the dataset's page, and never as one subject twice", () => {
     const [, card] = needsOf([held]);
-    expect([card.value, card.words, card.count]).toEqual(["160 files", "held until mapped", 1]);
+    expect([card.value, card.words, card.count]).toEqual(["160 files", "need a subject code", 1]);
     expect(card.meta).toBe("an identifier the map does not know · from dataset north");
     expect(card.act).toEqual({ label: "Map them", href: "#data/datasets/north/pseudonymisation" });
     // held files of two datasets are named on the Identifiers page
@@ -89,7 +89,7 @@ describe("the identity questions on the queue", () => {
     // a collision leads, with the held files beside it
     const [, both] = needsOf([held, items[1]]);
     expect([both.value, both.words]).toEqual(["1 subject", "may be one subject twice"]);
-    expect(both.meta).toBe("the same identifier under two codes · from datasets north and alpha · 160 files held until mapped");
+    expect(both.meta).toBe("the same identifier under two subject codes · from datasets north and alpha · 160 files need a subject code");
     expect(both.act).toEqual({ label: "Decide", href: "#review/identifiers" });
     // a provisional subject is merged
     const [, coded] = needsOf([provisional]);
@@ -98,7 +98,7 @@ describe("the identity questions on the queue", () => {
   });
   it("offer Map them and no Decide on a held row, Merge on a provisional one, Decide on a collision", () => {
     const html = renderToStaticMarkup(<QueueTable items={[held, provisional, items[1]]} may onDecide={() => undefined} onLook={() => undefined} onSee={() => undefined} />);
-    expect(html).toContain("160 files held until the map names an identifier shaped AA9999");
+    expect(html).toContain("160 files wait until the map names an identifier shaped AA9999");
     expect(html).toContain('href="#data/datasets/north/pseudonymisation">Map them</a>');
     expect(html).toContain('href="#review/identifiers">Merge</a>');
     expect(html.match(/>Decide<\/button>/gu)).toHaveLength(1);
@@ -114,9 +114,9 @@ describe("a run's pipeline:qc items below detail quasi", () => {
   ] as unknown as ReviewItem[];
   it("draws each group with its check and count, fewer than five where withheld, and nothing to open or decide", () => {
     const html = renderToStaticMarkup(<QueueTable items={grouped} may onDecide={() => undefined} onLook={() => undefined} onSee={() => undefined} />);
-    expect(html).toContain("snr &gt;= 8 in run 9: 6 units");
-    expect(html).toContain("holes &lt;= 200 in run 9: fewer than five units");
-    expect(html).toContain("failed in run 9: 7 units");
+    expect(html).toContain("snr &gt;= 8 in run 9: 6 results");
+    expect(html).toContain("holes &lt;= 200 in run 9: fewer than five results");
+    expect(html).toContain("failed in run 9: 7 results");
     expect(html).not.toContain(">Decide</button>");
     expect(html).not.toContain("undefined");
     expect(html.match(/counted at your detail/gu)).toHaveLength(3);

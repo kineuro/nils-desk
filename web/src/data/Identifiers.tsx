@@ -225,7 +225,7 @@ function LinkDialog({ canonical, onClose, onDone }: { canonical: string; onClose
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const ids = useId();
-  const refusal = !alias.trim() ? "the other subject's code" : alias.trim() === canonical ? "another subject" : reasonRefusal(evidence);
+  const refusal = !alias.trim() ? "the other subject code" : alias.trim() === canonical ? "another subject" : reasonRefusal(evidence);
   const send = () => {
     if (refusal !== null || busy) return;
     setBusy(true);
@@ -329,7 +329,7 @@ function PurgeDialog({ subject, onClose, onDone }: { subject: string | null; onC
       )}
       <div className="field">
         <label className="label" htmlFor={`${ids}-confirm`}>
-          Type {subject ? "the code" : EVERY_SUBJECT}
+          Type {subject ? "the subject code" : EVERY_SUBJECT}
         </label>
         <span className="input mono">
           <input id={`${ids}-confirm`} value={typed} autoComplete="off" spellCheck={false} onChange={(e) => setTyped(e.target.value)} />

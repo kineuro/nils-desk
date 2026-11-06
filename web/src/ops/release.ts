@@ -228,7 +228,7 @@ export function releaseBody(src: ReleaseSource, f: ReleaseForm, stacks: number[]
   }
   if (src.subjects?.length) {
     body.subjects = src.subjects;
-    parts.push(`${src.subjects.length} subjects by code`);
+    parts.push(`${src.subjects.length} subjects by subject code`);
   }
   if (src.axes?.length) {
     body.axes = src.axes;

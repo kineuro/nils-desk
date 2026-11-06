@@ -233,7 +233,7 @@ describe("the list in plain words", () => {
     expect(html).toContain('href="#review/questions/base%3Amissing?dataset=ms-a"');
     expect(html.match(/>Answer<\/a>/gu)).toHaveLength(2);
     expect(html).toContain('System 1 asks about a whole scan: 2 scans<a href="#review/asked">Open</a>');
-    expect(html).toContain("3 scans are held by campaign base-check, answered there.");
+    expect(html).toContain("3 scans are in campaign base-check, answered there.");
     expect(renderToStaticMarkup(<QuestionsList list={listOf({ questions: [] })} where={{}} />)).toContain("No question waits: the rules decided every scan.");
   });
 });
@@ -282,7 +282,7 @@ describe("a question's grid", () => {
     const blind = host.querySelector('[data-stack="205"]')!;
     expect(blind.className).toContain("blind");
     expect(blind.querySelector(".q-s1")).toBeNull();
-    expect(host.querySelector('[data-stack="203"] .q-staged')?.textContent).toBe("staged T2w");
+    expect(host.querySelector('[data-stack="203"] .q-staged')?.textContent).toBe("proposed T2w");
     expect(host.querySelector('[data-stack="201"] .q-s1')?.textContent).toBe("S1 T1w 0.91");
     expect([...host.querySelectorAll(".q-keys .opt")].map((b) => b.textContent)).toEqual(["1T1w", "2T2w", "0other value", "-no value"]);
     // no dialog, no scope, no why field

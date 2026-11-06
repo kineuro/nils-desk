@@ -397,3 +397,26 @@ for (const [device, width, height] of [
     await page.screenshot({ path: `test-results/data-step-notes-cohort-${device}.png` });
   });
 }
+
+// ux-runscope (2026-11-06): parts that go at once say so, their counts summed; and the sort's Run offers its scans not
+// sorted first, then every scan; on a laptop and a phone, nothing goes sideways
+for (const [device, width, height] of [
+  ["laptop", 1440, 900],
+  ["phone", 390, 844],
+] as const) {
+  test(`on a ${device} parts at once say which run, and the sort offers its scans not sorted first`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/data.html?atonce#data/datasets?dataset=study-big");
+    await expect(page.locator(".dp-detail")).toHaveAttribute("aria-label", "study-big");
+    await expect(page.locator(".dp-detail .dp-step-note").first()).toContainText(/^Body part: 1,200 of 2,610 scans in parts 3 to 5 of 23/u);
+    const run = page.locator(".dp-detail .dp-step").filter({ hasText: "Sorted" }).locator(".dp-step-run button");
+    await run.click();
+    const choice = page.locator(".dp-run-choice");
+    await expect(choice.locator(".dp-run-act button")).toHaveText(["Run on the 7 not sorted", "Run again on all 1,003"]);
+    await expect(choice.locator(".dp-run-act button").first()).not.toHaveClass(/secondary/u);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    const box = (await choice.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    await page.locator(".dp-detail .dp-sec").filter({ hasText: "Where it is" }).screenshot({ path: `test-results/data-sort-choice-${device}.png` });
+  });
+}

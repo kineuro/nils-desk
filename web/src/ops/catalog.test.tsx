@@ -108,7 +108,7 @@ describe("a run on a selection", () => {
     expect(needsOf(TRAIN).labels?.id).toBe("labels");
     expect(needsOf(INFER).models.map((m) => m.id)).toEqual(["head"]);
     expect(writesWords(TRAIN)).toBe("one model for the run");
-    expect(writesWords(INFER)).toBe("an output per stack; proposals on body_part, staged at the model's threshold for a person to commit");
+    expect(writesWords(INFER)).toBe("an output per stack; proposals on body_part at the model's threshold, for a person to commit");
     expect(imageWords(TRAIN)).toBe("ghcr.io/kineuro/nils-bodypart@sha256:0a0a0a0a0a0a");
   });
   it("counts a run's account", () => {

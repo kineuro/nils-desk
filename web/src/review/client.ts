@@ -305,7 +305,7 @@ export function itemWords(item: ReviewItem): string {
     const ev = (item.evidence ?? {}) as Json;
     const run = num(((item.ref ?? {}) as Json).run_id);
     const what = text(ev.check) ?? (text(ev.status) === "breach" ? "a check" : (text(ev.status) ?? "failed"));
-    const units = item.units === 1 ? "1 unit" : `${unitsWords(item.units)} units`;
+    const units = item.units === 1 ? "1 result" : `${unitsWords(item.units)} results`;
     return `${what}${run !== null ? ` in run ${run}` : ""}: ${units}`;
   }
   const ev = (item.evidence ?? {}) as Json;
@@ -317,7 +317,7 @@ export function itemWords(item: ReviewItem): string {
   }
   if (familyOf(item.kind) === "campaigns") {
     const held = heldBy(item);
-    return `held by ${held.name ? `campaign ${held.name}` : "a campaign"}, answered there`;
+    return `in ${held.name ? `campaign ${held.name}` : "a campaign"}, answered there`;
   }
   if (item.kind === "classify.asked") return `System 1 asks about stack ${num(((item.ref ?? {}) as Json).stack_id) ?? ""}`;
   if (k.classifier && k.what === "model") {
@@ -339,11 +339,11 @@ export function itemWords(item: ReviewItem): string {
   if (k.area === "identity" || k.area === "linkage") {
     const sessions = num(ev.sessions);
     const between = sessions !== null ? ` · ${n(sessions)} ${sessions === 1 ? "session" : "sessions"} between them` : "";
-    if (k.what === "collision" || k.what === "conflict") return `two codes share one identifier${between}`;
+    if (k.what === "collision" || k.what === "conflict") return `two subject codes share one identifier${between}`;
     if (k.what === "unmapped") {
       const files = num(ev.files);
       const shape = text(ev.shape);
-      return `${files !== null ? `${n(files)} files ` : "files "}held until the map names ${shape ? `an identifier shaped ${shape}` : "their identifier"}`;
+      return `${files !== null ? `${n(files)} files ` : "files "}wait until the map names ${shape ? `an identifier shaped ${shape}` : "their identifier"}`;
     }
     if (k.what === "provisional") return `a subject coded from an identifier the map does not know${between}`;
     if (k.what === "same_instance") {

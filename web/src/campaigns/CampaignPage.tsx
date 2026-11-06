@@ -19,6 +19,7 @@ import { Wait } from "../ui/Wait";
 import {
   adjudicatorHas,
   agreementWords,
+  answeredAxes,
   answerWords,
   campaigns,
   CLOSES_WORDS,
@@ -70,7 +71,8 @@ import { ratersRefusal, type RaterWarning } from "./raters";
 import { RatersDialog } from "./RatersDialog";
 import { namesRaters, raterNames, resultsRefusal } from "./results";
 import { ResultsView } from "./Results";
-import { aloneWords, closeStage, closingWords, leaseLine, mayReadAllInBatches, missingModes, refusedLines, type LeaseLine } from "./upkeep";
+import { aloneWords, closeStage, closingWords, isAxesGalleryLine, leaseLine, mayAskOneAxis, mayReadAllInBatches, missingModes, refusedLines, type LeaseLine } from "./upkeep";
+import { AskOneDialog } from "./AskOneDialog";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -79,7 +81,7 @@ type Load = { kind: "loading"; since: number } | { kind: "failed"; why: string }
 
 export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities; id: string; missing?: number | null }) {
   const [load, setLoad] = useState<Load>(() => ({ kind: "loading", since: Date.now() }));
-  const [acting, setActing] = useState<"close" | "export" | "raters" | null>(null);
+  const [acting, setActing] = useState<"close" | "export" | "raters" | "ask-one" | null>(null);
   const [said, setSaid] = useState<string | null>(null);
   const [warned, setWarned] = useState<RaterWarning[]>([]);
   const readsSets = served(caps, "GET /api/label-sets") && mayAny(caps, "campaigns:see", "review:see");
@@ -119,7 +121,7 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
   if (load.kind === "failed") return <p className="warn">The campaign could not be read: {load.why}</p>;
   const c = load.c;
   return (
-    <CampaignBody caps={caps} campaign={c} answers={load.answers} answersBlind={load.blind} sets={load.sets} stats={load.stats} said={said} warned={warned} missing={missing} onAct={setActing} onRelease={release} onReadAll={readAll}>
+    <CampaignBody caps={caps} campaign={c} answers={load.answers} answersBlind={load.blind} sets={load.sets} stats={load.stats} said={said} warned={warned} missing={missing} onAct={setActing} onRelease={release} onReadAll={readAll} onAskOne={() => setActing("ask-one")}>
       {isCheck(c) && checkServed(caps) ? null : isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : isAnchored(c) && anchoredServed(caps) ? <AnchoredPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
       {acting === "close" && (
         <CloseDialog
@@ -146,6 +148,17 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
             setActing(null);
             setSaid(words);
             setWarned(r.warnings);
+            read();
+          }}
+        />
+      )}
+      {acting === "ask-one" && (
+        <AskOneDialog
+          campaign={c}
+          onClose={() => setActing(null)}
+          onDone={(words) => {
+            setActing(null);
+            setSaid(words);
             read();
           }}
         />
@@ -188,11 +201,13 @@ export interface CampaignBodyProps {
   onRelease?: (a: Assignment) => void;
   /** Sets none of each batch aside, where the campaign allows it (2026-11-05). */
   onReadAll?: () => void;
+  /** Opens the confirm that moves the campaign to one asked axis, which brings the gallery. */
+  onAskOne?: () => void;
   children?: React.ReactNode;
 }
 
 /** One campaign as it draws from what it read. */
-export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, sets, stats = null, said = null, warned = [], filter: initial = null, view: opened = "items", missing = null, onAct, onRelease, onReadAll, children }: CampaignBodyProps) {
+export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, sets, stats = null, said = null, warned = [], filter: initial = null, view: opened = "items", missing = null, onAct, onRelease, onReadAll, onAskOne, children }: CampaignBodyProps) {
   const [filter, setFilter] = useState<string | null>(initial);
   // record 55, ruling 35 (d): the results, where the person may read them
   const results = resultsRefusal(caps, c) === null;
@@ -317,6 +332,11 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
       {c.status === "open" && (c.counts.items.open ?? 0) > 0 && missingModes(caps, c).map((w) => (
         <p key={w} className="meta mode-missing">
           {w}
+          {onAskOne && isAxesGalleryLine(w) && mayAskOneAxis(caps, c) && (
+            <button type="button" className="button quiet small" title="asks one axis from now on, the others derived from it where the rules can; answers given are kept" onClick={onAskOne}>
+              Ask {answeredAxes(c.question)[0]} alone
+            </button>
+          )}
         </p>
       ))}
       {c.status === "open" && alone && (

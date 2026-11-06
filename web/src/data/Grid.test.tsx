@@ -22,6 +22,7 @@ vi.mock("./ScanViewer", () => ({
 
 const { Viewer } = await import("./Viewer");
 const { forgetHeld } = await import("./viewer");
+const { forgetOrigins } = await import("./origins");
 const { PICTURE_POLL } = await import("./Grid");
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -142,15 +143,40 @@ const EXAM_SCANS = [
   exam(69, "Ax_ASL_2D_EPI_Magnitude", 8, { datatype: "perf", folder: "perf", axes: { base: "ASL", construct: "Magnitude" }, acquisition_family: null }),
 ];
 
+/** UX round 2: the origins of visit s34, the spine scan's body part decided neck and not sorted since, or sorted once the re-sort ran. */
+const SORTED = { pack: "mri", version: "1.4.0", overlay: null, job: 3, at: "2026-11-01T08:00:00Z" };
+const spineAxis = (resorted: boolean) =>
+  resorted
+    ? { axis: "body_part", values: ["neck"], confidence: 1, tier: "decision", origin: "decision", line: "decided by anna@lab", state: "current", words: null, rules: [], from: { kind: "person", by: "anna@lab", campaign: 6, scope: "stack" }, decided: { id: 77, kind: "person", value: "neck", values: ["neck"], by: "anna@lab", campaign: { id: 6, name: "curate", status: "closed", item: 412 } } }
+    : { axis: "body_part", values: ["spine"], confidence: 0.9, tier: "keyword", origin: "rules", line: "rules mri@1.4.0, body_part/spine_words", state: "unsorted", words: "decided neck; sorted before the decision", rules: [{ rule_set: "body_part", rule: "spine_words", source: "series_description" }], decided: { id: 77, kind: "person", value: "neck", values: ["neck"], by: "anna@lab", campaign: { id: 6, name: "curate", status: "closed", item: 412 } } };
+const originsOf34 = (resorted: boolean) => ({
+  count: 2,
+  unsorted: resorted ? 0 : 1,
+  stacks: [
+    { stack: 11, sorted: SORTED, unsorted: false, axes: [{ axis: "base", values: ["T1w"], confidence: 1, tier: "header", origin: "rules", line: "", state: "current", words: null, rules: [{ rule_set: "base", rule: "t1_words" }], decided: null }] },
+    { stack: 14, sorted: SORTED, unsorted: !resorted, axes: [{ axis: "base", values: ["T2w"], confidence: 1, tier: "header", origin: "rules", line: "", state: "current", words: null, rules: [], decided: null }, spineAxis(resorted)] },
+  ],
+});
+const ORIGIN_DOORS = [...ALL_DOORS, "GET /api/origins", "POST /api/origins/resort"];
+const sorter = (doors = ORIGIN_DOORS) => {
+  const c = caps(doors);
+  return { ...c, person: { ...c.person, grants: ["data:see", "pipelines:work"] } } as Capabilities;
+};
+
 describe("the dataset viewer's grid", () => {
   let root: Root;
   let el: HTMLDivElement;
   let calls: string[];
   let detail: string;
+  let resorted: boolean;
+  let resortBodies: unknown[];
   beforeEach(() => {
     calls = [];
     detail = "quasi";
+    resorted = false;
+    resortBodies = [];
     forgetHeld();
+    forgetOrigins();
     try {
       localStorage.clear();
     } catch {
@@ -159,11 +185,17 @@ describe("the dataset viewer's grid", () => {
     el = document.createElement("div");
     document.body.appendChild(el);
     root = createRoot(el);
-    vi.stubGlobal("fetch", async (url: string) => {
+    vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
       calls.push(url);
       const u = new URL(url, "http://desk");
       const q = u.searchParams;
       const json = (v: unknown) => new Response(JSON.stringify(v));
+      if (u.pathname === "/api/origins") return json(originsOf34(resorted));
+      if (u.pathname === "/api/origins/resort") {
+        resortBodies.push(JSON.parse(String(init?.body ?? "{}")));
+        resorted = true;
+        return json({ resort: { state: "done", stacks: 1, sorted: 1, jobs: [9], words: "1 of 1 scan(s) re-sorted" }, origins: originsOf34(true) });
+      }
       if (u.pathname === "/api/datasets/ms-a/subjects" || u.pathname === "/api/cohorts/ms/subjects") {
         let list = SUBJECTS;
         if ((q.get("filter") ?? "").includes("look")) list = list.filter((s) => (s.look as number) > 0);
@@ -178,7 +210,10 @@ describe("the dataset viewer's grid", () => {
         return json({ ...v, detail, subject: { id, code: `sub-${id}`, label: id === 1 ? "sub-a1" : `sub-${id}` }, totals: { ...v.totals, span: detail === "plain" ? "999" : "418" } });
       }
       if (u.pathname === "/api/datasets/ms-a/scans") {
-        if (q.get("session") === "34") return json({ total: VISIT_SCANS.length, scans: VISIT_SCANS, next: null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
+        if (q.get("session") === "34") {
+          const scans = resorted ? VISIT_SCANS.map((r) => (r.stack === 14 ? { ...r, family: "plain", axes: { base: "T2w", body_part: "neck" } } : r)) : VISIT_SCANS;
+          return json({ total: VISIT_SCANS.length, scans, next: null, pictures: { shown: true, why: null, missing: 0, partial: 0 } });
+        }
         if (q.get("session") === "60") return json({ total: 2, scans: [row(31, "Ax_T2w_2D", { session: { id: 60, label: "20200202" } }), row(32, "Ax_FLAIR_2D", { session: { id: 60, label: "20200202" } })], next: null, pictures: { shown: true, why: null, missing: 2, partial: 0 } });
         if (q.get("session") === "50") {
           // a visit of 250 scans, one image a stack: two pages
@@ -509,5 +544,60 @@ describe("the dataset viewer's grid", () => {
     expect(el.querySelector(".dview")).not.toBeNull();
     expect(el.querySelector(".vw-switch:not(.names)")).toBeNull();
     expect(asked("/api/datasets/ms-a/subjects")).toEqual([]);
+  });
+
+  it("says where a visit's labels came from in one read, marks a decision not sorted yet and sorts the visit again", async () => {
+    await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34", sorter());
+    expect(asked("/api/origins?")).toEqual(["/api/origins?session=34"]);
+    const spine = el.querySelector('.vw-scan[data-stack="14"]')!;
+    expect(spine.querySelector(".vw-tag.stale")?.textContent).toBe("decided neck");
+    expect(spine.getAttribute("title")).toContain("body part spine: Rules mri@1.4.0 · body_part/spine_words · Decided neck; sorted before the decision");
+    expect(el.querySelector('.vw-scan[data-stack="11"]')!.getAttribute("title")).toContain("weighting T1w: Rules mri@1.4.0 · base/t1_words");
+    expect(text(".vw-scan .vw-tag.stale")).toEqual(["decided neck"]);
+    expect(el.querySelector(".vw-stale span")?.textContent).toBe("1 scan was sorted before its decision");
+    const again = [...el.querySelectorAll<HTMLButtonElement>(".vw-stale button")].find((b) => b.textContent === "Sort the visit again")!;
+    act(() => again.click());
+    await settle();
+    expect(resortBodies).toEqual([{ session: 34 }]);
+    // the visit and its origins read again: the scan reads neck, nothing waits
+    expect(asked("/api/origins?")).toEqual(["/api/origins?session=34", "/api/origins?session=34"]);
+    expect(el.querySelector(".vw-tag.stale")).toBeNull();
+    expect(el.querySelector(".vw-stale")).toBeNull();
+    expect(el.querySelector('.vw-scan[data-stack="14"]')!.getAttribute("title")).toContain("body part neck: Decided by anna@lab");
+  });
+
+  it("offers no re-sort to who may not run a sort, and reads no origins where the engine has no door", async () => {
+    await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34", caps(ORIGIN_DOORS));
+    expect(el.querySelector(".vw-stale span")?.textContent).toBe("1 scan was sorted before its decision");
+    expect(el.querySelector(".vw-stale button")).toBeNull();
+    act(() => root.unmount());
+    root = createRoot(el);
+    forgetOrigins();
+    calls = [];
+    await open("#data/datasets/ms-a/view?mode=grid&subject=1&visit=s34", caps());
+    expect(asked("/api/origins?")).toEqual([]);
+    expect(el.querySelector(".vw-tag.stale")).toBeNull();
+  });
+
+  it("frames the browser's labels by origin, says the decision not sorted yet and sorts the scan again", async () => {
+    await open("#data/datasets/ms-a/view?mode=browser&subject=1&visit=s34&scan=14", sorter());
+    expect(asked("/api/origins?")).toEqual(["/api/origins?session=34"]);
+    const facts = [...el.querySelectorAll<HTMLButtonElement>(".dview-facts button.origin")];
+    const bp = facts.find((b) => b.textContent?.startsWith("spine"))!;
+    expect(bp.getAttribute("data-tone")).toBe("stale");
+    expect(bp.textContent).toBe("spinedecided neck");
+    expect(facts.find((b) => b.textContent === "T2w")!.getAttribute("data-tone")).toBe("rules");
+    act(() => bp.click());
+    const pop = el.querySelector(".origin-pop")!;
+    expect(pop.textContent).toContain("Decided neck; sorted before the decision");
+    expect(pop.querySelector("a")?.getAttribute("href")).toBe("#review/campaigns/6");
+    const again = [...pop.querySelectorAll("button")].find((b) => b.textContent === "Sort this scan again")!;
+    await act(async () => {
+      again.click();
+    });
+    await settle();
+    expect(resortBodies).toEqual([{ stack: 14 }]);
+    const after = [...el.querySelectorAll<HTMLButtonElement>(".dview-facts button.origin")].find((b) => b.textContent === "neck");
+    expect(after?.getAttribute("data-tone")).toBe("decision");
   });
 });

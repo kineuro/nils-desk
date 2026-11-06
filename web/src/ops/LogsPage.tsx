@@ -57,7 +57,7 @@ export function LogsPage({ caps, job }: { caps: Capabilities; job: number | null
         <div className="grow">
           <span className="eyebrow">Pipelines</span>
           <h1>Logs</h1>
-          <p className="lede">What each job printed, and each unit of a run.</p>
+          <p className="lede">What each job and each run printed.</p>
         </div>
       </div>
       {why && <p className="warn">The jobs could not be read: {why}</p>}
@@ -222,7 +222,7 @@ export function LogText({ read, which }: { read: (from?: number) => Promise<LogP
           <span className="meta">From its start</span>
         )}
         <span className="meta grow">
-          {piece.shared ? "The run's units ran together and wrote one log. " : ""}
+          {piece.shared ? "One log for the whole run: its scans ran together. " : ""}
           {sizeOf(piece.size)}
           {piece.over ? "" : ", still running"}
         </span>

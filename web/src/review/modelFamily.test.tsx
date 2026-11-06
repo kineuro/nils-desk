@@ -86,8 +86,8 @@ describe("the model family", () => {
     expect([fromOfRow(NOW_UNKNOWN), fromOfRow(NO_VALUE), fromOfRow("spine")]).toEqual([undefined, null, "spine"]);
   });
   it("says what the door answered: the decisions it put in force are a list of ids", () => {
-    expect(committedWords({ committed: [15], items: 1, left: 2, split: [] })).toBe("Committed 1 decision on 1 item; 2 left staged.");
-    expect(committedWords({ committed: [15, 16], items: 2, left: 0, split: [9] })).toBe("Committed 2 decisions on 2 items; 0 left staged; 1 group was split, the rest of each left staged.");
+    expect(committedWords({ committed: [15], items: 1, left: 2, split: [] })).toBe("Committed 1 decision on 1 item; 2 left waiting.");
+    expect(committedWords({ committed: [15, 16], items: 2, left: 0, split: [9] })).toBe("Committed 2 decisions on 2 items; 0 left waiting; 1 group was split, the rest of each left waiting.");
   });
 });
 
@@ -97,7 +97,7 @@ describe("the family's page", () => {
     const html = renderToStaticMarkup(<ChangeMatrix groups={modelGroups(ITEMS)} axis="body_part" on={{ from: "spine", to: "chest" }} onCell={() => undefined} />);
     expect(html).toContain("<th class=\"from\">body_part now</th>");
     expect(html).toContain("to chest");
-    expect(html).toMatch(/<td class="num on"><button type="button" aria-pressed="true" title="11 staged">11<\/button><\/td>/u);
+    expect(html).toMatch(/<td class="num on"><button type="button" aria-pressed="true" title="11 waiting to be confirmed">11<\/button><\/td>/u);
   });
   it("offers commit and commit by filter only with review work and the doors", () => {
     expect(modelActs(capsWith(doors, ["review:see", "review:work"]))).toEqual({ commit: true, byFilter: true, withdraw: true });

@@ -110,7 +110,7 @@ export function QuestionsList({ list, where, failed = null, since = Date.now() }
       })}
       {list.held.scans > 0 && (
         <p className="meta q-held">
-          {scans(list.held.scans)} {list.held.scans === 1 ? "is" : "are"} held by {list.held.campaigns.length === 1 ? `campaign ${list.held.campaigns[0].name}` : `${n(list.held.campaigns.length)} campaigns`}, answered there.
+          {scans(list.held.scans)} {list.held.scans === 1 ? "is" : "are"} in {list.held.campaigns.length === 1 ? `campaign ${list.held.campaigns[0].name}` : `${n(list.held.campaigns.length)} campaigns`}, answered there.
         </p>
       )}
     </section>
@@ -574,8 +574,8 @@ function Tile({ scan: x, state: s, palette, onToggle, onApart }: { scan: QScan; 
         {x.picture ? <img src={x.picture} alt="" decoding="async" draggable={false} /> : <span className="q-blank">no picture yet</span>}
         {x.blind && <span className="q-mark q-blind">blind</span>}
         {x.staged?.value && (
-          <span className="q-mark q-staged" title={`staged by ${x.staged.actor ?? x.staged.author_kind ?? "a model"}, for a person to confirm`}>
-            staged {x.staged.value}
+          <span className="q-mark q-staged" title={`proposed by ${x.staged.actor ?? x.staged.author_kind ?? "a model"}, for a person to confirm`}>
+            proposed {x.staged.value}
           </span>
         )}
         {s1 && (

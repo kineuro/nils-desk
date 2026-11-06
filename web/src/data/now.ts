@@ -119,7 +119,7 @@ export function progressOf(j: JobRow, now: number): { fraction: number | null; w
   if (rate !== null && j.state !== "queued") parts.push(`${n(Math.round(rate))} a second`);
   const left = leftWords(j, now);
   if (left) parts.push(`${left} left`);
-  if (held !== null && held > 0) parts.push(`${n(held)} held until mapped`);
+  if (held !== null && held > 0) parts.push(`${n(held)} need a subject code`);
   if (refused !== null && refused > 0) parts.push(`${n(refused)} refused`);
   if (parts.length === 0) return null;
   return { fraction: of !== null && of > 0 && done !== null ? Math.min(1, done / of) : null, words: parts.join(" · ") };

@@ -11,7 +11,7 @@ import type { IconName } from "../ui/Icon";
 import { keptRunning } from "./install";
 import type { AdmissionRecord } from "./kvasir";
 import type { SortUnder } from "./sorting";
-import type { Install, Pack, PartRelease, Packs, Release } from "./supervise";
+import type { Install, OrderStep, Pack, PartRelease, Packs, Release } from "./supervise";
 
 export type Tone = "ok" | "caution" | "blocked";
 
@@ -406,13 +406,19 @@ export function behind(r: PartRelease): boolean {
   return r.newer !== null && r.held === null;
 }
 
-/** What the Newer column says of one part beside its own newest release. */
+/** What the Newer column says of one part beside its own newest release; a tag whose release is being built is said where nothing newer is out. */
 function ownWords(r: PartRelease): PartRow["newer"] {
   if (r.follows) return { text: `follows ${r.follows}`, tag: false };
   if (r.newer && r.held) return { text: `${r.newer} waits for the engine`, tag: false };
   if (r.newer) return { text: r.newer, tag: true };
+  if (r.coming) return { text: `${r.coming} being released`, tag: false };
   if (r.error) return { text: "not checked", tag: false };
   return { text: r.newest ? "the newest" : "not checked", tag: false };
+}
+
+/** Whether a part's Update takes the engine with it: its newer release needs the engine's next contract. */
+export function withEngine(r: PartRelease | undefined): boolean {
+  return Boolean(r && r.needs && r.held === null && r.newer !== null);
 }
 
 /** The parts an update would move, each beside its own newest release; an engine older than the list offers its own release alone. */
@@ -438,6 +444,42 @@ export function newerWords(install: Install): string | null {
   if (!install.release.parts) return `${parts[0].newer} is out`;
   if (parts.length === 1) return `${releaseTitle(parts[0])} ${parts[0].newer} is out`;
   return `${count(parts.length, "update", "updates")} are out`;
+}
+
+/** One step of the order, as the panel says it: what moves, and why it is in that place. */
+function stepWords(s: OrderStep, install: Install): string {
+  const why = s.why ? `, ${s.why}` : "";
+  const from = s.from ? ` from ${s.from}` : "";
+  if (s.part === "rules") {
+    const title = `${packTitle(s.pack ?? "rules")} rules`;
+    const move = s.from === s.to ? `Another build of the ${title} ${s.to} replaces the one in place` : `The ${title} move${from} to ${s.to}`;
+    return `${move}, their own release${why}; the engine reads them at its next look, and nothing is started again. Scans already sorted keep their answers until Sort again.`;
+  }
+  if (s.part === "packs") return `The rule packs move to the ones engine ${s.to} was released with${why}; the ones before are kept beside them.`;
+  const built = install.parts[s.part]?.kind === "node" ? ", fetched and built again" : "";
+  return `${cap(partName(s.part))} moves${from} to ${s.to}${built}${why}.`;
+}
+
+/**
+ * The order Update everything takes the parts in, said before it starts (2026-11-06): each step with why it is in
+ * its place ("first: desk 1.0.0-beta.7 needs its HTTP contract 8"), then what stays out and why. Null from an
+ * engine that does not say its order, whose words are `updateWords`' alone.
+ */
+export function orderWords(install: Install): { steps: string[]; after: string[] } | null {
+  const order = install.release.order;
+  if (!order) return null;
+  const steps = order.map((s) => stepWords(s, install));
+  // a reason that names the release already ("desk 1.0.0-beta.8 needs suite contract 4, ...") is said once
+  const after = (install.release.stays ?? []).map((s) => {
+    const named = `${s.pack ?? s.part} ${s.version}`.toLowerCase();
+    return s.why.toLowerCase().startsWith(named) ? `${cap(s.why)}.` : `${s.pack ? `${packTitle(s.pack)} rules` : partTitle(s.part)} ${s.version} stays out: ${s.why}.`;
+  });
+  const all = install.parts;
+  if (all["postgres"]) after.push(`Postgres stays at ${all["postgres"].version}, and its data is not touched.`);
+  if (order.length > 0 && !order.every((s) => s.part === "rules")) {
+    after.push(keptRunning(install) ? "Every part starts again, in order, once it is replaced." : "This install runs no services, so start each part again yourself once it is replaced.");
+  }
+  return { steps, after };
 }
 
 /** What taking the newer releases changes, part by part, in the order the update does it. */
@@ -515,17 +557,27 @@ export function checkedWords(at: number | null, now: number): string | null {
 }
 
 /**
- * When the supervisor last looked at the releases, as a person says it. The
- * supervisor keeps what it looked at for a quarter of an hour, so this is not
- * when the page was read (`checkedWords`): a release published since is not
- * on the page until a look is made again. Nothing from an engine that does
- * not say when.
+ * When the supervisor last looked for releases, as a person says it, to the
+ * ten seconds under a minute ("looked for releases 40 s ago"). While the Parts
+ * page is open it looks every minute; elsewhere it keeps its look for a
+ * quarter of an hour, so this is not when the page was read (`checkedWords`).
+ * Nothing from an engine that does not say when.
  */
 export function lookedWords(at: string | null | undefined, now: number): string | null {
   const when = at ? Date.parse(at) : Number.NaN;
   if (!Number.isFinite(when)) return null;
-  const minutes = Math.floor((now - when) / 60_000);
-  if (minutes < 1) return "releases looked up just now";
-  if (minutes < 60) return `releases looked up ${count(minutes, "minute", "minutes")} ago`;
-  return `releases looked up ${count(Math.floor(minutes / 60), "hour", "hours")} ago`;
+  const seconds = Math.floor((now - when) / 1_000);
+  if (seconds < 10) return "looked for releases just now";
+  if (seconds < 60) return `looked for releases ${Math.floor(seconds / 10) * 10} s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `looked for releases ${minutes} min ago`;
+  return `looked for releases ${Math.floor(minutes / 60)} h ago`;
+}
+
+/** Where a look waits for GitHub's requests an hour, when the next one is, as a person reads a clock. */
+export function nextLookWords(release: Release, zone?: string): string | null {
+  const when = release.next_look ? Date.parse(release.next_look) : Number.NaN;
+  if (!Number.isFinite(when)) return null;
+  const clock = new Date(when).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: zone });
+  return `next full look at ${clock}: ${release.allowance ?? "GitHub's requests an hour are spent"}`;
 }
