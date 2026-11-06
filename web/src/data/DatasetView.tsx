@@ -472,7 +472,7 @@ export function Browser({ caps, scope, view, go, onSections, grid }: { caps?: Ca
               <span className="meta num" aria-label={`${filtering ? `${n(order.length)} of ${n(all.length)}` : n(total)} scans`}>
                 {filtering ? `${n(order.length)} of ${n(all.length)}` : n(total)}
               </span>
-              <KeepActions caps={caps} ready={!failed && order.length > 0} kept={() => browserKept(scope, words, order, { read: all.length, total })} />
+              <KeepActions caps={caps} ready={!failed && order.length > 0} runs kept={() => browserKept(scope, words, order, { read: all.length, total })} />
             </div>
           )}
           {failed && <p className="warn">The scans could not be read: {failed}</p>}

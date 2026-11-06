@@ -8,7 +8,10 @@
 // that differs from the page's. Then the question is kept as a card and
 // saved as a selection, or run and its subjects promoted into a cohort,
 // through the same doors the Query page's dialogs use, and one line on the
-// bar says where it went.
+// bar says where it went. Where scans are shown (2026-11-06), a third act
+// runs a step over them without a cohort: the question saved as a selection
+// on the way, then each step's run over it chosen as on a dataset's rail
+// (RunOnScans).
 
 import { useEffect, useRef, useState } from "react";
 import type { Capabilities } from "../capabilities";
@@ -24,13 +27,14 @@ import { Wait } from "../ui/Wait";
 import { cohorts, type Cohort } from "./cohorts";
 import { cannotPromote, countOf, HELD_LIST, grainWords, keepDoors, keepError, KEEP_DOORS, mayCohort, maySelect, Refusal, unasked, type Kept } from "./keep";
 import { suggestedCohort } from "./PromoteDialog";
+import { mayRunOnScans, StepsOver } from "./RunOnScans";
 import { plural } from "./viewer";
 import { HELD, heldRefusal, LIST_WHY } from "../ask/held";
 
 
 const n = (v: number) => v.toLocaleString("en-US");
 
-export type KeepKind = "selection" | "cohort";
+export type KeepKind = "selection" | "cohort" | "run";
 
 /** What a done act left on the bar: its words, where it went, and a promotion's job to follow. */
 export interface Said {
@@ -56,8 +60,8 @@ function countWords(kind: KeepKind, kept: Kept, c: { rows: number | null; subjec
   return `${grainWords(kept.grain, c.rows)} of ${plural(c.subjects, "subject")}`;
 }
 
-/** The two actions on a level's bar, the line a done one leaves, and the dialog they open. The question can take a read first (a search's subjects), so `kept` may answer later. */
-export function KeepActions({ caps, kept, ready }: { caps: Capabilities; kept: () => Kept | Promise<Kept>; ready: boolean }) {
+/** The two actions on a level's bar, the line a done one leaves, and the dialog they open; where `runs`, the scans shown, a third that runs a step over them. The question can take a read first (a search's subjects), so `kept` may answer later. */
+export function KeepActions({ caps, kept, ready, runs = false }: { caps: Capabilities; kept: () => Kept | Promise<Kept>; ready: boolean; runs?: boolean }) {
   const [open, setOpen] = useState<{ kind: KeepKind; kept: Kept } | null>(null);
   const [said, setSaid] = useState<Said | null>(null);
   const [preparing, setPreparing] = useState(false);
@@ -71,6 +75,7 @@ export function KeepActions({ caps, kept, ready }: { caps: Capabilities; kept: (
   );
   const selects = maySelect(caps);
   const promotes = mayCohort(caps);
+  const steps = runs && selects && mayRunOnScans(caps);
   if (!selects && !promotes) return null;
   const start = (kind: KeepKind) => {
     setSaid(null);
@@ -110,6 +115,12 @@ export function KeepActions({ caps, kept, ready }: { caps: Capabilities; kept: (
         <button type="button" className="button quiet small" disabled={!ready || preparing} onClick={() => start("cohort")}>
           <Icon name="users" />
           Make a cohort
+        </button>
+      )}
+      {steps && (
+        <button type="button" className="button quiet small" disabled={!ready || preparing} onClick={() => start("run")}>
+          <Icon name="play" />
+          Run a step
         </button>
       )}
       {open && (
@@ -179,7 +190,10 @@ function SaidLine({ caps, said }: { caps: Capabilities; said: Said }) {
 export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabilities; kind: KeepKind; kept: Kept; onClose: () => void; onDone: (s: Said) => void }) {
   const [count, setCount] = useState<Count>(() => ({ kind: "counting", since: Date.now() }));
   const [word, setWord] = useState(false);
-  const [name, setName] = useState(() => (kind === "selection" ? (selectionName(kept.name) ?? "") : suggestedCohort(kept.name)));
+  const selecting = kind !== "cohort";
+  const [name, setName] = useState(() => (selecting ? (selectionName(kept.name) ?? "") : suggestedCohort(kept.name)));
+  // a run's selection once it is saved: the dialog then offers each step's run over it
+  const [saved, setSaved] = useState<{ name: string; version: number } | null>(null);
   const [note, setNote] = useState("");
   const [into, setInto] = useState<"new" | "existing">("new");
   const [existing, setExisting] = useState("");
@@ -225,7 +239,7 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
   const asked = kept.narrowed.filter((x) => x.asked).map((x) => x.words);
   const howMany = counted ? countWords(kind, kept, counted) : count.kind === "counting" ? "counting" : "not counted";
 
-  const clean = kind === "selection" ? selectionName(name) : into === "new" ? name.trim() : existing;
+  const clean = selecting ? selectionName(name) : into === "new" ? name.trim() : existing;
   /** What the act still needs, in words; null where it needs nothing. */
   const needs = (): string | null => {
     if (!clean) return into === "existing" && kind === "cohort" ? "a cohort to add them to" : "a name";
@@ -240,7 +254,7 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
     setBusy(null);
     // a list held back at plain is said as held, never as a failure (record 55 K7, small lists)
     const held = heldRefusal(e) || (e instanceof Refusal && e.message === HELD_LIST);
-    setWhy({ words: keepError(e) ?? (kind === "selection" ? "The selection was not saved." : "The cohort was not made."), detail: e instanceof Refusal || held ? "" : messageOf(e), held });
+    setWhy({ words: keepError(e) ?? (selecting ? "The selection was not saved." : "The cohort was not made."), detail: e instanceof Refusal || held ? "" : messageOf(e), held });
   };
   const save = () => {
     if (!can || !clean) return;
@@ -249,7 +263,13 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
     keepDoors
       .store(kept.document)
       .then((id) => selections.save(clean, id, note))
-      .then((s) => onDone({ words: `Saved as ${s.name}, version ${s.version}.`, href: href("query", "selections"), link: "Selections" }), failed);
+      .then((s) => {
+        // a run goes on with the steps over what was saved
+        if (kind === "run") {
+          setBusy(null);
+          setSaved({ name: s.name, version: s.version });
+        } else onDone({ words: `Saved as ${s.name}, version ${s.version}.`, href: href("query", "selections"), link: "Selections" });
+      }, failed);
   };
   const promote = () => {
     if (!can || !clean) return;
@@ -270,20 +290,35 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
       }, failed);
   };
 
-  const foot = (
+  const foot = saved ? (
     <div className="row actions">
-      {busy ? <Wait phase={busy.phase} since={busy.since} /> : <span className="meta grow">{refusal ? `Needs ${refusal}.` : kind === "cohort" ? "It appears on Cohorts at once." : "It appears under Selections at once."}</span>}
+      <span className="meta grow">
+        Saved as {saved.name}, version {saved.version}.
+      </span>
+      <button type="button" className="button secondary" onClick={onClose}>
+        Close
+      </button>
+    </div>
+  ) : (
+    <div className="row actions">
+      {busy ? <Wait phase={busy.phase} since={busy.since} /> : <span className="meta grow">{refusal ? `Needs ${refusal}.` : kind === "cohort" ? "It appears on Cohorts at once." : kind === "run" ? "Saved as a selection first; the run names it." : "It appears under Selections at once."}</span>}
       <button type="button" className="button secondary" onClick={onClose}>
         Cancel
       </button>
-      <button type="button" className="button" disabled={!can} onClick={kind === "selection" ? save : promote}>
-        {kind === "selection" ? "Save" : into === "new" ? "Make the cohort" : "Add them"}
+      <button type="button" className="button" disabled={!can} onClick={selecting ? save : promote}>
+        {kind === "selection" ? "Save" : kind === "run" ? "Save and go on" : into === "new" ? "Make the cohort" : "Add them"}
       </button>
     </div>
   );
+  if (saved)
+    return (
+      <Dialog title="Run a step" icon="play" onClose={onClose} foot={foot}>
+        <StepsOver caps={caps} selection={saved} onDone={onDone} />
+      </Dialog>
+    );
   return (
-    <Dialog title={kind === "selection" ? "Save as a selection" : "Make a cohort"} icon={kind === "selection" ? "file" : "users"} onClose={onClose} foot={foot}>
-      <Values cells={[{ k: "from", v: kept.where }, ...(asked.length > 0 ? [{ k: "filters", v: asked.join(" · ") }] : []), { k: kind === "selection" ? "it keeps" : "who joins", v: howMany }]} />
+    <Dialog title={kind === "selection" ? "Save as a selection" : kind === "run" ? "Run a step" : "Make a cohort"} icon={kind === "selection" ? "file" : kind === "run" ? "play" : "users"} onClose={onClose} foot={foot}>
+      <Values cells={[{ k: "from", v: kept.where }, ...(asked.length > 0 ? [{ k: "filters", v: asked.join(" · ") }] : []), { k: kind === "selection" ? "it keeps" : kind === "run" ? "it runs on" : "who joins", v: howMany }]} />
       {count.kind === "counting" && <Wait phase="counting" since={count.since} />}
       {count.kind === "refused" && (
         <p className="warn" role="alert">
@@ -334,7 +369,7 @@ export function KeepDialog({ caps, kind, kept, onClose, onDone }: { caps: Capabi
           </div>
         </div>
       )}
-      {kind === "selection" ? (
+      {selecting ? (
         <>
           <div className="field">
             <label className="label" htmlFor="keep-name">

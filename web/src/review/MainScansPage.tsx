@@ -20,7 +20,8 @@ import { slotOf } from "../campaigns/values";
 import { cohorts as cohortsDoor } from "../data/cohorts";
 import { isRoot } from "../data/layout";
 import { sources } from "../data/sources";
-import { runControl, startedWords, stepRuns } from "../data/stepRun";
+import { RunChoice } from "../data/RunChoice";
+import { runActs, runControl, startedWords, stepRuns, type Over } from "../data/stepRun";
 import type { SummaryStep } from "../data/summary";
 import { door as served } from "../deployment";
 import { may } from "../grants";
@@ -327,6 +328,8 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   const [layerSince, setLayerSince] = useState(() => Date.now());
   const [layerSaid, setLayerSaid] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  // 2026-11-06: a press of the layer's Run opens what it would go over, as the dataset's rail does
+  const [layerChoosing, setLayerChoosing] = useState(false);
   // the layer's step as its scope's own door said it last, while it waits or runs, for the layer and the map read it is about
   // the layers whose step could not be read again, each with the read it failed in and its note: switching back to one shows
   // its own note, and the asking resumes where the map is read again
@@ -336,6 +339,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
     setLayerState(l);
     setLayerSince(Date.now());
     setLayerSaid(null);
+    setLayerChoosing(false);
     keepLayer(LAYER_KEY, l);
   };
 
@@ -628,29 +632,38 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
   // a Run of the layer's step where it has not run over the scope, as the dataset's or cohort's own page offers it
   const runScope = scope.kind === "cohort" ? "cohorts" : "datasets";
   const control = layerStep && layerStep.state !== "done" ? runControl(caps, runScope, layerStep) : null;
+  // 2026-11-06: a press opens the same choice as the dataset's rail, from the step's own runs: its scans without its answer
+  // first, then every one, over the page's dataset or cohort
+  const layerOperation = layerStep && (layerStep.step === "body_part" || layerStep.step === "post_contrast") ? layerStep.step : null;
+  const runLayer = (over: Over) => {
+    if (!layerOperation) return;
+    const step = layerOperation;
+    setRunning(true);
+    setLayerSaid(null);
+    stepRuns.start(runScope, title, step, over).then(
+      (started) => {
+        setRunning(false);
+        setLayerChoosing(false);
+        setLayerSaid(startedWords(title, step, started));
+        setReload((x) => x + 1);
+      },
+      (e: unknown) => {
+        setRunning(false);
+        setLayerSaid(`Not started: ${messageOf(e)}`);
+      },
+    );
+  };
   const layerRun: LayerRun | null =
-    control && layerStep && (layerStep.step === "body_part" || layerStep.step === "post_contrast")
+    control && layerOperation
       ? {
           ...control,
           disabled: control.disabled || running,
-          onRun: () => {
-            const step = layerStep.step as "body_part" | "post_contrast";
-            setRunning(true);
-            setLayerSaid(null);
-            stepRuns.start(runScope, title, step).then(
-              () => {
-                setRunning(false);
-                setLayerSaid(startedWords(title, step));
-                setReload((x) => x + 1);
-              },
-              (e: unknown) => {
-                setRunning(false);
-                setLayerSaid(`Not started: ${messageOf(e)}`);
-              },
-            );
-          },
+          open: layerChoosing,
+          onRun: () => setLayerChoosing((was) => !was),
         }
       : null;
+  const layerChoice =
+    layerRun && layerChoosing && layerStep ? <RunChoice title={layerOperation === "post_contrast" ? "Post-contrast" : "Body part"} acts={runActs(layerStep)} held={layerRun.disabled} why={layerRun.why} onRun={runLayer} onClose={() => setLayerChoosing(false)} /> : null;
 
   return (
     <section className="ms" aria-label={`Main scans of ${scope.name}`}>
@@ -724,6 +737,7 @@ function ScopePage({ caps, scope, earlier, lists, onLists }: { caps: Capabilitie
                 since={layerSince}
                 step={layer && layerAnswer ? layerStepWords(layer, scope, layerStep) : null}
                 run={layerRun}
+                choice={layerChoice}
                 said={layerSaid}
                 note={
                   layerAnswer && (stepState === "queued" || stepState === "running") && (stepStopped || !stepServed)

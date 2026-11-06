@@ -8,7 +8,9 @@
 // runs; where the engine would refuse it, it stands disabled with the engine's
 // reason behind a "?". Main scans carry a Run of their own (2026-10-11):
 // the pick run door picks a dataset's main scans again by its saved rules,
-// beside a link to its Main scans page and one line of help.
+// beside a link to its Main scans page and one line of help. Since
+// 2026-11-06 a step runs over a saved selection too, without a cohort: the
+// scans chosen in the viewer, saved as one on the way (RunOnScans).
 
 import { door } from "../ask/client";
 import type { Capabilities } from "../capabilities";
@@ -20,11 +22,23 @@ import { mayPick } from "./pickRun";
 import type { StepMore, StepRunOffer } from "./StepRail";
 import { OPERATIONS, type Operation, type StepName, type SummaryStep } from "./summary";
 
-/** The doors that start a step's run, a dataset's and a cohort's. */
+/** The doors that start a step's run, a dataset's, a cohort's and a saved selection's (engine, 2026-11-06). */
 export const STEP_RUN_DOORS = {
   datasets: "POST /api/datasets/{name}/steps/{step}/run",
   cohorts: "POST /api/cohorts/{name}/steps/{step}/run",
+  selections: "POST /api/selections/{name}/steps/{step}/run",
 } as const;
+
+/** What each step's run over a saved selection would go over, before it starts (engine, 2026-11-06). */
+export const SELECTION_STEPS_DOOR = "GET /api/selections/{name}/steps";
+
+/** A saved selection's steps, as the engine counts them over its scans: the sort, body part and post-contrast, each with `runs`. */
+export interface SelectionSteps {
+  selection: { name: string; version: number };
+  for: string;
+  scans: number;
+  steps: SummaryStep[];
+}
 
 export type RunScope = keyof typeof STEP_RUN_DOORS;
 
@@ -45,9 +59,11 @@ export interface StepStarted {
 }
 
 export const stepRuns = {
-  /** A step's run over a dataset's or a cohort's scans, queued: every one, or only those without its answer. */
+  /** A step's run over a dataset's, a cohort's or a saved selection's scans (`name@version` for a selection), queued: every one, or only those without its answer. */
   start: (scope: RunScope, name: string, step: Runnable, over: Over = "all") =>
     door<StepStarted>("POST", `/api/${scope}/${encodeURIComponent(name)}/steps/${step}/run`, over === "without" ? { scans: "without" } : undefined),
+  /** What each step's run over one version of a saved selection would go over. */
+  over: (name: string, version: number) => door<SelectionSteps>("GET", `/api/selections/${encodeURIComponent(`${name}@${version}`)}/steps`),
 };
 
 /** The steps the door runs: the operations, and the sort (engine 1.0.0-beta.9, from a dataset's and a cohort's card). */
@@ -122,8 +138,8 @@ export interface RunAct {
   primary: boolean;
 }
 
-/** The scans a model step's "N without" counts, in the words its Run says them. */
-const WITHOUT: Record<Operation, string> = { body_part: "without a body part", post_contrast: "T1 brain, contrast unknown" };
+/** The scans a step's "N without" counts, in the words its Run says them: a model step's, and the sort's not sorted (engine, 2026-11-06). */
+const WITHOUT: Record<Runnable, string> = { body_part: "without a body part", post_contrast: "T1 brain, contrast unknown", sorted: "not sorted" };
 
 /**
  * What a step's Run offers before it starts (2026-11-05: production's body
@@ -131,8 +147,9 @@ const WITHOUT: Record<Operation, string> = { body_part: "without a body part", p
  * in 23 parts, saying neither): a model step its scans without its answer
  * first, "Run on the 135 without a body part", where they are some of its
  * scans and not all, then every scan, "Run again on all 456,132", each with
- * its count and parts; the sort every scan; main scans every subject. An
- * engine from before says only how many scans the step counts.
+ * its count and parts; the sort its scans not sorted first, then every scan
+ * (engine, 2026-11-06); main scans every subject. An engine from before
+ * says only how many scans the step counts.
  */
 export function runActs(st: SummaryStep, subjects: number | null = null): RunAct[] {
   const verb = st.state === "done" || st.state === "failed" ? "Run again" : "Run";
@@ -142,9 +159,9 @@ export function runActs(st: SummaryStep, subjects: number | null = null): RunAct
   }
   const all = st.runs?.all ?? (typeof st.of === "number" ? { scans: st.of, parts: 1 } : null);
   const out: RunAct[] = [];
-  const without = isOperation(st.step) ? (st.runs?.without ?? null) : null;
+  const without = isRunnable(st.step) ? (st.runs?.without ?? null) : null;
   const some = without !== null && all !== null && without.scans > 0 && without.scans < all.scans;
-  if (some && isOperation(st.step)) out.push({ over: "without", label: `Run on the ${n(without.scans)} ${WITHOUT[st.step]}`, scans: without.scans, parts: without.parts, primary: true });
+  if (some && isRunnable(st.step)) out.push({ over: "without", label: `Run on the ${n(without.scans)} ${WITHOUT[st.step]}`, scans: without.scans, parts: without.parts, primary: true });
   if (all) out.push({ over: "all", label: `${verb} on all ${n(all.scans)}`, scans: all.scans, parts: all.parts, primary: !some });
   else out.push({ over: "all", label: verb, scans: 0, parts: 1, primary: true });
   return out;

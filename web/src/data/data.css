@@ -341,3 +341,8 @@ a.dp-view:hover { background: var(--n-bg-hover); }
   .dp-run-act { flex-wrap: wrap; }
   .dp-run-act > .button { white-space: normal; text-align: left; }
 }
+
+/* ux-runscope (2026-11-06): each step's run over the scans chosen in the viewer, in its dialog; the Main scans layer's choice under its line */
+.ros { display: grid; gap: 0.5rem; }
+.ros .dp-run-choice { margin-top: 0; }
+.ms-layer .dp-run-choice { margin-top: 0.5rem; }

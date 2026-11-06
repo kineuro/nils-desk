@@ -7,6 +7,9 @@
 // ("Run again on all 456,132", in 23 parts); the sort every scan, main scans
 // every subject. Production's body part went over all 456,132 scans in 23
 // parts where 135 had no body part, and nothing said so before it began.
+// Since 2026-11-06 the sort offers its scans not sorted first too, the Main
+// scans map's layer Run opens the same choice, and a dialog over the scans
+// chosen in the viewer lists one per step.
 
 import type { Over, RunAct } from "./stepRun";
 
@@ -28,7 +31,8 @@ export function RunChoice({
   /** Why the Run is held, where the engine says why. */
   why?: string | null;
   onRun: (over: Over) => void;
-  onClose: () => void;
+  /** Where the choice can be put away; none where it stands in a list of its own, as in a dialog. */
+  onClose?: () => void;
 }) {
   return (
     <div className="dp-run-choice" role="group" aria-label={`Run ${title}`}>
@@ -42,9 +46,11 @@ export function RunChoice({
         </span>
       ))}
       {why && <span className="meta">{why}</span>}
-      <button type="button" className="button quiet small" onClick={onClose}>
-        Cancel
-      </button>
+      {onClose && (
+        <button type="button" className="button quiet small" onClick={onClose}>
+          Cancel
+        </button>
+      )}
     </div>
   );
 }

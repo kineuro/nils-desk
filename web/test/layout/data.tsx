@@ -143,10 +143,15 @@ const CAP = {
   advice:
     "a container was killed at its memory cap, the memory its pipeline declares for a unit of the cores it took: run it with fewer threads where its memory grows with them, or add a version of the pipeline that declares more memory (nils pipeline add) within what the lane holds (nils pipeline lane --memory-gb)",
 };
+/** ?atonce (ux-runscope, 2026-11-06): the big dataset's body part runs parts 3 to 5 of 23 at once, their counts summed, and its sort has 7 scans not sorted. */
+const AT_ONCE = new URLSearchParams(location.search).has("atonce");
+const SUMMED = { ...BEAT, units: 2610, running: 2610, done: 1200, total: 2610, reported: { done: 1200, of: 2610, what: "stacks", units: 3 }, part: { at: 3, to: 5, of: 23 }, runs: [160, 161, 162] };
 const progressing = (steps: ReturnType<typeof step>[], scans: number) =>
   steps.map((st) =>
     st.step === "body_part"
-      ? { ...st, state: "running", run: 162, job: 41, started_at: ago(12), finished_at: null, progress: BEAT, refusal: { reason: "running", error: "Body part runs already over these scans, as job 41" } }
+      ? { ...st, state: "running", run: 162, job: 41, started_at: ago(12), finished_at: null, progress: AT_ONCE ? SUMMED : BEAT, refusal: { reason: "running", error: "Body part runs already over these scans, as job 41" } }
+      : AT_ONCE && st.step === "sorted"
+        ? { ...st, unsorted: 7, runs: { all: { scans, parts: 1 }, without: { scans: 7, parts: 1 } } }
       : st.step === "post_contrast"
         ? { ...st, state: "failed", served: true, run: 158, job: 37, started_at: ago(130), finished_at: ago(124), refusal: null, failure: CAP, of: scans }
         : st,
@@ -191,7 +196,7 @@ function summary(s: Spec) {
   );
   const views = s.name === "study-big" ? { ...step("views", "running", { made: 57, of: s.scans }, null, 9), started_at: ago(1), progress: { done: 57, total: 1001 } } : step("views", read ? "done" : "waiting", { made: s.scans, of: s.scans }, read ? 60 : null, 9);
   steps.push(views);
-  const shown = PROGRESS && s.name === "study-big" ? progressing(steps, s.scans) : steps;
+  const shown = (PROGRESS || AT_ONCE) && s.name === "study-big" ? progressing(steps, s.scans) : steps;
   return {
     dataset: s.name,
     dataset_id: SPECS.indexOf(s) + 2,

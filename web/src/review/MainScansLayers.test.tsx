@@ -92,16 +92,28 @@ describe("Main scans' layers", () => {
     expect(box().textContent).toContain("400 scans carry no body region · 8 visits have none at all · 8 scans taken without one.");
   });
 
-  it("says the layer's step has not run on the cohort, and its Run asks the cohort's door and says it is queued", async () => {
-    const engine = await open({ cohort: "ms-followup" }, (c) => (c.method === "POST" && c.path === "/api/cohorts/ms-followup/steps/body_part/run" ? { status: 202, body: { job: 41, state: "queued", step: "body_part", for: "cohort:ms-followup", scans: 1300, handle: 9, command: [] } } : layerDoors()(c)));
+  it("says the layer's step has not run on the cohort, and its Run opens the rail's choice, asks the cohort's door and says it is queued", async () => {
+    const engine = await open({ cohort: "ms-followup" }, (c) =>
+      c.method === "POST" && c.path === "/api/cohorts/ms-followup/steps/body_part/run"
+        ? { status: 202, body: { job: 41, state: "queued", step: "body_part", for: "cohort:ms-followup", scans: (c.body as { scans?: string } | undefined)?.scans === "without" ? 240 : 1300, parts: 1, handle: 9, command: [] } }
+        : layerDoors({ body_part: stepOf("body_part", { runs: { all: { scans: 1300, parts: 1 }, without: { scans: 240, parts: 1 } } }) })(c),
+    );
     await choose("Body part");
     expect(box().querySelector(".ms-layer-said")?.textContent).toBe("Body part has not run on this cohort.");
     expect(box().querySelector(".ms-layer-said")?.classList.contains("not-run")).toBe(true);
     const asked = engine.of("POST", "/api/picks/map").length;
+    // 2026-11-06: a press opens what it would go over, the scans without a body part first, then every one
     act(() => button(box(), "Run")!.click());
+    expect(button(box(), "Run")!.getAttribute("aria-expanded")).toBe("true");
+    expect(engine.of("POST", "/api/cohorts/ms-followup/steps/body_part/run")).toHaveLength(0);
+    const choice = box().querySelector(".dp-run-choice")!;
+    expect(choice.querySelector(".dp-run-title")?.textContent).toBe("Body part");
+    expect([...choice.querySelectorAll(".dp-run-act button")].map((b) => b.textContent)).toEqual(["Run on the 240 without a body part", "Run on all 1,300"]);
+    act(() => button(choice as HTMLElement, "Run on the 240 without a body part")!.click());
     await settle();
-    expect(engine.of("POST", "/api/cohorts/ms-followup/steps/body_part/run")).toHaveLength(1);
-    expect(box().querySelector(".ms-said")?.textContent).toBe("ms-followup: body part queued.");
+    expect(engine.of("POST", "/api/cohorts/ms-followup/steps/body_part/run").map((c) => c.body)).toEqual([{ scans: "without" }]);
+    expect(box().querySelector(".dp-run-choice")).toBeNull();
+    expect(box().querySelector(".ms-said")?.textContent).toBe("ms-followup: body part queued on 240 scans.");
     // the map is read again, so the step says it waits its turn
     expect(engine.of("POST", "/api/picks/map").length).toBeGreaterThan(asked);
   });
@@ -143,15 +155,17 @@ describe("Main scans' layers", () => {
     expect(engine.of("POST", "/api/picks/map").at(-1)?.body).toMatchObject({ scope: { dataset: "@study-big" }, layer: "post_contrast" });
     expect(box().querySelector(".ms-layer-said")?.textContent).toBe("Post-contrast has not run on this dataset.");
     act(() => button(box(), "Run")!.click());
+    act(() => button(box(), "Run on all 1,300")!.click());
     await settle();
     expect(engine.calls.filter((c) => c.path.endsWith("/steps/post_contrast/run")).map((c) => c.path)).toEqual(["/api/datasets/study-big/steps/post_contrast/run"]);
-    expect(box().querySelector(".ms-said")?.textContent).toBe("study-big: post-contrast queued.");
+    expect(box().querySelector(".ms-said")?.textContent).toBe("study-big: post-contrast queued on 10 scans.");
   });
 
   it("says why a Run was not started", async () => {
     await open({ cohort: "ms-followup" }, (c) => (c.method === "POST" && c.path.endsWith("/run") ? { status: 409, body: { error: "body part runs already over these scans, as job 40", reason: "running" } } : layerDoors()(c)));
     await choose("Body part");
     act(() => button(box(), "Run")!.click());
+    act(() => button(box(), "Run on all 1,300")!.click());
     await settle();
     expect(box().querySelector(".ms-said")?.textContent).toContain("Not started: body part runs already over these scans, as job 40");
   });

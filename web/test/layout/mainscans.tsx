@@ -276,6 +276,8 @@ function layerStep(layer: string) {
     jobs: ran ? [812] : [],
     refusal: null,
     label: ran ? { rule: "time-rule-1", labelled: 12600, in_anchored_sessions: 9000, by_state: {} } : null,
+    // ux-runscope (2026-11-06): what a run would go over, every scan or those without its answer
+    runs: ran ? { all: { scans: 12600, parts: 6 }, without: { scans: 0, parts: 0 } } : { all: { scans: 12600, parts: 6 }, without: { scans: 2400, parts: 2 } },
   };
 }
 
@@ -380,7 +382,10 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     // the runs asked for, for the check to read: the fake engine answers in the page, where no request is seen
     const w = window as unknown as { runs?: string[] };
     w.runs = [...(w.runs ?? []), path];
-    return json(202, { job: 913, state: "queued", step: path.split("/")[5], for: "made-up", scans: 12600, handle: 51, command: [] });
+    // ux-runscope (2026-11-06): a run over the scans without the step's answer goes over those alone
+    const without = body.scans === "without";
+    w.runs = [...w.runs.slice(0, -1), `${path}${without ? " without" : ""}`];
+    return json(202, { job: 913, state: "queued", step: path.split("/")[5], for: "made-up", scans: without ? 2400 : 12600, over: without ? "without" : "all", parts: without ? 2 : 6, handle: 51, command: [] });
   }
   const layer = typeof body.layer === "string" ? body.layer : null;
   if (layer && path === "/api/picks/map") return json(200, { ...(body.columns === "dataset" ? datasetMapOf(String(body.role), body.rules !== undefined) : mapOf(String(body.role), body.rules !== undefined)), layer: mapLayerOf(String(body.role), layer) });

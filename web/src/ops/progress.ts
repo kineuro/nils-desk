@@ -21,7 +21,8 @@ export interface LiveProgress {
   total: number | null;
   /** What it counts, in the engine's word: stacks, sessions, subjects, or a container's own (slices, steps). */
   what: string | null;
-  part: { at: number; of: number } | null;
+  /** Which part runs; where parts run at once (engine, 2026-11-06), from the first going (`at`) to the last (`to`), their counts summed. */
+  part: { at: number; to?: number; of: number } | null;
   /** Since when its job runs, every part's. */
   since: string | null;
   /** What the running containers said of themselves, where any did. */
@@ -33,6 +34,7 @@ export function liveOf(progress: unknown): LiveProgress {
   const p = obj(progress);
   const part = obj(p.part);
   const at = num(part.at);
+  const to = num(part.to);
   const of = num(part.of);
   const r = obj(p.reported);
   const rd = num(r.done);
@@ -40,7 +42,7 @@ export function liveOf(progress: unknown): LiveProgress {
     done: num(p.done),
     total: num(p.total),
     what: text(p.what),
-    part: at !== null && of !== null && of > 1 ? { at, of } : null,
+    part: at !== null && of !== null && of > 1 ? { at, ...(to !== null && to > at ? { to } : {}), of } : null,
     since: text(p.since),
     reported: rd !== null ? { done: rd, of: num(r.of), units: num(r.units) ?? 1 } : null,
   };
@@ -62,10 +64,10 @@ export function whatWords(what: string | null, count: number): string {
   }
 }
 
-/** "312 of 870 scans in part 4 of 23", "12 of 40 visits", "part 2 of 3"; null where the record says nothing a person can read. */
+/** "312 of 870 scans in part 4 of 23", "1,200 of 2,610 scans in parts 3 to 5 of 23", "12 of 40 visits", "part 2 of 3"; null where the record says nothing a person can read. */
 export function liveWords(p: LiveProgress): string | null {
   const count = p.done !== null && p.total !== null ? `${n(p.done)} of ${n(p.total)} ${whatWords(p.what, p.total)}` : null;
-  const part = p.part ? `part ${n(p.part.at)} of ${n(p.part.of)}` : null;
+  const part = p.part ? (p.part.to !== undefined ? `parts ${n(p.part.at)} to ${n(p.part.to)} of ${n(p.part.of)}` : `part ${n(p.part.at)} of ${n(p.part.of)}`) : null;
   if (count && part) return `${count} in ${part}`;
   return count ?? part;
 }

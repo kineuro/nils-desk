@@ -1104,6 +1104,7 @@ function ScansLevel({ caps, scope, view, go, subject, visit }: LevelProps & { su
         <KeepActions
           caps={caps}
           ready={!!page && !load.failed && scans.length > 0}
+          runs
           kept={() =>
             scansKept(
               scope,
