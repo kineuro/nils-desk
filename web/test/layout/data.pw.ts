@@ -130,6 +130,61 @@ test("sort, body part, post-contrast and main scans carry their Run inside their
   }
 });
 
+// 2026-11-05: production's body part said "135 with no body part", and its Run went over all 456,132 scans in 23
+// parts, saying neither before it began. A step's Run opens what it would go over under the rail: the scans
+// without a body part first, every scan second with the parts it takes; one act starts it.
+for (const width of [1440, 390]) {
+  test(`at ${width} px a step's Run says what it would go over before it starts, the scans without its answer first`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/data.html#data/datasets");
+    await expect(page.locator(".dp-detail")).toHaveAttribute("aria-label", "study-big");
+    const run = page.locator(".dp-detail .dp-step").filter({ hasText: "Body part" }).locator(".dp-step-run button");
+    await expect(run).toHaveText("Run again");
+    await expect(page.locator(".dp-run-choice")).toHaveCount(0);
+    await run.click();
+    await expect(run).toHaveAttribute("aria-expanded", "true");
+    const choice = page.locator(".dp-run-choice");
+    await expect(choice).toHaveCount(1);
+    const acts = choice.locator(".dp-run-act");
+    await expect(acts).toHaveCount(2);
+    await expect(acts.nth(0).locator("button")).toHaveText("Run on the 12 without a body part");
+    await expect(acts.nth(0).locator("button")).not.toHaveClass(/secondary/);
+    await expect(acts.nth(1).locator("button")).toHaveText("Run again on all 1,003");
+    await expect(acts.nth(1).locator("button")).toHaveClass(/secondary/);
+    await expect(acts.nth(1).locator(".meta")).toHaveText("in 3 parts");
+    // the rail keeps its four Runs, and nothing goes sideways
+    await expect(page.locator(".dp-detail .dp-step-run")).toHaveCount(4);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    const box = (await choice.boundingBox())!;
+    expect(box.x + box.width).toBeLessThanOrEqual(width);
+    await page.locator(".dp-detail .dp-sec").filter({ hasText: "Where it is" }).screenshot({ path: `test-results/data-run-choice-${width}.png` });
+    // the first act runs over the twelve alone, and the line goes
+    await acts.nth(0).locator("button").click();
+    await expect(page.locator(".dp-run-choice")).toHaveCount(0);
+    await expect(page.getByText("study-big: body part queued on 12 scans.")).toBeVisible();
+    // Cancel closes it without a run; the sort's says its every scan, main scans' every subject
+    await page.locator(".dp-detail .dp-step").filter({ hasText: "Sorted" }).locator(".dp-step-run button").click();
+    await expect(page.locator(".dp-run-choice .dp-run-act button")).toHaveText(["Run again on all 1,003"]);
+    await page.locator(".dp-run-choice").getByRole("button", { name: "Cancel" }).click();
+    await expect(page.locator(".dp-run-choice")).toHaveCount(0);
+    await page.locator(".dp-detail .dp-step").filter({ hasText: "Main scans" }).locator(".dp-step-run button").click();
+    await expect(page.locator(".dp-run-choice .dp-run-act button")).toHaveText(["Run again for all 70 subjects"]);
+  });
+
+  test(`at ${width} px a dataset never counted says what its first count counts and how far, on its card and under Where it is`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/data.html?first#data/datasets?dataset=study-big");
+    await expect(page.locator(".dp-detail")).toHaveAttribute("aria-label", "study-big");
+    const card = page.locator(".dp-card").filter({ has: page.locator(".dp-pick", { hasText: "study-big" }) });
+    await expect(card.locator(".dp-first")).toHaveText("Counting files in working: 412,000 so far");
+    await expect(page.locator(".dp-detail .dp-first")).toHaveText("Counting files in working: 412,000 so far.");
+    await expect(page.locator(".dp-detail")).not.toContainText("Reading where it is.");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await card.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: `test-results/data-first-count-${width}.png` });
+  });
+}
+
 test("an identified dataset read keeps main scans' Run, Rules and \"?\" on one line, and says whose its set-aside files are", async ({ page }) => {
   // five widths, each a page of its own
   test.setTimeout(120_000);
@@ -303,5 +358,42 @@ for (const [device, width, height] of [
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
     await card.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `test-results/data-partial-${device}.png` });
+  });
+}
+
+// ux-progress (2026-11-06): a model's step that runs says how far under the rail, in the engine's count with its part and
+// how long; one that failed says why with its kind and the way to its run; on a laptop and a phone, nothing goes sideways
+for (const [device, width, height] of [
+  ["laptop", 1440, 900],
+  ["phone", 390, 844],
+] as const) {
+  test(`on a ${device} a model's step says how far it is and why it failed, under the rail`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    await page.goto("/data.html?progress#data/datasets?dataset=study-big");
+    // the dataset's card says it too, in a few words
+    await expect(page.locator(".dp-card").filter({ has: page.locator(".dp-pick", { hasText: "study-big" }) })).toContainText("Body part: 312 of 870 scans in part 4 of 23");
+    const notes = page.locator(".dp-detail .dp-step-note");
+    await expect(notes).toHaveCount(2);
+    await expect(notes.nth(0)).toContainText(/^Body part: 312 of 870 scans in part 4 of 23 · 4[78] min/u);
+    await expect(notes.nth(1)).toHaveClass(/failed/u);
+    await expect(notes.nth(1)).toContainText("Post-contrast failed: killed at its memory cap of 16 GB");
+    await expect(notes.nth(1).locator(".kind-tag")).toHaveText("resource");
+    await expect(notes.nth(1).getByRole("link", { name: "Run 158" })).toHaveAttribute("href", "#pipelines/runs/158");
+    await expect(page.locator(".dp-detail .dp-step").nth(3)).toContainText("312 of 870");
+    // each line within the detail's width, and nothing goes sideways
+    const detail = (await page.locator(".dp-detail").boundingBox())!;
+    for (const n of await notes.all()) {
+      const b = (await n.boundingBox())!;
+      expect(b.x + b.width).toBeLessThanOrEqual(detail.x + detail.width + 1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.locator(".dp-detail .dp-step-notes").evaluate((e) => e.scrollIntoView({ block: "end" }));
+    await page.screenshot({ path: `test-results/data-step-notes-${device}.png` });
+    // the cohort's card says the same of its steps
+    await page.goto("/data.html?progress#data/datasets?cohort=ms-followup");
+    await expect(page.locator(".dp-step-note")).toHaveCount(2);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.locator(".dp-step-notes").evaluate((e) => e.scrollIntoView({ block: "end" }));
+    await page.screenshot({ path: `test-results/data-step-notes-cohort-${device}.png` });
   });
 }

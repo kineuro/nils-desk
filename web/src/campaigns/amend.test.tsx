@@ -114,10 +114,10 @@ describe("the items held back and the next item", () => {
   it("says how many are held back and why", () => {
     const p = pageOf({ campaign: 7, axis: "body_part", values: VALUES, sealed: 3, held_back: 4, held_back_open: 219, alone: 222, hold_back: 0.1, left: 0, items: [] });
     expect(p.held_back_open).toBe(219);
-    expect(aloneWords(p)).toBe("219 items are held back to be read one by one: the campaign holds back 10 % of what is accepted in batches, chosen at random, so the engine can check how often a batch answer is right; 3 are of a sealed sample, read blind with nothing suggested.");
+    expect(aloneWords(p)).toBe("219 items are set aside to read one by one: the campaign sets aside 10 % of every page accepted at once, at random, to check how often such an answer is right; 3 are of a sealed sample, read blind with nothing suggested.");
     expect(aloneWords(pageOf({ held_back: 0, sealed: 0, items: [] }))).toBeNull();
     // an engine before the count says what its page held back
-    expect(aloneWords(pageOf({ held_back: 2, hold_back: 0.1, sealed: 0, items: [] }))).toContain("2 items are held back");
+    expect(aloneWords(pageOf({ held_back: 2, hold_back: 0.1, sealed: 0, items: [] }))).toContain("2 items are set aside");
   });
 
   it("reads the claim's next item in every shape the engine may say it", () => {
@@ -327,7 +327,7 @@ describe("the gallery", () => {
     root = createRoot(host);
     await act(async () => root.render(<Gallery caps={capsWith(DOORS)} id="7" />));
     const line = await until(() => host.querySelector("[data-alone]"));
-    expect(line.textContent).toContain("3 items are held back to be read one by one");
+    expect(line.textContent).toContain("3 items are set aside to read one by one");
     expect(line.textContent).toContain("2 are of a sealed sample");
     expect(line.querySelector("a")?.getAttribute("href")).toBe("#review/campaigns/7/rate?alone=1");
     await press("u");

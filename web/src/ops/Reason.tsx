@@ -32,7 +32,7 @@ export function FailLine({ f, children }: { f: Failure; children?: React.ReactNo
   return (
     <div className="fail-line">
       {f.kind && <KindTag kind={f.kind} cause={f.cause} />}
-      <span className="fail-words" title={f.error}>
+      <span className="fail-words" title={f.said && f.advice ? `${f.advice}\n\n${f.error}` : f.error}>
         {f.line}
       </span>
       {children}
@@ -52,6 +52,8 @@ export function FailNote({ f, lead = null, software = null, children }: { f: Fai
           <span>{f.line}</span>
           {software && isSoftwares(f) && <SoftwareLink href={software} />}
         </p>
+        {/* what happened leads where the engine says it, and what to do follows (2026-11-05) */}
+        {f.said && f.advice && <p className="note-detail">{f.advice}</p>}
         {f.error !== f.line && <p className="note-detail">{f.error}</p>}
         {children}
       </div>

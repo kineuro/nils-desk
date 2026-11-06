@@ -98,8 +98,8 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
       )}
       {said && <p className="meta said">{said}</p>}
       <p className="batch-counts" role="status" aria-live="polite">
-        <b>{plan.n - plan.drawn}</b> take {taking ?? "the suggestion"} · <b>{plan.drawn + plan.read.length}</b> held back
-        {plan.drawn > 0 ? ` (${plan.drawn} at random for the draw${plan.read.length > 0 ? `, ${plan.read.length} by you` : ""})` : ""}
+        <b>{plan.n - plan.drawn}</b> accepted as {taking ?? "suggested"} · <b>{plan.drawn + plan.read.length}</b> left to read one by one
+        {plan.drawn > 0 ? ` (${plan.drawn} set aside at random${plan.read.length > 0 ? `, ${plan.read.length} by you` : ""})` : ""}
         {plan.items !== null && shown < b.count ? `; the ${b.count - shown} not shown wait for a later move` : ""}
       </p>
       <div className="batch-grid">
@@ -112,7 +112,7 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
               role="button"
               tabIndex={0}
               aria-pressed={held}
-              aria-label={`${i.stack !== null ? `stack ${i.stack}` : `item ${i.item}`}: ${held ? "held back by you; press to let it take the suggestion" : "takes the suggestion; press to hold it back"}`}
+              aria-label={`${i.stack !== null ? `stack ${i.stack}` : `item ${i.item}`}: ${held ? "left by you to read one by one; press to accept it as suggested" : "accepted as suggested; press to read it one by one"}`}
               onClick={() => onHold(i.item)}
               onKeyDown={(e) => {
                 // Space or Enter on a tile holds it back or lets it go; never the batch's accept
@@ -123,7 +123,7 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
                 }
               }}
             >
-              {i.stack !== null ? <Tile stack={i.stack} sync={sync} size={size} caption={held ? "held by you" : `stack ${i.stack}`} /> : <span className="meta">item {i.item}</span>}
+              {i.stack !== null ? <Tile stack={i.stack} sync={sync} size={size} caption={held ? "one by one" : `stack ${i.stack}`} /> : <span className="meta">item {i.item}</span>}
             </div>
           );
         })}
@@ -141,7 +141,7 @@ export function BatchView({ batches, at, mine, busy, said, onHold, onAccept, onN
           One by one <kbd>b</kbd>
         </button>
       </div>
-      <p className="meta">A click, Space or Enter on a tile holds it back to read one by one; the wheel moves every tile a plane at a time.</p>
+      <p className="meta">A click, Space or Enter on a tile leaves it to read one by one; the wheel moves every tile a plane at a time.</p>
     </div>
   );
 }

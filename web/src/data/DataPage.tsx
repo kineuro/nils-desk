@@ -49,6 +49,9 @@ import {
   slotOf,
   summaries,
   TONE,
+  countWords,
+  isPending,
+  type CountProgress,
   type DatasetSummary,
   type Part,
   type Relation,
@@ -137,6 +140,8 @@ export function DataPage({
   /** Why the cohorts could not be read, where they could not. */
   const [cohortsWhy, setCohortsWhy] = useState<string | null>(null);
   const [sums, setSums] = useState<Record<string, DatasetSummary>>({});
+  /** 2026-11-05: how far the first count of a dataset never counted has got, by its name, while the engine answers it without counts. */
+  const [firsts, setFirsts] = useState<Record<string, CountProgress>>({});
   /** Why a dataset's summary could not be read, by its name. */
   const [sumsWhy, setSumsWhy] = useState<Record<string, string>>({});
   const [chosen, setChosen] = useState<Chosen>(() => chosenOf(dataset, query));
@@ -188,11 +193,17 @@ export function DataPage({
   const summaryReads = useReads(
     (name) => summaries.read(name),
     (name, s) => {
-      setSums((was) => ({ ...was, [name]: s }));
+      // 2026-11-05: a dataset never counted is answered at once with how far its first count has got, and read again until it lands
+      if (isPending(s)) setFirsts((was) => ({ ...was, [name]: s.count }));
+      else {
+        setSums((was) => ({ ...was, [name]: s }));
+        setFirsts((was) => (name in was ? without(was, name) : was));
+      }
       setSumsWhy((was) => (name in was ? without(was, name) : was));
     },
     (name, e) => {
       setSums((was) => (name in was ? without(was, name) : was));
+      setFirsts((was) => (name in was ? without(was, name) : was));
       setSumsWhy((was) => ({ ...was, [name]: messageOf(e) }));
     },
   );
@@ -237,7 +248,9 @@ export function DataPage({
   const counting = Object.values(sums)
     .filter((s) => names.split("\n").includes(s.dataset) && s.counting === true && !running.includes(s.dataset))
     .map((s) => s.dataset);
-  const followKey = [...running, ...counting].join("\n");
+  // 2026-11-05: and one never counted, until its first count lands
+  const firstly = Object.keys(firsts).filter((name) => names.split("\n").includes(name) && !(name in sums));
+  const followKey = [...running, ...counting, ...firstly].join("\n");
   useEffect(() => {
     const was = lastOpen.current;
     lastOpen.current = openKey;
@@ -386,6 +399,7 @@ export function DataPage({
               why={whyOf(d)}
               summary={sums[d.name] ?? null}
               reading={summarises && !(d.name in sums)}
+              first={d.name in sums ? null : (firsts[d.name] ?? null)}
               on={chosenDataset?.id === d.id}
               relation={chosenCohort ? datasetRelation(d.name, chosenCohort) : null}
               feeds={feedsWords(d.name, d.cohort, allCohorts)}
@@ -429,6 +443,7 @@ export function DataPage({
           dataset={chosenDataset}
           summary={sums[chosenDataset.name] ?? null}
           summaryWhy={sumsWhy[chosenDataset.name] ?? null}
+          first={chosenDataset.name in sums ? null : (firsts[chosenDataset.name] ?? null)}
           why={whyOf(chosenDataset)}
           jobs={jobs}
           datasets={list}
@@ -548,13 +563,15 @@ function DatasetCard(props: {
   summary: DatasetSummary | null;
   /** Its summary is served and not read: on its way, or its read failed. */
   reading: boolean;
+  /** 2026-11-05: how far its first count has got, while the engine counts it for the first time. */
+  first: CountProgress | null;
   on: boolean;
   relation: Relation | null;
   feeds: string;
   view: View;
   onPick: () => void;
 }) {
-  const { dataset: d, why, summary, reading, on, relation, feeds, view, onPick } = props;
+  const { dataset: d, why, summary, reading, first, on, relation, feeds, view, onPick } = props;
   const next = nextStep(d, why, summary);
   const found = foundOf(d, summary);
   const files = found.files;
@@ -610,9 +627,16 @@ function DatasetCard(props: {
               <span key={i} className={s} />
             ))}
           </div>
-          <div className={next.step === "pseudonymise" && (d.held?.identifiers ?? 0) > 0 ? "dp-line look" : "dp-line"} title={lookWords || undefined}>
-            {line}
-          </div>
+          {first ? (
+            // 2026-11-05: what its first count counts and how far, never a wait without words
+            <div className="dp-line dp-first" title={line} role="status">
+              {countWords(first)}
+            </div>
+          ) : (
+            <div className={next.step === "pseudonymise" && (d.held?.identifiers ?? 0) > 0 ? "dp-line look" : "dp-line"} title={lookWords || undefined}>
+              {line}
+            </div>
+          )}
         </>
       )}
       <div className="dp-foot">

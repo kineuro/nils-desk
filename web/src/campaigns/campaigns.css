@@ -712,3 +712,14 @@ dl.facts dd .raters-change { margin-left: 0.6rem; }
 .axis-rows .opt.unfit { opacity: 0.55; border-style: dashed; }
 /* a campaign's tables scroll inside their wrap on a narrow screen, never the page: the wrap is a grid item that may shrink */
 .campaign > .table-wrap, .campaign-results { min-width: 0; }
+
+/* ux-campaign (2026-11-05): a campaign's upkeep on its page: an open item's
+   lease beside its state, the ways of reading not offered, the items read one
+   by one, and the close as it runs */
+.campaign-items .lease { white-space: normal; }
+.campaign-items .lease .button { margin-left: 0.5rem; }
+.campaign .read-alone .button { margin-left: 0.6rem; }
+.campaign p.said[role="status"] .icon { flex: none; }
+dialog .closing { display: grid; gap: 0.4rem; }
+dialog .closed-result .refused-list { margin: 0.4rem 0 0; padding-left: 1.1rem; }
+dialog .closed-result .refused-list li { overflow-wrap: anywhere; }

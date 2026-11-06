@@ -51,9 +51,11 @@ export interface Failure {
   cause: string | null;
   /** What to do, in the engine's words. */
   advice: string | null;
-  /** The one line a person reads first: what to do, else the error's first sentence. */
+  /** The one line a person reads first: what happened where the engine says it (`said`), else what to do, else the error's first sentence. */
   line: string;
   fix: Fix | null;
+  /** Since 2026-11-05, what happened in the engine's words where it says it: "killed at its memory cap of 16 GB"; then `advice` is said beside the line. */
+  said?: string;
 }
 
 /** One check of what a run needs of this machine, as the pre-flight answers it. */
@@ -89,9 +91,10 @@ export function failureOf(answer: unknown): Failure | null {
   const f = obj(o[SLICE.failure]);
   const kind = text(f.kind);
   const advice = text(f.advice);
+  const said = text(f.said);
   if (error === null && advice === null && kind === null) return null;
   const whole = error ?? advice ?? kind!;
-  return { error: whole, kind, cause: text(f.cause), advice, line: advice ?? firstSentence(whole), fix: fixOf(f.fix) };
+  return { error: whole, kind, cause: text(f.cause), advice, line: said ?? advice ?? firstSentence(whole), fix: fixOf(f.fix), ...(said ? { said } : {}) };
 }
 
 /** The checks an answer holds (a pre-flight, or a refused run), each with its failure where it fails. */

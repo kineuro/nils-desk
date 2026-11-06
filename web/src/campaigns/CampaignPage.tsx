@@ -45,7 +45,9 @@ import {
   suggestOf,
   SUGGEST_WORDS,
   type Answer,
+  type Assignment,
   type Campaign,
+  type Closed,
   type Closure,
   type Item,
   type LabelSet,
@@ -68,6 +70,7 @@ import { ratersRefusal, type RaterWarning } from "./raters";
 import { RatersDialog } from "./RatersDialog";
 import { namesRaters, raterNames, resultsRefusal } from "./results";
 import { ResultsView } from "./Results";
+import { aloneWords, closeStage, closingWords, leaseLine, mayReadAllInBatches, missingModes, refusedLines, type LeaseLine } from "./upkeep";
 
 const n = (v: number) => v.toLocaleString("en-US");
 const ROWS = 200;
@@ -88,17 +91,45 @@ export function CampaignPage({ caps, id, missing = null }: { caps: Capabilities;
       .catch((e: unknown) => setLoad({ kind: "failed", why: refusedWords(e) }));
   }, [readsSets, id, caps]);
   useEffect(() => read(), [read]);
+  // a close running as a job: the page reads the campaign again until it is closed (2026-11-05)
+  const closing = load.kind === "ready" && closeStage(load.c) === "running" && acting !== "close";
+  useEffect(() => {
+    if (!closing) return;
+    const t = setTimeout(read, 2000);
+    return () => clearTimeout(t);
+  }, [closing, load, read]);
+  const release = useCallback(
+    (a: Assignment) => {
+      campaigns
+        .release(id, a.id)
+        .then((r) => setSaid((r as Assignment & { words?: string }).words ?? `Gave back ${a.principal.split("@")[0]}'s item.`))
+        .catch((e: unknown) => setSaid(`Not given back: ${refusedWords(e)}`))
+        .finally(read);
+    },
+    [id, read],
+  );
+  const readAll = useCallback(() => {
+    campaigns
+      .holdBack(id, 0)
+      .then((r) => setSaid(r.freed > 0 ? `Every item can now be read in batches and the gallery; ${n(r.freed)} set aside went back.` : "Every item can now be read in batches and the gallery."))
+      .catch((e: unknown) => setSaid(`Not changed: ${refusedWords(e)}`))
+      .finally(read);
+  }, [id, read]);
   if (load.kind === "loading") return <Wait phase="reading the campaign" since={load.since} size="panel" />;
   if (load.kind === "failed") return <p className="warn">The campaign could not be read: {load.why}</p>;
   const c = load.c;
   return (
-    <CampaignBody caps={caps} campaign={c} answers={load.answers} answersBlind={load.blind} sets={load.sets} stats={load.stats} said={said} warned={warned} missing={missing} onAct={setActing}>
+    <CampaignBody caps={caps} campaign={c} answers={load.answers} answersBlind={load.blind} sets={load.sets} stats={load.stats} said={said} warned={warned} missing={missing} onAct={setActing} onRelease={release} onReadAll={readAll}>
       {isCheck(c) && checkServed(caps) ? null : isAb(c) && abServed(caps) ? <AbPanel campaign={c} /> : isPair(c) && pairServed(caps) ? <PairPanel campaign={c} /> : isAnchored(c) && anchoredServed(caps) ? <AnchoredPanel campaign={c} /> : <Suggestions caps={caps} campaign={c} />}
       {acting === "close" && (
         <CloseDialog
           campaign={c}
           plan={closure(c, load.answers)}
-          onClose={() => setActing(null)}
+          onClosed={read}
+          onClose={() => {
+            setActing(null);
+            read();
+          }}
           onDone={(w) => {
             setActing(null);
             setSaid(w);
@@ -153,11 +184,15 @@ export interface CampaignBodyProps {
   /** Stacks without their picture, as the make door counted them. */
   missing?: number | null;
   onAct: (act: "close" | "export" | "raters") => void;
+  /** Gives back a rater's live lease (2026-11-05). */
+  onRelease?: (a: Assignment) => void;
+  /** Sets none of each batch aside, where the campaign allows it (2026-11-05). */
+  onReadAll?: () => void;
   children?: React.ReactNode;
 }
 
 /** One campaign as it draws from what it read. */
-export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, sets, stats = null, said = null, warned = [], filter: initial = null, view: opened = "items", missing = null, onAct, children }: CampaignBodyProps) {
+export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, sets, stats = null, said = null, warned = [], filter: initial = null, view: opened = "items", missing = null, onAct, onRelease, onReadAll, children }: CampaignBodyProps) {
   const [filter, setFilter] = useState<string | null>(initial);
   // record 55, ruling 35 (d): the results, where the person may read them
   const results = resultsRefusal(caps, c) === null;
@@ -173,9 +208,14 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
   const anchored = isAnchored(c) && anchoredServed(caps);
   const adjudicate = adjudicatorHas(caps, c);
   const close = closeRefusal(caps, c);
+  // a close running as a job is followed, never started a second time; one that stopped part way is run again
+  const stage = closeStage(c);
   const exp = exportRefusal(caps);
   const a = c.agreement;
   const blind = answersBlind ?? !seesAnswers(caps, c);
+  // an open item's lease, for the campaign's maker and those who read every answer (2026-11-05)
+  const leases = !blind || c.owner === principalOf(caps);
+  const alone = aloneWords(c);
   // the raters by name to the maker and a Review worker, by number to anyone else; the account's name where the pace door gives it (record 58 P1)
   const accountNames = new Map((stats?.raters ?? []).flatMap((r) => (r.name ? [[r.principal, r.name] as [string, string]] : [])));
   const who = raterNames(answers ?? [], principalOf(caps), namesRaters(caps, c), accountNames);
@@ -216,12 +256,17 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
             Adjudicate
           </a>
         )}
-        {c.status !== "closed" && close === null && !check?.closes && (
+        {c.status === "open" && close === null && !check?.closes && (
           <button type="button" className={check ? "button quiet" : "button secondary"} onClick={() => onAct("close")}>
             Close
           </button>
         )}
-        {check?.closes && c.status !== "closed" && close === null && (
+        {stage === "stopped" && close === null && (
+          <button type="button" className="button" title="the close stopped part way; run again, it writes what the first did not" onClick={() => onAct("close")}>
+            Run the close again
+          </button>
+        )}
+        {check?.closes && c.status === "open" && close === null && (
           <button type="button" className="button" onClick={() => onAct("close")}>
             Close and write the checks
           </button>
@@ -243,6 +288,17 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
           {said}
         </p>
       )}
+      {stage === "running" && (
+        <p className="meta said" role="status">
+          <Icon name="clock" />
+          Closing{c.close_job?.by ? ` (started by ${c.close_job.by.split("@")[0]})` : ""}: {closingWords(c)} The page follows it.
+        </p>
+      )}
+      {stage === "stopped" && (
+        <p className="warn">
+          The close stopped part way{c.close_job?.error ? `: ${c.close_job.error}` : ""}. Run it again; it writes what the first did not.
+        </p>
+      )}
       {warned.map((w) => (
         <p key={w.principal} className="warn">
           {w.why}
@@ -258,6 +314,21 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
         ]}
       />
       <StateBar counts={c.counts} />
+      {c.status === "open" && (c.counts.items.open ?? 0) > 0 && missingModes(caps, c).map((w) => (
+        <p key={w} className="meta mode-missing">
+          {w}
+        </p>
+      ))}
+      {c.status === "open" && alone && (
+        <p className="meta read-alone">
+          {alone}
+          {onReadAll && mayReadAllInBatches(caps, c) && (
+            <button type="button" className="button quiet small" title="sets none aside from now on; the items set aside go back to the batches and the gallery" onClick={onReadAll}>
+              Read all in batches
+            </button>
+          )}
+        </p>
+      )}
       {check && <CheckPanel caps={caps} campaign={c} />}
       {a?.per_axis && Object.keys(a.per_axis).length > 0 && (
         <p className="meta">
@@ -421,7 +492,7 @@ export function CampaignBody({ caps, campaign: c, answers, answersBlind = null, 
           </thead>
           <tbody>
             {rows.map((i) => (
-              <ItemRow key={i.id} item={i} answers={byItem.get(i.id) ?? []} blind={blind} words={words(i)} check={reasons !== null} who={who} />
+              <ItemRow key={i.id} item={i} answers={byItem.get(i.id) ?? []} blind={blind} words={words(i)} check={reasons !== null} who={who} lease={leases ? leaseLine(caps, c, i) : null} onRelease={onRelease} />
             ))}
           </tbody>
         </table>
@@ -469,7 +540,7 @@ function useCheckNames(rows: Item[], byItem: Map<number, Answer[]>): Map<number,
   return names;
 }
 
-function ItemRow({ item: i, answers, blind, words = answerWords, check = false, who }: { item: Item; answers: Answer[]; blind: boolean; words?: (a: Pick<Answer, "value" | "form" | "derivative_id">) => string; check?: boolean; who: Map<string, string> }) {
+function ItemRow({ item: i, answers, blind, words = answerWords, check = false, who, lease = null, onRelease }: { item: Item; answers: Answer[]; blind: boolean; words?: (a: Pick<Answer, "value" | "form" | "derivative_id">) => string; check?: boolean; who: Map<string, string>; lease?: LeaseLine | null; onRelease?: (a: Assignment) => void }) {
   const tone = STATES.find((s) => s.state === i.state)?.tone ?? "";
   return (
     <tr>
@@ -480,6 +551,17 @@ function ItemRow({ item: i, answers, blind, words = answerWords, check = false, 
       </td>
       <td>
         <span className={tone ? `tag ${tone}` : "tag"}>{stateWords(i.state)}</span>
+        {lease && (
+          <span className="meta lease">
+            {" "}
+            {lease.words}
+            {lease.release && onRelease && (
+              <button type="button" className="button quiet small" title="gives the item back unanswered; it goes to the next claim" onClick={() => onRelease(lease.release!)}>
+                Release
+              </button>
+            )}
+          </span>
+        )}
       </td>
       <td className="meta">
         {answers.length === 0
@@ -536,7 +618,7 @@ export function ClosurePanel({ campaign: c, plan }: { campaign: Campaign; plan: 
         Writes {n(plan.writes.n)} {plan.writes.words}.
       </p>
       {plan.staged > 0 && <p className="meta">{n(plan.staged)} of them a model or an agent answered, so they are staged whatever the campaign says, and a person commits them.</p>}
-      {plan.already > 0 && <p className="meta">{n(plan.already)} were resolved by an earlier close.</p>}
+      {plan.already > 0 && <p className="meta">{n(plan.already)} {plan.already === 1 ? "is" : "are"} written already.</p>}
       {plan.unresolvedTotal > 0 ? (
         <p>
           Leaves {n(plan.unresolvedTotal)} unresolved: {plan.unresolved.map((u) => `${n(u.n)} ${u.words}`).join(", ")}. {c.closes_into === "check" ? "Their questions close with it; a later check asks them again." : "Their review items stay in the queue."}
@@ -551,21 +633,63 @@ export function ClosurePanel({ campaign: c, plan }: { campaign: Campaign; plan: 
   );
 }
 
-function CloseDialog({ campaign: c, plan, onClose, onDone }: { campaign: Campaign; plan: Closure; onClose: () => void; onDone: (words: string) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [why, setWhy] = useState<string | null>(null);
+type Closing = { kind: "ask" } | { kind: "running"; job: number | null; since: number; c: Campaign } | { kind: "done"; r: Closed | null } | { kind: "failed"; why: string };
+
+/**
+ * The close as it runs (2026-11-05: the dialog stayed on its button while a
+ * close of 4,838 items ran for 40 s, and the page never followed it). The
+ * close starts as a job; the dialog reads the campaign until the job is done,
+ * says how far it is, then what it wrote and what it refused with why.
+ */
+export function CloseDialog({ campaign: c, plan, onClose, onDone, onClosed, every = 1500 }: { campaign: Campaign; plan: Closure; onClose: () => void; onDone: (words: string) => void; onClosed?: () => void; every?: number }) {
+  const [at, setAt] = useState<Closing>(() => ({ kind: "ask" }));
+  // the page under the dialog reads the campaign again once the close is done, so it stands closed behind the result
+  const finished = at.kind === "done";
+  useEffect(() => {
+    if (finished) onClosed?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finished]);
   const go = () => {
-    setBusy(true);
-    setWhy(null);
+    setAt({ kind: "running", job: null, since: Date.now(), c });
     campaigns
-      .close(c.id)
-      .then((r) => onDone(closedWords(r, c.closes_into)))
-      .catch((e: unknown) => {
-        setBusy(false);
-        setWhy(refusedWords(e));
-      });
+      .closeInBackground(c.id)
+      .then((r) => {
+        // an engine before the close job closes in the one answer
+        if ("decisions" in r) setAt({ kind: "done", r });
+        else setAt((s) => (s.kind === "running" ? { ...s, job: r.job } : s));
+      })
+      .catch((e: unknown) => setAt({ kind: "failed", why: refusedWords(e) }));
   };
-  const again = c.status === "closed";
+  const job = at.kind === "running" ? at.job : null;
+  useEffect(() => {
+    if (job === null) return;
+    let alive = true;
+    const look = () => {
+      campaigns
+        .one(c.id)
+        .then((now) => {
+          if (!alive) return;
+          const j = now.close_job;
+          if (j && j.id === job && j.state === "done") return setAt({ kind: "done", r: j.result });
+          if (j && j.id === job && (j.state === "failed" || j.state === "cancelled")) return setAt({ kind: "failed", why: `Not closed: ${j.error ?? "the close stopped"}` });
+          if (!j && now.status === "closed") return setAt({ kind: "done", r: null });
+          setAt((s) => (s.kind === "running" ? { ...s, c: now } : s));
+          timer = setTimeout(look, every);
+        })
+        .catch(() => {
+          if (alive) timer = setTimeout(look, every * 2);
+        });
+    };
+    let timer = setTimeout(look, every);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [job, c.id, every]);
+  // what the close was asked as, kept while the page behind it reads the campaign closed
+  const [again] = useState(() => c.status === "closed");
+  const [rerun] = useState(() => c.status === "closing");
+  const words = at.kind === "done" ? (at.r ? closedWords(at.r, c.closes_into) : "Closed.") : null;
   return (
     <Dialog
       title={again ? `Close ${c.name} again` : `Close ${c.name}`}
@@ -574,17 +698,56 @@ function CloseDialog({ campaign: c, plan, onClose, onDone }: { campaign: Campaig
       foot={
         <div className="row actions">
           <span className="grow" />
-          <button type="button" className="button secondary" onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" className="button" disabled={busy} onClick={go}>
-            {again ? "Close it again" : "Close the campaign"}
-          </button>
+          {at.kind === "ask" && (
+            <>
+              <button type="button" className="button secondary" onClick={onClose}>
+                Cancel
+              </button>
+              <button type="button" className="button" onClick={go}>
+                {again ? "Close it again" : rerun ? "Run the close again" : "Close the campaign"}
+              </button>
+            </>
+          )}
+          {at.kind === "running" && (
+            <button type="button" className="button secondary" title="the close goes on; the page follows it" onClick={onClose}>
+              Hide
+            </button>
+          )}
+          {at.kind === "done" && (
+            <button type="button" className="button" onClick={() => onDone(words ?? "Closed.")}>
+              Done
+            </button>
+          )}
+          {at.kind === "failed" && (
+            <button type="button" className="button secondary" onClick={onClose}>
+              Close this
+            </button>
+          )}
         </div>
       }
     >
-      <ClosurePanel campaign={c} plan={plan} />
-      {why && <p className="warn">{why}</p>}
+      {at.kind === "ask" && <ClosurePanel campaign={c} plan={plan} />}
+      {at.kind === "running" && (
+        <div className="closing" role="status">
+          <Wait phase="closing" since={at.since} size="line" />
+          <p className="meta">{closingWords(at.c)}</p>
+        </div>
+      )}
+      {at.kind === "done" && (
+        <div className="closed-result" role="status">
+          <p className="note-lead">{words}</p>
+          {at.r && at.r.refused.length > 0 && (
+            <ul className="refused-list">
+              {refusedLines(at.r).map((l) => (
+                <li key={l} className="warn">
+                  {l}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {at.kind === "failed" && <p className="warn">{at.why}</p>}
     </Dialog>
   );
 }

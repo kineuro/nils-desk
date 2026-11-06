@@ -64,7 +64,7 @@ describe("the gallery's state", () => {
     expect(p.items[3].confidences).toBeNull();
     expect(p.items[4].others[0]).toEqual({ by: "v0-person", value: "neck", confidence: null });
     expect(pageOf({}).items).toEqual([]);
-    expect(pageWords(p, 6)).toBe("6 of 7 to check · 1 after these · 1 held back to read alone · 1 sealed, read blind one by one");
+    expect(pageWords(p, 6)).toBe("6 of 7 to check · 1 after these · 1 set aside to read one by one · 1 sealed, read blind one by one");
   });
 
   it("orders the least certain first: disagreement, then no suggestion, then the lowest confidence", () => {

@@ -19,6 +19,7 @@ import { href, narrow } from "../routes";
 import { Icon } from "../ui/Icon";
 import { campaigns, refused as refusedWords, suggestOf, type Campaign } from "./client";
 import { MyAnswers } from "./MyAnswers";
+import { missingModes } from "./upkeep";
 import { Thumb } from "./Thumb";
 import { valueTone } from "./values";
 import {
@@ -159,7 +160,7 @@ export function Gallery({ caps, id }: { caps: Capabilities; id: string }) {
     <GalleryBody
       campaign={campaign}
       state={s}
-      failed={failed ?? (campaign && !offered ? `Campaign ${campaign.name} asks more than one axis, or this engine has no gallery; read it one by one.` : null)}
+      failed={failed ?? (campaign && !offered ? (missingModes(caps, campaign).find((w) => w.startsWith("No gallery")) ?? `This engine serves no gallery of ${campaign.name}; read it one by one.`) : null)}
       said={said}
       busy={busy}
       done={done}
@@ -292,7 +293,7 @@ export function GalleryBody(p: GalleryBodyProps) {
       )}
       {p.mine}
       {!s && !p.failed && <p className="meta">Reading the gallery…</p>}
-      {s && s.page.items.length === 0 && <p className="meta">Nothing is left to check here. Held-back and sealed items are read one by one.</p>}
+      {s && s.page.items.length === 0 && <p className="meta">Nothing is left to check here. Items set aside and sealed ones are read one by one.</p>}
       {s && s.page.items.length > 0 && (
         <div className="gallery-grid" ref={p.grid} data-gallery-grid="">
           {groups(s).map((g) => (

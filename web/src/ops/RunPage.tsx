@@ -35,6 +35,7 @@ import { byWords, flagWords, keyShort, keyTitle, madeColumns, packView, packWord
 import { namer } from "./who";
 import { failureOf } from "./failure";
 import { InstallFor } from "./Install";
+import { liveOf, liveWords, stepProgressWords } from "./progress";
 import { FailLine, FailNote, KindTag } from "./Reason";
 import { madeOf, madeWords, runTag, unitsByWhy } from "./made";
 import { againOfRun, RunAgainDialog } from "./RunAgain";
@@ -310,9 +311,12 @@ export function RunView(props: {
   // a run that ended without making all it was for says why, one line a reason with the units under it
   const short = words !== null && words.tone === "caution" && !running && r.status !== "failed";
   const reasons = short ? (units.length > 0 ? unitsByWhy(units).map((w) => ({ why: `${w.status}: ${w.why}`, count: w.units.length as number | null, units: w.units })) : (made?.why ?? []).map((w) => ({ why: `${w.status}: ${w.why}`, count: w.units, units: [] as string[] }))) : [];
+  // 2026-11-05: how far it is while a unit works, in the engine's count, and how long its job has run
+  const liveCell = running && liveWords(liveOf(r.progress)) ? stepProgressWords(r.progress, r.started_at, Date.now()) : null;
   const cells = [
     // a run that ended reads as its units summed (the tag above, and units here), never a bare done
     ...(words && !running && (r.status === "done" || r.status === "partial") ? [] : [{ k: "status", v: r.status }]),
+    ...(liveCell ? [{ k: "now", v: liveCell }] : []),
     ...unitCells,
     { k: "over", v: r.selection ? overWords(r.selection, main?.roles ?? null) : r.handle_id ? `handle ${r.handle_id}` : "", title: main ? [main.of, main.read].filter(Boolean).join(": ") : (r.selection ?? undefined) },
     // record 55 (2026-10-12): a dataset's or a cohort's main scans say which rules picked them

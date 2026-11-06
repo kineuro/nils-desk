@@ -1832,3 +1832,9 @@ table.thin tr.member td:first-child { padding-left: 1.6rem; }
 .participation .step .actions { justify-content: flex-end; }
 /* a receiver's address, a digest or a seed never widens a phone's screen */
 .participation .path, .participation .ok-words, .participation .note-lead, .participation .card-head .meta { white-space: normal; overflow-wrap: anywhere; }
+
+/* ux-progress (2026-11-06): the line under a dataset's or a cohort's rail for a model's step that runs (how far, how long) or failed (why, the way to its run) */
+.dp-step-notes { display: grid; gap: 0.375rem; margin-top: 0.625rem; }
+.dp-step-note { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; margin: 0; padding: 0.375rem 0.75rem; border: 1px solid var(--n-line); border-left: 3px solid var(--n-brand-line); border-radius: var(--n-radius); font-size: var(--n-text-size-small); overflow-wrap: anywhere; min-width: 0; }
+.dp-step-note > span { min-width: 0; }
+.dp-step-note.failed { border-color: var(--n-caution-line); border-left-color: var(--n-caution-fg); background: var(--n-caution-bg); }

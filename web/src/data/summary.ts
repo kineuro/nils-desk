@@ -12,6 +12,7 @@ import { door as served } from "../deployment";
 import { may } from "../grants";
 import type { Cohort, Join, CohortRelease } from "./cohorts";
 import type { Dataset } from "./datasets";
+import { liveOf, liveWords, whatWords } from "../ops/progress";
 import { declared } from "./layout";
 import { ranOf } from "./pseudoStep";
 import { outsideWords, readStopped, type NextStep } from "./steps";
@@ -94,6 +95,16 @@ export interface SummaryStep {
   hint?: StepHint | null;
   /** Body part and post-contrast on a map's layer (record 55, decision 6): the scans whose model answers are staged and not yet put in force, which the layer does not show yet. */
   staged?: number;
+  /** Body part and post-contrast (engine, 2026-11-05): what a run would go over before it starts, every scan or those without its answer, each with the parts it takes; an engine from before says nothing. */
+  runs?: StepRuns | null;
+  /** Body part and post-contrast, a failed step (2026-11-05): why, in the engine's words, {kind, cause, advice, said, cap_gb}; an engine from before says nothing. */
+  failure?: unknown;
+}
+
+/** What a run of a model step would go over: every scan it counts, and those without its answer (its hint's), each with how many parts the run takes. */
+export interface StepRuns {
+  all: { scans: number; parts: number };
+  without?: { scans: number; parts: number };
 }
 
 /** One kind of file the read set aside, not a scan: a stable key, its plural in plain words, and how many. */
@@ -154,11 +165,42 @@ export interface DatasetSummary {
   /** 2026-10-31: when the counts were read, and whether the engine reads them again now, the kept ones answering at once meanwhile; an engine from before says neither. */
   counts_as_of?: string;
   counting?: boolean;
+  /** 2026-11-05: how far the reading under way has got, while the engine counts; an engine from before says nothing. */
+  count?: CountProgress | null;
+  counted?: true;
   steps: SummaryStep[];
 }
 
+/**
+ * How far a reading of a dataset's counts has got (engine, 2026-11-05): the
+ * registry's scans and files first, then the files looked at under the
+ * working place (`place`), `done` so far, and since when.
+ */
+export interface CountProgress {
+  what: "scans" | "files";
+  place: string | null;
+  done: number | null;
+  since: string | null;
+}
+
+/** A summary asked at once for a dataset whose counts were never read: none yet, and how far their first reading has got. */
+export interface PendingSummary {
+  dataset: string;
+  counted: false;
+  counting: true;
+  count: CountProgress;
+}
+
+export type SummaryAnswer = DatasetSummary | PendingSummary;
+
+/** Whether the engine answered at once with no counts yet. */
+export function isPending(s: SummaryAnswer): s is PendingSummary {
+  return (s as PendingSummary).counted === false;
+}
+
 export const summaries = {
-  read: (name: string) => door<DatasetSummary>("GET", `/api/datasets/${encodeURIComponent(name)}/summary`),
+  /** 2026-11-05: at once, never waiting for a first count (an engine from before waits, as it did). */
+  read: (name: string) => door<SummaryAnswer>("GET", `/api/datasets/${encodeURIComponent(name)}/summary?at_once=1`),
 };
 
 /** Whether the summary is read here: Data reading, and the door served. */
@@ -309,11 +351,38 @@ export function clock(iso: string | null | undefined, now = new Date()): string 
   return t.getFullYear() === now.getFullYear() ? day : `${day} ${t.getFullYear()}`;
 }
 
-/** The line under a dataset's counts while the engine reads them again (2026-10-31): when the ones shown were read; nothing once they are fresh. */
-export function countingWords(s: Pick<DatasetSummary, "counts_as_of" | "counting"> | null | undefined, now = new Date()): string | null {
+/** What a reading of a dataset's counts does now (2026-11-05): "Counting files in results: 412,000 so far", or the registry's scans before that. */
+export function countWords(c: CountProgress | null | undefined): string {
+  if (c?.what === "files") {
+    const where = c.place ? `Counting files in ${c.place}` : "Counting files";
+    return typeof c.done === "number" && c.done > 0 ? `${where}: ${n(c.done)} so far` : where;
+  }
+  return "Counting scans and files";
+}
+
+/** How old a count is, briefly: "2 min ago", "3 h ago", or the day where it is older than a day. */
+export function ago(iso: string | null | undefined, now = new Date()): string {
+  if (!iso) return "";
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return "";
+  const s = Math.max(0, (now.getTime() - t) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  return clock(iso, now);
+}
+
+/**
+ * The line under a dataset's counts while the engine reads them again
+ * (2026-10-31): the kept ones are shown with their age, and what the reading
+ * does now (2026-11-05: "counted 25 min ago · counting files in results:
+ * 412,000 so far"); nothing once they are fresh.
+ */
+export function countingWords(s: Pick<DatasetSummary, "counts_as_of" | "counting" | "count"> | null | undefined, now = new Date()): string | null {
   if (!s?.counting) return null;
-  const when = clock(s.counts_as_of, now);
-  return when ? `counts from ${when}, counting again` : "counting again";
+  const age = ago(s.counts_as_of, now);
+  const doing = s.count ? countWords(s.count).replace(/^C/, "c") : "counting again";
+  return age ? `counted ${age} · ${doing}` : doing;
 }
 
 /** How long something took, briefly: "4 s", "3 min", "1.5 h"; nothing where it cannot be told. */
@@ -543,7 +612,9 @@ export function cardLine(d: Dataset, next: NextStep, s: DatasetSummary | null): 
     return ranOf(d, stepOf(s, "pseudonymised")) ? "The rest waits to be pseudonymised" : "Waits to be pseudonymised";
   }
   const running = s?.steps.find((x) => x.state === "running");
-  if (running) return `${TITLE[running.step]}: running now`;
+  // a model's run says how far it is in the engine's count (2026-11-05), where its run's beat says it
+  const live = running && (OPERATIONS as StepName[]).includes(running.step) ? liveWords(liveOf(running.progress)) : null;
+  if (running) return `${TITLE[running.step]}: ${live ?? "running now"}`;
   if (d.digests.count === 0) return "Not read yet";
   // the newest read was cancelled or failed part way: reading again is next (2026-10-17)
   if (next.step === "read-again") return "The last read stopped part way";
@@ -875,8 +946,12 @@ export function unitOf(kind: string): string {
 /** The words under a running job's bar: "57 of 1,001 scans · about 11 min left · in the background". */
 export function runningWords(j: Pick<JobRow, "kind" | "progress" | "started_at" | "state">, now: number): { fraction: number | null; words: string } {
   const r = runningOf(j.progress as Record<string, unknown> | null, j.started_at, now);
+  // a model's run says what it counts and which part of a split run it is (2026-11-05)
+  const live = j.kind === "pipeline" ? liveOf(j.progress) : null;
+  const unit = live?.what ? whatWords(live.what, r.of ?? r.done ?? 0) : unitOf(j.kind);
   const parts: string[] = [];
-  if (r.done !== null) parts.push(r.of !== null ? `${n(r.done)} of ${n(r.of)} ${unitOf(j.kind)}` : `${n(r.done)} ${unitOf(j.kind)}`);
+  if (r.done !== null) parts.push(r.of !== null ? `${n(r.done)} of ${n(r.of)} ${unit}` : `${n(r.done)} ${unit}`);
+  if (live?.part) parts.push(`part ${n(live.part.at)} of ${n(live.part.of)}`);
   if (r.left) parts.push(r.left);
   if (j.kind === "pyramid" || j.kind === "preview") parts.push("in the background");
   if (j.state === "queued") parts.push("waits its turn");

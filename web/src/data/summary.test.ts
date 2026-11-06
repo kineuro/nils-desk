@@ -19,7 +19,10 @@ import {
   cohortLine,
   cohortRail,
   cohortRelation,
+  ago,
   countingWords,
+  countWords,
+  isPending,
   datasetRelation,
   fedWords,
   feedsWords,
@@ -165,8 +168,14 @@ describe("a card's six steps", () => {
 });
 
 describe("the line under the counts while the engine counts again (2026-10-31)", () => {
-  it("says when the counts shown were read, and nothing once they are fresh or the engine is from before", () => {
-    expect(countingWords({ counts_as_of: today("14:50"), counting: true }, NOW)).toBe(`counts from ${clock(today("14:50"), NOW)}, counting again`);
+  it("says how old the counts shown are and what the reading does now, and nothing once they are fresh or the engine is from before", () => {
+    const at = new Date(NOW.getTime() - 25 * 60_000).toISOString();
+    expect(countingWords({ counts_as_of: at, counting: true }, NOW)).toBe("counted 25 min ago · counting again");
+    // 2026-11-05: what the reading does, where the engine says it
+    expect(countingWords({ counts_as_of: at, counting: true, count: { what: "files", place: "results", done: 412000, since: at } }, NOW)).toBe(
+      "counted 25 min ago · counting files in results: 412,000 so far",
+    );
+    expect(countingWords({ counts_as_of: at, counting: true, count: { what: "scans", place: null, done: null, since: at } }, NOW)).toBe("counted 25 min ago · counting scans and files");
     expect(countingWords({ counting: true }, NOW)).toBe("counting again");
     expect(countingWords({ counts_as_of: today("14:50"), counting: false }, NOW)).toBeNull();
     expect(countingWords({}, NOW)).toBeNull();
@@ -705,5 +714,29 @@ describe("the words of the page", () => {
 
   it("name the roles as a person reads them, the usual ones first", () => {
     expect(["t2w", "flair", "t1w", "swi"].sort(roleOrder).map(roleWord)).toEqual(["T1w", "FLAIR", "T2w", "SWI"]);
+  });
+});
+
+describe("a first count's words (2026-11-05): what is counted and how far, never a wait without words", () => {
+  it("says the registry's scans, then the files under the working place so far", () => {
+    expect(countWords({ what: "scans", place: null, done: null, since: null })).toBe("Counting scans and files");
+    expect(countWords({ what: "files", place: "results", done: 412000, since: null })).toBe("Counting files in results: 412,000 so far");
+    expect(countWords({ what: "files", place: "results", done: 0, since: null })).toBe("Counting files in results");
+    expect(countWords({ what: "files", place: null, done: 12, since: null })).toBe("Counting files: 12 so far");
+    expect(countWords(null)).toBe("Counting scans and files");
+  });
+
+  it("tells an answer with no counts yet from one with them", () => {
+    expect(isPending({ dataset: "x", counted: false, counting: true, count: { what: "scans", place: null, done: null, since: null } })).toBe(true);
+    expect(isPending(summary({}) as DatasetSummary)).toBe(false);
+  });
+
+  it("says a count's age briefly", () => {
+    const back = (s: number) => new Date(NOW.getTime() - s * 1000).toISOString();
+    expect(ago(back(10), NOW)).toBe("just now");
+    expect(ago(back(25 * 60), NOW)).toBe("25 min ago");
+    expect(ago(back(3 * 3600), NOW)).toBe("3 h ago");
+    expect(ago(back(3 * 86400), NOW)).toBe(clock(back(3 * 86400), NOW));
+    expect(ago(null, NOW)).toBe("");
   });
 });
