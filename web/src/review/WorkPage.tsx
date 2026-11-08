@@ -30,6 +30,7 @@ import { review, type ReviewSummary } from "./client";
 import { standingActs, standingDoors, type Standing } from "./modelFamily";
 import { CommitStandingDialog, RestCampaignDialog } from "./ModelStanding";
 import { questions, questionsServed, type QuestionList } from "./questions";
+import { gridHref, gridServed } from "./proposalGrid";
 import { committedLine, followLine, resortOf, useFollowedJob, type Resort } from "./resort";
 import { alsoRows, alsoSummary, axisCards, campaignBand, modelSub, shareWords, sortStandings, standingMeta, standingTitle, type CampaignCard } from "./work";
 import "../campaigns/campaigns.css";
@@ -196,6 +197,7 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
       onMake={() => setMaking({ source: "selection", from: "" })}
       onCommit={acts.commit ? setCommitting : undefined}
       onRead={acts.campaign ? setReading : undefined}
+      reviewHref={gridServed(caps) ? (s) => gridHref(s.model.id, s.axis) : undefined}
     >
       {making && (
         <MakeDialog
@@ -263,11 +265,13 @@ export interface WorkBodyProps {
   onCommit?: (s: Standing) => void;
   /** Read a model's unsure answers in a campaign of one's own; absent where the person may not. */
   onRead?: (s: Standing) => void;
+  /** UX round 5: review a model's unsure answers as a grid, accepted in one move; absent where the engine has no grid. */
+  reviewHref?: (s: Standing) => string;
   children?: React.ReactNode;
 }
 
 /** The page as it draws from what it read: each band once its own reading landed, none while it has nothing. */
-export function WorkBody({ caps, summary, standings = null, qlist = null, list, mine = {}, since = null, why = [], said = null, now = Date.now(), onMake, onCommit, onRead, children }: WorkBodyProps) {
+export function WorkBody({ caps, summary, standings = null, qlist = null, list, mine = {}, since = null, why = [], said = null, now = Date.now(), onMake, onCommit, onRead, reviewHref, children }: WorkBodyProps) {
   const reviewer = reviews(caps);
   const making = makeRefusal(caps);
   const proposed = useMemo(() => sortStandings(standings ?? []).filter((s) => s.staged.stacks > 0 || s.below.stacks > 0), [standings]);
@@ -321,15 +325,20 @@ export function WorkBody({ caps, summary, standings = null, qlist = null, list, 
                   <span>proposed</span>
                 </div>
                 <span className="rv-meta">{standingMeta(s)}</span>
-                {((onCommit && s.commit.stacks > 0) || (onRead && s.below.stacks > 0)) && (
+                {((onCommit && s.commit.stacks > 0) || ((onRead || reviewHref) && s.below.stacks > 0)) && (
                   <div className="rv-acts">
                     {onCommit && s.commit.stacks > 0 && (
                       <button type="button" className="button" onClick={() => onCommit(s)}>
                         Commit {n(s.commit.stacks)}
                       </button>
                     )}
+                    {reviewHref && s.below.stacks > 0 && (
+                      <a className="button" href={reviewHref(s)}>
+                        Review the {n(s.below.stacks)}
+                      </a>
+                    )}
                     {onRead && s.below.stacks > 0 && (
-                      <button type="button" className={onCommit && s.commit.stacks > 0 ? "button secondary" : "button"} onClick={() => onRead(s)}>
+                      <button type="button" className={(onCommit && s.commit.stacks > 0) || reviewHref ? "button secondary" : "button"} onClick={() => onRead(s)}>
                         Read the {n(s.below.stacks)}
                       </button>
                     )}

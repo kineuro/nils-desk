@@ -1,0 +1,406 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// The batch accept grid (UX round 5, 2026-11-08; Nima's design on the
+// Proposals page): for what a model left unsure, not a campaign read one by
+// one but a filter by the value proposed and by the model's confidence, the
+// scans dense, about five hundred a page, each framed in the proposed value's
+// colour; a click sets a scan apart, shift-click a range, space the focused
+// one; one primary button accepts the page but the exceptions, in the
+// person's name with the model's probability beside each decision, and the
+// next page loads. Nothing about the exceptions is written. One quiet line
+// says where the page stands. No dialog.
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { Capabilities } from "../capabilities";
+import { valueTone, chosenTone } from "../campaigns/values";
+import { ScanViewer } from "../data/ScanViewer";
+import type { Scan } from "../data/scans";
+import { href } from "../routes";
+import { Icon } from "../ui/Icon";
+import { Wait } from "../ui/Wait";
+import {
+  acceptBody,
+  acceptWords,
+  acceptedWords,
+  bandWords,
+  defaultFilter,
+  filterOf,
+  grid,
+  gridHref,
+  gridOf,
+  keyAct,
+  mayAccept,
+  moved,
+  rangeApart,
+  refusedWords,
+  SIZES,
+  slots,
+  stateLine,
+  tally,
+  tileTitle,
+  toggleApart,
+  type Band,
+  type Filter,
+  type GScan,
+  type GridState,
+} from "./proposalGrid";
+import { axisTitle } from "./work";
+import "../campaigns/campaigns.css";
+import "./questions.css";
+import "./proposalGrid.css";
+
+const n = (v: number) => v.toLocaleString("en-US");
+
+/** How many tiles a row of the grid holds now, for the up and down keys. */
+function columnsOf(el: HTMLElement | null): number {
+  const cells = el ? [...el.querySelectorAll<HTMLElement>(".pg-tile")] : [];
+  if (cells.length < 2) return 1;
+  const top = cells[0].offsetTop;
+  const i = cells.findIndex((c) => c.offsetTop !== top);
+  return i > 0 ? i : cells.length;
+}
+
+/** A scan as the light viewer takes one, for f. */
+function asScan(s: GScan): Scan {
+  return {
+    id: s.stack,
+    subjectId: s.subject?.id ?? 0,
+    subject: s.subject?.code ?? "",
+    session: s.session?.id ?? null,
+    label: s.session?.label ?? null,
+    day: s.day,
+    name: s.name ?? s.description ?? `Scan ${s.stack}`,
+    description: s.description,
+    bids: s.bids,
+    datatype: "other",
+    folder: "other",
+    axes: s.axes,
+    series: null,
+    orientation: null,
+    images: null,
+    picture: s.picture,
+    partial: s.partial,
+    questions: [],
+  };
+}
+
+export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities; model: string; axis: string; query?: Record<string, string> }) {
+  const given = useMemo(() => filterOf(query), [query?.value, query?.min, query?.max, query?.size]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [filter, setFilter] = useState<Filter>(given);
+  const [state, setState] = useState<GridState | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const [said, setSaid] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [full, setFull] = useState(false);
+  const [since, setSince] = useState(Date.now());
+  const gridEl = useRef<HTMLDivElement | null>(null);
+  const accepting = mayAccept(caps);
+  // the first read opens the filter: the value with the most scans, the band below the threshold
+  const opened = useRef(false);
+
+  const read = useCallback(
+    (f: Filter) => {
+      setSince(Date.now());
+      return grid.scans(model, axis, f).then(
+        (p) => {
+          setFailed(null);
+          setState(gridOf(p));
+        },
+        (e: unknown) => setFailed(refusedWords(e).words),
+      );
+    },
+    [model, axis],
+  );
+
+  useEffect(() => {
+    opened.current = false;
+    setState(null);
+    setSaid(null);
+    // one small read for the counts, then the page under the filter they open
+    grid.scans(model, axis, given, 1, 1).then(
+      (p) => {
+        const f = defaultFilter(p, given);
+        opened.current = true;
+        setFilter(f);
+        void read(f);
+      },
+      (e: unknown) => setFailed(refusedWords(e).words),
+    );
+  }, [model, axis, given, read]);
+
+  /** The filter changed by the person: the address keeps it, the page is read again. */
+  const narrow = useCallback(
+    (f: Filter) => {
+      setFilter(f);
+      setState(null);
+      history.replaceState(null, "", gridHref(model, axis, f));
+      void read(f);
+    },
+    [model, axis, read],
+  );
+
+  const apply = useCallback(() => {
+    if (!state || busy) return;
+    if (!accepting) return setSaid("Accepting needs work on the Review page.");
+    const body = acceptBody(state, filter);
+    if (!body) return setSaid("Choose a value first.");
+    if (tally(state).accept === 0) return setSaid("Every scan on this page is set apart or decided: nothing to accept.");
+    const was = state;
+    setBusy(true);
+    grid
+      .accept(body)
+      .then((a) => {
+        setSaid(acceptedWords(a, was));
+        // the next page: the scans accepted left the set, so the first page is the next
+        return read(filter);
+      })
+      .catch((e: unknown) => {
+        const r = refusedWords(e);
+        setSaid(r.words);
+        if (r.stale) void read(filter);
+      })
+      .finally(() => setBusy(false));
+  }, [state, busy, accepting, filter, read]);
+
+  // the keys, on the window while the page is open; a field or the full view keeps its own
+  const keyed = useRef({ state, apply, full });
+  keyed.current = { state, apply, full };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const k = keyed.current;
+      if (!k.state || e.ctrlKey || e.metaKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (t?.closest?.("dialog")) return;
+      if (k.full) {
+        if (e.key === "f") {
+          e.preventDefault();
+          setFull(false);
+        }
+        return;
+      }
+      const act = keyAct(e.key, columnsOf(gridEl.current));
+      if (act.kind === "none") return;
+      if ((act.kind === "apply" || act.kind === "apart") && t?.closest?.("a, button")) return;
+      e.preventDefault();
+      switch (act.kind) {
+        case "apart":
+          return setState((s) => (s && s.focus !== null ? toggleApart(s, s.focus) : s));
+        case "apply":
+          return k.apply();
+        case "move":
+          return setState((s) => (s ? moved(s, act.by) : s));
+        case "full":
+          return setFull(true);
+        case "back":
+          location.hash = href("review");
+          return;
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // the focused tile stays in view as the keys move it
+  useEffect(() => {
+    if (!state || state.focus === null) return;
+    gridEl.current?.querySelector<HTMLElement>(`[data-stack="${state.focus}"]`)?.scrollIntoView?.({ block: "nearest" });
+  }, [state?.focus]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <GridBody
+      state={state}
+      axis={axis}
+      filter={filter}
+      failed={failed}
+      said={said}
+      busy={busy}
+      full={full}
+      since={since}
+      accepting={accepting}
+      grid={gridEl}
+      onState={setState}
+      onFilter={narrow}
+      onApply={apply}
+      onFull={setFull}
+    />
+  );
+}
+
+export interface GridBodyProps {
+  state: GridState | null;
+  axis: string;
+  filter: Filter;
+  failed: string | null;
+  said: string | null;
+  busy: boolean;
+  full: boolean;
+  since?: number;
+  accepting: boolean;
+  grid?: React.RefObject<HTMLDivElement | null>;
+  onState: (f: (s: GridState | null) => GridState | null) => void;
+  onFilter: (f: Filter) => void;
+  onApply: () => void;
+  onFull: (open: boolean) => void;
+}
+
+/** The grid as it draws from its state. */
+export function GridBody(p: GridBodyProps) {
+  const s = p.state;
+  const page = s?.page ?? null;
+  const palette = useMemo(() => (page ? slots(page.values, [page.value ?? ""].filter(Boolean)) : []), [page]);
+  const t = s ? tally(s) : null;
+  const focusAt = s && page ? Math.max(0, page.scans.findIndex((x) => x.stack === s.focus)) : 0;
+  const set = (f: (s: GridState) => GridState) => p.onState((x) => (x ? f(x) : x));
+  const value = page?.value ?? p.filter.value;
+  const empty = page !== null && page.total === 0;
+  return (
+    <section className="qgrid-page pgrid-page" aria-label="proposals">
+      <div className="qgrid-head">
+        <span className="eyebrow">
+          <a href={href("review")}>Review</a>
+        </span>
+        <h1>{axisTitle(p.axis)} · what the model is unsure of</h1>
+        {page && (
+          <span className="meta">
+            {page.label}
+            {page.threshold !== null ? ` · sure at ${page.threshold.toFixed(2)} or above` : ""}
+          </span>
+        )}
+        <span className="grow" />
+        {page && (
+          <span className="meta pg-state" role="status">
+            {stateLine(page, p.filter)}
+          </span>
+        )}
+      </div>
+      {p.failed && (
+        <p className="warn">
+          <Icon name="alert" /> {p.failed}
+        </p>
+      )}
+      {page && (
+        <div className="pg-filter" role="group" aria-label="Narrow the scans">
+          <span className="pg-values" role="group" aria-label="Value proposed">
+            {page.values.map((v) => {
+              const on = v.value === value;
+              return (
+                <button key={v.value} type="button" className={on ? "opt on" : "opt"} aria-pressed={on} {...chosenTone(palette, v.value, on)} onClick={() => p.onFilter({ ...p.filter, value: v.value })}>
+                  {v.value}
+                  <b>{n(v.count)}</b>
+                </button>
+              );
+            })}
+          </span>
+          {page.range && <Histogram bands={page.bands} range={page.range} min={p.filter.min} max={p.filter.max} onChange={(min, max) => p.onFilter({ ...p.filter, min, max })} />}
+          <label className="pg-size">
+            <span className="meta">a page</span>
+            <select aria-label="Scans a page" value={p.filter.size} onChange={(e) => p.onFilter({ ...p.filter, size: Number(e.target.value) })}>
+              {SIZES.map((z) => (
+                <option key={z} value={z}>
+                  {n(z)}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      {p.said && <p className="meta said qgrid-said">{p.said}</p>}
+      {!s && !p.failed && <Wait phase="reading the scans" since={p.since ?? Date.now()} size="line" />}
+      {page?.pictures && !page.pictures.shown && page.pictures.why && <p className="meta">No pictures: {page.pictures.why}</p>}
+      {page && (page.asked > 0 || page.withheldSealed > 0) && (
+        <p className="meta">
+          {[page.asked > 0 ? `${n(page.asked)} asked in a campaign, answered there` : null, page.withheldSealed > 0 ? `${n(page.withheldSealed)} of a sealed sample, withheld` : null].filter(Boolean).join(" · ")}
+        </p>
+      )}
+      {empty && (
+        <div className="qgrid-done">
+          <p className="lede">Nothing left here{value ? ` for ${value}` : ""}{bandWords(p.filter.min, p.filter.max) ? ` ${bandWords(p.filter.min, p.filter.max)}` : ""}.</p>
+          <a className="button" href={href("review")}>
+            Review
+          </a>
+        </div>
+      )}
+      {s && page && !empty && (
+        <div className="pgrid" ref={p.grid} data-pgrid="">
+          {page.scans.map((x) => (
+            <Tile key={x.stack} scan={x} state={s} palette={palette} onClick={(shift) => set((y) => (shift ? rangeApart(y, x.stack) : toggleApart(y, x.stack)))} />
+          ))}
+        </div>
+      )}
+      {s && page && !empty && (
+        <div className="pg-foot" role="toolbar" aria-label="accept">
+          <button type="button" className="button" disabled={p.busy || !p.accepting || !value || (t?.accept ?? 0) === 0} onClick={p.onApply}>
+            {acceptWords(s, p.filter)} <kbd>Enter</kbd>
+          </button>
+          {t && (
+            <span className="q-tally" role="status" aria-live="polite">
+              {t.apart > 0 ? <><b>{n(t.apart)}</b> set apart</> : <span className="meta">click a wrong one to set it apart</span>}
+              {t.decided > 0 ? <> · <b>{n(t.decided)}</b> decided by a person, kept</> : null}
+            </span>
+          )}
+          <span className="grow" />
+          <span className="q-help">
+            <span>
+              <kbd>space</kbd>set apart
+            </span>
+            <span>
+              <kbd>shift</kbd>click a range
+            </span>
+            <span>
+              <kbd>f</kbd>full size
+            </span>
+          </span>
+        </div>
+      )}
+      {p.full && s && page && page.scans.length > 0 && (
+        <div className="qgrid-full">
+          <ScanViewer scans={page.scans.map(asScan)} at={focusAt} onAt={(i) => set((y) => ({ ...y, focus: page.scans[i]?.stack ?? y.focus }))} onClose={() => p.onFull(false)} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** The model's confidence as ten bars, with two handles for the band. */
+export function Histogram({ bands, range, min, max, onChange }: { bands: Band[]; range: { low: number; high: number }; min: number | null; max: number | null; onChange: (min: number | null, max: number | null) => void }) {
+  const lo = range.low;
+  const hi = range.high;
+  const span = Math.max(hi - lo, 0.0001);
+  const most = Math.max(1, ...bands.map((b) => b.count));
+  const at = (p: number) => `${(((p - lo) / span) * 100).toFixed(2)}%`;
+  const from = min ?? lo;
+  const to = max ?? hi;
+  const step = 0.01;
+  // a handle at the range's own edge leaves that edge open
+  const give = (a: number, b: number) => onChange(a <= lo + 1e-9 ? null : Math.min(a, b - step), b >= hi - 1e-9 ? null : Math.max(b, a + step));
+  return (
+    <div className="pg-hist" role="group" aria-label="Confidence">
+      <div className="pg-bars" aria-hidden="true">
+        {bands.map((b, i) => {
+          const inBand = b.to > from && b.from < to;
+          return <span key={i} className={inBand ? "pg-bar on" : "pg-bar"} style={{ height: `${Math.max(2, (b.count / most) * 100)}%` }} title={`${b.from.toFixed(2)} to ${b.to.toFixed(2)}: ${b.count.toLocaleString("en-US")}`} />;
+        })}
+        <span className="pg-chosen" style={{ left: at(from), width: `calc(${at(to)} - ${at(from)})` }} />
+      </div>
+      <div className="pg-handles">
+        <input type="range" aria-label="Lowest confidence" min={lo} max={hi} step={step} value={from} onChange={(e) => give(Number(e.target.value), to)} />
+        <input type="range" aria-label="Highest confidence" min={lo} max={hi} step={step} value={to} onChange={(e) => give(from, Number(e.target.value))} />
+      </div>
+      <span className="pg-band meta">{bandWords(min, max) || `${lo.toFixed(2)} to ${hi.toFixed(2)}`}</span>
+    </div>
+  );
+}
+
+function Tile({ scan: x, state: s, palette, onClick }: { scan: GScan; state: GridState; palette: string[]; onClick: (shift: boolean) => void }) {
+  const apart = x.stack in s.apart;
+  const focused = s.focus === x.stack;
+  const cls = ["pg-tile", focused ? "focused" : "", apart ? "apart" : "", x.decided ? "decided" : ""].filter(Boolean).join(" ");
+  return (
+    <div className={cls} data-stack={x.stack} {...valueTone(palette, x.proposed)} aria-label={`scan ${x.stack}: ${x.proposed} ${x.probability.toFixed(2)}${apart ? ", set apart" : ""}${x.decided ? ", decided by a person" : ""}`} aria-current={focused ? "true" : undefined} title={tileTitle(x)} onClick={(e) => onClick(e.shiftKey)}>
+      {x.picture ? <img src={x.picture} alt="" decoding="async" draggable={false} /> : <span className="q-blank">no picture</span>}
+      <span className="pg-p">{x.probability.toFixed(2)}</span>
+      {apart && <span className="pg-mark">apart</span>}
+      {x.decided && !apart && <span className="pg-mark pg-decided">decided</span>}
+    </div>
+  );
+}

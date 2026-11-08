@@ -1,0 +1,74 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* The batch accept grid (UX round 5): a model's proposals on one axis,
+   dense, about a hundred pixels a picture on a laptop and five a row on a
+   phone, each framed in the proposed value's colour (the theme's value
+   tokens through data-slot, as the question grid and the gallery). A scan
+   set apart takes the caution frame; one a person decided is dashed and
+   steps back. The probability shows in a corner on hover. The filter row
+   above: value chips with counts, the confidence histogram with two handles,
+   the size. One primary button under the grid. Theme tokens only. */
+
+.pgrid-page .qgrid-head .pg-state { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ------------------------------------------------------------ the filter row */
+.pg-filter { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem 1rem; padding: 0.4rem 0.6rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); min-width: 0; }
+.pg-values { display: inline-flex; flex-wrap: wrap; gap: 0.3rem; min-width: 0; }
+.pg-values .opt b { margin-left: 0.35rem; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--n-text-faint); }
+.pg-values .opt.on b { color: var(--n-text); }
+.pg-size { display: inline-flex; align-items: center; gap: 0.35rem; margin-left: auto; }
+.pg-size select { font-size: 13px; }
+
+/* the histogram: ten bars, the chosen band tinted, two range handles over it */
+.pg-hist { position: relative; display: grid; grid-template-rows: 2.2rem auto auto; width: min(22rem, 100%); min-width: 10rem; }
+.pg-bars { position: relative; display: flex; align-items: flex-end; gap: 1px; height: 2.2rem; padding: 0 0.5rem; }
+.pg-bar { flex: 1; min-width: 0; background: var(--n-neutral-line); border-radius: 1px 1px 0 0; opacity: 0.55; }
+.pg-bar.on { background: var(--n-brand-icon); opacity: 1; }
+.pg-chosen { position: absolute; bottom: 0; height: 100%; margin-left: 0.5rem; background: var(--n-brand-bg, transparent); opacity: 0.35; pointer-events: none; }
+.pg-handles { position: relative; height: 1.1rem; margin: 0 0.5rem; }
+.pg-handles input[type="range"] { position: absolute; left: 0; right: 0; top: 0; width: 100%; margin: 0; height: 1.1rem; background: transparent; pointer-events: none; -webkit-appearance: none; appearance: none; }
+.pg-handles input[type="range"]::-webkit-slider-runnable-track { height: 2px; background: var(--n-line); }
+.pg-handles input[type="range"]::-moz-range-track { height: 2px; background: var(--n-line); }
+.pg-handles input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: -6px; border-radius: 50%; border: 2px solid var(--n-brand-icon); background: var(--n-bg-raised); pointer-events: auto; cursor: ew-resize; }
+.pg-handles input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--n-brand-icon); background: var(--n-bg-raised); pointer-events: auto; cursor: ew-resize; }
+.pg-handles input[type="range"]:focus-visible { outline: none; }
+.pg-handles input[type="range"]:focus-visible::-webkit-slider-thumb { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+.pg-band { font-variant-numeric: tabular-nums; text-align: center; }
+
+/* ------------------------------------------------------------ the grid */
+/* the rows are a fixed hundred pixels inside the scrolling grid (auto rows are squeezed to the
+   scroll box's height in Chromium); a phone's grid does not scroll and its tiles are square by
+   their picture */
+.pgrid { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); grid-auto-rows: 100px; gap: 4px; align-content: start; padding: 2px; }
+.pg-tile { position: relative; display: block; height: 100%; overflow: hidden; border: 1px solid var(--n-line); border-left: 4px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-image-bg); cursor: pointer; min-width: 0; user-select: none; }
+.pg-tile[data-slot] { border: 1px solid var(--vc); border-left: 4px solid var(--vc); }
+.pg-tile img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.pg-tile .q-blank { display: flex; align-items: center; justify-content: center; height: 100%; color: var(--n-text-faint); font-size: 11px; }
+.pg-tile.focused { outline: 2px solid var(--n-focus); outline-offset: 1px; }
+/* set apart: the caution frame, and the tile steps back */
+.pg-tile.apart { border-color: var(--n-caution-line); border-left-color: var(--n-caution-line); box-shadow: inset 0 0 0 2px var(--n-caution-line); }
+.pg-tile.apart img { opacity: 0.45; }
+/* a person decided it already: dashed, kept */
+.pg-tile.decided { border-style: dashed; border-left-style: solid; opacity: 0.6; }
+.pg-p { position: absolute; right: 0.2rem; bottom: 0.15rem; padding: 0 0.25rem; border-radius: var(--n-radius); background: var(--n-bg-raised); color: var(--n-text); font-size: 11px; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity 0.1s; pointer-events: none; }
+.pg-tile:hover .pg-p, .pg-tile.focused .pg-p { opacity: 0.95; }
+.pg-mark { position: absolute; left: 0.2rem; top: 0.15rem; padding: 0 0.3rem; border: 1px solid var(--n-caution-line); border-radius: var(--n-radius); background: var(--n-caution-bg); color: var(--n-caution-fg); font-size: 11px; line-height: 1.4; }
+.pg-mark.pg-decided { border-color: var(--n-gated-line); background: var(--n-gated-bg); color: var(--n-gated-fg); }
+
+/* ------------------------------------------------------------ the foot */
+.pg-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.8rem; padding: 0.35rem 0.55rem; border: 1px solid var(--n-line); border-radius: var(--n-radius); background: var(--n-bg-raised); min-width: 0; }
+.pg-foot .q-help { display: inline-flex; flex-wrap: wrap; gap: 0.2rem 0.7rem; color: var(--n-text-faint); font-size: var(--n-text-size-small); }
+
+@media (max-width: 860px) {
+  .pgrid { overflow: visible; }
+}
+@media (max-width: 640px) {
+  /* five scans a row on a phone, each square by its picture */
+  .pgrid { grid-template-columns: repeat(5, minmax(0, 1fr)); grid-auto-rows: auto; gap: 3px; }
+  .pg-tile { border-left-width: 3px; height: auto; }
+  .pg-tile img { height: auto; aspect-ratio: 1; }
+  .pg-tile .q-blank { height: auto; aspect-ratio: 1; }
+  .pg-foot .q-help { display: none; }
+  .pg-hist { width: 100%; }
+  .pg-size { margin-left: 0; }
+  .pgrid-page .qgrid-head .pg-state { white-space: normal; }
+}

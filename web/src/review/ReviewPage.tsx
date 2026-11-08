@@ -25,6 +25,8 @@ import { kindOf } from "./triage";
 import { ExplainDialog } from "./Explain";
 import { filterKind, queueFilterOf } from "./filter";
 import { QuestionGrid, QuestionsRoute } from "./Questions";
+import { ProposalGrid } from "./ProposalGrid";
+import { gridServed } from "./proposalGrid";
 import { kindsAnswered, questions, questionsServed, whereOf, type QuestionList, type Where } from "./questions";
 import { AskedFamily, PicksFamily, ProposalsFamily } from "./Families";
 import { IdentifiersPage } from "./Identifiers";
@@ -98,6 +100,8 @@ export function ReviewPage(props: { caps: Capabilities; page: string | null; arg
   if (page === "questions" && arg !== null && arg !== "" && questionsServed(caps)) return <QuestionGrid key={`${arg}|${query?.dataset ?? ""}|${query?.cohort ?? ""}`} caps={caps} qkey={arg} where={whereOf(query)} />;
   // UX round 5: the questions as cards under Review's head, one axis or all; a batch's queue keeps its table
   if (page === "questions" && (arg === null || arg === "") && questionsServed(caps) && !query?.batch) return <QuestionsRoute where={whereOf(query)} axis={queueFilterOf(query).axis} />;
+  // UX round 5: a model's proposals on one axis as a grid, accepted in one move: #review/proposals/<model>/<axis>
+  if (page === "proposals" && arg !== null && arg !== "" && sub !== null && sub !== "" && gridServed(caps)) return <ProposalGrid key={`${arg}|${sub}`} caps={caps} model={arg} axis={sub} query={query} />;
   // record 55 D3 and D7: the rounds, what each accepted and its blind audit
   if (page === "rounds" && may(caps, "review:see") && served(caps, "GET /api/review/rounds")) return <RoundsPage caps={caps} />;
   const narrowed = query !== undefined && Object.keys(query).length > 0;
