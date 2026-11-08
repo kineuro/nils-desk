@@ -22,6 +22,7 @@ import {
   acceptBody,
   acceptWords,
   acceptedOf,
+  acceptedFollowLine,
   acceptedWords,
   bandWords,
   defaultFilter,
@@ -173,6 +174,11 @@ describe("the words", () => {
     const a = acceptedOf(accepted({ seen: page.scans.map((x) => x.stack), except: [1003], value: "neck" }));
     expect(acceptedWords(a, s)).toBe("Accepted 8 as neck in your name · 1 set apart stays a proposal · 1 keeps a person's decision · 1 question closed · sorted again as job 356");
     expect(acceptedWords(acceptedOf({ decided: 3, value: "spine", resort: { job: null, state: "done", stacks: 3 } }))).toBe("Accepted 3 as spine in your name · sorted again");
+    // the line follows the job as the commit's does: how far, the job while it runs, then done
+    const row = (state: "queued" | "running" | "done", done: number) => ({ state, progress: { done, of: 8, what: "scans" }, error: null, result: null });
+    expect(acceptedFollowLine(a, s, row("queued", 0))).toBe("Accepted 8 as neck in your name · 1 set apart stays a proposal · 1 keeps a person's decision · 1 question closed · 0 of 8 sorted again · waiting for a worker (job 356)");
+    expect(acceptedFollowLine(a, s, row("running", 5))).toBe("Accepted 8 as neck in your name · 1 set apart stays a proposal · 1 keeps a person's decision · 1 question closed · 5 of 8 sorted again (job 356)");
+    expect(acceptedFollowLine(a, s, row("done", 8))).toBe("Accepted 8 as neck in your name · 1 set apart stays a proposal · 1 keeps a person's decision · 1 question closed · 8 of 8 sorted again");
     expect(refusedWords(new DoorError(409, { error: "bp-head@1 no longer proposes neck on scan 4" }))).toEqual({ words: "bp-head@1 no longer proposes neck on scan 4. The page is read again.", stale: true });
     expect(refusedWords(new DoorError(403, {}))).toEqual({ words: "Accepting needs work on the Review page.", stale: false });
     expect(tileTitle(page.scans[0])).toBe("Ax_T2w_2D_TSE_1000 · now brain · neck 0.90 · decided by a person · subject 9f3c00a7e1b2d4");
@@ -203,6 +209,8 @@ describe("the page", () => {
         return reply(gpage({ value, min: q.get("min") ? Number(q.get("min")) : null, max: q.get("max") ? Number(q.get("max")) : null, size: Number(q.get("size") ?? 500), page: Number(q.get("page") ?? 1), total: value === "spine" ? 0 : undefined }));
       }
       if (url === "/api/review/proposals/accept") return reply(accepted(body as { seen: number[]; except: number[]; value: string }));
+      // the re-sort job the accept queued, over on its first read
+      if (url === "/api/jobs/356") return reply({ id: 356, kind: "resort", name: "re-sort after astrid accepted 244 decision(s)", state: "done", progress: { done: 244, of: 244, what: "scans" }, error: null, result: null });
       return reply({ error: "no such door" }, 404);
     });
   });
@@ -263,10 +271,13 @@ describe("the page", () => {
     expect((post.body as { seen: number[] }).seen).toHaveLength(250);
     expect(post.body).not.toHaveProperty("min");
     expect(post.body).not.toHaveProperty("max");
-    // the next page is read, and the line says what was written and that the sort runs again
-    expect(calls.length).toBe(reads + 2);
-    expect(calls.at(-1)?.url).toBe("/api/review/proposals/scans?model=12&axis=body_part&value=neck&page=1&size=250");
-    expect(host.querySelector(".qgrid-said")?.textContent).toBe("Accepted 244 as neck in your name · 5 set apart stay proposals · 1 keeps a person's decision · 1 question closed · sorted again as job 356");
+    // the next page is read, the line says what was written and that the sort runs again, and the page follows that job
+    expect(calls.length).toBe(reads + 3);
+    expect(calls.filter((c) => c.url.startsWith("/api/review/proposals/scans?")).at(-1)?.url).toBe("/api/review/proposals/scans?model=12&axis=body_part&value=neck&page=1&size=250");
+    expect(calls.at(-1)?.url).toBe("/api/jobs/356");
+    expect(host.querySelector(".qgrid-said")?.textContent).toMatch(/^Accepted 244 as neck in your name · 5 set apart stay proposals · 1 keeps a person's decision · 1 question closed · (sorted again as job 356|244 of 244 sorted again)$/u);
+    await settle();
+    expect(host.querySelector(".qgrid-said")?.textContent).toBe("Accepted 244 as neck in your name · 5 set apart stay proposals · 1 keeps a person's decision · 1 question closed · 244 of 244 sorted again");
     expect(host.querySelectorAll(".pg-tile.apart")).toHaveLength(0);
   });
 

@@ -104,7 +104,9 @@ for (const vp of VIEWPORTS) {
       await page.locator('.pg-tile[data-stack="1003"]').click();
       await page.keyboard.press("Enter");
       await expect(page.locator(".qgrid-said")).toContainText("Accepted 498 as neck in your name · 1 set apart stays a proposal");
-      await expect(page.locator(".qgrid-said")).toContainText("sorted again as job 356");
+      // the line follows the re-sort job the accept queued: the job while it runs, then done
+      await expect(page.locator(".qgrid-said")).toHaveText(/(sorted again as job 356|249 of 498 sorted again \(job 356\))$/u);
+      await expect(page.locator(".qgrid-said")).toContainText("498 of 498 sorted again", { timeout: 8000 });
       const posted = await page.evaluate(() => (window as unknown as { posted: { seen: number[]; except: number[]; value: string; min?: number; max?: number }[] }).posted);
       expect(posted).toHaveLength(1);
       expect(posted[0].value).toBe("neck");

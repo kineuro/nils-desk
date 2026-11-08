@@ -22,6 +22,7 @@ const DOORS = [
   "GET /api/review/proposals",
   "GET /api/review/proposals/scans",
   "POST /api/review/proposals/accept",
+  "GET /api/jobs/{id}",
   "POST /api/review/proposals/campaign",
   "POST /api/decisions/commit",
   "GET /api/review/questions",
@@ -58,9 +59,10 @@ const STANDING = {
   name: "bodypart-cascade-body_part-unsure",
 };
 
-const w = window as unknown as { posted: unknown[]; accepted: number };
+const w = window as unknown as { posted: unknown[]; accepted: number; jobReads: number };
 w.posted = [];
 w.accepted = 0;
+w.jobReads = 0;
 const json = (status: number, body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } }));
 window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, location.origin);
@@ -79,6 +81,13 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     const a = accepted(body);
     w.accepted += a.decided as number;
     return json(200, a);
+  }
+  // the re-sort job the accept queued: half way on the first read, over on the next
+  if (path === "/api/jobs/356") {
+    w.jobReads += 1;
+    const of = w.accepted;
+    const done = w.jobReads === 1 ? Math.floor(of / 2) : of;
+    return json(200, { id: 356, kind: "resort", name: "re-sort after astrid@site accepted decisions", state: done >= of ? "done" : "running", started_at: "2026-11-08T20:00:00Z", heartbeat_at: null, finished_at: null, progress: { done, of, what: "scans" }, error: null, args: {}, result: null });
   }
   if (path === "/api/review/summary") return json(200, { by_kind: { "body_part:model": 39 }, cohorts: [], none: 0 });
   if (path === "/api/review") return json(200, { count: 0, items: [] });

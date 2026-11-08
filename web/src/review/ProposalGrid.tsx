@@ -17,10 +17,13 @@ import type { Scan } from "../data/scans";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
+import { useFollowedJob } from "./resort";
 import {
   acceptBody,
   acceptWords,
+  acceptedFollowLine,
   acceptedWords,
+  type Accepted,
   bandWords,
   defaultFilter,
   filterOf,
@@ -89,6 +92,10 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
   const [state, setState] = useState<GridState | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [said, setSaid] = useState<string | null>(null);
+  // the last accept and the page it was made on: the said line follows the re-sort job it queued, as the commit's does
+  const [accepted, setAccepted] = useState<{ a: Accepted; was: GridState } | null>(null);
+  const job = useFollowedJob(accepted?.a.resort?.job ?? null);
+  const line = accepted && job ? acceptedFollowLine(accepted.a, accepted.was, job) : said;
   const [busy, setBusy] = useState(false);
   const [full, setFull] = useState(false);
   const [since, setSince] = useState(Date.now());
@@ -115,6 +122,7 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
     opened.current = false;
     setState(null);
     setSaid(null);
+    setAccepted(null);
     // one small read for the counts, then the page under the filter they open
     grid.scans(model, axis, given, 1, 1).then(
       (p) => {
@@ -150,12 +158,14 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       .accept(body)
       .then((a) => {
         setSaid(acceptedWords(a, was));
+        setAccepted(a.resort?.job ? { a, was } : null);
         // the next page: the scans accepted left the set, so the first page is the next
         return read(filter);
       })
       .catch((e: unknown) => {
         const r = refusedWords(e);
         setSaid(r.words);
+        setAccepted(null);
         if (r.stale) void read(filter);
       })
       .finally(() => setBusy(false));
@@ -212,7 +222,7 @@ export function ProposalGrid({ caps, model, axis, query }: { caps: Capabilities;
       axis={axis}
       filter={filter}
       failed={failed}
-      said={said}
+      said={line}
       busy={busy}
       full={full}
       since={since}

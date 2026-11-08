@@ -47,7 +47,7 @@ const DOORS = [
 
 const caps = {
   engine: {
-    engine: { name: "nils", version: "1.0.0-alpha.80" },
+    engine: { name: "nils", version: "1.0.0-beta.11" },
     contracts: { openapi: "7" },
     doors: DOORS,
     policy: [],
@@ -96,7 +96,14 @@ const CAMPAIGNS = [
   campaign(16, "reference-ab-cert3", { kind: "axes", axes: ["base", "technique", "modifier"] }, counts(54, 0, 0), { source: { ab: { voters: ["rules", "judge"] } }, raters_per_item: 1 }),
   campaign(9, "probe-axis", { kind: "axis", axis: "base" }, counts(0, 6, 0), { status: "closed", closed_at: "2026-10-01T09:00:00Z" }),
 ];
-const SUMMARY = { by_kind: { "release.shared_name": 948, "identity.same_instance": 208, "base:missing": 7, "identity.collision": 2, "identity.unmapped": 1, "body_part:model": 40, "body_part:decision": 14, "pick.border": 3, "classify.asked": 5, "campaign.axis": 219, "pipeline:qc": 4, "construct:session": 7 }, cohorts: [], none: 0 };
+// UX round 5: the summary of an engine with the questions door's own count per axis (`questions`) and the kinds it does not ask (`not_questions`)
+const SUMMARY = {
+  by_kind: { "release.shared_name": 948, "identity.same_instance": 208, "base:missing": 7, "identity.collision": 2, "identity.unmapped": 1, "body_part:model": 40, "body_part:decision": 14, "pick.border": 3, "classify.asked": 5, "campaign.axis": 219, "pipeline:qc": 4, "construct:session": 7 },
+  questions: { body_part: 14, base: 7, construct: 7 },
+  not_questions: { "classify.asked": 5 },
+  cohorts: [],
+  none: 0,
+};
 const PROPOSALS = [
   { model: { id: 7, name: "nils-postcontrast", version: "0.3.1" }, label: "nils-postcontrast@0.3.1", axis: "post_contrast", threshold: 0.99, staged: { groups: 89, stacks: 50006 }, held: { groups: 1, stacks: 12 }, commit: { groups: 88, stacks: 1701 }, drifted: 3, below: { groups: 4, stacks: 190, pace_s: 10.2 }, asked: { groups: 0, stacks: 0 }, campaigns: [], name: "nils-postcontrast-post_contrast-unsure" },
   { model: { id: 5, name: "nils-bodypart", version: "1.2.0" }, label: "nils-bodypart@1.2.0", axis: "body_part", threshold: 0.9, staged: { groups: 3, stacks: 40 }, held: { groups: 0, stacks: 0 }, commit: { groups: 3, stacks: 40 }, drifted: 0, below: { groups: 2, stacks: 26 }, asked: { groups: 0, stacks: 0 }, campaigns: [], name: "nils-bodypart-body_part-unsure" },

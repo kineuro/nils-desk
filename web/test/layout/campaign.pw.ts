@@ -16,7 +16,7 @@ const VIEWPORTS = [
 ];
 
 const STATES = [
-  { state: "open", next: "Read the 2 left", lede: "Is the scan like the pre or the post? · like the pre or the post · post_contrast · 6 scans · you read them", tag: "open", controls: 4 },
+  { state: "open", next: "Read the 2 left", lede: "Is the scan like the pre or the post? · post_contrast · 6 scans · you read them", tag: "open", controls: 4 },
   { state: "settle", next: "Settle the 3", lede: "Rune and a rater read them", tag: "open", controls: 4 },
   { state: "done", next: "Close", lede: "Rune reads them", tag: "open", controls: 3 },
   { state: "closed", next: "Results", lede: "Rune reads them", tag: "closed", controls: 2 },

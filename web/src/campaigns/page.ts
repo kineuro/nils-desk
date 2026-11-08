@@ -62,11 +62,36 @@ export function readersWords(caps: Capabilities, c: Pick<Campaign, "rater_policy
   return `you and ${namesWords(names, others)} read them`;
 }
 
-/** The head's one line: what it asks, the engine's words of the question, how many items, who reads them. */
+/**
+ * What the question is about, said once after it: the axis (`post_contrast`, `body_part · 4 values`), never the
+ * question again in other words. Nothing where the question names its subject already (a pick's role, free text).
+ */
+export function subjectWords(q: Question): string | null {
+  switch (q.kind) {
+    case "anchored":
+    case "pair":
+      return q.axis ?? "post_contrast";
+    case "axis":
+      return questionWords(q);
+    case "axes":
+      return (q.axes ?? []).join(", ") || null;
+    case "form": {
+      const fields = Object.keys(q.schema?.properties ?? {}).length;
+      return `${fields} ${fields === 1 ? "field" : "fields"}`;
+    }
+    case "pick":
+    case "free":
+      return null;
+    default:
+      return questionWords(q);
+  }
+}
+
+/** The head's one line: what it asks, what it is about, how many items, who reads them. */
 export function ledeWords(caps: Capabilities, c: Campaign, names: ReadonlyMap<string, string>): string {
   const total = itemTotal(c.counts);
   const noun = c.grain === "session" ? (total === 1 ? "session" : "sessions") : total === 1 ? "scan" : "scans";
-  return [askWords(c.question), questionWords(c.question), `${n(total)} ${noun}`, readersWords(caps, c, names)].join(" · ");
+  return [askWords(c.question), subjectWords(c.question), `${n(total)} ${noun}`, readersWords(caps, c, names)].filter((w) => w !== null).join(" · ");
 }
 
 /** The page's tone, told by the head's border: a campaign being read is the brand's, one closing or stopped part way the caution's, a closed one quiet. */

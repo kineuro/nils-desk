@@ -46,9 +46,11 @@ describe("what a campaign asks, in a person's words", () => {
     expect(readersWords(caps, { rater_policy: { raters: [HASH, "a@w", "b@w", "c@w"], adjudicators: [] } }, names)).toBe("4 raters");
   });
 
-  it("puts the head's line together: the question, the engine's words, how many, who reads them", () => {
+  it("puts the head's line together: the question once, what it is about, how many, who reads them", () => {
     const anchored: Campaign = { ...open, question: { kind: "anchored", axis: "post_contrast" }, rater_policy: { raters: ["carol@walk"], adjudicators: [] }, counts: { items: { open: 2, agreed: 34 }, assignments: {}, answers: 34 } };
-    expect(ledeWords(capsFor({ principal: "carol@walk" }), anchored, new Map())).toBe("Is the scan like the pre or the post? · like the pre or the post · post_contrast · 36 scans · you read them");
+    expect(ledeWords(capsFor({ principal: "carol@walk" }), anchored, new Map())).toBe("Is the scan like the pre or the post? · post_contrast · 36 scans · you read them");
+    expect(ledeWords(capsFor({ principal: "carol@walk" }), { ...anchored, question: { kind: "axis", axis: "body_part", values: ["brain", "neck", "spine"] } }, new Map())).toBe("What is each scan's body part? · body_part · 3 values · 36 scans · you read them");
+    expect(ledeWords(capsFor({ principal: "carol@walk" }), { ...anchored, question: { kind: "pick", role: "t1w" } }, new Map())).toBe("Which stack is the t1w? · 36 scans · you read them");
     expect(ledeWords(capsFor(), { ...open, grain: "session", counts: { items: { open: 1 }, assignments: {}, answers: 0 } }, new Map())).toContain("· 1 session ·");
   });
 

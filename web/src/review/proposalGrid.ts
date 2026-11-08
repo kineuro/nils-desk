@@ -9,11 +9,12 @@
 // same keys. Everything here is pure, so the page and its tests read one
 // shape; the component is ProposalGrid.tsx.
 
-import { door, DoorError, type Json } from "../ask/client";
+import { door, DoorError, type JobRow, type Json } from "../ask/client";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow } from "../routes";
+import { jobOver, sortedLine } from "./resort";
 
 /** The doors, as the engine's capabilities name them. */
 export const GRID_DOORS = {
@@ -387,15 +388,31 @@ export function acceptWords(s: GridState, f: Filter): string {
   return `Accept ${nf(tally(s).accept)} as ${value}`;
 }
 
-/** What the accept did, in a line, and that the sort runs again. */
-export function acceptedWords(a: Accepted, s: GridState | null = null): string {
+/** What the accept did, before the re-sort: what was written, set apart, kept and closed. */
+function acceptedHead(a: Accepted, s: GridState | null): string[] {
   const parts = [`Accepted ${nf(a.decided)} as ${a.value} in your name`];
   const apart = s ? tally(s).apart : a.setApart;
   if (apart > 0) parts.push(`${nf(apart)} set apart ${apart === 1 ? "stays a proposal" : "stay proposals"}`);
   if (a.keptDecided > 0) parts.push(`${nf(a.keptDecided)} ${a.keptDecided === 1 ? "keeps" : "keep"} a person's decision`);
   if (a.closed.length > 0) parts.push(`${nf(a.closed.length)} ${a.closed.length === 1 ? "question" : "questions"} closed`);
+  return parts;
+}
+
+/** What the accept did, in a line, and that the sort runs again. */
+export function acceptedWords(a: Accepted, s: GridState | null = null): string {
+  const parts = acceptedHead(a, s);
   if (a.resort?.job) parts.push(`sorted again as job ${a.resort.job}`);
   else if (a.resort && a.resort.state === "done" && a.decided > 0) parts.push("sorted again");
+  return parts.join(" · ");
+}
+
+/**
+ * The line while the page follows the re-sort job the accept queued, as the commit's line does: what the accept did,
+ * then how far the job is (`120 of 497 sorted again (job 356)`, then `497 of 497 sorted again`).
+ */
+export function acceptedFollowLine(a: Accepted, s: GridState | null, job: Pick<JobRow, "state" | "progress" | "error" | "result">): string {
+  const parts = acceptedHead(a, s);
+  parts.push(`${sortedLine(job, a.resort?.stacks ?? a.decided)}${jobOver(job.state) || a.resort?.job === null ? "" : ` (job ${a.resort?.job})`}`);
   return parts.join(" · ");
 }
 
