@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
 // Review's Questions page with an engine that gathers its questions (record
-// 56 section 6.3): the list in plain words on top, read for the dataset the
-// page was opened for, the Questions chip counting its distinct scans, and
-// what else waits under it without the kinds the grid answers; a question's
+// 56 section 6.3; UX round 5, 2026-11-08): under Review's head, the axis or
+// "Scans to answer", one card per question as Review's first page draws them,
+// read for the dataset the page was opened for, and nothing else: no chips, no
+// cohort chips, no zero cards, no table of what else waits; a question's
 // address opens its grid; an engine before the doors keeps the queue alone.
 
 import { act } from "react";
@@ -54,21 +55,40 @@ describe("Review's Questions page", () => {
     });
   };
 
-  it("puts the questions on top, counts their scans on the chip, and leaves the kinds the grid answers out of what else waits", async () => {
+  it("draws the questions as cards under Review's head, for the dataset it was opened for, and nothing else", async () => {
     const caps = capsWith([QUESTION_DOORS.list, QUESTION_DOORS.scans, QUESTION_DOORS.answer, "GET /api/review/summary"], [...GRANTS] as Grant[]);
     act(() => root.render(<ReviewPage caps={caps} page="questions" query={{ dataset: "ms-a" }} />));
     await settle();
-    expect(urls).toContain("/api/review/questions?dataset=ms-a");
-    expect([...el.querySelectorAll(".q-row .q-words")].map((w) => w.textContent)).toEqual(["T2w or PDw?", "Which base?"]);
-    expect(el.querySelector(".chips.pages a.on b")?.textContent).toBe("21");
-    // what else waits: the identity question and a pass's, never the questions answered above
-    const rows = [...el.querySelectorAll("table.queue tbody tr")].map((r) => r.textContent ?? "");
-    expect(rows.some((r) => r.includes("two subject codes share one identifier"))).toBe(true);
-    expect(rows.some((r) => r.includes("modifier"))).toBe(true);
-    expect(rows.some((r) => r.includes("no base fits"))).toBe(false);
-    expect(el.querySelector("h2")?.textContent).toBe("Also waiting");
-    // the unsure card is the list's now; the identity card stays
-    expect([...el.querySelectorAll(".needs .need .value")].map((v) => v.textContent)).toEqual(["1 subject", "0 sessions"]);
+    expect(urls).toEqual(["/api/review/questions?dataset=ms-a"]);
+    expect(el.querySelector(".data-head .eyebrow")?.textContent).toBe("Review");
+    expect(el.querySelector("h1")?.textContent).toBe("Scans to answer");
+    expect(el.querySelector(".q-where")?.textContent).toBe("in dataset ms-a · everywhere");
+    expect(el.querySelector(".q-where a")?.getAttribute("href")).toBe("#review/questions");
+    const cards = [...el.querySelectorAll(".rv-card.answer")];
+    expect(cards.map((c) => c.querySelector(".rv-title")?.textContent)).toEqual(["T2w or PDw?", "Which base?"]);
+    expect(cards.map((c) => c.querySelector(".rv-big b")?.textContent)).toEqual(["12", "7"]);
+    expect(cards[1].querySelector(".rv-meta")?.textContent).toBe("The rules found no base for these scans.");
+    expect(cards.map((c) => c.querySelector("a.button")?.getAttribute("href"))).toEqual(["#review/questions/base%3APDw%7CT2w?dataset=ms-a", "#review/questions/base%3Amissing?dataset=ms-a"]);
+    expect(cards.map((c) => c.querySelector("a.button")?.textContent)).toEqual(["Answer", "Answer"]);
+    // the old page's head, chips, cohort chips, zero cards and table are gone
+    for (const gone of [".chips.pages", ".chips.cohorts", ".needs", "table.queue", ".lede", "h2", ".q-else", ".q-held"]) expect(el.querySelector(gone)).toBeNull();
+    expect(el.textContent).not.toContain("What needs a person");
+    expect(el.textContent).not.toContain("Also waiting");
+  });
+
+  it("narrowed to an axis, it is the axis's page; one with no question says so", async () => {
+    const caps = capsWith([QUESTION_DOORS.list, QUESTION_DOORS.scans, QUESTION_DOORS.answer, "GET /api/review/summary"], [...GRANTS] as Grant[]);
+    act(() => root.render(<ReviewPage caps={caps} page="questions" query={{ axis: "base" }} />));
+    await settle();
+    expect(urls).toEqual(["/api/review/questions"]);
+    expect(el.querySelector("h1")?.textContent).toBe("Base");
+    expect(el.querySelectorAll(".rv-card.answer")).toHaveLength(2);
+    expect(el.querySelector(".q-where")).toBeNull();
+    act(() => root.render(<ReviewPage caps={caps} page="questions" query={{ axis: "modifier", dataset: "ms-a" }} />));
+    await settle();
+    expect(el.querySelector("h1")?.textContent).toBe("Modifier");
+    expect(el.querySelectorAll(".rv-card.answer")).toHaveLength(0);
+    expect(el.querySelector(".q-none")?.textContent).toContain("Nothing to answer here.");
   });
 
   it("opens a question's grid at its address", async () => {
@@ -85,7 +105,7 @@ describe("Review's Questions page", () => {
     expect(el.querySelector('.qgrid-head a[href*="make=review"]')?.getAttribute("href")).toContain("from=base%3Adisagree");
   });
 
-  it("keeps the queue alone with an engine before the doors", async () => {
+  it("keeps the queue alone with an engine before the doors, and for a batch", async () => {
     const caps = capsWith(["GET /api/review/summary"], [...GRANTS] as Grant[]);
     act(() => root.render(<ReviewPage caps={caps} page="questions" query={{ dataset: "ms-a" }} />));
     await settle();
@@ -93,5 +113,11 @@ describe("Review's Questions page", () => {
     expect(el.querySelector(".questions")).toBeNull();
     expect(el.querySelector("h2")?.textContent).toBe("The queue");
     expect(el.querySelector(".chips.pages a.on b")?.textContent).toBe("4");
+    expect(el.textContent).not.toContain("What needs a person");
+    const served = capsWith([QUESTION_DOORS.list, QUESTION_DOORS.scans, QUESTION_DOORS.answer, "GET /api/review/summary"], [...GRANTS] as Grant[]);
+    act(() => root.render(<ReviewPage caps={served} page="questions" query={{ batch: "3" }} />));
+    await settle();
+    expect(el.querySelector("h2")?.textContent).toBe("The queue");
+    expect(el.querySelector(".rv-card")).toBeNull();
   });
 });

@@ -21,8 +21,8 @@ import { fromCampaigns, parse } from "../routes";
 import { button, dialogs, settle } from "../../test/safeWayIn";
 import { familyOf, itemWords, kindTag } from "./client";
 import { fakeEngine } from "./mainScans.fixture";
-import { CAMPAIGNS, ME, QUESTIONS, QUESTIONS_RAW, STANDING_ROWS, STANDINGS, SUMMARY } from "./work.fixture";
-import { alsoRows, alsoSummary, alsoWords, axisCards, axisTitle, campaignBand, heldCount, modelWords, queuedCount, readerOf, reasonLine, shareWords, sortStandings, standingMeta, standingTitle, theirs } from "./work";
+import { CAMPAIGNS, ME, QUESTIONS, QUESTIONS_RAW, STANDING_ROWS, STANDINGS, SUMMARY, SUMMARY_OLD } from "./work.fixture";
+import { alsoRows, alsoSummary, alsoWords, askedHere, axisCards, axisTitle, campaignBand, heldCount, modelWords, queuedCount, readerOf, reasonLine, shareWords, sortStandings, standingMeta, standingTitle, theirs } from "./work";
 import { WorkBody, WorkPage } from "./WorkPage";
 
 const list = (listed as { campaigns: Campaign[] }).campaigns;
@@ -55,7 +55,7 @@ describe("the words", () => {
     expect(reasonLine("decision", 14)).toBe("14 where a decision disagrees");
     expect(reasonLine("vote", 5)).toBe("5 where the rules disagree");
     expect(reasonLine("disagree", 12)).toBe("12 where the rules and System 1 disagree");
-    expect(reasonLine("session", 1)).toBe("1 session question");
+    expect(reasonLine("session", 1)).toBe("1 where the session says otherwise");
     expect(reasonLine("conflict", 2000)).toBe("2,000 where the rules conflict");
   });
 
@@ -73,12 +73,14 @@ describe("the words", () => {
     expect(alsoWords("classify.asked")).toBe("What System 1 asks");
     expect(alsoWords("pick.border")).toBe("Occasions a pick run doubts");
     expect(alsoWords("body_part:model")).toBe("Body part: scans a model proposes");
+    expect(alsoWords("construct:session")).toBe("Construct: scans where the session says otherwise");
+    expect(alsoWords("body_part:decision")).toBe("Body part: scans where a decision disagrees");
     expect(alsoWords("something.odd")).toBe("something odd");
   });
 });
 
 describe("the scans to answer", () => {
-  it("one card per axis from the questions, the reasons summed by their counts, one click to the scans", () => {
+  it("one card per axis counting what the engine's summary says the door asks, the reasons from the questions, one click to the scans", () => {
     const cards = axisCards(QUESTIONS, SUMMARY);
     expect(cards.map((c) => [c.title, c.scans])).toEqual([
       ["Body part", 20],
@@ -89,27 +91,56 @@ describe("the scans to answer", () => {
     ]);
     const by = Object.fromEntries(cards.map((c) => [c.axis, c]));
     expect(by.body_part.meta).toBe("14 where a decision disagrees · 5 where the rules disagree · 1 with no value");
-    // several questions on the axis: the list, narrowed to it
+    // several questions on the axis: the Questions page, narrowed to it
     expect(by.body_part.href).toBe("#review/questions?axis=body_part");
     // one question: its grid
     expect(by.post_contrast.href).toBe("#review/questions/post_contrast%3Amissing");
-    // a session's questions, which the questions doors do not carry, under their axis
-    expect(by.construct.meta).toBe("7 session questions");
-    expect(by.construct.href).toBe("#review/questions?axis=construct");
+    expect(by.construct.meta).toBe("7 where the session says otherwise");
+    expect(by.construct.href).toBe("#review/questions/construct%3Afs%7Cnone");
     expect(by.base.meta).toBe("12 where the rules and System 1 disagree · 7 with no value");
   });
 
-  it("without the questions doors, the summary's kinds by axis", () => {
-    const cards = axisCards(null, SUMMARY);
-    expect(cards.map((c) => [c.title, c.scans, c.meta])).toEqual([
-      ["Body part", 19, "14 where a decision disagrees · 5 where the rules disagree"],
-      ["Base", 7, "7 with no value"],
-      ["Construct", 7, "7 session questions"],
-      ["Modifier", 4, "4 session questions"],
+  it("counts the engine's distinct scans, never the questions' sum or by_kind", () => {
+    // a scan asked twice on body part: the door counts it once, the list's rows sum to 20
+    const cards = axisCards(QUESTIONS, { ...SUMMARY, questions: { ...SUMMARY.questions, body_part: 14 } });
+    expect(cards.find((c) => c.axis === "body_part")?.scans).toBe(14);
+    // the list still reading: the counts from the summary, the reasons from its kinds about the axis
+    const alone = axisCards(null, SUMMARY);
+    expect(alone.map((c) => [c.title, c.scans, c.meta])).toEqual([
+      ["Body part", 20, "14 where a decision disagrees · 5 where the rules disagree"],
+      ["Base", 19, "7 with no value"],
+      ["Construct", 7, "7 where the session says otherwise"],
+      ["Modifier", 4, "4 where the session says otherwise"],
+      ["Post-contrast", 3, ""],
     ]);
-    expect(cards[0].href).toBe("#review/questions?axis=body_part");
+    expect(alone[0].href).toBe("#review/questions?axis=body_part");
+    // an axis the door asks nothing about is no card, whatever by_kind holds
+    expect(axisCards(QUESTIONS, { ...SUMMARY, questions: { body_part: 0 } }).map((c) => c.axis)).toEqual(["body_part", "base", "construct", "modifier", "post_contrast"]);
+    expect(axisCards(null, { ...SUMMARY, questions: {} })).toEqual([]);
+  });
+
+  it("with an older engine's summary, the questions alone; never by_kind alone", () => {
+    const cards = axisCards(QUESTIONS, SUMMARY_OLD);
+    expect(cards.map((c) => [c.title, c.scans])).toEqual([
+      ["Body part", 20],
+      ["Base", 19],
+      ["Construct", 7],
+      ["Modifier", 4],
+      ["Post-contrast", 3],
+    ]);
+    expect(axisCards(null, SUMMARY_OLD)).toEqual([]);
     expect(axisCards(null, null)).toEqual([]);
-    expect(axisCards({ ...QUESTIONS, questions: [] }, { by_kind: { "campaign.axis": 3 }, cohorts: [], none: 0 })).toEqual([]);
+    expect(axisCards({ ...QUESTIONS, questions: [] }, { by_kind: { "campaign.axis": 3, "body_part:decision": 14 }, cohorts: [], none: 0 })).toEqual([]);
+  });
+
+  it("knows which kinds the door asks: the engine's word where it has one, else the questions' kinds", () => {
+    expect(askedHere("body_part:decision", SUMMARY, null)).toBe(true);
+    expect(askedHere("classify.asked", SUMMARY, QUESTIONS)).toBe(false);
+    expect(askedHere("body_part:model", SUMMARY, QUESTIONS)).toBe(false);
+    expect(askedHere("body_part:decision", { ...SUMMARY, questions: { base: 7 } }, QUESTIONS)).toBe(false);
+    expect(askedHere("body_part:decision", SUMMARY_OLD, QUESTIONS)).toBe(true);
+    expect(askedHere("construct:session", SUMMARY_OLD, { ...QUESTIONS, questions: QUESTIONS.questions.filter((q) => q.axis !== "construct") })).toBe(false);
+    expect(askedHere("construct:session", SUMMARY_OLD, null)).toBe(false);
   });
 
   it("the queue's own count leaves the campaigns' items out, and a campaign's item is a family of its own", () => {
@@ -178,6 +209,13 @@ describe("what else waits", () => {
     const older = alsoRows(caps, SUMMARY, false);
     expect(older.find((r) => r.key === "kind:body_part:model")).toMatchObject({ words: "Body part: scans a model proposes", count: 59, href: "#review/proposals" });
     expect(alsoSummary(older)).toBe("Also waiting: 1,245 subjects, files and checks");
+    // an older engine's summary: a kind the questions do not carry is a row here, in plain words, worked in the queue
+    const before = alsoRows(caps, SUMMARY_OLD, true, { ...QUESTIONS, questions: QUESTIONS.questions.filter((q) => q.axis !== "construct" && q.axis !== "modifier") });
+    expect(before.find((r) => r.key === "kind:construct:session")).toMatchObject({ words: "Construct: scans where the session says otherwise", count: 7, href: "#review?axis=construct" });
+    expect(before.some((r) => r.key === "kind:body_part:decision")).toBe(false);
+    expect(alsoRows(caps, SUMMARY_OLD, true, QUESTIONS).some((r) => r.key.endsWith(":session"))).toBe(false);
+    // and with no questions read at all, every classifier kind waits here
+    expect(alsoRows(caps, SUMMARY_OLD, true).some((r) => r.key === "kind:body_part:decision")).toBe(true);
     // no Main scans without its door
     expect(alsoRows(capsFor({ doors: DOORS, principal: ME }), SUMMARY, true).some((r) => r.key === "main-scans")).toBe(false);
   });

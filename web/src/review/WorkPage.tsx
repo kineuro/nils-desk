@@ -263,9 +263,9 @@ export function WorkBody({ caps, summary, standings = null, qlist = null, list, 
   const cards = useMemo(() => campaignBand(caps, list), [caps, list]);
   // the fold only where something is counted; Main scans alone has its page in the side
   const also = useMemo(() => {
-    const rows = reviewer && summary ? alsoRows(caps, summary, standings !== null) : [];
+    const rows = reviewer && summary ? alsoRows(caps, summary, standings !== null, qlist) : [];
     return rows.some((r) => (r.count ?? 0) > 0) ? rows : [];
-  }, [caps, reviewer, summary, standings]);
+  }, [caps, reviewer, summary, standings, qlist]);
   const closed = (list ?? []).filter((c) => c.status === "closed");
   const empty = since === null && proposed.length === 0 && axes.length === 0 && cards.length === 0 && also.length === 0;
   return (

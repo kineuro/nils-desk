@@ -14,7 +14,8 @@ import { listOf, type QuestionList } from "./questions";
 /** The person the fixtures are read as. */
 export const ME = "carol@walk";
 
-export const SUMMARY: ReviewSummary = {
+/** The summary as an engine before UX round 5 sends it: `by_kind` alone, no `questions`. */
+export const SUMMARY_OLD: ReviewSummary = {
   by_kind: {
     "release.shared_name": 948,
     "identity.same_instance": 208,
@@ -33,6 +34,13 @@ export const SUMMARY: ReviewSummary = {
   },
   cohorts: [],
   none: 0,
+};
+
+/** The summary with the questions door's own counts per axis (engine 1.0.0-beta.11): what each axis card counts. */
+export const SUMMARY: ReviewSummary = {
+  ...SUMMARY_OLD,
+  questions: { body_part: 20, base: 19, construct: 7, modifier: 4, post_contrast: 3 },
+  not_questions: { "classify.asked": 5, "classify.excluded": 12 },
 };
 
 const standingRow = (over: Json): Json => ({
@@ -73,17 +81,19 @@ export const STANDING_ROWS: Json[] = [
 
 export const STANDINGS: Standing[] = STANDING_ROWS.map(standingOf).filter((s): s is Standing => s !== null);
 
-/** The rules' questions, gathered: body part asked three ways, post-contrast once, base twice. */
+/** The questions, gathered: body part asked three ways (a model against fourteen decisions among them), post-contrast once, base twice, a session's construct and modifier once each. */
 export const QUESTIONS_RAW: Json = {
   scope: { kind: "registry", name: null, id: null },
-  scans: 44,
+  scans: 55,
   questions: [
-    { key: "body_part:decision", axis: "body_part", shape: "doubt", values: ["brain"], words: "brain?", reason: "A decision disagrees with the rules.", scans: 14, staged: 0, kinds: { "body_part:decision": 14 } },
+    { key: "body_part:brain-neck|neck", axis: "body_part", shape: "pair", values: ["neck", "brain-neck"], words: "neck or brain-neck?", reason: "A model says brain-neck; a person decided neck.", scans: 14, staged: 0, kinds: { "body_part:decision": 14 } },
     { key: "body_part:vote", axis: "body_part", shape: "pair", values: ["spine", "neck"], words: "spine or neck?", reason: "The rules disagree.", scans: 5, staged: 0, kinds: { "body_part:vote": 5 } },
     { key: "body_part:missing", axis: "body_part", shape: "missing", values: ["brain", "spine"], words: "Which body part?", reason: "The rules found no body part.", scans: 1, staged: 0, kinds: { "body_part:missing": 1 } },
     { key: "post_contrast:missing", axis: "post_contrast", shape: "missing", values: ["given", "none"], words: "Which post-contrast?", reason: "The rules found no answer.", scans: 3, staged: 0, kinds: { "post_contrast:missing": 3 } },
     { key: "base:PDw|T2w", axis: "base", shape: "pair", values: ["T2w", "PDw"], words: "T2w or PDw?", reason: "The rules and System 1 disagree.", scans: 12, staged: 0, kinds: { "base:disagree": 12 } },
     { key: "base:missing", axis: "base", shape: "missing", values: ["T1w", "T2w"], words: "Which base?", reason: "The rules found no base.", scans: 7, staged: 1, kinds: { "base:missing": 7 } },
+    { key: "construct:fs|none", axis: "construct", shape: "pair", values: ["fs", "none"], words: "fs or none?", reason: "The session says fs; the scan alone said none.", scans: 7, staged: 0, kinds: { "construct:session": 7 } },
+    { key: "modifier:3d?", axis: "modifier", shape: "doubt", values: ["3d"], words: "3d?", reason: "The session says 3d; the scan alone said nothing.", scans: 4, staged: 0, kinds: { "modifier:session": 4 } },
   ],
   vocabularies: {},
   elsewhere: [],

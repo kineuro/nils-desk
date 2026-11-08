@@ -4,6 +4,11 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- Review's axis cards count what their Answer opens. With engine 1.0.0-beta.11 the card's number is the engine's own count of the scans the questions door asks about on that axis (the summary's `questions`), never the summary's kinds alone; with an older engine it is the questions' sum, and a kind the questions do not carry goes to the fold in plain words ("Construct: scans where the session says otherwise") with the way to the queue. On production the Body part card said 14 scans and its Answer landed on a page that said no body part question waits.
+- `#review/questions` is rebuilt as cards under Review's head: the axis ("Body part") or "Scans to answer", one card per question as the first page draws them (its words, its scans, why, Answer), and nothing else. The head "What needs a person", the Questions / Picks / Proposals / Asked chips, the cohort chips, the two zero cards and the "Also waiting" table are gone from it; a dataset or cohort the page was opened for is one line under the head. Picks and Asked keep their pages at their addresses; a batch's queue keeps its table.
+
 ## [1.0.0-beta.8] - 2026-11-08
 
 The eighth desk beta is one page, from production use: Review opens on cards, as Data does, so a person who comes for what a model proposed sees it first and acts on it from the card. The engine is unchanged.

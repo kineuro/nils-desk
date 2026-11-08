@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 /* Review round 1 (record 56 section 6.3): the few questions the sort leaves
-   to a person, as a list in plain words and as a grid of each question's
+   to a person, as cards in plain words and as a grid of each question's
    scans. Colour by border only: a scan's tile is framed in the colour of
    NILS's answer (the theme's value tokens, slotted by the axis's own order,
    so a value keeps its colour everywhere), a question that needs a person
@@ -8,36 +8,12 @@
    value's colour. The grid's page grows with the screen as the gallery's
    does (proportional, not bigger buttons). Theme tokens only. */
 
-/* ------------------------------------------------------------ the list */
-.questions { display: grid; gap: 0.45rem; margin: 0.6rem 0 1.2rem; }
-.q-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
-.q-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 0.3rem 1rem;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid var(--n-line);
-  border-left: 3px solid var(--n-caution-line);
-  border-radius: var(--n-radius);
-  background: var(--n-bg-raised);
-}
-.q-row:hover { border-color: var(--n-caution-line); }
-.q-what { display: grid; gap: 0.1rem; min-width: 0; color: var(--n-text); text-decoration: none; }
-.q-what:hover { text-decoration: none; }
-.q-what:hover .q-words { color: var(--n-brand-hover); }
-.q-words { font-family: var(--n-font-serif); font-size: 1.1rem; overflow-wrap: anywhere; }
-.q-what .meta { overflow-wrap: anywhere; }
-.q-count { display: inline-flex; align-items: baseline; gap: 0.35rem; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--n-text-faint); }
-.q-count b { font-family: var(--n-font-serif); font-size: 1.2rem; font-weight: 400; color: var(--n-text); }
-.q-count .tag { align-self: center; }
-.q-act { display: flex; justify-content: flex-end; }
-.questions .q-none, .questions .q-else, .questions .q-held { margin: 0; }
-.q-else a { margin-left: 0.3rem; }
-@media (max-width: 640px) {
-  .q-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .q-row .q-act { grid-column: 1 / -1; justify-content: flex-start; }
-}
+/* ------------------------------------------------------------ the questions as cards */
+/* The Questions page (UX round 5) draws Review's cards (work.css) under Review's head; a question's card has
+   the caution bar, since it waits for a person. */
+.questions.work .rv-card.answer { border-left-color: var(--n-caution-line); }
+.questions .q-where { display: block; margin-top: 0.2rem; }
+.questions .q-none { margin: 0; }
 
 /* ------------------------------------------------------------ the grid's page */
 .page:has(.qgrid-page) { display: flex; flex-direction: column; padding: 0.6rem 1.1rem 0.7rem; overflow: hidden; }

@@ -14,7 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DoorError, type Json } from "../ask/client";
 import { GRANTS, type Grant } from "../grants";
 import { capsWith } from "./caps.fixture";
-import { QuestionGrid, QuestionsList } from "./Questions";
+import { QuestionGrid, QuestionsPage } from "./Questions";
 import {
   answerBody,
   answeredOf,
@@ -223,18 +223,24 @@ describe("the addresses", () => {
   });
 });
 
-describe("the list in plain words", () => {
-  it("each question with its scans, why, its staged answers and the way to its grid; what is answered elsewhere and held by campaigns", () => {
-    const html = renderToStaticMarkup(<QuestionsList list={listOf(LIST)} where={{ dataset: "ms-a" }} />);
-    expect(html).toContain('<span class="q-words">T2w or PDw?</span>');
+describe("the questions as cards", () => {
+  it("each question a card with its words, its scans, why and the way to its grid; nothing else", () => {
+    const html = renderToStaticMarkup(<QuestionsPage list={listOf(LIST)} where={{ dataset: "ms-a" }} />);
+    expect(html).toContain("<h1>Scans to answer</h1>");
+    expect(html).toContain('<span class="rv-title">T2w or PDw?</span>');
     expect(html).toContain("The rules found no base for these scans.");
-    expect(html).toContain("<b>7</b> scans");
-    expect(html).toContain('<span class="tag caution">1 staged</span>');
+    expect(html).toContain("<b>7</b><span>scans</span>");
     expect(html).toContain('href="#review/questions/base%3Amissing?dataset=ms-a"');
     expect(html.match(/>Answer<\/a>/gu)).toHaveLength(2);
-    expect(html).toContain('System 1 asks about a whole scan: 2 scans<a href="#review/asked">Open</a>');
-    expect(html).toContain("3 scans are in campaign base-check, answered there.");
-    expect(renderToStaticMarkup(<QuestionsList list={listOf({ questions: [] })} where={{}} />)).toContain("No question waits: the rules decided every scan.");
+    expect(html).toContain("in dataset ms-a");
+    // what is answered elsewhere and what campaigns hold are not on this page
+    expect(html).not.toContain("System 1 asks");
+    expect(html).not.toContain("base-check");
+    expect(html).not.toContain("staged");
+    const axis = renderToStaticMarkup(<QuestionsPage list={listOf(LIST)} where={{}} axis="base" />);
+    expect(axis).toContain("<h1>Base</h1>");
+    expect(axis).not.toContain("in dataset");
+    expect(renderToStaticMarkup(<QuestionsPage list={listOf({ questions: [] })} where={{}} />)).toContain("Nothing to answer here.");
   });
 });
 
