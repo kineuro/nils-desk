@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+## [1.0.0-beta.7] - 2026-11-08
+
+The seventh desk beta is the two UX rounds of production use. A campaign's page follows its close as it runs, says who holds each open item and until when, counts the items read one by one with why, and offers one axis where several were asked; Review > Proposals is one card per model and axis with its two acts; a scan's labels say where they came from, with a re-sort a press away; a step's Run says what it would go over before it starts and offers the scans not sorted first, a step runs over the scans shown, and a running step says how far it is and a failed one why, under the rail; Settings > Parts notices a release within a minute and Update everything lists its order; and Review, Data, Pipelines and Settings say the person's words for the engine's states. Most of it shows where the engine is 1.0.0-beta.10 or later; the engine floor is unchanged.
+
 ### Added
 
 - Settings > Parts notices a release within a minute: while the page is open it reads the install twice a minute and asks the supervisor to watch, which looks for new releases once a minute without spending GitHub's requests an hour, so no Look again is needed (it stays). The page says when the supervisor last looked, to the ten seconds (`looked for releases 40 s ago`), in place of when the page was read; a tag whose release is still being built says so in the Newer column; where GitHub's requests an hour are spent, the time of the next full look and why; and a look that failed says why (engine `[Unreleased]`, 2026-11-06).
