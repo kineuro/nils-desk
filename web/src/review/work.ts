@@ -60,7 +60,7 @@ export function axisTitle(axis: string): string {
 /** A model as a person names it: the friendly name of a NILS model where the software table has one, else its name, then its version. */
 export function modelWords(s: Pick<Standing, "model" | "label">): string {
   const name = knownToolName(s.model.name) ?? s.model.name;
-  return s.model.version ? `${name} ${s.model.version}` : s.label;
+  return s.model.version ? `${name} ${s.model.version}` : name;
 }
 
 // ------------------------------------------------------------ band 1: proposed by models
@@ -263,7 +263,7 @@ export function campaignCards(caps: Capabilities, c: Campaign): CampaignCard[] {
 /** The band: every open campaign the person may see, the person's own first, then the most open first. */
 export function campaignBand(caps: Capabilities, list: readonly Campaign[] | null): CampaignCard[] {
   return (list ?? [])
-    .filter((c) => c.status === "open" && theirs(caps, c))
+    .filter((c) => c.status !== "closed" && theirs(caps, c))
     .flatMap((c) => campaignCards(caps, c))
     .sort((a, b) => Number(b.own) - Number(a.own) || b.count - a.count || a.campaign.name.localeCompare(b.campaign.name));
 }
