@@ -168,16 +168,24 @@ const secs = (v: number | null) => (v === null ? "none" : v < 10 ? v.toFixed(1) 
  * median and ninetieth percentile seconds, the share of suggestions changed.
  * Blind as the answers are: a rater sees their own row alone, and no totals.
  */
-export function RaterStats({ stats }: { stats: RaterStatsDoc }) {
-  const pct = (v: number | null) => (v === null ? "none" : `${Math.round(v * 100)}%`);
-  // 2026-11-05: a claim left open is a break, not reading, and the heading says the bound
+/** The pace's caveat (2026-11-05): a claim left open is a break, not reading, and the line says the bound. */
+export function paceCaveat(stats: Pick<RaterStatsDoc, "pause_seconds">): string | null {
   const bound = stats.pause_seconds ?? null;
+  if (bound === null) return null;
+  return `seconds per answer read one by one; a claim open over ${bound % 60 === 0 ? `${bound / 60} min` : `${bound} s`} is a break, not reading`;
+}
+
+/** Each rater's pace; `who` names a rater (UX round 5: by display name, the principal on hover), else the door's name or the principal; `caveat` false keeps the bound's words off the heading for a page that says them elsewhere. */
+export function RaterStats({ stats, who, caveat = true }: { stats: RaterStatsDoc; who?: (principal: string) => { name: string; title: string | null }; caveat?: boolean }) {
+  const pct = (v: number | null) => (v === null ? "none" : `${Math.round(v * 100)}%`);
+  const words = caveat ? paceCaveat(stats) : null;
   const breaks = stats.raters.some((r) => (r.paused ?? 0) > 0);
+  const named = (r: RaterStatsDoc["raters"][number]) => (who ? who(r.principal) : { name: r.name ?? r.principal, title: r.principal });
   return (
     <>
       <h2>
         {stats.blind ? "Your pace" : "Pace"}
-        {bound !== null && <span className="meta"> · seconds per answer read one by one; a claim open over {bound % 60 === 0 ? `${bound / 60} min` : `${bound} s`} is a break, not reading</span>}
+        {words !== null && <span className="meta"> · {words}</span>}
       </h2>
       <div className="table-wrap">
         <table className="thin rater-stats">
@@ -195,7 +203,7 @@ export function RaterStats({ stats }: { stats: RaterStatsDoc }) {
           <tbody>
             {stats.raters.map((r) => (
               <tr key={r.principal}>
-                {!stats.blind && <td title={r.principal}>{r.name ?? r.principal}</td>}
+                {!stats.blind && <td title={named(r).title ?? undefined}>{named(r).name}</td>}
                 <td className="num">{r.decisions.toLocaleString("en-US")}</td>
                 <td className="num">{secs(r.median_seconds)}</td>
                 <td className="num">{secs(r.p90_seconds)}</td>

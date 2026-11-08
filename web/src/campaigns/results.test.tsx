@@ -116,8 +116,9 @@ describe("the campaign page", () => {
   });
 
   it("names the raters of the items table to the maker, and numbers them for another rater", () => {
-    expect(draw(capsFor({ doors: WITH, principal: "carol@walk", grants: ["campaigns:see"] }))).toContain("bob T2w");
-    const alice = draw(capsFor({ doors: WITH, principal: "alice@walk", grants: ["campaigns:see"] }));
+    const text = (html: string) => html.replace(/<[^>]+>/gu, "");
+    expect(text(draw(capsFor({ doors: WITH, principal: "carol@walk", grants: ["campaigns:see"] })))).toContain("bob T2w");
+    const alice = text(draw(capsFor({ doors: WITH, principal: "alice@walk", grants: ["campaigns:see"] })));
     expect(alice).toContain("rater 1 T2w");
     expect(alice).toContain("alice T1w");
     expect(alice).not.toContain("bob T2w");
