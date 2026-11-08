@@ -15,6 +15,7 @@ import {
   decisionLink,
   fromLine,
   heldOrigins,
+  hoverLine,
   keepOrigins,
   originsFor,
   originTone,
@@ -62,12 +63,9 @@ export function useOrigins(t: Target | null): { origins: Origins | null; failed:
   };
 }
 
-/** The hover's lines: where it came from, and a decision not sorted yet. */
+/** The hover's line, in a person's words (UX round 5): "Body part: neck · decided by anna on 7 Nov", with a decision not sorted yet after it. */
 export function hoverOf(fact: Fact, a: AxisOrigin, sorted: Sorted | null): string {
-  const lines = [`${fact.what}: ${fromLine(a, sorted)}`];
-  const stale = staleLine(a);
-  if (stale) lines.push(stale);
-  return lines.join("\n");
+  return hoverLine(fact.what, { ...a, values: a.values.length > 0 ? a.values : [fact.value] }, sorted);
 }
 
 /** A source field in words: series_description is "series description". */

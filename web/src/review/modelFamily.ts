@@ -251,6 +251,8 @@ export interface Standing {
   drifted: number;
   /** Below the threshold, asked by no campaign: what a campaign of the rest asks. */
   below: Part;
+  /** The median seconds an answer on the axis took in closed campaigns (UX round 5); null where the engine knows none. */
+  pace: number | null;
   /** Below the threshold and asked by an open campaign already. */
   asked: Part;
   campaigns: { id: number; name: string }[];
@@ -281,6 +283,7 @@ export function standingOf(v: unknown): Standing | null {
     commit: isObj(v.commit) ? partOf(v.commit) : { groups: staged.groups - held.groups, stacks: staged.stacks - held.stacks },
     drifted: count(v.drifted),
     below: partOf(v.below),
+    pace: isObj(v.below) ? num(v.below.pace_s) : null,
     asked: partOf(v.asked),
     campaigns: Array.isArray(v.campaigns) ? v.campaigns.filter(isObj).map((c) => ({ id: count(c.id), name: text(c.name) ?? "" })) : [],
     name: text(v.name) ?? `${name}-${v.axis}-unsure`,
@@ -308,22 +311,41 @@ export function commitStandingBody(s: Standing): Json {
   return { model: String(s.model.id), axis: s.axis, ...(s.drifted > 0 ? { anyway: true } : {}) };
 }
 
-/** What a commit answered, with the re-sort's words. */
+/** What a commit answered, with the re-sort: since UX round 5 a queued job (`state` queued with `job`), before that its words. */
 export interface CommitAnswer extends CommittedPart {
-  resort?: { state?: string; words?: string } | null;
+  resort?: { state?: string; words?: string; job?: number | null; stacks?: number } | null;
 }
 
-/** What a campaign of the rest answered. */
+/** Which of a model's unsure scans a campaign of the rest takes first (UX round 5). */
+export type RestOrder = "least_sure" | "most_sure" | "random";
+
+/** The orders a person may choose, in their words. */
+export const REST_ORDERS: { order: RestOrder; words: string }[] = [
+  { order: "least_sure", words: "Least sure first" },
+  { order: "most_sure", words: "Most sure first" },
+  { order: "random", words: "Random" },
+];
+
+/** How many scans a campaign of the rest takes unless the person says otherwise: the engine's default too. */
+export const REST_LIMIT = 500;
+
+/** What a campaign of the rest answered; `left`, the scans the limit left out, since UX round 5. */
 export interface RestAnswer {
   campaign: { id: number; name: string };
   adopted: number;
   suggestions: { suggestions: number };
+  left?: number;
+}
+
+/** The body of a campaign of the rest: the model, the axis, the name where given, and since UX round 5 how many and which first. */
+export function restBody(s: Standing, name: string, limit?: number, order?: RestOrder): Json {
+  return { model: String(s.model.id), axis: s.axis, ...(name.trim() ? { name: name.trim() } : {}), ...(limit !== undefined ? { limit } : {}), ...(order !== undefined ? { order } : {}) };
 }
 
 export const standingDoors = {
   list: () => door<Json>("GET", "/api/review/proposals").then((r) => (Array.isArray(r.proposals) ? r.proposals.map(standingOf).filter((s): s is Standing => s !== null) : [])),
   commit: (s: Standing) => door<CommitAnswer>("POST", "/api/decisions/commit", commitStandingBody(s)),
-  campaign: (s: Standing, name: string) => door<RestAnswer>("POST", "/api/review/proposals/campaign", { model: String(s.model.id), axis: s.axis, ...(name.trim() ? { name: name.trim() } : {}) }),
+  campaign: (s: Standing, name: string, limit?: number, order?: RestOrder) => door<RestAnswer>("POST", "/api/review/proposals/campaign", restBody(s, name, limit, order)),
 };
 
 const nf = (v: number) => v.toLocaleString("en-US");
@@ -341,10 +363,4 @@ export function commitWords(s: Standing): string {
 /** The campaign's button. */
 export function campaignWords(s: Standing): string {
   return `Make a campaign of the other ${nf(s.below.stacks)} for me`;
-}
-
-/** What a commit did, said after it. */
-export function committedStandingWords(s: Standing, r: CommitAnswer): string {
-  const resort = r.resort?.words ? ` ${r.resort.words.charAt(0).toUpperCase()}${r.resort.words.slice(1)}.` : "";
-  return `Committed ${nf(s.commit.stacks)} ${s.axis} answers of ${s.label}.${resort}`;
 }

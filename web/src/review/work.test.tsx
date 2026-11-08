@@ -21,8 +21,8 @@ import { fromCampaigns, parse } from "../routes";
 import { button, dialogs, settle } from "../../test/safeWayIn";
 import { familyOf, itemWords, kindTag } from "./client";
 import { fakeEngine } from "./mainScans.fixture";
-import { CAMPAIGNS, ME, QUESTIONS, QUESTIONS_RAW, STANDING_ROWS, STANDINGS, SUMMARY, SUMMARY_OLD } from "./work.fixture";
-import { alsoRows, alsoSummary, alsoWords, askedHere, axisCards, axisTitle, campaignBand, heldCount, modelWords, queuedCount, readerOf, reasonLine, shareWords, sortStandings, standingMeta, standingTitle, theirs } from "./work";
+import { CAMPAIGNS, ME, QUESTIONS, QUESTIONS_RAW, STANDINGS, STANDING_ROWS, SUMMARY, SUMMARY_OLD } from "./work.fixture";
+import { alsoRows, alsoSummary, alsoWords, askedHere, axisCards, axisTitle, campaignBand, heldCount, modelInWords, modelSub, modelWords, queuedCount, readerOf, reasonLine, shareWords, sortStandings, standingMeta, standingTitle, theirs } from "./work";
 import { WorkBody, WorkPage } from "./WorkPage";
 
 const list = (listed as { campaigns: Campaign[] }).campaigns;
@@ -37,14 +37,23 @@ describe("the words", () => {
     expect(axisTitle("post_contrast")).toBe("Post-contrast");
     expect(axisTitle("body_part")).toBe("Body part");
     expect(axisTitle("body_region")).toBe("Body region");
-    expect(modelWords(STANDINGS[0])).toBe("NILS post-contrast model 0.3.1");
-    expect(modelWords({ model: { id: 9, name: "region-head", version: "2" }, label: "region-head@2" })).toBe("region-head 2");
-    expect(modelWords({ model: { id: 9, name: "region-head", version: "" }, label: "region-head" })).toBe("region-head");
-    expect(standingTitle(STANDINGS[0])).toBe("Post-contrast · NILS post-contrast model 0.3.1");
+    // UX round 5, finding 2: the model as a person names it, by its family; the registry's name@version under it
+    expect(modelWords(STANDINGS[0])).toBe("Post-contrast model");
+    expect(modelWords(STANDINGS[1])).toBe("Body part model");
+    expect(modelWords({ model: { id: 9, name: "bodypart-fusion-coarse", version: "r7" }, label: "bodypart-fusion-coarse@r7" })).toBe("Body part model");
+    expect(modelWords({ model: { id: 9, name: "postcontrast-cascade", version: "c1-fs3-m" }, label: "postcontrast-cascade@c1-fs3-m" })).toBe("Post-contrast model");
+    expect(modelWords({ model: { id: 9, name: "kineuro/nils-system1", version: "0.2" }, label: "kineuro/nils-system1@0.2" })).toBe("System 1");
+    expect(modelWords({ model: { id: 9, name: "region-head", version: "2" }, label: "region-head@2" })).toBe("region-head");
+    expect(modelSub(STANDINGS[0])).toBe("nils-postcontrast@0.3.1");
+    expect(modelInWords(STANDINGS[0])).toBe("the post-contrast model");
+    expect(modelInWords({ model: { id: 9, name: "nils-system1", version: "1" }, label: "nils-system1@1" })).toBe("System 1");
+    expect(modelInWords({ model: { id: 9, name: "region-head", version: "2" }, label: "region-head@2" })).toBe("region-head");
+    expect(modelSub({ model: { id: 9, name: "region-head", version: "2" }, label: "" })).toBe("region-head@2");
+    expect(standingTitle(STANDINGS[0])).toBe("Post-contrast · Post-contrast model");
   });
 
-  it("say a model's line: sure at the threshold, unsure, in a campaign already, moved on", () => {
-    expect(standingMeta(STANDINGS[0])).toBe("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 moved on");
+  it("say a model's line: sure at the threshold, unsure, in a campaign already, proposed before the data changed", () => {
+    expect(standingMeta(STANDINGS[0])).toBe("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 proposed before the data changed");
     expect(standingMeta(STANDINGS[1])).toBe("59 sure at 0.90 or above · 0 unsure");
     expect(standingMeta({ ...STANDINGS[1], threshold: null })).toBe("59 sure · 0 unsure");
     expect(sortStandings([STANDINGS[1], STANDINGS[0]]).map((s) => s.axis)).toEqual(["post_contrast", "body_part"]);
@@ -232,9 +241,10 @@ describe("the page", () => {
     expect(html).not.toContain("<h1>Work</h1>");
     expect(bands(html)).toEqual(["Proposed by models", "Scans to answer", "Campaigns"]);
     // band 1: two cards, the most proposed first, with Commit and Read on the card
-    expect(cards(html, "proposed")).toEqual(["Post-contrast · NILS post-contrast model 0.3.1", "Body part · NILS body part model 1.2.0"]);
+    expect(cards(html, "proposed")).toEqual(["Post-contrast · Post-contrast model", "Body part · Body part model"]);
+    expect(html).toContain('<span class="rv-sub path">nils-postcontrast@0.3.1</span>');
     expect(html).toContain("<b>50,006</b><span>proposed</span>");
-    expect(html).toContain("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 moved on");
+    expect(html).toContain("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 proposed before the data changed");
     expect(html).toContain(">Commit 1,701</button>");
     expect(html).toContain(">Read the 190</button>");
     expect(html).toContain(">Commit 59</button>");
@@ -369,7 +379,7 @@ describe("a reviewer's page", () => {
     });
     await act(async () => root.render(<WorkPage caps={caps} />));
     await settle(8);
-    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Post-contrast · NILS post-contrast model 0.3.1", "Body part · NILS body part model 1.2.0"]);
+    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Post-contrast · Post-contrast model", "Body part · Body part model"]);
     act(() => button(host, "Commit 1,701")!.click());
     const d = host.querySelector<HTMLDialogElement>("dialog[open]")!;
     expect(d.querySelector("h2")?.textContent).toBe("Commit at or above the threshold");
@@ -377,8 +387,8 @@ describe("a reviewer's page", () => {
     await settle(8);
     expect(e.of("POST", "/api/decisions/commit").map((c) => c.body)).toEqual([{ model: "7", axis: "post_contrast", anyway: true }]);
     expect(host.querySelector("dialog[open]")).toBeNull();
-    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,701 post_contrast answers of nils-postcontrast@0.3.1. Re-sorted 1,701 scans.");
-    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Body part · NILS body part model 1.2.0"]);
+    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,701 post-contrast answers. Re-sorted 1,701 scans.");
+    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Body part · Body part model"]);
     // Read opens the campaign of the rest, which asks only its name
     act(() => button(host, "Read the 26")?.click());
     expect(e.of("GET", "/api/review/proposals").length).toBeGreaterThanOrEqual(2);

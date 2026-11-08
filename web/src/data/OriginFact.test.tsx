@@ -60,7 +60,7 @@ describe("a label's origin", () => {
     const h = show(rules);
     const b = h.querySelector("button.origin")!;
     expect(b.getAttribute("data-tone")).toBe("rules");
-    expect(b.getAttribute("title")).toBe("Body part: Rules mri@1.4.0 · body_part/spine_words");
+    expect(b.getAttribute("title")).toBe("Body part: spine · from the header (rules 1.4.0)");
     press(b);
     const pop = h.querySelector(".origin-pop")!;
     expect(pop.textContent).toContain("Rules mri@1.4.0 · body_part/spine_words");

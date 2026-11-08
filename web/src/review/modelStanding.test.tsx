@@ -79,6 +79,7 @@ afterEach(() => {
   host.remove();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 function engine(rows: () => unknown[], more: (c: FakeCall) => { status: number; body?: unknown } | undefined = () => undefined) {
@@ -118,14 +119,23 @@ describe("the Proposals page", () => {
     expect(host.textContent).not.toContain("body_part now");
   });
 
-  it("commits the ones at or above the threshold after a confirm that counts them, and shows what is left", async () => {
+  it("commits after a one-paragraph confirm whose button goes quiet while the call is out; the dialog closes on the answer, the page follows the re-sort and shows what is left", async () => {
+    // the follow reads the job every few seconds: the clock is moved by hand
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     let committed = false;
+    let answer: (() => void) | null = null;
+    let jobReads = 0;
     const e = engine(
       () => [committed ? row({ staged: { groups: 1, stacks: 46 }, commit: { groups: 0, stacks: 0 }, drifted: 0 }) : row()],
       (c) => {
         if (c.method === "POST" && c.path === "/api/decisions/commit") {
           committed = true;
-          return { status: 200, body: { committed: [1, 2, 3, 4, 5, 6, 7, 8], items: 8, left: 1, split: [], resort: { state: "done", stacks: 1204, sorted: 1204, words: "re-sorted 1,204 scans" } } };
+          return { status: 200, body: { committed: [1, 2, 3, 4, 5, 6, 7, 8], items: 8, left: 1, split: [], resort: { state: "queued", job: 356, stacks: 1204, words: "1,204 scan(s) to sort again, queued as job 356" } } };
+        }
+        if (c.method === "GET" && c.path === "/api/jobs/356") {
+          jobReads += 1;
+          const done = jobReads === 1 ? 700 : 1204;
+          return { status: 200, body: { id: 356, kind: "resort", name: "re-sort after astrid committed 8 decision(s)", state: done < 1204 ? "running" : "done", progress: { done, of: 1204, what: "scans" }, error: null, result: null } };
         }
         return undefined;
       },
@@ -134,37 +144,96 @@ describe("the Proposals page", () => {
     press("Commit the 1,204 at or above the threshold");
     const d = dialog()!;
     expect(d.querySelector("h2")?.textContent).toBe("Commit at or above the threshold");
-    expect(d.querySelector(".lede")?.textContent).toBe("1,204 scans take bp-head@1's body_part, each at or above 0.90.");
-    const meta = d.querySelector(".dialog-body .meta")?.textContent ?? "";
-    expect(meta).toContain("In force under your name, and re-sorted, so every page shows the new body_part.");
-    expect(meta).toContain("Some were proposed before the data changed; committed as proposed.");
-    expect(meta).toContain("46 more wait for their campaign.");
-    expect(meta).toContain("The 4,838 below stay asked.");
+    // finding 3: the person's words, and nothing else
+    expect(d.querySelector(".lede")?.textContent).toBe("1,204 scans get body part = what the model proposed, at 0.90 or above, in your name. Every page shows it once they are sorted again.");
+    expect(d.querySelectorAll(".dialog-body p")).toHaveLength(1);
+    expect(d.textContent).not.toContain("In force under your name");
+    expect(d.textContent).not.toContain("proposed before the data changed");
+    // finding 1: the button is quiet while the call is out
+    const hold = new Promise<void>((r) => (answer = r));
+    const fetched = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+      const r = await fetched(input, init);
+      if (init?.method === "POST") await hold;
+      return r;
+    });
     press("Commit 1,204", d);
+    await settle(2);
+    const commit = button(d, /Committing/u) as HTMLButtonElement;
+    expect(commit.disabled).toBe(true);
+    expect(dialog()).not.toBeNull();
+    act(() => answer!());
     await settle(8);
     expect(e.of("POST", "/api/decisions/commit").map((c) => c.body)).toEqual([{ model: "7", axis: "body_part", anyway: true }]);
+    // the dialog closes the moment the engine answers; the page says what happened and follows the job
     expect(dialog()).toBeNull();
-    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,204 body_part answers of bp-head@1. Re-sorted 1,204 scans.");
+    expect(host.querySelector(".said")?.textContent).toMatch(/^Committed 1,204 body part answers · (sorting them again \(job 356\)|700 of 1,204 sorted again \(job 356\))$/u);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3500);
+    });
+    await settle(8);
+    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,204 body part answers · 1,204 of 1,204 sorted again");
+    expect(jobReads).toBe(2);
     // what is left: the campaign of the rest alone
     expect([...host.querySelectorAll(".proposal-card button")].map((b) => b.textContent)).toEqual(["Make a campaign of the other 4,838 for me"]);
   });
 
-  it("makes the rest a campaign for the person, asking only its name, and lands on it", async () => {
-    const e = engine(
+  it("says an older engine's re-sort words as they come", async () => {
+    engine(
       () => [row()],
-      (c) => (c.method === "POST" && c.path === "/api/review/proposals/campaign" ? { status: 201, body: { campaign: { id: 12, name: String(c.body?.name) }, adopted: 30, suggestions: { suggestions: 4838 }, counts: {} } } : undefined),
+      (c) => (c.method === "POST" && c.path === "/api/decisions/commit" ? { status: 200, body: { committed: [1], items: 1, left: 0, split: [], resort: { state: "done", stacks: 1204, sorted: 1204, words: "re-sorted 1,204 scans" } } } : undefined),
+    );
+    await open();
+    press("Commit the 1,204 at or above the threshold");
+    press("Commit 1,204", dialog()!);
+    await settle(8);
+    expect(dialog()).toBeNull();
+    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,204 body part answers. Re-sorted 1,204 scans.");
+  });
+
+  it("makes the rest a campaign for the person: its name, how many, which first and what it would take, then lands on it", async () => {
+    const e = engine(
+      () => [row({ below: { groups: 30, stacks: 4838, pace_s: 10.2 } })],
+      (c) => (c.method === "POST" && c.path === "/api/review/proposals/campaign" ? { status: 201, body: { campaign: { id: 12, name: String(c.body?.name) }, adopted: 4, suggestions: { suggestions: 500 }, counts: {}, left: 4338, limit: 500, order: "most_sure", seed: null } } : undefined),
     );
     await open();
     press("Make a campaign of the other 4,838 for me");
     const d = dialog()!;
-    expect(d.querySelector(".lede")?.textContent).toBe("4,838 scans below 0.90: bp-head@1's body_part filled in, for you to accept or correct.");
+    expect(d.querySelector(".lede")?.textContent).toBe("4,838 scans bp-head is unsure of, below 0.90: its answer filled in, for you to accept or correct.");
     const name = d.querySelector<HTMLInputElement>("input")!;
     expect(name.value).toBe("bp-head-body_part-unsure");
-    expect(d.querySelectorAll("input")).toHaveLength(1);
-    press("Make it", d);
+    // finding 9: a cap, 500 by default with the whole lot as the second choice, an order, and the estimate at the axis's pace
+    const radios = (group: string) => [...d.querySelectorAll<HTMLButtonElement>(`[role=radiogroup][aria-label="${group}"] [role=radio]`)];
+    expect(radios("How many").map((r) => [r.textContent, r.getAttribute("aria-checked")])).toEqual([
+      ["500", "true"],
+      ["All 4,838", "false"],
+    ]);
+    expect(radios("Which first").map((r) => [r.textContent, r.getAttribute("aria-checked")])).toEqual([
+      ["Least sure first", "true"],
+      ["Most sure first", "false"],
+      ["Random", "false"],
+    ]);
+    expect(d.querySelector(".rest-estimate")?.textContent).toBe("You alone read them: about 1 h 25 min at 10 s a scan.");
+    expect(button(d, /^Make a campaign of/u)?.textContent).toBe("Make a campaign of 500");
+    act(() => radios("How many")[1].click());
+    expect(d.querySelector(".rest-estimate")?.textContent).toBe("You alone read them: about 13 h 42 min at 10 s a scan.");
+    expect(button(d, /^Make a campaign of/u)?.textContent).toBe("Make a campaign of 4,838");
+    act(() => radios("How many")[0].click());
+    act(() => radios("Which first")[1].click());
+    press("Make a campaign of 500", d);
     await settle(8);
-    expect(e.of("POST", "/api/review/proposals/campaign").map((c) => c.body)).toEqual([{ model: "7", axis: "body_part", name: "bp-head-body_part-unsure" }]);
+    expect(e.of("POST", "/api/review/proposals/campaign").map((c) => c.body)).toEqual([{ model: "7", axis: "body_part", name: "bp-head-body_part-unsure", limit: 500, order: "most_sure" }]);
     expect(location.hash).toBe("#review/campaigns/12");
+  });
+
+  it("offers the whole lot alone where it is under the cap, and no estimate where the engine knows no pace", async () => {
+    engine(() => [row({ below: { groups: 3, stacks: 190 } })]);
+    await open();
+    press("Make a campaign of the other 190 for me");
+    const d = dialog()!;
+    expect([...d.querySelectorAll('[role=radiogroup][aria-label="How many"] [role=radio]')].map((r) => r.textContent)).toEqual(["All 190"]);
+    expect(d.querySelector(".rest-estimate")?.textContent).toBe("You alone read them.");
+    expect(button(d, /^Make a campaign of/u)?.textContent).toBe("Make a campaign of 190");
   });
 
   it("says a refusal and stays open", async () => {
@@ -174,7 +243,7 @@ describe("the Proposals page", () => {
     );
     await open();
     press("Make a campaign of the other 4,838 for me");
-    press("Make it", dialog()!);
+    press(/^Make a campaign of/u, dialog()!);
     await settle(8);
     expect(dialog()?.querySelector(".warn")?.textContent).toBe("Refused: a campaign named bp-head-body_part-unsure exists");
     expect(location.hash).toBe("#review/proposals");

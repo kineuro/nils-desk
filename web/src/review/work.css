@@ -25,6 +25,7 @@
 .work .rv-card.campaign { border-left-color: var(--n-brand-line); }
 .work .rv-card.adjudication { border-left-color: var(--n-caution-line); }
 .work .rv-title { font-weight: 600; overflow-wrap: anywhere; }
+.work .rv-sub { margin-top: -0.35rem; font-size: var(--n-text-size-small); color: var(--n-text-faint); overflow-wrap: anywhere; }
 a.rv-title, a.rv-title:hover { color: var(--n-text); }
 .work .rv-big { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 0.5rem; }
 .work .rv-big b { font-family: var(--n-font-serif); font-weight: 400; font-size: 1.75rem; line-height: 1.2; font-variant-numeric: tabular-nums; }

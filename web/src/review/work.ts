@@ -57,27 +57,45 @@ export function axisTitle(axis: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** A model as a person names it: the friendly name of a NILS model where the software table has one, else its name, then its version. */
+/**
+ * A model as a person names it (UX round 5, finding 2): by the family its name starts with, after any `nils-` or
+ * repository prefix: a body-part model is "Body part model", a post-contrast one "Post-contrast model", System 1
+ * "System 1"; any other model keeps its name. The registry's name@version goes under it (`modelSub`).
+ */
 export function modelWords(s: Pick<Standing, "model" | "label">): string {
-  const name = knownToolName(s.model.name) ?? s.model.name;
-  return s.model.version ? `${name} ${s.model.version}` : name;
+  const raw = s.model.name.toLowerCase();
+  const last = raw.split("/").pop() ?? raw;
+  const bare = last.replace(/^nils[-_]/u, "");
+  if (bare.startsWith("bodypart") || bare.startsWith("body-part") || bare.startsWith("body_part")) return "Body part model";
+  if (bare.startsWith("postcontrast") || bare.startsWith("post-contrast") || bare.startsWith("post_contrast")) return "Post-contrast model";
+  if (bare.startsWith("system1") || bare.startsWith("system-1") || bare.startsWith("system_1")) return "System 1";
+  return knownToolName(s.model.name) ?? s.model.name;
+}
+
+/** The model inside a sentence: "the body part model", "System 1", or a model's own name. */
+export function modelInWords(s: Pick<Standing, "model" | "label">): string {
+  const words = modelWords(s);
+  if (words === "System 1") return words;
+  return words.endsWith(" model") ? `the ${words.charAt(0).toLowerCase()}${words.slice(1)}` : words;
+}
+
+/** The registry's own name of the model, for the small line under a person's words: name@version. */
+export function modelSub(s: Pick<Standing, "model" | "label">): string {
+  return s.label || (s.model.version ? `${s.model.name}@${s.model.version}` : s.model.name);
 }
 
 // ------------------------------------------------------------ band 1: proposed by models
 
-/** A card's title: the axis, then the model. */
+/** A card's title: the axis, then the model as a person names it. */
 export function standingTitle(s: Standing): string {
   return `${axisTitle(s.axis)} · ${modelWords(s)}`;
 }
-
-/** The words behind "moved on", on hover: the commit dialog's own. */
-export const MOVED_ON_WORDS = "Some were proposed before the data changed; committed as proposed.";
 
 /** A card's one line: how many are sure and at what, how many unsure, and what waits elsewhere. */
 export function standingMeta(s: Standing): string {
   const parts = [`${n(s.commit.stacks)} sure${s.threshold === null ? "" : ` at ${s.threshold.toFixed(2)} or above`}`, `${n(s.below.stacks)} unsure`];
   if (s.held.stacks > 0) parts.push(`${n(s.held.stacks)} in a campaign already`);
-  if (s.drifted > 0) parts.push(`${n(s.drifted)} moved on`);
+  if (s.drifted > 0) parts.push(`${n(s.drifted)} proposed before the data changed`);
   return parts.join(" · ");
 }
 

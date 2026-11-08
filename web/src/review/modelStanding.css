@@ -1,0 +1,5 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+/* The campaign of the rest's choices (UX round 5): how many and which first, as chips under their label. */
+.rest-choice { margin: 0; padding: 0; border: 0; min-width: 0; }
+.rest-choice > legend { padding: 0; margin-bottom: 0.3rem; }
+.rest-estimate { margin: 0; }
