@@ -67,20 +67,23 @@ export interface QuestionsListProps {
   where: Where;
   failed?: string | null;
   since?: number;
+  /** Review's first page sends a person to one axis's questions (2026-11-08): only those are listed. */
+  axis?: string | null;
 }
 
 /** The questions in plain words, each with its distinct scans and why, and the way to its grid. */
-export function QuestionsList({ list, where, failed = null, since = Date.now() }: QuestionsListProps) {
+export function QuestionsList({ list, where, failed = null, since = Date.now(), axis = null }: QuestionsListProps) {
   if (failed) return <p className="warn">The questions could not be read: {failed}</p>;
   if (!list) return <Wait phase="reading the questions" since={since} size="line" />;
   const elsewhere = list.elsewhere.filter((e) => e.scans > 0);
+  const shown = axis ? list.questions.filter((q) => q.axis === axis) : list.questions;
   return (
     <section className="questions" aria-label="Questions">
-      {list.questions.length === 0 ? (
-        <p className="meta q-none">No question waits: the rules decided every scan.</p>
+      {shown.length === 0 ? (
+        <p className="meta q-none">{axis && list.questions.length > 0 ? `No ${axis.replaceAll("_", " ")} question waits.` : "No question waits: the rules decided every scan."}</p>
       ) : (
         <ul className="q-rows">
-          {list.questions.map((q) => (
+          {shown.map((q) => (
             <li key={q.key} className="q-row" data-key={q.key}>
               <a className="q-what" href={gridHref(q.key, where)}>
                 <span className="q-words">{q.words}</span>

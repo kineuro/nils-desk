@@ -23,7 +23,7 @@ import { RoundsBody } from "./RoundsPage";
 import { BlindShare, HeadersView, headersBy, shareOf, signsTitle } from "./S1Settings";
 import { gradeWords, neverAskedHolds, overriddenWords, owesBlind, pct, provisionalValue, rankWords } from "./s1";
 import { ROUND, SUGGESTIONS } from "./s1.fixture";
-import { jobOf, workList } from "./work";
+import { campaignBand, campaignMeta } from "./work";
 import { reviewPages } from "../home/placeholders";
 
 const item = (over: Partial<ReviewItem> = {}): ReviewItem => ({ id: 41, kind: "base:missing", scope: "stack", status: "open", ref: { stack_id: 1207 }, evidence: {}, created_at: "", ...over });
@@ -181,16 +181,12 @@ describe("the rounds", () => {
 describe("audit campaigns and a campaign's purpose", () => {
   const list = (listed as { campaigns: Campaign[] }).campaigns;
   const caps = capsFor({ doors: [...DOORS, "GET /api/review", "GET /api/review/summary"] });
-  it("an audit is a family of its own, said never to train, and absent while none is open", () => {
+  it("an audit is a campaign card that says it never trains (2026-11-08: no family of its own)", () => {
     const audit = { ...list[0], id: 99, name: "audit-round-3-draw-2", purpose: "audit", status: "open" } as Campaign;
-    expect(jobOf(audit)).toBe("audit");
-    const groups = workList(caps, null, [...list, audit]);
-    const g = groups.find((x) => x.job === "audit")!;
-    expect(g.title).toBe("Audit");
-    expect(g.line).toContain("Never trains");
-    expect(g.rows.map((r) => r.title)).toEqual(["audit-round-3-draw-2"]);
-    expect(g.rows[0].what).toContain("audit, never trains");
-    expect(workList(caps, null, list).some((x) => x.job === "audit")).toBe(false);
+    expect(campaignMeta(audit)).toBe("base · 11 values · audit, never trains");
+    const cards = campaignBand(caps, [...list, audit]);
+    expect(cards.filter((c) => c.campaign.id === 99 && c.kind === "campaign").map((c) => c.meta)).toEqual(["base · 11 values · audit, never trains"]);
+    expect(campaignBand(caps, list).some((c) => c.meta.includes("never trains"))).toBe(false);
   });
 
   it("the purpose rides on the make door; an audit suggests nothing and closes into nothing", () => {

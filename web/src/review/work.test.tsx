@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
 // SPDX-License-Identifier: AGPL-3.0-only
-// Review's one list of work (Wave 7a, record 55 H3; spec 13.2): the machine's
-// open questions by kind with their counts and the campaigns with their state
-// and the person's own share, each under the job a person does; a campaign's
-// items held in the queue as a family of their own; a rater who holds only
-// campaigns:* sees their campaigns and the page never reads the queue for
-// them; old Campaigns addresses lead to the same page inside Review.
+// Review's first page (redesigned 2026-11-08): the production case as a
+// fixture. What models proposed as cards with Commit and Read, the scans to
+// answer as one card per axis with the reasons summed in plain words, the
+// campaigns as cards with their one act, the person's own first, and what
+// else waits folded with its count; an engine without the proposals door
+// shows no proposals band; a rater who holds only campaigns:* sees their
+// campaigns alone and the page never reads the queue for them; nothing
+// proposed and nothing to answer shows the campaigns alone; old Campaigns
+// addresses lead to the same page inside Review.
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -16,36 +19,100 @@ import { capsFor, DOORS } from "../campaigns/caps.fixture";
 import type { Campaign } from "../campaigns/client";
 import { fromCampaigns, parse } from "../routes";
 import { familyOf, itemWords, kindTag } from "./client";
-import { heldCount, jobOf, machineRow, machineRows, queuedCount, readerOf, shareWords, theirs, workList } from "./work";
+import { CAMPAIGNS, ME, QUESTIONS, STANDINGS, SUMMARY } from "./work.fixture";
+import { alsoRows, alsoSummary, alsoWords, axisCards, axisTitle, campaignBand, heldCount, modelWords, queuedCount, readerOf, reasonLine, shareWords, sortStandings, standingMeta, standingTitle, theirs } from "./work";
 import { WorkBody, WorkPage } from "./WorkPage";
 
 const list = (listed as { campaigns: Campaign[] }).campaigns;
 const none = () => undefined;
-const NOW = Date.parse("2026-10-13T10:00:00Z");
-const REVIEW = [...DOORS, "GET /api/review", "GET /api/review/summary", "GET /api/picks/rules", "GET /api/campaigns/{id}/mine"];
-const summary = { by_kind: { "base:missing": 7, "body_part:model": 40, "pick.border": 3, "identity.collision": 2, "campaign.axis": 12, "classify.asked": 5 }, cohorts: [], none: 0 };
+const NOW = Date.parse("2026-11-08T10:00:00Z");
+const REVIEW = [...DOORS, "GET /api/review", "GET /api/review/summary", "GET /api/picks/rules", "GET /api/campaigns/{id}/mine", "GET /api/review/proposals", "POST /api/review/proposals/campaign", "GET /api/review/questions", "GET /api/review/questions/{key}/scans"];
+const caps = capsFor({ doors: REVIEW, principal: ME });
+const production = { caps, summary: SUMMARY, standings: STANDINGS, qlist: QUESTIONS, list: CAMPAIGNS, now: NOW, onMake: none };
 
-describe("the machine's questions", () => {
-  it("each kind is a row under its job, with where it is worked and its act", () => {
-    expect(machineRow("base:missing", 7)).toMatchObject({ job: "answer", title: "base: no value", count: 7, href: "#review/questions", act: "Answer" });
-    // record 56: the gate's questions too are answered from the list of questions
-    expect(machineRow("base:disagree", 3)).toMatchObject({ job: "answer", title: "base: the rules and System 1 disagree", href: "#review/questions", act: "Answer" });
-    expect(machineRow("body_part:model", 40)).toMatchObject({ job: "answer", href: "#review/proposals" });
-    expect(machineRow("pick.border", 3)).toMatchObject({ job: "pick", href: "#review/picks?earlier=1" });
-    expect(machineRow("identity.collision", 2)).toMatchObject({ job: "answer", title: "Subjects: may be one subject twice", href: "#review/identifiers", act: "Decide" });
-    expect(machineRow("pipeline:qc", 4)).toMatchObject({ job: "check" });
-    // a campaign's items are answered there, never a row of the queue's
-    expect(machineRow("campaign.axis", 12)).toBeNull();
-    expect(machineRow("base:missing", 0)).toBeNull();
+describe("the words", () => {
+  it("name an axis and a model as a person does", () => {
+    expect(axisTitle("post_contrast")).toBe("Post-contrast");
+    expect(axisTitle("body_part")).toBe("Body part");
+    expect(axisTitle("body_region")).toBe("Body region");
+    expect(modelWords(STANDINGS[0])).toBe("NILS post-contrast model 0.3.1");
+    expect(modelWords({ model: { id: 9, name: "region-head", version: "2" }, label: "region-head@2" })).toBe("region-head 2");
+    expect(modelWords({ model: { id: 9, name: "region-head", version: "" }, label: "region-head" })).toBe("region-head");
+    expect(standingTitle(STANDINGS[0])).toBe("Post-contrast · NILS post-contrast model 0.3.1");
   });
 
-  it("the most waiting first, and the queue's own count leaves the campaigns' items out", () => {
-    expect(machineRows(summary).map((r) => r.count)).toEqual([40, 7, 5, 3, 2]);
-    expect(heldCount(summary)).toBe(12);
-    expect(queuedCount(summary)).toBe(57);
+  it("say a model's line: sure at the threshold, unsure, in a campaign already, moved on", () => {
+    expect(standingMeta(STANDINGS[0])).toBe("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 moved on");
+    expect(standingMeta(STANDINGS[1])).toBe("59 sure at 0.90 or above · 0 unsure");
+    expect(standingMeta({ ...STANDINGS[1], threshold: null })).toBe("59 sure · 0 unsure");
+    expect(sortStandings([STANDINGS[1], STANDINGS[0]]).map((s) => s.axis)).toEqual(["post_contrast", "body_part"]);
   });
 
-  it("a campaign's item is a family of its own in the queue, named by its campaign", () => {
+  it("say a reason, counted", () => {
+    expect(reasonLine("missing", 1)).toBe("1 with no value");
+    expect(reasonLine("decision", 14)).toBe("14 where a decision disagrees");
+    expect(reasonLine("vote", 5)).toBe("5 where the rules disagree");
+    expect(reasonLine("disagree", 12)).toBe("12 where the rules and System 1 disagree");
+    expect(reasonLine("session", 1)).toBe("1 session question");
+    expect(reasonLine("conflict", 2000)).toBe("2,000 where the rules conflict");
+  });
+
+  it("say what else waits by its kind, never in the engine's words", () => {
+    expect(alsoWords("identity.same_instance")).toBe("The same scan under two subjects");
+    expect(alsoWords("identity.collision")).toBe("Two subject codes may be one person");
+    expect(alsoWords("identity.empty_study")).toBe("Studies with no files");
+    expect(alsoWords("identity.unmapped")).toBe("Files that need a subject code");
+    expect(alsoWords("linkage.provisional")).toBe("Files that need a subject code");
+    expect(alsoWords("release.shared_name")).toBe("Files that would share a name in a release");
+    expect(alsoWords("release.no_task")).toBe("A release with nothing to do");
+    expect(alsoWords("ingest.quarantine")).toBe("Files NILS could not read");
+    expect(alsoWords("pipeline:qc")).toBe("Results a run's checks flagged");
+    expect(alsoWords("classify.excluded")).toBe("Scans the rules set aside");
+    expect(alsoWords("classify.asked")).toBe("What System 1 asks");
+    expect(alsoWords("pick.border")).toBe("Occasions a pick run doubts");
+    expect(alsoWords("body_part:model")).toBe("Body part: scans a model proposes");
+    expect(alsoWords("something.odd")).toBe("something odd");
+  });
+});
+
+describe("the scans to answer", () => {
+  it("one card per axis from the questions, the reasons summed by their counts, one click to the scans", () => {
+    const cards = axisCards(QUESTIONS, SUMMARY);
+    expect(cards.map((c) => [c.title, c.scans])).toEqual([
+      ["Body part", 20],
+      ["Base", 19],
+      ["Construct", 7],
+      ["Modifier", 4],
+      ["Post-contrast", 3],
+    ]);
+    const by = Object.fromEntries(cards.map((c) => [c.axis, c]));
+    expect(by.body_part.meta).toBe("14 where a decision disagrees · 5 where the rules disagree · 1 with no value");
+    // several questions on the axis: the list, narrowed to it
+    expect(by.body_part.href).toBe("#review/questions?axis=body_part");
+    // one question: its grid
+    expect(by.post_contrast.href).toBe("#review/questions/post_contrast%3Amissing");
+    // a session's questions, which the questions doors do not carry, under their axis
+    expect(by.construct.meta).toBe("7 session questions");
+    expect(by.construct.href).toBe("#review/questions?axis=construct");
+    expect(by.base.meta).toBe("12 where the rules and System 1 disagree · 7 with no value");
+  });
+
+  it("without the questions doors, the summary's kinds by axis", () => {
+    const cards = axisCards(null, SUMMARY);
+    expect(cards.map((c) => [c.title, c.scans, c.meta])).toEqual([
+      ["Body part", 19, "14 where a decision disagrees · 5 where the rules disagree"],
+      ["Base", 7, "7 with no value"],
+      ["Construct", 7, "7 session questions"],
+      ["Modifier", 4, "4 session questions"],
+    ]);
+    expect(cards[0].href).toBe("#review/questions?axis=body_part");
+    expect(axisCards(null, null)).toEqual([]);
+    expect(axisCards({ ...QUESTIONS, questions: [] }, { by_kind: { "campaign.axis": 3 }, cohorts: [], none: 0 })).toEqual([]);
+  });
+
+  it("the queue's own count leaves the campaigns' items out, and a campaign's item is a family of its own", () => {
+    expect(heldCount(SUMMARY)).toBe(219);
+    expect(queuedCount(SUMMARY)).toBe(1282);
     expect(familyOf("campaign.axis")).toBe("campaigns");
     expect(kindTag("campaign.pair").words).toBe("campaign");
     const item = { id: 1, kind: "campaign.axis", scope: "stack", status: "open", ref: { stack_id: 4 }, evidence: { campaign: 6, campaign_name: "base-check" }, created_at: "" } as never;
@@ -54,26 +121,22 @@ describe("the machine's questions", () => {
 });
 
 describe("the campaigns", () => {
-  const caps = capsFor({ doors: REVIEW });
-  it("each under the job its readers do, read in its own reader", () => {
-    const ab = { ...list[0], source: { ab: { voters: ["rules", "judge"] } } } as Campaign;
-    expect(jobOf(ab)).toBe("settle");
-    expect(readerOf(ab)).toEqual({ view: "settle", act: "Settle" });
-    expect(jobOf({ ...list[0], question: { kind: "check" } })).toBe("check");
-    expect(jobOf({ ...list[0], question: { kind: "pick", role: "t1w" } })).toBe("pick");
-    expect(readerOf({ ...list[0], question: { kind: "pair" } })).toEqual({ view: "pairs", act: "Read" });
+  it("each open one a card with the act of its reader, the person's own first, then the most open; an adjudication a card of its own", () => {
+    const cards = campaignBand(caps, CAMPAIGNS);
+    expect(cards.map((c) => [c.campaign.name, c.kind, c.act, c.own])).toEqual([
+      ["body-part-curation-round-9", "campaign", "Rate", true],
+      ["post-contrast-pairs-r3", "campaign", "Read", true],
+      ["body-part-curation-round-9", "adjudication", "Adjudicate", true],
+      ["samseg-lesions-check", "campaign", "Check", false],
+      ["reference-ab-cert3", "campaign", "Settle", false],
+    ]);
+    expect(cards[0].href).toBe("#review/campaigns/11/rate");
+    expect(cards[2].href).toBe("#review/campaigns/11/adjudicate");
+    expect(cards[2].meta).toBe("3 to adjudicate");
+    expect(cards[4].meta).toBe("base, technique, modifier · audit, never trains");
+    // the closed ones are not cards
+    expect(cards.some((c) => c.campaign.status === "closed")).toBe(false);
     expect(readerOf({ ...list[0], question: { kind: "anchored" } })).toEqual({ view: "anchored", act: "Read" });
-  });
-
-  it("the whole list by job: questions first, Main scans under Pick, then the campaigns, and an adjudication under Settle", () => {
-    const groups = workList(caps, summary, list);
-    expect(groups.map((g) => g.job)).toEqual(["answer", "pick", "check", "settle"]);
-    const titles = (job: string) => groups.find((g) => g.job === job)!.rows.map((r) => r.title);
-    expect(titles("answer").slice(0, 4)).toEqual(["body_part: a model proposes", "base: no value", "System 1 asks", "Subjects: may be one subject twice"]);
-    expect(titles("pick")).toEqual(["Pick borders", "Main scans", "probe-pick"]);
-    expect(titles("settle")).toEqual(["base-check"]);
-    // the closed campaign is not on the list
-    expect(groups.flatMap((g) => g.rows).some((r) => r.title === "probe-axis")).toBe(false);
   });
 
   it("a rater sees the campaigns that are theirs, a reviewer every one", () => {
@@ -83,8 +146,7 @@ describe("the campaigns", () => {
     expect(theirs(rater, named)).toBe(true);
     expect(theirs(rater, other)).toBe(false);
     expect(theirs(caps, other)).toBe(true);
-    // and no question of the machine's is listed for them
-    expect(workList(rater, summary, [named]).flatMap((g) => g.rows).map((r) => r.title)).toEqual(["probe-pick"]);
+    expect(campaignBand(rater, [named, other]).map((c) => c.campaign.name)).toEqual(["probe-pick"]);
   });
 
   it("says the person's own share", () => {
@@ -94,22 +156,109 @@ describe("the campaigns", () => {
   });
 });
 
+describe("what else waits", () => {
+  it("every kind no band shows, the most first, then Main scans, and the fold's line counts them", () => {
+    const rows = alsoRows(caps, SUMMARY, true);
+    expect(rows.map((r) => [r.words, r.count])).toEqual([
+      ["Files that would share a name in a release", 948],
+      ["The same scan under two subjects", 208],
+      ["Scans the rules set aside", 12],
+      ["Files that need a subject code", 6],
+      ["What System 1 asks", 5],
+      ["Files NILS could not read", 4],
+      ["Two subject codes may be one person", 3],
+      ["Main scans · each dataset's and cohort's picks", null],
+    ]);
+    expect(rows.map((r) => r.href).slice(0, 5)).toEqual(["#review/questions", "#review/identifiers", "#review/questions", "#review/identifiers", "#review/asked"]);
+    expect(rows[7].href).toBe("#review/picks");
+    expect(alsoSummary(rows)).toBe("Also waiting: 1,186 subjects, files and checks");
+    // without the proposals band, a model's proposals wait here, with the way to them
+    const older = alsoRows(caps, SUMMARY, false);
+    expect(older.find((r) => r.key === "kind:body_part:model")).toMatchObject({ words: "Body part: scans a model proposes", count: 59, href: "#review/proposals" });
+    expect(alsoSummary(older)).toBe("Also waiting: 1,245 subjects, files and checks");
+    // no Main scans without its door
+    expect(alsoRows(capsFor({ doors: DOORS, principal: ME }), SUMMARY, true).some((r) => r.key === "main-scans")).toBe(false);
+  });
+});
+
 describe("the page", () => {
-  it("draws each job with its rows, the held line, and Questions with the queue's own count", () => {
-    const html = renderToStaticMarkup(<WorkBody caps={capsFor({ doors: REVIEW })} summary={summary} list={list} mine={{ 6: 2 }} now={NOW} onMake={none} />);
-    expect(html).toContain("<h1>Work</h1>");
-    for (const t of ["Answer a question", "Pick a main scan", "Check a result", "Settle a disagreement"]) expect(html).toContain(`<h2>${t}</h2>`);
-    expect(html).not.toContain("Draw");
-    // the side carries Review's pages (record 55 H2, round 4): no tabs here
-    expect(html).not.toContain('class="chips pages"');
-    expect(html).toContain("12 questions are in campaigns, answered there.");
-    expect(html).toContain("base · 11 values · 2 of 6 yours");
-    // a row's kind is its border's colour, never a glyph
-    expect(html).toContain('class="work-row from-campaign"');
-    expect(html).toContain('class="work-row from-adjudication"');
-    expect(html).toContain('class="work-row from-machine"');
-    // Check a result has nothing yet, and says so
-    expect(html).toMatch(/<h2>Check a result<\/h2>.*?Nothing waits\./su);
+  const render = (over: Partial<Parameters<typeof WorkBody>[0]> = {}) => renderToStaticMarkup(<WorkBody {...production} onCommit={none} onRead={none} {...over} />);
+  const bands = (html: string) => [...html.matchAll(/<section class="rv-band" aria-label="([^"]+)"/gu)].map((m) => m[1]);
+  const cards = (html: string, kind: string) => [...html.matchAll(new RegExp(`<article class="rv-card ${kind}" aria-label="([^"]+)"`, "gu"))].map((m) => m[1]);
+
+  it("draws the production case as four bands of cards", () => {
+    const html = render();
+    expect(html).toContain("<h1>Review</h1>");
+    expect(html).not.toContain("<h1>Work</h1>");
+    expect(bands(html)).toEqual(["Proposed by models", "Scans to answer", "Campaigns"]);
+    // band 1: two cards, the most proposed first, with Commit and Read on the card
+    expect(cards(html, "proposed")).toEqual(["Post-contrast · NILS post-contrast model 0.3.1", "Body part · NILS body part model 1.2.0"]);
+    expect(html).toContain("<b>50,006</b><span>proposed</span>");
+    expect(html).toContain("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 moved on");
+    expect(html).toContain(">Commit 1,701</button>");
+    expect(html).toContain(">Read the 190</button>");
+    expect(html).toContain(">Commit 59</button>");
+    expect(html).not.toContain("Read the 0");
+    expect(html).toContain('href="#review/proposals">Value by value</a>');
+    // band 2: one card per axis with its sum and its reasons
+    expect(cards(html, "answer")).toEqual(["Body part", "Base", "Construct", "Modifier", "Post-contrast"]);
+    expect(html).toContain("<b>20</b><span>scans</span>");
+    expect(html).toContain("14 where a decision disagrees · 5 where the rules disagree · 1 with no value");
+    expect(html).toContain('href="#review/questions?axis=body_part">Answer</a>');
+    // band 3: the four open campaigns with their acts, and the adjudication
+    expect(cards(html, "campaign")).toEqual(["body-part-curation-round-9", "post-contrast-pairs-r3", "samseg-lesions-check", "reference-ab-cert3"]);
+    expect(cards(html, "adjudication")).toEqual(["body-part-curation-round-9"]);
+    for (const act of [">Rate</a>", ">Read</a>", ">Check</a>", ">Settle</a>", ">Adjudicate</a>"]) expect(html).toContain(act);
+    expect(html).toContain("audit, never trains");
+    expect(html).toContain("2 closed campaigns keep every answer");
+    // band 4: the fold, closed, its line counting what it holds
+    expect(html).toContain('<details class="rv-fold"><summary>Also waiting: 1,186 subjects, files and checks</summary>');
+    expect(html).toContain("Files that would share a name in a release");
+    // no engine words, no job groups, no lede
+    for (const gone of ["Waiting in the queue", "staged", "queue", "Answer a question", "Pick a main scan", "What the machine asks", "release shared name", "a model proposes</"]) expect(html).not.toContain(gone);
+    expect(html).not.toContain('class="lede"');
+  });
+
+  it("says the person's share on their campaign's card, and leaves a person who may not act the numbers alone", () => {
+    const html = render({ mine: { 15: 34 } });
+    expect(html).toContain("which is post · post_contrast · 34 of 120 yours");
+    const quiet = render({ onCommit: undefined, onRead: undefined });
+    expect(quiet).not.toContain(">Commit ");
+    expect(quiet).not.toContain(">Read the ");
+    expect(quiet).toContain("<b>50,006</b><span>proposed</span>");
+  });
+
+  it("an engine without the proposals door shows no proposals band, and the model's proposals wait in the fold", () => {
+    const html = render({ standings: null });
+    expect(bands(html)).toEqual(["Scans to answer", "Campaigns"]);
+    expect(html).toContain("Body part: scans a model proposes");
+    expect(html).toContain("Also waiting: 1,245 subjects, files and checks");
+  });
+
+  it("a rater who holds only campaigns:* sees the campaigns alone", () => {
+    const rater = capsFor({ grants: ["campaigns:see", "campaigns:work"], principal: "alice@walk", doors: REVIEW });
+    const theirsOnly = CAMPAIGNS.map((c) => (c.id === 15 ? ({ ...c, owner: "alice@walk", rater_policy: { raters: ["alice@walk"], adjudicators: [] } } as Campaign) : c));
+    const html = render({ caps: rater, summary: null, standings: null, qlist: null, list: theirsOnly });
+    expect(bands(html)).toEqual(["Campaigns"]);
+    expect(cards(html, "campaign")).toEqual(["post-contrast-pairs-r3"]);
+    expect(html).not.toContain("rv-fold");
+    // the make button stays grant-gated as before: a rater who may work campaigns has it
+    expect(html).toContain("Make a campaign");
+  });
+
+  it("nothing proposed and nothing to answer shows the campaigns alone", () => {
+    const html = render({ standings: [], qlist: { ...QUESTIONS, questions: [] }, summary: { by_kind: { "campaign.axis": 219 }, cohorts: [], none: 0 } });
+    expect(bands(html)).toEqual(["Campaigns"]);
+    expect(html).not.toContain("rv-fold");
+    const empty = render({ standings: [], qlist: { ...QUESTIONS, questions: [] }, summary: { by_kind: {}, cohorts: [], none: 0 }, list: [] });
+    expect(bands(empty)).toEqual([]);
+    expect(empty).toContain("Nothing waits.");
+  });
+
+  it("waits while anything is read, and says why a reading failed", () => {
+    const html = render({ since: NOW - 2000, standings: null, qlist: null, why: ["the proposals could not be read: 502"] });
+    expect(html).toContain("The proposals could not be read: 502");
+    expect(html).toContain("reading what waits");
   });
 });
 
@@ -127,7 +276,7 @@ describe("a rater's page", () => {
     vi.unstubAllGlobals();
   });
 
-  it("reads the campaigns and their own share, never the queue", async () => {
+  it("reads the campaigns and their own share, never the queue, the proposals or the questions", async () => {
     const asked: string[] = [];
     vi.stubGlobal("fetch", async (input: RequestInfo | URL) => {
       const url = new URL(typeof input === "string" ? input : input instanceof URL ? input.href : input.url, "http://desk.test");
@@ -138,10 +287,11 @@ describe("a rater's page", () => {
     root = createRoot(host);
     await act(async () => root.render(<WorkPage caps={capsFor({ grants: ["campaigns:see", "campaigns:work"], principal: "alice@walk", doors: REVIEW })} />));
     for (let i = 0; i < 50 && !host.textContent?.includes("3 of 172 yours"); i++) await act(async () => new Promise((r) => setTimeout(r, 10)));
-    expect(host.textContent).toContain("The campaigns you read.");
+    expect(host.querySelector("h1")?.textContent).toBe("Review");
     expect(host.textContent).toContain("probe-pick");
     expect(host.textContent).toContain("3 of 172 yours");
     expect(asked.some((p) => p.startsWith("/api/review"))).toBe(false);
+    expect(host.querySelector(".rv-fold")).toBeNull();
     expect(host.querySelector('a[href="#review/questions"]')).toBeNull();
   });
 });

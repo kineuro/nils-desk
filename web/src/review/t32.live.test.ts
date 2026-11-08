@@ -28,7 +28,7 @@ import { bodyOf, given, keyAct, rowsOf, seatOf, type Seat } from "../campaigns/w
 import { REGISTRY, viewerDoors } from "../data/viewer";
 import { picksDoors } from "../data/picksHeat";
 import { review, type ReviewSummary } from "./client";
-import { heldCount, workList } from "./work";
+import { alsoRows, axisCards, campaignBand, heldCount } from "./work";
 
 const ENGINE = process.env.T32_ENGINE ?? "";
 const PEOPLE = (process.env.T32_TOKENS ?? "")
@@ -218,14 +218,18 @@ describe.skipIf(!ENGINE || PEOPLE.length < 3)("T32 on a live engine over a lab r
   it("Review's one list, as a reviewer and as a rater who never reads the queue", { timeout: 60_000 }, async () => {
     const summary = (await as(CAROL, () => review.summary())) as ReviewSummary;
     const list = await as(CAROL, () => campaigns.list());
-    const groups = workList(caps, summary, list);
-    for (const g of groups) say(`${g.title}: ${g.rows.length} rows, ${g.waiting} waiting (${g.rows.map((r) => r.title).slice(0, 4).join("; ")})`);
-    expect(groups.flatMap((g) => g.rows).length).toBeGreaterThan(0);
+    const axes = axisCards(null, summary);
+    const cards = campaignBand(caps, list);
+    const also = alsoRows(caps, summary, false);
+    say(`scans to answer: ${axes.map((a) => `${a.title} ${a.scans}`).join("; ")}`);
+    say(`campaigns: ${cards.map((c) => `${c.campaign.name} ${c.act}`).slice(0, 6).join("; ")}`);
+    say(`also waiting: ${also.map((r) => `${r.words} ${r.count ?? ""}`).slice(0, 6).join("; ")}`);
+    expect(axes.length + cards.length + also.length).toBeGreaterThan(0);
     // alice holds campaigns:* only: her list is her campaigns, and the engine refuses her the queue
     const aliceEngine = await as(ALICE, () => door<EngineCapabilities>("GET", "/api/capabilities"));
     const alice = capsOf(aliceEngine, ALICE.who);
-    const hers = workList(alice, null, await as(ALICE, () => campaigns.list()));
-    say(`alice's list: ${hers.flatMap((g) => g.rows).map((r) => r.title).join("; ")}`);
+    const hers = campaignBand(alice, await as(ALICE, () => campaigns.list()));
+    say(`alice's campaigns: ${hers.map((c) => c.campaign.name).join("; ")}`);
     const refused = await as(ALICE, () => review.summary()).then(
       () => 200,
       (e: { status?: number }) => e.status ?? 0,
