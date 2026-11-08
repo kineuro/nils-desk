@@ -50,7 +50,7 @@ for (const [w, h] of [[1440, 900], [390, 844]] as const) {
   test(`work with the audit family at ${w}`, async ({ page }) => {
     await page.setViewportSize({ width: w, height: h });
     await page.goto("/s1.html?view=work");
-    await expect(page.locator(".work-group.job-audit")).toHaveCount(1);
+    await expect(page.locator(".rv-card.campaign", { hasText: "audit, never trains" })).toHaveCount(1);
     await noSideways(page);
     await shot(page, `work-audit-${w}`);
   });

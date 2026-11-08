@@ -18,8 +18,10 @@ import listed from "../../test/fixtures/campaigns/list.json";
 import { capsFor, DOORS } from "../campaigns/caps.fixture";
 import type { Campaign } from "../campaigns/client";
 import { fromCampaigns, parse } from "../routes";
+import { button, dialogs, settle } from "../../test/safeWayIn";
 import { familyOf, itemWords, kindTag } from "./client";
-import { CAMPAIGNS, ME, QUESTIONS, STANDINGS, SUMMARY } from "./work.fixture";
+import { fakeEngine } from "./mainScans.fixture";
+import { CAMPAIGNS, ME, QUESTIONS, QUESTIONS_RAW, STANDING_ROWS, STANDINGS, SUMMARY } from "./work.fixture";
 import { alsoRows, alsoSummary, alsoWords, axisCards, axisTitle, campaignBand, heldCount, modelWords, queuedCount, readerOf, reasonLine, shareWords, sortStandings, standingMeta, standingTitle, theirs } from "./work";
 import { WorkBody, WorkPage } from "./WorkPage";
 
@@ -293,6 +295,55 @@ describe("a rater's page", () => {
     expect(asked.some((p) => p.startsWith("/api/review"))).toBe(false);
     expect(host.querySelector(".rv-fold")).toBeNull();
     expect(host.querySelector('a[href="#review/questions"]')).toBeNull();
+  });
+});
+
+describe("a reviewer's page", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    dialogs();
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("commits a model's sure answers from its card through the confirm, says what it did, and reads the page again", async () => {
+    let committed = false;
+    const e = fakeEngine((c) => {
+      if (c.method === "GET" && c.path === "/api/review/summary") return { status: 200, body: SUMMARY };
+      if (c.method === "GET" && c.path === "/api/review/proposals") return { status: 200, body: { count: 2, proposals: committed ? [STANDING_ROWS[1]] : STANDING_ROWS } };
+      if (c.method === "GET" && c.path === "/api/review/questions") return { status: 200, body: QUESTIONS_RAW };
+      if (c.method === "GET" && c.path === "/api/campaigns") return { status: 200, body: { count: CAMPAIGNS.length, campaigns: CAMPAIGNS } };
+      if (c.method === "GET" && /\/api\/campaigns\/\d+\/mine$/u.test(c.path)) return { status: 200, body: { count: 0, total: 0, values: {}, answers: [] } };
+      if (c.method === "POST" && c.path === "/api/decisions/commit") {
+        committed = true;
+        return { status: 200, body: { committed: [1], items: 88, left: 1, split: [], resort: { state: "done", stacks: 1701, words: "re-sorted 1,701 scans" } } };
+      }
+      return undefined;
+    });
+    await act(async () => root.render(<WorkPage caps={caps} />));
+    await settle(8);
+    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Post-contrast · NILS post-contrast model 0.3.1", "Body part · NILS body part model 1.2.0"]);
+    act(() => button(host, "Commit 1,701")!.click());
+    const d = host.querySelector<HTMLDialogElement>("dialog[open]")!;
+    expect(d.querySelector("h2")?.textContent).toBe("Commit at or above the threshold");
+    act(() => button(d, "Commit 1,701")!.click());
+    await settle(8);
+    expect(e.of("POST", "/api/decisions/commit").map((c) => c.body)).toEqual([{ model: "7", axis: "post_contrast", anyway: true }]);
+    expect(host.querySelector("dialog[open]")).toBeNull();
+    expect(host.querySelector(".said")?.textContent).toBe("Committed 1,701 post_contrast answers of nils-postcontrast@0.3.1. Re-sorted 1,701 scans.");
+    expect([...host.querySelectorAll<HTMLElement>(".rv-card.proposed")].map((c) => c.getAttribute("aria-label"))).toEqual(["Body part · NILS body part model 1.2.0"]);
+    // Read opens the campaign of the rest, which asks only its name
+    act(() => button(host, "Read the 26")?.click());
+    expect(e.of("GET", "/api/review/proposals").length).toBeGreaterThanOrEqual(2);
   });
 });
 

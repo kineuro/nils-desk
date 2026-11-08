@@ -29,29 +29,29 @@ const answers = (answersOpen as { answers: Answer[] }).answers;
 const none = () => undefined;
 const NOW = Date.parse("2026-09-24T10:00:00Z");
 
-describe("the list, inside Review's one list of work", () => {
+describe("the campaigns, as cards on Review's first page", () => {
   const html = renderToStaticMarkup(<WorkBody caps={capsFor({ grants: RATER, principal: "alice@walk" })} summary={null} list={list} now={NOW} onMake={none} />);
 
-  it("lists the open campaigns under their job with their question and items by state, and keeps the closed ones apart", () => {
-    expect(html).toContain("<h1>Work</h1>");
-    expect(html).toContain('<a class="work-title" href="#review/campaigns/6/rate">base-check</a>');
-    expect(html).toContain("campaign · base · 11 values");
+  it("one card per open campaign with its question and items by state, the most open first, and the closed ones apart", () => {
+    expect(html).toContain("<h1>Review</h1>");
+    expect(html).toContain('<article class="rv-card campaign" aria-label="base-check">');
+    expect(html).toContain('<a class="rv-title" href="#review/campaigns/6">base-check</a>');
+    expect(html).toContain('<span class="rv-meta">base · 11 values</span>');
     expect(html).toContain("1 to adjudicate · 2 agreed of 6");
     expect(html).toContain('<i class="s-ok" style="width:33.3%"></i>');
-    // the pick campaign is a session's main scan, job type 2
-    expect(html.indexOf("probe-pick")).toBeGreaterThan(html.indexOf("Pick a main scan"));
-    expect(html.indexOf("probe-pick")).toBeLessThan(html.indexOf("Check a result"));
+    // the most open first: the pick campaign's 172 before the forms' 6
+    expect(html.indexOf("probe-pick")).toBeLessThan(html.indexOf("probe-form"));
     expect(html).toContain("1 closed campaign keeps every answer");
     expect(html.indexOf("probe-axis")).toBeGreaterThan(html.indexOf("closed campaign keeps"));
   });
 
   it("offers Rate where the person may claim, Adjudicate only to a named adjudicator, and Make with work", () => {
-    expect(html).toContain('href="#review/campaigns/6/rate"');
+    expect(html).toContain('<a class="button" href="#review/campaigns/6/rate">Rate</a>');
     expect(html).not.toContain('href="#review/campaigns/6/adjudicate"');
     expect(html).toContain("Make a campaign");
     const carol = renderToStaticMarkup(<WorkBody caps={capsFor({ principal: "carol@walk" })} summary={null} list={list} now={NOW} onMake={none} />);
-    expect(carol).toContain('href="#review/campaigns/6/adjudicate"');
-    expect(carol.indexOf("#review/campaigns/6/adjudicate")).toBeGreaterThan(carol.indexOf("Settle a disagreement"));
+    expect(carol).toContain('<article class="rv-card adjudication" aria-label="base-check">');
+    expect(carol).toContain('<a class="button" href="#review/campaigns/6/adjudicate">Adjudicate</a>');
     const looker = renderToStaticMarkup(<WorkBody caps={capsFor({ grants: ["campaigns:see"] })} summary={null} list={list} now={NOW} onMake={none} />);
     expect(looker).not.toContain("/rate");
     expect(looker).not.toContain("Make a campaign");

@@ -23,10 +23,12 @@ for (const vp of VIEWPORTS) {
   test.describe(`${vp.width} by ${vp.height}`, () => {
     test.use({ viewport: { width: vp.width, height: vp.height } });
 
-    test("arriving from Work's row shows the Proposals tab, and each model and axis is a card with its two acts", async ({ page }) => {
+    test("Review's first page shows the proposals as cards with Commit and Read; Value by value opens the Proposals page on its tab, and each model and axis is a card with its two acts", async ({ page }) => {
       await page.goto("/proposals.html#review");
-      await expect(page.locator("h1")).toHaveText("Work");
-      const open = page.locator(".work-row", { hasText: "a model proposes" }).locator(".work-act a");
+      await expect(page.locator("h1")).toHaveText("Review");
+      await expect(page.locator(".rv-card.proposed")).toHaveCount(2);
+      await expect(page.locator(".rv-card.proposed").first().getByRole("button")).toHaveText(["Commit 1,204", "Read the 4,838"]);
+      const open = page.getByRole("link", { name: "Value by value" });
       await open.scrollIntoViewIfNeeded();
       await open.click();
       await expect(page.locator("h1")).toHaveText("What models proposed");
