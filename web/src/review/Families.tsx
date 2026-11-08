@@ -20,6 +20,7 @@ import { modelGroups, standingActs, standingDoors, type Standing } from "./model
 import { ModelFamily } from "./ModelFamily";
 import { CommitStandingDialog, RestCampaignDialog, StandingCard } from "./ModelStanding";
 import { PickDialog } from "./PickDialog";
+import { gridHref, gridServed } from "./proposalGrid";
 import { borderOf, borderWords, occasionWords, PICK_BORDER, rolesOffered, type Border } from "./picks";
 
 const n = (v: number) => v.toLocaleString("en-US");
@@ -179,7 +180,7 @@ function ProposalStandings({ caps, acts, onChanged }: { caps: Capabilities; acts
       <Reading load={load} what="the proposals" />
       {load.kind === "ready" && list.length === 0 && <p className="meta">Nothing proposed. A model run from Pipelines proposes its values here.</p>}
       {list.map((s) => (
-        <StandingCard key={`${s.model.id}|${s.axis}`} s={s} acts={acts} onCommit={() => setCommitting(s)} onCampaign={() => setMaking(s)} />
+        <StandingCard key={`${s.model.id}|${s.axis}`} s={s} acts={acts} onCommit={() => setCommitting(s)} onCampaign={() => setMaking(s)} reviewHref={gridServed(caps) ? gridHref(s.model.id, s.axis) : null} />
       ))}
       {load.kind === "ready" && list.length > 0 && (
         <details className="proposal-groups" onToggle={(e) => setGroups((e.target as HTMLDetailsElement).open)}>

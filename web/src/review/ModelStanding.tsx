@@ -17,7 +17,7 @@ import { campaignWords, commitWords, committedStandingWords, standingDoors, thre
 const n = (v: number) => v.toLocaleString("en-US");
 
 /** One model's proposals on one axis: what waits, and the two acts. */
-export function StandingCard({ s, acts, onCommit, onCampaign }: { s: Standing; acts: { commit: boolean; campaign: boolean }; onCommit: () => void; onCampaign: () => void }) {
+export function StandingCard({ s, acts, onCommit, onCampaign, reviewHref = null }: { s: Standing; acts: { commit: boolean; campaign: boolean }; onCommit: () => void; onCampaign: () => void; reviewHref?: string | null }) {
   const nothing = s.commit.stacks === 0 && s.below.stacks === 0;
   return (
     <article className="panel card proposal-card" aria-label={`${s.axis} by ${s.label}`}>
@@ -33,8 +33,13 @@ export function StandingCard({ s, acts, onCommit, onCampaign }: { s: Standing; a
               {commitWords(s)}
             </button>
           )}
+          {reviewHref && s.below.stacks > 0 && (
+            <a className="button" href={reviewHref}>
+              Review the {n(s.below.stacks)}
+            </a>
+          )}
           {s.below.stacks > 0 && (
-            <button type="button" className={s.commit.stacks > 0 ? "button secondary" : "button"} disabled={!acts.campaign} onClick={onCampaign}>
+            <button type="button" className={s.commit.stacks > 0 || reviewHref ? "button secondary" : "button"} disabled={!acts.campaign} onClick={onCampaign}>
               {campaignWords(s)}
             </button>
           )}

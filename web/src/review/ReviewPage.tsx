@@ -25,6 +25,8 @@ import { kindOf } from "./triage";
 import { ExplainDialog } from "./Explain";
 import { filterKind, queueFilterOf } from "./filter";
 import { QuestionGrid, QuestionsList } from "./Questions";
+import { ProposalGrid } from "./ProposalGrid";
+import { gridServed } from "./proposalGrid";
 import { kindsAnswered, questions, questionsServed, whereOf, type QuestionList, type Where } from "./questions";
 import { AskedFamily, PicksFamily, ProposalsFamily } from "./Families";
 import { IdentifiersPage } from "./Identifiers";
@@ -96,6 +98,8 @@ export function ReviewPage(props: { caps: Capabilities; page: string | null; arg
   if (page === "label-sets") return <LabelSetPages caps={caps} id={arg} />;
   // record 56 section 6.3: one question, as a grid of its scans
   if (page === "questions" && arg !== null && arg !== "" && questionsServed(caps)) return <QuestionGrid key={`${arg}|${query?.dataset ?? ""}|${query?.cohort ?? ""}`} caps={caps} qkey={arg} where={whereOf(query)} />;
+  // UX round 5: a model's proposals on one axis as a grid, accepted in one move: #review/proposals/<model>/<axis>
+  if (page === "proposals" && arg !== null && arg !== "" && sub !== null && sub !== "" && gridServed(caps)) return <ProposalGrid key={`${arg}|${sub}`} caps={caps} model={arg} axis={sub} query={query} />;
   // record 55 D3 and D7: the rounds, what each accepted and its blind audit
   if (page === "rounds" && may(caps, "review:see") && served(caps, "GET /api/review/rounds")) return <RoundsPage caps={caps} />;
   const narrowed = query !== undefined && Object.keys(query).length > 0;
