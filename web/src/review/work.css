@@ -1,42 +1,60 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
-/* Review's one list of work (Wave 7a, record 55 H3): a group per job, a row
-   per kind of the machine's questions or per campaign. A row's kind is its
-   left border's colour, never a glyph: the machine's questions neutral, a
-   campaign the brand's, an adjudication the caution's. On a phone a row's
-   bar and act wrap under its words; nothing scrolls sideways. Theme tokens
-   only. */
+/* Review's first page (redesigned 2026-11-08): bands of cards as Data's page
+   draws them, a card at most a title, one big number with its noun, a line
+   and its acts. A card's kind is its left border's colour, never a glyph: a
+   model's proposals and the rules' questions neutral, a campaign the brand's,
+   an adjudication the caution's. The grid stacks to one column on a phone;
+   nothing scrolls sideways. Theme tokens only. */
 
-.work .work-group { display: grid; gap: 0.5rem; margin-top: 1.2rem; }
-.work .work-group .section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.7rem; }
-.work .work-group .section-head h2 { margin: 0; }
-.work .work-empty, .work .work-held { margin: 0; }
-.work .chips .opt b { margin-left: 0.35rem; font-weight: 500; }
-.work .chips.pages a { text-decoration: none; }
-
-.work-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }
-.work-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(10rem, 14rem) 7rem;
-  align-items: center;
-  gap: 0.4rem 1rem;
-  padding: 0.45rem 0.7rem;
+.work .rv-band { display: grid; gap: 0.625rem; }
+.work .rv-band-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.2rem 0.625rem; }
+.work .rv-band-head .eyebrow { margin: 0; }
+.work .rv-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16.125rem), 1fr)); }
+.work .rv-grid.campaigns { grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr)); }
+.work .rv-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.75rem 0.875rem;
   border: 1px solid var(--n-line);
   border-left: 3px solid var(--n-neutral-line);
   border-radius: var(--n-radius);
   background: var(--n-bg-raised);
 }
-.work-row.from-campaign { border-left-color: var(--n-brand-line); }
-.work-row.from-adjudication { border-left-color: var(--n-caution-line); }
-.work-row.from-closed { grid-template-columns: minmax(0, 1fr) minmax(10rem, 14rem); }
-.work-what { display: grid; gap: 0.1rem; min-width: 0; }
-.work-title { font-weight: 500; overflow-wrap: anywhere; }
-.work-what .meta { overflow-wrap: anywhere; }
-.work-count { font-family: var(--n-font-serif); font-size: 1.2rem; text-align: right; }
-.work-act { display: flex; justify-content: flex-end; }
+.work .rv-card.campaign { border-left-color: var(--n-brand-line); }
+.work .rv-card.adjudication { border-left-color: var(--n-caution-line); }
+.work .rv-title { font-weight: 600; overflow-wrap: anywhere; }
+a.rv-title, a.rv-title:hover { color: var(--n-text); }
+.work .rv-big { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 0.5rem; }
+.work .rv-big b { font-family: var(--n-font-serif); font-weight: 400; font-size: 1.75rem; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.work .rv-big span { font-size: var(--n-text-size-small); color: var(--n-text-faint); }
+.work .rv-meta { font-size: var(--n-text-size-small); color: var(--n-text-dim); overflow-wrap: anywhere; }
+.work .rv-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: auto; }
+.work .rv-card .state-bar { min-width: 0; }
+.work .rv-quiet { justify-self: start; font-size: var(--n-text-size-small); }
+
+/* the folds: what else waits, and the closed campaigns */
+.work .rv-fold > summary, .work .rv-closed > summary { cursor: pointer; }
+.work .rv-fold > summary { font-size: var(--n-text-size-small); color: var(--n-text-dim); }
+.work .rv-rows { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.3rem; }
+.work .rv-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.3rem 0.875rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--n-line);
+  border-radius: var(--n-radius);
+  background: var(--n-bg-raised);
+  font-size: var(--n-text-size-small);
+}
+.work .rv-row-what { display: grid; gap: 0.1rem; min-width: 0; overflow-wrap: anywhere; }
+.work .rv-row-count { font-family: var(--n-font-serif); font-size: 1.1rem; text-align: right; font-variant-numeric: tabular-nums; }
+.work .rv-closed .rv-row { grid-template-columns: minmax(0, 1fr) minmax(10rem, 14rem); }
 
 @media (max-width: 640px) {
-  .work-row, .work-row.from-closed { grid-template-columns: minmax(0, 1fr) auto; }
-  .work-row .state-bar { grid-column: 1 / -1; min-width: 0; }
-  .work-row .work-count { grid-row: 1; grid-column: 2; }
-  .work-row .work-act { grid-column: 1 / -1; justify-content: flex-start; }
+  .work .rv-row, .work .rv-closed .rv-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .work .rv-row .state-bar { grid-column: 1 / -1; min-width: 0; }
+  .work .rv-row > .button { grid-column: 1 / -1; justify-self: start; }
 }

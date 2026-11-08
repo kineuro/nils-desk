@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Review's first page (Wave 7a, record 55 H3; spec 13.2): one list of work.
-// The machine's open questions by kind and the campaigns, each under the job
-// a person does, with its count and the one act that starts it. It reads the
-// review summary only for a person who reviews; a rater who holds only
-// campaigns:* finds their campaigns here, and the page never reads the queue
-// for them. The make dialog and New check open from it, as the Campaigns
-// list's did: #review/campaigns?make=selection|handle|review&from= and
+// Review's first page (Wave 7a, record 55 H3; redesigned 2026-11-08 after a
+// person opened it for a model's proposals and could not find them): cards,
+// as Data's page, in up to four bands. What models proposed, each card with
+// Commit and Read; the scans the rules ask about, one card per axis with
+// Answer; the campaigns people read, each with its one act; and everything
+// else, folded, in a person's words. A band with nothing is left out. It
+// reads the review doors only for a person who reviews; a rater who holds
+// only campaigns:* finds their campaigns here, and the page never reads the
+// queue for them. An engine without a door shows the page with what it
+// serves. The make dialog and New check open from it, as the Campaigns list's
+// did: #review/campaigns?make=selection|handle|review&from= and
 // #review/campaigns?make=check[&run=<id>].
 
 import { useEffect, useMemo, useState } from "react";
 import type React from "react";
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
-import { may } from "../grants";
 import { href } from "../routes";
 import { Icon } from "../ui/Icon";
 import { Wait } from "../ui/Wait";
@@ -22,9 +25,12 @@ import { NewCheck, runChoiceOf, type RunChoice } from "../campaigns/NewCheck";
 import { checkServed, makeCheckRefusal } from "../campaigns/check";
 import { StateBar } from "../campaigns/parts";
 import { catalog } from "../ops/catalog";
-import { reviews } from "../home/placeholders";
+import { readsCampaigns as readsCampaignsOf, reviews } from "../home/placeholders";
 import { review, type ReviewSummary } from "./client";
-import { heldCount, shareWords, workList, type WorkRow } from "./work";
+import { standingActs, standingDoors, type Standing } from "./modelFamily";
+import { CommitStandingDialog, RestCampaignDialog } from "./ModelStanding";
+import { questions, questionsServed, type QuestionList } from "./questions";
+import { alsoRows, alsoSummary, axisCards, campaignBand, MOVED_ON_WORDS, shareWords, sortStandings, standingMeta, standingTitle, type CampaignCard } from "./work";
 import "../campaigns/campaigns.css";
 import "./work.css";
 
@@ -35,21 +41,32 @@ const SHARES_READ = 30;
 
 type Load<T> = { kind: "loading"; since: number } | { kind: "failed"; why: string } | { kind: "ready"; value: T };
 
+const loading = <T,>(): Load<T> => ({ kind: "loading", since: Date.now() });
+const ready = <T,>(value: T): Load<T> => ({ kind: "ready", value });
+
 export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<string, string> }) {
   const reviewer = reviews(caps);
-  const readsCampaigns = may(caps, "campaigns:see") && served(caps, "GET /api/campaigns");
-  const [summary, setSummary] = useState<Load<ReviewSummary | null>>(() => ({ kind: "loading", since: Date.now() }));
-  const [list, setList] = useState<Load<Campaign[]>>(() => ({ kind: "loading", since: Date.now() }));
+  const readsCampaigns = readsCampaignsOf(caps);
+  const acts = standingActs(caps);
+  const asks = questionsServed(caps);
+  const [summary, setSummary] = useState<Load<ReviewSummary | null>>(loading);
+  const [standings, setStandings] = useState<Load<Standing[] | null>>(loading);
+  const [qlist, setQlist] = useState<Load<QuestionList | null>>(loading);
+  const [list, setList] = useState<Load<Campaign[]>>(loading);
   const [mine, setMine] = useState<Record<number, number>>({});
+  const [tick, setTick] = useState(0);
+  const [said, setSaid] = useState<string | null>(null);
+  const [committing, setCommitting] = useState<Standing | null>(null);
+  const [reading, setReading] = useState<Standing | null>(null);
   const prefill = prefillOf(query);
   const check = query?.make === "check" ? (query.run && /^\d+$/u.test(query.run) ? Number(query.run) : 0) : null;
   const [making, setMaking] = useState<Prefill | null>(prefill);
   const [checking, setChecking] = useState<{ run: RunChoice | null } | null>(check === 0 ? { run: null } : null);
 
-  // the machine's questions, for a person who reviews; never read for a rater
+  // the summary of what waits, for a person who reviews; never read for a rater
   useEffect(() => {
     if (!reviewer) {
-      setSummary({ kind: "ready", value: null });
+      setSummary(ready(null));
       return;
     }
     let alive = true;
@@ -61,28 +78,60 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
           return { by_kind, cohorts: [], none: 0 } as ReviewSummary;
         });
     read.then(
-      (s) => alive && setSummary({ kind: "ready", value: s }),
+      (s) => alive && setSummary(ready(s)),
       (e: Error) => alive && setSummary({ kind: "failed", why: e.message }),
     );
     return () => {
       alive = false;
     };
-  }, [caps, reviewer]);
+  }, [caps, reviewer, tick]);
+
+  // what models proposed, where the engine counts them
+  useEffect(() => {
+    if (!acts.reads) {
+      setStandings(ready(null));
+      return;
+    }
+    let alive = true;
+    standingDoors.list().then(
+      (l) => alive && setStandings(ready(l)),
+      (e: Error) => alive && setStandings({ kind: "failed", why: e.message }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [caps, acts.reads, tick]);
+
+  // the rules' own questions, gathered, where the engine serves them
+  useEffect(() => {
+    if (!asks) {
+      setQlist(ready(null));
+      return;
+    }
+    let alive = true;
+    questions.list({}).then(
+      (l) => alive && setQlist(ready(l)),
+      (e: Error) => alive && setQlist({ kind: "failed", why: e.message }),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [caps, asks, tick]);
 
   useEffect(() => {
     if (!readsCampaigns) {
-      setList({ kind: "ready", value: [] });
+      setList(ready([]));
       return;
     }
     let alive = true;
     campaigns.list().then(
-      (l) => alive && setList({ kind: "ready", value: l }),
+      (l) => alive && setList(ready(l)),
       (e: Error) => alive && setList({ kind: "failed", why: e.message }),
     );
     return () => {
       alive = false;
     };
-  }, [caps, readsCampaigns]);
+  }, [caps, readsCampaigns, tick]);
 
   // the person's own share of each open campaign they read in, one small read each
   const listed = list.kind === "ready" ? list.value : null;
@@ -121,15 +170,28 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
   const leave = () => {
     if (location.hash.includes("?")) history.replaceState(null, "", href("review"));
   };
+  const loads: Load<unknown>[] = [summary, standings, qlist, list];
+  const since = loads.reduce<number | null>((s, l) => (l.kind === "loading" ? Math.min(s ?? l.since, l.since) : s), null);
+  const why = [
+    summary.kind === "failed" ? `what waits could not be read: ${summary.why}` : null,
+    standings.kind === "failed" ? `the proposals could not be read: ${standings.why}` : null,
+    qlist.kind === "failed" ? `the questions could not be read: ${qlist.why}` : null,
+    list.kind === "failed" ? `the campaigns could not be read: ${list.why}` : null,
+  ].filter((w): w is string => w !== null);
   return (
     <WorkBody
       caps={caps}
       summary={summary.kind === "ready" ? summary.value : null}
+      standings={standings.kind === "ready" ? standings.value : null}
+      qlist={qlist.kind === "ready" ? qlist.value : null}
       list={listed}
       mine={mine}
-      since={summary.kind === "loading" ? summary.since : list.kind === "loading" ? list.since : null}
-      why={[summary.kind === "failed" ? `the questions could not be read: ${summary.why}` : null, list.kind === "failed" ? `the campaigns could not be read: ${list.why}` : null].filter((w): w is string => w !== null)}
+      since={since}
+      why={why}
+      said={said}
       onMake={() => setMaking({ source: "selection", from: "" })}
+      onCommit={acts.commit ? setCommitting : undefined}
+      onRead={acts.campaign ? setReading : undefined}
     >
       {making && (
         <MakeDialog
@@ -153,38 +215,65 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
           }}
         />
       )}
+      {committing && (
+        <CommitStandingDialog
+          s={committing}
+          onClose={() => setCommitting(null)}
+          onDone={(w) => {
+            setCommitting(null);
+            setSaid(w);
+            setTick((x) => x + 1);
+          }}
+        />
+      )}
+      {reading && <RestCampaignDialog s={reading} onClose={() => setReading(null)} />}
     </WorkBody>
   );
 }
 
 export interface WorkBodyProps {
   caps: Capabilities;
-  /** The machine's questions by kind; null for a person who does not review, or while it is read. */
+  /** What waits, by the engine's kind; null for a person who does not review, or while it is read. */
   summary: ReviewSummary | null;
+  /** What models proposed; null where the engine does not count them, or while it is read. */
+  standings?: readonly Standing[] | null;
+  /** The rules' own questions; null where the engine does not gather them, or while they are read. */
+  qlist?: QuestionList | null;
   list: readonly Campaign[] | null;
   /** The person's own answers standing, by campaign. */
   mine?: Record<number, number>;
   since?: number | null;
   why?: string[];
+  said?: string | null;
   now?: number;
   onMake: () => void;
+  /** Commit a model's sure answers; absent where the person may not. */
+  onCommit?: (s: Standing) => void;
+  /** Read a model's unsure answers in a campaign of one's own; absent where the person may not. */
+  onRead?: (s: Standing) => void;
   children?: React.ReactNode;
 }
 
-/** The list as it draws from what it read. */
-export function WorkBody({ caps, summary, list, mine = {}, since = null, why = [], now = Date.now(), onMake, children }: WorkBodyProps) {
+/** The page as it draws from what it read: each band once its own reading landed, none while it has nothing. */
+export function WorkBody({ caps, summary, standings = null, qlist = null, list, mine = {}, since = null, why = [], said = null, now = Date.now(), onMake, onCommit, onRead, children }: WorkBodyProps) {
   const reviewer = reviews(caps);
   const making = makeRefusal(caps);
-  const groups = useMemo(() => workList(caps, summary, list), [caps, summary, list]);
+  const proposed = useMemo(() => sortStandings(standings ?? []).filter((s) => s.staged.stacks > 0 || s.below.stacks > 0), [standings]);
+  const axes = useMemo(() => (reviewer ? axisCards(qlist, summary) : []), [reviewer, qlist, summary]);
+  const cards = useMemo(() => campaignBand(caps, list), [caps, list]);
+  // the fold only where something is counted; Main scans alone has its page in the side
+  const also = useMemo(() => {
+    const rows = reviewer && summary ? alsoRows(caps, summary, standings !== null) : [];
+    return rows.some((r) => (r.count ?? 0) > 0) ? rows : [];
+  }, [caps, reviewer, summary, standings]);
   const closed = (list ?? []).filter((c) => c.status === "closed");
-  const held = heldCount(summary);
+  const empty = since === null && proposed.length === 0 && axes.length === 0 && cards.length === 0 && also.length === 0;
   return (
     <section className="data review work">
       <div className="data-head">
         <div className="grow">
           <span className="eyebrow">Review</span>
-          <h1>Work</h1>
-          <p className="lede">{reviewer ? "What the machine asks, and the campaigns people read." : "The campaigns you read."}</p>
+          <h1>Review</h1>
         </div>
         {making === null && (
           <button type="button" className="button" onClick={onMake}>
@@ -193,40 +282,102 @@ export function WorkBody({ caps, summary, list, mine = {}, since = null, why = [
           </button>
         )}
       </div>
-      {since !== null && <Wait phase="reading the work" since={since ?? now} size="panel" />}
+      {said && (
+        <p className="meta said">
+          <Icon name="check" />
+          {said}
+        </p>
+      )}
+      {since !== null && <Wait phase="reading what waits" since={since ?? now} size="panel" />}
       {why.map((w) => (
         <p key={w} className="warn">
           {w.charAt(0).toUpperCase() + w.slice(1)}
         </p>
       ))}
-      {since === null &&
-        groups.map((g) => (
-          <section key={g.job} className={`work-group job-${g.job}`} aria-label={g.title}>
-            <div className="section-head">
-              <h2>{g.title}</h2>
-              {g.waiting > 0 && <span className="tag">{n(g.waiting)}</span>}
-              <span className="meta">{g.line}</span>
-            </div>
-            {g.rows.length === 0 ? <p className="meta work-empty">Nothing waits.</p> : <WorkRows rows={g.rows} mine={mine} />}
-            {g.job === "answer" && held > 0 && (
-              <p className="meta work-held">
-                {n(held)} {held === 1 ? "question is" : "questions are"} in campaigns, answered there.
-              </p>
-            )}
-          </section>
-        ))}
+      {proposed.length > 0 && (
+        <section className="rv-band" aria-label="Proposed by models">
+          <div className="rv-band-head">
+            <span className="eyebrow">Proposed by models</span>
+          </div>
+          <div className="rv-grid">
+            {proposed.map((s) => (
+              <article key={`${s.model.id}|${s.axis}`} className="rv-card proposed" aria-label={standingTitle(s)}>
+                <span className="rv-title">{standingTitle(s)}</span>
+                <div className="rv-big">
+                  <b>{n(s.staged.stacks)}</b>
+                  <span>proposed</span>
+                </div>
+                <span className="rv-meta" title={s.drifted > 0 ? MOVED_ON_WORDS : undefined}>
+                  {standingMeta(s)}
+                </span>
+                {((onCommit && s.commit.stacks > 0) || (onRead && s.below.stacks > 0)) && (
+                  <div className="rv-acts">
+                    {onCommit && s.commit.stacks > 0 && (
+                      <button type="button" className="button" onClick={() => onCommit(s)}>
+                        Commit {n(s.commit.stacks)}
+                      </button>
+                    )}
+                    {onRead && s.below.stacks > 0 && (
+                      <button type="button" className={onCommit && s.commit.stacks > 0 ? "button secondary" : "button"} onClick={() => onRead(s)}>
+                        Read the {n(s.below.stacks)}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </article>
+            ))}
+          </div>
+          <a className="rv-quiet" href={href("review", "proposals")}>
+            Value by value
+          </a>
+        </section>
+      )}
+      {axes.length > 0 && (
+        <section className="rv-band" aria-label="Scans to answer">
+          <div className="rv-band-head">
+            <span className="eyebrow">Scans to answer</span>
+          </div>
+          <div className="rv-grid">
+            {axes.map((a) => (
+              <article key={a.axis} className="rv-card answer" aria-label={a.title}>
+                <span className="rv-title">{a.title}</span>
+                <div className="rv-big">
+                  <b>{n(a.scans)}</b>
+                  <span>{a.scans === 1 ? "scan" : "scans"}</span>
+                </div>
+                <span className="rv-meta">{a.meta}</span>
+                <div className="rv-acts">
+                  <a className="button" href={a.href}>
+                    Answer
+                  </a>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+      {cards.length > 0 && (
+        <section className="rv-band" aria-label="Campaigns">
+          <div className="rv-band-head">
+            <span className="eyebrow">Campaigns</span>
+          </div>
+          <div className="rv-grid campaigns">
+            {cards.map((c) => (
+              <CampaignTile key={c.key} card={c} share={c.kind === "campaign" ? shareWords(mine[c.campaign.id], c.campaign) : null} />
+            ))}
+          </div>
+        </section>
+      )}
       {closed.length > 0 && (
-        <details className="retired">
+        <details className="retired rv-closed">
           <summary className="meta">
             {closed.length} closed {closed.length === 1 ? "campaign keeps" : "campaigns keep"} every answer
           </summary>
-          <ul className="work-rows">
+          <ul className="rv-rows">
             {closed.map((c) => (
-              <li key={c.id} className="work-row from-closed">
-                <span className="work-what">
-                  <a className="work-title" href={href("review", "campaigns", String(c.id))}>
-                    {c.name}
-                  </a>
+              <li key={c.id} className="rv-row">
+                <span className="rv-row-what">
+                  <a href={href("review", "campaigns", String(c.id))}>{c.name}</a>
                   <span className="meta">{c.closed_at ? `closed ${c.closed_at.slice(0, 10)}` : "closed"}</span>
                 </span>
                 <StateBar counts={c.counts} />
@@ -235,43 +386,46 @@ export function WorkBody({ caps, summary, list, mine = {}, since = null, why = [
           </ul>
         </details>
       )}
+      {also.length > 0 && (
+        <details className="rv-fold">
+          <summary>{alsoSummary(also)}</summary>
+          <ul className="rv-rows">
+            {also.map((r) => (
+              <li key={r.key} className="rv-row">
+                <span className="rv-row-what">{r.words}</span>
+                <span className="rv-row-count">{r.count !== null && <b>{n(r.count)}</b>}</span>
+                <a className="button secondary small" href={r.href}>
+                  Open
+                </a>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      {empty && why.length === 0 && <p className="meta">Nothing waits.</p>}
       {children}
     </section>
   );
 }
 
-function WorkRows({ rows, mine }: { rows: readonly WorkRow[]; mine: Record<number, number> }) {
+/** One campaign's card: its name, its line, its items by state, and the one act. */
+function CampaignTile({ card: c, share }: { card: CampaignCard; share: string | null }) {
+  const camp = c.campaign;
   return (
-    <ul className="work-rows">
-      {rows.map((r) => {
-        const share = r.campaign && r.from === "campaign" ? shareWords(mine[r.campaign.id], r.campaign) : null;
-        return (
-          <li key={r.key} className={`work-row from-${r.from}`}>
-            <span className="work-what">
-              <a className="work-title" href={r.href}>
-                {r.title}
-              </a>
-              <span className="meta">
-                {r.from === "campaign" ? "campaign · " : r.from === "adjudication" ? "adjudication · " : ""}
-                {r.what}
-                {share ? ` · ${share}` : ""}
-              </span>
-            </span>
-            {r.campaign && r.from === "campaign" ? (
-              <StateBar counts={r.campaign.counts} />
-            ) : (
-              <span className="work-count">{r.count !== null ? <b>{n(r.count)}</b> : null}</span>
-            )}
-            <span className="work-act">
-              {r.act && (
-                <a className="button secondary small" href={r.href}>
-                  {r.act}
-                </a>
-              )}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+    <article className={`rv-card ${c.kind}`} aria-label={camp.name}>
+      <a className="rv-title" href={href("review", "campaigns", String(camp.id))}>
+        {camp.name}
+      </a>
+      <span className="rv-meta">
+        {c.meta}
+        {share ? ` · ${share}` : ""}
+      </span>
+      <StateBar counts={camp.counts} />
+      <div className="rv-acts">
+        <a className="button" href={c.href}>
+          {c.act}
+        </a>
+      </div>
+    </article>
   );
 }

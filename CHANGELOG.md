@@ -4,6 +4,10 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- Review opens on cards, as Data does, so a person knows by looking: Proposed by models first, one card per model and axis (`Post-contrast · NILS post-contrast model 0.3.1`, 50,006 proposed, `1,701 sure at 0.99 or above · 190 unsure`) with Commit and Read on the card and the change matrix a quiet Value by value away; then Scans to answer, one card per axis with its reasons summed in plain words (`14 where a decision disagrees · 5 where the rules disagree`) and Answer one click from the scans; then the campaigns, the person's own first, each with its one act (Rate, Read, Check, Settle, Adjudicate); and everything else folded under one line that counts it (`Also waiting: 1,172 subjects, files and checks`), each row in a person's words with Open. The five job groups, the row list, the "1,305" tag, the lede and "Waiting in the queue." are gone; a band with nothing is left out. A person who opened Review for a model's proposals found fourteen rows of the engine's kinds and no proposals, which waited on a page nothing named. The engine is unchanged; an engine without the proposals or questions doors shows the page with what it serves.
+
 ## [1.0.0-beta.7] - 2026-11-08
 
 The seventh desk beta is the two UX rounds of production use. A campaign's page follows its close as it runs, says who holds each open item and until when, counts the items read one by one with why, and offers one axis where several were asked; Review > Proposals is one card per model and axis with its two acts; a scan's labels say where they came from, with a re-sort a press away; a step's Run says what it would go over before it starts and offers the scans not sorted first, a step runs over the scans shown, and a running step says how far it is and a failed one why, under the rail; Settings > Parts notices a release within a minute and Update everything lists its order; and Review, Data, Pipelines and Settings say the person's words for the engine's states. Most of it shows where the engine is 1.0.0-beta.10 or later; the engine floor is unchanged.

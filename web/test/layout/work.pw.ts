@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Review's one list of work and Data's Browse on a screen (Wave 7a, record
-// 55 H3; spec 13.1 and 13.2): at a laptop's width (1440) and a phone's
-// (390), in the desk's own shell. The list's four jobs, each row's kind
-// told by its left border's colour and never a glyph, nothing sideways; the
-// make dialog choosing its selections from lists, drawing a pair campaign
-// with its seed and its preview's counts on the foot; Browse's subjects and
-// a subject's sessions from the registry's doors. Screenshots go to
-// test-results for the report.
+// Review's first page and Data's Browse on a screen (Wave 7a, record 55 H3;
+// spec 13.1 and 13.2; the cards of 2026-11-08): at a laptop's width (1440)
+// and a phone's (390), in the desk's own shell. The page's bands of cards,
+// each card's kind told by its left border's colour and never a glyph, the
+// cards one to a column on a phone, nothing sideways; the make dialog
+// choosing its selections from lists, drawing a pair campaign with its seed
+// and its preview's counts on the foot; Browse's subjects and a subject's
+// sessions from the registry's doors. Screenshots go to test-results for the
+// report.
 
 import { expect, test, type Page } from "@playwright/test";
 
@@ -25,29 +26,49 @@ for (const vp of VIEWPORTS) {
   test.describe(`${vp.width} by ${vp.height}`, () => {
     test.use({ viewport: { width: vp.width, height: vp.height } });
 
-    test("Review is one list of work by job, its rows told apart by their borders, nothing sideways", async ({ page }) => {
+    test("Review opens on bands of cards, each told apart by its border, one to a column on a phone, nothing sideways", async ({ page }) => {
       await page.goto("/work.html#review");
-      await expect(page.locator("h1")).toHaveText("Work");
-      await expect(page.locator(".work-group h2")).toHaveText(["Answer a question", "Pick a main scan", "Check a result", "Settle a disagreement"]);
-      await expect(page.locator(".work-row.from-campaign")).toHaveCount(6);
-      await expect(page.locator(".work-row.from-adjudication")).toHaveCount(1);
-      await expect(page.getByText("219 questions are in campaigns, answered there.")).toBeVisible();
+      await expect(page.locator("h1")).toHaveText("Review");
+      await expect(page.locator(".rv-band")).toHaveCount(3);
+      expect(await page.locator(".rv-band").evaluateAll((bands) => bands.map((b) => b.getAttribute("aria-label")))).toEqual(["Proposed by models", "Scans to answer", "Campaigns"]);
+      // what models proposed: Commit and Read on the card, the matrix a quiet link away
+      const proposed = page.locator(".rv-card.proposed");
+      await expect(proposed).toHaveCount(2);
+      await expect(proposed.first().getByRole("button")).toHaveText(["Commit 1,701", "Read the 190"]);
+      await expect(proposed.first()).toContainText("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 moved on");
+      await expect(page.getByRole("link", { name: "Value by value" })).toHaveAttribute("href", "#review/proposals");
+      // the scans to answer, one card per axis, its Answer one click from the scans
+      await expect(page.locator(".rv-card.answer")).toHaveCount(3);
+      await expect(page.locator(".rv-card.answer").first().getByRole("link", { name: "Answer" })).toHaveAttribute("href", "#review/questions/body_part%3Adecision");
+      // the campaigns, the adjudication its own card, the person's share
+      await expect(page.locator(".rv-card.campaign")).toHaveCount(6);
+      await expect(page.locator(".rv-card.adjudication")).toHaveCount(1);
+      await expect(page.locator(".rv-card.campaign", { hasText: "body-part-curation-round-9" })).toContainText("34 of 300 yours");
+      // the fold, closed, counting what else waits; no job groups, no engine words
+      const fold = page.locator(".rv-fold");
+      await expect(fold.locator("summary")).toHaveText("Also waiting: 1,171 subjects, files and checks");
+      expect(await fold.evaluate((d) => (d as HTMLDetailsElement).open)).toBe(false);
+      await expect(page.locator(".work-group")).toHaveCount(0);
+      await expect(page.getByText("Waiting in the queue.")).toHaveCount(0);
       // the side carries Review's pages (record 55 H2, round 4): no tabs in the page
       await expect(page.locator(".chips.pages")).toHaveCount(0);
-      // a row's kind is the colour of its left border: three kinds, three colours, and no glyph before the title
-      const borders = await page.locator(".work-row").evaluateAll((rows) => rows.map((r) => [r.className, getComputedStyle(r).borderLeftWidth, getComputedStyle(r).borderLeftColor]));
+      // a card's kind is the colour of its left border: three kinds, three colours, and no glyph before the title
+      const borders = await page.locator(".rv-card").evaluateAll((cards) => cards.map((c) => [c.className, getComputedStyle(c).borderLeftWidth, getComputedStyle(c).borderLeftColor]));
       for (const [, w] of borders) expect(w).toBe("3px");
       const colour = (k: string) => new Set(borders.filter(([c]) => c.includes(k)).map(([, , c]) => c));
-      expect(colour("from-machine").size).toBe(1);
-      expect(colour("from-campaign").size).toBe(1);
-      expect([...colour("from-machine")][0]).not.toBe([...colour("from-campaign")][0]);
-      expect([...colour("from-adjudication")][0]).not.toBe([...colour("from-campaign")][0]);
-      // every row's act sits inside the window
-      for (const b of await page.locator(".work-row .work-act a").all()) {
+      expect(colour("proposed").size).toBe(1);
+      expect(colour("campaign").size).toBe(1);
+      expect([...colour("proposed")][0]).not.toBe([...colour("campaign")][0]);
+      expect([...colour("adjudication")][0]).not.toBe([...colour("campaign")][0]);
+      // every act sits inside the window
+      for (const b of await page.locator(".rv-acts .button").all()) {
         const box = (await b.boundingBox())!;
         expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
       }
-      await expect(page.locator(".work-row", { hasText: "body-part-curation-round-9" })).toContainText("34 of 300 yours");
+      // on a phone the cards stack to one column; on a laptop a band holds several across
+      const xs = await page.locator(".rv-grid.campaigns .rv-card").evaluateAll((cards) => cards.map((c) => c.getBoundingClientRect().left));
+      if (vp.width < 700) expect(new Set(xs).size).toBe(1);
+      else expect(new Set(xs).size).toBeGreaterThan(1);
       await noSideways(page, vp.width);
       await page.screenshot({ path: `test-results/work-${vp.name}.png`, fullPage: true });
     });
@@ -64,7 +85,7 @@ for (const vp of VIEWPORTS) {
     test("an old Campaigns address opens the same page inside Review", async ({ page }) => {
       await page.goto("/work.html#campaigns");
       await expect(page).toHaveURL(/#review\/campaigns$/u);
-      await expect(page.locator("h1")).toHaveText("Work");
+      await expect(page.locator("h1")).toHaveText("Review");
     });
 
     test("the make dialog chooses its selections from lists and draws a pair campaign with its seed", async ({ page }) => {

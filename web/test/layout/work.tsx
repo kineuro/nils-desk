@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Review's one list of work and Data's Browse, in the real desk's shell
-// (Wave 7a, record 55 H3; spec 13.1 and 13.2), against a fake engine whose
-// doors answer as the engine's do: the machine's questions by kind, six
-// campaigns of every job (an axis, a pick, a check, a pair, an A/B and one to
-// adjudicate) with the person's own share, the saved selections, the open
-// kinds and the people the make dialog chooses from, the preview of a drawn
-// campaign, and the registry's subjects, sessions and scans. work.pw.ts
-// opens it at #review, at the make dialog and at #data/browse, at a laptop's
-// width and a phone's. Every name and number here is made up.
+// Review's first page and Data's Browse, in the real desk's shell (Wave 7a,
+// record 55 H3; spec 13.1 and 13.2; the cards of 2026-11-08), against a fake
+// engine whose doors answer as the engine's do: what waits by kind, two
+// models' proposals, the rules' questions gathered, six campaigns of every
+// job (an axis, a pick, a check, a pair, an A/B and one to adjudicate) with
+// the person's own share, the saved selections, the open kinds and the people
+// the make dialog chooses from, the preview of a drawn campaign, and the
+// registry's subjects, sessions and scans. work.pw.ts opens it at #review, at
+// the make dialog and at #data/browse, at a laptop's width and a phone's.
+// Every name and number here is made up.
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -19,6 +20,11 @@ const DOORS = [
   "GET /api/capabilities",
   "GET /api/review",
   "GET /api/review/summary",
+  "GET /api/review/proposals",
+  "POST /api/review/proposals/campaign",
+  "POST /api/decisions/commit",
+  "GET /api/review/questions",
+  "GET /api/review/questions/{key}/scans",
   "GET /api/campaigns",
   "POST /api/campaigns",
   "POST /api/campaigns/preview",
@@ -89,7 +95,22 @@ const CAMPAIGNS = [
   campaign(16, "reference-ab-cert3", { kind: "axes", axes: ["base", "technique", "modifier"] }, counts(54, 0, 0), { source: { ab: { voters: ["rules", "judge"] } }, raters_per_item: 1 }),
   campaign(9, "probe-axis", { kind: "axis", axis: "base" }, counts(0, 6, 0), { status: "closed", closed_at: "2026-10-01T09:00:00Z" }),
 ];
-const SUMMARY = { by_kind: { "base:missing": 7, "identity.collision": 2, "identity.unmapped": 1, "body_part:model": 40, "pick.border": 3, "classify.asked": 5, "campaign.axis": 219, "pipeline:qc": 4 }, cohorts: [], none: 0 };
+const SUMMARY = { by_kind: { "release.shared_name": 948, "identity.same_instance": 208, "base:missing": 7, "identity.collision": 2, "identity.unmapped": 1, "body_part:model": 40, "body_part:decision": 14, "pick.border": 3, "classify.asked": 5, "campaign.axis": 219, "pipeline:qc": 4, "construct:session": 7 }, cohorts: [], none: 0 };
+const PROPOSALS = [
+  { model: { id: 7, name: "nils-postcontrast", version: "0.3.1" }, label: "nils-postcontrast@0.3.1", axis: "post_contrast", threshold: 0.99, staged: { groups: 89, stacks: 50006 }, held: { groups: 1, stacks: 12 }, commit: { groups: 88, stacks: 1701 }, drifted: 3, below: { groups: 4, stacks: 190 }, asked: { groups: 0, stacks: 0 }, campaigns: [], name: "nils-postcontrast-post_contrast-unsure" },
+  { model: { id: 5, name: "nils-bodypart", version: "1.2.0" }, label: "nils-bodypart@1.2.0", axis: "body_part", threshold: 0.9, staged: { groups: 3, stacks: 40 }, held: { groups: 0, stacks: 0 }, commit: { groups: 3, stacks: 40 }, drifted: 0, below: { groups: 2, stacks: 26 }, asked: { groups: 0, stacks: 0 }, campaigns: [], name: "nils-bodypart-body_part-unsure" },
+];
+const QUESTIONS = {
+  scope: { kind: "registry", name: null, id: null },
+  scans: 21,
+  questions: [
+    { key: "body_part:decision", axis: "body_part", shape: "doubt", values: ["brain"], words: "brain?", reason: "A decision disagrees with the rules.", scans: 14, staged: 0, kinds: { "body_part:decision": 14 } },
+    { key: "base:missing", axis: "base", shape: "missing", values: ["T1w", "T2w"], words: "Which base?", reason: "The rules found no base.", scans: 7, staged: 0, kinds: { "base:missing": 7 } },
+  ],
+  vocabularies: {},
+  elsewhere: [],
+  held: { scans: 219, campaigns: [{ id: 11, name: "body-part-curation-round-9" }] },
+};
 const SELECTIONS = ["t1-pre", "t1-post", "body-part-unsure", "sealed-cert-3"].map((name, i) => ({
   id: i + 1,
   name,
@@ -159,6 +180,8 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (p === "/desk/capabilities") return json(200, caps);
   if (p === "/desk/people") return json(200, { people: [{ subject: "bo", display: "Bo", holds: true }, { subject: "cy", display: "Cy", holds: true }, { subject: "dee", display: "Dee", holds: false }] });
   if (p === "/api/review/summary") return json(200, SUMMARY);
+  if (p === "/api/review/proposals") return json(200, { count: PROPOSALS.length, proposals: PROPOSALS });
+  if (p === "/api/review/questions") return json(200, QUESTIONS);
   if (p === "/api/review") return json(200, { count: 0, items: [] });
   if (p === "/api/campaigns") return json(200, { count: CAMPAIGNS.length, campaigns: CAMPAIGNS });
   if (/^\/api\/campaigns\/\d+\/mine$/.test(p)) return json(200, { campaign: 11, principal: "astrid@site", open: true, count: 34, total: 34, values: {}, answers: [] });

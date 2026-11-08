@@ -1,51 +1,28 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-// Review's one list of work (Wave 7a, record 55 H3; spec 13.2): the
-// machine's open questions, grouped by kind with their counts, and the
-// campaigns with their state and the person's own share, side by side under
-// the job types a person does. A queue is worked by one person, item by
-// item; a campaign by several readers, blind, with their agreement
-// measured; both are rows here, each with the one act that starts it. The
-// list is built from the doors that exist (the review summary, the
-// campaigns list and each campaign's mine door); nothing here decides.
+// Review's first page (Wave 7a, record 55 H3; redesigned 2026-11-08 after
+// production use): what the page shows is built here, pure, from the doors
+// that exist. Four bands of cards: what models proposed (one card per model
+// and axis, from `GET /api/review/proposals`), the scans the rules ask a
+// person about (one card per axis, from the questions doors, else from the
+// review summary), the campaigns people read (one card each, the person's own
+// first), and everything else the summary counts, folded, in a person's words
+// with the one place each is worked. Nothing here decides, and no engine word
+// (kind, item, staged, queue) reaches the surface.
 
 import type { Capabilities } from "../capabilities";
 import { door as served } from "../deployment";
 import { may } from "../grants";
 import { href, narrow } from "../routes";
 import { adjudicatorHas, itemTotal, ownCampaign, purposeOf, questionWords, rateRefusal, type Campaign } from "../campaigns/client";
+import { knownToolName } from "../settings/software";
 import type { ReviewSummary } from "./client";
 import { REASONS, queueHref, reasonWords } from "./filter";
-import { kindOf, kindWords } from "./triage";
+import { isModelKind, type Standing } from "./modelFamily";
 import { PICK_BORDER } from "./picks";
+import { gridHref, listHref, type QuestionList, type Where } from "./questions";
+import { kindOf, kindWords } from "./triage";
 
-/** The job types a person does in 7a; drawing a mask (type 4) is Wave 7b's and has no row. */
-export type Job = "answer" | "pick" | "check" | "settle" | "audit";
-
-export const JOBS: { job: Job; title: string; line: string }[] = [
-  { job: "answer", title: "Answer a question", line: "An axis, several axes, a form, a pair." },
-  { job: "pick", title: "Pick a main scan", line: "The stack that stands for a role." },
-  { job: "check", title: "Check a result", line: "Accept, reject or flag a pipeline's output." },
-  { job: "settle", title: "Settle a disagreement", line: "Two answers side by side." },
-  // record 55 D7: a round's blind audit, read by agent raters; shown only while one is open
-  { job: "audit", title: "Audit", line: "Blind reads of accepted scans. Never trains." },
-];
-
-/** One row of the list: a kind of the machine's questions, or a campaign, with the act that starts it. */
-export interface WorkRow {
-  key: string;
-  job: Job;
-  /** The machine's questions are worked alone; a campaign by its readers; an adjudication by its adjudicator. */
-  from: "machine" | "campaign" | "adjudication";
-  title: string;
-  /** A few words under the title. */
-  what: string;
-  /** How many wait: the open questions of the kind, a campaign's open items, the items to adjudicate. */
-  count: number | null;
-  href: string;
-  /** The act's word; null where the row is only opened. */
-  act: string | null;
-  campaign?: Campaign;
-}
+const n = (v: number) => v.toLocaleString("en-US");
 
 /** Whether a kind is one a campaign holds (the campaigns family): answered in its campaign, never in the queue. */
 export const heldKind = (kind: string): boolean => kind.startsWith("campaign.");
@@ -60,53 +37,159 @@ export function queuedCount(summary: ReviewSummary | null): number {
   return Object.entries(summary?.by_kind ?? {}).reduce((s, [k, v]) => s + (heldKind(k) ? 0 : v), 0);
 }
 
+// ------------------------------------------------------------ words
+
+/** An axis as a person names it; an axis the table does not know is its words capitalised. */
+const AXIS_TITLES: Record<string, string> = {
+  body_part: "Body part",
+  post_contrast: "Post-contrast",
+  base: "Base",
+  technique: "Technique",
+  modifier: "Modifier",
+  construct: "Construct",
+  provenance: "Provenance",
+};
+
+export function axisTitle(axis: string): string {
+  const known = AXIS_TITLES[axis];
+  if (known) return known;
+  const words = axis.replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** A model as a person names it: the friendly name of a NILS model where the software table has one, else its name, then its version. */
+export function modelWords(s: Pick<Standing, "model" | "label">): string {
+  const name = knownToolName(s.model.name) ?? s.model.name;
+  return s.model.version ? `${name} ${s.model.version}` : name;
+}
+
+// ------------------------------------------------------------ band 1: proposed by models
+
+/** A card's title: the axis, then the model. */
+export function standingTitle(s: Standing): string {
+  return `${axisTitle(s.axis)} · ${modelWords(s)}`;
+}
+
+/** The words behind "moved on", on hover: the commit dialog's own. */
+export const MOVED_ON_WORDS = "Some were proposed before the data changed; committed as proposed.";
+
+/** A card's one line: how many are sure and at what, how many unsure, and what waits elsewhere. */
+export function standingMeta(s: Standing): string {
+  const parts = [`${n(s.commit.stacks)} sure${s.threshold === null ? "" : ` at ${s.threshold.toFixed(2)} or above`}`, `${n(s.below.stacks)} unsure`];
+  if (s.held.stacks > 0) parts.push(`${n(s.held.stacks)} in a campaign already`);
+  if (s.drifted > 0) parts.push(`${n(s.drifted)} moved on`);
+  return parts.join(" · ");
+}
+
+/** The standings as the band orders them: the most proposed first (the door says no time), then by model. */
+export function sortStandings(list: readonly Standing[]): Standing[] {
+  return [...list].sort((a, b) => b.staged.stacks - a.staged.stacks || a.label.localeCompare(b.label) || a.axis.localeCompare(b.axis));
+}
+
+// ------------------------------------------------------------ band 2: scans to answer
+
+/** One axis's card: how many scans wait on it, why, and the one place a person answers them. */
+export interface AxisCard {
+  axis: string;
+  title: string;
+  scans: number;
+  /** The reasons summed, in the order of their counts. */
+  meta: string;
+  href: string;
+}
+
 /** The reasons of the sort's own questions about one axis (record 56), each answered in a question's grid. */
 const SORT_WHY: readonly string[] = ["missing", "disagree", "unsure", "decision", "conflict", "low_confidence"];
 
-/** A subject question's kind in a person's words, as the Identifiers page names it (2026-11-06: "unmapped" was the engine's). */
-const SUBJECT_WORDS: Record<string, string> = {
-  collision: "may be one subject twice",
-  unmapped: "files need a subject code",
-  provisional: "coded without a map",
-  same_instance: "the same scan filed twice",
-};
-
-/** The row of one kind of the machine's open questions: its job, its words and where it is worked. */
-export function machineRow(kind: string, count: number): WorkRow | null {
-  if (heldKind(kind) || count <= 0) return null;
+/** Whether a kind is one of the sort's questions about an axis: answered in band 2, never in the fold. */
+export function axisKind(kind: string): boolean {
   const k = kindOf(kind);
-  const base = { key: `kind:${kind}`, from: "machine" as const, count };
-  if (kind === PICK_BORDER) return { ...base, job: "pick", title: "Pick borders", what: "Occasions a pick run doubts.", href: narrow(href("review", "picks"), { earlier: 1 }), act: "Open" };
-  if (kind === "classify.asked") return { ...base, job: "answer", title: "System 1 asks", what: "Legal candidates for a whole stack.", href: href("review", "asked"), act: "Open" };
-  if (kind === "pipeline:qc") return { ...base, job: "check", title: "A run's checks", what: "What a run's own checks flagged.", href: href("review", "questions"), act: "Open" };
-  if (k.classifier && k.what === "model") return { ...base, job: "answer", title: `${k.area}: a model proposes`, what: "Waiting for a person to commit them.", href: href("review", "proposals"), act: "Open" };
-  // record 56 section 6.3: the sort's own questions are answered as a question's grid, from the list of them
-  if (k.classifier && SORT_WHY.includes(k.what)) return { ...base, job: "answer", title: `${k.area}: ${reasonWords(k.what)}`, what: "Scans the rules left to a person.", href: href("review", "questions"), act: "Answer" };
-  if (k.classifier && (REASONS as readonly string[]).includes(k.what)) return { ...base, job: "answer", title: `${k.area}: ${reasonWords(k.what)}`, what: "Scans the rules left to a person.", href: queueHref({ axis: k.area, reason: k.what, border: null }), act: "Answer" };
-  if (k.area === "identity" || k.area === "linkage") return { ...base, job: "answer", title: `Subjects: ${SUBJECT_WORDS[k.what] ?? k.what.replace(/_/gu, " ")}`, what: "Who a file is about.", href: href("review", "identifiers"), act: "Decide" };
-  if (k.area === "session") return { ...base, job: "answer", title: `Sessions: ${k.what.replace(/_/gu, " ")}`, what: "Sessions that moved between visits.", href: href("review", "questions"), act: "See" };
-  return { ...base, job: "answer", title: kindWords(kind), what: "Waiting in the queue.", href: href("review", "questions"), act: "Open" };
+  return k.classifier && !isModelKind(kind) && (k.what === "session" || SORT_WHY.includes(k.what) || (REASONS as readonly string[]).includes(k.what));
 }
 
-/** The machine's rows, the most waiting first within each job. */
-export function machineRows(summary: ReviewSummary | null): WorkRow[] {
-  return Object.entries(summary?.by_kind ?? {})
-    .map(([kind, count]) => machineRow(kind, count))
-    .filter((r): r is WorkRow => r !== null)
-    .sort((a, b) => (b.count ?? 0) - (a.count ?? 0) || a.title.localeCompare(b.title));
+/** One reason, counted, in a person's words. */
+export function reasonLine(reason: string, count: number): string {
+  const c = n(count);
+  switch (reason) {
+    case "missing":
+      return `${c} with no value`;
+    case "decision":
+      return `${c} where a decision disagrees`;
+    case "disagree":
+      return `${c} where the rules and System 1 disagree`;
+    case "unsure":
+      return `${c} where System 1 is not sure`;
+    case "vote":
+      return `${c} where the rules disagree`;
+    case "conflict":
+      return `${c} where the rules conflict`;
+    case "low_confidence":
+      return `${c} where the rules are not confident`;
+    case "session":
+      return `${c} session ${count === 1 ? "question" : "questions"}`;
+    default:
+      return `${c} where ${reasonWords(reason)}`;
+  }
 }
+
+/** Where one kind of the sort's questions is answered without the questions doors: a question's list, narrowed. */
+function kindHref(kind: string): string {
+  const k = kindOf(kind);
+  if (SORT_WHY.includes(k.what) || k.what === "session") return narrow(href("review", "questions"), { axis: k.area });
+  return queueHref({ axis: k.area, reason: k.what, border: null });
+}
+
+/**
+ * The axis cards: the questions the engine gathered (one card per axis, its scans summed, the way to its one
+ * question's grid or to the list narrowed to the axis), with the summary's kinds about the axis that the
+ * questions do not carry (a session's, an older engine's) counted under them; with no questions doors, the
+ * summary's kinds alone. The most scans first.
+ */
+export function axisCards(list: QuestionList | null, summary: ReviewSummary | null, where: Where = {}): AxisCard[] {
+  const by = new Map<string, { scans: number; reasons: Map<string, number>; keys: string[]; kinds: Set<string> }>();
+  const axisOf = (axis: string) => {
+    let a = by.get(axis);
+    if (!a) by.set(axis, (a = { scans: 0, reasons: new Map(), keys: [], kinds: new Set() }));
+    return a;
+  };
+  const sorted = [...(list?.questions ?? [])].sort((p, q) => q.scans - p.scans);
+  for (const q of sorted) {
+    const a = axisOf(q.axis);
+    a.scans += q.scans;
+    a.keys.push(q.key);
+    for (const [kind, count] of Object.entries(q.kinds)) {
+      a.kinds.add(kind);
+      const what = kindOf(kind).what;
+      a.reasons.set(what, (a.reasons.get(what) ?? 0) + count);
+    }
+  }
+  const extra: { axis: string; kind: string; count: number }[] = [];
+  for (const [kind, count] of Object.entries(summary?.by_kind ?? {})) {
+    if (count <= 0 || !axisKind(kind)) continue;
+    const k = kindOf(kind);
+    if (by.get(k.area)?.kinds.has(kind)) continue;
+    const a = axisOf(k.area);
+    a.scans += count;
+    a.reasons.set(k.what, (a.reasons.get(k.what) ?? 0) + count);
+    extra.push({ axis: k.area, kind, count });
+  }
+  return [...by.entries()]
+    .filter(([, a]) => a.scans > 0)
+    .map(([axis, a]) => {
+      const reasons = [...a.reasons.entries()].sort((p, q) => q[1] - p[1]).map(([r, c]) => reasonLine(r, c));
+      let to: string;
+      if (a.keys.length === 1) to = gridHref(a.keys[0], where);
+      else if (a.keys.length > 1) to = narrow(listHref(where), { axis });
+      else to = kindHref(extra.filter((e) => e.axis === axis).sort((p, q) => q.count - p.count)[0].kind);
+      return { axis, title: axisTitle(axis), scans: a.scans, meta: reasons.join(" · "), href: to };
+    })
+    .sort((p, q) => q.scans - p.scans || p.title.localeCompare(q.title));
+}
+
+// ------------------------------------------------------------ band 3: campaigns
 
 /** An A/B campaign (record 48): its source names its voters. */
 export const isAb = (c: Pick<Campaign, "source">): boolean => typeof (c.source as { ab?: unknown }).ab === "object" && (c.source as { ab?: unknown }).ab !== null;
-
-/** The job a campaign's readers do, by its question. */
-export function jobOf(c: Pick<Campaign, "question" | "source" | "purpose">): Job {
-  if (purposeOf(c) === "audit") return "audit";
-  if (isAb(c)) return "settle";
-  if (c.question.kind === "check") return "check";
-  if (c.question.kind === "pick") return "pick";
-  return "answer";
-}
 
 /** The reader a campaign's items are read in, by its question, and the word of its act. */
 export function readerOf(c: Pick<Campaign, "question" | "source">): { view: string; act: string } {
@@ -123,64 +206,130 @@ export function theirs(caps: Capabilities, c: Campaign): boolean {
   return ownCampaign(caps, c) || rateRefusal(caps, c) === null || adjudicatorHas(caps, c);
 }
 
-/** A campaign's rows: its reading, where the person may claim an item, and its adjudication, where an item waits for them. */
-export function campaignRows(caps: Capabilities, c: Campaign): WorkRow[] {
+/** A campaign's line: its question, and its purpose where it is not to decide. */
+export function campaignMeta(c: Pick<Campaign, "question" | "purpose">): string {
+  const purpose = purposeOf(c);
+  if (purpose === "decide") return questionWords(c.question);
+  return `${questionWords(c.question)} · ${purpose === "audit" ? "audit, never trains" : `${purpose}, blind first`}`;
+}
+
+/** One campaign card: the campaign's reading, or the adjudication an adjudicator has in it. */
+export interface CampaignCard {
+  key: string;
+  kind: "campaign" | "adjudication";
+  campaign: Campaign;
+  meta: string;
+  /** What the order goes by: the open items, or the items to adjudicate. */
+  count: number;
+  href: string;
+  act: string;
+  own: boolean;
+}
+
+/** A campaign's cards: its reading, with the act where the person may claim an item, and its adjudication where an item waits for them. */
+export function campaignCards(caps: Capabilities, c: Campaign): CampaignCard[] {
   const open = c.counts.items.open ?? 0;
   const r = readerOf(c);
   const reads = rateRefusal(caps, c) === null && open > 0;
-  const total = itemTotal(c.counts);
-  const rows: WorkRow[] = [
+  const own = ownCampaign(caps, c);
+  const cards: CampaignCard[] = [
     {
       key: `campaign:${c.id}`,
-      job: jobOf(c),
-      from: "campaign",
-      title: c.name,
-      what: purposeOf(c) === "decide" ? questionWords(c.question) : `${questionWords(c.question)} · ${purposeOf(c) === "audit" ? "audit, never trains" : `${purposeOf(c)}, blind first`}`,
-      count: c.status === "open" ? open : total,
+      kind: "campaign",
+      campaign: c,
+      meta: campaignMeta(c),
+      count: open,
       href: reads ? href("review", "campaigns", String(c.id), r.view) : href("review", "campaigns", String(c.id)),
       act: reads ? r.act : "Open",
-      campaign: c,
+      own,
     },
   ];
   if (adjudicatorHas(caps, c)) {
-    const n = c.counts.items.needs_adjudication ?? 0;
-    rows.push({
+    const waiting = c.counts.items.needs_adjudication ?? 0;
+    cards.push({
       key: `adjudicate:${c.id}`,
-      job: "settle",
-      from: "adjudication",
-      title: c.name,
-      what: `${n.toLocaleString("en-US")} to adjudicate`,
-      count: n,
+      kind: "adjudication",
+      campaign: c,
+      meta: `${n(waiting)} to adjudicate`,
+      count: waiting,
       href: c.question.kind === "check" ? narrow(href("review", "campaigns", String(c.id), "check"), { as: "adjudicator" }) : href("review", "campaigns", String(c.id), "adjudicate"),
       act: "Adjudicate",
-      campaign: c,
+      own: true,
     });
   }
-  return rows;
+  return cards;
 }
 
-/** Main scans' standing row under Pick, for a person who may open the page: the picks of every dataset and cohort. */
-export function mainScansRow(caps: Capabilities): WorkRow | null {
-  if (!may(caps, "review:see") || !served(caps, "GET /api/picks/rules")) return null;
-  return { key: "main-scans", job: "pick", from: "machine", title: "Main scans", what: "Each dataset's and cohort's picks, by their rules.", count: null, href: href("review", "picks"), act: "Open" };
-}
-
-/** The whole list, by job, in the order of JOBS: the machine's rows first, then the campaigns, the most waiting first. */
-export function workList(caps: Capabilities, summary: ReviewSummary | null, list: readonly Campaign[] | null): { job: Job; title: string; line: string; rows: WorkRow[]; waiting: number }[] {
-  const open = (list ?? []).filter((c) => c.status !== "closed" && theirs(caps, c));
-  const machine = may(caps, "review:see") ? machineRows(summary) : [];
-  const ms = mainScansRow(caps);
-  const campaigns = open.flatMap((c) => campaignRows(caps, c)).sort((a, b) => (b.count ?? 0) - (a.count ?? 0) || a.title.localeCompare(b.title));
-  return JOBS.filter((j) => j.job !== "audit" || campaigns.some((r) => r.job === "audit")).map((j) => {
-    const rows = [...machine.filter((r) => r.job === j.job), ...(ms && j.job === "pick" ? [ms] : []), ...campaigns.filter((r) => r.job === j.job)];
-    const waiting = rows.reduce((s, r) => s + (r.from === "campaign" && r.campaign?.status !== "open" ? 0 : (r.count ?? 0)), 0);
-    return { ...j, rows, waiting };
-  });
+/** The band: every open campaign the person may see, the person's own first, then the most open first. */
+export function campaignBand(caps: Capabilities, list: readonly Campaign[] | null): CampaignCard[] {
+  return (list ?? [])
+    .filter((c) => c.status !== "closed" && theirs(caps, c))
+    .flatMap((c) => campaignCards(caps, c))
+    .sort((a, b) => Number(b.own) - Number(a.own) || b.count - a.count || a.campaign.name.localeCompare(b.campaign.name));
 }
 
 /** The person's own share of a campaign, in words: their answers standing, of the items it holds. */
 export function shareWords(mine: number | null | undefined, c: Pick<Campaign, "counts">): string | null {
   if (mine === null || mine === undefined) return null;
   const total = itemTotal(c.counts);
-  return mine === 0 ? "none yours yet" : `${mine.toLocaleString("en-US")} of ${total.toLocaleString("en-US")} yours`;
+  return mine === 0 ? "none yours yet" : `${n(mine)} of ${n(total)} yours`;
+}
+
+// ------------------------------------------------------------ band 4: also waiting
+
+/** What else waits, in a person's words, by the summary's kind. */
+export function alsoWords(kind: string): string {
+  const k = kindOf(kind);
+  if (kind === "identity.same_instance") return "The same scan under two subjects";
+  if (kind === "identity.collision") return "Two subject codes may be one person";
+  if (kind === "identity.empty_study") return "Studies with no files";
+  if (kind === "identity.unmapped" || k.area === "linkage") return "Files that need a subject code";
+  if (kind === "release.shared_name") return "Files that would share a name in a release";
+  if (kind === "release.no_task") return "A release with nothing to do";
+  if (kind === "ingest.quarantine") return "Files NILS could not read";
+  if (kind === "pipeline:qc") return "Results a run's checks flagged";
+  if (kind === "classify.excluded") return "Scans the rules set aside";
+  if (kind === "classify.asked") return "What System 1 asks";
+  if (kind === PICK_BORDER) return "Occasions a pick run doubts";
+  if (isModelKind(kind)) return `${axisTitle(k.area)}: scans a model proposes`;
+  return kindWords(kind);
+}
+
+/** Where one kind of the summary is worked today. */
+export function alsoHref(kind: string): string {
+  const k = kindOf(kind);
+  if (kind === PICK_BORDER) return narrow(href("review", "picks"), { earlier: 1 });
+  if (kind === "classify.asked") return href("review", "asked");
+  if (isModelKind(kind)) return href("review", "proposals");
+  if (k.area === "identity" || k.area === "linkage") return href("review", "identifiers");
+  return href("review", "questions");
+}
+
+/** One row of the fold: what waits, how many, and where it is worked. */
+export interface AlsoRow {
+  key: string;
+  words: string;
+  /** Null for a page with no count of its own (Main scans). */
+  count: number | null;
+  href: string;
+}
+
+/**
+ * The fold's rows: every kind of the summary that no band above shows (a campaign's items are answered there,
+ * the sort's questions are band 2, a model's proposals band 1 where the engine counts them), the most first,
+ * then Main scans for a person who may open the page.
+ */
+export function alsoRows(caps: Capabilities, summary: ReviewSummary | null, proposals: boolean): AlsoRow[] {
+  const rows: AlsoRow[] = Object.entries(summary?.by_kind ?? {})
+    .filter(([kind, count]) => count > 0 && !heldKind(kind) && !axisKind(kind) && !(proposals && isModelKind(kind)))
+    .map(([kind, count]) => ({ key: `kind:${kind}`, words: alsoWords(kind), count, href: alsoHref(kind) }))
+    .sort((a, b) => (b.count ?? 0) - (a.count ?? 0) || a.words.localeCompare(b.words));
+  if (may(caps, "review:see") && served(caps, "GET /api/picks/rules")) rows.push({ key: "main-scans", words: "Main scans · each dataset's and cohort's picks", count: null, href: href("review", "picks") });
+  return rows;
+}
+
+/** The fold's one line: what it counts. */
+export function alsoSummary(rows: readonly AlsoRow[]): string {
+  const total = rows.reduce((s, r) => s + (r.count ?? 0), 0);
+  return `Also waiting: ${n(total)} subjects, files and checks`;
 }

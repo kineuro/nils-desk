@@ -235,7 +235,7 @@ function ReviewPages({ caps, page, arg = null, sub: opens = null, query }: { cap
       )}
       {load.kind === "loading" && (sub === "queue" || sub === "identifiers") && <Wait phase="reading the queue" since={load.since} size="panel" />}
       {load.kind === "failed" && (sub === "queue" || sub === "identifiers") && <p className="warn">The queue could not be read: {load.why}</p>}
-      {asks && <QuestionsList list={qlist.list} where={where} failed={qlist.failed} since={qlist.since} />}
+      {asks && <QuestionsList list={qlist.list} where={where} failed={qlist.failed} since={qlist.since} axis={filter.axis} />}
       {sub === "queue" && load.kind === "ready" && (
         <QueuePage
           caps={caps}

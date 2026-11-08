@@ -22,8 +22,8 @@ for (const vp of [
     test("Review's one list, the make dialog, Browse and the heatmap, nothing sideways", async ({ page }) => {
       const sideways = async () => expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(vp.width);
       await page.goto("/lab.html#review");
-      await expect(page.locator("h1")).toHaveText("Work");
-      await expect(page.locator(".work-row").first()).toBeVisible();
+      await expect(page.locator("h1")).toHaveText("Review");
+      await expect(page.locator(".work .rv-band, .work .rv-fold, .work > p.meta").first()).toBeVisible();
       await sideways();
       await page.screenshot({ path: `test-results/lab-work-${vp.name}.png`, fullPage: true });
       await page.goto("/lab.html#review/campaigns?make=1");

@@ -214,6 +214,11 @@ const TOOL_NAMES: Record<string, string> = {
   "kineuro/nils-system1": "NILS System 1 model",
 };
 
+/** The friendly name of a tool by its repository, or by the repository's last name alone (a model's name as the engine lists it); null where the table has none. */
+export function knownToolName(name: string): string | null {
+  return TOOL_NAMES[name] ?? Object.entries(TOOL_NAMES).find(([repo]) => repo.split("/").pop() === name)?.[1] ?? null;
+}
+
 /** The repository of an image reference, its registry host, tag and digest left out: `docker.io/antsx/ants@sha256:…` to `antsx/ants`. */
 export function repositoryOf(ref: string | null | undefined): string | null {
   if (!ref) return null;
