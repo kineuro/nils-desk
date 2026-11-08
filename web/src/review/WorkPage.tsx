@@ -30,7 +30,8 @@ import { review, type ReviewSummary } from "./client";
 import { standingActs, standingDoors, type Standing } from "./modelFamily";
 import { CommitStandingDialog, RestCampaignDialog } from "./ModelStanding";
 import { questions, questionsServed, type QuestionList } from "./questions";
-import { alsoRows, alsoSummary, axisCards, campaignBand, MOVED_ON_WORDS, shareWords, sortStandings, standingMeta, standingTitle, type CampaignCard } from "./work";
+import { committedLine, followLine, resortOf, useFollowedJob, type Resort } from "./resort";
+import { alsoRows, alsoSummary, axisCards, campaignBand, modelSub, shareWords, sortStandings, standingMeta, standingTitle, type CampaignCard } from "./work";
 import "../campaigns/campaigns.css";
 import "./work.css";
 
@@ -56,6 +57,9 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
   const [mine, setMine] = useState<Record<number, number>>({});
   const [tick, setTick] = useState(0);
   const [said, setSaid] = useState<string | null>(null);
+  // UX round 5: the re-sort a commit queued, followed through the jobs door until it is over
+  const [follow, setFollow] = useState<{ s: Standing; resort: Resort } | null>(null);
+  const followed = useFollowedJob(follow?.resort.job ?? null, () => setTick((x) => x + 1));
   const [committing, setCommitting] = useState<Standing | null>(null);
   const [reading, setReading] = useState<Standing | null>(null);
   const prefill = prefillOf(query);
@@ -188,7 +192,7 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
       mine={mine}
       since={since}
       why={why}
-      said={said}
+      said={follow ? followLine(follow.s, follow.resort, followed) : said}
       onMake={() => setMaking({ source: "selection", from: "" })}
       onCommit={acts.commit ? setCommitting : undefined}
       onRead={acts.campaign ? setReading : undefined}
@@ -219,9 +223,17 @@ export function WorkPage({ caps, query }: { caps: Capabilities; query?: Record<s
         <CommitStandingDialog
           s={committing}
           onClose={() => setCommitting(null)}
-          onDone={(w) => {
+          onDone={(answer) => {
+            const s = committing;
             setCommitting(null);
-            setSaid(w);
+            const resort = resortOf(answer);
+            if (resort.job !== null) {
+              setSaid(null);
+              setFollow({ s, resort });
+            } else {
+              setFollow(null);
+              setSaid(committedLine(s, answer));
+            }
             setTick((x) => x + 1);
           }}
         />
@@ -303,13 +315,12 @@ export function WorkBody({ caps, summary, standings = null, qlist = null, list, 
             {proposed.map((s) => (
               <article key={`${s.model.id}|${s.axis}`} className="rv-card proposed" aria-label={standingTitle(s)}>
                 <span className="rv-title">{standingTitle(s)}</span>
+                <span className="rv-sub path">{modelSub(s)}</span>
                 <div className="rv-big">
                   <b>{n(s.staged.stacks)}</b>
                   <span>proposed</span>
                 </div>
-                <span className="rv-meta" title={s.drifted > 0 ? MOVED_ON_WORDS : undefined}>
-                  {standingMeta(s)}
-                </span>
+                <span className="rv-meta">{standingMeta(s)}</span>
                 {((onCommit && s.commit.stacks > 0) || (onRead && s.below.stacks > 0)) && (
                   <div className="rv-acts">
                     {onCommit && s.commit.stacks > 0 && (

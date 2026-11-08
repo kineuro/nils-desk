@@ -346,15 +346,60 @@ const AXIS_WORD: Record<string, string> = {
   disposition: "kind",
 };
 
-/** A scan's labels and where each came from, for a card's hover: one line an axis the facts show. */
+/** The axes of a hover's lines, in the order a person reads them, and their words there (UX round 5, finding 8). */
+const HOVER_WORD: Record<string, string> = {
+  base: "Weighting",
+  technique: "Sequence",
+  modifier: "Modifiers",
+  construct: "Image",
+  body_part: "Body part",
+  post_contrast: "Contrast",
+  provenance: "Made by",
+  disposition: "Kind",
+};
+
+/** The person's name for a decision's author, else the kind of author. */
+const whoDecided = (a: AxisOrigin): string => {
+  const d = a.decided?.kind === "model" ? null : a.decided;
+  const by = a.from?.by ?? d?.by;
+  if (by) return by;
+  return a.from?.kind === "agent" ? "an agent" : "a person";
+};
+
+/**
+ * Where a held value came from, in a person's words (UX round 5, finding 8): "from the header (rules 1.4.0)",
+ * "model, 0.97 (run 184)", "decided by anna on 7 Nov"; never the kind path or the rule's name, which stay under
+ * Details in the browser.
+ */
+export function originWords(a: AxisOrigin, sorted: Sorted | null): string {
+  if (a.origin === "model") {
+    const m = a.decided?.kind === "model" && a.state === "current" ? a.decided.model : a.from?.model;
+    const p = typeof m?.p === "number" ? `, ${m.p >= 0.995 ? "1.00" : m.p.toFixed(2)}` : "";
+    const run = typeof m?.run === "number" ? ` (run ${m.run})` : "";
+    return `model${p}${run}`;
+  }
+  if (a.origin === "decision") {
+    const at = a.state === "current" && a.decided?.at ? ` on ${whenWords(a.decided.at)}` : "";
+    return `decided by ${whoDecided(a)}${at}`;
+  }
+  if (a.origin === "none") return "nothing answered it";
+  return `from the header (rules${sorted ? ` ${sorted.version}` : ""})`;
+}
+
+/** One label as the hover says it: "Body part: brain · model, 0.97 (run 184)", with a decision not sorted yet after it. */
+export function hoverLine(word: string, a: AxisOrigin, sorted: Sorted | null): string {
+  const stale = staleLine(a);
+  return `${word}: ${said(a.axis, a.values)} · ${originWords(a, sorted)}${stale ? ` · ${stale}` : ""}`;
+}
+
+/** A scan's labels and where each came from, for a card's hover: one line an axis the facts show, in a person's words. */
 export function originTitle(axes: Map<string, AxisOrigin> | undefined, sorted: Sorted | null): string {
   if (!axes) return "";
   const lines: string[] = [];
-  for (const [axis, word] of Object.entries(AXIS_WORD)) {
+  for (const [axis, word] of Object.entries(HOVER_WORD)) {
     const a = axes.get(axis);
     if (!a || (a.values.length === 0 && a.state === "current")) continue;
-    const stale = staleLine(a);
-    lines.push(`${word} ${said(axis, a.values)}: ${fromLine(a, sorted)}${stale ? ` · ${stale}` : ""}`);
+    lines.push(hoverLine(word, a, sorted));
   }
   return lines.join("\n");
 }

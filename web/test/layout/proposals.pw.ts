@@ -44,26 +44,38 @@ for (const vp of VIEWPORTS) {
       await page.screenshot({ path: `test-results/proposals-${vp.name}.png`, fullPage: true });
     });
 
-    test("the commit's confirm counts what it puts in force, and the page shows what is left", async ({ page }) => {
+    test("the commit's confirm says what happens in one paragraph, closes on the answer, and the page follows the re-sort and shows what is left", async ({ page }) => {
       await page.goto("/proposals.html#review/proposals");
+      await expect(page.locator(".proposal-card").first()).toContainText("Body part model");
       await page.getByRole("button", { name: "Commit the 1,204 at or above the threshold" }).click();
       const dialog = page.locator("dialog[open]");
-      await expect(dialog.locator(".lede")).toHaveText("1,204 scans take bodypart-head@3's body_part, each at or above 0.90.");
+      await expect(dialog.locator(".lede")).toHaveText("1,204 scans get body part = what the model proposed, at 0.90 or above, in your name. Every page shows it once they are sorted again.");
+      await expect(dialog.locator(".dialog-body p")).toHaveCount(1);
       await page.screenshot({ path: `test-results/proposals-commit-${vp.name}.png`, animations: "disabled" });
       await dialog.getByRole("button", { name: "Commit 1,204" }).click();
-      await expect(page.locator(".said")).toHaveText("Committed 1,204 body_part answers of bodypart-head@3. Re-sorted 1,204 scans.");
+      await expect(page.locator("dialog[open]")).toHaveCount(0);
+      await expect(page.locator(".said")).toContainText("Committed 1,204 body part answers");
+      await expect(page.locator(".said")).toHaveText("Committed 1,204 body part answers · 1,204 of 1,204 sorted again", { timeout: 15000 });
       await expect(page.locator(".proposal-card").first().getByRole("button")).toHaveText(["Make a campaign of the other 4,838 for me"]);
       await noSideways(page, vp.width);
       await page.screenshot({ path: `test-results/proposals-after-${vp.name}.png`, fullPage: true });
     });
 
-    test("the campaign of the rest asks only its name and lands on the new campaign", async ({ page }) => {
+    test("the campaign of the rest asks its name, how many and which first, says what it would take, and lands on the new campaign", async ({ page }) => {
       await page.goto("/proposals.html#review/proposals");
       await page.getByRole("button", { name: "Make a campaign of the other 4,838 for me" }).click();
       const dialog = page.locator("dialog[open]");
       await expect(dialog.getByLabel("Name")).toHaveValue("bodypart-head-body_part-unsure");
+      await expect(dialog.getByRole("radiogroup", { name: "How many" }).getByRole("radio")).toHaveText(["500", "All 4,838"]);
+      await expect(dialog.getByRole("radiogroup", { name: "Which first" }).getByRole("radio")).toHaveText(["Least sure first", "Most sure first", "Random"]);
+      await expect(dialog.locator(".rest-estimate")).toHaveText("You alone read them: about 1 h 25 min at 10 s a scan.");
+      await dialog.getByRole("radio", { name: "All 4,838" }).click();
+      await expect(dialog.locator(".rest-estimate")).toHaveText("You alone read them: about 13 h 42 min at 10 s a scan.");
+      await dialog.getByRole("radio", { name: "500" }).click();
+      const box = (await dialog.boundingBox())!;
+      expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
       await page.screenshot({ path: `test-results/proposals-campaign-${vp.name}.png`, animations: "disabled" });
-      await dialog.getByRole("button", { name: "Make it" }).click();
+      await dialog.getByRole("button", { name: "Make a campaign of 500" }).click();
       await expect(page).toHaveURL(/#review\/campaigns\/12$/u);
     });
   });

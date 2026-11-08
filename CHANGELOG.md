@@ -4,6 +4,13 @@ All notable changes to the NILS desk are recorded here. The format follows [Keep
 
 ## [Unreleased]
 
+### Changed
+
+- Commit closes its dialog the moment the engine answers, and the page follows the re-sort. The confirm is one paragraph in a person's words (`50,006 scans get post-contrast = what the model proposed, at 0.90 or above, in your name. Every page shows it once they are sorted again.`), its button goes quiet while the call is out, and on the answer the dialog closes and the page says `Committed 50,006 post-contrast answers · sorting them again (job 356)`, then follows the job every few seconds until `50,006 of 50,006 sorted again` and reads the standings again. With an engine before 1.0.0-beta.11 the re-sort's words are shown as they come. A commit of 50,006 scans left the dialog open for three minutes with its button live.
+- Read the N asks how many and which first, and says what it would take. The campaign of a model's unsure scans asks its name, How many (500, or all N with its count), Which first (least sure, most sure, random) and says `about 1 h 25 min at 10 s a scan` where the engine (1.0.0-beta.11) knows the axis's pace; the button says `Make a campaign of 500`. A campaign of 145,274 scans was one click away.
+- The cards name a model as a person does: `Body part model`, `Post-contrast model`, `System 1`, with the registry's `name@version` in small type under it; `N moved on` reads `N proposed before the data changed`.
+- A scan's hover in the grid and the browser says each label in a person's words: `Contrast: given · from the header (rules 1.4.0)`, `Body part: brain · model, 0.97 (run 184)`, `Body part: neck · decided by anna on 7 Nov`; never the kind path or the rule's name, which stay under Details.
+
 ## [1.0.0-beta.8] - 2026-11-08
 
 The eighth desk beta is one page, from production use: Review opens on cards, as Data does, so a person who comes for what a model proposed sees it first and acts on it from the card. The engine is unchanged.

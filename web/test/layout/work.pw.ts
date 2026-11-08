@@ -35,7 +35,10 @@ for (const vp of VIEWPORTS) {
       const proposed = page.locator(".rv-card.proposed");
       await expect(proposed).toHaveCount(2);
       await expect(proposed.first().getByRole("button")).toHaveText(["Commit 1,701", "Read the 190"]);
-      await expect(proposed.first()).toContainText("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 moved on");
+      await expect(proposed.first()).toContainText("1,701 sure at 0.99 or above · 190 unsure · 12 in a campaign already · 3 proposed before the data changed");
+      // UX round 5, finding 2: the model as a person names it, the registry's name under it
+      await expect(proposed.first().locator(".rv-title")).toHaveText("Post-contrast · Post-contrast model");
+      await expect(proposed.first().locator(".rv-sub")).toHaveText("nils-postcontrast@0.3.1");
       await expect(page.getByRole("link", { name: "Value by value" })).toHaveAttribute("href", "#review/proposals");
       // the scans to answer, one card per axis, its Answer one click from the scans
       await expect(page.locator(".rv-card.answer")).toHaveCount(3);
@@ -71,6 +74,30 @@ for (const vp of VIEWPORTS) {
       else expect(new Set(xs).size).toBeGreaterThan(1);
       await noSideways(page, vp.width);
       await page.screenshot({ path: `test-results/work-${vp.name}.png`, fullPage: true });
+    });
+
+    test("Commit closes its dialog the moment the engine answers and the page follows the re-sort; Read asks how many and which first with the estimate", async ({ page }) => {
+      await page.goto("/work.html#review");
+      const first = page.locator(".rv-card.proposed").first();
+      await first.getByRole("button", { name: "Commit 1,701" }).click();
+      const dialog = page.locator("dialog[open]");
+      await expect(dialog.locator(".lede")).toHaveText("1,701 scans get post-contrast = what the model proposed, at 0.99 or above, in your name. Every page shows it once they are sorted again.");
+      await expect(dialog.locator(".dialog-body p")).toHaveCount(1);
+      await page.screenshot({ path: `test-results/work-commit-${vp.name}.png`, animations: "disabled" });
+      await dialog.getByRole("button", { name: "Commit 1,701" }).click();
+      await expect(page.locator("dialog[open]")).toHaveCount(0);
+      await expect(page.locator(".said")).toContainText("Committed 1,701 post-contrast answers");
+      await expect(page.locator(".said")).toHaveText("Committed 1,701 post-contrast answers · 1,701 of 1,701 sorted again", { timeout: 15000 });
+      await page.screenshot({ path: `test-results/work-committed-${vp.name}.png`, fullPage: true });
+      await first.getByRole("button", { name: "Read the 190" }).click();
+      const read = page.locator("dialog[open]");
+      await expect(read.getByRole("radiogroup", { name: "How many" }).getByRole("radio")).toHaveText(["All 190"]);
+      await expect(read.getByRole("radiogroup", { name: "Which first" }).getByRole("radio")).toHaveText(["Least sure first", "Most sure first", "Random"]);
+      await expect(read.locator(".rest-estimate")).toHaveText("You alone read them: about 32 min at 10 s a scan.");
+      await expect(read.getByRole("button", { name: "Make a campaign of 190" })).toBeEnabled();
+      const box = (await read.boundingBox())!;
+      expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
+      await page.screenshot({ path: `test-results/work-read-${vp.name}.png`, animations: "disabled" });
     });
 
     test("the side holds Review's pages, Campaigns among them, and no Campaigns section", async ({ page }) => {

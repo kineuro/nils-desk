@@ -21,6 +21,7 @@ const DOORS = [
   "POST /api/decisions/commit",
   "POST /api/decisions/{id}/commit",
   "POST /api/decisions/{id}/withdraw",
+  "GET /api/jobs/{id}",
   "GET /api/campaigns",
   "GET /api/campaigns/{id}",
 ];
@@ -62,13 +63,14 @@ const row = (over: Record<string, unknown> = {}) => ({
   held: { groups: 1, stacks: 46 },
   commit: committed ? { groups: 0, stacks: 0 } : { groups: 8, stacks: 1204 },
   drifted: committed ? 0 : 3,
-  below: { groups: 30, stacks: 4838 },
+  below: { groups: 30, stacks: 4838, pace_s: 10.2 },
   asked: { groups: 0, stacks: 0 },
   campaigns: [],
   runs: [162],
   name: "bodypart-head-body_part-unsure",
   ...over,
 });
+let jobReads = 0;
 const ROWS = () => [
   row(),
   row({ model: { id: 9, name: "region-head", version: "1" }, label: "region-head@1", axis: "body_region", threshold: 0.85, staged: { groups: 2, stacks: 310 }, held: { groups: 0, stacks: 0 }, commit: { groups: 2, stacks: 310 }, drifted: 0, below: { groups: 0, stacks: 0 }, asked: { groups: 3, stacks: 72 }, campaigns: [{ id: 4, name: "region-r1" }], name: "region-head-body_region-unsure" }),
@@ -85,9 +87,18 @@ window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   if (p === "/api/review/proposals") return json(200, { count: 2, proposals: ROWS() });
   if (p === "/api/decisions/commit" && method === "POST") {
     committed = true;
-    return json(200, { committed: [1, 2, 3, 4, 5, 6, 7, 8], items: 8, left: 1, split: [], resort: { state: "done", stacks: 1204, sorted: 1204, words: "re-sorted 1,204 scans" } });
+    // UX round 5: the re-sort is a queued job the page follows
+    return json(200, { committed: [1, 2, 3, 4, 5, 6, 7, 8], items: 8, left: 1, split: [], resort: { state: "queued", job: 356, stacks: 1204, words: "1,204 scan(s) to sort again, queued as job 356" } });
   }
-  if (p === "/api/review/proposals/campaign" && method === "POST") return json(201, { campaign: { id: 12, name: "bodypart-head-body_part-unsure" }, adopted: 30, suggestions: { suggestions: 4838 }, counts: {} });
+  if (p === "/api/jobs/356") {
+    jobReads += 1;
+    const done = Math.min(1204, jobReads * 700);
+    return json(200, { id: 356, kind: "resort", name: "re-sort after astrid@site committed 8 decision(s)", state: done >= 1204 ? "done" : "running", started_at: "2026-11-08T20:00:00Z", heartbeat_at: null, finished_at: null, progress: { done, of: 1204, what: "scans" }, error: null, args: {}, result: null });
+  }
+  if (p === "/api/review/proposals/campaign" && method === "POST") {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { limit?: number; order?: string };
+    return json(201, { campaign: { id: 12, name: "bodypart-head-body_part-unsure" }, adopted: 4, suggestions: { suggestions: body.limit ?? 4838 }, counts: {}, left: 4838 - (body.limit ?? 4838), limit: body.limit ?? null, order: body.order ?? "least_sure", seed: null });
+  }
   if (p === "/api/campaigns") return json(200, { count: 0, campaigns: [] });
   return json(404, { error: `the layout check's engine has no ${p}` });
 }) as typeof fetch;
